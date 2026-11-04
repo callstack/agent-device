@@ -1,3 +1,4 @@
+import type { ScreenshotScreenMask } from './screenshot.ts';
 // The public API vocabulary for snapshot, screenshot and diff capture.
 
 import type { SessionSurface } from './session-surface.ts';
@@ -112,6 +113,7 @@ export type CaptureScreenshotOptions = AgentDeviceRequestOverrides & {
   /** Crop the capture to the frame of the selector resolved on the same screen. */
   cropOn?: string;
   pixelDensity?: number;
+  screenMask?: ScreenshotScreenMask;
   fullscreen?: boolean;
   scale?: number;
   stabilize?: boolean;

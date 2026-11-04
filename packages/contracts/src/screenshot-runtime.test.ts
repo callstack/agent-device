@@ -54,3 +54,16 @@ test('a provider binding fails closed when its exact owner exposes no interactor
     details: { reason: 'provider-runtime-interactor-missing' },
   });
 });
+
+test('a provider capture refuses a simctl screen mask before calling its interactor', async () => {
+  const resolveInteractor = vi.fn();
+  const operations = bindProviderScreenshotInteractor({
+    device: { ...device, platform: 'apple', appleOs: 'ios', kind: 'simulator' },
+    signal: new AbortController().signal,
+    resolveInteractor,
+  });
+  await expect(
+    operations.captureScreenshot({ outPath: '/tmp/masked.png', options: { screenMask: 'black' } }),
+  ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
+  expect(resolveInteractor).not.toHaveBeenCalled();
+});

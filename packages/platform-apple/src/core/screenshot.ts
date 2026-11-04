@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import type { ScreenshotScreenMask } from '@agent-device/contracts/capture';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { copyHostFile } from '@agent-device/host-kit/host-file';
@@ -66,7 +67,7 @@ type SimulatorScreenshotFlowDeps = {
   captureWithRetry: (
     device: DeviceInfo,
     outPath: string,
-    env: Readonly<EnvMap>,
+    screenMask: ScreenshotScreenMask | undefined,
     display: AppleDeviceDisplay | undefined,
   ) => Promise<void>;
   /**
@@ -94,11 +95,12 @@ type SimulatorScreenshotFlowDeps = {
 };
 
 type SimulatorScreenshotFlowOptions = {
-  /** The calling runtime's host environment for simulator capture and runner-container configuration. */
+  /** The calling runtime's host environment; runner-container configuration is read from it. */
   env: Readonly<EnvMap>;
   appBundleId?: string;
   fullscreen?: boolean;
   pixelDensity?: number;
+  screenMask?: ScreenshotScreenMask;
   normalizeStatusBar?: boolean;
   runnerOptions?: AppleRunnerCommandOptions;
   skipIosSimulatorBootCheck?: boolean;
@@ -170,7 +172,7 @@ export async function captureSimulatorScreenshotWithFallback(
   const { display, displayRotation } = await deps.resolveCaptureTarget(device);
   const captureFacts: ScreenshotCaptureFacts = displayRotation ? { displayRotation } : {};
   const captureAndNormalize = async () => {
-    await deps.captureWithRetry(device, outPath, options.env, display);
+    await deps.captureWithRetry(device, outPath, options.screenMask, display);
     await deps.normalizeDensity(device, outPath, options.pixelDensity, display?.pointScale);
   };
   const captureWithFallback = async (): Promise<ScreenshotCaptureFacts> => {
@@ -191,7 +193,7 @@ export async function captureSimulatorScreenshotWithFallback(
           screenshotError = retryError;
         }
       }
-      if (!deps.shouldFallbackToRunner(screenshotError)) {
+      if (options.screenMask !== undefined || !deps.shouldFallbackToRunner(screenshotError)) {
         throw screenshotError;
       }
       emitScreenshotFallbackDiagnostic(device, 'simctl_screenshot', screenshotError);
@@ -220,7 +222,7 @@ export async function captureSimulatorScreenshotWithFallback(
 export async function captureSimulatorScreenshotWithRetry(
   device: DeviceInfo,
   outPath: string,
-  env: Readonly<EnvMap>,
+  screenMask: ScreenshotScreenMask | undefined,
   display?: AppleDeviceDisplay,
 ): Promise<void> {
   const deadline = Deadline.fromTimeoutMs(IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS);
@@ -228,7 +230,7 @@ export async function captureSimulatorScreenshotWithRetry(
     'io',
     device.id,
     'screenshot',
-    ...(env.AGENT_DEVICE_IOS_SIMULATOR_SCREENSHOT_MASK === 'black' ? ['--mask=black'] : []),
+    ...(screenMask === 'black' ? ['--mask=black'] : []),
     ...appleSimulatorDisplayArgvFragment(display),
     outPath,
   ];

@@ -1,3 +1,4 @@
+import type { ScreenshotScreenMask } from '@agent-device/contracts/capture';
 import type { FileOutputRef } from '@agent-device/contracts/artifact-adapter';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import type { SessionSurface } from '@agent-device/contracts/session';
@@ -50,6 +51,7 @@ export type ScreenshotCommandOptions = CommandContext & {
   fullscreen?: boolean;
   overlayRefs?: boolean;
   pixelDensity?: number;
+  screenMask?: ScreenshotScreenMask;
   scale?: number;
   stabilize?: boolean;
   normalizeStatusBar?: boolean;

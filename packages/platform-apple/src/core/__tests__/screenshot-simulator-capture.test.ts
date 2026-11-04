@@ -107,7 +107,8 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
     },
     async ({ calls }) => {
       await screenshotIos(IOS_TEST_SIMULATOR, outPath, {
-        env: { AGENT_DEVICE_IOS_SIMULATOR_SCREENSHOT_MASK: 'black' },
+        env: {},
+        screenMask: 'black',
       });
       const png = PNG.sync.read(await fs.readFile(outPath));
       assert.equal(png.width, 42);
@@ -129,10 +130,10 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
   );
 });
 
-test.each([undefined, '', 'alpha', 'BLACK', 'black'])(
-  'screenshotIos keeps density and opts into a black outline only for host setting %s',
+test.each([undefined, 'black'] as const)(
+  'screenshotIos keeps density and applies only the request screen mask %s',
   async (mask) => {
-    vi.stubEnv('AGENT_DEVICE_IOS_SIMULATOR_SCREENSHOT_MASK', mask === 'black' ? 'alpha' : 'black');
+    vi.stubEnv('AGENT_DEVICE_IOS_SIMULATOR_SCREENSHOT_MASK', 'black');
     const tmpDir = await mkdtempForTest('agent-device-ios-screenshot-density-');
     const outPath = path.join(tmpDir, 'screen.png');
 
@@ -154,7 +155,8 @@ test.each([undefined, '', 'alpha', 'BLACK', 'black'])(
       },
       async ({ calls }) => {
         await screenshotIos(IOS_TEST_SIMULATOR, outPath, {
-          env: { AGENT_DEVICE_IOS_SIMULATOR_SCREENSHOT_MASK: mask },
+          env: process.env,
+          screenMask: mask,
           pixelDensity: 2,
         });
         assert.deepEqual(calls.filter(isSimctlScreenshot), [

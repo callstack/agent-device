@@ -479,3 +479,46 @@ for (const backend of ['coredevice', 'xctest', undefined] as const) {
     });
   }
 }
+
+test('a request screen mask reaches the bound simulator capture without changing later requests', async () => {
+  const fixture = screenshotRuntimeFixture();
+  const session = makeSession('ios-mask', { device: IOS_SIMULATOR });
+  const outPath = path.join(mkdtempForTestSync('screen-mask-request'), 'screen.png');
+  for (const screenMask of ['black', undefined] as const) {
+    const req = screenshotRequest({
+      positionals: [outPath],
+      flags: screenMask ? { screenshotScreenMask: screenMask } : {},
+    });
+    const resolved = await resolveScreenshotGenericExecution({
+      hostCwd: process.cwd(),
+      createCommandSurface: testCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
+      req,
+      session,
+      inspectFacts: fixture.inspectFacts,
+      bindDevice: fixture.bindDevice,
+    });
+    await executeResult(resolved, session, req, req.flags);
+    expect(fixture.captureScreenshot.mock.lastCall?.[0].options?.screenMask).toBe(screenMask);
+  }
+});
+
+test.each([ANDROID_EMULATOR, IOS_DEVICE])(
+  'refuses a screen mask on $kind $platform before binding',
+  async (device) => {
+    const fixture = screenshotRuntimeFixture();
+    const session = makeSession('unsupported-mask', { device });
+    await expect(
+      resolveScreenshotGenericExecution({
+        hostCwd: process.cwd(),
+        createCommandSurface: testCreateCommandSurface,
+        platformServices: daemonPlatformServicesFixture(),
+        req: screenshotRequest({ flags: { screenshotScreenMask: 'black' } }),
+        session,
+        inspectFacts: fixture.inspectFacts,
+        bindDevice: fixture.bindDevice,
+      }),
+    ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
+    expect(fixture.binds).toHaveLength(0);
+  },
+);

@@ -3,6 +3,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   retiredScreenshotMaxSizeFlagError,
   screenshotFlagsFromOptions,
+  readScreenshotScreenMask,
   screenshotOptionsFromFlags,
 } from '@agent-device/contracts/capture';
 import type { DeviceRotation } from '@agent-device/contracts/device';
@@ -64,6 +65,17 @@ export async function resolveScreenshotGenericExecution(
   const retiredMaxSize = retiredScreenshotMaxSizeFlagError('screenshot', req.flags);
   if (retiredMaxSize) throw new AppError('INVALID_ARGS', retiredMaxSize);
   assertSupportedScreenshotPixelDensity(session.device, req.flags?.screenshotPixelDensity);
+
+  const screenMask = readScreenshotScreenMask(req.flags?.screenshotScreenMask);
+  if (
+    screenMask !== undefined &&
+    (!isIosFamily(session.device) || session.device.kind !== 'simulator')
+  ) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      '--screen-mask requires an iOS simulator simctl capture',
+    );
+  }
 
   const request = readScreenshotRequest(req, params.hostCwd);
   const cropOn =
@@ -362,6 +374,7 @@ function createBoundScreenshotBackend(
         options: {
           appBundleId: dispatchContext.appBundleId,
           pixelDensity: resolved.pixelDensity,
+          screenMask: resolved.screenMask,
           fullscreen: resolved.fullscreen,
           normalizeStatusBar: resolved.normalizeStatusBar,
           stabilize: resolved.stabilize,

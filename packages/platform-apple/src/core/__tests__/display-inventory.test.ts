@@ -511,7 +511,7 @@ describe('captureSimulatorScreenshotWithRetry display targeting', () => {
     await captureSimulatorScreenshotWithRetry(
       IOS_TEST_SIMULATOR,
       '/tmp/duo.png',
-      { AGENT_DEVICE_IOS_SIMULATOR_SCREENSHOT_MASK: 'black' },
+      'black',
       outerPanel,
     );
     assert.equal(mockRunSimctlForDevice.mock.calls.length, 1);
@@ -526,7 +526,7 @@ describe('captureSimulatorScreenshotWithRetry display targeting', () => {
   });
 
   test('omits the display flag for a single-panel device', async () => {
-    await captureSimulatorScreenshotWithRetry(IOS_TEST_SIMULATOR, '/tmp/duo.png', {});
+    await captureSimulatorScreenshotWithRetry(IOS_TEST_SIMULATOR, '/tmp/duo.png', undefined);
     assert.deepEqual(mockRunSimctlForDevice.mock.calls[0]![1], [
       'io',
       IOS_TEST_SIMULATOR.id,

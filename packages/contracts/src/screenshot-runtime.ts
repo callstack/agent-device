@@ -1,3 +1,4 @@
+import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   localInteractorSource,
@@ -83,8 +84,19 @@ export function bindProviderScreenshotInteractor(
     resolveInteractor: ProviderInteractorOperationResolver;
   }>,
 ): ScreenshotRuntimeOperations {
-  return bindScreenshotCapture(
+  const capture = bindScreenshotCapture(
     params.signal,
     providerInteractorSource({ ...params, operation: 'screenshot' }),
   );
+  return Object.freeze({
+    captureScreenshot: async (input: CaptureScreenshotInput) => {
+      if (input.options?.screenMask !== undefined) {
+        throw new AppError(
+          'UNSUPPORTED_OPERATION',
+          '--screen-mask requires local simctl capture, not a provider capture',
+        );
+      }
+      return await capture.captureScreenshot(input);
+    },
+  });
 }

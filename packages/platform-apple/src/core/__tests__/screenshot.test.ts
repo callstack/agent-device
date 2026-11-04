@@ -857,3 +857,25 @@ test('captureSimulatorScreenshotWithFallback keeps the panel rotation for a runn
   });
   assert.deepEqual(facts, { displayRotation: 'landscape-right' });
 });
+
+test('an explicit screen mask refuses an unmasked runner fallback after simctl exhaustion', async () => {
+  const failure = new AppError('COMMAND_FAILED', 'capture failed', {
+    stderr: 'Timeout waiting for screen surfaces',
+  });
+  mockRetryWithPolicy.mockRejectedValue(failure);
+  await assert.rejects(
+    captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/masked.png', {
+      env: {},
+      screenMask: 'black',
+      skipIosSimulatorBootCheck: true,
+      deps: {
+        resolveCaptureTarget: async () => ({}),
+        captureWithRetry: captureSimulatorScreenshotWithRetry,
+        captureWithRunner: captureScreenshotViaRunner,
+        normalizeDensity: async () => {},
+      },
+    }),
+    (error) => error === failure,
+  );
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
+});

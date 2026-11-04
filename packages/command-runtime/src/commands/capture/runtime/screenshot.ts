@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { validateScreenshotScale } from '@agent-device/contracts/capture';
+import { validateScreenshotScale, readScreenshotScreenMask } from '@agent-device/contracts/capture';
 import { successText } from '@agent-device/kernel/success-text';
 import { resizePngFileToScale } from '@agent-device/capture-kit/png-resize';
 import type { DeviceRotation } from '@agent-device/contracts/device';
@@ -46,6 +46,7 @@ export const screenshotCommand: RuntimeCommand<
         fullscreen: options.fullscreen,
         overlayRefs: options.overlayRefs,
         pixelDensity: options.pixelDensity,
+        screenMask: readScreenshotScreenMask(options.screenMask),
         stabilize: options.stabilize,
         normalizeStatusBar: options.normalizeStatusBar,
         surface: options.surface,

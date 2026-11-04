@@ -493,6 +493,12 @@ async function runAppleScreenshot(
   helper: MacOsHelperSurface | undefined,
   env: Readonly<EnvMap>,
 ): Promise<ScreenshotCaptureFacts> {
+  if (options.screenMask !== undefined && (helper || options.captureBackend === 'runner')) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      '--screen-mask requires simctl capture, not an XCTest runner or macOS capture',
+    );
+  }
   if (helper) {
     if (options.fullscreen) {
       throw new AppError(
@@ -530,6 +536,7 @@ async function runAppleScreenshot(
     env,
     appBundleId: options.appBundleId,
     pixelDensity: options.pixelDensity,
+    screenMask: options.screenMask,
     fullscreen: options.fullscreen,
     runnerOptions: runnerOpts,
     normalizeStatusBar: options.normalizeStatusBar,

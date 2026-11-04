@@ -12,6 +12,10 @@ import type {
   ResolvedInputFile,
 } from '@agent-device/contracts/artifact-adapter';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
+import {
+  readScreenshotScreenMask,
+  type ScreenshotScreenMask,
+} from '@agent-device/contracts/capture';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   compareScreenshots,
@@ -37,6 +41,7 @@ export type DiffScreenshotCommandOptions = CommandContext & {
   threshold?: number;
   overlayRefs?: boolean;
   normalizeStatusBar?: boolean;
+  screenMask?: ScreenshotScreenMask;
   surface?: BackendScreenshotOptions['surface'];
 };
 
@@ -54,12 +59,20 @@ export const diffScreenshotCommand: RuntimeCommand<
     throw new AppError('INVALID_ARGS', 'diff screenshot requires a baseline image');
   }
 
+  readScreenshotScreenMask(options.screenMask);
   const threshold = normalizeThreshold(options.threshold);
   const currentRef = options.current ?? { kind: 'live' };
   if (options.overlayRefs && !isLiveCurrentRef(currentRef)) {
     throw new AppError(
       'INVALID_ARGS',
       'diff screenshot <current.png> cannot use --overlay-refs because saved-image comparisons have no live accessibility refs',
+    );
+  }
+
+  if (options.screenMask !== undefined && !isLiveCurrentRef(currentRef)) {
+    throw new AppError(
+      'INVALID_ARGS',
+      '--screen-mask requires a live screenshot, not a saved current image',
     );
   }
 
@@ -222,10 +235,11 @@ async function captureScreenshot(
 }
 
 function liveDiffScreenshotOptions(
-  options: Pick<DiffScreenshotCommandOptions, 'normalizeStatusBar' | 'surface'>,
+  options: Pick<DiffScreenshotCommandOptions, 'normalizeStatusBar' | 'surface' | 'screenMask'>,
 ): BackendScreenshotOptions {
   return {
     normalizeStatusBar: options.normalizeStatusBar ?? true,
+    ...(options.screenMask !== undefined ? { screenMask: options.screenMask } : {}),
     ...(options.surface ? { surface: options.surface } : {}),
   };
 }

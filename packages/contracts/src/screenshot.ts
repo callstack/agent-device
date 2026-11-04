@@ -1,5 +1,13 @@
 import { AppError } from '@agent-device/kernel/errors';
 
+export const SCREENSHOT_SCREEN_MASKS = ['black'] as const;
+export type ScreenshotScreenMask = (typeof SCREENSHOT_SCREEN_MASKS)[number];
+
+export function readScreenshotScreenMask(value: unknown): ScreenshotScreenMask | undefined {
+  if (value === undefined || value === 'black') return value;
+  throw new AppError('INVALID_ARGS', '--screen-mask must be black');
+}
+
 export const SCREENSHOT_SCALE_LIMITS = { min: 0.01, max: 1 } as const;
 
 /**
@@ -85,6 +93,7 @@ export const SCREENSHOT_COMMAND_FLAG_KEYS = [
   'overlayRefs',
   'screenshotCropOn',
   'screenshotPixelDensity',
+  'screenshotScreenMask',
   'screenshotFullscreen',
   'screenshotScale',
   'screenshotNoStabilize',
@@ -94,6 +103,7 @@ export const SCREENSHOT_COMMAND_FLAG_KEYS = [
 export const SCREENSHOT_ACTION_FLAG_KEYS = [
   'screenshotCropOn',
   'screenshotPixelDensity',
+  'screenshotScreenMask',
   'screenshotFullscreen',
   'screenshotScale',
   'screenshotNoStabilize',
@@ -105,7 +115,8 @@ type ScreenshotSpecificFlagKey = (typeof SCREENSHOT_ACTION_FLAG_KEYS)[number];
 type ScreenshotSpecificFlagDefinition = {
   key: ScreenshotSpecificFlagKey;
   names: readonly string[];
-  type: 'boolean' | 'int' | 'number' | 'string';
+  type: 'boolean' | 'int' | 'number' | 'string' | 'enum';
+  enumValues?: readonly string[];
   min?: number;
   max?: number;
   usageLabel: string;
@@ -134,6 +145,17 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     usageDescription:
       'Screenshot: output PNG pixel density in pixels per logical point (currently supported on iOS simulators)',
     projectConfig: true,
+    recorded: true,
+  },
+  {
+    key: 'screenshotScreenMask',
+    names: ['--screen-mask'],
+    type: 'enum',
+    enumValues: SCREENSHOT_SCREEN_MASKS,
+    usageLabel: '--screen-mask <black>',
+    usageDescription:
+      'Screenshot or live screenshot diff: fill the iOS simulator screen outline with black; requires simctl capture',
+    projectConfig: false,
     recorded: true,
   },
   {
@@ -217,6 +239,7 @@ export type ScreenshotRequestFlags = {
   overlayRefs?: boolean;
   screenshotCropOn?: string;
   screenshotPixelDensity?: number;
+  screenshotScreenMask?: ScreenshotScreenMask;
   screenshotFullscreen?: boolean;
   screenshotScale?: number;
   screenshotNoStabilize?: boolean;
@@ -226,6 +249,7 @@ export type ScreenshotRequestFlags = {
 export type ScreenshotDispatchFlags = Pick<
   ScreenshotRequestFlags,
   | 'screenshotPixelDensity'
+  | 'screenshotScreenMask'
   | 'screenshotFullscreen'
   | 'screenshotNoStabilize'
   | 'screenshotNormalizeStatusBar'
@@ -235,6 +259,7 @@ export type ScreenshotRuntimeFlags = Pick<
   ScreenshotRequestFlags,
   | 'screenshotCropOn'
   | 'screenshotPixelDensity'
+  | 'screenshotScreenMask'
   | 'screenshotFullscreen'
   | 'screenshotScale'
   | 'screenshotNoStabilize'
@@ -245,6 +270,7 @@ export type ScreenshotPublicOptions = {
   overlayRefs?: boolean;
   cropOn?: string;
   pixelDensity?: number;
+  screenMask?: ScreenshotScreenMask;
   fullscreen?: boolean;
   scale?: number;
   stabilize?: boolean;
@@ -255,6 +281,7 @@ export type ScreenshotRuntimeOptions = {
   overlayRefs?: boolean;
   cropOn?: string;
   pixelDensity?: number;
+  screenMask?: ScreenshotScreenMask;
   fullscreen?: boolean;
   scale?: number;
   stabilize?: boolean;
@@ -268,6 +295,7 @@ export function screenshotOptionsFromFlags(
     overlayRefs: flags?.overlayRefs,
     cropOn: flags?.screenshotCropOn,
     pixelDensity: flags?.screenshotPixelDensity,
+    screenMask: readScreenshotScreenMask(flags?.screenshotScreenMask),
     fullscreen: flags?.screenshotFullscreen,
     scale: flags?.screenshotScale,
     stabilize:
@@ -283,6 +311,9 @@ export function screenshotFlagsFromOptions(
     overlayRefs: options.overlayRefs,
     screenshotCropOn: options.screenshotCropOn ?? options.cropOn,
     screenshotPixelDensity: options.screenshotPixelDensity ?? options.pixelDensity,
+    screenshotScreenMask: readScreenshotScreenMask(
+      options.screenshotScreenMask ?? options.screenMask,
+    ),
     screenshotFullscreen: options.screenshotFullscreen ?? options.fullscreen,
     screenshotScale: options.screenshotScale,
     screenshotNoStabilize:
@@ -324,6 +355,9 @@ export function appendScreenshotScriptFlags(
   if (typeof flags?.screenshotPixelDensity === 'number') {
     parts.push('--pixel-density', String(flags.screenshotPixelDensity));
   }
+  if (flags?.screenshotScreenMask !== undefined) {
+    parts.push('--screen-mask', readScreenshotScreenMask(flags.screenshotScreenMask)!);
+  }
   if (flags?.screenshotFullscreen) parts.push('--fullscreen');
   if (typeof flags?.screenshotScale === 'number') {
     parts.push('--scale', String(flags.screenshotScale));
@@ -340,6 +374,12 @@ export function readScreenshotScriptFlag(params: {
 }): { handled: true; nextIndex: number } | { handled: false } {
   const { args, flags, index } = params;
   const token = args[index];
+  if (token === '--screen-mask') {
+    const value = args[index + 1];
+    if (value === undefined) throw new AppError('INVALID_ARGS', '--screen-mask requires black');
+    flags.screenshotScreenMask = readScreenshotScreenMask(value);
+    return { handled: true, nextIndex: index + 1 };
+  }
   if (token === RETIRED_SCREENSHOT_MAX_SIZE.cliToken) {
     throw new AppError('INVALID_ARGS', RETIRED_SCREENSHOT_MAX_SIZE.migration.screenshot);
   }
