@@ -589,7 +589,7 @@ extension RunnerTests {
   /// Not `UIScreen.main`: the runner process can read that in compatibility mode (#4091). A failed
   /// read is not kept, so the next gesture reads again.
   @MainActor
-  private func soleDisplayPortraitSize() -> CGSize? {
+  func soleDisplayPortraitSize() -> CGSize? {
     if let cached = mainOwned.soleDisplayPortraitSize { return cached }
     let screen = RunnerSoleScreenSize()
     guard screen.width > 0, screen.height > 0 else { return nil }
@@ -671,6 +671,14 @@ extension RunnerTests {
       }
     } else if plan.executionProfile != nil {
       return "multi-touch gesture cannot define a single-pointer execution profile"
+    }
+    if let contactOrigin = plan.contactOrigin {
+      guard contactOrigin == runnerScreenEdgeContactOrigin else {
+        return "planned gesture has an unsupported contact origin"
+      }
+      guard plan.topology == "single" else {
+        return "only a single-pointer gesture can start as a screen-edge touch"
+      }
     }
     guard plan.durationMs.isFinite, plan.durationMs >= 16, plan.durationMs <= 10_000 else {
       return "planned gesture durationMs must be between 16 and 10000"
@@ -756,22 +764,41 @@ extension RunnerTests {
   }
 
   func plannedGestureExecution(for plan: RunnerGesturePlan) -> PlannedGestureExecution {
-    plan.topology == "single" && plan.executionProfile == "endpoint-hold"
+#if os(iOS) && targetEnvironment(simulator)
+    if plan.contactOrigin == runnerScreenEdgeContactOrigin {
+      return .screenEdgeTouch
+    }
+#endif
+    return plan.topology == "single" && plan.executionProfile == "endpoint-hold"
       ? .fastSwipe
       : .sampled
   }
 
-  @MainActor
-  func sampledPlannedGesture(
-    app: XCUIApplication,
-    plan: RunnerGesturePlan
-  ) throws -> RunnerInteractionOutcome {
 #if os(iOS)
+  /// A planned gesture's surface and each pointer's `{ x, y, offsetMs }` samples in native
+  /// (portrait-up) digitizer points.
+  struct NativePlannedGesture {
+    let context: SynthesizedCoordinateContext
+    let orientation: Int
+    let pointerSamples: [[[String: NSNumber]]]
+  }
+
+  enum NativePlannedGestureResolution {
+    case resolved(NativePlannedGesture)
+    case refused(RunnerInteractionOutcome)
+  }
+
+  @MainActor
+  func nativePlannedGesture(
+    app: XCUIApplication,
+    plan: RunnerGesturePlan,
+    gesture: String
+  ) throws -> NativePlannedGestureResolution {
     guard let context = try synthesizedCoordinateContext(app: app) else {
-      return .unsupported(message: "gesture could not resolve a surface", hint: nil)
+      return .refused(.unsupported(message: "\(gesture) could not resolve a surface", hint: nil))
     }
     guard let geometry = digitizerGeometry(app: app, surface: context.geometry) else {
-      return Self.unmeasuredSoleDisplayOutcome(gesture: "gesture")
+      return .refused(Self.unmeasuredSoleDisplayOutcome(gesture: gesture))
     }
     let pointerSamples: [[[String: NSNumber]]] = plan.pointers.map { pointer in
       pointer.samples.map { sample in
@@ -783,11 +810,28 @@ extension RunnerTests {
         ]
       }
     }
+    return .resolved(NativePlannedGesture(
+      context: context, orientation: geometry.orientation, pointerSamples: pointerSamples
+    ))
+  }
+#endif
+
+  @MainActor
+  func sampledPlannedGesture(
+    app: XCUIApplication,
+    plan: RunnerGesturePlan
+  ) throws -> RunnerInteractionOutcome {
+#if os(iOS)
+    let planned: NativePlannedGesture
+    switch try nativePlannedGesture(app: app, plan: plan, gesture: "gesture") {
+    case .resolved(let resolved): planned = resolved
+    case .refused(let outcome): return outcome
+    }
     if let message = RunnerSynthesizedGesture.synthesizeGesture(
       withApplication: app,
-      resolvedWindow: context.resolvedWindow,
-      interfaceOrientation: geometry.orientation,
-      pointerSamples: pointerSamples
+      resolvedWindow: planned.context.resolvedWindow,
+      interfaceOrientation: planned.orientation,
+      pointerSamples: planned.pointerSamples
     ) {
       return .unsupported(
         message: message,

@@ -15,6 +15,10 @@ extension RunnerTests {
   enum PlannedGestureExecution: Equatable {
     case fastSwipe
     case sampled
+#if os(iOS) && targetEnvironment(simulator)
+    /// One HID touch with the digitizer edge mask, which only a simulator can dispatch.
+    case screenEdgeTouch
+#endif
   }
 
   enum SynthesizedDragProfile: Equatable {

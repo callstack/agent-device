@@ -343,6 +343,8 @@ struct RunnerGesturePlan: Codable {
   let topology: String
   let intent: String
   let executionProfile: String?
+  /// `runnerScreenEdgeContactOrigin` when the contact starts as a screen-edge touch.
+  let contactOrigin: String?
   let durationMs: Double
   let viewport: RunnerGestureViewport
   let pointers: [RunnerGesturePointer]

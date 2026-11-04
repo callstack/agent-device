@@ -675,5 +675,45 @@ extension RunnerTests {
     )
   }
 
+  func testScreenEdgeFlingUsesTheEdgeTouchOnlyOnASimulator() throws {
+    let edge = try decodedFlingPlan(contactOrigin: #""screen-edge""#)
+    let inPage = try decodedFlingPlan(contactOrigin: nil)
+
+    XCTAssertNil(plannedGestureValidationError(edge))
+#if os(iOS) && targetEnvironment(simulator)
+    XCTAssertEqual(plannedGestureExecution(for: edge), .screenEdgeTouch)
+#else
+    XCTAssertEqual(plannedGestureExecution(for: edge), .fastSwipe)
+#endif
+    XCTAssertEqual(plannedGestureExecution(for: inPage), .fastSwipe)
+  }
+
+  func testPlannedGestureRejectsAnUnknownContactOrigin() throws {
+    let plan = try decodedFlingPlan(contactOrigin: #""screen-corner""#)
+
+    XCTAssertEqual(plannedGestureValidationError(plan), "planned gesture has an unsupported contact origin")
+  }
+
+  func testMultiTouchGestureCannotStartAsAScreenEdgeTouch() throws {
+    let plan = try JSONDecoder().decode(
+      RunnerGesturePlan.self,
+      from: Data(
+        #"{"topology":"multi","intent":"pan","contactOrigin":"screen-edge","durationMs":32,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":80,"y":80}},{"offsetMs":32,"point":{"x":100,"y":90}}]},{"pointerId":1,"samples":[{"offsetMs":0,"point":{"x":80,"y":120}},{"offsetMs":32,"point":{"x":100,"y":130}}]}]}"#.utf8
+      )
+    )
+
+    XCTAssertEqual(
+      plannedGestureValidationError(plan),
+      "only a single-pointer gesture can start as a screen-edge touch"
+    )
+  }
+
+  /// A right-edge fling; `contactOrigin` is the raw JSON value, or nil to omit the field.
+  private func decodedFlingPlan(contactOrigin: String?) throws -> RunnerGesturePlan {
+    let origin = contactOrigin.map { #""contactOrigin":\#($0),"# } ?? ""
+    let json = #"{"topology":"single","intent":"fling","executionProfile":"endpoint-hold",\#(origin)"durationMs":100,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":8,"y":150}},{"offsetMs":100,"point":{"x":170,"y":150}}]}]}"#
+    return try JSONDecoder().decode(RunnerGesturePlan.self, from: Data(json.utf8))
+  }
+
 }
 #endif

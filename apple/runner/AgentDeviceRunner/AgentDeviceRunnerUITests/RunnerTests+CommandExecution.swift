@@ -683,6 +683,13 @@ extension RunnerTests {
           try sampledPlannedGesture(app: activeApp, plan: plan)
         }
         return plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
+#if os(iOS) && targetEnvironment(simulator)
+      case .screenEdgeTouch:
+        let (timing, outcome) = try performGesture(activeApp, idleTimeout: false) {
+          try screenEdgePlannedGesture(app: activeApp, plan: plan)
+        }
+        return plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
+#endif
       }
     case .gestureViewport:
       let frame = try gestureViewportFrame(app: activeApp)
