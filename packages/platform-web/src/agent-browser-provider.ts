@@ -511,10 +511,10 @@ async function runAgentBrowserCommand(
   let semanticSuccess = false;
   const status = getManagedAgentBrowserStatus({ host: options.host, stateDir: options.stateDir });
   try {
-    await cleanupProviderStartupOrphans(options);
     if (options.ownedProcessRecords && cliArgs[0] === 'open') {
       agentBrowserFleetOf(options.ownedProcessRecords).openStarted(fleetSessionOf(options));
     }
+    await cleanupProviderStartupOrphans(options);
     const result = await runManagedAgentBrowser(cliArgs, {
       host: options.host,
       stateDir: options.stateDir,
