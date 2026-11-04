@@ -132,6 +132,7 @@ async function captureSnapshotAttempt(params: CaptureSnapshotParams): Promise<Sn
   recordSnapshotTiming(params.session, {
     durationMs: Date.now() - startedAt,
     backend: data.backend,
+    producer: data.producer,
     // approach (b): emit the PUBLIC leaf platform (ios/macos), never the internal `apple`.
     platform: publicPlatformString(params.device),
   });

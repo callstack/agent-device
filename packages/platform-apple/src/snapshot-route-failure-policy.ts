@@ -1,3 +1,7 @@
+import {
+  IOS_SYSTEM_SURFACE_HOSTS,
+  type IosSystemSurfaceHost,
+} from '@agent-device/contracts/ios-system-surface';
 import type { SnapshotSourceFailure } from './snapshot-source-facade.ts';
 
 /**
@@ -14,13 +18,32 @@ export type CaptureScopedConsequence =
   | 'window-not-full-screen';
 
 /**
+ * What a surface host refusal names (#2751): the registered host whose process runs for the
+ * Simulator, or `unverified` when the guest could not read the process table or place a process.
+ */
+export type SurfaceHostRefusal = IosSystemSurfaceHost | 'unverified';
+
+/**
  * The one classification a bridge failure receives before the route acts on it. `code` travels
  * unchanged for diagnostics; the scope says whether the generation is implicated, and a
- * capture-scoped verdict must name what it saw instead.
+ * capture-scoped verdict must name what it saw instead. A surface host refusal names the host, and
+ * the route serves it from the runner before any fallback warning applies.
  */
 export type BridgeFailureDisposition =
   | Readonly<{ scope: 'capture'; code: string; consequence: CaptureScopedConsequence }>
+  | Readonly<{
+      scope: 'capture';
+      code: string;
+      consequence: 'system-surface-host';
+      surfaceHost: SurfaceHostRefusal;
+    }>
   | Readonly<{ scope: 'generation'; code: string }>;
+
+/** Every disposition that reaches the generic fallback: all but a surface host refusal. */
+export type BridgeFallbackDisposition = Exclude<
+  BridgeFailureDisposition,
+  Readonly<{ consequence: 'system-surface-host' }>
+>;
 
 /**
  * Screen evidence, not app evidence: the arrangement is gone after the next keystroke, tap, or
@@ -46,9 +69,31 @@ export function bridgeFailureDisposition(failure: SnapshotSourceFailure): Bridge
   if (failure.kind === 'preparing') {
     return { scope: 'capture', code: failure.code, consequence: 'bridge-preparation' };
   }
+  const surfaceHost = surfaceHostRefusal(failure);
+  if (surfaceHost) {
+    return {
+      scope: 'capture',
+      code: failure.code,
+      consequence: 'system-surface-host',
+      surfaceHost,
+    };
+  }
   const consequence = CAPTURE_SCOPED_REFUSALS.get(failure.code);
   if (consequence) {
     return { scope: 'capture', code: failure.code, consequence };
   }
   return { scope: 'generation', code: failure.code };
+}
+
+/**
+ * A refusal over a running registered host names that host. A present refusal naming no
+ * registered executable proves nothing about which surface is up, so it is `unverified`.
+ */
+function surfaceHostRefusal(failure: SnapshotSourceFailure): SurfaceHostRefusal | undefined {
+  if (failure.code === 'system-surface-host-unverified') return 'unverified';
+  if (failure.code !== 'system-surface-host-present') return undefined;
+  const executable = failure.details?.surfaceHostExecutable;
+  return (
+    IOS_SYSTEM_SURFACE_HOSTS.find((host) => host.processExecutable === executable) ?? 'unverified'
+  );
 }

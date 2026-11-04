@@ -494,12 +494,18 @@ A host process outlives the surface it presented.
 For example, password AutoFill at sign-in leaves `SafariViewService` running for the rest of the session.
 If a host reports foreground, the capture goes to the runner.
 The read never starts or replaces a runner.
-If no runner is ready or the read fails, a device-scoped host-side probe checks for a registered host process that runs for the device.
-If such a process is running, the capture goes to the runner.
+If no runner is ready or the read fails, the bridge request names every registered host executable.
+Before the capture, and again after a capture that returned a tree, the bridge guest reads the process table in place for a host process that carries this device's `SIMULATOR_UDID`.
+If such a process is running, the guest refuses with `system-surface-host-present`, and the capture goes to the runner.
 If no such process is running, the capture stays on the bridge.
-If the probe cannot answer, the capture goes to the runner with the reason `system-surface-probe-unavailable`.
-The runner read comes first because the probe spawns processes on every capture.
+If the guest cannot read the process table or place a live host process, it refuses with `system-surface-host-unverified`, and the capture goes to the runner with that reason.
+A host process that exited, whether gone or a zombie, is absent: it presents nothing, and an unverified answer would keep every warm capture on the Mac off the bridge for as long as it lingered.
+The route resolved the app generation before the bridge refused, so that runner capture keeps the generation; the runner's own surface stamp still identifies a sheet it served.
+These refusals describe the screen, so they never retire the app generation.
+The check spawns no process, so a warm bridge capture costs no host process probe.
 Rejected: remembering a lingering verdict per host process. One process can present again.
+Rejected: caching an absent verdict until the next action. A sheet presents after the action that requests it, so the first poll would cache absence before the host starts.
+Rejected: a host-side `pgrep` and `ps` probe before each capture. It cost each warm capture about 45 ms (#2751).
 
 A presented surface also takes precedence over an explicitly requested bundle id.
 The runner checks for a presented host before it resolves or activates `command.appBundleId`.

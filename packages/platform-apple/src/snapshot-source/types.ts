@@ -28,6 +28,12 @@ export type SnapshotSourceTarget = Readonly<{
 export type SnapshotSourceRequest = Readonly<{
   target: SnapshotSourceTarget;
   hint: CaptureHint;
+  /**
+   * System surface host executables whose running process refuses this capture with
+   * `system-surface-host-present`. Absent means the caller already knows no host presents. The
+   * guest accepts 1 to 8 names of 1 to 256 characters each.
+   */
+  surfaceHostExecutables?: readonly string[];
   limits?: Partial<SnapshotSourceLimits>;
   signal?: AbortSignal;
 }>;

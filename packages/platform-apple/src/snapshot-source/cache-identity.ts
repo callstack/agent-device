@@ -18,6 +18,8 @@ export const SNAPSHOT_BRIDGE_SOURCE_FILENAMES = [
   'SnapshotBridgeRuntime.h',
   'SnapshotBridgeCapture.h',
   'SnapshotBridgeCapture.m',
+  'SnapshotBridgeSurfaceHosts.h',
+  'SnapshotBridgeSurfaceHosts.m',
   // Not a compile unit: the clang argv lists translation units only, and an included header
   // belongs in the fingerprint, not argv.
   SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME,
@@ -26,6 +28,7 @@ export const SNAPSHOT_BRIDGE_COMPILE_FILENAMES = [
   'SnapshotBridge.m',
   'SnapshotBridgeRuntime.m',
   'SnapshotBridgeCapture.m',
+  'SnapshotBridgeSurfaceHosts.m',
 ] as const;
 
 /**

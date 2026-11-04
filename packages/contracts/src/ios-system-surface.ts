@@ -22,9 +22,10 @@ export type IosSystemSurfaceHost = Readonly<{
   bundleId: string;
   kind: IosSystemSurfaceKind;
   /**
-   * Simulator app-binary path fragment the host-side presence probe matches with `pgrep -f`. Only
-   * a matched pid's environment is then read, to confirm the process belongs to the requested
-   * device. The Swift runner detects the host by bundle id (`XCUIApplication.state`) instead.
+   * Simulator app-binary path suffix the snapshot bridge guest matches against the end of each
+   * process's executable path, at a path component. Only a matched process's environment is then read, to confirm the process
+   * belongs to the requested device. The Swift runner detects the host by bundle id
+   * (`XCUIApplication.state`) instead.
    */
   processExecutable: string;
 }>;

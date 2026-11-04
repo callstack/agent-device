@@ -3,7 +3,7 @@ import { snapshotSourceError } from './errors.ts';
 import type { SnapshotSourceLimits } from './types.ts';
 
 export const SNAPSHOT_SOURCE_PROTOCOL_VERSION = 1;
-export const SNAPSHOT_SOURCE_VERSION = 'agent-device-simulator-ax-v1.9.0';
+export const SNAPSHOT_SOURCE_VERSION = 'agent-device-simulator-ax-v1.10.0';
 const FRAME_HEADER_BYTES = 4;
 
 export const SNAPSHOT_SOURCE_WIRE_KEYS = Object.freeze([
@@ -18,6 +18,8 @@ export const SNAPSHOT_SOURCE_WIRE_KEYS = Object.freeze([
   'maxDurationMs',
   'maxResponseBytes',
   'nativeLevelsHint',
+  'surfaceHostExecutables',
+  'simulatorUdid',
 ] as const);
 
 export const SNAPSHOT_SOURCE_RESPONSE_KEYS = Object.freeze([
@@ -34,6 +36,7 @@ export const SNAPSHOT_SOURCE_RESPONSE_KEYS = Object.freeze([
   'error_kind',
   'error_code',
   'error',
+  'surfaceHostExecutable',
 ] as const);
 
 export const SNAPSHOT_SOURCE_ATTRIBUTE_KEYS = Object.freeze([
@@ -51,6 +54,17 @@ export const SNAPSHOT_SOURCE_ATTRIBUTE_KEYS = Object.freeze([
 ] as const);
 
 export type SnapshotBridgeEnvelope = Readonly<Record<string, unknown>>;
+
+/**
+ * Asks the guest to refuse the capture while a process of one of these system surface host
+ * executables runs for the Simulator (`system-surface-host-present`), and to refuse it as well
+ * when it cannot read the process table or place a candidate (`system-surface-host-unverified`).
+ * The guest reads the process table in place, so the check spawns no host process (#2751).
+ */
+export type SnapshotBridgeSurfaceHostCheck = Readonly<{
+  simulatorUdid: string;
+  executables: readonly string[];
+}>;
 
 /**
  * The guest's native request accounting for one acquisition: how many native requests it
@@ -202,6 +216,7 @@ export function createSnapshotBridgeDescribeRequest(
     maxDurationMs: number;
     maxResponseBytes: number;
     nativeLevelsHint?: number;
+    surfaceHosts?: SnapshotBridgeSurfaceHostCheck;
   }>,
 ): Readonly<Record<string, unknown>> {
   return Object.freeze({
@@ -216,6 +231,12 @@ export function createSnapshotBridgeDescribeRequest(
     maxDurationMs: input.maxDurationMs,
     maxResponseBytes: input.maxResponseBytes,
     ...(input.nativeLevelsHint !== undefined ? { nativeLevelsHint: input.nativeLevelsHint } : {}),
+    ...(input.surfaceHosts
+      ? {
+          surfaceHostExecutables: input.surfaceHosts.executables,
+          simulatorUdid: input.surfaceHosts.simulatorUdid,
+        }
+      : {}),
   });
 }
 
@@ -265,7 +286,12 @@ export function bridgeFailureFromEnvelope(envelope: SnapshotBridgeEnvelope): nev
   const kind = envelope.error_kind;
   const code = typeof envelope.error_code === 'string' ? envelope.error_code : 'guest-error';
   const message = typeof envelope.error === 'string' ? envelope.error : undefined;
-  const details = message ? { guestMessage: message.slice(0, 1024) } : {};
+  const surfaceHostExecutable =
+    typeof envelope.surfaceHostExecutable === 'string' ? envelope.surfaceHostExecutable : undefined;
+  const details = {
+    ...(message ? { guestMessage: message.slice(0, 1024) } : {}),
+    ...(surfaceHostExecutable ? { surfaceHostExecutable } : {}),
+  };
   if (kind === 'unsupported') throw snapshotSourceError('unsupported', code, details);
   if (kind === 'malformed_tree') throw snapshotSourceError('malformed-tree', code, details);
   if (kind === 'application_not_responding') {

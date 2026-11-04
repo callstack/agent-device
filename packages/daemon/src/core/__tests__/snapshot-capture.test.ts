@@ -1,5 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import { captureSnapshot, captureSnapshotData } from '../snapshot-capture.ts';
+import { summarizeSnapshotDiagnostics } from '@agent-device/contracts/capture';
 import { buildSnapshotVisibility } from '@agent-device/capture-kit/snapshot-visibility';
 import { ANDROID_EMULATOR, buildNodes, IOS_SIMULATOR, MACOS_DEVICE } from '@agent-device/test-kit';
 import {
@@ -15,6 +16,7 @@ import {
   makeAndroidFreshnessSession,
 } from '../../__tests__/support/handlers/snapshot-handler.fixtures.ts';
 import { pendingSurfaceStabilization } from '../deferred-interaction-outcome.ts';
+import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 
 const captureSnapshotWithInteractor = vi.hoisted(() => vi.fn());
 vi.mock('../snapshot-interactor-capture.ts', () => ({ captureSnapshotWithInteractor }));
@@ -215,4 +217,25 @@ test('Android ref refresh mode does not retry narrow snapshots as sharp drops', 
   expect(result.freshness).toBeUndefined();
   expect(legacyDispatchCapture).toHaveBeenCalledTimes(1);
   expect(session.androidSnapshotFreshness).toBeUndefined();
+});
+
+// #2751: the host AX bridge and the runner share the `xctest` channel, so counting channels told a
+// warm bridge run apart from a runner fallback by nothing. The stats count the producer that served.
+test('snapshot timing stats count the producer that served each capture', async () => {
+  captureSnapshotWithInteractor.mockClear();
+  const session = makeIosSession('producer-stats');
+  for (const producer of ['simulator-ax-bridge', 'simulator-ax-bridge', 'apple-runner'] as const) {
+    captureSnapshotWithInteractor.mockResolvedValueOnce({ nodes: [], backend: 'xctest', producer });
+    await captureSnapshot({
+      device: IOS_SIMULATOR,
+      session,
+      flags: { snapshotInteractiveOnly: true },
+      logPath: '/tmp/snapshot-capture-test.log',
+    });
+  }
+
+  expect(summarizeSnapshotDiagnostics(session)?.stats.backends).toEqual({
+    'simulator-ax-bridge': 2,
+    'apple-runner': 1,
+  });
 });
