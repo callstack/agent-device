@@ -167,7 +167,10 @@ export function createLifecycleFixture(
       if (options.pauseAtDirectorySetup) await options.pauseAtDirectorySetup();
       await realHost.ensureDirectory(directoryPath);
     },
-    readTargetProcessStartTime: async () => options.targetStartTimes?.shift() ?? 'target-start',
+    readTargetProcessStartTime: async () => {
+      const startTime = options.targetStartTimes?.shift();
+      return startTime === undefined ? 'target-start' : startTime;
+    },
     start: (startedTarget, _bridgePath, socketPath) => {
       startedTargets.push(startedTarget);
       socketPaths.push(socketPath);
@@ -324,7 +327,7 @@ class FakeSocket extends EventEmitter implements SnapshotSourceSocket {
                 sourceVersion: SNAPSHOT_SOURCE_VERSION,
                 requestId: request.requestId,
                 ok: false,
-                pid: this.responsePid || request.pid,
+                pid: this.responsePid ?? request.pid,
                 generation: this.responseGeneration ?? request.generation,
                 error_kind: this.responseErrorKind,
                 error_code: 'fixture-error',
@@ -334,7 +337,7 @@ class FakeSocket extends EventEmitter implements SnapshotSourceSocket {
                 sourceVersion: SNAPSHOT_SOURCE_VERSION,
                 requestId: request.requestId,
                 ok: true,
-                pid: this.responsePid || request.pid,
+                pid: this.responsePid ?? request.pid,
                 generation: this.responseGeneration ?? request.generation,
                 truncated: false,
                 automationEnabled: true,
