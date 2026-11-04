@@ -15,6 +15,7 @@ import type {
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
 import { describeKeyboardOccludedPointWarning } from '@agent-device/selectors/keyboard-occlusion';
+import { resolveNodeTouchPoint } from '@agent-device/selectors/node-touch-point';
 import type { InteractionAction } from '@agent-device/selectors/interaction-action';
 import { assertReplayTargetResolution } from './replay-target-guard.ts';
 import type { ResolveInteractionTargetParams } from './interaction-resolution-request.ts';
@@ -27,7 +28,6 @@ import {
   assertVisibleSelectorTarget,
   runInteractionPipelineStages,
 } from './target-visibility-stages.ts';
-import { resolveNodeTouchPoint } from './resolution-touch-point.ts';
 
 export type { InteractionTarget, ResolvedInteractionTarget };
 

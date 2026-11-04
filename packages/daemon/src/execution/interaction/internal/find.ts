@@ -13,6 +13,7 @@ import {
 import { runNodePipelineStages } from '@agent-device/selectors/selector-pipeline';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { coveredInteractionDetails } from '@agent-device/selectors/interaction-error';
+import { resolveNodeTouchPoint } from '@agent-device/selectors/node-touch-point';
 import { assertTapTargetClearOfVisibleKeyboard } from '@agent-device/selectors/keyboard-occlusion';
 import {
   interactionVerb,
@@ -21,6 +22,7 @@ import {
 import { normalizeError } from '@agent-device/kernel/errors';
 import {
   centerOfRect,
+  type Point,
   type SnapshotAddressableNode,
   type SnapshotKeyboardBandFact,
   type SnapshotState,
@@ -397,13 +399,15 @@ async function dispatchFocusForFindMatch(
   const { req, logPath } = ctx;
   const coveredResponse = rejectCoveredFindMatch(match, 'focus');
   if (coveredResponse) return coveredResponse;
-  const coords = match.resolvedNode.rect ? centerOfRect(match.resolvedNode.rect) : null;
-  if (!coords) {
-    return errorResponse('COMMAND_FAILED', 'matched element has no bounds');
-  }
-  // The same keyboard decision the acting paths run (#2589/#2622): this seam dispatches the point
-  // itself instead of re-entering the interaction leaf, so the guard has to run here.
+  let coords: Point;
+  // The same touch-point and keyboard decisions the acting paths run (#2589/#2622/#3734): this seam
+  // dispatches the point itself instead of re-entering the interaction leaf, so they have to run here.
   try {
+    coords = resolveNodeTouchPoint(match.resolvedNode, match.tree.nodes, {
+      invalidMessage: `Ref ${match.ref} has no usable bounds`,
+      blockedTargetLabel: `Ref ${match.ref}`,
+      blockedTargetDetails: { ref: match.ref },
+    });
     assertTapTargetClearOfVisibleKeyboard({
       nodes: match.tree.nodes,
       node: match.resolvedNode,

@@ -9,6 +9,10 @@ export const FIND_FOCUS_DISPATCH_COVERAGE = definePathCoverage('find-focus-dispa
     'find-focus-dispatch keyboardOcclusion: the same match above the keyboard band focuses',
     'find-focus-dispatch keyboardOcclusion: a producer-measured band refuses the match even when the captured tree cannot derive one',
   ],
+  parentOwnedTouchPoint: [
+    'find-focus-dispatch parentOwnedTouchPoint: a fully tiled match refuses before dispatch',
+    'find-focus-dispatch parentOwnedTouchPoint: a child owning the center moves the focus to free parent space',
+  ],
   responseConstruction:
     'find-focus-dispatch responseConstruction: find focus returns the shared point-focus payload',
   errorTaxonomy:

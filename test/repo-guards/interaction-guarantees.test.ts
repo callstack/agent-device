@@ -167,7 +167,6 @@ test('acknowledged gaps are visible and bounded', () => {
     'find-focus-dispatch/nonHittable',
     'find-focus-dispatch/offscreen',
     'find-focus-dispatch/outcomeObservation',
-    'find-focus-dispatch/parentOwnedTouchPoint',
     'find-focus-dispatch/targetStability',
     'maestro-direct-selector/errorTaxonomy',
     'maestro-direct-selector/outcomeObservation',

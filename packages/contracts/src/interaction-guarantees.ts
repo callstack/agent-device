@@ -566,7 +566,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       // #2622: the seam dispatches the point itself, so the shared #2589 guard runs here rather
       // than at the interaction leaf's door. Same refusal, same typed details, measured at the
-      // center the seam dispatches.
+      // point the seam dispatches.
       keyboardOcclusion: {
         kind: 'runtime',
         via: 'packages/selectors/src/keyboard-occlusion.ts#assertTapTargetClearOfVisibleKeyboard',
@@ -578,10 +578,8 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
       },
       parentOwnedTouchPoint: {
-        kind: 'waived',
-        reason:
-          'gap: the seam aims `centerOfRect` of the resolved node rather than the parent-owned point `resolveInteractionTouchPoint` chooses, so a match whose center is tiled by an independently interactive descendant activates that descendant instead of failing closed — and the keyboard guard above measures the same center the tap uses, which is the point actually dispatched but not the point the acting paths would aim.',
-        trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
+        kind: 'runtime',
+        via: 'packages/selectors/src/interaction-touch-point.ts#resolveInteractionTouchPoint',
       },
       // The guarantee is promotion AND annotation. This seam runs only the first half, so the
       // cell cannot claim `runtime` for the whole guarantee (the same shape `native-ref` classifies

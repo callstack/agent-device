@@ -6,6 +6,7 @@ import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { scenarioName, scenarioNames } from './coverage-manifest.ts';
 import { FIND_FOCUS_DISPATCH_COVERAGE } from './find-focus-dispatch.coverage.ts';
+import { fullyTiledParentSnapshot } from './fixtures.ts';
 import { runnerSnapshotEntry, runnerTapEntry, withIosContractDaemon } from './daemon-harness.ts';
 
 // ADR 0011 Layer 3, find-focus-dispatch path: mutating `find <locator> focus` and the focus leg of
@@ -163,6 +164,50 @@ test(
 );
 
 test(
+  scenarioNames(FIND_FOCUS_DISPATCH_COVERAGE, 'parentOwnedTouchPoint')[0]!,
+  async () => {
+    // One scripted capture per request and no tap or type entry: a dispatch would consume an entry
+    // the transcript lacks. `type` is here because its focus leg is the same seam.
+    const tiled = fullyTiledParentSnapshot().nodes;
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(tiled), runnerSnapshotEntry(tiled)],
+      async (daemon) => {
+        for (const action of [['focus'], ['type', 'hello']]) {
+          const error = assertRpcError(
+            await daemon.callCommand('find', ['label', 'Card', ...action]),
+            500,
+            'COMMAND_FAILED',
+            /Ref @e2 has no parent-owned touch point/,
+          );
+          const details = readErrorDetails(error);
+          assert.equal(details.reason, 'covered_by_interactive_descendants');
+          assert.equal(details.ref, '@e2');
+          assert.equal(details.competitorCount, 10);
+          assert.equal(details.dispatched, 'no');
+        }
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  scenarioNames(FIND_FOCUS_DISPATCH_COVERAGE, 'parentOwnedTouchPoint')[1]!,
+  async () => {
+    // The closest negative: only a band across the card's center is an independent control, so the
+    // parent still owns free space. Its center (200,200) would activate that child.
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(partlyTiledCardTree()), runnerTapEntry({})],
+      async (daemon) => {
+        const data = assertRpcOk(await daemon.callCommand('find', ['label', 'Card', 'focus']));
+        assert.deepEqual({ x: data.x, y: data.y }, { x: 200, y: 168 });
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
   scenario('responseConstruction'),
   async () => {
     await withIosContractDaemon(
@@ -250,6 +295,28 @@ function readErrorDetails(error: Record<string, unknown>): Record<string, unknow
   const details = error.details;
   assert.ok(details && typeof details === 'object', 'the error carries typed details');
   return details as Record<string, unknown>;
+}
+
+function partlyTiledCardTree(): unknown[] {
+  return [
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 400, height: 800 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Link',
+      label: 'Card',
+      rect: { x: 20, y: 100, width: 360, height: 200 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      parentIndex: 1,
+      type: 'Button',
+      label: 'Action',
+      rect: { x: 20, y: 180, width: 360, height: 40 },
+      hittable: true,
+    },
+  ];
 }
 
 function nonHittableRowTree(): unknown[] {

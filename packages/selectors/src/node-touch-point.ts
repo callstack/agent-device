@@ -2,8 +2,8 @@ import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import type { Point, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { normalizeRef } from '@agent-device/kernel/snapshot';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
-import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
-import { resolveInteractionTouchPoint } from '@agent-device/selectors/interaction-touch-point';
+import { INTERACTION_ERROR_REASONS } from './interaction-error.ts';
+import { resolveInteractionTouchPoint } from './interaction-touch-point.ts';
 
 export function resolveNodeTouchPoint(
   node: SnapshotNode,
