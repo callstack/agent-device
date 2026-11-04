@@ -36,7 +36,7 @@
 | [0032 Layering Graph Engine](0032-layering-graph-engine.md) | replacement evaluation for `scripts/layering/` graph rules with dependency-cruiser or fallow `boundaries`, the reason that graph-based layering checks share one replaceable import model, the measured edge-set and parity gaps, and the revisit triggers |
 | [0033 Collocation decision table](0033-collocation-decision-table.md) | moves or additions for files in umbrella #3276 §5, renewed proposals for a move that the table refused, and a zone's collocation decisions |
 | [0034 Provider plugin registry](0034-provider-plugin-registry.md) | provider plugins, the `agent-device/plugins` contract, plugin sources and order, duplicate provider ids, plugin failure isolation, the daemon plugin inventory and `daemon status` |
-| [0035 macOS App Devices](0035-macos-app-devices.md) | native macOS apps as devices of their own, the host/app-device overlap rule, concurrent app sessions, and `macos-app` lease claims |
+| [0035 Host-Scoped Devices](0035-macos-app-devices.md) | native macOS apps and web sessions as devices of their own, the host/scoped-device overlap and claim rule, the web session name rule and backend key, concurrent app and web sessions, and `macos-app` lease claims |
 | [0036 Bounded Composite Resource Admission](0036-bounded-composite-resource-admission.md) | resource operations, nested tests, session disposal, and claim recovery inside bounded batch/replay steps |
 
 ADRs record rationale.
