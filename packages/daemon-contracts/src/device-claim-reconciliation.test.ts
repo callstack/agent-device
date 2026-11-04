@@ -401,6 +401,30 @@ test('an open-session recording with no surviving-owner authority is retained be
   expect(fs.readFileSync(claimPath)).toEqual(before);
 });
 
+test.each(['open-session', 'transient-command'] as const)(
+  'a %s recording with an outstanding session owner never enters recovery',
+  async (kind) => {
+    const stateDir = mkdtempForTestSync('pending-session-owner-');
+    const claim: DeviceClaim = {
+      ...makeClaim(stateDir),
+      claimOwnerKind: kind,
+      ...(kind === 'transient-command' ? { transientCommand: 'record' } : {}),
+      recordingSessionOwner: { pid: 123, startTime: 'owner-start' },
+    };
+    const env = { AGENT_DEVICE_CLAIMS_DIR: path.join(stateDir, 'claims') };
+    writeDeviceClaim(claim, env);
+    const claimPath = resolveDeviceClaimPath(claim.deviceKey, env);
+    const before = fs.readFileSync(claimPath);
+    const reconcile = vi.fn(async () => ({ status: 'reconciled' as const }));
+    await expect(settleVerifiedOrphanedClaim(claim, reconcile, env)).resolves.toEqual({
+      status: 'retained',
+      reason: 'screen-recording-session-owner-pending',
+    });
+    expect(reconcile).not.toHaveBeenCalled();
+    expect(fs.readFileSync(claimPath)).toEqual(before);
+  },
+);
+
 test.each([
   { evidence: 'missing token', token: undefined, generation: 1, reason: 'provenance-unconfirmed' },
   { evidence: 'replacement token', token: 'other-token', generation: 1, reason: 'owner-mismatch' },
