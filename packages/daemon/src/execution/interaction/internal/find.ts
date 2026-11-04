@@ -12,9 +12,12 @@ import {
 } from '@agent-device/selectors';
 import { runNodePipelineStages } from '@agent-device/selectors/selector-pipeline';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
-import { coveredInteractionDetails } from '@agent-device/selectors/interaction-error';
 import {
-  collectNestedTextFields,
+  coveredInteractionDetails,
+  INTERACTION_ERROR_REASONS,
+} from '@agent-device/selectors/interaction-error';
+import {
+  resolveFocusTarget,
   resolveNodeTouchPoint,
 } from '@agent-device/selectors/node-touch-point';
 import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snapshot-occlusion';
@@ -404,13 +407,28 @@ async function dispatchFocusForFindMatch(
   const { req, logPath } = ctx;
   const coveredResponse = rejectCoveredFindMatch(match, 'focus');
   if (coveredResponse) return coveredResponse;
-  const fields = collectNestedTextFields(match.resolvedNode, match.tree.nodes, ctx.device.platform);
-  if (fields.length > 1) return buildNestedTextFieldsError(match.ref, fields);
-  const nestedField = fields[0];
-  if (nestedField && isSnapshotNodeInteractionBlocked(nestedField)) {
-    return coveredFindResponse(nestedField, 'focus');
+  const focusTarget = resolveFocusTarget({
+    located: match.node,
+    resolved: match.resolvedNode,
+    nodes: match.tree.nodes,
+    platform: ctx.device.platform,
+  });
+  if (focusTarget.kind === 'several-fields') {
+    return buildNestedTextFieldsError(match.ref, focusTarget.fields);
   }
-  const target = nestedField ?? match.resolvedNode;
+  if (focusTarget.kind === 'disabled-field') {
+    return errorResponse(
+      'COMMAND_FAILED',
+      `Matched element @${focusTarget.node.ref} is a disabled text field and cannot be focused`,
+      {
+        reason: INTERACTION_ERROR_REASONS.targetDisabled,
+        ref: `@${focusTarget.node.ref}`,
+        hint: 'Enable the field first, or target a different one.',
+      },
+    );
+  }
+  const target = focusTarget.node;
+  if (isSnapshotNodeInteractionBlocked(target)) return coveredFindResponse(target, 'focus');
   const targetRef = `@${target.ref}`;
   let coords: Point;
   // The same touch-point and keyboard decisions the acting paths run (#2589/#2622/#3734): this seam

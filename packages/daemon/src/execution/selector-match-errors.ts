@@ -12,7 +12,7 @@ import { errorResponse } from '@agent-device/kernel/contracts';
 // (`elementMatchCandidateDetails`), beside the renderer — `matches` (the true
 // total) is what a
 // "+N more" marker is computed from at render time by the surface owners.
-// Exported as the single AMBIGUOUS_MATCH producer so the help-benchmark
+// Exported as find's locator AMBIGUOUS_MATCH producer so the help-benchmark
 // sample parity test renders the exact error this handler returns; a message
 // change here fails that gate instead of drifting past it.
 export function buildAmbiguousMatchError(

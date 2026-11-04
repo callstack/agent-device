@@ -595,8 +595,6 @@ const findCommandFacet = defineCommandFacet({
   name: 'find',
   text: {
     summary: 'Find an element and act',
-    cliDetail:
-      'find focus and find type aim at the text field when the match contains exactly one, and refuse with AMBIGUOUS_MATCH and the field candidates when it contains several. Disabled and invisible fields do not count.',
   },
   metadata: metadata('find'),
   run: (client, input) => client.interactions.find(input as FindOptions),

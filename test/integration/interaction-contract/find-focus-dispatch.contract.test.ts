@@ -399,6 +399,140 @@ test(
 );
 
 test(
+  nestedFieldScenario(9),
+  async () => {
+    // iOS reports a disabled node non-hittable, so `find` promotes the named field to its parent. The
+    // parent's only enabled field is a different one, and the text must not land there.
+    const tree = namedFieldBesideSiblingTree({ enabled: false });
+    await withIosContractDaemon([runnerSnapshotEntry(tree)], async (daemon) => {
+      const error = assertRpcError(
+        await daemon.callCommand('find', ['label', 'Notes', 'type', 'hello']),
+        500,
+        'COMMAND_FAILED',
+        /Matched element @e3 is a disabled text field and cannot be focused/,
+      );
+      const details = readErrorDetails(error);
+      assert.equal(details.reason, 'target_disabled');
+      assert.equal(details.ref, '@e3');
+    });
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  nestedFieldScenario(10),
+  async () => {
+    const tree = namedFieldBesideSiblingTree({ enabled: true });
+    await withIosContractDaemon([runnerSnapshotEntry(tree), runnerTapEntry({})], async (daemon) => {
+      const data = assertRpcOk(await daemon.callCommand('find', ['label', 'Notes', 'focus']));
+      assert.deepEqual({ x: data.x, y: data.y }, { x: 200, y: 150 });
+    });
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  nestedFieldScenario(11),
+  async () => {
+    const tree = labelledWrapperTree().map((node) =>
+      (node as { index: number }).index === 2
+        ? { ...(node as object), enabled: false, hittable: false }
+        : node,
+    );
+    await withIosContractDaemon([runnerSnapshotEntry(tree)], async (daemon) => {
+      const error = assertRpcError(
+        await daemon.callCommand('find', ['label', 'Email', 'focus']),
+        500,
+        'COMMAND_FAILED',
+        /Matched element @e3 is a disabled text field and cannot be focused/,
+      );
+      assert.equal(readErrorDetails(error).reason, 'target_disabled');
+    });
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  nestedFieldScenario(12),
+  async () => {
+    // One control reported twice: the search field and the text field it hosts.
+    const tree = [
+      APPLICATION_NODE,
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'Other',
+        label: 'Search',
+        rect: { x: 20, y: 100, width: 360, height: 80 },
+        hittable: true,
+      },
+      {
+        index: 2,
+        parentIndex: 1,
+        type: 'SearchField',
+        rect: { x: 32, y: 130, width: 336, height: 40 },
+        hittable: true,
+      },
+      {
+        index: 3,
+        parentIndex: 2,
+        type: 'TextField',
+        rect: { x: 32, y: 130, width: 336, height: 40 },
+        hittable: true,
+      },
+    ];
+    await withIosContractDaemon([runnerSnapshotEntry(tree), runnerTapEntry({})], async (daemon) => {
+      const data = assertRpcOk(await daemon.callCommand('find', ['label', 'Search', 'focus']));
+      assert.deepEqual({ x: data.x, y: data.y }, { x: 200, y: 150 });
+    });
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  nestedFieldScenario(13),
+  async () => {
+    // --raw keeps reported frames, so a scrolled-away field reaches this seam. It must not draw the
+    // focus off screen, and it must not turn the visible field into an ambiguity.
+    const form = {
+      index: 1,
+      parentIndex: 0,
+      type: 'ScrollView',
+      label: 'Form',
+      rect: { x: 0, y: 100, width: 400, height: 600 },
+      hittable: true,
+    };
+    const visibleField = {
+      index: 2,
+      parentIndex: 1,
+      type: 'TextField',
+      rect: { x: 32, y: 150, width: 336, height: 44 },
+      hittable: true,
+    };
+    const scrolledAwayField = {
+      index: 3,
+      parentIndex: 1,
+      type: 'TextField',
+      rect: { x: 32, y: 1400, width: 336, height: 44 },
+      hittable: false,
+    };
+    await withIosContractDaemon(
+      [
+        runnerSnapshotEntry([APPLICATION_NODE, form, visibleField, scrolledAwayField]),
+        runnerTapEntry({}),
+      ],
+      async (daemon) => {
+        const data = assertRpcOk(
+          await daemon.callCommand('find', ['label', 'Form', 'focus'], { snapshotRaw: true }),
+        );
+        assert.deepEqual({ x: data.x, y: data.y }, { x: 200, y: 172 });
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
   scenario('responseConstruction'),
   async () => {
     await withIosContractDaemon(
@@ -559,6 +693,36 @@ function labelBesideFieldTree(): unknown[] {
       parentIndex: 1,
       type: 'TextField',
       rect: { x: 32, y: 130, width: 336, height: 40 },
+      hittable: true,
+    },
+  ];
+}
+
+function namedFieldBesideSiblingTree({ enabled }: { enabled: boolean }): unknown[] {
+  return [
+    APPLICATION_NODE,
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Other',
+      rect: { x: 20, y: 100, width: 360, height: 160 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      parentIndex: 1,
+      type: 'TextView',
+      label: 'Notes',
+      enabled,
+      rect: { x: 32, y: 130, width: 336, height: 40 },
+      hittable: false,
+    },
+    {
+      index: 3,
+      parentIndex: 1,
+      type: 'TextField',
+      label: 'Title',
+      rect: { x: 32, y: 200, width: 336, height: 40 },
       hittable: true,
     },
   ];

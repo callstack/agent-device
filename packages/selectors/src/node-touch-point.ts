@@ -6,29 +6,66 @@ import type {
   SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import { normalizeRef } from '@agent-device/kernel/snapshot';
-import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
+import { createSnapshotVisibility, isFillableType } from '@agent-device/contracts/snapshot';
 import type { Platform } from '@agent-device/kernel/device';
 import { INTERACTION_ERROR_REASONS } from './interaction-error.ts';
 import { isDescendantOf, resolveInteractionTouchPoint } from './interaction-touch-point.ts';
-import { isNodeEditable, isNodeVisible } from './internal/node.ts';
+
+export type FocusTarget =
+  | { kind: 'target'; node: SnapshotAddressableNode }
+  | { kind: 'disabled-field'; node: SnapshotAddressableNode }
+  | { kind: 'several-fields'; fields: SnapshotAddressableNode[] };
 
 /**
- * The enabled, visible text fields inside `node`. A touch point treats a field as a competitor to
- * avoid, so a caller that means to focus a field has to ask for it by name.
+ * What an action that means to focus a text field should aim at. A touch point treats a field as a
+ * competitor to avoid, so this has to run first. The field the locator named wins over anything its
+ * promoted ancestor contains; otherwise the ancestor's outermost on-screen fields decide.
  */
-export function collectNestedTextFields(
+export function resolveFocusTarget(input: {
+  located: SnapshotNode;
+  resolved: SnapshotAddressableNode;
+  nodes: readonly SnapshotNode[];
+  platform: Platform;
+}): FocusTarget {
+  const { located, resolved, nodes, platform } = input;
+  if (isAddressable(located) && isTextField(located, platform)) {
+    return located.enabled === false
+      ? { kind: 'disabled-field', node: located }
+      : { kind: 'target', node: located };
+  }
+  const fields = collectOutermostTextFields(resolved, nodes, platform);
+  const enabled = fields.filter((field) => field.enabled !== false);
+  if (enabled.length > 1) return { kind: 'several-fields', fields: enabled };
+  if (enabled[0]) return { kind: 'target', node: enabled[0] };
+  return fields[0]
+    ? { kind: 'disabled-field', node: fields[0] }
+    : { kind: 'target', node: resolved };
+}
+
+function collectOutermostTextFields(
   node: SnapshotNode,
   nodes: readonly SnapshotNode[],
   platform: Platform,
 ): SnapshotAddressableNode[] {
   const byIndex = new Map(nodes.map((entry) => [entry.index, entry]));
-  return nodes.filter(
+  const visibility = createSnapshotVisibility([...nodes]);
+  const fields = nodes.filter(
     (candidate): candidate is SnapshotAddressableNode =>
-      candidate.ref !== undefined &&
+      isAddressable(candidate) &&
+      isTextField(candidate, platform) &&
       isDescendantOf(candidate, node, byIndex) &&
-      isNodeEditable(candidate, platform) &&
-      isNodeVisible(candidate),
+      visibility.isVisibleOnScreen(candidate),
   );
+  return fields.filter((field) => !fields.some((other) => isDescendantOf(field, other, byIndex)));
+}
+
+function isAddressable(node: SnapshotNode): node is SnapshotAddressableNode {
+  return node.ref !== undefined;
+}
+
+/** An untyped node is lenient for a fill guard, but here being a field would make it the target. */
+function isTextField(node: SnapshotNode, platform: Platform): boolean {
+  return node.editable ?? (Boolean(node.type?.trim()) && isFillableType(node.type ?? '', platform));
 }
 
 export function resolveNodeTouchPoint(

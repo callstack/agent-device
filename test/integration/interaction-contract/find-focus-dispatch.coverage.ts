@@ -19,6 +19,11 @@ export const FIND_FOCUS_DISPATCH_COVERAGE = definePathCoverage('find-focus-dispa
     'find-focus-dispatch parentOwnedTouchPoint: a disabled field does not count as a nested text field',
     'find-focus-dispatch parentOwnedTouchPoint: a covered nested text field refuses before dispatch',
     'find-focus-dispatch parentOwnedTouchPoint: a nested text field behind the keyboard refuses even when its parent is clear',
+    'find-focus-dispatch parentOwnedTouchPoint: a named disabled field refuses instead of writing into its sibling',
+    'find-focus-dispatch parentOwnedTouchPoint: a named non-hittable field stays the target over its sibling',
+    'find-focus-dispatch parentOwnedTouchPoint: a match holding only a disabled field refuses',
+    'find-focus-dispatch parentOwnedTouchPoint: a field nested in a field counts once',
+    'find-focus-dispatch parentOwnedTouchPoint: an off-screen field neither takes the focus nor counts',
   ],
   responseConstruction:
     'find-focus-dispatch responseConstruction: find focus returns the shared point-focus payload',

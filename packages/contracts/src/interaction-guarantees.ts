@@ -578,7 +578,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
       },
       // The rule treats a nested text field as a competitor to avoid, but this seam means to focus
-      // one, so a sole enabled field becomes the target first (#3734) and several refuse.
+      // one, so `resolveFocusTarget` chooses the node the rule then aims inside (#3734).
       parentOwnedTouchPoint: {
         kind: 'runtime',
         via: 'packages/selectors/src/interaction-touch-point.ts#resolveInteractionTouchPoint',
@@ -636,7 +636,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       targetStability: {
         kind: 'waived',
         reason:
-          "gap: the seam dispatches a rect center captured one runner round trip earlier without the #3471 re-observation, so a focus issued right after an action that animated the surface can aim a position the target has already vacated and report success on the vacancy. The gate itself is the acting leaf's (`guardResolvedTargetAgainstMotion`), and this route does not pass through it.",
+          "gap: the seam dispatches a touch point captured one runner round trip earlier without the #3471 re-observation, so a focus issued right after an action that animated the surface can aim a position the target has already vacated and report success on the vacancy. The gate itself is the acting leaf's (`guardResolvedTargetAgainstMotion`), and this route does not pass through it.",
         trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
       },
     },
