@@ -54,8 +54,8 @@ Tips:
   [Structured node fields](/docs/snapshots#structured-node-fields---json).
 - Use `find ... wait <timeoutMs>` to wait for an element to appear.
 - Pair `find` with a scoped snapshot (`snapshot -s "<label>"`) for speed.
-- [Android] If the matched node is not hittable, agent-device clicks or focuses the nearest hittable ancestor.
-- `find ... focus` and `find ... type` aim at a text field: the match when it is one, or else the one enabled on-screen field inside it. Several such fields refuse with `AMBIGUOUS_MATCH` and the field candidates, and a disabled field refuses with `target_disabled`. Web text boxes are not recognized as text fields, so a web match keeps its own aim.
+- [Android] If the matched node is not hittable, agent-device clicks or focuses the nearest hittable ancestor. `find ... focus` and `find ... type` keep a matched text field as their target instead.
+- `find ... focus` and `find ... type` aim at a text field: the match when it is one or sits inside one, or else the one enabled on-screen field inside it. Several such fields refuse with `AMBIGUOUS_MATCH` and the field candidates, and a disabled field refuses with `target_disabled`. Web text boxes are not recognized as text fields, so a web match keeps its own aim.
 - Use `fill` to find a field and replace its text in one step. To append to the text in the focused field, use `click` or `press`, then `type`.
 
 ## Selector syntax

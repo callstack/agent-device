@@ -72,6 +72,44 @@ test('fields under different controls each count, and nested ones count as their
   });
 });
 
+test('a disabled field a same-rect wrapper resolved to refuses', () => {
+  const wrapper = child(1, { type: 'android.widget.FrameLayout', hittable: false });
+  const field = child(2, {
+    parentIndex: 1,
+    type: 'android.widget.EditText',
+    rect: wrapper.rect,
+    enabled: false,
+  });
+  const target = resolveFocusTarget({
+    located: wrapper,
+    resolved: field,
+    nodes: [ROOT, wrapper, field],
+    platform: 'android',
+  });
+  assert.deepEqual(target, { kind: 'disabled-field', node: field });
+});
+
+function labelInsideFieldBesideSiblings(fieldOverrides: Partial<SnapshotAddressableNode>) {
+  const form = child(1, { type: 'Other', rect: { x: 0, y: 0, width: 400, height: 400 } });
+  const field = child(2, { parentIndex: 1, type: 'TextView', hittable: false, ...fieldOverrides });
+  const label = child(3, { parentIndex: 2, type: 'StaticText', hittable: false });
+  const siblings = [
+    child(4, { parentIndex: 1, type: 'TextField' }),
+    child(5, { parentIndex: 1, type: 'TextField' }),
+  ];
+  return { form, field, label, nodes: [form, field, label, ...siblings] };
+}
+
+test('a label inside a disabled field refuses when promotion passes the field', () => {
+  const { form, field, label, nodes } = labelInsideFieldBesideSiblings({ enabled: false });
+  assert.deepEqual(resolve(label, form, nodes), { kind: 'disabled-field', node: field });
+});
+
+test('a label inside an enabled field aims at that field when promotion passes it', () => {
+  const { form, field, label, nodes } = labelInsideFieldBesideSiblings({});
+  assert.deepEqual(resolve(label, form, nodes), { kind: 'target', node: field });
+});
+
 test('android reads its own field types', () => {
   const row = child(1, {
     type: 'android.widget.LinearLayout',

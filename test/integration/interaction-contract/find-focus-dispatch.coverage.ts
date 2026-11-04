@@ -24,6 +24,7 @@ export const FIND_FOCUS_DISPATCH_COVERAGE = definePathCoverage('find-focus-dispa
     'find-focus-dispatch parentOwnedTouchPoint: a match holding only a disabled field refuses',
     'find-focus-dispatch parentOwnedTouchPoint: a field nested in a field counts once',
     'find-focus-dispatch parentOwnedTouchPoint: an off-screen field neither takes the focus nor counts',
+    'find-focus-dispatch parentOwnedTouchPoint: a label inside a disabled field refuses instead of writing into its sibling',
   ],
   responseConstruction:
     'find-focus-dispatch responseConstruction: find focus returns the shared point-focus payload',

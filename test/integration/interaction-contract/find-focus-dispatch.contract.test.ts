@@ -420,6 +420,43 @@ test(
 );
 
 test(
+  nestedFieldScenario(14),
+  async () => {
+    // Promotion climbs past the disabled field to the form, whose only enabled field is another one.
+    const [application, form, field, sibling] = namedFieldBesideSiblingTree({ enabled: false }) as [
+      object,
+      object,
+      object,
+      object,
+    ];
+    const tree = [
+      application,
+      form,
+      { ...field, label: undefined },
+      {
+        index: 3,
+        parentIndex: 2,
+        type: 'StaticText',
+        label: 'Notes',
+        rect: { x: 40, y: 140, width: 100, height: 20 },
+        hittable: false,
+      },
+      { ...sibling, index: 4 },
+    ];
+    await withIosContractDaemon([runnerSnapshotEntry(tree)], async (daemon) => {
+      const error = assertRpcError(
+        await daemon.callCommand('find', ['label', 'Notes', 'type', 'hello']),
+        500,
+        'COMMAND_FAILED',
+        /Matched element @e3 is a disabled text field and cannot be focused/,
+      );
+      assert.equal(readErrorDetails(error).reason, 'target_disabled');
+    });
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
   nestedFieldScenario(10),
   async () => {
     const tree = namedFieldBesideSiblingTree({ enabled: true });

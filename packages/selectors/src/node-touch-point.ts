@@ -18,8 +18,9 @@ export type FocusTarget =
 
 /**
  * What an action that means to focus a text field should aim at. A touch point treats a field as a
- * competitor to avoid, so this has to run first. The field the locator named wins over anything its
- * promoted ancestor contains; otherwise the ancestor's outermost on-screen fields decide.
+ * competitor to avoid, so this has to run first. The field the locator named, or the one holding what
+ * it named, wins over anything the promoted match contains; otherwise the match's outermost on-screen
+ * fields decide.
  */
 export function resolveFocusTarget(input: {
   located: SnapshotNode;
@@ -28,10 +29,13 @@ export function resolveFocusTarget(input: {
   platform: Platform;
 }): FocusTarget {
   const { located, resolved, nodes, platform } = input;
-  if (isAddressable(located) && isTextField(located, platform)) {
-    return located.enabled === false
-      ? { kind: 'disabled-field', node: located }
-      : { kind: 'target', node: located };
+  const named = locatedToResolved(located, resolved, nodes).find(
+    (node): node is SnapshotAddressableNode => isAddressable(node) && isTextField(node, platform),
+  );
+  if (named) {
+    return named.enabled === false
+      ? { kind: 'disabled-field', node: named }
+      : { kind: 'target', node: named };
   }
   const fields = collectOutermostTextFields(resolved, nodes, platform);
   const enabled = fields.filter((field) => field.enabled !== false);
@@ -40,6 +44,30 @@ export function resolveFocusTarget(input: {
   return fields[0]
     ? { kind: 'disabled-field', node: fields[0] }
     : { kind: 'target', node: resolved };
+}
+
+/** Promotion climbs to an ancestor or settles on a same-rect descendant, so only a climb has a path. */
+function locatedToResolved(
+  located: SnapshotNode,
+  resolved: SnapshotNode,
+  nodes: readonly SnapshotNode[],
+): SnapshotNode[] {
+  const byIndex = new Map(nodes.map((entry) => [entry.index, entry]));
+  if (!isDescendantOf(located, resolved, byIndex)) return [located, resolved];
+  const path = [located];
+  let current = parentOf(located, byIndex);
+  while (current && current.index !== resolved.index) {
+    path.push(current);
+    current = parentOf(current, byIndex);
+  }
+  return [...path, resolved];
+}
+
+function parentOf(
+  node: SnapshotNode,
+  byIndex: ReadonlyMap<number, SnapshotNode>,
+): SnapshotNode | undefined {
+  return typeof node.parentIndex === 'number' ? byIndex.get(node.parentIndex) : undefined;
 }
 
 function collectOutermostTextFields(
