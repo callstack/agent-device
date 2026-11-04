@@ -8,6 +8,7 @@ import {
 } from './fixtures.ts';
 import { createCompletedNativeManifest, createNativeManifest } from './manifest.ts';
 import { bindAndroidScreenRecordingRuntime } from './runtime.ts';
+import { reconcileStartEvidence } from './start-reconciliation.ts';
 
 const start = async (overrides: Record<string, unknown>) =>
   await bindAndroidScreenRecordingRuntime({
@@ -529,29 +530,36 @@ function tamperCompletion(patch: Record<string, unknown>) {
   return { ...evidence, completion: { ...evidence.completion!, ...patch } };
 }
 
-test('an incomplete start is retired only after exact marker, writer absence and artifact absence are proven', async () => {
+test('an incomplete start checkpoints no effect only after exact marker, writer and artifact proof', async () => {
   const input = { ...recordingInput(), claimToken: 'claim-token' };
   const pending = '/sdcard/agent-device-recording-1.mp4';
   let marker = JSON.stringify(createNativeManifest(androidRecordingDevice, input, 1, [], pending));
   let writers = true;
   let artifact = false;
   let signals = 0;
-  const runtime = await start({
+  const overrides = {
     readManifest: async (markerPath: string) =>
       markerPath.startsWith('/sdcard') && marker
         ? { status: 'read' as const, contents: marker }
         : { status: 'missing' as const },
     findRunning: async () => (writers ? [{ pid: '42', startTime: '1', remotePath: pending }] : []),
     exists: async () => artifact,
+    inspect: async () => 'missing' as const,
     stop: async () => {
       signals += 1;
       return 'stopped' as const;
+    },
+    writeManifest: async ({ contents }: { contents: string }) => {
+      marker = contents;
     },
     removeManifest: async () => {
       marker = '';
       return true;
     },
-  });
+  };
+  const runtime = await start(overrides);
+  const transport =
+    await recordingHost(overrides).screenRecording.android.resolve(androidRecordingDevice);
   const recovery = { sessionId: input.sessionId, fence: input.fence, claimToken: input.claimToken };
   expect(
     await runtime.recoverIncompleteRecordingStart({ ...recovery, claimToken: 'foreign-token' }),
@@ -569,6 +577,18 @@ test('an incomplete start is retired only after exact marker, writer absence and
   expect(marker).not.toBe('');
   artifact = false;
   expect(await runtime.recoverIncompleteRecordingStart(recovery)).toBe('confirmed-no-effect');
+  expect(JSON.parse(marker)).toMatchObject({
+    startNoEffectConfirmed: true,
+    claimToken: 'claim-token',
+  });
+  expect(await runtime.recoverIncompleteRecordingStart(recovery)).toBe('confirmed-no-effect');
+  artifact = true;
+  await expect(reconcileStartEvidence(transport, androidRecordingDevice)).rejects.toMatchObject({
+    details: { reason: 'native_recording_artifact_claimed' },
+  });
+  expect(JSON.parse(marker).startNoEffectConfirmed).toBe(true);
+  artifact = false;
+  await reconcileStartEvidence(transport, androidRecordingDevice);
   expect(marker).toBe('');
   expect(signals).toBe(0);
 });

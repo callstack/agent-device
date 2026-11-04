@@ -294,6 +294,10 @@ export async function handleSessionCloseCommands(
       app,
     });
   }
+  const releaseRecordingClaimAfterCleanup =
+    session.recordOnlySession && session.deviceClaim
+      ? await req.internal?.holdRecordingClaimForClose?.(session.deviceClaim)
+      : undefined;
   const repair = await prepareRepairClose({
     req,
     ref,
@@ -314,6 +318,7 @@ export async function handleSessionCloseCommands(
     clearRuntimeHints: admission.clearRuntimeHints,
     repairArmed: repair.repairArmed,
     platformResourceCleanup,
+    releaseRecordingClaimAfterCleanup,
   });
   if (closed.kind === 'response') return closed.response;
   return buildCloseSuccessResponse({
@@ -349,6 +354,7 @@ async function runCloseTeardownAndRelease(params: {
   clearRuntimeHints?: RuntimeHintClearOperation;
   repairArmed: boolean;
   platformResourceCleanup: PlatformResourceCleanup;
+  releaseRecordingClaimAfterCleanup?: () => void;
 }): Promise<SessionCloseFinalization> {
   const {
     req,
@@ -400,12 +406,15 @@ async function runCloseTeardownAndRelease(params: {
       });
     }
   } else {
-    const outcome = await clearDeviceClaim(session.deviceClaim, params.env);
-    if (outcome === 'cleanup-pending')
-      throw new AppError('COMMAND_FAILED', 'Recording runtime cleanup is not confirmed', {
-        reason: 'cleanup-unconfirmed',
-        retriable: true,
-      });
+    if (params.releaseRecordingClaimAfterCleanup) params.releaseRecordingClaimAfterCleanup();
+    else {
+      const outcome = await clearDeviceClaim(session.deviceClaim, params.env);
+      if (outcome === 'cleanup-pending')
+        throw new AppError('COMMAND_FAILED', 'Recording runtime cleanup is not confirmed', {
+          reason: 'cleanup-unconfirmed',
+          retriable: true,
+        });
+    }
   }
   sessionStore.retire(ref, { retainExecutionHost });
   if (deviceClaimBlockingError) throw deviceClaimBlockingError;

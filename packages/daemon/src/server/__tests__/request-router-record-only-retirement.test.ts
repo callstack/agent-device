@@ -27,7 +27,7 @@ import {
 } from '../../__tests__/support/test-device-runtime-gateway.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
-import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { SessionStore } from '../../core/session-store.ts';
 import { makeIosDevice } from './request-router-open-harness.ts';
 import {
   createTestAppLogLiveHandle,
@@ -100,6 +100,16 @@ const SESSION = 'record-only-session';
 const RECORDING_OUT_PATH = '/tmp/record-only.mp4';
 
 const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
+
+function makeSessionStore(prefix: string): SessionStore {
+  const root = mkdtempForTestSync(prefix);
+  return new SessionStore(
+    path.join(root, 'sessions'),
+    createTestHostEnvironment({
+      env: { ...process.env, AGENT_DEVICE_CLAIMS_DIR: path.join(root, 'claims') },
+    }),
+  );
+}
 
 beforeEach(() => {
   mockAwaitFixtureReadiness.mockReset();
@@ -272,6 +282,7 @@ function createHandler(
     host: createTestHostEnvironment({
       env: {
         ...process.env,
+        AGENT_DEVICE_CLAIMS_DIR: path.join(sessionStore.resolveDaemonStateDir(), 'claims'),
         // The app-event route needs a URL template to deliver; without one it refuses before
         // publishing any app identity.
         AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE: 'myapp://agent-device/event?name={event}',

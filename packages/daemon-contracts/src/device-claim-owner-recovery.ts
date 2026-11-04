@@ -93,6 +93,15 @@ export function createOwnerScopedDeviceClaimReconciler(
       } catch {
         // ADR 0010: secondary diagnostic failures must preserve the reconciliation outcome.
       }
+      if (claim.recordingStartPending && outcome.status === 'fulfilled')
+        return {
+          status: 'retained',
+          reason:
+            outcome.result.status === 'retained'
+              ? outcome.result.reason
+              : 'screen-recording-recovery-disposal-unconfirmed',
+          cleanupUnconfirmed: true,
+        };
       if (outcome.status === 'fulfilled' && outcome.result.status === 'reconciled') throw error;
     }
     if (outcome.status === 'rejected') throw outcome.error;

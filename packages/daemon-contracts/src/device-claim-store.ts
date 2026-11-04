@@ -3,6 +3,7 @@ import path from 'node:path';
 import {
   publishFileSync,
   acquireProcessLockAcquisition,
+  tryAcquireProcessLock,
   withProcessLock,
 } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
@@ -42,6 +43,15 @@ export async function acquireDeviceClaimLock(deviceKey: string, env: EnvMap) {
     lockDirPath: `${resolveDeviceClaimPath(deviceKey, env)}.lock`,
     owner: { pid: owner.pid, startTime: owner.startTime, acquiredAtMs: Date.now() },
     timeoutMs: DEVICE_CLAIM_LOCK_TIMEOUT_MS,
+    description: `device claim for ${deviceKey}`,
+  });
+}
+
+export function tryDeviceClaimLock(deviceKey: string, env: EnvMap) {
+  const owner = readCurrentOwnerIdentity();
+  return tryAcquireProcessLock({
+    lockDirPath: `${resolveDeviceClaimPath(deviceKey, env)}.lock`,
+    owner: { pid: owner.pid, startTime: owner.startTime, acquiredAtMs: Date.now() },
     description: `device claim for ${deviceKey}`,
   });
 }

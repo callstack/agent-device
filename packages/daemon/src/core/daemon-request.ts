@@ -36,6 +36,9 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
   reserveRecordingFence?: (fence: ResourceOwnershipFence) => Promise<void>;
   retryRecordingCleanup?: (device: DeviceInfo) => Promise<void>;
   recoverIncompleteRecordingStart?: (device: DeviceInfo) => Promise<boolean>;
+  holdRecordingClaimForClose?: (
+    ownership: DeviceClaimSessionOwnership,
+  ) => Promise<(() => void) | undefined>;
   /**
    * The steps a batch still has ahead of this one. The open seam derives platform readiness
    * policy (runner demand) from it; the transport strips `internal`, so it never arrives from a

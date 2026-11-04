@@ -512,3 +512,116 @@ test('unexpected lock acquisition failures propagate and preserve the recording'
     await f.cleanup();
   }
 });
+
+test('full daemon startup and authenticated RPC complete while the orphan claim lock is busy', async () => {
+  const f = await fixture();
+  let held: Awaited<ReturnType<typeof acquireProcessLockAcquisition>> | undefined;
+  let runtime: Awaited<ReturnType<typeof f.start>> | undefined;
+  let recovery: Promise<unknown> | undefined;
+  let startup: ReturnType<typeof f.start> | undefined;
+  try {
+    await stopChild(f.oldDaemon);
+    control.ownerPid = 0;
+    const owner = readCurrentOwnerIdentity();
+    held = await acquireProcessLockAcquisition({
+      lockDirPath: `${f.claimPath}.lock`,
+      owner: { ...owner, acquiredAtMs: Date.now() },
+      timeoutMs: 1_000,
+    });
+    const starting = f.start();
+    startup = starting;
+    runtime = await Promise.race([
+      starting,
+      new Promise<never>((_, reject) => {
+        const timer = setTimeout(
+          () => reject(new Error('full daemon startup waited on a busy claim')),
+          3_000,
+        );
+        timer.unref();
+        void starting.finally(() => clearTimeout(timer)).catch(() => {});
+      }),
+    ]);
+    const response = await fetch(`http://127.0.0.1:${runtime.httpPort}/rpc`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${runtime.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'ready',
+        method: 'agent_device.command',
+        params: { command: 'session_list', meta: { requestId: 'ready' } },
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ id: 'ready', result: expect.anything() });
+    expectPreserved(f);
+    expect(fs.readFileSync(path.join(f.stateDir, 'daemon.log'), 'utf8')).toContain(
+      'device_claim_reconcile_retained',
+    );
+    await held.release();
+    held = undefined;
+    await Promise.resolve();
+    expectPreserved(f);
+    const admission = createRecordingReapAdmission({
+      stateDir: f.stateDir,
+      sessionsDir: f.sessionsDir,
+      env: f.env,
+      onRetained: () => {},
+    });
+    recovery = reapOwnedProcessRecordsAtStartup(f.store, {
+      purposes: ['simctl-screen-recording'],
+      withRecordingAdmission: admission,
+    });
+    await vi.waitFor(() => expect(fs.readFileSync(f.signalPath, 'utf8')).toBe('SIGINT'));
+    expect(inspectProcessLock(`${f.claimPath}.lock`).state).toBe('held');
+    f.child.send!('exit');
+    await recovery;
+    expect(f.store.read()).toEqual([]);
+    expect(fs.readFileSync(f.nativePath, 'utf8')).toBe('recoverable video');
+    expect(fs.readFileSync(f.markerPath, 'utf8')).toBe('stop checkpoint');
+    expect(fs.existsSync(f.claimPath)).toBe(true);
+  } finally {
+    await held?.release();
+    await stopChild(f.child);
+    await recovery?.catch(() => {});
+    if (!runtime && startup) runtime = await startup.catch(() => undefined);
+    await runtime?.close();
+    await f.cleanup();
+  }
+});
+
+test('startup retains an unproven orphan lock while reconciling a separate claim', async () => {
+  const f = await fixture();
+  let runtime: Awaited<ReturnType<typeof f.start>> | undefined;
+  try {
+    await stopChild(f.oldDaemon);
+    control.ownerPid = 0;
+    const otherDevice = { ...identity, id: 'other-simulator' };
+    const otherKey = canonicalLocalDeviceKey(otherDevice);
+    const otherPath = path.join(
+      f.env.AGENT_DEVICE_CLAIMS_DIR,
+      `${crypto.createHash('sha256').update(otherKey).digest('hex')}.json`,
+    );
+    const { transientCommand: _command, recordingFence: _fence, ...claim } = f.claim;
+    fs.writeFileSync(
+      otherPath,
+      JSON.stringify({
+        ...claim,
+        deviceKey: otherKey,
+        device: { ...otherDevice, name: 'Other Simulator' },
+        session: 'other-session',
+        claimOwnerKind: 'open-session',
+      }),
+    );
+    fs.mkdirSync(`${f.claimPath}.lock`);
+    runtime = await f.start();
+    expectPreserved(f);
+    expect(fs.existsSync(otherPath)).toBe(false);
+    const log = fs.readFileSync(path.join(f.stateDir, 'daemon.log'), 'utf8');
+    expect(log).toContain('device_claim_reconcile_retained');
+    expect(log).toContain('claim-lock-unproven');
+    expect(inspectProcessLock(`${f.claimPath}.lock`).state).toBe('unproven');
+  } finally {
+    await runtime?.close();
+    await f.cleanup();
+  }
+});

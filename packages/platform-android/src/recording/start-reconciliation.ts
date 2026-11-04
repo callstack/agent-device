@@ -4,7 +4,7 @@ import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runti
 import { provesAndroidScreenRecordPathUnclaimed } from '@agent-device/contracts/screen-recording-runtime-host';
 import { candidateRemotePaths, cleanupChunks } from './chunks.ts';
 import { decodeNativeManifest, type NativeManifest } from './manifest.ts';
-import { removeNativeManifest } from './manifest-store.ts';
+import { persistNativeManifest, removeNativeManifest } from './manifest-store.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
 type ManifestCandidate = Readonly<{
@@ -66,7 +66,11 @@ function retireableCandidate(
  * those artifacts, and `proveArtifactsReleased` is what refuses while a recorder here is writing.
  */
 function isRetireableEvidence(evidence: NativeManifest, device: DeviceInfo): boolean {
-  return evidence.completion !== undefined || evidence.deviceId !== device.id;
+  return (
+    evidence.completion !== undefined ||
+    evidence.startNoEffectConfirmed === true ||
+    evidence.deviceId !== device.id
+  );
 }
 
 async function retireEvidence(
@@ -75,6 +79,14 @@ async function retireEvidence(
   manifestPath: string,
 ): Promise<void> {
   await proveArtifactsReleased(transport, evidence);
+  if (evidence.startNoEffectConfirmed) {
+    if ((await transport.exists(evidence.pendingRemotePath!)) !== false)
+      throw artifactClaimed(evidence.pendingRemotePath!, 'other-recorder');
+    await removeNativeManifest(transport, manifestPath);
+    if ((await transport.readManifest(manifestPath)).status !== 'missing')
+      throw retirementUnconfirmed(manifestPath);
+    return;
+  }
   await cleanupChunks(transport, evidence.chunks);
   await removePendingArtifact(transport, evidence);
   await removeNativeManifest(transport, manifestPath);
@@ -256,7 +268,7 @@ export async function recoverIncompleteAndroidRecordingStart(
   }>,
 ): Promise<'confirmed-no-effect' | 'retained'> {
   const candidates = await readManifestCandidates(transport);
-  const paths = new Set<string>();
+  const proven: RetireableCandidate[] = [];
   for (const candidate of candidates) {
     if (candidate.read.status === 'missing') continue;
     if (candidate.read.status !== 'read') return 'retained';
@@ -281,12 +293,15 @@ export async function recoverIncompleteAndroidRecordingStart(
       (await transport.exists(evidence.pendingRemotePath)) !== false
     )
       return 'retained';
-    paths.add(candidate.manifestPath);
+    proven.push({ manifestPath: candidate.manifestPath, evidence });
   }
-  if (paths.size === 0) return 'retained';
-  for (const marker of paths) {
-    if (!(await transport.removeManifest(marker))) return 'retained';
-    if ((await transport.readManifest(marker)).status !== 'missing') return 'retained';
+  if (proven.length === 0) return 'retained';
+  for (const { manifestPath, evidence } of proven) {
+    const confirmed = { ...evidence, startNoEffectConfirmed: true as const };
+    if (!evidence.startNoEffectConfirmed)
+      await persistNativeManifest(transport, manifestPath, confirmed);
+    const after = await transport.readManifest(manifestPath);
+    if (after.status !== 'read' || after.contents !== JSON.stringify(confirmed)) return 'retained';
   }
   return 'confirmed-no-effect';
 }

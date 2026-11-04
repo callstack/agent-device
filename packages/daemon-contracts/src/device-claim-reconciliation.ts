@@ -41,9 +41,12 @@ export function createDeviceClaimReconciler(params: {
       if (liveness !== 'owner-process-dead' && liveness !== 'owner-process-reused')
         return { status: 'retained', reason: 'screen-recording-owner-unsettled' };
       const settled = await recoverIncompleteRecordingClaim(claim, params.gateway, params.scope);
-      return settled === 'confirmed-no-effect'
-        ? { status: 'reconciled' }
-        : { status: 'retained', reason: 'screen-recording-start-unconfirmed' };
+      if (settled === 'confirmed-no-effect') return { status: 'reconciled' };
+      return {
+        status: 'retained',
+        reason: 'screen-recording-start-unconfirmed',
+        ...(settled === 'cleanup-unconfirmed' ? { cleanupUnconfirmed: true as const } : {}),
+      };
     }
     const inspection = suppliedInspection ?? inspectDeviceClaimRecovery(claim);
     if (inspection.status === 'retained') return inspection;
@@ -291,7 +294,7 @@ export async function recoverIncompleteRecordingClaim(
   claim: DeviceClaim,
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>,
   scope: PlatformRequestScope,
-): Promise<'confirmed-no-effect' | 'retained'> {
+): Promise<'confirmed-no-effect' | 'retained' | 'cleanup-unconfirmed'> {
   if (
     !claim.recordingFence ||
     !claim.recordingRuntimeOwner ||
@@ -299,7 +302,7 @@ export async function recoverIncompleteRecordingClaim(
   )
     return 'retained';
   const device = { ...claim.device, platform: claim.device.family };
-  let binding: Awaited<ReturnType<typeof gateway.bind>> | undefined;
+  let binding: Awaited<ReturnType<typeof gateway.bind>>;
   try {
     binding = await gateway.bind({
       device,
@@ -310,28 +313,28 @@ export async function recoverIncompleteRecordingClaim(
       },
       scope,
     });
-    if (
-      !sameDeviceIdentity(deviceIdentity(binding.device), claim.device) ||
-      !sameRuntimeOwner(binding.owner, claim.recordingRuntimeOwner) ||
-      !binding.recoverIncompleteRecordingStart
-    )
-      return 'retained';
-    const result = await binding.recoverIncompleteRecordingStart({
-      sessionId: claim.session,
-      fence: claim.recordingFence,
-      claimToken: claim.ownerToken,
-    });
-    const adopted = binding;
-    binding = undefined;
-    await adopted[Symbol.asyncDispose]();
-    return result;
   } catch {
-    return 'retained';
-  } finally {
-    if (binding) {
-      try {
-        await binding[Symbol.asyncDispose]();
-      } catch {}
-    }
+    return 'cleanup-unconfirmed';
   }
+  let result: 'confirmed-no-effect' | 'retained' = 'retained';
+  try {
+    if (
+      sameDeviceIdentity(deviceIdentity(binding.device), claim.device) &&
+      sameRuntimeOwner(binding.owner, claim.recordingRuntimeOwner) &&
+      binding.recoverIncompleteRecordingStart
+    )
+      result = await binding.recoverIncompleteRecordingStart({
+        sessionId: claim.session,
+        fence: claim.recordingFence,
+        claimToken: claim.ownerToken,
+      });
+  } catch {
+    result = 'retained';
+  }
+  try {
+    await binding[Symbol.asyncDispose]();
+  } catch {
+    return 'cleanup-unconfirmed';
+  }
+  return result;
 }

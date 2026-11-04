@@ -44,6 +44,10 @@ import {
   isIncompleteRecordingStartClaim,
   recoverIncompleteRecordingClaim,
 } from './device-claim-reconciliation.ts';
+import {
+  beginIncompleteStartRecoveryCleanup,
+  finishIncompleteStartRecoveryCleanup,
+} from './device-claim-settlement.ts';
 
 type RecordingClaimContext = {
   device: DeviceInfo;
@@ -695,11 +699,11 @@ export async function recoverIncompleteRecordingStartClaim(
       if (liveness !== 'owner-process-dead' && liveness !== 'owner-process-reused')
         throw claimError();
     }
-    if (
-      (await recoverIncompleteRecordingClaim(claim, params.gateway, params.scope)) !==
-      'confirmed-no-effect'
-    )
-      throw cleanupPendingError();
+    if (!beginIncompleteStartRecoveryCleanup(claim, params.env)) throw claimError();
+    const recovered = await recoverIncompleteRecordingClaim(claim, params.gateway, params.scope);
+    if (recovered === 'cleanup-unconfirmed') throw cleanupPendingError();
+    if (!finishIncompleteStartRecoveryCleanup(claim, params.env)) throw claimError();
+    if (recovered !== 'confirmed-no-effect') throw cleanupPendingError();
     const after = inspectDeviceClaimFile(resolveDeviceClaimPath(key, params.env))?.claim;
     if (
       !after ||
@@ -714,6 +718,7 @@ export async function recoverIncompleteRecordingStartClaim(
       )
     )
       throw claimError();
+    if (!isIncompleteRecordingStartClaim(after)) throw claimError();
     if (after.claimOwnerKind === 'open-session') {
       const { recordingStartPending: _, ...settled } = after;
       writeDeviceClaim(settled, params.env);

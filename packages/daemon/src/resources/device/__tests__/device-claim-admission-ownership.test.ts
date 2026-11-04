@@ -14,6 +14,9 @@ import {
 } from '@agent-device/capture-kit';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
+import { audioProbeResourceStore } from '@agent-device/capture-kit/audio-probe-resource-store';
+import { encodeHostAudioProbeDescriptor } from '@agent-device/capture-kit/audio-probe-descriptor-fixtures';
+import type { AudioProbeLiveHandle } from '@agent-device/contracts/audio-probe-runtime';
 import { markScreenRecordingStartNotDispatched } from '@agent-device/contracts/screen-recording-runtime';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import {
@@ -27,7 +30,6 @@ import type {
 import { deviceIdentity } from '@agent-device/kernel/device';
 import {
   acquireDeviceClaim,
-  clearDeviceClaim,
   inspectDeviceClaims,
   reconcileOrphanedDeviceClaims,
 } from '@agent-device/daemon-contracts/device-claims';
@@ -39,6 +41,8 @@ import { SessionStore } from '../../../core/session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { createRequestExecutionScope } from '../../../server/request-execution-scope.ts';
 import { handleRecordCommand } from '../../../sessions/handlers/record-runtime.ts';
+import { handleSessionCloseCommands } from '../../../sessions/session-lifecycle/internal/session-close.ts';
+import { platformResourceCleanupFixture } from '../../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
@@ -130,6 +134,9 @@ function fixture() {
   const reattach = vi.fn(async () => ({ status: 'missing' as const }));
   let startRecovery: 'confirmed-no-effect' | 'retained' = 'retained';
   const recoverIncompleteRecordingStart = vi.fn(async () => startRecovery);
+  const closeApplication = vi.fn(async () => {});
+  const finalizeApplicationClose = vi.fn(async () => ({}));
+  let disposeBinding: () => Promise<void> = async () => {};
   const factsBase = createUnavailableRuntimeFactsForTest(device, owner);
   const facts = {
     ...factsBase,
@@ -138,22 +145,30 @@ function fixture() {
       screenRecordingStart: { available: true as const },
       screenRecordingReattach: { available: true as const },
       screenRecordingCleanup: { available: true as const },
+      closeApplication: { available: true as const },
+      finalizeApplicationClose: { available: true as const },
     },
   };
   let gateway = {
     inspectFacts: async () => facts,
-    bind: async () => ({
-      device,
-      owner,
-      facts,
-      recoverIncompleteRecordingStart,
-      operations: {
-        screenRecordingStart: start,
-        screenRecordingReattach: reattach,
-        screenRecordingCleanup: async () => ({ status: 'cleaned' as const }),
-      },
-      [Symbol.asyncDispose]: async () => {},
-    }),
+    bind: async () => {
+      const dispose = disposeBinding;
+      disposeBinding = async () => {};
+      return {
+        device,
+        owner,
+        facts,
+        recoverIncompleteRecordingStart,
+        operations: {
+          screenRecordingStart: start,
+          screenRecordingReattach: reattach,
+          screenRecordingCleanup: async () => ({ status: 'cleaned' as const }),
+          closeApplication,
+          finalizeApplicationClose,
+        },
+        [Symbol.asyncDispose]: async () => await dispose(),
+      };
+    },
     shutdown: async () => {},
   } as unknown as DeviceRuntimeGateway<PlatformRuntimeOperations>;
   async function scopeFor(
@@ -161,6 +176,7 @@ function fixture() {
     action: string | undefined,
     cwd: string | undefined,
     state = store,
+    requestRegistry = registry,
   ) {
     return await createRequestExecutionScope({
       host,
@@ -173,15 +189,20 @@ function fixture() {
         ...(cwd ? { meta: { cwd } } : {}),
       },
       sessionStore: state,
-      leaseRegistry: registry,
+      leaseRegistry: requestRegistry,
       deviceRuntimeGateway: gateway,
       claimRecoveryGateway: () => gateway,
       platformServices: daemonPlatformServicesFixture(),
       platformRequestScope: scope,
     });
   }
-  async function record(action: 'start' | 'stop', cwd: string | undefined, state = store) {
-    const request = await scopeFor('record', action, cwd, state);
+  async function record(
+    action: 'start' | 'stop',
+    cwd: string | undefined,
+    state = store,
+    requestRegistry = registry,
+  ) {
+    const request = await scopeFor('record', action, cwd, state, requestRegistry);
     const response = await request.runLocked(
       async () =>
         await handleRecordCommand({
@@ -221,6 +242,7 @@ function fixture() {
     foreign,
     host,
     store,
+    registry,
     scopeFor,
     record,
     publish,
@@ -231,6 +253,10 @@ function fixture() {
     gateway,
     scope,
     recoverIncompleteRecordingStart,
+    closeApplication,
+    setBindingDisposal: (dispose: () => Promise<void>) => {
+      disposeBinding = dispose;
+    },
     setGateway: (value: DeviceRuntimeGateway<PlatformRuntimeOperations>) => {
       gateway = value;
     },
@@ -245,7 +271,76 @@ test('a record-only session keeps its exact claim for surviving app and audio ow
   const ref = f.publish(true);
   expect((await f.record('start', f.workspace)).ok).toBe(true);
   const claim = inspectDeviceClaims({}, process.env)[0]!.claim!;
-  f.store.update(ref, { appBundleId: 'org.example.editor', audioProbe: {} as never });
+  let enterAudio!: () => void;
+  let releaseAudio!: () => void;
+  const audioEntered = new Promise<void>((resolve) => {
+    enterAudio = resolve;
+  });
+  const audioGate = new Promise<void>((resolve) => {
+    releaseAudio = resolve;
+  });
+  const sessionDir = f.store.resolveSessionDir('recording');
+  const statusPath = path.join(sessionDir, 'audio-probe.json');
+  const stopped = {
+    audio: 'probe' as const,
+    state: 'stopped' as const,
+    active: false,
+    heard: false,
+    source: 'system-audio' as const,
+    backend: 'fixture-audio',
+    durationMs: 10000,
+    elapsedMs: 2000,
+    bucketMs: 1000,
+    sampleCount: 2,
+    sourceCount: 1,
+    rmsDbfs: [] as number[],
+    peakDbfs: [] as number[],
+  };
+  const audioHandle: AudioProbeLiveHandle = {
+    inspect: () => ({
+      source: 'system-audio',
+      backend: 'fixture-audio',
+      sourceCount: 1,
+      notes: [],
+      statusPath,
+      startedAt: 1,
+      durationMs: 10000,
+      bucketMs: 1000,
+    }),
+    status: async () => stopped,
+    finish: async () => {
+      enterAudio();
+      await audioGate;
+      return { status: 'completed', result: stopped };
+    },
+    forceCleanup: async () => ({ status: 'cleaned' }),
+    [Symbol.asyncDispose]: async () => {},
+  };
+  const audioEnvelope = createDurableResourceEnvelope({
+    resourceKind: 'audio-probe',
+    sessionId: 'recording',
+    device: deviceIdentity(f.device),
+    owner: localRuntimeOwner('android'),
+    fence: { token: 'audio-fence', generation: 1 },
+    lifecycle: 'open',
+    descriptor: encodeHostAudioProbeDescriptor({
+      backend: 'macos-screencapturekit',
+      source: 'system-audio',
+      sourceCount: 1,
+      notes: [],
+      statusPath,
+      startedAt: 1,
+      durationMs: 10000,
+      bucketMs: 1000,
+      marker: { pid: 4242, startTime: 'boot+1', command: 'helper' },
+    }),
+  });
+  const audioPath = audioProbeResourceStore.resolvePath(sessionDir);
+  audioProbeResourceStore.write(audioPath, audioEnvelope);
+  f.store.update(ref, {
+    appBundleId: 'org.example.editor',
+    audioProbe: { handle: audioHandle, envelope: audioEnvelope },
+  });
   const own = await f.scopeFor('install', undefined, f.subdir);
   await own.bindDevice(f.device, { required: [], preferred: [] });
   await own[Symbol.asyncDispose]();
@@ -273,11 +368,116 @@ test('a record-only session keeps its exact claim for surviving app and audio ow
     error: { code: 'DEVICE_IN_USE' },
   });
   expect(f.start).not.toHaveBeenCalled();
-  expect(await clearDeviceClaim(f.store.requireCurrent(ref).deviceClaim, process.env)).toBe(
-    'deleted',
+  let enterDisposal!: () => void;
+  let releaseDisposal!: () => void;
+  const disposalEntered = new Promise<void>((resolve) => {
+    enterDisposal = resolve;
+  });
+  const disposalGate = new Promise<void>((resolve) => {
+    releaseDisposal = resolve;
+  });
+  f.setBindingDisposal(async () => {
+    enterDisposal();
+    await disposalGate;
+  });
+  const close = await f.scopeFor('close', 'org.example.editor', f.workspace);
+  const closing = close.runLocked(
+    async () =>
+      await handleSessionCloseCommands({
+        host: f.host,
+        req: close.req,
+        sessionName: close.sessionName,
+        logPath: close.requestLogPath,
+        sessionStore: f.store,
+        leaseRegistry: f.registry,
+        inspectFacts: close.inspectFacts,
+        bindDevice: close.bindDevice,
+        platformServices: close.platformServices,
+        platformResourceCleanup: platformResourceCleanupFixture(),
+      }),
   );
-  expect(inspectDeviceClaims({}, process.env)).toHaveLength(0);
+  const competing = () => f.record('start', f.workspace, other, new LeaseRegistry());
+  try {
+    await Promise.race([
+      audioEntered,
+      closing.then(() => {
+        throw new Error('close skipped audio');
+      }),
+    ]);
+    expect(inspectDeviceClaims({}, process.env)[0]?.claim).toMatchObject({
+      ownerToken: claim.ownerToken,
+      recordingCleanupPending: true,
+    });
+    expect(await competing()).toMatchObject({ ok: false, error: { code: 'DEVICE_IN_USE' } });
+    releaseAudio();
+    await Promise.race([
+      disposalEntered,
+      closing.then(() => {
+        throw new Error('close skipped disposal');
+      }),
+    ]);
+    expect(f.closeApplication).toHaveBeenCalledOnce();
+    expect(audioProbeResourceStore.read(audioPath)).toMatchObject({
+      status: 'decoded',
+      envelope: { lifecycle: 'completed' },
+    });
+    expect(inspectDeviceClaims({}, process.env)[0]?.claim?.ownerToken).toBe(claim.ownerToken);
+    expect(await competing()).toMatchObject({ ok: false, error: { code: 'DEVICE_IN_USE' } });
+    expect(f.start).not.toHaveBeenCalled();
+    releaseDisposal();
+    expect((await closing).ok).toBe(true);
+    await close[Symbol.asyncDispose]();
+    expect(inspectDeviceClaims({}, process.env)).toHaveLength(0);
+  } finally {
+    releaseAudio();
+    releaseDisposal();
+    await closing.catch(() => {});
+    await Promise.resolve(close[Symbol.asyncDispose]()).catch(() => {});
+  }
 });
+
+test.each(['failed disposal', 'replacement claim'] as const)(
+  'session close retains a recording reservation after %s',
+  async (failure) => {
+    const f = fixture();
+    const ref = f.publish(true);
+    expect((await f.record('start', f.workspace)).ok).toBe(true);
+    f.store.update(ref, { appBundleId: 'org.example.editor' });
+    expect((await f.record('stop', f.workspace)).ok).toBe(true);
+    const claimFile = path.join(
+      f.claimsDir,
+      fs.readdirSync(f.claimsDir).find((name) => name.endsWith('.json'))!,
+    );
+    const original = JSON.parse(fs.readFileSync(claimFile, 'utf8'));
+    f.setBindingDisposal(async () => {
+      if (failure === 'failed disposal') throw new Error('binding cleanup failed');
+      const current = JSON.parse(fs.readFileSync(claimFile, 'utf8'));
+      fs.writeFileSync(claimFile, JSON.stringify({ ...current, ownerToken: 'successor' }));
+    });
+    const close = await f.scopeFor('close', 'org.example.editor', f.workspace);
+    const response = await close.runLocked(
+      async () =>
+        await handleSessionCloseCommands({
+          host: f.host,
+          req: close.req,
+          sessionName: close.sessionName,
+          logPath: close.requestLogPath,
+          sessionStore: f.store,
+          leaseRegistry: f.registry,
+          inspectFacts: close.inspectFacts,
+          bindDevice: close.bindDevice,
+          platformServices: close.platformServices,
+          platformResourceCleanup: platformResourceCleanupFixture(),
+        }),
+    );
+    expect(response.ok).toBe(true);
+    await expect(Promise.resolve(close[Symbol.asyncDispose]())).rejects.toThrow();
+    expect(JSON.parse(fs.readFileSync(claimFile, 'utf8'))).toMatchObject({
+      ownerToken: failure === 'replacement claim' ? 'successor' : original.ownerToken,
+      recordingCleanupPending: true,
+    });
+  },
+);
 
 test('open-session recordings bind the claim token and reject a replacement before recovery', async () => {
   const f = fixture();
@@ -411,6 +611,100 @@ test('stale claim reconciliation leaves unknown native evidence and retires prov
   expect(fs.existsSync(claimFile)).toBe(false);
 });
 
+test.each(['stop', 'sweep'] as const)(
+  'incomplete-start %s retains a matching manifest published during platform recovery',
+  async (recovery) => {
+    const f = fixture();
+    f.publish(true);
+    f.start.mockRejectedValueOnce(new Error('launch outcome unknown'));
+    await f.record('start', f.workspace);
+    const claimFile = path.join(
+      f.claimsDir,
+      fs.readdirSync(f.claimsDir).find((name) => name.endsWith('.json'))!,
+    );
+    const original = JSON.parse(fs.readFileSync(claimFile, 'utf8'));
+    if (recovery === 'sweep')
+      fs.writeFileSync(
+        claimFile,
+        JSON.stringify({ ...original, ownerPid: 999999999, ownerStartTime: 'dead' }),
+      );
+    f.recoverIncompleteRecordingStart.mockImplementationOnce(async () => {
+      screenRecordingDurableResource.store.write(
+        f.manifestPath,
+        createDurableResourceEnvelope({
+          resourceKind: 'screen-recording',
+          sessionId: 'recording',
+          device: deviceIdentity(f.device),
+          owner: localRuntimeOwner('android'),
+          fence: original.recordingFence,
+          lifecycle: 'open',
+          descriptor: { version: 1, body: {} },
+          metadata: { deviceClaimToken: original.ownerToken, deviceClaimBindingVersion: 1 },
+        }),
+      );
+      return 'confirmed-no-effect';
+    });
+    if (recovery === 'stop') {
+      expect(await f.record('stop', f.workspace)).toMatchObject({
+        ok: false,
+        error: { code: 'DEVICE_IN_USE' },
+      });
+    } else {
+      const reconciler = createOwnerScopedDeviceClaimReconciler({
+        scope: f.scope,
+        composeGateway: () => f.gateway,
+      });
+      expect(
+        (await reconcileOrphanedDeviceClaims(reconciler, f.stateDir, process.env)).retained,
+      ).toBe(1);
+    }
+    expect(JSON.parse(fs.readFileSync(claimFile, 'utf8')).ownerToken).toBe(original.ownerToken);
+    expect(screenRecordingDurableResource.store.read(f.manifestPath)).toMatchObject({
+      status: 'decoded',
+      envelope: { fence: original.recordingFence, lifecycle: 'open' },
+    });
+  },
+);
+
+test('stale start recovery retains its claim when the recovery gateway cannot shut down', async () => {
+  const f = fixture();
+  f.publish(true);
+  f.start.mockRejectedValueOnce(new Error('launch outcome unknown'));
+  await f.record('start', f.workspace);
+  const claimFile = path.join(
+    f.claimsDir,
+    fs.readdirSync(f.claimsDir).find((name) => name.endsWith('.json'))!,
+  );
+  const claim = JSON.parse(fs.readFileSync(claimFile, 'utf8'));
+  fs.writeFileSync(
+    claimFile,
+    JSON.stringify({ ...claim, ownerPid: 999999999, ownerStartTime: 'dead' }),
+  );
+  f.setStartRecovery('confirmed-no-effect');
+  const bind = vi.fn(f.gateway.bind);
+  const reconciler = createOwnerScopedDeviceClaimReconciler({
+    scope: f.scope,
+    composeGateway: () => ({
+      ...f.gateway,
+      bind,
+      shutdown: async () => {
+        throw new Error('gateway cleanup failed');
+      },
+    }),
+  });
+  expect((await reconcileOrphanedDeviceClaims(reconciler, f.stateDir, process.env)).retained).toBe(
+    1,
+  );
+  expect(JSON.parse(fs.readFileSync(claimFile, 'utf8'))).toMatchObject({
+    ownerToken: claim.ownerToken,
+    recordingCleanupPending: true,
+  });
+  expect((await reconcileOrphanedDeviceClaims(reconciler, f.stateDir, process.env)).retained).toBe(
+    1,
+  );
+  expect(bind).toHaveBeenCalledOnce();
+});
+
 test('confirmed adoption rollback releases the reservation when its tombstone cannot be written', async () => {
   const f = fixture();
   f.publish(true);
@@ -431,12 +725,12 @@ test('confirmed adoption rollback releases the reservation when its tombstone ca
   expect(fs.existsSync(f.manifestPath)).toBe(false);
 });
 
-test('Android incomplete-start recovery retains a writer and then clears only the exact no-effect marker', async () => {
+test('Android incomplete-start recovery retries an interrupted exact no-effect checkpoint', async () => {
   const f = fixture();
   f.publish(true);
   let marker = '';
   let writer = true;
-  let allowMarkerRemoval = false;
+  let interruptCheckpoint = false;
   const stop = vi.fn(async () => 'stopped' as const);
   const transport = {
     mode: 'local' as const,
@@ -467,11 +761,13 @@ test('Android incomplete-start recovery retains a writer and then clears only th
       contents: string;
     }) => {
       if (manifestPath.startsWith('/sdcard')) marker = contents;
+      if (interruptCheckpoint && JSON.parse(contents).startNoEffectConfirmed) {
+        interruptCheckpoint = false;
+        throw new Error('checkpoint reply lost');
+      }
     },
     removeManifest: async () => {
-      if (!allowMarkerRemoval) return false;
-      marker = '';
-      return true;
+      return false;
     },
   };
   const host = {
@@ -514,12 +810,55 @@ test('Android incomplete-start recovery retains a writer and then clears only th
   expect(marker).not.toBe('');
   expect(inspectDeviceClaims({}, process.env)[0]?.claim?.ownerToken).toBe(claim.ownerToken);
   writer = false;
-  allowMarkerRemoval = true;
+  interruptCheckpoint = true;
+  expect(await f.record('stop', f.workspace)).toMatchObject({
+    ok: false,
+    error: { details: { reason: 'cleanup-unconfirmed' } },
+  });
+  expect(JSON.parse(marker)).toMatchObject({
+    claimToken: claim.ownerToken,
+    startNoEffectConfirmed: true,
+  });
+  expect(inspectDeviceClaims({}, process.env)[0]?.claim?.ownerToken).toBe(claim.ownerToken);
   expect(await f.record('stop', f.workspace)).toMatchObject({
     ok: false,
     error: { details: { reason: 'recording-start-rolled-back' } },
   });
-  expect(marker).toBe('');
+  expect(JSON.parse(marker).startNoEffectConfirmed).toBe(true);
   expect(inspectDeviceClaims({}, process.env)).toHaveLength(0);
   expect(stop).not.toHaveBeenCalled();
+});
+
+test('an incomplete-start recovery with failed binding disposal keeps its exact reservation', async () => {
+  const f = fixture();
+  f.publish(true);
+  f.start.mockRejectedValueOnce(new Error('launch outcome unknown'));
+  expect((await f.record('start', f.workspace)).ok).toBe(false);
+  const claim = inspectDeviceClaims({}, process.env)[0]!.claim!;
+  f.setStartRecovery('confirmed-no-effect');
+  const original = f.gateway;
+  const bind = vi.fn(async (...args: Parameters<typeof original.bind>) => {
+    const binding = await original.bind(...args);
+    return {
+      ...binding,
+      [Symbol.asyncDispose]: async () => {
+        throw new Error('dispose failed');
+      },
+    };
+  });
+  f.setGateway({ ...original, bind });
+  expect(await f.record('stop', f.workspace)).toMatchObject({
+    ok: false,
+    error: { details: { reason: 'cleanup-unconfirmed' } },
+  });
+  expect(inspectDeviceClaims({}, process.env)[0]?.claim).toMatchObject({
+    ownerToken: claim.ownerToken,
+    recordingCleanupPending: true,
+  });
+  expect(await f.record('stop', f.workspace)).toMatchObject({
+    ok: false,
+    error: { details: { reason: 'cleanup-unconfirmed' } },
+  });
+  expect(bind).toHaveBeenCalledOnce();
+  expect(inspectDeviceClaims({}, process.env)[0]?.claim?.ownerToken).toBe(claim.ownerToken);
 });

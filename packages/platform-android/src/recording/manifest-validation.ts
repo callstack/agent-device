@@ -96,6 +96,12 @@ function hasValidManifestResources(candidate: Partial<NativeManifest>): boolean 
     Array.isArray(candidate.chunks) &&
     candidate.chunks.every(isValidNativeChunk) &&
     (candidate.chunks.length > 0 || candidate.pendingRemotePath !== undefined) &&
+    (candidate.startNoEffectConfirmed === undefined ||
+      (candidate.startNoEffectConfirmed === true &&
+        candidate.claimToken !== undefined &&
+        candidate.chunks.length === 0 &&
+        candidate.pendingRemotePath !== undefined &&
+        candidate.completion === undefined)) &&
     (candidate.completion === undefined || isValidCompletion(candidate.completion))
   );
 }

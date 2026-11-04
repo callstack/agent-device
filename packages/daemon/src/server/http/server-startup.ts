@@ -46,7 +46,11 @@ export async function reconcileDeviceClaimsForDaemonStartup(
 ): Promise<void> {
   await withDaemonDiagnosticsScope({ logPath }, async () => {
     try {
-      const summary = await reconcileOrphanedDeviceClaims(reconcile, stateDir, env);
+      const summary = await reconcileOrphanedDeviceClaims(reconcile, stateDir, env, {
+        lockPolicy: 'try',
+        onLockRetained: (data) =>
+          emitDiagnostic({ level: 'warn', phase: 'device_claim_reconcile_retained', data }),
+      });
       if (summary.examined > 0) {
         emitDiagnostic({ phase: 'device_claim_reconcile', data: summary });
       }

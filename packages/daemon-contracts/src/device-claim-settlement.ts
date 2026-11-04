@@ -3,6 +3,7 @@ import type { DeviceBootObservationService } from '@agent-device/contracts/devic
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { EnvMap } from '@agent-device/kernel/source-value';
+import { sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import {
   ownerIdentityMatches,
   type readCurrentOwnerIdentity,
@@ -26,6 +27,7 @@ import {
   type DeviceClaimSessionOwnership,
 } from './device-claim-record.ts';
 import { writeDeviceClaim } from './device-claim-store.ts';
+import { isIncompleteRecordingStartClaim } from './device-claim-reconciliation.ts';
 
 /**
  * What the claim file says before an acquisition writes its own record. `available` means the
@@ -50,7 +52,7 @@ export type InspectedClaimSettlement =
 
 export type DeviceClaimReconciliationResult =
   | { status: 'reconciled' }
-  | { status: 'retained'; reason: string };
+  | { status: 'retained'; reason: string; cleanupUnconfirmed?: true };
 
 export type DeviceClaimReconciler = (
   claim: DeviceClaim,
@@ -205,14 +207,68 @@ export async function settleVerifiedOrphanedClaim(
   reconcile: DeviceClaimReconciler,
   env: EnvMap,
 ): Promise<DeviceClaimReconciliationResult> {
+  const guarded = claim.recordingStartPending && !claim.recordingCleanupPending;
+  if (guarded && !beginIncompleteStartRecoveryCleanup(claim, env))
+    return { status: 'retained', reason: 'screen-recording-claim-changed' };
   const result = await reconcile(claim);
+  if (guarded && !(result.status === 'retained' && result.cleanupUnconfirmed)) {
+    if (!finishIncompleteStartRecoveryCleanup(claim, env))
+      return { status: 'retained', reason: 'screen-recording-claim-changed' };
+  }
   if (result.status === 'retained') return result;
+  if (guarded && !isIncompleteRecordingStartClaim(claim))
+    return { status: 'retained', reason: 'screen-recording-manifest-changed' };
   try {
     fs.unlinkSync(resolveDeviceClaimPath(claim.deviceKey, env));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
   return { status: 'reconciled' };
+}
+
+function sameIncompleteStartClaim(
+  current: DeviceClaim | undefined,
+  expected: DeviceClaim,
+): boolean {
+  return Boolean(
+    current &&
+    current.deviceKey === expected.deviceKey &&
+    current.stateDir === expected.stateDir &&
+    current.workspace === expected.workspace &&
+    current.session === expected.session &&
+    current.claimOwnerKind === expected.claimOwnerKind &&
+    current.transientCommand === expected.transientCommand &&
+    current.ownerToken === expected.ownerToken &&
+    ownerIdentityMatches(
+      { pid: current.ownerPid, startTime: current.ownerStartTime },
+      { pid: expected.ownerPid, startTime: expected.ownerStartTime },
+    ) &&
+    current.recordingStartPending &&
+    current.recordingFence?.token === expected.recordingFence?.token &&
+    current.recordingFence?.generation === expected.recordingFence?.generation &&
+    current.recordingRuntimeOwner &&
+    expected.recordingRuntimeOwner &&
+    sameRuntimeOwner(current.recordingRuntimeOwner, expected.recordingRuntimeOwner),
+  );
+}
+
+/** Called with the exact device claim lock held. */
+export function beginIncompleteStartRecoveryCleanup(claim: DeviceClaim, env: EnvMap): boolean {
+  const current = inspectDeviceClaimFile(resolveDeviceClaimPath(claim.deviceKey, env))?.claim;
+  if (!current || !sameIncompleteStartClaim(current, claim) || current.recordingCleanupPending)
+    return false;
+  writeDeviceClaim({ ...current, recordingCleanupPending: true }, env);
+  return true;
+}
+
+/** A failed or interrupted disposal must leave the reservation protected. */
+export function finishIncompleteStartRecoveryCleanup(claim: DeviceClaim, env: EnvMap): boolean {
+  const current = inspectDeviceClaimFile(resolveDeviceClaimPath(claim.deviceKey, env))?.claim;
+  if (!current || !sameIncompleteStartClaim(current, claim) || !current.recordingCleanupPending)
+    return false;
+  const { recordingCleanupPending: _, ...settled } = current;
+  writeDeviceClaim(settled, env);
+  return true;
 }
 
 export function isClaimOwnedByThisDaemon(

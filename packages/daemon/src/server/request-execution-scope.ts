@@ -13,6 +13,10 @@ import {
   createOwnerScopedDeviceClaimReconciler,
   type ClaimRecoveryGatewayFactory,
 } from '@agent-device/daemon-contracts/device-claim-recovery';
+import {
+  finishRecordingClaimClose,
+  holdRecordingClaimForClose,
+} from '@agent-device/daemon-contracts/device-claims';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
@@ -332,6 +336,7 @@ export async function createRequestExecutionScope(params: {
       claimRecoveryGateway: params.claimRecoveryGateway,
     });
 
+    let finishDeferredClose: (() => Promise<void>) | undefined;
     if (command === 'record') {
       scopedReq = {
         ...scopedReq,
@@ -353,6 +358,46 @@ export async function createRequestExecutionScope(params: {
           },
         },
       };
+    } else if (command === 'close') {
+      scopedReq = {
+        ...scopedReq,
+        internal: {
+          ...scopedReq.internal,
+          holdRecordingClaimForClose: async (ownership) => {
+            if (finishDeferredClose)
+              throw new AppError('COMMAND_FAILED', 'Recording claim cleanup is already pending', {
+                reason: 'cleanup-unconfirmed',
+              });
+            const held = await holdRecordingClaimForClose(ownership, params.host.env);
+            if (held.status === 'ordinary') return undefined;
+            if (held.status === 'cleanup-pending')
+              throw new AppError('COMMAND_FAILED', 'Recording runtime cleanup is not confirmed', {
+                reason: 'cleanup-unconfirmed',
+                retriable: true,
+              });
+            if (held.status !== 'held')
+              throw new AppError('DEVICE_IN_USE', 'The recording device claim changed', {
+                reason: 'DEVICE_CLAIM_OWNER_UNCERTAIN',
+              });
+            let release = false;
+            finishDeferredClose = async () => {
+              const result = await finishRecordingClaimClose(
+                ownership,
+                held.fence,
+                params.host.env,
+                release,
+              );
+              if (result !== 'settled')
+                throw new AppError('DEVICE_IN_USE', 'The recording device claim changed', {
+                  reason: 'DEVICE_CLAIM_OWNER_UNCERTAIN',
+                });
+            };
+            return () => {
+              release = true;
+            };
+          },
+        },
+      };
     }
     let bindingCleanup: Promise<void> | undefined;
     const disposeBindings = (): Promise<void> => {
@@ -368,6 +413,7 @@ export async function createRequestExecutionScope(params: {
         } finally {
           await claimAdmission[Symbol.asyncDispose]();
         }
+        await finishDeferredClose?.();
       })();
       return bindingCleanup;
     };

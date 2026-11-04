@@ -9,6 +9,7 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import type { DeviceBootObservationService } from '@agent-device/contracts/device-boot';
+import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { ownerIdentityMatches, readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 
@@ -45,7 +46,7 @@ import {
   type DeviceClaimReconciler,
   type InspectedClaimSettlement,
 } from './device-claim-settlement.ts';
-import { withDeviceClaimLock, writeDeviceClaim } from './device-claim-store.ts';
+import { withDeviceClaimLock, tryDeviceClaimLock, writeDeviceClaim } from './device-claim-store.ts';
 
 export { canonicalLocalDeviceKey, deviceClaimIdentity } from './device-claim-paths.ts';
 export {
@@ -697,6 +698,58 @@ export async function clearDeviceClaim(
   );
 }
 
+/** Retain a promoted recording claim while its owning session and request bindings close. */
+export async function holdRecordingClaimForClose(
+  ownership: DeviceClaimSessionOwnership,
+  env: EnvMap,
+): Promise<
+  | { status: 'held'; fence: ResourceOwnershipFence }
+  | { status: 'ordinary' | 'cleanup-pending' | 'ownership-changed' }
+> {
+  return await writeOwnedDeviceClaim(
+    ownership,
+    env,
+    (claim) => {
+      if (claim.recordingCleanupPending || claim.recordingStartPending)
+        return { status: 'cleanup-pending' } as const;
+      if (claim.claimOwnerKind !== 'open-session' || !claim.recordingFence)
+        return { status: 'ordinary' } as const;
+      writeDeviceClaim({ ...claim, recordingCleanupPending: true }, env);
+      return { status: 'held', fence: claim.recordingFence } as const;
+    },
+    () => ({ status: 'ownership-changed' as const }),
+  );
+}
+
+/** Finish only the reservation held by this close, after request runtime cleanup settles. */
+export async function finishRecordingClaimClose(
+  ownership: DeviceClaimSessionOwnership,
+  fence: ResourceOwnershipFence,
+  env: EnvMap,
+  release: boolean,
+): Promise<'settled' | 'ownership-changed'> {
+  return await writeOwnedDeviceClaim(
+    ownership,
+    env,
+    (claim, claimPath) => {
+      if (
+        !claim.recordingCleanupPending ||
+        claim.recordingStartPending ||
+        claim.recordingFence?.token !== fence.token ||
+        claim.recordingFence.generation !== fence.generation
+      )
+        return 'ownership-changed' as const;
+      if (release) fs.unlinkSync(claimPath);
+      else {
+        const { recordingCleanupPending: _, ...settled } = claim;
+        writeDeviceClaim(settled, env);
+      }
+      return 'settled' as const;
+    },
+    () => 'ownership-changed' as const,
+  );
+}
+
 /**
  * What abandoning a claim did, in the terms {@link DeviceClaimClearOutcome} uses:
  *
@@ -822,6 +875,13 @@ export async function reconcileOrphanedDeviceClaims(
   reconcile: DeviceClaimReconciler,
   daemonStateDir: string,
   env: EnvMap,
+  options?: {
+    lockPolicy?: 'try';
+    onLockRetained?: (detail: {
+      deviceKey: string;
+      reason: 'claim-lock-busy' | 'claim-lock-unproven';
+    }) => void;
+  },
 ): Promise<{ examined: number; reconciled: number; retained: number; changed: number }> {
   const root = resolveDeviceClaimRoot(env);
   let entries: fs.Dirent[];
@@ -852,7 +912,7 @@ export async function reconcileOrphanedDeviceClaims(
       retained += 1;
       continue;
     }
-    await withDeviceClaimLock(deviceKey, env, async () => {
+    const reconcileCurrent = async () => {
       const current = inspectDeviceClaimFile(filePath);
       if (
         !current?.claim ||
@@ -868,7 +928,25 @@ export async function reconcileOrphanedDeviceClaims(
         return;
       }
       reconciled += 1;
-    });
+    };
+    if (options?.lockPolicy !== 'try') {
+      await withDeviceClaimLock(deviceKey, env, reconcileCurrent);
+      continue;
+    }
+    const attempt = tryDeviceClaimLock(deviceKey, env);
+    if (attempt.status !== 'acquired') {
+      retained += 1;
+      options.onLockRetained?.({
+        deviceKey,
+        reason: attempt.status === 'busy' ? 'claim-lock-busy' : 'claim-lock-unproven',
+      });
+      continue;
+    }
+    try {
+      await reconcileCurrent();
+    } finally {
+      await attempt.acquisition.release();
+    }
   }
   return { examined, reconciled, retained, changed };
 }
