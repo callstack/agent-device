@@ -63,11 +63,11 @@ test('a host overlaps each of its web session devices, and two of its web sessio
   assert.equal(devicesOverlap(webSessionDevice(mac, { name: 'one' }).id, one), false);
 });
 
-test('a web session device id names its host and keeps the name case-sensitive', () => {
+test('a web session device id names its host, and its name is case-insensitive', () => {
   const id = webDevice('Run-One').id;
   assert.equal(hostDeviceIdOf(id), browser.id);
   assert.equal(canonicalDeviceId(id), id);
-  assert.notEqual(id, webDevice('run-one').id);
+  assert.equal(id, webDevice('run-one').id);
 });
 
 test('web session names that differ only by case drive one browser and are one device', () => {
