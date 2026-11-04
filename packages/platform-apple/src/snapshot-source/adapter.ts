@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { observeCompleteTreeKeyboard } from '@agent-device/contracts/tap-keyboard-occlusion';
 import type {
   CaptureHint,
   IosSnapshotAcquisition,
@@ -246,6 +247,11 @@ function createAcquisition(
     nodes,
     truncated,
     viewport: decoded.viewport,
+    keyboard: observeCompleteTreeKeyboard({
+      nodes,
+      viewport: decoded.viewport.kind === 'reported' ? decoded.viewport.rect : null,
+      complete: !truncated,
+    }),
     lineage,
     residue,
   };

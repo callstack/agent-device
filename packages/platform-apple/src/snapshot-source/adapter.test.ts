@@ -554,6 +554,8 @@ type AdapterFixture = {
   runningSurfaceHost: boolean;
   /** The surface host check each request carried: its executables and Simulator, or undefined. */
   surfaceHostChecks: Array<Readonly<{ executables: unknown; simulatorUdid: unknown }> | undefined>;
+  /** The windows the fake guest reports under its root when no other tree shape is selected. */
+  windows: readonly Record<string, unknown>[];
   omitRecovery: boolean;
   diagnostics: Record<string, unknown>[];
   startedTargets: Array<Parameters<SnapshotSourceHost['start']>[0]>;
@@ -591,6 +593,7 @@ function createAdapterHost(buildDelayMs = 0): AdapterFixture {
     omitViewport: false,
     runningSurfaceHost: false,
     surfaceHostChecks: [],
+    windows: [],
     omitRecovery: false,
     diagnostics: [],
     startedTargets: [],
@@ -813,7 +816,7 @@ class AdapterSocket extends EventEmitter implements SnapshotSourceSocket {
                                 ],
                               },
                             ]
-                          : [],
+                          : this.fixture.windows,
                 },
           },
           {
@@ -868,6 +871,135 @@ test('the Simulator AX source refuses a window whose coordinate space it cannot 
       hint: deriveIosCaptureHint(createIosSnapshotRequest()),
     });
     assert.equal(recovered.stage, 'acquired');
+  } finally {
+    await source.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+/** A guest node; `automationType` 19 is `Keyboard` and 20 is `Key`. */
+function guestNode(
+  elementType: string,
+  frame: Readonly<{ X: number; Y: number; Width: number; Height: number }>,
+  children: readonly Record<string, unknown>[] = [],
+  automationType?: number,
+): Record<string, unknown> {
+  return {
+    XC_kAXXCAttributeElementType: elementType,
+    ...(automationType === undefined ? {} : { XC_kAXXCAttributeAutomationType: automationType }),
+    XC_kAXXCAttributeFrame: frame,
+    XC_kAXXCAttributeChildren: children,
+  };
+}
+
+const APP_FRAME = { X: 0, Y: 0, Width: 390, Height: 844 };
+const ASSISTANT_FRAME = { X: 0, Y: 509, Width: 390, Height: 44 };
+// The docked key plane stops 58 pt above the viewport bottom, as on iPhone 17 Pro.
+const DOCKED_KEYBOARD_WINDOW = guestNode('UIRemoteKeyboardWindow', APP_FRAME, [
+  guestNode('TUISystemInputAssistantView', ASSISTANT_FRAME),
+  guestNode(
+    'UIKeyboardAutomatic',
+    { X: 0, Y: 553, Width: 390, Height: 233 },
+    [
+      guestNode('UIKeyboardLayoutStar', { X: 0, Y: 553, Width: 390, Height: 233 }, [
+        guestNode('UIAccessibilityElementKBKey', { X: 0, Y: 560, Width: 195, Height: 54 }, [], 20),
+        guestNode(
+          'UIAccessibilityElementKBKey',
+          { X: 195, Y: 560, Width: 195, Height: 54 },
+          [],
+          20,
+        ),
+      ]),
+    ],
+    19,
+  ),
+]);
+
+test('the Simulator AX source publishes absence only from a complete tree with no keyboard trace', async () => {
+  const root = await mkdtempForTest('agent-device-snapshot-adapter-keyboard-');
+  const sourceRoot = path.join(root, 'source');
+  await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
+  for (const name of [
+    'SnapshotBridge.m',
+    'SnapshotBridgeRuntime.m',
+    'SnapshotBridgeRuntime.h',
+    'SnapshotBridgeCapture.h',
+    'SnapshotBridgeCapture.m',
+    'ForegroundApplicationGeometry.h',
+  ]) {
+    await writeFile(path.join(sourceRoot, name), 'native source');
+  }
+  const fixture = createAdapterHost();
+  const source = createSimulatorSnapshotSource({
+    host: fixture.host,
+    sourceRoot,
+    cacheRoot: path.join(root, 'cache'),
+  });
+  const target = { ...targetForTest(), generation: 'generation-1', targetId: 'target-1' };
+  const notObserved = { kind: 'unmeasurable', reason: 'keyboard-not-observed' };
+  const cases = [
+    {
+      name: 'a docked keyboard',
+      windows: [DOCKED_KEYBOARD_WINDOW],
+      truncated: false,
+      keyboard: {
+        kind: 'derived',
+        derivation: 'docked-tree',
+        frame: { x: 0, y: 553, width: 390, height: 291 },
+        treeBound: true,
+      },
+    },
+    {
+      name: 'a complete tree',
+      windows: [],
+      truncated: false,
+      keyboard: { kind: 'absent', treeBound: true },
+    },
+    // A cut can drop the keyboard window, so a truncated tree proves only presence.
+    { name: 'a truncated tree', windows: [], truncated: true, keyboard: notObserved },
+    // The in-app placeholder can outlive the key plane during a dismissal.
+    {
+      name: 'a placeholder without keys',
+      windows: [
+        guestNode('UITextEffectsWindow', APP_FRAME, [
+          guestNode('_UIRemoteKeyboardPlaceholderView', { X: 0, Y: 509, Width: 390, Height: 335 }),
+        ]),
+      ],
+      truncated: false,
+      keyboard: notObserved,
+    },
+    // A minimized keyboard leaves only its assistant bar.
+    {
+      name: 'an assistant bar without keys',
+      windows: [
+        guestNode('UIRemoteKeyboardWindow', APP_FRAME, [
+          guestNode('TUISystemInputAssistantView', ASSISTANT_FRAME),
+        ]),
+      ],
+      truncated: false,
+      keyboard: notObserved,
+    },
+  ];
+
+  try {
+    for (const entry of cases) {
+      fixture.windows = entry.windows;
+      fixture.truncated = entry.truncated;
+      for (const acquisitionIntent of ['full', 'surface-observation'] as const) {
+        const outcome = await source.acquire({
+          target,
+          hint: deriveIosCaptureHint(createIosSnapshotRequest({ acquisitionIntent })),
+        });
+        assert.equal(outcome.stage, 'acquired', `${entry.name} (${acquisitionIntent})`);
+        if (outcome.stage !== 'acquired') continue;
+        assert.equal(outcome.acquisition.truncated, entry.truncated);
+        assert.deepEqual(
+          outcome.acquisition.keyboard,
+          entry.keyboard,
+          `${entry.name} (${acquisitionIntent})`,
+        );
+      }
+    }
   } finally {
     await source.close();
     await rm(root, { recursive: true, force: true });

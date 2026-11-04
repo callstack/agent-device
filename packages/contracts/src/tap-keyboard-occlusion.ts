@@ -356,6 +356,30 @@ export function acquireProviderKeyboard(params: ProviderKeyboardInput): {
   };
 }
 
+/**
+ * The keyboard fact of a producer that reads the target app's whole in-process tree in one capture,
+ * as the Simulator AX bridge does: the keyboard window is one of the app's own windows there, so a
+ * complete tree with no keyboard node proves absence the way a full XCTest scan does. A truncated tree
+ * proves only presence.
+ */
+export function observeCompleteTreeKeyboard(
+  params: Readonly<{ nodes: readonly RawSnapshotNode[]; viewport: Rect | null; complete: boolean }>,
+): SnapshotKeyboardBandFact {
+  const fact = observeProviderKeyboard(params);
+  if (fact.kind !== 'unmeasurable' || !params.complete) return fact;
+  return params.nodes.some(isKeyboardTraceNode) ? fact : { kind: 'absent', treeBound: true };
+}
+
+/** Any node the keyboard leaves in the tree, including the in-app placeholder of a remote keyboard. */
+function isKeyboardTraceNode(node: RawSnapshotNode): boolean {
+  return (
+    isKeyboardSurfaceNode(node) ||
+    hasIosKeyboardRole(node, IOS_KEYBOARD_SETTLE_CHROME_ROLES) ||
+    hasIosKeyboardRole(node, IOS_KEYBOARD_SUBTREE_CHROME_ROLES) ||
+    hasIosKeyboardRole(node, IOS_KEYBOARD_CHROME_MARKER_ROLES)
+  );
+}
+
 function observeProviderKeyboard(params: ProviderKeyboardInput): SnapshotKeyboardBandFact {
   const frame = deriveDockedKeyboardFrame(params.nodes, params.viewport);
   // Derived from the nodes this capture returns, so a stale tree derives the stale tree's band.
