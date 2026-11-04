@@ -14,9 +14,14 @@ conflict check, and the host/scoped-device overlap (`devicesOverlap`).
    bound: it stays an inventory entry and the parent for `devicesOverlap`. Two sessions with
    different names run in parallel and two with one name conflict, in one daemon or in daemons that
    share a claims directory.
-2. A session name is trimmed, matches case-insensitively, and must match `[A-Za-z0-9_-]`, be
-   non-empty, and fit agent-browser's socket path limit: at most 30 characters, and 17 under tenant
-   isolation. Any other name is refused with `INVALID_ARGS`, `reason: 'web_session_name_invalid'`.
+2. A session name matches case-insensitively and must match `[A-Za-z0-9_-]`, be non-empty, and fit
+   agent-browser's socket path limit: at most 30 characters, and 17 under tenant isolation. A name
+   is never trimmed, so surrounding whitespace is refused. Any other name is refused with
+   `INVALID_ARGS`, `reason: 'web_session_name_invalid'`. An explicit empty or whitespace-only name
+   (`--session ""`, a blank HTTP `session`) is refused the same way and never falls back to
+   `default`; only an absent `--session` maps to `default`. Admission does not trim the name:
+   trimming there changed the session keys of other platforms, so the web name rule refuses
+   padding instead.
 3. The backend key is `p_<name>` with the name in lower case, or `t_<first 12 hex of sha256(tenant
    id)>_<name>` under tenant isolation, so two tenants using one name hold two devices and two
    browsers. The kernel derives it once from the tenant-relative public name and the tenant id,
