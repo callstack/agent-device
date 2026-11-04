@@ -142,6 +142,6 @@ test.each([
       outPath: '/tmp/capture.png',
       options: { captureBackend: undefined, preferredCaptureBackend: 'runner' },
     });
-    expect(screenshot.mock.lastCall?.[1]).toEqual(expected);
+    expect(screenshot).toHaveBeenLastCalledWith('/tmp/capture.png', expected);
   },
 );
