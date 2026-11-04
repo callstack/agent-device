@@ -16,6 +16,7 @@ export const androidRecordingDevice = {
 export function recordingInput() {
   return {
     sessionId: 'one',
+    claimToken: 'fixture-claim',
     outputPath: '/tmp/capture.mp4',
     scope: 'device' as const,
     showTouches: true,

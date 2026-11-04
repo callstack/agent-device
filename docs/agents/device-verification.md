@@ -66,6 +66,8 @@ First, examine the underlying error. A generic startup or cleanup failure does n
 
 A version 2 Android recording marker uses a generation-specific device lock.
 If a device command dies while it holds that lock, recovery retains the recording claim.
+Before you reboot the device or remove the lock, obtain the device owner's approval.
+Before you reboot the device or remove the lock, isolate the device from unrelated work.
 Before you remove that exact lock, stop every host that can send commands to the device.
 Before you remove that exact lock, drain or terminate every queued and in-flight device command on those hosts.
 After the hosts are stopped, reboot the device and verify that the reboot completed.

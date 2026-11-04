@@ -6,6 +6,7 @@ import {
   type ScreenRecordingStartInput,
   SCREEN_RECORDING_RESOURCE_KIND,
 } from '@agent-device/contracts/screen-recording-runtime';
+import { SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import {
   createDurableResourceEnvelope,
@@ -319,6 +320,9 @@ async function startAndroidRecording(params: {
       owner,
       fence: input.fence,
       lifecycle: 'open',
+      ...(input.claimToken
+        ? { metadata: { [SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY]: input.claimToken } }
+        : {}),
       descriptor: encodeDurableDescriptor(androidScreenRecordingDescriptorCodec, {
         backend: 'adb-screenrecord-v2',
         manifestPath,

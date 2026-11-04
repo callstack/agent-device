@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
-import { recordingArtifactPath } from './native-path.ts';
+import { recordingArtifactPath, recordingMarkerPath } from './native-path.ts';
 import { bindAndroidScreenRecordingRuntime } from './runtime.ts';
 
 const start = async (overrides: Record<string, unknown>) =>
@@ -347,6 +347,7 @@ test('retains pending evidence without signalling an unproven writer', async () 
       {
         deviceId: androidRecordingDevice.id,
         sessionId: recordingInput().sessionId,
+        claimToken: recordingInput().claimToken,
         fence: recordingInput().fence,
       },
       777,
@@ -433,4 +434,223 @@ test('rejects another generation marker path without signalling the recorder', a
     reason: 'ownership-fence-lost',
   });
   expect(signals).toEqual([]);
+});
+
+test.each(['missing-token', 'replaced-token', 'wrong-generation'] as const)(
+  'refuses %s native evidence on reattach, cleanup and incomplete-start recovery',
+  async (change) => {
+    let marker = '';
+    const effects: string[] = [];
+    let artifactPresent = true;
+    const runtime = await start({
+      readManifest: async (path: string) =>
+        path.includes('recording-v2-') && marker
+          ? { status: 'read' as const, contents: marker }
+          : { status: 'missing' as const },
+      writeManifest: async ({ contents }: { contents: string }) => {
+        effects.push('marker-write');
+        marker = contents;
+      },
+      stop: async ({ pid }: { pid: string }) => {
+        effects.push(`signal:${pid}`);
+        return 'stopped' as const;
+      },
+      remove: async () => {
+        effects.push('remove');
+        return true;
+      },
+      findRunning: async () => [],
+      exists: async () => artifactPresent,
+    });
+    const startInput = recordingInput();
+    const started = await runtime.screenRecordingStart(startInput);
+    artifactPresent = false;
+    effects.length = 0;
+    const original = JSON.parse(marker);
+    const otherClaim =
+      change === 'missing-token'
+        ? undefined
+        : change === 'replaced-token'
+          ? 'successor'
+          : startInput.claimToken;
+    const otherFence = {
+      ...startInput.fence,
+      generation: startInput.fence.generation + (change === 'wrong-generation' ? 1 : 0),
+    };
+    const generation = {
+      deviceId: androidRecordingDevice.id,
+      sessionId: startInput.sessionId,
+      claimToken: otherClaim,
+      fence: otherFence,
+    };
+    const otherPath = recordingArtifactPath('/sdcard', generation, 777);
+    marker = JSON.stringify({
+      ...original,
+      claimToken: otherClaim,
+      fenceGeneration: otherFence.generation,
+      chunks: [{ ...original.chunks[0], remotePath: otherPath }],
+    });
+    const envelope = {
+      ...started.envelope,
+      descriptor: {
+        ...started.envelope.descriptor,
+        body: {
+          ...started.envelope.descriptor.body,
+          manifestPath: recordingMarkerPath('/sdcard', generation),
+        },
+      },
+    };
+    const before = marker;
+    await expect(runtime.screenRecordingReattach({ envelope })).resolves.toMatchObject({
+      status: 'unreattachable',
+      reason: 'ownership-fence-lost',
+    });
+    await expect(runtime.screenRecordingCleanup({ envelope })).resolves.toMatchObject({
+      status: 'cleanup-pending',
+      reason: 'ownership-fence-lost',
+    });
+    expect(marker).toBe(before);
+    marker = JSON.stringify({
+      ...JSON.parse(before),
+      chunks: [],
+      pendingRemotePath: otherPath,
+      launchDisposition: 'armed',
+    });
+    const pending = marker;
+    await expect(
+      runtime.recoverIncompleteRecordingStart({
+        sessionId: startInput.sessionId,
+        claimToken: startInput.claimToken,
+        fence: startInput.fence,
+      }),
+    ).resolves.toBe('retained');
+    expect(marker).toBe(pending);
+    expect(effects).toEqual([]);
+  },
+);
+
+test.each(['missing-token', 'replaced-token', 'wrong-generation'] as const)(
+  'settlement retains evidence if the durable envelope loses %s after reattachment',
+  async (change) => {
+    let marker = '';
+    const effects: string[] = [];
+    const runtime = await start({
+      readManifest: async (path: string) =>
+        path.includes('recording-v2-') && marker
+          ? { status: 'read' as const, contents: marker }
+          : { status: 'missing' as const },
+      writeManifest: async ({ contents }: { contents: string }) => {
+        effects.push('marker-write');
+        marker = contents;
+      },
+      stop: async ({ pid }: { pid: string }) => {
+        effects.push(`signal:${pid}`);
+        return 'stopped' as const;
+      },
+      remove: async () => {
+        effects.push('remove');
+        return true;
+      },
+    });
+    const started = await runtime.screenRecordingStart(recordingInput());
+    const envelope = {
+      ...started.envelope,
+      metadata: { ...started.envelope.metadata },
+      fence: { ...started.envelope.fence },
+    };
+    const attached = await runtime.screenRecordingReattach({ envelope });
+    expect(attached.status).toBe('active');
+    if (attached.status !== 'active' || !attached.handle.settleForExport)
+      throw new Error('missing settlement authority');
+    if (change === 'missing-token') delete envelope.metadata.deviceClaimToken;
+    if (change === 'replaced-token') envelope.metadata.deviceClaimToken = 'successor';
+    if (change === 'wrong-generation') envelope.fence.generation += 1;
+    const before = marker;
+    effects.length = 0;
+    await expect(
+      attached.handle.settleForExport({ learned: {}, record: () => {} }),
+    ).resolves.toEqual({ status: 'retained', reason: 'ownership-fence-lost' });
+    expect(marker).toBe(before);
+    expect(effects).toEqual([]);
+  },
+);
+
+test.each(['missing-token', 'replaced-token', 'wrong-generation'] as const)(
+  'settlement retains changed %s native evidence after an exact reattachment',
+  async (change) => {
+    let marker = '';
+    const effects: string[] = [];
+    const runtime = await start({
+      readManifest: async (path: string) =>
+        path.includes('recording-v2-') && marker
+          ? { status: 'read' as const, contents: marker }
+          : { status: 'missing' as const },
+      writeManifest: async ({ contents }: { contents: string }) => {
+        effects.push('marker-write');
+        marker = contents;
+      },
+      stop: async ({ pid }: { pid: string }) => {
+        effects.push(`signal:${pid}`);
+        return 'stopped' as const;
+      },
+      remove: async () => {
+        effects.push('remove');
+        return true;
+      },
+    });
+    const started = await runtime.screenRecordingStart(recordingInput());
+    const attached = await runtime.screenRecordingReattach({ envelope: started.envelope });
+    expect(attached.status).toBe('active');
+    if (attached.status !== 'active' || !attached.handle.settleForExport)
+      throw new Error('missing settlement authority');
+    const evidence = JSON.parse(marker);
+    if (change === 'missing-token') delete evidence.claimToken;
+    if (change === 'replaced-token') evidence.claimToken = 'successor';
+    if (change === 'wrong-generation') evidence.fenceGeneration += 1;
+    marker = JSON.stringify(evidence);
+    const before = marker;
+    effects.length = 0;
+    await expect(
+      attached.handle.settleForExport({ learned: {}, record: () => {} }),
+    ).resolves.toEqual({ status: 'retained', reason: 'ownership-fence-lost' });
+    expect(marker).toBe(before);
+    expect(effects).toEqual([]);
+  },
+);
+
+test('retains an unbound version-two recording when neither native evidence nor envelope has a claim token', async () => {
+  let marker = '';
+  const effects: string[] = [];
+  const runtime = await start({
+    readManifest: async (path: string) =>
+      path.includes('recording-v2-') && marker
+        ? { status: 'read' as const, contents: marker }
+        : { status: 'missing' as const },
+    writeManifest: async ({ contents }: { contents: string }) => {
+      effects.push('marker-write');
+      marker = contents;
+    },
+    stop: async () => {
+      effects.push('signal');
+      return 'stopped' as const;
+    },
+    remove: async () => {
+      effects.push('remove');
+      return true;
+    },
+  });
+  const started = await runtime.screenRecordingStart({
+    ...recordingInput(),
+    claimToken: undefined,
+  });
+  const before = marker;
+  effects.length = 0;
+  await expect(
+    runtime.screenRecordingReattach({ envelope: started.envelope }),
+  ).resolves.toMatchObject({ status: 'unreattachable', reason: 'ownership-fence-lost' });
+  await expect(
+    runtime.screenRecordingCleanup({ envelope: started.envelope }),
+  ).resolves.toMatchObject({ status: 'cleanup-pending', reason: 'ownership-fence-lost' });
+  expect(marker).toBe(before);
+  expect(effects).toEqual([]);
 });

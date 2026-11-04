@@ -20,6 +20,7 @@ const device = {
 const generation = {
   deviceId: device.id,
   sessionId: 'session-1',
+  claimToken: 'claim-1',
   fence: { token: 'fence-1', generation: 2 },
 };
 test('decodes only complete, ordered Android native recording evidence', () => {
@@ -27,6 +28,7 @@ test('decodes only complete, ordered Android native recording evidence', () => {
     device,
     {
       sessionId: 'session-1',
+      claimToken: 'claim-1',
       outputPath: '/tmp/capture.mp4',
       scope: 'device',
       showTouches: true,
@@ -78,6 +80,7 @@ test('requires the device, session, and fence identity carried by the durable en
     device,
     {
       sessionId: 'session-1',
+      claimToken: 'claim-1',
       outputPath: '/tmp/capture.mp4',
       scope: 'device',
       showTouches: true,
@@ -97,6 +100,7 @@ test('requires the device, session, and fence identity carried by the durable en
   );
   const envelope = {
     sessionId: 'session-1',
+    metadata: { deviceClaimToken: 'claim-1' },
     device: { id: device.id },
     fence: { token: 'fence-1', generation: 2 },
   };

@@ -168,8 +168,9 @@ export function nativeManifestMatchesEnvelope(
     manifest.deviceId === envelope.device.id &&
     manifest.fenceToken === envelope.fence.token &&
     manifest.fenceGeneration === envelope.fence.generation &&
-    (manifest.claimToken === undefined ||
-      manifest.claimToken === envelope.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY]) &&
+    typeof manifest.claimToken === 'string' &&
+    manifest.claimToken.length > 0 &&
+    manifest.claimToken === envelope.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] &&
     manifest.sessionId === envelope.sessionId
   );
 }

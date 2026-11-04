@@ -15,6 +15,7 @@ import { snapshot } from './live-snapshot.ts';
 const generation = {
   deviceId: androidRecordingDevice.id,
   sessionId: recordingInput().sessionId,
+  claimToken: recordingInput().claimToken,
   fence: recordingInput().fence,
 };
 const REMOTE_CHUNK = recordingArtifactPath('/sdcard', generation, 1);

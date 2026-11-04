@@ -7,6 +7,7 @@ import { isValidAndroidRecordingDescriptor, isValidNativeManifest } from './mani
 const generation = {
   deviceId: androidRecordingDevice.id,
   sessionId: recordingInput().sessionId,
+  claimToken: recordingInput().claimToken,
   fence: recordingInput().fence,
 };
 test('validates descriptor structure independently of descriptor decoding', () => {

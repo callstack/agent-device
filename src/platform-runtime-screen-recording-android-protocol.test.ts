@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { createAndroidRuntimeModule } from '@agent-device/platform-android';
 import { withAndroidAdbProvider } from '@agent-device/platform-android/mechanics';
 import type { VideoValidatorPreparation } from '@agent-device/capture-kit/recording-video';
@@ -86,7 +86,11 @@ async function rig(
 ) {
   const root = mkdtempForTestSync('android-marker-protocol-');
   const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
-  process.env.AGENT_DEVICE_CLAIMS_DIR = path.join(root, 'claims');
+  const claimsDir = path.join(root, 'claims');
+  mkdirSync(claimsDir);
+  const claimsSentinel = path.join(claimsDir, 'sentinel');
+  writeFileSync(claimsSentinel, 'untouched');
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
   const sdcard = path.join(root, 'sdcard');
   const local = path.join(root, 'local');
   const bin = path.join(root, 'bin');
@@ -189,7 +193,9 @@ rm -f '${childPid}'
         validator,
       );
       const host = {
-        hostEnvironment: createLiveTestHostEnvironment(),
+        hostEnvironment: createTestHostEnvironment({
+          env: { ...process.env, AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+        }),
         androidTools: { probeClipboardShellSupport: async () => 'unsupported' },
         processTransports: { resolve: async () => ({}) },
         localInteractors: {
@@ -281,6 +287,7 @@ rm -f '${childPid}'
         ),
       );
       if (existsSync(childPid)) await vi.waitFor(() => expect(existsSync(childPid)).toBe(false));
+      expect(readFileSync(claimsSentinel, 'utf8')).toBe('untouched');
     } finally {
       if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
       else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
