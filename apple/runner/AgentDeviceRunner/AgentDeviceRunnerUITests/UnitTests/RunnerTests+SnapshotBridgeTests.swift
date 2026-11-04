@@ -55,6 +55,15 @@ extension RunnerTests {
     XCTAssertNotEqual(refusal["error_kind"] as? String, "bad_request")
   }
 
+  func testReaderRefusesAJsonBooleanWhereANumberIsRequired() throws {
+    var request = Self.snapshotBridgeReaderRequest(try firstReadPayload())
+    request["pid"] = true
+    XCTAssertEqual(SnapshotBridgeHandleRequest(request)["error_code"] as? String, "pid-required")
+    request["pid"] = 1
+    request["maxDepth"] = false
+    XCTAssertEqual(SnapshotBridgeHandleRequest(request)["error_code"] as? String, "bounds-invalid")
+  }
+
   func testEnvelopeAtTheBoundIncludingItsFrameHeaderIsServed() throws {
     let envelope: [AnyHashable: Any] = ["requestId": "r", "ok": true, "pid": 7]
     let size = try JSONSerialization.data(withJSONObject: envelope).count

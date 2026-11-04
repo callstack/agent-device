@@ -30,6 +30,8 @@ static BOOL validBoundInteger(id value, NSUInteger minimum, NSUInteger maximum, 
 {
   if (![value isKindOfClass:NSNumber.class]) return NO;
   NSNumber *number = value;
+  // A JSON boolean is an NSNumber too, and must not pass as 0 or 1.
+  if (CFGetTypeID((__bridge CFTypeRef)number) == CFBooleanGetTypeID()) return NO;
   if (number.doubleValue != floor(number.doubleValue)) return NO;
   if (number.unsignedIntegerValue < minimum || number.unsignedIntegerValue > maximum) return NO;
   if (output) *output = number.unsignedIntegerValue;
