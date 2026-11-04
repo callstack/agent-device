@@ -107,7 +107,7 @@ test('proxy open by device spec sends the spec on allocate without listing devic
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
-test('a grant echoing another device mode than the request names is released and refused', async () => {
+test('a slim grant for a full request is released and refused', async () => {
   const { tempRoot, stateDir, flags } = proxyWorkspace('agent-device-proxy-spec-wrong-mode-');
   const releases: LeaseReleaseRequest[] = [];
   await assert.rejects(
@@ -139,6 +139,26 @@ test('a grant echoing another device mode than the request names is released and
     ['lease-1'],
   );
   assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId, undefined);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('a full grant serves a slim request, because slim is best effort', async () => {
+  const { tempRoot, flags } = proxyWorkspace('agent-device-proxy-spec-slim-full-');
+  const device: LeaseDevice = { ...GRANTED_DEVICE, deviceMode: 'full' };
+
+  const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
+    command: 'open',
+    flags: { ...flags, deviceMode: 'slim' },
+    client: createTestClient({
+      listDevices: unexpectedCommandCall,
+      allocate: async (request) => grantedLease(request, { deviceKey: REMOTE_DEVICE_KEY, device }),
+      release: unexpectedCommandCall,
+    }),
+  });
+
+  assert.equal(materialized.flags.udid, 'SIM-REMOTE');
+  assert.deepEqual(materialized.leaseDevice, device);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 

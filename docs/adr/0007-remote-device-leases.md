@@ -345,7 +345,8 @@ A remote config file first applies the value rules of every config key: a string
 The backend that honours the spec strips the keys before it forwards the allocation, and echoes the granted device on the lease as `lease.device` (`model`, `osVersion`, `imageTag?`, `deviceMode?`, `physical`).
 `deviceKey` stays the identity of the lease; `lease.device` is the proof that the spec was understood.
 A backend can report the granted mode as `lease.device.deviceMode`.
-The CLI proxy connection treats a new lease that reports another mode than the request named like a lease without `lease.device`.
+The CLI proxy connection treats a new lease that reports `slim` for a `full` request like a lease without `lease.device`.
+Full is a guarantee and slim is best effort, so `full` granted for a `slim` request is served.
 A lease that reports no mode is accepted, so the proof does not confirm `deviceMode`: a backend that ignores the key and reports no mode grants its default without an error.
 A backend older than the spec returns a lease without `lease.device`.
 The CLI proxy connection then releases that lease and fails with `UNSUPPORTED_OPERATION` and `details.reason: 'device-spec-unsupported'`.
