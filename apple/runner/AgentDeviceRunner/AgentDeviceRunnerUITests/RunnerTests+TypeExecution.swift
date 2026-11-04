@@ -30,12 +30,14 @@ extension RunnerTests {
     } else {
       treeContext = nil
     }
-    let xCTestTreeUnavailable = xCTestChannelPenalized || treeContext?.treeUnreadable == true
+    // One value per command decides every XCTest-dependent step of the text entry: the route, the
+    // replacement guard, and the typing, so a refusal never follows a dispatched tap.
+    let xCTestUnavailable = xCTestChannelPenalized || treeContext?.treeUnreadable == true
     if Self.shouldUseResolvedCoordinateTextEntryRoute(
       repairMode: textEntryMode,
       hasX: command.x != nil,
       hasY: command.y != nil,
-      xCTestChannelPenalized: xCTestTreeUnavailable
+      xCTestUnavailable: xCTestUnavailable
     ), let x = command.x, let y = command.y {
       // Resolved before the tap: the focus it causes can move the field away from this point.
       // A replacement with no input at the point has nothing to bind to: its clear and its typed
@@ -69,7 +71,7 @@ extension RunnerTests {
       }
     }
 #else
-    let xCTestChannelPenalized = false
+    let xCTestUnavailable = false
     let treeContext: SynthesizedCoordinateContext? = nil
     let resolvedCoordinateTarget: TextEntryTarget? = nil
 #endif
@@ -96,7 +98,7 @@ extension RunnerTests {
       let canReplaceResolvedFirstResponder = Self.shouldUseSynthesizedFirstResponderReplacement(
         hasResolvedElement: target.element != nil,
         hasRefreshPoint: target.refreshPoint != nil,
-        xCTestChannelPenalized: xCTestChannelPenalized
+        xCTestUnavailable: xCTestUnavailable
       )
 #else
       let canReplaceResolvedFirstResponder = false
@@ -115,7 +117,7 @@ extension RunnerTests {
       text: text,
       delaySeconds: delaySeconds,
       repairMode: textEntryMode,
-      xCTestChannelPenalized: xCTestChannelPenalized,
+      xCTestUnavailable: xCTestUnavailable,
       synthesizer: PrivateXCTestTextEntrySynthesizer(),
       commandId: command.commandId
     )

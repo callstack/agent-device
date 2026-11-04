@@ -26,6 +26,19 @@ private final class RunnerCoordinatePressCounter: NSObject {
   }
 }
 
+/// Answers no window for the windows query and every other query as XCTest does: the shape of a
+/// tree whose windows XCTest cannot serialize while the text input queries still answer.
+private final class RunnerWindowlessQueryStub: NSObject {
+  static var original: IMP?
+  @objc var allElementsBoundByIndex: [XCUIElement] {
+    let query = unsafeBitCast(self, to: XCUIElementQuery.self)
+    if query.debugDescription.contains("Window") { return [] }
+    typealias Getter = @convention(c) (AnyObject, Selector) -> [XCUIElement]
+    guard let original = Self.original else { return [] }
+    return unsafeBitCast(original, to: Getter.self)(query, #selector(getter: XCUIElementQuery.allElementsBoundByIndex))
+  }
+}
+
 /// Counts XCTest coordinate taps without performing them.
 private final class RunnerCoordinateTapCounter: NSObject {
   static var taps = 0
@@ -172,12 +185,18 @@ extension RunnerTests {
   }
 
   /// Installs `RunnerUnserializableTreeStub` until the returned closure restores XCTest.
-  private func simulateUnserializableAppTree() throws -> () -> Void {
-    let swaps: [(Method?, Method?)] = [
+  private func simulateUnserializableAppTree(framesReadable: Bool = false) throws -> () -> Void {
+    var swaps: [(Method?, Method?)] = [
       (class_getInstanceMethod(XCUIElementQuery.self, #selector(getter: XCUIElementQuery.allElementsBoundByIndex)),
        class_getInstanceMethod(RunnerUnserializableTreeStub.self, #selector(getter: RunnerUnserializableTreeStub.allElementsBoundByIndex))),
-      (class_getInstanceMethod(XCUIElement.self, #selector(getter: XCUIElement.frame)),
-       class_getInstanceMethod(RunnerUnserializableTreeStub.self, #selector(getter: RunnerUnserializableTreeStub.frame))),
+    ]
+    if !framesReadable {
+      swaps.append(
+        (class_getInstanceMethod(XCUIElement.self, #selector(getter: XCUIElement.frame)),
+         class_getInstanceMethod(RunnerUnserializableTreeStub.self, #selector(getter: RunnerUnserializableTreeStub.frame)))
+      )
+    }
+    swaps += [
       (class_getInstanceMethod(XCUICoordinate.self, #selector(XCUICoordinate.press(forDuration:))),
        class_getInstanceMethod(RunnerCoordinatePressCounter.self, #selector(RunnerCoordinatePressCounter.press(forDuration:)))),
       (class_getInstanceMethod(XCUICoordinate.self, #selector(XCUICoordinate.tap)),
@@ -197,8 +216,8 @@ extension RunnerTests {
 
   /// On a tree XCTest cannot serialize, XCTest's coordinate press reads an infinite app frame and
   /// raises an exception that ends the runner test. A long press needs no tree: when the sole-screen
-  /// route is open for the app it is synthesized on that screen, and anything else keeps the XCTest
-  /// press.
+  /// route is open for the app it is synthesized on that screen, and anything else refuses with
+  /// `UNSUPPORTED_OPERATION` instead of pressing through the XCTest coordinate.
   @MainActor
   func testLongPressOnAnUnserializableTreeIsSynthesizedOnTheSoleScreen() throws {
     app.launch()
@@ -221,10 +240,10 @@ extension RunnerTests {
     let longPressCoordinatePresses = RunnerCoordinatePressCounter.presses
     let pressSeriesResponse = try executeOnMainPrepared(command: pressSeries, activeApp: app)
 
-    XCTAssertTrue(longPressResponse.ok, String(describing: longPressResponse.error))
-    XCTAssertEqual(longPressResponse.data?.message, "long pressed")
-    XCTAssertTrue(pressSeriesResponse.ok, String(describing: pressSeriesResponse.error))
     if soleScreenRouteIsOpen(for: app) {
+      XCTAssertTrue(longPressResponse.ok, String(describing: longPressResponse.error))
+      XCTAssertEqual(longPressResponse.data?.message, "long pressed")
+      XCTAssertTrue(pressSeriesResponse.ok, String(describing: pressSeriesResponse.error))
       XCTAssertEqual(longPressCoordinatePresses, 0)
       XCTAssertNil(longPressResponse.data?.gestureFallback)
       XCTAssertEqual(pressSeriesResponse.data?.completedSteps, 2)
@@ -238,9 +257,9 @@ extension RunnerTests {
         XCTAssertGreaterThanOrEqual(try XCTUnwrap(end) - XCTUnwrap(start), 600)
       }
     } else {
-      XCTAssertEqual(longPressCoordinatePresses, 1)
-      XCTAssertEqual(longPressResponse.data?.gestureFallback, "xctest-coordinate-long-press")
-      XCTAssertEqual(RunnerCoordinatePressCounter.presses, 3)
+      XCTAssertFalse(longPressResponse.ok)
+      XCTAssertEqual(longPressResponse.error?.code, "UNSUPPORTED_OPERATION")
+      XCTAssertEqual(RunnerCoordinatePressCounter.presses, 0)
     }
   }
 
@@ -285,12 +304,107 @@ extension RunnerTests {
       app.terminate()
     }
 
-    XCTAssertThrowsError(try doubleTapAt(app: app, x: 40, y: 40))
-    XCTAssertThrowsError(try longPressAt(app: app, x: 40, y: 40, duration: 0.5))
-    XCTAssertThrowsError(try performBackGesture(app: app))
-    XCTAssertThrowsError(try performAppSwitcherGesture(app: app))
+    let refusals: [(String, () throws -> Void)] = [
+      ("doubleTap", { _ = try self.doubleTapAt(app: self.app, x: 40, y: 40) }),
+      ("longPress", { _ = try self.longPressAt(app: self.app, x: 40, y: 40, duration: 0.5) }),
+      ("drag", { _ = try self.dragAt(app: self.app, x: 40, y: 40, x2: 80, y2: 80, holdDuration: 0.1) }),
+      ("back", { try self.performBackGesture(app: self.app) }),
+      ("appSwitcher", { try self.performAppSwitcherGesture(app: self.app) }),
+    ]
+    for (name, gesture) in refusals {
+      XCTAssertThrowsError(try gesture(), name) { error in
+        XCTAssertTrue(error is RunnerCoordinateRefusal, "\(name): \(error)")
+        XCTAssertNotNil((error as? RunnerCoordinateRefusal)?.hint, name)
+      }
+    }
     XCTAssertEqual(RunnerCoordinatePressCounter.presses, 0)
     XCTAssertEqual(RunnerCoordinateTapCounter.taps, 0)
+  }
+
+  /// No window is not proof of an unreadable tree: where the app's own frame still reads, an XCTest
+  /// coordinate gesture keeps its app-origin anchor, as before the gate.
+  @MainActor
+  func testCoordinateGestureOnAWindowlessTreeWhoseFrameReadsKeepsItsAppAnchor() throws {
+    app.launch()
+    mainOwned.app = app
+    let restoreXCTest = try simulateUnserializableAppTree(framesReadable: true)
+    defer {
+      restoreXCTest()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+
+    _ = try longPressAt(app: app, x: 40, y: 40, duration: 0.5)
+
+    XCTAssertEqual(RunnerCoordinatePressCounter.presses, 1)
+  }
+
+  /// A refused coordinate tap answers `UNSUPPORTED_OPERATION` with a hint, not an uncoded failure:
+  /// the daemon surfaces the code, and the runner stays up.
+  @MainActor
+  func testRefusedCoordinateTapAnswersACodedUnsupportedOperationWithAHint() throws {
+    let restoreSynthesizedTap = try forceSynthesizedTapFailure()
+    app.launch()
+    mainOwned.app = app
+    let restoreXCTest = try simulateUnserializableAppTree()
+    defer {
+      restoreXCTest()
+      restoreSynthesizedTap()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let tap = try runnerCommandFixture(#"{"command":"tap","commandId":"refused-coordinate-tap","x":40,"y":40}"#)
+
+    let response = try executeOnMainPrepared(command: tap, activeApp: app)
+
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "UNSUPPORTED_OPERATION")
+    XCTAssertNotNil(response.error?.hint)
+    XCTAssertEqual(RunnerCoordinateTapCounter.taps, 0)
+  }
+
+  /// With the penalty lapsed and the windows query failing, a probe that still answers an input
+  /// carries the fill through the synthesized replacement: one value decides the route, the
+  /// replacement guard, and the typing, so no XCTest coordinate is tapped and no refusal follows a
+  /// tap.
+  @MainActor
+  func testCoordinateFillWhoseProbeAnswersAnInputOnAWindowlessTreeCompletesWithoutAnXCTestCoordinate() throws {
+    let field = try focusSynthesizedReplacementField()
+    defer { tearDownSynthesizedReplacementField() }
+    clearSnapshotXCTestChannelPenalty(reason: "test-setup")
+    mainOwned.accessibilityHealth = .healthy
+    guard soleScreenRouteIsOpen(for: app) else { throw XCTSkip("the sole-screen route is closed on this device") }
+    let frame = field.frame
+    let restoreXCTest = try simulateWindowlessTree()
+    defer { restoreXCTest() }
+    let command = try runnerCommandFixture(
+      #"{"command":"type","commandId":"windowless-fill","text":"windowless","textEntryMode":"replace","x":\#(frame.midX),"y":\#(frame.midY)}"#
+    )
+    let failureCountBefore = currentXCTestFailureCount()
+
+    let response = try executeTypeCommand(activeApp: app, command: command)
+
+    let recordedFailure = didRecordXCTestFailure(since: failureCountBefore)
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(RunnerCoordinateTapCounter.taps, 0)
+    XCTAssertFalse(recordedFailure)
+    XCTAssertEqual(String(describing: field.value ?? ""), "windowless")
+  }
+
+  /// Windows answer nothing, every other query answers, and the XCTest coordinate tap is counted.
+  private func simulateWindowlessTree() throws -> () -> Void {
+    let query = try XCTUnwrap(class_getInstanceMethod(XCUIElementQuery.self, #selector(getter: XCUIElementQuery.allElementsBoundByIndex)))
+    let stub = try XCTUnwrap(class_getInstanceMethod(RunnerWindowlessQueryStub.self, #selector(getter: RunnerWindowlessQueryStub.allElementsBoundByIndex)))
+    let tap = try XCTUnwrap(class_getInstanceMethod(XCUICoordinate.self, #selector(XCUICoordinate.tap)))
+    let tapStub = try XCTUnwrap(class_getInstanceMethod(RunnerCoordinateTapCounter.self, #selector(RunnerCoordinateTapCounter.tap)))
+    RunnerWindowlessQueryStub.original = method_getImplementation(query)
+    let originalQuery = method_setImplementation(query, method_getImplementation(stub))
+    let originalTap = method_setImplementation(tap, method_getImplementation(tapStub))
+    RunnerCoordinateTapCounter.taps = 0
+    return {
+      method_setImplementation(tap, originalTap)
+      method_setImplementation(query, originalQuery)
+    }
   }
 
   /// The penalty clock lapses while a tree stays unreadable to XCTest, and a coordinate `fill` then
@@ -310,7 +424,7 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    guard soleScreenRouteIsOpen(for: app) else { return }
+    try XCTSkipUnless(soleScreenRouteIsOpen(for: app), "the sole-screen route is closed on this device")
     textInputProbeBlindForTesting = true
     defer { textInputProbeBlindForTesting = false }
     let fill = try runnerCommandFixture(

@@ -24,6 +24,8 @@ extension RunnerTests {
       )
     } catch let refusal as RunnerAppScreenCaptureFailure {
       return refusal.response
+    } catch let refusal as RunnerCoordinateRefusal {
+      return unsupportedResponse(message: refusal.message, hint: refusal.hint)
     }
   }
 

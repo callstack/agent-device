@@ -44,7 +44,7 @@ extension RunnerTests {
         Self.shouldUseSynthesizedFirstResponderReplacement(
           hasResolvedElement: testCase.hasElement,
           hasRefreshPoint: testCase.hasPoint,
-          xCTestChannelPenalized: testCase.penalized
+          xCTestUnavailable: testCase.penalized
         ),
         testCase.expected
       )
@@ -412,7 +412,7 @@ extension RunnerTests {
           repairMode: mode,
           hasX: hasX,
           hasY: hasY,
-          xCTestChannelPenalized: penalized
+          xCTestUnavailable: penalized
         ),
         expected
       )
@@ -745,7 +745,7 @@ extension RunnerTests {
       text: "abc",
       delaySeconds: 0.001,
       repairMode: .replacement,
-      xCTestChannelPenalized: true,
+      xCTestUnavailable: true,
       synthesizer: synthesizer
     )
 
@@ -792,7 +792,7 @@ extension RunnerTests {
       text: "abc",
       delaySeconds: 0,
       repairMode: .replacement,
-      xCTestChannelPenalized: true,
+      xCTestUnavailable: true,
       synthesizer: synthesizer
     )
 
@@ -816,7 +816,7 @@ extension RunnerTests {
       text: "",
       delaySeconds: 0,
       repairMode: .replacement,
-      xCTestChannelPenalized: false,
+      xCTestUnavailable: false,
       synthesizer: RecordingTextEntrySynthesizer()
     )
 
