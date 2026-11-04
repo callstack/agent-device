@@ -462,6 +462,7 @@ export type AndroidApplicationTools = Readonly<{
 
 /** Gateway-coordinated durable phases whose concrete mechanics stay package-owned. */
 export type ApplicationLifecycleResourceLifecycle = Readonly<{
+  prepareRecordingRecovery(): Promise<void>;
   recoverStartupResources(input: Readonly<{ stateDir: string }>): Promise<void>;
   detachForDaemonShutdown(): Promise<readonly string[]>;
   finalizeDaemonShutdown(): Promise<readonly string[]>;

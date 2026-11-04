@@ -62,6 +62,7 @@ import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
+import { hasRecordingRecoveryNeedingValidator } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { withCommandHost } from '@agent-device/host-kit/command';
 import { cancelAllRequests } from '@agent-device/host-kit/request';
 import {
@@ -604,6 +605,15 @@ async function startDaemonRuntimeOnHost(
     openWebSessionNames: openWebSessionNames(sessionStore),
     ownedProcessRecords: deps.ownedProcessRecords,
   });
+  if (hasRecordingRecoveryNeedingValidator(sessionsDir)) {
+    await applicationLifecycle.prepareRecordingRecovery().catch((error: unknown) => {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'daemon_recording_recovery_preparation_failed',
+        data: { error: normalizeError(error) },
+      });
+    });
+  }
   // Marker-gated lifecycle recovery owns test-IME orphan repair. Its implementation remains
   // lazy until the marker exists, so a normal daemon startup does not load or probe adb.
   void applicationLifecycle.recoverStartupResources({ stateDir: baseDir }).catch((error) => {

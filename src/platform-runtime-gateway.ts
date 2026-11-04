@@ -85,6 +85,9 @@ export function createComposedPlatformRuntimeGateway(options: {
   let lifecycleDetach: Promise<readonly string[]> | undefined;
   let lifecycleFinalize: Promise<readonly string[]> | undefined;
   const applicationLifecycle = Object.freeze({
+    prepareRecordingRecovery: async () => {
+      await (await loadHost()).applicationResources.prepareRecordingRecovery();
+    },
     recoverStartupResources: async (input: Readonly<{ stateDir: string }>) => {
       await runStartupRecoveryFence(input.stateDir, async () => {
         await (await loadHost()).applicationResources.recoverStartupResources(input);

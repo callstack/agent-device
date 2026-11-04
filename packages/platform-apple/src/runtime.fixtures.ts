@@ -33,6 +33,7 @@ export function platformRuntimeHostFixture(): PlatformRuntimeHost {
     localInteractors: { resolve: async () => ({}) as Interactor },
     audioProbe: inertAudioProbeHost(),
     applicationResources: {
+      prepareRecordingRecovery: async () => {},
       recoverStartupResources: async () => {},
       detachForDaemonShutdown: async () => {},
       finalizeDaemonShutdown: async () => {},

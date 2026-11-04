@@ -7,6 +7,16 @@ export const screenRecordingResourceStore = createDurableCaptureResourceStore({
   displayName: 'screen recording',
 });
 
+/** Whether an open durable recording can require MP4 validation after daemon restart. */
+export function hasRecordingRecoveryNeedingValidator(sessionsDir: string): boolean {
+  return screenRecordingResourceStore.list(sessionsDir).some((resourcePath) => {
+    const record = screenRecordingResourceStore.read(resourcePath);
+    if (record.status !== 'decoded' || record.envelope.lifecycle !== 'open') return false;
+    const outputPath = record.envelope.descriptor.body.outputPath;
+    return typeof outputPath === 'string' && !outputPath.toLowerCase().endsWith('.webm');
+  });
+}
+
 /**
  * The metadata key this record stores a finished recording's stop response under, beside the
  * mechanics' own facts. The writer is the kind's `completionMetadata`, the reader is

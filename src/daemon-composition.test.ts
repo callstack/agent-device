@@ -26,6 +26,7 @@ vi.mock('./platform-runtime.ts', () => ({
   }),
   createPlatformRuntimeGateway: () => ({
     applicationLifecycle: {
+      prepareRecordingRecovery: async () => {},
       recoverStartupResources: async () => {},
       detachForDaemonShutdown: async () => [],
       finalizeDaemonShutdown: async () => [],

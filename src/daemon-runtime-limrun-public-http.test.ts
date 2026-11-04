@@ -18,6 +18,7 @@ const limrunIo = vi.hoisted(() => ({
 }));
 const rootPorts = vi.hoisted(() => {
   const applicationLifecycle = {
+    prepareRecordingRecovery: vi.fn(async () => {}),
     recoverStartupResources: vi.fn(async () => {}),
     detachForDaemonShutdown: vi.fn(async () => []),
     finalizeDaemonShutdown: vi.fn(async () => []),

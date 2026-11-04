@@ -13,6 +13,8 @@ import {
 } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
 import { lifecycleDeviceRuntimeGateway } from '../../__tests__/support/test-device-runtime-gateway.ts';
 import { startDaemonRuntime } from './daemon-runtime.ts';
+import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
+import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 
 function hostFor(stateDir: string) {
   return createTestHostEnvironment({
@@ -30,6 +32,55 @@ function providerRuntime(provider: string, shutdown: () => Promise<void>): Provi
 }
 
 const silent = { stderr: { write: () => {} }, stdout: { write: () => {} } };
+
+test.each([
+  { lifecycle: 'open' as const, outputPath: '/tmp/capture.mp4', expected: 1 },
+  { lifecycle: 'open' as const, outputPath: '/tmp/capture.webm', expected: 0 },
+  { lifecycle: 'completed' as const, outputPath: '/tmp/capture.mp4', expected: 0 },
+])(
+  'startup warms only an open MP4 recording: $lifecycle $outputPath',
+  async ({ lifecycle, outputPath, expected }) => {
+    const stateDir = mkdtempForTestSync('daemon-recording-recovery-ready-');
+    const paths = resolveDaemonPaths(stateDir);
+    const resource = makeTestScreenRecordingResource({
+      name: 'session',
+      device: {
+        platform: 'android',
+        id: 'emulator-5554',
+        name: 'fixture',
+        kind: 'emulator',
+      },
+    });
+    const resourcePath = screenRecordingResourceStore.resolvePath(
+      path.join(paths.sessionsDir, 'session'),
+    );
+    screenRecordingResourceStore.write(resourcePath, {
+      ...resource.envelope,
+      lifecycle,
+      descriptor: { version: 1, body: { backend: 'fixture', outputPath } },
+    });
+    const prepareRecordingRecovery = vi.fn(async () => {});
+    const runtime = await startDaemonRuntime({
+      host: hostFor(stateDir),
+      ...silent,
+      composeDeps: daemonRuntimeDepsFixture({
+        deviceRuntimeGateway: {
+          ...lifecycleDeviceRuntimeGateway,
+          applicationLifecycle: applicationLifecycleResourceFixture({ prepareRecordingRecovery }),
+        },
+      }),
+    });
+    try {
+      expect(prepareRecordingRecovery).toHaveBeenCalledTimes(expected);
+      expect(screenRecordingResourceStore.read(resourcePath)).toMatchObject({
+        status: 'decoded',
+        envelope: { lifecycle },
+      });
+    } finally {
+      await runtime.close();
+    }
+  },
+);
 
 test('close is idempotent and every caller receives the one report', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-close-');

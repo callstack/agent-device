@@ -419,6 +419,7 @@ function host(
     },
     localInteractors: { resolve: async () => interactor },
     applicationResources: {
+      prepareRecordingRecovery: async () => {},
       recoverStartupResources: async () => {},
       detachForDaemonShutdown: async () => {},
       finalizeDaemonShutdown: async () => {},

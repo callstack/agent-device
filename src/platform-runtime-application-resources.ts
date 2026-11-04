@@ -16,9 +16,15 @@ export function createApplicationResourceLifecycle(tools: {
   android: AndroidApplicationTools;
   apple: AppleApplicationTools;
   /** The recording host's validator owner: its background compile outlives every request. */
-  recording: Readonly<{ closeValidatorPreparation(): Promise<void> }>;
+  recording: Readonly<{
+    closeValidatorPreparation(): Promise<void>;
+    finalize: Readonly<{ prepare(input: Readonly<{ container: 'mp4' }>): Promise<void> }>;
+  }>;
 }): ApplicationLifecycleResourceLifecycle {
   return Object.freeze({
+    prepareRecordingRecovery: async () => {
+      await tools.recording.finalize.prepare({ container: 'mp4' });
+    },
     // Android test IME is the one durable device mutation that outlives a crashed daemon. The
     // marker read is the evidence gate: without it the Android mechanics are never imported.
     recoverStartupResources: async (input) => {

@@ -31,6 +31,7 @@ function lifecycle(overrides: {
         overrides.finalizeRunnerSessionsForShutdown ?? (async () => {}),
     } as unknown as AppleApplicationTools,
     recording: {
+      finalize: { prepare: async () => {} },
       closeValidatorPreparation: overrides.closeValidatorPreparation ?? (async () => {}),
     },
   });

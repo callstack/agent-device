@@ -17,7 +17,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function runIsolationScenario(failBeforeClose: boolean, stallClose = false): Promise<void> {
+async function runIsolationScenario(
+  failBeforeClose: boolean,
+  stallPreparation = false,
+): Promise<void> {
   Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
   const cacheDir = mkdtempForTestSync('video-cache-isolation-');
   const host = {
@@ -34,6 +37,7 @@ async function runIsolationScenario(failBeforeClose: boolean, stallClose = false
     signals.push(signal);
     await new Promise<void>((resolve, reject) => {
       const abort = () => {
+        if (stallPreparation && signals.length > 1) return;
         signal.removeEventListener('abort', abort);
         reject(new Error('compiler cancelled'));
       };
@@ -60,6 +64,7 @@ async function runIsolationScenario(failBeforeClose: boolean, stallClose = false
   void firstResult.catch(() => undefined);
   let secondResult: ReturnType<typeof second.prepare> | undefined;
   let earlyFailureReached = false;
+  let closeTimedOut = false;
   try {
     await expect.poll(() => signals.length, { timeout: 5_000 }).toBe(1);
     const bin = path.join(cacheDir, 'bin');
@@ -101,29 +106,32 @@ async function runIsolationScenario(failBeforeClose: boolean, stallClose = false
       if (earlyFailureReached) await expect.poll(() => signals.length, { timeout: 5_000 }).toBe(2);
     } finally {
       try {
-        const close = second.close();
-        const closing = stallClose ? close.then(() => new Promise<void>(() => {})) : close;
+        const closing = second.close();
         let timeout: ReturnType<typeof setTimeout> | undefined;
         try {
           await Promise.race([
             closing,
             new Promise<never>((_resolve, reject) => {
-              timeout = setTimeout(
-                () => reject(new Error('second owner cleanup did not settle')),
-                1_000,
-              );
+              timeout = setTimeout(() => {
+                closeTimedOut = true;
+                reject(new Error('second owner cleanup did not settle'));
+              }, 1_000);
             }),
           ]);
         } finally {
           clearTimeout(timeout);
           releaseSecond = true;
-          finishSecond?.();
+          if (closeTimedOut) expect(signals[1]?.aborted).toBe(true);
+          if (!closeTimedOut) finishSecond?.();
         }
       } finally {
-        await Promise.allSettled([firstResult, ...(secondResult ? [secondResult] : [])]);
+        await Promise.allSettled([
+          firstResult,
+          ...(!closeTimedOut && secondResult ? [secondResult] : []),
+        ]);
         try {
           const bin = path.join(cacheDir, 'bin');
-          if (fs.existsSync(bin)) {
+          if (fs.existsSync(bin) && !closeTimedOut) {
             expect(
               fs.readdirSync(bin).some((entry) => entry.endsWith('.lock') || entry.startsWith('.')),
             ).toBe(false);
