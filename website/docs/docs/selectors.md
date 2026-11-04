@@ -55,6 +55,7 @@ Tips:
 - Use `find ... wait <timeoutMs>` to wait for an element to appear.
 - Pair `find` with a scoped snapshot (`snapshot -s "<label>"`) for speed.
 - [Android] If the matched node is not hittable, agent-device clicks or focuses the nearest hittable ancestor.
+- `find ... focus` and `find ... type` aim at the text field when the match contains exactly one. They refuse with `AMBIGUOUS_MATCH` and the field candidates when it contains several. Disabled and invisible fields do not count.
 - Use `fill` to find a field and replace its text in one step. To append to the text in the focused field, use `click` or `press`, then `type`.
 
 ## Selector syntax

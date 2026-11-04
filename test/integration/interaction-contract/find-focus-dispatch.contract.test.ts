@@ -7,7 +7,12 @@ import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/tes
 import { scenarioName, scenarioNames } from './coverage-manifest.ts';
 import { FIND_FOCUS_DISPATCH_COVERAGE } from './find-focus-dispatch.coverage.ts';
 import { fullyTiledParentSnapshot } from './fixtures.ts';
-import { runnerSnapshotEntry, runnerTapEntry, withIosContractDaemon } from './daemon-harness.ts';
+import {
+  runnerSnapshotEntry,
+  runnerTapEntry,
+  runnerTypeEntry,
+  withIosContractDaemon,
+} from './daemon-harness.ts';
 
 // ADR 0011 Layer 3, find-focus-dispatch path: mutating `find <locator> focus` and the focus leg of
 // `find <locator> type`. These run over the daemon harness because the seam lives in the daemon's
@@ -207,6 +212,195 @@ test(
   PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
 );
 
+const nestedFieldScenario = (index: number): string =>
+  scenarioNames(FIND_FOCUS_DISPATCH_COVERAGE, 'parentOwnedTouchPoint')[index]!;
+
+test(
+  nestedFieldScenario(2),
+  async () => {
+    // The field's center is (200,150). The labelled wrapper's free space is (200,118), where focus
+    // would report success and the text would then go to whatever already held the focus.
+    await withIosContractDaemon(
+      [
+        runnerSnapshotEntry(labelledWrapperTree()),
+        runnerTapEntry({}),
+        runnerSnapshotEntry(labelledWrapperTree()),
+        runnerTapEntry({}),
+        runnerTypeEntry({}),
+      ],
+      async (daemon, transcript) => {
+        const focused = assertRpcOk(await daemon.callCommand('find', ['label', 'Email', 'focus']));
+        assert.deepEqual({ x: focused.x, y: focused.y }, { x: 200, y: 150 });
+
+        assertRpcOk(await daemon.callCommand('find', ['label', 'Email', 'type', 'hello']));
+        const dispatched = transcript.calls.slice(-2);
+        assert.deepEqual(
+          dispatched.map((call) => call.command),
+          ['ios.runner.tap', 'ios.runner.type'],
+        );
+        const tap = dispatched[0]?.request as Record<string, unknown>;
+        assert.deepEqual({ x: tap.x, y: tap.y }, { x: 200, y: 150 });
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  nestedFieldScenario(3),
+  async () => {
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(fieldFillingCellTree()), runnerTapEntry({})],
+      async (daemon) => {
+        const data = assertRpcOk(await daemon.callCommand('find', ['label', 'Email', 'focus']));
+        assert.deepEqual({ x: data.x, y: data.y }, { x: 200, y: 122 });
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  nestedFieldScenario(4),
+  async () => {
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(labelBesideFieldTree()), runnerTapEntry({})],
+      async (daemon) => {
+        const data = assertRpcOk(await daemon.callCommand('find', ['label', 'Email', 'focus']));
+        assert.deepEqual({ x: data.x, y: data.y }, { x: 200, y: 150 });
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  nestedFieldScenario(5),
+  async () => {
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(twoFieldsTree()), runnerSnapshotEntry(twoFieldsTree())],
+      async (daemon) => {
+        for (const action of [['focus'], ['type', 'hello']]) {
+          const error = assertRpcError(
+            await daemon.callCommand('find', ['label', 'Address', ...action]),
+            500,
+            'AMBIGUOUS_MATCH',
+            /find matched @e2, which contains 2 text fields/,
+          );
+          assert.deepEqual(readErrorDetails(error).candidates, [
+            '@e3 [text-field] "Street"',
+            '@e4 [text-field] "City"',
+          ]);
+        }
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  nestedFieldScenario(6),
+  async () => {
+    // The closest negative to the refusal above: the same two fields, one of them disabled.
+    const tree = twoFieldsTree().map((node) =>
+      (node as { index: number }).index === 2
+        ? { ...(node as object), enabled: false, hittable: false }
+        : node,
+    );
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(tree), runnerTapEntry({})],
+      async (daemon) => {
+        const data = assertRpcOk(await daemon.callCommand('find', ['label', 'Address', 'focus']));
+        assert.deepEqual({ x: data.x, y: data.y }, { x: 200, y: 220 });
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  nestedFieldScenario(7),
+  async () => {
+    // The tab bar covers the field at the bottom of the form but leaves the form's own center clear.
+    const tree = [
+      { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'Other',
+        label: 'Email',
+        rect: { x: 0, y: 500, width: 390, height: 344 },
+        hittable: true,
+      },
+      {
+        index: 2,
+        parentIndex: 1,
+        type: 'TextField',
+        rect: { x: 16, y: 790, width: 140, height: 44 },
+        hittable: true,
+      },
+      {
+        index: 3,
+        parentIndex: 0,
+        type: 'TabBar',
+        rect: { x: 0, y: 760, width: 390, height: 84 },
+        hittable: true,
+      },
+    ];
+    await withIosContractDaemon([runnerSnapshotEntry(tree)], async (daemon) => {
+      const error = assertRpcError(
+        await daemon.callCommand('find', ['label', 'Email', 'focus']),
+        500,
+        'COMMAND_FAILED',
+        /Matched element @e3 is covered by another visible element and cannot be focused safely/,
+      );
+      const details = readErrorDetails(error);
+      assert.equal(details.reason, 'target_covered');
+      assert.equal(details.ref, '@e3');
+    });
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  nestedFieldScenario(8),
+  async () => {
+    // The parent's center (200,530) clears the band; the field's center (200,620) does not.
+    const frame = { x: 0, y: 583, width: 402, height: 291 };
+    const tree = [
+      { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'Other',
+        label: 'Email',
+        rect: { x: 20, y: 400, width: 360, height: 260 },
+        hittable: true,
+      },
+      {
+        index: 2,
+        parentIndex: 1,
+        type: 'TextField',
+        rect: { x: 32, y: 600, width: 336, height: 40 },
+        hittable: true,
+      },
+    ];
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(tree, { keyboard: { kind: 'visible', frame } })],
+      async (daemon) => {
+        const error = assertRpcError(
+          await daemon.callCommand('find', ['label', 'Email', 'focus']),
+          500,
+          'COMMAND_FAILED',
+          /Ref @e3 is behind the visible keyboard and cannot be focused safely/,
+        );
+        assert.equal(readErrorDetails(error).reason, 'tap_keyboard_occludes_target');
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
 test(
   scenario('responseConstruction'),
   async () => {
@@ -295,6 +489,112 @@ function readErrorDetails(error: Record<string, unknown>): Record<string, unknow
   const details = error.details;
   assert.ok(details && typeof details === 'object', 'the error carries typed details');
   return details as Record<string, unknown>;
+}
+
+const APPLICATION_NODE = {
+  index: 0,
+  type: 'Application',
+  rect: { x: 0, y: 0, width: 400, height: 800 },
+};
+
+function labelledWrapperTree(): unknown[] {
+  return [
+    APPLICATION_NODE,
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Other',
+      label: 'Email',
+      rect: { x: 20, y: 100, width: 360, height: 80 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      parentIndex: 1,
+      type: 'TextField',
+      rect: { x: 32, y: 130, width: 336, height: 40 },
+      hittable: true,
+    },
+  ];
+}
+
+function fieldFillingCellTree(): unknown[] {
+  return [
+    APPLICATION_NODE,
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Cell',
+      label: 'Email',
+      rect: { x: 0, y: 100, width: 400, height: 44 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      parentIndex: 1,
+      type: 'TextField',
+      rect: { x: 16, y: 100, width: 368, height: 44 },
+      hittable: true,
+    },
+  ];
+}
+
+function labelBesideFieldTree(): unknown[] {
+  return [
+    APPLICATION_NODE,
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Other',
+      rect: { x: 20, y: 100, width: 360, height: 80 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      parentIndex: 1,
+      type: 'StaticText',
+      label: 'Email',
+      rect: { x: 32, y: 100, width: 336, height: 24 },
+      hittable: false,
+    },
+    {
+      index: 3,
+      parentIndex: 1,
+      type: 'TextField',
+      rect: { x: 32, y: 130, width: 336, height: 40 },
+      hittable: true,
+    },
+  ];
+}
+
+function twoFieldsTree(): unknown[] {
+  return [
+    APPLICATION_NODE,
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Other',
+      label: 'Address',
+      rect: { x: 20, y: 100, width: 360, height: 160 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      parentIndex: 1,
+      type: 'TextField',
+      label: 'Street',
+      rect: { x: 32, y: 130, width: 336, height: 40 },
+      hittable: true,
+    },
+    {
+      index: 3,
+      parentIndex: 1,
+      type: 'TextField',
+      label: 'City',
+      rect: { x: 32, y: 200, width: 336, height: 40 },
+      hittable: true,
+    },
+  ];
 }
 
 function partlyTiledCardTree(): unknown[] {

@@ -13,7 +13,12 @@ import {
 import { runNodePipelineStages } from '@agent-device/selectors/selector-pipeline';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { coveredInteractionDetails } from '@agent-device/selectors/interaction-error';
-import { resolveNodeTouchPoint } from '@agent-device/selectors/node-touch-point';
+import {
+  collectNestedTextFields,
+  resolveNodeTouchPoint,
+} from '@agent-device/selectors/node-touch-point';
+import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snapshot-occlusion';
+import { buildNestedTextFieldsError } from '../../selector-match-errors.ts';
 import { assertTapTargetClearOfVisibleKeyboard } from '@agent-device/selectors/keyboard-occlusion';
 import {
   interactionVerb,
@@ -399,20 +404,28 @@ async function dispatchFocusForFindMatch(
   const { req, logPath } = ctx;
   const coveredResponse = rejectCoveredFindMatch(match, 'focus');
   if (coveredResponse) return coveredResponse;
+  const fields = collectNestedTextFields(match.resolvedNode, match.tree.nodes, ctx.device.platform);
+  if (fields.length > 1) return buildNestedTextFieldsError(match.ref, fields);
+  const nestedField = fields[0];
+  if (nestedField && isSnapshotNodeInteractionBlocked(nestedField)) {
+    return coveredFindResponse(nestedField, 'focus');
+  }
+  const target = nestedField ?? match.resolvedNode;
+  const targetRef = `@${target.ref}`;
   let coords: Point;
   // The same touch-point and keyboard decisions the acting paths run (#2589/#2622/#3734): this seam
   // dispatches the point itself instead of re-entering the interaction leaf, so they have to run here.
   try {
-    coords = resolveNodeTouchPoint(match.resolvedNode, match.tree.nodes, {
-      invalidMessage: `Ref ${match.ref} has no usable bounds`,
-      blockedTargetLabel: `Ref ${match.ref}`,
-      blockedTargetDetails: { ref: match.ref },
+    coords = resolveNodeTouchPoint(target, match.tree.nodes, {
+      invalidMessage: `Ref ${targetRef} has no usable bounds`,
+      blockedTargetLabel: `Ref ${targetRef}`,
+      blockedTargetDetails: { ref: targetRef },
     });
     assertTapTargetClearOfVisibleKeyboard({
       nodes: match.tree.nodes,
-      node: match.resolvedNode,
+      node: target,
       action: 'focus',
-      label: `Ref ${match.ref}`,
+      label: `Ref ${targetRef}`,
       ...(match.keyboard ? { keyboard: match.keyboard } : {}),
       tapPoint: coords,
     });
@@ -442,11 +455,16 @@ function rejectCoveredFindMatch(
   match: ResolvedMatch,
   action: InteractionAction,
 ): DaemonResponse | null {
-  const blockedNode = match.occludedNode;
-  if (!blockedNode) return null;
+  return match.occludedNode ? coveredFindResponse(match.occludedNode, action) : null;
+}
+
+function coveredFindResponse(
+  blockedNode: SnapshotAddressableNode,
+  action: InteractionAction,
+): DaemonResponse {
   return errorResponse(
     'COMMAND_FAILED',
-    `Matched element ${match.ref} is covered by another visible element and cannot ${interactionVerb(action)} safely`,
+    `Matched element @${blockedNode.ref} is covered by another visible element and cannot ${interactionVerb(action)} safely`,
     coveredInteractionDetails(blockedNode),
   );
 }

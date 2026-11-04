@@ -1,9 +1,35 @@
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
-import type { Point, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type {
+  Point,
+  SnapshotAddressableNode,
+  SnapshotNode,
+  SnapshotState,
+} from '@agent-device/kernel/snapshot';
 import { normalizeRef } from '@agent-device/kernel/snapshot';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
+import type { Platform } from '@agent-device/kernel/device';
 import { INTERACTION_ERROR_REASONS } from './interaction-error.ts';
-import { resolveInteractionTouchPoint } from './interaction-touch-point.ts';
+import { isDescendantOf, resolveInteractionTouchPoint } from './interaction-touch-point.ts';
+import { isNodeEditable, isNodeVisible } from './internal/node.ts';
+
+/**
+ * The enabled, visible text fields inside `node`. A touch point treats a field as a competitor to
+ * avoid, so a caller that means to focus a field has to ask for it by name.
+ */
+export function collectNestedTextFields(
+  node: SnapshotNode,
+  nodes: readonly SnapshotNode[],
+  platform: Platform,
+): SnapshotAddressableNode[] {
+  const byIndex = new Map(nodes.map((entry) => [entry.index, entry]));
+  return nodes.filter(
+    (candidate): candidate is SnapshotAddressableNode =>
+      candidate.ref !== undefined &&
+      isDescendantOf(candidate, node, byIndex) &&
+      isNodeEditable(candidate, platform) &&
+      isNodeVisible(candidate),
+  );
+}
 
 export function resolveNodeTouchPoint(
   node: SnapshotNode,

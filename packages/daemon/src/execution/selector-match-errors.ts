@@ -26,3 +26,15 @@ export function buildAmbiguousMatchError(
     { locator, query, ...elementMatchCandidateDetails(matches) },
   );
 }
+
+/** The match is one element, but which of its text fields `find focus` or `find type` means is not. */
+export function buildNestedTextFieldsError(
+  ref: string,
+  fields: SnapshotState['nodes'],
+): DaemonResponse {
+  return errorResponse(
+    'AMBIGUOUS_MATCH',
+    `find matched ${ref}, which contains ${fields.length} text fields. Use a more specific locator or selector.`,
+    { ref, ...elementMatchCandidateDetails(fields) },
+  );
+}

@@ -577,6 +577,8 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
           'gap: the `findAct` row declares `offscreen: "ignore"` because find ranks across the whole tree and prefers on-screen matches rather than refusing off-screen ones (#1625), and focus/type never re-enter the acting leaf where the runtime rows refuse. So the seam dispatches at a captured touch point the acting paths would reject as outside the root viewport — a closed drawer or an off-viewport carousel is a silent no-op focus here.',
         trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
       },
+      // The rule treats a nested text field as a competitor to avoid, but this seam means to focus
+      // one, so a sole enabled field becomes the target first (#3734) and several refuse.
       parentOwnedTouchPoint: {
         kind: 'runtime',
         via: 'packages/selectors/src/interaction-touch-point.ts#resolveInteractionTouchPoint',
