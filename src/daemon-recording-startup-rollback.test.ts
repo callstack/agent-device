@@ -76,6 +76,10 @@ test.each([false, true])(
     const compilerStarted = new Promise<void>((resolve) => {
       started = resolve;
     });
+    let releaseListener!: () => void;
+    const listenerReleased = new Promise<void>((resolve) => {
+      releaseListener = resolve;
+    });
     const compilerSettlement = new Promise<void>((resolve) => {
       release = resolve;
     });
@@ -100,7 +104,7 @@ test.each([false, true])(
         return originalRemove(target, options);
       });
     const listen = vi.spyOn(transport, 'listenHttpServer').mockImplementation(async () => {
-      await compilerStarted;
+      await Promise.race([compilerStarted, listenerReleased]);
       throw bindFailure;
     });
     let result: Promise<unknown> | undefined;
@@ -116,7 +120,7 @@ test.each([false, true])(
         settled = true;
         return error;
       });
-      await expect.poll(() => signal?.aborted, { timeout: 3000 }).toBe(true);
+      await expect.poll(() => signal?.aborted, { timeout: 1500 }).toBe(true);
       expect(settled).toBe(false);
       const bin = path.join(cache, 'bin');
       expect(fs.readdirSync(bin).some((entry) => entry.endsWith('.lock'))).toBe(true);
@@ -168,6 +172,7 @@ test.each([false, true])(
       });
     } finally {
       release();
+      releaseListener();
       await result;
       remove.mockRestore();
       fs.rmSync(cache, { recursive: true, force: true });
@@ -371,18 +376,18 @@ test('a daemon admits requests while its recovery compiler remains pending', asy
       stderr: { write: () => {} },
       composeDeps: daemonRuntimeDepsFixture({ deviceRuntimeGateway: gateway }),
     });
-    await expect.poll(() => signal !== undefined, { timeout: 5000 }).toBe(true);
+    await expect.poll(() => signal !== undefined, { timeout: 1500 }).toBe(true);
     runtime = await Promise.race([
       startup,
       new Promise<never>((_, reject) => {
-        const timer = setTimeout(() => reject(new Error('startup waited for compiler')), 5000);
+        const timer = setTimeout(() => reject(new Error('startup waited for compiler')), 1500);
         timer.unref();
         void startup!.finally(() => clearTimeout(timer)).catch(() => {});
       }),
     ]);
     const response = await fetch(`http://127.0.0.1:${runtime.httpPort}/rpc`, {
       method: 'POST',
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(2000),
       headers: { authorization: `Bearer ${runtime.token}`, 'content-type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0',

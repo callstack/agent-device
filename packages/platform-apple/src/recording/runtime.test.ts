@@ -661,12 +661,27 @@ test('starts capture while video validation preparation is pending', async () =>
     owner: localRuntimeOwner('apple'),
     signal: new AbortController().signal,
   });
-  const starting = operations.screenRecordingStart(input());
-  const started = await starting;
-  expect(events).toEqual(['preparation', 'recorder']);
-  expect(startRecorder).toHaveBeenCalledOnce();
-  expect(prepareOutput).toHaveBeenCalledOnce();
-  expect(clockAnchor).toHaveBeenCalledOnce();
-  ready();
-  await started.pendingHandle[Symbol.asyncDispose]();
+  const outcome = operations.screenRecordingStart(input()).then(
+    (started) => ({ status: 'started' as const, started }),
+    (error: unknown) => ({ status: 'rejected' as const, error }),
+  );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const observed = await Promise.race([
+      outcome,
+      new Promise<{ status: 'blocked' }>((resolve) => {
+        timer = setTimeout(() => resolve({ status: 'blocked' }), 1500);
+      }),
+    ]);
+    expect(observed.status).toBe('started');
+    expect(events).toEqual(['preparation', 'recorder']);
+    expect(startRecorder).toHaveBeenCalledOnce();
+    expect(prepareOutput).toHaveBeenCalledOnce();
+    expect(clockAnchor).toHaveBeenCalledOnce();
+  } finally {
+    clearTimeout(timer);
+    ready();
+    const settled = await outcome;
+    if (settled.status === 'started') await settled.started.pendingHandle[Symbol.asyncDispose]();
+  }
 });
