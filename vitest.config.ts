@@ -184,6 +184,8 @@ export default defineConfig({
             // Package attribution models npm-pack output. Keep it in the fast lane so every new
             // package path remains accounted for.
             'scripts/__tests__/size-report-package.test.ts',
+            'scripts/__tests__/bundled-license-notices.test.ts',
+            'scripts/lib/cli-entrypoint.test.ts',
             // Publish preparation spawns only fixture-owned scripts and proves both Android
             // helper families are rebuilt through the shared release/size-report owner.
             'scripts/__tests__/prepare-publish-assets.test.ts',
