@@ -6,6 +6,7 @@ import { withoutCommandExecutorOverride } from '@agent-device/host-kit/command';
 import {
   expandProcessTree,
   hostProcessId,
+  isProcessAlive,
   listHostProcesses,
   readHostProcessIdentityObservationsAsync,
   readProcessCommand,
@@ -122,24 +123,27 @@ export async function recordManagedAgentBrowserProcesses(
 export async function managedWebBrowserProcessRecordIsLive(
   store: OwnedProcessRecordStore,
 ): Promise<boolean> {
-  const alive = await readRecordedProcessLiveness(store);
-  return alive.length > 0 && alive.every(Boolean);
+  const liveness = await readRecordedProcessLiveness(store);
+  return liveness.length > 0 && liveness.every((state) => state === 'alive');
 }
 
 /**
- * Whether the daemon-scoped record names processes and none of them is alive under the identity
- * the record carries. An empty, undecodable, or unanswered record is unknown evidence, not dead.
+ * Whether the daemon-scoped record names processes and every one of them was observed not alive:
+ * gone, a zombie, or under another start time than the record carries. An empty, undecodable, or
+ * unanswered record, or a process the probe could not observe, is unknown evidence, not dead.
  */
 export async function managedWebBrowserProcessRecordIsDead(
   store: OwnedProcessRecordStore,
 ): Promise<boolean> {
-  const alive = await readRecordedProcessLiveness(store);
-  return alive.length > 0 && !alive.some(Boolean);
+  const liveness = await readRecordedProcessLiveness(store);
+  return liveness.length > 0 && liveness.every((state) => state === 'not-alive');
 }
+
+type RecordedProcessLiveness = 'alive' | 'not-alive' | 'unobserved';
 
 async function readRecordedProcessLiveness(
   store: OwnedProcessRecordStore,
-): Promise<readonly boolean[]> {
+): Promise<readonly RecordedProcessLiveness[]> {
   const records = readDaemonManagedWebBrowserRecords(store);
   if (records.length === 0) return [];
   const observations = await readHostProcessIdentityObservationsAsync(
@@ -147,11 +151,12 @@ async function readRecordedProcessLiveness(
   );
   return records.map((record) => {
     const observation = observations.get(record.pid);
-    return (
-      observation !== undefined &&
-      !observation.state.startsWith('Z') &&
-      observation.startTime === record.startTime
-    );
+    // A pid the process table does not name is gone only when the signal probe agrees; a table
+    // that answered nothing (a failed `ps`) leaves it unobserved.
+    if (observation === undefined) return isProcessAlive(record.pid) ? 'unobserved' : 'not-alive';
+    return !observation.state.startsWith('Z') && observation.startTime === record.startTime
+      ? 'alive'
+      : 'not-alive';
   });
 }
 
