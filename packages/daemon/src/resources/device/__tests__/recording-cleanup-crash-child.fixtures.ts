@@ -21,6 +21,14 @@ if (phase === 'active-app') {
   if (!result.ok) throw new Error(`recording start failed: ${JSON.stringify(result)}`);
   checkpoint();
 }
+if (phase === 'pending-native') {
+  const fixture = cleanupCrashFixture(stateDir, claimsDir, true, false, false, true, true);
+  const started = await fixture.start();
+  if (!started.ok) throw new Error(`recording start failed: ${JSON.stringify(started)}`);
+  const stopped = await fixture.stop();
+  if (!stopped.ok) throw new Error(`recording stop failed: ${JSON.stringify(stopped)}`);
+  checkpoint();
+}
 const resourcePath = screenRecordingDurableResource.store.resolvePath(
   path.join(stateDir, 'sessions', 'recording'),
 );

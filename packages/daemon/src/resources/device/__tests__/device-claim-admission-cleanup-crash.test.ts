@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, expect, test, vi } from 'vitest';
 import * as deviceSelection from '@agent-device/device-selection/dispatch-resolve';
 import { IOS_SIMULATOR } from '@agent-device/test-kit';
+import { AppError } from '@agent-device/kernel/errors';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
 import { reconcileOrphanedDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
 import { createOwnerScopedDeviceClaimReconciler } from '@agent-device/daemon-contracts/device-claim-recovery';
@@ -255,5 +256,128 @@ test('cold stop transfers the recording while retaining the old daemon session o
   } finally {
     if (resource.exitCode === null && resource.signalCode === null) resource.kill('SIGKILL');
     await exited;
+  }
+});
+
+test('a cold selectorless stop replays the pending export when the device is unavailable', async () => {
+  const { stateDir, claimsDir } = setup();
+  await crashAt(stateDir, claimsDir, 'pending-native');
+  const runtime = cleanupCrashFixture(stateDir, claimsDir, false);
+  const claimPath = path.join(
+    claimsDir,
+    fs.readdirSync(claimsDir).find((name) => name.endsWith('.json'))!,
+  );
+  const resourcePath = screenRecordingDurableResource.store.resolvePath(
+    path.join(stateDir, 'sessions', 'recording'),
+  );
+  const before = fs.readFileSync(claimPath, 'utf8');
+  const manifest = fs.readFileSync(resourcePath, 'utf8');
+  const effects = fs.readFileSync(runtime.events, 'utf8');
+  vi.spyOn(deviceSelection, 'resolveTargetDevice').mockRejectedValue(
+    new AppError('DEVICE_NOT_FOUND', 'device unavailable'),
+  );
+  expect(await runtime.stop()).toMatchObject({ ok: true, data: { outPath: runtime.output } });
+  expect(fs.readFileSync(runtime.output, 'utf8')).toBe('preserved export');
+  expect(fs.readFileSync(claimPath, 'utf8')).toBe(before);
+  expect(fs.readFileSync(resourcePath, 'utf8')).toBe(manifest);
+  expect(fs.readFileSync(runtime.events, 'utf8')).toBe(effects);
+  const caller = new AbortController();
+  caller.abort();
+  const canceled = cleanupCrashFixture(
+    stateDir,
+    claimsDir,
+    false,
+    false,
+    false,
+    false,
+    false,
+    caller.signal,
+  );
+  await expect(canceled.stop()).rejects.toMatchObject({ name: 'AbortError' });
+  expect(fs.readFileSync(claimPath, 'utf8')).toBe(before);
+  const replacement = { ...JSON.parse(before), ownerToken: 'replacement-token' };
+  fs.writeFileSync(claimPath, JSON.stringify(replacement));
+  expect(await runtime.stop()).toMatchObject({ ok: false });
+  expect(JSON.parse(fs.readFileSync(claimPath, 'utf8'))).toEqual(replacement);
+  expect(fs.readFileSync(resourcePath, 'utf8')).toBe(manifest);
+  fs.writeFileSync(claimPath, before);
+  fs.unlinkSync(runtime.output);
+  expect(await runtime.stop()).toMatchObject({ ok: false });
+  expect(fs.readFileSync(claimPath, 'utf8')).toBe(before);
+});
+
+test('a legacy open-session claim preserves its unproven session owner after export', async () => {
+  const f = fixture();
+  const old = JSON.parse(fs.readFileSync(f.claimPath, 'utf8'));
+  delete old.transientCommand;
+  old.claimOwnerKind = 'open-session';
+  fs.writeFileSync(f.claimPath, JSON.stringify(old));
+  const before = fs.readFileSync(f.claimPath, 'utf8');
+  const reconciler = createOwnerScopedDeviceClaimReconciler({
+    scope: f.runtime.platformScope,
+    composeGateway: () => f.runtime.gateway,
+  });
+  expect(
+    (await reconcileOrphanedDeviceClaims(reconciler, f.stateDir, f.runtime.host.env)).retained,
+  ).toBe(1);
+  expect(fs.readFileSync(f.claimPath, 'utf8')).toBe(before);
+  expect(await f.runtime.stop()).toMatchObject({ ok: true, data: { outPath: f.runtime.output } });
+  const claim = JSON.parse(fs.readFileSync(f.claimPath, 'utf8'));
+  expect(claim).toMatchObject({
+    ownerToken: old.ownerToken,
+    claimOwnerKind: 'open-session',
+    recordingSessionOwner: { pid: old.ownerPid, startTime: old.ownerStartTime },
+  });
+  expect(fs.readFileSync(f.runtime.output, 'utf8')).toBe('preserved export');
+  expect(await reconciler(claim)).toMatchObject({
+    status: 'retained',
+    reason: 'screen-recording-session-owner-pending',
+  });
+  const otherState = path.join(f.stateDir, '..', 'legacy-competitor');
+  fs.mkdirSync(otherState, { recursive: true });
+  const competing = cleanupCrashFixture(otherState, f.claimsDir);
+  expect(await competing.start()).toMatchObject({ ok: false, error: { code: 'DEVICE_IN_USE' } });
+  expect(fs.readFileSync(competing.events, 'utf8')).not.toContain('start\n');
+});
+
+test('an internal recovery deadline replays the pending output without canceling the caller', async () => {
+  const { stateDir, claimsDir } = setup();
+  await crashAt(stateDir, claimsDir, 'pending-native');
+  const claimPath = path.join(
+    claimsDir,
+    fs.readdirSync(claimsDir).find((name) => name.endsWith('.json'))!,
+  );
+  const old = JSON.parse(fs.readFileSync(claimPath, 'utf8'));
+  delete old.recordingCleanupPending;
+  fs.writeFileSync(claimPath, JSON.stringify(old));
+  vi.spyOn(deviceSelection, 'resolveTargetDevice').mockResolvedValue(IOS_SIMULATOR);
+  let enter!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    enter = resolve;
+  });
+  const runtime = cleanupCrashFixture(
+    stateDir,
+    claimsDir,
+    false,
+    false,
+    false,
+    false,
+    false,
+    undefined,
+    enter,
+  );
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  try {
+    const stopping = runtime.stop();
+    await entered;
+    await vi.advanceTimersByTimeAsync(5001);
+    expect(await stopping).toMatchObject({ ok: true, data: { outPath: runtime.output } });
+    expect(JSON.parse(fs.readFileSync(claimPath, 'utf8'))).toMatchObject({
+      ownerToken: old.ownerToken,
+      recordingCleanupPending: true,
+    });
+    expect(fs.readFileSync(runtime.output, 'utf8')).toBe('preserved export');
+  } finally {
+    vi.useRealTimers();
   }
 });

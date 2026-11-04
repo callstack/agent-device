@@ -31,6 +31,9 @@ export function cleanupCrashFixture(
   failDisposal = false,
   retainSession = false,
   recordOnlySession = false,
+  pendingNative = false,
+  requestSignal?: AbortSignal,
+  hangReattach?: () => void,
 ) {
   const host = createTestHostEnvironment({
     env: { ...process.env, AGENT_DEVICE_CLAIMS_DIR: claimsDir },
@@ -64,9 +67,20 @@ export function cleanupCrashFixture(
           showTouches: false,
           recordOnlySession: false,
         },
+        ...(pendingNative
+          ? {
+              cleanupPending: {
+                status: 'cleanup-pending' as const,
+                reason: 'cleanup-unconfirmed' as const,
+              },
+            }
+          : {}),
       };
     },
-    forceCleanup: async () => ({ status: 'cleaned' as const }),
+    forceCleanup: async () =>
+      pendingNative
+        ? ({ status: 'cleanup-pending', reason: 'cleanup-unconfirmed' } as const)
+        : ({ status: 'cleaned' } as const),
   });
   const base = createUnavailableRuntimeFactsForTest(device, owner);
   const facts = {
@@ -80,7 +94,7 @@ export function cleanupCrashFixture(
   };
   const gateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
     inspectFacts: async () => facts,
-    bind: async () => ({
+    bind: async ({ scope }) => ({
       device,
       owner,
       facts,
@@ -102,6 +116,16 @@ export function cleanupCrashFixture(
         },
         screenRecordingReattach: async () => {
           fs.appendFileSync(events, 'reattach\n');
+          if (hangReattach) {
+            hangReattach();
+            await new Promise<never>((_resolve, reject) => {
+              if (scope.signal.aborted) reject(scope.signal.reason);
+              else
+                scope.signal.addEventListener('abort', () => reject(scope.signal.reason), {
+                  once: true,
+                });
+            });
+          }
           return { status: 'export' as const, handle };
         },
         screenRecordingCleanup: async () => ({ status: 'cleaned' as const }),
@@ -126,7 +150,10 @@ export function cleanupCrashFixture(
     validateOpenRelaunchTarget: async () => undefined,
     resolveSessionAppBundleIdForTarget: async (_device, _target, current) => current,
   };
-  const platformScope = platformRequestScopeFixture();
+  const platformScope = {
+    ...platformRequestScopeFixture(),
+    ...(requestSignal ? { signal: requestSignal } : {}),
+  };
   if (publish)
     store.publish('recording', {
       name: 'recording',
@@ -145,6 +172,7 @@ export function cleanupCrashFixture(
         command: 'record',
         positionals: [action],
         flags: { recordingScope: 'device' },
+        meta: { sessionExplicit: true },
       },
       sessionStore: store,
       leaseRegistry: new LeaseRegistry(),

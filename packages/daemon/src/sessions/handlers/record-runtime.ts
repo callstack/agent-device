@@ -95,6 +95,18 @@ type ScreenRecordingStop = Readonly<{
   recordsSessionAction: boolean;
 }>;
 
+class PendingRecordingReplayError extends Error {
+  readonly original: unknown;
+  constructor(original: unknown) {
+    super('Recording recovery is unavailable');
+    this.original = original;
+  }
+}
+
+type RecordingCleanupResult = Awaited<
+  ReturnType<NonNullable<NonNullable<DaemonRequest['internal']>['retryRecordingCleanup']>>
+>;
+
 export type RecordRuntimeHandlerParams = Readonly<{
   req: DaemonRequest;
   sessionName: string;
@@ -114,7 +126,46 @@ export async function handleRecordCommand(
   try {
     return await handleRecordCommandUnsafe(params);
   } catch (error) {
-    return { ok: false, error: normalizeError(error) };
+    let canceled = params.requestScope.signal.aborted;
+    try {
+      params.throwIfCanceled();
+    } catch {
+      canceled = true;
+    }
+    if (
+      error instanceof PendingRecordingReplayError &&
+      params.req.positionals?.[0] === 'stop' &&
+      !hasDeviceSelectionInput(params.req.flags) &&
+      !canceled
+    ) {
+      const replay = await params.req.internal
+        ?.readPendingRecordingReplay?.()
+        .catch(() => undefined);
+      if (replay && !params.requestScope.signal.aborted) {
+        try {
+          params.throwIfCanceled();
+        } catch (error) {
+          return { ok: false, error: normalizeError(error) };
+        }
+        const response = buildRecordingStopResponse(replay.completion);
+        return response.ok && response.data
+          ? {
+              ...response,
+              data: withCaptureOutputOwnership(
+                response.data,
+                isDaemonOwnedRecordingOutput(replay.completion, replay.remoteOutput)
+                  ? 'daemon'
+                  : 'caller',
+                replay.tenantId,
+              ),
+            }
+          : response;
+      }
+    }
+    return {
+      ok: false,
+      error: normalizeError(error instanceof PendingRecordingReplayError ? error.original : error),
+    };
   }
 }
 
@@ -137,7 +188,14 @@ async function handleRecordCommandUnsafe(
   ) {
     return missingAppSessionResponse(req);
   }
-  const resolvedSession = await resolveRecordingSession(params, existingRef, plan);
+  let resolvedSession: Awaited<ReturnType<typeof resolveRecordingSession>>;
+  try {
+    resolvedSession = await resolveRecordingSession(params, existingRef, plan);
+  } catch (error) {
+    if (plan.kind === 'stop-recovery' && namesSessionWithoutTarget(req))
+      throw new PendingRecordingReplayError(error);
+    throw error;
+  }
   const { session } = resolvedSession;
   if (plan.kind === 'start') {
     return await startRecording(
@@ -442,11 +500,22 @@ async function stopRecording(
   try {
     let selectedKind = kind;
     if (kind === 'stop-live') {
-      const cleanup = await params.req.internal?.retryRecordingCleanup?.(session.device);
+      let cleanup: RecordingCleanupResult | undefined;
+      try {
+        cleanup = await params.req.internal?.retryRecordingCleanup?.(session.device);
+      } catch (error) {
+        if (error instanceof AppError && error.details?.reason === 'cleanup-unconfirmed')
+          throw new PendingRecordingReplayError(error);
+        throw error;
+      }
       if (cleanup?.cleanupSettled && !params.sessionStore.resolveCurrent(ref!)?.screenRecording) {
         selectedKind = 'stop-recovery';
       } else {
-        await params.bindDevice(session.device, screenRecordingAdmissionUse);
+        try {
+          await params.bindDevice(session.device, screenRecordingAdmissionUse);
+        } catch (error) {
+          throw new PendingRecordingReplayError(error);
+        }
         params.req.internal?.recordStopDispatch?.();
       }
     }
@@ -516,7 +585,9 @@ async function finishLiveWithCleanupAuthority(
       throw new AppError('DEVICE_IN_USE', 'The recording owner changed during cleanup', {
         reason: 'ownership-fence-lost',
       });
+    let settled = false;
     params.req.internal?.recordingStopCleanupPending?.(async () => {
+      if (settled) return;
       const outcome = await pending.handle.forceCleanup();
       if (!isConfirmedCleanup(outcome))
         throw new AppError('COMMAND_FAILED', 'Recording cleanup is not confirmed', {
@@ -527,6 +598,7 @@ async function finishLiveWithCleanupAuthority(
         throw new AppError('DEVICE_IN_USE', 'The recording owner changed during cleanup', {
           reason: 'ownership-fence-lost',
         });
+      settled = true;
     });
   }
   return completion;
@@ -552,7 +624,7 @@ function deleteTerminalRecordOnlySession(
  */
 function retireRecordOnlySession(store: SessionStore, ref: SessionRef): void {
   const session = store.resolveCurrent(ref);
-  if (!session?.recordOnlySession) return;
+  if (!session?.recordOnlySession || session.screenRecording) return;
   if (sessionHasOwnersBeyondRecording(session)) return;
   store.retire(ref);
 }
@@ -562,7 +634,14 @@ async function finishRecovered(
   session: SessionState,
   needsReadiness: boolean,
 ): Promise<ScreenRecordingStop> {
-  const cleanup = await params.req.internal?.retryRecordingCleanup?.(session.device);
+  let cleanup: RecordingCleanupResult | undefined;
+  try {
+    cleanup = await params.req.internal?.retryRecordingCleanup?.(session.device);
+  } catch (error) {
+    if (error instanceof AppError && error.details?.reason === 'cleanup-unconfirmed')
+      throw new PendingRecordingReplayError(error);
+    throw error;
+  }
   if (cleanup?.startRolledBack)
     throw new AppError('INVALID_ARGS', 'no active recording', {
       reason: 'recording-start-rolled-back',
@@ -582,23 +661,34 @@ async function finishRecovered(
   if (recovery.kind === 'completed') {
     return { completion: recovery.completion, recordsSessionAction: false };
   }
-  await params.bindDevice(session.device, screenRecordingAdmissionUse);
+  try {
+    await params.bindDevice(session.device, screenRecordingAdmissionUse);
+  } catch (error) {
+    if (recovery.pendingCompletion) throw new PendingRecordingReplayError(error);
+    throw error;
+  }
   params.req.internal?.recordStopDispatch?.();
-  const completion = await finishRecoveredScreenRecording({
-    resourcePath: recovery.resourcePath,
-    scope: params.requestScope,
-    acquireControl: async (envelope, recoveryScope) => {
-      const runtime = await params.bindExactDevice(
-        session.device,
-        envelope.owner,
-        envelope.fence,
-        screenRecordingRecoveryUse,
-        recoveryScope,
-      );
-      if (needsReadiness) await ensureBoundDeviceReady(runtime, params.platformServices);
-      return createScreenRecordingRecoveryControl({ runtime, dispose: async () => {} });
-    },
-  });
+  let completion: ScreenRecordingCompletion;
+  try {
+    completion = await finishRecoveredScreenRecording({
+      resourcePath: recovery.resourcePath,
+      scope: params.requestScope,
+      acquireControl: async (envelope, recoveryScope) => {
+        const runtime = await params.bindExactDevice(
+          session.device,
+          envelope.owner,
+          envelope.fence,
+          screenRecordingRecoveryUse,
+          recoveryScope,
+        );
+        if (needsReadiness) await ensureBoundDeviceReady(runtime, params.platformServices);
+        return createScreenRecordingRecoveryControl({ runtime, dispose: async () => {} });
+      },
+    });
+  } catch (error) {
+    if (recovery.pendingCompletion) throw new PendingRecordingReplayError(error);
+    throw error;
+  }
   return { completion, recordsSessionAction: true };
 }
 

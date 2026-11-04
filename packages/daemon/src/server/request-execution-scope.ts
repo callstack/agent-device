@@ -350,6 +350,7 @@ export async function createRequestExecutionScope(params: {
           recordStartNoEffect: claimAdmission.recordingStartNoEffect,
           recoverIncompleteRecordingStart: claimAdmission.recoverIncompleteStart,
           incompleteRecordingStartDevice: claimAdmission.incompleteStartDevice,
+          readPendingRecordingReplay: claimAdmission.readPendingReplay,
           recordingClaimOwnership: claimAdmission.recordingClaimOwnership,
           reserveRecordingFence: claimAdmission.reserveRecordingFence,
           retryRecordingCleanup: async (device) => {

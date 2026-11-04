@@ -18,6 +18,8 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { withDurableCaptureResourceFence } from '@agent-device/capture-kit/durable-capture';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
+import { readPendingRecordingReplayUnderLock } from './device-claim-recording-replay.ts';
+import { readPendingScreenRecordingCompletion } from '@agent-device/capture-kit/screen-recording-stop-recovery';
 import {
   SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY as CLAIM_TOKEN,
   SCREEN_RECORDING_CLAIM_BINDING_VERSION_KEY as CLAIM_BINDING_VERSION,
@@ -222,6 +224,10 @@ export async function admitRecordingStop(
         )
           throw claimError();
         const covered = current && claim.claimOwnerKind === 'open-session';
+        const priorSessionOwner =
+          !current && claim.claimOwnerKind === 'open-session' && !claim.recordingSessionOwner
+            ? { pid: claim.ownerPid, startTime: claim.ownerStartTime }
+            : undefined;
         const transferred: DeviceClaim = {
           ...claim,
           ...(covered
@@ -235,6 +241,7 @@ export async function admitRecordingStop(
           recordingFence: envelope.fence,
           recordingRuntimeOwner: envelope.owner,
           recordingCleanupPending: true,
+          ...(priorSessionOwner ? { recordingSessionOwner: priorSessionOwner } : {}),
           updatedAtMs: Date.now(),
         };
         writeDeviceClaim(transferred, params.env);
@@ -287,6 +294,24 @@ export async function admitRecordingStop(
           )
         )
           throw claimError();
+      },
+      readPending: async () => {
+        hostLock?.assertHeld();
+        lock.assertHeld();
+        const current = inspectDeviceClaimFile(resolveDeviceClaimPath(key, params.env))?.claim;
+        if (
+          !current ||
+          !matchesContext(current, params) ||
+          current.ownerToken !== ownership.ownerToken ||
+          current.recordingFence?.token !== expected.fence.token ||
+          current.recordingFence.generation !== expected.fence.generation ||
+          !ownerIdentityMatches(
+            { pid: current.ownerPid, startTime: current.ownerStartTime },
+            { pid: ownership.ownerPid, startTime: ownership.ownerStartTime },
+          )
+        )
+          return undefined;
+        return await readPendingRecordingReplayUnderLock(current, params.resourcePath);
       },
       finish: async (input: RecordingClaimFinish) => {
         try {
@@ -622,7 +647,7 @@ export type RetainedRecordingCleanup = Readonly<{
   startProof?: 'not-dispatched' | 'rolled-back';
   releaseWhenComplete?: boolean;
   sessionOwner?: DeviceClaim['recordingSessionOwner'];
-  retry(): Promise<void>;
+  retry(): Promise<'native-settled' | void>;
 }>;
 
 /** Retry only the cleanup authority captured by the request that held this exact claim. */
@@ -722,6 +747,7 @@ export async function retryRecordingClaimCleanup(
       envelope: DurableResourceEnvelope<'screen-recording'>,
       completed: boolean,
       markRolledBack?: () => void,
+      markNativeSettled?: () => void,
     ) => {
       if (
         envelope.sessionId !== claim.session ||
@@ -730,8 +756,9 @@ export async function retryRecordingClaimCleanup(
         envelope.metadata?.[CLAIM_TOKEN] !== claim.ownerToken
       )
         throw claimError();
+      let retryResult: 'native-settled' | void;
       try {
-        await retained.retry();
+        retryResult = await retained.retry();
       } catch {
         throw cleanupPendingError();
       }
@@ -765,6 +792,12 @@ export async function retryRecordingClaimCleanup(
       if (retained.purpose === 'start' && retained.startProof && !completed) {
         if (!markRolledBack) throw cleanupPendingError();
         markRolledBack();
+        completed = true;
+      }
+      if (retained.purpose === 'stop' && retryResult === 'native-settled' && !completed) {
+        if (!markNativeSettled || !readPendingScreenRecordingCompletion(manifest.envelope.metadata))
+          throw cleanupPendingError();
+        markNativeSettled();
         completed = true;
       }
       if (retained.purpose === 'close' && completed && retained.releaseWhenComplete) {
@@ -818,12 +851,17 @@ export async function retryRecordingClaimCleanup(
       resourcePath: params.resourcePath,
       expected: retained.fence,
       onCompleted: async ({ envelope }) => await settle(envelope, true),
-      run: async (lease) =>
-        await settle(lease.envelope, false, () => {
+      run: async (lease) => {
+        const markSettled = () => {
+          const metadata = { ...lease.envelope.metadata };
+          delete metadata.cleanupPendingReason;
+          delete metadata.cleanupPendingMessage;
           lease.transition('completed', {
-            metadata: { ...lease.envelope.metadata, phase: 'completed', cleanupStatus: 'cleaned' },
+            metadata: { ...metadata, phase: 'completed', cleanupStatus: 'cleaned' },
           });
-        }),
+        };
+        return await settle(lease.envelope, false, markSettled, markSettled);
+      },
     });
   });
 }

@@ -69,6 +69,8 @@ export type { DeviceClaim } from './device-claim-record.ts';
 export type { TakenOverDeviceClaim } from './device-claim-reboot.ts';
 export type { DeviceClaimReconciler } from './device-claim-settlement.ts';
 export type { DeviceClaimSessionOwnership } from './device-claim-record.ts';
+export { readPendingRecordingReplay } from './device-claim-recording-replay.ts';
+export type { PendingRecordingReplay } from './device-claim-recording-replay.ts';
 
 export type DeviceClaimAcquireResult =
   | {

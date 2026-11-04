@@ -30,7 +30,8 @@ export function seed(
     ownerToken: 'original-token',
     createdAtMs: 1,
     updatedAtMs: 1,
-    claimOwnerKind: 'open-session',
+    claimOwnerKind: 'transient-command',
+    transientCommand: 'record',
     recordingFence: envelope?.fence ?? { token: 'recording-fence', generation: 7 },
     recordingRuntimeOwner: localRuntimeOwner(device.platform),
   };

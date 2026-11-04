@@ -41,6 +41,9 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
   ) => Promise<{ startRolledBack: boolean; cleanupSettled?: boolean }>;
   recoverIncompleteRecordingStart?: (device: DeviceInfo) => Promise<boolean>;
   incompleteRecordingStartDevice?: () => DeviceIdentity | undefined;
+  readPendingRecordingReplay?: () => Promise<
+    import('@agent-device/daemon-contracts/device-claims').PendingRecordingReplay | undefined
+  >;
   holdRecordingClaimForClose?: (
     ownership: DeviceClaimSessionOwnership,
     device: DeviceInfo,

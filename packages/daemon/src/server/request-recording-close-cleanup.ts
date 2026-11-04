@@ -18,7 +18,9 @@ export function createRequestRecordingCloseCleanup(params: {
   claimAdmission: DeviceClaimAdmission;
 }) {
   let finish: (() => Promise<void>) | undefined;
-  let retain: ((retry: () => Promise<void>) => RetainedRecordingCleanup) | undefined;
+  let retain:
+    | ((retry: () => Promise<'native-settled' | void>) => RetainedRecordingCleanup)
+    | undefined;
   let recordingRetry: (() => Promise<void>) | undefined;
   let markEffectsStarted: (() => void) | undefined;
   return {
@@ -31,6 +33,7 @@ export function createRequestRecordingCloseCleanup(params: {
       const retry = async () => {
         await bindingRetry?.();
         await recordingRetry?.();
+        if (recordingRetry) return 'native-settled' as const;
       };
       const retained = retain?.(retry) ?? params.claimAdmission.retainedRecordingCleanup(retry);
       if (retained) params.sessionStore.retainRecordingCleanup(params.sessionName, retained);

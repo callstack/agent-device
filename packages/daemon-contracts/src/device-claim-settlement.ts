@@ -211,6 +211,8 @@ export async function settleVerifiedOrphanedClaim(
     return { status: 'retained', reason: 'screen-recording-binding-cleanup-pending' };
   if (claim.recordingSessionOwner)
     return { status: 'retained', reason: 'screen-recording-session-owner-pending' };
+  if (claim.claimOwnerKind === 'open-session' && claim.recordingFence)
+    return { status: 'retained', reason: 'screen-recording-session-owner-unproven' };
   const guarded = claim.recordingStartPending && !claim.recordingCleanupPending;
   if (guarded && !beginIncompleteStartRecoveryCleanup(claim, env))
     return { status: 'retained', reason: 'screen-recording-claim-changed' };

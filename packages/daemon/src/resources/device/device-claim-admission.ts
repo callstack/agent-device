@@ -25,6 +25,8 @@ import {
   retryRecordingClaimCleanup,
   recoverIncompleteRecordingStartClaim,
   findIncompleteRecordingReservation,
+  readPendingRecordingReplay,
+  type PendingRecordingReplay,
   type RetainedRecordingCleanup,
   clearDeviceClaim,
   type DeviceClaimReconciler,
@@ -59,7 +61,10 @@ export type DeviceClaimAdmission = AsyncDisposable &
     runtimeDisposalFailed(): void;
     recoverIncompleteStart(device: DeviceInfo): Promise<boolean>;
     incompleteStartDevice(): ReturnType<typeof findIncompleteRecordingReservation>;
-    retainedRecordingCleanup(retry: () => Promise<void>): RetainedRecordingCleanup | undefined;
+    readPendingReplay(): Promise<PendingRecordingReplay | undefined>;
+    retainedRecordingCleanup(
+      retry: () => Promise<'native-settled' | void>,
+    ): RetainedRecordingCleanup | undefined;
     retryRecordingCleanup(
       device: DeviceInfo,
       retained?: RetainedRecordingCleanup,
@@ -282,6 +287,17 @@ export function createDeviceClaimAdmission(params: {
           !requestScopeRoot || params.resolveScopeRoot(workspace) === requestScopeRoot,
         env: params.env,
       }),
+    readPendingReplay: async () => {
+      if (recording?.stopLease) return await recording.stopLease.readPending();
+      return await readPendingRecordingReplay({
+        session: params.session,
+        stateDir: params.stateDir,
+        resourcePath: recordingResourcePath,
+        workspaceMatches: (workspace) =>
+          !requestScopeRoot || params.resolveScopeRoot(workspace) === requestScopeRoot,
+        env: params.env,
+      });
+    },
     runtimeDisposalFailed: () => {
       runtimeDisposed = false;
     },
