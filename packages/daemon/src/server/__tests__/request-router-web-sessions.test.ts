@@ -108,9 +108,11 @@ test.each(['batch', 'replay'] as const)(
         deviceInventoryGateways: createTestDeviceInventoryGateways(),
         trackDownloadableArtifact: () => 'artifact-id',
       });
-      const responses = await Promise.all(
-        names.map((name) => handler(freshWebRequest(command, name, replayPath))),
-      );
+      const pending = names.map((name) => handler(freshWebRequest(command, name, replayPath)));
+      // A request that ends before it binds releases the other one's wait, so its failure reaches
+      // the assertions below instead of hanging the test.
+      for (const response of pending) response.then(bothBound, bothBound);
+      const responses = await Promise.all(pending);
 
       for (const response of responses) expect(response).toMatchObject({ ok: true });
       expect([...bound].sort()).toEqual(
