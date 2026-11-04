@@ -56,7 +56,7 @@ test('publish package requires bundled dependency license notices', () => {
 // The publish gate's own copy of what a shipped notices file must contain. Written out rather than
 // produced by the bundler: a fixture the producer generates cannot show the producer emitted the wrong
 // thing. The attribution lines, the reference markers and the license bodies are the shape
-// `renderNotices` in scripts/lib/bundled-license-notices.ts writes for a bundled build, and the
+// `renderLicenseNotices` in scripts/size-report-package-notices.mjs writes for a bundled build, and the
 // placeholder below is the line that same function writes when the bundle holds no third-party code.
 const REAL_NOTICES = [
   '@agent-device/proxy@0.21.37-dev (MIT): [1]',
@@ -228,8 +228,11 @@ test('pack gate reads content without a tree, staying a manifest-only check', ()
   assert.doesNotThrow(() => assertBundledLicenseNotices([noticesEntry()]));
 });
 
-/** A dependency the license plugin bundles, with the manifest fields that shape its attribution. */
-function dependencyManifest(name: string, fields: Record<string, string>): [string, string][] {
+/** A dependency the fixture build bundles, with the manifest fields that shape its attribution. */
+function dependencyManifest(
+  name: string,
+  fields: Record<string, string | undefined>,
+): [string, string][] {
   return [
     [
       `node_modules/${name}/package.json`,
@@ -243,15 +246,16 @@ function dependencyManifest(name: string, fields: Record<string, string>): [stri
   ];
 }
 
+type FixtureDependency = [string, Record<string, string | undefined>, Record<string, string>?];
+
 /**
  * Real renderer bytes: runs the same `bundledLicenseNotices` plugin the published build uses (through
  * the shared fixture build script) over a fixture tree, so the attribution lines the pack gate reads
- * are the ones `renderNotices` writes — grouped SPDX field, author clause and all — rather than a
- * hand-written approximation of them.
+ * are the ones `renderLicenseNotices` writes — grouped SPDX field, author clause and all — rather than a
+ * hand-written approximation of them. The build writes into the tree's `dist/src`, so the fixture
+ * root is the tree the gate reads, whether or not the build succeeded.
  */
-async function renderedNotices(
-  dependencies: [string, Record<string, string>, Record<string, string>?][],
-): Promise<string> {
+async function bundledTree(dependencies: FixtureDependency[]): Promise<string> {
   const root = await realpath(await mkdtempForTest('pack-gate-render-'));
   const files: [string, string][] = [
     ['package.json', JSON.stringify({ name: 'fixture-project', type: 'module' })],
@@ -273,6 +277,10 @@ async function renderedNotices(
     await mkdir(join(file, '..'), { recursive: true });
     await writeFile(file, source);
   }
+  return root;
+}
+
+async function buildTree(root: string): Promise<void> {
   await execFileAsync(
     process.execPath,
     [
@@ -280,19 +288,37 @@ async function renderedNotices(
       join(import.meta.dirname, 'fixtures', 'bundled-license-build.mts'),
       root,
       'false',
-      'dist',
+      'dist/src',
     ],
     { cwd: import.meta.dirname },
   );
-  const tree = await treeWithNotices(
-    await readFile(join(root, 'dist', 'THIRD_PARTY_NOTICES.txt'), 'utf8'),
-  );
-  return tree;
 }
 
+async function renderedNotices(dependencies: FixtureDependency[]): Promise<string> {
+  const root = await bundledTree(dependencies);
+  await buildTree(root);
+  return root;
+}
+
+test('a licensed dependency cannot carry an unattributable one past build and pack gate', async () => {
+  // The former license plugin reported only packages whose manifest named a version or a license, so a
+  // bundled `omitted` package with neither left a notices file that attributed its licensed
+  // neighbor, and the gate accepted it. The build enumerates bundled modules itself: it fails, writes
+  // no notices, and the gate then names the missing file instead of passing a partial one.
+  const root = await bundledTree([
+    ['included', { license: 'MIT' }],
+    ['omitted', { version: undefined }],
+  ]);
+  await assert.rejects(buildTree(root), /Bundled dependency omitted is missing its version/);
+  assert.throws(
+    () => assertBundledLicenseNotices([noticesEntry()], { noticesRoot: root, context: 'npm pack' }),
+    /npm pack has no dist\/src\/THIRD_PARTY_NOTICES\.txt/,
+  );
+});
+
 test('pack gate accepts the attribution the renderer writes for a grouped SPDX expression', async () => {
-  // A `package.json` license may be a grouped SPDX expression, and `renderNotices` wraps whatever the
-  // plugin reports in its own parentheses, so the attribution carries nested ones. Those bytes are
+  // A `package.json` license may be a grouped SPDX expression, and `renderLicenseNotices` wraps the
+  // manifest's license in its own parentheses, so the attribution carries nested ones. Those bytes are
   // valid producer output: the gate has to read them, not report them as naming nobody.
   const root = await renderedNotices([
     ['shared', { license: '(MIT OR Apache-2.0)', author: 'Grouped author <g@example.test>' }],
@@ -612,8 +638,24 @@ test('base measurement uses the measured revision package asset policy', async (
     .split('      - name: Save base dist cache')[0]!;
   assert.match(
     baseStep,
-    /git checkout --detach[\s\S]*cp scripts\/size-report-package\.mjs \/tmp\/agent-device-size-report\/[\s\S]*node \/tmp\/agent-device-size-report\/size-report\.mjs/,
+    /git checkout --detach[\s\S]*cp scripts\/size-report-package\*\.mjs \/tmp\/agent-device-size-report\/[\s\S]*node \/tmp\/agent-device-size-report\/size-report\.mjs/,
   );
+});
+
+// The size lane copies `scripts/size-report*.mjs` out of the checkout and recopies the measured
+// revision's `scripts/size-report-package*.mjs`, then runs the copy with no node_modules. Each
+// module the package policy imports must fall in both copies, and the notices format owner, which
+// the build also imports, must import nothing.
+test('the package policy and its notices format run from the standalone size-report copy', async () => {
+  const policy = await readFile(join(import.meta.dirname, '../size-report-package.mjs'), 'utf8');
+  const localImports = [...policy.matchAll(/from '\.\/([^']+)'/g)].map((match) => match[1]);
+  assert.deepEqual(localImports, ['size-report-package-notices.mjs']);
+  for (const local of localImports) assert.match(local, /^size-report-package[^/]*\.mjs$/);
+  const format = await readFile(
+    join(import.meta.dirname, '../size-report-package-notices.mjs'),
+    'utf8',
+  );
+  assert.doesNotMatch(format, /^\s*import\b|\bimport\(|\brequire\(/m);
 });
 
 test.each(['1', -1, 0.5, null])('npm pack rejects malformed file sizes (%s)', (size) => {

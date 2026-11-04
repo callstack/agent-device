@@ -1,100 +1,141 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import license, { type Dependency } from 'rollup-plugin-license';
+import type { TsdownPlugin } from 'tsdown';
+import { renderLicenseNotices, type NoticeDependency } from '../size-report-package-notices.mjs';
 
-/** Reads extra notices from root's LICENSES directory and emits them beside the bundle. */
-export function bundledLicenseNotices(root: string): ReturnType<typeof license> {
-  let source: string | undefined;
-  const collector = license({
-    cwd: root,
-    sourcemap: false,
-    thirdParty: {
-      multipleVersions: true,
-      output(dependencies) {
-        source = renderNotices(root, dependencies);
-      },
-    },
-  });
-  // rollup-plugin-license 3.7.1 exposes synchronous dependency output without a bundler context.
+type Manifest = {
+  name?: unknown;
+  version?: unknown;
+  license?: unknown;
+  author?: unknown;
+  private?: unknown;
+};
+
+/**
+ * Enumerates every module rendered into the bundle, attributes each third-party one to its package,
+ * and emits the notices beside the bundle. Extra notices are read from root's LICENSES directory.
+ */
+export function bundledLicenseNotices(root: string): TsdownPlugin {
   return {
-    ...collector,
-    async generateBundle(options, bundle, isWrite) {
-      source = undefined;
-      const hook = collector.generateBundle;
-      const generate = typeof hook === 'function' ? hook : hook?.handler;
-      await generate?.call(this, options, bundle, isWrite);
-      if (source === undefined)
-        this.error(
-          'rollup-plugin-license did not report dependencies from generateBundle; expected its synchronous thirdParty.output callback.',
-        );
-      this.emitFile({ type: 'asset', fileName: 'THIRD_PARTY_NOTICES.txt', source });
+    name: 'bundled-license-notices',
+    generateBundle(_options, bundle) {
+      const packages = new Map<string, Manifest>();
+      for (const output of Object.values(bundle)) {
+        if (output.type !== 'chunk') continue;
+        for (const [id, module] of Object.entries(output.modules)) {
+          if (module.renderedLength === 0) continue;
+          const owner = thirdPartyPackage(root, id);
+          if (owner) packages.set(owner.directory, owner.manifest);
+        }
+      }
+      const dependencies = Array.from(packages, ([directory, manifest]) =>
+        attributableDependency(root, directory, manifest),
+      );
+      this.emitFile({
+        type: 'asset',
+        fileName: 'THIRD_PARTY_NOTICES.txt',
+        source: renderLicenseNotices(deduplicate(dependencies)),
+      });
     },
   };
+}
+
+function readManifest(directory: string): Manifest | undefined {
+  const file = path.join(directory, 'package.json');
+  if (!fs.existsSync(file)) return undefined;
+  const manifest = JSON.parse(fs.readFileSync(file, 'utf8')) as Manifest;
+  return typeof manifest.name === 'string' && manifest.name ? manifest : undefined;
 }
 
 /**
- * A bundled dependency must be attributable before it can be listed: `version` is optional to
- * `rollup-plugin-license` and reports `null` for a module whose `package.json` has none, which is what
- * an unresolvable or path-linked module looks like to it. Emitting `included@null (MIT)` would
- * attribute code to a release that never existed, so the version is named first and every later
- * diagnostic can name the package the way the notice file does.
+ * The package that owns a bundled module: the nearest `package.json` with a name. A `package.json`
+ * without one only marks a module type. Root and private workspace packages are this project's code.
+ * A module under `node_modules` must find its package before it leaves that `node_modules`.
  */
-function assertBundledDependencyAttributable(dependency: Dependency): void {
-  if (!dependency.version?.trim()) {
-    throw new Error(`Bundled dependency ${dependency.name} is missing its version.`);
-  }
-  if (!dependency.license || !dependency.licenseText?.trim()) {
-    throw new Error(
-      `Bundled dependency ${dependency.name}@${dependency.version} is missing its license or license text.`,
-    );
-  }
-}
-
-function renderNotices(root: string, dependencies: readonly Dependency[]): string {
-  if (dependencies.length === 0) return 'No third-party dependencies are bundled.\n';
-  const texts = new Map<string, number>();
-  const reference = (text: string): string => {
-    const normalized = text.replaceAll('\r\n', '\n').trim();
-    let id = texts.get(normalized);
-    if (id === undefined) {
-      id = texts.size + 1;
-      texts.set(normalized, id);
+function thirdPartyPackage(
+  root: string,
+  moduleId: string,
+): { directory: string; manifest: Manifest } | undefined {
+  const file = moduleId.replace(/^\0/, '');
+  if (!path.isAbsolute(file)) return undefined;
+  for (let directory = path.dirname(file); directory !== root;) {
+    const manifest = readManifest(directory);
+    if (manifest) {
+      const vendored = directory.split(path.sep).includes('node_modules');
+      return manifest.private === true && !vendored ? undefined : { directory, manifest };
     }
-    return `[${id}]`;
-  };
-  const packages: string[] = [];
-  const sortedDependencies = [...dependencies].sort((left, right) => {
-    const a = `${left.name}@${left.version}`;
-    const b = `${right.name}@${right.version}`;
-    return a < b ? -1 : a > b ? 1 : 0;
-  });
-  for (const dependency of sortedDependencies) {
-    assertBundledDependencyAttributable(dependency);
-    const references = [reference(dependency.licenseText)];
-    if (dependency.noticeText?.trim()) references.push(reference(dependency.noticeText));
-    if (dependency.name === 'jpeg-js') {
-      const sourceNotices = fs.readFileSync(path.join(root, 'LICENSES/jpeg-js.txt'), 'utf8');
-      const noticeVersion = sourceNotices
-        .split(/\r?\n/, 1)[0]
-        ?.match(/^jpeg-js (\S+) source-file notices$/)?.[1];
-      if (noticeVersion !== dependency.version) {
-        throw new Error(
-          `Refresh LICENSES/jpeg-js.txt for bundled jpeg-js@${dependency.version}; its first line must name that version.`,
-        );
-      }
-      references.push(
-        reference(sourceNotices),
-        reference(fs.readFileSync(path.join(root, 'LICENSES/Apache-2.0.txt'), 'utf8')),
+    const parent = path.dirname(directory);
+    if (path.basename(directory) === 'node_modules' || parent === directory) {
+      throw new Error(
+        `Bundled module ${path.relative(root, file)} has no package.json naming its package.`,
       );
     }
-    packages.push(
-      `${dependency.name}@${dependency.version} (${dependency.license}): ${references.join(', ')}${dependency.author ? `; Author: ${dependency.author.text()}` : ''}`,
+    directory = parent;
+  }
+  return undefined;
+}
+
+function readNamedFile(directory: string, prefix: RegExp): string | undefined {
+  const name = fs
+    .readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && prefix.test(entry.name))
+    .map((entry) => entry.name)
+    .sort()[0];
+  const text = name === undefined ? undefined : fs.readFileSync(path.join(directory, name), 'utf8');
+  return text?.trim() ? text : undefined;
+}
+
+function authorText(author: unknown): string | undefined {
+  if (typeof author === 'string') return author.trim() || undefined;
+  if (typeof author !== 'object' || author === null) return undefined;
+  const { name, email, url } = author as Record<string, unknown>;
+  if (typeof name !== 'string' || !name) return undefined;
+  return `${name}${typeof email === 'string' && email ? ` <${email}>` : ''}${typeof url === 'string' && url ? ` (${url})` : ''}`;
+}
+
+/**
+ * A bundled package must name its release, its license, and the license text before it is listed.
+ * The version is checked first so every later diagnostic names the package as the notices do.
+ */
+function attributableDependency(
+  root: string,
+  directory: string,
+  manifest: Manifest,
+): NoticeDependency {
+  const name = String(manifest.name);
+  const version = typeof manifest.version === 'string' ? manifest.version.trim() : '';
+  if (!version) throw new Error(`Bundled dependency ${name} is missing its version.`);
+  const license = typeof manifest.license === 'string' ? manifest.license.trim() : '';
+  const licenseText = readNamedFile(directory, /^licen[cs]e/i);
+  if (!license || !licenseText) {
+    throw new Error(
+      `Bundled dependency ${name}@${version} is missing its license or license text.`,
     );
   }
-  // One trailing newline closes the last license block: the generic notice above carries one, and a
-  // reader who `cat`s the file or counts its lines sees a finished file either way.
-  const body = [packages.join('\n'), ...Array.from(texts, ([text, id]) => `[${id}]\n${text}`)].join(
-    '\n\n',
-  );
-  return `${body}\n`;
+  const texts = [licenseText];
+  const noticeText = readNamedFile(directory, /^notice/i);
+  if (noticeText) texts.push(noticeText);
+  if (name === 'jpeg-js') {
+    const sourceNotices = fs.readFileSync(path.join(root, 'LICENSES/jpeg-js.txt'), 'utf8');
+    const noticeVersion = sourceNotices
+      .split(/\r?\n/, 1)[0]
+      ?.match(/^jpeg-js (\S+) source-file notices$/)?.[1];
+    if (noticeVersion !== version) {
+      throw new Error(
+        `Refresh LICENSES/jpeg-js.txt for bundled jpeg-js@${version}; its first line must name that version.`,
+      );
+    }
+    texts.push(sourceNotices, fs.readFileSync(path.join(root, 'LICENSES/Apache-2.0.txt'), 'utf8'));
+  }
+  const author = authorText(manifest.author);
+  return { name, version, license, ...(author ? { author } : {}), texts };
+}
+
+/** One attribution per release: two installed copies of one `name@version` are one package. */
+function deduplicate(dependencies: readonly NoticeDependency[]): NoticeDependency[] {
+  return [
+    ...new Map(
+      dependencies.map((dependency) => [`${dependency.name}@${dependency.version}`, dependency]),
+    ).values(),
+  ];
 }

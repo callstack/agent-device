@@ -98,11 +98,9 @@ test('bundling fails when a dependency has a license identifier but no license t
   await assert.rejects(bundle(root), /included@1\.0\.0 is missing its license or license text/);
 });
 
-// `rollup-plugin-license` reports `version: null` for a module whose `package.json` has none, which
-// is what an unresolvable or path-linked module looks like to it. Before the version was checked, a
-// fully licensed such dependency shipped a notice reading `included@null (MIT)`, attributing code to
-// a release that never existed, and one missing its license too was reported as a license problem —
-// sending the reader to the fixture's LICENSE file instead of to the version-less module.
+// A licensed package without a version once shipped a notice reading `included@null (MIT)`,
+// attributing code to a release that never existed. The version is checked first, so the failure
+// names the version-less package rather than its license.
 test.each([
   { name: 'no version field', version: undefined },
   { name: 'blank version', version: '   ' },
@@ -121,10 +119,70 @@ test.each([
   });
 });
 
-// A module whose `package.json` carries neither a version nor a license identifier never reaches
-// `renderNotices`: the plugin reports no dependencies for it at all, and the bundle gets the generic
-// empty notice. That gap belongs to the publish gate, not to this formatter — see the
-// `size-report-package` notices content test.
+// The build enumerates the bundled modules itself. A package whose `package.json` names neither a
+// version nor a license, or a module with no `package.json` at all, is still bundled code: beside a
+// licensed neighbor it must stop the build, not drop out of a notices file that names the neighbor.
+test.each([
+  {
+    name: 'package with neither license nor version',
+    files: {
+      'node_modules/omitted/package.json': JSON.stringify({ name: 'omitted', main: 'index.js' }),
+      'node_modules/omitted/index.js': 'export const value = process.env.OMITTED;',
+    },
+    failure: /Bundled dependency omitted is missing its version/,
+  },
+  {
+    name: 'module with no package.json',
+    files: { 'node_modules/omitted/index.js': 'export const value = process.env.OMITTED;' },
+    failure:
+      /Bundled module node_modules\/omitted\/index\.js has no package\.json naming its package/,
+  },
+])(
+  'bundling rejects an unattributable module beside a licensed one: $name',
+  async (fixtureCase) => {
+    const root = await fixture({
+      'input.ts': [
+        "export { value } from 'included';",
+        "export { value as omitted } from 'omitted';",
+      ].join('\n'),
+      'node_modules/included/package.json': JSON.stringify({
+        name: 'included',
+        version: '1.0.0',
+        license: 'MIT',
+        main: 'index.js',
+      }),
+      'node_modules/included/index.js': 'export const value = process.env.INCLUDED;',
+      'node_modules/included/LICENSE': 'Copyright fixture author\nFull license terms.',
+      ...fixtureCase.files,
+    });
+    await assert.rejects(bundle(root), fixtureCase.failure);
+    await assert.rejects(fs.stat(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt')), {
+      code: 'ENOENT',
+    });
+  },
+);
+
+// The attribution block is one line per package, so manifest text that spans lines must not split it.
+test('multiline license and author metadata render as one attribution line', async () => {
+  const root = await fixture({
+    'input.ts': "export { value } from 'included';",
+    'node_modules/included/package.json': JSON.stringify({
+      name: 'included',
+      version: '1.0.0',
+      license: 'MIT\nOR Apache-2.0',
+      author: 'Multi\nline author <author@example.test>',
+      main: 'index.js',
+    }),
+    'node_modules/included/index.js': 'export const value = process.env.INCLUDED;',
+    'node_modules/included/LICENSE': 'Copyright fixture author\nFull license terms.',
+  });
+  await bundle(root);
+  const notices = await fs.readFile(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt'), 'utf8');
+  assert.equal(
+    notices.split('\n\n')[0],
+    'included@1.0.0 (MIT OR Apache-2.0): [1]; Author: Multi line author <author@example.test>',
+  );
+});
 
 test('identical notices are shared without losing packages or distinct copyrights', async () => {
   const sharedLicense = 'Copyright shared author\nFull shared license terms.';

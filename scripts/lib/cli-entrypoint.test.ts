@@ -264,3 +264,42 @@ test.each([
     }
   },
 );
+
+// The diagnostic for an early stdout failure is written while main is still pending. Behind a real
+// stderr pipe nobody reads, that write never completes, and a pending main does not keep Node alive
+// on its own: only the stalled write does. The diagnostic must end at its deadline so the process can
+// exit with the failure it retained, instead of waiting on the reader forever.
+test('an early diagnostic behind an unread stderr pipe cannot keep a pending command alive', async () => {
+  const source = [
+    `import { runEntrypoint } from ${JSON.stringify(new URL('./cli-entrypoint.ts', import.meta.url).href)};`,
+    "import { Writable } from 'node:stream';",
+    "const output = new Writable({ write(_chunk, _encoding, done) { done(Object.assign(new Error('fixture write failure'), { code: 'EIO' })); } });",
+    "Object.defineProperty(process, 'stdout', { value: output });",
+    'setTimeout(() => process.exit(99), 4000).unref();',
+    "runEntrypoint('fixture', () => {",
+    "  process.stderr.write('e'.repeat(4 * 1024 * 1024));",
+    '  process.send({ queuedBytes: process.stderr.writableLength }, () => process.disconnect());',
+    "  process.stdout.write('trigger');",
+    '  return new Promise(() => {});',
+    '});',
+  ].join('\n');
+  const child = spawn(
+    process.execPath,
+    ['--experimental-strip-types', '--input-type=module', '--eval', source],
+    { stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
+  );
+  const exited = once(child, 'exit');
+  try {
+    const [message] = await once(child, 'message');
+    assert.ok(
+      message.queuedBytes > 0,
+      'the diagnostic must queue behind output the unread pipe has not taken',
+    );
+    const [code, signal] = await exited;
+    assert.equal(signal, null);
+    assert.equal(code, 1, 'the diagnostic deadline must win before the independent leak guard');
+  } finally {
+    child.stderr.destroy();
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+  }
+});

@@ -17,6 +17,7 @@ await build({
   deps: {
     onlyBundle: [
       'included',
+      'omitted',
       'shared',
       'distinct',
       'unused',

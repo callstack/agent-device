@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { readLicenseNotices } from './size-report-package-notices.mjs';
 export const SNAPSHOT_BRIDGE_ASSET_PATHS = Object.freeze([
   'apple/snapshot-bridge/SnapshotBridge.m',
   'apple/snapshot-bridge/SnapshotBridgeRuntime.m',
@@ -72,69 +73,6 @@ export function collectNpmPack(root) {
  */
 const BUNDLED_LICENSE_NOTICES_PATH = 'dist/src/THIRD_PARTY_NOTICES.txt';
 
-/**
- * The heading that opens a numbered license section. The renderer writes every attribution it
- * produces before the first one, so this line is also the boundary between the attributions the
- * gate reads and the license text it preserves.
- */
-const LICENSE_SECTION_HEADING = /^\[(\d+)\]$/;
-
-/**
- * The ids of the numbered license sections that hold text. A section runs from its `[n]` heading to
- * the next heading, so a license whose body carries blank lines keeps that body. A line shaped like a
- * heading inside a license body only shortens the section it sits in; it cannot fill an empty one.
- */
-function readLicenseTextIds(lines) {
-  const idsWithText = new Set();
-  let openId;
-  let seenText = false;
-  for (const line of lines) {
-    const heading = line.match(LICENSE_SECTION_HEADING);
-    if (heading) {
-      if (seenText) idsWithText.add(openId);
-      openId = Number(heading[1]);
-      seenText = false;
-    } else if (openId !== undefined && line.trim()) {
-      seenText = true;
-    }
-  }
-  if (seenText) idsWithText.add(openId);
-  return idsWithText;
-}
-
-/**
- * The lines the attributions can live on: everything before the first numbered section, which is the
- * block the renderer writes first. A section holds a dependency's license or NOTICE text verbatim —
- * the renderer neither escapes nor indents it — so its content is upstream's, and prose there can
- * carry a contact address or a pointer to "section [9]" shaped like an attribution line. Reading
- * those as attributions would reject publishable bytes, and one such line would stand in for the
- * real attributions a build failed to write.
- */
-function readAttributionLines(lines) {
-  const firstSection = lines.findIndex((line) => LICENSE_SECTION_HEADING.test(line));
-  return firstSection === -1 ? lines : lines.slice(0, firstSection);
-}
-
-/**
- * The `name@version (license): [n]` line the bundler writes, or undefined for any other line. The
- * license field is whatever the plugin reports, wrapped in the renderer's own parentheses, so a
- * grouped SPDX expression like `(MIT OR (Apache-2.0 AND CC0-1.0))` nests inside it: the field ends
- * at the first `):` boundary, which only that closing parenthesis can reach. What follows the colon
- * up to the renderer's optional `; Author: ` clause is the reference list — one package names
- * several ids when it ships a NOTICE or source-file notices with its license. The author clause is
- * attribution metadata: an author field holding a bracketed footnote must not read as a license
- * reference, in either direction.
- */
-function readAttribution(line) {
-  const attribution = line.match(/^(\S+@\S+ \((.+?)\)): ?(.*)$/);
-  if (!attribution) return undefined;
-  const references = attribution[3].split('; Author: ', 1)[0];
-  return {
-    label: attribution[1],
-    references: [...references.matchAll(/\[(\d+)\]/g)].map((reference) => Number(reference[1])),
-  };
-}
-
 function describeUnresolvedAttribution(attribution) {
   return (
     `${attribution.label} -> ` +
@@ -156,11 +94,7 @@ function describeUnresolvedAttribution(attribution) {
  * still gets the generic notice, and only this package is held to naming somebody.
  */
 function assertLicenseNoticeContents(contents, context) {
-  const lines = contents.replaceAll('\r\n', '\n').split('\n');
-  const licenseTextIds = readLicenseTextIds(lines);
-  const attributions = readAttributionLines(lines)
-    .map(readAttribution)
-    .filter((attribution) => attribution !== undefined);
+  const { attributions, licenseTextIds } = readLicenseNotices(contents);
   const unresolved = attributions.filter(
     (attribution) =>
       attribution.references.length === 0 ||
