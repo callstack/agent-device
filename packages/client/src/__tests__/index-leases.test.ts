@@ -44,7 +44,13 @@ test('lease allocation sends the device spec and returns the device the backend 
         runId: req.meta?.runId,
         backend: req.meta?.leaseBackend,
         deviceKey: 'android:mobile:emulator-5554',
-        device: { model: 'Pixel 9', osVersion: '34', imageTag: 'google_apis', physical: false },
+        device: {
+          model: 'Pixel 9',
+          osVersion: '34',
+          imageTag: 'google_apis',
+          deviceMode: 'full',
+          physical: false,
+        },
       },
     },
   }));
@@ -70,6 +76,7 @@ test('lease allocation sends the device spec and returns the device the backend 
     model: 'Pixel 9',
     osVersion: '34',
     imageTag: 'google_apis',
+    deviceMode: 'full',
     physical: false,
   });
 });

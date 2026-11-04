@@ -64,7 +64,13 @@ function renewingClient(heartbeats: string[]) {
 test('proxy open by device spec sends the spec on allocate without listing devices and reports the granted device', async () => {
   const { tempRoot, stateDir, flags } = proxyWorkspace('agent-device-proxy-device-spec-');
   const requests: LeaseAllocateRequest[] = [];
-  const spec: LeaseDeviceSpec = { osVersion: ' >=26 ', deviceMode: 'full', physical: true };
+  const spec: Required<LeaseDeviceSpec> = {
+    osVersion: ' >=26 ',
+    imageTag: 'google_apis',
+    deviceMode: 'full',
+    physical: true,
+  };
+  const grantedDevice: LeaseDevice = { ...GRANTED_DEVICE, deviceMode: 'full' };
 
   const materialized = await materializeRemoteConnectionForCommand({
     host: createTestHostEnvironment(),
@@ -74,7 +80,7 @@ test('proxy open by device spec sends the spec on allocate without listing devic
       listDevices: unexpectedCommandCall,
       allocate: async (request) => {
         requests.push(request);
-        return grantedLease(request, { deviceKey: REMOTE_DEVICE_KEY, device: GRANTED_DEVICE });
+        return grantedLease(request, { deviceKey: REMOTE_DEVICE_KEY, device: grantedDevice });
       },
       release: unexpectedCommandCall,
     }),
@@ -84,7 +90,7 @@ test('proxy open by device spec sends the spec on allocate without listing devic
   assert.equal(requests[0]?.deviceKey, undefined);
   assert.equal(requests[0]?.platform, 'ios');
   assert.equal(requests[0]?.device, 'iPhone 17 Pro');
-  assert.deepEqual(materialized.leaseDevice, GRANTED_DEVICE);
+  assert.deepEqual(materialized.leaseDevice, grantedDevice);
   // The leased device is named by its identity from here on; the spec does not reach the command.
   assert.equal(materialized.flags.udid, 'SIM-REMOTE');
   for (const key of LEASE_DEVICE_SPEC_KEYS) {
@@ -96,8 +102,63 @@ test('proxy open by device spec sends the spec on allocate without listing devic
   assert.deepEqual(state?.leaseDeviceSpec, {
     leaseId: 'lease-1',
     spec,
-    device: GRANTED_DEVICE,
+    device: grantedDevice,
   });
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('a grant echoing another device mode than the request names is released and refused', async () => {
+  const { tempRoot, stateDir, flags } = proxyWorkspace('agent-device-proxy-spec-wrong-mode-');
+  const releases: LeaseReleaseRequest[] = [];
+  await assert.rejects(
+    materializeRemoteConnectionForCommand({
+      host: createTestHostEnvironment(),
+      command: 'open',
+      flags: { ...flags, deviceMode: 'full' },
+      client: createTestClient({
+        listDevices: unexpectedCommandCall,
+        allocate: async (request) =>
+          grantedLease(request, {
+            created: true,
+            deviceKey: REMOTE_DEVICE_KEY,
+            device: { ...GRANTED_DEVICE, deviceMode: 'slim' },
+          }),
+        release: async (request) => {
+          releases.push(request);
+          return { released: true };
+        },
+      }),
+    }),
+    (error: AppError) =>
+      error.code === 'UNSUPPORTED_OPERATION' &&
+      error.details?.reason === 'device-spec-unsupported' &&
+      JSON.stringify(error.details?.keys) === '["deviceMode"]',
+  );
+  assert.deepEqual(
+    releases.map((request) => request.leaseId),
+    ['lease-1'],
+  );
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId, undefined);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('a grant that reports no device mode serves a request naming one', async () => {
+  const { tempRoot, flags } = proxyWorkspace('agent-device-proxy-spec-no-mode-echo-');
+
+  const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
+    command: 'open',
+    flags: { ...flags, deviceMode: 'full' },
+    client: createTestClient({
+      listDevices: unexpectedCommandCall,
+      allocate: async (request) =>
+        grantedLease(request, { deviceKey: REMOTE_DEVICE_KEY, device: GRANTED_DEVICE }),
+      release: unexpectedCommandCall,
+    }),
+  });
+
+  assert.equal(materialized.flags.udid, 'SIM-REMOTE');
+  assert.deepEqual(materialized.leaseDevice, GRANTED_DEVICE);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
@@ -480,7 +541,13 @@ test('a lease re-allocated by its stored device for a non-allocating command doe
   await materializeRemoteConnectionForCommand({
     host: createTestHostEnvironment(),
     command: 'snapshot',
-    flags: { ...flags, osVersion: '>=26', deviceMode: 'full' },
+    flags: {
+      ...flags,
+      osVersion: '>=26',
+      imageTag: 'google_apis',
+      deviceMode: 'full',
+      physical: true,
+    },
     client: createTestClient({
       listDevices: unexpectedCommandCall,
       heartbeat: async () => {

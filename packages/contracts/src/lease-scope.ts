@@ -370,10 +370,12 @@ export function readLeaseDevice(value: unknown): LeaseDevice | undefined {
   const osVersion = nonEmptyString(record.osVersion);
   if (!model || !osVersion || typeof record.physical !== 'boolean') return undefined;
   const imageTag = nonEmptyString(record.imageTag);
+  const deviceMode = nonEmptyString(record.deviceMode);
   return {
     model,
     osVersion,
     ...(imageTag ? { imageTag } : {}),
+    ...(deviceMode ? { deviceMode } : {}),
     physical: record.physical,
   };
 }

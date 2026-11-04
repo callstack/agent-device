@@ -55,6 +55,8 @@ export type LeaseDevice = {
   /** The exact OS version granted. */
   osVersion: string;
   imageTag?: string;
+  /** The iOS simulator mode granted, when the backend reports it. */
+  deviceMode?: string;
   physical: boolean;
 };
 
