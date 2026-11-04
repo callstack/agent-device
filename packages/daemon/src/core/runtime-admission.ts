@@ -45,6 +45,11 @@ export type RuntimeAdmissionRequest = RuntimeAdmissionBindings &
 
 export type { RuntimeAdmissionBindings };
 
+/** The owner has no live session for the device, so a session record must not answer for it. */
+export function ownerHoldsNoLiveSession(reason: unknown): boolean {
+  return reason === 'owner-capability-missing';
+}
+
 /**
  * The one refusal the daemon reports when a device's exact runtime owner did not admit an
  * operation. Both seams — this generic route and the request-scoped session handlers — build their

@@ -203,11 +203,7 @@ function bindLimrunAppLogs(
     ensureReady: async () => ({ ...device, booted: true }),
     bootTarget: async () => ({ ...device, booted: true }),
     listApps: async (input) => await options.listApps(input.device, input.filter, signal),
-    ...(device.platform === 'android'
-      ? {
-          appState: async () => await options.getAppState(device, signal),
-        }
-      : {}),
+    appState: async () => await options.getAppState(device, signal),
     ...availableApplicationLifecycleOperations(
       bindLimrunApplicationLifecycle({
         device,

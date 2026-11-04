@@ -12,7 +12,10 @@ import {
   type ProviderAppCatalogQuery,
 } from '@agent-device/contracts/device';
 import { asAppError } from '@agent-device/kernel/errors';
-import { unsupportedOperationResponse } from '../../../core/runtime-admission.ts';
+import {
+  ownerHoldsNoLiveSession,
+  unsupportedOperationResponse,
+} from '../../../core/runtime-admission.ts';
 import {
   requireRuntimeBinding,
   requireRuntimeFacts,
@@ -44,9 +47,14 @@ import {
   selectorTargetsSessionDevice,
 } from '../../../resources/session-device-resolution.ts';
 import { resolveSessionScope, sessionMatchesInventoryScope } from '../../session-routing.ts';
-import type { BoundDeviceRuntime, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
+import type {
+  BoundDeviceRuntime,
+  RuntimeFacts,
+  RuntimeOperationKey,
+} from '@agent-device/contracts/platform-runtime';
 import {
   type PlatformRuntimeOperations,
+  appStateUse,
   appsRuntimeUse,
 } from '@agent-device/contracts/platform-runtime-operations';
 import { ensureAppsRuntimeReady, listAppsFromRuntime } from '../../../execution/apps-runtime.ts';
@@ -292,12 +300,30 @@ async function capabilitiesInventoryResponse(params: {
         : {}),
       availableCommands: listRuntimeFactCommands().filter((command) => {
         // A session that already owns an app identity answers appstate itself, so it stays
-        // available even when the sessionless runtime probe cannot see a foreground app.
-        if (command === 'appstate' && sessionOwnedAppStateAvailable) return true;
+        // available even when the sessionless runtime probe cannot see a foreground app. The
+        // exception is an owner with no live session, whose refusal appstate reports.
+        if (
+          command === 'appstate' &&
+          sessionOwnedAppStateAvailable &&
+          !ownerRefusesSessionAppState(facts)
+        ) {
+          return true;
+        }
         return commandIsAvailableFromFacts(command, facts);
       }),
     },
   };
+}
+
+function ownerRefusesSessionAppState(
+  facts: RuntimeFacts<PlatformRuntimeOperations> | undefined,
+): boolean {
+  if (!facts) return true;
+  const required: readonly RuntimeOperationKey<PlatformRuntimeOperations>[] = appStateUse.required;
+  const unavailable = required
+    .map((operation) => facts.operations[operation])
+    .find((fact) => !fact.available);
+  return unavailable?.available === false && ownerHoldsNoLiveSession(unavailable.reason);
 }
 
 function isSessionOwnedAppStateAvailable(

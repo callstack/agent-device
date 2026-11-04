@@ -60,10 +60,6 @@ const prepareUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'Apple runner preparation is unavailable for Limrun-owned devices.',
 );
-const iosAppStateUnavailable = unavailableFact(
-  'unsupported-provider-mode',
-  'Limrun iOS appstate is session-owned; no sessionless provider foreground probe is exposed.',
-);
 const openTargetUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'Limrun open requires a Limrun-owned iOS simulator or Android emulator.',
@@ -138,7 +134,6 @@ export function limrunAppLogFacts(
   device: DeviceInfo,
 ): RuntimeFacts<PlatformRuntimeOperations> {
   const deployment = limrunAppDeploymentFacts(deploymentOptions(options), device);
-  const isAndroid = device.platform === 'android';
   const customSnapshotFact =
     isIosFamily(device) && device.kind === 'simulator' ? available : customSnapshotUnavailable;
   return Object.freeze({
@@ -150,7 +145,7 @@ export function limrunAppLogFacts(
       appLogReattach: available,
       appLogCleanup: available,
       ...deployment,
-      appState: isAndroid ? available : iosAppStateUnavailable,
+      appState: available,
       networkDump: available,
       screenRecordingStart: available,
       screenRecordingReattach: available,

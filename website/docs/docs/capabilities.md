@@ -183,7 +183,7 @@ What a **Yes** does not claim:
 | [Uninstall an app](/docs/commands#app-uninstall) | No | No | No | No | No | No | No | No |
 | [Install from a source URL](/docs/commands#app-install-from-source-url) | Yes | Yes | No | No | Yes | Yes | No | No |
 | [Installed app list](/docs/commands#app-state-and-app-lists) | No | No | No | No | Yes | Yes | No | No |
-| [Foreground app state](/docs/commands#app-state-and-app-lists) | No | No | No | No | No | Yes | No | No |
+| [Foreground app state](/docs/commands#app-state-and-app-lists) | No | No | No | No | Last opened app, once the instance answers; no foreground read | Yes | No | No |
 | [App switcher](/docs/commands#navigation) | Yes | Yes | Yes | Yes | No | Yes | No | No |
 | [Get the device ready and boot simulators and emulators](/docs/commands#navigation) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Shut down a simulator or emulator](/docs/commands#navigation) | No | No | No | No | No | No | No | No |
