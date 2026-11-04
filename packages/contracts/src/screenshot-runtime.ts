@@ -27,7 +27,7 @@ export type ScreenshotRuntimeExecution = Readonly<Omit<RunnerContext, 'appBundle
  */
 export type CaptureScreenshotInput = Readonly<{
   outPath: string;
-  options?: Readonly<ScreenshotOptions>;
+  options?: Readonly<ScreenshotOptions & { preferredCaptureBackend?: ScreenshotCaptureBackend }>;
   execution?: ScreenshotRuntimeExecution;
 }>;
 
@@ -90,14 +90,15 @@ export function screenshotRuntimeOperationFacts(
   return Object.freeze({ captureScreenshot: input.capture });
 }
 
-/** A preference, unlike `captureBackend`, keeps the owner's default where it declares no such backend. */
-function resolvePreferredCaptureBackend(
-  input: Readonly<ScreenshotOptions> | undefined,
+/** A preference, unlike `captureBackend`, keeps the owner's default where it declares no such backend. Maestro's comparison capture asks for one. */
+function resolveCaptureOptions(
+  input: CaptureScreenshotInput['options'],
   binding: ScreenshotCaptureBindingOptions,
 ): Readonly<ScreenshotOptions> {
-  const { preferredCaptureBackend: preferred, ...options } = input ?? {};
+  const { captureBackend: explicit, preferredCaptureBackend: preferred, ...options } = input ?? {};
+  if (explicit) return { ...options, captureBackend: explicit };
   return preferred && binding.captureCapabilities(options).captureBackends?.includes(preferred)
-    ? { captureBackend: preferred, ...options }
+    ? { ...options, captureBackend: preferred }
     : options;
 }
 
@@ -112,7 +113,7 @@ function bindScreenshotCapture(
 ): ScreenshotRuntimeOperations {
   return Object.freeze({
     captureScreenshot: async (input: CaptureScreenshotInput) => {
-      const options = resolvePreferredCaptureBackend(input.options, binding);
+      const options = resolveCaptureOptions(input.options, binding);
       await assertScreenshotCaptureSupport(options, binding.captureCapabilities(options));
       const interactor = await resolveInteractor({
         ...input.execution,

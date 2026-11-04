@@ -131,7 +131,7 @@ test.each([
 ])(
   'a preferred backend selects a declared one and otherwise keeps the default capture: %j',
   async (captureBackends, expected) => {
-    const screenshot = vi.fn(async () => ({}));
+    const screenshot = vi.fn(async (_outPath: string, _options: unknown) => ({}));
     const operations = bindLocalScreenshotInteractor({
       device,
       signal: new AbortController().signal,
@@ -140,8 +140,8 @@ test.each([
     });
     await operations.captureScreenshot({
       outPath: '/tmp/capture.png',
-      options: { preferredCaptureBackend: 'runner' },
+      options: { captureBackend: undefined, preferredCaptureBackend: 'runner' },
     });
-    expect(screenshot).toHaveBeenCalledWith('/tmp/capture.png', expected);
+    expect(screenshot.mock.lastCall?.[1]).toEqual(expected);
   },
 );

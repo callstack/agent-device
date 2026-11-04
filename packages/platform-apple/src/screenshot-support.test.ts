@@ -116,3 +116,27 @@ test.each([
     }
   },
 );
+
+test('the shape the daemon passes for a Maestro preference selects the runner on an iOS simulator', async () => {
+  const screenshot = vi.fn(async (_outPath: string, _options: ScreenshotOptions) => ({}));
+  const host = {
+    ...platformRuntimeHostFixture(),
+    localInteractors: { resolve: async () => ({ screenshot }) as unknown as Interactor },
+  };
+  const binding = await createApplePlatformRuntime(host).bind({
+    device: simulator,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+
+  await binding.operations.captureScreenshot!({
+    outPath: '/tmp/maestro.png',
+    options: { captureBackend: undefined, preferredCaptureBackend: 'runner' },
+  });
+
+  expect(screenshot.mock.lastCall?.[1]).toEqual({ captureBackend: 'runner' });
+});
