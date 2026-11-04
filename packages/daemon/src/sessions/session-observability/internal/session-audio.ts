@@ -23,6 +23,7 @@ import type { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef } from '../../../core/session-state.ts';
 import { bindSessionAudioProbe } from '../../../core/session-capture-binding.ts';
+import { retainSessionOwnerForRecording } from '../../recording-session-owner.ts';
 import {
   type DaemonFailureResponse,
   errorResponse,
@@ -115,6 +116,7 @@ async function startAudioProbe(
   use: typeof audioProbeStartUse,
 ): Promise<DaemonResponse> {
   let session = params.sessionStore.requireCurrent(ref);
+  await retainSessionOwnerForRecording(params.sessionStore, ref);
   const binding = bindSessionAudioProbe(params.sessionStore, ref);
   // Start restarts an already-running probe (legacy parity), completing it through the durable
   // coordinator so the previous envelope terminalizes before a new fence is minted. Nobody reads

@@ -36,6 +36,7 @@ import type { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { bindSessionPerfCapture } from '../../../core/session-capture-binding.ts';
+import { retainSessionOwnerForRecording } from '../../recording-session-owner.ts';
 import { withCaptureOutputOwnership } from '../../../core/capture-output-ownership.ts';
 import { recordSessionAction } from '../../../core/session-action-recorder.ts';
 import {
@@ -220,6 +221,7 @@ async function startPerfCapture(
       hint: 'Run open <app> first so perf can resolve the app process identity.',
     });
   }
+  await retainSessionOwnerForRecording(params.sessionStore, params.ref);
   const fallback =
     request.kind === 'xctrace'
       ? `perf-${request.area === 'cpu' ? 'cpu-profile' : 'trace'}.trace`

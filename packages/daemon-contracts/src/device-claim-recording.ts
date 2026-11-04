@@ -185,6 +185,7 @@ export async function admitRecordingStop(
         ))
     )
       throw claimError();
+    let otherResourcesPending = false;
     if (!current) {
       const liveness = classifyOwnerLiveness({
         owner: { pid: claim.ownerPid, startTime: claim.ownerStartTime },
@@ -192,11 +193,8 @@ export async function admitRecordingStop(
       if (liveness !== 'owner-process-dead' && liveness !== 'owner-process-reused')
         throw claimError();
       const resources = inspectDeviceClaimRecovery(claim, { allowPendingSessionOwner: true });
-      if (
-        resources.status !== 'inspectable' ||
-        resources.recoveryKinds.some((kind) => kind !== 'screen-recording')
-      )
-        throw claimError();
+      if (resources.status !== 'inspectable') throw claimError();
+      otherResourcesPending = resources.recoveryKinds.some((kind) => kind !== 'screen-recording');
     }
     const record = screenRecordingDurableResource.store.read(params.resourcePath);
     if (record.status !== 'decoded' || record.envelope.lifecycle !== 'open') throw claimError();
@@ -225,7 +223,9 @@ export async function admitRecordingStop(
           throw claimError();
         const covered = current && claim.claimOwnerKind === 'open-session';
         const priorSessionOwner =
-          !current && claim.claimOwnerKind === 'open-session' && !claim.recordingSessionOwner
+          !current &&
+          (claim.claimOwnerKind === 'open-session' || otherResourcesPending) &&
+          !claim.recordingSessionOwner
             ? { pid: claim.ownerPid, startTime: claim.ownerStartTime }
             : undefined;
         const transferred: DeviceClaim = {
@@ -795,7 +795,7 @@ export async function retryRecordingClaimCleanup(
         completed = true;
       }
       if (retained.purpose === 'stop' && retryResult === 'native-settled' && !completed) {
-        if (!markNativeSettled || !readPendingScreenRecordingCompletion(manifest.envelope.metadata))
+        if (!markNativeSettled || !readPendingScreenRecordingCompletion(manifest.envelope))
           throw cleanupPendingError();
         markNativeSettled();
         completed = true;

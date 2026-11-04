@@ -35,6 +35,7 @@ import type {
 import type { SessionStore } from '../../../core/session-store.ts';
 import { unsupportedOperationResponse } from '../../../core/runtime-admission.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
+import { retainSessionOwnerForRecording } from '../../recording-session-owner.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { handleAudioCommand } from './session-audio.ts';
 import { handlePerfRuntimeCommand } from './session-perf-runtime.ts';
@@ -364,6 +365,7 @@ async function startSessionAppLog(
   const outputPath = sessionStore.resolveAppLogPath(sessionName);
   const resourcePath = appLogResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName));
   try {
+    await retainSessionOwnerForRecording(sessionStore, params.ref);
     const fence = createNextAppLogFence({
       ledger: params.appLogAdmissionLedger,
       resourcePath,

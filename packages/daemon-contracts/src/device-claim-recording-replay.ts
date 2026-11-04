@@ -102,7 +102,7 @@ export async function readPendingRecordingReplayUnderLock(
         envelope.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] !== claim.ownerToken
       )
         return undefined;
-      const completion = readPendingScreenRecordingCompletion(envelope.metadata);
+      const completion = readPendingScreenRecordingCompletion(envelope);
       if (!completion) return undefined;
       const tenantId = envelope.metadata?.remoteCaptureTenantId;
       return {

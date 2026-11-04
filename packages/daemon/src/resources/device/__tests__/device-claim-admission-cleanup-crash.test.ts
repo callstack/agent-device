@@ -8,6 +8,12 @@ import * as deviceSelection from '@agent-device/device-selection/dispatch-resolv
 import { IOS_SIMULATOR } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { audioProbeResourceStore } from '@agent-device/capture-kit/audio-probe-resource-store';
+import { encodeHostAudioProbeDescriptor } from '@agent-device/capture-kit/audio-probe-descriptor-fixtures';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { deviceIdentity } from '@agent-device/kernel/device';
+import { readProcessIdentityFacts } from '@agent-device/host-kit/process';
 import { reconcileOrphanedDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
 import { createOwnerScopedDeviceClaimReconciler } from '@agent-device/daemon-contracts/device-claim-recovery';
 import { isolatedDeviceClaimStores } from '../../../__tests__/support/device-claim-store.ts';
@@ -301,6 +307,29 @@ test('a cold selectorless stop replays the pending export when the device is una
   expect(JSON.parse(fs.readFileSync(claimPath, 'utf8'))).toEqual(replacement);
   expect(fs.readFileSync(resourcePath, 'utf8')).toBe(manifest);
   fs.writeFileSync(claimPath, before);
+  const recorded = screenRecordingDurableResource.store.read(resourcePath);
+  if (recorded.status !== 'decoded') throw new Error('missing pending recording');
+  screenRecordingDurableResource.store.write(resourcePath, {
+    ...recorded.envelope,
+    metadata: { ...recorded.envelope.metadata, phase: 'completing' },
+  });
+  expect(await runtime.stop()).toMatchObject({ ok: true, data: { outPath: runtime.output } });
+  expect(fs.readFileSync(claimPath, 'utf8')).toBe(before);
+  fs.writeFileSync(resourcePath, manifest);
+  for (const change of ['missing-binding', 'different-descriptor'] as const) {
+    const metadata = { ...recorded.envelope.metadata };
+    if (change === 'missing-binding') delete metadata.pendingCompletionBinding;
+    screenRecordingDurableResource.store.write(resourcePath, {
+      ...recorded.envelope,
+      metadata,
+      ...(change === 'different-descriptor'
+        ? { descriptor: { ...recorded.envelope.descriptor, body: { replaced: true } } }
+        : {}),
+    });
+    expect(await runtime.stop()).toMatchObject({ ok: false });
+    expect(fs.readFileSync(claimPath, 'utf8')).toBe(before);
+    fs.writeFileSync(resourcePath, manifest);
+  }
   fs.unlinkSync(runtime.output);
   expect(await runtime.stop()).toMatchObject({ ok: false });
   expect(fs.readFileSync(claimPath, 'utf8')).toBe(before);
@@ -379,5 +408,72 @@ test('an internal recovery deadline replays the pending output without canceling
     expect(fs.readFileSync(runtime.output, 'utf8')).toBe('preserved export');
   } finally {
     vi.useRealTimers();
+  }
+});
+
+test('cold recording export preserves an independently owned live audio resource', async () => {
+  const f = fixture();
+  const audio = spawn(
+    process.execPath,
+    ['-e', String.raw`process.stdout.write('ready\n'); process.stdin.resume()`],
+    { stdio: ['pipe', 'pipe', 'pipe'] },
+  );
+  const exited = once(audio, 'exit');
+  try {
+    await once(audio.stdout, 'data');
+    const identity = await readProcessIdentityFacts(audio.pid!);
+    if (!identity.startTime || !identity.command) throw new Error('audio identity unavailable');
+    const audioPath = audioProbeResourceStore.resolvePath(
+      path.join(f.stateDir, 'sessions', 'recording'),
+    );
+    audioProbeResourceStore.write(
+      audioPath,
+      createDurableResourceEnvelope({
+        resourceKind: 'audio-probe',
+        sessionId: 'recording',
+        device: deviceIdentity(IOS_SIMULATOR),
+        owner: localRuntimeOwner('apple'),
+        fence: { token: 'audio-fence', generation: 1 },
+        lifecycle: 'open',
+        descriptor: encodeHostAudioProbeDescriptor({
+          backend: 'macos-screencapturekit',
+          source: 'system-audio',
+          sourceCount: 1,
+          notes: [],
+          statusPath: path.join(f.stateDir, 'audio-status.json'),
+          startedAt: 1,
+          durationMs: 10000,
+          bucketMs: 1000,
+          marker: { pid: audio.pid!, startTime: identity.startTime, command: identity.command },
+        }),
+      }),
+    );
+    const beforeAudio = fs.readFileSync(audioPath, 'utf8');
+    expect(await f.runtime.stop()).toMatchObject({ ok: true, data: { outPath: f.runtime.output } });
+    expect(fs.readFileSync(f.runtime.output, 'utf8')).toBe('preserved export');
+    expect(fs.readFileSync(audioPath, 'utf8')).toBe(beforeAudio);
+    expect(audio.exitCode).toBeNull();
+    const claim = JSON.parse(fs.readFileSync(f.claimPath, 'utf8'));
+    expect(claim).toMatchObject({
+      ownerToken: 'original-token',
+      recordingSessionOwner: { pid: 999999999 },
+    });
+    const reconcile = createOwnerScopedDeviceClaimReconciler({
+      scope: f.runtime.platformScope,
+      composeGateway: () => f.runtime.gateway,
+    });
+    expect(await reconcile(claim)).toMatchObject({
+      status: 'retained',
+      reason: 'screen-recording-session-owner-pending',
+    });
+    const otherState = path.join(f.stateDir, '..', 'audio-competitor');
+    fs.mkdirSync(otherState, { recursive: true });
+    const competing = cleanupCrashFixture(otherState, f.claimsDir);
+    expect(await competing.start()).toMatchObject({ ok: false, error: { code: 'DEVICE_IN_USE' } });
+    expect(fs.readFileSync(competing.events, 'utf8')).not.toContain('start\n');
+    expect(audio.exitCode).toBeNull();
+  } finally {
+    if (audio.exitCode === null && audio.signalCode === null) audio.kill('SIGKILL');
+    await exited;
   }
 });
