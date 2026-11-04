@@ -37,7 +37,11 @@ import { LeaseRegistry } from '../../lease-registry.ts';
 import { handleRecordCommand } from '../../../sessions/handlers/record-runtime.ts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { seed } from './device-claim-admission-recording.fixtures.ts';
-import { androidRecordingMarkerPath } from './android-recording-transport.fixtures.ts';
+import {
+  androidRecordingAdmission,
+  androidRecordingAdmissionOwner,
+  androidRecordingMarkerPath,
+} from './android-recording-transport.fixtures.ts';
 import {
   isolatedClaimTestHost,
   isolatedDeviceClaimStores,
@@ -735,6 +739,7 @@ test('the Android runtime settles its exact recorder and exports its preserved c
   const output = path.join(stateDir, 'real-android.mp4');
   const deviceFiles = new Map<string, string>();
   const markers = new Map<string, string>();
+  const admissionLease = androidRecordingAdmission(markers);
   let running = true;
   const signal = vi.fn(async () => {
     running = false;
@@ -744,8 +749,12 @@ test('the Android runtime settles its exact recorder and exports its preserved c
   const finalize = vi.fn(async () => ({}));
   const transport: AndroidScreenRecordingTransport = {
     mode: 'local' as const,
+    acquireAdmission: admissionLease.acquireAdmission,
+    releaseAdmission: admissionLease.releaseAdmission,
     start: async ({ remotePath, admission }) => {
       if (
+        !admissionLease.owns(admission.owner) ||
+        admission.owner !== androidRecordingAdmissionOwner(admission.expected) ||
         admission.manifestPath !== androidRecordingMarkerPath(remotePath) ||
         markers.get(admission.manifestPath) !== admission.expected
       )
@@ -867,6 +876,10 @@ test('the Android runtime settles its exact recorder and exports its preserved c
   expect(signal).toHaveBeenCalledOnce();
   expect([...deviceFiles.values()]).toEqual(['android video']);
   expect(markers.size).toBe(1);
+  const evidence = JSON.parse([...markers.values()][0]!);
+  expect(
+    `${evidence.deviceId}/${evidence.sessionId}/${evidence.claimToken}/${evidence.fenceToken}/${evidence.fenceGeneration}`,
+  ).toBe(`${ANDROID_EMULATOR.id}/recording/original-token/real-android-fence/1`);
   expect(prepare).not.toHaveBeenCalled();
   expect(finalize).not.toHaveBeenCalled();
   expect(fs.existsSync(claimPath)).toBe(true);

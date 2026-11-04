@@ -162,6 +162,7 @@ export function fixture(setup: () => IsolatedDeviceClaimStore) {
     cwd: string | undefined,
     state = store,
     requestRegistry = registry,
+    cancelAdoption = false,
   ) {
     const request = await scopeFor('record', action, cwd, state, requestRegistry);
     const response = await request.runLocked(
@@ -176,7 +177,11 @@ export function fixture(setup: () => IsolatedDeviceClaimStore) {
           requestScope: scope,
           platformServices: request.platformServices,
           retainDeviceExecutionLock: request.retainDeviceExecutionLock,
-          throwIfCanceled: request.throwIfCanceled,
+          throwIfCanceled: cancelAdoption
+            ? () => {
+                throw new Error('adoption canceled');
+              }
+            : request.throwIfCanceled,
         }),
     );
     await request[Symbol.asyncDispose]();

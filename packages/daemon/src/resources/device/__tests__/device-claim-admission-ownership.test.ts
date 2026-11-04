@@ -27,7 +27,11 @@ import { LeaseRegistry } from '../../lease-registry.ts';
 import { handleSessionCloseCommands } from '../../../sessions/session-lifecycle/internal/session-close.ts';
 import { platformResourceCleanupFixture } from '../../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import { fixture as createFixture } from './device-claim-admission-ownership.fixtures.ts';
-import { androidRecordingMarkerPath } from './android-recording-transport.fixtures.ts';
+import {
+  androidRecordingAdmission,
+  androidRecordingAdmissionOwner,
+  androidRecordingMarkerPath,
+} from './android-recording-transport.fixtures.ts';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
@@ -597,7 +601,18 @@ test('confirmed adoption rollback releases the reservation when its tombstone ca
   expect(fs.existsSync(f.manifestPath)).toBe(false);
 });
 
-test.each(['unknown', 'rolled-back', 'foreign'] as const)(
+const androidFailedStartScenarios = [
+  'unknown',
+  'rolled-back',
+  'foreign',
+  'legacy',
+  'unavailable',
+  'marker-failed',
+  'marker-uncertain',
+  'adoption-uncertain',
+] as const;
+
+test.each(androidFailedStartScenarios)(
   'Android failed start keeps exact ownership for %s disposition',
   async (scenario) => {
     const f = fixture();
@@ -619,27 +634,41 @@ test.each(['unknown', 'rolled-back', 'foreign'] as const)(
       old = fs.readFileSync(f.manifestPath, 'utf8');
     }
     const markers = new Map<string, string>();
+    const legacyPath = '/sdcard/agent-device-recording-active.json';
+    if (scenario === 'legacy') markers.set(legacyPath, 'legacy evidence');
+    const admissionLease = androidRecordingAdmission(markers);
     const marker = () => [...markers.values()][0] ?? '';
     let writer = scenario === 'unknown';
     let artifact = '';
-    let failActivePublication = scenario !== 'unknown';
+    let failActivePublication = scenario === 'rolled-back' || scenario === 'foreign';
     let interruptCheckpoint = false;
+    let publishLateMarker: (() => void) | undefined;
     const stop = vi.fn(async () => {
-      if (scenario === 'foreign') return 'ownership-lost' as const;
+      if (scenario === 'foreign' || scenario === 'adoption-uncertain')
+        return 'ownership-lost' as const;
       writer = false;
       return 'stopped' as const;
     });
-    const transport: AndroidScreenRecordingTransport = {
-      mode: 'local' as const,
-      start: async ({ remotePath, admission }) => {
+    const start = vi.fn<AndroidScreenRecordingTransport['start']>(
+      async ({ remotePath, admission }) => {
         if (scenario === 'unknown') throw new Error('launch outcome unknown');
-        if (markers.get(admission.manifestPath) !== admission.expected)
+        if (
+          !admissionLease.owns(admission.owner) ||
+          admission.owner !== androidRecordingAdmissionOwner(admission.expected) ||
+          markers.get(admission.manifestPath) !== admission.expected
+        )
           throw new Error('launch admission mismatch');
         markers.set(admission.manifestPath, admission.admitted);
         writer = true;
         artifact = remotePath;
         return { process: { pid: '42', startTime: '1', remotePath } };
       },
+    );
+    const transport: AndroidScreenRecordingTransport = {
+      mode: 'local' as const,
+      acquireAdmission: admissionLease.acquireAdmission,
+      releaseAdmission: admissionLease.releaseAdmission,
+      start,
       inspect: async () => (writer ? 'owned-alive' : 'missing'),
       stop,
       exists: async (remotePath) => artifact === remotePath,
@@ -655,11 +684,18 @@ test.each(['unknown', 'rolled-back', 'foreign'] as const)(
       },
       manifestPathFor: androidRecordingMarkerPath,
       readManifest: async (markerPath) => {
+        if (scenario === 'unavailable' && markerPath === legacyPath)
+          return { status: 'unavailable', message: 'device evidence unavailable' };
         const contents = markers.get(markerPath);
         return contents === undefined ? { status: 'missing' } : { status: 'read', contents };
       },
       compareAndSetManifest: async ({ manifestPath, expected, contents }) => {
         if ((markers.get(manifestPath) ?? null) !== expected) return 'mismatch';
+        if (expected === null && contents && scenario === 'marker-failed') return 'failed';
+        if (expected === null && contents && scenario === 'marker-uncertain') {
+          publishLateMarker = () => markers.set(manifestPath, contents);
+          return 'unavailable';
+        }
         if (contents && failActivePublication && JSON.parse(contents).chunks.length > 0) {
           failActivePublication = false;
           return 'unavailable';
@@ -703,7 +739,73 @@ test.each(['unknown', 'rolled-back', 'foreign'] as const)(
       bind: platform.bind,
       shutdown: async () => {},
     });
-    expect((await f.record('start', f.workspace)).ok).toBe(false);
+    const response = await f.record(
+      'start',
+      f.workspace,
+      undefined,
+      undefined,
+      scenario === 'adoption-uncertain',
+    );
+    expect(response.ok).toBe(false);
+    if (scenario === 'legacy' || scenario === 'unavailable' || scenario === 'marker-failed') {
+      expect(response).toMatchObject({
+        ok: false,
+        error: {
+          code: scenario === 'legacy' ? 'DEVICE_IN_USE' : 'COMMAND_FAILED',
+          details: {
+            reason:
+              scenario === 'legacy'
+                ? 'legacy_native_recording_evidence_unproven'
+                : scenario === 'unavailable'
+                  ? 'native_recovery_evidence_unavailable'
+                  : 'native_recording_marker_not_written',
+          },
+        },
+      });
+      expect(start).not.toHaveBeenCalled();
+      expect(inspectDeviceClaims({}, process.env)).toHaveLength(0);
+      expect(fs.readFileSync(f.manifestPath, 'utf8')).toBe(old);
+      if (scenario === 'legacy') expect(markers.get(legacyPath)).toBe('legacy evidence');
+      expect(admissionLease.isHeld()).toBe(false);
+      return;
+    }
+    if (scenario === 'marker-uncertain') {
+      const claim = inspectDeviceClaims({}, process.env)[0]?.claim;
+      expect(claim).toMatchObject({ recordingStartPending: true });
+      expect(admissionLease.isHeld()).toBe(true);
+      expect(start).not.toHaveBeenCalled();
+      expect(fs.readFileSync(f.manifestPath, 'utf8')).toBe(old);
+      expect(publishLateMarker).toBeDefined();
+      publishLateMarker?.();
+      expect(JSON.parse(marker()).claimToken).toBe(claim?.ownerToken);
+      expect(inspectDeviceClaims({}, process.env)[0]?.claim?.ownerToken).toBe(claim?.ownerToken);
+      return;
+    }
+    if (scenario === 'adoption-uncertain') {
+      const claim = inspectDeviceClaims({}, process.env)[0]?.claim;
+      expect(claim).toMatchObject({ recordingStartPending: true });
+      expect(artifact).not.toBe('');
+      expect(JSON.parse(marker()).claimToken).toBe(claim?.ownerToken);
+      expect(screenRecordingDurableResource.store.read(f.manifestPath)).toMatchObject({
+        status: 'decoded',
+        envelope: { lifecycle: 'open', metadata: { cleanupStatus: 'cleanup-pending' } },
+      });
+      expect(stop).toHaveBeenCalledOnce();
+      const other = new SessionStore(path.join(f.root, 'other-state', 'sessions'), f.host);
+      other.publish('recording', {
+        name: 'recording',
+        device: f.device,
+        createdAt: 1,
+        actions: [],
+      });
+      expect(await f.record('start', f.workspace, other)).toMatchObject({
+        ok: false,
+        error: { code: 'DEVICE_IN_USE' },
+      });
+      expect(start).toHaveBeenCalledOnce();
+      expect(inspectDeviceClaims({}, process.env)[0]?.claim?.ownerToken).toBe(claim?.ownerToken);
+      return;
+    }
     if (scenario !== 'unknown') {
       expect(fs.readFileSync(f.manifestPath, 'utf8')).toBe(old);
       expect(stop).toHaveBeenCalledOnce();
