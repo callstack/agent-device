@@ -384,7 +384,7 @@
         },
         "runner": {
           "outcome": "not-applicable",
-          "reason": "the runner's XCTest plan reads no continuation; the tree-changed refusal belongs to the bridge reader"
+          "reason": "the runner's private AX bridge has no child counts, so it cannot see a shrink; the reader that the runner compiles from apple/snapshot-bridge is the host-bridge producer"
         }
       }
     },

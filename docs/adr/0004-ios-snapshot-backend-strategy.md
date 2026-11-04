@@ -816,8 +816,8 @@ Thus, the runner abandons a slow read first, and the daemon receives `bridge-rea
 
 The runner names the app generation itself, because the daemon cannot list the Simulator's processes.
 The `target` verb returns the pid and the process start time of the app's foreground process.
-The `describe` verb refuses another process of the same app as `stale_target`.
-The daemon keeps the target until a read refuses it as `stale_target`.
+The `describe` verb refuses another process of the same app with `target-process-changed`.
+The daemon keeps the target until a read refuses it with `target-process-changed`.
 Thus, a steady capture costs one runner round trip for the tree.
 While a generation's circuit is open, no read can meet a newer process.
 Thus, on a `targetFreshness: 'cached'` channel, the route asks for a fresh target before it trusts an open circuit.
@@ -838,7 +838,7 @@ An observe-only capture must not activate the app or start work, so the provider
 Rejected alternatives:
 
 - Ask the provider to start the guest bridge process and forward its socket. That needs provider features that do not exist, for every provider.
-- Read the Simulator's process table in the runner to prove absence without XCTest. The provider's sandbox does not allow process enumeration.
+- Prove absence from the Simulator's process table alone. A provider's sandbox can refuse that table (`system-surface-host-unverified`), so the runner's foreground read comes first.
 - Pin the runner's private-AX backend on a provider iOS Simulator. That is another producer with another tree, and it needs the XCTest main thread.
 - Copy the reader sources into the runner. The two readers would drift.
 
