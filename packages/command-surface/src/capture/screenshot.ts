@@ -51,7 +51,10 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
     maxSize: retiredField(RETIRED_SCREENSHOT_MAX_SIZE.migration.screenshot),
     stabilize: booleanField(),
     normalizeStatusBar: booleanField(),
-    captureBackend: enumField(SCREENSHOT_CAPTURE_BACKENDS),
+    captureBackend: enumField(
+      SCREENSHOT_CAPTURE_BACKENDS,
+      'Capture through the XCTest runner instead of the platform default, which leaves out the simulator-drawn Dynamic Island. Apple targets only; refused on a macOS surface the helper captures, and with pixelDensity, screenMask or normalizeStatusBar.',
+    ),
     surface: enumField(SESSION_SURFACES),
   },
 );

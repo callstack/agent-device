@@ -12,6 +12,7 @@ import {
   mkdtempForTestSync,
 } from '@agent-device/test-kit';
 import { makeSession } from '../__tests__/support/session-factories.ts';
+import { contextFromFlags } from '../core/context.ts';
 import type { GenericPlatformExecutionParams } from '../core/generic-leaf-execution.ts';
 import { resolveScreenshotGenericExecution } from './screenshot-runtime.ts';
 import {
@@ -282,7 +283,34 @@ test('refuses --capture-backend runner outside Apple targets, with --pixel-densi
     { screenshotCaptureBackend: 'runner', screenshotPixelDensity: 3 },
     'INVALID_ARGS',
   );
+  await refused(
+    IOS_SIMULATOR,
+    { screenshotCaptureBackend: 'runner', screenshotNormalizeStatusBar: true },
+    'INVALID_ARGS',
+  );
   await refused(IOS_SIMULATOR, { screenshotCaptureBackend: 'simctl' }, 'INVALID_ARGS');
+});
+
+test('a --capture-backend runner request reaches the bound capture', async () => {
+  const fixture = screenshotRuntimeFixture();
+  const session = makeSession('ios', { device: IOS_SIMULATOR });
+  const req = screenshotRequest({
+    positionals: [path.join(mkdtempForTestSync('agent-device-runner-capture'), 'runner.png')],
+    flags: { screenshotCaptureBackend: 'runner' },
+  });
+
+  const resolved = await resolveScreenshotGenericExecution({
+    hostCwd: process.cwd(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req,
+    session,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+
+  await executeResult(resolved, session, req, contextFromFlags('/tmp/daemon.log', req.flags));
+  expect(fixture.captureScreenshot.mock.calls[0]?.[0]?.options?.captureBackend).toBe('runner');
 });
 
 const CROP_TREE_ROOT = {

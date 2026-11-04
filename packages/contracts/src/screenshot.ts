@@ -214,7 +214,7 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     enumValues: SCREENSHOT_CAPTURE_BACKENDS,
     usageLabel: '--capture-backend runner',
     usageDescription:
-      'Screenshot: on Apple targets capture through the XCTest runner (XCUIScreen), which leaves out the simulator-drawn Dynamic Island, instead of simctl; output is at the device density, so --pixel-density is refused with it',
+      'Screenshot: on Apple targets capture through the XCTest runner (XCUIScreen), which leaves out the simulator-drawn Dynamic Island, instead of simctl; refused on macOS surfaces the helper captures, and with --pixel-density, --screen-mask and --normalize-status-bar',
     projectConfig: true,
     recorded: false,
   },

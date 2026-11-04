@@ -176,6 +176,17 @@ test('screenshot script flags use the shared recorded flag contract', () => {
   ]);
 });
 
+test('the capture backend stays out of recorded scripts', () => {
+  const parts: string[] = [];
+  appendScreenshotScriptFlags(parts, { screenshotCaptureBackend: 'runner' });
+  assert.deepEqual(parts, []);
+  assert.equal(
+    SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS.find(({ key }) => key === 'screenshotCaptureBackend')
+      ?.recorded,
+    false,
+  );
+});
+
 test('explicit screenshot stabilization survives SDK projection and script recording', () => {
   const projected = screenshotFlagsFromOptions({ stabilize: true });
   assert.deepEqual(screenshotOptionsFromFlags(projected), { stabilize: true });

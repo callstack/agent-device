@@ -1,7 +1,6 @@
-import type { ScreenshotScreenMask } from './screenshot.ts';
+import type { ScreenshotCaptureBackend, ScreenshotScreenMask } from './screenshot.ts';
 // The public API vocabulary for snapshot, screenshot and diff capture.
 
-import type { ScreenshotCaptureBackend } from './screenshot.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { PublicSnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';

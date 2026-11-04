@@ -319,7 +319,7 @@ async function annotateScreenshotWithSessionRefs(
   });
 }
 
-/** The runner capture exists on Apple targets only, and it encodes the device's own density. */
+/** The runner capture exists on Apple targets only, and skips the simctl capture pipeline. */
 function assertSupportedScreenshotCaptureBackend(
   device: SessionState['device'],
   flags: DaemonRequest['flags'],
@@ -338,10 +338,10 @@ function assertSupportedScreenshotCaptureBackend(
       '--capture-backend runner is supported only on Apple targets',
     );
   }
-  if (flags?.screenshotPixelDensity !== undefined) {
+  if (flags?.screenshotPixelDensity !== undefined || flags?.screenshotNormalizeStatusBar) {
     throw new AppError(
       'INVALID_ARGS',
-      '--pixel-density cannot be combined with --capture-backend runner: the runner captures at the device density',
+      '--pixel-density and --normalize-status-bar cannot be combined with --capture-backend runner: they belong to the simctl capture',
     );
   }
 }

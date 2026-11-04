@@ -36,6 +36,7 @@ export type ScreenshotRuntimeOperations = Readonly<{
 
 export type ScreenshotCaptureCapabilities = Readonly<{
   screenMask?: boolean;
+  runner?: boolean;
 }>;
 
 type ScreenshotCaptureBindingOptions = Readonly<{
@@ -47,6 +48,13 @@ export async function assertScreenshotCaptureSupport(
   options: Readonly<ScreenshotOptions> | undefined,
   capabilities: ScreenshotCaptureCapabilities = {},
 ): Promise<void> {
+  if (options?.captureBackend === 'runner' && capabilities.runner === false) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      '--capture-backend runner cannot capture this surface: the macOS helper owns it',
+      { reason: 'screenshot-capture-backend-unsupported' },
+    );
+  }
   if (options?.screenMask === undefined) return;
   const { readScreenshotScreenMask } = await import('./screenshot.ts');
   const screenMask = readScreenshotScreenMask(options?.screenMask);
