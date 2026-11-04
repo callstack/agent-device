@@ -104,3 +104,42 @@ test('a record of an unknown schema version is unreadable', () => {
   expect(decodeStoredDeviceClaim(null)).toBeNull();
   expect(decodeStoredDeviceClaim([currentClaim()])).toBeNull();
 });
+
+test('close intent and an unconfirmed app event survive decoding without guessing missing authority', () => {
+  const intent = {
+    positionals: ['org.example.app'],
+    appBundleId: 'org.example.app',
+    surface: 'app',
+    mode: 'normal',
+    shutdownTarget: false,
+  };
+  const pending = {
+    recordingFence: { token: 'fence', generation: 2 },
+    recordingRuntimeOwner: { kind: 'local-family', family: 'android' },
+    recordingCleanupPending: true,
+    recordingClosePending: true,
+    recordingCloseIntent: intent,
+    recordingSessionOwner: { pid: 4242, startTime: 'start' },
+    recordingUnresolvedAppEvent: true,
+  };
+  expect(decodeStoredDeviceClaim(currentClaim(pending))).toMatchObject(pending);
+  expect(
+    decodeStoredDeviceClaim(currentClaim({ recordingUnresolvedAppEvent: true })),
+  ).toMatchObject({ recordingUnresolvedAppEvent: true });
+  expect(
+    decodeStoredDeviceClaim(currentClaim({ ...pending, recordingCloseIntent: undefined })),
+  ).toMatchObject({ recordingClosePending: true });
+  expect(
+    decodeStoredDeviceClaim(
+      currentClaim({ ...pending, recordingCloseIntent: { ...intent, positionals: [1] } }),
+    ),
+  ).toBeNull();
+  expect(
+    decodeStoredDeviceClaim(
+      currentClaim({ ...pending, recordingClosePending: undefined, recordingCloseIntent: intent }),
+    ),
+  ).toBeNull();
+  expect(
+    decodeStoredDeviceClaim(currentClaim({ ...pending, recordingSessionOwner: undefined })),
+  ).toBeNull();
+});

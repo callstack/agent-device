@@ -19,7 +19,11 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { deviceIdentity } from '@agent-device/kernel/device';
-import { inspectDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
+import {
+  abandonDeviceClaim,
+  acquireDeviceClaim,
+  inspectDeviceClaims,
+} from '@agent-device/daemon-contracts/device-claims';
 import { createOwnerScopedDeviceClaimReconciler } from '@agent-device/daemon-contracts/device-claim-recovery';
 import { handleAudioCommand } from '../../../sessions/session-observability/internal/session-audio.ts';
 import { handleAppEventCommand } from '../../../execution/handlers/session-selector-dispatch.ts';
@@ -162,139 +166,185 @@ test('a replacement claim cannot acquire a session owner obligation', async () =
   expect(f.store.requireCurrent(ref).audioProbe).toBeUndefined();
 });
 
-test('an app event retains the exact recording claim before launching its session owner', async () => {
-  const f = createFixture(setup);
-  const ref = f.publish(true);
-  expect((await f.record('start', f.workspace)).ok).toBe(true);
-  const original = inspectDeviceClaims({}, f.host.env)[0]!.claim!;
-  expect(original.recordingSessionOwner).toBeUndefined();
-  const child: { process?: ChildProcessWithoutNullStreams; exited?: Promise<unknown> } = {};
-  const trigger = vi.fn(async () => {
-    expect(inspectDeviceClaims({}, f.host.env)[0]?.claim).toMatchObject({
-      ownerToken: original.ownerToken,
-      recordingSessionOwner: { pid: process.pid, startTime: expect.any(String) },
-    });
-    const app = spawn(
-      process.execPath,
-      ['-e', String.raw`process.stdout.write('ready\n'); process.stdin.resume()`],
-      { stdio: ['pipe', 'pipe', 'pipe'] },
-    );
-    child.process = app;
-    child.exited = once(app, 'exit');
-    await once(app.stdout, 'data');
-  });
-  const base = f.gateway;
-  const originalFacts = await base.inspectFacts(f.device);
-  const facts = {
-    ...originalFacts,
-    operations: { ...originalFacts.operations, triggerAppEvent: { available: true as const } },
-  };
-  const gateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
-    ...base,
-    inspectFacts: async () => facts,
-    bind: async (input) => {
-      const binding = await base.bind(input);
-      return { ...binding, facts, operations: { ...binding.operations, triggerAppEvent: trigger } };
-    },
-  };
-  f.setGateway(gateway);
-  const host = {
-    ...f.host,
-    env: { ...f.host.env, AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE: 'test://event/{event}' },
-  };
-  const event = async (name: string) => {
-    const request = await f.scopeFor('trigger-app-event', name, f.workspace);
-    try {
-      return await request.runLocked(
-        async () =>
-          await handleAppEventCommand({
-            host,
-            req: request.req,
-            sessionName: request.sessionName,
-            logPath: request.requestLogPath,
-            sessionStore: f.store,
-            inspectFacts: request.inspectFacts,
-            bindDevice: request.bindDevice,
-            platformServices: {
-              ...request.platformServices,
-              resolveSessionAppBundleIdForTarget: async () => 'org.example.app',
-            },
-          }),
+test.each([
+  [false, false],
+  [false, true],
+  [true, false],
+  [true, true],
+])(
+  'an app event retains an unproven owner (before recording: %s, app context resolves: %s)',
+  async (beforeRecording, resolveIdentity) => {
+    const f = createFixture(setup);
+    const ref = f.publish(!beforeRecording);
+    if (beforeRecording) {
+      const acquired = await acquireDeviceClaim({
+        device: f.device,
+        session: 'recording',
+        workspace: f.workspace,
+        stateDir: f.stateDir,
+        env: f.host.env,
+        reconcileOrphanedDeviceClaim: async () => ({ status: 'retained', reason: 'test' }),
+      });
+      if (acquired.status !== 'acquired') throw new Error('test claim was not acquired');
+      f.store.update(ref, { deviceClaim: acquired.ownership });
+    } else expect((await f.record('start', f.workspace)).ok).toBe(true);
+    const original = inspectDeviceClaims({}, f.host.env)[0]!.claim!;
+    expect(original.recordingSessionOwner).toBeUndefined();
+    const child: { process?: ChildProcessWithoutNullStreams; exited?: Promise<unknown> } = {};
+    const trigger = vi.fn(async () => {
+      expect(inspectDeviceClaims({}, f.host.env)[0]?.claim).toMatchObject({
+        ownerToken: original.ownerToken,
+        ...(beforeRecording
+          ? {}
+          : { recordingSessionOwner: { pid: process.pid, startTime: expect.any(String) } }),
+        recordingUnresolvedAppEvent: true,
+      });
+      const app = spawn(
+        process.execPath,
+        ['-e', String.raw`process.stdout.write('ready\n'); process.stdin.resume()`],
+        { stdio: ['pipe', 'pipe', 'pipe'] },
       );
+      child.process = app;
+      child.exited = once(app, 'exit');
+      await once(app.stdout, 'data');
+    });
+    const base = f.gateway;
+    const originalFacts = await base.inspectFacts(f.device);
+    const facts = {
+      ...originalFacts,
+      operations: { ...originalFacts.operations, triggerAppEvent: { available: true as const } },
+    };
+    const gateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
+      ...base,
+      inspectFacts: async () => facts,
+      bind: async (input) => {
+        const binding = await base.bind(input);
+        return {
+          ...binding,
+          facts,
+          operations: { ...binding.operations, triggerAppEvent: trigger },
+        };
+      },
+    };
+    f.setGateway(gateway);
+    const host = {
+      ...f.host,
+      env: { ...f.host.env, AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE: 'test://event/{event}' },
+    };
+    const event = async (name: string) => {
+      const request = await f.scopeFor('trigger-app-event', name, f.workspace);
+      try {
+        return await request.runLocked(
+          async () =>
+            await handleAppEventCommand({
+              host,
+              req: request.req,
+              sessionName: request.sessionName,
+              logPath: request.requestLogPath,
+              sessionStore: f.store,
+              inspectFacts: request.inspectFacts,
+              bindDevice: request.bindDevice,
+              platformServices: {
+                ...request.platformServices,
+                resolveSessionAppBundleIdForTarget: async () =>
+                  resolveIdentity ? 'org.example.app' : undefined,
+              },
+            }),
+        );
+      } finally {
+        await request[Symbol.asyncDispose]();
+      }
+    };
+    try {
+      await expect(event('invalid event')).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+      expect(trigger).not.toHaveBeenCalled();
+      expect(inspectDeviceClaims({}, f.host.env)[0]?.claim?.recordingSessionOwner).toBeUndefined();
+      expect(await event('ready')).toMatchObject({ ok: true });
+      expect(trigger).toHaveBeenCalledOnce();
+      if (beforeRecording) {
+        expect(inspectDeviceClaims({}, f.host.env)[0]?.claim).toMatchObject({
+          ownerToken: original.ownerToken,
+          recordingUnresolvedAppEvent: true,
+        });
+        expect((await f.record('start', f.workspace)).ok).toBe(true);
+      }
+      const app = child.process;
+      if (!app || !child.exited) throw new Error('test app did not start');
+      expect(f.store.requireCurrent(ref).appBundleId).toBe(
+        resolveIdentity ? 'org.example.app' : undefined,
+      );
+      expect((await f.record('stop', f.workspace)).ok).toBe(true);
+      const retained = inspectDeviceClaims({}, f.host.env)[0]!.claim!;
+      expect(retained).toMatchObject({
+        ownerToken: original.ownerToken,
+        recordingSessionOwner: { pid: process.pid },
+        recordingUnresolvedAppEvent: true,
+      });
+      expect(await abandonDeviceClaim(f.store.requireCurrent(ref).deviceClaim, f.host.env)).toBe(
+        'cleanup-pending',
+      );
+      const reconcile = createOwnerScopedDeviceClaimReconciler({
+        scope: f.scope,
+        composeGateway: () => gateway,
+      });
+      expect(await reconcile(retained)).toMatchObject({
+        status: 'retained',
+        reason: 'screen-recording-session-owner-pending',
+      });
+      const other = new SessionStore(path.join(f.root, 'other-state', 'sessions'), f.host);
+      other.publish('recording', {
+        name: 'recording',
+        device: f.device,
+        createdAt: 1,
+        actions: [],
+        recordOnlySession: true,
+      });
+      f.start.mockClear();
+      expect(await f.record('start', f.workspace, other, new LeaseRegistry())).toMatchObject({
+        ok: false,
+        error: { code: 'DEVICE_IN_USE' },
+      });
+      expect(f.start).not.toHaveBeenCalled();
+      expect(app.exitCode).toBeNull();
+      for (const target of [undefined, 'org.example.app']) {
+        const close = await f.scopeFor('close', target, f.workspace);
+        const outcome = await close
+          .runLocked(
+            async () =>
+              await handleSessionCloseCommands({
+                host: f.host,
+                req: close.req,
+                sessionName: close.sessionName,
+                logPath: close.requestLogPath,
+                sessionStore: f.store,
+                leaseRegistry: f.registry,
+                inspectFacts: close.inspectFacts,
+                bindDevice: close.bindDevice,
+                platformServices: close.platformServices,
+                platformResourceCleanup: platformResourceCleanupFixture(),
+              }),
+          )
+          .then(
+            (value) => ({ value }),
+            (error: unknown) => ({ error }),
+          );
+        const disposal = await Promise.resolve(close[Symbol.asyncDispose]()).then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        expect(outcome).toMatchObject({ error: { details: { reason: 'cleanup-unconfirmed' } } });
+        expect(disposal).toBeUndefined();
+        expect(f.closeApplication).not.toHaveBeenCalled();
+        expect(app.exitCode).toBeNull();
+        expect(inspectDeviceClaims({}, f.host.env)[0]?.claim?.ownerToken).toBe(original.ownerToken);
+      }
     } finally {
-      await request[Symbol.asyncDispose]();
+      if (child.process && child.process.exitCode === null && child.process.signalCode === null)
+        child.process.kill('SIGKILL');
+      await child.exited;
     }
-  };
-  try {
-    await expect(event('invalid event')).rejects.toMatchObject({ code: 'INVALID_ARGS' });
-    expect(trigger).not.toHaveBeenCalled();
-    expect(inspectDeviceClaims({}, f.host.env)[0]?.claim?.recordingSessionOwner).toBeUndefined();
-    expect(await event('ready')).toMatchObject({ ok: true });
-    expect(trigger).toHaveBeenCalledOnce();
-    const app = child.process;
-    const exited = child.exited;
-    if (!app || !exited) throw new Error('test app did not start');
-    expect(f.store.requireCurrent(ref).appBundleId).toBe('org.example.app');
-    expect((await f.record('stop', f.workspace)).ok).toBe(true);
-    const retained = inspectDeviceClaims({}, f.host.env)[0]!.claim!;
-    expect(retained).toMatchObject({
-      ownerToken: original.ownerToken,
-      recordingSessionOwner: { pid: process.pid },
-    });
-    const reconcile = createOwnerScopedDeviceClaimReconciler({
-      scope: f.scope,
-      composeGateway: () => gateway,
-    });
-    expect(await reconcile(retained)).toMatchObject({
-      status: 'retained',
-      reason: 'screen-recording-session-owner-pending',
-    });
-    const other = new SessionStore(path.join(f.root, 'other-state', 'sessions'), f.host);
-    other.publish('recording', {
-      name: 'recording',
-      device: f.device,
-      createdAt: 1,
-      actions: [],
-      recordOnlySession: true,
-    });
-    f.start.mockClear();
-    expect(await f.record('start', f.workspace, other, new LeaseRegistry())).toMatchObject({
-      ok: false,
-      error: { code: 'DEVICE_IN_USE' },
-    });
-    expect(f.start).not.toHaveBeenCalled();
-    expect(app.exitCode).toBeNull();
-    f.closeApplication.mockImplementationOnce(async () => {
-      app.stdin.end();
-      await exited;
-    });
-    const close = await f.scopeFor('close', 'org.example.app', f.workspace);
-    expect(
-      await close.runLocked(
-        async () =>
-          await handleSessionCloseCommands({
-            host: f.host,
-            req: close.req,
-            sessionName: close.sessionName,
-            logPath: close.requestLogPath,
-            sessionStore: f.store,
-            leaseRegistry: f.registry,
-            inspectFacts: close.inspectFacts,
-            bindDevice: close.bindDevice,
-            platformServices: close.platformServices,
-            platformResourceCleanup: platformResourceCleanupFixture(),
-          }),
-      ),
-    ).toMatchObject({ ok: true });
-    await close[Symbol.asyncDispose]();
-    expect(app.exitCode).toBe(0);
-    expect(inspectDeviceClaims({}, f.host.env)).toHaveLength(0);
-  } finally {
-    if (child.process && child.process.exitCode === null && child.process.signalCode === null)
-      child.process.kill('SIGKILL');
-    await child.exited;
-  }
-});
+  },
+);
 
 test('an app event refuses a replacement claim after binding and before dispatch', async () => {
   const f = createFixture(setup);

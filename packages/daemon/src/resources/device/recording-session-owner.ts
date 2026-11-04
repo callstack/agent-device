@@ -7,10 +7,11 @@ import type { SessionRef } from '../../core/session-state.ts';
 export async function retainSessionOwnerForRecording(
   store: SessionStore,
   ref: SessionRef,
+  effect?: 'app-event',
 ): Promise<void> {
   const session = store.requireCurrent(ref);
   if (!session.deviceClaim) return;
-  const result = await retainRecordingClaimForSession(session.deviceClaim, store.host.env);
+  const result = await retainRecordingClaimForSession(session.deviceClaim, store.host.env, effect);
   if (result === 'retained' || result === 'ordinary') return;
   throw new AppError('DEVICE_IN_USE', 'The recording session owner is not settled', {
     reason: 'cleanup-unconfirmed',

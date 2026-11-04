@@ -6,7 +6,12 @@ import {
   type RuntimeOwnerRef,
 } from '@agent-device/contracts/platform-runtime';
 import { ownerIdentityMatches } from '@agent-device/host-kit/process';
-import type { DeviceClaim, DeviceClaimSessionOwnership } from './device-claim-record.ts';
+import {
+  sameRecordingCloseIntent,
+  type DeviceClaim,
+  type DeviceClaimSessionOwnership,
+  type RecordingCloseIntent,
+} from './device-claim-record.ts';
 import { writeDeviceClaim } from './device-claim-store.ts';
 import { writeOwnedDeviceClaim } from './device-claim-owned.ts';
 
@@ -14,19 +19,34 @@ import { writeOwnedDeviceClaim } from './device-claim-owned.ts';
 export async function retainRecordingClaimForSession(
   ownership: DeviceClaimSessionOwnership,
   env: EnvMap,
+  effect?: 'app-event',
 ): Promise<'retained' | 'ordinary' | 'ownership-changed' | 'cleanup-pending'> {
   return await writeOwnedDeviceClaim(
     ownership,
     env,
     (claim) => {
-      if (!claim.recordingFence) return 'ordinary' as const;
+      if (!claim.recordingFence) {
+        if (effect === 'app-event' && claim.claimOwnerKind === 'open-session')
+          writeDeviceClaim({ ...claim, recordingUnresolvedAppEvent: true }, env);
+        return 'ordinary' as const;
+      }
       if (claim.recordingCleanupPending || claim.recordingStartPending)
         return 'cleanup-pending' as const;
       const owner = { pid: ownership.ownerPid, startTime: ownership.ownerStartTime };
       if (claim.recordingSessionOwner && !ownerIdentityMatches(claim.recordingSessionOwner, owner))
         return 'ownership-changed' as const;
-      if (!claim.recordingSessionOwner)
-        writeDeviceClaim({ ...claim, recordingSessionOwner: owner }, env);
+      if (
+        !claim.recordingSessionOwner ||
+        (effect === 'app-event' && !claim.recordingUnresolvedAppEvent)
+      )
+        writeDeviceClaim(
+          {
+            ...claim,
+            recordingSessionOwner: claim.recordingSessionOwner ?? owner,
+            ...(effect === 'app-event' ? { recordingUnresolvedAppEvent: true as const } : {}),
+          },
+          env,
+        );
       return 'retained' as const;
     },
     () => 'ownership-changed' as const,
@@ -37,15 +57,25 @@ export async function retainRecordingClaimForSession(
 export async function holdRecordingClaimForClose(
   ownership: DeviceClaimSessionOwnership,
   env: EnvMap,
+  intent: RecordingCloseIntent,
 ): Promise<
   | {
       status: 'held';
       fence: ResourceOwnershipFence;
       owner: RuntimeOwnerRef;
       sessionOwner: DeviceClaim['recordingSessionOwner'];
+      intent: RecordingCloseIntent;
       resumed: boolean;
     }
-  | { status: 'ordinary' | 'cleanup-pending' | 'ownership-changed' }
+  | {
+      status:
+        | 'ordinary'
+        | 'cleanup-pending'
+        | 'ownership-changed'
+        | 'close-intent-mismatch'
+        | 'unresolved-app-event'
+        | 'session-owner-unconfirmed';
+    }
 > {
   return await writeOwnedDeviceClaim(
     ownership,
@@ -62,6 +92,13 @@ export async function holdRecordingClaimForClose(
         !claim.recordingFence
       )
         return { status: 'ordinary' } as const;
+      if (claim.recordingUnresolvedAppEvent) return { status: 'unresolved-app-event' } as const;
+      if (
+        intent.appBundleId !== null &&
+        claim.device.family !== 'web' &&
+        intent.positionals[0] !== intent.appBundleId
+      )
+        return { status: 'session-owner-unconfirmed' } as const;
       if (!claim.recordingRuntimeOwner) return { status: 'cleanup-pending' } as const;
       if (
         claim.recordingSessionOwner &&
@@ -73,9 +110,16 @@ export async function holdRecordingClaimForClose(
       )
         return { status: 'cleanup-pending' } as const;
       const resumed = claim.recordingClosePending === true;
+      if (resumed && !sameRecordingCloseIntent(claim.recordingCloseIntent, intent))
+        return { status: 'close-intent-mismatch' } as const;
       if (!resumed)
         writeDeviceClaim(
-          { ...claim, recordingCleanupPending: true, recordingClosePending: true },
+          {
+            ...claim,
+            recordingCleanupPending: true,
+            recordingClosePending: true,
+            recordingCloseIntent: intent,
+          },
           env,
         );
       return {
@@ -83,6 +127,7 @@ export async function holdRecordingClaimForClose(
         fence: claim.recordingFence,
         owner: claim.recordingRuntimeOwner,
         sessionOwner: claim.recordingSessionOwner,
+        intent,
         resumed,
       } as const;
     },
@@ -96,6 +141,7 @@ export async function finishRecordingClaimClose(
   fence: ResourceOwnershipFence,
   owner: RuntimeOwnerRef,
   sessionOwner: DeviceClaim['recordingSessionOwner'],
+  intent: RecordingCloseIntent,
   env: EnvMap,
   release: boolean,
 ): Promise<'settled' | 'ownership-changed'> {
@@ -106,6 +152,8 @@ export async function finishRecordingClaimClose(
       if (
         !claim.recordingCleanupPending ||
         !claim.recordingClosePending ||
+        claim.recordingUnresolvedAppEvent ||
+        !sameRecordingCloseIntent(claim.recordingCloseIntent, intent) ||
         !sameRecordingSessionOwner(claim.recordingSessionOwner, sessionOwner) ||
         claim.recordingStartPending ||
         claim.recordingFence?.token !== fence.token ||
@@ -120,6 +168,7 @@ export async function finishRecordingClaimClose(
           recordingCleanupPending: _,
           recordingCleanupProof: _proof,
           recordingClosePending: _close,
+          recordingCloseIntent: _intent,
           ...settled
         } = claim;
         writeDeviceClaim(settled, env);

@@ -232,7 +232,8 @@ export async function handleAppEventCommand(
     ...params,
     command: PUBLIC_COMMANDS.triggerAppEvent,
     resolveRuntime: (runtimeParams) => resolveBoundAppEventRuntime(runtimeParams),
-    beforeDispatch: async (ref) => await retainSessionOwnerForRecording(params.sessionStore, ref),
+    beforeDispatch: async (ref) =>
+      await retainSessionOwnerForRecording(params.sessionStore, ref, 'app-event'),
     updateSession: async (ref, result) => {
       const eventUrl = typeof result?.eventUrl === 'string' ? result.eventUrl : undefined;
       if (!eventUrl) return;

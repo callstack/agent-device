@@ -1,4 +1,7 @@
-import type { DeviceClaimSessionOwnership } from '@agent-device/daemon-contracts/device-claims';
+import type {
+  DeviceClaimSessionOwnership,
+  RecordingCloseIntent,
+} from '@agent-device/daemon-contracts/device-claims';
 import type { DeviceIdentity, DeviceInfo } from '@agent-device/kernel/device';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 import type { ExecutionPlan } from './execution-plan.ts';
@@ -47,6 +50,7 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
   holdRecordingClaimForClose?: (
     ownership: DeviceClaimSessionOwnership,
     device: DeviceInfo,
+    intent: RecordingCloseIntent,
   ) => Promise<(() => void) | undefined>;
   retryRecordingCloseCleanup?: () => Promise<'none' | 'settled' | 'released'>;
   markRecordingCloseEffectsStarted?: () => void;

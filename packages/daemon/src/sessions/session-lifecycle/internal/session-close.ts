@@ -304,7 +304,13 @@ export async function handleSessionCloseCommands(
     });
   }
   const releaseRecordingClaimAfterCleanup = session.deviceClaim
-    ? await req.internal?.holdRecordingClaimForClose?.(session.deviceClaim, session.device)
+    ? await req.internal?.holdRecordingClaimForClose?.(session.deviceClaim, session.device, {
+        positionals: [...(req.positionals ?? [])],
+        appBundleId: session.appBundleId ?? null,
+        surface: session.surface ?? 'app',
+        mode: req.internal?.killApp === true ? 'kill' : 'normal',
+        shutdownTarget: req.flags?.shutdown === true,
+      })
     : undefined;
   const repair = await prepareRepairClose({
     req,

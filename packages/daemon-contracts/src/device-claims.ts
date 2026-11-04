@@ -65,7 +65,7 @@ export type {
   DeviceClaimSelectors,
   InspectedDeviceClaim,
 } from './device-claim-inspection.ts';
-export type { DeviceClaim } from './device-claim-record.ts';
+export type { DeviceClaim, RecordingCloseIntent } from './device-claim-record.ts';
 export type { TakenOverDeviceClaim } from './device-claim-reboot.ts';
 export type { DeviceClaimReconciler } from './device-claim-settlement.ts';
 export type { DeviceClaimSessionOwnership } from './device-claim-record.ts';
@@ -695,7 +695,8 @@ export async function clearDeviceClaim(
       if (
         claim.recordingCleanupPending ||
         claim.recordingStartPending ||
-        claim.recordingSessionOwner
+        claim.recordingSessionOwner ||
+        (claim.recordingFence && claim.recordingUnresolvedAppEvent)
       )
         return 'cleanup-pending';
       try {
@@ -743,7 +744,13 @@ export async function abandonDeviceClaim(
     ownership,
     env,
     (claim) => {
-      if (claim.recordingCleanupPending || claim.recordingStartPending) return 'cleanup-pending';
+      if (
+        claim.recordingCleanupPending ||
+        claim.recordingStartPending ||
+        claim.recordingSessionOwner ||
+        (claim.recordingFence && claim.recordingUnresolvedAppEvent)
+      )
+        return 'cleanup-pending';
       const now = Date.now();
       writeDeviceClaim({ ...claim, abandonedAtMs: now, updatedAtMs: now }, env);
       return 'abandoned';

@@ -30,6 +30,30 @@ const DEVICE_CLAIM_OWNER_KINDS: readonly DeviceClaimOwnerKind[] = [
   'unstated',
 ];
 
+export type RecordingCloseIntent = Readonly<{
+  positionals: readonly string[];
+  appBundleId: string | null;
+  surface: string;
+  mode: 'normal' | 'kill';
+  shutdownTarget: boolean;
+}>;
+
+export function sameRecordingCloseIntent(
+  left: RecordingCloseIntent | undefined,
+  right: RecordingCloseIntent | undefined,
+): boolean {
+  return Boolean(
+    left &&
+    right &&
+    left.appBundleId === right.appBundleId &&
+    left.surface === right.surface &&
+    left.mode === right.mode &&
+    left.shutdownTarget === right.shutdownTarget &&
+    left.positionals.length === right.positionals.length &&
+    left.positionals.every((value, index) => value === right.positionals[index]),
+  );
+}
+
 /**
  * A claim owned by one process: the session or the sessionless command that took it. Its principal
  * is `ownerPid`/`ownerStartTime`/`ownerToken`, which is what every clearing surface matches on.
@@ -61,8 +85,12 @@ export type DeviceClaim = {
   recordingCleanupPending?: true;
   /** A session close still owns teardown as well as binding cleanup. */
   recordingClosePending?: true;
+  /** The exact close request whose effects are still being settled. */
+  recordingCloseIntent?: RecordingCloseIntent;
   /** The daemon that still owes settlement of a session owner attached to this recording. */
   recordingSessionOwner?: { pid: number; startTime: string | null };
+  /** An app event may have launched an owner the platform did not identify. */
+  recordingUnresolvedAppEvent?: true;
   /** Untrusted legacy phase metadata. It never authorizes cleanup or claim release. */
   recordingCleanupProof?:
     | 'stop-prepared'
@@ -122,7 +150,9 @@ function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
     recordingFence,
     recordingCleanupPending,
     recordingClosePending,
+    recordingCloseIntent,
     recordingSessionOwner,
+    recordingUnresolvedAppEvent,
     recordingCleanupProof,
     recordingRuntimeOwner,
     recordingStartPending,
@@ -167,6 +197,18 @@ function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
   )
     return null;
   if (
+    recordingCloseIntent !== undefined &&
+    (!recordingClosePending || !isRecordingCloseIntent(recordingCloseIntent))
+  )
+    return null;
+  if (
+    recordingUnresolvedAppEvent !== undefined &&
+    (recordingUnresolvedAppEvent !== true ||
+      !recordingKind ||
+      (recordingFence !== undefined && recordingSessionOwner === undefined))
+  )
+    return null;
+  if (
     recordingCleanupProof !== undefined &&
     (!recordingCleanupPending ||
       recordingRuntimeOwner === undefined ||
@@ -202,6 +244,8 @@ function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
       : {}),
     ...(recordingCleanupPending ? { recordingCleanupPending: true as const } : {}),
     ...(recordingClosePending ? { recordingClosePending: true as const } : {}),
+    ...(recordingCloseIntent === undefined ? {} : { recordingCloseIntent }),
+    ...(recordingUnresolvedAppEvent ? { recordingUnresolvedAppEvent: true as const } : {}),
     ...(recordingSessionOwner === undefined
       ? {}
       : {
@@ -224,6 +268,18 @@ function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
           },
         }),
   };
+}
+
+function isRecordingCloseIntent(value: unknown): value is RecordingCloseIntent {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.positionals) &&
+    value.positionals.every((item: unknown) => typeof item === 'string') &&
+    (value.appBundleId === null || typeof value.appBundleId === 'string') &&
+    isNonEmptyString(value.surface) &&
+    (value.mode === 'normal' || value.mode === 'kill') &&
+    typeof value.shutdownTarget === 'boolean'
+  );
 }
 
 function isKnownOwnerKind(value: unknown): value is DeviceClaimOwnerKind {

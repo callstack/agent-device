@@ -38,6 +38,7 @@ import {
 } from './device-claim-paths.ts';
 import {
   ownershipFromClaim,
+  sameRecordingCloseIntent,
   type DeviceClaim,
   type DeviceClaimSessionOwnership,
 } from './device-claim-record.ts';
@@ -383,7 +384,8 @@ export async function reserveRecordingClaimFence(
         ...claim,
         recordingFence: params.fence,
         recordingRuntimeOwner: params.owner,
-        ...(params.retainForSession && !claim.recordingSessionOwner
+        ...((params.retainForSession || claim.recordingUnresolvedAppEvent) &&
+        !claim.recordingSessionOwner
           ? {
               recordingSessionOwner: {
                 pid: params.ownership.ownerPid,
@@ -647,6 +649,7 @@ export type RetainedRecordingCleanup = Readonly<{
   startProof?: 'not-dispatched' | 'rolled-back';
   releaseWhenComplete?: boolean;
   sessionOwner?: DeviceClaim['recordingSessionOwner'];
+  closeIntent?: DeviceClaim['recordingCloseIntent'];
   retry(): Promise<'native-settled' | void>;
 }>;
 
@@ -686,7 +689,9 @@ export async function retryRecordingClaimCleanup(
       claim.recordingFence?.token !== retained.fence.token ||
       claim.recordingFence.generation !== retained.fence.generation ||
       (retained.purpose === 'close' &&
-        !sameSessionOwner(claim.recordingSessionOwner, retained.sessionOwner)) ||
+        (!sameSessionOwner(claim.recordingSessionOwner, retained.sessionOwner) ||
+          !sameRecordingCloseIntent(claim.recordingCloseIntent, retained.closeIntent) ||
+          claim.recordingUnresolvedAppEvent)) ||
       !claim.recordingRuntimeOwner ||
       !sameRuntimeOwner(claim.recordingRuntimeOwner, retained.owner)
     )
@@ -772,7 +777,9 @@ export async function retryRecordingClaimCleanup(
         after.recordingFence?.token !== retained.fence.token ||
         after.recordingFence.generation !== retained.fence.generation ||
         (retained.purpose === 'close' &&
-          !sameSessionOwner(after.recordingSessionOwner, retained.sessionOwner)) ||
+          (!sameSessionOwner(after.recordingSessionOwner, retained.sessionOwner) ||
+            !sameRecordingCloseIntent(after.recordingCloseIntent, retained.closeIntent) ||
+            after.recordingUnresolvedAppEvent)) ||
         !after.recordingRuntimeOwner ||
         !sameRuntimeOwner(after.recordingRuntimeOwner, retained.owner) ||
         !ownerIdentityMatches(

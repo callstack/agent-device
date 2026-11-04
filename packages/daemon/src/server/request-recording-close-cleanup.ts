@@ -5,6 +5,7 @@ import {
   finishRecordingClaimClose,
   holdRecordingClaimForClose,
   type DeviceClaimSessionOwnership,
+  type RecordingCloseIntent,
   type RetainedRecordingCleanup,
 } from '@agent-device/daemon-contracts/device-claims';
 import type { SessionStore } from '../core/session-store.ts';
@@ -51,17 +52,36 @@ export function createRequestRecordingCloseCleanup(params: {
         });
       return result;
     },
-    async hold(ownership: DeviceClaimSessionOwnership, device: DeviceInfo) {
+    async hold(
+      ownership: DeviceClaimSessionOwnership,
+      device: DeviceInfo,
+      intent: RecordingCloseIntent,
+    ) {
       if (finish)
         throw new AppError('COMMAND_FAILED', 'Recording claim cleanup is already pending', {
           reason: 'cleanup-unconfirmed',
         });
-      const held = await holdRecordingClaimForClose(ownership, params.env);
+      const held = await holdRecordingClaimForClose(ownership, params.env, intent);
       if (held.status === 'ordinary') return undefined;
       if (held.status === 'cleanup-pending')
         throw new AppError('COMMAND_FAILED', 'Recording runtime cleanup is not confirmed', {
           reason: 'cleanup-unconfirmed',
           retriable: true,
+        });
+      if (
+        held.status === 'close-intent-mismatch' ||
+        held.status === 'session-owner-unconfirmed' ||
+        held.status === 'unresolved-app-event'
+      )
+        throw new AppError('COMMAND_FAILED', 'Session close effects are not confirmed', {
+          reason: 'cleanup-unconfirmed',
+          retriable: held.status !== 'unresolved-app-event',
+          hint:
+            held.status === 'close-intent-mismatch'
+              ? 'Retry the previous close with the same target and options.'
+              : held.status === 'session-owner-unconfirmed'
+                ? 'Close the session app by its exact bundle ID before releasing the device.'
+                : 'The platform did not confirm which app the event opened, so the device claim remains held.',
         });
       if (held.status !== 'held') throw changedClaim();
       let release = false;
@@ -77,6 +97,7 @@ export function createRequestRecordingCloseCleanup(params: {
         purpose: 'close',
         releaseWhenComplete: release,
         sessionOwner: held.sessionOwner,
+        closeIntent: held.intent,
         retry,
       });
       finish = async () => {
@@ -86,6 +107,7 @@ export function createRequestRecordingCloseCleanup(params: {
           held.fence,
           held.owner,
           held.sessionOwner,
+          held.intent,
           params.env,
           release,
         );

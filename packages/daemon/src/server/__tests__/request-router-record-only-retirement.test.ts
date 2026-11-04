@@ -16,6 +16,7 @@ import {
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import { deviceIdentity } from '@agent-device/kernel/device';
+import { inspectDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
 import { type DaemonResponse, type DaemonResponseData } from '@agent-device/kernel/contracts';
 import { type Mock, beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
@@ -150,7 +151,7 @@ test('record stop leaves a session an open took over intact, and close releases 
   expect(sessionStore.requireCurrent(ref).screenRecording).toBeUndefined();
 
   // Only the close that owns the session's teardown releases the claim and the app log with it.
-  await unwrap(handler(request('close', [], 'req-close')));
+  await unwrap(handler(request('close', ['com.example.app'], 'req-close')));
   expect(sessionStore.get(SESSION)).toBeUndefined();
   expect(appLogResourceStore.read(appLogResourcePath(sessionStore))).toMatchObject({
     status: 'decoded',
@@ -242,8 +243,14 @@ test('record stop leaves a session an app-event and its app log attached intact'
     envelope: { lifecycle: 'completed' },
   });
 
-  await unwrap(handler(request('close', [], 'req-event-close')));
-  expect(sessionStore.get(SESSION)).toBeUndefined();
+  expect(await handler(request('close', [], 'req-event-close'))).toMatchObject({
+    ok: false,
+    error: { code: 'COMMAND_FAILED', details: { reason: 'cleanup-unconfirmed' } },
+  });
+  expect(sessionStore.get(SESSION)).toBeDefined();
+  expect(inspectDeviceClaims({}, sessionStore.host.env)[0]?.claim).toMatchObject({
+    recordingUnresolvedAppEvent: true,
+  });
 });
 
 test('record stop still retires a session that stayed record-only', async () => {
