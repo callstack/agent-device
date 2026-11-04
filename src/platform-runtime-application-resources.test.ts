@@ -9,8 +9,7 @@ import fs from 'node:fs';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { startDaemonRuntime } from '@agent-device/daemon';
-import { daemonRuntimeDepsFixture } from '../packages/daemon/src/__tests__/support/daemon-runtime-deps-fixture.ts';
-import { lifecycleDeviceRuntimeGateway } from '../packages/daemon/src/__tests__/support/test-device-runtime-gateway.ts';
+import { recordingDaemonDeps } from './__tests__/test-utils/recording-daemon.ts';
 
 function lifecycle(overrides: {
   hasTestImeRecoveryEvidence: AndroidApplicationTools['hasTestImeRecoveryEvidence'];
@@ -279,7 +278,6 @@ test('daemon close records sanitized application resource cleanup failures', asy
   const runtime = await startDaemonRuntime({
     host: createTestHostEnvironment({
       env: {
-        ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
         AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
         AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
@@ -287,9 +285,10 @@ test('daemon close records sanitized application resource cleanup failures', asy
     }),
     stderr: { write: () => {} },
     stdout: { write: () => {} },
-    composeDeps: daemonRuntimeDepsFixture({
-      deviceRuntimeGateway: { ...lifecycleDeviceRuntimeGateway, applicationLifecycle: resources },
-    }),
+    composeDeps: recordingDaemonDeps((gateway) => ({
+      ...gateway,
+      applicationLifecycle: resources,
+    })),
   });
   await expect(runtime.close()).rejects.toMatchObject({
     details: { reason: 'application_resource_shutdown_failed' },

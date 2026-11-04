@@ -2,17 +2,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
-import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  androidRecordingDescriptorFixture,
+  createTestHostEnvironment,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { androidScreenRecordingDescriptorCodec } from '../packages/platform-android/src/recording/manifest.ts';
 import { createPlatformRuntimeHost } from './platform-runtime-operation-host.ts';
 import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway.ts';
 import { startDaemonRuntime } from '@agent-device/daemon';
-import * as transport from '../packages/daemon/src/server/http/transport.ts';
-import { daemonRuntimeDepsFixture } from '../packages/daemon/src/__tests__/support/daemon-runtime-deps-fixture.ts';
-import { makeTestScreenRecordingResource } from '../packages/daemon/src/__tests__/support/screen-recording-live-handle.ts';
+import {
+  failDaemonHttpListen,
+  recordingDaemonDeps,
+  recordingRecoveryEnvelope,
+} from './__tests__/test-utils/recording-daemon.ts';
 
 vi.mock('@agent-device/host-kit/command', async (original) => ({
   ...(await original<typeof import('@agent-device/host-kit/command')>()),
@@ -27,32 +32,17 @@ test.each([false, true])(
     const stateDir = mkdtempForTestSync('startup-rollback-state-');
     const cache = mkdtempForTestSync('startup-rollback-cache-');
     const paths = resolveDaemonPaths(stateDir);
-    const resource = makeTestScreenRecordingResource({
-      name: 'session',
-      device: { platform: 'android', id: 'emulator-5554', name: 'fixture', kind: 'emulator' },
-    });
     const resourcePath = screenRecordingResourceStore.resolvePath(
       path.join(paths.sessionsDir, 'session'),
     );
-    const descriptor = androidScreenRecordingDescriptorCodec.encode({
-      backend: 'adb-screenrecord',
-      manifestPath: '/data/local/tmp/agent-device-recording-active.json',
-      outputPath: '/tmp/capture.mp4',
-      scope: 'device',
-      showTouches: true,
-      recordOnlySession: false,
-      transportMode: 'local',
-    });
-    expect(androidScreenRecordingDescriptorCodec.decode(descriptor)).toMatchObject({
+    const descriptor = androidRecordingDescriptorFixture;
+    screenRecordingResourceStore.write(resourcePath, recordingRecoveryEnvelope(descriptor));
+    expect(screenRecordingResourceStore.read(resourcePath)).toMatchObject({
       status: 'decoded',
-    });
-    screenRecordingResourceStore.write(resourcePath, {
-      ...resource.envelope,
-      descriptor: { version: 1, body: descriptor },
+      envelope: { descriptor: { body: descriptor } },
     });
     const host = createTestHostEnvironment({
       env: {
-        ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
         AGENT_DEVICE_SWIFT_CACHE_DIR: cache,
         AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
@@ -103,9 +93,10 @@ test.each([false, true])(
           throw new Error('password=cleanupsecret');
         return originalRemove(target, options);
       });
-    const listen = vi.spyOn(transport, 'listenHttpServer').mockImplementation(async () => {
-      await Promise.race([compilerStarted, listenerReleased]);
-      throw bindFailure;
+    const listen = failDaemonHttpListen(bindFailure, {
+      beforeFailure: async () => {
+        await Promise.race([compilerStarted, listenerReleased]);
+      },
     });
     let result: Promise<unknown> | undefined;
     try {
@@ -114,7 +105,7 @@ test.each([false, true])(
         host,
         stdout: { write: () => {} },
         stderr: { write: () => {} },
-        composeDeps: daemonRuntimeDepsFixture({ deviceRuntimeGateway: gateway }),
+        composeDeps: recordingDaemonDeps(() => gateway),
       });
       result = startup.catch((error: unknown) => {
         settled = true;
@@ -191,7 +182,6 @@ test('rollback closes the host before a late recording import', async () => {
   const paths = resolveDaemonPaths(stateDir);
   const host = createTestHostEnvironment({
     env: {
-      ...process.env,
       AGENT_DEVICE_STATE_DIR: stateDir,
       AGENT_DEVICE_SWIFT_CACHE_DIR: cache,
       AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
@@ -210,14 +200,14 @@ test('rollback closes the host before a late recording import', async () => {
     loadHost: async () => operationHost,
   });
   const failure = new Error('bind failed');
-  const listen = vi.spyOn(transport, 'listenHttpServer').mockRejectedValue(failure);
+  const listen = failDaemonHttpListen(failure);
   try {
     await expect(
       startDaemonRuntime({
         host,
         stdout: { write: () => {} },
         stderr: { write: () => {} },
-        composeDeps: daemonRuntimeDepsFixture({ deviceRuntimeGateway: gateway }),
+        composeDeps: recordingDaemonDeps(() => gateway),
       }),
     ).rejects.toBe(failure);
     await operationHost.screenRecording.finalize.prepare({ container: 'mp4' });
@@ -234,7 +224,6 @@ test('startup failure retains nested recording cleanup diagnostics', async () =>
   const stateDir = mkdtempForTestSync('startup-rollback-failure-');
   const host = createTestHostEnvironment({
     env: {
-      ...process.env,
       AGENT_DEVICE_STATE_DIR: stateDir,
       AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
       AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
@@ -275,14 +264,14 @@ test('startup failure retains nested recording cleanup diagnostics', async () =>
     reason: 'bind_failed',
     exitCode: 7,
   });
-  const listen = vi.spyOn(transport, 'listenHttpServer').mockRejectedValue(failure);
+  const listen = failDaemonHttpListen(failure);
   try {
     await expect(
       startDaemonRuntime({
         host,
         stdout: { write: () => {} },
         stderr: { write: () => {} },
-        composeDeps: daemonRuntimeDepsFixture({ deviceRuntimeGateway: gateway }),
+        composeDeps: recordingDaemonDeps(() => gateway),
       }),
     ).rejects.toMatchObject({
       code: 'COMMAND_FAILED',
@@ -316,30 +305,14 @@ test('a daemon admits requests while its recovery compiler remains pending', asy
   const stateDir = mkdtempForTestSync('startup-warm-admission-');
   const cache = mkdtempForTestSync('startup-warm-cache-');
   const paths = resolveDaemonPaths(stateDir);
-  const resource = makeTestScreenRecordingResource({
-    name: 'session',
-    device: { platform: 'android', id: 'emulator-5554', name: 'fixture', kind: 'emulator' },
-  });
   const resourcePath = screenRecordingResourceStore.resolvePath(
     path.join(paths.sessionsDir, 'session'),
   );
-  const descriptor = androidScreenRecordingDescriptorCodec.encode({
-    backend: 'adb-screenrecord',
-    manifestPath: '/data/local/tmp/agent-device-recording-active.json',
-    outputPath: '/tmp/capture.mp4',
-    scope: 'device',
-    showTouches: true,
-    recordOnlySession: false,
-    transportMode: 'local',
-  });
-  screenRecordingResourceStore.write(resourcePath, {
-    ...resource.envelope,
-    descriptor: { version: 1, body: descriptor },
-  });
+  const descriptor = androidRecordingDescriptorFixture;
+  screenRecordingResourceStore.write(resourcePath, recordingRecoveryEnvelope(descriptor));
   const originalResource = fs.readFileSync(resourcePath);
   const host = createTestHostEnvironment({
     env: {
-      ...process.env,
       AGENT_DEVICE_STATE_DIR: stateDir,
       AGENT_DEVICE_SWIFT_CACHE_DIR: cache,
       AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
@@ -374,7 +347,7 @@ test('a daemon admits requests while its recovery compiler remains pending', asy
       host,
       stdout: { write: () => {} },
       stderr: { write: () => {} },
-      composeDeps: daemonRuntimeDepsFixture({ deviceRuntimeGateway: gateway }),
+      composeDeps: recordingDaemonDeps(() => gateway),
     });
     await expect.poll(() => signal !== undefined, { timeout: 1500 }).toBe(true);
     runtime = await Promise.race([

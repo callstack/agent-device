@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { androidRecordingDescriptorFixture } from '@agent-device/test-kit';
 import {
   androidScreenRecordingDescriptorCodec,
   createNativeManifest,
@@ -52,15 +53,7 @@ test('decodes only complete, ordered Android native recording evidence', () => {
 
 test('accepts only a durable Android manifest path in the descriptor', () => {
   expect(
-    androidScreenRecordingDescriptorCodec.decode({
-      backend: 'adb-screenrecord',
-      manifestPath: '/data/local/tmp/agent-device-recording-active.json',
-      outputPath: '/tmp/capture.mp4',
-      scope: 'device',
-      showTouches: true,
-      recordOnlySession: false,
-      transportMode: 'local',
-    }),
+    androidScreenRecordingDescriptorCodec.decode(androidRecordingDescriptorFixture),
   ).toMatchObject({ status: 'decoded' });
   expect(
     androidScreenRecordingDescriptorCodec.decode({

@@ -180,3 +180,4 @@ export {
 } from './stream-capture.ts';
 
 export { prepareRecordingValidatorFixture } from './recording-video.ts';
+export { androidRecordingDescriptorFixture } from './android-recording-descriptor.ts';
