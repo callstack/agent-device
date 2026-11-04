@@ -82,7 +82,7 @@ extension RunnerTests {
   func testAlertActivationAfterDeadlineDoesNotTapTheOriginal() throws {
     defer { tearDownReplacementAlert() }
     let alert = try launchReplacementAlert()
-    let button = try XCTUnwrap(alert.buttons.first { $0.label == "OK" })
+    let button = try XCTUnwrap(alert.actions.first { $0.label == "OK" })
     let frame = button.frame
 
     let outcome = try activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantPast)
@@ -99,11 +99,11 @@ extension RunnerTests {
     let alert = RunnerAlert(
       root: resolved.root,
       ownerApp: resolved.ownerApp,
-      buttons: resolved.buttons,
+      actions: resolved.actions,
       source: resolved.source,
       window: app.windows.matching(identifier: "agent-device-missing-window").firstMatch
     )
-    let button = try XCTUnwrap(alert.buttons.first { $0.label == "OK" })
+    let button = try XCTUnwrap(alert.actions.first { $0.label == "OK" })
 
     let frame = button.frame
     let options = XCTExpectedFailure.Options()
@@ -123,7 +123,7 @@ extension RunnerTests {
   func testAlertDeadlineDuringSynthesisPreparationLeavesTheOriginalUntouched() throws {
     defer { tearDownReplacementAlert() }
     let alert = try launchReplacementAlert()
-    let button = try XCTUnwrap(alert.buttons.first { $0.label == "OK" })
+    let button = try XCTUnwrap(alert.actions.first { $0.label == "OK" })
     let frame = button.frame
     try withAlertTapStub {
       let outcome = try activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantFuture)
@@ -190,7 +190,7 @@ extension RunnerTests {
 
   @MainActor
   private func assertAlertActivationDisablesInterruptionHandling(_ alert: RunnerAlert) throws {
-    let button = try XCTUnwrap(alert.buttons.first { $0.label == "OK" })
+    let button = try XCTUnwrap(alert.actions.first { $0.label == "OK" })
     let frame = button.frame
     try withAlertTapStub {
       AlertTapDeadlineStub.status = .deadlineExceeded

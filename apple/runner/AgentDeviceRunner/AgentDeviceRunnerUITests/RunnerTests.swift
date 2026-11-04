@@ -38,8 +38,8 @@ final class RunnerTests: XCTestCase {
   /// channel, so the runner cannot tell whether an input is there.
   /// `ALERT_BUTTON_NOT_FOUND` is the alert button choice refusing before any activation, so it
   /// discloses dispatched: no.
-  /// `ALERT_UNRESOLVED` is a visible blocking system modal whose host could not be read: a prompt
-  /// is on screen, so it must never read as absence. It activates nothing, so dispatched: no.
+  /// `ALERT_UNRESOLVED` means required alert acquisition failed or exhausted its deadline.
+  /// It establishes no absence and activates nothing, so dispatched: no.
   enum RunnerWireErrorCode {
     static let mainThreadTimeout = "MAIN_THREAD_TIMEOUT"
     static let appNotRunning = "APP_NOT_RUNNING"
@@ -245,6 +245,7 @@ final class RunnerTests: XCTestCase {
   /// out-of-process sheet the tier cannot read. Production builds compile none of this.
   var privateAXAcquisitionOverrideForTesting: (() -> SnapshotAcquisition?)?
   var blockingSystemModalPresenceOverrideForTesting: Bool?
+  var modalElementsQueryOverrideForTesting: (() -> [XCUIElement])?
   var alertResolutionOverrideForTesting: (@MainActor (Date) -> AlertResolution)?
   var alertButtonHittabilityProbeOverrideForTesting: (@MainActor (Date) -> Bool)?
   // Unit-test-only seam for the in-place surface probe (`presentedSystemSurfaceHost`): a registered

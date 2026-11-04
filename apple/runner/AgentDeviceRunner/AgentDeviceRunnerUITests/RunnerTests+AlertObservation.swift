@@ -82,9 +82,6 @@ extension RunnerTests {
     case .timedOut:
       code = "ALERT_DEADLINE_EXCEEDED"
       message = "alert \(action) exhausted its deadline"
-    case .stillVisible:
-      code = "INTERACTION_FAILED"
-      message = "alert \(action) still observes an unchanged alert presentation"
     case .unconfirmed:
       code = "ALERT_CONFIRMATION_UNAVAILABLE"
       message = "alert \(action) could not read the alert presentation"

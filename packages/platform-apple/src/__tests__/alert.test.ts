@@ -347,29 +347,151 @@ test('a wait that polls past an unreadable prompt into a readable one answers it
   assert.deepEqual(result, { title: 'Pair accessory' });
 });
 
-test('an exhausted accept on an unreadable prompt keeps the runner hint, not the absence fallback', async () => {
-  vi.useFakeTimers();
-  let calls = 0;
-  mockRunner.mockImplementation(async () => {
-    calls += 1;
-    throw runnerUnresolved();
-  });
+test.each(['accept', 'dismiss'] as const)(
+  'an exhausted %s on an unreadable prompt keeps the runner hint, not the absence fallback',
+  async (action) => {
+    vi.useFakeTimers();
+    let calls = 0;
+    mockRunner.mockImplementation(async () => {
+      calls += 1;
+      throw runnerUnresolved();
+    });
 
-  const outcome = actOnAppleAlert(
+    const outcome = actOnAppleAlert(
+      IOS_SIMULATOR,
+      runnerOptions,
+      action,
+      undefined,
+      process.env,
+    ).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await vi.advanceTimersByTimeAsync(3_500);
+    const error = (await outcome) as AppError;
+
+    assert.ok(calls > 1, 'an unreadable prompt is retried in the action window');
+    assert.equal(error.code, ALERT_UNRESOLVED_RUNNER_CODE);
+    assert.match(String(error.details?.hint), /screenshot/);
+    assert.doesNotMatch(String(error.details?.hint), /scoped snapshot/i);
+  },
+);
+
+test.each([
+  ['unresolved', 4_630],
+  ['absent', 4_630],
+  ['unresolved', 4_400],
+  ['absent', 4_400],
+] as const)(
+  'a wait retains a completed %s observation after a %d ms read',
+  async (state, readMs) => {
+    vi.useFakeTimers();
+    const observed = state === 'unresolved' ? runnerUnresolved() : runnerAbsence();
+    mockRunner.mockImplementation(async () => {
+      if (mockRunner.mock.calls.length > 1) {
+        throw new AppError('COMMAND_FAILED', 'runner timed out', {
+          runnerErrorCode: 'MAIN_THREAD_TIMEOUT',
+          dispatched: 'no',
+        });
+      }
+      await new Promise((resolve) => setTimeout(resolve, readMs));
+      throw observed;
+    });
+    let settled = false;
+    const outcome = awaitAppleAlert(IOS_SIMULATOR, runnerOptions, { timeoutMs: 5_000 }, process.env)
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      )
+      .then((result) => {
+        settled = true;
+        return result;
+      });
+    await vi.advanceTimersByTimeAsync(4_999);
+    assert.equal(mockRunner.mock.calls.length, 1);
+    assert.equal(settled, false);
+    await vi.advanceTimersByTimeAsync(1);
+    const error = (await outcome) as AppError;
+    assert.equal(mockRunner.mock.calls.length, 1);
+    assert.equal(
+      (mockRunner.mock.calls[0]?.[1] as { timeoutMs: number } | undefined)?.timeoutMs,
+      5_000,
+    );
+    assert.equal((mockRunner.mock.calls[0]?.[1] as { action: string } | undefined)?.action, 'get');
+    if (state === 'unresolved') {
+      assert.equal(error, observed);
+      assert.equal(error.details?.dispatched, 'no');
+    } else {
+      assert.equal(error.message, 'alert wait timed out');
+      assert.equal(error.details?.runnerErrorCode, ALERT_NOT_FOUND_RUNNER_CODE);
+    }
+  },
+);
+
+test('a dispatched wait read propagates its main-thread watchdog after an unresolved observation', async () => {
+  vi.useFakeTimers();
+  const watchdog = new AppError('COMMAND_FAILED', 'runner main thread timed out', {
+    runnerErrorCode: 'MAIN_THREAD_TIMEOUT',
+    dispatched: 'no',
+  });
+  mockRunner.mockImplementation(async (_device, command) => {
+    if (mockRunner.mock.calls.length === 1) throw runnerUnresolved();
+    await new Promise((resolve) =>
+      setTimeout(resolve, (command as { timeoutMs: number }).timeoutMs),
+    );
+    throw watchdog;
+  });
+  const outcome = awaitAppleAlert(
     IOS_SIMULATOR,
     runnerOptions,
-    'accept',
-    undefined,
+    { timeoutMs: 5_000 },
     process.env,
   ).then(
     () => undefined,
     (error: unknown) => error,
   );
-  await vi.advanceTimersByTimeAsync(3_500);
-  const error = (await outcome) as AppError;
-
-  assert.ok(calls > 1, 'an unreadable prompt is retried in the action window');
-  assert.equal(error.code, ALERT_UNRESOLVED_RUNNER_CODE);
-  assert.match(String(error.details?.hint), /screenshot/);
-  assert.doesNotMatch(String(error.details?.hint), /scoped snapshot/i);
+  await vi.advanceTimersByTimeAsync(5_000);
+  assert.equal(await outcome, watchdog);
+  assert.equal(mockRunner.mock.calls.length, 2);
+  assert.equal(
+    (mockRunner.mock.calls[1]?.[1] as { timeoutMs: number } | undefined)?.timeoutMs,
+    4_700,
+  );
+  assert.ok(
+    mockRunner.mock.calls.every((call) => (call[1] as { action: string }).action === 'get'),
+  );
+  assert.equal(watchdog.details?.dispatched, 'no');
 });
+
+test('a wait admits another read when more than one poll interval remains', async () => {
+  vi.useFakeTimers();
+  mockRunner.mockImplementation(async () => {
+    if (mockRunner.mock.calls.length === 1) {
+      await new Promise((resolve) => setTimeout(resolve, 4_399));
+      throw runnerUnresolved();
+    }
+    return { title: 'Ready' };
+  });
+  const outcome = awaitAppleAlert(IOS_SIMULATOR, runnerOptions, { timeoutMs: 5_000 }, process.env);
+  await vi.advanceTimersByTimeAsync(4_699);
+  assert.deepEqual(await outcome, { title: 'Ready' });
+  assert.equal(
+    (mockRunner.mock.calls[1]?.[1] as { timeoutMs: number } | undefined)?.timeoutMs,
+    301,
+  );
+});
+
+test.each(['accept', 'dismiss'] as const)(
+  'an %s retries an unresolved alert and acts when controls become readable',
+  async (action) => {
+    vi.useFakeTimers();
+    mockRunner.mockRejectedValueOnce(runnerUnresolved()).mockResolvedValueOnce({ message: 'done' });
+    const outcome = actOnAppleAlert(IOS_SIMULATOR, runnerOptions, action, undefined, process.env);
+    await vi.advanceTimersByTimeAsync(300);
+    assert.deepEqual(await outcome, { message: 'done' });
+    assert.equal(mockRunner.mock.calls.length, 2);
+    assert.ok(
+      mockRunner.mock.calls.every((call) => (call[1] as { action: string }).action === action),
+    );
+  },
+);

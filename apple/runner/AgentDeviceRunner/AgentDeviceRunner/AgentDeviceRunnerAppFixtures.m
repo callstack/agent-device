@@ -12,6 +12,29 @@
 #import <UIKit/UIKit.h>
 #import <UserNotifications/UserNotifications.h>
 
+// Mirrors the App Tracking Transparency prompt's real button order: the affirmative button is
+// last (#3627). The answer label records which button the app actually took, so a test asserts
+// the app's answer instead of the command's own report. `--agent-device-alert-affirmative-only`
+// shows the same alert with no decline button at all.
+static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, UILabel *answer) {
+  UIAlertController *alert = [UIAlertController
+    alertControllerWithTitle:@"“Runner” Would Like to Track Your Activity"
+                     message:@"Track your activity across other companies' apps and websites."
+              preferredStyle:UIAlertControllerStyleAlert];
+  NSArray<NSArray *> *buttons = affirmativeOnly
+      ? @[ @[@"Allow", @"Authorized"], @[@"OK", @"Authorized"] ]
+      : @[ @[@"Ask App Not to Track", @"Declined"], @[@"Allow", @"Authorized"] ];
+  for (NSArray *button in buttons) {
+    [alert addAction:[UIAlertAction actionWithTitle:button[0]
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+                                              (void)action;
+                                              answer.text = button[1];
+                                            }]];
+  }
+  return alert;
+}
+
 // A plain text field whose accessibility value is the masked rendering of its text. This is how
 // a React Native `secureTextEntry` input reaches XCTest: `.textField`, not `.secureTextField`,
 // with a value of bullets (tester-army/e2e#872).
@@ -354,7 +377,7 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
   for (NSString *buttonTitle in @[@"Cancel", @"OK"]) {
     UIAlertActionStyle style = [buttonTitle isEqualToString:@"Cancel"]
         ? UIAlertActionStyleCancel : UIAlertActionStyleDefault;
-    [alert addAction:[UIAlertAction actionWithTitle:buttonTitle style:style handler:^(UIAlertAction *action) {
+    UIAlertAction *button = [UIAlertAction actionWithTitle:buttonTitle style:style handler:^(UIAlertAction *action) {
       (void)action;
       if (!replacement) {
         self.alertActivationBusyAnswer.text = self.alertActivationBusyBackstop != nil
@@ -373,33 +396,17 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
           [self presentAlertFixtureReplacement:YES];
         }];
       }
-    }]];
+    }];
+    button.enabled = ![arguments containsObject:@"--agent-device-alert-replacement-disabled-buttons"];
+    [alert addAction:button];
   }
   [self presentViewController:alert animated:NO completion:nil];
 }
 
-// Mirrors the App Tracking Transparency prompt's real button order: the affirmative button is
-// last (#3627). The answer label records which button the app actually took, so a test asserts
-// the app's answer instead of the command's own report. `--agent-device-alert-affirmative-only`
-// shows the same alert with no decline button at all.
 - (void)presentAlertDeclineChoiceFixture {
   BOOL affirmativeOnly =
       [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-affirmative-only"];
-  UIAlertController *alert = [UIAlertController
-    alertControllerWithTitle:@"“Runner” Would Like to Track Your Activity"
-                     message:@"Track your activity across other companies' apps and websites."
-              preferredStyle:UIAlertControllerStyleAlert];
-  NSArray<NSArray *> *buttons = affirmativeOnly
-      ? @[ @[@"Allow", @"Authorized"], @[@"OK", @"Authorized"] ]
-      : @[ @[@"Ask App Not to Track", @"Declined"], @[@"Allow", @"Authorized"] ];
-  for (NSArray *button in buttons) {
-    [alert addAction:[UIAlertAction actionWithTitle:button[0]
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction *action) {
-                                              (void)action;
-                                              self.alertDeclineAnswer.text = button[1];
-                                            }]];
-  }
+  UIAlertController *alert = RunnerAlertDeclineChoiceFixture(affirmativeOnly, self.alertDeclineAnswer);
   [self presentViewController:alert animated:NO completion:nil];
 }
 

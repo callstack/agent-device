@@ -272,7 +272,7 @@ extension RunnerTests {
       let held = holdingRecordedIssues {
         do {
           _ = try activateAlertButton(
-            RunnerAlert(root: app, ownerApp: app, buttons: [app], source: .appAlert, window: nil),
+            RunnerAlert(root: app, ownerApp: app, actions: [app], source: .appAlert, window: nil),
             button: app, action: "accept", frame: CGRect(x: 10, y: 10, width: 40, height: 40), deadline: .distantFuture
           )
         } catch { alertRefusal = error }

@@ -645,15 +645,8 @@ extension RunnerTests {
           ok: false,
           error: ErrorPayload(code: "ALERT_NOT_FOUND", message: "alert not found")
         )
-      case .unresolved:
-        return Response(
-          ok: false,
-          error: ErrorPayload(
-            code: RunnerWireErrorCode.alertUnresolved,
-            message: "a system prompt is visible but its buttons could not be read",
-            hint: RunnerTests.alertUnresolvedHint
-          )
-        )
+      case .unresolved, .notActionable:
+        return alertUnresolvedResponse()
       }
     case .gesture:
       guard let plan = command.gesturePlan else {
