@@ -4,10 +4,10 @@ import type { ReadinessPhase } from '@agent-device/contracts/wait';
 import { createDetachedAttempts, waitForDetachedAttempt } from './detached-attempt.ts';
 import {
   readSimctlDevicesByRuntime,
-  runSimctlForDevice,
   simulatorAddressFor,
   type SimulatorAddress,
 } from './core/simctl.ts';
+import { runSimctlForDevice } from './core/simctl-execution.ts';
 import { readSnapshotTargetProcessStartTime } from './snapshot-process.ts';
 
 /** Identity re-check of a cached target: one local `ps`, never CoreSimulator IPC. */

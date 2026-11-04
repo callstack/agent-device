@@ -53,15 +53,17 @@ const SCHEME_PROBES = [
 
 function createSchemeTool(
   fixture: SchemeFixture,
-  options: { failFirstProbes?: number } = {},
+  options: { failFirstAppAProbe?: boolean } = {},
 ): { handle: (args: string[]) => FakeAppleToolResponse; probeCount: () => number } {
   let probeCount = 0;
+  let failedAppA = false;
 
   const respondToPlutil = (plistPath: string): FakeAppleToolResponse => {
     const probe = SCHEME_PROBES.find((candidate) => plistPath.endsWith(candidate.suffix));
     if (!probe) return '{}';
     probeCount += 1;
-    if (options.failFirstProbes !== undefined && probeCount <= options.failFirstProbes) {
+    if (options.failFirstAppAProbe && plistPath === fixture.plistA && !failedAppA) {
+      failedAppA = true;
       return { stdout: '', exitCode: 1 };
     }
     return probe.schemesJson;
@@ -97,7 +99,7 @@ test('resolveIosSimulatorDeepLinkBundleId memoizes per-app url-scheme probes', a
 
 test('a failed url-scheme probe is retried on the next lookup instead of cached', async () => {
   const fixture = await makeSchemeFixture();
-  const tool = createSchemeTool(fixture, { failFirstProbes: 1 });
+  const tool = createSchemeTool(fixture, { failFirstAppAProbe: true });
 
   await withFakeAppleTool(tool.handle, async () => {
     const duringFailure = await resolveIosSimulatorDeepLinkBundleId(
@@ -139,4 +141,38 @@ test('rewriting the Info.plist invalidates the cached scheme set', async () => {
     );
     assert.equal(plutilProbes(), probesBeforeRewrite + 1);
   });
+});
+
+test('deep-link ownership reads app metadata serially and still detects ambiguous owners', async () => {
+  const { createLocalAppleToolProvider, withAppleToolProvider } =
+    await import('../tool-provider.ts');
+  let active = 0;
+  let peak = 0;
+  let reads = 0;
+  const apps = Array.from({ length: 20 }, (_, index) => ({
+    bundleId: `com.example.app${index}`,
+    name: `App ${index}`,
+    applicationType: 'User',
+  }));
+  const provider = createLocalAppleToolProvider({
+    simulatorApps: {
+      list: async () => ({ type: 'listed', apps }),
+      readInfoPlist: async () => {
+        active += 1;
+        peak = Math.max(peak, active);
+        reads += 1;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        active -= 1;
+        return { CFBundleURLTypes: [{ CFBundleURLSchemes: ['shared'] }] };
+      },
+    },
+  });
+  await withAppleToolProvider(provider, async () => {
+    assert.equal(
+      await resolveIosSimulatorDeepLinkBundleId(IOS_TEST_SIMULATOR, 'shared://home'),
+      undefined,
+    );
+  });
+  assert.equal(reads, 20);
+  assert.equal(peak, 1);
 });

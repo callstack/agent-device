@@ -1,8 +1,8 @@
 import { beforeEach, describe, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 
-vi.mock('../simctl.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../simctl.ts')>();
+vi.mock('../simctl-execution.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../simctl-execution.ts')>();
   return {
     ...actual,
     runSimctlForDevice: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
@@ -49,7 +49,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { runXcrun } from '../tool-provider.ts';
 import { readHostTextFile } from '@agent-device/host-kit/host-file';
-import { runSimctlForDevice } from '../simctl.ts';
+import { runSimctlForDevice } from '../simctl-execution.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { ensureFoldHelperBinary } from '../../foldable/fold-helper-cache.ts';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';

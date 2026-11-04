@@ -8,7 +8,7 @@ import {
 } from '@agent-device/host-kit/command';
 
 import { IOS_HINGE_ANGLE_READ_TIMEOUT_MS } from '../core/config.ts';
-import { runSimctlForDevice } from '../core/simctl.ts';
+import { runSimctlForDevice } from '../core/simctl-execution.ts';
 import { ensureFoldHelperBinary, type FoldHelperBinary } from './fold-helper-cache.ts';
 
 /** The read returned no usable sample; the details say why. */

@@ -13,3 +13,8 @@ export type {
   AppleToolProvider,
   AppleToolSubcommandExecutor,
 } from './core/tool-provider.ts';
+
+export async function readSimctlContainerPath(stdout: string): Promise<string | undefined> {
+  const simctl = await import('./core/simctl.ts');
+  return simctl.readSimctlContainerPath(stdout);
+}

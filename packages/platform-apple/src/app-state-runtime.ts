@@ -16,7 +16,9 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
  * the simulator host in the runner-demand table, since it demands no runner of its own.
  */
 export function bindAppleAppStateRuntime(
-  host: Pick<PlatformRuntimeHost, 'appleApplications'>,
+  host: {
+    appleApplications: Pick<PlatformRuntimeHost['appleApplications'], 'hasLiveRunnerSession'>;
+  },
   params: Readonly<{
     device: DeviceInfo;
     signal: AbortSignal;

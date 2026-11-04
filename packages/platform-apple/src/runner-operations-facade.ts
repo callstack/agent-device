@@ -41,3 +41,11 @@ export async function cleanupRunnerLeasesForOwner(
   const { runnerLeaseCleanupAdapter } = await import('@agent-device/apple-runner');
   await cleanup(owner, runnerLeaseCleanupAdapter);
 }
+
+/** Binds provider-owned sessions to the shared Apple runner execution. */
+export async function createAppleRunnerRuntime(
+  options: Parameters<typeof import('./runner-runtime.ts').createAppleRunnerRuntime>[0],
+) {
+  const { createAppleRunnerRuntime } = await import('./runner-runtime.ts');
+  return createAppleRunnerRuntime(options);
+}

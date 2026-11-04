@@ -684,3 +684,102 @@ test.each([
     expect(uninstalls()).toEqual([argv]);
   },
 );
+
+test.each([false, true])(
+  'reinstall clears the old app before preparing and installing with a hosted installer: %s',
+  async (hosted) => {
+    const events: string[] = [];
+    const artifact = {
+      installablePath: '/tmp/new.app',
+      bundleId: 'com.example.app',
+      cleanup: async () => {
+        events.push('cleanup');
+      },
+    };
+    const executor: AppleAppDeploymentExecutor = {
+      withInvalidatedAppResolutionCache: async (_device, operation) => {
+        events.push('invalidate-before');
+        try {
+          return await operation();
+        } finally {
+          events.push('invalidate-after');
+        }
+      },
+      resolveAppBundleId: async () => 'com.example.app',
+      prepareArtifact: async () => {
+        events.push('materialize');
+        return artifact;
+      },
+    };
+    const host = deploymentHost(
+      executor,
+      xcrunLikeRun((request) => {
+        if (request.args[0] === 'uninstall') events.push('uninstall');
+        if (request.args[0] === 'install') events.push('native-install');
+        return bootedSimulatorListResult(request);
+      }),
+    );
+    const operations = createAppleAppDeploymentOperations({
+      host,
+      device: appleDevice(),
+      signal: new AbortController().signal,
+      ...(hosted
+        ? {
+            install: async () => {
+              events.push('hosted-install');
+              return { bundleId: 'com.example.app' };
+            },
+          }
+        : {}),
+    });
+    expect(
+      await operations.deployApp!({
+        app: 'Example',
+        appPath: '/tmp/new.app',
+        replaceExisting: true,
+      }),
+    ).toEqual({ bundleId: 'com.example.app', launchTarget: 'com.example.app' });
+    expect(events).toEqual([
+      'invalidate-before',
+      'uninstall',
+      'materialize',
+      hosted ? 'hosted-install' : 'native-install',
+      'cleanup',
+      'invalidate-after',
+    ]);
+  },
+);
+
+test.each([
+  [{}, { bundleId: 'com.example.app', appName: 'Example', launchTarget: 'com.example.app' }],
+  [
+    { bundleId: 'com.installed.app' },
+    { bundleId: 'com.installed.app', appName: 'Example', launchTarget: 'com.installed.app' },
+  ],
+  [
+    { bundleId: 'com.installed.app', appName: 'Installed', launchTarget: 'installed://home' },
+    { bundleId: 'com.installed.app', appName: 'Installed', launchTarget: 'installed://home' },
+  ],
+])(
+  'hosted install preserves metadata and fills artifact defaults: %j',
+  async (result, expected) => {
+    const run = xcrunLikeRun(bootedSimulatorListResult);
+    const operations = createAppleAppDeploymentOperations({
+      host: deploymentHost({} as AppleAppDeploymentExecutor, run),
+      device: appleDevice(),
+      signal: new AbortController().signal,
+      install: async () => result,
+    });
+    await expect(
+      operations.deployMaterializedApp!({
+        artifact: {
+          installablePath: '/tmp/Example.app',
+          bundleId: 'com.example.app',
+          appName: 'Example',
+          cleanup: async () => {},
+        },
+      }),
+    ).resolves.toEqual(expected);
+    expect(run).not.toHaveBeenCalled();
+  },
+);
