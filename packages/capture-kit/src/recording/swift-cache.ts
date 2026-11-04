@@ -8,9 +8,14 @@ import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
-import { acquireProcessLock, type ProcessLockRelease } from '@agent-device/host-kit/file';
+import {
+  acquireProcessLock,
+  publishFileSync,
+  type ProcessLockRelease,
+} from '@agent-device/host-kit/file';
 
 const SWIFT_CACHE_VERSION = '2';
+const SWIFT_SOURCE_TEXT_CACHE_VERSION = '3';
 const LOCK_RETRY_DELAY_MS = 25;
 // swift-driver runs each frontend job in its own process group. It stops them on SIGINT, but
 // SIGKILL or SIGTERM leaves them compiling with no parent.
@@ -132,7 +137,12 @@ type SwiftSourceTextInput = Readonly<{
 
 function swiftSourceTextPaths(params: SwiftSourceTextInput) {
   const cacheName = sanitizeCacheName(params.cacheName);
-  const key = hashParts([SWIFT_CACHE_VERSION, process.platform, process.arch, params.source]);
+  const key = hashParts([
+    SWIFT_SOURCE_TEXT_CACHE_VERSION,
+    process.platform,
+    process.arch,
+    params.source,
+  ]);
   const cacheRoot = getSwiftCacheRoot(params.host.env);
   const sourcePath = path.join(cacheRoot, 'sources', `${cacheName}-${key}.swift`);
   const executablePath = path.join(cacheRoot, 'bin', `${cacheName}-${key}`);
@@ -210,13 +220,17 @@ async function ensureSwiftExecutable(params: {
       const tempExecutablePath = path.join(tempDir, path.basename(params.executablePath));
       try {
         const [primarySourcePath] = params.sourcePaths;
-        if (
-          params.sourceText !== undefined &&
-          primarySourcePath &&
-          !fs.existsSync(primarySourcePath)
-        ) {
+        if (params.sourceText !== undefined && primarySourcePath) {
           fs.mkdirSync(path.dirname(primarySourcePath), { recursive: true });
-          fs.writeFileSync(primarySourcePath, params.sourceText);
+          let cachedSource: string | undefined;
+          try {
+            cachedSource = fs.readFileSync(primarySourcePath, 'utf8');
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+          }
+          if (cachedSource !== params.sourceText) {
+            publishFileSync({ destination: primarySourcePath, contents: params.sourceText });
+          }
         }
         await runCmd('xcrun', ['swiftc', ...params.sourcePaths, '-o', tempExecutablePath], {
           timeoutMs,
