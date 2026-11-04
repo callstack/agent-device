@@ -8,6 +8,7 @@ import {
 import type { NetworkDumpInput } from '@agent-device/contracts/network-runtime';
 import type { AppStateRuntimeOperations } from '@agent-device/contracts/app-state-runtime';
 import { bindAppleAppStateRuntime } from './app-state-runtime.ts';
+import { appleScreenshotCaptureCapabilities } from './screenshot-support.ts';
 import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
@@ -409,6 +410,8 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             device: request.device,
             signal: request.scope.signal,
             resolveInteractor: host.localInteractors.resolve,
+            captureCapabilities: (options) =>
+              appleScreenshotCaptureCapabilities(request.device, options),
           }),
         ),
         ...whenAdmitted(facts.operations.focusPoint, () =>

@@ -55,15 +55,40 @@ test('a provider binding fails closed when its exact owner exposes no interactor
   });
 });
 
-test('a provider capture refuses a simctl screen mask before calling its interactor', async () => {
-  const resolveInteractor = vi.fn();
-  const operations = bindProviderScreenshotInteractor({
-    device: { ...device, platform: 'apple', appleOs: 'ios', kind: 'simulator' },
+test.each([bindLocalScreenshotInteractor, bindProviderScreenshotInteractor])(
+  'a capture without a declared mask capability refuses before resolving its interactor',
+  async (bind) => {
+    const resolveInteractor = vi.fn();
+    const operations = bind({
+      device: { ...device, platform: 'apple', appleOs: 'ios', kind: 'simulator' },
+      signal: new AbortController().signal,
+      resolveInteractor,
+    });
+    await expect(
+      operations.captureScreenshot({
+        outPath: '/tmp/masked.png',
+        options: { screenMask: 'black' },
+      }),
+    ).rejects.toMatchObject({
+      code: 'UNSUPPORTED_OPERATION',
+      details: { reason: 'screenshot-screen-mask-unsupported' },
+    });
+    expect(resolveInteractor).not.toHaveBeenCalled();
+  },
+);
+
+test('the selected capture capability admits a mask for one invocation without changing the next', async () => {
+  const screenshot = vi.fn(async () => ({ displayRotation: 'portrait' as const }));
+  const operations = bindLocalScreenshotInteractor({
+    device,
     signal: new AbortController().signal,
-    resolveInteractor,
+    resolveInteractor: async () => ({ screenshot }) as unknown as Interactor,
+    captureCapabilities: () => ({ screenMask: true }),
   });
-  await expect(
-    operations.captureScreenshot({ outPath: '/tmp/masked.png', options: { screenMask: 'black' } }),
-  ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
-  expect(resolveInteractor).not.toHaveBeenCalled();
+  for (const screenMask of ['black', undefined] as const) {
+    await expect(
+      operations.captureScreenshot({ outPath: '/tmp/capture.png', options: { screenMask } }),
+    ).resolves.toEqual({ displayRotation: 'portrait' });
+    expect(screenshot.mock.lastCall).toEqual(['/tmp/capture.png', { screenMask }]);
+  }
 });

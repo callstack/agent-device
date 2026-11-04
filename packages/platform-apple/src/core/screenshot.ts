@@ -1,6 +1,8 @@
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import type { ScreenshotScreenMask } from '@agent-device/contracts/capture';
+import { assertScreenshotCaptureSupport } from '@agent-device/contracts/screenshot-runtime';
+import { appleScreenshotCaptureCapabilities } from '../screenshot-support.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { copyHostFile } from '@agent-device/host-kit/host-file';
@@ -126,6 +128,7 @@ export async function screenshotIos(
   outPath: string,
   options: Omit<SimulatorScreenshotFlowOptions, 'deps'>,
 ): Promise<ScreenshotCaptureFacts> {
+  assertScreenshotCaptureSupport(options, appleScreenshotCaptureCapabilities(device, {}));
   if (isMacOs(device)) {
     await captureScreenshotViaRunner(
       device,
@@ -155,6 +158,7 @@ export async function captureSimulatorScreenshotWithFallback(
   outPath: string,
   options: SimulatorScreenshotFlowOptions,
 ): Promise<ScreenshotCaptureFacts> {
+  assertScreenshotCaptureSupport(options, appleScreenshotCaptureCapabilities(device, {}));
   if (device.kind !== 'simulator') {
     throw new AppError(
       'UNSUPPORTED_OPERATION',

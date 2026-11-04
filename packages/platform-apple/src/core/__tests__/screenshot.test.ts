@@ -49,6 +49,7 @@ import {
   captureSimulatorScreenshotWithFallback,
   captureSimulatorScreenshotWithRetry,
   captureScreenshotViaRunner,
+  screenshotIos,
   resolveSimulatorRunnerScreenshotCandidatePaths,
   shouldRetryIosSimulatorScreenshot,
 } from '../screenshot.ts';
@@ -879,3 +880,20 @@ test('an explicit screen mask refuses an unmasked runner fallback after simctl e
   );
   assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });
+
+test.each([MACOS_TEST_DEVICE, { ...IOS_TEST_SIMULATOR, kind: 'device' as const }])(
+  'screenshotIos refuses a masked $kind capture outside simctl before native execution',
+  async (device) => {
+    mockRunCmd.mockRejectedValue(new Error('unexpected native capture'));
+    mockRunAppleRunnerCommand.mockRejectedValue(new Error('unexpected runner capture'));
+    await assert.rejects(
+      screenshotIos(device, '/tmp/masked.png', { env: {}, screenMask: 'black' }),
+      {
+        code: 'UNSUPPORTED_OPERATION',
+        details: { reason: 'screenshot-screen-mask-unsupported' },
+      },
+    );
+    assert.equal(mockRunCmd.mock.calls.length, 0);
+    assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
+  },
+);

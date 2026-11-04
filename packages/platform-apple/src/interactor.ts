@@ -1,3 +1,5 @@
+import { assertScreenshotCaptureSupport } from '@agent-device/contracts/screenshot-runtime';
+import { appleScreenshotCaptureCapabilities } from './screenshot-support.ts';
 import { closeIosApp, openIosApp, openIosDevice } from './core/app-launch.ts';
 import { readIosClipboardText, writeIosClipboardText } from './core/app-device-io.ts';
 import { readIosSetting, setIosSetting } from './core/app-settings.ts';
@@ -493,12 +495,7 @@ async function runAppleScreenshot(
   helper: MacOsHelperSurface | undefined,
   env: Readonly<EnvMap>,
 ): Promise<ScreenshotCaptureFacts> {
-  if (options.screenMask !== undefined && (helper || options.captureBackend === 'runner')) {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      '--screen-mask requires simctl capture, not an XCTest runner or macOS capture',
-    );
-  }
+  assertScreenshotCaptureSupport(options, appleScreenshotCaptureCapabilities(device, options));
   if (helper) {
     if (options.fullscreen) {
       throw new AppError(

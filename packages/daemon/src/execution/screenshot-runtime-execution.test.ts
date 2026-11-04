@@ -502,23 +502,3 @@ test('a request screen mask reaches the bound simulator capture without changing
     expect(fixture.captureScreenshot.mock.lastCall?.[0].options?.screenMask).toBe(screenMask);
   }
 });
-
-test.each([ANDROID_EMULATOR, IOS_DEVICE])(
-  'refuses a screen mask on $kind $platform before binding',
-  async (device) => {
-    const fixture = screenshotRuntimeFixture();
-    const session = makeSession('unsupported-mask', { device });
-    await expect(
-      resolveScreenshotGenericExecution({
-        hostCwd: process.cwd(),
-        createCommandSurface: testCreateCommandSurface,
-        platformServices: daemonPlatformServicesFixture(),
-        req: screenshotRequest({ flags: { screenshotScreenMask: 'black' } }),
-        session,
-        inspectFacts: fixture.inspectFacts,
-        bindDevice: fixture.bindDevice,
-      }),
-    ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
-    expect(fixture.binds).toHaveLength(0);
-  },
-);
