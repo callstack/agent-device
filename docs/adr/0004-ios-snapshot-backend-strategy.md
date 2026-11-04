@@ -623,9 +623,9 @@ Thus, the pass returns that tree exactly as reported.
 This is a structural consequence of the same rule applied uniformly.
 It is not the per-tier omission that a hand-threaded space would have made it.
 
-The provider producers (`appium-source`, `limrun-ios-tree`, `revyl-ios-tree`) never see the app's windows either.
-Their keyboard fact comes only from the docked-tree derivation or from a separate visibility probe, and it never states absence.
-A consumer reads a missing or `unmeasurable` fact as "this producer did not measure".
+The provider producers (`appium-source`, `limrun-ios-tree`) never see the app's windows either.
+A capture from any of them publishes no keyboard fact.
+A consumer reads that silence as "this producer did not measure".
 Those paths publish what the platform reported.
 Thus, the last reader that can still refuse geometry that it cannot place is the tap-path keyboard guard, and its width rule therefore remains.
 The rule detects un-normalized arrival, not a standing fact about iOS.
@@ -777,31 +777,3 @@ Rejected alternatives:
 
 - Move the tree by the window origin. The bridge would then be the only correct producer for a windowed app. The keyboard window and alerts were not measured in that mode, so the refusal stays until they are.
 - Read the screen size on the host from the device type profile or from `simctl io`. That adds a host process and a format that Apple does not document. It also does not give the window origin.
-
-## Amendment: the bridge's keyboard fact (follow-up to PR #4207)
-
-The bridge reads the app's root with the same remote AX snapshot API as the runner.
-In that tree, the system keyboard window (`UIRemoteKeyboardWindow`) is one of the app's own windows, and its frames are in app space.
-The bridge sets `truncated` on every cut that it makes.
-
-Decision. A bridge acquisition publishes a keyboard fact (`observeCompleteTreeKeyboard`) for both intents.
-A docked keyboard in the tree publishes the docked-tree band (`derived`, `treeBound`).
-A complete tree (`truncated: false`) with no keyboard trace publishes `absent` with `treeBound`.
-A keyboard trace is the keyboard window (`UIRemoteKeyboardWindow`), a `Keyboard` or `Key` node, or a node with an iOS keyboard role, which includes `_UIRemoteKeyboardPlaceholderView` and `TUISystemInputAssistantView`.
-A truncated tree, or a complete tree that holds only a trace, publishes `unmeasurable`.
-Thus, a keyboard window that exposes no keys, for example a hardware keyboard that shows only the assistant bar, never publishes absence.
-
-Reason. Post-gesture stabilization counts a keyboard change as fresh only between two tree-bound facts.
-Without a bridge fact, a drag that only dismissed the keyboard waited for the distrust cap (about 3.5 s) on the default Simulator route.
-
-Rejected alternatives:
-
-- Publish absence from every tree without a `Keyboard` or `Key` node. A minimized keyboard, a placeholder that outlives the key plane during a dismissal, and an out-of-process keyboard can leave only a trace. Absence there could end the distrust window on a stale read.
-- Publish absence from a truncated tree. A cut can drop the keyboard window.
-
-Consequences. `snapshot --json` shows `keyboard` for bridge captures.
-On a complete tree with no keyboard trace, the tap guard reads `no-keyboard` instead of `undetermined`.
-Only `occluded` changes a tap, so taps do not change.
-The bridge band excludes the input assistant bar, as the band that the tap guard derived for bridge captures already did.
-The runner's measured band includes that bar.
-Open gaps: third-party keyboards, iPad floating and split keyboards, and hardware-keyboard states were not captured on the bridge.
