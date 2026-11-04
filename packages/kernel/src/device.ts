@@ -203,9 +203,9 @@ export function hostAndDeviceIds(device: DeviceInfo): string[] {
   return device.hostApp ? [device.hostApp.hostDeviceId, device.id] : [device.id];
 }
 
-/** Only the macOS host holds apps as devices of their own. */
-export function canHostAppDevices(device: Pick<DeviceInfo, 'platform' | 'appleOs'>): boolean {
-  return isMacOs(device);
+/** The macOS host holds apps, and the web host holds web sessions, as devices of their own. */
+export function canHostScopedDevices(device: Pick<DeviceInfo, 'platform' | 'appleOs'>): boolean {
+  return isMacOs(device) || device.platform === 'web';
 }
 
 /** Whether `deviceId` is an app device or a web session device of `hostDeviceId`. */
