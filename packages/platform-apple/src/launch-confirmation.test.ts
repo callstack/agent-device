@@ -742,21 +742,3 @@ test('abandoned accepts stop once the request cannot hold another press', async 
     expect(acceptAlert).toHaveBeenCalledTimes(2);
   });
 });
-
-test('forwarded launch confirmation uses its provider URL resolver without reading local app containers', async () => {
-  const local = vi.mocked(resolveIosSimulatorDeepLinkBundleId);
-  local.mockClear();
-  const signal = new AbortController().signal;
-  const resolveOwner = vi.fn(async () => undefined);
-  const port = createLaunchConfirmationPort(
-    simulator,
-    { appBundleId: 'com.example.app', url: 'example://home' },
-    { awaitAlert: async () => ({}), readAlert: async () => ({}), acceptAlert: async () => ({}) },
-    signal,
-    undefined,
-    resolveOwner,
-  );
-  await expect(port.resolveUrlOwner()).resolves.toBeUndefined();
-  expect(resolveOwner).toHaveBeenCalledWith(simulator, 'example://home', signal);
-  expect(local).not.toHaveBeenCalled();
-});

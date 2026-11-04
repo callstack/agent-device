@@ -213,16 +213,12 @@ export async function resolveIosSimulatorDeepLinkBundleId(
   const { remainingLookupBudget } = await import('./simulator-app-budget.ts');
   const remaining = remainingLookupBudget(options);
   const apps = await listSimulatorAppMetadata(device, remaining());
-  const candidates = apps.filter(
-    (app) => !app.bundleId.startsWith(AGENT_DEVICE_RUNNER_BUNDLE_PREFIX),
-  );
-  const claims = await Promise.all(
-    candidates.map(async (app) => ({
-      app,
-      schemes: await readInstalledAppUrlSchemes(device, app.bundleId, remaining(), app.path),
-    })),
-  );
-  const matches = claims.filter(({ schemes }) => schemes.has(scheme)).map(({ app }) => app);
+  const matches: SimulatorAppMetadata[] = [];
+  for (const app of apps) {
+    if (app.bundleId.startsWith(AGENT_DEVICE_RUNNER_BUNDLE_PREFIX)) continue;
+    const schemes = await readInstalledAppUrlSchemes(device, app.bundleId, remaining(), app.path);
+    if (schemes.has(scheme)) matches.push(app);
+  }
   const userMatches = matches.filter((app) => app.applicationType === 'User');
   if (userMatches.length === 1) return userMatches[0]?.bundleId;
   if (userMatches.length > 1) return undefined;

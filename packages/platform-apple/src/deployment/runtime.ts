@@ -164,12 +164,17 @@ async function deployPreparedAppleApp(
   signal: AbortSignal,
   install?: AppDeploymentInstaller,
 ): Promise<AppDeploymentResult> {
-  if (install) return await install(input.artifact, signal);
-  await installAppleApp(host, device, input.artifact.installablePath, signal);
+  let result: AppDeploymentResult = {};
+  if (install) result = await install(input.artifact, signal);
+  else await installAppleApp(host, device, input.artifact.installablePath, signal);
+  const bundleId = result.bundleId ?? input.artifact.bundleId;
+  const appName = result.appName ?? input.artifact.appName;
+  const launchTarget = result.launchTarget ?? bundleId;
   return {
-    ...(input.artifact.bundleId ? { bundleId: input.artifact.bundleId } : {}),
-    ...(input.artifact.appName ? { appName: input.artifact.appName } : {}),
-    ...(input.artifact.bundleId ? { launchTarget: input.artifact.bundleId } : {}),
+    ...result,
+    ...(bundleId ? { bundleId } : {}),
+    ...(appName ? { appName } : {}),
+    ...(launchTarget ? { launchTarget } : {}),
   };
 }
 

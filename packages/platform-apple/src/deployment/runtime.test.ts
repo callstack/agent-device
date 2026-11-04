@@ -714,8 +714,8 @@ test.each([false, true])(
     const host = deploymentHost(
       executor,
       xcrunLikeRun((request) => {
-        if (request.args[0] === 'uninstall' || request.args[0] === 'install')
-          events.push(request.args[0]);
+        if (request.args[0] === 'uninstall') events.push('uninstall');
+        if (request.args[0] === 'install') events.push('native-install');
         return bootedSimulatorListResult(request);
       }),
     );
@@ -726,7 +726,7 @@ test.each([false, true])(
       ...(hosted
         ? {
             install: async () => {
-              events.push('install');
+              events.push('hosted-install');
               return { bundleId: 'com.example.app' };
             },
           }
@@ -743,9 +743,43 @@ test.each([false, true])(
       'invalidate-before',
       'uninstall',
       'materialize',
-      'install',
+      hosted ? 'hosted-install' : 'native-install',
       'cleanup',
       'invalidate-after',
     ]);
+  },
+);
+
+test.each([
+  [{}, { bundleId: 'com.example.app', appName: 'Example', launchTarget: 'com.example.app' }],
+  [
+    { bundleId: 'com.installed.app' },
+    { bundleId: 'com.installed.app', appName: 'Example', launchTarget: 'com.installed.app' },
+  ],
+  [
+    { bundleId: 'com.installed.app', appName: 'Installed', launchTarget: 'installed://home' },
+    { bundleId: 'com.installed.app', appName: 'Installed', launchTarget: 'installed://home' },
+  ],
+])(
+  'hosted install preserves metadata and fills artifact defaults: %j',
+  async (result, expected) => {
+    const run = xcrunLikeRun(bootedSimulatorListResult);
+    const operations = createAppleAppDeploymentOperations({
+      host: deploymentHost({} as AppleAppDeploymentExecutor, run),
+      device: appleDevice(),
+      signal: new AbortController().signal,
+      install: async () => result,
+    });
+    await expect(
+      operations.deployMaterializedApp!({
+        artifact: {
+          installablePath: '/tmp/Example.app',
+          bundleId: 'com.example.app',
+          appName: 'Example',
+          cleanup: async () => {},
+        },
+      }),
+    ).resolves.toEqual(expected);
+    expect(run).not.toHaveBeenCalled();
   },
 );

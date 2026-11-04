@@ -142,3 +142,37 @@ test('rewriting the Info.plist invalidates the cached scheme set', async () => {
     assert.equal(plutilProbes(), probesBeforeRewrite + 1);
   });
 });
+
+test('deep-link ownership reads app metadata serially and still detects ambiguous owners', async () => {
+  const { createLocalAppleToolProvider, withAppleToolProvider } =
+    await import('../tool-provider.ts');
+  let active = 0;
+  let peak = 0;
+  let reads = 0;
+  const apps = Array.from({ length: 20 }, (_, index) => ({
+    bundleId: `com.example.app${index}`,
+    name: `App ${index}`,
+    applicationType: 'User',
+  }));
+  const provider = createLocalAppleToolProvider({
+    simulatorApps: {
+      list: async () => ({ type: 'listed', apps }),
+      readInfoPlist: async () => {
+        active += 1;
+        peak = Math.max(peak, active);
+        reads += 1;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        active -= 1;
+        return { CFBundleURLTypes: [{ CFBundleURLSchemes: ['shared'] }] };
+      },
+    },
+  });
+  await withAppleToolProvider(provider, async () => {
+    assert.equal(
+      await resolveIosSimulatorDeepLinkBundleId(IOS_TEST_SIMULATOR, 'shared://home'),
+      undefined,
+    );
+  });
+  assert.equal(reads, 20);
+  assert.equal(peak, 1);
+});

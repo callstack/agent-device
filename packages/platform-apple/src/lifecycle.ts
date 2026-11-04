@@ -73,11 +73,6 @@ type AppleLifecycleServices = Pick<
     device: DeviceInfo,
     input: OpenApplicationInput,
   ): Promise<string | undefined>;
-  resolveUrlOwner?: (
-    device: DeviceInfo,
-    url: string,
-    signal: AbortSignal,
-  ) => Promise<string | undefined>;
   runnerFreeObservation: boolean;
 };
 
@@ -215,7 +210,7 @@ async function openAppleApplication(
       localIosSimulator,
       {
         observation,
-        answerConfirmation: confirmationAnswer(host, binding, input, launch),
+        answerConfirmation: confirmationAnswer(binding, input, launch),
         redispatchLaunchUrl: confirmationRedispatch(binding, input, launch),
       },
       timing,
@@ -358,7 +353,6 @@ async function openLaunchUrl(
  * answered.
  */
 function confirmationAnswer(
-  host: AppleLifecycleServices,
   binding: BoundAppleInteractor,
   input: OpenApplicationInput,
   { confirmation }: AppleLaunchPlan,
@@ -372,7 +366,6 @@ function confirmationAnswer(
       binding.resolveInteractor(input.execution, confirmation.appBundleId),
       binding.signal,
       input.execution.requestDeadlineAtMs,
-      host.resolveUrlOwner,
     );
   };
 }

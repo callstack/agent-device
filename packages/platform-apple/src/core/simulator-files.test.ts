@@ -163,3 +163,40 @@ test('an absolute simulator screenshot path does not require an app container lo
   expect(await fs.readFile(destinationPath)).toEqual(bytes);
   expect(run).not.toHaveBeenCalled();
 });
+
+test('container copies distinguish the same simulator UDID in different simulator sets', async () => {
+  const directory = await mkdtempForTest('simulator-file-set-identity-');
+  const sets = [path.join(directory, 'first'), path.join(directory, 'second')];
+  for (const [index, setPath] of sets.entries()) {
+    await fs.mkdir(path.join(setPath, 'container'), { recursive: true });
+    await fs.writeFile(path.join(setPath, 'container', 'file.bin'), `set ${index}`);
+  }
+  const run = vi.fn(async (args: readonly string[]) => ({
+    stdout: path.join(args[1]!, 'container'),
+    stderr: '',
+    exitCode: 0,
+  }));
+  await withAppleToolProvider(createLocalAppleToolProvider({ simctl: { run } }), async () => {
+    for (const index of [0, 1, 0]) {
+      const destinationPath = path.join(directory, `copied-${index}.bin`);
+      await copySimulatorFileToHost({
+        device: {
+          platform: 'apple',
+          appleOs: 'ios',
+          kind: 'simulator',
+          id: directory,
+          name: 'Same UDID',
+          simulatorSetPath: sets[index],
+          booted: true,
+        },
+        bundleId: 'com.example.app',
+        containerType: 'data',
+        sourcePath: 'file.bin',
+        destinationPath,
+        timeoutMs: 1000,
+      });
+      expect(await fs.readFile(destinationPath, 'utf8')).toBe(`set ${index}`);
+    }
+  });
+  expect(run).toHaveBeenCalledTimes(2);
+});

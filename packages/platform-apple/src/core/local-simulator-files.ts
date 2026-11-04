@@ -1,4 +1,8 @@
-import { readSimctlContainerPath, scopeSimctlArgsForDevice } from './simctl.ts';
+import {
+  readSimctlContainerPath,
+  scopeSimctlArgsForDevice,
+  simulatorAddressFor,
+} from './simctl.ts';
 import path from 'node:path';
 import {
   copyHostFile,
@@ -27,7 +31,11 @@ export async function copySimulatorFileToHost(
     await copyFromContainer('', request);
     return;
   }
-  const key = JSON.stringify([request.device.id, request.bundleId, request.containerType]);
+  const key = JSON.stringify([
+    simulatorAddressFor(request.device),
+    request.bundleId,
+    request.containerType,
+  ]);
   const cached = containerPaths.get(key);
   if (cached) {
     try {
