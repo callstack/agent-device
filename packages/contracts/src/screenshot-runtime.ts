@@ -1,5 +1,4 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { readScreenshotScreenMask } from './screenshot.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   localInteractorSource,
@@ -44,10 +43,12 @@ type ScreenshotCaptureBindingOptions = Readonly<{
   captureCapabilities?: (options: Readonly<ScreenshotOptions>) => ScreenshotCaptureCapabilities;
 }>;
 
-export function assertScreenshotCaptureSupport(
+export async function assertScreenshotCaptureSupport(
   options: Readonly<ScreenshotOptions> | undefined,
   capabilities: ScreenshotCaptureCapabilities = {},
-): void {
+): Promise<void> {
+  if (options?.screenMask === undefined) return;
+  const { readScreenshotScreenMask } = await import('./screenshot.ts');
   const screenMask = readScreenshotScreenMask(options?.screenMask);
   if (screenMask !== undefined && capabilities.screenMask !== true) {
     throw new AppError(
@@ -80,7 +81,7 @@ function bindScreenshotCapture(
 ): ScreenshotRuntimeOperations {
   return Object.freeze({
     captureScreenshot: async (input: CaptureScreenshotInput) => {
-      assertScreenshotCaptureSupport(
+      await assertScreenshotCaptureSupport(
         input.options,
         binding.captureCapabilities?.(input.options ?? {}),
       );

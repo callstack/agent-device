@@ -128,7 +128,7 @@ export async function screenshotIos(
   outPath: string,
   options: Omit<SimulatorScreenshotFlowOptions, 'deps'>,
 ): Promise<ScreenshotCaptureFacts> {
-  assertScreenshotCaptureSupport(options, appleScreenshotCaptureCapabilities(device, {}));
+  await assertScreenshotCaptureSupport(options, appleScreenshotCaptureCapabilities(device, {}));
   if (isMacOs(device)) {
     await captureScreenshotViaRunner(
       device,
@@ -158,7 +158,7 @@ export async function captureSimulatorScreenshotWithFallback(
   outPath: string,
   options: SimulatorScreenshotFlowOptions,
 ): Promise<ScreenshotCaptureFacts> {
-  assertScreenshotCaptureSupport(options, appleScreenshotCaptureCapabilities(device, {}));
+  await assertScreenshotCaptureSupport(options, appleScreenshotCaptureCapabilities(device, {}));
   if (device.kind !== 'simulator') {
     throw new AppError(
       'UNSUPPORTED_OPERATION',

@@ -495,7 +495,10 @@ async function runAppleScreenshot(
   helper: MacOsHelperSurface | undefined,
   env: Readonly<EnvMap>,
 ): Promise<ScreenshotCaptureFacts> {
-  assertScreenshotCaptureSupport(options, appleScreenshotCaptureCapabilities(device, options));
+  await assertScreenshotCaptureSupport(
+    options,
+    appleScreenshotCaptureCapabilities(device, options),
+  );
   if (helper) {
     if (options.fullscreen) {
       throw new AppError(
