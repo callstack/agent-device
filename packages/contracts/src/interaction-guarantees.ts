@@ -574,7 +574,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       offscreen: {
         kind: 'waived',
         reason:
-          'gap: the `findAct` row declares `offscreen: "ignore"` because find ranks across the whole tree and prefers on-screen matches rather than refusing off-screen ones (#1625), and focus/type never re-enter the acting leaf where the runtime rows refuse. So the seam dispatches at a captured rect center the acting paths would reject as outside the root viewport — a closed drawer or an off-viewport carousel is a silent no-op focus here.',
+          'gap: the `findAct` row declares `offscreen: "ignore"` because find ranks across the whole tree and prefers on-screen matches rather than refusing off-screen ones (#1625), and focus/type never re-enter the acting leaf where the runtime rows refuse. So the seam dispatches at a captured touch point the acting paths would reject as outside the root viewport — a closed drawer or an off-viewport carousel is a silent no-op focus here.',
         trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
       },
       parentOwnedTouchPoint: {
@@ -587,7 +587,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       nonHittable: {
         kind: 'waived',
         reason:
-          "gap: the promotion half does run — the `findAct` row declares `hittable-ancestor-below-root`, so the seam dispatches the promoted ancestor's center (regression-proven in packages/daemon/src/execution/interaction/internal/__tests__/find.test.ts) — but the annotation half never does: the response is the focus runtime's point payload, so a match still reporting `hittable: false` after promotion is accepted silently, where press/click/fill answer with `targetHittable: false` plus a hint. Closing it needs the annotation composed at this seam, which is response-shape work the `responseIdentity` waiver below also records.",
+          "gap: the promotion half does run — the `findAct` row declares `hittable-ancestor-below-root`, so the seam dispatches the promoted ancestor's touch point (regression-proven in packages/daemon/src/execution/interaction/internal/__tests__/find.test.ts) — but the annotation half never does: the response is the focus runtime's point payload, so a match still reporting `hittable: false` after promotion is accepted silently, where press/click/fill answer with `targetHittable: false` plus a hint. Closing it needs the annotation composed at this seam, which is response-shape work the `responseIdentity` waiver below also records.",
         trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
       },
       // One construction site per dispatch kind, both shared with the plain commands: the focus
