@@ -13,6 +13,7 @@ import { createScreenRecordingAdmissionLedger } from '../screen-recording-admiss
 import {
   adoptStartedScreenRecording,
   finishLiveScreenRecording,
+  finishRecoveredScreenRecording,
 } from '../screen-recording-session-resource.ts';
 import { screenRecordingResourceStore } from '../screen-recording-resource-store.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -400,3 +401,82 @@ function resourcePath(
 ) {
   return screenRecordingResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName));
 }
+
+test('recovered stop waits for a cancelled reattach and preserves the native evidence', async () => {
+  const dir = mkdtempForTestSync('recording-stop-late-');
+  const resourcePath = screenRecordingResourceStore.resolvePath(dir);
+  const nativePath = path.join(dir, 'native.mp4');
+  fs.writeFileSync(nativePath, 'native bytes');
+  screenRecordingResourceStore.write(
+    resourcePath,
+    createDurableResourceEnvelope({
+      resourceKind: 'screen-recording',
+      sessionId: 'session',
+      device: { family: 'android', id: device.id, kind: device.kind },
+      owner: localRuntimeOwner('android'),
+      fence: { token: 'fence', generation: 1 },
+      lifecycle: 'open',
+      descriptor: { version: 1, body: {} },
+    }),
+  );
+  const forceCleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
+  const disposeControl = vi.fn(async () => {});
+  const handle = createScreenRecordingLiveHandle(
+    {
+      backend: 'android',
+      outPath: '/tmp/out',
+      startedAt: 1,
+      scope: 'device',
+      showTouches: false,
+      recordOnlySession: true,
+      gestureEvents: [],
+    },
+    {
+      finish: async () => {
+        throw new Error('unexpected finish');
+      },
+      forceCleanup,
+    },
+  );
+  let release!: () => void;
+  let entered!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const abort = new AbortController();
+  const task = finishRecoveredScreenRecording({
+    resourcePath,
+    scope: {
+      signal: abort.signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+    acquireControl: async () => ({
+      reattach: async () => {
+        entered();
+        await pending;
+        return { status: 'active' as const, handle };
+      },
+      cleanup: forceCleanup,
+      [Symbol.asyncDispose]: disposeControl,
+    }),
+  });
+  const result = task.catch((error: unknown) => error);
+  await started;
+  abort.abort();
+  await Promise.resolve();
+  expect(disposeControl).not.toHaveBeenCalled();
+  expect(forceCleanup).not.toHaveBeenCalled();
+  release();
+  await expect(result).resolves.toBeInstanceOf(Error);
+  expect(forceCleanup).not.toHaveBeenCalled();
+  expect(disposeControl).toHaveBeenCalledOnce();
+  expect(fs.readFileSync(nativePath, 'utf8')).toBe('native bytes');
+  expect(screenRecordingResourceStore.read(resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'open' },
+  });
+});

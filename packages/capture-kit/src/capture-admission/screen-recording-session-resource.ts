@@ -1,3 +1,11 @@
+import { AppError } from '@agent-device/kernel/errors';
+import { sameDeviceIdentity } from '@agent-device/kernel/device';
+import { sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { withDurableCaptureResourceFence } from '../durable-capture/fence.ts';
+import {
+  createStopProgress,
+  markCompletingDurableCapture,
+} from '../durable-capture/transitions.ts';
 import type { JsonObject } from '@agent-device/contracts/client';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
@@ -128,7 +136,7 @@ function encodeChunk(chunk: ScreenRecordingChunk): JsonObject {
   };
 }
 
-export function finishRecoveredScreenRecording(params: {
+export async function finishRecoveredScreenRecording(params: {
   resourcePath: string;
   scope: PlatformRequestScope;
   acquireControl(
@@ -143,5 +151,87 @@ export function finishRecoveredScreenRecording(params: {
   >;
   deadlineMs?: number;
 }): Promise<ScreenRecordingCompletion> {
-  return screenRecordingDurableResource.finishRecovered(params);
+  const store = screenRecordingDurableResource.store;
+  const record = store.read(params.resourcePath);
+  if (record.status !== 'decoded' || record.envelope.lifecycle !== 'open')
+    throw new AppError('INVALID_ARGS', 'no active recording');
+  const expected = record.envelope;
+  return await withDurableCaptureResourceFence({
+    store,
+    resourcePath: params.resourcePath,
+    expected: expected.fence,
+    onCompleted: async ({ envelope }) => {
+      const { readReplayableStoredCompletion } =
+        await import('./screen-recording-stop-recovery.ts');
+      const completion = readReplayableStoredCompletion(envelope.metadata);
+      if (completion) return completion;
+      throw new AppError('COMMAND_FAILED', 'Recording completion is unavailable', {
+        reason: 'resource-missing',
+      });
+    },
+    run: async (lease) => {
+      if (
+        lease.envelope.sessionId !== expected.sessionId ||
+        !sameDeviceIdentity(lease.envelope.device, expected.device) ||
+        !sameRuntimeOwner(lease.envelope.owner, expected.owner)
+      )
+        throw new AppError('COMMAND_FAILED', 'Recording owner changed', {
+          reason: 'ownership-fence-lost',
+        });
+      const controller = new AbortController();
+      const scope = {
+        ...params.scope,
+        signal: AbortSignal.any([params.scope.signal, controller.signal]),
+      };
+      const timer = setTimeout(() => controller.abort(), params.deadlineMs ?? 5000);
+      timer.unref?.();
+      let control: Awaited<ReturnType<typeof params.acquireControl>> | undefined;
+      try {
+        scope.signal.throwIfAborted();
+        control = await params.acquireControl(lease.envelope, scope);
+        const result = await control.reattach(lease.envelope);
+        clearTimeout(timer);
+        scope.signal.throwIfAborted();
+        if (result.status === 'unreattachable')
+          throw new AppError('COMMAND_FAILED', result.message ?? 'Recording cannot be reattached', {
+            reason: result.reason,
+          });
+        if (result.status === 'missing')
+          throw new AppError('COMMAND_FAILED', 'Recording is missing', {
+            reason: 'resource-missing',
+          });
+        if (result.status === 'completed') {
+          lease.transition('completed', {
+            metadata: {
+              ...lease.envelope.metadata,
+              ...encodeScreenRecordingCompletionMetadata(result.result),
+              phase: 'completed',
+            },
+          });
+          return result.result;
+        }
+        try {
+          markCompletingDurableCapture(lease);
+          const finished = await result.handle.finish(createStopProgress(lease));
+          if (finished.status !== 'completed')
+            throw new AppError('COMMAND_FAILED', finished.message ?? 'Recording stop is pending', {
+              reason: finished.reason,
+            });
+          lease.transition('completed', {
+            metadata: {
+              ...lease.envelope.metadata,
+              ...encodeScreenRecordingCompletionMetadata(finished.result),
+              phase: 'completed',
+            },
+          });
+          return finished.result;
+        } finally {
+          if (result.status === 'export') await result.handle[Symbol.asyncDispose]();
+        }
+      } finally {
+        clearTimeout(timer);
+        if (control) await control[Symbol.asyncDispose]();
+      }
+    },
+  });
 }

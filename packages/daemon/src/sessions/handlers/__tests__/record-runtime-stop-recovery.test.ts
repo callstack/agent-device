@@ -394,7 +394,7 @@ test('record stop after daemon-state loss reattaches only through the persisted 
   expect(harness.runtime.finish).toHaveBeenCalledOnce();
 });
 
-test('record stop terminalizes cleanup-only exact recovery without starting a replacement', async () => {
+test('record stop retains unreattachable recording evidence without starting a replacement', async () => {
   const harness = makeRecordRuntimeHarness('record-runtime-cleanup-only-stop-', {
     recordOnlySession: true,
     runtime: { reattachUnreattachable: true },
@@ -414,9 +414,12 @@ test('record stop terminalizes cleanup-only exact recovery without starting a re
     ok: false,
     error: { code: 'COMMAND_FAILED', details: { reason: 'transport-not-reattachable' } },
   });
-  expect(harness.runtime.cleanup).toHaveBeenCalledOnce();
-  expectDecodedCompletedRecording(harness.sessionStore, harness.sessionName);
-  expect(harness.sessionStore.get(harness.sessionName)).toBeUndefined();
+  expect(harness.runtime.cleanup).not.toHaveBeenCalled();
+  const record = screenRecordingResourceStore.read(
+    recordingResourcePath(harness.sessionStore, harness.sessionName),
+  );
+  expect(record).toMatchObject({ status: 'decoded', envelope: { lifecycle: 'open' } });
+  expect(harness.sessionStore.get(harness.sessionName)).toBeDefined();
   expect(harness.runtime.start).toHaveBeenCalledOnce();
 });
 
