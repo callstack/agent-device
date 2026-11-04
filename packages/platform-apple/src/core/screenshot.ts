@@ -210,8 +210,7 @@ export async function captureSimulatorScreenshotWithFallback(
       device,
       outPath,
       options.appBundleId,
-      options.fullscreen ??
-        (resolveAppleToolProvider().simulatorScreenshotBackend === 'runner' ? true : undefined),
+      options.fullscreen,
       options.runnerOptions,
       options.env,
     );
@@ -287,10 +286,16 @@ export async function captureScreenshotViaRunner(
   device: DeviceInfo,
   outPath: string,
   appBundleId: string | undefined,
-  fullscreen: boolean | undefined,
+  requestedFullscreen: boolean | undefined,
   runnerOptions: AppleRunnerCommandOptions | undefined,
   env: Readonly<EnvMap>,
 ): Promise<RunnerScreenCaptureMetadata | undefined> {
+  const fullscreen =
+    requestedFullscreen ??
+    (device.kind === 'simulator' &&
+    resolveAppleToolProvider().simulatorScreenshotBackend === 'runner'
+      ? true
+      : undefined);
   if (!capturesThroughSimulatorStatusBar(device)) {
     return await captureRunnerScreenshot(
       device,
