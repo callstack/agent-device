@@ -6,8 +6,7 @@ export function createScreenRecordingOutputHost(): ScreenRecordingRuntimeHost['o
   return Object.freeze({
     inspect: async (filePath) => {
       try {
-        fs.statSync(filePath);
-        return 'present';
+        return fs.statSync(filePath).isFile() ? 'present' : 'missing';
       } catch (error) {
         return (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'missing' : 'unavailable';
       }
