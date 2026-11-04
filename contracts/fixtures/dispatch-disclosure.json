@@ -226,7 +226,7 @@
   {
     "id": "ios-runner.reply.ALERT_UNRESOLVED",
     "producer": "ios-runner",
-    "trigger": "structured runner reply with code ALERT_UNRESOLVED: required alert acquisition failed or exhausted its deadline, refused before any activation",
+    "trigger": "structured runner reply with code ALERT_UNRESOLVED: required alert acquisition failed, exhausted its deadline, or found an app surface without actionable controls, refused before any activation",
     "dispatched": "no"
   },
   {

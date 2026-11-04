@@ -33,8 +33,8 @@ export const ALERT_BUTTON_NOT_FOUND_RUNNER_CODE = 'ALERT_BUTTON_NOT_FOUND';
 
 /**
  * The Apple XCUITest runner could not complete required alert acquisition: a query failed,
- * the search deadline expired, or a system modal's host could not be read. Presence or absence
- * is unconfirmed, so this travels as its own wire code with `dispatched: no`.
+ * the search deadline expired, a system modal's host could not be read, or an app surface has
+ * no actionable controls yet. It travels as its own wire code with `dispatched: no`.
  */
 export const ALERT_UNRESOLVED_RUNNER_CODE = 'ALERT_UNRESOLVED';
 

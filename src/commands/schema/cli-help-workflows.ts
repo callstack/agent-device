@@ -128,7 +128,7 @@ Alerts:
   If alert reports no alert but a sheet is visible, alert did not recognize it. Press the button by the ref snapshot -i prints (@e3 is an example):
     agent-device snapshot -i
     agent-device press @e3
-  ALERT_UNRESOLVED means alert could not finish reading the prompt state. Inspect it with screenshot, then snapshot -i.
+  ALERT_UNRESOLVED means alert could not finish reading the prompt state or found an app alert without actionable controls. Inspect it with screenshot, then snapshot -i.
   Do not use settings permission to answer a dialog already on screen. Reserve settings permission for setup/resetting permission state before a flow.
 
 Diagnostics and traces:

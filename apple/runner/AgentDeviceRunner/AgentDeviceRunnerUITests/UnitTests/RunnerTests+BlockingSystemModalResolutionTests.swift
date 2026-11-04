@@ -150,6 +150,49 @@ extension RunnerTests {
       XCTAssertEqual(response.error?.code, RunnerWireErrorCode.alertButtonNotFound, action)
     }
   }
+
+  @MainActor
+  func testAppAlertWithoutHittableControlsRemainsRetriableUntilControlsAppear() throws {
+    for action in ["get", "wait", "accept", "dismiss"] {
+      app.launchArguments = ["--agent-device-alert-replacement-regression"]
+      app.launch()
+      defer {
+        modalElementsQueryOverrideForTesting = nil
+        invalidateCachedTarget(reason: "unit_test_cleanup")
+        app.terminate()
+      }
+      let root = app.alerts.firstMatch
+      XCTAssertTrue(root.waitForFixtureExistence(timeout: appExistenceTimeout))
+      let covered = app.staticTexts["agent-device-alert-actions"]
+      XCTAssertTrue(covered.exists)
+      XCTAssertFalse(covered.isHittable)
+      var queryIndex = 0
+      modalElementsQueryOverrideForTesting = {
+        queryIndex += 1
+        if queryIndex <= 2 { return [] }
+        if queryIndex == 3 { return [root] }
+        return [covered]
+      }
+      let command = try runnerCommandFixture(
+        #"{"command":"alert","commandId":"app-controls-\#(action)","action":"\#(action)"}"#
+      )
+      for _ in 0..<2 {
+        queryIndex = 0
+        let response = try executeOnMainPrepared(command: command, activeApp: app)
+        XCTAssertFalse(response.ok, action)
+        XCTAssertEqual(response.error?.code, RunnerWireErrorCode.alertUnresolved, action)
+      }
+      XCTAssertEqual(covered.label, "First actions: 0; replacement actions: 0")
+      modalElementsQueryOverrideForTesting = nil
+      let response = try executeOnMainPrepared(command: command, activeApp: app)
+      XCTAssertTrue(response.ok, "\(action): \(String(describing: response.error))")
+      if action == "get" || action == "wait" {
+        XCTAssertEqual(response.data?.items, ["Cancel", "OK"])
+      } else {
+        XCTAssertEqual(covered.label, "First actions: 1; replacement actions: 0")
+      }
+    }
+  }
 #endif
 
   // No SpringBoard host (`hasSpringBoardSystemModalHost`) means modal resolution must return

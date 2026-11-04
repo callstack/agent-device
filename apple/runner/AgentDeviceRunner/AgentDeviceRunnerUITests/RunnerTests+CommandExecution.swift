@@ -645,7 +645,7 @@ extension RunnerTests {
           ok: false,
           error: ErrorPayload(code: "ALERT_NOT_FOUND", message: "alert not found")
         )
-      case .unresolved:
+      case .unresolved, .notActionable:
         return alertUnresolvedResponse()
       }
     case .gesture:

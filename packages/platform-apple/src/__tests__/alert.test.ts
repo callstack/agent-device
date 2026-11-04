@@ -347,32 +347,35 @@ test('a wait that polls past an unreadable prompt into a readable one answers it
   assert.deepEqual(result, { title: 'Pair accessory' });
 });
 
-test('an exhausted accept on an unreadable prompt keeps the runner hint, not the absence fallback', async () => {
-  vi.useFakeTimers();
-  let calls = 0;
-  mockRunner.mockImplementation(async () => {
-    calls += 1;
-    throw runnerUnresolved();
-  });
+test.each(['accept', 'dismiss'] as const)(
+  'an exhausted %s on an unreadable prompt keeps the runner hint, not the absence fallback',
+  async (action) => {
+    vi.useFakeTimers();
+    let calls = 0;
+    mockRunner.mockImplementation(async () => {
+      calls += 1;
+      throw runnerUnresolved();
+    });
 
-  const outcome = actOnAppleAlert(
-    IOS_SIMULATOR,
-    runnerOptions,
-    'accept',
-    undefined,
-    process.env,
-  ).then(
-    () => undefined,
-    (error: unknown) => error,
-  );
-  await vi.advanceTimersByTimeAsync(3_500);
-  const error = (await outcome) as AppError;
+    const outcome = actOnAppleAlert(
+      IOS_SIMULATOR,
+      runnerOptions,
+      action,
+      undefined,
+      process.env,
+    ).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await vi.advanceTimersByTimeAsync(3_500);
+    const error = (await outcome) as AppError;
 
-  assert.ok(calls > 1, 'an unreadable prompt is retried in the action window');
-  assert.equal(error.code, ALERT_UNRESOLVED_RUNNER_CODE);
-  assert.match(String(error.details?.hint), /screenshot/);
-  assert.doesNotMatch(String(error.details?.hint), /scoped snapshot/i);
-});
+    assert.ok(calls > 1, 'an unreadable prompt is retried in the action window');
+    assert.equal(error.code, ALERT_UNRESOLVED_RUNNER_CODE);
+    assert.match(String(error.details?.hint), /screenshot/);
+    assert.doesNotMatch(String(error.details?.hint), /scoped snapshot/i);
+  },
+);
 
 test.each([
   ['unresolved', 4_630],
@@ -477,3 +480,18 @@ test('a wait admits another read when more than one poll interval remains', asyn
     301,
   );
 });
+
+test.each(['accept', 'dismiss'] as const)(
+  'an %s retries an unresolved alert and acts when controls become readable',
+  async (action) => {
+    vi.useFakeTimers();
+    mockRunner.mockRejectedValueOnce(runnerUnresolved()).mockResolvedValueOnce({ message: 'done' });
+    const outcome = actOnAppleAlert(IOS_SIMULATOR, runnerOptions, action, undefined, process.env);
+    await vi.advanceTimersByTimeAsync(300);
+    assert.deepEqual(await outcome, { message: 'done' });
+    assert.equal(mockRunner.mock.calls.length, 2);
+    assert.ok(
+      mockRunner.mock.calls.every((call) => (call[1] as { action: string }).action === action),
+    );
+  },
+);

@@ -15,6 +15,7 @@ extension RunnerTests {
     case absent
     /// Required alert acquisition did not establish presence or absence.
     case unresolved
+    case notActionable
     case resolved(RunnerAlert)
   }
 
@@ -45,7 +46,7 @@ extension RunnerTests {
       let systemResolution = resolveBlockingSystemModal(deadline: deadline)
       switch systemResolution {
       case .absent: break
-      case .resolved, .unresolved: return systemResolution
+      case .resolved, .unresolved, .notActionable: return systemResolution
       }
 #endif
       let state = try readModalValue(deadline: deadline) { activeApp.state }
@@ -54,23 +55,28 @@ extension RunnerTests {
       if let alert = try firstExistingElement(in: readModalElements(deadline: deadline) {
         activeApp.alerts.allElementsBoundByIndex
       }, deadline: deadline) {
-        return .resolved(RunnerAlert(root: alert, ownerApp: activeApp,
-          actions: try readModalActions(in: alert, deadline: deadline), source: .appAlert, window: nil))
+        return try resolveAppAlert(root: alert, ownerApp: activeApp, source: .appAlert, deadline: deadline)
       }
       if let dialog = try firstExistingElement(in: readModalElements(deadline: deadline) {
         activeApp.otherElements.matching(identifier: AlertSurface.safariDialogIdentifier).allElementsBoundByIndex
       }, deadline: deadline) {
-        return .resolved(RunnerAlert(root: dialog, ownerApp: activeApp,
-          actions: try readModalActions(in: dialog, deadline: deadline), source: .safariDialog, window: nil))
+        return try resolveAppAlert(root: dialog, ownerApp: activeApp, source: .safariDialog, deadline: deadline)
       }
       if let popup = try firstDismissPopupWindow(in: activeApp, deadline: deadline) {
-        return .resolved(RunnerAlert(root: popup, ownerApp: activeApp,
-          actions: try readModalActions(in: popup, deadline: deadline), source: .dismissPopup, window: nil))
+        return try resolveAppAlert(root: popup, ownerApp: activeApp, source: .dismissPopup, deadline: deadline)
       }
       return .absent
     } catch {
       return .unresolved
     }
+  }
+
+  private func resolveAppAlert(
+    root: XCUIElement, ownerApp: XCUIApplication, source: AlertSurfaceSource, deadline: Date
+  ) throws -> AlertResolution {
+    let actions = try readModalActions(in: root, deadline: deadline)
+    guard !actions.isEmpty else { return .notActionable }
+    return .resolved(RunnerAlert(root: root, ownerApp: ownerApp, actions: actions, source: source, window: nil))
   }
 
   @MainActor
