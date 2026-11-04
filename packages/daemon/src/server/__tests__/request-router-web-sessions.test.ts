@@ -3,7 +3,6 @@ import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import {
-  webSessionBackendKey,
   webSessionDevice,
   type DeviceInfo,
   type WebSessionIdentity,
@@ -329,8 +328,14 @@ test('two tenants using one web session name each open their own browser, and on
       sessionIsolation: 'tenant' as const,
     },
   });
+  // The first 12 hex characters of the sha256 of each tenant id, written out so the test fails if
+  // the backend key derivation changes.
+  const tenantKeyHash: Record<string, string> = {
+    'tenant-1': '0a96abb33b07',
+    'tenant-2': 'e12e79d593ae',
+  };
   const deviceId = (tenantId: string, name: string) =>
-    `${WEB_DESKTOP_DEVICE.id}:session:${webSessionBackendKey({ name, tenantId })}`;
+    `${WEB_DESKTOP_DEVICE.id}:session:t_${tenantKeyHash[tenantId]}_${name}`;
   try {
     const [first, second] = await Promise.all([
       handler(tenantOpen('tenant-1', 'shop')),
