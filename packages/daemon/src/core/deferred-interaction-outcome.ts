@@ -150,6 +150,7 @@ function markSurfaceStabilization(
             provenance: 'pre-action' as const,
             signature: baselineSignature,
             comparisonKey: snapshotSurfaceComparisonKey(session.snapshot),
+            keyboard: session.snapshot?.keyboard,
           },
         }
       : {}),
@@ -374,6 +375,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
           return {
             signature: buildInteractionSurfaceSignature(snapshot.nodes),
             comparisonKey: snapshotSurfaceComparisonKey(snapshot),
+            keyboard: snapshot.keyboard,
           };
         },
         signaturesStable: areInteractionSurfaceSignaturesStable,

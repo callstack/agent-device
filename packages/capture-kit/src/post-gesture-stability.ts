@@ -1,5 +1,9 @@
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import type { PostGestureAction, PostGestureOutcome } from '@agent-device/kernel/snapshot';
+import type {
+  PostGestureAction,
+  PostGestureOutcome,
+  SnapshotKeyboardBandFact,
+} from '@agent-device/kernel/snapshot';
 import { observeUntil, type ObservationClock, type ObservationSchedule } from './observe-until.ts';
 
 /**
@@ -51,6 +55,8 @@ export type BaselineSurfaceEvidence = 'changed' | 'unchanged' | 'ambiguous';
 export type PostGestureSurfaceReading<S> = Readonly<{
   signature: S;
   comparisonKey: string | undefined;
+  /** The keyboard fact the producer published with this reading; absent when it published none. */
+  keyboard?: SnapshotKeyboardBandFact | undefined;
 }>;
 
 /**
@@ -91,8 +97,14 @@ export type PostGestureStabilityHooks<T, S extends readonly unknown[]> = {
   readSurface: (value: T) => PostGestureSurfaceReading<S>;
   /** Two consecutive polls agree — the quiet-window test. */
   signaturesStable: (previous: S, current: S) => boolean;
-  /** Subset-tolerant baseline comparison feeding the distrust verdict. */
-  classifyBaselineEvidence: (baseline: S, quiet: S) => BaselineSurfaceEvidence;
+  /**
+   * Subset-tolerant baseline comparison feeding the distrust verdict. It reads both readings, not
+   * only their signatures, so a fact the producer published beside the tree can count as evidence.
+   */
+  classifyBaselineEvidence: (
+    baseline: PostGestureSurfaceReading<S>,
+    quiet: PostGestureSurfaceReading<S>,
+  ) => BaselineSurfaceEvidence;
   /** Full-surface both-direction agreement — the no-effect corroboration bar. */
   surfacesIdentical: (baseline: S, current: S) => boolean;
   /** Why `surfacesIdentical` said no, for the veto diagnostic. */
@@ -144,18 +156,18 @@ function postGestureOutcome(
  */
 export function decidePostGestureStabilityVerdict<S extends readonly unknown[]>(params: {
   baseline: PostGestureBaseline<S> | undefined;
-  quietSignature: S;
+  quiet: PostGestureSurfaceReading<S>;
   elapsedMs: number;
   distrustCapMs: number;
-  classifyBaselineEvidence: (baseline: S, quiet: S) => BaselineSurfaceEvidence;
+  classifyBaselineEvidence: PostGestureStabilityHooks<unknown, S>['classifyBaselineEvidence'];
 }): PostGestureStabilityDecision<S> {
-  const { baseline, quietSignature, elapsedMs, distrustCapMs } = params;
+  const { baseline, quiet, elapsedMs, distrustCapMs } = params;
   // An empty baseline is no baseline: never classify against it, whatever the classifier does
   // with empties. The writer normalizes `[]` away, so this guards a caller-constructed value.
   if (baseline?.provenance !== 'pre-action' || baseline.signature.length === 0) {
     return { verdict: 'trust' };
   }
-  if (params.classifyBaselineEvidence(baseline.signature, quietSignature) !== 'unchanged') {
+  if (params.classifyBaselineEvidence(baseline, quiet) !== 'unchanged') {
     return { verdict: 'trust' };
   }
   return elapsedMs < distrustCapMs
@@ -227,12 +239,13 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
           provenance: 'post-action',
           signature: current.signature,
           comparisonKey: current.comparisonKey,
+          keyboard: current.keyboard,
         };
         return { kind: 'continue' };
       }
       const decision = decidePostGestureStabilityVerdict({
         baseline,
-        quietSignature: current.signature,
+        quiet: current,
         elapsedMs,
         distrustCapMs: STABILIZATION_DISTRUST_DEADLINE_MS,
         classifyBaselineEvidence: hooks.classifyBaselineEvidence,
