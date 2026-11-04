@@ -69,6 +69,8 @@ export type ScreenshotOptions = {
   surface?: SessionSurface;
   skipIosSimulatorBootCheck?: boolean;
   captureBackend?: 'runner';
+  /** Maestro's comparison capture: the runner where the owner declares it, else the owner's default. */
+  preferredCaptureBackend?: 'runner';
 };
 
 /**

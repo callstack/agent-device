@@ -39,6 +39,7 @@ export function contextFromFlags(
     logPath,
     traceLogPath,
     ...dispatchContextFlags(flags),
+    preferredScreenshotCaptureBackend: flags?.maestro?.screenshotCaptureBackend,
     ...screenshotFlagsFromOptions(flags),
     clickButton: resolveClickButton(flags),
   };

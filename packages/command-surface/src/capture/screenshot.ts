@@ -53,7 +53,7 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
     normalizeStatusBar: booleanField(),
     captureBackend: enumField(
       SCREENSHOT_CAPTURE_BACKENDS,
-      'Capture through the XCTest runner instead of the platform default, which leaves out the simulator-drawn Dynamic Island. Apple targets only; refused on a macOS surface the helper captures, and with pixelDensity, screenMask or normalizeStatusBar.',
+      'Capture through the XCTest runner instead of the platform default, which leaves out the simulator-drawn Dynamic Island. Local Apple targets only; refused on provider sessions and on a macOS surface the helper captures, and with pixelDensity, screenMask or normalizeStatusBar.',
     ),
     surface: enumField(SESSION_SURFACES),
   },

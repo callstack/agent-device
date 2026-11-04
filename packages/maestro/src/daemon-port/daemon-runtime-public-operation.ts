@@ -398,7 +398,7 @@ function projectCaptureOperation(
               flags: {
                 ...(operation.stabilize === false ? { screenshotNoStabilize: true } : {}),
                 ...(operation.captureBackend === 'runner'
-                  ? { screenshotCaptureBackend: 'runner' as const }
+                  ? { maestro: { screenshotCaptureBackend: 'runner' as const } }
                   : {}),
               },
             }

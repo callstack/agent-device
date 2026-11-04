@@ -661,7 +661,9 @@ test('waitForAnimationToEnd uses two unstabilized screenshot captures', async ()
 
   expect(requests.map(({ command }) => command)).toEqual(['screenshot', 'screenshot']);
   expect(requests.every(({ flags }) => flags?.screenshotNoStabilize === true)).toBe(true);
-  expect(requests.every(({ flags }) => flags?.screenshotCaptureBackend === undefined)).toBe(true);
+  expect(
+    requests.every(({ flags }) => flags?.maestro?.screenshotCaptureBackend === undefined),
+  ).toBe(true);
   expect(result).not.toHaveProperty('visualStabilityReached');
 });
 
@@ -690,7 +692,9 @@ test('waitForAnimationToEnd uses the persistent runner capture backend on iOS', 
 
   expect(requests).toHaveLength(2);
   expect(requests.every(({ flags }) => flags?.screenshotNoStabilize === true)).toBe(true);
-  expect(requests.every(({ flags }) => flags?.screenshotCaptureBackend === 'runner')).toBe(true);
+  expect(requests.every(({ flags }) => flags?.maestro?.screenshotCaptureBackend === 'runner')).toBe(
+    true,
+  );
 });
 
 test('waitForAnimationToEnd between two taps does not throw a stability-generation mismatch', async () => {

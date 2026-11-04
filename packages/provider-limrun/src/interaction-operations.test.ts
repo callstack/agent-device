@@ -6,8 +6,9 @@ import {
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import {
+  bindLimrunInteractionOperations,
   limrunAppEventOperationFacts,
   limrunAlertOperationFacts,
   limrunSettingsOperationFacts,
@@ -270,4 +271,34 @@ test('long press is admitted on both direct-session legs and closed with a dead 
   expect(limrunInteractionOperationFacts(iosDevice, liveSessionUnavailable).longPressPoint).toEqual(
     liveSessionUnavailable,
   );
+});
+
+test('a provider iOS capture refuses an explicit runner request instead of returning a provider screenshot', async () => {
+  const screenshot = vi.fn(async () => ({}));
+  const operations = bindLimrunInteractionOperations({
+    device: iosDevice,
+    signal: new AbortController().signal,
+    getInteractor: () => ({ screenshot }) as unknown as Interactor,
+    presentIosAcquisition: (() => {
+      throw new Error('unused');
+    }) as never,
+  });
+
+  await expect(
+    operations.captureScreenshot({
+      outPath: '/tmp/runner.png',
+      options: { captureBackend: 'runner' },
+    }),
+  ).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    message: expect.stringContaining('Limrun'),
+    details: { reason: 'screenshot-capture-backend-unsupported' },
+  });
+  expect(screenshot).not.toHaveBeenCalled();
+
+  await operations.captureScreenshot({
+    outPath: '/tmp/maestro.png',
+    options: { preferredCaptureBackend: 'runner' },
+  });
+  expect(screenshot).toHaveBeenCalledWith('/tmp/maestro.png', {});
 });

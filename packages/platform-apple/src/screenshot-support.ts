@@ -16,6 +16,7 @@ export function appleScreenshotCaptureCapabilities(
       isHandheldAppleSimulator(device) &&
       options.captureBackend !== 'runner' &&
       resolveAppleToolProvider().simulatorScreenshotBackend !== 'runner',
-    runner: helper === undefined,
+    captureBackends: helper === undefined ? ['runner'] : [],
+    captureBackendRefusal: 'the macOS helper captures this surface',
   };
 }

@@ -28,7 +28,10 @@ import {
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
-import { bindProviderScreenshotInteractor } from '@agent-device/contracts/screenshot-runtime';
+import {
+  bindProviderScreenshotInteractor,
+  defaultCaptureOnly,
+} from '@agent-device/contracts/screenshot-runtime';
 import {
   bindProviderSnapshotInteractor,
   type SnapshotRuntimePresenter,
@@ -205,7 +208,12 @@ export function bindLimrunInteractionOperations(
       facts: limrunInteractionOperationFacts(device),
       pause: async (milliseconds) => await sleep(milliseconds, undefined, { signal }),
     }),
-    ...bindProviderScreenshotInteractor({ device, signal, resolveInteractor }),
+    ...bindProviderScreenshotInteractor({
+      device,
+      signal,
+      resolveInteractor,
+      captureCapabilities: defaultCaptureOnly('Limrun captures through its provider endpoint'),
+    }),
     ...bindProviderGestureInteractor({
       device,
       signal,

@@ -26,6 +26,7 @@ export function bindLocalInteractorOperationSet(
     resolveInteractor: LocalInteractorOperationResolver;
     facts: RuntimeFacts<PlatformRuntimeOperations>['operations'];
     pause: (milliseconds: number) => Promise<void>;
+    captureCapabilities: Parameters<typeof bindLocalScreenshotInteractor>[0]['captureCapabilities'];
   }>,
 ): Partial<PlatformRuntimeOperations> {
   const { facts, pause } = params;
@@ -35,7 +36,12 @@ export function bindLocalInteractorOperationSet(
     resolveInteractor: params.resolveInteractor,
   };
   return {
-    ...(facts.captureScreenshot.available ? bindLocalScreenshotInteractor(resolver) : {}),
+    ...(facts.captureScreenshot.available
+      ? bindLocalScreenshotInteractor({
+          ...resolver,
+          captureCapabilities: params.captureCapabilities,
+        })
+      : {}),
     ...(facts.focusPoint.available ? bindLocalFocusInteractor(resolver) : {}),
     ...bindLocalGestureInteractor({ ...resolver, facts }),
     ...(facts.scrollDirection.available ? bindLocalScrollInteractor(resolver) : {}),

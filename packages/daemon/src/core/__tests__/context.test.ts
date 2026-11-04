@@ -8,11 +8,17 @@ test('contextFromFlags propagates back mode into the dispatch context', () => {
   assert.equal(context.backMode, 'system');
 });
 
-test('contextFromFlags forwards the runner screenshot capture backend', () => {
-  const context = contextFromFlags('/tmp/agent-device.log', {
+test('contextFromFlags keeps an explicit capture backend apart from the Maestro preference', () => {
+  const explicit = contextFromFlags('/tmp/agent-device.log', {
     screenshotCaptureBackend: 'runner',
   });
-  assert.equal(context.screenshotCaptureBackend, 'runner');
+  assert.equal(explicit.screenshotCaptureBackend, 'runner');
+  assert.equal(explicit.preferredScreenshotCaptureBackend, undefined);
+  const preferred = contextFromFlags('/tmp/agent-device.log', {
+    maestro: { screenshotCaptureBackend: 'runner' },
+  });
+  assert.equal(preferred.screenshotCaptureBackend, undefined);
+  assert.equal(preferred.preferredScreenshotCaptureBackend, 'runner');
 });
 
 test('contextFromFlags forwards scroll pixels from CLI flags', () => {

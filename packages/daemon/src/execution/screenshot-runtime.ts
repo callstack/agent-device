@@ -8,7 +8,7 @@ import {
 } from '@agent-device/contracts/capture';
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { ScreenshotRuntimeExecution } from '@agent-device/contracts/screenshot-runtime';
-import { isApplePlatform, isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
+import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
 import { promises as fs } from 'node:fs';
@@ -65,7 +65,7 @@ export async function resolveScreenshotGenericExecution(
   const retiredMaxSize = retiredScreenshotMaxSizeFlagError('screenshot', req.flags);
   if (retiredMaxSize) throw new AppError('INVALID_ARGS', retiredMaxSize);
   assertSupportedScreenshotPixelDensity(session.device, req.flags?.screenshotPixelDensity);
-  assertSupportedScreenshotCaptureBackend(session.device, req.flags);
+  assertSupportedScreenshotCaptureBackend(req.flags);
 
   const request = readScreenshotRequest(req, params.hostCwd);
   const cropOn =
@@ -319,23 +319,14 @@ async function annotateScreenshotWithSessionRefs(
   });
 }
 
-/** The runner capture exists on Apple targets only, and skips the simctl capture pipeline. */
-function assertSupportedScreenshotCaptureBackend(
-  device: SessionState['device'],
-  flags: DaemonRequest['flags'],
-): void {
+/** Each capture owner declares its backends; what stays here is the shape of the request. */
+function assertSupportedScreenshotCaptureBackend(flags: DaemonRequest['flags']): void {
   const backend: unknown = flags?.screenshotCaptureBackend;
   if (backend === undefined) return;
   if (!(SCREENSHOT_CAPTURE_BACKENDS as readonly unknown[]).includes(backend)) {
     throw new AppError(
       'INVALID_ARGS',
       `--capture-backend takes ${SCREENSHOT_CAPTURE_BACKENDS.join(', ')}`,
-    );
-  }
-  if (!isApplePlatform(device.platform)) {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      '--capture-backend runner is supported only on Apple targets',
     );
   }
   if (flags?.screenshotPixelDensity !== undefined || flags?.screenshotNormalizeStatusBar) {
@@ -402,6 +393,7 @@ function createBoundScreenshotBackend(
             dispatchContext.skipIosSimulatorBootCheck ??
             (isIosFamily(session.device) && session.device.kind === 'simulator'),
           captureBackend: resolved.captureBackend,
+          preferredCaptureBackend: dispatchContext.preferredScreenshotCaptureBackend,
         },
         execution: screenshotExecutionFromContext(dispatchContext),
       });

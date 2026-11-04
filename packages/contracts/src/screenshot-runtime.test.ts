@@ -3,6 +3,7 @@ import type { Interactor } from './interactor-types.ts';
 import {
   bindLocalScreenshotInteractor,
   bindProviderScreenshotInteractor,
+  defaultCaptureOnly,
   screenshotRuntimeOperationFacts,
 } from './screenshot-runtime.ts';
 
@@ -24,7 +25,12 @@ test('a local binding hands the interactor the destination, options, and the req
   const resolveInteractor = vi.fn(async () => ({ screenshot }) as unknown as Interactor);
   const signal = new AbortController().signal;
 
-  const operations = bindLocalScreenshotInteractor({ device, signal, resolveInteractor });
+  const operations = bindLocalScreenshotInteractor({
+    device,
+    signal,
+    resolveInteractor,
+    captureCapabilities: defaultCaptureOnly('test'),
+  });
   await operations.captureScreenshot({
     outPath: '/tmp/out.png',
     options: { appBundleId: 'com.example.app', fullscreen: true },
@@ -47,6 +53,7 @@ test('a provider binding fails closed when its exact owner exposes no interactor
     device,
     signal: new AbortController().signal,
     resolveInteractor: () => undefined,
+    captureCapabilities: defaultCaptureOnly('test'),
   });
 
   await expect(operations.captureScreenshot({ outPath: '/tmp/out.png' })).rejects.toMatchObject({
@@ -63,6 +70,7 @@ test.each([bindLocalScreenshotInteractor, bindProviderScreenshotInteractor])(
       device: { ...device, platform: 'apple', appleOs: 'ios', kind: 'simulator' },
       signal: new AbortController().signal,
       resolveInteractor,
+      captureCapabilities: defaultCaptureOnly('test'),
     });
     await expect(
       operations.captureScreenshot({
@@ -92,3 +100,48 @@ test('the selected capture capability admits a mask for one invocation without c
     expect(screenshot.mock.lastCall).toEqual(['/tmp/capture.png', { screenMask }]);
   }
 });
+
+test.each([bindLocalScreenshotInteractor, bindProviderScreenshotInteractor])(
+  'an owner declaring no capture backend refuses an explicit one with its own explanation',
+  async (bind) => {
+    const resolveInteractor = vi.fn();
+    const operations = bind({
+      device,
+      signal: new AbortController().signal,
+      resolveInteractor,
+      captureCapabilities: defaultCaptureOnly('this owner has one capture path'),
+    });
+    await expect(
+      operations.captureScreenshot({
+        outPath: '/tmp/capture.png',
+        options: { captureBackend: 'runner' },
+      }),
+    ).rejects.toMatchObject({
+      code: 'UNSUPPORTED_OPERATION',
+      message: expect.stringContaining('this owner has one capture path'),
+      details: { reason: 'screenshot-capture-backend-unsupported' },
+    });
+    expect(resolveInteractor).not.toHaveBeenCalled();
+  },
+);
+
+test.each([
+  [['runner'] as const, { captureBackend: 'runner' }],
+  [[] as const, {}],
+])(
+  'a preferred backend selects a declared one and otherwise keeps the default capture: %j',
+  async (captureBackends, expected) => {
+    const screenshot = vi.fn(async () => ({}));
+    const operations = bindLocalScreenshotInteractor({
+      device,
+      signal: new AbortController().signal,
+      resolveInteractor: async () => ({ screenshot }) as unknown as Interactor,
+      captureCapabilities: () => ({ captureBackends }),
+    });
+    await operations.captureScreenshot({
+      outPath: '/tmp/capture.png',
+      options: { preferredCaptureBackend: 'runner' },
+    });
+    expect(screenshot).toHaveBeenCalledWith('/tmp/capture.png', expected);
+  },
+);

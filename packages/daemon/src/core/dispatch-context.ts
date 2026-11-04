@@ -20,9 +20,9 @@ import type { Point } from '@agent-device/kernel/snapshot';
  * anything this list does not.
  *
  * The flags that DO change on the way through stay hand-written at the mapper,
- * where the decision lives: `clickButton` (resolved from several flags) and the
- * screenshot family (`screenshotFlagsFromOptions`), which includes the capture
- * backend. Order follows the flag order in `CliFlags`.
+ * where the decision lives: `clickButton` (resolved from several flags), the
+ * screenshot family (`screenshotFlagsFromOptions`), and the maestro-nested
+ * capture backend. Order follows the flag order in `CliFlags`.
  */
 // Exported only because `DispatchContextFlags` says `typeof` it.
 // fallow-ignore-next-line unused-export
@@ -85,6 +85,7 @@ export type DispatchContext = ScreenshotDispatchFlags &
     traceLogPath?: string;
     runnerLeaseContext?: RunnerLogicalLeaseContext;
     screenshotCaptureBackend?: 'runner';
+    preferredScreenshotCaptureBackend?: 'runner';
     snapshotIncludeRects?: boolean;
     skipIosSimulatorBootCheck?: boolean;
     /** Maestro replay compatibility for coordinate-resolved fill targets. */

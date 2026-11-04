@@ -13,6 +13,7 @@ import type {
   ScreenshotOptions,
 } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
+import type { ScreenshotCaptureBackend } from './screenshot.ts';
 
 export type { ScreenshotCaptureFacts, ScreenshotOptions } from './interactor-types.ts';
 
@@ -36,22 +37,33 @@ export type ScreenshotRuntimeOperations = Readonly<{
 
 export type ScreenshotCaptureCapabilities = Readonly<{
   screenMask?: boolean;
-  runner?: boolean;
+  /** The backends a request can select on this owner; an absent list selects none. */
+  captureBackends?: readonly ScreenshotCaptureBackend[];
+  /** Why this owner cannot serve a selected backend. */
+  captureBackendRefusal?: string;
 }>;
 
 type ScreenshotCaptureBindingOptions = Readonly<{
   signal: AbortSignal;
-  captureCapabilities?: (options: Readonly<ScreenshotOptions>) => ScreenshotCaptureCapabilities;
+  captureCapabilities: (options: Readonly<ScreenshotOptions>) => ScreenshotCaptureCapabilities;
 }>;
+
+/** The declaration of an owner that captures one way only, and why. */
+export function defaultCaptureOnly(
+  captureBackendRefusal: string,
+): (options: Readonly<ScreenshotOptions>) => ScreenshotCaptureCapabilities {
+  return () => ({ captureBackendRefusal });
+}
 
 export async function assertScreenshotCaptureSupport(
   options: Readonly<ScreenshotOptions> | undefined,
   capabilities: ScreenshotCaptureCapabilities = {},
 ): Promise<void> {
-  if (options?.captureBackend === 'runner' && capabilities.runner === false) {
+  const backend = options?.captureBackend;
+  if (backend !== undefined && !capabilities.captureBackends?.includes(backend)) {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
-      '--capture-backend runner cannot capture this surface: the macOS helper owns it',
+      `--capture-backend ${backend} is not supported: ${capabilities.captureBackendRefusal ?? 'this capture owner declares no such backend'}`,
       { reason: 'screenshot-capture-backend-unsupported' },
     );
   }
@@ -78,6 +90,17 @@ export function screenshotRuntimeOperationFacts(
   return Object.freeze({ captureScreenshot: input.capture });
 }
 
+/** A preference, unlike `captureBackend`, keeps the owner's default where it declares no such backend. */
+function resolvePreferredCaptureBackend(
+  input: Readonly<ScreenshotOptions> | undefined,
+  binding: ScreenshotCaptureBindingOptions,
+): Readonly<ScreenshotOptions> {
+  const { preferredCaptureBackend: preferred, ...options } = input ?? {};
+  return preferred && binding.captureCapabilities(options).captureBackends?.includes(preferred)
+    ? { captureBackend: preferred, ...options }
+    : options;
+}
+
 /**
  * Captures one selected owner's interactor authority for the lifetime of a request binding. The
  * owner is already chosen by the time a binder is called, so each entry point supplies its own
@@ -89,16 +112,14 @@ function bindScreenshotCapture(
 ): ScreenshotRuntimeOperations {
   return Object.freeze({
     captureScreenshot: async (input: CaptureScreenshotInput) => {
-      await assertScreenshotCaptureSupport(
-        input.options,
-        binding.captureCapabilities?.(input.options ?? {}),
-      );
+      const options = resolvePreferredCaptureBackend(input.options, binding);
+      await assertScreenshotCaptureSupport(options, binding.captureCapabilities(options));
       const interactor = await resolveInteractor({
         ...input.execution,
         appBundleId: input.options?.appBundleId,
         signal: binding.signal,
       });
-      return (await interactor.screenshot(input.outPath, input.options)) ?? {};
+      return (await interactor.screenshot(input.outPath, options)) ?? {};
     },
   });
 }

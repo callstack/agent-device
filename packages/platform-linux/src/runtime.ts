@@ -28,7 +28,10 @@ import {
   unavailableFact,
 } from '@agent-device/contracts/platform-runtime';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
-import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
+import {
+  screenshotRuntimeOperationFacts,
+  defaultCaptureOnly,
+} from '@agent-device/contracts/screenshot-runtime';
 import {
   captureSnapshotSignal,
   snapshotRuntimeOperationFacts,
@@ -179,6 +182,7 @@ function linuxInteractionOperations(
   return bindLocalInteractorOperationSet({
     ...resolver,
     facts: facts.operations,
+    captureCapabilities: defaultCaptureOnly('a Linux target captures through its desktop tools'),
     pause: async (milliseconds) => await host.clock.sleep(milliseconds, request.scope.signal),
   });
 }

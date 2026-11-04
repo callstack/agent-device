@@ -252,7 +252,7 @@ test('rejects --pixel-density outside iOS-family simulators before inspecting ow
   expect(fixture.binds).toHaveLength(0);
 });
 
-test('refuses --capture-backend runner outside Apple targets, with --pixel-density, and any other backend, before inspecting owner facts', async () => {
+test('refuses --capture-backend runner with --pixel-density or --normalize-status-bar, and any other backend, before inspecting owner facts', async () => {
   const refused = async (
     device: SessionState['device'],
     // The wire flags are untyped, so a request can name a backend the type does not list.
@@ -277,7 +277,6 @@ test('refuses --capture-backend runner outside Apple targets, with --pixel-densi
     expect(fixture.binds).toHaveLength(0);
   };
 
-  await refused(ANDROID_EMULATOR, { screenshotCaptureBackend: 'runner' }, 'UNSUPPORTED_OPERATION');
   await refused(
     IOS_SIMULATOR,
     { screenshotCaptureBackend: 'runner', screenshotPixelDensity: 3 },
@@ -289,6 +288,31 @@ test('refuses --capture-backend runner outside Apple targets, with --pixel-densi
     'INVALID_ARGS',
   );
   await refused(IOS_SIMULATOR, { screenshotCaptureBackend: 'simctl' }, 'INVALID_ARGS');
+});
+
+test('a Maestro comparison capture prefers the runner without selecting it', async () => {
+  const fixture = screenshotRuntimeFixture();
+  const session = makeSession('ios', { device: IOS_SIMULATOR });
+  const req = screenshotRequest({
+    positionals: [path.join(mkdtempForTestSync('agent-device-maestro-capture'), 'maestro.png')],
+    flags: { maestro: { screenshotCaptureBackend: 'runner' } },
+  });
+
+  const resolved = await resolveScreenshotGenericExecution({
+    hostCwd: process.cwd(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req,
+    session,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+
+  await executeResult(resolved, session, req, contextFromFlags('/tmp/daemon.log', req.flags));
+  expect(fixture.captureScreenshot.mock.calls[0]?.[0]?.options).toMatchObject({
+    preferredCaptureBackend: 'runner',
+  });
+  expect(fixture.captureScreenshot.mock.calls[0]?.[0]?.options?.captureBackend).toBeUndefined();
 });
 
 test('a --capture-backend runner request reaches the bound capture', async () => {
