@@ -57,6 +57,11 @@ export function createScreenRecordingRuntimeHost(options: {
     },
   });
   const outputs: ScreenRecordingRuntimeHost['outputs'] = Object.freeze({
+    inspect: async (filePath) => {
+      const { createScreenRecordingOutputHost } =
+        await import('./platform-runtime-screen-recording-output-host.ts');
+      return await createScreenRecordingOutputHost().inspect(filePath);
+    },
     prepare: async (outputPath) => {
       const { createScreenRecordingOutputHost } =
         await import('./platform-runtime-screen-recording-output-host.ts');

@@ -49,10 +49,13 @@ export type ResourceUnreattachableReason =
   | 'descriptor-version-unsupported'
   | 'owner-unavailable'
   | 'transport-not-reattachable'
-  | 'ownership-fence-lost';
+  | 'ownership-fence-lost'
+  | 'preservation-unavailable';
 
 export type ReattachOutcome<Handle extends AsyncDisposable, Result> =
   | Readonly<{ status: 'active'; handle: Handle }>
+  /** The recorder is gone and disposal of this handle must preserve its export material. */
+  | Readonly<{ status: 'export'; handle: Handle }>
   | Readonly<{ status: 'completed'; result: Result }>
   | Readonly<{ status: 'missing' }>
   | Readonly<{

@@ -132,7 +132,7 @@ async function disposeLateRecoveryAuthority<K extends string, H extends LiveReso
   primaryError: unknown,
 ): Promise<void> {
   try {
-    if (authority.reattached.status === 'active') {
+    if (authority.reattached.status === 'active' || authority.reattached.status === 'export') {
       await disposeLateAuthority(
         params,
         authority.reattached.handle,
@@ -164,7 +164,7 @@ async function acquireRecoveryAuthority<K extends string, H extends LiveResource
     return { control, reattached };
   } catch (error) {
     try {
-      if (reattached?.status === 'active') {
+      if (reattached?.status === 'active' || reattached?.status === 'export') {
         await disposeLateAuthority(params, reattached.handle, 'late_handle_cleanup_failed', error);
       }
     } finally {

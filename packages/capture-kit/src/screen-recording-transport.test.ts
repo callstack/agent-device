@@ -67,7 +67,12 @@ function harness(
     startTransportScreenRecording({
       host: {
         screenRecording: {
-          outputs: { prepare, copy: async () => {}, remove: async () => 'removed' as const },
+          outputs: {
+            inspect: async () => 'missing' as const,
+            prepare,
+            copy: async () => {},
+            remove: async () => 'removed' as const,
+          },
           finalize: { prepare: prepareValidator, sniff: async () => {}, complete },
         },
       },
@@ -168,7 +173,12 @@ test('unsupported options are refused with a typed error before the output is pr
   const started = startTransportScreenRecording({
     host: {
       screenRecording: {
-        outputs: { prepare, copy: async () => {}, remove: async () => 'removed' as const },
+        outputs: {
+          inspect: async () => 'missing' as const,
+          prepare,
+          copy: async () => {},
+          remove: async () => 'removed' as const,
+        },
         finalize: { prepare: prepareValidator, sniff: async () => {}, complete: async () => ({}) },
       },
     },

@@ -81,3 +81,39 @@ test('a recovered stop removes nothing from a record that committed while author
     envelope: { lifecycle: 'completed', metadata: { phase: 'completed' } },
   });
 });
+
+test('a recovered export finishes under the durable fence', async () => {
+  const context = makeDurableCaptureContext();
+  writeOpenRecord(context.resourcePath, context);
+  const result = { outputPath: '/tmp/export', completedAt: 1 };
+  const finish = vi.fn(async () => ({ status: 'completed' as const, result }));
+  const forceCleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
+  const cleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
+  const dispose = vi.fn(async () => {});
+  await expect(
+    finishRecoveredDurableCapture(testCaptureDefinition, {
+      resourcePath: context.resourcePath,
+      scope: makeScope(),
+      acquireControl: async () => ({
+        reattach: async () => ({
+          status: 'export' as const,
+          handle: {
+            finish,
+            forceCleanup,
+            [Symbol.asyncDispose]: async () => {},
+          },
+        }),
+        cleanup,
+        [Symbol.asyncDispose]: dispose,
+      }),
+    }),
+  ).resolves.toEqual(result);
+  expect(finish).toHaveBeenCalledOnce();
+  expect(forceCleanup).not.toHaveBeenCalled();
+  expect(cleanup).not.toHaveBeenCalled();
+  expect(dispose).toHaveBeenCalledOnce();
+  expect(testCaptureStore.read(context.resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'completed' },
+  });
+});

@@ -43,6 +43,7 @@ function fakeRecordingHost(calls: string[], finalize?: () => Promise<Record<stri
   return {
     screenRecording: {
       outputs: {
+        inspect: async () => 'missing' as const,
         prepare: vi.fn(async () => {
           calls.push('prepare');
         }),

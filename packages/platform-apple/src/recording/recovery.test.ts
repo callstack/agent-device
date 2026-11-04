@@ -120,8 +120,8 @@ test('a simulator recording whose recorder died with its daemon exports through 
   const reattached = await recoveryOperations(simulatorHost(files)).screenRecordingReattach({
     envelope: started.envelope,
   });
-  expect(reattached).toMatchObject({ status: 'active' });
-  if (reattached.status !== 'active') throw new Error('expected an exportable recording');
+  expect(reattached).toMatchObject({ status: 'export' });
+  if (reattached.status !== 'export') throw new Error('expected an exportable recording');
 
   await expect(reattached.handle.finish()).resolves.toMatchObject({
     status: 'completed',
@@ -158,7 +158,7 @@ test('a finalized export whose daemon died before the record closed still comple
   const reattached = await recoveryOperations(
     simulatorHost(files, { complete }),
   ).screenRecordingReattach({ envelope });
-  if (reattached.status !== 'active') throw new Error('expected a finalized export to replay');
+  if (reattached.status !== 'export') throw new Error('expected a finalized export to replay');
 
   await expect(reattached.handle.finish(stopProgressFor(envelope))).resolves.toMatchObject({
     status: 'completed',
@@ -196,7 +196,7 @@ test('a collected copy is finalized again when the recorder no longer has its ow
   const reattached = await recoveryOperations(
     simulatorHost(files, { complete, outputs: { copy } }),
   ).screenRecordingReattach({ envelope });
-  if (reattached.status !== 'active') throw new Error('expected a collectable copy to finish');
+  if (reattached.status !== 'export') throw new Error('expected a collectable copy to finish');
 
   await expect(reattached.handle.finish(stopProgressFor(envelope))).resolves.toMatchObject({
     status: 'completed',
@@ -249,7 +249,7 @@ test('a recovered export discloses the touch overlay whose events died with the 
   const reattached = await recoveryOperations(simulatorHost(files)).screenRecordingReattach({
     envelope: started.envelope,
   });
-  if (reattached.status !== 'active') throw new Error('expected an exportable recording');
+  if (reattached.status !== 'export') throw new Error('expected an exportable recording');
   const finished = await reattached.handle.finish();
   if (finished.status !== 'completed') throw new Error('expected a completed export');
   expect(finished.result.overlayWarning).toContain('overlay unavailable');
@@ -383,3 +383,109 @@ test.each([
     expect(inspectRunner).not.toHaveBeenCalled();
   },
 );
+
+test('export authority releases without cleanup and can still finish from the native file', async () => {
+  const files = recordingFileStore();
+  const started = await startSimulatorRecording(files);
+  const native = nativeRecordingPath(recordingOutputPath());
+  const complete = vi.fn(async () => ({}));
+  const prepare = vi.fn(async () => {});
+  const terminateProcess = vi.fn(async () => 'terminated' as const);
+  const clear = vi.fn();
+  const host = simulatorHost(files, {
+    complete,
+    prepare,
+    apple: { terminateProcess },
+    ownedProcesses: { clear, replace: () => {} },
+  });
+  const outcome = await recoveryOperations(host).screenRecordingReattach({
+    envelope: started.envelope,
+  });
+  expect(outcome.status).toBe('export');
+  if (outcome.status !== 'export') throw new Error('expected export authority');
+  await outcome.handle[Symbol.asyncDispose]();
+  expect(files.exists(native)).toBe(true);
+  expect(terminateProcess).not.toHaveBeenCalled();
+  expect(clear).not.toHaveBeenCalled();
+  expect(prepare).not.toHaveBeenCalled();
+  expect(complete).not.toHaveBeenCalled();
+  await expect(outcome.handle.finish()).resolves.toMatchObject({ status: 'completed' });
+  expect(files.exists(recordingOutputPath())).toBe(true);
+});
+
+test.each(['owned-alive', 'ownership-lost', 'unavailable'] as const)(
+  'simulator %s refuses preservation without signalling or removing the native file',
+  async (state) => {
+    const files = recordingFileStore();
+    const started = await startSimulatorRecording(files);
+    const native = nativeRecordingPath(recordingOutputPath());
+    const terminateProcess = vi.fn(async () => 'terminated' as const);
+    const complete = vi.fn(async () => ({}));
+    const prepare = vi.fn(async () => {});
+    const inspectProcess = vi.fn(async () => {
+      if (state === 'unavailable') throw new Error('process probe unavailable');
+      return state;
+    });
+    const outcome = await recoveryOperations(
+      simulatorHost(files, {
+        apple: { inspectProcess, terminateProcess },
+        complete,
+        prepare,
+      }),
+    ).screenRecordingReattach({ envelope: started.envelope });
+    expect(outcome).toMatchObject({
+      status: 'unreattachable',
+      reason: state === 'ownership-lost' ? 'ownership-fence-lost' : 'preservation-unavailable',
+    });
+    expect(terminateProcess).not.toHaveBeenCalled();
+    expect(prepare).not.toHaveBeenCalled();
+    expect(complete).not.toHaveBeenCalled();
+    expect(files.exists(native)).toBe(true);
+  },
+);
+
+test('a failed source probe preserves native material and refuses export authority', async () => {
+  const files = recordingFileStore();
+  const started = await startSimulatorRecording(files);
+  const native = nativeRecordingPath(recordingOutputPath());
+  const complete = vi.fn(async () => ({}));
+  const outcome = await recoveryOperations(
+    simulatorHost(files, {
+      sniff: async () => {
+        throw new Error('unreadable source');
+      },
+      complete,
+    }),
+  ).screenRecordingReattach({ envelope: started.envelope });
+  expect(outcome).toMatchObject({ status: 'unreattachable', reason: 'preservation-unavailable' });
+  expect(files.exists(native)).toBe(true);
+  expect(complete).not.toHaveBeenCalled();
+});
+
+test('an unavailable source inspection retains the native file and refuses export authority', async () => {
+  const files = recordingFileStore();
+  const started = await startSimulatorRecording(files);
+  const native = nativeRecordingPath(recordingOutputPath());
+  const outcome = await recoveryOperations(
+    simulatorHost(files, {
+      outputs: { inspect: async () => 'unavailable' },
+    }),
+  ).screenRecordingReattach({ envelope: started.envelope });
+  expect(outcome).toMatchObject({ status: 'unreattachable', reason: 'preservation-unavailable' });
+  expect(files.exists(native)).toBe(true);
+});
+
+test('a missing finalized export cannot be restored from its checkpoint', async () => {
+  const files = recordingFileStore();
+  const started = await startSimulatorRecording(files);
+  const envelope = stopJournalOn(started.envelope, {
+    stopObservation: { recorder: 'confirmed' },
+    stoppedAtMs: 1,
+    exportPath: recordingOutputPath(),
+    stopFinalization: { telemetryPath: '/tmp/telemetry' },
+  });
+  await expect(
+    recoveryOperations(simulatorHost(files)).screenRecordingReattach({ envelope }),
+  ).resolves.toEqual({ status: 'missing' });
+  expect(files.exists(nativeRecordingPath(recordingOutputPath()))).toBe(true);
+});

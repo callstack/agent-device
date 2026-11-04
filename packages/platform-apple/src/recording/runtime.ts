@@ -67,7 +67,7 @@ export function createAppleScreenRecordingOperations(params: {
     screenRecordingReattach: async (input) => {
       const reattached = await reattachAppleRecording({ host, device, envelope: input.envelope });
       return reattached.status === 'restore-export'
-        ? { status: 'active', handle: simulatorExportHandle({ host, restored: reattached }) }
+        ? { status: 'export', handle: simulatorExportHandle({ host, restored: reattached }) }
         : reattached;
     },
     screenRecordingCleanup: async (input) =>
@@ -234,7 +234,7 @@ function simulatorExportHandle(
     backend: SIMULATOR_BACKEND_LABEL,
     gestureEvents: [],
   });
-  return createScreenRecordingLiveHandle(snapshot, {
+  const handle = createScreenRecordingLiveHandle(snapshot, {
     finish: (current, progress) =>
       stopAndExportScreenRecording({
         snapshot: current,
@@ -271,6 +271,7 @@ function simulatorExportHandle(
       }),
     forceCleanup: async () => await cleanup(),
   });
+  return Object.freeze({ ...handle, [Symbol.asyncDispose]: async () => {} });
 }
 
 async function collectSimulatorRecording(

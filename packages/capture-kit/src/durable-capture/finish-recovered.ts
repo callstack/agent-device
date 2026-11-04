@@ -66,6 +66,7 @@ export async function finishRecoveredDurableCapture<
   try {
     switch (authority.reattached.status) {
       case 'active':
+      case 'export':
         return await finishDurableCaptureHandle(definition, {
           handle: authority.reattached.handle,
           fence: envelope.fence,

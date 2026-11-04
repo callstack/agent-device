@@ -70,3 +70,13 @@ test('says a recording file it could not remove is still there instead of throwi
   expect(await createScreenRecordingOutputHost().remove(filePath)).toBe('present');
   expect(fs.existsSync(filePath)).toBe(true);
 });
+
+test('inspects recording presence without changing the file', async () => {
+  const root = mkdtempForTestSync('agent-device-recording-inspect-');
+  const filePath = path.join(root, 'capture.native.mp4');
+  const output = createScreenRecordingOutputHost();
+  await expect(output.inspect(filePath)).resolves.toBe('missing');
+  fs.writeFileSync(filePath, 'recorded');
+  await expect(output.inspect(filePath)).resolves.toBe('present');
+  expect(fs.readFileSync(filePath, 'utf8')).toBe('recorded');
+});

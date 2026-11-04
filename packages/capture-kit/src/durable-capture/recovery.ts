@@ -179,6 +179,9 @@ async function settleRecoveryAuthority<K extends string, H extends LiveResourceH
         });
         return isConfirmedCleanup(cleanup);
       }
+      case 'export':
+        await authority.reattached.handle[Symbol.asyncDispose]();
+        return false;
       case 'completed':
         await transitionTerminal(params, resourcePath, envelope, {
           ...params.definition.completionMetadata(authority.reattached.result),
@@ -238,6 +241,7 @@ export function allowsDurableCaptureDescriptorCleanup(
     case 'descriptor-invalid':
     case 'descriptor-version-unsupported':
     case 'ownership-fence-lost':
+    case 'preservation-unavailable':
       return false;
     case 'owner-unavailable':
     case 'transport-not-reattachable':

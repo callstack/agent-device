@@ -287,29 +287,53 @@ async function reattachSimulatorRecording(
   }>,
   descriptor: Extract<AppleRecordingDescriptor, { backend: 'simctl' }>,
 ): Promise<AppleRecordingReattachment> {
-  const ownership = await Promise.all(
-    descriptor.processes.map(
-      async (marker) => await params.host.screenRecording.apple.inspectProcess(marker),
-    ),
-  );
+  let ownership: Awaited<ReturnType<typeof params.host.screenRecording.apple.inspectProcess>>[];
+  try {
+    ownership = await Promise.all(
+      descriptor.processes.map(
+        async (marker) => await params.host.screenRecording.apple.inspectProcess(marker),
+      ),
+    );
+  } catch {
+    return unreattachableAppleRecording(
+      'preservation-unavailable',
+      'Apple recorder ownership could not be inspected.',
+    );
+  }
+  if (ownership.includes('ownership-lost')) {
+    return unreattachableAppleRecording(
+      'ownership-fence-lost',
+      'Apple recording ownership no longer matches the durable descriptor.',
+    );
+  }
   if (!ownership.every((value) => value === 'missing')) {
     return unreattachableAppleRecording(
-      'transport-not-reattachable',
-      ownership.includes('ownership-lost')
-        ? 'Apple recording ownership no longer matches the durable descriptor.'
-        : 'Apple screen recordings require exact cleanup after daemon restart.',
+      'preservation-unavailable',
+      'Apple recorder termination is not confirmed.',
     );
   }
   const { recording } = descriptor;
-  const source = resumedExportSource(
-    readStopCheckpoints(params.envelope.metadata),
-    descriptor.outputPath,
-  );
-  if (
-    recording === undefined ||
-    (source !== undefined && !(await recordingRemains(params.host, source)))
-  ) {
-    return { status: 'missing' };
+  const progress = readStopCheckpoints(params.envelope.metadata);
+  if (progress.finalization !== undefined && progress.exportPath === undefined)
+    return unreattachableAppleRecording(
+      'preservation-unavailable',
+      'Apple recording export checkpoint has no path.',
+    );
+  const source = resumedExportSource(progress, descriptor.outputPath);
+  if (recording === undefined) return { status: 'missing' };
+  if (source !== undefined) {
+    let status: 'present' | 'missing' | 'unavailable';
+    try {
+      status = await params.host.screenRecording.outputs.inspect(source);
+    } catch {
+      status = 'unavailable';
+    }
+    if (status === 'missing') return { status: 'missing' };
+    if (status === 'unavailable' || !(await recordingRemains(params.host, source)))
+      return unreattachableAppleRecording(
+        'preservation-unavailable',
+        'Apple recording export source could not be verified.',
+      );
   }
   return {
     status: 'restore-export',
@@ -330,7 +354,7 @@ function resumedExportSource(
   learned: RecordingStopProgress,
   nativePath: string,
 ): string | undefined {
-  if (learned.finalization !== undefined) return undefined;
+  if (learned.finalization !== undefined) return learned.exportPath;
   return learned.collectedPath ?? nativePath;
 }
 

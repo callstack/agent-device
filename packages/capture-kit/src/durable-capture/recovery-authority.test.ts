@@ -459,3 +459,55 @@ test('already-canceled recovery acquires no exact-owner authority', async () => 
   ).rejects.toBe(cancellation);
   expect(acquireControl).not.toHaveBeenCalled();
 });
+
+test('late export authority releases its handle and control without forced cleanup', async () => {
+  vi.useFakeTimers();
+  try {
+    let resolve!: (value: { status: 'export'; handle: AppLogLiveHandle }) => void;
+    const forceCleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
+    const release = vi.fn(async () => {});
+    const disposeControl = vi.fn(async () => {});
+    const handle = {
+      ...createAppLogLiveHandle({
+        inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
+        finish: async () => ({
+          status: 'completed',
+          result: { backend: 'android', outputPath: '/tmp/log', completedAt: 1 },
+        }),
+        forceCleanup,
+      }),
+      [Symbol.asyncDispose]: release,
+    };
+    const acquisition = acquireDurableCaptureRecoveryAuthorityBeforeDeadline({
+      displayName: 'app-log',
+      envelope,
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+      deadlineMs: 25,
+      acquireControl: async () => ({
+        reattach: async () =>
+          await new Promise<{ status: 'export'; handle: AppLogLiveHandle }>((accept) => {
+            resolve = accept;
+          }),
+        cleanup: async () => ({ status: 'already-missing' as const }),
+        [Symbol.asyncDispose]: disposeControl,
+      }),
+      onLateCleanupFailure: () => {},
+    });
+    const timedOut = expect(acquisition).rejects.toBeInstanceOf(
+      DurableCaptureRecoveryDeadlineError,
+    );
+    await vi.advanceTimersByTimeAsync(25);
+    await timedOut;
+    resolve({ status: 'export', handle });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(forceCleanup).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledOnce();
+    expect(disposeControl).toHaveBeenCalledOnce();
+  } finally {
+    vi.useRealTimers();
+  }
+});

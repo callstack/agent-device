@@ -266,6 +266,7 @@ export type ScreenRecordingFinalizer = Readonly<{
 
 /** Destructive output preparation occurs only after package-owned semantic validation. */
 export type ScreenRecordingOutputHost = Readonly<{
+  inspect(filePath: string): Promise<'present' | 'missing' | 'unavailable'>;
   prepare(outputPath: string): Promise<void>;
   /**
    * Copies one recording file to another host path, replacing whatever sits at `to` (ADR 0024 2.3).

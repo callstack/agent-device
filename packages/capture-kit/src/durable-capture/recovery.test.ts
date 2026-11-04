@@ -122,3 +122,58 @@ function commitCommittedRecord(resourcePath: string): void {
     metadata: { ...(record.envelope.metadata ?? {}), phase: 'completed' },
   });
 }
+
+test('recovery retains export authority without cleanup or manifest completion', async () => {
+  const context = makeDurableCaptureContext();
+  testCaptureStore.write(
+    context.resourcePath,
+    createDurableResourceEnvelope({
+      resourceKind: TEST_CAPTURE_KIND,
+      sessionId: context.sessionName,
+      device: { id: context.device.id, family: context.device.platform, kind: context.device.kind },
+      owner: context.owner,
+      fence: context.fence,
+      lifecycle: 'open',
+      descriptor: { version: 1, body: { pid: 123 } },
+    }),
+  );
+  const forceCleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
+  const release = vi.fn(async () => {});
+  const disposeControl = vi.fn(async () => {});
+  const cleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
+  await expect(
+    recoverDurableCaptureResourcesAfterDaemonLock({
+      definition: testCaptureDefinition,
+      sessionsDir: context.sessionsDir,
+      resolveSessionDir: context.resolveSessionDir,
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+      acquireControl: async () => ({
+        reattach: async () => ({
+          status: 'export' as const,
+          handle: {
+            finish: async () => ({
+              status: 'completed' as const,
+              result: { outputPath: '/tmp/test', completedAt: 1 },
+            }),
+            forceCleanup,
+            [Symbol.asyncDispose]: release,
+          },
+        }),
+        cleanup,
+        [Symbol.asyncDispose]: disposeControl,
+      }),
+    }),
+  ).resolves.toEqual({ scanned: 1, recovered: 0, retained: 1 });
+  expect(forceCleanup).not.toHaveBeenCalled();
+  expect(cleanup).not.toHaveBeenCalled();
+  expect(release).toHaveBeenCalledOnce();
+  expect(disposeControl).toHaveBeenCalledOnce();
+  expect(testCaptureStore.read(context.resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'open' },
+  });
+});

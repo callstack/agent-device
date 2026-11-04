@@ -4,6 +4,14 @@ import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-
 
 export function createScreenRecordingOutputHost(): ScreenRecordingRuntimeHost['outputs'] {
   return Object.freeze({
+    inspect: async (filePath) => {
+      try {
+        fs.statSync(filePath);
+        return 'present';
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'missing' : 'unavailable';
+      }
+    },
     prepare: async (outputPath: string) => {
       fs.mkdirSync(path.dirname(outputPath), { recursive: true });
       fs.rmSync(outputPath, { force: true });

@@ -23,6 +23,7 @@ export function recordingFileStore(initial: Readonly<Record<string, string>> = {
     files,
     exists: (filePath) => files.has(filePath),
     outputs: {
+      inspect: async (filePath) => (files.has(filePath) ? 'present' : 'missing'),
       prepare: async (outputPath) => {
         files.delete(outputPath);
       },
