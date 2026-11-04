@@ -616,7 +616,7 @@ test('devices shows the web host as claimed while one of its web session devices
       reconcileOrphanedDeviceClaim: async () => ({ status: 'retained', reason: 'test' }),
     });
     expect(claimed.status).toBe('acquired');
-    const response = await runDevices({}, [browser]);
+    const response = await runDevices({ platform: 'web' }, [browser]);
     expect(response?.ok).toBeTruthy();
     if (response?.ok) {
       const devices = response.data?.devices as Array<Record<string, unknown>> | undefined;
