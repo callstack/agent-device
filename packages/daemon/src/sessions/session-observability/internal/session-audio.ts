@@ -23,7 +23,7 @@ import type { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef } from '../../../core/session-state.ts';
 import { bindSessionAudioProbe } from '../../../core/session-capture-binding.ts';
-import { retainSessionOwnerForRecording } from '../../recording-session-owner.ts';
+import { retainSessionOwnerForRecording } from '../../../resources/device/recording-session-owner.ts';
 import {
   type DaemonFailureResponse,
   errorResponse,

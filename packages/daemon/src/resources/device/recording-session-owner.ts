@@ -1,7 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { retainRecordingClaimForSession } from '@agent-device/daemon-contracts/device-claims';
-import type { SessionStore } from '../core/session-store.ts';
-import type { SessionRef } from '../core/session-state.ts';
+import type { SessionStore } from '../../core/session-store.ts';
+import type { SessionRef } from '../../core/session-state.ts';
 
 /** Fence another session-owned effect before it can escape a recording-held claim. */
 export async function retainSessionOwnerForRecording(

@@ -36,7 +36,7 @@ import type { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { bindSessionPerfCapture } from '../../../core/session-capture-binding.ts';
-import { retainSessionOwnerForRecording } from '../../recording-session-owner.ts';
+import { retainSessionOwnerForRecording } from '../../../resources/device/recording-session-owner.ts';
 import { withCaptureOutputOwnership } from '../../../core/capture-output-ownership.ts';
 import { recordSessionAction } from '../../../core/session-action-recorder.ts';
 import {

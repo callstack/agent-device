@@ -14,6 +14,7 @@ import {
 import { recordSessionAction } from '../../core/session-action-recorder.ts';
 import { resolveBoundAppEventRuntime } from '../app-event-runtime.ts';
 import { resolveBoundKeyboardRuntime } from '../keyboard-runtime.ts';
+import { retainSessionOwnerForRecording } from '../../resources/device/recording-session-owner.ts';
 import { resolveRefFrameEffect } from '../../core/daemon-command-registry.ts';
 import { expireRefFrame } from '../../core/ref-frame.ts';
 import type {
@@ -144,6 +145,7 @@ type SessionRouteRuntimeResolver = (
     inspectFacts?: InspectDeviceRuntimeFacts;
     platformServices: DaemonPlatformServices;
     bindDevice?: BindDeviceRuntime;
+    beforeDispatch?: () => Promise<void>;
   }>,
 ) => Promise<
   | Readonly<{ ok: false; response: DaemonResponse }>
@@ -170,6 +172,7 @@ async function runBoundSessionRoute(
        * lexically. A bare reference would dedupe the wiring and delete the proof with it.
        */
       resolveRuntime: SessionRouteRuntimeResolver;
+      beforeDispatch?: (ref: SessionRef) => Promise<void>;
       updateSession?: Parameters<typeof runSessionOrSelectorDispatch>[0]['updateSession'];
     }>,
 ): Promise<DaemonResponse> {
@@ -185,6 +188,7 @@ async function runBoundSessionRoute(
     platformServices,
     ...(params.updateSession ? { updateSession: params.updateSession } : {}),
     prepare: async (device, ref) => {
+      const beforeDispatch = params.beforeDispatch;
       const bound = await params.resolveRuntime({
         host: params.host,
         device,
@@ -193,6 +197,7 @@ async function runBoundSessionRoute(
         inspectFacts,
         bindDevice,
         platformServices,
+        ...(ref && beforeDispatch ? { beforeDispatch: () => beforeDispatch(ref) } : {}),
       });
       if (!bound.ok) return { ok: false, response: bound.response };
       const session = ref ? sessionStore.requireCurrent(ref) : undefined;
@@ -227,6 +232,7 @@ export async function handleAppEventCommand(
     ...params,
     command: PUBLIC_COMMANDS.triggerAppEvent,
     resolveRuntime: (runtimeParams) => resolveBoundAppEventRuntime(runtimeParams),
+    beforeDispatch: async (ref) => await retainSessionOwnerForRecording(params.sessionStore, ref),
     updateSession: async (ref, result) => {
       const eventUrl = typeof result?.eventUrl === 'string' ? result.eventUrl : undefined;
       if (!eventUrl) return;

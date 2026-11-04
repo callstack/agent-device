@@ -34,6 +34,7 @@ async function executeAppEvent(
   context: DaemonCommandContext,
   positionals: readonly string[],
   env: NodeJS.ProcessEnv,
+  beforeDispatch?: () => Promise<void>,
 ): Promise<Record<string, unknown>> {
   const { eventName, payload } = parseTriggerAppEventArgs([...positionals]);
   const eventUrl = resolveAppEventUrl(device, eventName, payload, env);
@@ -42,6 +43,7 @@ async function executeAppEvent(
     ...(context.appBundleId === undefined ? {} : { options: { appBundleId: context.appBundleId } }),
     execution: runtimeExecutionFromContext(context),
   };
+  await beforeDispatch?.();
   await runtime.operations.triggerAppEvent(input);
   return {
     event: eventName,
@@ -62,11 +64,20 @@ export async function resolveBoundAppEventRuntime(
     device: DeviceInfo;
     positionals: readonly string[];
     readiness?: boolean;
+    beforeDispatch?: () => Promise<void>;
   }> &
     RuntimeAdmissionBindings,
 ): Promise<ResolvedAppEventExecution> {
-  const { host, device, positionals, inspectFacts, bindDevice, platformServices, readiness } =
-    params;
+  const {
+    host,
+    device,
+    positionals,
+    inspectFacts,
+    bindDevice,
+    platformServices,
+    readiness,
+    beforeDispatch,
+  } = params;
   const admission = await admitRuntimeUse({
     command: 'trigger-app-event',
     device,
@@ -80,6 +91,7 @@ export async function resolveBoundAppEventRuntime(
   const runtime = admission.runtime;
   return {
     ok: true,
-    execute: (context) => executeAppEvent(runtime, device, context, positionals, host.env),
+    execute: (context) =>
+      executeAppEvent(runtime, device, context, positionals, host.env, beforeDispatch),
   };
 }
