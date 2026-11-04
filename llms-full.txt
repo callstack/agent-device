@@ -2364,7 +2364,7 @@ agent-device is text 'id="greeting"' "Welcome back"
 * The first read after `scroll`, `swipe`, or `gesture swipe` waits for two captures to agree. When that proves something about the gesture, `is`, `get`, `find`, `wait`, interactions that captured it, and `snapshot` add a warning, and all but `snapshot` report `postGestureOutcome` (`{ "kind", "gesture": { "action", "positionals" } }`) in `data` or `error.details`:
 
   * `kind: "unsettled"`: the screen was still changing. A miss is not proof of absence; read again. `is absent` refuses with `observation: "unsettled"`, and `wait absent` keeps polling.
-  * `kind: "no-effect"`: nothing changed. The list may be at its edge or ignore synthesized scrolls; a raw `swipe x1 y1 x2 y2` inside it moves such lists.
+  * `kind: "no-effect"`: nothing changed. The list may be at its edge or ignore synthesized scrolls; a raw `swipe x1 y1 x2 y2` inside it moves such lists. The soft keyboard appearing or going away counts as a change only when the pre-gesture baseline and a later quiet capture both read the keyboard from their own tree and disagree: the iOS XCTest runner does, a WebDriver (Appium) visibility probe does not. Otherwise only the content is compared.
 
 ## Replay
 
