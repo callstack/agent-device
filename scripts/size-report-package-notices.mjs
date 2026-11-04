@@ -1,7 +1,7 @@
 // The THIRD_PARTY_NOTICES.txt format: the build renders it and the pack gate reads it. It imports
 // nothing, so the standalone size-report copy runs it without the repository's dependencies.
 
-export const NO_BUNDLED_DEPENDENCIES_NOTICE = 'No third-party dependencies are bundled.\n';
+const NO_BUNDLED_DEPENDENCIES_NOTICE = 'No third-party dependencies are bundled.\n';
 
 /**
  * The heading that opens a numbered license section. Every attribution is written before the first

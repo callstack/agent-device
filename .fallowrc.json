@@ -75,7 +75,7 @@
     // A hand-written type surface for a plain-Node .mjs the typechecked program (and Fallow's
     // graph) cannot import; its only consumer is the .mjs's real importers, resolved by tsc, not
     // by an import edge. Same shape as the help-conformance declaration files above.
-    "scripts/size-report-package.d.mts"
+    "scripts/size-report-package*.d.mts"
   ],
   "dynamicallyLoaded": [
     "packages/daemon/src/execution/interaction/index.ts",
