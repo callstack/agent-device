@@ -1,3 +1,7 @@
+import { createHash } from 'node:crypto';
+import { canonicalJson } from '@agent-device/kernel/collections';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
+import type { ScreenRecordingCompletion } from '@agent-device/contracts/screen-recording-runtime';
 import { SCREEN_RECORDING_RESOURCE_KIND } from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableCaptureResourceStore } from '../durable-capture/index.ts';
 
@@ -24,5 +28,28 @@ export function hasRecordingRecoveryNeedingValidator(sessionsDir: string): boole
  */
 export const SCREEN_RECORDING_COMPLETION_METADATA_KEY = 'completion';
 export const SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY = 'deviceClaimToken';
+export const SCREEN_RECORDING_PENDING_COMPLETION_BINDING_KEY = 'pendingCompletionBinding';
+
+/** Binds a preserved export to the exact recording and claim that produced it. */
+export function screenRecordingPendingCompletionBinding(
+  envelope: DurableResourceEnvelope<'screen-recording'>,
+  completion: ScreenRecordingCompletion,
+): string | undefined {
+  const claimToken = envelope.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY];
+  if (typeof claimToken !== 'string' || claimToken.trim().length === 0) return undefined;
+  return createHash('sha256')
+    .update(
+      canonicalJson({
+        sessionId: envelope.sessionId,
+        device: envelope.device,
+        owner: envelope.owner,
+        fence: envelope.fence,
+        descriptor: envelope.descriptor,
+        claimToken,
+        completion,
+      }),
+    )
+    .digest('hex');
+}
 
 export const SCREEN_RECORDING_CLAIM_BINDING_VERSION_KEY = 'deviceClaimBindingVersion';

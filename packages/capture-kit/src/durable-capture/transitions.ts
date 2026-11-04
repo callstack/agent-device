@@ -358,6 +358,9 @@ export function transitionFinishOutcome<K extends string, C>(
       metadata: {
         ...metadata,
         ...definition.completionMetadata(outcome.result),
+        ...(outcome.cleanupPending
+          ? definition.pendingCompletionMetadata?.(outcome.result, lease.envelope)
+          : {}),
         phase: outcome.cleanupPending ? 'cleanup-pending' : 'completed',
         ...(outcome.cleanupPending
           ? {

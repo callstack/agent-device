@@ -20,6 +20,8 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DurableCaptureResourceRecord } from '../durable-capture/index.ts';
 import {
   SCREEN_RECORDING_COMPLETION_METADATA_KEY,
+  SCREEN_RECORDING_PENDING_COMPLETION_BINDING_KEY,
+  screenRecordingPendingCompletionBinding,
   screenRecordingResourceStore,
 } from './screen-recording-resource-store.ts';
 
@@ -61,7 +63,7 @@ export function resolveScreenRecordingStopRecovery(
   if (record.status !== 'decoded') return { kind: 'none' };
   assertManifestBelongsToRequest(params, record.envelope);
   if (record.envelope.lifecycle !== 'completed') {
-    const pendingCompletion = readPendingScreenRecordingCompletion(record.envelope.metadata);
+    const pendingCompletion = readPendingScreenRecordingCompletion(record.envelope);
     return {
       kind: 'open',
       resourcePath,
@@ -159,10 +161,15 @@ export function readReplayableStoredCompletion(
 }
 
 export function readPendingScreenRecordingCompletion(
-  metadata: JsonObject | undefined,
+  envelope: DurableResourceEnvelope<'screen-recording'>,
 ): ScreenRecordingCompletion | undefined {
-  return metadata?.phase === 'cleanup-pending' && metadata.cleanupStatus === 'cleanup-pending'
-    ? readReplayableStoredCompletion(metadata)
+  const metadata = envelope.metadata;
+  if (envelope.lifecycle !== 'open' || metadata?.cleanupStatus !== 'cleanup-pending') return;
+  const completion = readReplayableStoredCompletion(metadata);
+  if (!completion) return;
+  const binding = screenRecordingPendingCompletionBinding(envelope, completion);
+  return binding && metadata[SCREEN_RECORDING_PENDING_COMPLETION_BINDING_KEY] === binding
+    ? completion
     : undefined;
 }
 

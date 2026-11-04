@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { canonicalJson } from '@agent-device/kernel/collections';
 import { sameDeviceIdentity } from '@agent-device/kernel/device';
 import { sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { withDurableCaptureResourceFence } from '../durable-capture/fence.ts';
@@ -33,6 +34,9 @@ import type { DurableCaptureFinishIntent } from './durable-capture-resource.ts';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
 import {
   SCREEN_RECORDING_COMPLETION_METADATA_KEY,
+  SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY,
+  SCREEN_RECORDING_PENDING_COMPLETION_BINDING_KEY,
+  screenRecordingPendingCompletionBinding,
   screenRecordingResourceStore,
 } from './screen-recording-resource-store.ts';
 
@@ -44,6 +48,10 @@ const screenRecordingDefinition: DurableCaptureRecordDefinition<
   displayName: 'screen recording',
   store: screenRecordingResourceStore,
   completionMetadata: encodeScreenRecordingCompletionMetadata,
+  pendingCompletionMetadata: (completion, envelope): JsonObject => {
+    const binding = screenRecordingPendingCompletionBinding(envelope, completion);
+    return binding ? { [SCREEN_RECORDING_PENDING_COMPLETION_BINDING_KEY]: binding } : {};
+  },
   // The manifest holds the whole stop response this kind wrote, so a caller that reaches the committed
   // record is served the same export the first stop was answered with. That answer is a cold path: the
   // record has to be read before anyone can be refused or served, so the reader is reached on demand
@@ -164,11 +172,18 @@ export async function finishRecoveredScreenRecording(params: {
   if (record.status !== 'decoded' || record.envelope.lifecycle !== 'open')
     throw new AppError('INVALID_ARGS', 'no active recording');
   const expected = record.envelope;
+  const currentAuthority = () => {
+    const current = store.read(params.resourcePath);
+    if (current.status !== 'decoded' || !sameRecordingAuthority(expected, current.envelope))
+      throw recordingOwnershipLost();
+    return current.envelope;
+  };
   return await withDurableCaptureResourceFence({
     store,
     resourcePath: params.resourcePath,
     expected: expected.fence,
     onCompleted: async ({ envelope }) => {
+      if (!sameRecordingAuthority(expected, envelope)) throw recordingOwnershipLost();
       const { readReplayableStoredCompletion } =
         await import('./screen-recording-stop-recovery.ts');
       const completion = readReplayableStoredCompletion(envelope.metadata);
@@ -178,14 +193,7 @@ export async function finishRecoveredScreenRecording(params: {
       });
     },
     run: async (lease) => {
-      if (
-        lease.envelope.sessionId !== expected.sessionId ||
-        !sameDeviceIdentity(lease.envelope.device, expected.device) ||
-        !sameRuntimeOwner(lease.envelope.owner, expected.owner)
-      )
-        throw new AppError('COMMAND_FAILED', 'Recording owner changed', {
-          reason: 'ownership-fence-lost',
-        });
+      if (!sameRecordingAuthority(expected, lease.envelope)) throw recordingOwnershipLost();
       const controller = new AbortController();
       const scope = {
         ...params.scope,
@@ -196,21 +204,26 @@ export async function finishRecoveredScreenRecording(params: {
       let control: Awaited<ReturnType<typeof params.acquireControl>> | undefined;
       try {
         scope.signal.throwIfAborted();
-        const preserved = (
-          await import('./screen-recording-stop-recovery.ts')
-        ).readPendingScreenRecordingCompletion(lease.envelope.metadata);
+        const { readPendingScreenRecordingCompletion } =
+          await import('./screen-recording-stop-recovery.ts');
         let result: Awaited<ReturnType<NonNullable<typeof control>['reattach']>>;
         try {
           control = await params.acquireControl(lease.envelope, scope);
           result = await control.reattach(lease.envelope);
         } catch (error) {
-          if (preserved && !scope.signal.aborted) return preserved;
+          const preserved = !scope.signal.aborted
+            ? readPendingScreenRecordingCompletion(currentAuthority())
+            : undefined;
+          if (preserved) return preserved;
           throw error;
         }
         clearTimeout(timer);
         scope.signal.throwIfAborted();
-        if (preserved && (result.status === 'unreattachable' || result.status === 'missing'))
-          return preserved;
+        const current = currentAuthority();
+        if (result.status === 'unreattachable' || result.status === 'missing') {
+          const preserved = readPendingScreenRecordingCompletion(current);
+          if (preserved) return preserved;
+        }
         if (result.status === 'unreattachable')
           throw new AppError('COMMAND_FAILED', result.message ?? 'Recording cannot be reattached', {
             reason: result.reason,
@@ -230,6 +243,7 @@ export async function finishRecoveredScreenRecording(params: {
         try {
           markCompletingDurableCapture(lease);
           const finished = await result.handle.finish(createStopProgress(lease));
+          currentAuthority();
           if (finished.status !== 'completed')
             throw new AppError('COMMAND_FAILED', finished.message ?? 'Recording stop is pending', {
               reason: finished.reason,
@@ -244,5 +258,27 @@ export async function finishRecoveredScreenRecording(params: {
         if (control) await control[Symbol.asyncDispose]();
       }
     },
+  });
+}
+
+function sameRecordingAuthority(
+  expected: DurableResourceEnvelope<'screen-recording'>,
+  current: DurableResourceEnvelope<'screen-recording'>,
+): boolean {
+  return (
+    current.sessionId === expected.sessionId &&
+    sameDeviceIdentity(current.device, expected.device) &&
+    sameRuntimeOwner(current.owner, expected.owner) &&
+    current.fence.token === expected.fence.token &&
+    current.fence.generation === expected.fence.generation &&
+    current.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] ===
+      expected.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] &&
+    canonicalJson(current.descriptor) === canonicalJson(expected.descriptor)
+  );
+}
+
+function recordingOwnershipLost(): AppError {
+  return new AppError('COMMAND_FAILED', 'Recording owner changed', {
+    reason: 'ownership-fence-lost',
   });
 }

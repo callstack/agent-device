@@ -6,6 +6,8 @@ import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableResourceEnvelope } from '../../durable-resource-envelope.ts';
+import { withDurableCaptureResourceFence } from '../../durable-capture/fence.ts';
+import { markCompletingDurableCapture } from '../../durable-capture/transitions.ts';
 import { createScreenRecordingLiveHandle } from '../../screen-recording-live-handle.ts';
 import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 import { stopAndExportScreenRecording } from '../../recording/stop-sequence.ts';
@@ -16,6 +18,7 @@ import {
   finishRecoveredScreenRecording,
 } from '../screen-recording-session-resource.ts';
 import { screenRecordingResourceStore } from '../screen-recording-resource-store.ts';
+import { resolveScreenRecordingStopRecovery } from '../screen-recording-stop-recovery.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DurableCaptureSessionState } from '../session-state-slice.ts';
 import {
@@ -181,6 +184,150 @@ test('a failed recording finish keeps the record open and never disposes the rec
     status: 'decoded',
     envelope: { lifecycle: 'open', metadata: { phase: 'completing' } },
   });
+});
+
+test('an interrupted retry replays its bound export while the exact cleanup remains pending', async () => {
+  const sessionStore = makeCaptureAdmissionSessionStore<TestRecordingSession>('pending-retry-');
+  const sessionName = 'recording';
+  sessionStore.set(sessionName, { name: sessionName, device });
+  const binding = makeCaptureSessionBinding(sessionStore, sessionName, {
+    read: (session) => session.screenRecording,
+    replace: (session, screenRecording) => ({ ...session, screenRecording }),
+  });
+  const outPath = path.join(mkdtempForTestSync('pending-retry-output-'), 'recording.mp4');
+  fs.writeFileSync(outPath, 'export bytes');
+  const owner = localRuntimeOwner('android');
+  const fence = { token: 'fence', generation: 7 } as const;
+  const completion = {
+    backend: 'adb screenrecord',
+    outPath,
+    startedAt: 1,
+    completedAt: 2,
+    scope: 'device' as const,
+    showTouches: false,
+    recordOnlySession: false,
+    nativePathDisposition: 'pending' as const,
+  };
+  const handle = createScreenRecordingLiveHandle(
+    { ...completion, gestureEvents: [] },
+    {
+      finish: async () => ({
+        status: 'completed',
+        result: completion,
+        cleanupPending: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
+      }),
+      forceCleanup: async () => ({ status: 'cleanup-pending', reason: 'cleanup-unconfirmed' }),
+    },
+  );
+  await adoptStartedScreenRecording({
+    admissionLedger: createScreenRecordingAdmissionLedger(),
+    binding,
+    device,
+    owner,
+    fence,
+    pendingHandle: new PendingTransferGuard(handle),
+    envelope: createDurableResourceEnvelope({
+      resourceKind: 'screen-recording',
+      sessionId: sessionName,
+      device: { id: device.id, family: 'android', kind: 'emulator' },
+      owner,
+      fence,
+      lifecycle: 'open',
+      descriptor: { version: 3, body: { outputPath: outPath, marker: 'exact-generation' } },
+      metadata: { deviceClaimToken: 'claim-token' },
+    }),
+    throwIfCanceled: () => {},
+  });
+  await expect(finishLiveScreenRecording({ intent: 'capture', binding })).resolves.toEqual(
+    completion,
+  );
+  const recordPath = resourcePath(sessionStore, sessionName);
+  await expect(
+    withDurableCaptureResourceFence({
+      store: screenRecordingResourceStore,
+      resourcePath: recordPath,
+      expected: fence,
+      onCompleted: () => undefined,
+      run: async (lease) => {
+        markCompletingDurableCapture(lease);
+        throw new Error('interrupted immediately after completing checkpoint');
+      },
+    }),
+  ).rejects.toThrow('interrupted immediately after completing checkpoint');
+  const interrupted = screenRecordingResourceStore.read(recordPath);
+  expect(interrupted).toMatchObject({
+    status: 'decoded',
+    envelope: {
+      lifecycle: 'open',
+      fence,
+      metadata: {
+        phase: 'completing',
+        cleanupStatus: 'cleanup-pending',
+        deviceClaimToken: 'claim-token',
+      },
+    },
+  });
+  if (interrupted.status !== 'decoded') throw new Error('Expected interrupted record');
+  const expectedRecovery = {
+    kind: 'open',
+    resourcePath: recordPath,
+    pendingCompletion: completion,
+  };
+  expect(resolveScreenRecordingStopRecovery({ sessionName, sessionStore, device })).toEqual(
+    expectedRecovery,
+  );
+  const scope = {
+    signal: new AbortController().signal,
+    diagnostics: { emit: () => {} },
+    progress: { report: () => {} },
+  };
+  const unavailable = async () => {
+    throw new Error('owner unavailable');
+  };
+  await expect(
+    finishRecoveredScreenRecording({
+      resourcePath: recordPath,
+      scope,
+      acquireControl: unavailable,
+    }),
+  ).resolves.toEqual(completion);
+  expect(screenRecordingResourceStore.read(recordPath)).toEqual(interrupted);
+  for (const changed of [
+    { ...interrupted.envelope, fence: { token: 'other-fence', generation: 7 } },
+    {
+      ...interrupted.envelope,
+      descriptor: { version: 3, body: { outputPath: outPath, marker: 'other' } },
+    },
+    {
+      ...interrupted.envelope,
+      metadata: { ...interrupted.envelope.metadata, deviceClaimToken: 'other-claim' },
+    },
+  ]) {
+    screenRecordingResourceStore.write(recordPath, changed);
+    expect(resolveScreenRecordingStopRecovery({ sessionName, sessionStore, device })).toEqual({
+      kind: 'open',
+      resourcePath: recordPath,
+    });
+    await expect(
+      finishRecoveredScreenRecording({
+        resourcePath: recordPath,
+        scope,
+        acquireControl: unavailable,
+      }),
+    ).rejects.toThrow('owner unavailable');
+    screenRecordingResourceStore.write(recordPath, interrupted.envelope);
+    await expect(
+      finishRecoveredScreenRecording({
+        resourcePath: recordPath,
+        scope,
+        acquireControl: async () => {
+          screenRecordingResourceStore.write(recordPath, changed);
+          throw new Error('owner unavailable');
+        },
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'ownership-fence-lost' } });
+  }
+  screenRecordingResourceStore.write(recordPath, interrupted.envelope);
 });
 
 test('a record stop that fails after collecting resumes through the fence without a second signal', async () => {

@@ -24,6 +24,10 @@ import {
   encodeScreenRecordingCompletionMetadata,
   screenRecordingDurableResource,
 } from './screen-recording-session-resource.ts';
+import {
+  SCREEN_RECORDING_PENDING_COMPLETION_BINDING_KEY,
+  screenRecordingPendingCompletionBinding,
+} from './screen-recording-resource-store.ts';
 
 type ScreenRecordingRecoveryRuntime = BoundDeviceRuntime<typeof screenRecordingRecoveryUse>;
 
@@ -108,12 +112,19 @@ export async function recoverScreenRecordingResourceAfterDaemonLock(params: {
               return { status: 'retained' as const, reason: outcome.reason };
             case 'missing':
               return { status: 'retained' as const, reason: 'resource-missing' };
-            case 'completed':
-              if (outcome.cleanupPending)
+            case 'completed': {
+              if (outcome.cleanupPending) {
+                const binding = screenRecordingPendingCompletionBinding(
+                  lease.envelope,
+                  outcome.result,
+                );
                 lease.transition('open', {
                   metadata: {
                     ...lease.envelope.metadata,
                     ...encodeScreenRecordingCompletionMetadata(outcome.result),
+                    ...(binding
+                      ? { [SCREEN_RECORDING_PENDING_COMPLETION_BINDING_KEY]: binding }
+                      : {}),
                     phase: 'cleanup-pending',
                     cleanupStatus: outcome.cleanupPending.status,
                     cleanupPendingReason: outcome.cleanupPending.reason,
@@ -122,7 +133,9 @@ export async function recoverScreenRecordingResourceAfterDaemonLock(params: {
                       : {}),
                   },
                 });
+              }
               return { status: 'retained' as const, reason: 'completion-pending' };
+            }
           }
         } finally {
           if (control) await control[Symbol.asyncDispose]();

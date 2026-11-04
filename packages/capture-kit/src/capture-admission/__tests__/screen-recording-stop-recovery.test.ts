@@ -8,7 +8,10 @@ import { createDurableResourceEnvelope } from '../../durable-resource-envelope.t
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceIdentity } from '@agent-device/kernel/device';
 import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
-import { screenRecordingResourceStore } from '../screen-recording-resource-store.ts';
+import {
+  screenRecordingPendingCompletionBinding,
+  screenRecordingResourceStore,
+} from '../screen-recording-resource-store.ts';
 import { encodeScreenRecordingCompletionMetadata } from '../screen-recording-session-resource.ts';
 import {
   resolveScreenRecordingStopRecovery,
@@ -125,8 +128,21 @@ test('an open cleanup obligation exposes its surviving export without becoming t
     ...encodeScreenRecordingCompletionMetadata(completion),
     phase: 'cleanup-pending',
     cleanupStatus: 'cleanup-pending',
+    deviceClaimToken: 'claim',
   };
   writeManifest(harness, metadata, { lifecycle: 'open' });
+  const resourcePath = manifestPath(harness.sessionStore);
+  const record = screenRecordingResourceStore.read(resourcePath);
+  if (record.status !== 'decoded') throw new Error('Expected pending recording');
+  const binding = screenRecordingPendingCompletionBinding(record.envelope, completion);
+  if (!binding) throw new Error('Expected pending completion binding');
+  screenRecordingResourceStore.write(resourcePath, {
+    ...record.envelope,
+    metadata: {
+      ...record.envelope.metadata,
+      pendingCompletionBinding: binding,
+    },
+  });
   expect(resolveScreenRecordingStopRecovery({ ...harness.params, device: SESSION_DEVICE })).toEqual(
     {
       kind: 'open',
