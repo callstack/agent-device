@@ -46,6 +46,8 @@ extension RunnerTests {
     XCTAssertNil(request["maxDepth"])
   }
 
+  // The runner compiles the shared reader only for the iOS Simulator (RunnerSnapshotBridge.m).
+  #if os(iOS) && targetEnvironment(simulator)
   func testReaderDoesNotRefuseTheBoundsOfAFirstRead() throws {
     var request = Self.snapshotBridgeReaderRequest(try firstReadPayload())
     request["pid"] = 1
@@ -63,6 +65,7 @@ extension RunnerTests {
     request["maxDepth"] = false
     XCTAssertEqual(SnapshotBridgeHandleRequest(request)["error_code"] as? String, "bounds-invalid")
   }
+  #endif
 
   func testEnvelopeAtTheBoundIncludingItsFrameHeaderIsServed() throws {
     let envelope: [AnyHashable: Any] = ["requestId": "r", "ok": true, "pid": 7]
