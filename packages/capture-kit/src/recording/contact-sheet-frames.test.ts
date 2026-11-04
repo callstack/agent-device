@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createTestHost } from '../host-environment.fixtures.ts';
 import path from 'node:path';
 import {
@@ -6,7 +6,11 @@ import {
   CONTACT_SHEET_NO_FRAMES_REASON,
   CONTACT_SHEET_UNSUPPORTED_HOST_REASON,
 } from './contact-sheet-report.ts';
-import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import { solidPng } from '../png-pixels.fixtures.ts';
 import { writeDecodedFrames, type StubFrame } from './contact-sheet.fixtures.ts';
@@ -26,6 +30,7 @@ import { runCmd } from '@agent-device/host-kit/command';
 
 const mockRunCmd = vi.mocked(runCmd);
 const scratchDir = mkdtempForTestSync('agent-device-contact-sheet-frames-');
+afterEach(() => vi.unstubAllEnvs());
 const CELL_WIDTH = 360;
 const VIDEO = '/tmp/recording.mp4';
 
@@ -58,6 +63,8 @@ function answerWith(framesByRequestedTimeMs: ReadonlyMap<number, StubFrame>) {
 describe('extractRecordingFrames', () => {
   beforeEach(() => {
     mockRunCmd.mockReset();
+    vi.stubEnv('AGENT_DEVICE_CLAIMS_DIR', path.join(scratchDir, 'claims'));
+    vi.stubEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', path.join(scratchDir, 'cache'));
   });
 
   test('refuses to decode at all on a host with no frame decoder', async () => {
@@ -281,6 +288,45 @@ describe('extractRecordingFrames', () => {
       allowFailure: true,
       signal: controller.signal,
     });
+  });
+
+  test('cancels an in-progress decoder compile with the same request', async () => {
+    const { compileSwiftSourceFile } = await import('./swift-cache.ts');
+    const controller = new AbortController();
+    let entered!: () => void;
+    const compiling = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    vi.mocked(compileSwiftSourceFile).mockImplementationOnce(
+      async ({ signal }) =>
+        await new Promise<string>((_, reject) => {
+          entered();
+          signal?.addEventListener('abort', () => reject(createRequestCanceledError()), {
+            once: true,
+          });
+        }),
+    );
+    const host = createTestHost();
+    const operation = extractRecordingFrames({
+      host: {
+        ...host,
+        env: {
+          ...host.env,
+          AGENT_DEVICE_CLAIMS_DIR: path.join(scratchDir, 'claims'),
+          AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(scratchDir, 'cache'),
+        },
+      },
+      videoPath: VIDEO,
+      scratchDir,
+      maxWidth: CELL_WIDTH,
+      timesMs: [0],
+      hostPlatform: 'darwin',
+      signal: controller.signal,
+    }).catch((error: unknown) => error);
+    await compiling;
+    controller.abort();
+    expect(isRequestCanceledError(await operation)).toBe(true);
+    expect(mockRunCmd).not.toHaveBeenCalled();
   });
 
   test('answers a cancelled request as a cancellation, not an extraction failure', async () => {

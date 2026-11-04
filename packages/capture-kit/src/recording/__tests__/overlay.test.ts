@@ -50,11 +50,13 @@ let tmpDir: string;
 beforeEach(() => {
   tmpDir = mkdtempForTestSync('agent-device-overlay-test-');
   vi.stubEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', path.join(tmpDir, 'swift-cache'));
+  vi.stubEnv('AGENT_DEVICE_CLAIMS_DIR', path.join(tmpDir, 'claims'));
   vi.clearAllMocks();
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 

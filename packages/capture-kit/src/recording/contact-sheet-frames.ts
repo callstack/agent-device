@@ -275,6 +275,7 @@ async function compileDecoder(input: {
       extraSourcePaths: [resolveRecordingScriptPath(SHARED_SUPPORT_SCRIPT, findProjectRoot(), cwd)],
       cacheName: 'recording-frames',
       timeoutMs: COMPILATION_TIMEOUT_MS,
+      signal: input.signal,
     });
   } catch (error) {
     throwExtractionFailure(error, input.videoPath, 'Could not build the frame decoder');

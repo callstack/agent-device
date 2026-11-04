@@ -31,10 +31,12 @@ let tmpDir: string;
 beforeEach(() => {
   tmpDir = mkdtempForTestSync('agent-device-swift-cache-test-');
   vi.stubEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', path.join(tmpDir, 'swift-cache'));
+  vi.stubEnv('AGENT_DEVICE_CLAIMS_DIR', path.join(tmpDir, 'claims'));
   vi.clearAllMocks();
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -64,12 +66,12 @@ test('refuses publication when the compiler output changes during its snapshot',
     fs.writeFileSync(output, 'compiled', { mode: 0o755 });
     return { stdout: '', stderr: '', exitCode: 0 };
   });
-  const read = fs.readFileSync;
-  const spy = vi.spyOn(fs, 'readFileSync').mockImplementation(((target, options) => {
-    const result = read(target, options as never);
-    if (typeof target === 'number' && output) fs.appendFileSync(output, 'late');
-    return result;
-  }) as typeof fs.readFileSync);
+  const read = fs.createReadStream;
+  const spy = vi.spyOn(fs, 'createReadStream').mockImplementation(((target, options) => {
+    const stream = read(target, options);
+    if (target === output) stream.once('end', () => fs.appendFileSync(output, 'late'));
+    return stream;
+  }) as typeof fs.createReadStream);
   try {
     await expect(
       compileSwiftSourceText({ host: createTestHost(), source: 'print(1)', cacheName: 'changing' }),
@@ -79,6 +81,102 @@ test('refuses publication when the compiler output changes during its snapshot',
     spy.mockRestore();
   }
 });
+
+test.each(['read', 'write'] as const)(
+  'cancellation settles a multi-chunk executable snapshot stalled at %s without publication',
+  async (stage) => {
+    const cancel = new AbortController();
+    let outputPath = '';
+    mockRunCmd.mockImplementationOnce(async (_cmd, args) => {
+      outputPath = args[args.indexOf('-o') + 1]!;
+      fs.writeFileSync(outputPath, Buffer.alloc(1024 * 1024, 0x42), { mode: 0o755 });
+      return { stdout: '', stderr: '', exitCode: 0 };
+    });
+    let entered!: () => void;
+    const stalled = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let observed = 0;
+    let stream: fs.ReadStream | fs.WriteStream | undefined;
+    let result: Promise<unknown> | undefined;
+    const realRead = fs.createReadStream;
+    const realWrite = fs.createWriteStream;
+    const readSpy = vi.spyOn(fs, 'createReadStream').mockImplementation(((target, options) => {
+      const created = realRead(target, options);
+      if (stage === 'read' && target === outputPath) {
+        stream = created;
+        const read = created._read;
+        let reads = 0;
+        created._read = function (size) {
+          if (reads++ === 0) read.call(this, size);
+          else entered();
+        };
+        created.on('data', (chunk) => {
+          observed += chunk.length;
+        });
+      }
+      return created;
+    }) as typeof fs.createReadStream);
+    const writeSpy = vi.spyOn(fs, 'createWriteStream').mockImplementation(((target, options) => {
+      const created = realWrite(target, options);
+      if (
+        stage === 'write' &&
+        typeof target === 'string' &&
+        path.basename(target) === 'executable-snapshot'
+      ) {
+        stream = created;
+        const write = created._write;
+        let chunks = 0;
+        created._write = function (chunk, encoding, callback) {
+          observed += chunk.length;
+          if (++chunks === 2) {
+            entered();
+            return;
+          }
+          write.call(this, chunk, encoding, callback);
+        };
+      }
+      return created;
+    }) as typeof fs.createWriteStream);
+    try {
+      const compile = compileSwiftSourceText({
+        host: createTestHost(),
+        source: 'print(1)',
+        cacheName: `stall-${stage}`,
+        signal: cancel.signal,
+      });
+      result = compile.catch((error: unknown) => error);
+      expect(
+        await Promise.race([stalled.then(() => 'stalled'), result.then(() => 'finished')]),
+      ).toBe('stalled');
+      const start = performance.now();
+      cancel.abort();
+      const outcome = await Promise.race([
+        result,
+        new Promise((resolve) => setTimeout(() => resolve('copy did not settle'), 1000)),
+      ]);
+      expect(outcome).toMatchObject({ details: { reason: 'request_canceled' } });
+      expect(performance.now() - start).toBeLessThan(1000);
+      expect(observed).toBeGreaterThanOrEqual(64 * 1024);
+      expect(stream?.destroyed).toBe(true);
+      expect(stream?.closed).toBe(true);
+      expect(fs.readdirSync(path.join(tmpDir, 'swift-cache', 'bin'))).toEqual([]);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(fs.readdirSync(path.join(tmpDir, 'swift-cache', 'bin'))).toEqual([]);
+      const attempts = path.join(tmpDir, 'swift-cache', 'attempts');
+      const attempt = fs.readdirSync(attempts)[0]!;
+      await vi.waitFor(() =>
+        expect(fs.existsSync(path.join(attempts, attempt, 'executable-snapshot'))).toBe(false),
+      );
+    } finally {
+      cancel.abort();
+      stream?.destroy();
+      await result;
+      readSpy.mockRestore();
+      writeSpy.mockRestore();
+    }
+  },
+);
 
 test('concurrent file-backed helper compiles for the same cache key reuse the winning executable', async () => {
   const sourcePath = writeSourceFile();
@@ -402,6 +500,7 @@ test('the cache root and tool environment come from the host it is given, not th
     host: {
       env: {
         AGENT_DEVICE_SWIFT_CACHE_DIR: hostCacheDir,
+        AGENT_DEVICE_CLAIMS_DIR: path.join(tmpDir, 'claims'),
         DEVELOPER_DIR: '/host/developer',
         FROM_HOST: 'no',
       },
@@ -432,7 +531,10 @@ test('reads only a published executable for the exact source and cache, without 
       ...input,
       host: {
         ...input.host,
-        env: { AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(tmpDir, 'other-cache') },
+        env: {
+          AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(tmpDir, 'other-cache'),
+          AGENT_DEVICE_CLAIMS_DIR: path.join(tmpDir, 'claims'),
+        },
       },
     }),
   ).toBeUndefined();
@@ -457,11 +559,21 @@ test('a temp removal failure survives a canceled compile', async () => {
       source: 'print(1)',
       cacheName: 'removal',
     }).catch((error: unknown) => error);
-    expect(error).toMatchObject({ details: { reason: 'swift_cache_cleanup_failed' } });
+    expect(error).toMatchObject({
+      details: {
+        reason: 'request_canceled',
+        cleanupFailures: [
+          expect.objectContaining({
+            reason: 'swift_cache_temp_removal_failed',
+            attemptId: expect.any(String),
+          }),
+        ],
+      },
+    });
     expect(((error as Error).cause as AggregateError).errors).toEqual([
       cancelFailure,
       expect.objectContaining({
-        details: { reason: 'swift_cache_temp_removal_failed' },
+        details: expect.objectContaining({ reason: 'swift_cache_temp_removal_failed' }),
         cause: removalFailure,
       }),
     ]);
@@ -496,7 +608,7 @@ test('simultaneous temp removal and lock release failures preserve all evidence'
     expect(((error as Error).cause as AggregateError).errors).toEqual([
       compileFailure,
       expect.objectContaining({
-        details: { reason: 'swift_cache_temp_removal_failed' },
+        details: expect.objectContaining({ reason: 'swift_cache_temp_removal_failed' }),
         cause: removalFailure,
       }),
       expect.objectContaining({
@@ -526,7 +638,7 @@ test('successful compilation still reports failure to remove temporary output', 
     expect(error).toMatchObject({ details: { reason: 'swift_cache_cleanup_failed' } });
     expect(((error as Error).cause as AggregateError).errors).toEqual([
       expect.objectContaining({
-        details: { reason: 'swift_cache_temp_removal_failed' },
+        details: expect.objectContaining({ reason: 'swift_cache_temp_removal_failed' }),
         cause: removalFailure,
       }),
     ]);

@@ -223,6 +223,204 @@ test('bounded exact retries reclaim a large attempt and refuse a symlinked attem
   }
 });
 
+test('a failed live-owner closure can be retried exactly after the journal becomes writable', async () => {
+  const root = mkdtempForTestSync('swift-close-retry-');
+  const cache = path.join(root, 'cache');
+  const claims = path.join(root, 'claims');
+  fs.mkdirSync(claims);
+  const env = {
+    ...process.env,
+    AGENT_DEVICE_CLAIMS_DIR: claims,
+    AGENT_DEVICE_SWIFT_CACHE_DIR: cache,
+  };
+  const attempt = createSwiftAttempt(env, 'validator');
+  const name = path.basename(attempt.directory);
+  const failure = Object.assign(new Error('fixture'), { code: 'ENOSPC' });
+  const rename = fs.renameSync;
+  let failed = false;
+  const spy = vi.spyOn(fs, 'renameSync').mockImplementation(((from, to) => {
+    if (!failed && to === path.join(attempt.directory, 'pending.json')) {
+      failed = true;
+      throw failure;
+    }
+    return rename(from, to);
+  }) as typeof fs.renameSync);
+  try {
+    expect(() => releaseSwiftAttempt(attempt)).toThrow(failure);
+    expect(fs.lstatSync(attempt.work).isSymbolicLink()).toBe(true);
+    expect(
+      JSON.parse(fs.readFileSync(path.join(attempt.directory, 'pending.json'), 'utf8')).closed,
+    ).toBe(false);
+    spy.mockRestore();
+    await reclaimSwiftAttempt(env, name);
+    expect(fs.lstatSync(attempt.work).isFile()).toBe(true);
+    expect(fs.lstatSync(attempt.data).isFile()).toBe(true);
+    expect(
+      JSON.parse(fs.readFileSync(path.join(attempt.directory, 'pending.json'), 'utf8'))
+        .dataTombstone,
+    ).toEqual({ device: expect.any(String), inode: expect.any(String) });
+    expect(fs.readdirSync(claims)).toEqual([]);
+  } finally {
+    spy.mockRestore();
+    await reclaimSwiftAttempt(env, name).catch(() => {});
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an absent legacy data directory can be fenced without adopting an unknown fence file', async () => {
+  const root = mkdtempForTestSync('swift-absent-fence-');
+  const claims = path.join(root, 'claims');
+  const cache = path.join(root, 'cache');
+  fs.mkdirSync(claims);
+  const env = {
+    ...process.env,
+    AGENT_DEVICE_CLAIMS_DIR: claims,
+    AGENT_DEVICE_SWIFT_CACHE_DIR: cache,
+  };
+  const missing = createSwiftAttempt(env, 'compiler');
+  const unknown = createSwiftAttempt(env, 'compiler');
+  const unknownFence = path.join(unknown.directory, 'data-fence');
+  fs.rmSync(missing.data, { recursive: true });
+  fs.writeFileSync(unknownFence, 'unrecognized');
+  try {
+    releaseSwiftAttempt(missing);
+    releaseSwiftAttempt(unknown);
+    await reclaimSwiftAttempt(env, path.basename(missing.directory));
+    await reclaimSwiftAttempt(env, path.basename(unknown.directory));
+    expect(fs.lstatSync(missing.data).isFile()).toBe(true);
+    expect(fs.readFileSync(unknownFence, 'utf8')).toBe('unrecognized');
+    expect(fs.lstatSync(unknown.data).isDirectory()).toBe(true);
+    expect(
+      JSON.parse(fs.readFileSync(path.join(unknown.directory, 'pending.json'), 'utf8'))
+        .dataTombstone,
+    ).toBeUndefined();
+    expect(
+      fs.existsSync(path.join(cache, 'pending-attempts', path.basename(unknown.directory))),
+    ).toBe(true);
+    expect(fs.readdirSync(claims)).toEqual([]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test.each(['rmdir', 'rmdir-recreate', 'create', 'journal', 'install'] as const)(
+  'a crashed fence owner leaves %s recoverable or explicitly pending',
+  async (scenario) => {
+    const root = mkdtempForTestSync('swift-fence-crash-');
+    const cache = path.join(root, 'cache');
+    const claims = path.join(root, 'claims');
+    const sentinel = path.join(root, 'sentinel');
+    fs.mkdirSync(claims);
+    fs.mkdirSync(sentinel);
+    fs.writeFileSync(path.join(sentinel, 'keep'), 'untouched');
+    const env = {
+      ...process.env,
+      AGENT_DEVICE_CLAIMS_DIR: claims,
+      AGENT_DEVICE_SWIFT_CACHE_DIR: cache,
+    };
+    const fixture = fileURLToPath(
+      new URL('./__tests__/test-utils/swift-fence-crash-owner.ts', import.meta.url),
+    );
+    const owner = spawn(
+      process.execPath,
+      [
+        '--experimental-strip-types',
+        fixture,
+        root,
+        scenario === 'rmdir-recreate' ? 'rmdir' : scenario,
+      ],
+      { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    const ownerExit = once(owner, 'exit');
+    let writer: ReturnType<typeof spawn> | undefined;
+    let writerExit: Promise<unknown> | undefined;
+    let ownerStart: string | null = null;
+    let writerStart: string | null = null;
+    try {
+      if (!owner.pid || !owner.stdout) throw new Error('fixture owner did not start');
+      ownerStart = (await readProcessIdentityFacts(owner.pid)).startTime;
+      expect(ownerStart).toBeTruthy();
+      const [initial] = await once(owner.stdout, 'data');
+      const checkpoint = JSON.parse(String(initial)) as { attempt: string; data: string };
+      const directory = path.join(cache, 'attempts', checkpoint.attempt);
+      await reclaimSwiftAttempt(env, checkpoint.attempt);
+      expect(fs.lstatSync(path.join(directory, 'alias', 'work')).isSymbolicLink()).toBe(true);
+      if (scenario === 'rmdir-recreate') {
+        const script = String.raw`
+          const fs = require('node:fs'); const [data, root] = process.argv.slice(1);
+          fs.writeFileSync(root + '/writer-ready', 'ready');
+          const timer = setInterval(() => {
+            if (!fs.existsSync(root + '/writer-go')) return;
+            try { fs.mkdirSync(data); fs.writeFileSync(data + '/late', 'private'); fs.writeFileSync(root + '/writer-done', 'created'); }
+            catch (error) { fs.writeFileSync(root + '/writer-done', error.code); }
+            clearInterval(timer);
+          }, 10);
+          setTimeout(() => clearInterval(timer), 10000).unref();
+        `;
+        writer = spawn(process.execPath, ['-e', script, checkpoint.data, root], {
+          cwd: root,
+          env,
+          detached: true,
+          stdio: 'ignore',
+        });
+        writerExit = once(writer, 'exit');
+        if (!writer.pid) throw new Error('fixture writer did not start');
+        writerStart = (await readProcessIdentityFacts(writer.pid)).startTime;
+        expect(writerStart).toBeTruthy();
+        await vi.waitFor(() => expect(fs.existsSync(path.join(root, 'writer-ready'))).toBe(true));
+      }
+      console.log('fence crash fixture', {
+        scenario,
+        root,
+        cache,
+        claims,
+        sentinel,
+        ...checkpoint,
+        ownerPid: owner.pid,
+        ownerStart,
+        writerPid: writer?.pid,
+        writerStart,
+      });
+      const reached = once(owner.stdout, 'data');
+      fs.writeFileSync(path.join(root, 'begin'), 'begin');
+      const [event] = await reached;
+      expect(JSON.parse(String(event)).checkpoint).toBe(
+        scenario === 'rmdir-recreate' ? 'rmdir' : scenario,
+      );
+      owner.kill('SIGKILL');
+      await ownerExit;
+      if (writer) {
+        fs.writeFileSync(path.join(root, 'writer-go'), 'go');
+        await writerExit;
+        expect(fs.readFileSync(path.join(root, 'writer-done'), 'utf8')).toBe('created');
+        expect(fs.readFileSync(path.join(checkpoint.data, 'late'), 'utf8')).toBe('private');
+      }
+      await reclaimSwiftAttempt(env, checkpoint.attempt);
+      const record = JSON.parse(fs.readFileSync(path.join(directory, 'pending.json'), 'utf8'));
+      const pending = path.join(cache, 'pending-attempts', checkpoint.attempt);
+      const data = fs.lstatSync(checkpoint.data, { bigint: true });
+      expect(data.isFile()).toBe(true);
+      expect(record.dataTombstone).toEqual({ device: String(data.dev), inode: String(data.ino) });
+      expect(fs.existsSync(pending)).toBe(false);
+      expect(fs.readFileSync(path.join(sentinel, 'keep'), 'utf8')).toBe('untouched');
+      expect(fs.readdirSync(claims)).toEqual([]);
+    } finally {
+      if (owner.exitCode === null && owner.signalCode === null) owner.kill('SIGKILL');
+      await ownerExit;
+      if (writer && writer.exitCode === null && writer.signalCode === null) {
+        fs.writeFileSync(path.join(root, 'writer-go'), 'cleanup');
+        await writerExit;
+      }
+      if (owner.pid && ownerStart)
+        expect((await readProcessIdentityFacts(owner.pid)).startTime).not.toBe(ownerStart);
+      if (writer?.pid && writerStart)
+        expect((await readProcessIdentityFacts(writer.pid)).startTime).not.toBe(writerStart);
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  },
+  10000,
+);
+
 test('a bounded owner sweep progresses past earlier crash records', async () => {
   const root = mkdtempForTestSync('swift-attempt-orphans-');
   const cache = path.join(root, 'cache');

@@ -6,7 +6,7 @@ import { compileSwiftSourceText, readCompiledSwiftSourceText } from './swift-cac
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 import { hasPlayableWebmStructure } from './video-webm.ts';
-import { createSwiftAttempt, releaseSwiftAttempt, withSwiftAttempt } from './swift-attempt.ts';
+import { createSwiftAttempt, withSwiftAttempt, withSwiftAttemptRelease } from './swift-attempt.ts';
 
 // Duration zero must pass: a recording of a fully static screen legitimately contains a single
 // frame (screenrecord only encodes on screen updates), and AVFoundation reports its duration as 0.
@@ -94,6 +94,18 @@ export function createVideoValidatorPreparation(host: HostEnvironment): VideoVal
           next.failed = true;
           if (error instanceof AppError && error.details?.reason === 'swift_cache_cleanup_failed') {
             cleanupFailures.push(error);
+          } else if (error instanceof AppError && Array.isArray(error.details?.cleanupFailures)) {
+            cleanupFailures.push(
+              new AppError(
+                'COMMAND_FAILED',
+                'Swift cache cleanup failed',
+                {
+                  reason: 'swift_cache_cleanup_failed',
+                  cleanupFailures: error.details.cleanupFailures,
+                },
+                error,
+              ),
+            );
           }
         });
       }
@@ -298,24 +310,27 @@ export async function isPlayableVideo(
   );
   if (runTimeoutMs <= 0) return false;
   const attempt = createSwiftAttempt(prepared.env, 'validator');
-  let result;
-  try {
-    result = await withSwiftAttempt(attempt, (env) =>
-      runCmd(prepared.executablePath, [filePath], {
-        allowFailure: true,
-        timeoutMs: runTimeoutMs,
-        signal,
-        cwd: attempt.work,
-        env,
-      }),
-    ).catch((error: unknown) => {
-      if (isCommandTimeoutError(error)) return undefined;
-      if (isUnavailableVideoValidatorError(error)) throw unavailableVideoValidator(error);
-      throw error;
-    });
-  } finally {
-    releaseSwiftAttempt(attempt);
-  }
+  const result = await withSwiftAttemptRelease(
+    attempt,
+    async () => {
+      const outcome = await withSwiftAttempt(attempt, (env) =>
+        runCmd(prepared.executablePath, [filePath], {
+          allowFailure: true,
+          timeoutMs: runTimeoutMs,
+          signal,
+          cwd: attempt.work,
+          env,
+        }),
+      ).catch((error: unknown) => {
+        if (isCommandTimeoutError(error)) return undefined;
+        if (isUnavailableVideoValidatorError(error)) throw unavailableVideoValidator(error);
+        throw error;
+      });
+      if (signal?.aborted) throw createRequestCanceledError();
+      return outcome;
+    },
+    signal,
+  );
   if (!result) return false;
   if (isSwiftVideoValidatorUnavailable(result.stderr, result.stdout)) {
     throw unavailableVideoValidator(

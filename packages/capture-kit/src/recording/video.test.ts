@@ -3,7 +3,7 @@ import { createTestHost } from '../host-environment.fixtures.ts';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { likelyPlayableWebmContainer } from '../__tests__/test-utils/video-fixtures.ts';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import { mp4Atom, mp4MovieHeader } from './mp4.fixtures.ts';
@@ -30,7 +30,11 @@ vi.mock(import('./swift-attempt.ts'), async (importOriginal) => {
     ...actual,
     createSwiftAttempt: (env: NodeJS.ProcessEnv, kind: 'compiler' | 'overlay' | 'validator') =>
       actual.createSwiftAttempt(
-        { ...env, AGENT_DEVICE_SWIFT_CACHE_DIR: process.env.AGENT_DEVICE_SWIFT_CACHE_DIR },
+        {
+          ...env,
+          AGENT_DEVICE_SWIFT_CACHE_DIR: process.env.AGENT_DEVICE_SWIFT_CACHE_DIR,
+          AGENT_DEVICE_CLAIMS_DIR: process.env.AGENT_DEVICE_CLAIMS_DIR,
+        },
         kind,
       ),
   };
@@ -40,7 +44,9 @@ const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
 
 beforeEach(() => {
   Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
-  vi.stubEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', mkdtempForTestSync('agent-device-video-validator-'));
+  const root = mkdtempForTestSync('agent-device-video-validator-');
+  vi.stubEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', path.join(root, 'cache'));
+  vi.stubEnv('AGENT_DEVICE_CLAIMS_DIR', path.join(root, 'claims'));
   vi.mocked(runCmd).mockReset().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   vi.mocked(compileSwiftSourceText).mockReset().mockResolvedValue('/bin/true');
   vi.mocked(readCompiledSwiftSourceText).mockReset().mockReturnValue(undefined);
@@ -554,6 +560,20 @@ test('close reports a typed Swift cache cleanup failure', async () => {
   const preparation = createVideoValidatorPreparation(createTestHost());
   await expect(preparation.prepare()).rejects.toBe(failure);
   await expect(preparation.close()).rejects.toBe(failure);
+});
+
+test('host close reports cleanup evidence from a canceled preparation as cleanup failure', async () => {
+  const cleanupFailures = [
+    { reason: 'swift_cache_temp_removal_failed', attemptId: 'compiler-AAAAAA', code: 'ENOSPC' },
+  ];
+  const canceled = createRequestCanceledError({ cleanupFailures });
+  vi.mocked(compileSwiftSourceText).mockRejectedValueOnce(canceled);
+  const preparation = createVideoValidatorPreparation(createTestHost());
+  await expect(preparation.prepare()).rejects.toBe(canceled);
+  await expect(preparation.close()).rejects.toMatchObject({
+    details: { reason: 'swift_cache_cleanup_failed', cleanupFailures },
+    cause: canceled,
+  });
 });
 
 test('a retry does not erase an earlier cleanup failure from close', async () => {

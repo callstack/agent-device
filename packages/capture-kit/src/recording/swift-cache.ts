@@ -1,9 +1,15 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { finished, pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { trimEdgeDashes } from '@agent-device/kernel/collections';
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
+import type { Deadline } from '@agent-device/host-kit/retry';
 import { runCmd } from '@agent-device/host-kit/command';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
@@ -15,11 +21,7 @@ import {
 } from './swift-attempt.ts';
 export { getSwiftCacheRoot } from './swift-attempt.ts';
 
-import {
-  acquireProcessLock,
-  publishFileSync,
-  type ProcessLockRelease,
-} from '@agent-device/host-kit/file';
+import { acquireProcessLock, type ProcessLockRelease } from '@agent-device/host-kit/file';
 
 const SWIFT_CACHE_VERSION = '3';
 const SWIFT_SOURCE_TEXT_CACHE_VERSION = '4';
@@ -103,6 +105,7 @@ export async function compileSwiftSourceFile(params: {
   cacheName?: string;
   timeoutMs?: number;
   signal?: AbortSignal;
+  deadline?: Deadline;
 }): Promise<string> {
   const sourcePaths = [params.sourcePath, ...(params.extraSourcePaths ?? [])];
   const sources = sourcePaths.map((sourcePath) => ({
@@ -137,6 +140,7 @@ export async function compileSwiftSourceFile(params: {
     executablePath,
     timeoutMs: params.timeoutMs,
     signal: params.signal,
+    deadline: params.deadline,
   });
   return executablePath;
 }
@@ -192,6 +196,7 @@ async function ensureSwiftExecutable(params: {
   executablePath: string;
   timeoutMs?: number;
   signal?: AbortSignal;
+  deadline?: Deadline;
 }): Promise<void> {
   if (isExecutableFile(params.executablePath)) {
     return;
@@ -249,14 +254,13 @@ async function ensureSwiftExecutable(params: {
             },
           ),
         );
-        if (params.signal?.aborted) throw createRequestCanceledError();
-        const snapshot = snapshotSwiftExecutable(tempExecutablePath);
-        if (params.signal?.aborted) throw createRequestCanceledError();
-        publishFileSync({
-          destination: params.executablePath,
-          contents: snapshot.contents,
-          mode: snapshot.mode,
-        });
+        await snapshotSwiftExecutable(
+          tempExecutablePath,
+          params.executablePath,
+          attempt,
+          params.signal,
+          params.deadline,
+        );
       } finally {
         try {
           releaseSwiftAttempt(attempt);
@@ -265,7 +269,11 @@ async function ensureSwiftExecutable(params: {
             new AppError(
               'COMMAND_FAILED',
               'Swift attempt sealing failed',
-              { reason: 'swift_cache_temp_removal_failed' },
+              {
+                reason: 'swift_cache_temp_removal_failed',
+                attemptId: path.basename(attempt.directory),
+                code: (error as NodeJS.ErrnoException)?.code,
+              },
               error,
             ),
           );
@@ -274,7 +282,10 @@ async function ensureSwiftExecutable(params: {
     })();
   } catch (error) {
     taskFailed = true;
-    taskFailure = error;
+    taskFailure =
+      params.signal?.aborted && !isRequestCanceledError(error)
+        ? createRequestCanceledError(undefined, error)
+        : error;
   }
   try {
     await release();
@@ -289,6 +300,24 @@ async function ensureSwiftExecutable(params: {
     );
   }
   if (cleanupFailures.length) {
+    if (params.signal?.aborted || isRequestCanceledError(taskFailure)) {
+      const details = taskFailure instanceof AppError ? taskFailure.details : undefined;
+      const previous = Array.isArray(details?.cleanupFailures) ? details.cleanupFailures : [];
+      throw createRequestCanceledError(
+        {
+          ...details,
+          cleanupFailures: [
+            ...previous,
+            ...cleanupFailures.map((failure) =>
+              failure instanceof AppError
+                ? failure.details
+                : { reason: 'swift_cache_cleanup_failed' },
+            ),
+          ],
+        },
+        new AggregateError(taskFailed ? [taskFailure, ...cleanupFailures] : cleanupFailures),
+      );
+    }
     throw new AppError(
       'COMMAND_FAILED',
       'Swift cache cleanup failed',
@@ -299,28 +328,75 @@ async function ensureSwiftExecutable(params: {
   if (taskFailed) throw taskFailure;
 }
 
-function snapshotSwiftExecutable(source: string): { contents: Buffer; mode: number } {
-  const fd = fs.openSync(source, 'r');
+async function snapshotSwiftExecutable(
+  source: string,
+  destination: string,
+  attempt: ReturnType<typeof createSwiftAttempt>,
+  signal?: AbortSignal,
+  deadline?: Deadline,
+): Promise<void> {
+  const proofFd = fs.openSync(source, 'r');
+  let inputFd: number | undefined;
+  let outputFd: number | undefined;
   try {
-    const before = fs.fstatSync(fd, { bigint: true });
+    const before = fs.fstatSync(proofFd, { bigint: true });
     if (!before.isFile() || before.size === 0n || !(before.mode & 0o111n)) {
       throw new AppError('COMMAND_FAILED', 'Swift compiler did not produce an executable');
     }
-    const contents = fs.readFileSync(fd);
-    const after = fs.fstatSync(fd, { bigint: true });
+    inputFd = fs.openSync(source, 'r');
+    const opened = fs.fstatSync(inputFd, { bigint: true });
+    if (before.dev !== opened.dev || before.ino !== opened.ino) {
+      throw new AppError('COMMAND_FAILED', 'Swift compiler output changed while being copied', {
+        reason: 'swift_cache_output_changed',
+      });
+    }
+    const snapshot = path.join(attempt.directory, 'executable-snapshot');
+    outputFd = fs.openSync(snapshot, fs.constants.O_WRONLY | fs.constants.O_NOFOLLOW);
+    const snapshotStat = fs.fstatSync(outputFd, { bigint: true });
+    const snapshotIdentity = attempt.record.executableSnapshot;
+    if (
+      !snapshotIdentity ||
+      !snapshotStat.isFile() ||
+      snapshotStat.size !== 0n ||
+      String(snapshotStat.dev) !== snapshotIdentity.device ||
+      String(snapshotStat.ino) !== snapshotIdentity.inode
+    )
+      throw new AppError('COMMAND_FAILED', 'Invalid Swift executable snapshot');
+    fs.fchmodSync(outputFd, Number(before.mode & 0o777n));
+    const reader = fs.createReadStream(source, { fd: inputFd, autoClose: true });
+    inputFd = undefined;
+    let writer: fs.WriteStream;
+    try {
+      writer = fs.createWriteStream(snapshot, { fd: outputFd, autoClose: true });
+    } catch (error) {
+      reader.destroy();
+      await finished(reader).catch(() => {});
+      throw error;
+    }
+    outputFd = undefined;
+    await pipeline(reader, writer, { signal });
+    const after = fs.fstatSync(proofFd, { bigint: true });
     if (
       before.size !== after.size ||
       before.mtimeNs !== after.mtimeNs ||
       before.ctimeNs !== after.ctimeNs ||
-      BigInt(contents.length) !== after.size
+      BigInt(reader.bytesRead) !== after.size ||
+      BigInt(writer.bytesWritten) !== after.size
     ) {
       throw new AppError('COMMAND_FAILED', 'Swift compiler output changed while being copied', {
         reason: 'swift_cache_output_changed',
       });
     }
-    return { contents, mode: Number(after.mode & 0o777n) };
+    if (signal?.aborted) throw createRequestCanceledError();
+    if (deadline?.isExpired())
+      throw new AppError('COMMAND_FAILED', 'Swift compilation deadline expired', {
+        reason: 'swift_cache_deadline_expired',
+      });
+    await fs.promises.rename(snapshot, destination);
   } finally {
-    fs.closeSync(fd);
+    if (outputFd !== undefined) fs.closeSync(outputFd);
+    if (inputFd !== undefined) fs.closeSync(inputFd);
+    fs.closeSync(proofFd);
   }
 }
 

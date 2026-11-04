@@ -7,10 +7,18 @@ When a helper succeeds, copy its output to a parent-owned inode before publicati
 When you publish an overlay, validate the parent-owned copy before the atomic rename.
 When you wait for a copy, propagate the finalization deadline and the request cancellation signal.
 When a copy ends, wait for its streams to close before you return.
+When you submit a publication rename, check the deadline and request signal immediately before the rename.
+When you snapshot a compiled executable, use its recorded parent-owned inode and verify the compiler output before publication.
 When you stop a recording, do not cancel the host's shared validator preparation.
 
 When an attempt ends, seal its work alias before you reclaim its private data.
-When private data is empty, remove its directory and create the recorded data tombstone.
+When a live owner's close journal or alias seal fails, retain that owner's exact retry authority.
+When cancellation and cleanup fail together, keep the typed cancellation and its cleanup evidence.
+When private data is empty, create a fence candidate inside that data and record its identity before you link the candidate outside the data directory.
+When the recorded fence is linked outside the data directory, remove the data directory and link the recorded fence at its path.
+When a crash leaves an unrecorded candidate inside private data, remove it through the bounded private-data cleanup before you retry.
+When an absent data directory has no recognized outside fence, recreate only that private data directory and retry its fence.
+When an outside fence has no matching recorded identity, retain it and its pending record.
 When another writer creates a replacement during that transition, retain the attempt and retry its exact cleanup.
 When a parent crashes, reclaim an exact attempt only after you verify that the recorded parent no longer owns it.
 When you reclaim an attempt, bound each pass and keep its record if cleanup is incomplete.

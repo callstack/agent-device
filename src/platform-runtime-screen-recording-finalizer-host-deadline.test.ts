@@ -23,11 +23,20 @@ vi.mock(import('@agent-device/capture-kit/recording-overlay'), async (importOrig
 test('a finalizer deadline leaves the compiler running for a later stop', async () => {
   const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
   const root = mkdtempForTestSync('finalizer-validator-deadline-');
+  const claims = path.join(root, 'claims');
+  const sentinel = path.join(root, 'sentinel');
+  fs.mkdirSync(claims);
+  fs.mkdirSync(sentinel);
+  fs.writeFileSync(path.join(sentinel, 'keep'), 'untouched');
   const outputPath = path.join(root, 'recording.mp4');
   fs.writeFileSync(outputPath, Buffer.from('0000000c6674797069736f6d000000086d6f6f76', 'hex'));
   const host = {
     cwd: root,
-    env: { ...process.env, AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(root, 'cache') },
+    env: {
+      ...process.env,
+      AGENT_DEVICE_CLAIMS_DIR: claims,
+      AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(root, 'cache'),
+    },
   };
   const preparation = createVideoValidatorPreparation(host);
   const finalizer = createScreenRecordingFinalizer(host, preparation);
@@ -75,6 +84,8 @@ test('a finalizer deadline leaves the compiler running for a later stop', async 
     expect(compilerSignal?.aborted).toBe(false);
     expect(compilerEntered).toHaveBeenCalledOnce();
     expect(validatorCalls).toEqual([path.join(root, 'cache', 'bin', path.basename(compiledPath))]);
+    expect(fs.readdirSync(claims)).toEqual([]);
+    expect(fs.readFileSync(path.join(sentinel, 'keep'), 'utf8')).toBe('untouched');
   } finally {
     finishCompile?.();
     try {

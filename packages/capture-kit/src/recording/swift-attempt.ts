@@ -9,6 +9,11 @@ import {
 } from '@agent-device/host-kit/process';
 import { publishFileSync } from '@agent-device/host-kit/file';
 import { withRestrictedCommandEnvironment } from '@agent-device/host-kit/command';
+import {
+  AppError,
+  createRequestCanceledError,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
 
 const ATTEMPT_NAME = /^(compiler|overlay|validator)-[A-Za-z0-9]{6}$/;
 const MAX_ATTEMPTS = 8;
@@ -17,6 +22,7 @@ const MAX_DEPTH = 12;
 const MAX_BATCHES = 8;
 const MAX_SWEEP_ROUNDS = 4;
 const active = new Set<string>();
+const closing = new Map<string, SwiftAttempt>();
 const running = new Map<string, Promise<void>>();
 const queued = new Map<string, Set<string>>();
 const publicationRecovery = new Map<string, Promise<void>>();
@@ -29,6 +35,7 @@ type AttemptRecord = {
   owner: { pid: number; startTime: string | null };
   closed: boolean;
   publication?: { device: string; inode: string };
+  executableSnapshot?: { device: string; inode: string };
   dataTombstone?: { device: string; inode: string };
 };
 
@@ -71,6 +78,15 @@ export function createSwiftAttempt(env: NodeJS.ProcessEnv, kind: AttemptKind): S
     owner: readCurrentOwnerIdentity(),
     closed: false,
   };
+  if (kind === 'compiler') {
+    const fd = fs.openSync(path.join(directory, 'executable-snapshot'), 'wx', 0o600);
+    try {
+      const stat = fs.fstatSync(fd, { bigint: true });
+      record.executableSnapshot = { device: String(stat.dev), inode: String(stat.ino) };
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
   writeRecord(directory, record);
   fs.writeFileSync(path.join(pending, path.basename(directory)), '', { flag: 'wx', mode: 0o600 });
   const toolEnv: NodeJS.ProcessEnv = {};
@@ -228,13 +244,58 @@ async function unlinkMatchingPublication(
 
 /** Seals this attempt's published pathname. Open descendants can still hold unlinked inodes. */
 export function releaseSwiftAttempt(attempt: SwiftAttempt): void {
+  closing.set(attempt.directory, attempt);
+  writeRecord(attempt.directory, { ...attempt.record, closed: true });
+  attempt.record.closed = true;
+  seal(attempt.directory);
+  closing.delete(attempt.directory);
+  active.delete(attempt.directory);
+  scheduleSweep(path.dirname(path.dirname(attempt.directory)), attempt.directory);
+}
+
+/** Keeps operation failure primary when sealing this exact attempt also fails. */
+export async function withSwiftAttemptRelease<T>(
+  attempt: SwiftAttempt,
+  run: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  let failed = false;
+  let primary: unknown;
+  let result: T | undefined;
   try {
-    writeRecord(attempt.directory, { ...attempt.record, closed: true });
-    seal(attempt.directory);
-  } finally {
-    active.delete(attempt.directory);
-    scheduleSweep(path.dirname(path.dirname(attempt.directory)), attempt.directory);
+    result = await run();
+  } catch (error) {
+    failed = true;
+    primary = error;
   }
+  try {
+    releaseSwiftAttempt(attempt);
+  } catch (error) {
+    const evidence = {
+      reason: 'swift_attempt_release_failed',
+      attemptId: path.basename(attempt.directory),
+      code: (error as NodeJS.ErrnoException)?.code,
+    };
+    const details = primary instanceof AppError ? primary.details : undefined;
+    const previous = Array.isArray(details?.cleanupFailures) ? details.cleanupFailures : [];
+    const combined = { ...details, cleanupFailures: [...previous, evidence] };
+    const cause = new AggregateError(failed ? [primary, error] : [error]);
+    if (signal?.aborted || isRequestCanceledError(primary))
+      throw createRequestCanceledError(combined, cause);
+    if (primary instanceof AppError)
+      throw new AppError(primary.code, primary.message, combined, cause);
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Swift attempt cleanup failed',
+      {
+        reason: 'swift_attempt_release_failed',
+        cleanupFailures: [evidence],
+      },
+      cause,
+    );
+  }
+  if (failed) throw primary;
+  return result as T;
 }
 
 function writeRecord(directory: string, record: AttemptRecord): void {
@@ -316,6 +377,14 @@ async function sweep(root: string, preferred?: string): Promise<void> {
       }
       let progress = false;
       for (const candidate of candidates) {
+        const retry = closing.get(candidate);
+        if (retry) {
+          try {
+            releaseSwiftAttempt(retry);
+          } catch {
+            continue;
+          }
+        }
         if (active.has(candidate)) continue;
         await reclaimOwnedCandidate(candidate).catch(() => {});
         try {
@@ -341,6 +410,8 @@ export async function reclaimSwiftAttempt(
   const root = getSwiftCacheRoot(env);
   if (!(await safeAttemptsRoot(root))) return;
   const candidate = path.join(root, 'attempts', attemptName);
+  const retry = closing.get(candidate);
+  if (retry) releaseSwiftAttempt(retry);
   if (active.has(candidate)) return;
   await reclaimOwnedCandidate(candidate);
 }
@@ -395,13 +466,45 @@ async function reclaimCandidate(directory: string): Promise<'retained' | 'more' 
   const record = await readRecord(directory);
   if (!record) return 'retained';
   if (!record.closed && !(await parentGone(record.owner))) return 'retained';
+  const snapshot = path.join(directory, 'executable-snapshot');
+  try {
+    await fs.promises.lstat(snapshot);
+    if (
+      !record.executableSnapshot ||
+      !(await matchesDataFence(snapshot, record.executableSnapshot))
+    )
+      return 'retained';
+    await fs.promises.unlink(snapshot);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
   try {
     seal(directory);
   } catch {
     return 'retained';
   }
   const data = path.join(directory, 'data');
-  const dataStat = await fs.promises.lstat(data, { bigint: true });
+  let dataStat: fs.BigIntStats;
+  try {
+    dataStat = await fs.promises.lstat(data, { bigint: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    const fence = path.join(directory, 'data-fence');
+    if (record.dataTombstone && (await matchesDataFence(fence, record.dataTombstone)))
+      return await installDataFence(directory, record);
+    try {
+      await fs.promises.lstat(fence);
+      return 'retained';
+    } catch (fenceError) {
+      if ((fenceError as NodeJS.ErrnoException).code !== 'ENOENT') throw fenceError;
+    }
+    try {
+      await fs.promises.mkdir(data, { mode: 0o700 });
+    } catch (mkdirError) {
+      if ((mkdirError as NodeJS.ErrnoException).code !== 'EEXIST') throw mkdirError;
+    }
+    return 'more';
+  }
   if (dataStat.isFile() && !dataStat.isSymbolicLink()) {
     const tombstone = record.dataTombstone;
     if (
@@ -425,6 +528,7 @@ async function reclaimCandidate(directory: string): Promise<'retained' | 'more' 
     const budget = { remaining: MAX_ENTRIES };
     const empty = await cleanDirectory(data, budget, 0);
     if (!empty) return 'more';
+    if (!(await prepareDataFence(directory, record))) return 'retained';
     await handle.chmod(0o500);
     const check = await fs.promises.opendir(data);
     try {
@@ -434,15 +538,7 @@ async function reclaimCandidate(directory: string): Promise<'retained' | 'more' 
     }
     try {
       await fs.promises.rmdir(data);
-      const tombstone = await fs.promises.open(data, 'wx', 0o400);
-      try {
-        const stat = await tombstone.stat({ bigint: true });
-        record.dataTombstone = { device: String(stat.dev), inode: String(stat.ino) };
-        writeRecord(directory, record);
-      } finally {
-        await tombstone.close();
-      }
-      return 'fenced';
+      return await installDataFence(directory, record);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code === 'ENOENT' || code === 'EEXIST' || code === 'ENOTEMPTY' || code === 'EBUSY')
@@ -452,6 +548,71 @@ async function reclaimCandidate(directory: string): Promise<'retained' | 'more' 
   } finally {
     await handle.close();
   }
+}
+
+async function prepareDataFence(directory: string, record: AttemptRecord): Promise<boolean> {
+  const fence = path.join(directory, 'data-fence');
+  try {
+    await fs.promises.lstat(fence);
+    return Boolean(record.dataTombstone && (await matchesDataFence(fence, record.dataTombstone)));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  const candidate = path.join(directory, 'data', '.data-fence');
+  let handle: fs.promises.FileHandle;
+  try {
+    handle = await fs.promises.open(candidate, 'wx', 0o400);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    throw error;
+  }
+  try {
+    const stat = await handle.stat({ bigint: true });
+    record.dataTombstone = { device: String(stat.dev), inode: String(stat.ino) };
+    writeRecord(directory, record);
+    if (!(await matchesDataFence(candidate, record.dataTombstone))) return false;
+    await fs.promises.link(candidate, fence);
+    if (!(await matchesDataFence(fence, record.dataTombstone))) return false;
+    await fs.promises.unlink(candidate);
+    return true;
+  } finally {
+    await handle.close();
+  }
+}
+
+async function matchesDataFence(
+  file: string,
+  identity: NonNullable<AttemptRecord['dataTombstone']>,
+): Promise<boolean> {
+  try {
+    const stat = await fs.promises.lstat(file, { bigint: true });
+    return (
+      stat.isFile() &&
+      !stat.isSymbolicLink() &&
+      String(stat.dev) === identity.device &&
+      String(stat.ino) === identity.inode
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
+async function installDataFence(
+  directory: string,
+  record: AttemptRecord,
+): Promise<'retained' | 'more' | 'fenced'> {
+  const fence = path.join(directory, 'data-fence');
+  if (!record.dataTombstone || !(await matchesDataFence(fence, record.dataTombstone)))
+    return 'retained';
+  const data = path.join(directory, 'data');
+  try {
+    await fs.promises.link(fence, data);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return 'more';
+    throw error;
+  }
+  return (await matchesDataFence(data, record.dataTombstone)) ? 'fenced' : 'retained';
 }
 
 async function readRecord(directory: string): Promise<AttemptRecord | undefined> {

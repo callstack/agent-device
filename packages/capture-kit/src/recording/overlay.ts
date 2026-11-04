@@ -4,17 +4,21 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import { runCmd } from '@agent-device/host-kit/command';
 import { Deadline } from '@agent-device/host-kit/retry';
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
 import { findProjectRoot } from '@agent-device/host-kit/version';
 import { compileSwiftSourceFile, resolveRecordingScriptPath } from './swift-cache.ts';
 import {
   createSwiftAttempt,
   recordSwiftPublication,
-  releaseSwiftAttempt,
   scheduleSwiftPublicationRemoval,
   scheduleSwiftPublicationRecovery,
   swiftPublicationPath,
   withSwiftAttempt,
+  withSwiftAttemptRelease,
   type SwiftAttempt,
 } from './swift-attempt.ts';
 import { waitForPlayableVideo, type VideoValidator } from './video.ts';
@@ -108,6 +112,7 @@ async function exportProcessedVideo(params: {
       // `runCmd` reads a timeout of 0 as none.
       timeoutMs: Math.max(1, deadline.remainingMs()),
       signal,
+      deadline,
     });
     if (deadline.remainingMs() <= HELPER_EXIT_GRACE_MS) {
       throw new AppError(
@@ -116,59 +121,74 @@ async function exportProcessedVideo(params: {
       );
     }
     attempt = createSwiftAttempt(host.env, 'overlay');
-    const publicationPath = swiftPublicationPath(videoPath, path.basename(attempt.directory));
-    const work = attempt.work;
-    const inputPath = path.join(work, `input${path.extname(videoPath) || '.mp4'}`);
-    const outputPath = path.join(work, `output${path.extname(videoPath) || '.mp4'}`);
-    const eventsPath = path.join(work, 'events.json');
-    await copyOverlayFile(videoPath, inputPath, signal);
-    await copyOverlayFile(telemetryPath, eventsPath, signal);
-    const helperMs = deadline.remainingMs();
-    const exportMs = helperMs - HELPER_EXIT_GRACE_MS;
-    if (exportMs <= 0) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        `No time was left for the export within the ${OVERLAY_BUDGET_MS}ms budget`,
-      );
-    }
-    try {
-      await withSwiftAttempt(attempt, (env) =>
-        runCmd(
-          executablePath,
-          [
-            '--input',
-            inputPath,
-            '--output',
-            outputPath,
-            '--events',
-            eventsPath,
-            ...scriptArgs,
-            '--timeout-ms',
-            String(Math.round(exportMs)),
-          ],
-          { timeoutMs: helperMs, cwd: work, env, signal },
-        ),
-      );
-    } catch (error) {
-      exportOverran = deadline.remainingMs() <= HELPER_EXIT_GRACE_MS;
-      throw error;
-    }
-    await copyStableOverlay(outputPath, publicationPath, signal, attempt);
-    if (
-      !(await waitForPlayableVideo(publicationPath, {
-        validator: params.validator,
-        deadline,
-        signal,
-      }))
-    ) {
-      exportOverran = deadline.isExpired();
-      throw new AppError('COMMAND_FAILED', 'The composited video was not verified as playable');
-    }
-    if (signal.aborted)
-      throw new AppError('COMMAND_FAILED', 'Overlay finalization deadline expired');
-    await fs.promises.rename(publicationPath, videoPath);
+    const ownedAttempt = attempt;
+    await withSwiftAttemptRelease(
+      ownedAttempt,
+      async () => {
+        const publicationPath = swiftPublicationPath(
+          videoPath,
+          path.basename(ownedAttempt.directory),
+        );
+        const work = ownedAttempt.work;
+        const inputPath = path.join(work, `input${path.extname(videoPath) || '.mp4'}`);
+        const outputPath = path.join(work, `output${path.extname(videoPath) || '.mp4'}`);
+        const eventsPath = path.join(work, 'events.json');
+        await copyOverlayFile(videoPath, inputPath, signal);
+        await copyOverlayFile(telemetryPath, eventsPath, signal);
+        const helperMs = deadline.remainingMs();
+        const exportMs = helperMs - HELPER_EXIT_GRACE_MS;
+        if (exportMs <= 0) {
+          throw new AppError(
+            'COMMAND_FAILED',
+            `No time was left for the export within the ${OVERLAY_BUDGET_MS}ms budget`,
+          );
+        }
+        try {
+          await withSwiftAttempt(ownedAttempt, (env) =>
+            runCmd(
+              executablePath,
+              [
+                '--input',
+                inputPath,
+                '--output',
+                outputPath,
+                '--events',
+                eventsPath,
+                ...scriptArgs,
+                '--timeout-ms',
+                String(Math.round(exportMs)),
+              ],
+              { timeoutMs: helperMs, cwd: work, env, signal },
+            ),
+          );
+        } catch (error) {
+          exportOverran = deadline.remainingMs() <= HELPER_EXIT_GRACE_MS;
+          throw error;
+        }
+        await copyStableOverlay(outputPath, publicationPath, signal, ownedAttempt);
+        if (
+          !(await waitForPlayableVideo(publicationPath, {
+            validator: params.validator,
+            deadline,
+            signal,
+          }))
+        ) {
+          exportOverran = deadline.isExpired();
+          throw new AppError('COMMAND_FAILED', 'The composited video was not verified as playable');
+        }
+        if (signal.aborted || deadline.isExpired()) {
+          exportOverran = deadline.isExpired();
+          throw new AppError('COMMAND_FAILED', 'Overlay finalization deadline expired');
+        }
+        await fs.promises.rename(publicationPath, videoPath);
+      },
+      params.signal,
+    );
   } catch (error) {
-    if (params.signal?.aborted) throw createRequestCanceledError();
+    if (params.signal?.aborted) {
+      if (isRequestCanceledError(error)) throw error;
+      throw createRequestCanceledError(undefined, error);
+    }
     if (deadlineAbort.signal.aborted) exportOverran = true;
     const description = exportOverran
       ? `${commandDescription}: the export did not finish within its ${OVERLAY_BUDGET_MS}ms budget; a lower --fps renders faster`
@@ -194,13 +214,7 @@ async function exportProcessedVideo(params: {
     );
   } finally {
     clearTimeout(timer);
-    if (attempt) {
-      try {
-        releaseSwiftAttempt(attempt);
-      } finally {
-        scheduleSwiftPublicationRemoval(attempt, videoPath);
-      }
-    }
+    if (attempt) scheduleSwiftPublicationRemoval(attempt, videoPath);
   }
 }
 

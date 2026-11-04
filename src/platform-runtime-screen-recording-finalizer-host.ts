@@ -1,4 +1,8 @@
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { RECORDING_OUTPUT_UNPLAYABLE_REASON } from '@agent-device/contracts/screen-recording-runtime';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
@@ -86,7 +90,10 @@ async function overlayTouches(
     });
     return { telemetryPath };
   } catch (error) {
-    if (signal?.aborted) throw createRequestCanceledError();
+    if (signal?.aborted) {
+      if (isRequestCanceledError(error)) throw error;
+      throw createRequestCanceledError(undefined, error);
+    }
     return {
       telemetryPath,
       overlayWarning: `failed to overlay recording touches: ${error instanceof Error ? error.message : String(error)}`,
