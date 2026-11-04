@@ -70,18 +70,17 @@ test('a web session device id names its host and keeps the name case-sensitive',
   assert.notEqual(id, webDevice('run-one').id);
 });
 
-test('web session names that drive one browser are one device', () => {
+test('web session names that differ only by case drive one browser and are one device', () => {
   const one = webDevice('one').id;
-  assert.equal(webDevice('one ').id, one);
-  assert.equal(webDevice(' one').id, one);
-  assert.equal(devicesOverlap(webDevice('one\t').id, one), true);
+  assert.equal(webDevice('ONE').id, one);
+  assert.equal(devicesOverlap(webDevice('One').id, one), true);
 });
 
 test('the backend key is p_<name>, and t_<hash of the tenant>_<name> under tenant isolation', () => {
   assert.equal(webSessionBackendKey({ name: 'one' }), 'p_one');
   const first = webSessionBackendKey({ name: 'one', tenantId: 'tenant-1' });
   assert.match(first, /^t_[0-9a-f]{12}_one$/);
-  assert.equal(first, webSessionBackendKey({ name: ' one ', tenantId: 'tenant-1' }));
+  assert.equal(first, webSessionBackendKey({ name: 'ONE', tenantId: 'tenant-1' }));
   assert.notEqual(first, webSessionBackendKey({ name: 'one', tenantId: 'tenant-2' }));
   assert.notEqual(first, webSessionBackendKey({ name: 'one' }));
 });
@@ -114,6 +113,9 @@ test.each([
   'a:b',
   ':',
   'a b',
+  ' one',
+  'one ',
+  'one\t',
   'a/b',
   'a.b',
   'é',

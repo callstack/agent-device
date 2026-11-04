@@ -24,19 +24,17 @@ import { assertDaemonPolicyAdmitsLease } from '../core/daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 
 /**
- * Names the session a request runs in. The session name is trimmed here once, so the address the
- * store holds is the name web validation checks. The scoped request also carries the name the
- * caller supplied, which a nested batch or replay step keeps, so web validation sees a blank name
- * where the store key already says `default`.
+ * Names the session a request runs in. The scoped request also carries the name the caller
+ * supplied, which a nested batch or replay step keeps, so web validation sees a blank name where
+ * the store key already says `default`.
  */
 export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
-  const named = { ...req, session: req.session.trim() };
-  const scoped = scopeSessionToTenant(named);
+  const scoped = scopeSessionToTenant(req);
   return {
     ...scoped,
     internal: {
       ...scoped.internal,
-      suppliedSession: req.internal?.suppliedSession ?? named.session,
+      suppliedSession: req.internal?.suppliedSession ?? req.session,
     },
   };
 }

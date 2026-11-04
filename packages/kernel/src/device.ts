@@ -148,15 +148,16 @@ function webBackendKeyPrefix(tenantId: string | undefined): string {
 }
 
 /**
- * The name of a web session without surrounding whitespace and in lower case, so names that differ
- * only by case are one session on a case-insensitive filesystem, refused with `web_session_name_invalid`
- * unless it is non-empty, holds only letters, digits, `_` and `-` (the characters the backend
- * accepts in a session name), and leaves room for `keyPrefixLength` characters of the backend key
- * within the socket path limit. That also keeps `:` out of the name, which would parse as the
- * `:session:` or `:app:` infix of another device id.
+ * The name of a web session in lower case, so names that differ only by case are one session on a
+ * case-insensitive filesystem. It is refused with `web_session_name_invalid`, never trimmed, unless
+ * it is non-empty, holds only letters, digits, `_` and `-` (the characters the backend accepts in
+ * a session name, so surrounding whitespace is refused and the stored session address equals the
+ * validated name), and leaves room for `keyPrefixLength` characters of the backend key within the
+ * socket path limit. That also keeps `:` out of the name, which would parse as the `:session:` or
+ * `:app:` infix of another device id.
  */
 function requireWebSessionName(sessionName: string, keyPrefixLength: number): string {
-  const name = sessionName.trim().toLowerCase();
+  const name = sessionName.toLowerCase();
   const maxLength = WEB_BACKEND_KEY_MAX_LENGTH - keyPrefixLength;
   if (!WEB_SESSION_NAME_PATTERN.test(name) || name.length > maxLength) {
     throw new AppError(
