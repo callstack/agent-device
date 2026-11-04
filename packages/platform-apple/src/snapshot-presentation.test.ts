@@ -284,6 +284,14 @@ test('the reader forwards each published keyboard band shape unchanged', () => {
   );
 });
 
+test('the reader keeps the runner tree binding on its keyboard band', () => {
+  assert.deepEqual(
+    readAppleSnapshotResult({ keyboard: { kind: 'absent', treeBound: true } }, IOS_SIMULATOR)
+      .keyboard,
+    { kind: 'absent', treeBound: true },
+  );
+});
+
 // #3565: the runner classifies the presentation on the acquisition it is about to present, and this
 // seam is the only place that fact becomes a TS value. Forwarding the raw wire string would let a
 // payload spelling a state this vocabulary never declared reach settle as if a producer had read it.

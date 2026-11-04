@@ -133,36 +133,38 @@ export function classifyBaselineSurfaceEvidence(
  *
  * A drag that dismisses the keyboard moves no content, so on content alone the quiet pair after it
  * equals the pre-gesture baseline, and the loop distrusted a read that had in fact changed until the
- * distrust cap: about 3.5 s for every keyboard dismissal by drag. The stale read the distrust exists
- * for replays a whole capture that predates the gesture, and the producer decides the keyboard fact
- * on that same acquired tree, so a stale read repeats the baseline's fact. Two facts that disagree
- * about the keyboard therefore prove the read fresh.
+ * distrust cap: about 3.5 s for every keyboard dismissal by drag. A tree-bound keyboard fact
+ * (`treeBound`) was read from the same acquired tree as its capture's nodes, so a stale tree repeats
+ * the baseline's fact, and two tree-bound facts that disagree prove the read fresh.
  *
- * Only explicit facts count. Keyboard nodes do not: the baseline is often a broader capture than the
- * quiet reads, and a narrower presentation can leave the keyboard's nodes out while the keyboard is
- * still up. A missing or unmeasurable fact on either side falls back to the content comparison.
+ * Every other keyboard reading proves nothing and falls back to the content comparison:
+ * - Keyboard nodes. The baseline is often a broader capture than the quiet reads, and a narrower
+ *   presentation can leave the keyboard's nodes out while the keyboard is still up.
+ * - A fact sampled apart from the tree. A WebDriver (Appium) capture reads page source before its
+ *   separate visibility probe, so a stale source can arrive with a newer visibility.
+ * - A missing or unmeasurable fact on either side.
  */
 export function classifyPostGestureBaselineEvidence(
   baseline: PostGestureSurfaceReading<InteractionSurfaceSignature>,
   quiet: PostGestureSurfaceReading<InteractionSurfaceSignature>,
 ): InteractionSurfaceChange {
-  const before = keyboardShown(baseline.keyboard);
-  const after = keyboardShown(quiet.keyboard);
+  const before = treeBoundKeyboardShown(baseline.keyboard);
+  const after = treeBoundKeyboardShown(quiet.keyboard);
   if (before !== undefined && after !== undefined && before !== after) return 'changed';
   return classifyBaselineSurfaceEvidence(baseline.signature, quiet.signature);
 }
 
-/** Whether a keyboard fact proves the keyboard up (true) or down (false); undefined when it proves neither. */
-function keyboardShown(fact: SnapshotKeyboardBandFact | undefined): boolean | undefined {
+/**
+ * Whether a tree-bound keyboard fact shows the keyboard up (true) or down (false); undefined for a
+ * fact that is not tree-bound or proves neither.
+ */
+function treeBoundKeyboardShown(fact: SnapshotKeyboardBandFact | undefined): boolean | undefined {
   switch (fact?.kind) {
     case 'visible':
     case 'derived':
-      return true;
+      return fact.treeBound === true ? true : undefined;
     case 'absent':
-      return false;
-    case 'visibility-only':
-    case 'tree-rejected':
-      return fact.visible;
+      return fact.treeBound === true ? false : undefined;
     default:
       return undefined;
   }

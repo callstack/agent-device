@@ -99,11 +99,14 @@ export function parseRect(value: unknown): Rect | undefined {
  * identify the rejected shape: `malformed-fact`, `unrecognized-kind`, `unreported-reason`,
  * `invalid-visibility-probe`, `unrecognized-derivation`, `invalid-visible-frame`, or
  * `invalid-derived-frame`. They describe validation failures rather than levels of trust.
+ *
+ * `treeBound` survives only as the literal `true` on the kinds that can carry it; any other value reads
+ * as unbound, which costs a reader evidence but never claims a binding the producer did not make.
  */
 export function readSnapshotKeyboardBandFact(value: unknown): SnapshotKeyboardBandFact | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value)) return { kind: 'unmeasurable', reason: 'malformed-fact' };
-  if (value.kind === 'absent') return { kind: 'absent' };
+  if (value.kind === 'absent') return { kind: 'absent', ...treeBinding(value) };
   if (value.kind === 'unmeasurable') {
     return typeof value.reason === 'string' && value.reason.trim().length > 0
       ? { kind: 'unmeasurable', reason: value.reason }
@@ -119,9 +122,13 @@ export function readSnapshotKeyboardBandFact(value: unknown): SnapshotKeyboardBa
     return { kind: 'unmeasurable', reason: 'unrecognized-derivation' };
   }
   if (value.kind === 'visible' || value.kind === 'derived') {
-    return readKeyboardFrameFact(value.frame, value.kind);
+    return readKeyboardFrameFact(value.frame, value.kind, treeBinding(value));
   }
   return { kind: 'unmeasurable', reason: 'unrecognized-kind' };
+}
+
+function treeBinding(value: Record<string, unknown>): { treeBound?: true } {
+  return value.treeBound === true ? { treeBound: true } : {};
 }
 
 function readKeyboardTreeRejection(value: Record<string, unknown>): SnapshotKeyboardBandFact {
@@ -141,6 +148,7 @@ function readKeyboardTreeRejection(value: Record<string, unknown>): SnapshotKeyb
 function readKeyboardFrameFact(
   value: unknown,
   kind: 'visible' | 'derived',
+  binding: { treeBound?: true },
 ): SnapshotKeyboardBandFact {
   const frame = parseRect(value);
   // Same rule as `isPositiveFiniteRect` in kernel/rect, inlined: this module is a leaf that
@@ -154,8 +162,8 @@ function readKeyboardFrameFact(
     frame.height > 0;
   if (!plottable) return { kind: 'unmeasurable', reason: `invalid-${kind}-frame` };
   return kind === 'derived'
-    ? { kind: 'derived', derivation: 'docked-tree', frame }
-    : { kind: 'visible', frame };
+    ? { kind: 'derived', derivation: 'docked-tree', frame, ...binding }
+    : { kind: 'visible', frame, ...binding };
 }
 
 /**

@@ -4186,7 +4186,8 @@
           "y": 583,
           "width": 402,
           "height": 291
-        }
+        },
+        "treeBound": true
       },
       "expected": {
         "kind": "occluded",
@@ -4366,7 +4367,8 @@
           "y": 583,
           "width": 402,
           "height": 291
-        }
+        },
+        "treeBound": true
       },
       "expected": {
         "kind": "clear",
@@ -4422,7 +4424,8 @@
           "y": 583,
           "width": 402,
           "height": 291
-        }
+        },
+        "treeBound": true
       },
       "expected": {
         "kind": "occluded",
@@ -4586,7 +4589,8 @@
           "y": 580,
           "width": 390,
           "height": 264
-        }
+        },
+        "treeBound": true
       }
     },
     {
@@ -4899,7 +4903,8 @@
           "y": 580,
           "width": 390,
           "height": 264
-        }
+        },
+        "treeBound": true
       },
       "expected": {
         "kind": "occluded",
@@ -4969,7 +4974,8 @@
           "y": 580,
           "width": 390,
           "height": 264
-        }
+        },
+        "treeBound": true
       },
       "expected": {
         "kind": "clear",

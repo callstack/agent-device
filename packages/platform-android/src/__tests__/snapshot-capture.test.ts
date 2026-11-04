@@ -196,6 +196,7 @@ test('the Android keyboard band survives the publication adapter into the daemon
   assert.deepEqual(androidSnapshotPublicationInput(capture).keyboard, {
     kind: 'visible',
     frame: { x: 0, y: 1500, width: 1080, height: 900 },
+    treeBound: true,
   });
 });
 

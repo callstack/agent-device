@@ -924,7 +924,8 @@ function applyHiddenContentHintsToInteractiveNodes(
 /**
  * The keyboard band an Android capture measured, read from the window roots the helper already
  * captured: each root carries its `AccessibilityWindowInfo` type and screen bounds, so this costs no
- * adb call. Bounds are screen pixels, the same space as every node rect.
+ * adb call and the fact is bound to the captured tree (`treeBound`). Bounds are screen pixels, the
+ * same space as every node rect.
  *
  * An input method that draws nothing (agent-device's test IME) puts no window on screen and reads as
  * `absent`, and so does an input method window whose bounds parsed to an empty box. One whose bounds
@@ -965,7 +966,9 @@ export function androidSnapshotKeyboardFromTree(
   if (metadata.missingRootWindowTypes?.includes(ANDROID_WINDOW_TYPE_INPUT_METHOD)) {
     return { kind: 'unmeasurable', reason: 'window-root-unavailable' };
   }
-  if (inputMethodRects.length > 0) return { kind: 'visible', frame: unionRects(inputMethodRects) };
+  if (inputMethodRects.length > 0) {
+    return { kind: 'visible', frame: unionRects(inputMethodRects), treeBound: true };
+  }
   if (
     metadata.captureMode !== 'interactive-windows' ||
     windows.some((window) => window.windowType === undefined)
@@ -975,7 +978,7 @@ export function androidSnapshotKeyboardFromTree(
   if (metadata.helperTruncated === true) {
     return { kind: 'unmeasurable', reason: 'capture-truncated' };
   }
-  return { kind: 'absent' };
+  return { kind: 'absent', treeBound: true };
 }
 
 function isEmptyFiniteRect(rect: Rect | undefined): boolean {

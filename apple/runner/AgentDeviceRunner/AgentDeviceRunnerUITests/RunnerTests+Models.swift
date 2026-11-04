@@ -560,13 +560,16 @@ struct TextEntryVerificationTargetPayload: Codable, Equatable {
 }
 
 /// `kind` mirrors the TS `SnapshotKeyboardBandFact`: "visible" carries `frame`, "unmeasurable"
-/// carries `reason`, and "absent" carries nothing because there is nothing to say. `frame` is in the
+/// carries `reason`, and "absent" carries nothing else to say. "visible" and "absent" also carry
+/// `treeBound`, because both are read from the capture's own root snapshot. `frame` is in the
 /// app's own orientation space — the same space `SnapshotGeometrySpace` publishes every node rect in
 /// — so the daemon compares it against node rects without transforming either side (#2660).
 struct KeyboardBandFactPayload: Codable, Equatable {
   let kind: String
   let frame: SnapshotRect?
   let reason: String?
+  /// True when the fact was read from the capture's own root snapshot, the tree its nodes come from.
+  var treeBound: Bool? = nil
 }
 
 /// `kind` mirrors the TS `IosSystemSurfaceKind` (e.g. "web-auth").

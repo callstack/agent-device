@@ -162,6 +162,7 @@ test('Limrun carries docked tree evidence and never infers absence from missing 
     kind: 'derived',
     derivation: 'docked-tree',
     frame: { x: 0, y: 140, width: 320, height: 100 },
+    treeBound: true,
   });
   tree.children!.at(-1)!.frame = { x: 100, y: 60, width: 140, height: 80 };
   expect(

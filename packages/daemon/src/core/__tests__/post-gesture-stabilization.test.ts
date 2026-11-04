@@ -1,4 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import { acquireProviderKeyboard } from '@agent-device/contracts/tap-keyboard-occlusion';
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
@@ -496,13 +497,17 @@ test('capturePostGestureStabilizedResult settles at the first quiet pair after a
   const session = makeSession('ios');
   session.snapshot = {
     ...makeSnapshotState([...pickupSnapshot(500).nodes, ...keyboardWindowNodes()]),
-    keyboard: { kind: 'visible', frame: { x: 0, y: 400, width: 390, height: 444 } },
+    keyboard: {
+      kind: 'visible',
+      frame: { x: 0, y: 400, width: 390, height: 444 },
+      treeBound: true,
+    },
   };
   markPostGestureStabilization(session, 'swipe');
 
   const capture = vi.fn(async () => ({
     ...pickupSnapshot(500),
-    keyboard: { kind: 'absent' as const },
+    keyboard: { kind: 'absent' as const, treeBound: true as const },
   }));
 
   const resultPromise = withDiagnosticsScope({}, async () => {
@@ -534,7 +539,11 @@ test('capturePostGestureStabilizedResult still distrusts a read that only lost t
   const session = makeSession('ios');
   session.snapshot = {
     ...makeSnapshotState([...pickupSnapshot(500).nodes, ...keyboardWindowNodes()]),
-    keyboard: { kind: 'visible', frame: { x: 0, y: 400, width: 390, height: 444 } },
+    keyboard: {
+      kind: 'visible',
+      frame: { x: 0, y: 400, width: 390, height: 444 },
+      treeBound: true,
+    },
   };
   markPostGestureStabilization(session, 'swipe');
 
@@ -555,6 +564,44 @@ test('capturePostGestureStabilizedResult still distrusts a read that only lost t
   await vi.advanceTimersByTimeAsync(10_000);
   const { staleAccepts, settled } = await resultPromise;
 
+  assert.equal(staleAccepts, 1);
+  assert.equal(settled, 0);
+});
+
+test('capturePostGestureStabilizedResult still distrusts a stale WebDriver source whose separate visibility probe changed (iOS)', async () => {
+  // Appium reads page source, then probes keyboard visibility on its own. The source here never
+  // changes from the pre-gesture tree, while the probe answers up before the gesture and down after.
+  vi.useFakeTimers();
+  const appiumCapture = (visibility: boolean) => {
+    const source = pickupSnapshot(500);
+    return {
+      ...source,
+      keyboard: acquireProviderKeyboard({ nodes: source.nodes, viewport: null, visibility })
+        .keyboard,
+    };
+  };
+  const session = makeSession('ios');
+  session.snapshot = appiumCapture(true);
+  markPostGestureStabilization(session, 'swipe');
+
+  const capture = vi.fn(async () => appiumCapture(false));
+
+  const resultPromise = withDiagnosticsScope({}, async () => {
+    await capturePostGestureStabilizedResult({
+      session,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    });
+    return {
+      staleAccepts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stale_accept']),
+      settled: countDiagnosticEventsByPhase(['post_gesture_snapshot_stabilized']),
+    };
+  });
+
+  await vi.advanceTimersByTimeAsync(10_000);
+  const { staleAccepts, settled } = await resultPromise;
+
+  assert.equal(session.snapshot?.keyboard?.kind, 'visibility-only');
   assert.equal(staleAccepts, 1);
   assert.equal(settled, 0);
 });

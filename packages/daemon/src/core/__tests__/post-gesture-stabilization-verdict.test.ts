@@ -246,8 +246,9 @@ test('decidePostGestureStabilityVerdict trusts immediately when the overlap is o
 const KEYBOARD_UP: SnapshotKeyboardBandFact = {
   kind: 'visible',
   frame: { x: 0, y: 400, width: 390, height: 444 },
+  treeBound: true,
 };
-const KEYBOARD_DOWN: SnapshotKeyboardBandFact = { kind: 'absent' };
+const KEYBOARD_DOWN: SnapshotKeyboardBandFact = { kind: 'absent', treeBound: true };
 
 function pickupWithKeyboard(keyboard: boolean): InteractionSurfaceSignature {
   return buildInteractionSurfaceSignature([
@@ -283,7 +284,12 @@ test('decidePostGestureStabilityVerdict trusts a quiet read whose keyboard fact 
     decidePostGestureStabilityVerdict({
       baseline: preActionBaseline(pickupWithKeyboard(false), KEYBOARD_DOWN),
       quietSignature: pickupWithKeyboard(true),
-      quietKeyboard: { kind: 'visibility-only', visible: true },
+      quietKeyboard: {
+        kind: 'derived',
+        derivation: 'docked-tree',
+        frame: { x: 0, y: 400, width: 390, height: 444 },
+        treeBound: true,
+      },
       elapsedMs: 0,
       distrustCapMs: 3_500,
     }),
@@ -334,4 +340,34 @@ test('decidePostGestureStabilityVerdict does not read a baseline without a keybo
     }),
     { verdict: 'distrust' },
   );
+});
+
+test('decidePostGestureStabilityVerdict does not read keyboard facts sampled apart from the tree as proof of a change', () => {
+  // A WebDriver (Appium) capture reads page source, then probes visibility on its own: a stale source
+  // can arrive with a newer visibility.
+  const unbound: Array<[SnapshotKeyboardBandFact, SnapshotKeyboardBandFact]> = [
+    [
+      { kind: 'visibility-only', visible: true },
+      { kind: 'visibility-only', visible: false },
+    ],
+    [
+      { kind: 'tree-rejected', derivation: 'docked-tree', visible: true },
+      { kind: 'tree-rejected', derivation: 'docked-tree', visible: false },
+    ],
+    [{ kind: 'visible', frame: { x: 0, y: 400, width: 390, height: 444 } }, { kind: 'absent' }],
+    [KEYBOARD_UP, { kind: 'visibility-only', visible: false }],
+  ];
+  for (const [baselineKeyboard, quietKeyboard] of unbound) {
+    assert.deepEqual(
+      decidePostGestureStabilityVerdict({
+        baseline: preActionBaseline(pickupWithKeyboard(true), baselineKeyboard),
+        quietSignature: pickupWithKeyboard(true),
+        quietKeyboard,
+        elapsedMs: 0,
+        distrustCapMs: 3_500,
+      }),
+      { verdict: 'distrust' },
+      `${baselineKeyboard.kind} -> ${quietKeyboard.kind}`,
+    );
+  }
 });
