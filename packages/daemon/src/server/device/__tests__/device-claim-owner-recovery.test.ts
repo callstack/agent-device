@@ -118,7 +118,11 @@ test('unreadable durable evidence prevents owner-scoped gateway construction', a
 
 test('owner-scoped recovery uses its pre-gateway ownership decision for terminal cleanup', async () => {
   const stateDir = mkdtempForTestSync('device-claim-terminal-owner-');
-  const claim = makeClaim(stateDir, 'claimed-session');
+  const claim: DeviceClaim = {
+    ...makeClaim(stateDir, 'claimed-session'),
+    recordingFence: { token: 'fence', generation: 1 },
+    recordingRuntimeOwner: localRuntimeOwner('android'),
+  };
   const resourcePath = appLogResourceStore.resolvePath(
     path.join(stateDir, 'sessions', claim.session),
   );
@@ -147,6 +151,7 @@ test('owner-scoped recovery uses its pre-gateway ownership decision for terminal
       fence: { token: 'fence', generation: 1 },
       lifecycle: 'completed',
       descriptor: { version: 1, body: {} },
+      metadata: { deviceClaimToken: claim.ownerToken },
     }),
   );
   const openedPaths: string[] = [];

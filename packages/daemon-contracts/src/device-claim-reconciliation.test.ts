@@ -251,10 +251,19 @@ test.each([
   'a later foreign manifest $caseName during $mode recovery retains the claim',
   async ({ initiallyOwned, mode }) => {
     const stateDir = mkdtempForTestSync('device-claim-late-resource-');
-    const claim = {
-      ...makeClaim(stateDir),
-      recordingFence: { token: 'screen-fence', generation: 1 },
-    };
+    const baseClaim = makeClaim(stateDir);
+    const claim: DeviceClaim = initiallyOwned
+      ? {
+          ...baseClaim,
+          claimOwnerKind: 'transient-command',
+          transientCommand: 'record',
+          recordingFence: { token: 'screen-fence', generation: 1 },
+        }
+      : {
+          ...baseClaim,
+          recordingFence: undefined,
+          recordingRuntimeOwner: undefined,
+        };
     const env = { AGENT_DEVICE_CLAIMS_DIR: path.join(stateDir, 'claims') };
     writeDeviceClaim(claim, env);
     const sessionDir = path.join(stateDir, 'sessions', claim.session);
@@ -328,10 +337,18 @@ test.each([
             composeGateway: () => gateway,
           })
         : createDeviceClaimReconciler({ gateway, scope });
+    expect(inspectDeviceClaimRecovery(claim).status).toBe('inspectable');
     const settlement = settleVerifiedOrphanedClaim(claim, reconciler, env);
-    await enteredBind;
-    writeScreen('foreign-session');
-    resumeBind();
+    try {
+      const phase = await Promise.race([
+        enteredBind.then(() => ({ phase: 'binding' as const })),
+        settlement.then((result) => ({ phase: 'settled' as const, result })),
+      ]);
+      expect(phase).toEqual({ phase: 'binding' });
+      writeScreen('foreign-session');
+    } finally {
+      resumeBind();
+    }
 
     await expect(settlement).resolves.toEqual({
       status: 'retained',
@@ -367,10 +384,79 @@ function makeClaim(stateDir: string): DeviceClaim {
   };
 }
 
+test('an open-session recording with no surviving-owner authority is retained before recovery', async () => {
+  const stateDir = mkdtempForTestSync('unproven-session-owner-');
+  const claim = makeClaim(stateDir);
+  const env = { AGENT_DEVICE_CLAIMS_DIR: path.join(stateDir, 'claims') };
+  writeDeviceClaim(claim, env);
+  const claimPath = resolveDeviceClaimPath(claim.deviceKey, env);
+  const before = fs.readFileSync(claimPath);
+  const reconcile = vi.fn(async () => ({ status: 'reconciled' as const }));
+
+  await expect(settleVerifiedOrphanedClaim(claim, reconcile, env)).resolves.toEqual({
+    status: 'retained',
+    reason: 'screen-recording-session-owner-unproven',
+  });
+  expect(reconcile).not.toHaveBeenCalled();
+  expect(fs.readFileSync(claimPath)).toEqual(before);
+});
+
+test.each([
+  { evidence: 'missing token', token: undefined, generation: 1, reason: 'provenance-unconfirmed' },
+  { evidence: 'replacement token', token: 'other-token', generation: 1, reason: 'owner-mismatch' },
+  {
+    evidence: 'replacement generation',
+    token: 'claim-token',
+    generation: 2,
+    reason: 'owner-mismatch',
+  },
+] as const)(
+  'recording $evidence is retained before binding or settlement',
+  async ({ token, generation, reason }) => {
+    const stateDir = mkdtempForTestSync('unproven-recording-');
+    const claim: DeviceClaim = {
+      ...makeClaim(stateDir),
+      claimOwnerKind: 'transient-command',
+      transientCommand: 'record',
+    };
+    const env = { AGENT_DEVICE_CLAIMS_DIR: path.join(stateDir, 'claims') };
+    writeDeviceClaim(claim, env);
+    const resourcePath = screenRecordingDurableResource.store.resolvePath(
+      path.join(stateDir, 'sessions', claim.session),
+    );
+    screenRecordingDurableResource.store.write(
+      resourcePath,
+      createDurableResourceEnvelope({
+        resourceKind: 'screen-recording',
+        sessionId: claim.session,
+        device: claim.device,
+        owner: localRuntimeOwner('android'),
+        fence: { token: 'fence', generation },
+        lifecycle: 'open',
+        descriptor: { version: 1, body: {} },
+        ...(token === undefined ? {} : { metadata: { deviceClaimToken: token } }),
+      }),
+    );
+    const before = fs.readFileSync(resourcePath);
+    const bind = vi.fn();
+    const gateway = { bind } as unknown as DeviceRuntimeGateway<PlatformRuntimeOperations>;
+    await expect(
+      settleVerifiedOrphanedClaim(claim, createDeviceClaimReconciler({ gateway, scope }), env),
+    ).resolves.toEqual({ status: 'retained', reason: `screen-recording-${reason}` });
+    expect(bind).not.toHaveBeenCalled();
+    expect(fs.readFileSync(resourcePath)).toEqual(before);
+    expect(
+      JSON.parse(fs.readFileSync(resolveDeviceClaimPath(claim.deviceKey, env), 'utf8')),
+    ).toMatchObject({ ownerToken: claim.ownerToken });
+  },
+);
+
 test('missing finalized simulator export retains the claim and recovered stop reports missing', async () => {
   const stateDir = mkdtempForTestSync('missing-recording-claim-');
   const claim = {
     ...makeClaim(stateDir),
+    claimOwnerKind: 'transient-command' as const,
+    transientCommand: 'record',
     recordingFence: { token: 'screen-fence', generation: 1 },
     recordingRuntimeOwner: localRuntimeOwner('apple'),
     deviceKey: 'local:apple:ios:sim',
@@ -462,7 +548,11 @@ test('missing finalized simulator export retains the claim and recovered stop re
 
 test('claim reconciliation retains the exact recording claim and journals settlement without cleaning material', async () => {
   const stateDir = mkdtempForTestSync('preservation-claim-');
-  const claim = makeClaim(stateDir);
+  const claim: DeviceClaim = {
+    ...makeClaim(stateDir),
+    claimOwnerKind: 'transient-command',
+    transientCommand: 'record',
+  };
   const env = { AGENT_DEVICE_CLAIMS_DIR: path.join(stateDir, 'claims') };
   writeDeviceClaim(claim, env);
   const resourcePath = screenRecordingDurableResource.store.resolvePath(
