@@ -16,6 +16,7 @@ import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import { isRecord } from '@agent-device/kernel/record';
 import {
+  SCREEN_RECORDING_CLEANUP_SCOPE_METADATA_KEY,
   SCREEN_RECORDING_RESOURCE_KIND,
   type ScreenRecordingCompletion,
   type ScreenRecordingLiveHandle,
@@ -113,8 +114,9 @@ export function createAppleRecordingEnvelope(params: {
   owner: RuntimeOwnerRef;
   input: ScreenRecordingStartInput;
   descriptor: AppleRecordingDescriptor;
+  cleanupRecoveryScope?: 'local-drained';
 }) {
-  const { device, owner, input, descriptor } = params;
+  const { device, owner, input, descriptor, cleanupRecoveryScope } = params;
   return createDurableResourceEnvelope({
     resourceKind: SCREEN_RECORDING_RESOURCE_KIND,
     sessionId: input.sessionId,
@@ -123,6 +125,9 @@ export function createAppleRecordingEnvelope(params: {
     fence: input.fence,
     lifecycle: 'open',
     descriptor: encodeDurableDescriptor(descriptorCodec, descriptor),
+    ...(cleanupRecoveryScope
+      ? { metadata: { [SCREEN_RECORDING_CLEANUP_SCOPE_METADATA_KEY]: cleanupRecoveryScope } }
+      : {}),
   });
 }
 

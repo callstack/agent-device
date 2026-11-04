@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import * as fileHost from '@agent-device/host-kit/file';
 import { expect, test, vi } from 'vitest';
 import {
   ANDROID_EMULATOR,
@@ -12,13 +13,17 @@ import {
   createScreenRecordingLiveHandle,
 } from '@agent-device/capture-kit';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
-import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
+import {
+  encodeScreenRecordingCompletionMetadata,
+  screenRecordingDurableResource,
+} from '@agent-device/capture-kit/screen-recording-session-resource';
 import {
   localRuntimeOwner,
   type DeviceRuntimeGateway,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { deviceIdentity } from '@agent-device/kernel/device';
+import { SCREEN_RECORDING_CLEANUP_SCOPE_METADATA_KEY } from '@agent-device/contracts/screen-recording-runtime';
 import {
   canonicalLocalDeviceKey,
   clearDeviceClaim,
@@ -55,7 +60,7 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
 
 const setup = isolatedDeviceClaimStores('recording-cleanup-authority-');
 
-function fixture(retryable = true) {
+function fixture(retryable = true, localBinding = false) {
   const { stateDir, claimsDir } = setup();
   const host = createTestHostEnvironment({
     env: { ...process.env, AGENT_DEVICE_CLAIMS_DIR: claimsDir },
@@ -106,7 +111,11 @@ function fixture(retryable = true) {
       fence: { token: 'recording-fence', generation: 3 },
       lifecycle: 'open',
       descriptor: { version: 1, body: {} },
-      metadata: { deviceClaimToken: 'original-token', deviceClaimBindingVersion: 1 },
+      metadata: {
+        deviceClaimToken: 'original-token',
+        deviceClaimBindingVersion: 1,
+        ...(localBinding ? { [SCREEN_RECORDING_CLEANUP_SCOPE_METADATA_KEY]: 'local-drained' } : {}),
+      },
     }),
   );
   const finish = vi.fn(async () => {
@@ -124,6 +133,7 @@ function fixture(retryable = true) {
       },
     };
   });
+  let nativeCleanupPending = false;
   const handle = createScreenRecordingLiveHandle(
     {
       backend: 'fixture',
@@ -134,7 +144,13 @@ function fixture(retryable = true) {
       recordOnlySession: false,
       gestureEvents: [],
     },
-    { finish, forceCleanup: async () => ({ status: 'cleaned' }) },
+    {
+      finish,
+      forceCleanup: async () =>
+        nativeCleanupPending
+          ? { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' }
+          : { status: 'cleaned' },
+    },
   );
   const reattach = vi.fn(async () => ({ status: 'export' as const, handle }));
   let releaseRetry!: () => void;
@@ -168,6 +184,7 @@ function fixture(retryable = true) {
       device,
       owner,
       facts,
+      ...(localBinding ? { recordingCleanupRecovery: 'local-drained' as const } : {}),
       operations: {
         screenRecordingStart: async () => {
           throw new Error('unexpected start');
@@ -236,6 +253,11 @@ function fixture(retryable = true) {
     key,
     claimPath,
     resourcePath,
+    device,
+    handle,
+    setNativeCleanupPending: (pending: boolean) => {
+      nativeCleanupPending = pending;
+    },
     gateway,
     scope,
     finish,
@@ -247,6 +269,70 @@ function fixture(retryable = true) {
     stop,
   };
 }
+
+test('completed replay keeps native cleanup authority until the exact handle settles', async () => {
+  const f = fixture(true, true);
+  const open = screenRecordingDurableResource.store.read(f.resourcePath);
+  if (open.status !== 'decoded') throw new Error('missing recording');
+  fs.writeFileSync(f.output, 'recorded bytes');
+  f.store.publish('recording', {
+    name: 'recording',
+    device: f.device,
+    createdAt: 1,
+    actions: [],
+    screenRecording: { handle: f.handle, envelope: open.envelope },
+  });
+  f.setNativeCleanupPending(true);
+  const publish = fileHost.publishFileSync;
+  let changed = false;
+  const intercept = vi.spyOn(fileHost, 'publishFileSync').mockImplementation((options) => {
+    publish(options);
+    if (changed || options.destination !== f.claimPath) return;
+    const claim = JSON.parse(fs.readFileSync(f.claimPath, 'utf8'));
+    if (!claim.recordingCleanupPending) return;
+    changed = true;
+    screenRecordingDurableResource.store.write(f.resourcePath, {
+      ...open.envelope,
+      lifecycle: 'completed',
+      metadata: {
+        ...open.envelope.metadata,
+        ...encodeScreenRecordingCompletionMetadata({
+          backend: 'fixture',
+          outPath: f.output,
+          startedAt: 1,
+          completedAt: 2,
+          scope: 'device',
+          showTouches: false,
+          recordOnlySession: false,
+        }),
+      },
+    });
+  });
+  try {
+    expect((await f.stop()).response).toMatchObject({ ok: true });
+  } finally {
+    intercept.mockRestore();
+  }
+  expect(changed).toBe(true);
+  expect(inspectDeviceClaims({}, process.env)[0]?.claim).toMatchObject({
+    ownerToken: 'original-token',
+    recordingCleanupPending: true,
+  });
+  expect(inspectDeviceClaims({}, process.env)[0]?.claim).not.toHaveProperty(
+    'recordingCleanupProof',
+  );
+  expect(f.store.get('recording')?.screenRecording).toBeDefined();
+  expect((await f.stop()).response).toMatchObject({
+    ok: false,
+    error: { details: { reason: 'cleanup-unconfirmed' } },
+  });
+  expect(fs.existsSync(f.claimPath)).toBe(true);
+  f.setNativeCleanupPending(false);
+  expect((await f.stop()).response).toMatchObject({ ok: true });
+  expect(fs.existsSync(f.claimPath)).toBe(false);
+  expect(fs.readFileSync(f.output, 'utf8')).toBe('recorded bytes');
+  expect(f.store.get('recording')?.screenRecording).toBeUndefined();
+});
 
 test('a failed binding disposal retains the completed export until its authority drains on stop retry', async () => {
   const f = fixture();

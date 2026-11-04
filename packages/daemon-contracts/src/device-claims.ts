@@ -758,7 +758,7 @@ export async function finishRecordingClaimClose(
         return 'ownership-changed' as const;
       if (release) fs.unlinkSync(claimPath);
       else {
-        const { recordingCleanupPending: _, ...settled } = claim;
+        const { recordingCleanupPending: _, recordingCleanupProof: _proof, ...settled } = claim;
         writeDeviceClaim(settled, env);
       }
       return 'settled' as const;

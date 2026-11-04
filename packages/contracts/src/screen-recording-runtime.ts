@@ -15,6 +15,8 @@ import type { PendingTransferGuard } from './async-lifecycle.ts';
 import type { ResourceOwnershipFence } from './platform-runtime.ts';
 
 export const SCREEN_RECORDING_RESOURCE_KIND = 'screen-recording' as const;
+/** The backend recorded local-only recording effects before starting the native recorder. */
+export const SCREEN_RECORDING_CLEANUP_SCOPE_METADATA_KEY = 'recordingCleanupScope' as const;
 
 const START_NOT_DISPATCHED = Symbol('screen-recording-start-not-dispatched');
 

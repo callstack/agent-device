@@ -31,10 +31,14 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
   openDeviceWait?: { waitedMs: number };
   publicNetworkOnly?: true;
   recordStartAttempt?: () => void;
+  recordStopDispatch?: () => void;
+  recordingStopCleanupPending?: (retry: () => Promise<void>) => void;
   recordStartNoEffect?: (proof: 'not-dispatched' | 'rolled-back') => void;
   recordingClaimOwnership?: () => DeviceClaimSessionOwnership | undefined;
   reserveRecordingFence?: (fence: ResourceOwnershipFence) => Promise<void>;
-  retryRecordingCleanup?: (device: DeviceInfo) => Promise<{ startRolledBack: boolean }>;
+  retryRecordingCleanup?: (
+    device: DeviceInfo,
+  ) => Promise<{ startRolledBack: boolean; cleanupSettled?: boolean }>;
   recoverIncompleteRecordingStart?: (device: DeviceInfo) => Promise<boolean>;
   incompleteRecordingStartDevice?: () => DeviceIdentity | undefined;
   holdRecordingClaimForClose?: (

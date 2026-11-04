@@ -345,6 +345,8 @@ export async function createRequestExecutionScope(params: {
         internal: {
           ...scopedReq.internal,
           recordStartAttempt: claimAdmission.recordingStartAttempt,
+          recordStopDispatch: claimAdmission.recordingStopDispatch,
+          recordingStopCleanupPending: closeCleanup.recordingPending,
           recordStartNoEffect: claimAdmission.recordingStartNoEffect,
           recoverIncompleteRecordingStart: claimAdmission.recoverIncompleteStart,
           incompleteRecordingStartDevice: claimAdmission.incompleteStartDevice,
@@ -359,6 +361,7 @@ export async function createRequestExecutionScope(params: {
                 releaseRecordOnlyRecordingClaim(sessionStore, sessionName, retained.ownership);
             }
             return {
+              cleanupSettled: result !== 'none',
               startRolledBack: Boolean(
                 retained?.purpose === 'start' && retained.startProof && result !== 'none',
               ),
@@ -381,13 +384,12 @@ export async function createRequestExecutionScope(params: {
       bindingCleanup ??= (async () => {
         try {
           await runtimeBindings[Symbol.asyncDispose]();
+          if (runtimeBindings.hasLocalRecordingCleanupAuthority())
+            claimAdmission.runtimeDisposalDrainedLocally();
+          closeCleanup.retainPending();
         } catch (error) {
           claimAdmission.runtimeDisposalFailed();
-          const retry = runtimeBindings.failedDisposal();
-          const retained =
-            retry &&
-            (closeCleanup.retained(retry) ?? claimAdmission.retainedRecordingCleanup(retry));
-          if (retained) sessionStore.retainRecordingCleanup(sessionName, retained);
+          closeCleanup.retainPending(runtimeBindings.failedDisposal());
           throw error;
         } finally {
           await claimAdmission[Symbol.asyncDispose]();
@@ -524,7 +526,9 @@ export async function createRequestExecutionScope(params: {
           if (admittedLease) await assertMacOsAppLeaseProcess(admittedLease);
           const result = await runAdmittedLeaseWork({ leaseRegistry, req: scopedReq, task });
           if (typeof result === 'object' && result !== null && 'ok' in result && result.ok === true)
-            claimAdmission.recordingSucceeded();
+            await claimAdmission.recordingSucceeded(
+              runtimeBindings.hasLocalRecordingCleanupAuthority(),
+            );
           return result;
         } finally {
           // The #2833 inactivity deadline is measured from the END of the last command that ATTACHED

@@ -266,7 +266,7 @@ export function finishIncompleteStartRecoveryCleanup(claim: DeviceClaim, env: En
   const current = inspectDeviceClaimFile(resolveDeviceClaimPath(claim.deviceKey, env))?.claim;
   if (!current || !sameIncompleteStartClaim(current, claim) || !current.recordingCleanupPending)
     return false;
-  const { recordingCleanupPending: _, ...settled } = current;
+  const { recordingCleanupPending: _, recordingCleanupProof: _proof, ...settled } = current;
   writeDeviceClaim(settled, env);
   return true;
 }

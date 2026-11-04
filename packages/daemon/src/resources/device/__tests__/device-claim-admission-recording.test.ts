@@ -73,6 +73,7 @@ afterEach(() => vi.restoreAllMocks());
 function runtime(device: DeviceInfo, output: string) {
   let failFinish = false;
   let missing = false;
+  let cleanupUnconfirmed = false;
   const native = `${output}.native`;
   fs.writeFileSync(native, 'preserved video');
   const finish = vi.fn(async () => {
@@ -101,7 +102,13 @@ function runtime(device: DeviceInfo, output: string) {
       recordOnlySession: false,
       gestureEvents: [],
     },
-    { finish, forceCleanup: async () => ({ status: 'cleaned' }) },
+    {
+      finish,
+      forceCleanup: async () =>
+        cleanupUnconfirmed
+          ? { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' }
+          : { status: 'cleaned' },
+    },
   );
   const signal = vi.fn();
   const recovered = {
@@ -174,6 +181,9 @@ function runtime(device: DeviceInfo, output: string) {
     },
     missing: (value: boolean) => {
       missing = value;
+    },
+    cleanupUnconfirmed: (value: boolean) => {
+      cleanupUnconfirmed = value;
     },
   };
 }
@@ -447,6 +457,35 @@ test('a confirmed failed-adoption rollback releases its recording reservation', 
     status: 'decoded',
     envelope: { lifecycle: 'completed', metadata: { cleanupStatus: 'cleaned' } },
   });
+});
+
+test('unconfirmed failed-adoption cleanup retains the claim and native recording', async () => {
+  const { root, stateDir } = setup();
+  const store = new SessionStore(path.join(stateDir, 'sessions'), isolatedClaimTestHost());
+  const rt = runtime(ANDROID_EMULATOR, path.join(stateDir, 'output.mp4'));
+  rt.cleanupUnconfirmed(true);
+  const result = await request(stateDir, ANDROID_EMULATOR, rt, 'start', store, true, true);
+  expect(result.response.ok).toBe(false);
+  expect(inspectDeviceClaims({}, process.env)[0]?.claim).toMatchObject({
+    recordingStartPending: true,
+  });
+  expect(
+    screenRecordingDurableResource.store.read(
+      screenRecordingDurableResource.store.resolvePath(store.resolveSessionDir(result.session)),
+    ),
+  ).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'open', metadata: { cleanupStatus: 'cleanup-pending' } },
+  });
+  expect(fs.readFileSync(rt.native, 'utf8')).toBe('preserved video');
+  const otherState = path.join(root, 'other');
+  fs.mkdirSync(otherState, { recursive: true });
+  const other = new SessionStore(path.join(otherState, 'sessions'), isolatedClaimTestHost());
+  const competitor = runtime(ANDROID_EMULATOR, path.join(otherState, 'competitor.mp4'));
+  const refused = await request(otherState, ANDROID_EMULATOR, competitor, 'start', other);
+  expect(refused.response).toMatchObject({ ok: false, error: { code: 'DEVICE_IN_USE' } });
+  expect(competitor.start).not.toHaveBeenCalled();
+  expect(inspectDeviceClaims({}, process.env)).toHaveLength(1);
 });
 
 test('an unconfirmed native start keeps its reservation even when an older manifest is completed', async () => {

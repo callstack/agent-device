@@ -49,13 +49,19 @@ import {
 export type DeviceClaimAdmission = AsyncDisposable &
   Readonly<{
     /** Throws `DEVICE_IN_USE` when a foreign live claim owns the device. */
-    admit(device: DeviceInfo, owner: RuntimeOwnerRef): Promise<void>;
-    recordingSucceeded(): void;
+    admit(
+      device: DeviceInfo,
+      owner: RuntimeOwnerRef,
+      recordingCleanupRecovery?: 'local-drained',
+    ): Promise<void>;
+    recordingSucceeded(localBindings: boolean): Promise<void>;
     recordingStartAttempt(): void;
+    recordingStopDispatch(): void;
     recordingStartNoEffect(proof: 'not-dispatched' | 'rolled-back'): void;
     recordingClaimOwnership(): DeviceClaimSessionOwnership | undefined;
     reserveRecordingFence(fence: ResourceOwnershipFence): Promise<void>;
     runtimeDisposalFailed(): void;
+    runtimeDisposalDrainedLocally(): void;
     recoverIncompleteStart(device: DeviceInfo): Promise<boolean>;
     incompleteStartDevice(): ReturnType<typeof findIncompleteRecordingReservation>;
     retainedRecordingCleanup(retry: () => Promise<void>): RetainedRecordingCleanup | undefined;
@@ -111,6 +117,7 @@ export function createDeviceClaimAdmission(params: {
   let startProof: 'not-dispatched' | 'rolled-back' | undefined;
   let startFence: ResourceOwnershipFence | undefined;
   let runtimeDisposed = true;
+  let runtimeDrainedLocally = false;
   let recording:
     | {
         device: DeviceInfo;
@@ -179,7 +186,7 @@ export function createDeviceClaimAdmission(params: {
   }
 
   return {
-    admit: async (device, owner) => {
+    admit: async (device, owner, recordingCleanupRecovery) => {
       switch (deviceClaimRuleForOwner(owner)) {
         case 'none':
           return;
@@ -199,6 +206,7 @@ export function createDeviceClaimAdmission(params: {
               const result = await admitRecordingStop({
                 ...recordingContext(device),
                 owner,
+                recordingCleanupRecovery,
                 sessionOwnership: params.currentSessionClaim?.(),
               });
               recording.stopLease = result;
@@ -210,12 +218,17 @@ export function createDeviceClaimAdmission(params: {
         }
       }
     },
-    recordingSucceeded: () => {
+    recordingSucceeded: async (localBindings) => {
       recordingSucceeded = true;
+      if (runtimeDisposed && localBindings && recording?.stopLease)
+        await recording.stopLease.completedLocally(
+          params.recordingHasOtherOwners?.(recording.stopLease.ownership),
+        );
     },
     recordingStartAttempt: () => {
       startAttempted = true;
     },
+    recordingStopDispatch: () => recording?.stopLease?.dispatch(),
     recordingStartNoEffect: (proof) => {
       startProof = proof;
     },
@@ -282,12 +295,16 @@ export function createDeviceClaimAdmission(params: {
     runtimeDisposalFailed: () => {
       runtimeDisposed = false;
     },
+    runtimeDisposalDrainedLocally: () => {
+      runtimeDrainedLocally = true;
+    },
     [Symbol.asyncDispose]: async () => {
       if (recording?.stopLease) {
         const released = await recording.stopLease.finish({
           action: 'stop',
           succeeded: recordingSucceeded,
           runtimeDisposed,
+          runtimeDrainedLocally,
           startAttempted,
           retainForSession: params.recordingHasOtherOwners?.(recording.stopLease.ownership),
         });

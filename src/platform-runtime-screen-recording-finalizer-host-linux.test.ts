@@ -21,7 +21,12 @@ test.skipIf(process.platform !== 'linux')(
     const cache = path.join(root, 'swift-cache');
     fs.mkdirSync(bin);
     const host = createTestHostEnvironment({
-      env: { ...process.env, PATH: bin, AGENT_DEVICE_SWIFT_CACHE_DIR: cache },
+      env: {
+        ...process.env,
+        PATH: bin,
+        AGENT_DEVICE_SWIFT_CACHE_DIR: cache,
+        AGENT_DEVICE_CLAIMS_DIR: path.join(root, 'claims'),
+      },
     });
     for (const command of ['swift', 'swiftc', 'xcrun']) {
       expect(spawnSync(command, [], { env: host.env }).error).toMatchObject({ code: 'ENOENT' });

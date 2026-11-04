@@ -99,6 +99,7 @@ export type RequestRuntimeBindings = AsyncDisposable &
     inspectFacts: InspectDeviceRuntimeFacts;
     bindDevice: BindDeviceRuntime;
     bindExactDevice: BindExactDeviceRuntime;
+    hasLocalRecordingCleanupAuthority(): boolean;
     failedDisposal(): (() => Promise<void>) | undefined;
   }>;
 
@@ -111,14 +112,22 @@ export function createRequestRuntimeBindings(params: {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
   dispatchLedger: RequestDispatchLedger;
-  admitDeviceClaim: (device: DeviceInfo, owner: RuntimeOwnerRef) => Promise<void>;
+  admitDeviceClaim: (
+    device: DeviceInfo,
+    owner: RuntimeOwnerRef,
+    recordingCleanupRecovery?: DeviceBinding<PlatformRuntimeOperations>['recordingCleanupRecovery'],
+  ) => Promise<void>;
   /** ADR 0029 daemon-policy device scope, checked before the gateway inspects or binds a device. */
   admitDevice?: (device: DeviceInfo) => void;
 }): RequestRuntimeBindings {
   const cleanups = new AsyncCleanupStack();
   const bindings = new Map<string, Promise<DeviceBinding<PlatformRuntimeOperations>>>();
   const failed: Array<(() => Promise<void>) | undefined> = [];
+  let boundCount = 0;
+  let hasLocalRecordingCleanupAuthority = true;
   const track = (binding: DeviceBinding<PlatformRuntimeOperations>) => {
+    boundCount += 1;
+    hasLocalRecordingCleanupAuthority &&= binding.recordingCleanupRecovery === 'local-drained';
     cleanups.defer(async () => {
       try {
         await binding[Symbol.asyncDispose]();
@@ -133,7 +142,13 @@ export function createRequestRuntimeBindings(params: {
   const admitBinding = async (
     binding: DeviceBinding<PlatformRuntimeOperations>,
   ): Promise<DeviceBinding<PlatformRuntimeOperations>> => {
-    await params.admitDeviceClaim(binding.device, binding.owner);
+    if (binding.recordingCleanupRecovery)
+      await params.admitDeviceClaim(
+        binding.device,
+        binding.owner,
+        binding.recordingCleanupRecovery,
+      );
+    else await params.admitDeviceClaim(binding.device, binding.owner);
     return binding;
   };
 
@@ -174,6 +189,7 @@ export function createRequestRuntimeBindings(params: {
     },
     bindDevice,
     bindExactDevice,
+    hasLocalRecordingCleanupAuthority: () => boundCount > 0 && hasLocalRecordingCleanupAuthority,
     failedDisposal: () => {
       if (!failed.length) return undefined;
       return async () => {

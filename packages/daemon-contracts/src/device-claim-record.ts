@@ -59,6 +59,13 @@ export type DeviceClaim = {
   recordingRuntimeOwner?: RuntimeOwnerRef;
   /** The request still owes verified cleanup of recording runtime bindings. */
   recordingCleanupPending?: true;
+  /** Durable proof for the narrow stop phases whose effects cannot outlive their owner. */
+  recordingCleanupProof?:
+    | 'stop-prepared'
+    | 'stop-completed-release'
+    | 'stop-completed-retain'
+    | 'stop-drained-release'
+    | 'stop-drained-retain';
   recordingStartPending?: true;
   /** Set by `abandonDeviceClaim`; absent while the claim still holds the device for its owner. */
   abandonedAtMs?: number;
@@ -110,6 +117,7 @@ function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
     transientCommand,
     recordingFence,
     recordingCleanupPending,
+    recordingCleanupProof,
     recordingRuntimeOwner,
     recordingStartPending,
   } = raw;
@@ -134,6 +142,17 @@ function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
     return null;
   if (recordingCleanupPending && recordingFence === undefined) return null;
   if (
+    recordingCleanupProof !== undefined &&
+    (!recordingCleanupPending ||
+      recordingRuntimeOwner === undefined ||
+      (recordingCleanupProof !== 'stop-prepared' &&
+        recordingCleanupProof !== 'stop-completed-release' &&
+        recordingCleanupProof !== 'stop-completed-retain' &&
+        recordingCleanupProof !== 'stop-drained-release' &&
+        recordingCleanupProof !== 'stop-drained-retain'))
+  )
+    return null;
+  if (
     recordingStartPending !== undefined &&
     (recordingStartPending !== true ||
       !recordingKind ||
@@ -157,6 +176,7 @@ function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
       ? { transientCommand: transientCommand as string }
       : {}),
     ...(recordingCleanupPending ? { recordingCleanupPending: true as const } : {}),
+    ...(recordingCleanupProof === undefined ? {} : { recordingCleanupProof }),
     ...(recordingStartPending ? { recordingStartPending: true as const } : {}),
     ...(recordingRuntimeOwner === undefined
       ? {}

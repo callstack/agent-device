@@ -1,4 +1,5 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import { isConfirmedCleanup } from '@agent-device/contracts/durable-resource';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import path from 'node:path';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
@@ -439,17 +440,20 @@ async function stopRecording(
 ): Promise<DaemonResponse> {
   let stopped: ScreenRecordingStop;
   try {
+    let selectedKind = kind;
     if (kind === 'stop-live') {
-      await params.req.internal?.retryRecordingCleanup?.(session.device);
-      await params.bindDevice(session.device, screenRecordingAdmissionUse);
+      const cleanup = await params.req.internal?.retryRecordingCleanup?.(session.device);
+      if (cleanup?.cleanupSettled && !params.sessionStore.resolveCurrent(ref!)?.screenRecording) {
+        selectedKind = 'stop-recovery';
+      } else {
+        await params.bindDevice(session.device, screenRecordingAdmissionUse);
+        params.req.internal?.recordStopDispatch?.();
+      }
     }
     stopped =
-      kind === 'stop-live'
+      selectedKind === 'stop-live'
         ? {
-            completion: await finishLiveScreenRecording({
-              intent: 'capture',
-              binding: bindSessionScreenRecording(params.sessionStore, ref!),
-            }),
+            completion: await finishLiveWithCleanupAuthority(params, ref!),
             recordsSessionAction: true,
           }
         : await finishRecovered(params, session, needsReadiness);
@@ -497,6 +501,35 @@ async function stopRecording(
         ),
       }
     : response;
+}
+
+async function finishLiveWithCleanupAuthority(
+  params: RecordRuntimeHandlerParams,
+  ref: SessionRef,
+): Promise<ScreenRecordingCompletion> {
+  const binding = bindSessionScreenRecording(params.sessionStore, ref);
+  const original = binding.read();
+  const completion = await finishLiveScreenRecording({ intent: 'capture', binding });
+  const pending = binding.read();
+  if (pending) {
+    if (pending !== original)
+      throw new AppError('DEVICE_IN_USE', 'The recording owner changed during cleanup', {
+        reason: 'ownership-fence-lost',
+      });
+    params.req.internal?.recordingStopCleanupPending?.(async () => {
+      const outcome = await pending.handle.forceCleanup();
+      if (!isConfirmedCleanup(outcome))
+        throw new AppError('COMMAND_FAILED', 'Recording cleanup is not confirmed', {
+          reason: 'cleanup-unconfirmed',
+          retriable: true,
+        });
+      if (binding.clear(pending) === 'resource-changed')
+        throw new AppError('DEVICE_IN_USE', 'The recording owner changed during cleanup', {
+          reason: 'ownership-fence-lost',
+        });
+    });
+  }
+  return completion;
 }
 
 function deleteTerminalRecordOnlySession(
@@ -550,6 +583,7 @@ async function finishRecovered(
     return { completion: recovery.completion, recordsSessionAction: false };
   }
   await params.bindDevice(session.device, screenRecordingAdmissionUse);
+  params.req.internal?.recordStopDispatch?.();
   const completion = await finishRecoveredScreenRecording({
     resourcePath: recovery.resourcePath,
     scope: params.requestScope,

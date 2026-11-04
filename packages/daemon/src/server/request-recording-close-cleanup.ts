@@ -19,7 +19,21 @@ export function createRequestRecordingCloseCleanup(params: {
 }) {
   let finish: (() => Promise<void>) | undefined;
   let retain: ((retry: () => Promise<void>) => RetainedRecordingCleanup) | undefined;
+  let recordingRetry: (() => Promise<void>) | undefined;
   return {
+    recordingPending(retry: () => Promise<void>) {
+      params.claimAdmission.runtimeDisposalFailed();
+      recordingRetry = retry;
+    },
+    retainPending(bindingRetry?: () => Promise<void>) {
+      if (!bindingRetry && !recordingRetry) return;
+      const retry = async () => {
+        await bindingRetry?.();
+        await recordingRetry?.();
+      };
+      const retained = retain?.(retry) ?? params.claimAdmission.retainedRecordingCleanup(retry);
+      if (retained) params.sessionStore.retainRecordingCleanup(params.sessionName, retained);
+    },
     async retry(): Promise<boolean> {
       const retained = params.sessionStore.recordingCleanup(params.sessionName);
       if (!retained || retained.purpose !== 'close') return false;
@@ -70,7 +84,6 @@ export function createRequestRecordingCloseCleanup(params: {
         release = true;
       };
     },
-    retained: (retry: () => Promise<void>) => retain?.(retry),
     finish: async () => await finish?.(),
   };
 }
