@@ -51,7 +51,8 @@ left exactly as it was. Other platforms, provider-owned sessions, and `--diff` a
 
 The runner refuses with `OBSERVATION_UNAVAILABLE` (also named by `details.runnerErrorCode`) unless
 the app reports `runningForeground` before and after the capture under one process identity. It does
-not substitute SpringBoard or a presented system surface. The host refuses with `COMMAND_FAILED` and
+not substitute SpringBoard or a presented system surface, and it refuses the same way when the
+capture finds a system alert over the app. The host refuses with `COMMAND_FAILED` and
 `details.reason: "observation-unavailable"` when a runner answers an observe-only request without
 `observation` or with a `targetActivation` fact. Successful JSON includes:
 

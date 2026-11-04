@@ -109,6 +109,44 @@ extension RunnerTests {
   }
 
   @MainActor
+  func testObserveOnlySnapshotRefusesOnlyASubstitutedSystemAlertTree() throws {
+    app.launch()
+    XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+    invalidateCachedTarget(reason: "unit_test_setup")
+    defer {
+      systemModalProbeOverrideForTesting = nil
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let appField = "\"appBundleId\":\"com.callstack.agentdevice.runner\""
+
+    let alertTreeMessage = "substituted system alert tree"
+    systemModalProbeOverrideForTesting = { _ in DataPayload(message: alertTreeMessage) }
+    for rawField in ["", ",\"raw\":true"] {
+      let observeOnly = try executeSnapshotDispatched(command: runnerCommandFixture(
+        "{\"command\":\"snapshot\",\(appField),\"observeOnly\":true\(rawField)}"
+      ))
+      XCTAssertFalse(observeOnly.ok, "request suffix: \(rawField)")
+      XCTAssertEqual(observeOnly.error?.code, "OBSERVATION_UNAVAILABLE", "request suffix: \(rawField)")
+      XCTAssertNil(observeOnly.data, "request suffix: \(rawField)")
+
+      let regular = try executeSnapshotDispatched(command: runnerCommandFixture(
+        "{\"command\":\"snapshot\",\(appField)\(rawField)}"
+      ))
+      XCTAssertTrue(regular.ok, "request suffix: \(rawField)")
+      XCTAssertEqual(regular.data?.message, alertTreeMessage, "request suffix: \(rawField)")
+      XCTAssertNil(regular.data?.observation, "request suffix: \(rawField)")
+    }
+
+    systemModalProbeOverrideForTesting = { _ in nil }
+    let noAlert = try executeSnapshotDispatched(command: runnerCommandFixture(
+      "{\"command\":\"snapshot\",\(appField),\"observeOnly\":true}"
+    ))
+    XCTAssertTrue(noAlert.ok)
+    XCTAssertEqual(noAlert.data?.observation?.mode, "observe-only")
+  }
+
+  @MainActor
   func testRegularSnapshotStillRepairsBackgroundAndDisclosesPriorState() throws {
     app.launch()
     mainOwned.app = app
