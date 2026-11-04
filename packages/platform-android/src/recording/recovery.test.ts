@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
+import { recordingArtifactPath } from './native-path.ts';
 import { bindAndroidScreenRecordingRuntime } from './runtime.ts';
 
 const start = async (overrides: Record<string, unknown>) =>
@@ -341,7 +342,15 @@ test('retains pending evidence without signalling an unproven writer', async () 
   manifest = JSON.stringify({
     ...JSON.parse(manifest),
     chunks: [],
-    pendingRemotePath: '/data/local/tmp/agent-device-recording-777.mp4',
+    pendingRemotePath: recordingArtifactPath(
+      '/sdcard',
+      {
+        deviceId: androidRecordingDevice.id,
+        sessionId: recordingInput().sessionId,
+        fence: recordingInput().fence,
+      },
+      777,
+    ),
   });
   await expect(
     runtime.screenRecordingReattach({ envelope: started.envelope }),
@@ -356,5 +365,72 @@ test('retains pending evidence without signalling an unproven writer', async () 
     status: 'cleanup-pending',
   });
   expect(removed).toEqual([]);
+  expect(signals).toEqual([]);
+});
+
+test('rejects a version-one descriptor before it can signal or remove generation material', async () => {
+  let marker = '';
+  const effects: string[] = [];
+  const runtime = await start({
+    readManifest: async () =>
+      marker ? { status: 'read' as const, contents: marker } : { status: 'missing' as const },
+    writeManifest: async ({ contents }: { contents: string }) => {
+      marker = contents;
+    },
+    stop: async () => {
+      effects.push('signal');
+      return 'stopped' as const;
+    },
+    remove: async () => {
+      effects.push('remove');
+      return true;
+    },
+  });
+  const started = await runtime.screenRecordingStart(recordingInput());
+  const before = marker;
+  const envelope = {
+    ...started.envelope,
+    descriptor: { ...started.envelope.descriptor, version: 1 },
+  };
+  await expect(runtime.screenRecordingReattach({ envelope })).resolves.toMatchObject({
+    status: 'unreattachable',
+    reason: 'descriptor-invalid',
+  });
+  await expect(runtime.screenRecordingCleanup({ envelope })).resolves.toMatchObject({
+    status: 'cleanup-pending',
+    reason: 'manual-recovery-required',
+  });
+  expect(marker).toBe(before);
+  expect(effects).toEqual([]);
+});
+
+test('rejects another generation marker path without signalling the recorder', async () => {
+  let marker = '';
+  const signals: string[] = [];
+  const runtime = await start({
+    readManifest: async () =>
+      marker ? { status: 'read' as const, contents: marker } : { status: 'missing' as const },
+    writeManifest: async ({ contents }: { contents: string }) => {
+      marker = contents;
+    },
+    stop: async ({ pid }: { pid: string }) => {
+      signals.push(pid);
+      return 'stopped' as const;
+    },
+  });
+  const started = await runtime.screenRecordingStart(recordingInput());
+  const body = {
+    ...started.envelope.descriptor.body,
+    manifestPath: `/sdcard/agent-device-recording-v2-${'a'.repeat(64)}.json`,
+  };
+  const envelope = { ...started.envelope, descriptor: { ...started.envelope.descriptor, body } };
+  await expect(runtime.screenRecordingReattach({ envelope })).resolves.toMatchObject({
+    status: 'unreattachable',
+    reason: 'ownership-fence-lost',
+  });
+  await expect(runtime.screenRecordingCleanup({ envelope })).resolves.toMatchObject({
+    status: 'cleanup-pending',
+    reason: 'ownership-fence-lost',
+  });
   expect(signals).toEqual([]);
 });

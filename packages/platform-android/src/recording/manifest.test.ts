@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { androidRecordingDescriptorFixture } from '@agent-device/test-kit';
+import { recordingArtifactPath, recordingMarkerPath } from './native-path.ts';
 import {
   androidScreenRecordingDescriptorCodec,
   createNativeManifest,
@@ -16,6 +17,11 @@ const device = {
   booted: true,
 };
 
+const generation = {
+  deviceId: device.id,
+  sessionId: 'session-1',
+  fence: { token: 'fence-1', generation: 2 },
+};
 test('decodes only complete, ordered Android native recording evidence', () => {
   const manifest = createNativeManifest(
     device,
@@ -32,7 +38,7 @@ test('decodes only complete, ordered Android native recording evidence', () => {
     [
       {
         index: 1,
-        remotePath: '/sdcard/agent-device-recording-100.mp4',
+        remotePath: recordingArtifactPath('/sdcard', generation, 100),
         remotePid: '42',
         remoteStartTime: '1',
       },
@@ -53,7 +59,11 @@ test('decodes only complete, ordered Android native recording evidence', () => {
 
 test('accepts only a durable Android manifest path in the descriptor', () => {
   expect(
-    androidScreenRecordingDescriptorCodec.decode(androidRecordingDescriptorFixture),
+    androidScreenRecordingDescriptorCodec.decode({
+      ...androidRecordingDescriptorFixture,
+      backend: 'adb-screenrecord-v2',
+      manifestPath: recordingMarkerPath('/sdcard', generation),
+    }),
   ).toMatchObject({ status: 'decoded' });
   expect(
     androidScreenRecordingDescriptorCodec.decode({
@@ -79,7 +89,7 @@ test('requires the device, session, and fence identity carried by the durable en
     [
       {
         index: 1,
-        remotePath: '/sdcard/agent-device-recording-100.mp4',
+        remotePath: recordingArtifactPath('/sdcard', generation, 100),
         remotePid: '42',
         remoteStartTime: '1',
       },
@@ -97,4 +107,11 @@ test('requires the device, session, and fence identity carried by the durable en
       device: { id: 'another-device' },
     } as never),
   ).toBe(false);
+});
+
+test('rejects legacy descriptor names and paths rather than adopting their marker', () => {
+  expect(
+    androidScreenRecordingDescriptorCodec.decode(androidRecordingDescriptorFixture),
+  ).toMatchObject({ status: 'invalid' });
+  expect(androidScreenRecordingDescriptorCodec.version).toBe(2);
 });

@@ -431,7 +431,7 @@ test('does not launch the sequential fallback after the stop was claimed', async
     });
     const handle = (await runtime.screenRecordingStart(recordingInput())).pendingHandle.transfer();
     await vi.advanceTimersByTimeAsync(170_000);
-    expect(starts).toBe(3);
+    expect(starts).toBe(2);
     expect(retirement.isPaused()).toBe(true);
     const finishing = handle.finish();
     retirement.release();
@@ -442,7 +442,7 @@ test('does not launch the sequential fallback after the stop was claimed', async
     expect((outcome as { result?: { warning?: string } }).result?.warning ?? '').not.toMatch(
       /platform limit/,
     );
-    expect(starts).toBe(3);
+    expect(starts).toBe(2);
     expect(JSON.parse(manifest).chunks).toEqual([expect.objectContaining({ remotePid: '42' })]);
   } finally {
     vi.useRealTimers();
@@ -476,7 +476,7 @@ test('still discloses the platform limit when the recorder a fallback retired ha
     });
     const handle = (await runtime.screenRecordingStart(recordingInput())).pendingHandle.transfer();
     await vi.advanceTimersByTimeAsync(170_000);
-    expect(starts).toBe(3);
+    expect(starts).toBe(2);
     expect(retirement.isPaused()).toBe(true);
     const finishing = handle.finish();
     retirement.release();
@@ -488,7 +488,7 @@ test('still discloses the platform limit when the recorder a fallback retired ha
     expect((outcome as { result?: { warning?: string } }).result?.warning ?? '').toMatch(
       /platform limit/,
     );
-    expect(starts).toBe(3);
+    expect(starts).toBe(2);
     expect(JSON.parse(manifest).chunks).toEqual([expect.objectContaining({ remotePid: '42' })]);
   } finally {
     vi.useRealTimers();
@@ -714,9 +714,9 @@ test('falls back to sequential rotation when concurrent start is unavailable', a
         starts += 1;
         return recordingProcess(String(41 + starts));
       },
-      exists: async () => starts === 1 || starts > 3,
+      exists: async () => starts === 1 || starts > 2,
       inspect: async ({ pid }: { pid: string }) =>
-        pid === '42' || Number(pid) > 44 ? ('owned-alive' as const) : ('missing' as const),
+        pid === '42' || Number(pid) > 43 ? ('owned-alive' as const) : ('missing' as const),
       stop: async () => 'already-missing' as const,
       writeManifest: async ({ contents }: { contents: string }) => {
         manifest = contents;
@@ -724,7 +724,7 @@ test('falls back to sequential rotation when concurrent start is unavailable', a
     });
     await runtime.screenRecordingStart(recordingInput());
     await vi.advanceTimersByTimeAsync(170_000);
-    expect(starts).toBe(4);
+    expect(starts).toBe(3);
     expect(JSON.parse(manifest).chunks).toHaveLength(2);
   } finally {
     vi.useRealTimers();

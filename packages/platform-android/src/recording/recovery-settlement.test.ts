@@ -81,7 +81,7 @@ async function setup(initial: 'owned-alive' | 'missing' = 'owned-alive', twoChun
   if (twoChunks) {
     const marker = JSON.parse(manifest);
     const active = marker.chunks[0];
-    const olderPath = '/sdcard/agent-device-recording-123.mp4';
+    const olderPath = active.remotePath.replace(/-\d+\.mp4$/, '-123.mp4');
     files.add(olderPath);
     marker.chunks = [
       { ...active, index: 1, remotePid: '41', remotePath: olderPath },

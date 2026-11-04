@@ -1,13 +1,19 @@
 import { expect, test } from 'vitest';
 import { androidRecordingDevice, recordingInput } from './fixtures.ts';
 import { createCompletedNativeManifest, createNativeManifest } from './manifest.ts';
+import { recordingArtifactPath, recordingMarkerPath } from './native-path.ts';
 import { isValidAndroidRecordingDescriptor, isValidNativeManifest } from './manifest-validation.ts';
 
+const generation = {
+  deviceId: androidRecordingDevice.id,
+  sessionId: recordingInput().sessionId,
+  fence: recordingInput().fence,
+};
 test('validates descriptor structure independently of descriptor decoding', () => {
   expect(
     isValidAndroidRecordingDescriptor({
-      backend: 'adb-screenrecord',
-      manifestPath: '/sdcard/agent-device-recording-active.json',
+      backend: 'adb-screenrecord-v2',
+      manifestPath: recordingMarkerPath('/sdcard', generation),
       outputPath: '/tmp/capture.mp4',
       scope: 'device',
       showTouches: true,
@@ -17,7 +23,7 @@ test('validates descriptor structure independently of descriptor decoding', () =
   ).toBe(true);
   expect(
     isValidAndroidRecordingDescriptor({
-      backend: 'adb-screenrecord',
+      backend: 'adb-screenrecord-v2',
       manifestPath: '/tmp/active.json',
       outputPath: '/tmp/capture.mp4',
       scope: 'device',
@@ -37,7 +43,7 @@ test('rejects terminal evidence whose result coordinates diverge from its manife
     [
       {
         index: 1,
-        remotePath: '/sdcard/agent-device-recording-1.mp4',
+        remotePath: recordingArtifactPath('/sdcard', generation, 1),
         remotePid: '41',
         remoteStartTime: '7',
       },
@@ -72,7 +78,7 @@ test('accepts a measured clip length in terminal evidence and refuses an uncount
     [
       {
         index: 1,
-        remotePath: '/sdcard/agent-device-recording-1.mp4',
+        remotePath: recordingArtifactPath('/sdcard', generation, 1),
         remotePid: '41',
         remoteStartTime: '7',
       },

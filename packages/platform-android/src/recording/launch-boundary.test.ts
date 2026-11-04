@@ -109,10 +109,9 @@ test('cancellation during active manifest publication retains evidence after unc
     readManifest: async () => ({ status: 'read' as const, contents: manifest }),
     start: async () => recordingProcess('43'),
   });
-  await expect(replacement.screenRecordingStart(recordingInput())).rejects.toMatchObject({
-    code: 'DEVICE_IN_USE',
-    details: { reason: 'native_recovery_evidence_open' },
-  });
+  await expect(replacement.screenRecordingStart(recordingInput())).rejects.toBeInstanceOf(
+    AndroidScreenRecordingStartRollbackUnconfirmed,
+  );
 });
 
 test('live cleanup refuses a replacement marker with a different claim token', async () => {

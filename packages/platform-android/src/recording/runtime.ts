@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
@@ -147,7 +146,7 @@ async function startAndroidRecording(params: {
    */
   const activeEvidence = (chunkList: readonly NativeChunk[], pendingRemotePath?: string) =>
     createNativeManifest(device, input, startedAt, chunkList, pendingRemotePath, transport.mode);
-  const launchChunk = async (previous: NativeChunk) =>
+  const launchChunk = async () =>
     await startPendingChunk({
       transport,
       device,
@@ -155,7 +154,6 @@ async function startAndroidRecording(params: {
       startedAt,
       chunks,
       manifestPath,
-      preferredDir: path.posix.dirname(previous.remotePath),
       launchAdmission: stopAdmission.signal,
     });
   /**
@@ -166,7 +164,7 @@ async function startAndroidRecording(params: {
     previous: NativeChunk,
   ): Promise<Readonly<{ chunk: NativeChunk; previousStopped: boolean }>> => {
     try {
-      return { chunk: await launchChunk(previous), previousStopped: false };
+      return { chunk: await launchChunk(), previousStopped: false };
     } catch (concurrentStartError) {
       // The stop refused this rotation before it dispatched anything. It must not retire the chunk
       // being replaced either: the stop owns that recorder now.
@@ -184,7 +182,7 @@ async function startAndroidRecording(params: {
       // gone means the recorder ended on its own, and that disclosure must survive this rotation.
       if (!(await stopChunk(transport, previous))) retiredActiveRecorder = true;
       try {
-        return { chunk: await launchChunk(previous), previousStopped: true };
+        return { chunk: await launchChunk(), previousStopped: true };
       } catch (sequentialStartError) {
         throw sequentialStartError instanceof Error ? sequentialStartError : concurrentStartError;
       }
@@ -322,7 +320,7 @@ async function startAndroidRecording(params: {
       fence: input.fence,
       lifecycle: 'open',
       descriptor: encodeDurableDescriptor(androidScreenRecordingDescriptorCodec, {
-        backend: 'adb-screenrecord',
+        backend: 'adb-screenrecord-v2',
         manifestPath,
         ...recordingRequestFields(input),
         transportMode: transport.mode,

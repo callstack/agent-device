@@ -5,12 +5,12 @@ import type {
   ScreenRecordingChunk,
   ScreenRecordingCompletion,
 } from '@agent-device/contracts/screen-recording-runtime';
+import { recordingGenerationKey } from './native-path.ts';
 import { chunkPathAt } from './chunk-path.ts';
 import type { AndroidRecordingDescriptor, NativeChunk, NativeManifest } from './manifest.ts';
 
-const nativeRecordingPath =
-  /^(?:\/sdcard|\/data\/local\/tmp)\/agent-device-recording-\d{1,20}\.mp4$/;
-const nativeManifestPath = /^(?:\/sdcard|\/data\/local\/tmp)\/agent-device-recording-active\.json$/;
+const nativeRecordingPath = /^\/sdcard\/agent-device-recording-v2-[a-f0-9]{64}-\d{1,20}\.mp4$/;
+const nativeManifestPath = /^\/sdcard\/agent-device-recording-v2-[a-f0-9]{64}\.json$/;
 
 export function isValidAndroidRecordingDescriptor(
   value: Record<string, unknown>,
@@ -30,6 +30,7 @@ export function isValidNativeManifest(value: unknown): value is NativeManifest {
     manifestRecordingIsValid(candidate) &&
     manifestOptionsAreValid(candidate) &&
     hasValidManifestResources(candidate) &&
+    manifestPathsMatchGeneration(candidate) &&
     (candidate.completion === undefined || completionMatchesManifest(candidate as NativeManifest))
   );
 }
@@ -46,7 +47,7 @@ export function completionMatchesDescriptor(
 
 function descriptorIdentityIsValid(value: Record<string, unknown>): boolean {
   return (
-    value.backend === 'adb-screenrecord' &&
+    value.backend === 'adb-screenrecord-v2' &&
     typeof value.manifestPath === 'string' &&
     nativeManifestPath.test(value.manifestPath) &&
     typeof value.outputPath === 'string'
@@ -63,7 +64,7 @@ function descriptorOptionsAreValid(value: Record<string, unknown>): boolean {
 
 function manifestIdentityIsValid(candidate: Partial<NativeManifest>): boolean {
   return (
-    candidate.version === 1 &&
+    candidate.version === 2 &&
     candidate.resourceKind === 'screen-recording' &&
     typeof candidate.fenceToken === 'string' &&
     (candidate.claimToken === undefined ||
@@ -110,6 +111,27 @@ function hasValidManifestResources(candidate: Partial<NativeManifest>): boolean 
         candidate.completion === undefined)) &&
     (candidate.completion === undefined || isValidCompletion(candidate.completion))
   );
+}
+
+function manifestPathsMatchGeneration(candidate: Partial<NativeManifest>): boolean {
+  if (
+    !candidate.deviceId ||
+    !candidate.sessionId ||
+    !candidate.fenceToken ||
+    !Number.isInteger(candidate.fenceGeneration) ||
+    !candidate.chunks
+  )
+    return false;
+  const key = recordingGenerationKey({
+    deviceId: candidate.deviceId,
+    sessionId: candidate.sessionId,
+    claimToken: candidate.claimToken,
+    fence: { token: candidate.fenceToken, generation: candidate.fenceGeneration! },
+  });
+  return [
+    ...candidate.chunks.map((chunk) => chunk.remotePath),
+    ...(candidate.pendingRemotePath ? [candidate.pendingRemotePath] : []),
+  ].every((path) => path.includes(`/agent-device-recording-v2-${key}-`));
 }
 
 function isValidNativeChunk(chunk: unknown, index: number): chunk is NativeChunk {

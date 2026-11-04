@@ -1,5 +1,7 @@
+import path from 'node:path';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 
+import { recordingMarkerPath } from './native-path.ts';
 import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
 
 export const androidRecordingDevice = {
@@ -34,13 +36,30 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
   const legacy = overrides as Record<string, any>;
   if (legacy.initialManifest)
     markers.set(
-      '/sdcard/agent-device-recording-active.json',
+      recordingMarkerPath('/sdcard', {
+        deviceId: legacy.initialManifest.deviceId,
+        sessionId: legacy.initialManifest.sessionId,
+        claimToken: legacy.initialManifest.claimToken,
+        fence: {
+          token: legacy.initialManifest.fenceToken,
+          generation: legacy.initialManifest.fenceGeneration,
+        },
+      }),
       JSON.stringify(legacy.initialManifest),
     );
   const read = async (manifestPath: string) => {
     const external = legacy.readManifest
       ? await legacy.readManifest(manifestPath)
       : { status: 'missing' as const };
+    if (
+      manifestPath.endsWith('/agent-device-recording-active.json') &&
+      !legacy.forceLegacy &&
+      external.status === 'read'
+    ) {
+      try {
+        if (JSON.parse(external.contents).version === 2) return { status: 'missing' as const };
+      } catch {}
+    }
     if (external.status !== 'missing' || !markers.has(manifestPath)) return external;
     return { status: 'read' as const, contents: markers.get(manifestPath)! };
   };
@@ -118,7 +137,7 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
     },
     manifestPathFor: (remotePath: string) =>
       legacy.manifestPathFor?.(remotePath) ??
-      `${remotePath.slice(0, remotePath.lastIndexOf('/'))}/agent-device-recording-active.json`,
+      `${path.posix.dirname(remotePath)}/${path.posix.basename(remotePath).replace(/-\d+\.mp4$/, '.json')}`,
     readManifest: read,
     writeManifest: async (
       request: { manifestPath: string; contents: string },

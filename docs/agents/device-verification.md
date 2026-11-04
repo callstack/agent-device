@@ -61,3 +61,20 @@ Before you run a live smoke harness, read it. Its environment contract is in its
 
 If a sandbox rejects localhost with `listen EPERM`, use host access, if permitted.
 First, examine the underlying error. A generic startup or cleanup failure does not prove a sandbox cause.
+
+## Android recording marker lock
+
+A version 2 Android recording marker uses a generation-specific device lock.
+If a device command dies while it holds that lock, recovery retains the recording claim.
+Before you remove that exact lock, stop every host that can send commands to the device.
+Before you remove that exact lock, drain or terminate every queued and in-flight device command on those hosts.
+After the hosts are stopped, reboot the device and verify that the reboot completed.
+After the reboot, verify the marker path and the claim token and fence generation against the retained claim.
+Only after those checks, remove the exact marker's `.lock` directory and its `expected` and `next` files.
+Keep the marker and every recording artifact for the recording recovery owner.
+If you cannot prove that every old command is drained, retain the lock and claim.
+A version 1 shared marker has no verified claim provenance.
+If a version 1 marker is present, retain its marker and artifacts for explicit recovery.
+
+Version 2 uses `/sdcard` for its marker and recording artifacts.
+If `/sdcard` is unavailable, the version 2 start does not use the legacy fallback directory.

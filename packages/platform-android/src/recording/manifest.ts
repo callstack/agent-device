@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { recordingMarkerPath } from './native-path.ts';
 import { SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY } from '@agent-device/capture-kit/screen-recording-resource-store';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
@@ -13,7 +15,7 @@ import {
 } from './manifest-validation.ts';
 
 export type AndroidRecordingDescriptor = Readonly<{
-  backend: 'adb-screenrecord';
+  backend: 'adb-screenrecord-v2';
   manifestPath: string;
   outputPath: string;
   clientOutputPath?: string;
@@ -34,7 +36,7 @@ export type NativeChunk = Readonly<{
 }>;
 
 export type NativeManifest = Readonly<{
-  version: 1;
+  version: 2;
   resourceKind: 'screen-recording';
   fenceToken: string;
   claimToken?: string;
@@ -60,14 +62,14 @@ export type NativeManifest = Readonly<{
 
 export const androidScreenRecordingDescriptorCodec = Object.freeze({
   resourceKind: SCREEN_RECORDING_RESOURCE_KIND,
-  version: 1,
+  version: 2,
   encode: (descriptor: AndroidRecordingDescriptor) => ({ ...descriptor }),
   decode: (body: Record<string, unknown>) =>
     isValidAndroidRecordingDescriptor(body)
       ? ({
           status: 'decoded',
           descriptor: Object.freeze({
-            backend: 'adb-screenrecord',
+            backend: 'adb-screenrecord-v2',
             manifestPath: body.manifestPath,
             outputPath: body.outputPath,
             ...(body.clientOutputPath === undefined
@@ -120,7 +122,7 @@ export function createNativeManifest(
   transportMode: NativeManifest['transportMode'] = 'local',
 ): NativeManifest {
   return Object.freeze({
-    version: 1,
+    version: 2,
     resourceKind: 'screen-recording',
     fenceToken: input.fence.token,
     ...(input.claimToken ? { claimToken: input.claimToken } : {}),
@@ -177,6 +179,13 @@ export function nativeManifestMatchesDescriptor(
   descriptor: AndroidRecordingDescriptor,
 ): boolean {
   return (
+    descriptor.manifestPath ===
+      recordingMarkerPath(path.posix.dirname(descriptor.manifestPath), {
+        deviceId: manifest.deviceId,
+        sessionId: manifest.sessionId,
+        claimToken: manifest.claimToken,
+        fence: { token: manifest.fenceToken, generation: manifest.fenceGeneration },
+      }) &&
     manifest.outputPath === descriptor.outputPath &&
     manifest.clientOutputPath === descriptor.clientOutputPath &&
     manifest.scope === descriptor.scope &&

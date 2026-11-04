@@ -9,7 +9,10 @@ import type {
   ScreenRecordingSettlement,
 } from '@agent-device/contracts/screen-recording-runtime';
 import { provesAndroidScreenRecordTermination } from '@agent-device/contracts/screen-recording-runtime-host';
-import { createScreenRecordingLiveHandle } from '@agent-device/capture-kit';
+import {
+  createScreenRecordingLiveHandle,
+  decodeDurableDescriptor,
+} from '@agent-device/capture-kit';
 import {
   androidScreenRecordingDescriptorCodec,
   decodeNativeManifest,
@@ -97,7 +100,7 @@ export async function reattachAndroidRecording(params: {
   signal?: AbortSignal;
 }) {
   const { host, transport, device, input, signal } = params;
-  const parsed = androidScreenRecordingDescriptorCodec.decode(input.envelope.descriptor.body);
+  const parsed = decodeDurableDescriptor(input.envelope, androidScreenRecordingDescriptorCodec);
   if (parsed.status !== 'decoded') return unreattachable('descriptor-invalid');
   const recovered = await readDescriptorEvidence({
     transport,
@@ -128,8 +131,9 @@ export async function cleanupAndroidRecording(params: {
   device: Parameters<typeof nativeManifestMatchesEnvelope>[1];
   input: Parameters<ScreenRecordingRuntimeOperations['screenRecordingCleanup']>[0];
 }): Promise<CleanupOutcome> {
-  const parsed = androidScreenRecordingDescriptorCodec.decode(
-    params.input.envelope.descriptor.body,
+  const parsed = decodeDurableDescriptor(
+    params.input.envelope,
+    androidScreenRecordingDescriptorCodec,
   );
   if (parsed.status !== 'decoded')
     return { status: 'cleanup-pending', reason: 'manual-recovery-required' };

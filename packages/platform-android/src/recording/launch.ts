@@ -15,6 +15,7 @@ import {
 import { createNativeManifest, type NativeChunk } from './manifest.ts';
 import { persistNativeManifest, removeNativeManifest } from './manifest-store.ts';
 import { reconcileStartEvidence } from './start-reconciliation.ts';
+import type { AndroidRecordingGeneration } from './native-path.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
 
@@ -27,14 +28,21 @@ export async function startInitialTransaction(params: {
   prepareOutput: () => Promise<void>;
 }): Promise<Readonly<{ chunk: NativeChunk; manifestPath: string; startedAtMs: number }>> {
   const { transport, device, input, startedAt, signal, prepareOutput } = params;
+  const generation: AndroidRecordingGeneration = {
+    deviceId: device.id,
+    sessionId: input.sessionId,
+    fence: input.fence,
+    claimToken: input.claimToken,
+  };
   try {
-    await reconcileStartEvidence(transport, device);
+    await reconcileStartEvidence(transport);
     await prepareOutput();
   } catch (error) {
+    if (error instanceof AndroidScreenRecordingStartRollbackUnconfirmed) throw error;
     throw markScreenRecordingStartNotDispatched(error);
   }
   let last: ScreenRecordingStartRolledBack | undefined;
-  for (const remotePath of candidateRemotePaths(undefined)) {
+  for (const remotePath of candidateRemotePaths(generation)) {
     const manifestPath = transport.manifestPathFor(remotePath);
     const armed = {
       ...createNativeManifest(device, input, startedAt, [], remotePath, transport.mode),
@@ -43,8 +51,7 @@ export async function startInitialTransaction(params: {
     try {
       await persistNativeManifest(transport, manifestPath, armed, signal, true);
     } catch (error) {
-      if (last) throw new ScreenRecordingStartRolledBack(error);
-      throw markScreenRecordingStartNotDispatched(error);
+      throw new AndroidScreenRecordingStartRollbackUnconfirmed(error);
     }
     let chunk: NativeChunk;
     const startedAtMs = Date.now();
@@ -114,22 +121,18 @@ export async function startPendingChunk(params: {
   startedAt: number;
   chunks: readonly NativeChunk[];
   manifestPath: string;
-  preferredDir: string;
   // Refuses a device start once the recording's stop has been claimed.
   launchAdmission: AbortSignal;
 }): Promise<NativeChunk> {
-  const {
-    transport,
-    device,
-    input,
-    startedAt,
-    chunks,
-    manifestPath,
-    preferredDir,
-    launchAdmission,
-  } = params;
+  const { transport, device, input, startedAt, chunks, manifestPath, launchAdmission } = params;
   let last: unknown;
-  for (const remotePath of candidateRemotePaths(preferredDir)) {
+  const generation: AndroidRecordingGeneration = {
+    deviceId: device.id,
+    sessionId: input.sessionId,
+    fence: input.fence,
+    claimToken: input.claimToken,
+  };
+  for (const remotePath of candidateRemotePaths(generation)) {
     if (launchAdmission.aborted) throw new AndroidScreenRecordingStopClaimed();
     const armed = {
       ...createNativeManifest(device, input, startedAt, chunks, remotePath, transport.mode),

@@ -12,7 +12,6 @@ import {
 } from '@agent-device/capture-kit/recording-video';
 import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
-const ANDROID_MANIFEST_NAME = 'agent-device-recording-active.json';
 const ADB_TIMEOUT_MS = 5_000;
 const BIT_RATE = { medium: 8_000_000, high: 20_000_000 } as const;
 
@@ -141,7 +140,13 @@ export async function createAndroidScreenRecordingTransport(
     },
     remove: async (remotePath, signal) =>
       (await shell(['rm', '-f', remotePath], signal)).exitCode === 0,
-    manifestPathFor: (remotePath) => `${path.posix.dirname(remotePath)}/${ANDROID_MANIFEST_NAME}`,
+    manifestPathFor: (remotePath) => {
+      const name = path.posix.basename(remotePath);
+      const match = /^agent-device-recording-v2-([a-f0-9]{64})-\d{1,20}\.mp4$/.exec(name);
+      if (!match || path.posix.dirname(remotePath) !== '/sdcard')
+        throw new Error('Invalid Android recording artifact path');
+      return `${path.posix.dirname(remotePath)}/agent-device-recording-v2-${match[1]}.json`;
+    },
     readManifest: async (manifestPath, signal) => {
       const exists = await shell(['test', '-e', manifestPath], signal);
       if (exists.exitCode !== 0) {

@@ -66,8 +66,7 @@ test('retained native evidence blocks replacement before output preparation or l
     signal: new AbortController().signal,
   });
   await expect(runtime.screenRecordingStart(recordingInput())).rejects.toMatchObject({
-    code: 'COMMAND_FAILED',
-    details: { reason: 'native_recovery_evidence_unreadable' },
+    cause: { details: { reason: 'legacy_native_recording_evidence_unproven' } },
   });
   expect({ starts, writes, prepared }).toEqual({ starts: 0, writes: 0, prepared: 0 });
 });
@@ -100,8 +99,7 @@ test('unavailable native evidence blocks replacement before output preparation o
     signal: new AbortController().signal,
   });
   await expect(runtime.screenRecordingStart(recordingInput())).rejects.toMatchObject({
-    code: 'COMMAND_FAILED',
-    details: { reason: 'native_recovery_evidence_unavailable' },
+    cause: { details: { reason: 'legacy_native_recording_evidence_unproven' } },
   });
   expect({ starts, writes, prepared }).toEqual({ starts: 0, writes: 0, prepared: 0 });
 });
@@ -154,11 +152,11 @@ test('rolls back a child when initial active evidence publication fails', async 
   );
   expect(calls).toEqual([
     'signal:42',
-    expect.stringMatching(/^remove:\/sdcard\/agent-device-recording-\d+\.mp4$/),
+    expect.stringMatching(/^remove:\/sdcard\/agent-device-recording-v2-[a-f0-9]{64}-\d+\.mp4$/),
   ]);
 });
 
-test('reports confirmed rollback when every candidate recorder exits and its artifact is absent', async () => {
+test('reports confirmed rollback when the recorder exits and its artifact is absent', async () => {
   let starts = 0;
   const runtime = await start({
     start: async () => recordingProcess(String(42 + starts++)),
@@ -169,7 +167,7 @@ test('reports confirmed rollback when every candidate recorder exits and its art
   await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBeInstanceOf(
     ScreenRecordingStartRolledBack,
   );
-  expect(starts).toBe(2);
+  expect(starts).toBe(1);
 });
 
 test('preserves cancellation before and after child acquisition without retries', async () => {

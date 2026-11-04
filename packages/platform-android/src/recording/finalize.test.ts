@@ -9,9 +9,17 @@ import { finalizeAndroidRecording } from './finalize.ts';
 import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
 import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
 import { createNativeManifest, type NativeManifest } from './manifest.ts';
+import { recordingArtifactPath, recordingMarkerPath } from './native-path.ts';
 import { snapshot } from './live-snapshot.ts';
 
-const REMOTE_CHUNK = '/sdcard/agent-device-recording-1.mp4';
+const generation = {
+  deviceId: androidRecordingDevice.id,
+  sessionId: recordingInput().sessionId,
+  fence: recordingInput().fence,
+};
+const REMOTE_CHUNK = recordingArtifactPath('/sdcard', generation, 1);
+const SECOND_CHUNK = recordingArtifactPath('/sdcard', generation, 2);
+const MARKER = recordingMarkerPath('/sdcard', generation);
 
 function evidenceFor(chunks: readonly string[]): NativeManifest {
   return createNativeManifest(
@@ -55,7 +63,7 @@ test('writes terminal coordinates before removing a fenced Android artifact', as
       host,
       transport,
       evidence: evidenceFor([REMOTE_CHUNK]),
-      manifestPath: '/sdcard/agent-device-recording-active.json',
+      manifestPath: MARKER,
       recording: snapshot(input, 1),
       startedAtMs: 1,
     }),
@@ -83,7 +91,7 @@ test('serves the export from a copy of the collected chunk and retires the copy'
       host,
       transport,
       evidence: evidenceFor([REMOTE_CHUNK]),
-      manifestPath: '/sdcard/agent-device-recording-active.json',
+      manifestPath: MARKER,
       recording: snapshot(input, 1),
       startedAtMs: 1,
     }),
@@ -115,7 +123,7 @@ test('a stop that already collected serves the export without signalling again',
     host,
     transport,
     evidence: evidenceFor([REMOTE_CHUNK]),
-    manifestPath: '/sdcard/agent-device-recording-active.json',
+    manifestPath: MARKER,
     recording: snapshot(recordingInput(), 1),
     startedAtMs: 1,
     progress: completedProgress({
@@ -148,8 +156,8 @@ test('a chunked export the finalizer refuses leaves the caller paths empty and t
     finalizeAndroidRecording({
       host,
       transport,
-      evidence: evidenceFor([REMOTE_CHUNK, '/sdcard/agent-device-recording-2.mp4']),
-      manifestPath: '/sdcard/agent-device-recording-active.json',
+      evidence: evidenceFor([REMOTE_CHUNK, SECOND_CHUNK]),
+      manifestPath: MARKER,
       recording: snapshot(recordingInput(), 1),
       startedAtMs: 1,
     }),
@@ -174,7 +182,7 @@ test('answers with the disposition the device shows after disposal', async () =>
     host,
     transport,
     evidence: evidenceFor([REMOTE_CHUNK]),
-    manifestPath: '/sdcard/agent-device-recording-active.json',
+    manifestPath: MARKER,
     recording: snapshot(recordingInput(), 1),
     startedAtMs: 1,
   });
@@ -197,8 +205,8 @@ test('discloses the finalizer, the platform limit, and the split in one answer',
   const outcome = await finalizeAndroidRecording({
     host,
     transport,
-    evidence: evidenceFor([REMOTE_CHUNK, '/sdcard/agent-device-recording-2.mp4']),
-    manifestPath: '/sdcard/agent-device-recording-active.json',
+    evidence: evidenceFor([REMOTE_CHUNK, SECOND_CHUNK]),
+    manifestPath: MARKER,
     recording: snapshot({ ...recordingInput(), showTouches: false }, 1),
     startedAtMs: 1,
     reachedLimit: true,
@@ -248,7 +256,7 @@ test('measures a pulled MP4 against the window the host bracketed around the rec
     host,
     transport,
     evidence: evidenceFor([REMOTE_CHUNK]),
-    manifestPath: '/sdcard/agent-device-recording-active.json',
+    manifestPath: MARKER,
     recording: snapshot(input, 1),
     startedAtMs: Date.now() - 16_000,
   });
@@ -283,7 +291,7 @@ test('a retried commit serves every chunk and the captured length its first atte
     },
   });
   const input = { ...recordingInput(), outputPath: path.join(directory, 'capture.mp4') };
-  const evidence = evidenceFor([REMOTE_CHUNK, '/sdcard/agent-device-recording-2.mp4']);
+  const evidence = evidenceFor([REMOTE_CHUNK, SECOND_CHUNK]);
   const transport = await host.screenRecording.android.resolve(androidRecordingDevice);
   const manifest = journal();
   const stop = () =>
@@ -291,7 +299,7 @@ test('a retried commit serves every chunk and the captured length its first atte
       host,
       transport,
       evidence,
-      manifestPath: '/sdcard/agent-device-recording-active.json',
+      manifestPath: MARKER,
       recording: snapshot(input, 1),
       startedAtMs: Date.now() - 181_000,
       progress: manifest.progress(),
@@ -323,7 +331,7 @@ test('a stop resumed after its collect measures the window its first attempt sig
     host,
     transport,
     evidence: evidenceFor([REMOTE_CHUNK]),
-    manifestPath: '/sdcard/agent-device-recording-active.json',
+    manifestPath: MARKER,
     recording: snapshot(input, 1),
     startedAtMs,
     // Signalled 7.5 s in, then the first attempt failed and this one runs almost two minutes later.

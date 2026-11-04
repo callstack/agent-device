@@ -15,8 +15,9 @@ const validator: VideoValidatorPreparation = {
   read: async () => ({ kind: 'container' }),
   close: async () => {},
 };
-const marker = '/sdcard/agent-device-recording-active.json';
-const artifact = '/sdcard/agent-device-recording-123.mp4';
+const key = 'ccf89eb2e95b701cb64e560b9be91a9cdb00a1ea4817fdee5e9d58a4e3eba315';
+const marker = `/sdcard/agent-device-recording-v2-${key}.json`;
+const artifact = `/sdcard/agent-device-recording-v2-${key}-123.mp4`;
 const androidRecordingDevice = {
   platform: 'android' as const,
   id: 'emulator-5554',
@@ -31,7 +32,7 @@ const recovery = {
   claimToken: 'claim-token',
 };
 const armed = JSON.stringify({
-  version: 1,
+  version: 2,
   resourceKind: 'screen-recording',
   fenceToken: recovery.fence.token,
   claimToken: recovery.claimToken,
@@ -66,6 +67,11 @@ async function rig(
     markerFile: string;
     ledger: string;
     gate: string;
+    checkpointReady: string;
+    checkpointGate: string;
+    legacyMarker: string;
+    legacyArtifact: string;
+    legacyWrite: (contents: string) => Promise<void>;
     pauseDispatch: ReturnType<typeof barrier>;
     seenDispatch: ReturnType<typeof barrier>;
     options: {
@@ -73,6 +79,7 @@ async function rig(
       pauseBeforeWriter: boolean;
       replaceOnArtifactProbe?: string;
       casFailure: boolean;
+      pauseCheckpoint: boolean;
     };
     signals: string[];
   }) => Promise<void>,
@@ -89,6 +96,10 @@ async function rig(
   const ledger = path.join(root, 'writer');
   const gate = path.join(root, 'resume');
   const hold = path.join(root, 'hold');
+  const checkpointReady = path.join(root, 'checkpoint-ready');
+  const checkpointGate = path.join(root, 'checkpoint-gate');
+  const legacyMarker = path.join(sdcard, 'agent-device-recording-active.json');
+  const legacyArtifact = path.join(sdcard, 'agent-device-recording-123.mp4');
   const ready = path.join(root, 'child-ready');
   const childPid = path.join(root, 'child-pid');
   writeFileSync(
@@ -108,6 +119,7 @@ rm -f '${childPid}'
   );
   const processes = new Set<ChildProcess>();
   const pendingLaunches = new Set<ReturnType<typeof launch>>();
+  const pendingRecoveries = new Set<Promise<'confirmed-no-effect' | 'retained'>>();
   const signals: string[] = [];
   const pauseDispatch = barrier();
   const seenDispatch = barrier();
@@ -116,6 +128,7 @@ rm -f '${childPid}'
     pauseBeforeWriter: false,
     replaceOnArtifactProbe: undefined as string | undefined,
     casFailure: false,
+    pauseCheckpoint: false,
   };
   const map = (value: string) =>
     value.replaceAll('/data/local/tmp', local).replaceAll('/sdcard', sdcard);
@@ -135,6 +148,16 @@ rm -f '${childPid}'
       if (options.pauseBeforeWriter) writeFileSync(hold, 'hold');
     } else if (options.casFailure && command.includes('/expected')) {
       return { stdout: '', stderr: '', exitCode: 1 };
+    }
+    if (
+      options.pauseCheckpoint &&
+      command.includes('startNoEffectConfirmed') &&
+      command.includes('cmp -s')
+    ) {
+      command = command.replace(
+        '|| exit 73; printf %s ',
+        `|| exit 73; : > '${checkpointReady}'; while [ ! -e '${checkpointGate}' ]; do sleep 0.02; done; printf %s `,
+      );
     }
     command = map(command);
     return await new Promise<{ stdout: string; stderr: string; exitCode: number }>(
@@ -192,7 +215,15 @@ rm -f '${childPid}'
       try {
         await run({
           transport,
-          recover: () => binding.recoverIncompleteRecordingStart!(recovery),
+          recover: () => {
+            const pending = binding.recoverIncompleteRecordingStart!(recovery);
+            pendingRecoveries.add(pending);
+            void pending.then(
+              () => pendingRecoveries.delete(pending),
+              () => pendingRecoveries.delete(pending),
+            );
+            return pending;
+          },
           dispatch: () => {
             const pending = launch(transport);
             pendingLaunches.add(pending);
@@ -205,6 +236,29 @@ rm -f '${childPid}'
           markerFile: path.join(sdcard, path.basename(marker)),
           ledger,
           gate,
+          checkpointReady,
+          checkpointGate,
+          legacyMarker,
+          legacyArtifact,
+          legacyWrite: async (contents) => {
+            await new Promise<void>((resolve, reject) => {
+              const child = spawn('/bin/sh', [
+                '-c',
+                'printf %s "$3" > "$1" && printf %s legacy-video > "$2"',
+                'legacy',
+                legacyMarker,
+                legacyArtifact,
+                contents,
+              ]);
+              processes.add(child);
+              child.once('error', reject);
+              child.once('close', (code) => {
+                processes.delete(child);
+                if (code === 0) resolve();
+                else reject(new Error('legacy writer failed'));
+              });
+            });
+          },
           pauseDispatch,
           seenDispatch,
           options,
@@ -217,17 +271,21 @@ rm -f '${childPid}'
   } finally {
     pauseDispatch.release();
     writeFileSync(gate, 'resume');
-    await Promise.allSettled(pendingLaunches);
-    for (const child of processes) child.kill();
-    await Promise.all(
-      [...processes].map(
-        (child) => new Promise<void>((resolve) => child.once('close', () => resolve())),
-      ),
-    );
-    if (existsSync(childPid)) await vi.waitFor(() => expect(existsSync(childPid)).toBe(false));
-    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
-    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
-    rmSync(root, { recursive: true, force: true });
+    writeFileSync(checkpointGate, 'resume');
+    try {
+      await Promise.allSettled([...pendingLaunches, ...pendingRecoveries]);
+      for (const child of processes) child.kill();
+      await Promise.all(
+        [...processes].map(
+          (child) => new Promise<void>((resolve) => child.once('close', () => resolve())),
+        ),
+      );
+      if (existsSync(childPid)) await vi.waitFor(() => expect(existsSync(childPid)).toBe(false));
+    } finally {
+      if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+      else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+      rmSync(root, { recursive: true, force: true });
+    }
   }
 }
 
@@ -335,5 +393,44 @@ test('exclusive marker creation preserves an existing generation', async () => {
       }),
     ).toBe('mismatch');
     expect(await transport.readManifest(marker)).toEqual({ status: 'read', contents: armed });
+  });
+});
+
+test('an old writer bypassing the new mutex cannot overwrite generation evidence or be overwritten by its checkpoint', async () => {
+  await rig(
+    async ({
+      transport,
+      recover,
+      options,
+      checkpointReady,
+      checkpointGate,
+      legacyMarker,
+      legacyArtifact,
+      legacyWrite,
+      markerFile,
+      signals,
+    }) => {
+      await seed(transport);
+      options.pauseCheckpoint = true;
+      const oldBytes = '{"legacy":"successor bytes"}\n';
+      const settling = recover();
+      await vi.waitFor(() => expect(existsSync(checkpointReady)).toBe(true));
+      await legacyWrite(oldBytes);
+      writeFileSync(checkpointGate, 'resume');
+      expect(await settling).toBe('confirmed-no-effect');
+      expect(readFileSync(legacyMarker, 'utf8')).toBe(oldBytes);
+      expect(readFileSync(legacyArtifact, 'utf8')).toBe('legacy-video');
+      expect(JSON.parse(readFileSync(markerFile, 'utf8')).launchDisposition).toBe('canceled');
+      expect(signals).toEqual([]);
+    },
+  );
+});
+
+test('maps only version-two artifact paths to their generation-specific marker', async () => {
+  await rig(async ({ transport }) => {
+    expect(transport.manifestPathFor(artifact)).toBe(marker);
+    expect(marker).not.toBe('/sdcard/agent-device-recording-active.json');
+    expect(artifact).not.toBe('/sdcard/agent-device-recording-123.mp4');
+    expect(() => transport.manifestPathFor('/sdcard/agent-device-recording-123.mp4')).toThrow();
   });
 });

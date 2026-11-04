@@ -4,6 +4,7 @@ import type { NativePathDisposition } from '@agent-device/contracts/recording-na
 import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 import { chunkPathAt } from './chunk-path.ts';
 import type { NativeChunk, NativeManifest } from './manifest.ts';
+import { recordingArtifactPath, type AndroidRecordingGeneration } from './native-path.ts';
 import { ScreenRecordingStartRolledBack } from '@agent-device/contracts/screen-recording-runtime';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
@@ -32,13 +33,10 @@ export class AndroidScreenRecordingStopClaimed extends Error {
 }
 
 export function candidateRemotePaths(
-  preferredDir: string | undefined,
+  generation: AndroidRecordingGeneration,
   now = Date.now(),
 ): readonly string[] {
-  const dirs = preferredDir
-    ? [preferredDir, '/sdcard', '/data/local/tmp']
-    : ['/sdcard', '/data/local/tmp'];
-  return [...new Set(dirs)].map((directory) => `${directory}/agent-device-recording-${now}.mp4`);
+  return [recordingArtifactPath('/sdcard', generation, now)];
 }
 
 export async function startChunkAt(
