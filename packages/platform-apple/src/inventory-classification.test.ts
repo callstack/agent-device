@@ -74,6 +74,14 @@ test('devicectl records report a paired device CoreDevice cannot reach as not bo
   assert.equal(mapDevicectlAppleDevice(record('disconnected'))?.booted, true);
   assert.equal(mapDevicectlAppleDevice(record('connected'))?.booted, true);
   assert.equal(mapDevicectlAppleDevice(record())?.booted, true);
+  // devicectl JSON is not validated at runtime, so a malformed state must not break the listing.
+  assert.equal(
+    mapDevicectlAppleDevice({
+      hardwareProperties: { platform: 'iOS', productType: 'iPhone18,1', udid: 'phone-1' },
+      connectionProperties: { tunnelState: 3 as unknown as string },
+    })?.booted,
+    true,
+  );
 });
 
 test('devicectl records report the marketing model and OS version', () => {
