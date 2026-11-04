@@ -128,6 +128,11 @@ extension RunnerTests {
       ))
       XCTAssertFalse(observeOnly.ok, "request suffix: \(rawField)")
       XCTAssertEqual(observeOnly.error?.code, "OBSERVATION_UNAVAILABLE", "request suffix: \(rawField)")
+      XCTAssertEqual(
+        observeOnly.error?.hint,
+        "A system alert is presented over the session app. Resolve it with alert, or read it with a regular snapshot.",
+        "request suffix: \(rawField)"
+      )
       XCTAssertNil(observeOnly.data, "request suffix: \(rawField)")
 
       let regular = try executeSnapshotDispatched(command: runnerCommandFixture(
