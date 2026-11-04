@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 // The lit panel of the command in flight (ADR 0025), main-owned and written behind main work a
 // previous command left queued, so that work still reads its own command's panel.
@@ -11,7 +12,7 @@ struct LitPanelSurface {
   let key: LitPanelBookingKey
   let displayID: UInt
   let window: XCUIElement
-  let frame: CGRect
+  let geometry: SurfaceGeometry
 }
 
 /// The command's lit panel and what it booked on it. Read and written only on the main thread.
@@ -79,7 +80,7 @@ extension RunnerTests {
     guard failure == .none, let element = window as? XCUIElement else {
       return RunnerAppScreenCaptureFailure(failure == .none ? .unresolvedWindow : failure)
     }
-    litPanelState.surface = LitPanelSurface(key: key, displayID: litPanel.displayID, window: element, frame: frame)
+    litPanelState.surface = LitPanelSurface(key: key, displayID: litPanel.displayID, window: element, geometry: surfaceGeometry(windowFrame: frame, app: app))
     return nil
   }
 

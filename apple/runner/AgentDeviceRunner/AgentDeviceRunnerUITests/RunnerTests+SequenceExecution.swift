@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
   // MARK: - Sequence command
@@ -41,14 +42,28 @@ extension RunnerTests {
     // synthesized context already names the frame, so the app tree is not read for it again.
     let firstStep = steps[0]
     let firstFrame = try (firstStep.x != nil && firstStep.y != nil)
-      ? synthesizedContext.map { touchVisualizationFrame(x: firstStep.x!, y: firstStep.y!, context: $0) }
+      ? synthesizedContext.map { touchVisualizationFrame(point: SurfacePoint(CGPoint(x: firstStep.x!, y: firstStep.y!)), context: $0) }
         ?? resolvedTouchVisualizationFrame(app: activeApp, x: firstStep.x!, y: firstStep.y!)
       : nil
 
+#if os(iOS)
+    let orientation = command.sequenceOrientation ?? synthesizedContext?.geometry.orientation ?? litPanelState.surface?.geometry.orientation
+      ?? Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: activeApp))
+#else
+    let orientation: Int? = nil
+#endif
     let execution = try assembleSequenceExecution(steps: steps) { _, step in
-      try performSequenceStep(step, activeApp: activeApp, synthesizedContext: synthesizedContext)
+#if os(iOS)
+      if orientation != Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: activeApp)) {
+        return finishedSequenceStep(step, timing: measureGesture {}, outcome: .unsupported(
+          message: "sequence stopped because the screen orientation changed",
+          hint: "Inspect the screen before continuing with the remaining actions."
+        ))
+      }
+#endif
+      return try performSequenceStep(step, activeApp: activeApp, synthesizedContext: synthesizedContext)
     }
-    return sequenceResponse(execution: execution, touchFrame: firstFrame)
+    return sequenceResponse(execution: execution, touchFrame: firstFrame, sequenceOrientation: orientation)
   }
 
   /// Pure, device-free assembler: runs each step in order via `perform`, stops at the first
@@ -230,7 +245,8 @@ extension RunnerTests {
 
   private func sequenceResponse(
     execution: SequenceExecutionResult,
-    touchFrame: TouchVisualizationFrame?
+    touchFrame: TouchVisualizationFrame?,
+    sequenceOrientation: Int?
   ) -> Response {
     return Response(
       ok: true,
@@ -243,6 +259,7 @@ extension RunnerTests {
         referenceWidth: touchFrame?.referenceWidth,
         referenceHeight: touchFrame?.referenceHeight,
         completedSteps: execution.completedSteps,
+        sequenceOrientation: sequenceOrientation,
         failedStepIndex: execution.failedStepIndex,
         sequenceResults: execution.results
       )

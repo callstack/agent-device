@@ -1,3 +1,4 @@
+import AgentDeviceSnapshotPresentation
 import XCTest
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
@@ -160,7 +161,7 @@ extension RunnerTests {
     accessibilityHealth: RunnerAccessibilityHealth
   ) -> SynthesizedCoordinateContext {
     SynthesizedCoordinateContext(
-      referenceFrame: CGRect(x: 0, y: 0, width: 390, height: 844),
+      geometry: SurfaceGeometry(windowOnScreen: SurfaceRect(CGRect(x: 0, y: 0, width: 390, height: 844)), panelNativeSize: nil, orientation: 1),
       resolvedWindow: app.windows.firstMatch,
       accessibilityHealth: accessibilityHealth
     )

@@ -299,7 +299,7 @@ extension RunnerTests {
   /// A lit-panel snapshot's root, raw or regular, is the booked box (ADR 0025).
   static func publishLitPanelRoot(_ root: inout RawAXNode, surface: LitPanelSurface?) {
     if let surface {
-      root.rect = SnapshotRect(surface.frame)
+      root.rect = SnapshotRect(surface.geometry.windowOnScreen.rect)
     }
   }
 

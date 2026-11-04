@@ -32,14 +32,7 @@ enum RunnerScrollKeyboardClip: Equatable {
 
 /** Where one directional scroll may place its swipe, once the keyboard has taken its share. */
 enum RunnerScrollViewport {
-  /**
-   * The band to plan the swipe inside, the frame to rotate its coordinates against, and the keyboard
-   * top when the band was clipped for one. The two frames are separate on purpose: a clip shortens
-   * only the band, while `CoordinateSpaceRotation.native(point:)` derives a `landscapeRight` native x from the
-   * frame's HEIGHT, so rotating inside the band moves the dispatched path sideways off the planned
-   * one.
-   */
-  case swipe(planFrame: CGRect, coordinateFrame: CGRect, keyboardMinY: Double?)
+  case swipe(planFrame: CGRect, keyboardMinY: Double?)
   /** Nothing to swipe. The caller answers `occlusionRunnerCode` and performs no gesture. */
   case occluded(keyboardMinY: Double, visibleHeight: Double)
 }
@@ -49,7 +42,6 @@ enum RunnerScrollViewport {
 struct ScrollGestureDispatch {
   let plan: RunnerScrollGesturePlan
   let planFrame: CGRect
-  let coordinateFrame: CGRect
   let keyboardMinY: Double?
 }
 
@@ -91,7 +83,7 @@ extension RunnerScrollViewport {
     switch self {
     case .occluded(let keyboardMinY, let visibleHeight):
       return .occluded(keyboardMinY: keyboardMinY, visibleHeight: visibleHeight)
-    case .swipe(let planFrame, let coordinateFrame, let keyboardMinY):
+    case .swipe(let planFrame, let keyboardMinY):
       guard planFrame.width > 0, planFrame.height > 0 else {
         return .unusableFrame
       }
@@ -108,7 +100,6 @@ extension RunnerScrollViewport {
         ScrollGestureDispatch(
           plan: plan,
           planFrame: planFrame,
-          coordinateFrame: coordinateFrame,
           keyboardMinY: keyboardMinY
         )
       )
@@ -168,9 +159,9 @@ enum ScrollViewportPolicy {
   static func frames(referenceFrame: CGRect, clip: RunnerScrollKeyboardClip) -> RunnerScrollViewport {
     switch clip {
     case .unobstructed:
-      return .swipe(planFrame: referenceFrame, coordinateFrame: referenceFrame, keyboardMinY: nil)
+      return .swipe(planFrame: referenceFrame, keyboardMinY: nil)
     case .avoided(let frame, let keyboardMinY):
-      return .swipe(planFrame: frame, coordinateFrame: referenceFrame, keyboardMinY: keyboardMinY)
+      return .swipe(planFrame: frame, keyboardMinY: keyboardMinY)
     case .occluded(let keyboardMinY, let visibleHeight):
       return .occluded(keyboardMinY: keyboardMinY, visibleHeight: visibleHeight)
     }
@@ -195,17 +186,17 @@ extension RunnerTests {
     // Every scroll reports its decision, including the two ways it avoids reading the keyboard at
     // all: unavailable accessibility health, and a probe that finds no keyboard.
     guard context.allowsKeyboardProbe else {
-      logScrollViewport(decision: "probeSkipped", keyboardMinY: nil, swipeHeight: context.referenceFrame.height, context: context)
-      return ScrollViewportPolicy.frames(referenceFrame: context.referenceFrame, clip: .unobstructed)
+      logScrollViewport(decision: "probeSkipped", keyboardMinY: nil, swipeHeight: context.geometry.windowOnScreen.rect.height, context: context)
+      return ScrollViewportPolicy.frames(referenceFrame: context.geometry.windowOnScreen.rect, clip: .unobstructed)
     }
     guard let keyboardFrame = visibleKeyboardFrame(app: app) else {
-      logScrollViewport(decision: "noKeyboard", keyboardMinY: nil, swipeHeight: context.referenceFrame.height, context: context)
-      return ScrollViewportPolicy.frames(referenceFrame: context.referenceFrame, clip: .unobstructed)
+      logScrollViewport(decision: "noKeyboard", keyboardMinY: nil, swipeHeight: context.geometry.windowOnScreen.rect.height, context: context)
+      return ScrollViewportPolicy.frames(referenceFrame: context.geometry.windowOnScreen.rect, clip: .unobstructed)
     }
-    let clip = ScrollViewportPolicy.clip(viewport: context.referenceFrame, keyboard: keyboardFrame)
+    let clip = ScrollViewportPolicy.clip(viewport: context.geometry.windowOnScreen.rect, keyboard: keyboardFrame)
     switch clip {
     case .unobstructed:
-      logScrollViewport(decision: "unobstructed", keyboardMinY: nil, swipeHeight: context.referenceFrame.height, context: context)
+      logScrollViewport(decision: "unobstructed", keyboardMinY: nil, swipeHeight: context.geometry.windowOnScreen.rect.height, context: context)
     case .avoided(let frame, let keyboardMinY):
       logScrollViewport(
         decision: "avoided",
@@ -221,7 +212,7 @@ extension RunnerTests {
         context: context
       )
     }
-    return ScrollViewportPolicy.frames(referenceFrame: context.referenceFrame, clip: clip)
+    return ScrollViewportPolicy.frames(referenceFrame: context.geometry.windowOnScreen.rect, clip: clip)
 #else
     let fallbackFrame = try resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
     return ScrollViewportPolicy.frames(referenceFrame: fallbackFrame, clip: .unobstructed)

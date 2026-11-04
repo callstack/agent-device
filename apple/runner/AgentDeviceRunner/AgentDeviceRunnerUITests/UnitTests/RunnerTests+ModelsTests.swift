@@ -78,6 +78,7 @@ extension RunnerTests {
     let samples = pointers.flatMap { $0["samples"] as? [[String: Any]] ?? [] }
     let litPanels = requests.compactMap { $0["litPanel"] as? [String: Any] }
     let commands = try entries.map { try decodeProductionRunnerRequest($0.request, $0.name) }
+    XCTAssertEqual(commands.compactMap(\.sequenceOrientation).first, 1)
     let command = try XCTUnwrap(commands.first, "no production request")
     let plan = try XCTUnwrap(
       commands.compactMap(\.gesturePlan).first,

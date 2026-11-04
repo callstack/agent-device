@@ -55,9 +55,6 @@ extension RunnerTests {
     let points: DragPoints
     let context: SynthesizedCoordinateContext
 
-    var referenceFrame: CGRect {
-      context.referenceFrame
-    }
   }
 
   struct SelectorElementMatch {
@@ -240,7 +237,7 @@ extension RunnerTests {
   // lit-panel request uses its booked window, because app.frame names one
   // panel (ADR 0025).
   private func hasTappableFrame(app: XCUIApplication, element: XCUIElement) throws -> Bool {
-    let windowFrame = try requestLitPanel == nil ? app.frame : requireRequestLitPanelSurface(app: app).frame
+    let windowFrame = try requestLitPanel == nil ? app.frame : requireRequestLitPanelSurface(app: app).geometry.windowOnScreen.rect
     let frame = element.frame
     if frame.isEmpty {
       return false
@@ -270,7 +267,7 @@ extension RunnerTests {
   func resolveRunnerWindow(app: XCUIApplication) throws -> (window: XCUIElement?, frame: CGRect) {
     if requestLitPanel != nil {
       let booked = try requireRequestLitPanelSurface(app: app)
-      return (booked.window, booked.frame)
+      return (booked.window, booked.geometry.windowOnScreen.rect)
     }
     guard let resolved = resolveRunnerWindowElement(app: app) else { return (nil, app.frame) }
     return (resolved.window, resolved.frame)
@@ -282,7 +279,7 @@ extension RunnerTests {
   func resolveRunnerWindowElement(app: XCUIApplication) -> (window: XCUIElement, frame: CGRect)? {
     if requestLitPanel != nil {
       guard bookRequestLitPanelSurface(app: app) == nil, let booked = litPanelState.surface else { return nil }
-      return (booked.window, booked.frame)
+      return (booked.window, booked.geometry.windowOnScreen.rect)
     }
     for window in app.windows.allElementsBoundByIndex where window.exists {
       let frame = window.frame
@@ -648,7 +645,8 @@ extension RunnerTests {
     }
     let booked = try requireRequestLitPanelSurface(app: app)
     let origin = booked.window.coordinate(withNormalizedOffset: .zero)
-    return origin.withOffset(CGVector(dx: x - booked.frame.minX, dy: y - booked.frame.minY))
+    let point = booked.geometry.contentPoint(from: SurfacePoint(CGPoint(x: x, y: y))).point
+    return origin.withOffset(CGVector(dx: point.x, dy: point.y))
 #else
     let resolved = try resolveRunnerWindow(app: app)
     let root = resolved.window ?? app

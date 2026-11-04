@@ -228,7 +228,7 @@ extension RunnerTests {
       app: app,
       windowQueryRejected: windowQueryRejected
     ), let point = Self.topLeadingNavigationFallbackPoint(
-      in: context.referenceFrame,
+      in: context.geometry.windowOnScreen.rect,
       topSafeAreaInset: screenTopSafeAreaInset()
     ) else {
       return .unavailable

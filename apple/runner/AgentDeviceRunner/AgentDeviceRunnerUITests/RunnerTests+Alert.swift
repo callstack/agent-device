@@ -211,7 +211,7 @@ extension RunnerTests {
         if let window = alert.window {
           // Never fall back to the owner app's first window: on a foldable it can be another panel.
           guard let context = SynthesizedCoordinateContext(
-            validating: safely("ALERT_WINDOW", CGRect.null) { window.frame },
+            validating: surfaceGeometry(windowFrame: safely("ALERT_WINDOW", CGRect.null) { window.frame }, app: alert.ownerApp),
             resolvedWindow: window,
             accessibilityHealth: mainOwned.accessibilityHealth
           ) else {

@@ -168,6 +168,7 @@ export type RunnerCommand = {
    * command that resolves a screen (ADR 0025).
    */
   litPanel?: { displayId: number; widthPt: number; heightPt: number };
+  sequenceOrientation?: RunnerSequenceOrientation;
   steps?: RunnerSequenceStep[];
 };
 
@@ -573,7 +574,10 @@ export type ParsedRunnerSequenceResult = {
   results: RunnerSequenceStepResult[];
   completedSteps: number;
   failedStepIndex?: number;
+  sequenceOrientation?: RunnerSequenceOrientation;
 };
+
+export type RunnerSequenceOrientation = 1 | 2 | 3 | 4;
 
 function isSequenceableKind(kind: unknown): kind is SequenceableRunnerStepKind {
   return (
@@ -703,7 +707,15 @@ export function parseRunnerSequenceResult(
     throw buildSequenceStepError(results, completedSteps, failedStepIndex);
   }
 
-  return { results, completedSteps, failedStepIndex };
+  const orientation = data.sequenceOrientation;
+  return {
+    results,
+    completedSteps,
+    failedStepIndex,
+    ...(orientation === 1 || orientation === 2 || orientation === 3 || orientation === 4
+      ? { sequenceOrientation: orientation }
+      : {}),
+  };
 }
 
 function buildSequenceStepError(
