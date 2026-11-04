@@ -18,7 +18,7 @@ import {
   type DeviceRuntimeGateway,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { deviceIdentity } from '@agent-device/kernel/device';
+import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { SessionStore } from '../../../core/session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { createRequestExecutionScope } from '../../../server/request-execution-scope.ts';
@@ -27,7 +27,7 @@ import type { IsolatedDeviceClaimStore } from '../../../__tests__/support/device
 import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 
-export function fixture(setup: () => IsolatedDeviceClaimStore) {
+export function fixture(setup: () => IsolatedDeviceClaimStore, selectedDevice?: DeviceInfo) {
   const { root, stateDir, claimsDir } = setup();
   const workspace = path.join(root, 'worktree');
   const subdir = path.join(workspace, 'nested');
@@ -42,8 +42,8 @@ export function fixture(setup: () => IsolatedDeviceClaimStore) {
   const store = new SessionStore(path.join(stateDir, 'sessions'), host);
   const registry = new LeaseRegistry();
   const scope = platformRequestScopeFixture();
-  const device = ANDROID_EMULATOR;
-  const owner = localRuntimeOwner('android');
+  const device = selectedDevice ?? ANDROID_EMULATOR;
+  const owner = localRuntimeOwner(device.platform);
   const output = path.join(stateDir, 'output.mp4');
   const handle = createScreenRecordingLiveHandle(
     {
@@ -220,6 +220,7 @@ export function fixture(setup: () => IsolatedDeviceClaimStore) {
     scope,
     recoverIncompleteRecordingStart,
     closeApplication,
+    finalizeApplicationClose,
     setBindingDisposal: (dispose: () => Promise<void>) => {
       disposeBinding = dispose;
     },

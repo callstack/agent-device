@@ -21,7 +21,7 @@ const fixture = () => createFixture(setup);
 function runClose(
   f: ReturnType<typeof fixture>,
   close: Awaited<ReturnType<ReturnType<typeof fixture>['scopeFor']>>,
-  change?: { killApp?: true; shutdown?: true },
+  change?: { killApp?: true; shutdown?: true; retainExecutionHost?: boolean },
 ) {
   return close.runLocked(
     async () =>
@@ -41,10 +41,93 @@ function runClose(
         inspectFacts: close.inspectFacts,
         bindDevice: close.bindDevice,
         platformServices: close.platformServices,
-        platformResourceCleanup: platformResourceCleanupFixture(),
+        platformResourceCleanup: platformResourceCleanupFixture({
+          retainExecutionHostAfterClose: () => change?.retainExecutionHost ?? false,
+        }),
       }),
   );
 }
+
+test('a retained lease keeps its runner and recording claim until failed close is retried', async () => {
+  const device = {
+    platform: 'apple' as const,
+    appleOs: 'ios' as const,
+    id: 'leased-simulator',
+    name: 'Leased simulator',
+    kind: 'simulator' as const,
+    booted: true,
+  };
+  const f = createFixture(setup, device);
+  const child = spawn(
+    process.execPath,
+    ['-e', String.raw`process.stdout.write('ready\n'); process.stdin.resume()`],
+    { stdio: ['pipe', 'pipe', 'pipe'] },
+  );
+  const exited = once(child, 'exit');
+  try {
+    await once(child.stdout, 'data');
+    const ref = f.publish(true);
+    f.store.update(ref, { appBundleId: 'org.example.editor' });
+    expect((await f.record('start', f.workspace)).ok).toBe(true);
+    expect((await f.record('stop', f.workspace)).ok).toBe(true);
+    const original = inspectDeviceClaims({}, f.host.env)[0]!.claim!;
+    const lease = f.registry.allocateLease({
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      leaseBackend: 'ios-simulator',
+      deviceKey: 'ios:leased-simulator',
+      clientId: 'client-a',
+      retainOnClose: true,
+    });
+    f.store.update(ref, {
+      lease: {
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        leaseBackend: lease.backend,
+        deviceKey: lease.deviceKey,
+        clientId: lease.clientId,
+        expiresAt: lease.expiresAt,
+      },
+    });
+    f.closeApplication.mockRejectedValueOnce(new Error('owned app did not close'));
+    const first = await f.scopeFor('close', 'org.example.editor', f.workspace);
+    await expect(runClose(f, first, { retainExecutionHost: true })).rejects.toThrow(
+      'owned app did not close',
+    );
+    await first[Symbol.asyncDispose]();
+    expect(child.exitCode).toBeNull();
+    expect(f.store.lookup('recording')).toBeDefined();
+    expect(f.store.listRetainedExecutionHosts(lease.leaseId)).toEqual([]);
+    expect(f.registry.listActiveLeases()).toHaveLength(1);
+    expect(f.finalizeApplicationClose).toHaveBeenLastCalledWith(
+      expect.objectContaining({ retainRunner: true }),
+    );
+    expect(inspectDeviceClaims({}, f.host.env)[0]?.claim).toMatchObject({
+      ownerToken: original.ownerToken,
+      recordingClosePending: true,
+      recordingCleanupPending: true,
+    });
+
+    f.closeApplication.mockImplementationOnce(async () => {
+      child.stdin.end();
+      await exited;
+    });
+    const retry = await f.scopeFor('close', 'org.example.editor', f.workspace);
+    expect(await runClose(f, retry, { retainExecutionHost: true })).toMatchObject({ ok: true });
+    await retry[Symbol.asyncDispose]();
+    expect(child.exitCode).toBe(0);
+    expect(inspectDeviceClaims({}, f.host.env)).toHaveLength(0);
+    expect(f.store.lookup('recording')).toBeUndefined();
+    expect(f.store.listRetainedExecutionHosts(lease.leaseId)).toEqual([
+      expect.objectContaining({ address: 'recording', device }),
+    ]);
+    expect(f.registry.listActiveLeases()).toHaveLength(1);
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    await exited;
+  }
+});
 
 test.each([false, true])(
   'a different close cannot settle a failed targeted app close (binding failure: %s)',
