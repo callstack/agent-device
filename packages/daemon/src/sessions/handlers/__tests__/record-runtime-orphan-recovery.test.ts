@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
@@ -8,6 +8,16 @@ import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { deviceIdentity } from '@agent-device/kernel/device';
 import type { SessionState } from '../../../core/session-state.ts';
 import { makeRecordRuntimeHarness, recordingResourcePath } from './record-runtime.fixtures.ts';
+
+// A record-only start selects the harness device.
+vi.mock('@agent-device/device-selection/dispatch-resolve', () => ({
+  resolveTargetDevice: async () => ({
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator',
+  }),
+}));
 
 // Two sessions share one device, so the second start meets the first one's record.
 function startOnSecondSession(harness: ReturnType<typeof makeRecordRuntimeHarness>) {
@@ -26,6 +36,27 @@ function recordLifecycle(
   );
   if (record.status !== 'decoded') throw new Error('Expected a decoded recording record');
   return record.envelope.lifecycle;
+}
+
+// An open record that a recording on another device left under `sessionId`.
+function writeRecordOnOtherDevice(
+  harness: ReturnType<typeof makeRecordRuntimeHarness>,
+  sessionId: string,
+) {
+  const resourcePath = recordingResourcePath(harness.sessionStore, sessionId);
+  fs.mkdirSync(path.dirname(resourcePath), { recursive: true });
+  screenRecordingResourceStore.write(
+    resourcePath,
+    createDurableResourceEnvelope({
+      resourceKind: 'screen-recording',
+      sessionId,
+      device: deviceIdentity({ platform: 'android', id: 'emulator-5556', kind: 'emulator' }),
+      owner: localRuntimeOwner('android'),
+      fence: { token: sessionId, generation: 1 },
+      lifecycle: 'open',
+      descriptor: { version: 1, body: { recordingId: sessionId } },
+    }),
+  );
 }
 
 async function leaveOrphanedRecord(harness: ReturnType<typeof makeRecordRuntimeHarness>) {
@@ -69,30 +100,39 @@ test('record start leaves an orphaned record on another device open', async () =
   const harness = makeRecordRuntimeHarness('record-runtime-orphan-elsewhere-', {
     runtime: { reattachActive: true },
   });
-  const elsewhere = recordingResourcePath(harness.sessionStore, 'elsewhere');
-  fs.mkdirSync(path.dirname(elsewhere), { recursive: true });
-  screenRecordingResourceStore.write(
-    elsewhere,
-    createDurableResourceEnvelope({
-      resourceKind: 'screen-recording',
-      sessionId: 'elsewhere',
-      device: deviceIdentity({
-        platform: 'android',
-        id: 'emulator-5556',
-        kind: 'emulator',
-      }),
-      owner: localRuntimeOwner('android'),
-      fence: { token: 'elsewhere', generation: 1 },
-      lifecycle: 'open',
-      descriptor: { version: 1, body: { recordingId: 'elsewhere' } },
-    }),
-  );
+  writeRecordOnOtherDevice(harness, 'elsewhere');
   const outPath = path.join(mkdtempForTestSync('record-runtime-orphan-elsewhere-out-'), 'a.mp4');
 
   const response = await harness.run(['start', outPath]);
 
   expect(response).toMatchObject({ ok: true, data: { recording: 'started' } });
   expect(recordLifecycle(harness, 'elsewhere')).toBe('open');
+  expect(harness.runtime.reattach).not.toHaveBeenCalled();
+});
+
+test('record start refuses on a record of its own session that another device left open', async () => {
+  const harness = makeRecordRuntimeHarness('record-runtime-orphan-same-path-', {
+    runtime: { reattachActive: true },
+  });
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected the harness session');
+  harness.sessionStore.retire(ref);
+  writeRecordOnOtherDevice(harness, harness.sessionName);
+  const outPath = path.join(mkdtempForTestSync('record-runtime-orphan-same-path-out-'), 'a.mp4');
+
+  const response = await harness.run(['start', outPath], undefined, {
+    recordingScope: 'device',
+    serial: 'emulator-5554',
+  });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      hint: expect.stringContaining('"emulator-5556"'),
+      details: { reason: 'cleanup-unconfirmed', session: harness.sessionName },
+    },
+  });
+  expect(recordLifecycle(harness)).toBe('open');
   expect(harness.runtime.reattach).not.toHaveBeenCalled();
 });
 

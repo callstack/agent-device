@@ -80,13 +80,19 @@ function assertNoConflictingManifest<K extends string, C>(
   const [conflict] = listDurableCaptureStartConflicts(definition, resourcePath, device).records;
   if (!conflict) return;
   const session = conflict.envelope.sessionId;
+  const otherDevice =
+    deviceIdentityKey(conflict.envelope.device) === deviceIdentityKey(deviceIdentity(device))
+      ? undefined
+      : conflict.envelope.device.id;
   throw new AppError(
     'COMMAND_FAILED',
-    `${capitalizeDurableCaptureLabel(articleFor(definition.displayName))} ${definition.displayName} resource for this device has not reached a confirmed terminal state`,
+    `${capitalizeDurableCaptureLabel(articleFor(definition.displayName))} ${definition.displayName} resource for this ${otherDevice ? 'session' : 'device'} has not reached a confirmed terminal state`,
     {
       reason: 'cleanup-unconfirmed',
       session,
-      hint: `The open ${definition.displayName} record belongs to session "${session}". Stop or close that session, or retry once its device is reachable; exact-owner cleanup must confirm it before a replacement starts.`,
+      hint: otherDevice
+        ? `The open ${definition.displayName} record of session "${session}" is on device "${otherDevice}". Stop it in that session, or start this one under another session name.`
+        : `The open ${definition.displayName} record belongs to session "${session}". Stop or close that session, or retry once its device is reachable; exact-owner cleanup must confirm it before a replacement starts.`,
     },
   );
 }

@@ -15,7 +15,7 @@ import {
 } from '../durable-capture/index.ts';
 import type { LiveResourceHandle } from '@agent-device/contracts/durable-resource';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { deviceIdentity, deviceIdentityKey, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DurableCaptureAdmissionLedger } from './durable-capture-admission-ledger.ts';
 import {
   createNextDurableCaptureFence,
@@ -105,9 +105,10 @@ export function createDurableCaptureResource<
       return recoverDurableCaptureResource(recoveryParams(params), resourcePath);
     },
     /**
-     * Runs exact-owner recovery for the records that would refuse a start at `resourcePath` on
-     * `device` and whose session the daemon no longer holds. A held session's record belongs to
-     * its own stop or close; a record recovery cannot confirm stays open and still refuses.
+     * Runs exact-owner recovery for the records on `device` that would refuse a start at
+     * `resourcePath` and whose session the daemon no longer holds. A held session's record belongs
+     * to its own stop or close. A record on another device is never recovered through the start
+     * device. A record left open still refuses.
      */
     async settleStartConflicts(
       params: Omit<SessionCaptureRecoveryParams<K, H, C>, 'sessionsDir'> &
@@ -119,8 +120,10 @@ export function createDurableCaptureResource<
     ): Promise<void> {
       const { resourcePath, device, holdsSession, ...recovery } = params;
       const conflicts = listDurableCaptureStartConflicts(definition, resourcePath, device);
+      const deviceKey = deviceIdentityKey(deviceIdentity(device));
       for (const record of conflicts.records) {
         if (holdsSession(record.envelope.sessionId)) continue;
+        if (deviceIdentityKey(record.envelope.device) !== deviceKey) continue;
         await recoverDurableCaptureResource(
           recoveryParams({ ...recovery, sessionsDir: conflicts.sessionsDir }),
           record.resourcePath,
