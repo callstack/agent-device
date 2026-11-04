@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 
@@ -19,8 +20,8 @@ vi.mock('../../resources/lease-registry.ts', async (importOriginal) => {
   }
   return { ...actual, LeaseRegistry: RecordedLeaseRegistry };
 });
-vi.mock('../request-execution-scope.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../request-execution-scope.ts')>();
+vi.mock('../lease-session-end.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lease-session-end.ts')>();
   return {
     ...actual,
     createLeaseSessionEnd: () => ({
@@ -63,6 +64,7 @@ test('an expired lease ends its session without any further request', async () =
       host: createTestHostEnvironment({
         env: {
           ...process.env,
+          AGENT_DEVICE_CLAIMS_DIR: path.join(stateDir, 'claims'),
           AGENT_DEVICE_STATE_DIR: stateDir,
           AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
           AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
@@ -104,6 +106,7 @@ test('a lease that expires after shutdown is refused and reported, not sent to i
       host: createTestHostEnvironment({
         env: {
           ...process.env,
+          AGENT_DEVICE_CLAIMS_DIR: path.join(stateDir, 'claims'),
           AGENT_DEVICE_STATE_DIR: stateDir,
           AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
           AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
@@ -174,6 +177,7 @@ test('shutdown cancels and drains lease ends before it tears sessions down', asy
       host: createTestHostEnvironment({
         env: {
           ...process.env,
+          AGENT_DEVICE_CLAIMS_DIR: path.join(stateDir, 'claims'),
           AGENT_DEVICE_STATE_DIR: stateDir,
           AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
           AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',

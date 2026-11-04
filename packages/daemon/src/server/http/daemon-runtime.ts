@@ -29,10 +29,8 @@ import {
   leaseReleaseDiagnosticEvent,
 } from '../provider-lease-expiry.ts';
 import { createRequestHandler } from '../request-router.ts';
-import {
-  createLeaseSessionEnd,
-  getLeaseRegistryExecutionLocks,
-} from '../request-execution-scope.ts';
+import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
+import { createLeaseSessionEnd } from '../lease-session-end.ts';
 import type { LeaseEndReason } from '../../sessions/lease-lifecycle.ts';
 import { teardownSessionResources } from '../../sessions/session-teardown.ts';
 import { resolveDaemonSessionTeardownTimeoutMs } from '../../sessions/session-teardown-budget.ts';
