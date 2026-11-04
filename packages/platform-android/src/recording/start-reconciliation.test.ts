@@ -1,9 +1,9 @@
 import { expect, test } from 'vitest';
+import { isScreenRecordingStartNotDispatched } from '@agent-device/contracts/screen-recording-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
 import { createNativeManifest } from './manifest.ts';
 import { recordingArtifactPath, recordingMarkerPath } from './native-path.ts';
-import { AndroidScreenRecordingStartRollbackUnconfirmed } from './chunks.ts';
 import { bindAndroidScreenRecordingRuntime } from './runtime.ts';
 
 const input = { ...recordingInput(), claimToken: 'claim-token' };
@@ -54,9 +54,12 @@ test.each(['/sdcard', '/data/local/tmp'])(
         },
       },
     });
-    await expect(runtime.screenRecordingStart(input)).rejects.toBeInstanceOf(
-      AndroidScreenRecordingStartRollbackUnconfirmed,
-    );
+    const error = await runtime.screenRecordingStart(input).catch((error: unknown) => error);
+    expect(error).toMatchObject({
+      code: 'DEVICE_IN_USE',
+      details: { reason: 'legacy_native_recording_evidence_unproven' },
+    });
+    expect(isScreenRecordingStartNotDispatched(error)).toBe(true);
     expect(effects).toEqual([]);
     expect(await runtime.recoverIncompleteRecordingStart(recovery)).toBe('retained');
   },
@@ -66,9 +69,12 @@ test('retains an unreadable legacy marker without dispatching or claiming no eff
   const runtime = await bind({
     readManifest: async () => ({ status: 'unavailable' as const, message: 'offline' }),
   });
-  await expect(runtime.screenRecordingStart(input)).rejects.toBeInstanceOf(
-    AndroidScreenRecordingStartRollbackUnconfirmed,
-  );
+  const error = await runtime.screenRecordingStart(input).catch((error: unknown) => error);
+  expect(error).toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'native_recovery_evidence_unavailable' },
+  });
+  expect(isScreenRecordingStartNotDispatched(error)).toBe(true);
 });
 
 test('cancels only an exact armed generation after writer and artifact proof', async () => {

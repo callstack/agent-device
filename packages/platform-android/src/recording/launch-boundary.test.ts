@@ -1,5 +1,8 @@
 import { expect, test } from 'vitest';
-import { ScreenRecordingStartRolledBack } from '@agent-device/contracts/screen-recording-runtime';
+import {
+  isScreenRecordingStartNotDispatched,
+  ScreenRecordingStartRolledBack,
+} from '@agent-device/contracts/screen-recording-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import {
   androidRecordingDevice,
@@ -142,4 +145,82 @@ test('live cleanup refuses a replacement marker with a different claim token', a
   });
   expect(signals).toEqual([]);
   expect(manifest).toBe(replacement);
+});
+
+test('waits for an armed marker write to settle before reporting cancellation as not dispatched', async () => {
+  const controller = new AbortController();
+  const reason = new Error('canceled before dispatch');
+  let release!: () => void;
+  let entered!: () => void;
+  const inWrite = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const drainWrite = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let starts = 0;
+  let settled = false;
+  let marker = '';
+  const runtime = await start(
+    {
+      readManifest: async (path: string) =>
+        path.includes('recording-v2-') && marker
+          ? { status: 'read' as const, contents: marker }
+          : { status: 'missing' as const },
+      writeManifest: async ({ contents }: { contents: string }) => {
+        entered();
+        await drainWrite;
+        marker = contents;
+      },
+      start: async () => {
+        starts += 1;
+        return recordingProcess('42');
+      },
+    },
+    controller.signal,
+  );
+  const outcome = runtime
+    .screenRecordingStart(recordingInput())
+    .catch((error: unknown) => error)
+    .then((error) => {
+      settled = true;
+      return error;
+    });
+  await inWrite;
+  controller.abort(reason);
+  await Promise.resolve();
+  expect(settled).toBe(false);
+  release();
+  const error = await outcome;
+  expect(error).toBe(reason);
+  expect(isScreenRecordingStartNotDispatched(error)).toBe(true);
+  expect(starts).toBe(0);
+  expect(JSON.parse(marker).launchDisposition).toBe('armed');
+});
+
+test('reports a pre-aborted request as not dispatched without touching native evidence', async () => {
+  const controller = new AbortController();
+  const reason = new Error('already canceled');
+  controller.abort(reason);
+  const effects: string[] = [];
+  const runtime = await start(
+    {
+      readManifest: async () => {
+        effects.push('read');
+        return { status: 'missing' as const };
+      },
+      outputs: {
+        prepare: async () => {
+          effects.push('prepare');
+        },
+      },
+    },
+    controller.signal,
+  );
+  const error = await runtime
+    .screenRecordingStart(recordingInput())
+    .catch((error: unknown) => error);
+  expect(error).toBe(reason);
+  expect(isScreenRecordingStartNotDispatched(error)).toBe(true);
+  expect(effects).toEqual([]);
 });

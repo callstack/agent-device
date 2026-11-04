@@ -38,7 +38,6 @@ export async function startInitialTransaction(params: {
     await reconcileStartEvidence(transport);
     await prepareOutput();
   } catch (error) {
-    if (error instanceof AndroidScreenRecordingStartRollbackUnconfirmed) throw error;
     throw markScreenRecordingStartNotDispatched(error);
   }
   let last: ScreenRecordingStartRolledBack | undefined;
@@ -49,9 +48,19 @@ export async function startInitialTransaction(params: {
       launchDisposition: 'armed' as const,
     };
     try {
-      await persistNativeManifest(transport, manifestPath, armed, signal, true);
+      signal.throwIfAborted();
+    } catch (error) {
+      throw markScreenRecordingStartNotDispatched(error);
+    }
+    try {
+      await persistNativeManifest(transport, manifestPath, armed, undefined, true);
     } catch (error) {
       throw new AndroidScreenRecordingStartRollbackUnconfirmed(error);
+    }
+    try {
+      signal.throwIfAborted();
+    } catch (error) {
+      throw markScreenRecordingStartNotDispatched(error);
     }
     let chunk: NativeChunk;
     const startedAtMs = Date.now();

@@ -68,12 +68,14 @@ A version 2 Android recording marker uses a generation-specific device lock.
 If a device command dies while it holds that lock, recovery retains the recording claim.
 Before you reboot the device or remove the lock, obtain the device owner's approval.
 Before you reboot the device or remove the lock, isolate the device from unrelated work.
-Before you remove that exact lock, stop every host that can send commands to the device.
-Before you remove that exact lock, drain or terminate every queued and in-flight device command on those hosts.
-After the hosts are stopped, reboot the device and verify that the reboot completed.
+Before you remove that exact lock, coordinate with the owner of the approved device.
+Before you remove that exact lock, drain every queued and in-flight command for that device.
+If you cannot prove exclusive control without affecting unrelated work, retain the lock and claim.
+After those commands drain, reboot the approved device and verify that the reboot completed.
 After the reboot, verify the marker path and the claim token and fence generation against the retained claim.
 Only after those checks, remove the exact marker's `.lock` directory and its `expected` and `next` files.
 Keep the marker and every recording artifact for the recording recovery owner.
+Lock removal does not prove incomplete, admitted, or legacy evidence safe to clear.
 If you cannot prove that every old command is drained, retain the lock and claim.
 A version 1 shared marker has no verified claim provenance.
 If a version 1 marker is present, retain its marker and artifacts for explicit recovery.

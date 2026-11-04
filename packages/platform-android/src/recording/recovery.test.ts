@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { isScreenRecordingStartNotDispatched } from '@agent-device/contracts/screen-recording-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
 import { recordingArtifactPath, recordingMarkerPath } from './native-path.ts';
@@ -618,39 +619,44 @@ test.each(['missing-token', 'replaced-token', 'wrong-generation'] as const)(
   },
 );
 
-test('retains an unbound version-two recording when neither native evidence nor envelope has a claim token', async () => {
-  let marker = '';
-  const effects: string[] = [];
-  const runtime = await start({
-    readManifest: async (path: string) =>
-      path.includes('recording-v2-') && marker
-        ? { status: 'read' as const, contents: marker }
-        : { status: 'missing' as const },
-    writeManifest: async ({ contents }: { contents: string }) => {
-      effects.push('marker-write');
-      marker = contents;
-    },
-    stop: async () => {
-      effects.push('signal');
-      return 'stopped' as const;
-    },
-    remove: async () => {
-      effects.push('remove');
-      return true;
-    },
-  });
-  const started = await runtime.screenRecordingStart({
-    ...recordingInput(),
-    claimToken: undefined,
-  });
-  const before = marker;
-  effects.length = 0;
-  await expect(
-    runtime.screenRecordingReattach({ envelope: started.envelope }),
-  ).resolves.toMatchObject({ status: 'unreattachable', reason: 'ownership-fence-lost' });
-  await expect(
-    runtime.screenRecordingCleanup({ envelope: started.envelope }),
-  ).resolves.toMatchObject({ status: 'cleanup-pending', reason: 'ownership-fence-lost' });
-  expect(marker).toBe(before);
-  expect(effects).toEqual([]);
-});
+test.each([undefined, ''])(
+  'rejects an absent claim token before native work',
+  async (claimToken) => {
+    const effects: string[] = [];
+    const runtime = await start({
+      readManifest: async () => {
+        effects.push('read');
+        return { status: 'missing' as const };
+      },
+      writeManifest: async () => {
+        effects.push('write');
+      },
+      start: async () => {
+        effects.push('start');
+        throw new Error('unexpected');
+      },
+      outputs: {
+        prepare: async () => {
+          effects.push('prepare');
+        },
+      },
+    });
+    const error = await runtime
+      .screenRecordingStart({ ...recordingInput(), claimToken })
+      .catch((error: unknown) => error);
+    expect(error).toMatchObject({
+      code: 'INVALID_ARGS',
+      details: { reason: 'recording-claim-token-required' },
+    });
+    expect(isScreenRecordingStartNotDispatched(error)).toBe(true);
+    expect(effects).toEqual([]);
+    await expect(
+      runtime.recoverIncompleteRecordingStart({
+        sessionId: recordingInput().sessionId,
+        claimToken: claimToken as string,
+        fence: recordingInput().fence,
+      }),
+    ).resolves.toBe('retained');
+    expect(effects).toEqual([]);
+  },
+);

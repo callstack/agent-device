@@ -1,6 +1,6 @@
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import { cleanupChunks, stopOwnedChunks } from './chunks.ts';
+import { rollbackChunks } from './chunks.ts';
 import type { NativeManifest } from './manifest.ts';
 import { removeNativeManifest } from './manifest-store.ts';
 
@@ -16,8 +16,7 @@ export async function cleanupVerifiedAndroidEvidence(
     const pendingPath = evidence.pendingRemotePath;
     if (pendingPath !== undefined && evidence.launchDisposition !== 'canceled')
       throw new Error('Android pending launch ownership is unconfirmed');
-    await stopOwnedChunks(transport, evidence.chunks);
-    await cleanupChunks(transport, evidence.chunks);
+    await rollbackChunks(transport, evidence.chunks);
     if (pendingPath !== undefined && (await transport.exists(pendingPath)) !== false)
       throw new Error('Android canceled launch artifact absence is unconfirmed');
     await removeNativeManifest(transport, manifestPath, JSON.stringify(evidence));
@@ -31,7 +30,7 @@ export async function cleanupVerifiedAndroidEvidence(
 function transportFailure(error: unknown): CleanupOutcome {
   return {
     status: 'cleanup-pending',
-    reason: 'transport-failed',
+    reason: 'cleanup-unconfirmed',
     message: error instanceof Error ? error.message : String(error),
   };
 }

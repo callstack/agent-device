@@ -1,7 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import { AndroidScreenRecordingStartRollbackUnconfirmed } from './chunks.ts';
 import { decodeNativeManifest } from './manifest.ts';
 import { legacyRecordingMarkerPaths, recordingMarkerPath } from './native-path.ts';
 
@@ -10,13 +9,24 @@ type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['andr
 export async function reconcileStartEvidence(transport: Transport): Promise<void> {
   for (const manifestPath of legacyRecordingMarkerPaths()) {
     const read = await transport.readManifest(manifestPath).catch(() => undefined);
-    if (!read || read.status !== 'missing') {
-      throw new AndroidScreenRecordingStartRollbackUnconfirmed(
-        new AppError(
-          'DEVICE_IN_USE',
-          `Legacy Android recording evidence is retained: ${manifestPath}`,
-          { reason: 'legacy_native_recording_evidence_unproven', manifestPath },
-        ),
+    if (!read || read.status === 'unavailable') {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `Android recording evidence is unavailable: ${manifestPath}`,
+        {
+          reason: 'native_recovery_evidence_unavailable',
+          manifestPath,
+        },
+      );
+    }
+    if (read.status === 'read') {
+      throw new AppError(
+        'DEVICE_IN_USE',
+        `Legacy Android recording evidence is retained: ${manifestPath}`,
+        {
+          reason: 'legacy_native_recording_evidence_unproven',
+          manifestPath,
+        },
       );
     }
   }
@@ -32,6 +42,8 @@ export async function recoverIncompleteAndroidRecordingStart(
     claimToken: string;
   }>,
 ): Promise<'confirmed-no-effect' | 'retained'> {
+  if (typeof input.claimToken !== 'string' || input.claimToken.trim().length === 0)
+    return 'retained';
   const generation = { deviceId: device.id, ...input };
   const manifestPath = recordingMarkerPath('/sdcard', generation);
   const read = await transport.readManifest(manifestPath);

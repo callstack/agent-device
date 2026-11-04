@@ -66,7 +66,7 @@ test('retained native evidence blocks replacement before output preparation or l
     signal: new AbortController().signal,
   });
   await expect(runtime.screenRecordingStart(recordingInput())).rejects.toMatchObject({
-    cause: { details: { reason: 'legacy_native_recording_evidence_unproven' } },
+    details: { reason: 'legacy_native_recording_evidence_unproven' },
   });
   expect({ starts, writes, prepared }).toEqual({ starts: 0, writes: 0, prepared: 0 });
 });
@@ -99,7 +99,7 @@ test('unavailable native evidence blocks replacement before output preparation o
     signal: new AbortController().signal,
   });
   await expect(runtime.screenRecordingStart(recordingInput())).rejects.toMatchObject({
-    cause: { details: { reason: 'legacy_native_recording_evidence_unproven' } },
+    details: { reason: 'native_recovery_evidence_unavailable' },
   });
   expect({ starts, writes, prepared }).toEqual({ starts: 0, writes: 0, prepared: 0 });
 });

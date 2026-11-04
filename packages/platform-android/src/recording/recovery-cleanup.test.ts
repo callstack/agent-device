@@ -201,7 +201,7 @@ test('retains evidence when the recorder presence probe is uncertain', async () 
     await vi.advanceTimersByTimeAsync(10_000);
     await expect(cleanup).resolves.toMatchObject({
       status: 'cleanup-pending',
-      reason: 'transport-failed',
+      reason: 'cleanup-unconfirmed',
     });
     expect(manifest).not.toBe('');
     await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBeInstanceOf(

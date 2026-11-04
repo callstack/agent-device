@@ -1,7 +1,9 @@
+import { AppError } from '@agent-device/kernel/errors';
 import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import {
+  markScreenRecordingStartNotDispatched,
   type ScreenRecordingRuntimeOperations,
   type ScreenRecordingStartInput,
   SCREEN_RECORDING_RESOURCE_KIND,
@@ -84,7 +86,15 @@ async function startAndroidRecording(params: {
   signal: AbortSignal;
 }) {
   const { host, transport, device, owner, input, signal } = params;
-  signal.throwIfAborted();
+  try {
+    signal.throwIfAborted();
+    if (typeof input.claimToken !== 'string' || input.claimToken.trim().length === 0)
+      throw new AppError('INVALID_ARGS', 'Android recording requires a device claim token', {
+        reason: 'recording-claim-token-required',
+      });
+  } catch (error) {
+    throw markScreenRecordingStartNotDispatched(error);
+  }
   void host.screenRecording.finalize.prepare({ container: 'mp4' }).catch(() => {});
   const startedAt = Date.now();
   const initial = await startInitialTransaction({
