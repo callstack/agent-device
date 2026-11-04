@@ -339,6 +339,20 @@ export async function createRequestExecutionScope(params: {
       sessionStore,
       claimAdmission,
     });
+    let appEventSettlement: (() => Promise<void>) | undefined;
+    if (command === 'trigger-app-event') {
+      scopedReq = {
+        ...scopedReq,
+        internal: {
+          ...scopedReq.internal,
+          afterAppEventBindingDisposal: (settle) => {
+            if (appEventSettlement)
+              throw new AppError('INTERNAL_ERROR', 'App event settlement is already registered');
+            appEventSettlement = settle;
+          },
+        },
+      };
+    }
     if (command === 'record') {
       scopedReq = {
         ...scopedReq,
@@ -395,6 +409,7 @@ export async function createRequestExecutionScope(params: {
           await claimAdmission[Symbol.asyncDispose]();
         }
         await closeCleanup.finish();
+        await appEventSettlement?.();
       })();
       return bindingCleanup;
     };

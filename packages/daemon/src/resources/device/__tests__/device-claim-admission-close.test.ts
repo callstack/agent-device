@@ -336,7 +336,7 @@ test('the real stale sweep retains a close obligation when its recorded owner ha
   expect(fs.readFileSync(claimPath, 'utf8')).toBe(before);
 });
 
-test.each(['session-owner', 'close-intent'] as const)(
+test.each(['session-owner', 'close-intent', 'app-event-owner'] as const)(
   'a changed %s cannot be cleared by an old binding cleanup retry',
   async (changed) => {
     const f = fixture();
@@ -376,13 +376,21 @@ test.each(['session-owner', 'close-intent'] as const)(
       const replacement =
         changed === 'session-owner'
           ? { ...claim, recordingSessionOwner: { pid: 1, startTime: 'different-owner' } }
-          : {
-              ...claim,
-              recordingCloseIntent: {
-                ...claim.recordingCloseIntent,
-                positionals: ['org.example.other'],
-              },
-            };
+          : changed === 'close-intent'
+            ? {
+                ...claim,
+                recordingCloseIntent: {
+                  ...claim.recordingCloseIntent,
+                  positionals: ['org.example.other'],
+                },
+              }
+            : {
+                ...claim,
+                recordingAppEventOwner: {
+                  kind: 'session-app-confirmed',
+                  appBundleId: 'org.example.other',
+                },
+              };
       fs.writeFileSync(claimPath, JSON.stringify(replacement));
       releaseRetry();
       await expect(retry).rejects.toMatchObject({ code: 'DEVICE_IN_USE' });

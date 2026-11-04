@@ -310,6 +310,12 @@ export type SnapshotRuntimeResult = SnapshotResult | SnapshotRuntimeAcquiredResu
 /** The application an owner's launch reports it started, when the launch names one. */
 export type ApplicationLaunchReport = Readonly<{ launchedAppBundleId?: string }>;
 
+/** An owner-confirmed event delivery to the existing session application. */
+export type AppEventDispatchOutcome = Readonly<{
+  kind: 'session-app-confirmed';
+  appBundleId: string;
+}>;
+
 export type Interactor = {
   open(
     app: string,
@@ -322,6 +328,10 @@ export type Interactor = {
       url?: string;
     },
   ): Promise<ApplicationLaunchReport | void>;
+  openAppEvent?(
+    eventUrl: string,
+    options?: { appBundleId?: string },
+  ): Promise<AppEventDispatchOutcome | void>;
   openDevice(): Promise<void>;
   close(app: string): Promise<void>;
   tap(x: number, y: number): Promise<Record<string, unknown> | void>;

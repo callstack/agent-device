@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { listAndroidApps, openAndroidApp } from '../app-lifecycle.ts';
+import { listAndroidApps, openAndroidApp, openAndroidAppEvent } from '../app-lifecycle.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -402,6 +402,47 @@ test('openAndroidApp returns the package am start reports it launched', async ()
     assert.equal(await openAndroidApp(device, 'settings'), undefined);
   });
 });
+
+test('a session-bound event reports the activity selected by the package-scoped launch', async () => {
+  const launched = (args: readonly string[]): FakeAdbResponse | undefined =>
+    args[2] === 'start' ? 'Status: ok\nActivity: com.example.app/.EventActivity\n' : undefined;
+  await withFakeAdb(launched, async ({ calls, device }) => {
+    assert.deepEqual(await openAndroidAppEvent(device, 'example://event', 'com.example.app'), {
+      kind: 'session-app-confirmed',
+      appBundleId: 'com.example.app',
+    });
+    assert.deepEqual(calls.at(-1), [
+      'shell',
+      'am',
+      'start',
+      '-W',
+      '-a',
+      'android.intent.action.VIEW',
+      '-d',
+      'example://event',
+      '-p',
+      'com.example.app',
+    ]);
+  });
+});
+
+test.each([
+  { output: 'Status: ok\n', app: 'com.example.app' },
+  { output: 'Status: failed\nActivity: com.example.app/.EventActivity\n', app: 'com.example.app' },
+  { output: 'Status: ok\nActivity: com.example.other/.EventActivity\n', app: 'com.example.app' },
+  { output: 'Status: ok\nActivity: android/.ResolverActivity\n', app: 'android' },
+  { output: 'Status: ok\nActivity: com.example.app/.EventActivity\n', app: undefined },
+])(
+  'an event with unproven package-scoped delivery stays unidentified: $output',
+  async ({ output, app }) => {
+    await withFakeAdb(
+      (args) => (args[2] === 'start' ? output : undefined),
+      async ({ device }) => {
+        assert.equal(await openAndroidAppEvent(device, 'example://event', app), undefined);
+      },
+    );
+  },
+);
 
 test('openAndroidApp stops the bound package before an app-bound deep link when terminating', async () => {
   await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {

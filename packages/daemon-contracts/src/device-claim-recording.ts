@@ -39,6 +39,7 @@ import {
 import {
   ownershipFromClaim,
   sameRecordingCloseIntent,
+  sameRecordingAppEventOwner,
   type DeviceClaim,
   type DeviceClaimSessionOwnership,
 } from './device-claim-record.ts';
@@ -384,7 +385,9 @@ export async function reserveRecordingClaimFence(
         ...claim,
         recordingFence: params.fence,
         recordingRuntimeOwner: params.owner,
-        ...((params.retainForSession || claim.recordingUnresolvedAppEvent) &&
+        ...((params.retainForSession ||
+          claim.recordingUnresolvedAppEvent ||
+          claim.recordingAppEventOwner) &&
         !claim.recordingSessionOwner
           ? {
               recordingSessionOwner: {
@@ -649,6 +652,7 @@ export type RetainedRecordingCleanup = Readonly<{
   startProof?: 'not-dispatched' | 'rolled-back';
   releaseWhenComplete?: boolean;
   sessionOwner?: DeviceClaim['recordingSessionOwner'];
+  appEventOwner?: DeviceClaim['recordingAppEventOwner'];
   closeIntent?: DeviceClaim['recordingCloseIntent'];
   retry(): Promise<'native-settled' | void>;
 }>;
@@ -690,6 +694,7 @@ export async function retryRecordingClaimCleanup(
       claim.recordingFence.generation !== retained.fence.generation ||
       (retained.purpose === 'close' &&
         (!sameSessionOwner(claim.recordingSessionOwner, retained.sessionOwner) ||
+          !sameRecordingAppEventOwner(claim.recordingAppEventOwner, retained.appEventOwner) ||
           !sameRecordingCloseIntent(claim.recordingCloseIntent, retained.closeIntent) ||
           claim.recordingUnresolvedAppEvent)) ||
       !claim.recordingRuntimeOwner ||
@@ -778,6 +783,7 @@ export async function retryRecordingClaimCleanup(
         after.recordingFence.generation !== retained.fence.generation ||
         (retained.purpose === 'close' &&
           (!sameSessionOwner(after.recordingSessionOwner, retained.sessionOwner) ||
+            !sameRecordingAppEventOwner(after.recordingAppEventOwner, retained.appEventOwner) ||
             !sameRecordingCloseIntent(after.recordingCloseIntent, retained.closeIntent) ||
             after.recordingUnresolvedAppEvent)) ||
         !after.recordingRuntimeOwner ||

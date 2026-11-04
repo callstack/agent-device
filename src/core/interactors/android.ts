@@ -13,6 +13,7 @@ import {
   homeAndroid,
   longPressAndroid,
   openAndroidApp,
+  openAndroidAppEvent,
   openAndroidDevice,
   doubleTapAndroid,
   pressAndroid,
@@ -79,6 +80,8 @@ export function createAndroidInteractor(
         url: options?.url,
       }),
     }),
+    openAppEvent: async (eventUrl, options) =>
+      await openAndroidAppEvent(device, eventUrl, options?.appBundleId),
     openDevice: () => openAndroidDevice(device),
     close: (app) => closeAndroidApp(device, app),
     tap: (x, y) => pressAndroid(device, x, y),

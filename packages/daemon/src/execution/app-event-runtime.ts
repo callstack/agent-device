@@ -1,4 +1,7 @@
-import type { AppEventInput } from '@agent-device/contracts/app-event-runtime';
+import type {
+  AppEventDispatchOutcome,
+  AppEventInput,
+} from '@agent-device/contracts/app-event-runtime';
 import { appEventRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -35,6 +38,7 @@ async function executeAppEvent(
   positionals: readonly string[],
   env: NodeJS.ProcessEnv,
   beforeDispatch?: () => Promise<void>,
+  afterDispatch?: (outcome: AppEventDispatchOutcome | void) => Promise<void>,
 ): Promise<Record<string, unknown>> {
   const { eventName, payload } = parseTriggerAppEventArgs([...positionals]);
   const eventUrl = resolveAppEventUrl(device, eventName, payload, env);
@@ -44,7 +48,8 @@ async function executeAppEvent(
     execution: runtimeExecutionFromContext(context),
   };
   await beforeDispatch?.();
-  await runtime.operations.triggerAppEvent(input);
+  const outcome = await runtime.operations.triggerAppEvent(input);
+  await afterDispatch?.(outcome);
   return {
     event: eventName,
     eventUrl,
@@ -65,6 +70,7 @@ export async function resolveBoundAppEventRuntime(
     positionals: readonly string[];
     readiness?: boolean;
     beforeDispatch?: () => Promise<void>;
+    afterDispatch?: (outcome: AppEventDispatchOutcome | void) => Promise<void>;
   }> &
     RuntimeAdmissionBindings,
 ): Promise<ResolvedAppEventExecution> {
@@ -77,6 +83,7 @@ export async function resolveBoundAppEventRuntime(
     platformServices,
     readiness,
     beforeDispatch,
+    afterDispatch,
   } = params;
   const admission = await admitRuntimeUse({
     command: 'trigger-app-event',
@@ -92,6 +99,14 @@ export async function resolveBoundAppEventRuntime(
   return {
     ok: true,
     execute: (context) =>
-      executeAppEvent(runtime, device, context, positionals, host.env, beforeDispatch),
+      executeAppEvent(
+        runtime,
+        device,
+        context,
+        positionals,
+        host.env,
+        beforeDispatch,
+        afterDispatch,
+      ),
   };
 }

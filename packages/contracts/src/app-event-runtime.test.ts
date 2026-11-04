@@ -42,3 +42,35 @@ test('a local binding opens the resolved event URL against the session app', asy
     appBundleId: 'com.example.app',
   });
 });
+
+test('a generic launch report alone does not authorize event-owner settlement', async () => {
+  const open = vi.fn(async () => ({ launchedAppBundleId: 'com.example.app' }));
+  const resolveInteractor = vi.fn(async () => ({ open }) as unknown as Interactor);
+  const operations = bindAppEvent(
+    new AbortController().signal,
+    localInteractorSource({ device, resolveInteractor }),
+  );
+  await expect(
+    operations.triggerAppEvent({
+      eventUrl: 'myapp://event',
+      options: { appBundleId: 'com.example.app' },
+    }),
+  ).resolves.toBeUndefined();
+});
+
+test('the bound owner can report a confirmed event delivery without changing the public result', async () => {
+  const proof = { kind: 'session-app-confirmed', appBundleId: 'com.example.app' } as const;
+  const openAppEvent = vi.fn(async () => proof);
+  const resolveInteractor = vi.fn(async () => ({ openAppEvent }) as unknown as Interactor);
+  const operations = bindAppEvent(
+    new AbortController().signal,
+    localInteractorSource({ device, resolveInteractor }),
+  );
+  await expect(
+    operations.triggerAppEvent({
+      eventUrl: 'myapp://event',
+      options: { appBundleId: 'com.example.app' },
+    }),
+  ).resolves.toEqual(proof);
+  expect(openAppEvent).toHaveBeenCalledWith('myapp://event', { appBundleId: 'com.example.app' });
+});

@@ -346,6 +346,343 @@ test.each([
   },
 );
 
+test.each([false, true])(
+  'a confirmed session app event settles after binding disposal (before recording: %s)',
+  async (beforeRecording) => {
+    const f = createFixture(setup);
+    const child = spawn(
+      process.execPath,
+      ['-e', String.raw`process.stdout.write('ready\n'); process.stdin.resume()`],
+      {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      },
+    );
+    const exited = once(child, 'exit');
+    try {
+      await once(child.stdout, 'data');
+      const ref = f.publish(!beforeRecording);
+      f.store.update(ref, { appBundleId: 'org.example.app' });
+      if (beforeRecording) {
+        const acquired = await acquireDeviceClaim({
+          device: f.device,
+          session: 'recording',
+          workspace: f.workspace,
+          stateDir: f.stateDir,
+          env: f.host.env,
+          reconcileOrphanedDeviceClaim: async () => ({ status: 'retained', reason: 'test' }),
+        });
+        if (acquired.status !== 'acquired') throw new Error('test claim was not acquired');
+        f.store.update(ref, { deviceClaim: acquired.ownership });
+      } else expect((await f.record('start', f.workspace)).ok).toBe(true);
+      const original = inspectDeviceClaims({}, f.host.env)[0]!.claim!;
+      const base = f.gateway;
+      const originalFacts = await base.inspectFacts(f.device);
+      const facts = {
+        ...originalFacts,
+        operations: { ...originalFacts.operations, triggerAppEvent: { available: true as const } },
+      };
+      let disposed = false;
+      f.setBindingDisposal(async () => {
+        expect(inspectDeviceClaims({}, f.host.env)[0]?.claim).toMatchObject({
+          ownerToken: original.ownerToken,
+          recordingUnresolvedAppEvent: true,
+        });
+        disposed = true;
+      });
+      f.setGateway({
+        ...base,
+        inspectFacts: async () => facts,
+        bind: async (input) => {
+          const binding = await base.bind(input);
+          return {
+            ...binding,
+            facts,
+            operations: {
+              ...binding.operations,
+              triggerAppEvent: async () => {
+                expect(disposed).toBe(false);
+                expect(
+                  inspectDeviceClaims({}, f.host.env)[0]?.claim?.recordingUnresolvedAppEvent,
+                ).toBe(true);
+                return { kind: 'session-app-confirmed' as const, appBundleId: 'org.example.app' };
+              },
+            },
+          };
+        },
+      });
+      const request = await f.scopeFor('trigger-app-event', 'ready', f.workspace);
+      const host = {
+        ...f.host,
+        env: { ...f.host.env, AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE: 'test://event/{event}' },
+      };
+      expect(
+        await request.runLocked(
+          async () =>
+            await handleAppEventCommand({
+              host,
+              req: request.req,
+              sessionName: request.sessionName,
+              logPath: request.requestLogPath,
+              sessionStore: f.store,
+              inspectFacts: request.inspectFacts,
+              bindDevice: request.bindDevice,
+              platformServices: {
+                ...request.platformServices,
+                resolveSessionAppBundleIdForTarget: async () => 'org.example.app',
+              },
+            }),
+        ),
+      ).toMatchObject({ ok: true });
+      await request[Symbol.asyncDispose]();
+      expect(disposed).toBe(true);
+      f.setBindingDisposal(async () => {});
+      expect(inspectDeviceClaims({}, f.host.env)[0]?.claim).toMatchObject({
+        ownerToken: original.ownerToken,
+        recordingAppEventOwner: { kind: 'session-app-confirmed', appBundleId: 'org.example.app' },
+      });
+      expect(
+        inspectDeviceClaims({}, f.host.env)[0]?.claim?.recordingUnresolvedAppEvent,
+      ).toBeUndefined();
+      if (beforeRecording) expect((await f.record('start', f.workspace)).ok).toBe(true);
+      expect(inspectDeviceClaims({}, f.host.env)[0]?.claim?.recordingSessionOwner).toBeDefined();
+      expect((await f.record('stop', f.workspace)).ok).toBe(true);
+      const other = new SessionStore(path.join(f.root, 'other-state', 'sessions'), f.host);
+      other.publish('recording', {
+        name: 'recording',
+        device: f.device,
+        createdAt: 1,
+        actions: [],
+        recordOnlySession: true,
+      });
+      f.start.mockClear();
+      expect(await f.record('start', f.workspace, other, new LeaseRegistry())).toMatchObject({
+        ok: false,
+        error: { code: 'DEVICE_IN_USE' },
+      });
+      expect(f.start).not.toHaveBeenCalled();
+      const runClose = async (target: string | undefined) => {
+        const close = await f.scopeFor('close', target, f.workspace);
+        try {
+          return await close.runLocked(
+            async () =>
+              await handleSessionCloseCommands({
+                host: f.host,
+                req: close.req,
+                sessionName: close.sessionName,
+                logPath: close.requestLogPath,
+                sessionStore: f.store,
+                leaseRegistry: f.registry,
+                inspectFacts: close.inspectFacts,
+                bindDevice: close.bindDevice,
+                platformServices: close.platformServices,
+                platformResourceCleanup: platformResourceCleanupFixture(),
+              }),
+          );
+        } finally {
+          await close[Symbol.asyncDispose]();
+        }
+      };
+      await expect(runClose(undefined)).rejects.toMatchObject({
+        details: { reason: 'cleanup-unconfirmed' },
+      });
+      f.store.update(ref, { appBundleId: 'org.example.other' });
+      await expect(runClose('org.example.other')).rejects.toMatchObject({
+        details: { reason: 'cleanup-unconfirmed' },
+      });
+      f.store.update(ref, { appBundleId: 'org.example.app' });
+      expect(f.closeApplication).not.toHaveBeenCalled();
+      expect(child.exitCode).toBeNull();
+      f.closeApplication.mockImplementationOnce(async () => {
+        child.stdin.end();
+        await exited;
+      });
+      expect(await runClose('org.example.app')).toMatchObject({ ok: true });
+      expect(child.exitCode).toBe(0);
+      expect(inspectDeviceClaims({}, f.host.env)).toHaveLength(0);
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      await exited;
+    }
+  },
+);
+
+test.each(['prior-unidentified-event', 'binding-disposal-failure'] as const)(
+  'confirmed delivery cannot erase %s',
+  async (scenario) => {
+    const f = createFixture(setup);
+    const ref = f.publish(true);
+    f.store.update(ref, { appBundleId: 'org.example.app' });
+    expect((await f.record('start', f.workspace)).ok).toBe(true);
+    const original = inspectDeviceClaims({}, f.host.env)[0]!.claim!;
+    const base = f.gateway;
+    const originalFacts = await base.inspectFacts(f.device);
+    const facts = {
+      ...originalFacts,
+      operations: { ...originalFacts.operations, triggerAppEvent: { available: true as const } },
+    };
+    let confirmed = false;
+    f.setGateway({
+      ...base,
+      inspectFacts: async () => facts,
+      bind: async (input) => {
+        const binding = await base.bind(input);
+        return {
+          ...binding,
+          facts,
+          operations: {
+            ...binding.operations,
+            triggerAppEvent: async () =>
+              confirmed
+                ? { kind: 'session-app-confirmed' as const, appBundleId: 'org.example.app' }
+                : undefined,
+          },
+        };
+      },
+    });
+    const host = {
+      ...f.host,
+      env: { ...f.host.env, AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE: 'test://event/{event}' },
+    };
+    const dispatch = async (failDisposal: boolean) => {
+      f.setBindingDisposal(async () => {
+        if (failDisposal) throw new Error('binding did not dispose');
+      });
+      const request = await f.scopeFor('trigger-app-event', 'ready', f.workspace);
+      expect(
+        await request.runLocked(
+          async () =>
+            await handleAppEventCommand({
+              host,
+              req: request.req,
+              sessionName: request.sessionName,
+              logPath: request.requestLogPath,
+              sessionStore: f.store,
+              inspectFacts: request.inspectFacts,
+              bindDevice: request.bindDevice,
+              platformServices: request.platformServices,
+            }),
+        ),
+      ).toMatchObject({ ok: true });
+      if (failDisposal)
+        await expect(Promise.resolve(request[Symbol.asyncDispose]())).rejects.toThrow(
+          'binding did not dispose',
+        );
+      else await request[Symbol.asyncDispose]();
+    };
+    if (scenario === 'prior-unidentified-event') await dispatch(false);
+    confirmed = true;
+    await dispatch(scenario === 'binding-disposal-failure');
+    f.setBindingDisposal(async () => {});
+    expect(inspectDeviceClaims({}, f.host.env)[0]?.claim).toMatchObject({
+      ownerToken: original.ownerToken,
+      recordingUnresolvedAppEvent: true,
+    });
+    expect(inspectDeviceClaims({}, f.host.env)[0]?.claim?.recordingAppEventOwner).toBeUndefined();
+    expect((await f.record('stop', f.workspace)).ok).toBe(true);
+    const close = await f.scopeFor('close', 'org.example.app', f.workspace);
+    try {
+      await expect(
+        close.runLocked(
+          async () =>
+            await handleSessionCloseCommands({
+              host: f.host,
+              req: close.req,
+              sessionName: close.sessionName,
+              logPath: close.requestLogPath,
+              sessionStore: f.store,
+              leaseRegistry: f.registry,
+              inspectFacts: close.inspectFacts,
+              bindDevice: close.bindDevice,
+              platformServices: close.platformServices,
+              platformResourceCleanup: platformResourceCleanupFixture(),
+            }),
+        ),
+      ).rejects.toMatchObject({ details: { reason: 'cleanup-unconfirmed' } });
+    } finally {
+      await close[Symbol.asyncDispose]();
+    }
+    expect(f.closeApplication).not.toHaveBeenCalled();
+    expect(inspectDeviceClaims({}, f.host.env)[0]?.claim?.ownerToken).toBe(original.ownerToken);
+  },
+);
+
+test.each(['claim-token', 'fence-generation', 'event-attempt'] as const)(
+  'event disposal cannot settle a replaced %s',
+  async (changed) => {
+    const f = createFixture(setup);
+    const ref = f.publish(true);
+    f.store.update(ref, { appBundleId: 'org.example.app' });
+    expect((await f.record('start', f.workspace)).ok).toBe(true);
+    const entry = inspectDeviceClaims({}, f.host.env)[0]!;
+    const claimPath = path.join(f.claimsDir, entry.fileName);
+    const base = f.gateway;
+    const originalFacts = await base.inspectFacts(f.device);
+    const facts = {
+      ...originalFacts,
+      operations: { ...originalFacts.operations, triggerAppEvent: { available: true as const } },
+    };
+    let replacement: unknown;
+    f.setBindingDisposal(async () => {
+      const claim = JSON.parse(fs.readFileSync(claimPath, 'utf8'));
+      replacement =
+        changed === 'claim-token'
+          ? { ...claim, ownerToken: 'replacement-token' }
+          : changed === 'fence-generation'
+            ? {
+                ...claim,
+                recordingFence: {
+                  ...claim.recordingFence,
+                  generation: claim.recordingFence.generation + 1,
+                },
+              }
+            : { ...claim, recordingAppEventAttempt: 'replacement-attempt' };
+      fs.writeFileSync(claimPath, JSON.stringify(replacement));
+    });
+    f.setGateway({
+      ...base,
+      inspectFacts: async () => facts,
+      bind: async (input) => {
+        const binding = await base.bind(input);
+        return {
+          ...binding,
+          facts,
+          operations: {
+            ...binding.operations,
+            triggerAppEvent: async () => ({
+              kind: 'session-app-confirmed' as const,
+              appBundleId: 'org.example.app',
+            }),
+          },
+        };
+      },
+    });
+    const host = {
+      ...f.host,
+      env: { ...f.host.env, AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE: 'test://event/{event}' },
+    };
+    const request = await f.scopeFor('trigger-app-event', 'ready', f.workspace);
+    expect(
+      await request.runLocked(
+        async () =>
+          await handleAppEventCommand({
+            host,
+            req: request.req,
+            sessionName: request.sessionName,
+            logPath: request.requestLogPath,
+            sessionStore: f.store,
+            inspectFacts: request.inspectFacts,
+            bindDevice: request.bindDevice,
+            platformServices: request.platformServices,
+          }),
+      ),
+    ).toMatchObject({ ok: true });
+    await expect(Promise.resolve(request[Symbol.asyncDispose]())).rejects.toMatchObject({
+      code: 'DEVICE_IN_USE',
+    });
+    expect(JSON.parse(fs.readFileSync(claimPath, 'utf8'))).toEqual(replacement);
+  },
+);
+
 test('an app event refuses a replacement claim after binding and before dispatch', async () => {
   const f = createFixture(setup);
   const ref = f.publish(true);

@@ -1,4 +1,4 @@
-import type { Interactor, RunnerContext } from './interactor-types.ts';
+import type { AppEventDispatchOutcome, Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
@@ -15,13 +15,11 @@ export type AppEventInput = Readonly<{
   execution?: SnapshotRuntimeExecution;
 }>;
 
-/**
- * Delivery returns nothing. The retired leaf discarded whatever the interactor answered and
- * reported only the event name and URL it sent, so a result type here would be a surface the
- * command never had.
- */
+/** Delivery may identify the session application when the platform confirms the target. */
+export type { AppEventDispatchOutcome } from './interactor-types.ts';
+
 export type AppEventRuntimeOperations = Readonly<{
-  triggerAppEvent(input: AppEventInput): Promise<void>;
+  triggerAppEvent(input: AppEventInput): Promise<AppEventDispatchOutcome | void>;
 }>;
 
 export type AppEventRuntimeOperationFacts = Readonly<{
@@ -51,7 +49,9 @@ export function bindAppEvent(
         appBundleId: input.options?.appBundleId,
         signal,
       });
-      await interactor.open(input.eventUrl, { appBundleId: input.options?.appBundleId });
+      const options = { appBundleId: input.options?.appBundleId };
+      if (interactor.openAppEvent) return await interactor.openAppEvent(input.eventUrl, options);
+      await interactor.open(input.eventUrl, options);
     },
   });
 }

@@ -14,7 +14,8 @@ import {
 import { recordSessionAction } from '../../core/session-action-recorder.ts';
 import { resolveBoundAppEventRuntime } from '../app-event-runtime.ts';
 import { resolveBoundKeyboardRuntime } from '../keyboard-runtime.ts';
-import { retainSessionOwnerForRecording } from '../../resources/device/recording-session-owner.ts';
+import { beginSessionAppEvent } from '../../resources/device/recording-session-owner.ts';
+import type { AppEventDispatchOutcome } from '@agent-device/contracts/app-event-runtime';
 import { resolveRefFrameEffect } from '../../core/daemon-command-registry.ts';
 import { expireRefFrame } from '../../core/ref-frame.ts';
 import type {
@@ -146,6 +147,7 @@ type SessionRouteRuntimeResolver = (
     platformServices: DaemonPlatformServices;
     bindDevice?: BindDeviceRuntime;
     beforeDispatch?: () => Promise<void>;
+    afterDispatch?: (outcome: AppEventDispatchOutcome | void) => Promise<void>;
   }>,
 ) => Promise<
   | Readonly<{ ok: false; response: DaemonResponse }>
@@ -173,6 +175,7 @@ async function runBoundSessionRoute(
        */
       resolveRuntime: SessionRouteRuntimeResolver;
       beforeDispatch?: (ref: SessionRef) => Promise<void>;
+      afterDispatch?: (ref: SessionRef, outcome: AppEventDispatchOutcome | void) => Promise<void>;
       updateSession?: Parameters<typeof runSessionOrSelectorDispatch>[0]['updateSession'];
     }>,
 ): Promise<DaemonResponse> {
@@ -189,6 +192,7 @@ async function runBoundSessionRoute(
     ...(params.updateSession ? { updateSession: params.updateSession } : {}),
     prepare: async (device, ref) => {
       const beforeDispatch = params.beforeDispatch;
+      const afterDispatch = params.afterDispatch;
       const bound = await params.resolveRuntime({
         host: params.host,
         device,
@@ -198,6 +202,9 @@ async function runBoundSessionRoute(
         bindDevice,
         platformServices,
         ...(ref && beforeDispatch ? { beforeDispatch: () => beforeDispatch(ref) } : {}),
+        ...(ref && afterDispatch
+          ? { afterDispatch: (outcome) => afterDispatch(ref, outcome) }
+          : {}),
       });
       if (!bound.ok) return { ok: false, response: bound.response };
       const session = ref ? sessionStore.requireCurrent(ref) : undefined;
@@ -228,12 +235,20 @@ export async function handleKeyboardCommand(
 export async function handleAppEventCommand(
   params: SessionRouteHandlerParams,
 ): Promise<DaemonResponse> {
+  let settleEvent: ((outcome: AppEventDispatchOutcome) => Promise<void>) | undefined;
   return await runBoundSessionRoute({
     ...params,
     command: PUBLIC_COMMANDS.triggerAppEvent,
     resolveRuntime: (runtimeParams) => resolveBoundAppEventRuntime(runtimeParams),
-    beforeDispatch: async (ref) =>
-      await retainSessionOwnerForRecording(params.sessionStore, ref, 'app-event'),
+    beforeDispatch: async (ref) => {
+      settleEvent = await beginSessionAppEvent(params.sessionStore, ref);
+    },
+    afterDispatch: async (_ref, outcome) => {
+      if (outcome && settleEvent) {
+        const settle = settleEvent;
+        params.req.internal?.afterAppEventBindingDisposal?.(async () => await settle(outcome));
+      }
+    },
     updateSession: async (ref, result) => {
       const eventUrl = typeof result?.eventUrl === 'string' ? result.eventUrl : undefined;
       if (!eventUrl) return;

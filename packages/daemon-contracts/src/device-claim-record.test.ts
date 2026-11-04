@@ -121,6 +121,8 @@ test('close intent and an unconfirmed app event survive decoding without guessin
     recordingCloseIntent: intent,
     recordingSessionOwner: { pid: 4242, startTime: 'start' },
     recordingUnresolvedAppEvent: true,
+    recordingAppEventAttempt: 'attempt',
+    recordingAppEventOwner: { kind: 'session-app-confirmed', appBundleId: 'org.example.app' },
   };
   expect(decodeStoredDeviceClaim(currentClaim(pending))).toMatchObject(pending);
   expect(
@@ -142,4 +144,20 @@ test('close intent and an unconfirmed app event survive decoding without guessin
   expect(
     decodeStoredDeviceClaim(currentClaim({ ...pending, recordingSessionOwner: undefined })),
   ).toBeNull();
+  expect(
+    decodeStoredDeviceClaim(currentClaim({ ...pending, recordingUnresolvedAppEvent: undefined })),
+  ).toBeNull();
+  expect(
+    decodeStoredDeviceClaim(
+      currentClaim({
+        ...pending,
+        recordingAppEventOwner: { kind: 'session-app-confirmed', appBundleId: '' },
+      }),
+    ),
+  ).toBeNull();
+  expect(
+    decodeStoredDeviceClaim(
+      currentClaim({ recordingAppEventOwner: pending.recordingAppEventOwner }),
+    ),
+  ).toMatchObject({ recordingAppEventOwner: pending.recordingAppEventOwner });
 });

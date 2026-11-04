@@ -54,6 +54,14 @@ export function sameRecordingCloseIntent(
   );
 }
 
+export function sameRecordingAppEventOwner(
+  left: DeviceClaim['recordingAppEventOwner'],
+  right: DeviceClaim['recordingAppEventOwner'],
+): boolean {
+  if (!left || !right) return left === right;
+  return left.kind === right.kind && left.appBundleId === right.appBundleId;
+}
+
 /**
  * A claim owned by one process: the session or the sessionless command that took it. Its principal
  * is `ownerPid`/`ownerStartTime`/`ownerToken`, which is what every clearing surface matches on.
@@ -91,6 +99,10 @@ export type DeviceClaim = {
   recordingSessionOwner?: { pid: number; startTime: string | null };
   /** An app event may have launched an owner the platform did not identify. */
   recordingUnresolvedAppEvent?: true;
+  /** The current event dispatch, fenced separately from any earlier unresolved event. */
+  recordingAppEventAttempt?: string;
+  /** The platform confirmed this event reached the session application. */
+  recordingAppEventOwner?: { kind: 'session-app-confirmed'; appBundleId: string };
   /** Untrusted legacy phase metadata. It never authorizes cleanup or claim release. */
   recordingCleanupProof?:
     | 'stop-prepared'
@@ -153,6 +165,8 @@ function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
     recordingCloseIntent,
     recordingSessionOwner,
     recordingUnresolvedAppEvent,
+    recordingAppEventAttempt,
+    recordingAppEventOwner,
     recordingCleanupProof,
     recordingRuntimeOwner,
     recordingStartPending,
@@ -209,6 +223,20 @@ function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
   )
     return null;
   if (
+    recordingAppEventAttempt !== undefined &&
+    (!recordingUnresolvedAppEvent || !isNonEmptyString(recordingAppEventAttempt))
+  )
+    return null;
+  if (
+    recordingAppEventOwner !== undefined &&
+    (!recordingKind ||
+      !isRecord(recordingAppEventOwner) ||
+      recordingAppEventOwner.kind !== 'session-app-confirmed' ||
+      !isNonEmptyString(recordingAppEventOwner.appBundleId) ||
+      (recordingFence !== undefined && recordingSessionOwner === undefined))
+  )
+    return null;
+  if (
     recordingCleanupProof !== undefined &&
     (!recordingCleanupPending ||
       recordingRuntimeOwner === undefined ||
@@ -246,6 +274,15 @@ function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
     ...(recordingClosePending ? { recordingClosePending: true as const } : {}),
     ...(recordingCloseIntent === undefined ? {} : { recordingCloseIntent }),
     ...(recordingUnresolvedAppEvent ? { recordingUnresolvedAppEvent: true as const } : {}),
+    ...(recordingAppEventAttempt === undefined ? {} : { recordingAppEventAttempt }),
+    ...(recordingAppEventOwner === undefined
+      ? {}
+      : {
+          recordingAppEventOwner: {
+            kind: 'session-app-confirmed' as const,
+            appBundleId: (recordingAppEventOwner as { appBundleId: string }).appBundleId,
+          },
+        }),
     ...(recordingSessionOwner === undefined
       ? {}
       : {

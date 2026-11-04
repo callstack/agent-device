@@ -52,7 +52,10 @@ export {
   retainRecordingClaimForSession,
   holdRecordingClaimForClose,
   finishRecordingClaimClose,
+  beginRecordingClaimAppEvent,
+  settleRecordingClaimAppEvent,
 } from './device-claim-close.ts';
+export type { RecordingAppEventAttempt } from './device-claim-close.ts';
 
 export { canonicalLocalDeviceKey, deviceClaimIdentity } from './device-claim-paths.ts';
 export {

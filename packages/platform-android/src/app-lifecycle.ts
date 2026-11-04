@@ -189,6 +189,24 @@ export async function openAndroidApp(
   return launchedAndroidPackage(await startAndroidApp(device, app, optionsOrActivity));
 }
 
+/** Confirm only a package-scoped event whose successful launch reported that exact activity owner. */
+export async function openAndroidAppEvent(
+  device: DeviceInfo,
+  eventUrl: string,
+  appBundleId: string | undefined,
+): Promise<{ kind: 'session-app-confirmed'; appBundleId: string } | void> {
+  const result = await startAndroidApp(device, eventUrl, { appBundleId });
+  if (
+    appBundleId &&
+    appBundleId === appBundleId.trim() &&
+    appBundleId !== 'android' &&
+    isDeepLinkTarget(eventUrl.trim()) &&
+    /^Status: ok\r?$/m.test(result.stdout) &&
+    launchedAndroidPackage(result) === appBundleId
+  )
+    return { kind: 'session-app-confirmed', appBundleId };
+}
+
 async function startAndroidApp(
   device: DeviceInfo,
   app: string,

@@ -97,6 +97,7 @@ export function createRequestRecordingCloseCleanup(params: {
         purpose: 'close',
         releaseWhenComplete: release,
         sessionOwner: held.sessionOwner,
+        appEventOwner: held.appEventOwner,
         closeIntent: held.intent,
         retry,
       });
@@ -107,6 +108,7 @@ export function createRequestRecordingCloseCleanup(params: {
           held.fence,
           held.owner,
           held.sessionOwner,
+          held.appEventOwner,
           held.intent,
           params.env,
           release,

@@ -85,6 +85,7 @@ export {
   closeAndroidApp,
   isAmStartError,
   openAndroidApp,
+  openAndroidAppEvent,
   openAndroidDevice,
   parseAndroidLaunchComponent,
   type OpenAndroidAppOptions,

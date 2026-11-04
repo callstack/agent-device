@@ -8,6 +8,7 @@ import { createAndroidInteractor } from './android.ts';
 import {
   fillAndroid,
   openAndroidApp,
+  openAndroidAppEvent,
   scrollAndroid,
   snapshotAndroid,
 } from '@agent-device/platform-android/mechanics';
@@ -21,6 +22,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
     scrollAndroid: vi.fn(),
     fillAndroid: vi.fn(),
     openAndroidApp: vi.fn(),
+    openAndroidAppEvent: vi.fn(),
     typeAndroid: vi.fn(),
   };
 });
@@ -29,6 +31,7 @@ const snapshotAndroidMock = vi.mocked(snapshotAndroid);
 const fillAndroidMock = vi.mocked(fillAndroid);
 const scrollAndroidMock = vi.mocked(scrollAndroid);
 const openAndroidAppMock = vi.mocked(openAndroidApp);
+const openAndroidAppEventMock = vi.mocked(openAndroidAppEvent);
 const device: DeviceInfo = {
   platform: 'android',
   id: 'emulator-5554',
@@ -152,5 +155,19 @@ test('a relaunching open asks the Android launch to terminate the running app', 
     device,
     'settings',
     expect.objectContaining({ terminateRunningApp: true }),
+  );
+});
+
+test('an app event forwards only the Android owner’s delivery evidence', async () => {
+  const proof = { kind: 'session-app-confirmed', appBundleId: 'com.example.app' } as const;
+  openAndroidAppEventMock.mockResolvedValue(proof);
+  const interactor = createAndroidInteractor(device);
+  expect(
+    await interactor.openAppEvent?.('example://event', { appBundleId: 'com.example.app' }),
+  ).toEqual(proof);
+  expect(openAndroidAppEventMock).toHaveBeenCalledWith(
+    device,
+    'example://event',
+    'com.example.app',
   );
 });
