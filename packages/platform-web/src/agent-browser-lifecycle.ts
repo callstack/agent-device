@@ -10,7 +10,10 @@ import {
 
 import { agentBrowserFleetOf } from './agent-browser-fleet.ts';
 import type { AgentBrowserToolStatus } from './agent-browser-tool.ts';
-import { MANAGED_WEB_BROWSER_PROCESS_PURPOSE } from './agent-browser-process-record.ts';
+import {
+  MANAGED_WEB_BROWSER_PROCESS_PURPOSE,
+  managedWebBrowserProcessRecordIsDead,
+} from './agent-browser-process-record.ts';
 import type { AgentBrowserProcessSummary } from './agent-browser-process-record.ts';
 export {
   agentBrowserChromeLaunchMarker,
@@ -75,6 +78,9 @@ export async function cleanupManagedAgentBrowserOrphans(
   if (!store) return emptyCleanupResult();
   const fleet = agentBrowserFleetOf(store);
   return await fleet.updateRecord(async () => {
+    if (fleet.sessions().length > 0 && (await managedWebBrowserProcessRecordIsDead(store))) {
+      fleet.evictLaunched();
+    }
     const fleetSessions = fleet.sessions().filter((value) => value.length > 0);
     if (fleetSessions.length > 0) {
       return skippedCleanupResult('open-web-session', { openWebSessionNames: fleetSessions });

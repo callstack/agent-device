@@ -23,6 +23,8 @@ export type AgentBrowserFleet = Readonly<{
   openSettled(session: string, launched: boolean): void;
   /** The browser of `session` was closed. */
   closed(session: string): void;
+  /** Every launched browser exited without a close: drop them. Launching ones stay. */
+  evictLaunched(): void;
   /** The sessions whose browser is launching or up, whether or not the daemon published them. */
   sessions(): readonly string[];
 }>;
@@ -54,6 +56,9 @@ function createAgentBrowserFleet(): AgentBrowserFleet {
     },
     closed(session) {
       launched.delete(session);
+    },
+    evictLaunched() {
+      launched.clear();
     },
     sessions: () => [...new Set([...opening.keys(), ...launched])],
   });

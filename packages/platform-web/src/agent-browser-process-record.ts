@@ -122,12 +122,30 @@ export async function recordManagedAgentBrowserProcesses(
 export async function managedWebBrowserProcessRecordIsLive(
   store: OwnedProcessRecordStore,
 ): Promise<boolean> {
+  const alive = await readRecordedProcessLiveness(store);
+  return alive.length > 0 && alive.every(Boolean);
+}
+
+/**
+ * Whether the daemon-scoped record names processes and none of them is alive under the identity
+ * the record carries. An empty, undecodable, or unanswered record is unknown evidence, not dead.
+ */
+export async function managedWebBrowserProcessRecordIsDead(
+  store: OwnedProcessRecordStore,
+): Promise<boolean> {
+  const alive = await readRecordedProcessLiveness(store);
+  return alive.length > 0 && !alive.some(Boolean);
+}
+
+async function readRecordedProcessLiveness(
+  store: OwnedProcessRecordStore,
+): Promise<readonly boolean[]> {
   const records = readDaemonManagedWebBrowserRecords(store);
-  if (records.length === 0) return false;
+  if (records.length === 0) return [];
   const observations = await readHostProcessIdentityObservationsAsync(
     records.map((record) => record.pid),
   );
-  return records.every((record) => {
+  return records.map((record) => {
     const observation = observations.get(record.pid);
     return (
       observation !== undefined &&
