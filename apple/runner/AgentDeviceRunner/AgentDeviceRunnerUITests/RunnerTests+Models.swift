@@ -517,6 +517,8 @@ struct DataPayload: Codable {
   var keyboardAvoided: Bool?
   var keyboardMinY: Double?
   var maestroNonHittableCoordinateFallbackUsed: Bool?
+  /// The one-pointer motion schedule a planned gesture ran.
+  var executionProfile: String?
   var textEntryRoute: String?
   /// A replacement whose field changed but whose value cannot echo the typed text: "unconfirmed",
   /// with the TS `FillUnconfirmedVerification` evidence in `requested`, `before`, `after`, `target`.

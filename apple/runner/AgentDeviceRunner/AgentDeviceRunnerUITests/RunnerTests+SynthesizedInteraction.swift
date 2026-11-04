@@ -769,9 +769,8 @@ extension RunnerTests {
       return .screenEdgeTouch
     }
 #endif
-    return plan.topology == "single" && plan.executionProfile == "endpoint-hold"
-      ? .fastSwipe
-      : .sampled
+    guard plan.topology == "single" else { return .sampled(schedule: nil) }
+    return plan.executionProfile == "endpoint-hold" ? .fastSwipe : .sampled(schedule: plan.executionProfile)
   }
 
 #if os(iOS)

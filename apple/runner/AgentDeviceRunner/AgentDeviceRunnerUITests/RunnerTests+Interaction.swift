@@ -12,13 +12,30 @@ private struct RunnerUnsupportedOperationError: LocalizedError {
 }
 
 extension RunnerTests {
+  /// How a planned gesture reaches the device, with the one-pointer motion schedule that route runs.
   enum PlannedGestureExecution: Equatable {
     case fastSwipe
-    case sampled
+    /// `schedule` is the plan's profile for one pointer, and nil for several contacts.
+    case sampled(schedule: String?)
 #if os(iOS) && targetEnvironment(simulator)
-    /// One HID touch with the digitizer edge mask, which only a simulator can dispatch.
+    /// One HID touch marked as a screen-edge swipe, which only a simulator can dispatch.
     case screenEdgeTouch
 #endif
+
+    /// The schedule the response reports. Mirrors `GestureExecutedProfile` in
+    /// packages/contracts/src/gesture-plan-types.ts.
+    var schedule: String? {
+      switch self {
+      case .fastSwipe:
+        return "endpoint-hold"
+      case .sampled(let schedule):
+        return schedule
+#if os(iOS) && targetEnvironment(simulator)
+      case .screenEdgeTouch:
+        return "edge-ease-in"
+#endif
+      }
+    }
   }
 
   enum SynthesizedDragProfile: Equatable {

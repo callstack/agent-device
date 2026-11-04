@@ -1,6 +1,7 @@
-import type {
-  GestureContactCount,
-  GestureIntent,
+import {
+  isGestureExecutedProfile,
+  type GestureContactCount,
+  type GestureIntent,
 } from '@agent-device/contracts/gesture-plan-types';
 import type { Point } from '@agent-device/kernel/snapshot';
 
@@ -15,13 +16,21 @@ type GestureResponseResult = {
   message?: string;
 };
 
-/** The sole response construction site shared by coordinate and target-authored gestures. */
+/**
+ * The sole response construction site shared by coordinate and target-authored gestures. The
+ * schedule the backend reports it ran wins; the caller's `executionProfile` names the planned
+ * schedule only for a backend that reports none.
+ */
 export function gestureResponseData(
   result: GestureResponseResult,
   extra: Record<string, unknown> = {},
 ): Record<string, unknown> {
-  const executionProfile =
-    typeof extra.executionProfile === 'string' ? extra.executionProfile : undefined;
+  const reported = result.backendResult?.executionProfile;
+  const executionProfile = isGestureExecutedProfile(reported)
+    ? reported
+    : typeof extra.executionProfile === 'string'
+      ? extra.executionProfile
+      : undefined;
   return {
     kind: result.kind,
     durationMs: result.durationMs,
@@ -33,6 +42,7 @@ export function gestureResponseData(
     ...extra,
     ...(executionProfile
       ? {
+          executionProfile,
           timing: {
             executionProfile,
             gestureDurationMs: result.durationMs,

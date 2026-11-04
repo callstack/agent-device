@@ -152,6 +152,13 @@ extension RunnerTests {
     )
   }
 
+  /// A successful planned gesture reports the motion schedule its route ran.
+  static func reportingSchedule(_ schedule: String?, in response: Response) -> Response {
+    guard response.ok, var data = response.data, let schedule else { return response }
+    data.executionProfile = schedule
+    return Response(ok: true, data: data)
+  }
+
   func plannedGestureResponse(
     plan: RunnerGesturePlan,
     timing: (gestureStartUptimeMs: Double, gestureEndUptimeMs: Double),

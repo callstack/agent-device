@@ -550,7 +550,7 @@ extension RunnerTests {
     )
 
     XCTAssertNil(plannedGestureValidationError(plan))
-    XCTAssertEqual(plannedGestureExecution(for: plan), .sampled)
+    XCTAssertEqual(plannedGestureExecution(for: plan), .sampled(schedule: nil))
   }
 
   func testPlannedMultiTouchGestureRejectsMismatchedOffsets() throws {
@@ -571,7 +571,7 @@ extension RunnerTests {
     for count in [2, 5] {
       let plan = try decodedMultiContactPlan(intent: "tap", starts: tapStarts(count))
       XCTAssertNil(plannedGestureValidationError(plan), "\(count) contacts")
-      XCTAssertEqual(plannedGestureExecution(for: plan), .sampled)
+      XCTAssertEqual(plannedGestureExecution(for: plan), .sampled(schedule: nil))
     }
   }
 
@@ -646,7 +646,7 @@ extension RunnerTests {
       )
     )
 
-    XCTAssertEqual(plannedGestureExecution(for: plan), .sampled)
+    XCTAssertEqual(plannedGestureExecution(for: plan), .sampled(schedule: "timed-pan"))
   }
 
   func testSinglePointerEndpointHoldUsesFastSwipeExecution() throws {
@@ -682,10 +682,21 @@ extension RunnerTests {
     XCTAssertNil(plannedGestureValidationError(edge))
 #if os(iOS) && targetEnvironment(simulator)
     XCTAssertEqual(plannedGestureExecution(for: edge), .screenEdgeTouch)
+    XCTAssertEqual(plannedGestureExecution(for: edge).schedule, "edge-ease-in")
 #else
     XCTAssertEqual(plannedGestureExecution(for: edge), .fastSwipe)
 #endif
     XCTAssertEqual(plannedGestureExecution(for: inPage), .fastSwipe)
+    XCTAssertEqual(plannedGestureExecution(for: inPage).schedule, "endpoint-hold")
+  }
+
+  func testOnlyASuccessfulPlannedGestureReportsItsSchedule() {
+    let performed = Response(ok: true, data: DataPayload(message: "fling"))
+    let refused = Response(ok: false, error: ErrorPayload(code: "UNSUPPORTED_OPERATION", message: "refused"))
+
+    XCTAssertEqual(Self.reportingSchedule("edge-ease-in", in: performed).data?.executionProfile, "edge-ease-in")
+    XCTAssertNil(Self.reportingSchedule(nil, in: performed).data?.executionProfile)
+    XCTAssertNil(Self.reportingSchedule("edge-ease-in", in: refused).data)
   }
 
   func testPlannedGestureRejectsAnUnknownContactOrigin() throws {

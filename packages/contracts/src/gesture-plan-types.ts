@@ -34,6 +34,17 @@ export type DragGestureInput = {
 /** Selects one-pointer release timing without changing semantic gesture intent. */
 export type GestureExecutionProfile = 'endpoint-hold' | 'timed-pan';
 
+/**
+ * The one-pointer motion schedule a backend ran, as gesture results report it. Beyond the plan
+ * profiles, `edge-ease-in` is the iOS simulator screen-edge contact, which a plan cannot request.
+ */
+const GESTURE_EXECUTED_PROFILES = ['endpoint-hold', 'timed-pan', 'edge-ease-in'] as const;
+export type GestureExecutedProfile = (typeof GESTURE_EXECUTED_PROFILES)[number];
+
+export function isGestureExecutedProfile(value: unknown): value is GestureExecutedProfile {
+  return (GESTURE_EXECUTED_PROFILES as readonly unknown[]).includes(value);
+}
+
 export type GestureSemanticInput =
   | { intent: 'fling'; from: Point; to: Point }
   | { intent: 'fling'; preset: SwipePreset }
