@@ -167,7 +167,8 @@ static NSString * _Nullable RunnerResolveTouchscreenSender(
                                     (unsigned long)displayID, (unsigned long)matches];
 }
 
-static void RunnerDispatchFrame(
+// Returns NO when the event could not be created, so nothing was dispatched.
+static BOOL RunnerDispatchFrame(
   const RunnerHIDFunctions *functions,
   CFTypeRef client,
   uint64_t sender,
@@ -185,7 +186,7 @@ static void RunnerDispatchFrame(
   if (hand == NULL || finger == NULL) {
     if (hand != NULL) CFRelease(hand);
     if (finger != NULL) CFRelease(finger);
-    return;
+    return NO;
   }
   functions->setIntegerValue(hand, RunnerDigitizerFieldIsDisplayIntegrated, 1);
   functions->setFloatValue(finger, RunnerDigitizerFieldMajorRadius, RunnerFingerRadius);
@@ -195,6 +196,7 @@ static void RunnerDispatchFrame(
   functions->dispatchEvent(client, hand);
   CFRelease(finger);
   CFRelease(hand);
+  return YES;
 }
 
 static CGPoint RunnerSamplePoint(NSDictionary<NSString *, NSNumber *> *sample, CGSize screenSize) {
@@ -257,22 +259,33 @@ static void RunnerWaitUntil(uint64_t startTicks, double offsetMs) {
 
   double durationMs = samples.lastObject[@"offsetMs"].doubleValue;
   uint64_t startTicks = mach_absolute_time();
-  RunnerDispatchFrame(
-    &functions, client, sender, RunnerPointAtOffset(samples, 0, screenSize),
-    RunnerDigitizerRange | RunnerDigitizerTouch | RunnerDigitizerIdentity | RunnerDigitizerEdgeMask, true);
-  for (double offsetMs = RunnerFrameIntervalMs; offsetMs < durationMs + RunnerFrameIntervalMs;
-       offsetMs += RunnerFrameIntervalMs) {
+  if (!RunnerDispatchFrame(
+        &functions, client, sender, RunnerPointAtOffset(samples, 0, screenSize),
+        RunnerDigitizerRange | RunnerDigitizerTouch | RunnerDigitizerIdentity | RunnerDigitizerEdgeMask, true)) {
+    CFRelease(client);
+    return @"simulator HID dispatch could not create the touch-down event";
+  }
+  double liftOffsetMs = durationMs + RunnerFrameIntervalMs;
+  BOOL moved = YES;
+  for (double offsetMs = RunnerFrameIntervalMs; offsetMs < liftOffsetMs; offsetMs += RunnerFrameIntervalMs) {
     double frameOffset = MIN(offsetMs, durationMs);
     RunnerWaitUntil(startTicks, frameOffset);
-    RunnerDispatchFrame(
-      &functions, client, sender, RunnerPointAtOffset(samples, frameOffset, screenSize),
-      RunnerDigitizerPosition | RunnerDigitizerEdgeMask, true);
+    if (!RunnerDispatchFrame(
+          &functions, client, sender, RunnerPointAtOffset(samples, frameOffset, screenSize),
+          RunnerDigitizerPosition | RunnerDigitizerEdgeMask, true)) {
+      moved = NO;
+      liftOffsetMs = frameOffset;
+      break;
+    }
   }
-  RunnerWaitUntil(startTicks, durationMs + RunnerFrameIntervalMs);
-  RunnerDispatchFrame(
-    &functions, client, sender, RunnerPointAtOffset(samples, durationMs, screenSize),
+  // The contact is down, so it lifts even after a failed move.
+  RunnerWaitUntil(startTicks, liftOffsetMs);
+  BOOL lifted = RunnerDispatchFrame(
+    &functions, client, sender, RunnerPointAtOffset(samples, MIN(liftOffsetMs, durationMs), screenSize),
     RunnerDigitizerRange | RunnerDigitizerTouch | RunnerDigitizerIdentity, false);
   CFRelease(client);
+  if (!lifted) return @"simulator HID dispatch could not create the touch-up event";
+  if (!moved) return @"simulator HID dispatch could not create a touch-move event; the contact lifted early";
   return nil;
 }
 
