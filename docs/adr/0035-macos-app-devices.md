@@ -54,7 +54,8 @@ kinds; rules 8 to 11 describe web session devices.
    The web host is never bound: it stays an inventory entry and the parent for `devicesOverlap`. The
    lock plan and the bound device name the same device, so two sessions with different names run in
    parallel and two with one name conflict, in one daemon or in daemons that share a claims directory.
-9. A web session name is trimmed and must match `[A-Za-z0-9_-]`, non-empty, and short enough that its
+9. A web session name is trimmed, matches case-insensitively (the key is lower case, as for bundle
+   ids, because one socket file serves names that differ only by case on macOS), and must match `[A-Za-z0-9_-]`, non-empty, and short enough that its
    backend key fits agent-browser's socket path limit: at most 30 characters, and 17 under tenant
    isolation. Any other name is refused with `INVALID_ARGS`, `reason: 'web_session_name_invalid'`.
 10. The backend key is `p_<name>`, or `t_<first 12 hex of sha256(tenant id)>_<name>` under tenant

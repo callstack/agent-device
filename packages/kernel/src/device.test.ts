@@ -139,8 +139,13 @@ test('the longest name leaves a key that fits the socket path, and is shorter un
   );
 });
 
-test.each(['a', 'Run_One-1', '0'])('a web session name of %j is accepted', (name) => {
+test.each(['a', 'run_one-1', '0'])('a web session name of %j is accepted', (name) => {
   assert.equal(webDevice(name).id, `${browser.id}:session:p_${name}`);
+});
+
+test('web session names that differ only by case are one device', () => {
+  assert.equal(webDevice('Run_One-1').id, `${browser.id}:session:p_run_one-1`);
+  assert.equal(webDevice('Checkout').id, webDevice('checkout').id);
 });
 
 test.each([
