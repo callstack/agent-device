@@ -56,8 +56,8 @@ Tips:
 - Pair `find` with a scoped snapshot (`snapshot -s "<label>"`) for speed.
 - [Android] If the matched node is not hittable, agent-device clicks or focuses the nearest hittable ancestor.
 - `find ... focus` and `find ... type` aim at a text field. If the match is a field or sits inside one, that field is the target, even when it is not hittable or has other fields beside it. Otherwise the target is the one enabled on-screen field inside the match.
-  - Several fields inside the match refuse with `AMBIGUOUS_MATCH` and the field candidates.
-  - A disabled field refuses with `COMMAND_FAILED` and reason `target_disabled`.
+  - Several enabled on-screen fields inside the match refuse with `AMBIGUOUS_MATCH` and the field candidates.
+  - A disabled target refuses with `COMMAND_FAILED` and reason `target_disabled`. This includes a match whose only on-screen fields are disabled.
   - A match or field covered by another visible element refuses with `COMMAND_FAILED`.
   - Web text boxes are not recognized as text fields, so a web match keeps its own aim.
 - Use `fill` to find a field and replace its text in one step. To append to the text in the focused field, use `click` or `press`, then `type`.
