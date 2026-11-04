@@ -98,7 +98,12 @@ const NSUInteger kMaximumRequestsPerCapture = 64;
     if (!continuation) return nil;
     nativeLevels = MIN(depth, self.acceptedDepth);
     children = continuation[childrenKey];
-    if (![children isKindOfClass:NSArray.class] || children.count < MIN(childCount.unsignedIntegerValue, self.remainingNodes)) {
+    if (![children isKindOfClass:NSArray.class]) {
+      if (error) *error = [NSError errorWithDomain:SnapshotCaptureErrorDomain code:SnapshotCaptureErrorMalformedContinuation
+          userInfo:@{NSLocalizedDescriptionKey: @"malformed snapshot continuation"}];
+      return nil;
+    }
+    if (children.count < MIN(childCount.unsignedIntegerValue, self.remainingNodes)) {
       if (error) *error = [NSError errorWithDomain:SnapshotCaptureErrorDomain code:SnapshotCaptureErrorTreeChanged
           userInfo:@{NSLocalizedDescriptionKey: @"snapshot continuation children unavailable"}];
       return nil;

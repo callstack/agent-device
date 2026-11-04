@@ -97,6 +97,7 @@ static NSString *captureScenario;
       else frontier[@"UIAccessibilitySnapshotKeyChildrenCount"] = [captureScenario isEqual:@"depth-fractional-count"] ? @0.5 : [captureScenario isEqual:@"depth-nan-count"] ? @(NAN) : [captureScenario isEqual:@"depth-negative-count"] ? @(-1) : [NSNull null];
     }
     if ([captureScenario isEqual:@"depth-incomplete"] && level > 0) tree[@"UIAccessibilitySnapshotKeyChildren"] = @[];
+    if ([captureScenario isEqual:@"depth-malformed-continuation"] && level > 0) tree[@"UIAccessibilitySnapshotKeyChildren"] = @"not an array";
     if ([captureScenario isEqual:@"depth-owner-change"] && level > 0) primaryApplication = replacementApplication;
     return tree;
   }
@@ -200,9 +201,9 @@ int main(int argc, const char *argv[])
       expectedCaptures = [scenario isEqual:@"wide-continuation"] ? 2 : 1;
     } else if ([scenario hasPrefix:@"depth-"]) {
       expectedCaptures = [scenario isEqual:@"depth-bound"] ? 5 : [scenario isEqual:@"depth-nodes"] ? 2 : 3;
-      if ([@[@"depth-missing-element", @"depth-incomplete", @"depth-missing-count", @"depth-invalid-count", @"depth-continuation-count", @"depth-fractional-count", @"depth-nan-count", @"depth-negative-count"] containsObject:scenario]) {
+      if ([@[@"depth-missing-element", @"depth-incomplete", @"depth-malformed-continuation", @"depth-missing-count", @"depth-invalid-count", @"depth-continuation-count", @"depth-fractional-count", @"depth-nan-count", @"depth-negative-count"] containsObject:scenario]) {
         expectedCode = @"snapshot-tree-malformed";
-        if (![scenario isEqual:@"depth-incomplete"] && ![scenario isEqual:@"depth-continuation-count"]) expectedCaptures = 2;
+        if (![scenario isEqual:@"depth-incomplete"] && ![scenario isEqual:@"depth-malformed-continuation"] && ![scenario isEqual:@"depth-continuation-count"]) expectedCaptures = 2;
         // The continuation found fewer children than the first read counted: the tree changed.
         if ([scenario isEqual:@"depth-incomplete"]) expectedCode = @"snapshot-tree-changed";
       }

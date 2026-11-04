@@ -7,7 +7,8 @@ extern const NSUInteger kMaximumRequestLevels;
 /// Requests one acquisition may issue before it fails as continuation-budget-exhausted.
 extern const NSUInteger kMaximumRequestsPerCapture;
 
-/// The domain of every error the tree reader reports.
+/// The domain of the failures the tree reader raises itself. A failure of a native read keeps the
+/// native read's own domain.
 extern NSErrorDomain const SnapshotCaptureErrorDomain;
 
 /// Why the reader stopped. The runtime maps each one to its wire refusal code.
@@ -21,7 +22,7 @@ typedef NS_ERROR_ENUM(SnapshotCaptureErrorDomain, SnapshotCaptureError) {
   /// A continuation re-read returned fewer children than the first read reported: the tree changed
   /// between the two reads, as a scrolling list does when it recycles its cells.
   SnapshotCaptureErrorTreeChanged = 4,
-  /// The foreground process changed while a continuation was read.
+  /// The foreground process changed while the reader read the tree.
   SnapshotCaptureErrorForegroundOwnerChanged = 5,
   /// A node below the first level reported no child count, so its children cannot be bounded.
   SnapshotCaptureErrorBoundaryChildCountUnavailable = 6,
