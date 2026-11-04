@@ -69,6 +69,7 @@ test('devicectl records report a paired device CoreDevice cannot reach as not bo
     ...(tunnelState === undefined ? {} : { connectionProperties: { tunnelState } }),
   });
   assert.equal(mapDevicectlAppleDevice(record('unavailable'))?.booted, false);
+  assert.equal(mapDevicectlAppleDevice(record('Unavailable'))?.booted, false);
   // CoreDevice opens a tunnel on demand, so an idle device it can reach is still usable.
   assert.equal(mapDevicectlAppleDevice(record('disconnected'))?.booted, true);
   assert.equal(mapDevicectlAppleDevice(record('connected'))?.booted, true);

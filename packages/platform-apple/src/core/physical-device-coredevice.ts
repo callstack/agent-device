@@ -19,6 +19,7 @@ import {
 import {
   IOS_DEVICE_READY_COMMAND_TIMEOUT_BUFFER_MS,
   IOS_DEVICE_READY_TIMEOUT_MS,
+  isCoreDeviceUnreachable,
 } from './physical-device-constants.ts';
 
 const IOS_RUNNER_DEVICE_INFO_TIMEOUT_MS = 10_000;
@@ -72,7 +73,7 @@ export async function ensureCoreDeviceReady(
           hint: 'Device tunnel is still connecting. Keep the device unlocked and connected by cable until it is fully available in Xcode Devices, then retry.',
         });
       }
-      if (tunnelState === 'unavailable') {
+      if (isCoreDeviceUnreachable(tunnelState)) {
         throw new AppError('COMMAND_FAILED', 'iOS device is not ready for automation', {
           kind: 'not_ready',
           deviceId: device.id,
