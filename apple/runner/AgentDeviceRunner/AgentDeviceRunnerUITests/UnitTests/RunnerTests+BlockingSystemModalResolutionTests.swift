@@ -141,12 +141,12 @@ extension RunnerTests {
     ) else { return XCTFail("a recognized surface remains resolved without enabled buttons") }
     XCTAssertEqual(alert.source, .appAlert)
     XCTAssertEqual(alert.actions.count, 2)
-    let inspection = handleAlert(alert, action: "get", deadline: .distantFuture)
+    let inspection = try handleAlert(alert, action: "get", deadline: .distantFuture)
     XCTAssertTrue(inspection.ok)
     XCTAssertEqual(inspection.data?.message, "First confirmation")
     XCTAssertEqual(inspection.data?.items, ["Cancel", "OK"])
     for action in ["accept", "dismiss"] {
-      let response = handleAlert(alert, action: action, deadline: .distantFuture)
+      let response = try handleAlert(alert, action: action, deadline: .distantFuture)
       XCTAssertEqual(response.error?.code, RunnerWireErrorCode.alertButtonNotFound, action)
     }
   }
