@@ -307,13 +307,10 @@ test(
         ? { ...(node as object), enabled: false, hittable: false }
         : node,
     );
-    await withIosContractDaemon(
-      [runnerSnapshotEntry(tree), runnerTapEntry({})],
-      async (daemon) => {
-        const data = assertRpcOk(await daemon.callCommand('find', ['label', 'Address', 'focus']));
-        assert.deepEqual({ x: data.x, y: data.y }, { x: 200, y: 220 });
-      },
-    );
+    await withIosContractDaemon([runnerSnapshotEntry(tree), runnerTapEntry({})], async (daemon) => {
+      const data = assertRpcOk(await daemon.callCommand('find', ['label', 'Address', 'focus']));
+      assert.deepEqual({ x: data.x, y: data.y }, { x: 200, y: 220 });
+    });
   },
   PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
 );
