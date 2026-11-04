@@ -86,7 +86,7 @@ function firstSessionOpenLocks(sessionStore: SessionStore): Map<string, Promise<
 /**
  * The key first opens serialize on. An app device keys by its host, so a whole-host open and an
  * app device open never both pass the session check (ADR 0035). A web host has no whole-host open,
- * so a web session device keys by itself and web sessions of one host open in parallel.
+ * so a web session device keys by itself and web sessions of one host open in parallel (ADR 0037).
  */
 function firstSessionOpenLockKey(device: DeviceInfo): string {
   return device.hostApp?.hostDeviceId ?? device.id;

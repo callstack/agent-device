@@ -60,7 +60,7 @@ function assertInvocationAdmitted(
 
 /**
  * A device the policy may bind: one it names, or an app device of a host it names (ADR 0035). A web
- * session device follows the same rule. An app or web session device it names admits that one
+ * session device (ADR 0037) follows the same rule. An app or web session device it names admits that one
  * alone, never its host or the host's other apps and sessions.
  */
 function isDeviceIdAllowed(deviceIds: ReadonlySet<string>, id: string): boolean {

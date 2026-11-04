@@ -2,9 +2,10 @@
 
 ## Status
 
-Accepted (2026-10-21). Amended (2026-11-04): this ADR defines host-scoped devices, of which macOS app
-devices (native backend, ADR 0031) and web session devices are the two kinds. Rules 1 to 3 and 5 to 7
-cover macOS app devices, rule 4 covers both, and rules 8 to 11 cover web session devices.
+Accepted (2026-10-21). Amended (2026-11-04): scope change. Its per-device rules apply to any
+host-scoped device, of which macOS app devices (native backend, ADR 0031) and web session devices are
+the two kinds. Rules 1 to 3 and 5 to 7 cover macOS app devices and rule 4 covers both. Web session
+devices are defined in [ADR 0037](0037-web-session-devices.md).
 
 ## Rules at a glance
 
@@ -44,23 +45,6 @@ cover macOS app devices, rule 4 covers both, and rules 8 to 11 cover web session
    other session.
 7. Helper screenshots take a host-wide lock (`macos-screen-capture.lock` in the claims directory) for
    one capture: ScreenCaptureKit fails or hangs when two processes capture at once.
-8. A web session is a device: the web host (`agent-browser-chrome`) holds one web session device per
-   session name, with id `<web host id>:session:<backend key>`. Every local web command binds the
-   session device of its request; without `--session` the implicit session name (`default`) applies.
-   The web host is never bound: it stays an inventory entry and the parent for `devicesOverlap`. Two
-   sessions with different names run in parallel and two with one name conflict, in one daemon or in
-   daemons that share a claims directory.
-9. A web session name is trimmed, matches case-insensitively, and must match `[A-Za-z0-9_-]`, be
-   non-empty, and fit agent-browser's socket path limit: at most 30 characters, and 17 under tenant
-   isolation. Any other name is refused with `INVALID_ARGS`, `reason: 'web_session_name_invalid'`.
-10. The backend key is `p_<name>` with the name in lower case, or `t_<first 12 hex of sha256(tenant
-    id)>_<name>` under tenant isolation, so two tenants using one name hold two devices and two
-    browsers. The kernel derives it once from the tenant-relative public name and the tenant id,
-    never from the tenant-prefixed store name. Every other reader takes it from the device id and
-    passes it to agent-browser as `--session`.
-11. First opens serialize on the host for an app device and on the device itself otherwise, so web
-    session opens of one host run in parallel.
-
 ## Context
 
 Many agents run many apps on one Mac, and by default they share one daemon. The native backend acts
@@ -82,15 +66,6 @@ bundle id are one target. Two copies of one app need two bundle ids.
 selection. The advisory lock plan and the locked open select the same device, so an open never holds
 the Mac's lock for an app device. An open whose app does not resolve fails as it did before.
 
-**Web sessions are devices.** agent-browser isolates a browser per `--session`, so the session is
-the unit to lock, claim, and refuse on conflict. One host device serialized every web session.
-
-**One name rule, one key.** The name rule is the backend's own: agent-browser accepts only
-`[A-Za-z0-9_-]` and refuses a socket path over 103 bytes, which leaves 32 characters of key. Names
-match case-insensitively because names that differ only by case share one socket file on macOS, as
-bundle ids lowercase for the same reason. Under tenant isolation the key carries a fixed-width hash
-prefix: a tenant id may hold `.` and 128 characters, which the backend refuses.
-
 **Known limit.** UI that another process owns, such as a system permission prompt, is not part of the
 app device. Use a `desktop` session for it.
 
@@ -103,25 +78,7 @@ app device. Use a `desktop` session for it.
 - **A host-wide input lock around every action.** Native actions need neither focus nor the pointer.
   Only helper capture contends, on ScreenCaptureKit.
 - **A separate claims directory per app.** Two stores could not exclude each other under one lock.
-- **Readable `<tenant>/<name>` web ids with reserved prefixes.** The backend refuses `/`, `:`, and
-  `.`, and tenant ids can exceed the socket budget.
-- **One shared browser per tenant.** Two sessions of a tenant would share cookies and storage.
-- **The key as a `contracts` type, or derived in `platform-web`.** The key never crosses the wire,
-  and device selection would depend on a platform package.
-- **Host-level web commands that lock the host.** They serialize every web session and bind a device
-  that no session claim covers.
-- **Keying web first opens by the host (rule 11).** The web host has no whole-host open to separate
-  from, so it would serialize web opens for no exclusion.
-
-## Open gaps
-
-- Implicit sessions of different workspaces share the web name `default`, because the key derives
-  from the public name, not the workspace-scoped store key.
-- A web open is admitted under a lease of any other backend, because lease admission never compares
-  platform with lease backend.
-- The 32-character key limit assumes the 48-byte macOS temporary directory.
 
 ## Support boundary
 
-A daemon older than this ADR does not scan app device claims on a whole-Mac acquisition, and one
-older than the web amendment claims the web host itself instead of scanning web session claims. Run one version per claims directory, as ADR 0030 requires for process locks.
+A daemon older than this ADR does not scan app device claims on a whole-Mac acquisition. Run one version per claims directory, as ADR 0030 requires for process locks.
