@@ -1,4 +1,5 @@
 #import "RunnerSimulatorEdgeTouch.h"
+#import "RunnerSimulatorEdgeTouch+Internal.h"
 
 #if TARGET_OS_IOS && TARGET_OS_SIMULATOR
 
@@ -7,42 +8,13 @@
 #import <mach/mach_time.h>
 #import <objc/message.h>
 
-typedef CFTypeRef RunnerHIDEventRef;
-typedef RunnerHIDEventRef (*RunnerCreateDigitizerEvent)(
-  CFAllocatorRef, uint64_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, double, double,
-  double, double, double, Boolean, Boolean, uint32_t);
-typedef RunnerHIDEventRef (*RunnerCreateDigitizerFingerEvent)(
-  CFAllocatorRef, uint64_t, uint32_t, uint32_t, uint32_t, double, double, double, double, double,
-  Boolean, Boolean, uint32_t);
-typedef void (*RunnerAppendEvent)(RunnerHIDEventRef, RunnerHIDEventRef, uint32_t);
-typedef void (*RunnerSetIntegerValue)(RunnerHIDEventRef, uint32_t, long);
-typedef void (*RunnerSetFloatValue)(RunnerHIDEventRef, uint32_t, double);
-typedef void (*RunnerSetSenderID)(RunnerHIDEventRef, uint64_t);
-typedef CFTypeRef (*RunnerCreateEventSystemClient)(CFAllocatorRef);
-typedef CFArrayRef (*RunnerCopyServices)(CFTypeRef);
-typedef CFTypeRef (*RunnerCopyServiceProperty)(CFTypeRef, CFStringRef);
-typedef CFTypeRef (*RunnerGetServiceRegistryID)(CFTypeRef);
-typedef void (*RunnerDispatchEvent)(CFTypeRef, RunnerHIDEventRef);
-
-typedef struct {
-  RunnerCreateDigitizerEvent createDigitizerEvent;
-  RunnerCreateDigitizerFingerEvent createFingerEvent;
-  RunnerAppendEvent appendEvent;
-  RunnerSetIntegerValue setIntegerValue;
-  RunnerSetFloatValue setFloatValue;
-  RunnerSetSenderID setSenderID;
-  RunnerCreateEventSystemClient createClient;
-  RunnerCopyServices copyServices;
-  RunnerCopyServiceProperty copyServiceProperty;
-  RunnerGetServiceRegistryID getServiceRegistryID;
-  RunnerDispatchEvent dispatchEvent;
-} RunnerHIDFunctions;
 
 // IOHIDDigitizerEventMask bits (IOHIDFamily IOHIDEventTypes.h). A real edge swipe on a simulator
 // carries Range/Touch/Position plus SwipeLocked and the swipe direction on every frame.
 static const uint32_t RunnerDigitizerRange = 1u << 0;
 static const uint32_t RunnerDigitizerTouch = 1u << 1;
 static const uint32_t RunnerDigitizerPosition = 1u << 2;
+static const uint32_t RunnerDigitizerCancel = 1u << 7;
 static const uint32_t RunnerDigitizerSwipeLocked = 1u << 18;
 static const uint32_t RunnerDigitizerSwipeUp = 1u << 24;
 static const uint32_t RunnerDigitizerSwipeDown = 1u << 25;
@@ -76,6 +48,7 @@ static NSString * _Nullable RunnerResolveHIDFunctions(RunnerHIDFunctions *functi
     { (void **)&functions->setIntegerValue, "IOHIDEventSetIntegerValue" },
     { (void **)&functions->setFloatValue, "IOHIDEventSetFloatValue" },
     { (void **)&functions->setSenderID, "IOHIDEventSetSenderID" },
+    { (void **)&functions->setTimeStamp, "IOHIDEventSetTimeStamp" },
     { (void **)&functions->createClient, "IOHIDEventSystemClientCreate" },
     { (void **)&functions->copyServices, "IOHIDEventSystemClientCopyServices" },
     { (void **)&functions->copyServiceProperty, "IOHIDServiceClientCopyProperty" },
@@ -173,10 +146,9 @@ static NSString * _Nullable RunnerResolveTouchscreenSender(
                                     (unsigned long)displayID];
 }
 
-// Returns NO when the event could not be created, so nothing was dispatched.
-static BOOL RunnerDispatchFrame(
+// One retained hand event with its finger, or NULL when either could not be created.
+static RunnerHIDEventRef _Nullable RunnerCreateFrame(
   const RunnerHIDFunctions *functions,
-  CFTypeRef client,
   uint64_t sender,
   CGPoint normalized,
   uint32_t mask,
@@ -192,17 +164,20 @@ static BOOL RunnerDispatchFrame(
   if (hand == NULL || finger == NULL) {
     if (hand != NULL) CFRelease(hand);
     if (finger != NULL) CFRelease(finger);
-    return NO;
+    return NULL;
   }
   functions->setIntegerValue(hand, RunnerDigitizerFieldIsDisplayIntegrated, 1);
   functions->setFloatValue(finger, RunnerDigitizerFieldMajorRadius, RunnerFingerRadius);
   functions->setFloatValue(finger, RunnerDigitizerFieldMinorRadius, RunnerFingerRadius);
   functions->appendEvent(hand, finger, 0);
-  functions->setSenderID(hand, sender);
-  functions->dispatchEvent(client, hand);
   CFRelease(finger);
-  CFRelease(hand);
-  return YES;
+  functions->setSenderID(hand, sender);
+  return hand;
+}
+
+static void RunnerDispatchAndRelease(const RunnerHIDFunctions *functions, CFTypeRef client, RunnerHIDEventRef event) {
+  functions->dispatchEvent(client, event);
+  CFRelease(event);
 }
 
 static CGPoint RunnerSamplePoint(NSDictionary<NSString *, NSNumber *> *sample, CGSize screenSize) {
@@ -256,6 +231,62 @@ static void RunnerWaitUntil(uint64_t startTicks, double offsetMs) {
   mach_wait_until(startTicks + nanoseconds * timebase.denom / timebase.numer);
 }
 
+NSString * _Nullable RunnerDispatchEdgeContact(
+  const RunnerHIDFunctions *functions,
+  CFTypeRef client,
+  uint64_t sender,
+  NSArray<NSDictionary<NSString *, NSNumber *> *> *samples,
+  CGSize screenSize
+) {
+  double durationMs = samples.lastObject[@"offsetMs"].doubleValue;
+  CGPoint start = RunnerPointAtOffset(samples, 0, screenSize);
+  uint32_t swipe = RunnerDigitizerSwipeLocked |
+    RunnerSwipeDirection(start, RunnerPointAtOffset(samples, durationMs, screenSize));
+  // The terminal event exists before touch-down, so a contact that goes down always ends.
+  RunnerHIDEventRef cancel = RunnerCreateFrame(
+    functions, sender, start, RunnerDigitizerRange | RunnerDigitizerTouch | RunnerDigitizerCancel | swipe, false);
+  if (cancel == NULL) return @"simulator HID dispatch could not create the touch-cancel event";
+  RunnerHIDEventRef down = RunnerCreateFrame(
+    functions, sender, start, RunnerDigitizerRange | RunnerDigitizerTouch | RunnerDigitizerPosition | swipe, true);
+  if (down == NULL) {
+    CFRelease(cancel);
+    return @"simulator HID dispatch could not create the touch-down event";
+  }
+  uint64_t startTicks = mach_absolute_time();
+  RunnerDispatchAndRelease(functions, client, down);
+  NSString *failure = nil;
+  for (double offsetMs = RunnerFrameIntervalMs; offsetMs < durationMs + RunnerFrameIntervalMs;
+       offsetMs += RunnerFrameIntervalMs) {
+    double frameOffset = MIN(offsetMs, durationMs);
+    RunnerWaitUntil(startTicks, frameOffset);
+    // The edge recognizer fails when the first move leaves the edge region in one frame, as a fast
+    // finger does on a wide panel, so the contact eases in like a real swipe.
+    RunnerHIDEventRef move = RunnerCreateFrame(
+      functions, sender, RunnerEasedPoint(samples, frameOffset, durationMs, screenSize),
+      RunnerDigitizerPosition | swipe, true);
+    if (move == NULL) {
+      failure = @"simulator HID dispatch could not create a touch-move event; the contact was cancelled";
+      break;
+    }
+    RunnerDispatchAndRelease(functions, client, move);
+  }
+  if (failure == nil) {
+    RunnerWaitUntil(startTicks, durationMs + RunnerFrameIntervalMs);
+    RunnerHIDEventRef lift = RunnerCreateFrame(
+      functions, sender, RunnerPointAtOffset(samples, durationMs, screenSize),
+      RunnerDigitizerRange | RunnerDigitizerTouch | swipe, false);
+    if (lift != NULL) {
+      RunnerDispatchAndRelease(functions, client, lift);
+      CFRelease(cancel);
+      return nil;
+    }
+    failure = @"simulator HID dispatch could not create the touch-up event; the contact was cancelled";
+  }
+  functions->setTimeStamp(cancel, mach_absolute_time());
+  RunnerDispatchAndRelease(functions, client, cancel);
+  return failure;
+}
+
 @implementation RunnerSimulatorEdgeTouch
 
 + (NSString * _Nullable)dispatchWithApplication:(id)application
@@ -283,40 +314,9 @@ static void RunnerWaitUntil(uint64_t startTicks, double offsetMs) {
     return failure;
   }
 
-  double durationMs = samples.lastObject[@"offsetMs"].doubleValue;
-  uint32_t swipe = RunnerDigitizerSwipeLocked |
-    RunnerSwipeDirection(RunnerPointAtOffset(samples, 0, screenSize), RunnerPointAtOffset(samples, durationMs, screenSize));
-  uint64_t startTicks = mach_absolute_time();
-  if (!RunnerDispatchFrame(
-        &functions, client, sender, RunnerPointAtOffset(samples, 0, screenSize),
-        RunnerDigitizerRange | RunnerDigitizerTouch | RunnerDigitizerPosition | swipe, true)) {
-    CFRelease(client);
-    return @"simulator HID dispatch could not create the touch-down event";
-  }
-  double liftOffsetMs = durationMs + RunnerFrameIntervalMs;
-  BOOL moved = YES;
-  for (double offsetMs = RunnerFrameIntervalMs; offsetMs < liftOffsetMs; offsetMs += RunnerFrameIntervalMs) {
-    double frameOffset = MIN(offsetMs, durationMs);
-    RunnerWaitUntil(startTicks, frameOffset);
-    // The edge recognizer fails when the first move leaves the edge region in one frame, as a fast
-    // finger does on a wide panel, so the contact eases in like a real swipe.
-    if (!RunnerDispatchFrame(
-          &functions, client, sender, RunnerEasedPoint(samples, frameOffset, durationMs, screenSize),
-          RunnerDigitizerPosition | swipe, true)) {
-      moved = NO;
-      liftOffsetMs = frameOffset;
-      break;
-    }
-  }
-  // The contact is down, so it lifts even after a failed move.
-  RunnerWaitUntil(startTicks, liftOffsetMs);
-  BOOL lifted = RunnerDispatchFrame(
-    &functions, client, sender, RunnerEasedPoint(samples, MIN(liftOffsetMs, durationMs), durationMs, screenSize),
-    RunnerDigitizerRange | RunnerDigitizerTouch | swipe, false);
+  failure = RunnerDispatchEdgeContact(&functions, client, sender, samples, screenSize);
   CFRelease(client);
-  if (!lifted) return @"simulator HID dispatch could not create the touch-up event";
-  if (!moved) return @"simulator HID dispatch could not create a touch-move event; the contact lifted early";
-  return nil;
+  return failure;
 }
 
 @end

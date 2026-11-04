@@ -8,3 +8,6 @@
 #if __has_include("UnitTests/RunnerAXModalScopeCapture.h")
 #import "UnitTests/RunnerAXModalScopeCapture.h"
 #endif
+#if __has_include("UnitTests/RunnerEdgeContactTesting.h")
+#import "UnitTests/RunnerEdgeContactTesting.h"
+#endif
