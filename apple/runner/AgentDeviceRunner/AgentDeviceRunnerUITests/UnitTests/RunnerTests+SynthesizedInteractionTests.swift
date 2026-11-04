@@ -271,10 +271,33 @@ extension RunnerTests {
     XCTAssertEqual(RunnerCoordinateTapCounter.taps, 0)
   }
 
+  /// Every other XCUICoordinate gesture anchors through the same gate: a double tap, a long press
+  /// fallback, a drag, and the back and app-switcher swipes refuse on a tree that answers no window
+  /// instead of building a coordinate from the application XCTest cannot snapshot.
+  @MainActor
+  func testEveryXCTestCoordinateGestureRefusesAnUnserializableTree() throws {
+    app.launch()
+    mainOwned.app = app
+    let restoreXCTest = try simulateUnserializableAppTree()
+    defer {
+      restoreXCTest()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+
+    XCTAssertThrowsError(try doubleTapAt(app: app, x: 40, y: 40))
+    XCTAssertThrowsError(try longPressAt(app: app, x: 40, y: 40, duration: 0.5))
+    XCTAssertThrowsError(try performBackGesture(app: app))
+    XCTAssertThrowsError(try performAppSwitcherGesture(app: app))
+    XCTAssertEqual(RunnerCoordinatePressCounter.presses, 0)
+    XCTAssertEqual(RunnerCoordinateTapCounter.taps, 0)
+  }
+
   /// The penalty clock lapses while a tree stays unreadable to XCTest, and a coordinate `fill` then
   /// used to take the XCTest focus route, whose coordinate tap raised the exception that ends the
-  /// runner. With no penalty on record the fill reads the tree itself, refuses with a typed
-  /// reason, and dispatches no XCTest coordinate and records no XCTest failure.
+  /// runner. With no penalty on record the fill reads the tree itself and refuses with the typed
+  /// probe reason (the probe's own tree read is blinded), dispatching no XCTest coordinate and
+  /// recording no XCTest failure.
   @MainActor
   func testCoordinateFillOnAnUnserializableTreeWithoutPenaltyRefusesWithoutAnXCTestCoordinate() throws {
     app.launch()
@@ -288,6 +311,8 @@ extension RunnerTests {
       app.terminate()
     }
     guard soleScreenRouteIsOpen(for: app) else { return }
+    textInputProbeBlindForTesting = true
+    defer { textInputProbeBlindForTesting = false }
     let fill = try runnerCommandFixture(
       #"{"command":"type","commandId":"unserializable-fill","text":"hello","textEntryMode":"replace","x":40,"y":40}"#
     )
@@ -297,10 +322,7 @@ extension RunnerTests {
 
     let recordedFailure = didRecordXCTestFailure(since: failureCountBefore)
     XCTAssertFalse(response.ok)
-    XCTAssertTrue(
-      ["TEXT_INPUT_PROBE_UNAVAILABLE", "NO_TEXT_INPUT_AT_POINT"].contains(response.error?.code ?? ""),
-      String(describing: response.error)
-    )
+    XCTAssertEqual(response.error?.code, "TEXT_INPUT_PROBE_UNAVAILABLE")
     XCTAssertEqual(RunnerCoordinateTapCounter.taps, 0)
     XCTAssertFalse(recordedFailure)
   }

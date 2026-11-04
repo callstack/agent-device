@@ -20,16 +20,21 @@ enum SynthesizedGesturePolicyKind: String, Equatable, Hashable {
   case synthesizedDrag
 
   /// Whether the call site's XCTest coordinate gesture may run after private synthesis fails.
-  /// A coordinate tap resolves its anchor through the same tree read as a long press, so it follows
-  /// the long press rule.
   /// Scroll's swipe is viewport-center-symmetric, so an unverified dispatch cannot be told apart
   /// from one that never reached the view, and it keeps the refusal. A coordinate long press
   /// resolves the app frame through the tree, so on a tree XCTest cannot serialize that read fails
   /// after its retries and raises an exception that ends the runner test; its fallback needs a tree
-  /// that answers.
-  func allowsXCTestCoordinateFallback(accessibilityHealth: RunnerAccessibilityHealth) -> Bool {
+  /// that answers. A coordinate tap resolves its anchor through the same read, but its refusal
+  /// needs the proof of the call's own windows query (`treeUnreadable`), not the health the last
+  /// snapshot left behind: a tree that answers now still takes the XCTest tap.
+  func allowsXCTestCoordinateFallback(
+    accessibilityHealth: RunnerAccessibilityHealth,
+    treeUnreadable: Bool = false
+  ) -> Bool {
     switch self {
-    case .coordinateTap, .coordinateLongPress, .synthesizedDrag:
+    case .coordinateTap:
+      return !treeUnreadable
+    case .coordinateLongPress, .synthesizedDrag:
       return accessibilityHealth != .unavailable
     case .scroll:
       return false
@@ -41,6 +46,9 @@ struct SynthesizedCoordinateContext {
   let geometry: SurfaceGeometry
   let resolvedWindow: XCUIElement?
   let accessibilityHealth: RunnerAccessibilityHealth
+  /// This call's own windows query answered no window and the sole-screen route supplied the frame,
+  /// so XCTest cannot anchor a coordinate on the app's tree.
+  var treeUnreadable: Bool = false
 
   /// The keyboard probe is not free — `visibleKeyboardFrame` resolves `app.keyboards.firstMatch`
   /// with a live AX fetch — so `.unavailable` skips it: there the fetch is known not to answer,
@@ -143,7 +151,8 @@ extension RunnerTests {
       return .performed(timing: timing)
     }
     let fallbackAllowed = kind.allowsXCTestCoordinateFallback(
-      accessibilityHealth: context?.accessibilityHealth ?? mainOwned.accessibilityHealth
+      accessibilityHealth: context?.accessibilityHealth ?? mainOwned.accessibilityHealth,
+      treeUnreadable: context?.treeUnreadable ?? false
     )
     logSynthesizedGesturePolicyDecision(
       kind: kind,
@@ -187,7 +196,7 @@ extension RunnerTests {
     }
     return "AGENT_DEVICE_RUNNER_SYNTHESIZED_GESTURE_POLICY kind=\(kind.rawValue)"
       + " axHealth=\(context.accessibilityHealth.rawValue)"
-      + " fallbackAllowed=\(kind.allowsXCTestCoordinateFallback(accessibilityHealth: context.accessibilityHealth))"
+      + " fallbackAllowed=\(kind.allowsXCTestCoordinateFallback(accessibilityHealth: context.accessibilityHealth, treeUnreadable: context.treeUnreadable))"
       + " fallbackAttempted=\(fallbackAttempted)"
   }
 }
@@ -197,13 +206,15 @@ extension SynthesizedCoordinateContext {
   init?(
     validating geometry: SurfaceGeometry,
     resolvedWindow: XCUIElement?,
-    accessibilityHealth: RunnerAccessibilityHealth
+    accessibilityHealth: RunnerAccessibilityHealth,
+    treeUnreadable: Bool = false
   ) {
     guard SnapshotGeometry.isPositiveFinite(geometry.windowOnScreen.rect) else { return nil }
     self.init(
       geometry: geometry,
       resolvedWindow: resolvedWindow,
-      accessibilityHealth: accessibilityHealth
+      accessibilityHealth: accessibilityHealth,
+      treeUnreadable: treeUnreadable
     )
   }
 }

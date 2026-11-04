@@ -425,6 +425,7 @@ extension RunnerTests {
     var health = mainOwned.accessibilityHealth
     let window: XCUIElement?
     let referenceFrame: CGRect
+    var treeUnreadable = false
     if requestLitPanel != nil {
       let booked = try requireRequestLitPanelSurface(app: app)
       guard let context = SynthesizedCoordinateContext(
@@ -444,13 +445,15 @@ extension RunnerTests {
       // The windows query just failed on this tree, so this gesture's keyboard probes and XCTest
       // fallbacks would fail on it too, after XCTest's own retries.
       health = .unavailable
+      treeUnreadable = true
     } else {
       return nil
     }
     return SynthesizedCoordinateContext(
       validating: surfaceGeometry(windowFrame: referenceFrame, app: app),
       resolvedWindow: window,
-      accessibilityHealth: health
+      accessibilityHealth: health,
+      treeUnreadable: treeUnreadable
     )
 #else
     return nil

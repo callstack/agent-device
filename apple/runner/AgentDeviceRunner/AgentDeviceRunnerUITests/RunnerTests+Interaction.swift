@@ -72,7 +72,7 @@ extension RunnerTests {
 
   private func performCoordinateBackGesture(app: XCUIApplication) throws {
 #if !os(tvOS)
-    let target = try resolveRunnerWindow(app: app).window ?? app
+    let target = try normalizedOffsetAnchor(app: app)
     let start = target.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5))
     let end = target.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
     start.press(forDuration: 0.05, thenDragTo: end)
@@ -102,7 +102,7 @@ extension RunnerTests {
 
   private func performCoordinateAppSwitcherGesture(app: XCUIApplication) throws {
 #if !os(tvOS)
-    let target = try resolveRunnerWindow(app: app).window ?? app
+    let target = try normalizedOffsetAnchor(app: app)
     let start = target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.99))
     let end = target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
     start.press(forDuration: 0.6, thenDragTo: end)
@@ -418,35 +418,43 @@ extension RunnerTests {
     }
   }
 
-  func tapAt(app: XCUIApplication, x: Double, y: Double) throws -> RunnerInteractionOutcome {
+  /// `context` is this call's own windows read when the caller already holds one, so a command
+  /// reads the tree's window once.
+  func tapAt(
+    app: XCUIApplication,
+    x: Double,
+    y: Double,
+    context: SynthesizedCoordinateContext? = nil
+  ) throws -> RunnerInteractionOutcome {
     if let outcome = selectFocusedTvElement(app: app, point: CGPoint(x: x, y: y), action: "tap") {
       return outcome
     }
 #if os(iOS)
-    if let outcome = try runOnMainActor({ try tapWithoutAccessibilityTree(app: app, x: x, y: y) }).get() {
-      return outcome
-    }
-#endif
+    return try runOnMainActor({ try tapAtScreenPoint(app: app, x: x, y: y, context: context) }).get()
+#else
     return try performCoordinateTap(app: app, x: x, y: y)
+#endif
   }
 
 #if os(iOS)
-  /// An XCTest coordinate tap resolves its anchor through the application's accessibility snapshot.
+  /// An XCTest coordinate resolves its anchor through the application's accessibility snapshot.
   /// On a tree XCTest cannot serialize (a deep React Native screen) that read fails, XCTest records
-  /// an issue that ends the runner test, and the infinite point it leaves raises an exception. A tap
-  /// at a screen point needs no tree, so where the context proves the tree unavailable it is
-  /// synthesized, and a refused synthesis throws instead of reaching the XCTest coordinate.
-  /// Returns nil when the tree answers, so the XCTest coordinate tap runs.
+  /// an issue that ends the runner test, and the infinite point it leaves raises an exception.
+  /// This call's own windows read decides: a tree that answers takes the XCTest coordinate tap,
+  /// one that does not is synthesized at the screen point, and a synthesis that cannot run throws
+  /// instead of reaching the XCTest coordinate.
   @MainActor
-  private func tapWithoutAccessibilityTree(
+  private func tapAtScreenPoint(
     app: XCUIApplication,
     x: Double,
-    y: Double
-  ) throws -> RunnerInteractionOutcome? {
-    guard let context = try synthesizedCoordinateContext(app: app),
-      context.accessibilityHealth == .unavailable
-    else {
-      return nil
+    y: Double,
+    context: SynthesizedCoordinateContext?
+  ) throws -> RunnerInteractionOutcome {
+    guard let context = try context ?? synthesizedCoordinateContext(app: app) else {
+      throw unreadableTreeError
+    }
+    guard context.treeUnreadable else {
+      return try performCoordinateTap(app: app, x: x, y: y, treeProven: true)
     }
     switch try performSynthesizedTapGesture(app: app, x: x, y: y, context: context) {
     case .performed:
@@ -454,6 +462,25 @@ extension RunnerTests {
     case .xctestFallback(let message, _), .refused(_, let message, _):
       throw RunnerUnsupportedOperationError(message: message)
     }
+  }
+
+  private var unreadableTreeError: RunnerUnsupportedOperationError {
+    RunnerUnsupportedOperationError(
+      message: "XCTest cannot anchor a coordinate gesture: the app's accessibility tree answered no window"
+    )
+  }
+
+  /// The window an XCTest coordinate gesture anchors on, or a refusal when the tree answers none.
+  /// Every iOS XCUICoordinate that does not come with a proven tree resolves through here, so the
+  /// gesture never builds a coordinate from an application XCTest cannot snapshot.
+  private func requireReadableTreeWindow(app: XCUIApplication) throws -> XCUIElement {
+    if requestLitPanel != nil {
+      return try requireRequestLitPanelSurface(app: app).window
+    }
+    guard let resolved = resolveRunnerWindowElement(app: app) else {
+      throw unreadableTreeError
+    }
+    return resolved.window
   }
 #endif
 
@@ -603,14 +630,19 @@ extension RunnerTests {
     return try performCoordinateDrag(app: app, x: x, y: y, x2: x2, y2: y2, holdDuration: holdDuration)
   }
 
-  private func performCoordinateTap(app: XCUIApplication, x: Double, y: Double) throws -> RunnerInteractionOutcome {
+  private func performCoordinateTap(
+    app: XCUIApplication,
+    x: Double,
+    y: Double,
+    treeProven: Bool = false
+  ) throws -> RunnerInteractionOutcome {
 #if os(tvOS)
     return .unsupported(
       message: "coordinate tap is not supported on tvOS; move focus with swipe or scroll, then select the focused element",
       hint: "tvOS has no coordinate input; move focus with swipe/scroll to the target, then select it."
     )
 #else
-    try interactionCoordinate(app: app, x: x, y: y).tap()
+    try interactionCoordinate(app: app, x: x, y: y, treeProven: treeProven).tap()
     return .performed
 #endif
   }
@@ -654,15 +686,34 @@ extension RunnerTests {
     )
 #else
     let start = try interactionCoordinate(app: app, x: x, y: y)
-    let end = try interactionCoordinate(app: app, x: x2, y: y2)
+    let end = try interactionCoordinate(app: app, x: x2, y: y2, treeProven: true)
     start.press(forDuration: holdDuration, thenDragTo: end)
     return .performed
 #endif
   }
 
 #if !os(tvOS)
-  private func interactionCoordinate(app: XCUIApplication, x: Double, y: Double) throws -> XCUICoordinate {
+  /// The element a normalized-offset XCTest gesture anchors on: the resolved window, which on iOS
+  /// must come from a tree that answers.
+  private func normalizedOffsetAnchor(app: XCUIApplication) throws -> XCUIElement {
 #if os(iOS)
+    return try requireReadableTreeWindow(app: app)
+#else
+    return try resolveRunnerWindow(app: app).window ?? app
+#endif
+  }
+
+  /// `treeProven` is set by a caller whose own windows read already showed the tree answers.
+  private func interactionCoordinate(
+    app: XCUIApplication,
+    x: Double,
+    y: Double,
+    treeProven: Bool = false
+  ) throws -> XCUICoordinate {
+#if os(iOS)
+    if !treeProven {
+      _ = try requireReadableTreeWindow(app: app)
+    }
     // Coordinate taps, double taps, long presses, and drags anchor at the app origin, not the
     // resolved window: callers pass screen points, and `app.frame` starts at the screen origin even
     // for a placed iPad window (#3899). The first qualifying

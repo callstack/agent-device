@@ -22,11 +22,15 @@ extension RunnerTests {
     let xCTestChannelPenalized = isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId)
     var resolvedCoordinateTarget: TextEntryTarget?
     // The penalty clock lapses while a tree stays unreadable to XCTest, so a coordinate replacement
-    // also reads the tree's health: the XCTest focus route taps through an XCUICoordinate, which
-    // needs the application snapshot.
-    let xCTestTreeUnavailable = try xCTestChannelPenalized
-      || (textEntryMode == .replacement && command.x != nil && command.y != nil
-        && synthesizedCoordinateContext(app: activeApp)?.accessibilityHealth == .unavailable)
+    // reads the tree's windows itself, once: the XCTest focus route taps through an XCUICoordinate,
+    // which needs the application snapshot. Every later step of this command reuses that read.
+    let treeContext: SynthesizedCoordinateContext?
+    if textEntryMode == .replacement && command.x != nil && command.y != nil {
+      treeContext = try synthesizedCoordinateContext(app: activeApp)
+    } else {
+      treeContext = nil
+    }
+    let xCTestTreeUnavailable = xCTestChannelPenalized || treeContext?.treeUnreadable == true
     if Self.shouldUseResolvedCoordinateTextEntryRoute(
       repairMode: textEntryMode,
       hasX: command.x != nil,
@@ -47,7 +51,7 @@ extension RunnerTests {
       case .unavailable:
         return textInputProbeUnavailableResponse()
       }
-      let context = try synthesizedCoordinateContext(app: activeApp)
+      let context = treeContext
       switch try performSynthesizedTapGesture(app: activeApp, x: x, y: y, context: context) {
       case .performed:
         resolvedCoordinateContext = context
@@ -66,12 +70,19 @@ extension RunnerTests {
     }
 #else
     let xCTestChannelPenalized = false
+    let treeContext: SynthesizedCoordinateContext? = nil
     let resolvedCoordinateTarget: TextEntryTarget? = nil
 #endif
     if let resolvedCoordinateTarget {
       target = resolvedCoordinateTarget
     } else {
-      target = try focusTextInputForTextEntry(app: activeApp, x: command.x, y: command.y, reusingFocusedInput: textEntryMode == .replacement)
+      target = try focusTextInputForTextEntry(
+        app: activeApp,
+        x: command.x,
+        y: command.y,
+        reusingFocusedInput: textEntryMode == .replacement,
+        tapContext: treeContext
+      )
     }
     NSLog(
       "AGENT_DEVICE_RUNNER_TEXT_ENTRY_PHASE commandId=%@ phase=focus durationMs=%.1f chars=%d mode=%@",
