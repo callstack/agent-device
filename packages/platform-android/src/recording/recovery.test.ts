@@ -1,6 +1,7 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { isScreenRecordingStartNotDispatched } from '@agent-device/contracts/screen-recording-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
 import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
 import { recordingArtifactPath, recordingMarkerPath } from './native-path.ts';
 import { bindAndroidScreenRecordingRuntime } from './runtime.ts';
@@ -259,20 +260,30 @@ test('retains completed evidence while an exact persisted recorder identity rema
 });
 
 test.each([
-  ['reassigned to an unrelated process', 'ownership-lost'],
-  ['reused by a replacement recorder on the same path', 'foreign-writer'],
+  ['reassigned pid and no path writer', 'ownership-lost', 'empty', true],
+  ['reassigned pid and inconclusive scan', 'ownership-lost', 'uncertain', false],
+  ['replacement writer on the path', 'foreign-writer', 'writer', false],
 ] as const)(
-  'retains completion while the recorder pid was %s and release is unconfirmed',
-  async (_name, ownership) => {
+  'checks path writers for a completed recorder with %s',
+  async (_name, ownership, disposition, released) => {
     let manifest = '';
     const removals: string[] = [];
-    const runtime = await start({
+    const files = recordingFileStore({ [recordingInput().outputPath]: 'export' });
+    const scan = vi.fn(async (remotePath: string) => ({
+      writers: disposition === 'writer' ? [{ pid: '42', remotePath, startTime: '9' }] : [],
+      conclusive: disposition !== 'uncertain',
+    }));
+    const stop = vi.fn(async () => 'stopped' as const);
+    const host = recordingHost({
+      files,
       writeManifest: async ({ contents }: { contents: string }) => {
         manifest = contents;
       },
       readManifest: async () =>
         manifest ? { status: 'read' as const, contents: manifest } : { status: 'missing' as const },
       inspect: async () => ownership,
+      findRunning: scan,
+      stop,
       remove: async (remotePath: string) => {
         removals.push(`artifact:${remotePath}`);
         return true;
@@ -282,7 +293,16 @@ test.each([
         return true;
       },
     });
+    const transport = await host.screenRecording.android.resolve(androidRecordingDevice);
+    const release = vi.spyOn(transport, 'releaseAdmission');
+    const runtime = await bindAndroidScreenRecordingRuntime({
+      host,
+      device: androidRecordingDevice,
+      owner: localRuntimeOwner('android'),
+      signal: new AbortController().signal,
+    });
     const started = await runtime.screenRecordingStart(recordingInput());
+    files.files.set(recordingInput().outputPath, 'export');
     const native = JSON.parse(manifest);
     manifest = JSON.stringify({
       ...native,
@@ -297,13 +317,25 @@ test.each([
       },
     });
 
-    await expect(
-      runtime.screenRecordingReattach({ envelope: started.envelope }),
-    ).resolves.toMatchObject({
-      status: 'completed',
-      result: { nativePathDisposition: 'pending' },
-      cleanupPending: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
-    });
+    const result = await runtime.screenRecordingReattach({ envelope: started.envelope });
+    expect(scan).toHaveBeenCalledExactlyOnceWith(native.chunks[0].remotePath);
+    expect(stop).not.toHaveBeenCalled();
+    if (released) {
+      expect(result).toMatchObject({ status: 'completed' });
+      expect(result).not.toHaveProperty('cleanupPending');
+      expect(release).toHaveBeenCalledOnce();
+      expect(JSON.parse(manifest)).toMatchObject({ admissionReleased: true });
+      expect(await transport.acquireAdmission('b'.repeat(64))).toBe('acquired');
+    } else {
+      expect(result).toMatchObject({
+        status: 'completed',
+        result: { nativePathDisposition: 'pending' },
+        cleanupPending: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
+      });
+      expect(release).not.toHaveBeenCalled();
+      expect(JSON.parse(manifest).admissionReleased).toBeUndefined();
+      expect(await transport.acquireAdmission('b'.repeat(64))).toBe('busy');
+    }
     expect(removals).toEqual([]);
     expect(JSON.parse(manifest)).toHaveProperty('completion');
   },

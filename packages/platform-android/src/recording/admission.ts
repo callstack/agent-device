@@ -1,5 +1,6 @@
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { PendingCleanupOutcome } from '@agent-device/contracts/durable-resource';
+import { provesAndroidScreenRecordTermination } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { NativeManifest } from './manifest.ts';
 import { decodeNativeManifest } from './manifest.ts';
 import { recordingGenerationKey } from './native-path.ts';
@@ -55,11 +56,13 @@ export async function releaseQuiescentAdmission(
     if (current.admissionReleased === true) return true;
     for (const chunk of current.chunks) {
       if (
-        (await transport.inspect({
-          pid: chunk.remotePid,
-          remotePath: chunk.remotePath,
-          startTime: chunk.remoteStartTime,
-        })) !== 'missing'
+        !provesAndroidScreenRecordTermination(
+          await transport.inspect({
+            pid: chunk.remotePid,
+            remotePath: chunk.remotePath,
+            startTime: chunk.remoteStartTime,
+          }),
+        )
       )
         return false;
       const writers = await transport.probeRunningWriters(chunk.remotePath);
