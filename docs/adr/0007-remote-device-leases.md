@@ -351,7 +351,7 @@ A lease that reports no mode is accepted, so the proof does not confirm `deviceM
 A backend older than the spec returns a lease without `lease.device`.
 The CLI proxy connection then releases that lease and fails with `UNSUPPORTED_OPERATION` and `details.reason: 'device-spec-unsupported'`.
 `details.released` reports whether the release succeeded.
-An allocation that explicitly reports reuse (`created: false`) is refused without a release.
+An allocation that explicitly reports reuse (`created: false`) fails with the same reason, without a release and without `details.released`.
 A live lease serves a later command only when every spec key that the command names equals the one the lease was allocated by; otherwise the command fails with `CONNECTION_DEVICE_CONFLICT`.
 The client never picks a device by spec from the daemon inventory.
 `--target` stays the only class selector.
