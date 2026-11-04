@@ -344,6 +344,7 @@ A value of another type is refused with `INVALID_ARGS`, `details.reason: 'device
 A remote config file first applies the value rules of every config key: a string must be non-empty, and a boolean also accepts a boolean string such as `"true"`.
 The backend that honours the spec strips the keys before it forwards the allocation, and echoes the granted device on the lease as `lease.device` (`model`, `osVersion`, `imageTag?`, `physical`).
 `deviceKey` stays the identity of the lease; `lease.device` is the proof that the spec was understood.
+`lease.device` does not report `deviceMode`, so the proof does not confirm it: a backend that accepts the key must honour it.
 A backend older than the spec returns a lease without `lease.device`.
 The CLI proxy connection then releases that lease and fails with `UNSUPPORTED_OPERATION` and `details.reason: 'device-spec-unsupported'`.
 `details.released` reports whether the release succeeded.

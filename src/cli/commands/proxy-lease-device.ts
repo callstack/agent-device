@@ -14,6 +14,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import {
   deviceSpecUnsupportedError,
+  LEASE_DEVICE_SPEC_KEYS,
   requireLeaseDeviceSpec,
 } from '@agent-device/contracts/lease-scope';
 import type { Lease, LeaseDevice, LeaseDeviceSpec } from '@agent-device/contracts/client';
@@ -138,10 +139,7 @@ export async function bindLeaseNamedDevice(options: {
       await assertLeasedDeviceMatchesRequest(client, options.state, flags, leased);
     }
     applyDeviceScopeSelector(flags, leased);
-    delete flags.osVersion;
-    delete flags.imageTag;
-    delete flags.deviceMode;
-    delete flags.physical;
+    for (const key of LEASE_DEVICE_SPEC_KEYS) delete flags[key];
     return {
       state: {
         ...options.state,

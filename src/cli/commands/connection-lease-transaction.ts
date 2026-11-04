@@ -1,6 +1,7 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   isInactiveLeaseError,
+  LEASE_DEVICE_SPEC_KEYS,
   readLeaseAllocateProviderFlags,
   requireLeaseDeviceSpec,
 } from '@agent-device/contracts/lease-scope';
@@ -376,13 +377,8 @@ async function allocateOrReuseLease(
     });
   }
   // The spec rides only a by-spec allocate, so it is added below rather than taken from the flags.
-  const {
-    osVersion: _osVersion,
-    imageTag: _imageTag,
-    deviceMode: _deviceMode,
-    physical: _physical,
-    ...providerFlags
-  } = readLeaseAllocateProviderFlags(flags);
+  const providerFlags = readLeaseAllocateProviderFlags(flags);
+  for (const key of LEASE_DEVICE_SPEC_KEYS) delete providerFlags[key];
   const lease = await client.leases.allocate({
     tenant: state.tenant,
     runId: state.runId,
