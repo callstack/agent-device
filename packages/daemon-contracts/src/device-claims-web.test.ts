@@ -110,8 +110,11 @@ test('the acquisition preview of a web session device names the live host claim'
     coveredClaimIsOwnedByRequest: () => false,
   });
 
-  assert.equal(
-    settlements.some((settlement) => settlement.status === 'conflict'),
-    true,
+  const conflicts = settlements.flatMap((settlement) =>
+    settlement.status === 'conflict' ? [settlement.conflict] : [],
+  );
+  assert.deepEqual(
+    conflicts.map((conflict) => conflict.claim?.device.id),
+    [browser.id],
   );
 });
