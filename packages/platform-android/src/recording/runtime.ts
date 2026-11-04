@@ -36,6 +36,7 @@ import { persistNativeManifest } from './manifest-store.ts';
 import { admissionReleaseUnconfirmed, releaseQuiescentAdmission } from './admission.ts';
 import { snapshot } from './live-snapshot.ts';
 import { finalizeAndroidRecording } from './finalize.ts';
+import { guardAndroidRecordingExport } from './export-availability.ts';
 import { cleanupVerifiedAndroidEvidence } from './cleanup.ts';
 import { cleanupAndroidRecording, reattachAndroidRecording, readLiveEvidence } from './recovery.ts';
 
@@ -341,7 +342,7 @@ async function startAndroidRecording(params: {
     },
   });
   return Object.freeze({
-    pendingHandle: new PendingTransferGuard(handle),
+    pendingHandle: new PendingTransferGuard(guardAndroidRecordingExport(host, handle)),
     envelope: createDurableResourceEnvelope({
       resourceKind: SCREEN_RECORDING_RESOURCE_KIND,
       sessionId: input.sessionId,

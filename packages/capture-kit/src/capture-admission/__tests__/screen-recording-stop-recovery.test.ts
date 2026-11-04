@@ -132,6 +132,12 @@ test('an open cleanup obligation exposes its surviving export without becoming t
   };
   writeManifest(harness, metadata, { lifecycle: 'open' });
   const resourcePath = manifestPath(harness.sessionStore);
+  expect(resolveScreenRecordingStopRecovery({ ...harness.params, device: SESSION_DEVICE })).toEqual(
+    {
+      kind: 'open',
+      resourcePath,
+    },
+  );
   const record = screenRecordingResourceStore.read(resourcePath);
   if (record.status !== 'decoded') throw new Error('Expected pending recording');
   const binding = screenRecordingPendingCompletionBinding(record.envelope, completion);

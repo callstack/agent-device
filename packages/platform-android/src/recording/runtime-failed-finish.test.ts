@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { expect, test, vi } from 'vitest';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
@@ -349,6 +349,123 @@ test.each(['confirmed', 'receipt-unavailable'] as const)(
     }
   },
 );
+
+test('a deleted export is refused while its exact admission is retried', async () => {
+  vi.useFakeTimers();
+  try {
+    const directory = mkdtempForTestSync('android-deleted-export-');
+    const input = { ...recordingInput(), outputPath: path.join(directory, 'capture.mp4') };
+    const files = recordingFileStore();
+    let marker = '';
+    let available = false;
+    const host = recordingHost({
+      files,
+      outputs: {
+        copy: async ({ from, to }: { from: string; to: string }) => {
+          await files.outputs.copy({ from, to });
+          if (to === input.outputPath) writeFileSync(to, files.files.get(to)!);
+        },
+        inspect: async (filePath: string) =>
+          filePath === input.outputPath
+            ? existsSync(filePath)
+              ? 'present'
+              : 'missing'
+            : await files.outputs.inspect(filePath),
+      },
+      writeManifest: async ({ contents }: { contents: string }) => {
+        marker = contents;
+      },
+      readManifest: async () =>
+        marker ? { status: 'read' as const, contents: marker } : { status: 'missing' as const },
+    });
+    const transport = await host.screenRecording.android.resolve(androidRecordingDevice);
+    const originalRelease = transport.releaseAdmission.bind(transport);
+    const release = vi
+      .spyOn(transport, 'releaseAdmission')
+      .mockImplementation(async (request) =>
+        available ? await originalRelease(request) : 'unavailable',
+      );
+    const owner = localRuntimeOwner('android');
+    const runtime = await bindAndroidScreenRecordingRuntime({
+      host,
+      device: androidRecordingDevice,
+      owner,
+      signal: new AbortController().signal,
+    });
+    const started = await runtime.screenRecordingStart(input);
+    const recording = await adoptAndroidRecording({
+      sessionName: input.sessionId,
+      owner,
+      pendingHandle: started.pendingHandle,
+      envelope: started.envelope,
+    });
+    const first = recording.finish();
+    await Promise.all([
+      vi.advanceTimersByTimeAsync(1_000),
+      expect(first).resolves.toMatchObject({ outPath: input.outputPath }),
+    ]);
+    expect(readFileSync(input.outputPath, 'utf8')).toBe('pulled');
+    rmSync(input.outputPath);
+    const recover = () =>
+      finishRecoveredScreenRecording({
+        resourcePath: recording.resourcePath,
+        scope: {
+          signal: new AbortController().signal,
+          diagnostics: { emit: () => {} },
+          progress: { report: () => {} },
+        },
+        acquireControl: async () => ({
+          reattach: async (envelope) => await runtime.screenRecordingReattach({ envelope }),
+          cleanup: async (envelope) => await runtime.screenRecordingCleanup({ envelope }),
+          [Symbol.asyncDispose]: async () => {},
+        }),
+      });
+
+    await expect(recording.finish()).rejects.toMatchObject({
+      details: { reason: 'resource-missing' },
+    });
+    await expect(
+      runtime.screenRecordingReattach({ envelope: started.envelope }),
+    ).resolves.toMatchObject({
+      status: 'unreattachable',
+      reason: 'resource-missing',
+    });
+    await expect(recording.dispose()).rejects.toMatchObject({
+      details: { reason: 'cleanup-unconfirmed' },
+    });
+    await expect(recover()).rejects.toMatchObject({ details: { reason: 'resource-missing' } });
+    expect(JSON.parse(marker).admissionReleased).toBeUndefined();
+    expect(recording.activeHandle()).toBeDefined();
+    expect(recording.manifestRecord()).toMatchObject({
+      status: 'decoded',
+      envelope: { lifecycle: 'open', metadata: { cleanupStatus: 'cleanup-pending' } },
+    });
+    const attempted = release.mock.calls.length;
+    expect(attempted).toBeGreaterThanOrEqual(3);
+
+    available = true;
+    await expect(recover()).rejects.toMatchObject({ details: { reason: 'resource-missing' } });
+    expect(release).toHaveBeenCalledTimes(attempted + 1);
+    expect(JSON.parse(marker)).toMatchObject({ admissionReleased: true });
+    expect(await transport.acquireAdmission('b'.repeat(64))).toBe('acquired');
+    await expect(recording.finish()).rejects.toMatchObject({
+      details: { reason: 'resource-missing' },
+    });
+    await expect(recording.finish()).rejects.toMatchObject({
+      details: { reason: 'resource-missing' },
+    });
+    expect(release).toHaveBeenCalledTimes(attempted + 1);
+    expect(await transport.acquireAdmission('a'.repeat(64))).toBe('busy');
+    expect(recording.activeHandle()).toBeDefined();
+    expect(recording.manifestRecord()).toMatchObject({
+      status: 'decoded',
+      envelope: { lifecycle: 'open' },
+    });
+    expect(existsSync(input.outputPath)).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 type AndroidRecordingSession = Readonly<{
   recording?: Readonly<{

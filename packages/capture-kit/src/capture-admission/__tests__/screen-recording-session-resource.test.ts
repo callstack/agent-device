@@ -294,6 +294,7 @@ test('an interrupted retry replays its bound export while the exact cleanup rema
   expect(screenRecordingResourceStore.read(recordPath)).toEqual(interrupted);
   for (const changed of [
     { ...interrupted.envelope, fence: { token: 'other-fence', generation: 7 } },
+    { ...interrupted.envelope, fence: { token: 'fence', generation: 8 } },
     {
       ...interrupted.envelope,
       descriptor: { version: 3, body: { outputPath: outPath, marker: 'other' } },
@@ -301,6 +302,10 @@ test('an interrupted retry replays its bound export while the exact cleanup rema
     {
       ...interrupted.envelope,
       metadata: { ...interrupted.envelope.metadata, deviceClaimToken: 'other-claim' },
+    },
+    {
+      ...interrupted.envelope,
+      metadata: { ...interrupted.envelope.metadata, deviceClaimToken: '' },
     },
   ]) {
     screenRecordingResourceStore.write(recordPath, changed);

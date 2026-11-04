@@ -36,6 +36,7 @@ import {
 import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
 import { snapshot } from './live-snapshot.ts';
 import { finalizeAndroidRecording } from './finalize.ts';
+import { androidExportAvailability, guardAndroidRecordingExport } from './export-availability.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
 type Envelope = Parameters<
@@ -170,6 +171,12 @@ async function reattachEvidence(params: {
     const released =
       observed.status === 'terminal' &&
       (await releaseQuiescentAdmission(transport, evidence, descriptor.manifestPath));
+    const availability = await androidExportAvailability(host, evidence.completion.outPath);
+    if (availability !== 'present')
+      return unreattachable(
+        availability === 'missing' ? 'resource-missing' : 'owner-unavailable',
+        'Android recording export is unavailable.',
+      );
     return {
       status: 'completed' as const,
       result: {
@@ -246,10 +253,11 @@ async function reattachEvidence(params: {
       return await cleanupAndroidRecording({ transport, device, input });
     },
   });
+  const guarded = guardAndroidRecordingExport(host, handle);
   return {
     status: 'active' as const,
     handle: Object.freeze({
-      ...handle,
+      ...guarded,
       settleForExport: async (progress: DurableCaptureProgress, signal?: AbortSignal) =>
         await settleAndroidRecording({ transport, device, input, descriptor, progress, signal }),
     }),
@@ -441,7 +449,12 @@ function inputFromDescriptor(
 }
 
 function unreattachable(
-  reason: 'descriptor-invalid' | 'transport-not-reattachable' | 'ownership-fence-lost',
+  reason:
+    | 'descriptor-invalid'
+    | 'transport-not-reattachable'
+    | 'ownership-fence-lost'
+    | 'resource-missing'
+    | 'owner-unavailable',
   message?: string,
 ) {
   return {

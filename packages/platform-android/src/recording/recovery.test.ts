@@ -227,6 +227,7 @@ test('a probe that cannot answer after a crash leaves the retirement owed', asyn
 test('retains completed evidence while an exact persisted recorder identity remains alive', async () => {
   let manifest = '';
   const runtime = await start({
+    outputs: { inspect: async () => 'present' as const },
     writeManifest: async ({ contents }: { contents: string }) => {
       manifest = contents;
     },
