@@ -67,7 +67,10 @@ test('forwards the request mask and refuses an explicit runner capture with it',
   );
   await expect(
     interactor.screenshot('/tmp/runner.png', { screenMask: 'black', captureBackend: 'runner' }),
-  ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
+  ).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    details: { reason: 'screenshot-screen-mask-unsupported' },
+  });
   expect(captureScreenshotViaRunner).not.toHaveBeenCalled();
 });
 
