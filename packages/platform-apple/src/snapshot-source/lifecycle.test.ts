@@ -875,12 +875,8 @@ test('close adopts paused startup, awaits cleanup and refuses future requests', 
       error instanceof SnapshotSourceError && error.failureCode === 'source-closed',
   );
   await reached;
-  let finished = false;
-  const closing = manager.close().then(() => {
-    finished = true;
-  });
-  await Promise.resolve();
-  assert.equal(finished, false);
+  const closing = manager.close();
+  assert.equal(await settleWithin(closing, 20), 'pending');
   release();
   await closing;
   await refused;
