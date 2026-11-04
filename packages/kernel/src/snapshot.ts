@@ -385,8 +385,8 @@ export type HiddenContentHint = {
  * Keyboard evidence in the node coordinate space: `visible` measured; `derived` from the shared
  * docked-tree policy before projection; `visibility-only` boolean; `tree-rejected` rejected geometry
  * against a usable viewport with optional visibility; `unmeasurable` unknown; `absent` explicit absence.
- * `treeBound`: read from the capture's own tree (iOS XCTest, Android, docked-tree derivation), never
- * a separate probe. A full iOS XCTest scan with no keyboard proves absence; missing nodes never do.
+ * `treeBound`: read from the capture's own tree (iOS XCTest, Android, docked-tree), not a probe. A full
+ * pre-projection iOS root scan proves absence; projected or partial nodes and omitted facts never do.
  */
 export type SnapshotKeyboardBandFact =
   | { kind: 'visible'; frame: Rect; treeBound?: true }
