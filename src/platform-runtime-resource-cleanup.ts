@@ -53,6 +53,7 @@ async function closeManagedWebRuntimeSession(
     sessionName: string;
     stateDir: string;
     openWebSessionNames: () => readonly string[];
+    ownedProcessRecords?: OwnedProcessRecordStore;
   },
   host: HostEnvironment,
 ): Promise<void> {
@@ -62,11 +63,15 @@ async function closeManagedWebRuntimeSession(
     session: params.sessionName,
     stateDir: params.stateDir,
     openWebSessionNames: params.openWebSessionNames,
+    ownedProcessRecords: params.ownedProcessRecords,
   });
   await provider.close();
 }
 
-export function createPlatformResourceCleanup(host: HostEnvironment): PlatformResourceCleanup {
+export function createPlatformResourceCleanup(
+  host: HostEnvironment,
+  ownedProcessRecords?: OwnedProcessRecordStore,
+): PlatformResourceCleanup {
   return Object.freeze({
     async stopSnapshotHelper(device) {
       if (device.platform !== 'android') return;
@@ -79,6 +84,7 @@ export function createPlatformResourceCleanup(host: HostEnvironment): PlatformRe
           sessionName: params.sessionName,
           stateDir: params.stateDir,
           openWebSessionNames: params.openSessionNames,
+          ownedProcessRecords,
         },
         host,
       );

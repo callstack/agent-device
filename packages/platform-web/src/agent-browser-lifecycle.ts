@@ -8,6 +8,7 @@ import {
   reapOwnedProcessRecordsAtStartup,
 } from '@agent-device/host-kit/process';
 
+import { agentBrowserFleetOf } from './agent-browser-fleet.ts';
 import type { AgentBrowserToolStatus } from './agent-browser-tool.ts';
 import { MANAGED_WEB_BROWSER_PROCESS_PURPOSE } from './agent-browser-process-record.ts';
 import type { AgentBrowserProcessSummary } from './agent-browser-process-record.ts';
@@ -72,34 +73,41 @@ export async function cleanupManagedAgentBrowserOrphans(
   }
   const store = options.ownedProcessRecords;
   if (!store) return emptyCleanupResult();
-  const reaped = await reapOwnedProcessRecordsAtStartup(store, {
-    openWebSessionNames,
-    purposes: [MANAGED_WEB_BROWSER_PROCESS_PURPOSE],
-    termTimeoutMs: WEB_BROWSER_REAP_TERM_TIMEOUT_MS,
-    killTimeoutMs: WEB_BROWSER_REAP_KILL_TIMEOUT_MS,
-  });
-  const signalPids = [...reaped.terminatedPids];
-  if (reaped.inspected > 0) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'web_agent_browser_orphan_cleanup',
-      data: {
-        reason,
-        count: reaped.inspected,
-        pids: [...reaped.inspectedPids],
-        signalPids,
-        ownershipLostPids: [...reaped.ownershipLostPids],
-        stateDir: status.stateDir,
-        installDir: status.installDir,
-      },
+  const fleet = agentBrowserFleetOf(store);
+  return await fleet.updateRecord(async () => {
+    const fleetSessions = fleet.sessions().filter((value) => value.length > 0);
+    if (fleetSessions.length > 0) {
+      return skippedCleanupResult('open-web-session', { openWebSessionNames: fleetSessions });
+    }
+    const reaped = await reapOwnedProcessRecordsAtStartup(store, {
+      openWebSessionNames,
+      purposes: [MANAGED_WEB_BROWSER_PROCESS_PURPOSE],
+      termTimeoutMs: WEB_BROWSER_REAP_TERM_TIMEOUT_MS,
+      killTimeoutMs: WEB_BROWSER_REAP_KILL_TIMEOUT_MS,
     });
-  }
-  return {
-    count: reaped.inspected,
-    pids: [...reaped.inspectedPids],
-    processes: [],
-    signalPids,
-  };
+    const signalPids = [...reaped.terminatedPids];
+    if (reaped.inspected > 0) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'web_agent_browser_orphan_cleanup',
+        data: {
+          reason,
+          count: reaped.inspected,
+          pids: [...reaped.inspectedPids],
+          signalPids,
+          ownershipLostPids: [...reaped.ownershipLostPids],
+          stateDir: status.stateDir,
+          installDir: status.installDir,
+        },
+      });
+    }
+    return {
+      count: reaped.inspected,
+      pids: [...reaped.inspectedPids],
+      processes: [],
+      signalPids,
+    };
+  });
 }
 
 export async function cleanupManagedAgentBrowserOrphansForProviderStartup(
