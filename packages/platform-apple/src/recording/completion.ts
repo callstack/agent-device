@@ -17,6 +17,7 @@ export async function completeAppleRecording(params: {
   stopObservation: StopObservation;
   recorderWarning?: string;
   nativePathDisposition?: NativePathDisposition;
+  signal?: AbortSignal;
 }): Promise<Readonly<{ status: 'completed'; result: ScreenRecordingCompletion }>> {
   const { host, snapshot, targetLabel, recorderWarning, nativePathDisposition } = params;
   // An invalidated recording lost the session that held its recorder, so whatever signalled the
@@ -29,14 +30,17 @@ export async function completeAppleRecording(params: {
   }
   let finalization;
   try {
-    finalization = await host.screenRecording.finalize.complete({
-      outputPath: snapshot.outPath,
-      showTouches: snapshot.invalidatedReason ? false : snapshot.showTouches,
-      gestureEvents: snapshot.gestureEvents,
-      exportQuality: snapshot.exportQuality ?? 'medium',
-      ...(snapshot.fps === undefined ? {} : { fps: snapshot.fps }),
-      targetLabel,
-    });
+    finalization = await host.screenRecording.finalize.complete(
+      {
+        outputPath: snapshot.outPath,
+        showTouches: snapshot.invalidatedReason ? false : snapshot.showTouches,
+        gestureEvents: snapshot.gestureEvents,
+        exportQuality: snapshot.exportQuality ?? 'medium',
+        ...(snapshot.fps === undefined ? {} : { fps: snapshot.fps }),
+        targetLabel,
+      },
+      params.signal,
+    );
   } catch (error) {
     throw asAppError(error, 'COMMAND_FAILED');
   }
@@ -78,6 +82,7 @@ export async function finalizeAppleRecordingFromCollected(
     exportPath: string;
     nativePath: string;
     overlayUnavailable?: string;
+    signal?: AbortSignal;
   }>,
 ): Promise<ScreenRecordingFinalization> {
   const { host, snapshot, targetLabel, collectedPath, exportPath, nativePath } = params;
@@ -91,14 +96,17 @@ export async function finalizeAppleRecordingFromCollected(
   try {
     await host.screenRecording.outputs.copy({ from: collectedPath, to: exportPath });
     finalization = await asAppErrorAsync(() =>
-      host.screenRecording.finalize.complete({
-        outputPath: exportPath,
-        showTouches: overlayUnavailability === undefined && snapshot.showTouches,
-        gestureEvents: snapshot.gestureEvents,
-        exportQuality: snapshot.exportQuality ?? 'medium',
-        ...(snapshot.fps === undefined ? {} : { fps: snapshot.fps }),
-        targetLabel,
-      }),
+      host.screenRecording.finalize.complete(
+        {
+          outputPath: exportPath,
+          showTouches: overlayUnavailability === undefined && snapshot.showTouches,
+          gestureEvents: snapshot.gestureEvents,
+          exportQuality: snapshot.exportQuality ?? 'medium',
+          ...(snapshot.fps === undefined ? {} : { fps: snapshot.fps }),
+          targetLabel,
+        },
+        params.signal,
+      ),
     );
   } catch (error) {
     // `--out` only ever holds bytes the finalizer accepted. The collected copy stays for the retry.

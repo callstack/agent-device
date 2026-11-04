@@ -113,8 +113,15 @@ async function startHarmonyRecording(params: {
     recorderStopped = true;
   };
   const handle = createScreenRecordingLiveHandle(initial, {
-    finish: async (current) =>
-      await finishHarmonyRecording(host, device, current, descriptor, stopRecorder),
+    finish: async (current, progress) =>
+      await finishHarmonyRecording(
+        host,
+        device,
+        current,
+        descriptor,
+        stopRecorder,
+        progress?.signal,
+      ),
     forceCleanup: async () =>
       await cleanupLiveHarmonyDescriptor(host, device, descriptor, stopRecorder),
   });
@@ -144,6 +151,7 @@ async function finishHarmonyRecording(
   snapshot: ScreenRecordingLiveSnapshot,
   descriptor: HarmonyRecordingDescriptor,
   stopRecorder: () => Promise<void>,
+  signal?: AbortSignal,
 ) {
   await stopRecorder();
   const mediaUri = await host.screenRecording.harmony.findMedia(device, descriptor.fileName);
@@ -161,12 +169,15 @@ async function finishHarmonyRecording(
       outputPath: snapshot.outPath,
     });
     if (pulled.exitCode !== 0) throw new Error('failed to retrieve HarmonyOS recording');
-    const finalization = await host.screenRecording.finalize.complete({
-      outputPath: snapshot.outPath,
-      showTouches: false,
-      gestureEvents: snapshot.gestureEvents,
-      targetLabel: 'HarmonyOS recording',
-    });
+    const finalization = await host.screenRecording.finalize.complete(
+      {
+        outputPath: snapshot.outPath,
+        showTouches: false,
+        gestureEvents: snapshot.gestureEvents,
+        targetLabel: 'HarmonyOS recording',
+      },
+      signal,
+    );
     const cleanupWarning = await cleanupCompletedHarmonyArtifacts(
       host,
       device,

@@ -72,6 +72,7 @@ export async function finishRecoveredDurableCapture<
           fence: envelope.fence,
           resourcePath: params.resourcePath,
           intent: 'capture',
+          signal: params.scope.signal,
         });
       case 'completed': {
         const result = authority.reattached.result;

@@ -190,6 +190,7 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
                 collectedPath,
                 exportPath,
                 nativePath,
+                signal: progress?.signal,
               });
             } catch (exportError) {
               throw recorderExitEndedTheRecording(exportError, recorderExit, recorderResult);
@@ -257,6 +258,7 @@ function simulatorExportHandle(
               collectedPath,
               exportPath,
               nativePath,
+              signal: progress?.signal,
               ...(recording.showTouches
                 ? {
                     overlayUnavailable:
@@ -346,7 +348,7 @@ async function startAppleRunnerRecording(params: AppleRecordingStartParams) {
       ...(result.remotePath === undefined ? {} : { remotePath: result.remotePath }),
     },
     snapshot: snapshot(input, 'runner AVAssetWriter', result),
-    finish: async (current) => {
+    finish: async (current, progress) => {
       await stopRunner();
       if (result.remotePath !== undefined) {
         await host.screenRecording.apple.retrieveRunnerRecording(
@@ -360,6 +362,7 @@ async function startAppleRunnerRecording(params: AppleRecordingStartParams) {
         snapshot: current,
         targetLabel: device.appleOs === 'macos' ? 'macOS recording' : 'iOS recording',
         stopObservation: { recorder: 'confirmed' },
+        signal: progress?.signal,
         // The runner wrote its recording to the device and the stop RPC was acknowledged, so the
         // retrieved file on the device is safe to retire; nothing removes it here (ADR 0024 2.3).
         ...(result.remotePath === undefined ? {} : { nativePathDisposition: 'retirable' as const }),

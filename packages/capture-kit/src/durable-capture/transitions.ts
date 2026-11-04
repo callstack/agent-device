@@ -31,6 +31,7 @@ export async function finishLiveDurableCapture<
   params: {
     binding: DurableCaptureSessionBinding<K, H>;
     intent: DurableCaptureFinishIntent;
+    signal?: AbortSignal;
   },
   resourcePath: string,
 ): Promise<C> {
@@ -43,6 +44,7 @@ export async function finishLiveDurableCapture<
       fence: active.envelope.fence,
       resourcePath,
       intent: params.intent,
+      signal: params.signal,
       onCleanupPending: () => {
         cleanupPending = true;
       },
@@ -73,6 +75,7 @@ export async function finishDurableCaptureHandle<
     fence: ResourceOwnershipFence;
     resourcePath: string;
     intent: DurableCaptureFinishIntent;
+    signal?: AbortSignal;
     onCleanupPending?(outcome: Extract<CleanupOutcome, { status: 'cleanup-pending' }>): void;
   },
 ): Promise<C> {
@@ -111,7 +114,7 @@ export async function finishDurableCaptureHandle<
     },
     run: async (lease) => {
       markCompletingDurableCapture(lease);
-      const progress = createStopProgress(lease);
+      const progress = createStopProgress(lease, params.signal);
       let finishOutcome: FinishOutcome<C>;
       try {
         finishOutcome = await params.handle.finish(progress);
@@ -389,9 +392,11 @@ export function transitionFinishOutcome<K extends string, C>(
  */
 export function createStopProgress<K extends string>(
   lease: DurableCaptureOpenResourceFenceLease<K>,
+  signal?: AbortSignal,
 ): DurableCaptureProgress {
   return Object.freeze({
     learned: lease.envelope.metadata,
+    ...(signal === undefined ? {} : { signal }),
     record: (fact: JsonObject) => {
       lease.transition('open', { metadata: { ...(lease.envelope.metadata ?? {}), ...fact } });
     },

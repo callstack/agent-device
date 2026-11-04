@@ -93,6 +93,7 @@ export function adoptStartedScreenRecording(params: {
 export function finishLiveScreenRecording(params: {
   binding: DurableCaptureSessionBinding<'screen-recording', ScreenRecordingLiveHandle>;
   intent: DurableCaptureFinishIntent;
+  signal?: AbortSignal;
 }): Promise<ScreenRecordingCompletion> {
   return screenRecordingDurableResource.finishLive(params);
 }
@@ -244,7 +245,7 @@ export async function finishRecoveredScreenRecording(params: {
         }
         try {
           markCompletingDurableCapture(lease);
-          const finished = await result.handle.finish(createStopProgress(lease));
+          const finished = await result.handle.finish(createStopProgress(lease, scope.signal));
           currentAuthority();
           if (finished.status !== 'completed')
             throw new AppError('COMMAND_FAILED', finished.message ?? 'Recording stop is pending', {

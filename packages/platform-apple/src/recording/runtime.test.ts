@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { expect, test, vi } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { RECORDING_OUTPUT_UNPLAYABLE_REASON } from '@agent-device/contracts/screen-recording-runtime';
 import type { AppleScreenRecordingRunnerRequest } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -260,6 +260,71 @@ test('a simulator stop exports from a copy and retires the file the recorder own
   expect(files.exists(exportPath)).toBe(true);
   expect(files.exists(nativePath)).toBe(false);
   expect(files.exists(collectedPath)).toBe(false);
+});
+
+test('a simulator finish uses the stop signal and preserves its collected recording for retry', async () => {
+  const exportPath = recordingOutputPath('cancel-stop.mp4');
+  const nativePath = exportPath.replace(/\.mp4$/, '.native.mp4');
+  const collectedPath = exportPath.replace(/\.mp4$/, '.collected.mp4');
+  const files = recordingFileStore();
+  const start = new AbortController();
+  const stop = new AbortController();
+  const retry = new AbortController();
+  let entered!: () => void;
+  const finalizing = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  let attempts = 0;
+  const operations = createAppleScreenRecordingOperations({
+    host: appleHost({
+      files,
+      apple: {
+        startSimulator: async () => ({
+          markers: [processIdentity],
+          wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
+          terminate: async () => {},
+        }),
+      },
+      complete: async (_input, signal) => {
+        attempts++;
+        expect(signal).toBe(attempts === 1 ? stop.signal : retry.signal);
+        if (attempts === 1) {
+          entered();
+          await new Promise<void>((resolve) =>
+            signal!.addEventListener('abort', () => resolve(), { once: true }),
+          );
+          throw createRequestCanceledError();
+        }
+        return {};
+      },
+    }),
+    device: simulator,
+    owner: localRuntimeOwner('apple'),
+    signal: start.signal,
+  });
+  const handle = (
+    await operations.screenRecordingStart({ ...input(), outputPath: exportPath })
+  ).pendingHandle.transfer();
+  start.abort();
+  let learned = {};
+  const progress = (signal: AbortSignal) => ({
+    learned,
+    signal,
+    record: (fact: object) => {
+      learned = { ...learned, ...fact };
+    },
+  });
+  const finishing = handle.finish(progress(stop.signal));
+  await finalizing;
+  stop.abort();
+  await expect(finishing).rejects.toMatchObject({ details: { reason: 'request_canceled' } });
+  expect(files.exists(nativePath)).toBe(true);
+  expect(files.exists(collectedPath)).toBe(true);
+  expect(files.exists(exportPath)).toBe(false);
+  await expect(handle.finish(progress(retry.signal))).resolves.toMatchObject({
+    status: 'completed',
+  });
+  expect(files.exists(exportPath)).toBe(true);
 });
 
 test('a simulator recording carries the caller fps from start to the finalizer', async () => {

@@ -578,7 +578,11 @@ async function finishLiveWithCleanupAuthority(
 ): Promise<ScreenRecordingCompletion> {
   const binding = bindSessionScreenRecording(params.sessionStore, ref);
   const original = binding.read();
-  const completion = await finishLiveScreenRecording({ intent: 'capture', binding });
+  const completion = await finishLiveScreenRecording({
+    intent: 'capture',
+    binding,
+    signal: params.requestScope.signal,
+  });
   const pending = binding.read();
   if (pending) {
     if (pending !== original)

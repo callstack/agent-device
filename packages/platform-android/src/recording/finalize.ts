@@ -108,6 +108,7 @@ export async function finalizeAndroidRecording(
           stoppedAtMs,
           collectedPath,
           exportPath,
+          signal: progress?.signal,
         }),
       discard: (collectedPath) =>
         discardCollectedChunks(host, collectedPath, evidence.chunks.length),
@@ -126,6 +127,7 @@ async function exportCollectedChunks(
     stoppedAtMs: number;
     collectedPath: string;
     exportPath: string;
+    signal?: AbortSignal;
   }>,
 ): Promise<ScreenRecordingFinalization> {
   const { host, evidence, recording, collectedPath, exportPath } = params;
@@ -141,14 +143,17 @@ async function exportCollectedChunks(
   >;
   try {
     await copyCollectedChunksToExport(host, files);
-    finalization = await host.screenRecording.finalize.complete({
-      outputPath: exportPath,
-      showTouches: chunked ? false : recording.showTouches,
-      gestureEvents: recording.gestureEvents,
-      exportQuality: recording.exportQuality ?? 'medium',
-      ...(recording.fps === undefined ? {} : { fps: recording.fps }),
-      targetLabel: TARGET_LABEL,
-    });
+    finalization = await host.screenRecording.finalize.complete(
+      {
+        outputPath: exportPath,
+        showTouches: chunked ? false : recording.showTouches,
+        gestureEvents: recording.gestureEvents,
+        exportQuality: recording.exportQuality ?? 'medium',
+        ...(recording.fps === undefined ? {} : { fps: recording.fps }),
+        targetLabel: TARGET_LABEL,
+      },
+      params.signal,
+    );
   } catch (error) {
     // The caller's paths only ever hold bytes the finalizer accepted. The collected set stays for the retry.
     for (const { served } of files) await host.screenRecording.outputs.remove(served.path);
@@ -212,7 +217,9 @@ function finalizationFromExport(
     ...(warnings.length === 0 ? {} : { warning: warnings.join(' ') }),
     ...(chunked && recording.showTouches && recording.gestureEvents.length > 0
       ? { overlayWarning: CHUNKED_OVERLAY_WARNING }
-      : {}),
+      : finalization.overlayWarning === undefined
+        ? {}
+        : { overlayWarning: finalization.overlayWarning }),
     ...(captured.capturedDurationMs === undefined
       ? {}
       : { capturedDurationMs: captured.capturedDurationMs }),

@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import { createRequestCanceledError } from '@agent-device/kernel/errors';
 import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import {
@@ -33,7 +34,7 @@ function input(overrides: Partial<ScreenRecordingStartInput> = {}): ScreenRecord
 function harness(
   options: {
     transport?: Partial<ScreenRecordingTransport<string>>;
-    finalize?: () => Promise<Record<string, never>>;
+    finalize?: (signal?: AbortSignal) => Promise<Record<string, never>>;
     signal?: AbortSignal;
   } = {},
 ) {
@@ -59,9 +60,9 @@ function harness(
   const prepareValidator = vi.fn(async () => {
     calls.push('prepare-validator');
   });
-  const complete = vi.fn(async () => {
+  const complete = vi.fn(async (_input: unknown, signal?: AbortSignal) => {
     calls.push('finalize');
-    return await (options.finalize ?? (async () => ({})))();
+    return await (options.finalize ?? (async () => ({})))(signal);
   });
   const start = () =>
     startTransportScreenRecording({
@@ -109,6 +110,39 @@ test('a finish stops once, collects to the output path, finalizes, and confirms 
       stopObservation: { recorder: 'confirmed' },
     },
   });
+});
+
+test('finish uses its own cancellation signal and retries without restarting the recorder', async () => {
+  const start = new AbortController();
+  const stop = new AbortController();
+  let entered!: () => void;
+  const finalizing = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  let attempts = 0;
+  const fixture = harness({
+    signal: start.signal,
+    finalize: async (signal) => {
+      attempts++;
+      expect(signal).toBe(attempts === 1 ? stop.signal : undefined);
+      if (attempts === 1) {
+        entered();
+        await new Promise<void>((resolve) =>
+          signal!.addEventListener('abort', () => resolve(), { once: true }),
+        );
+        throw createRequestCanceledError();
+      }
+      return {};
+    },
+  });
+  const handle = (await fixture.start()).pendingHandle.transfer();
+  start.abort();
+  const finishing = handle.finish({ learned: undefined, record: () => {}, signal: stop.signal });
+  await finalizing;
+  stop.abort();
+  await expect(finishing).rejects.toMatchObject({ details: { reason: 'request_canceled' } });
+  await expect(handle.finish()).resolves.toMatchObject({ status: 'completed' });
+  expect(fixture.calls.filter((call) => call === 'stop')).toHaveLength(1);
 });
 
 test('a collect that fails after a successful stop is retried by the next finish without a second stop', async () => {

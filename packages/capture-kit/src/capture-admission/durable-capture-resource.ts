@@ -79,6 +79,7 @@ export function createDurableCaptureResource<
     finishLive(params: {
       binding: DurableCaptureSessionBinding<K, H>;
       intent: DurableCaptureFinishIntent;
+      signal?: AbortSignal;
     }): Promise<C> {
       return finishLiveDurableCapture(
         definition,

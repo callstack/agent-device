@@ -119,18 +119,23 @@ export async function startTransportScreenRecording<Collectible>(params: {
   const handle = createScreenRecordingLiveHandle(
     transportRecordingSnapshot(transport.backend, input),
     {
-      finish: async (current) => {
+      finish: async (current, progress) => {
         const collectible = await stopOnce();
         if (transport.collect) {
           await transport.collect(collectible, current.outPath);
         }
-        const finalization = await host.screenRecording.finalize.complete({
-          outputPath: current.outPath,
-          showTouches: false,
-          gestureEvents: current.gestureEvents,
-          ...(current.exportQuality === undefined ? {} : { exportQuality: current.exportQuality }),
-          targetLabel: transport.targetLabel,
-        });
+        const finalization = await host.screenRecording.finalize.complete(
+          {
+            outputPath: current.outPath,
+            showTouches: false,
+            gestureEvents: current.gestureEvents,
+            ...(current.exportQuality === undefined
+              ? {}
+              : { exportQuality: current.exportQuality }),
+            targetLabel: transport.targetLabel,
+          },
+          progress?.signal,
+        );
         return createScreenRecordingCompletion(current, finalization, {
           // The provider acknowledged the stop and nothing else writes the export.
           stopObservation: { recorder: 'confirmed' },

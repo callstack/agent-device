@@ -43,6 +43,8 @@ export type FinishOutcome<Result> =
 export type DurableCaptureProgress = Readonly<{
   record(fact: JsonObject): void;
   readonly learned: JsonObject | undefined;
+  /** The current finish request, never the request that started the resource. */
+  readonly signal?: AbortSignal;
 }>;
 
 /** Common lifecycle shape implemented by a facet-specific live handle contract. */
