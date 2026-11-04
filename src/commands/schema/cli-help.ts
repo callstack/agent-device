@@ -457,7 +457,7 @@ Discovery:
 
 iOS physical-device prerequisites:
   Xcode, xcrun xcdevice, and xcrun xctrace must be available from the selected Xcode.
-  The device must be paired/trusted, connected, unlocked when needed, and have Developer Mode enabled.
+  The device must be paired/trusted, connected, unlocked when needed, and have Developer Mode enabled. A paired device that CoreDevice cannot reach (devicectl tunnelState unavailable: unplugged or off the network) is listed with booted: false, and commands refuse it with details.kind not_ready and details.tunnelState unavailable.
   Modern devices visible to devicectl use CoreDevice. Older devices visible only to xctrace use the XCTest backend automatically.
   XCTest-backed devices must already have the target app installed and should be opened by bundle ID; app inventory, install/reinstall, logs, performance sampling, recording, deep links, and launch arguments require CoreDevice.
   XCTest-backed runner commands travel through macOS usbmuxd; keep the trusted device connected by cable.
