@@ -177,26 +177,29 @@ export type RunnerCommand = {
 
 /**
  * One request to the Simulator AX bridge reader that the runner serves. `target` names the foreground
- * process of `appBundleId`; `describe` reads its tree under the guest bridge's own bounds, and refuses a
- * process other than `expectedPid` and `expectedProcessStartTime` as a stale target.
+ * process of `appBundleId`. `describe` reads that process's tree under the guest bridge's own bounds,
+ * and refuses a process other than `expectedPid` and `expectedProcessStartTime` as a stale target, so
+ * it cannot be sent without them.
  */
-export type RunnerSnapshotBridgeRequest = {
-  verb: 'target' | 'describe';
-  requestId: string;
-  generation?: string;
-  expectedPid?: number;
-  expectedProcessStartTime?: string;
-  maxDepth?: number;
-  maxNodes?: number;
-  maxDurationMs?: number;
-  maxResponseBytes?: number;
-  nativeLevelsHint?: number;
-  /**
-   * System surface host executables whose running process on this Simulator refuses the read with
-   * `system-surface-host-present`. The runner names its own Simulator.
-   */
-  surfaceHostExecutables?: readonly string[];
-};
+export type RunnerSnapshotBridgeRequest =
+  | { verb: 'target'; requestId: string; maxDurationMs?: number }
+  | {
+      verb: 'describe';
+      requestId: string;
+      generation: string;
+      expectedPid: number;
+      expectedProcessStartTime: string;
+      maxDepth?: number;
+      maxNodes?: number;
+      maxDurationMs?: number;
+      maxResponseBytes?: number;
+      nativeLevelsHint?: number;
+      /**
+       * System surface host executables whose running process on this Simulator refuses the read with
+       * `system-surface-host-present`. The runner names its own Simulator.
+       */
+      surfaceHostExecutables?: readonly string[];
+    };
 
 /**
  * One allowlisted coordinate gesture step inside a fused `sequence` runner command.

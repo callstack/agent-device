@@ -205,6 +205,20 @@ test('a remote Simulator capture reads the runner-served bridge in one round tri
   });
 });
 
+test('every runner bridge request names its own budget, one transport margin under the daemon deadline', async () => {
+  const { provider, sent } = bridgeRunner({
+    process: { pid: 41, processStartTime: '1700000000.000001' },
+  });
+  const { snapshot } = bridgeRoute(provider);
+
+  await snapshot();
+
+  const [target, describe] = sent.map((command) => command.snapshotBridge);
+  expect(target).toMatchObject({ verb: 'target', maxDurationMs: 4_000 });
+  expect(describe).toMatchObject({ verb: 'describe', maxDurationMs: 4_000 });
+  expect(describe!.maxResponseBytes).toBeGreaterThan(0);
+});
+
 test('a read that meets a relaunched app takes XCTest once and reads the new process next', async () => {
   const state = { process: { pid: 41, processStartTime: '1700000000.000001' } };
   const { provider, sent } = bridgeRunner(state);

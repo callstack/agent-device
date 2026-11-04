@@ -802,6 +802,8 @@ The runner includes the reader sources of `apple/snapshot-bridge`.
 The runner leaves out the guest socket server.
 The `snapshotBridge` runner command reaches the reader through the runner's forwarded HTTP transport.
 The runner answers that command on its own serial queue, off its journal and off the XCTest main thread.
+The reader's accessibility calls run on a private serial queue, not on the main thread where the guest process runs them.
+Live captures on Limrun iOS 26.4 and on a local iOS 26.2 Simulator (#4182) served trees from that queue.
 The route, the generation circuit, the one typed XCTest fallback, and the `simulator-ax-bridge` producer are the same as on a local Simulator.
 
 The guest process ends itself when a read outlives its budget, because nothing can stop an accessibility call that never returns.

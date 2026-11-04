@@ -41,13 +41,13 @@ const BACKGROUND_STATES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The runner session the reads go to, or `undefined` when no runner can answer. A session id makes
+ * The runner session the reads go to, or `undefined` when no runner can answer. The session id makes
  * each read refuse a replacement runner.
  */
 export type ForegroundProbeSession = (
   device: DeviceInfo,
   input: Readonly<{ signal: AbortSignal; requestId?: string }>,
-) => Promise<Readonly<{ sessionId?: string }> | undefined>;
+) => Promise<Readonly<{ sessionId: string }> | undefined>;
 
 /**
  * The local session: a ready runner in the session registry. The read never starts a runner: with no
@@ -83,19 +83,19 @@ export function createSystemSurfaceForegroundProbe(
 async function readHostState(
   device: DeviceInfo,
   bundleId: string,
-  runnerSessionId: string | undefined,
+  runnerSessionId: string,
   input: Readonly<{ signal: AbortSignal; requestId?: string }>,
 ): Promise<string | undefined> {
   try {
     // `appState` brings no app forward and binds nothing: it reads the named bundle's
     // `XCUIApplication.state`, the predicate the runner itself uses to serve a surface in place.
-    // An expected session id refuses a replacement runner, so the read cannot start or restart one.
+    // The expected session id refuses a replacement runner, so the read cannot start or restart one.
     const result = await runAppleRunnerCommand(
       device,
       { command: 'appState', appBundleId: bundleId },
       {
         signal: AbortSignal.any([input.signal, AbortSignal.timeout(HOST_STATE_READ_TIMEOUT_MS)]),
-        ...(runnerSessionId ? { expectedRunnerSessionId: runnerSessionId } : {}),
+        expectedRunnerSessionId: runnerSessionId,
         ...(input.requestId ? { requestId: input.requestId } : {}),
       },
     );
