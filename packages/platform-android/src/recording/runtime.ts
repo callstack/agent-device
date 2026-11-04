@@ -303,14 +303,26 @@ async function startAndroidRecording(params: {
         progress,
         activeRecorderRetired: retiredActiveRecorder,
       });
-      if (!(await releaseQuiescentAdmission(transport, activeEvidence(chunks), manifestPath)))
-        throw admissionReleaseUnconfirmed();
+      if (!(await releaseQuiescentAdmission(transport, activeEvidence(chunks), manifestPath))) {
+        if (exported.status !== 'completed') return exported;
+        return {
+          ...exported,
+          result: { ...exported.result, nativePathDisposition: 'pending' },
+          cleanupPending: admissionReleaseUnconfirmed(),
+        };
+      }
       confirmNativeCleanup();
       return exported;
     },
     forceCleanup: async () => {
       claimStop();
       if (phase === 'finished') return { status: 'cleaned' } as const;
+      if (exported?.status === 'completed') {
+        if (!(await releaseQuiescentAdmission(transport, activeEvidence(chunks), manifestPath)))
+          return admissionReleaseUnconfirmed();
+        confirmNativeCleanup();
+        return { status: 'cleaned' } as const;
+      }
       try {
         await rotation;
       } catch (error) {

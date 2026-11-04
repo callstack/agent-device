@@ -20,6 +20,7 @@ import {
   cleanupDurableCaptureDescriptor,
   markCompletingDurableCapture,
   transitionCleanupOutcome,
+  transitionFinishOutcome,
 } from './transitions.ts';
 
 const DEFAULT_RECOVERY_DEADLINE_MS = 5_000;
@@ -183,6 +184,17 @@ async function settleRecoveryAuthority<K extends string, H extends LiveResourceH
         await authority.reattached.handle[Symbol.asyncDispose]();
         return false;
       case 'completed':
+        if (authority.reattached.cleanupPending) {
+          const completed = authority.reattached;
+          await withDurableCaptureResourceFence({
+            store: params.definition.store,
+            resourcePath,
+            expected: envelope.fence,
+            onCompleted: () => undefined,
+            run: async (lease) => transitionFinishOutcome(params.definition, lease, completed),
+          });
+          return false;
+        }
         await transitionTerminal(params, resourcePath, envelope, {
           ...params.definition.completionMetadata(authority.reattached.result),
         });

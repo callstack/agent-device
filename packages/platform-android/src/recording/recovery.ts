@@ -167,27 +167,20 @@ async function reattachEvidence(params: {
   const { host, transport, device, input, descriptor, evidence, signal } = params;
   if (evidence.completion !== undefined) {
     const observed = await observeCompletedEvidence(transport, evidence, signal);
-    if (observed.status === 'terminal') {
-      if (!(await releaseQuiescentAdmission(transport, evidence, descriptor.manifestPath)))
-        return unreattachable(
-          'preservation-unavailable',
-          'Android recording admission release is unconfirmed; the completed export is retained.',
-        );
-      return {
-        status: 'completed' as const,
-        // The marker froze its disposition when the chunks were still owed a removal, so the replay
-        // answers that field from the device in front of it (ADR 0024 2.3). A recording whose chunks
-        // were disposed of while the daemon was down is not still owed a retirement.
-        result: {
-          ...evidence.completion,
-          nativePathDisposition: observed.nativePathDisposition,
-        },
-      };
-    }
-    return unreattachable(
-      'ownership-fence-lost',
-      'Android recording completed evidence still names a live or unverifiable recorder.',
-    );
+    const released =
+      observed.status === 'terminal' &&
+      (await releaseQuiescentAdmission(transport, evidence, descriptor.manifestPath));
+    return {
+      status: 'completed' as const,
+      result: {
+        ...evidence.completion,
+        nativePathDisposition:
+          released && observed.status === 'terminal'
+            ? observed.nativePathDisposition
+            : ('pending' as const),
+      },
+      ...(released ? {} : { cleanupPending: admissionReleaseUnconfirmed() }),
+    };
   }
   if (evidence.pendingRemotePath !== undefined)
     return unreattachable(
@@ -231,15 +224,27 @@ async function reattachEvidence(params: {
         reachedLimit: provesAndroidScreenRecordTermination(running),
         progress,
       });
-      if (!(await releaseQuiescentAdmission(transport, evidence, descriptor.manifestPath)))
-        throw admissionReleaseUnconfirmed();
+      if (!(await releaseQuiescentAdmission(transport, evidence, descriptor.manifestPath))) {
+        if (exported.status !== 'completed') return exported;
+        return {
+          ...exported,
+          result: { ...exported.result, nativePathDisposition: 'pending' },
+          cleanupPending: admissionReleaseUnconfirmed(),
+        };
+      }
       nativeCleanupConfirmed = true;
       return exported;
     },
-    forceCleanup: async () =>
-      nativeCleanupConfirmed
-        ? ({ status: 'cleaned' } as const)
-        : await cleanupAndroidRecording({ transport, device, input }),
+    forceCleanup: async () => {
+      if (nativeCleanupConfirmed) return { status: 'cleaned' } as const;
+      if (exported?.status === 'completed') {
+        if (!(await releaseQuiescentAdmission(transport, evidence, descriptor.manifestPath)))
+          return admissionReleaseUnconfirmed();
+        nativeCleanupConfirmed = true;
+        return { status: 'cleaned' } as const;
+      }
+      return await cleanupAndroidRecording({ transport, device, input });
+    },
   });
   return {
     status: 'active' as const,
@@ -436,11 +441,7 @@ function inputFromDescriptor(
 }
 
 function unreattachable(
-  reason:
-    | 'descriptor-invalid'
-    | 'transport-not-reattachable'
-    | 'ownership-fence-lost'
-    | 'preservation-unavailable',
+  reason: 'descriptor-invalid' | 'transport-not-reattachable' | 'ownership-fence-lost',
   message?: string,
 ) {
   return {

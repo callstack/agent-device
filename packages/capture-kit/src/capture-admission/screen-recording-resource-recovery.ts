@@ -20,7 +20,10 @@ import type {
 import { screenRecordingRecoveryUse } from '@agent-device/contracts/screen-recording-runtime-plan';
 import type { DurableCaptureRecoveryControl } from '../durable-capture/index.ts';
 import { acquireExactDurableCaptureRecoveryControl } from './durable-capture-runtime-recovery.ts';
-import { screenRecordingDurableResource } from './screen-recording-session-resource.ts';
+import {
+  encodeScreenRecordingCompletionMetadata,
+  screenRecordingDurableResource,
+} from './screen-recording-session-resource.ts';
 
 type ScreenRecordingRecoveryRuntime = BoundDeviceRuntime<typeof screenRecordingRecoveryUse>;
 
@@ -106,6 +109,19 @@ export async function recoverScreenRecordingResourceAfterDaemonLock(params: {
             case 'missing':
               return { status: 'retained' as const, reason: 'resource-missing' };
             case 'completed':
+              if (outcome.cleanupPending)
+                lease.transition('open', {
+                  metadata: {
+                    ...lease.envelope.metadata,
+                    ...encodeScreenRecordingCompletionMetadata(outcome.result),
+                    phase: 'cleanup-pending',
+                    cleanupStatus: outcome.cleanupPending.status,
+                    cleanupPendingReason: outcome.cleanupPending.reason,
+                    ...(outcome.cleanupPending.message
+                      ? { cleanupPendingMessage: outcome.cleanupPending.message }
+                      : {}),
+                  },
+                });
               return { status: 'retained' as const, reason: 'completion-pending' };
           }
         } finally {

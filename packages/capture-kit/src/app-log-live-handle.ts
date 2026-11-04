@@ -42,7 +42,7 @@ export function createAppLogLiveHandleFromFinish(
     forceCleanup: async () => {
       const outcome = await implementation.finish();
       return outcome.status === 'completed'
-        ? { status: 'cleaned' }
+        ? (outcome.cleanupPending ?? { status: 'cleaned' })
         : { status: 'cleanup-pending', reason: outcome.reason, message: outcome.message };
     },
   });

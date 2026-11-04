@@ -91,6 +91,39 @@ test('successful finish makes concurrent disposal inert', async () => {
   assert.equal(cleanup.mock.calls.length, 0);
 });
 
+test('an exported result with pending cleanup retains disposal and retries finish', async () => {
+  const pending = {
+    status: 'cleanup-pending' as const,
+    reason: 'cleanup-unconfirmed' as const,
+  };
+  let resolveFinish!: (
+    outcome: ReturnType<typeof completed> & { cleanupPending: typeof pending },
+  ) => void;
+  const finish = vi
+    .fn()
+    .mockImplementationOnce(
+      async () =>
+        await new Promise<ReturnType<typeof completed> & { cleanupPending: typeof pending }>(
+          (resolve) => {
+            resolveFinish = resolve;
+          },
+        ),
+    )
+    .mockResolvedValueOnce(completed());
+  const cleanup = vi.fn(async () => pending);
+  const handle = createScreenRecordingLiveHandle(snapshot(), { finish, forceCleanup: cleanup });
+  const finishing = handle.finish();
+  const disposing = handle.forceCleanup();
+  resolveFinish({ ...completed(), cleanupPending: pending });
+  await expect(finishing).resolves.toMatchObject({ status: 'completed', cleanupPending: pending });
+  await expect(disposing).resolves.toEqual(pending);
+  expect(cleanup).toHaveBeenCalledOnce();
+  await expect(handle.finish()).resolves.toEqual(completed());
+  await expect(handle.forceCleanup()).resolves.toEqual({ status: 'cleaned' });
+  expect(finish).toHaveBeenCalledTimes(2);
+  expect(cleanup).toHaveBeenCalledOnce();
+});
+
 test('failed finish permits one forced cleanup', async () => {
   const finish = vi.fn(async () => {
     throw new Error('finalization failed');

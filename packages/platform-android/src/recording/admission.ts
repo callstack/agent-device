@@ -1,17 +1,17 @@
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import { AppError } from '@agent-device/kernel/errors';
+import type { PendingCleanupOutcome } from '@agent-device/contracts/durable-resource';
 import type { NativeManifest } from './manifest.ts';
 import { decodeNativeManifest } from './manifest.ts';
 import { recordingGenerationKey } from './native-path.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
 
-export function admissionReleaseUnconfirmed(): AppError {
-  return new AppError('COMMAND_FAILED', 'Android recording admission release is unconfirmed', {
+export function admissionReleaseUnconfirmed(): PendingCleanupOutcome {
+  return {
+    status: 'cleanup-pending',
     reason: 'cleanup-unconfirmed',
-    retriable: true,
-    hint: 'Keep the recording recovery record and retry through its original owner.',
-  });
+    message: 'Android recording admission release is unconfirmed',
+  };
 }
 
 export function admissionOwner(evidence: NativeManifest): string {

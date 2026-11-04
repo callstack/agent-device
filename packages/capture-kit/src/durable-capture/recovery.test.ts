@@ -177,3 +177,56 @@ test('recovery retains export authority without cleanup or manifest completion',
     envelope: { lifecycle: 'open' },
   });
 });
+
+test('recovery records a completed export while retaining pending owner cleanup', async () => {
+  const context = makeDurableCaptureContext();
+  testCaptureStore.write(
+    context.resourcePath,
+    createDurableResourceEnvelope({
+      resourceKind: TEST_CAPTURE_KIND,
+      sessionId: context.sessionName,
+      device: { id: context.device.id, family: context.device.platform, kind: context.device.kind },
+      owner: context.owner,
+      fence: context.fence,
+      lifecycle: 'open',
+      descriptor: { version: 1, body: { pid: 123 } },
+    }),
+  );
+  const cleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
+  await expect(
+    recoverDurableCaptureResourcesAfterDaemonLock({
+      definition: testCaptureDefinition,
+      sessionsDir: context.sessionsDir,
+      resolveSessionDir: context.resolveSessionDir,
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+      acquireControl: async () => ({
+        reattach: async () => ({
+          status: 'completed' as const,
+          result: { outputPath: '/tmp/test', completedAt: 1 },
+          cleanupPending: {
+            status: 'cleanup-pending' as const,
+            reason: 'owner-unavailable' as const,
+          },
+        }),
+        cleanup,
+        [Symbol.asyncDispose]: async () => {},
+      }),
+    }),
+  ).resolves.toEqual({ scanned: 1, recovered: 0, retained: 1 });
+  expect(cleanup).not.toHaveBeenCalled();
+  expect(testCaptureStore.read(context.resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: {
+      lifecycle: 'open',
+      metadata: {
+        phase: 'cleanup-pending',
+        cleanupStatus: 'cleanup-pending',
+        cleanupPendingReason: 'owner-unavailable',
+      },
+    },
+  });
+});

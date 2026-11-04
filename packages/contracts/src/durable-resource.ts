@@ -16,8 +16,16 @@ export type CleanupOutcome =
       message?: string;
     }>;
 
+export type PendingCleanupOutcome = Extract<CleanupOutcome, { status: 'cleanup-pending' }>;
+
+/** A completed result can coexist with cleanup that still requires its exact owner. */
 export type FinishOutcome<Result> =
-  | Readonly<{ status: 'completed'; result: Result; alreadyCompleted?: boolean }>
+  | Readonly<{
+      status: 'completed';
+      result: Result;
+      alreadyCompleted?: boolean;
+      cleanupPending?: PendingCleanupOutcome;
+    }>
   | Readonly<{
       status: 'cleanup-pending';
       reason: CleanupPendingReason;
@@ -57,7 +65,8 @@ export type ReattachOutcome<Handle extends AsyncDisposable, Result> =
   | Readonly<{ status: 'active'; handle: Handle }>
   /** The recorder is gone and disposal of this handle must preserve its export material. */
   | Readonly<{ status: 'export'; handle: Handle }>
-  | Readonly<{ status: 'completed'; result: Result }>
+  /** A pending cleanup retains the resource's durable authority even when its result can be served. */
+  | Readonly<{ status: 'completed'; result: Result; cleanupPending?: PendingCleanupOutcome }>
   | Readonly<{ status: 'missing' }>
   | Readonly<{
       status: 'unreattachable';

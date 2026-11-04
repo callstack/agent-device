@@ -1,22 +1,20 @@
 import path from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { expect, test, vi } from 'vitest';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
-import type {
-  ScreenRecordingCompletion,
-  ScreenRecordingLiveHandle,
-} from '@agent-device/contracts/screen-recording-runtime';
-import {
-  adoptStartedDurableCapture,
-  createDurableCaptureResourceStore,
-  finishLiveDurableCapture,
-  forceCleanupLiveDurableCapture,
-  type DurableCaptureRecordDefinition,
-} from '@agent-device/capture-kit/durable-capture';
+import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
-import { finishRecoveredScreenRecording } from '@agent-device/capture-kit/screen-recording-session-resource';
+import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
+import {
+  adoptStartedScreenRecording,
+  finishLiveScreenRecording,
+  finishRecoveredScreenRecording,
+  screenRecordingDurableResource,
+} from '@agent-device/capture-kit/screen-recording-session-resource';
+import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { mkdtempForTestSync } from '../__tests__/test-utils/tmp-dir.ts';
 import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
 import { bindAndroidScreenRecordingRuntime } from './runtime.ts';
@@ -114,6 +112,7 @@ test.each(['release-unavailable', 'writer-scan-inconclusive'] as const)(
     try {
       const directory = mkdtempForTestSync('android-release-retry-');
       const files = recordingFileStore();
+      const input = { ...recordingInput(), outputPath: path.join(directory, 'capture.mp4') };
       let marker = '';
       let available = false;
       const scan = vi.fn(async () => ({
@@ -123,6 +122,12 @@ test.each(['release-unavailable', 'writer-scan-inconclusive'] as const)(
       const finalize = vi.fn(async () => ({}));
       const host = recordingHost({
         files,
+        outputs: {
+          copy: async ({ from, to }: { from: string; to: string }) => {
+            await files.outputs.copy({ from, to });
+            if (to === input.outputPath) writeFileSync(to, files.files.get(to)!);
+          },
+        },
         findRunning: scan,
         writeManifest: async ({ contents }: { contents: string }) => {
           marker = contents;
@@ -141,7 +146,6 @@ test.each(['release-unavailable', 'writer-scan-inconclusive'] as const)(
             : await releaseOriginal(input),
         );
       const owner = localRuntimeOwner('android');
-      const input = { ...recordingInput(), outputPath: path.join(directory, 'capture.mp4') };
       const runtime = await bindAndroidScreenRecordingRuntime({
         host,
         device: androidRecordingDevice,
@@ -156,28 +160,38 @@ test.each(['release-unavailable', 'writer-scan-inconclusive'] as const)(
         envelope: started.envelope,
       });
       const first = recording.finish();
-      const refused = expect(first).rejects.toMatchObject({
-        code: 'COMMAND_FAILED',
-        details: { reason: 'cleanup-unconfirmed' },
+      const completed = expect(first).resolves.toMatchObject({
+        outPath: input.outputPath,
+        nativePathDisposition: 'pending',
       });
-      await Promise.all([vi.advanceTimersByTimeAsync(1_000), refused]);
+      await Promise.all([vi.advanceTimersByTimeAsync(1_000), completed]);
       const completedMarker = JSON.parse(marker);
       expect(completedMarker).toMatchObject({ completion: { outPath: input.outputPath } });
       expect(completedMarker.admissionReleased).toBeUndefined();
       expect(files.files.get(input.outputPath)).toBe('pulled');
+      expect(readFileSync(input.outputPath, 'utf8')).toBe('pulled');
       expect(scan).toHaveBeenCalledWith(completedMarker.chunks[0].remotePath);
       if (failure === 'release-unavailable') expect(release).toHaveBeenCalled();
       else expect(release).not.toHaveBeenCalled();
       expect(recording.manifestRecord()).toMatchObject({
         status: 'decoded',
-        envelope: { lifecycle: 'open' },
+        envelope: {
+          lifecycle: 'open',
+          metadata: {
+            phase: 'cleanup-pending',
+            cleanupStatus: 'cleanup-pending',
+            deviceClaimToken: input.claimToken,
+            completion: { outPath: input.outputPath },
+          },
+        },
       });
       expect(recording.activeHandle()).toBeDefined();
       await expect(
         runtime.screenRecordingReattach({ envelope: started.envelope }),
       ).resolves.toMatchObject({
-        status: 'unreattachable',
-        reason: 'preservation-unavailable',
+        status: 'completed',
+        result: { outPath: input.outputPath, nativePathDisposition: 'pending' },
+        cleanupPending: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
       });
       await expect(
         finishRecoveredScreenRecording({
@@ -193,7 +207,23 @@ test.each(['release-unavailable', 'writer-scan-inconclusive'] as const)(
             [Symbol.asyncDispose]: async () => {},
           }),
         }),
-      ).rejects.toMatchObject({ details: { reason: 'preservation-unavailable' } });
+      ).resolves.toMatchObject({ outPath: input.outputPath, nativePathDisposition: 'pending' });
+      await expect(
+        finishRecoveredScreenRecording({
+          resourcePath: recording.resourcePath,
+          scope: {
+            signal: new AbortController().signal,
+            diagnostics: { emit: () => {} },
+            progress: { report: () => {} },
+          },
+          acquireControl: async () => {
+            throw new Error('owner unavailable');
+          },
+        }),
+      ).resolves.toMatchObject({ outPath: input.outputPath, nativePathDisposition: 'pending' });
+      await expect(recording.finishDisposal()).rejects.toMatchObject({
+        details: { reason: 'cleanup-unconfirmed' },
+      });
       await expect(recording.dispose()).rejects.toMatchObject({
         details: { reason: 'cleanup-unconfirmed' },
       });
@@ -204,9 +234,12 @@ test.each(['release-unavailable', 'writer-scan-inconclusive'] as const)(
       });
       expect(JSON.parse(marker)).toEqual(completedMarker);
       expect(files.files.get(input.outputPath)).toBe('pulled');
+      expect(readFileSync(input.outputPath, 'utf8')).toBe('pulled');
 
       available = true;
-      await expect(recording.finish()).resolves.toMatchObject({ outPath: input.outputPath });
+      if (failure === 'release-unavailable')
+        await expect(recording.finish()).resolves.toMatchObject({ outPath: input.outputPath });
+      else await expect(recording.dispose()).resolves.toBeUndefined();
       expect(finalize).toHaveBeenCalledOnce();
       expect(JSON.parse(marker)).toMatchObject({ admissionReleased: true });
       expect(files.files.get(input.outputPath)).toBe('pulled');
@@ -263,10 +296,12 @@ test.each(['confirmed', 'receipt-unavailable'] as const)(
       const started = await runtime.screenRecordingStart(input);
       const handle = started.pendingHandle.transfer();
       const finish = handle.finish();
-      const first =
-        receipt === 'confirmed'
-          ? expect(finish).resolves.toMatchObject({ status: 'completed' })
-          : expect(finish).rejects.toMatchObject({ details: { reason: 'cleanup-unconfirmed' } });
+      const first = expect(finish).resolves.toMatchObject({
+        status: 'completed',
+        ...(receipt === 'confirmed'
+          ? {}
+          : { cleanupPending: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' } }),
+      });
       await Promise.all([vi.advanceTimersByTimeAsync(1_000), first]);
       expect(files.files.get(input.outputPath)).toBe('pulled');
       expect(release).toHaveBeenCalledOnce();
@@ -281,12 +316,15 @@ test.each(['confirmed', 'receipt-unavailable'] as const)(
           status: 'completed',
           result: { outPath: input.outputPath },
         });
+        expect(replay).not.toHaveProperty('cleanupPending');
         expect(release).toHaveBeenCalledOnce();
+        expect(await transport.acquireAdmission('a'.repeat(64))).toBe('busy');
       } else {
         expect(JSON.parse(marker).admissionReleased).toBeUndefined();
         expect(replay).toMatchObject({
-          status: 'unreattachable',
-          reason: 'preservation-unavailable',
+          status: 'completed',
+          result: { outPath: input.outputPath, nativePathDisposition: 'pending' },
+          cleanupPending: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
         });
         expect(release).toHaveReturnedTimes(2);
         expect(await transport.acquireAdmission('a'.repeat(64))).toBe('busy');
@@ -330,23 +368,7 @@ async function adoptAndroidRecording(params: {
   pendingHandle: PendingTransferGuard<ScreenRecordingLiveHandle>;
   envelope: DurableResourceEnvelope<'screen-recording'>;
 }) {
-  const store = createDurableCaptureResourceStore({
-    resourceKind: 'screen-recording',
-    fileName: 'screen-recording.resource.json',
-    displayName: 'screen recording',
-  });
-  const definition: DurableCaptureRecordDefinition<'screen-recording', ScreenRecordingCompletion> =
-    {
-      resourceKind: 'screen-recording',
-      displayName: 'screen recording',
-      store,
-      failedFinishPolicy: 'preserve-retry-material',
-      completionMetadata: (completion) => ({ outPath: completion.outPath }),
-      messages: {
-        noActive: 'no active recording',
-        cleanupPendingHint: 'Keep screen-recording.resource.json and retry stop.',
-      },
-    };
+  const store = screenRecordingResourceStore;
   const sessionsDir = mkdtempForTestSync('agent-device-android-failed-finish-session-');
   let session: AndroidRecordingSession = {};
   const sessionStore = {
@@ -370,33 +392,22 @@ async function adoptAndroidRecording(params: {
     },
   };
   const resourcePath = store.resolvePath(binding.sessionDir);
-  await adoptStartedDurableCapture(
-    definition,
-    {
-      reportUndurableCleanup: () => {},
-      binding,
-      device: androidRecordingDevice,
-      owner: params.owner,
-      fence: params.envelope.fence,
-      pendingHandle: params.pendingHandle,
-      envelope: params.envelope,
-      throwIfCanceled: () => {},
-    },
-    resourcePath,
-  );
+  await adoptStartedScreenRecording({
+    admissionLedger: createScreenRecordingAdmissionLedger(),
+    binding,
+    device: androidRecordingDevice,
+    owner: params.owner,
+    fence: params.envelope.fence,
+    pendingHandle: params.pendingHandle,
+    envelope: params.envelope,
+    throwIfCanceled: () => {},
+  });
   return {
-    finish: () =>
-      finishLiveDurableCapture(
-        definition,
-        {
-          binding,
-          intent: 'capture',
-        },
-        resourcePath,
-      ),
+    finish: () => finishLiveScreenRecording({ binding, intent: 'capture' }),
+    finishDisposal: () => finishLiveScreenRecording({ binding, intent: 'disposal' }),
     manifestRecord: () => store.read(resourcePath),
     activeHandle: () => session.recording?.handle,
-    dispose: () => forceCleanupLiveDurableCapture(definition, { binding, resourcePath }),
+    dispose: () => screenRecordingDurableResource.forceCleanupLive({ binding }),
     resourcePath,
   };
 }

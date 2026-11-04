@@ -5,6 +5,7 @@ import { withDurableCaptureResourceFence } from '../durable-capture/fence.ts';
 import {
   createStopProgress,
   markCompletingDurableCapture,
+  transitionFinishOutcome,
 } from '../durable-capture/transitions.ts';
 import type { JsonObject } from '@agent-device/contracts/client';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
@@ -24,6 +25,7 @@ import type { StopObservation } from '@agent-device/contracts/recording-stop-obs
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type {
   DurableCaptureRecoveryControl,
+  DurableCaptureRecordDefinition,
   DurableCaptureSessionBinding,
 } from '../durable-capture/index.ts';
 import { createDurableCaptureResource } from './durable-capture-resource.ts';
@@ -34,11 +36,10 @@ import {
   screenRecordingResourceStore,
 } from './screen-recording-resource-store.ts';
 
-export const screenRecordingDurableResource = createDurableCaptureResource<
+const screenRecordingDefinition: DurableCaptureRecordDefinition<
   'screen-recording',
-  ScreenRecordingLiveHandle,
   ScreenRecordingCompletion
->({
+> = {
   resourceKind: 'screen-recording',
   displayName: 'screen recording',
   store: screenRecordingResourceStore,
@@ -57,7 +58,13 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
     cleanupPendingHint:
       'Keep screen-recording.resource.json and retry stop through its exact runtime owner.',
   },
-});
+};
+
+export const screenRecordingDurableResource = createDurableCaptureResource<
+  'screen-recording',
+  ScreenRecordingLiveHandle,
+  ScreenRecordingCompletion
+>(screenRecordingDefinition);
 
 export function adoptStartedScreenRecording(params: {
   admissionLedger: ScreenRecordingAdmissionLedger;
@@ -189,10 +196,21 @@ export async function finishRecoveredScreenRecording(params: {
       let control: Awaited<ReturnType<typeof params.acquireControl>> | undefined;
       try {
         scope.signal.throwIfAborted();
-        control = await params.acquireControl(lease.envelope, scope);
-        const result = await control.reattach(lease.envelope);
+        const preserved = (
+          await import('./screen-recording-stop-recovery.ts')
+        ).readPendingScreenRecordingCompletion(lease.envelope.metadata);
+        let result: Awaited<ReturnType<NonNullable<typeof control>['reattach']>>;
+        try {
+          control = await params.acquireControl(lease.envelope, scope);
+          result = await control.reattach(lease.envelope);
+        } catch (error) {
+          if (preserved && !scope.signal.aborted) return preserved;
+          throw error;
+        }
         clearTimeout(timer);
         scope.signal.throwIfAborted();
+        if (preserved && (result.status === 'unreattachable' || result.status === 'missing'))
+          return preserved;
         if (result.status === 'unreattachable')
           throw new AppError('COMMAND_FAILED', result.message ?? 'Recording cannot be reattached', {
             reason: result.reason,
@@ -202,12 +220,10 @@ export async function finishRecoveredScreenRecording(params: {
             reason: 'resource-missing',
           });
         if (result.status === 'completed') {
-          lease.transition('completed', {
-            metadata: {
-              ...lease.envelope.metadata,
-              ...encodeScreenRecordingCompletionMetadata(result.result),
-              phase: 'completed',
-            },
+          transitionFinishOutcome(screenRecordingDefinition, lease, {
+            status: 'completed',
+            result: result.result,
+            ...(result.cleanupPending ? { cleanupPending: result.cleanupPending } : {}),
           });
           return result.result;
         }
@@ -218,13 +234,7 @@ export async function finishRecoveredScreenRecording(params: {
             throw new AppError('COMMAND_FAILED', finished.message ?? 'Recording stop is pending', {
               reason: finished.reason,
             });
-          lease.transition('completed', {
-            metadata: {
-              ...lease.envelope.metadata,
-              ...encodeScreenRecordingCompletionMetadata(finished.result),
-              phase: 'completed',
-            },
-          });
+          transitionFinishOutcome(screenRecordingDefinition, lease, finished);
           return finished.result;
         } finally {
           if (result.status === 'export') await result.handle[Symbol.asyncDispose]();

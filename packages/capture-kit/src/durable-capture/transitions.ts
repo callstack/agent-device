@@ -121,6 +121,11 @@ export async function finishDurableCaptureHandle<
       }
       if (finishOutcome.status === 'completed') {
         transitionFinishOutcome(definition, lease, finishOutcome);
+        if (finishOutcome.cleanupPending) {
+          params.onCleanupPending?.(finishOutcome.cleanupPending);
+          if (params.intent === 'disposal')
+            throw cleanupPendingError(definition, finishOutcome.cleanupPending);
+        }
         return finishOutcome.result;
       }
       transitionFinishOutcome(definition, lease, finishOutcome);
@@ -294,9 +299,14 @@ export function transitionCleanupOutcome<K extends string>(
   lease: DurableCaptureOpenResourceFenceLease<K>,
   outcome: CleanupOutcome,
 ): void {
+  const metadata = { ...(lease.envelope.metadata ?? {}) };
+  if (isConfirmedCleanup(outcome)) {
+    delete metadata.cleanupPendingReason;
+    delete metadata.cleanupPendingMessage;
+  }
   lease.transition(isConfirmedCleanup(outcome) ? 'completed' : 'open', {
     metadata: {
-      ...(lease.envelope.metadata ?? {}),
+      ...metadata,
       phase: isConfirmedCleanup(outcome) ? 'completed' : 'cleanup-pending',
       cleanupStatus: outcome.status,
       ...(outcome.status === 'cleanup-pending'
@@ -339,11 +349,27 @@ export function transitionFinishOutcome<K extends string, C>(
   outcome: FinishOutcome<C>,
 ): void {
   if (outcome.status === 'completed') {
-    lease.transition('completed', {
+    const metadata = { ...(lease.envelope.metadata ?? {}) };
+    if (!outcome.cleanupPending) {
+      delete metadata.cleanupPendingReason;
+      delete metadata.cleanupPendingMessage;
+    }
+    lease.transition(outcome.cleanupPending ? 'open' : 'completed', {
       metadata: {
-        ...(lease.envelope.metadata ?? {}),
+        ...metadata,
         ...definition.completionMetadata(outcome.result),
-        phase: 'completed',
+        phase: outcome.cleanupPending ? 'cleanup-pending' : 'completed',
+        ...(outcome.cleanupPending
+          ? {
+              cleanupStatus: outcome.cleanupPending.status,
+              cleanupPendingReason: outcome.cleanupPending.reason,
+              ...(outcome.cleanupPending.message
+                ? { cleanupPendingMessage: outcome.cleanupPending.message }
+                : {}),
+            }
+          : lease.envelope.metadata?.cleanupStatus === 'cleanup-pending'
+            ? { cleanupStatus: 'cleaned' }
+            : {}),
       },
     });
     return;

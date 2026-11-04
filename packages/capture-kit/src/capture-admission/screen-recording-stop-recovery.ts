@@ -34,7 +34,12 @@ import {
  */
 export type ScreenRecordingStopRecovery =
   | Readonly<{ kind: 'completed'; completion: ScreenRecordingCompletion }>
-  | Readonly<{ kind: 'open'; resourcePath: string }>
+  | Readonly<{
+      kind: 'open';
+      resourcePath: string;
+      /** This export is replayable, but its open recording still owns an unresolved cleanup. */
+      pendingCompletion?: ScreenRecordingCompletion;
+    }>
   | Readonly<{ kind: 'none' }>;
 
 const OPTIONAL_RESPONSE_FIELDS = [
@@ -55,7 +60,14 @@ export function resolveScreenRecordingStopRecovery(
   const { resourcePath, record } = readSessionManifest(params);
   if (record.status !== 'decoded') return { kind: 'none' };
   assertManifestBelongsToRequest(params, record.envelope);
-  if (record.envelope.lifecycle !== 'completed') return { kind: 'open', resourcePath };
+  if (record.envelope.lifecycle !== 'completed') {
+    const pendingCompletion = readPendingScreenRecordingCompletion(record.envelope.metadata);
+    return {
+      kind: 'open',
+      resourcePath,
+      ...(pendingCompletion ? { pendingCompletion } : {}),
+    };
+  }
   const completion = readReplayableStoredCompletion(record.envelope.metadata);
   if (completion === undefined) {
     emitDiagnostic({
@@ -144,6 +156,14 @@ export function readReplayableStoredCompletion(
   }
   const completion = stored as unknown as ScreenRecordingCompletion;
   return fs.existsSync(completion.outPath) ? completion : undefined;
+}
+
+export function readPendingScreenRecordingCompletion(
+  metadata: JsonObject | undefined,
+): ScreenRecordingCompletion | undefined {
+  return metadata?.phase === 'cleanup-pending' && metadata.cleanupStatus === 'cleanup-pending'
+    ? readReplayableStoredCompletion(metadata)
+    : undefined;
 }
 
 /** The values a stop response computes on rather than repeats. */

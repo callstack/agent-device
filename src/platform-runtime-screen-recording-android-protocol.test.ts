@@ -597,6 +597,36 @@ test('a retained generation cannot reacquire admission and revive its queued lau
   });
 });
 
+test('an old release cannot change a successor generation or its admission', async () => {
+  await rig(async ({ transport, markerFile }) => {
+    await seed(transport);
+    const before = readFileSync(markerFile, 'utf8');
+    expect(
+      await transport.releaseAdmission({ owner: key, manifestPath: marker, expected: armed }),
+    ).toBe('released');
+    const successor = 'b'.repeat(64);
+    const successorMarker = `/sdcard/agent-device-recording-v2-admitted-${successor}.json`;
+    const successorBytes = 'successor-owned-bytes';
+    expect(await transport.acquireAdmission(successor)).toBe('acquired');
+    expect(
+      await transport.compareAndSetManifest({
+        manifestPath: successorMarker,
+        expected: null,
+        contents: successorBytes,
+      }),
+    ).toBe('updated');
+    expect(
+      await transport.releaseAdmission({ owner: key, manifestPath: marker, expected: armed }),
+    ).toBe('not-owner');
+    expect(await transport.readManifest(successorMarker)).toEqual({
+      status: 'read',
+      contents: successorBytes,
+    });
+    expect(readFileSync(markerFile, 'utf8')).toBe(before);
+    expect(await transport.acquireAdmission('a'.repeat(64))).toBe('busy');
+  });
+});
+
 test('retains an admission directory whose owner was never published', async () => {
   await rig(async ({ transport, admissionDir, markerFile }) => {
     mkdirSync(admissionDir);

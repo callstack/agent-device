@@ -87,6 +87,9 @@ export async function finishRecoveredDurableCapture<
               status: 'completed',
               result,
               alreadyCompleted: true,
+              ...(authority.reattached.status === 'completed' && authority.reattached.cleanupPending
+                ? { cleanupPending: authority.reattached.cleanupPending }
+                : {}),
             });
           },
         });

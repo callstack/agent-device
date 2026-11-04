@@ -117,6 +117,33 @@ test('an open manifest stays available for exact-owner recovery', async () => {
   expect(screenRecordingManifestIsTerminal(harness.params)).toBe(false);
 });
 
+test('an open cleanup obligation exposes its surviving export without becoming terminal', () => {
+  const harness = makeHarness();
+  const completion = fullCompletion(harness.videoPath);
+  fs.writeFileSync(harness.videoPath, 'mp4');
+  const metadata = {
+    ...encodeScreenRecordingCompletionMetadata(completion),
+    phase: 'cleanup-pending',
+    cleanupStatus: 'cleanup-pending',
+  };
+  writeManifest(harness, metadata, { lifecycle: 'open' });
+  expect(resolveScreenRecordingStopRecovery({ ...harness.params, device: SESSION_DEVICE })).toEqual(
+    {
+      kind: 'open',
+      resourcePath: manifestPath(harness.sessionStore),
+      pendingCompletion: completion,
+    },
+  );
+  expect(screenRecordingManifestIsTerminal(harness.params)).toBe(false);
+  fs.rmSync(harness.videoPath);
+  expect(resolveScreenRecordingStopRecovery({ ...harness.params, device: SESSION_DEVICE })).toEqual(
+    {
+      kind: 'open',
+      resourcePath: manifestPath(harness.sessionStore),
+    },
+  );
+});
+
 test('a session with no recording manifest has nothing to recover', () => {
   const harness = makeHarness();
 

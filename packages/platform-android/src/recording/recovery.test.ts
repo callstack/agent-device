@@ -251,8 +251,9 @@ test('retains completed evidence while an exact persisted recorder identity rema
   await expect(
     runtime.screenRecordingReattach({ envelope: started.envelope }),
   ).resolves.toMatchObject({
-    status: 'unreattachable',
-    reason: 'ownership-fence-lost',
+    status: 'completed',
+    result: { nativePathDisposition: 'pending' },
+    cleanupPending: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
   });
   expect(JSON.parse(manifest)).toHaveProperty('completion');
 });
@@ -299,8 +300,9 @@ test.each([
     await expect(
       runtime.screenRecordingReattach({ envelope: started.envelope }),
     ).resolves.toMatchObject({
-      status: 'unreattachable',
-      reason: 'preservation-unavailable',
+      status: 'completed',
+      result: { nativePathDisposition: 'pending' },
+      cleanupPending: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
     });
     expect(removals).toEqual([]);
     expect(JSON.parse(manifest)).toHaveProperty('completion');

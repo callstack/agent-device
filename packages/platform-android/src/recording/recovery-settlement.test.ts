@@ -218,20 +218,23 @@ test('a reattached finish keeps its exported completion until admission release 
     const f = await setup();
     const release = vi.spyOn(f.transport, 'releaseAdmission').mockResolvedValue('unavailable');
     const finishing = f.finish();
-    const refused = expect(finishing).rejects.toMatchObject({
-      details: { reason: 'cleanup-unconfirmed' },
+    const completed = expect(finishing).resolves.toMatchObject({
+      status: 'completed',
+      result: { outPath: '/tmp/capture.mp4', nativePathDisposition: 'pending' },
+      cleanupPending: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
     });
-    await Promise.all([vi.advanceTimersByTimeAsync(1_000), refused]);
-    const completed = JSON.parse(f.manifest());
-    expect(completed).toMatchObject({ completion: { outPath: '/tmp/capture.mp4' } });
-    expect(completed.admissionReleased).toBeUndefined();
+    await Promise.all([vi.advanceTimersByTimeAsync(1_000), completed]);
+    const marker = JSON.parse(f.manifest());
+    expect(marker).toMatchObject({ completion: { outPath: '/tmp/capture.mp4' } });
+    expect(marker.admissionReleased).toBeUndefined();
     expect(release).toHaveBeenCalledOnce();
     expect(f.finalize).toHaveBeenCalledOnce();
     await expect(
       f.runtime.screenRecordingReattach({ envelope: f.started.envelope }),
     ).resolves.toMatchObject({
-      status: 'unreattachable',
-      reason: 'preservation-unavailable',
+      status: 'completed',
+      result: { outPath: '/tmp/capture.mp4', nativePathDisposition: 'pending' },
+      cleanupPending: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
     });
     release.mockRestore();
     await expect(
@@ -438,4 +441,66 @@ test('startup preservation fences and journals the real Android reattach without
       metadata: { activeRecorderSignal: { pid: '42' }, stopObservation: { recorder: 'confirmed' } },
     },
   });
+});
+
+test('startup records an Android export without settling an unavailable admission', async () => {
+  vi.useFakeTimers();
+  try {
+    const f = await setup();
+    vi.spyOn(f.transport, 'releaseAdmission').mockResolvedValue('unavailable');
+    const finishing = f.finish();
+    const completed = expect(finishing).resolves.toMatchObject({
+      status: 'completed',
+      cleanupPending: { status: 'cleanup-pending' },
+    });
+    await Promise.all([vi.advanceTimersByTimeAsync(1_000), completed]);
+    const marker = f.manifest();
+    const sessionsDir = mkdtempForTestSync('startup-completed-admission-');
+    const resourcePath = screenRecordingResourceStore.resolvePath(path.join(sessionsDir, 'one'));
+    screenRecordingResourceStore.write(resourcePath, f.started.envelope);
+    const gateway = {
+      bind: async ({ device }: { device: unknown }) => ({
+        device,
+        owner: localRuntimeOwner('android'),
+        facts: {
+          device: { family: 'android', kind: 'emulator', providerMode: 'local' },
+          operations: {
+            screenRecordingReattach: { available: true },
+            screenRecordingCleanup: { available: true },
+          },
+        },
+        operations: f.runtime,
+        [Symbol.asyncDispose]: async () => {},
+      }),
+    } as unknown as DeviceRuntimeGateway<PlatformRuntimeOperations>;
+    await expect(
+      recoverScreenRecordingResourceAfterDaemonLock({
+        sessionsDir,
+        resourcePath,
+        gateway,
+        claim: { sessionId: f.started.envelope.sessionId, device: f.started.envelope.device },
+        scope: {
+          signal: new AbortController().signal,
+          diagnostics: { emit: () => {} },
+          progress: { report: () => {} },
+        },
+      }),
+    ).resolves.toEqual({ status: 'retained', reason: 'completion-pending' });
+    expect(screenRecordingResourceStore.read(resourcePath)).toMatchObject({
+      status: 'decoded',
+      envelope: {
+        lifecycle: 'open',
+        metadata: {
+          phase: 'cleanup-pending',
+          cleanupStatus: 'cleanup-pending',
+          completion: { outPath: '/tmp/capture.mp4', nativePathDisposition: 'pending' },
+        },
+      },
+    });
+    expect(f.manifest()).toBe(marker);
+    expect(f.removeManifest).not.toHaveBeenCalled();
+    expect(f.signal).toHaveBeenCalledOnce();
+  } finally {
+    vi.useRealTimers();
+  }
 });

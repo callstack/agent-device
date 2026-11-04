@@ -9,7 +9,7 @@ import type {
 } from '@agent-device/contracts/app-log-runtime';
 import type { DurableDescriptorCodec } from '@agent-device/contracts/durable-resource-envelope';
 import { APP_LOG_ENVELOPE_FIXTURE } from './durable-resource-envelope.fixtures.ts';
-import { createAppLogLiveHandle } from './app-log-live-handle.ts';
+import { createAppLogLiveHandle, createAppLogLiveHandleFromFinish } from './app-log-live-handle.ts';
 import {
   createAppLogRecoveryOperations,
   createAppLogStartResult,
@@ -96,6 +96,21 @@ test('app-log async disposal rejects when forced cleanup remains unconfirmed', a
     (error: unknown) =>
       error instanceof AppError && error.details?.reason === 'ownership-fence-lost',
   );
+});
+
+test('an app-log finish with pending cleanup does not claim that cleanup succeeded', async () => {
+  const handle = createAppLogLiveHandleFromFinish({
+    inspect: () => ({ backend: 'android', state: 'active', startedAt: 12 }),
+    finish: async () => ({
+      status: 'completed',
+      result: completion,
+      cleanupPending: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
+    }),
+  });
+  assert.deepEqual(await handle.forceCleanup(), {
+    status: 'cleanup-pending',
+    reason: 'cleanup-unconfirmed',
+  });
 });
 
 test('app-log start result retains pending ownership until explicit transfer', async () => {
