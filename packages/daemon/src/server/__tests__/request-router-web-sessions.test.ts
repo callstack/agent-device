@@ -217,7 +217,13 @@ test.each(['batch', 'replay'] as const)(
 
     const response = await handler(freshWebRequest(command, '', replayPath));
 
-    expect(response.ok).toBe(false);
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: command === 'replay' ? 'REPLAY_DIVERGENCE' : 'INVALID_ARGS',
+        details: { reason: 'web_session_name_invalid' },
+      },
+    });
     expect(bound).toEqual([]);
     expect(sessionStore.toArray()).toEqual([]);
   },
