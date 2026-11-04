@@ -29,7 +29,7 @@ import {
 } from './test-utils/host-bound-commands.ts';
 import { writeGeneratedRemoteConfig } from '../cli/connection/generated-config.ts';
 import {
-  CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS,
+  CLOUD_DEVICE_LEASE_TTL_MS,
   PROXY_REMOTE_LEASE_TTL_MS,
 } from '../cli/commands/connection-lease-policy.ts';
 import { hasDeferredMetroConfig } from '../cli/commands/connection-metro-runtime.ts';
@@ -783,7 +783,7 @@ test('cloud webdriver connection allocates and heartbeats with extended lease TT
   });
 
   assert.equal(allocateRequest?.leaseProvider, 'aws-device-farm');
-  assert.equal(allocateRequest?.ttlMs, CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS);
+  assert.equal(allocateRequest?.ttlMs, CLOUD_DEVICE_LEASE_TTL_MS);
   assert.equal(materialized.flags.leaseId, 'cloud-lease-1');
 
   let heartbeatRequest: Parameters<AgentDeviceClient['leases']['heartbeat']>[0] | undefined;
@@ -805,7 +805,79 @@ test('cloud webdriver connection allocates and heartbeats with extended lease TT
   });
 
   assert.equal(heartbeatRequest?.leaseId, 'cloud-lease-1');
-  assert.equal(heartbeatRequest?.ttlMs, CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS);
+  assert.equal(heartbeatRequest?.ttlMs, CLOUD_DEVICE_LEASE_TTL_MS);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('limrun connection allocates and heartbeats with the cloud device lease TTL', async () => {
+  const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
+    'agent-device-connect-limrun-ttl-',
+  );
+  fs.writeFileSync(remoteConfigPath, JSON.stringify({}));
+  seedConnectionState({
+    stateDir,
+    state: {
+      session: 'limrun-ttl',
+      remoteConfigPath,
+      tenant: 'acme',
+      runId: 'run-123',
+      leaseProvider: 'limrun',
+      platform: 'ios',
+    },
+  });
+  const baseFlags = {
+    json: true,
+    help: false,
+    version: false,
+    stateDir,
+    remoteConfig: remoteConfigPath,
+    tenant: 'acme',
+    runId: 'run-123',
+    session: 'limrun-ttl',
+    platform: 'ios',
+  } as const;
+  let allocateRequest: Parameters<AgentDeviceClient['leases']['allocate']>[0] | undefined;
+
+  await materializeRemoteConnectionForCommand({
+    command: 'snapshot',
+    flags: { ...baseFlags },
+    client: createTestClient({
+      allocate: async (request) => {
+        allocateRequest = request;
+        return {
+          leaseId: 'limrun-lease-1',
+          tenantId: request.tenant,
+          runId: request.runId,
+          backend: request.leaseBackend ?? 'ios-instance',
+          leaseProvider: request.leaseProvider,
+        };
+      },
+    }),
+  });
+
+  assert.equal(allocateRequest?.leaseProvider, 'limrun');
+  assert.equal(allocateRequest?.ttlMs, CLOUD_DEVICE_LEASE_TTL_MS);
+
+  let heartbeatRequest: Parameters<AgentDeviceClient['leases']['heartbeat']>[0] | undefined;
+  await materializeRemoteConnectionForCommand({
+    command: 'snapshot',
+    flags: { ...baseFlags },
+    client: createTestClient({
+      heartbeat: async (request) => {
+        heartbeatRequest = request;
+        return {
+          leaseId: request.leaseId,
+          tenantId: request.tenant ?? 'acme',
+          runId: request.runId ?? 'run-123',
+          backend: request.leaseBackend ?? 'ios-instance',
+          leaseProvider: request.leaseProvider,
+        };
+      },
+    }),
+  });
+
+  assert.equal(heartbeatRequest?.leaseId, 'limrun-lease-1');
+  assert.equal(heartbeatRequest?.ttlMs, CLOUD_DEVICE_LEASE_TTL_MS);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 

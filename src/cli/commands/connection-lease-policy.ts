@@ -18,7 +18,13 @@ const leaseDeferredCommands = new Set([
   'session',
 ]);
 export const PROXY_REMOTE_LEASE_TTL_MS = 5 * 60 * 1000;
-export const CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS = 10 * 60 * 1000;
+export const CLOUD_DEVICE_LEASE_TTL_MS = 10 * 60 * 1000;
+
+function cloudDeviceLeaseTtlMs(state: RemoteConnectionState): number | undefined {
+  return connectionProviderCapabilities(state.leaseProvider).holdsCloudDevice
+    ? CLOUD_DEVICE_LEASE_TTL_MS
+    : undefined;
+}
 
 export type ConnectionLeasePolicy = {
   shouldAllocate(command: string): boolean;
@@ -52,13 +58,13 @@ export function connectionLeasePolicyForState(state: RemoteConnectionState): Con
 const DEFERRED_APP_SELECTION_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
   shouldAllocate: (command) =>
     command !== PUBLIC_COMMANDS.apps && !leaseDeferredCommands.has(command),
-  ttlMs: () => undefined,
+  ttlMs: cloudDeviceLeaseTtlMs,
   resolveLeaseState: async (options) => ({ state: options.state }),
 };
 
 const DEFAULT_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
   shouldAllocate: (command) => !leaseDeferredCommands.has(command),
-  ttlMs: () => undefined,
+  ttlMs: cloudDeviceLeaseTtlMs,
   resolveLeaseState: async (options) => ({ state: options.state }),
 };
 
@@ -90,6 +96,6 @@ const MACOS_APP_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
 
 const CLOUD_WEBDRIVER_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
   shouldAllocate: (command) => !leaseDeferredCommands.has(command),
-  ttlMs: () => CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS,
+  ttlMs: () => CLOUD_DEVICE_LEASE_TTL_MS,
   resolveLeaseState: async (options) => ({ state: options.state }),
 };
