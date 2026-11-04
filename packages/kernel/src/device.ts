@@ -128,11 +128,10 @@ export function normalizeWebSessionName(sessionName: string): string {
 }
 
 /**
- * One web session of `host`, held as a device of its own and named by the normalized session name,
- * so two names that drive one browser are one device. A name that is empty or holds `:` is
- * refused: `:` would parse as the `:session:` or `:app:` infix of another device id.
+ * The normalized name of a web session, refused when it is empty or holds `:`: `:` would parse as
+ * the `:session:` or `:app:` infix of another device id.
  */
-export function webSessionDevice(host: DeviceInfo, sessionName: string): DeviceInfo {
+export function requireWebSessionName(sessionName: string): string {
   const name = normalizeWebSessionName(sessionName);
   if (name.length === 0 || name.includes(':')) {
     throw new AppError(
@@ -145,6 +144,15 @@ export function webSessionDevice(host: DeviceInfo, sessionName: string): DeviceI
       },
     );
   }
+  return name;
+}
+
+/**
+ * One web session of `host`, held as a device of its own and named by the normalized session name,
+ * so two names that drive one browser are one device.
+ */
+export function webSessionDevice(host: DeviceInfo, sessionName: string): DeviceInfo {
+  const name = requireWebSessionName(sessionName);
   return { ...host, id: `${host.id}${WEB_SESSION_DEVICE_ID_INFIX}${name}` };
 }
 

@@ -11,6 +11,7 @@ import {
 import { getResolveTargetDeviceMock } from '../../__tests__/support/request-router-dispatch-mocks.ts';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 import { replayScriptSourceBundleFor } from '../../__tests__/support/replay-script-source-fixture.ts';
+import { makeSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import {
   createRequestHandler,
@@ -121,3 +122,61 @@ test.each(['batch', 'replay'] as const)(
     }
   },
 );
+
+function createOpenHandler(sessionStore: ReturnType<typeof makeSessionStore>) {
+  return createRequestHandler({
+    host: createTestHostEnvironment(),
+    createCommandSurface: fakeCreateCommandSurface,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+}
+
+function openWebRequest(session: string): DaemonRequest {
+  return {
+    token: 'test-token',
+    session,
+    command: 'open',
+    positionals: ['about:blank'],
+    flags: { platform: 'web' },
+    meta: { requestId: `req-open-${JSON.stringify(session)}` },
+  };
+}
+
+test.each(['', '   '])(
+  'a fresh web open with the blank session name %j is refused and opens no browser',
+  async (session) => {
+    mockResolveTargetDevice.mockImplementation(webSessionResolution);
+    const sessionStore = makeSessionStore('agent-device-router-web-blank-');
+
+    const response = await createOpenHandler(sessionStore)(openWebRequest(session));
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_ARGS', details: { reason: 'web_session_name_invalid' } },
+    });
+    expect(sessionStore.toArray()).toEqual([]);
+  },
+);
+
+test('an open with an empty session name does not reopen the default web session', async () => {
+  mockResolveTargetDevice.mockImplementation(webSessionResolution);
+  const sessionStore = makeSessionStore('agent-device-router-web-blank-reuse-');
+  sessionStore.publish(
+    'default',
+    makeSession('default', { device: webSessionDevice(WEB_DESKTOP_DEVICE, 'default') }),
+  );
+
+  const response = await createOpenHandler(sessionStore)(openWebRequest(''));
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: { code: 'INVALID_ARGS', details: { reason: 'web_session_name_invalid' } },
+  });
+  expect(sessionStore.get('default')?.actions).toEqual([]);
+});

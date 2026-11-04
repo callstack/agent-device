@@ -29,7 +29,7 @@ import { assertSessionSelectorMatches } from '../core/session-selector.ts';
 import {
   resolveCallerScopeRoot,
   resolveEffectiveSessionName,
-  resolvePublicSessionName,
+  suppliedSessionName,
 } from '../sessions/session-routing.ts';
 import {
   assertRequestLeaseAdmissionPreflight,
@@ -132,7 +132,7 @@ async function resolveFreshBoundedOpenDevice(req: DaemonRequest, env: EnvMap): P
         openReq.positionals?.[0],
         env,
         openReq.flags?.surface,
-        resolvePublicSessionName(openReq),
+        suppliedSessionName(openReq),
       ),
     )
   ).device;

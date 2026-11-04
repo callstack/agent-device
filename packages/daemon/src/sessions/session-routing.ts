@@ -56,6 +56,14 @@ export function resolvePublicSessionName(req: DaemonRequest): string {
   return req.session || DEFAULT_SESSION_NAME;
 }
 
+/**
+ * The session name as the caller supplied it. A web session device is named from it, so a blank
+ * name reaches web validation instead of becoming the default session's browser.
+ */
+export function suppliedSessionName(req: DaemonRequest): string {
+  return req.session;
+}
+
 export function resolveImplicitSessionScope(
   req: DaemonRequest,
 ): Extract<SessionScope, { kind: 'cwd' }> | undefined {
