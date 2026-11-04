@@ -6,6 +6,8 @@ export {
   SCREENSHOT_CROP_REASONS,
   SCREENSHOT_FULLSCREEN_REASONS,
   SCREENSHOT_SCALE_LIMITS,
+  SCREENSHOT_SCREEN_MASKS,
+  readScreenshotScreenMask,
   SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS,
   appendScreenshotScriptFlags,
   readScreenshotScriptFlag,
@@ -18,6 +20,7 @@ export {
 } from '../screenshot.ts';
 export type {
   ScreenshotCropReason,
+  ScreenshotScreenMask,
   ScreenshotDispatchFlags,
   ScreenshotFullscreenReason,
   ScreenshotPublicOptions,

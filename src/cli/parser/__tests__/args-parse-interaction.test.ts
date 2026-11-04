@@ -256,6 +256,8 @@ test('parseArgs recognizes screenshot flags', () => {
       'page.png',
       '--pixel-density',
       '2',
+      '--screen-mask',
+      'black',
       '--full',
       '-f',
       '--fullscreen',
@@ -271,6 +273,7 @@ test('parseArgs recognizes screenshot flags', () => {
   assert.equal(parsed.command, 'screenshot');
   assert.deepEqual(parsed.positionals, ['page.png']);
   assert.equal(parsed.flags.screenshotPixelDensity, 2);
+  assert.equal(parsed.flags.screenshotScreenMask, 'black');
   assert.equal(parsed.flags.screenshotFullscreen, true);
   assert.equal(parsed.flags.screenshotScale, 0.3);
   assert.equal(parsed.flags.screenshotNoStabilize, true);
@@ -444,4 +447,20 @@ test('parseArgs maps scroll until and max passes', () => {
   assert.deepEqual(parsed.positionals, ['down']);
   assert.equal(parsed.flags.until, 'id="row-512"');
   assert.equal(parsed.flags.maxPasses, 90);
+});
+
+test('screen-mask is accepted for live screenshot diffs and refuses unknown values', () => {
+  const parsed = parseArgs(
+    ['diff', 'screenshot', '--baseline', 'base.png', '--screen-mask', 'black'],
+    { strictFlags: true },
+  );
+  assert.equal(parsed.flags.screenshotScreenMask, 'black');
+  assert.throws(() => parseArgs(['screenshot', '--screen-mask', 'alpha'], { strictFlags: true }));
+});
+
+test('screen-mask is refused for diff snapshot', () => {
+  assert.throws(
+    () => parseArgs(['diff', 'snapshot', '--screen-mask', 'black'], { strictFlags: true }),
+    { code: 'INVALID_ARGS' },
+  );
 });

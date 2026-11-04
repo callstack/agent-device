@@ -56,3 +56,35 @@ test('routes an internal runner screenshot without changing the default backend'
     process.env,
   );
 });
+
+test('forwards the request mask and refuses an explicit runner capture with it', async () => {
+  const interactor = createAppleInteractor(device, {}, { env: {}, cwd: process.cwd() });
+  await interactor.screenshot('/tmp/masked.png', { screenMask: 'black' });
+  expect(screenshotIos).toHaveBeenCalledWith(
+    device,
+    '/tmp/masked.png',
+    expect.objectContaining({ screenMask: 'black' }),
+  );
+  await expect(
+    interactor.screenshot('/tmp/runner.png', { screenMask: 'black', captureBackend: 'runner' }),
+  ).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    details: { reason: 'screenshot-screen-mask-unsupported' },
+  });
+  expect(captureScreenshotViaRunner).not.toHaveBeenCalled();
+});
+
+test.each([
+  { ...device, kind: 'device' as const },
+  { ...device, appleOs: 'macos' as const, kind: 'device' as const, target: 'desktop' as const },
+])('direct Apple $appleOs $kind captures refuse masks before native execution', async (target) => {
+  const interactor = createAppleInteractor(target, {}, { env: {}, cwd: process.cwd() });
+  await expect(
+    interactor.screenshot('/tmp/masked.png', { screenMask: 'black' }),
+  ).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    details: { reason: 'screenshot-screen-mask-unsupported' },
+  });
+  expect(screenshotIos).not.toHaveBeenCalled();
+  expect(captureScreenshotViaRunner).not.toHaveBeenCalled();
+});

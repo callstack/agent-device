@@ -1,3 +1,4 @@
+import type { ScreenshotScreenMask } from './screenshot.ts';
 import type { AppStateRuntimeResult } from './app-state-runtime.ts';
 import type { ElementTextTarget } from './element-text-target.ts';
 import type { BackMode } from './back-mode.ts';
@@ -61,6 +62,7 @@ export type { BackMode };
 export type ScreenshotOptions = {
   appBundleId?: string;
   pixelDensity?: number;
+  screenMask?: ScreenshotScreenMask;
   fullscreen?: boolean;
   normalizeStatusBar?: boolean;
   stabilize?: boolean;

@@ -1,3 +1,4 @@
+import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   localInteractorSource,
@@ -33,6 +34,31 @@ export type ScreenshotRuntimeOperations = Readonly<{
   captureScreenshot(input: CaptureScreenshotInput): Promise<ScreenshotCaptureFacts>;
 }>;
 
+export type ScreenshotCaptureCapabilities = Readonly<{
+  screenMask?: boolean;
+}>;
+
+type ScreenshotCaptureBindingOptions = Readonly<{
+  signal: AbortSignal;
+  captureCapabilities?: (options: Readonly<ScreenshotOptions>) => ScreenshotCaptureCapabilities;
+}>;
+
+export async function assertScreenshotCaptureSupport(
+  options: Readonly<ScreenshotOptions> | undefined,
+  capabilities: ScreenshotCaptureCapabilities = {},
+): Promise<void> {
+  if (options?.screenMask === undefined) return;
+  const { readScreenshotScreenMask } = await import('./screenshot.ts');
+  const screenMask = readScreenshotScreenMask(options?.screenMask);
+  if (screenMask !== undefined && capabilities.screenMask !== true) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      '--screen-mask requires a handheld iOS simulator simctl capture',
+      { reason: 'screenshot-screen-mask-unsupported' },
+    );
+  }
+}
+
 export type ScreenshotRuntimeOperationFacts = Readonly<{
   captureScreenshot: RuntimeOperationFact;
 }>;
@@ -50,15 +76,19 @@ export function screenshotRuntimeOperationFacts(
  * resolution and this holds only what both share: the runner context and the capture itself.
  */
 function bindScreenshotCapture(
-  signal: AbortSignal,
+  binding: ScreenshotCaptureBindingOptions,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
 ): ScreenshotRuntimeOperations {
   return Object.freeze({
     captureScreenshot: async (input: CaptureScreenshotInput) => {
+      await assertScreenshotCaptureSupport(
+        input.options,
+        binding.captureCapabilities?.(input.options ?? {}),
+      );
       const interactor = await resolveInteractor({
         ...input.execution,
         appBundleId: input.options?.appBundleId,
-        signal,
+        signal: binding.signal,
       });
       return (await interactor.screenshot(input.outPath, input.options)) ?? {};
     },
@@ -66,25 +96,25 @@ function bindScreenshotCapture(
 }
 
 export function bindLocalScreenshotInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: LocalInteractorOperationResolver;
-  }>,
+  params: ScreenshotCaptureBindingOptions &
+    Readonly<{
+      device: DeviceInfo;
+      resolveInteractor: LocalInteractorOperationResolver;
+    }>,
 ): ScreenshotRuntimeOperations {
-  return bindScreenshotCapture(params.signal, localInteractorSource(params));
+  return bindScreenshotCapture(params, localInteractorSource(params));
 }
 
 /** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
 export function bindProviderScreenshotInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: ProviderInteractorOperationResolver;
-  }>,
+  params: ScreenshotCaptureBindingOptions &
+    Readonly<{
+      device: DeviceInfo;
+      resolveInteractor: ProviderInteractorOperationResolver;
+    }>,
 ): ScreenshotRuntimeOperations {
   return bindScreenshotCapture(
-    params.signal,
+    params,
     providerInteractorSource({ ...params, operation: 'screenshot' }),
   );
 }

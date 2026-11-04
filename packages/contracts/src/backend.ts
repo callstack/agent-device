@@ -1,3 +1,4 @@
+import type { ScreenshotScreenMask } from './screenshot.ts';
 import type { ScreenshotResultData } from './snapshot-types.ts';
 import type { SnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
@@ -71,6 +72,7 @@ export type BackendScreenshotOptions = {
   fullscreen?: boolean;
   overlayRefs?: boolean;
   pixelDensity?: number;
+  screenMask?: ScreenshotScreenMask;
   stabilize?: boolean;
   normalizeStatusBar?: boolean;
   surface?: SessionSurface;

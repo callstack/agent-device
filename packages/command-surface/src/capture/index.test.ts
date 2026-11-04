@@ -2,7 +2,11 @@ import { describe, expect, test } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { alertCliReader, alertDaemonWriter } from './alert.ts';
 import { diffCliReader } from './diff.ts';
-import { screenshotCliReader, screenshotDaemonWriter } from './screenshot.ts';
+import {
+  screenshotCliReader,
+  screenshotDaemonWriter,
+  screenshotCommandFacet,
+} from './screenshot.ts';
 import { snapshotCliReader } from './snapshot.ts';
 import { waitCliReader, waitDaemonWriter } from './wait.ts';
 
@@ -48,11 +52,17 @@ describe('capture command interface', () => {
   test('reads screenshot path and writes screenshot flags', () => {
     const input = screenshotCliReader(
       ['page.png'],
-      flags({ screenshotPixelDensity: 2, screenshotFullscreen: true, screenshotScale: 0.3 }),
+      flags({
+        screenshotScreenMask: 'black',
+        screenshotPixelDensity: 2,
+        screenshotFullscreen: true,
+        screenshotScale: 0.3,
+      }),
     );
     expect(input).toMatchObject({
       path: 'page.png',
       pixelDensity: 2,
+      screenMask: 'black',
       fullscreen: true,
       scale: 0.3,
     });
@@ -61,6 +71,7 @@ describe('capture command interface', () => {
       positionals: ['page.png'],
       options: {
         screenshotPixelDensity: 2,
+        screenshotScreenMask: 'black',
         screenshotFullscreen: true,
         screenshotScale: 0.3,
       },
@@ -171,5 +182,19 @@ describe('capture command interface', () => {
       command: 'alert',
       positionals: ['dismiss', '1000'],
     });
+  });
+});
+
+test('refuses invalid screen-mask inputs from structured clients', () => {
+  expectInvalidArgs(
+    () => screenshotDaemonWriter({ screenMask: 'alpha' }),
+    '--screen-mask must be black',
+  );
+});
+
+test('screenshot exposes the screen mask enum in the shared Node and MCP input schema', () => {
+  expect(screenshotCommandFacet.metadata.inputSchema.properties?.screenMask).toMatchObject({
+    type: 'string',
+    enum: ['black'],
   });
 });

@@ -54,3 +54,41 @@ test('a provider binding fails closed when its exact owner exposes no interactor
     details: { reason: 'provider-runtime-interactor-missing' },
   });
 });
+
+test.each([bindLocalScreenshotInteractor, bindProviderScreenshotInteractor])(
+  'a capture without a declared mask capability refuses before resolving its interactor',
+  async (bind) => {
+    const resolveInteractor = vi.fn();
+    const operations = bind({
+      device: { ...device, platform: 'apple', appleOs: 'ios', kind: 'simulator' },
+      signal: new AbortController().signal,
+      resolveInteractor,
+    });
+    await expect(
+      operations.captureScreenshot({
+        outPath: '/tmp/masked.png',
+        options: { screenMask: 'black' },
+      }),
+    ).rejects.toMatchObject({
+      code: 'UNSUPPORTED_OPERATION',
+      details: { reason: 'screenshot-screen-mask-unsupported' },
+    });
+    expect(resolveInteractor).not.toHaveBeenCalled();
+  },
+);
+
+test('the selected capture capability admits a mask for one invocation without changing the next', async () => {
+  const screenshot = vi.fn(async () => ({ displayRotation: 'portrait' as const }));
+  const operations = bindLocalScreenshotInteractor({
+    device,
+    signal: new AbortController().signal,
+    resolveInteractor: async () => ({ screenshot }) as unknown as Interactor,
+    captureCapabilities: () => ({ screenMask: true }),
+  });
+  for (const screenMask of ['black', undefined] as const) {
+    await expect(
+      operations.captureScreenshot({ outPath: '/tmp/capture.png', options: { screenMask } }),
+    ).resolves.toEqual({ displayRotation: 'portrait' });
+    expect(screenshot.mock.lastCall).toEqual(['/tmp/capture.png', { screenMask }]);
+  }
+});

@@ -1,3 +1,5 @@
+import { assertScreenshotCaptureSupport } from '@agent-device/contracts/screenshot-runtime';
+import { appleScreenshotCaptureCapabilities } from './screenshot-support.ts';
 import { closeIosApp, openIosApp, openIosDevice } from './core/app-launch.ts';
 import { readIosClipboardText, writeIosClipboardText } from './core/app-device-io.ts';
 import { readIosSetting, setIosSetting } from './core/app-settings.ts';
@@ -493,6 +495,10 @@ async function runAppleScreenshot(
   helper: MacOsHelperSurface | undefined,
   env: Readonly<EnvMap>,
 ): Promise<ScreenshotCaptureFacts> {
+  await assertScreenshotCaptureSupport(
+    options,
+    appleScreenshotCaptureCapabilities(device, options),
+  );
   if (helper) {
     if (options.fullscreen) {
       throw new AppError(
@@ -530,6 +536,7 @@ async function runAppleScreenshot(
     env,
     appBundleId: options.appBundleId,
     pixelDensity: options.pixelDensity,
+    screenMask: options.screenMask,
     fullscreen: options.fullscreen,
     runnerOptions: runnerOpts,
     normalizeStatusBar: options.normalizeStatusBar,

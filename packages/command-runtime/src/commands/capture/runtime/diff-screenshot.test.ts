@@ -143,7 +143,7 @@ test('runtime diff screenshot enforces the normalized comparison pixel budget', 
   }
 });
 
-test('runtime diff screenshot attaches overlay refs to live mismatch regions', async () => {
+test('runtime diff screenshot keeps the screen mask on current and overlay captures', async () => {
   const dir = mkdtempForTestSync('runtime-diff-screenshot-');
   const baseline = path.join(dir, 'baseline.png');
   const diffOut = path.join(dir, 'diff.png');
@@ -153,6 +153,7 @@ test('runtime diff screenshot attaches overlay refs to live mismatch regions', a
   try {
     const device = createAgentDevice({
       backend: createScreenshotBackend((outPath, options) => {
+        assert.equal(options?.screenMask, 'black');
         fs.writeFileSync(outPath, solidPngBuffer(20, 20, { r: 255, g: 255, b: 255 }));
         return {
           path: outPath,
@@ -182,6 +183,7 @@ test('runtime diff screenshot attaches overlay refs to live mismatch regions', a
       out: { kind: 'path', path: diffOut },
       threshold: 0,
       overlayRefs: true,
+      screenMask: 'black',
     });
 
     assert.equal(result.currentOverlayPath, overlayOut);
@@ -230,3 +232,22 @@ function solidPngBuffer(
   }
   return PNG.sync.write(png);
 }
+
+test('runtime diff refuses a screen mask for saved images before reading or capturing', async () => {
+  const device = createAgentDevice({
+    backend: createScreenshotBackend(() => {
+      throw new Error('must not capture');
+    }),
+    artifacts: createLocalArtifactAdapter(),
+    sessions,
+    policy: localCommandPolicy(),
+  });
+  await assert.rejects(
+    device.capture.diffScreenshot({
+      baseline: { kind: 'path', path: '/missing/baseline.png' },
+      current: { kind: 'path', path: '/missing/current.png' },
+      screenMask: 'black',
+    }),
+    { code: 'INVALID_ARGS', message: /requires a live screenshot/ },
+  );
+});

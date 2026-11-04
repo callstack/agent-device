@@ -362,6 +362,7 @@ function createBoundScreenshotBackend(
         options: {
           appBundleId: dispatchContext.appBundleId,
           pixelDensity: resolved.pixelDensity,
+          screenMask: resolved.screenMask,
           fullscreen: resolved.fullscreen,
           normalizeStatusBar: resolved.normalizeStatusBar,
           stabilize: resolved.stabilize,

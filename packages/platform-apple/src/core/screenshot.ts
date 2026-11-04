@@ -1,5 +1,8 @@
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import type { ScreenshotScreenMask } from '@agent-device/contracts/capture';
+import { assertScreenshotCaptureSupport } from '@agent-device/contracts/screenshot-runtime';
+import { appleScreenshotCaptureCapabilities } from '../screenshot-support.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { copyHostFile } from '@agent-device/host-kit/host-file';
@@ -66,6 +69,7 @@ type SimulatorScreenshotFlowDeps = {
   captureWithRetry: (
     device: DeviceInfo,
     outPath: string,
+    screenMask: ScreenshotScreenMask | undefined,
     display: AppleDeviceDisplay | undefined,
   ) => Promise<void>;
   /**
@@ -98,6 +102,7 @@ type SimulatorScreenshotFlowOptions = {
   appBundleId?: string;
   fullscreen?: boolean;
   pixelDensity?: number;
+  screenMask?: ScreenshotScreenMask;
   normalizeStatusBar?: boolean;
   runnerOptions?: AppleRunnerCommandOptions;
   skipIosSimulatorBootCheck?: boolean;
@@ -123,6 +128,7 @@ export async function screenshotIos(
   outPath: string,
   options: Omit<SimulatorScreenshotFlowOptions, 'deps'>,
 ): Promise<ScreenshotCaptureFacts> {
+  await assertScreenshotCaptureSupport(options, appleScreenshotCaptureCapabilities(device, {}));
   if (isMacOs(device)) {
     await captureScreenshotViaRunner(
       device,
@@ -152,6 +158,7 @@ export async function captureSimulatorScreenshotWithFallback(
   outPath: string,
   options: SimulatorScreenshotFlowOptions,
 ): Promise<ScreenshotCaptureFacts> {
+  await assertScreenshotCaptureSupport(options, appleScreenshotCaptureCapabilities(device, {}));
   if (device.kind !== 'simulator') {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
@@ -169,7 +176,7 @@ export async function captureSimulatorScreenshotWithFallback(
   const { display, displayRotation } = await deps.resolveCaptureTarget(device);
   const captureFacts: ScreenshotCaptureFacts = displayRotation ? { displayRotation } : {};
   const captureAndNormalize = async () => {
-    await deps.captureWithRetry(device, outPath, display);
+    await deps.captureWithRetry(device, outPath, options.screenMask, display);
     await deps.normalizeDensity(device, outPath, options.pixelDensity, display?.pointScale);
   };
   const captureWithFallback = async (): Promise<ScreenshotCaptureFacts> => {
@@ -190,7 +197,7 @@ export async function captureSimulatorScreenshotWithFallback(
           screenshotError = retryError;
         }
       }
-      if (!deps.shouldFallbackToRunner(screenshotError)) {
+      if (options.screenMask !== undefined || !deps.shouldFallbackToRunner(screenshotError)) {
         throw screenshotError;
       }
       emitScreenshotFallbackDiagnostic(device, 'simctl_screenshot', screenshotError);
@@ -219,6 +226,7 @@ export async function captureSimulatorScreenshotWithFallback(
 export async function captureSimulatorScreenshotWithRetry(
   device: DeviceInfo,
   outPath: string,
+  screenMask: ScreenshotScreenMask | undefined,
   display?: AppleDeviceDisplay,
 ): Promise<void> {
   const deadline = Deadline.fromTimeoutMs(IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS);
@@ -226,6 +234,7 @@ export async function captureSimulatorScreenshotWithRetry(
     'io',
     device.id,
     'screenshot',
+    ...(screenMask === 'black' ? ['--mask=black'] : []),
     ...appleSimulatorDisplayArgvFragment(display),
     outPath,
   ];
