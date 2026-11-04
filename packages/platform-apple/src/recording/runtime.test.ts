@@ -315,8 +315,19 @@ test('a simulator finish uses the stop signal and preserves its collected record
     },
   });
   const finishing = handle.finish(progress(stop.signal));
-  await finalizing;
-  stop.abort();
+  try {
+    expect(
+      await Promise.race([
+        finalizing.then(() => 'finalizing'),
+        finishing.then(
+          () => 'completed',
+          () => 'failed-before-finalizing',
+        ),
+      ]),
+    ).toBe('finalizing');
+  } finally {
+    stop.abort();
+  }
   await expect(finishing).rejects.toMatchObject({ details: { reason: 'request_canceled' } });
   expect(files.exists(nativePath)).toBe(true);
   expect(files.exists(collectedPath)).toBe(true);

@@ -138,8 +138,19 @@ test('finish uses its own cancellation signal and retries without restarting the
   const handle = (await fixture.start()).pendingHandle.transfer();
   start.abort();
   const finishing = handle.finish({ learned: undefined, record: () => {}, signal: stop.signal });
-  await finalizing;
-  stop.abort();
+  try {
+    expect(
+      await Promise.race([
+        finalizing.then(() => 'finalizing'),
+        finishing.then(
+          () => 'completed',
+          () => 'failed-before-finalizing',
+        ),
+      ]),
+    ).toBe('finalizing');
+  } finally {
+    stop.abort();
+  }
   await expect(finishing).rejects.toMatchObject({ details: { reason: 'request_canceled' } });
   await expect(handle.finish()).resolves.toMatchObject({ status: 'completed' });
   expect(fixture.calls.filter((call) => call === 'stop')).toHaveLength(1);

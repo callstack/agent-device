@@ -12,6 +12,7 @@ import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-r
 import { startDaemonRuntime } from '@agent-device/daemon';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import { createRequestCanceledError } from '@agent-device/kernel/errors';
+import { getRequestSignal } from '@agent-device/host-kit/request';
 import { readProcessIdentityFacts } from '@agent-device/host-kit/process';
 import {
   runCmd,
@@ -433,6 +434,11 @@ test.skipIf(process.platform !== 'darwin').each(['deadline-warning', 'request-ca
     let childOutput = '';
     let helperEntered!: () => void;
     let releaseHelper: (() => void) | undefined;
+    let helperSignal: AbortSignal | undefined;
+    let observeRequestAbort!: () => void;
+    const requestAborted = new Promise<void>((resolve) => {
+      observeRequestAbort = resolve;
+    });
     const helperStarted = new Promise<void>((resolve) => {
       helperEntered = resolve;
     });
@@ -478,6 +484,14 @@ test.skipIf(process.platform !== 'darwin').each(['deadline-warning', 'request-ca
             if (!facts.startTime) throw new Error('test child has no start identity');
             childIdentity = { pid: child.pid, startTime: facts.startTime };
             fs.writeFileSync(path.join(root, 'owned-child.json'), JSON.stringify(childIdentity));
+            if (mode === 'request-canceled') {
+              const requestSignal = getRequestSignal(requestId);
+              if (!requestSignal || !options.signal)
+                throw new Error('missing request cancellation scope');
+              helperSignal = options.signal;
+              if (requestSignal.aborted) observeRequestAbort();
+              else requestSignal.addEventListener('abort', observeRequestAbort, { once: true });
+            }
             helperEntered();
             if (mode === 'deadline-warning') {
               finalizerClock.expired = true;
@@ -556,7 +570,11 @@ test.skipIf(process.platform !== 'darwin').each(['deadline-warning', 'request-ca
               stopping.then(() => 'stopped'),
             ]),
           ).toBe('helper');
-          if (mode === 'request-canceled') cancel.abort();
+          if (mode === 'request-canceled') {
+            cancel.abort();
+            await requestAborted;
+            expect(helperSignal?.aborted).toBe(true);
+          }
           const stopped = await stopping;
           const resourcePath = screenRecordingResourceStore.resolvePath(
             path.join(stateDir, 'sessions', 'recording'),
