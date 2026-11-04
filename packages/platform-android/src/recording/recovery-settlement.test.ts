@@ -9,6 +9,8 @@ import type { DurableCaptureProgress } from '@agent-device/contracts/durable-res
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
 import { bindAndroidScreenRecordingRuntime } from './runtime.ts';
+import { persistNativeManifest } from './manifest-store.ts';
+import { recordingMarkerPath } from './native-path.ts';
 
 async function setup(initial: 'owned-alive' | 'missing' = 'owned-alive', twoChunks = false) {
   let manifest = '';
@@ -32,47 +34,49 @@ async function setup(initial: 'owned-alive' | 'missing' = 'owned-alive', twoChun
     return true;
   });
   const finalize = vi.fn(async () => ({}));
+  const host = recordingHost({
+    start: async ({ remotePath }: { remotePath: string }) => {
+      files.add(remotePath);
+      return { remotePid: '42' };
+    },
+    inspect: async (identity: { pid: string }) => {
+      if (identity.pid === '41') return olderState;
+      if (state === 'missing' && failAfterSignal && ++missingProbes === 2) {
+        const failure = failAfterSignal;
+        failAfterSignal = undefined;
+        if (failure === 'throw') throw new Error('probe unavailable');
+        return 'uncertain' as const;
+      }
+      return state;
+    },
+    stop: async (identity: { pid: string }) => {
+      if (identity.pid === '41') {
+        if (olderFailure) {
+          olderFailure = false;
+          throw new Error('older stop failed');
+        }
+        olderState = 'missing';
+        return 'stopped' as const;
+      }
+      if (loseAtStop) {
+        state = 'ownership-lost';
+        return 'ownership-lost' as const;
+      }
+      return state === 'missing' ? ('already-missing' as const) : await signal();
+    },
+    exists: async (name: string) => files.has(name),
+    remove,
+    removeManifest,
+    writeManifest: async ({ contents }: { contents: string }) => {
+      manifest = contents;
+    },
+    readManifest: async () =>
+      manifest ? { status: 'read' as const, contents: manifest } : { status: 'missing' as const },
+    finalize: { complete: finalize },
+  });
+  const transport = await host.screenRecording.android.resolve(androidRecordingDevice);
   const runtime = await bindAndroidScreenRecordingRuntime({
-    host: recordingHost({
-      start: async ({ remotePath }: { remotePath: string }) => {
-        files.add(remotePath);
-        return { remotePid: '42' };
-      },
-      inspect: async (identity: { pid: string }) => {
-        if (identity.pid === '41') return olderState;
-        if (state === 'missing' && failAfterSignal && ++missingProbes === 2) {
-          const failure = failAfterSignal;
-          failAfterSignal = undefined;
-          if (failure === 'throw') throw new Error('probe unavailable');
-          return 'uncertain' as const;
-        }
-        return state;
-      },
-      stop: async (identity: { pid: string }) => {
-        if (identity.pid === '41') {
-          if (olderFailure) {
-            olderFailure = false;
-            throw new Error('older stop failed');
-          }
-          olderState = 'missing';
-          return 'stopped' as const;
-        }
-        if (loseAtStop) {
-          state = 'ownership-lost';
-          return 'ownership-lost' as const;
-        }
-        return state === 'missing' ? ('already-missing' as const) : await signal();
-      },
-      exists: async (name: string) => files.has(name),
-      remove,
-      removeManifest,
-      writeManifest: async ({ contents }: { contents: string }) => {
-        manifest = contents;
-      },
-      readManifest: async () =>
-        manifest ? { status: 'read' as const, contents: manifest } : { status: 'missing' as const },
-      finalize: { complete: finalize },
-    }),
+    host,
     device: androidRecordingDevice,
     owner: localRuntimeOwner('android'),
     signal: new AbortController().signal,
@@ -111,6 +115,7 @@ async function setup(initial: 'owned-alive' | 'missing' = 'owned-alive', twoChun
   });
   return {
     runtime,
+    transport,
     started,
     settle: async () => await attached.handle.settleForExport!(progress()),
     finish: async () => {
@@ -148,10 +153,98 @@ test('settles an owned recorder and preserves its marker and native output', asy
   await expect(f.settle()).resolves.toEqual({ status: 'export' });
   expect(f.signal).toHaveBeenCalledOnce();
   expect([...f.files]).toEqual(files);
-  expect(f.manifest()).toBe(manifest);
+  expect(JSON.parse(f.manifest())).toEqual({ ...JSON.parse(manifest), admissionReleased: true });
   expect(f.remove).not.toHaveBeenCalled();
   expect(f.removeManifest).not.toHaveBeenCalled();
   expect(f.finalize).not.toHaveBeenCalled();
+});
+
+test.each(['release-unavailable', 'writer-scan-inconclusive'] as const)(
+  'settlement retains the claim and export material when %s',
+  async (failure) => {
+    const f = await setup();
+    const marker = f.manifest();
+    const chunk = JSON.parse(marker).chunks[0];
+    const release = vi.spyOn(f.transport, 'releaseAdmission');
+    const scan = vi.spyOn(f.transport, 'probeRunningWriters');
+    if (failure === 'release-unavailable') release.mockResolvedValue('unavailable');
+    else scan.mockResolvedValue({ writers: [], conclusive: false });
+
+    await expect(f.settle()).resolves.toEqual({ status: 'retained', reason: 'owner-unavailable' });
+    expect(scan).toHaveBeenCalledWith(chunk.remotePath);
+    if (failure === 'release-unavailable') expect(release).toHaveBeenCalledOnce();
+    else expect(release).not.toHaveBeenCalled();
+    expect(f.metadata()).toMatchObject({ stopObservation: { recorder: 'confirmed' } });
+    expect(f.files.has(chunk.remotePath)).toBe(true);
+    expect(f.manifest()).toBe(marker);
+    expect(f.removeManifest).not.toHaveBeenCalled();
+
+    release.mockRestore();
+    scan.mockRestore();
+    await expect(f.settle()).resolves.toEqual({ status: 'export' });
+    expect(JSON.parse(f.manifest())).toMatchObject({ admissionReleased: true });
+    expect(f.files.has(chunk.remotePath)).toBe(true);
+  },
+);
+
+test('a released generation cannot be rearmed by a stale marker write', async () => {
+  const f = await setup();
+  await expect(f.settle()).resolves.toEqual({ status: 'export' });
+  const marker = f.manifest();
+  const evidence = JSON.parse(marker);
+  const pendingRemotePath = evidence.chunks[0].remotePath.replace(/-\d+\.mp4$/, '-123.mp4');
+  const manifestPath = recordingMarkerPath('/sdcard', {
+    deviceId: evidence.deviceId,
+    sessionId: evidence.sessionId,
+    claimToken: evidence.claimToken,
+    fence: { token: evidence.fenceToken, generation: evidence.fenceGeneration },
+  });
+  await expect(
+    persistNativeManifest(f.transport, manifestPath, {
+      ...evidence,
+      admissionReleased: undefined,
+      pendingRemotePath,
+      launchDisposition: 'armed',
+    }),
+  ).rejects.toThrow('admission is already released');
+  expect(f.manifest()).toBe(marker);
+  expect(f.signal).toHaveBeenCalledOnce();
+  expect(f.files.size).toBe(1);
+});
+
+test('a reattached finish keeps its exported completion until admission release can be retried', async () => {
+  vi.useFakeTimers();
+  try {
+    const f = await setup();
+    const release = vi.spyOn(f.transport, 'releaseAdmission').mockResolvedValue('unavailable');
+    const finishing = f.finish();
+    const refused = expect(finishing).rejects.toMatchObject({
+      details: { reason: 'cleanup-unconfirmed' },
+    });
+    await Promise.all([vi.advanceTimersByTimeAsync(1_000), refused]);
+    const completed = JSON.parse(f.manifest());
+    expect(completed).toMatchObject({ completion: { outPath: '/tmp/capture.mp4' } });
+    expect(completed.admissionReleased).toBeUndefined();
+    expect(release).toHaveBeenCalledOnce();
+    expect(f.finalize).toHaveBeenCalledOnce();
+    await expect(
+      f.runtime.screenRecordingReattach({ envelope: f.started.envelope }),
+    ).resolves.toMatchObject({
+      status: 'unreattachable',
+      reason: 'preservation-unavailable',
+    });
+    release.mockRestore();
+    await expect(
+      f.runtime.screenRecordingReattach({ envelope: f.started.envelope }),
+    ).resolves.toMatchObject({
+      status: 'completed',
+      result: { outPath: '/tmp/capture.mp4' },
+    });
+    expect(JSON.parse(f.manifest())).toMatchObject({ admissionReleased: true });
+    expect(f.finalize).toHaveBeenCalledOnce();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('a gone recorder with material retains export authority without a signal', async () => {
@@ -332,7 +425,7 @@ test('startup preservation fences and journals the real Android reattach without
   });
   expect(outcome).toEqual({ status: 'retained', reason: 'export-pending' });
   expect(f.signal).toHaveBeenCalledOnce();
-  expect(f.manifest()).toBe(marker);
+  expect(JSON.parse(f.manifest())).toEqual({ ...JSON.parse(marker), admissionReleased: true });
   expect([...f.files]).toEqual(material);
   expect(f.remove).not.toHaveBeenCalled();
   expect(f.removeManifest).not.toHaveBeenCalled();

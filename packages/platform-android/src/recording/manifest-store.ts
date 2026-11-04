@@ -20,6 +20,7 @@ export async function persistNativeManifest(
   create = false,
 ): Promise<void> {
   const read = await transport.readManifest(manifestPath, signal);
+  let next = evidence;
   if (read.status === 'unavailable') throw new AndroidMarkerWriteNotStarted();
   if (create ? read.status !== 'missing' : read.status !== 'read')
     throw new Error('Android recording marker changed');
@@ -35,12 +36,25 @@ export async function persistNativeManifest(
       current.launchDisposition === 'canceled'
     )
       throw new Error('Android recording marker ownership changed');
+    if (evidence.admissionReleased && !current.admissionReleased)
+      throw new Error('Android recording admission receipt changed');
+    if (current.admissionReleased) {
+      if (
+        evidence.pendingRemotePath !== undefined ||
+        evidence.launchDisposition !== undefined ||
+        JSON.stringify(current.chunks) !== JSON.stringify(evidence.chunks) ||
+        (current.completion !== undefined &&
+          JSON.stringify(current.completion) !== JSON.stringify(evidence.completion))
+      )
+        throw new Error('Android recording admission is already released');
+      next = { ...evidence, admissionReleased: true };
+    }
   }
   const outcome = await transport.compareAndSetManifest(
     {
       manifestPath,
       expected: read.status === 'read' ? read.contents : null,
-      contents: JSON.stringify(evidence),
+      contents: JSON.stringify(next),
     },
     signal,
   );

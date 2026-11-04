@@ -33,7 +33,7 @@ import {
 } from './launch.ts';
 import { recoverIncompleteAndroidRecordingStart } from './start-reconciliation.ts';
 import { persistNativeManifest } from './manifest-store.ts';
-import { releaseQuiescentAdmission } from './admission.ts';
+import { admissionReleaseUnconfirmed, releaseQuiescentAdmission } from './admission.ts';
 import { snapshot } from './live-snapshot.ts';
 import { finalizeAndroidRecording } from './finalize.ts';
 import { cleanupVerifiedAndroidEvidence } from './cleanup.ts';
@@ -287,12 +287,13 @@ async function startAndroidRecording(params: {
     schedule();
   };
   schedule();
+  let exported: Awaited<ReturnType<typeof finalizeAndroidRecording>> | undefined;
   const handle = createScreenRecordingLiveHandle(snapshot(input, startedAt), {
     finish: async (current, progress) => {
       claimStop();
       await rotation;
       if (rotationFailure) throw rotationFailure;
-      const outcome = await finalizeAndroidRecording({
+      exported ??= await finalizeAndroidRecording({
         host,
         transport,
         evidence: activeEvidence(chunks),
@@ -302,9 +303,10 @@ async function startAndroidRecording(params: {
         progress,
         activeRecorderRetired: retiredActiveRecorder,
       });
-      await releaseQuiescentAdmission(transport, activeEvidence(chunks), manifestPath);
+      if (!(await releaseQuiescentAdmission(transport, activeEvidence(chunks), manifestPath)))
+        throw admissionReleaseUnconfirmed();
       confirmNativeCleanup();
-      return outcome;
+      return exported;
     },
     forceCleanup: async () => {
       claimStop();

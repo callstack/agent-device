@@ -261,7 +261,7 @@ test.each([
   ['reassigned to an unrelated process', 'ownership-lost'],
   ['reused by a replacement recorder on the same path', 'foreign-writer'],
 ] as const)(
-  'terminalizes completed evidence whose recorder pid was %s, touching nothing',
+  'retains completion while the recorder pid was %s and release is unconfirmed',
   async (_name, ownership) => {
     let manifest = '';
     const removals: string[] = [];
@@ -296,20 +296,11 @@ test.each([
       },
     });
 
-    await expect(runtime.screenRecordingReattach({ envelope: started.envelope })).resolves.toEqual({
-      status: 'completed',
-      result: {
-        backend: 'adb screenrecord',
-        outPath: native.outputPath,
-        startedAt: native.startedAt,
-        completedAt: native.startedAt + 1,
-        scope: native.scope,
-        showTouches: native.showTouches,
-        recordOnlySession: native.recordOnlySession,
-        // Nothing was disposed of here, and the disposition the replay serves is read from the
-        // device rather than from the marker — which this marker never carried at all.
-        nativePathDisposition: 'retirable',
-      },
+    await expect(
+      runtime.screenRecordingReattach({ envelope: started.envelope }),
+    ).resolves.toMatchObject({
+      status: 'unreattachable',
+      reason: 'preservation-unavailable',
     });
     expect(removals).toEqual([]);
     expect(JSON.parse(manifest)).toHaveProperty('completion');

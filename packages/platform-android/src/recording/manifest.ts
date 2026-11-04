@@ -57,6 +57,7 @@ export type NativeManifest = Readonly<{
   pendingRemotePath?: string;
   launchDisposition?: 'armed' | 'admitted' | 'canceled';
   startNoEffectConfirmed?: true;
+  admissionReleased?: true;
   completion?: ScreenRecordingCompletion;
 }>;
 

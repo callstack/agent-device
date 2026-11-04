@@ -578,6 +578,25 @@ test('a launch without its exact device-wide owner cannot change the marker or s
   });
 });
 
+test('a retained generation cannot reacquire admission and revive its queued launch', async () => {
+  await rig(async ({ transport, markerFile, ledger }) => {
+    await seed(transport);
+    const before = readFileSync(markerFile, 'utf8');
+    expect(
+      await transport.releaseAdmission({ owner: key, manifestPath: marker, expected: armed }),
+    ).toBe('released');
+    expect(await transport.acquireAdmission(key)).toBe('unavailable');
+    await expect(
+      transport.start({
+        remotePath: artifact,
+        admission: { owner: key, manifestPath: marker, expected: armed, admitted },
+      }),
+    ).rejects.toBeInstanceOf(Error);
+    expect(readFileSync(markerFile, 'utf8')).toBe(before);
+    expect(existsSync(ledger)).toBe(false);
+  });
+});
+
 test('retains an admission directory whose owner was never published', async () => {
   await rig(async ({ transport, admissionDir, markerFile }) => {
     mkdirSync(admissionDir);

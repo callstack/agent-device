@@ -21,7 +21,7 @@ import {
   type AndroidRecordingDescriptor,
   type NativeManifest,
 } from './manifest.ts';
-import { releaseQuiescentAdmission } from './admission.ts';
+import { admissionReleaseUnconfirmed, releaseQuiescentAdmission } from './admission.ts';
 import { cleanupVerifiedAndroidEvidence } from './cleanup.ts';
 import {
   AndroidRecordingOwnershipLost,
@@ -168,7 +168,11 @@ async function reattachEvidence(params: {
   if (evidence.completion !== undefined) {
     const observed = await observeCompletedEvidence(transport, evidence, signal);
     if (observed.status === 'terminal') {
-      await releaseQuiescentAdmission(transport, evidence, descriptor.manifestPath);
+      if (!(await releaseQuiescentAdmission(transport, evidence, descriptor.manifestPath)))
+        return unreattachable(
+          'preservation-unavailable',
+          'Android recording admission release is unconfirmed; the completed export is retained.',
+        );
       return {
         status: 'completed' as const,
         // The marker froze its disposition when the chunks were still owed a removal, so the replay
@@ -214,9 +218,10 @@ async function reattachEvidence(params: {
     descriptor,
   );
   let nativeCleanupConfirmed = false;
+  let exported: Awaited<ReturnType<typeof finalizeAndroidRecording>> | undefined;
   const handle = createScreenRecordingLiveHandle(snapshot(inputForHandle, evidence.startedAt), {
     finish: async (current, progress) => {
-      const outcome = await finalizeAndroidRecording({
+      exported ??= await finalizeAndroidRecording({
         host,
         transport,
         evidence,
@@ -226,9 +231,10 @@ async function reattachEvidence(params: {
         reachedLimit: provesAndroidScreenRecordTermination(running),
         progress,
       });
-      await releaseQuiescentAdmission(transport, evidence, descriptor.manifestPath);
+      if (!(await releaseQuiescentAdmission(transport, evidence, descriptor.manifestPath)))
+        throw admissionReleaseUnconfirmed();
       nativeCleanupConfirmed = true;
-      return outcome;
+      return exported;
     },
     forceCleanup: async () =>
       nativeCleanupConfirmed
@@ -334,19 +340,6 @@ async function settleAndroidRecording(params: {
           : 'stop-unconfirmed',
     };
   }
-  const latest = await readDescriptorEvidence({
-    transport: params.transport,
-    device: params.device,
-    envelope: params.input.envelope,
-    descriptor: params.descriptor,
-    signal: params.signal,
-  });
-  if (latest.status === 'matched')
-    await releaseQuiescentAdmission(
-      params.transport,
-      latest.evidence,
-      params.descriptor.manifestPath,
-    );
   if (intentionalStop && mustSignalRecorder(readStopCheckpoints(params.progress.learned))) {
     params.progress.record(
       writeStopCheckpoint({ observation: { recorder: 'confirmed' }, stoppedAtMs }),
@@ -361,6 +354,26 @@ async function settleAndroidRecording(params: {
   } catch {
     return { status: 'retained', reason: 'owner-unavailable' };
   }
+  const latest = await readDescriptorEvidence({
+    transport: params.transport,
+    device: params.device,
+    envelope: params.input.envelope,
+    descriptor: params.descriptor,
+    signal: params.signal,
+  }).catch(() => ({ status: 'transport-unavailable' as const }));
+  if (latest.status !== 'matched')
+    return {
+      status: 'retained',
+      reason: latest.status === 'ownership-lost' ? 'ownership-fence-lost' : 'owner-unavailable',
+    };
+  if (
+    !(await releaseQuiescentAdmission(
+      params.transport,
+      latest.evidence,
+      params.descriptor.manifestPath,
+    ))
+  )
+    return { status: 'retained', reason: 'owner-unavailable' };
   return { status: 'export' };
 }
 
@@ -423,7 +436,11 @@ function inputFromDescriptor(
 }
 
 function unreattachable(
-  reason: 'descriptor-invalid' | 'transport-not-reattachable' | 'ownership-fence-lost',
+  reason:
+    | 'descriptor-invalid'
+    | 'transport-not-reattachable'
+    | 'ownership-fence-lost'
+    | 'preservation-unavailable',
   message?: string,
 ) {
   return {

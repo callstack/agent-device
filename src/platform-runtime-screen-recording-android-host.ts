@@ -62,10 +62,16 @@ export async function createAndroidScreenRecordingTransport(
   return Object.freeze({
     mode: scoped.mode,
     acquireAdmission: async (owner) => {
+      if (!/^[a-f0-9]{64}$/.test(owner)) return 'unavailable';
       const lease = shellQuote(ANDROID_ADMISSION_PATH);
+      const manifestPath = `/sdcard/agent-device-recording-v2-admitted-${owner}.json`;
+      const marker = shellQuote(manifestPath);
       const result = await shell([
         shellFragment(
-          `if mkdir ${lease} 2>/dev/null; then printf %s ${shellQuote(owner)} > ${lease}/owner || exit 74; else if test -d ${lease}; then exit 73; else exit 74; fi; fi`,
+          markerLock(
+            manifestPath,
+            `if test -e ${marker} || test -L ${marker}; then exit 74; fi; if mkdir ${lease} 2>/dev/null; then printf %s ${shellQuote(owner)} > ${lease}/owner || exit 74; else if test -d ${lease}; then exit 73; else exit 74; fi; fi`,
+          ),
         ),
       ]);
       return result.exitCode === 0 ? 'acquired' : result.exitCode === 73 ? 'busy' : 'unavailable';

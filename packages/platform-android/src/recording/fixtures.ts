@@ -70,6 +70,9 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
     mode: legacy.mode ?? ('local' as const),
     acquireAdmission: async (owner: string) => {
       if (legacy.acquireAdmission) return await legacy.acquireAdmission(owner);
+      if (!/^[a-f0-9]{64}$/.test(owner)) return 'unavailable' as const;
+      if (markers.has(`/sdcard/agent-device-recording-v2-admitted-${owner}.json`))
+        return 'unavailable' as const;
       if (admissionOwner !== undefined) return 'busy' as const;
       admissionOwner = owner;
       return 'acquired' as const;

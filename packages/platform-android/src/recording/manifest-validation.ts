@@ -110,6 +110,12 @@ function hasValidManifestResources(candidate: Partial<NativeManifest>): boolean 
         candidate.chunks.length === 0 &&
         candidate.pendingRemotePath !== undefined &&
         candidate.completion === undefined)) &&
+    (candidate.admissionReleased === undefined ||
+      (candidate.admissionReleased === true &&
+        candidate.claimToken !== undefined &&
+        candidate.chunks.length > 0 &&
+        candidate.pendingRemotePath === undefined &&
+        candidate.launchDisposition === undefined)) &&
     (candidate.completion === undefined || isValidCompletion(candidate.completion))
   );
 }

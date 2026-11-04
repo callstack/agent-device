@@ -2,6 +2,7 @@ import { expect, test, vi } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
 import { bindAndroidScreenRecordingRuntime } from './runtime.ts';
+import { AndroidScreenRecordingStartRollbackUnconfirmed } from './chunks.ts';
 
 const start = async (overrides: Record<string, unknown>) =>
   await bindAndroidScreenRecordingRuntime({
@@ -132,23 +133,21 @@ test('cleans verified dead evidence so a later start is admitted', async () => {
 });
 
 const inconclusiveWriterScans = [
-  ['no recorder at all', { writers: [], conclusive: false }],
-  [
-    'one recorder and an unreadable candidate',
-    {
-      writers: [{ pid: '88', remotePath: '/sdcard/agent-device-recording-9.mp4', startTime: '4' }],
-      conclusive: false,
-    },
-  ],
-];
+  ['no recorder at all', false],
+  ['one recorder and an unreadable candidate', true],
+] as const;
 
 test.each(inconclusiveWriterScans)(
   'retains evidence when the pending artifact writer scan reports %s',
-  async (_name, scan) => {
-    const pendingPath = '/sdcard/agent-device-recording-9.mp4';
+  async (_name, hasWriter) => {
     let manifest = '';
+    let pendingPath = '';
     const removed: string[] = [];
     const signalled: string[] = [];
+    const scan = vi.fn(async () => ({
+      writers: hasWriter ? [{ pid: '88', remotePath: pendingPath, startTime: '4' }] : [],
+      conclusive: false,
+    }));
     const runtime = await start({
       writeManifest: async ({ contents }: { contents: string }) => {
         manifest = contents;
@@ -167,14 +166,23 @@ test.each(inconclusiveWriterScans)(
         signalled.push(pid);
         return true;
       },
-      findRunning: async () => scan,
+      findRunning: scan,
       isRunning: async () => false,
     });
     const started = await runtime.screenRecordingStart(recordingInput());
-    manifest = JSON.stringify({ ...JSON.parse(manifest), pendingRemotePath: pendingPath });
+    const active = JSON.parse(manifest);
+    pendingPath = active.chunks[0].remotePath.replace(/-\d+\.mp4$/, '-9.mp4');
+    manifest = JSON.stringify({
+      ...active,
+      chunks: [],
+      pendingRemotePath: pendingPath,
+      launchDisposition: 'canceled',
+      startNoEffectConfirmed: true,
+    });
     await expect(
       runtime.screenRecordingCleanup({ envelope: started.envelope }),
     ).resolves.toMatchObject({ status: 'cleanup-pending' });
+    expect(scan).toHaveBeenCalledExactlyOnceWith(pendingPath);
     expect(signalled).toEqual([]);
     expect(removed).toEqual([]);
     expect(manifest).not.toBe('');
@@ -203,10 +211,9 @@ test('retains evidence when the recorder presence probe is uncertain', async () 
       reason: 'cleanup-unconfirmed',
     });
     expect(manifest).not.toBe('');
-    await expect(runtime.screenRecordingStart(recordingInput())).rejects.toMatchObject({
-      code: 'DEVICE_IN_USE',
-      details: { reason: 'android_recording_admission_busy' },
-    });
+    await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBeInstanceOf(
+      AndroidScreenRecordingStartRollbackUnconfirmed,
+    );
   } finally {
     vi.useRealTimers();
   }

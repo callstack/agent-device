@@ -73,7 +73,7 @@ Before you remove that exact lock, drain every queued and in-flight command for 
 If you cannot prove exclusive control without affecting unrelated work, retain the lock and claim.
 After those commands drain, reboot the approved device and verify that the reboot completed.
 After the reboot, verify the marker path and the claim token and fence generation against the retained claim.
-Only after those checks, remove the exact marker's `.lock` directory and its `expected` and `next` files.
+Only after those checks, remove the exact marker's `.lock` directory and its `expected`, `next`, and `lease-owner` files.
 Keep the marker and every recording artifact for the recording recovery owner.
 Lock removal does not prove incomplete, admitted, or legacy evidence safe to clear.
 If you cannot prove that every old command is drained, retain the lock and claim.
@@ -84,9 +84,10 @@ Admission-aware Android recording uses `/sdcard` for its marker and recording ar
 If `/sdcard` is unavailable, Android recording does not use the legacy fallback directory.
 
 Admission-aware Android recording also uses a device-wide admission lock.
-For one device, use only admission-aware controllers on every host that can start a recording.
+For one device, upgrade every controller to support admission-release receipts and generation-marker admission checks.
 If an older controller or its recorder can still run, do not assume that the admission lock excludes it.
 If that admission lock has an unknown owner, retain the lock and claim.
 If admission release cannot be confirmed, retain the recording evidence and claim.
+If a successor holds admission before the earlier release receipt is recorded, wait for the successor to release admission before you retry the retained recording.
 Before you inspect or remove an admission lock, use the same approved isolated-device procedure.
 Do not treat admission lock removal as proof that a recorder exited or that an artifact is absent.

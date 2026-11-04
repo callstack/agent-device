@@ -1,6 +1,6 @@
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import { releaseExactAdmission } from './admission.ts';
+import { releaseExactAdmission, releaseQuiescentAdmission } from './admission.ts';
 import { rollbackChunks } from './chunks.ts';
 import type { NativeManifest } from './manifest.ts';
 import { removeNativeManifest } from './manifest-store.ts';
@@ -18,11 +18,25 @@ export async function cleanupVerifiedAndroidEvidence(
     if (pendingPath !== undefined && evidence.launchDisposition !== 'canceled')
       throw new Error('Android pending launch ownership is unconfirmed');
     await rollbackChunks(transport, evidence.chunks);
-    if (pendingPath !== undefined && (await transport.exists(pendingPath)) !== false)
-      throw new Error('Android canceled launch artifact absence is unconfirmed');
-    if (!(await releaseExactAdmission(transport, evidence, manifestPath, JSON.stringify(evidence))))
+    if (pendingPath !== undefined) {
+      const writers = await transport.probeRunningWriters(pendingPath);
+      if (!writers.conclusive || writers.writers.length !== 0)
+        throw new Error('Android canceled launch writer absence is unconfirmed');
+      if ((await transport.exists(pendingPath)) !== false)
+        throw new Error('Android canceled launch artifact absence is unconfirmed');
+    }
+    let expected = JSON.stringify(evidence);
+    if (pendingPath === undefined) {
+      const read = await transport.readManifest(manifestPath);
+      if (read.status !== 'read' || read.contents !== expected)
+        throw new Error('Android recording marker changed');
+      if (!(await releaseQuiescentAdmission(transport, evidence, manifestPath)))
+        throw new Error('Android recording admission release unconfirmed');
+      expected = JSON.stringify({ ...evidence, admissionReleased: true });
+    } else if (!(await releaseExactAdmission(transport, evidence, manifestPath, expected))) {
       throw new Error('Android recording admission release unconfirmed');
-    await removeNativeManifest(transport, manifestPath, JSON.stringify(evidence));
+    }
+    await removeNativeManifest(transport, manifestPath, expected);
     return { status: 'cleaned' };
   } catch (error) {
     return transportFailure(error);
