@@ -49,6 +49,10 @@ extension RunnerTests {
 
     XCTAssertNil(selection.failure)
     XCTAssertEqual(selection.sender, 7)
+    XCTAssertEqual(
+      selection.description,
+      "registryID=7 Transport=<missing> Product=<missing> Built-In=<missing> displayUUID=D1"
+    )
   }
 
   func testCoreDeviceTouchscreenWinsOverAServiceWithoutTransport() {
@@ -71,17 +75,49 @@ extension RunnerTests {
     XCTAssertEqual(selection.sender, 10)
   }
 
-  func testTouchscreensWithoutCoreDeviceAreAmbiguousWhenThereAreSeveral() {
+  func testSeveralTouchscreensWithoutATransportAreAmbiguous() {
     let selection = touchscreenSelection([
       touchscreen(registryID: 3, transport: nil),
-      touchscreen(registryID: 4, transport: 42 as NSNumber),
+      touchscreen(registryID: 4, transport: nil),
     ])
 
     XCTAssertEqual(selection.sender, 0)
-    let failure = selection.failure ?? ""
-    XCTAssertTrue(failure.contains("2 touchscreen HID services without a CoreDevice transport"), failure)
-    XCTAssertTrue(failure.contains("missing: 1"), failure)
-    XCTAssertTrue(failure.contains("other type: 1"), failure)
+    XCTAssertEqual(
+      selection.failure,
+      "display 1 has 2 touchscreen HID services without a Transport, so an edge touch cannot choose one"
+    )
+  }
+
+  func testAnUnrecognizedTransportIsNeverChosenWithoutACoreDeviceTouchscreen() {
+    let otherType = touchscreenSelection([touchscreen(registryID: 4, transport: 42 as NSNumber)])
+    let otherValue = touchscreenSelection([touchscreen(registryID: 4, transport: "USB")])
+    let besideAMissingOne = touchscreenSelection([
+      touchscreen(registryID: 3, transport: nil),
+      touchscreen(registryID: 4, transport: "USB"),
+    ])
+
+    for (selection, counts) in [
+      (otherType, "other type: 1, other value: 0"),
+      (otherValue, "other type: 0, other value: 1"),
+      (besideAMissingOne, "other type: 0, other value: 1"),
+    ] {
+      XCTAssertEqual(selection.sender, 0, counts)
+      XCTAssertTrue(
+        selection.failure?.contains("unrecognized Transport (\(counts))") == true,
+        selection.failure ?? "nil"
+      )
+    }
+  }
+
+  func testCoreDeviceTouchscreenWinsBesideAnUnrecognizedTransport() {
+    let selection = touchscreenSelection([
+      touchscreen(registryID: 4, transport: "USB"),
+      touchscreen(registryID: 9, transport: "CoreDevice"),
+    ])
+
+    XCTAssertNil(selection.failure)
+    XCTAssertEqual(selection.sender, 9)
+    XCTAssertTrue(selection.description?.hasPrefix("registryID=9 Transport=CoreDevice") == true)
   }
 
   func testNoCandidateNamesTheConditionThatRejectedTheTouchscreens() {
@@ -103,10 +139,13 @@ extension RunnerTests {
     return service
   }
 
-  private func touchscreenSelection(_ services: [[String: Any]]) -> (failure: String?, sender: UInt64) {
+  private func touchscreenSelection(
+    _ services: [[String: Any]]
+  ) -> (failure: String?, sender: UInt64, description: String?) {
     var sender: UInt64 = 0
-    let failure = RunnerTouchscreenSelection(services, "D1", &sender)
-    return (failure, sender)
+    var description: NSString?
+    let failure = RunnerTouchscreenSelection(services, "D1", &sender, &description)
+    return (failure, sender, description as String?)
   }
 }
 #endif

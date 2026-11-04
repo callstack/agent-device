@@ -16,11 +16,13 @@ FOUNDATION_EXPORT NSArray<NSDictionary<NSString *, NSNumber *> *> *RunnerEdgeCon
 
 /// Runs the touchscreen sender selection over fake HID services. Each service is a dictionary of
 /// its properties (`PrimaryUsagePage`, `PrimaryUsage`, `Transport`, `displayUUID`) plus
-/// `registryID`; an absent key is a missing property. Returns the failure, or nil with `sender` set.
+/// `registryID`; an absent key is a missing property. Returns the failure, or nil with `sender` set
+/// and `selection` describing the chosen service.
 FOUNDATION_EXPORT NSString * _Nullable RunnerTouchscreenSelection(
   NSArray<NSDictionary<NSString *, id> *> *services,
   NSString * _Nullable displayUUID,
-  uint64_t *sender
+  uint64_t *sender,
+  NSString * _Nullable * _Nullable selection
 );
 
 #endif

@@ -82,14 +82,18 @@ static CFTypeRef RunnerTestingGetServiceRegistryID(CFTypeRef service) {
 NSString *RunnerTouchscreenSelection(
   NSArray<NSDictionary<NSString *, id> *> *services,
   NSString *displayUUID,
-  uint64_t *sender
+  uint64_t *sender,
+  NSString **selection
 ) {
   RunnerHIDFunctions functions = {
     .copyServices = RunnerTestingCopyServices,
     .copyServiceProperty = RunnerTestingCopyServiceProperty,
     .getServiceRegistryID = RunnerTestingGetServiceRegistryID,
   };
-  return RunnerSelectTouchscreenSender(&functions, (__bridge CFTypeRef)services, displayUUID, 1, sender);
+  NSString *described = nil;
+  NSString *failure = RunnerSelectTouchscreenSender(&functions, (__bridge CFTypeRef)services, displayUUID, 1, sender, &described);
+  if (selection != NULL) *selection = described;
+  return failure;
 }
 
 #endif

@@ -60,7 +60,13 @@ static NSString * _Nullable RunnerResolveTouchscreenSender(
   NSUInteger displayID,
   uint64_t *sender
 ) {
-  return RunnerSelectTouchscreenSender(functions, client, RunnerDisplayUUID(displayID), displayID, sender);
+  NSString *selection = nil;
+  NSString *failure = RunnerSelectTouchscreenSender(
+    functions, client, RunnerDisplayUUID(displayID), displayID, sender, &selection);
+  if (failure == nil) {
+    NSLog(@"AGENT_DEVICE_RUNNER_EDGE_TOUCHSCREEN display=%lu %@", (unsigned long)displayID, selection);
+  }
+  return failure;
 }
 
 @implementation RunnerSimulatorEdgeTouch

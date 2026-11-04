@@ -269,19 +269,52 @@ static inline RunnerServicePropertyRead RunnerReadServiceStringProperty(
   return read;
 }
 
+// One service property as the selection log shows it: its value, `<missing>`, or `<other type>`.
+static inline NSString *RunnerDescribeServiceProperty(
+  const RunnerHIDFunctions *functions,
+  CFTypeRef service,
+  CFStringRef key
+) {
+  CFTypeRef property = functions->copyServiceProperty(service, key);
+  if (property == NULL) return @"<missing>";
+  CFTypeID type = CFGetTypeID(property);
+  NSString *description = (type == CFStringGetTypeID() || type == CFNumberGetTypeID() || type == CFBooleanGetTypeID())
+    ? [(__bridge id)property description]
+    : @"<other type>";
+  CFRelease(property);
+  return description;
+}
+
+static inline NSString *RunnerDescribeTouchscreen(
+  const RunnerHIDFunctions *functions,
+  CFTypeRef service,
+  uint64_t registryID
+) {
+  return [NSString stringWithFormat:@"registryID=%llu Transport=%@ Product=%@ Built-In=%@ displayUUID=%@",
+    registryID,
+    RunnerDescribeServiceProperty(functions, service, CFSTR("Transport")),
+    RunnerDescribeServiceProperty(functions, service, CFSTR("Product")),
+    RunnerDescribeServiceProperty(functions, service, CFSTR("Built-In")),
+    RunnerDescribeServiceProperty(functions, service, CFSTR("displayUUID"))];
+}
+
 // Touches reach the app only with its display's touchscreen service as their sender. A candidate is
 // a touchscreen (digitizer usage page, touch screen usage) on the app's display with a readable
 // registry ID. A simulator client names its service's Transport `CoreDevice`, one service per
 // attached client; the oldest, created at boot, is always present and wins. Some simulator hosts
-// name no Transport at all; their display's only candidate is its touchscreen, and several are
-// ambiguous.
+// name no Transport at all; without a CoreDevice candidate, the display's sole touchscreen without a
+// Transport is used. Several such touchscreens are ambiguous, and a Transport of another value or
+// type is not a known simulator touchscreen, so both refuse rather than pick a sender.
+// `selection` describes the chosen service for the runner log.
 static inline NSString * _Nullable RunnerSelectTouchscreenSender(
   const RunnerHIDFunctions *functions,
   CFTypeRef client,
   NSString * _Nullable displayUUID,
   NSUInteger displayID,
-  uint64_t *sender
+  uint64_t *sender,
+  NSString * _Nullable __autoreleasing * _Nonnull selection
 ) {
+  *selection = nil;
   NSUInteger touchscreens = 0;
   NSUInteger onDisplay = 0;
   NSUInteger coreDevice = 0;
@@ -289,7 +322,9 @@ static inline NSString * _Nullable RunnerSelectTouchscreenSender(
   NSUInteger transportOtherType = 0;
   NSUInteger transportOtherValue = 0;
   uint64_t oldestCoreDevice = 0;
-  uint64_t otherCandidate = 0;
+  uint64_t missingCandidate = 0;
+  NSString *oldestCoreDeviceDescription = nil;
+  NSString *missingDescription = nil;
   CFArrayRef services = functions->copyServices(client);
   for (CFIndex index = 0; services != NULL && index < CFArrayGetCount(services); index++) {
     CFTypeRef service = CFArrayGetValueAtIndex(services, index);
@@ -310,38 +345,44 @@ static inline NSString * _Nullable RunnerSelectTouchscreenSender(
     NSString *transport = nil;
     switch (RunnerReadServiceStringProperty(functions, service, CFSTR("Transport"), &transport)) {
       case RunnerServicePropertyPresent:
-        if ([transport isEqualToString:@"CoreDevice"]) {
-          if (coreDevice == 0 || candidate < oldestCoreDevice) oldestCoreDevice = candidate;
-          coreDevice += 1;
-          continue;
+        if (![transport isEqualToString:@"CoreDevice"]) {
+          transportOtherValue += 1;
+        } else if (coreDevice++ == 0 || candidate < oldestCoreDevice) {
+          oldestCoreDevice = candidate;
+          oldestCoreDeviceDescription = RunnerDescribeTouchscreen(functions, service, candidate);
         }
-        transportOtherValue += 1;
         break;
       case RunnerServicePropertyMissing:
         transportMissing += 1;
+        missingCandidate = candidate;
+        missingDescription = RunnerDescribeTouchscreen(functions, service, candidate);
         break;
       case RunnerServicePropertyUnexpectedType:
         transportOtherType += 1;
         break;
     }
-    otherCandidate = candidate;
   }
   if (services != NULL) CFRelease(services);
-  NSUInteger others = transportMissing + transportOtherType + transportOtherValue;
   if (coreDevice > 0) {
     *sender = oldestCoreDevice;
+    *selection = oldestCoreDeviceDescription;
     return nil;
   }
-  if (others == 1) {
-    *sender = otherCandidate;
-    return nil;
-  }
-  if (others > 1) {
+  if (transportOtherType + transportOtherValue > 0) {
     return [NSString stringWithFormat:
-      @"display %lu has %lu touchscreen HID services without a CoreDevice transport "
-      @"(missing: %lu, other type: %lu, other value: %lu), so an edge touch cannot choose one",
-      (unsigned long)displayID, (unsigned long)others, (unsigned long)transportMissing,
-      (unsigned long)transportOtherType, (unsigned long)transportOtherValue];
+      @"display %lu has touchscreen HID services with an unrecognized Transport (other type: %lu, "
+      @"other value: %lu) and none with a CoreDevice transport, so an edge touch cannot trust a sender",
+      (unsigned long)displayID, (unsigned long)transportOtherType, (unsigned long)transportOtherValue];
+  }
+  if (transportMissing == 1) {
+    *sender = missingCandidate;
+    *selection = missingDescription;
+    return nil;
+  }
+  if (transportMissing > 1) {
+    return [NSString stringWithFormat:
+      @"display %lu has %lu touchscreen HID services without a Transport, so an edge touch cannot choose one",
+      (unsigned long)displayID, (unsigned long)transportMissing];
   }
   return [NSString stringWithFormat:
     @"display %lu has no simulator touchscreen HID service: %lu touchscreen service%@, %lu on this "
