@@ -42,5 +42,71 @@ extension RunnerTests {
       XCTAssertEqual(terminal?["restamped"]?.boolValue, true, "frame \(failingFrame): stamped at dispatch")
     }
   }
+
+  func testTouchscreenWithoutATransportIsTheDisplaysOnlyCandidate() {
+    // Reported on iOS 18.1 and 26.5 simulators: the touchscreen service reads no Transport.
+    let selection = touchscreenSelection([touchscreen(registryID: 7, transport: nil)])
+
+    XCTAssertNil(selection.failure)
+    XCTAssertEqual(selection.sender, 7)
+  }
+
+  func testCoreDeviceTouchscreenWinsOverAServiceWithoutTransport() {
+    let selection = touchscreenSelection([
+      touchscreen(registryID: 3, transport: nil),
+      touchscreen(registryID: 9, transport: "CoreDevice"),
+    ])
+
+    XCTAssertNil(selection.failure)
+    XCTAssertEqual(selection.sender, 9)
+  }
+
+  func testOldestCoreDeviceTouchscreenWinsWhenAWindowAddsAnother() {
+    let selection = touchscreenSelection([
+      touchscreen(registryID: 20, transport: "CoreDevice"),
+      touchscreen(registryID: 10, transport: "CoreDevice"),
+    ])
+
+    XCTAssertNil(selection.failure)
+    XCTAssertEqual(selection.sender, 10)
+  }
+
+  func testTouchscreensWithoutCoreDeviceAreAmbiguousWhenThereAreSeveral() {
+    let selection = touchscreenSelection([
+      touchscreen(registryID: 3, transport: nil),
+      touchscreen(registryID: 4, transport: 42 as NSNumber),
+    ])
+
+    XCTAssertEqual(selection.sender, 0)
+    let failure = selection.failure ?? ""
+    XCTAssertTrue(failure.contains("2 touchscreen HID services without a CoreDevice transport"), failure)
+    XCTAssertTrue(failure.contains("missing: 1"), failure)
+    XCTAssertTrue(failure.contains("other type: 1"), failure)
+  }
+
+  func testNoCandidateNamesTheConditionThatRejectedTheTouchscreens() {
+    let otherDisplay = touchscreenSelection([touchscreen(registryID: 5, transport: "CoreDevice", displayUUID: "D2")])
+    let unreadableID = touchscreenSelection([touchscreen(registryID: "5" as NSString, transport: "CoreDevice")])
+
+    XCTAssertTrue(otherDisplay.failure?.contains("1 touchscreen service, 0 on this display") == true, otherDisplay.failure ?? "nil")
+    XCTAssertTrue(unreadableID.failure?.contains("1 on this display, 0 with a readable registry ID") == true, unreadableID.failure ?? "nil")
+  }
+
+  private func touchscreen(registryID: Any, transport: Any?, displayUUID: String = "D1") -> [String: Any] {
+    var service: [String: Any] = [
+      "PrimaryUsagePage": 13,
+      "PrimaryUsage": 4,
+      "displayUUID": displayUUID,
+      "registryID": registryID,
+    ]
+    if let transport { service["Transport"] = transport }
+    return service
+  }
+
+  private func touchscreenSelection(_ services: [[String: Any]]) -> (failure: String?, sender: UInt64) {
+    var sender: UInt64 = 0
+    let failure = RunnerTouchscreenSelection(services, "D1", &sender)
+    return (failure, sender)
+  }
 }
 #endif

@@ -212,6 +212,144 @@ static inline NSString * _Nullable RunnerDispatchEdgeContact(
   return failure;
 }
 
+// The simulator touchscreen HID service: digitizer usage page, touch screen usage.
+static const long RunnerDigitizerUsagePage = 13;
+static const long RunnerTouchScreenUsage = 4;
+
+static inline long RunnerServiceIntegerProperty(
+  const RunnerHIDFunctions *functions,
+  CFTypeRef service,
+  CFStringRef key
+) {
+  CFTypeRef value = functions->copyServiceProperty(service, key);
+  long result = -1;
+  if (value != NULL && CFGetTypeID(value) == CFNumberGetTypeID()) {
+    CFNumberGetValue((CFNumberRef)value, kCFNumberLongType, &result);
+  }
+  if (value != NULL) CFRelease(value);
+  return result;
+}
+
+static inline NSString * _Nullable RunnerServiceStringProperty(
+  const RunnerHIDFunctions *functions,
+  CFTypeRef service,
+  CFStringRef key
+) {
+  CFTypeRef value = functions->copyServiceProperty(service, key);
+  NSString *result = nil;
+  if (value != NULL && CFGetTypeID(value) == CFStringGetTypeID()) {
+    result = [(__bridge NSString *)value copy];
+  }
+  if (value != NULL) CFRelease(value);
+  return result;
+}
+
+// How a service property reads: absent, present with a type other than the one asked for, or present.
+typedef NS_ENUM(NSInteger, RunnerServicePropertyRead) {
+  RunnerServicePropertyMissing,
+  RunnerServicePropertyUnexpectedType,
+  RunnerServicePropertyPresent,
+};
+
+static inline RunnerServicePropertyRead RunnerReadServiceStringProperty(
+  const RunnerHIDFunctions *functions,
+  CFTypeRef service,
+  CFStringRef key,
+  NSString * _Nullable __autoreleasing * _Nonnull value
+) {
+  *value = nil;
+  CFTypeRef property = functions->copyServiceProperty(service, key);
+  if (property == NULL) return RunnerServicePropertyMissing;
+  RunnerServicePropertyRead read = RunnerServicePropertyUnexpectedType;
+  if (CFGetTypeID(property) == CFStringGetTypeID()) {
+    *value = [(__bridge NSString *)property copy];
+    read = RunnerServicePropertyPresent;
+  }
+  CFRelease(property);
+  return read;
+}
+
+// Touches reach the app only with its display's touchscreen service as their sender. A candidate is
+// a touchscreen (digitizer usage page, touch screen usage) on the app's display with a readable
+// registry ID. A simulator client names its service's Transport `CoreDevice`, one service per
+// attached client; the oldest, created at boot, is always present and wins. Some simulator hosts
+// name no Transport at all; their display's only candidate is its touchscreen, and several are
+// ambiguous.
+static inline NSString * _Nullable RunnerSelectTouchscreenSender(
+  const RunnerHIDFunctions *functions,
+  CFTypeRef client,
+  NSString * _Nullable displayUUID,
+  NSUInteger displayID,
+  uint64_t *sender
+) {
+  NSUInteger touchscreens = 0;
+  NSUInteger onDisplay = 0;
+  NSUInteger coreDevice = 0;
+  NSUInteger transportMissing = 0;
+  NSUInteger transportOtherType = 0;
+  NSUInteger transportOtherValue = 0;
+  uint64_t oldestCoreDevice = 0;
+  uint64_t otherCandidate = 0;
+  CFArrayRef services = functions->copyServices(client);
+  for (CFIndex index = 0; services != NULL && index < CFArrayGetCount(services); index++) {
+    CFTypeRef service = CFArrayGetValueAtIndex(services, index);
+    if (RunnerServiceIntegerProperty(functions, service, CFSTR("PrimaryUsagePage")) != RunnerDigitizerUsagePage ||
+        RunnerServiceIntegerProperty(functions, service, CFSTR("PrimaryUsage")) != RunnerTouchScreenUsage) {
+      continue;
+    }
+    touchscreens += 1;
+    NSString *serviceDisplayUUID = RunnerServiceStringProperty(functions, service, CFSTR("displayUUID"));
+    if (serviceDisplayUUID != displayUUID && ![serviceDisplayUUID isEqualToString:displayUUID]) continue;
+    onDisplay += 1;
+    CFTypeRef registryID = functions->getServiceRegistryID(service);
+    uint64_t candidate = 0;
+    if (registryID == NULL || CFGetTypeID(registryID) != CFNumberGetTypeID() ||
+        !CFNumberGetValue((CFNumberRef)registryID, kCFNumberSInt64Type, &candidate)) {
+      continue;
+    }
+    NSString *transport = nil;
+    switch (RunnerReadServiceStringProperty(functions, service, CFSTR("Transport"), &transport)) {
+      case RunnerServicePropertyPresent:
+        if ([transport isEqualToString:@"CoreDevice"]) {
+          if (coreDevice == 0 || candidate < oldestCoreDevice) oldestCoreDevice = candidate;
+          coreDevice += 1;
+          continue;
+        }
+        transportOtherValue += 1;
+        break;
+      case RunnerServicePropertyMissing:
+        transportMissing += 1;
+        break;
+      case RunnerServicePropertyUnexpectedType:
+        transportOtherType += 1;
+        break;
+    }
+    otherCandidate = candidate;
+  }
+  if (services != NULL) CFRelease(services);
+  NSUInteger others = transportMissing + transportOtherType + transportOtherValue;
+  if (coreDevice > 0) {
+    *sender = oldestCoreDevice;
+    return nil;
+  }
+  if (others == 1) {
+    *sender = otherCandidate;
+    return nil;
+  }
+  if (others > 1) {
+    return [NSString stringWithFormat:
+      @"display %lu has %lu touchscreen HID services without a CoreDevice transport "
+      @"(missing: %lu, other type: %lu, other value: %lu), so an edge touch cannot choose one",
+      (unsigned long)displayID, (unsigned long)others, (unsigned long)transportMissing,
+      (unsigned long)transportOtherType, (unsigned long)transportOtherValue];
+  }
+  return [NSString stringWithFormat:
+    @"display %lu has no simulator touchscreen HID service: %lu touchscreen service%@, %lu on this "
+    @"display, 0 with a readable registry ID",
+    (unsigned long)displayID, (unsigned long)touchscreens, touchscreens == 1 ? @"" : @"s",
+    (unsigned long)onDisplay];
+}
+
 NS_ASSUME_NONNULL_END
 
 #endif

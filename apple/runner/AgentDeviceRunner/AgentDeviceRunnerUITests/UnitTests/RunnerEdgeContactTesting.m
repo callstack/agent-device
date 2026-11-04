@@ -66,5 +66,31 @@ NSArray<NSDictionary<NSString *, NSNumber *> *> *RunnerEdgeContactDispatches(
   return [RunnerTestingDispatched copy];
 }
 
+static CFArrayRef RunnerTestingCopyServices(CFTypeRef client) {
+  return CFBridgingRetain([(__bridge NSArray *)client copy]);
+}
+
+static CFTypeRef RunnerTestingCopyServiceProperty(CFTypeRef service, CFStringRef key) {
+  id value = ((__bridge NSDictionary *)service)[(__bridge NSString *)key];
+  return value == nil ? NULL : CFBridgingRetain(value);
+}
+
+static CFTypeRef RunnerTestingGetServiceRegistryID(CFTypeRef service) {
+  return (__bridge CFTypeRef)((__bridge NSDictionary *)service)[@"registryID"];
+}
+
+NSString *RunnerTouchscreenSelection(
+  NSArray<NSDictionary<NSString *, id> *> *services,
+  NSString *displayUUID,
+  uint64_t *sender
+) {
+  RunnerHIDFunctions functions = {
+    .copyServices = RunnerTestingCopyServices,
+    .copyServiceProperty = RunnerTestingCopyServiceProperty,
+    .getServiceRegistryID = RunnerTestingGetServiceRegistryID,
+  };
+  return RunnerSelectTouchscreenSender(&functions, (__bridge CFTypeRef)services, displayUUID, 1, sender);
+}
+
 #endif
 #endif

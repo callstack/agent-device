@@ -7,10 +7,6 @@
 #import <dlfcn.h>
 #import <objc/message.h>
 
-// The simulator touchscreen HID service: digitizer usage page, touch screen usage.
-static const long RunnerDigitizerUsagePage = 13;
-static const long RunnerTouchScreenUsage = 4;
-
 static NSString * _Nullable RunnerResolveHIDFunctions(RunnerHIDFunctions *functions) {
   void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW);
   if (iokit == NULL) {
@@ -40,34 +36,6 @@ static NSString * _Nullable RunnerResolveHIDFunctions(RunnerHIDFunctions *functi
   return nil;
 }
 
-static long RunnerServiceIntegerProperty(
-  const RunnerHIDFunctions *functions,
-  CFTypeRef service,
-  CFStringRef key
-) {
-  CFTypeRef value = functions->copyServiceProperty(service, key);
-  long result = -1;
-  if (value != NULL && CFGetTypeID(value) == CFNumberGetTypeID()) {
-    CFNumberGetValue((CFNumberRef)value, kCFNumberLongType, &result);
-  }
-  if (value != NULL) CFRelease(value);
-  return result;
-}
-
-static NSString * _Nullable RunnerServiceStringProperty(
-  const RunnerHIDFunctions *functions,
-  CFTypeRef service,
-  CFStringRef key
-) {
-  CFTypeRef value = functions->copyServiceProperty(service, key);
-  NSString *result = nil;
-  if (value != NULL && CFGetTypeID(value) == CFStringGetTypeID()) {
-    result = [(__bridge NSString *)value copy];
-  }
-  if (value != NULL) CFRelease(value);
-  return result;
-}
-
 // The display UUID that a touchscreen HID service names for `displayID`, the XCTest display ID.
 // A simulator runtime that gives its displays no UUID answers nil, and so do its touchscreens.
 static NSString * _Nullable RunnerDisplayUUID(NSUInteger displayID) {
@@ -86,39 +54,13 @@ static NSString * _Nullable RunnerDisplayUUID(NSUInteger displayID) {
   return nil;
 }
 
-// Touches reach the app only with its display's touchscreen service as their sender. A display has
-// one service per attached simulator client; the oldest, created at boot, is always present.
 static NSString * _Nullable RunnerResolveTouchscreenSender(
   const RunnerHIDFunctions *functions,
   CFTypeRef client,
   NSUInteger displayID,
   uint64_t *sender
 ) {
-  NSString *displayUUID = RunnerDisplayUUID(displayID);
-  CFArrayRef services = functions->copyServices(client);
-  NSUInteger matches = 0;
-  for (CFIndex index = 0; services != NULL && index < CFArrayGetCount(services); index++) {
-    CFTypeRef service = CFArrayGetValueAtIndex(services, index);
-    if (RunnerServiceIntegerProperty(functions, service, CFSTR("PrimaryUsagePage")) != RunnerDigitizerUsagePage ||
-        RunnerServiceIntegerProperty(functions, service, CFSTR("PrimaryUsage")) != RunnerTouchScreenUsage ||
-        ![RunnerServiceStringProperty(functions, service, CFSTR("Transport")) isEqualToString:@"CoreDevice"]) {
-      continue;
-    }
-    NSString *serviceDisplayUUID = RunnerServiceStringProperty(functions, service, CFSTR("displayUUID"));
-    if (serviceDisplayUUID != displayUUID && ![serviceDisplayUUID isEqualToString:displayUUID]) continue;
-    CFTypeRef registryID = functions->getServiceRegistryID(service);
-    uint64_t candidate = 0;
-    if (registryID == NULL || CFGetTypeID(registryID) != CFNumberGetTypeID() ||
-        !CFNumberGetValue((CFNumberRef)registryID, kCFNumberSInt64Type, &candidate)) {
-      continue;
-    }
-    if (matches == 0 || candidate < *sender) *sender = candidate;
-    matches += 1;
-  }
-  if (services != NULL) CFRelease(services);
-  if (matches > 0) return nil;
-  return [NSString stringWithFormat:@"display %lu has no simulator touchscreen HID service",
-                                    (unsigned long)displayID];
+  return RunnerSelectTouchscreenSender(functions, client, RunnerDisplayUUID(displayID), displayID, sender);
 }
 
 @implementation RunnerSimulatorEdgeTouch
