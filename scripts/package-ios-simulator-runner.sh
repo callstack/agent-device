@@ -99,6 +99,11 @@ if [ ! -d "$STAGED_APP_PATH/Frameworks/XCTest.framework" ]; then
   exit 1
 fi
 PLATFORM_PATH="$(xcrun --sdk iphonesimulator --show-sdk-platform-path)"
+# Newer Xcode 26 releases link Testing.framework against this library; Xcode 26.2 ships none.
+INTEROP_LIBRARY="$PLATFORM_PATH/Developer/usr/lib/lib_TestingInterop.dylib"
+if [ -f "$INTEROP_LIBRARY" ]; then
+  cp "$INTEROP_LIBRARY" "$STAGED_APP_PATH/Frameworks/"
+fi
 # Swift Testing loads overlays at runtime; keep them from the same toolchain as its bundled framework.
 if [ -d "$STAGED_APP_PATH/Frameworks/Testing.framework" ]; then
   for FRAMEWORK in "$PLATFORM_PATH"/Developer/Library/Frameworks/_Testing_*.framework; do
