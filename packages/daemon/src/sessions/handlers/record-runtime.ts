@@ -185,10 +185,10 @@ async function resolveRecordingSession(
  * applies the named-session rule (#3674) at its only device selection.
  *
  * A request that names a session this daemon does not hold and states no device is answered from
- * the durable manifest the session address finds, never from a sweep of every device on the host:
- * a decodable manifest is re-resolved with the request's scope and lease keys under the manifest's
- * family (admission proved the request states no device), and a start or a stop with no decodable
- * manifest to recover from refuses with the named-session error.
+ * the exact incomplete recording reservation or the durable manifest the session address finds:
+ * their recorded identity is re-resolved with the request's scope and lease keys. A start or a stop
+ * with neither source refuses with the named-session error. Reservation lookup is not admission;
+ * the claim owner rechecks it under the device locks before any native effect.
  * `assertManifestBelongsToRequest` owns the proof that the resolved device
  * and session address match the manifest.
  *

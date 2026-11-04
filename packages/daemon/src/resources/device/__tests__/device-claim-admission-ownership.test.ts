@@ -3,30 +3,15 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import * as fileHost from '@agent-device/host-kit/file';
 import { createAndroidRuntimeModule } from '@agent-device/platform-android';
-import {
-  ANDROID_EMULATOR,
-  createTestHostEnvironment,
-  createUnavailableRuntimeFactsForTest,
-} from '@agent-device/test-kit';
-import {
-  createDurableResourceEnvelope,
-  createScreenRecordingLiveHandle,
-} from '@agent-device/capture-kit';
-import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
 import { audioProbeResourceStore } from '@agent-device/capture-kit/audio-probe-resource-store';
 import { encodeHostAudioProbeDescriptor } from '@agent-device/capture-kit/audio-probe-descriptor-fixtures';
 import type { AudioProbeLiveHandle } from '@agent-device/contracts/audio-probe-runtime';
+import type { AndroidScreenRecordingTransport } from '@agent-device/contracts/screen-recording-runtime-host';
 import { markScreenRecordingStartNotDispatched } from '@agent-device/contracts/screen-recording-runtime';
-import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
-import {
-  localRuntimeOwner,
-  type DeviceRuntimeGateway,
-} from '@agent-device/contracts/platform-runtime';
-import type {
-  PlatformRuntimeHost,
-  PlatformRuntimeOperations,
-} from '@agent-device/contracts/platform-runtime-operations';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { deviceIdentity } from '@agent-device/kernel/device';
 import {
   acquireDeviceClaim,
@@ -39,16 +24,13 @@ import {
 } from '@agent-device/daemon-contracts/device-claim-recovery';
 import { SessionStore } from '../../../core/session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
-import { createRequestExecutionScope } from '../../../server/request-execution-scope.ts';
-import { handleRecordCommand } from '../../../sessions/handlers/record-runtime.ts';
 import { handleSessionCloseCommands } from '../../../sessions/session-lifecycle/internal/session-close.ts';
 import { platformResourceCleanupFixture } from '../../../__tests__/support/platform-resource-cleanup-fixture.ts';
+import { fixture as createFixture } from './device-claim-admission-ownership.fixtures.ts';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
 } from '../../../__tests__/support/device-claim-store.ts';
-import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
-import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
@@ -73,208 +55,7 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
 const setup = isolatedDeviceClaimStores('recording-owner-');
 afterEach(() => vi.restoreAllMocks());
 
-function fixture() {
-  const { root, stateDir, claimsDir } = setup();
-  const workspace = path.join(root, 'worktree');
-  const subdir = path.join(workspace, 'nested');
-  const foreign = path.join(root, 'foreign');
-  fs.mkdirSync(path.join(workspace, '.git'), { recursive: true });
-  fs.mkdirSync(subdir, { recursive: true });
-  fs.mkdirSync(foreign, { recursive: true });
-  const host = createTestHostEnvironment({
-    cwd: workspace,
-    env: { ...process.env, AGENT_DEVICE_CLAIMS_DIR: claimsDir },
-  });
-  const store = new SessionStore(path.join(stateDir, 'sessions'), host);
-  const registry = new LeaseRegistry();
-  const scope = platformRequestScopeFixture();
-  const device = ANDROID_EMULATOR;
-  const owner = localRuntimeOwner('android');
-  const output = path.join(stateDir, 'output.mp4');
-  const handle = createScreenRecordingLiveHandle(
-    {
-      backend: 'fixture',
-      outPath: output,
-      startedAt: 1,
-      scope: 'device',
-      showTouches: false,
-      recordOnlySession: true,
-      gestureEvents: [],
-    },
-    {
-      finish: async () => {
-        fs.writeFileSync(output, 'video');
-        return {
-          status: 'completed' as const,
-          result: {
-            backend: 'fixture',
-            outPath: output,
-            startedAt: 1,
-            completedAt: 2,
-            scope: 'device' as const,
-            showTouches: false,
-            recordOnlySession: true,
-          },
-        };
-      },
-      forceCleanup: async () => ({ status: 'cleaned' as const }),
-    },
-  );
-  const start = vi.fn(
-    async (input: Parameters<PlatformRuntimeOperations['screenRecordingStart']>[0]) => ({
-      pendingHandle: new PendingTransferGuard(handle),
-      envelope: createDurableResourceEnvelope({
-        resourceKind: 'screen-recording',
-        sessionId: input.sessionId,
-        device: deviceIdentity(device),
-        owner,
-        fence: input.fence,
-        lifecycle: 'open',
-        descriptor: { version: 1, body: {} },
-      }),
-    }),
-  );
-  const reattach = vi.fn(async () => ({ status: 'missing' as const }));
-  let startRecovery: 'confirmed-no-effect' | 'retained' = 'retained';
-  const recoverIncompleteRecordingStart = vi.fn(async () => startRecovery);
-  const closeApplication = vi.fn(async () => {});
-  const finalizeApplicationClose = vi.fn(async () => ({}));
-  let disposeBinding: () => Promise<void> = async () => {};
-  let retryBinding: (() => Promise<void>) | undefined;
-  const factsBase = createUnavailableRuntimeFactsForTest(device, owner);
-  const facts = {
-    ...factsBase,
-    operations: {
-      ...factsBase.operations,
-      screenRecordingStart: { available: true as const },
-      screenRecordingReattach: { available: true as const },
-      screenRecordingCleanup: { available: true as const },
-      closeApplication: { available: true as const },
-      finalizeApplicationClose: { available: true as const },
-    },
-  };
-  let gateway = {
-    inspectFacts: async () => facts,
-    bind: async () => {
-      const dispose = disposeBinding;
-      const retry = retryBinding;
-      disposeBinding = async () => {};
-      retryBinding = undefined;
-      return {
-        device,
-        owner,
-        facts,
-        recoverIncompleteRecordingStart,
-        operations: {
-          screenRecordingStart: start,
-          screenRecordingReattach: reattach,
-          screenRecordingCleanup: async () => ({ status: 'cleaned' as const }),
-          closeApplication,
-          finalizeApplicationClose,
-        },
-        ...(retry ? { retryDisposal: retry } : {}),
-        [Symbol.asyncDispose]: async () => await dispose(),
-      };
-    },
-    shutdown: async () => {},
-  } as unknown as DeviceRuntimeGateway<PlatformRuntimeOperations>;
-  async function scopeFor(
-    command: string,
-    action: string | undefined,
-    cwd: string | undefined,
-    state = store,
-    requestRegistry = registry,
-  ) {
-    return await createRequestExecutionScope({
-      host,
-      req: {
-        token: 't',
-        session: 'recording',
-        command,
-        positionals: action ? [action] : [],
-        flags: { recordingScope: 'device' },
-        ...(cwd ? { meta: { cwd } } : {}),
-      },
-      sessionStore: state,
-      leaseRegistry: requestRegistry,
-      deviceRuntimeGateway: gateway,
-      claimRecoveryGateway: () => gateway,
-      platformServices: daemonPlatformServicesFixture(),
-      platformRequestScope: scope,
-    });
-  }
-  async function record(
-    action: 'start' | 'stop',
-    cwd: string | undefined,
-    state = store,
-    requestRegistry = registry,
-  ) {
-    const request = await scopeFor('record', action, cwd, state, requestRegistry);
-    const response = await request.runLocked(
-      async () =>
-        await handleRecordCommand({
-          req: request.req,
-          sessionName: request.sessionName,
-          sessionStore: state,
-          bindDevice: request.bindDevice,
-          bindExactDevice: request.bindExactDevice,
-          admissionLedger: createScreenRecordingAdmissionLedger(),
-          requestScope: scope,
-          platformServices: request.platformServices,
-          retainDeviceExecutionLock: request.retainDeviceExecutionLock,
-          throwIfCanceled: request.throwIfCanceled,
-        }),
-    );
-    await request[Symbol.asyncDispose]();
-    return response;
-  }
-  function publish(recordOnlySession: boolean) {
-    return store.publish('recording', {
-      name: 'recording',
-      device,
-      createdAt: 1,
-      actions: [],
-      recordOnlySession,
-    });
-  }
-  const manifestPath = screenRecordingDurableResource.store.resolvePath(
-    store.resolveSessionDir('recording'),
-  );
-  return {
-    root,
-    stateDir,
-    claimsDir,
-    workspace,
-    subdir,
-    foreign,
-    host,
-    store,
-    registry,
-    scopeFor,
-    record,
-    publish,
-    manifestPath,
-    start,
-    reattach,
-    device,
-    gateway,
-    scope,
-    recoverIncompleteRecordingStart,
-    closeApplication,
-    setBindingDisposal: (dispose: () => Promise<void>) => {
-      disposeBinding = dispose;
-    },
-    setBindingRetry: (retry: () => Promise<void>) => {
-      retryBinding = retry;
-    },
-    setGateway: (value: DeviceRuntimeGateway<PlatformRuntimeOperations>) => {
-      gateway = value;
-    },
-    setStartRecovery: (value: 'confirmed-no-effect' | 'retained') => {
-      startRecovery = value;
-    },
-  };
-}
+const fixture = () => createFixture(setup);
 
 function runClose(
   f: ReturnType<typeof fixture>,
@@ -815,109 +596,163 @@ test('confirmed adoption rollback releases the reservation when its tombstone ca
   expect(fs.existsSync(f.manifestPath)).toBe(false);
 });
 
-test('Android incomplete-start recovery retries an interrupted exact no-effect checkpoint', async () => {
-  const f = fixture();
-  f.publish(true);
-  let marker = '';
-  let writer = true;
-  let interruptCheckpoint = false;
-  const stop = vi.fn(async () => 'stopped' as const);
-  const transport = {
-    mode: 'local' as const,
-    start: async () => {
-      throw new Error('launch outcome unknown');
-    },
-    inspect: async () => 'missing' as const,
-    stop,
-    exists: async () => false,
-    size: async () => undefined,
-    probeRunningWriters: async (remotePath: string) => ({
-      conclusive: true,
-      writers: writer ? [{ pid: '42', startTime: '1', remotePath }] : [],
-    }),
-    pullPlayable: async () => ({ stdout: '', stderr: '', exitCode: 0, playable: true }),
-    remove: async () => true,
-    manifestPathFor: (remotePath: string) =>
-      `${remotePath.slice(0, remotePath.lastIndexOf('/'))}/agent-device-recording-active.json`,
-    readManifest: async (markerPath: string) =>
-      markerPath.startsWith('/sdcard') && marker
-        ? { status: 'read' as const, contents: marker }
-        : { status: 'missing' as const },
-    writeManifest: async ({
-      manifestPath,
-      contents,
-    }: {
-      manifestPath: string;
-      contents: string;
-    }) => {
-      if (manifestPath.startsWith('/sdcard')) marker = contents;
-      if (interruptCheckpoint && JSON.parse(contents).startNoEffectConfirmed) {
-        interruptCheckpoint = false;
-        throw new Error('checkpoint reply lost');
+test.each(['unknown', 'rolled-back', 'foreign'] as const)(
+  'Android failed start keeps exact ownership for %s disposition',
+  async (scenario) => {
+    const f = fixture();
+    f.publish(true);
+    let old: string | undefined;
+    if (scenario !== 'unknown') {
+      screenRecordingDurableResource.store.write(
+        f.manifestPath,
+        createDurableResourceEnvelope({
+          resourceKind: 'screen-recording',
+          sessionId: 'recording',
+          device: deviceIdentity(f.device),
+          owner: localRuntimeOwner('android'),
+          fence: { token: 'old', generation: 1 },
+          lifecycle: 'completed',
+          descriptor: { version: 1, body: {} },
+        }),
+      );
+      old = fs.readFileSync(f.manifestPath, 'utf8');
+    }
+    const markers = new Map<string, string>();
+    const marker = () => markers.get('/sdcard/agent-device-recording-active.json') ?? '';
+    let writer = scenario === 'unknown';
+    let artifact = '';
+    let failActivePublication = scenario !== 'unknown';
+    let interruptCheckpoint = false;
+    const stop = vi.fn(async () => {
+      if (scenario === 'foreign') return 'ownership-lost' as const;
+      writer = false;
+      return 'stopped' as const;
+    });
+    const transport: AndroidScreenRecordingTransport = {
+      mode: 'local' as const,
+      start: async ({ remotePath, admission }) => {
+        if (scenario === 'unknown') throw new Error('launch outcome unknown');
+        if (markers.get(admission.manifestPath) !== admission.expected)
+          throw new Error('launch admission mismatch');
+        markers.set(admission.manifestPath, admission.admitted);
+        writer = true;
+        artifact = remotePath;
+        return { process: { pid: '42', startTime: '1', remotePath } };
+      },
+      inspect: async () => (writer ? 'owned-alive' : 'missing'),
+      stop,
+      exists: async (remotePath) => artifact === remotePath,
+      size: async (remotePath) => (artifact === remotePath ? 5 : undefined),
+      probeRunningWriters: async (remotePath: string) => ({
+        conclusive: true,
+        writers: writer ? [{ pid: '42', startTime: '1', remotePath }] : [],
+      }),
+      pullPlayable: async () => ({ stdout: '', stderr: '', exitCode: 0, playable: true }),
+      remove: async (remotePath) => {
+        if (artifact === remotePath) artifact = '';
+        return true;
+      },
+      manifestPathFor: (remotePath: string) =>
+        `${remotePath.slice(0, remotePath.lastIndexOf('/'))}/agent-device-recording-active.json`,
+      readManifest: async (markerPath) => {
+        const contents = markers.get(markerPath);
+        return contents === undefined ? { status: 'missing' } : { status: 'read', contents };
+      },
+      compareAndSetManifest: async ({ manifestPath, expected, contents }) => {
+        if ((markers.get(manifestPath) ?? null) !== expected) return 'mismatch';
+        if (contents && failActivePublication && JSON.parse(contents).chunks.length > 0) {
+          failActivePublication = false;
+          return 'unavailable';
+        }
+        if (contents === null) markers.delete(manifestPath);
+        else markers.set(manifestPath, contents);
+        if (interruptCheckpoint && contents && JSON.parse(contents).startNoEffectConfirmed) {
+          interruptCheckpoint = false;
+          throw new Error('checkpoint reply lost');
+        }
+        return 'updated';
+      },
+    };
+    const host = {
+      hostEnvironment: f.host,
+      androidTools: { probeClipboardShellSupport: async () => 'unsupported' },
+      processTransports: { resolve: async () => ({}) },
+      localInteractors: {
+        resolve: async () => {
+          throw new Error('unexpected interactor');
+        },
+      },
+      audioProbe: { hostCapture: {} },
+      screenRecording: {
+        android: { resolve: async () => transport },
+        outputs: {
+          prepare: async () => {},
+          inspect: async () => 'missing' as const,
+          copy: async () => {},
+          remove: async () => 'removed' as const,
+        },
+        finalize: { prepare: async () => {}, sniff: async () => {}, complete: async () => ({}) },
+        ownedProcesses: { replace: () => {}, clear: () => {} },
+      },
+    } as unknown as PlatformRuntimeHost;
+    const platform = await createAndroidRuntimeModule({ bindAdbHost: async () => {} }).loadRuntime(
+      host,
+    );
+    f.setGateway({
+      inspectFacts: platform.inspectFacts,
+      bind: platform.bind,
+      shutdown: async () => {},
+    });
+    expect((await f.record('start', f.workspace)).ok).toBe(false);
+    if (scenario !== 'unknown') {
+      expect(fs.readFileSync(f.manifestPath, 'utf8')).toBe(old);
+      expect(stop).toHaveBeenCalledOnce();
+      if (scenario === 'rolled-back') {
+        expect(artifact).toBe('');
+        expect(marker()).toBe('');
+        expect(inspectDeviceClaims({}, process.env)).toHaveLength(0);
+      } else {
+        const claim = inspectDeviceClaims({}, process.env)[0]!.claim!;
+        expect(claim.recordingStartPending).toBe(true);
+        expect(artifact).not.toBe('');
+        expect(JSON.parse(marker()).launchDisposition).toBe('admitted');
+        expect(await f.record('stop', f.workspace)).toMatchObject({
+          ok: false,
+          error: { details: { reason: 'cleanup-unconfirmed' } },
+        });
+        expect(inspectDeviceClaims({}, process.env)[0]?.claim?.ownerToken).toBe(claim.ownerToken);
+        expect(stop).toHaveBeenCalledOnce();
       }
-    },
-    removeManifest: async () => {
-      return false;
-    },
-  };
-  const host = {
-    hostEnvironment: f.host,
-    androidTools: { probeClipboardShellSupport: async () => 'unsupported' },
-    processTransports: { resolve: async () => ({}) },
-    localInteractors: {
-      resolve: async () => {
-        throw new Error('unexpected interactor');
-      },
-    },
-    audioProbe: { hostCapture: {} },
-    screenRecording: {
-      android: { resolve: async () => transport },
-      outputs: {
-        prepare: async () => {},
-        inspect: async () => 'missing' as const,
-        copy: async () => {},
-        remove: async () => 'removed' as const,
-      },
-      finalize: { prepare: async () => {}, sniff: async () => {}, complete: async () => ({}) },
-      ownedProcesses: { replace: () => {}, clear: () => {} },
-    },
-  } as unknown as PlatformRuntimeHost;
-  const platform = await createAndroidRuntimeModule({ bindAdbHost: async () => {} }).loadRuntime(
-    host,
-  );
-  f.setGateway({
-    inspectFacts: platform.inspectFacts,
-    bind: platform.bind,
-    shutdown: async () => {},
-  });
-  expect((await f.record('start', f.workspace)).ok).toBe(false);
-  const claim = inspectDeviceClaims({}, process.env)[0]!.claim!;
-  expect(JSON.parse(marker).claimToken).toBe(claim.ownerToken);
-  expect(await f.record('stop', f.workspace)).toMatchObject({
-    ok: false,
-    error: { details: { reason: 'cleanup-unconfirmed' } },
-  });
-  expect(marker).not.toBe('');
-  expect(inspectDeviceClaims({}, process.env)[0]?.claim?.ownerToken).toBe(claim.ownerToken);
-  writer = false;
-  interruptCheckpoint = true;
-  expect(await f.record('stop', f.workspace)).toMatchObject({
-    ok: false,
-    error: { details: { reason: 'cleanup-unconfirmed' } },
-  });
-  expect(JSON.parse(marker)).toMatchObject({
-    claimToken: claim.ownerToken,
-    startNoEffectConfirmed: true,
-  });
-  expect(inspectDeviceClaims({}, process.env)[0]?.claim?.ownerToken).toBe(claim.ownerToken);
-  expect(await f.record('stop', f.workspace)).toMatchObject({
-    ok: false,
-    error: { details: { reason: 'recording-start-rolled-back' } },
-  });
-  expect(JSON.parse(marker).startNoEffectConfirmed).toBe(true);
-  expect(inspectDeviceClaims({}, process.env)).toHaveLength(0);
-  expect(stop).not.toHaveBeenCalled();
-});
+      return;
+    }
+    const claim = inspectDeviceClaims({}, process.env)[0]!.claim!;
+    expect(JSON.parse(marker()).claimToken).toBe(claim.ownerToken);
+    expect(await f.record('stop', f.workspace)).toMatchObject({
+      ok: false,
+      error: { details: { reason: 'cleanup-unconfirmed' } },
+    });
+    expect(marker()).not.toBe('');
+    expect(inspectDeviceClaims({}, process.env)[0]?.claim?.ownerToken).toBe(claim.ownerToken);
+    writer = false;
+    interruptCheckpoint = true;
+    expect(await f.record('stop', f.workspace)).toMatchObject({
+      ok: false,
+      error: { details: { reason: 'cleanup-unconfirmed' } },
+    });
+    expect(JSON.parse(marker())).toMatchObject({
+      claimToken: claim.ownerToken,
+      startNoEffectConfirmed: true,
+    });
+    expect(inspectDeviceClaims({}, process.env)[0]?.claim?.ownerToken).toBe(claim.ownerToken);
+    expect(await f.record('stop', f.workspace)).toMatchObject({
+      ok: false,
+      error: { details: { reason: 'recording-start-rolled-back' } },
+    });
+    expect(JSON.parse(marker()).startNoEffectConfirmed).toBe(true);
+    expect(inspectDeviceClaims({}, process.env)).toHaveLength(0);
+    expect(stop).not.toHaveBeenCalled();
+  },
+);
 
 test.each([true, false])(
   'incomplete-start cleanup retry respects retry capability %s',

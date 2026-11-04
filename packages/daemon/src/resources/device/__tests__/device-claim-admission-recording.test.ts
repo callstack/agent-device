@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import crypto from 'node:crypto';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import * as deviceSelection from '@agent-device/device-selection/dispatch-resolve';
@@ -25,10 +24,9 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
-import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
+import type { AndroidScreenRecordingTransport } from '@agent-device/contracts/screen-recording-runtime-host';
 import { deviceIdentity, hostAppDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import {
-  canonicalLocalDeviceKey,
   inspectDeviceClaims,
   reconcileOrphanedDeviceClaims,
 } from '@agent-device/daemon-contracts/device-claims';
@@ -38,6 +36,7 @@ import { SessionStore } from '../../../core/session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { handleRecordCommand } from '../../../sessions/handlers/record-runtime.ts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
+import { seed } from './device-claim-admission-recording.fixtures.ts';
 import {
   isolatedClaimTestHost,
   isolatedDeviceClaimStores,
@@ -236,65 +235,6 @@ async function request(
   );
   await scope[Symbol.asyncDispose]();
   return { response, session: scope.sessionName };
-}
-
-function seed(
-  stateDir: string,
-  claimsDir: string,
-  session: string,
-  device: DeviceInfo,
-  native: string,
-  envelope?: DurableResourceEnvelope<'screen-recording'>,
-) {
-  const key = canonicalLocalDeviceKey(deviceIdentity(device));
-  const claim = {
-    schemaVersion: 3,
-    deviceKey: key,
-    device: { ...deviceIdentity(device), name: device.name },
-    session,
-    workspace: process.cwd(),
-    stateDir,
-    ownerPid: 999999999,
-    ownerStartTime: 'dead',
-    ownerToken: 'original-token',
-    createdAtMs: 1,
-    updatedAtMs: 1,
-    claimOwnerKind: 'open-session',
-    recordingFence: envelope?.fence ?? { token: 'recording-fence', generation: 7 },
-    recordingRuntimeOwner: localRuntimeOwner(device.platform),
-  };
-  fs.mkdirSync(claimsDir, { recursive: true });
-  const claimPath = path.join(
-    claimsDir,
-    `${crypto.createHash('sha256').update(key).digest('hex')}.json`,
-  );
-  fs.writeFileSync(claimPath, JSON.stringify(claim));
-  const resourcePath = screenRecordingDurableResource.store.resolvePath(
-    path.join(stateDir, 'sessions', session),
-  );
-  screenRecordingDurableResource.store.write(
-    resourcePath,
-    envelope
-      ? {
-          ...envelope,
-          metadata: {
-            ...envelope.metadata,
-            deviceClaimToken: 'original-token',
-            deviceClaimBindingVersion: 1,
-          },
-        }
-      : createDurableResourceEnvelope({
-          resourceKind: 'screen-recording',
-          sessionId: session,
-          device: deviceIdentity(device),
-          owner: localRuntimeOwner(device.platform),
-          fence: { token: 'recording-fence', generation: 7 },
-          lifecycle: 'open',
-          descriptor: { version: 1, body: { outputPath: native } },
-          metadata: { deviceClaimToken: 'original-token', deviceClaimBindingVersion: 1 },
-        }),
-  );
-  return { claimPath, resourcePath, claim };
 }
 
 test.for([ANDROID_EMULATOR, IOS_SIMULATOR])(
@@ -762,9 +702,15 @@ test('the Android runtime settles its exact recorder and exports its preserved c
   });
   const prepare = vi.fn(async () => {});
   const finalize = vi.fn(async () => ({}));
-  const transport = {
+  const transport: AndroidScreenRecordingTransport = {
     mode: 'local' as const,
-    start: async ({ remotePath }: { remotePath: string }) => {
+    start: async ({ remotePath, admission }) => {
+      if (
+        admission.manifestPath !== '/sdcard/agent-device-recording-active.json' ||
+        marker !== admission.expected
+      )
+        throw new Error('launch admission mismatch');
+      marker = admission.admitted;
       deviceFiles.set(remotePath, 'android video');
       return { process: { pid: '42', startTime: '1', remotePath } };
     },
@@ -791,12 +737,14 @@ test('the Android runtime settles its exact recorder and exports its preserved c
     manifestPathFor: () => '/sdcard/agent-device-recording-active.json',
     readManifest: async () =>
       marker ? { status: 'read' as const, contents: marker } : { status: 'missing' as const },
-    writeManifest: async ({ contents }: { contents: string }) => {
-      marker = contents;
-    },
-    removeManifest: async () => {
-      marker = '';
-      return true;
+    compareAndSetManifest: async ({ manifestPath, expected, contents }) => {
+      if (
+        manifestPath !== '/sdcard/agent-device-recording-active.json' ||
+        (marker || null) !== expected
+      )
+        return 'mismatch';
+      marker = contents ?? '';
+      return 'updated';
     },
   };
   const host = {
