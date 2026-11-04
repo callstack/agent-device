@@ -27,6 +27,7 @@ import { LeaseRegistry } from '../../lease-registry.ts';
 import { handleSessionCloseCommands } from '../../../sessions/session-lifecycle/internal/session-close.ts';
 import { platformResourceCleanupFixture } from '../../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import { fixture as createFixture } from './device-claim-admission-ownership.fixtures.ts';
+import { androidRecordingMarkerPath } from './android-recording-transport.fixtures.ts';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
@@ -618,7 +619,7 @@ test.each(['unknown', 'rolled-back', 'foreign'] as const)(
       old = fs.readFileSync(f.manifestPath, 'utf8');
     }
     const markers = new Map<string, string>();
-    const marker = () => markers.get('/sdcard/agent-device-recording-active.json') ?? '';
+    const marker = () => [...markers.values()][0] ?? '';
     let writer = scenario === 'unknown';
     let artifact = '';
     let failActivePublication = scenario !== 'unknown';
@@ -652,8 +653,7 @@ test.each(['unknown', 'rolled-back', 'foreign'] as const)(
         if (artifact === remotePath) artifact = '';
         return true;
       },
-      manifestPathFor: (remotePath: string) =>
-        `${remotePath.slice(0, remotePath.lastIndexOf('/'))}/agent-device-recording-active.json`,
+      manifestPathFor: androidRecordingMarkerPath,
       readManifest: async (markerPath) => {
         const contents = markers.get(markerPath);
         return contents === undefined ? { status: 'missing' } : { status: 'read', contents };

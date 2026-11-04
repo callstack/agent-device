@@ -37,6 +37,7 @@ import { LeaseRegistry } from '../../lease-registry.ts';
 import { handleRecordCommand } from '../../../sessions/handlers/record-runtime.ts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { seed } from './device-claim-admission-recording.fixtures.ts';
+import { androidRecordingMarkerPath } from './android-recording-transport.fixtures.ts';
 import {
   isolatedClaimTestHost,
   isolatedDeviceClaimStores,
@@ -694,7 +695,7 @@ test('the Android runtime settles its exact recorder and exports its preserved c
   const store = new SessionStore(path.join(stateDir, 'sessions'), isolatedClaimTestHost());
   const output = path.join(stateDir, 'real-android.mp4');
   const deviceFiles = new Map<string, string>();
-  let marker = '';
+  const markers = new Map<string, string>();
   let running = true;
   const signal = vi.fn(async () => {
     running = false;
@@ -706,11 +707,11 @@ test('the Android runtime settles its exact recorder and exports its preserved c
     mode: 'local' as const,
     start: async ({ remotePath, admission }) => {
       if (
-        admission.manifestPath !== '/sdcard/agent-device-recording-active.json' ||
-        marker !== admission.expected
+        admission.manifestPath !== androidRecordingMarkerPath(remotePath) ||
+        markers.get(admission.manifestPath) !== admission.expected
       )
         throw new Error('launch admission mismatch');
-      marker = admission.admitted;
+      markers.set(admission.manifestPath, admission.admitted);
       deviceFiles.set(remotePath, 'android video');
       return { process: { pid: '42', startTime: '1', remotePath } };
     },
@@ -734,16 +735,15 @@ test('the Android runtime settles its exact recorder and exports its preserved c
       deviceFiles.delete(file);
       return true;
     },
-    manifestPathFor: () => '/sdcard/agent-device-recording-active.json',
-    readManifest: async () =>
-      marker ? { status: 'read' as const, contents: marker } : { status: 'missing' as const },
+    manifestPathFor: androidRecordingMarkerPath,
+    readManifest: async (manifestPath) => {
+      const contents = markers.get(manifestPath);
+      return contents === undefined ? { status: 'missing' } : { status: 'read', contents };
+    },
     compareAndSetManifest: async ({ manifestPath, expected, contents }) => {
-      if (
-        manifestPath !== '/sdcard/agent-device-recording-active.json' ||
-        (marker || null) !== expected
-      )
-        return 'mismatch';
-      marker = contents ?? '';
+      if ((markers.get(manifestPath) ?? null) !== expected) return 'mismatch';
+      if (contents === null) markers.delete(manifestPath);
+      else markers.set(manifestPath, contents);
       return 'updated';
     },
   };
@@ -827,7 +827,7 @@ test('the Android runtime settles its exact recorder and exports its preserved c
   expect((await reconcileOrphanedDeviceClaims(reconciler, stateDir, process.env)).retained).toBe(1);
   expect(signal).toHaveBeenCalledOnce();
   expect([...deviceFiles.values()]).toEqual(['android video']);
-  expect(marker).not.toBe('');
+  expect(markers.size).toBe(1);
   expect(prepare).not.toHaveBeenCalled();
   expect(finalize).not.toHaveBeenCalled();
   expect(fs.existsSync(claimPath)).toBe(true);
