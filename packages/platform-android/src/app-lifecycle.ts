@@ -41,6 +41,12 @@ const ANDROID_CLOSE_PROCESS_TIMEOUT_MS = 2_000;
 const ANDROID_CLOSE_KILLED_EXIT_TIMEOUT_MS = 10_000;
 const ANDROID_CLOSE_PROCESS_POLL_MS = 50;
 const ANDROID_CLOSE_PROCESS_GONE_STABLE_MS = 150;
+/**
+ * The helper open's deadline, measured from dispatch. It matches the helper's `app` action budget,
+ * so a launch that `am start -W` stopped waiting for still has to come up within the same window.
+ */
+const ANDROID_HELPER_OPEN_TIMEOUT_MS = 30_000;
+const ANDROID_HELPER_OPEN_FOREGROUND_POLL_MS = 250;
 
 export async function listAndroidApps(
   device: DeviceInfo,
@@ -242,6 +248,7 @@ async function tryAndroidHelperLaunch(
   )
     return undefined;
   const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
+  const deadline = Deadline.fromTimeoutMs(ANDROID_HELPER_OPEN_TIMEOUT_MS);
   const result = await runAndroidAutomationHelper(device, {
     action: 'app',
     input: { kind: 'open', packageName },
@@ -253,13 +260,53 @@ async function tryAndroidHelperLaunch(
   )
     throw buildAndroidPackageNotInstalledError(packageName);
   const stdout = result.kind === 'launched' ? result.output : '';
-  if (!/^Status: ok\r?$/m.test(stdout)) {
+  const launch = { stdout, stderr: '', exitCode: 0 };
+  if (/^Status: ok\r?$/m.test(stdout)) return launch;
+  if (!isDispatchedAndroidLaunchTimeout(launch, packageName)) {
     throw new AppError('COMMAND_FAILED', 'Android helper could not launch the application', {
       packageName,
       stdout,
     });
   }
-  return { stdout, stderr: '', exitCode: 0 };
+  if (!(await waitForAndroidPackageForeground(device, packageName, deadline))) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Android helper launch timed out before the application reached the foreground',
+      {
+        reason: 'android-launch-not-foreground',
+        packageName,
+        stdout,
+        timeoutMs: ANDROID_HELPER_OPEN_TIMEOUT_MS,
+      },
+    );
+  }
+  return launch;
+}
+
+/**
+ * `am start -W` stops waiting after about 10 s and prints `Status: timeout`, while the launch it
+ * dispatched continues. Its `Activity:` line names the package that launch is starting.
+ */
+function isDispatchedAndroidLaunchTimeout(
+  launch: AndroidAdbExecutorResult,
+  packageName: string,
+): boolean {
+  return (
+    /^Status: timeout\r?$/m.test(launch.stdout) && launchedAndroidPackage(launch) === packageName
+  );
+}
+
+function waitForAndroidPackageForeground(
+  device: DeviceInfo,
+  packageName: string,
+  deadline: Deadline,
+): Promise<boolean> {
+  return waitForAndroidForegroundPackage(
+    device,
+    deadline,
+    ANDROID_HELPER_OPEN_FOREGROUND_POLL_MS,
+    (foregroundPackage) => foregroundPackage === packageName,
+  );
 }
 
 /** `am start -W` names the activity this launch resumed on its `Activity: <package>/<class>` line. */
@@ -695,16 +742,30 @@ function androidCloseTimeoutError(packageName: string, phase: AndroidStopFencePh
   });
 }
 
-async function waitForAndroidPackageNotForeground(
+function waitForAndroidPackageNotForeground(
   device: DeviceInfo,
   packageName: string,
 ): Promise<boolean> {
-  const deadline = Deadline.fromTimeoutMs(ANDROID_CLOSE_FOCUS_TIMEOUT_MS);
+  return waitForAndroidForegroundPackage(
+    device,
+    Deadline.fromTimeoutMs(ANDROID_CLOSE_FOCUS_TIMEOUT_MS),
+    ANDROID_CLOSE_FOCUS_POLL_MS,
+    (foregroundPackage) => foregroundPackage !== packageName,
+  );
+}
+
+/** Polls the foreground package until `matches` holds, or false once the deadline expires. */
+async function waitForAndroidForegroundPackage(
+  device: DeviceInfo,
+  deadline: Deadline,
+  pollMs: number,
+  matches: (foregroundPackage: string | undefined) => boolean,
+): Promise<boolean> {
   while (!deadline.isExpired()) {
     const foreground = await probeBeforeDeadline(deadline, () => readAndroidForegroundApp(device));
     if (!foreground) break;
-    if (foreground.value?.package !== packageName) return true;
-    await sleep(ANDROID_CLOSE_FOCUS_POLL_MS);
+    if (matches(foreground.value?.package)) return true;
+    await sleep(pollMs);
   }
   return false;
 }
