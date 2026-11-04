@@ -72,6 +72,14 @@ export async function ensureCoreDeviceReady(
           hint: 'Device tunnel is still connecting. Keep the device unlocked and connected by cable until it is fully available in Xcode Devices, then retry.',
         });
       }
+      if (tunnelState === 'unavailable') {
+        throw new AppError('COMMAND_FAILED', 'iOS device is not ready for automation', {
+          kind: 'not_ready',
+          deviceId: device.id,
+          tunnelState,
+          hint: 'CoreDevice cannot reach the device. Connect it by cable or to the same network as this Mac, unlock it, and wait until Xcode Devices lists it as available, then retry.',
+        });
+      }
       return;
     }
     throw new AppError(

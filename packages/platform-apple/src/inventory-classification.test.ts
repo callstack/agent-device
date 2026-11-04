@@ -63,6 +63,18 @@ test('devicectl records map to normalized physical Apple devices', () => {
   );
 });
 
+test('devicectl records report a paired device CoreDevice cannot reach as not booted', () => {
+  const record = (tunnelState?: string) => ({
+    hardwareProperties: { platform: 'iOS', productType: 'iPhone18,1', udid: 'phone-1' },
+    ...(tunnelState === undefined ? {} : { connectionProperties: { tunnelState } }),
+  });
+  assert.equal(mapDevicectlAppleDevice(record('unavailable'))?.booted, false);
+  // CoreDevice opens a tunnel on demand, so an idle device it can reach is still usable.
+  assert.equal(mapDevicectlAppleDevice(record('disconnected'))?.booted, true);
+  assert.equal(mapDevicectlAppleDevice(record('connected'))?.booted, true);
+  assert.equal(mapDevicectlAppleDevice(record())?.booted, true);
+});
+
 test('devicectl records report the marketing model and OS version', () => {
   const devicectlRecord = {
     identifier: '3F1DAD0D-212F-44F2-B41E-C390F96140BE',

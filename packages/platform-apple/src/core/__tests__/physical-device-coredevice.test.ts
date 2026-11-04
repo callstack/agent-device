@@ -589,6 +589,22 @@ test('ensureCoreDeviceReady names the connecting tunnel state as the reason it r
   assert.match(error.message, /not ready for automation/i);
 });
 
+test('ensureCoreDeviceReady refuses a device CoreDevice cannot reach', async () => {
+  const error = await expectReadyFailure(() => readyPayload('unavailable'));
+  assert.equal(error.details?.kind, 'not_ready');
+  assert.equal(error.details?.tunnelState, 'unavailable');
+  assert.match(error.message, /not ready for automation/i);
+});
+
+test('ensureCoreDeviceReady passes a device whose tunnel opens on demand', async () => {
+  await withCoreDeviceProbe(
+    () => readyPayload('disconnected'),
+    async () => {
+      await ensureCoreDeviceReady(IOS_DEVICE);
+    },
+  );
+});
+
 test('ensureCoreDeviceReady reports a failed details command with the device hint', async () => {
   const error = await expectReadyFailure(() => ({
     exitCode: 1,

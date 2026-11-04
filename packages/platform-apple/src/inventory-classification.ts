@@ -128,6 +128,6 @@ export function mapDevicectlAppleDevice(device: DevicectlAppleDevice): DeviceInf
     ...(model ? { model } : {}),
     ...(osVersion ? { osVersion } : {}),
     iosPhysicalDeviceBackend: 'coredevice',
-    booted: true,
+    booted: device.connectionProperties?.tunnelState !== 'unavailable',
   };
 }
