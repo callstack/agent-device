@@ -11,8 +11,10 @@ import { SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY } from '@agent-device/capture
 import {
   classifyOwnerLiveness,
   readHostProcessIdentityObservations,
+  readCurrentOwnerIdentity,
 } from '@agent-device/host-kit/process';
 import { isSafeSessionSegment } from '@agent-device/host-kit/session-paths';
+import { tryAcquireProcessLock } from '@agent-device/host-kit/file';
 import { hostDeviceIdOf, sameDeviceIdentity } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
@@ -20,15 +22,25 @@ import type { EnvMap } from '@agent-device/kernel/source-value';
 import { inspectDeviceClaimFile } from './device-claim-inspection.ts';
 import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from './device-claim-paths.ts';
 import type { DeviceClaim } from './device-claim-record.ts';
-import { acquireDeviceClaimLock } from './device-claim-store.ts';
 import { resolveSessionDir } from './session-artifact-paths.ts';
+
+const RECORDING_REAP_ADMISSION_BUDGET_MS = 1_000;
+
+export type RecordingReapRetention = Readonly<{
+  reason: 'claim-lock-busy' | 'claim-lock-unproven' | 'admission-budget-exhausted';
+  sessionId: string;
+  pid: number;
+  resourcePath: string;
+}>;
 
 /** Run a simulator ledger reaper only while its exact dead owner's claim and recording are guarded. */
 export function createRecordingReapAdmission(params: {
   stateDir: string;
   sessionsDir: string;
   env: EnvMap;
+  onRetained: (retention: RecordingReapRetention) => void;
 }) {
+  const deadline = performance.now() + RECORDING_REAP_ADMISSION_BUDGET_MS;
   return async (
     scope: OwnedProcessRecordScope,
     process: OwnedProcessRecord,
@@ -42,6 +54,12 @@ export function createRecordingReapAdmission(params: {
       return;
     const store = screenRecordingDurableResource.store;
     const resourcePath = store.resolvePath(resolveSessionDir(params.sessionsDir, scope.sessionId));
+    const retain = (reason: RecordingReapRetention['reason']) =>
+      params.onRetained({ reason, sessionId: scope.sessionId, pid: process.pid, resourcePath });
+    if (performance.now() >= deadline) {
+      retain('admission-budget-exhausted');
+      return;
+    }
     const initial = store.read(resourcePath);
     if (initial.status !== 'decoded' || !matchesProcess(initial.envelope, process)) return;
     const expected = initial.envelope;
@@ -59,12 +77,41 @@ export function createRecordingReapAdmission(params: {
       hostId === expected.device.id
         ? undefined
         : canonicalLocalDeviceKey({ ...expected.device, id: hostId });
-    const hostLock =
-      hostKey === undefined ? undefined : await acquireDeviceClaimLock(hostKey, params.env);
+    const tryClaimLock = (deviceKey: string) => {
+      const owner = readCurrentOwnerIdentity();
+      return tryAcquireProcessLock({
+        lockDirPath: `${resolveDeviceClaimPath(deviceKey, params.env)}.lock`,
+        owner: { ...owner, acquiredAtMs: Date.now() },
+        description: `device claim for ${deviceKey}`,
+      });
+    };
+    if (performance.now() >= deadline) {
+      retain('admission-budget-exhausted');
+      return;
+    }
+    const hostAttempt = hostKey === undefined ? undefined : tryClaimLock(hostKey);
+    if (hostAttempt && hostAttempt.status !== 'acquired') {
+      retain(hostAttempt.status === 'busy' ? 'claim-lock-busy' : 'claim-lock-unproven');
+      return;
+    }
+    const hostLock = hostAttempt?.acquisition;
     try {
       if (hostKey && inspectDeviceClaimFile(resolveDeviceClaimPath(hostKey, params.env))) return;
-      const lock = await acquireDeviceClaimLock(key, params.env);
+      if (performance.now() >= deadline) {
+        retain('admission-budget-exhausted');
+        return;
+      }
+      const attempt = tryClaimLock(key);
+      if (attempt.status !== 'acquired') {
+        retain(attempt.status === 'busy' ? 'claim-lock-busy' : 'claim-lock-unproven');
+        return;
+      }
+      const lock = attempt.acquisition;
       try {
+        if (performance.now() >= deadline) {
+          retain('admission-budget-exhausted');
+          return;
+        }
         const current = inspectDeviceClaimFile(claimPath)?.claim;
         if (
           !current ||
@@ -82,6 +129,10 @@ export function createRecordingReapAdmission(params: {
             run: async ({ envelope }) => {
               hostLock?.assertHeld();
               lock.assertHeld();
+              if (performance.now() >= deadline) {
+                retain('admission-budget-exhausted');
+                return;
+              }
               if (
                 envelope.sessionId !== expected.sessionId ||
                 !sameDeviceIdentity(envelope.device, expected.device) ||

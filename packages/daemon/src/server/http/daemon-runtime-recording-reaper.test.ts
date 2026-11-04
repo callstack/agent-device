@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -8,12 +9,15 @@ import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import {
   acquireDeviceClaim,
   inspectDeviceClaims,
+  canonicalLocalDeviceKey,
 } from '@agent-device/daemon-contracts/device-claims';
+import { createRecordingReapAdmission } from '@agent-device/daemon-contracts/device-claim-recovery';
 import { acquireProcessLockAcquisition, inspectProcessLock } from '@agent-device/host-kit/file';
 import {
   createOwnedProcessRecordStore,
   readCurrentOwnerIdentity,
   readProcessIdentityFacts,
+  reapOwnedProcessRecordsAtStartup,
 } from '@agent-device/host-kit/process';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 
@@ -21,7 +25,7 @@ const control = vi.hoisted(() => ({
   liveness: 'live' as 'live' | 'unknown' | 'owner-process-dead' | 'owner-process-reused',
   ownerPid: 0,
   lockPath: '',
-  attempted: undefined as (() => void) | undefined,
+  beforeAttempt: undefined as (() => void) | undefined,
 }));
 
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
@@ -32,15 +36,14 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
       input.owner.pid === control.ownerPid ? control.liveness : actual.classifyOwnerLiveness(input),
   };
 });
+
 vi.mock('@agent-device/host-kit/file', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/file')>();
   return {
     ...actual,
-    acquireProcessLockAcquisition: async (
-      input: Parameters<typeof actual.acquireProcessLockAcquisition>[0],
-    ) => {
-      if (input.lockDirPath === control.lockPath) control.attempted?.();
-      return await actual.acquireProcessLockAcquisition(input);
+    tryAcquireProcessLock: (input: Parameters<typeof actual.tryAcquireProcessLock>[0]) => {
+      if (input.lockDirPath === control.lockPath) control.beforeAttempt?.();
+      return actual.tryAcquireProcessLock(input);
     },
   };
 });
@@ -63,7 +66,7 @@ afterEach(() => {
   control.ownerPid = 0;
   control.liveness = 'live';
   control.lockPath = '';
-  control.attempted = undefined;
+  control.beforeAttempt = undefined;
 });
 
 async function fixture() {
@@ -166,12 +169,18 @@ async function fixture() {
       });
       screenRecordingResourceStore.write(resourcePath, envelope);
       control.ownerPid = claim.ownerPid;
+      let httpPort: number | undefined;
       const start = async () =>
         await startDaemonRuntime({
           composeDeps: daemonRuntimeDepsFixture(),
           host: createTestHostEnvironment({ env }),
           stderr: { write: () => {} },
-          stdout: { write: () => {} },
+          stdout: {
+            write: (text) => {
+              const match = /AGENT_DEVICE_DAEMON_HTTP_PORT=(\d+)/.exec(text);
+              if (match) httpPort = Number(match[1]);
+            },
+          },
         });
       const cleanup = async () => {
         await stopChild(child);
@@ -195,6 +204,7 @@ async function fixture() {
         store,
         start,
         cleanup,
+        getHttpPort: () => httpPort,
       };
     } catch (error) {
       await stopChild(oldDaemon);
@@ -309,14 +319,12 @@ test.each(['token', 'fence', 'device', 'identity', 'stateDir', 'session'] as con
   },
 );
 
-test('startup holds the claim through recorder exit and preserves its export material', async () => {
+test('busy claim retains the recorder and the listening daemon can later reap the dead owner', async () => {
   const f = await fixture();
   let runtime: Awaited<ReturnType<typeof f.start>> | undefined;
   let held: Awaited<ReturnType<typeof acquireProcessLockAcquisition>> | undefined;
   let startup: ReturnType<typeof f.start> | undefined;
   try {
-    await stopChild(f.oldDaemon);
-    control.ownerPid = 0;
     const owner = readCurrentOwnerIdentity();
     const lockPath = `${f.claimPath}.lock`;
     held = await acquireProcessLockAcquisition({
@@ -324,15 +332,30 @@ test('startup holds the claim through recorder exit and preserves its export mat
       owner: { ...owner, acquiredAtMs: Date.now() },
       timeoutMs: 1_000,
     });
-    const attempted = new Promise<void>((resolve) => {
-      control.lockPath = lockPath;
-      control.attempted = resolve;
-    });
+    const began = performance.now();
     startup = f.start();
-    await attempted;
+    await vi.waitFor(() => expect(f.getHttpPort()).toBeDefined());
+    const elapsed = performance.now() - began;
+    expect(elapsed).toBeLessThan(3_000);
+    const response = await fetch(`http://127.0.0.1:${f.getHttpPort()}/health`);
+    expect(response.status).toBe(200);
+    await vi.waitFor(() =>
+      expect(fs.readFileSync(path.join(f.stateDir, 'daemon.log'), 'utf8')).toContain(
+        'claim-lock-busy',
+      ),
+    );
     expectPreserved(f);
+    expect(inspectProcessLock(lockPath).state).toBe('held');
     await held.release();
     held = undefined;
+    runtime = await startup;
+    expectPreserved(f);
+    await runtime.close();
+    runtime = undefined;
+
+    await stopChild(f.oldDaemon);
+    control.ownerPid = 0;
+    startup = f.start();
     await vi.waitFor(() => expect(fs.readFileSync(f.signalPath, 'utf8')).toBe('SIGINT'));
     expect(inspectProcessLock(lockPath).state).toBe('held');
     expect(f.child.exitCode).toBeNull();
@@ -355,39 +378,137 @@ test('startup holds the claim through recorder exit and preserves its export mat
   }
 });
 
-test('a replacement claim published while startup waits is never signalled or cleared', async () => {
+test('one admission budget retains later records and leaves no lock waiter after return', async () => {
   const f = await fixture();
-  let runtime: Awaited<ReturnType<typeof f.start>> | undefined;
   let held: Awaited<ReturnType<typeof acquireProcessLockAcquisition>> | undefined;
-  let startup: ReturnType<typeof f.start> | undefined;
+  let now = 10;
+  const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
   try {
-    await stopChild(f.oldDaemon);
-    control.ownerPid = 0;
+    const original = f.store.read()[0]!.records[0]!;
+    for (let i = 1; i <= 12; i++) {
+      const name = `recording-${i}`;
+      const nextDevice = { ...identity, id: `simulator-${i + 1}` };
+      const deviceKey = canonicalLocalDeviceKey(nextDevice);
+      const claimPath = path.join(
+        f.env.AGENT_DEVICE_CLAIMS_DIR,
+        `${crypto.createHash('sha256').update(deviceKey).digest('hex')}.json`,
+      );
+      fs.writeFileSync(
+        claimPath,
+        JSON.stringify({
+          ...f.claim,
+          deviceKey,
+          device: { ...nextDevice, name: 'Simulator' },
+          session: name,
+        }),
+      );
+      screenRecordingResourceStore.write(
+        screenRecordingResourceStore.resolvePath(path.join(f.sessionsDir, name)),
+        { ...f.envelope, sessionId: name, device: nextDevice },
+      );
+      f.store.replace({ kind: 'session', sessionId: name }, [original]);
+    }
     const owner = readCurrentOwnerIdentity();
-    const lockPath = `${f.claimPath}.lock`;
     held = await acquireProcessLockAcquisition({
-      lockDirPath: lockPath,
+      lockDirPath: `${f.claimPath}.lock`,
       owner: { ...owner, acquiredAtMs: Date.now() },
       timeoutMs: 1_000,
     });
-    const attempted = new Promise<void>((resolve) => {
-      control.lockPath = lockPath;
-      control.attempted = resolve;
+    const retained: string[] = [];
+    let callbacks = 0;
+    const admission = createRecordingReapAdmission({
+      stateDir: f.stateDir,
+      sessionsDir: f.sessionsDir,
+      env: f.env,
+      onRetained: ({ reason }) => {
+        retained.push(reason);
+        now = 2_000;
+      },
     });
-    startup = f.start();
-    await attempted;
-    const replacement = { ...f.claim, ownerToken: 'successor' };
-    fs.writeFileSync(f.claimPath, JSON.stringify(replacement));
+    const summary = await reapOwnedProcessRecordsAtStartup(f.store, {
+      purposes: ['simctl-screen-recording'],
+      withRecordingAdmission: async (scope, record, reap) =>
+        await admission(scope, record, async () => {
+          callbacks++;
+          await reap();
+        }),
+    });
+    expect(retained).toEqual(['claim-lock-busy', ...Array(12).fill('admission-budget-exhausted')]);
+    expect(summary.inspected).toBe(0);
+    expect(callbacks).toBe(0);
+    expect(f.store.read()).toHaveLength(13);
+    expectPreserved(f);
     await held.release();
     held = undefined;
-    runtime = await startup;
+    await Promise.resolve();
+    expect(callbacks).toBe(0);
+    expect(fs.existsSync(f.signalPath)).toBe(false);
+  } finally {
+    clock.mockRestore();
+    await held?.release();
+    await f.cleanup();
+  }
+});
+
+test('an uninspectable claim lock is retained with a typed diagnostic', async () => {
+  const f = await fixture();
+  let runtime: Awaited<ReturnType<typeof f.start>> | undefined;
+  try {
+    const owner = readCurrentOwnerIdentity();
+    fs.writeFileSync(
+      f.claimPath,
+      JSON.stringify({ ...f.claim, ownerPid: owner.pid, ownerStartTime: owner.startTime }),
+    );
+    control.ownerPid = owner.pid;
+    fs.mkdirSync(`${f.claimPath}.lock`);
+    runtime = await f.start();
+    expect((await fetch(`http://127.0.0.1:${runtime.httpPort}/health`)).status).toBe(200);
+    expect(fs.readFileSync(path.join(f.stateDir, 'daemon.log'), 'utf8')).toContain(
+      'claim-lock-unproven',
+    );
+    expectPreserved(f);
+    expect(inspectProcessLock(`${f.claimPath}.lock`)).toMatchObject({
+      state: 'unproven',
+      reason: 'owner-unwritten',
+    });
+  } finally {
+    await runtime?.close();
+    await f.cleanup();
+  }
+});
+
+test('a successor claim published immediately before lock acquisition is retained', async () => {
+  const f = await fixture();
+  let runtime: Awaited<ReturnType<typeof f.start>> | undefined;
+  try {
+    await stopChild(f.oldDaemon);
+    control.ownerPid = 0;
+    const replacement = { ...f.claim, ownerToken: 'successor' };
+    control.lockPath = `${f.claimPath}.lock`;
+    control.beforeAttempt = () => {
+      control.beforeAttempt = undefined;
+      fs.writeFileSync(f.claimPath, JSON.stringify(replacement));
+    };
+    runtime = await f.start();
     expectPreserved(f);
     expect(JSON.parse(fs.readFileSync(f.claimPath, 'utf8'))).toEqual(replacement);
   } finally {
-    await held?.release();
-    await stopChild(f.child);
-    if (!runtime && startup) runtime = await startup.catch(() => undefined);
     await runtime?.close();
+    await f.cleanup();
+  }
+});
+
+test('unexpected lock acquisition failures propagate and preserve the recording', async () => {
+  const f = await fixture();
+  try {
+    control.lockPath = `${f.claimPath}.lock`;
+    control.beforeAttempt = () => {
+      throw new Error('unexpected lock failure');
+    };
+    await expect(f.start()).rejects.toThrow('unexpected lock failure');
+    expectPreserved(f);
+    expect(inspectProcessLock(control.lockPath).state).toBe('absent');
+  } finally {
     await f.cleanup();
   }
 });

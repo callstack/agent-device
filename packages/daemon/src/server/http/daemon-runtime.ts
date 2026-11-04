@@ -615,7 +615,14 @@ async function startDaemonRuntimeOnHost(
   await reapOwnedProcessRecordsAtStartup(deps.ownedProcessRecords, {
     openWebSessionNames: openWebSessionNames(sessionStore),
     purposes: ['simctl-screen-recording'],
-    withRecordingAdmission: createRecordingReapAdmission({ stateDir: baseDir, sessionsDir, env }),
+    withRecordingAdmission: createRecordingReapAdmission({
+      stateDir: baseDir,
+      sessionsDir,
+      env,
+      onRetained: ({ resourcePath, ...data }) => {
+        startupDiagnostics.push({ phase: 'recording_reaper_retained', resourcePath, data });
+      },
+    }),
     termTimeoutMs: DAEMON_RECORDING_REAP_TERM_TIMEOUT_MS,
   });
   await deps.cleanupManagedWebOrphans({
