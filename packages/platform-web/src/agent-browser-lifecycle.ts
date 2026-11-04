@@ -45,6 +45,8 @@ export type AgentBrowserCleanupOptions = {
   env: Readonly<EnvMap>;
   openWebSessionNames?: readonly string[];
   ownedProcessRecords?: OwnedProcessRecordStore;
+  /** The fleet session whose open runs this cleanup: it has spawned nothing yet, so it never blocks the reap. */
+  startingSession?: string;
 };
 
 const providerStartupCleanupAttempts = new Map<string, number>();
@@ -81,7 +83,7 @@ export async function cleanupManagedAgentBrowserOrphans(
     if (fleet.sessions().length > 0 && (await managedWebBrowserProcessRecordIsDead(store))) {
       fleet.evictLaunched();
     }
-    const fleetSessions = fleet.sessions();
+    const fleetSessions = fleet.sessions().filter((name) => name !== options.startingSession);
     if (fleetSessions.length > 0) {
       return skippedCleanupResult('open-web-session', { openWebSessionNames: fleetSessions });
     }

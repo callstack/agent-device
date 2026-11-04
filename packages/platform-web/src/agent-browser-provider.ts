@@ -511,10 +511,11 @@ async function runAgentBrowserCommand(
   let semanticSuccess = false;
   const status = getManagedAgentBrowserStatus({ host: options.host, stateDir: options.stateDir });
   try {
-    if (options.ownedProcessRecords && cliArgs[0] === 'open') {
-      agentBrowserFleetOf(options.ownedProcessRecords).openStarted(fleetSessionOf(options));
+    const startingSession = cliArgs[0] === 'open' ? fleetSessionOf(options) : undefined;
+    if (options.ownedProcessRecords && startingSession !== undefined) {
+      agentBrowserFleetOf(options.ownedProcessRecords).openStarted(startingSession);
     }
-    await cleanupProviderStartupOrphans(options);
+    await cleanupProviderStartupOrphans(options, startingSession);
     const result = await runManagedAgentBrowser(cliArgs, {
       host: options.host,
       stateDir: options.stateDir,
@@ -672,7 +673,10 @@ function canClearAgentBrowserRecord(
   );
 }
 
-async function cleanupProviderStartupOrphans(options: AgentBrowserProviderOptions): Promise<void> {
+async function cleanupProviderStartupOrphans(
+  options: AgentBrowserProviderOptions,
+  startingSession: string | undefined,
+): Promise<void> {
   if (!options.openWebSessionNames) return;
   const status = getManagedAgentBrowserStatus({ host: options.host, stateDir: options.stateDir });
   if (!status.installed) return;
@@ -680,6 +684,7 @@ async function cleanupProviderStartupOrphans(options: AgentBrowserProviderOption
     await cleanupManagedAgentBrowserOrphansForProviderStartup(status, {
       env: options.host.env,
       openWebSessionNames: options.openWebSessionNames(),
+      ...(startingSession === undefined ? {} : { startingSession }),
       ...(options.ownedProcessRecords === undefined
         ? {}
         : { ownedProcessRecords: options.ownedProcessRecords }),
