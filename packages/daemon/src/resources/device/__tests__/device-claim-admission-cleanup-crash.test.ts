@@ -287,6 +287,19 @@ test('a cold selectorless stop replays the pending export when the device is una
   expect(fs.readFileSync(claimPath, 'utf8')).toBe(before);
   expect(fs.readFileSync(resourcePath, 'utf8')).toBe(manifest);
   expect(fs.readFileSync(runtime.events, 'utf8')).toBe(effects);
+  const secondChunk = path.join(stateDir, 'export.part-002.mp4');
+  expect(fs.readFileSync(secondChunk, 'utf8')).toBe('preserved second chunk');
+  fs.unlinkSync(secondChunk);
+  expect(await runtime.stop()).toMatchObject({ ok: false });
+  expect(fs.readFileSync(runtime.output, 'utf8')).toBe('preserved export');
+  expect(fs.readFileSync(claimPath, 'utf8')).toBe(before);
+  expect(fs.readFileSync(resourcePath, 'utf8')).toBe(manifest);
+  expect(fs.readFileSync(runtime.events, 'utf8')).toBe(effects);
+  fs.writeFileSync(secondChunk, 'preserved second chunk');
+  expect(await runtime.stop()).toMatchObject({
+    ok: true,
+    data: { chunks: [{ path: runtime.output }, { path: secondChunk }] },
+  });
   const caller = new AbortController();
   caller.abort();
   const canceled = cleanupCrashFixture(

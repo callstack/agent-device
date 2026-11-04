@@ -42,6 +42,7 @@ export function cleanupCrashFixture(
   const device = IOS_SIMULATOR;
   const owner = localRuntimeOwner('apple');
   const output = path.join(stateDir, 'export.mp4');
+  const secondChunk = path.join(stateDir, 'export.part-002.mp4');
   const events = path.join(stateDir, 'effects');
   const snapshot = {
     backend: 'fixture',
@@ -56,6 +57,7 @@ export function cleanupCrashFixture(
     finish: async () => {
       fs.appendFileSync(events, 'finish\n');
       fs.writeFileSync(output, 'preserved export');
+      if (pendingNative) fs.writeFileSync(secondChunk, 'preserved second chunk');
       return {
         status: 'completed' as const,
         result: {
@@ -66,6 +68,14 @@ export function cleanupCrashFixture(
           scope: 'device' as const,
           showTouches: false,
           recordOnlySession: false,
+          ...(pendingNative
+            ? {
+                chunks: [
+                  { index: 1, path: output },
+                  { index: 2, path: secondChunk },
+                ],
+              }
+            : {}),
         },
         ...(pendingNative
           ? {

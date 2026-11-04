@@ -328,7 +328,7 @@ test('record start after a daemon restart still refuses the named missing sessio
 
 test('record stop with a live handle binds no runtime and terminalizes the durable record', async () => {
   const harness = makeRecordRuntimeHarness('record-runtime-live-stop-');
-  const outPath = path.join(mkdtempForTestSync('record-runtime-live-stop-output-'), 'capture.mp4');
+  const outPath = writeRecording('record-runtime-live-stop-output-');
   await harness.run(['start', outPath]);
 
   const stopped = await harness.run(['stop']);
@@ -377,10 +377,7 @@ test('record stop after daemon-state loss reattaches only through the persisted 
   const harness = makeRecordRuntimeHarness('record-runtime-recovered-stop-', {
     runtime: { reattachActive: true },
   });
-  const outPath = path.join(
-    mkdtempForTestSync('record-runtime-recovered-stop-output-'),
-    'capture.mp4',
-  );
+  const outPath = writeRecording('record-runtime-recovered-stop-output-');
   await harness.run(['start', outPath]);
   const ref = harness.sessionStore.lookup(harness.sessionName);
   if (!ref) throw new Error('Expected adopted recording session');
@@ -531,7 +528,8 @@ test('live record stop writes its action under the captured scoped address after
     sessionName: 'cwd:0123456789abcdef:default',
   });
   harness.session.name = 'default';
-  await expect(harness.run(['start', 'capture.mp4'])).resolves.toMatchObject({ ok: true });
+  const outPath = writeRecording('record-runtime-scoped-stop-output-');
+  await expect(harness.run(['start', outPath])).resolves.toMatchObject({ ok: true });
   await expect(harness.run(['stop'])).resolves.toMatchObject({ ok: true });
   await harness.sessionStore.flushEvents();
   expect(

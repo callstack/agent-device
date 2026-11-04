@@ -18,6 +18,7 @@ import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-r
 import { deviceIdentity } from '@agent-device/kernel/device';
 import { type DaemonResponse, type DaemonResponseData } from '@agent-device/kernel/contracts';
 import { type Mock, beforeEach, expect, test, vi } from 'vitest';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 import { awaitFixtureReadiness } from '../../__tests__/support/application-lifecycle-runtime-fixture.ts';
@@ -97,8 +98,6 @@ vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) =>
 // lets `logs start` attach to it. Every story here runs through the router, so the resource is
 // attached by the command that really attaches it and the stop is the request that really stops.
 const SESSION = 'record-only-session';
-const RECORDING_OUT_PATH = '/tmp/record-only.mp4';
-
 const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
 
 function makeSessionStore(prefix: string): SessionStore {
@@ -117,14 +116,15 @@ beforeEach(() => {
 });
 
 test('record stop leaves a session an open took over intact, and close releases it', async () => {
-  const recording = createRecordingGateway();
   const sessionStore = makeSessionStore('agent-device-record-only-open-');
+  const outPath = path.join(sessionStore.resolveDaemonStateDir(), 'record-only.mp4');
+  const recording = createRecordingGateway(outPath);
   const handler = createHandler(sessionStore, recording.gateway);
 
   // The recording is the only owner of the session `record start` publishes.
-  expect(
-    await unwrap(handler(recordRequest(['start', RECORDING_OUT_PATH], 'req-start'))),
-  ).toMatchObject({ recording: 'started' });
+  expect(await unwrap(handler(recordRequest(['start', outPath], 'req-start')))).toMatchObject({
+    recording: 'started',
+  });
 
   const ref = sessionStore.lookup(SESSION);
   if (!ref) throw new Error('expected `record start` to publish its session');
@@ -159,11 +159,12 @@ test('record stop leaves a session an open took over intact, and close releases 
 });
 
 test('record stop leaves a session an audio probe attached intact, and the probe stop releases it', async () => {
-  const recording = createRecordingGateway();
   const sessionStore = makeSessionStore('agent-device-record-only-audio-');
+  const outPath = path.join(sessionStore.resolveDaemonStateDir(), 'record-only.mp4');
+  const recording = createRecordingGateway(outPath);
   const handler = createHandler(sessionStore, recording.gateway);
 
-  await unwrap(handler(recordRequest(['start', RECORDING_OUT_PATH], 'req-audio-start')));
+  await unwrap(handler(recordRequest(['start', outPath], 'req-audio-start')));
   const ref = sessionStore.lookup(SESSION);
   if (!ref) throw new Error('expected `record start` to publish its session');
 
@@ -201,15 +202,16 @@ test('record stop leaves a session an audio probe attached intact, and the probe
 });
 
 test('record stop leaves a session an app-event and its app log attached intact', async () => {
-  const recording = createRecordingGateway();
   const sessionStore = makeSessionStore('agent-device-record-only-app-event-');
+  const outPath = path.join(sessionStore.resolveDaemonStateDir(), 'record-only.mp4');
+  const recording = createRecordingGateway(outPath);
   // The app-event route answers the app identity through the platform-services port; this suite
   // pins what the daemon does with it, not the open-target rule itself.
   const handler = createHandler(sessionStore, recording.gateway, {
     resolveSessionAppBundleIdForTarget: async () => 'com.example.app',
   });
 
-  await unwrap(handler(recordRequest(['start', RECORDING_OUT_PATH], 'req-event-start')));
+  await unwrap(handler(recordRequest(['start', outPath], 'req-event-start')));
   const ref = sessionStore.lookup(SESSION);
   if (!ref) throw new Error('expected `record start` to publish its session');
 
@@ -245,11 +247,12 @@ test('record stop leaves a session an app-event and its app log attached intact'
 });
 
 test('record stop still retires a session that stayed record-only', async () => {
-  const recording = createRecordingGateway();
   const sessionStore = makeSessionStore('agent-device-record-only-retire-');
+  const outPath = path.join(sessionStore.resolveDaemonStateDir(), 'record-only.mp4');
+  const recording = createRecordingGateway(outPath);
   const handler = createHandler(sessionStore, recording.gateway);
 
-  await unwrap(handler(recordRequest(['start', RECORDING_OUT_PATH], 'req-retired-start')));
+  await unwrap(handler(recordRequest(['start', outPath], 'req-retired-start')));
   const stopped = await unwrap(handler(recordRequest(['stop'], 'req-retired-stop')));
 
   // Nothing else ever joined this record, so its stop is its teardown: no session is left to close.
@@ -336,7 +339,7 @@ function audioProbeResourcePath(sessionStore: ReturnType<typeof makeSessionStore
  * operations, so `record`, `open`, `audio`, `logs`, `trigger-app-event` and `close` all reach one
  * runtime over the same device.
  */
-function createRecordingGateway(): {
+function createRecordingGateway(outPath: string): {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   finish: Mock<ScreenRecordingLiveHandle['finish']>;
 } {
@@ -362,18 +365,21 @@ function createRecordingGateway(): {
       triggerAppEvent: available,
     },
   });
-  const finish = vi.fn<ScreenRecordingLiveHandle['finish']>(async () => ({
-    status: 'completed' as const,
-    result: {
-      backend: 'simctl recordVideo',
-      outPath: RECORDING_OUT_PATH,
-      startedAt: 1,
-      completedAt: 2,
-      scope: 'device' as const,
-      showTouches: false,
-      recordOnlySession: true,
-    },
-  }));
+  const finish = vi.fn<ScreenRecordingLiveHandle['finish']>(async () => {
+    fs.writeFileSync(outPath, 'recorded video');
+    return {
+      status: 'completed' as const,
+      result: {
+        backend: 'simctl recordVideo',
+        outPath,
+        startedAt: 1,
+        completedAt: 2,
+        scope: 'device' as const,
+        showTouches: false,
+        recordOnlySession: true,
+      },
+    };
+  });
   const appLogFinish = vi.fn(async () => ({
     status: 'completed' as const,
     result: {
@@ -386,7 +392,7 @@ function createRecordingGateway(): {
     screenRecordingStart: async (
       input: Parameters<PlatformRuntimeOperations['screenRecordingStart']>[0],
     ) => ({
-      pendingHandle: new PendingTransferGuard(createRecordingHandle(finish)),
+      pendingHandle: new PendingTransferGuard(createRecordingHandle(finish, outPath)),
       // Admission compares the envelope's authority with the binding's device, owner and fence, so
       // the fake has to state them exactly.
       envelope: createDurableResourceEnvelope({
@@ -511,11 +517,12 @@ function createAudioProbeHandle(): AudioProbeLiveHandle {
 
 function createRecordingHandle(
   finish: Mock<ScreenRecordingLiveHandle['finish']>,
+  outPath: string,
 ): ScreenRecordingLiveHandle {
   return {
     inspect: () => ({
       backend: 'simctl recordVideo',
-      outPath: RECORDING_OUT_PATH,
+      outPath,
       startedAt: 1,
       scope: 'device',
       showTouches: false,

@@ -25,6 +25,7 @@ test.each([
   [false, false],
   [true, false],
   [false, true],
+  [true, true],
 ])(
   'a usable live export keeps its claim until native cleanup settles (other owner: %s, binding failure: %s)',
   async (otherOwner, bindingFails) => {
@@ -32,9 +33,11 @@ test.each([
     const ref = f.publish(true);
     if (otherOwner) f.store.update(ref, { appBundleId: 'org.example.editor' });
     const output = path.join(f.stateDir, 'pending.mp4');
+    const secondChunk = path.join(f.stateDir, 'pending.part-002.mp4');
     let releaseConfirmed = false;
     const finish = vi.fn(async () => {
       fs.writeFileSync(output, 'exported video');
+      fs.writeFileSync(secondChunk, 'second video chunk');
       return {
         status: 'completed' as const,
         result: {
@@ -45,6 +48,10 @@ test.each([
           scope: 'device' as const,
           showTouches: false,
           recordOnlySession: true,
+          chunks: [
+            { index: 1, path: output },
+            { index: 2, path: secondChunk },
+          ],
         },
         cleanupPending: {
           status: 'cleanup-pending' as const,
@@ -110,8 +117,12 @@ test.each([
         'binding disposal failed',
       );
     else await stop[Symbol.asyncDispose]();
-    expect(first).toMatchObject({ ok: true, data: { outPath: output } });
+    expect(first).toMatchObject({
+      ok: true,
+      data: { outPath: output, chunks: [{ path: output }, { path: secondChunk }] },
+    });
     expect(fs.readFileSync(output, 'utf8')).toBe('exported video');
+    expect(fs.readFileSync(secondChunk, 'utf8')).toBe('second video chunk');
     const claim = inspectDeviceClaims({}, f.host.env)[0]!.claim!;
     expect(claim).toMatchObject({ recordingCleanupPending: true });
     expect(f.store.lookup('recording')?.session.screenRecording).toBeDefined();
@@ -134,6 +145,18 @@ test.each([
       ok: false,
       error: { code: 'DEVICE_IN_USE' },
     });
+    fs.unlinkSync(secondChunk);
+    expect((await f.record('stop', f.workspace)).ok).toBe(false);
+    expect(fs.readFileSync(output, 'utf8')).toBe('exported video');
+    expect(inspectDeviceClaims({}, f.host.env)[0]?.claim).toMatchObject({
+      ownerToken: claim.ownerToken,
+      recordingCleanupPending: true,
+    });
+    expect(screenRecordingDurableResource.store.read(f.manifestPath)).toMatchObject({
+      status: 'decoded',
+      envelope: { lifecycle: 'open' },
+    });
+    fs.writeFileSync(secondChunk, 'second video chunk');
     fs.unlinkSync(output);
     expect((await f.record('stop', f.workspace)).ok).toBe(false);
     expect(inspectDeviceClaims({}, f.host.env)[0]?.claim?.ownerToken).toBe(claim.ownerToken);
@@ -144,10 +167,24 @@ test.each([
     expect(retryBinding).toHaveBeenCalledTimes(bindingFails ? 1 : 0);
     expect(inspectDeviceClaims({}, f.host.env)[0]?.claim?.ownerToken).toBe(claim.ownerToken);
     releaseConfirmed = true;
+    fs.unlinkSync(secondChunk);
+    const cleanupCalls = cleanup.mock.calls.length;
+    expect((await f.record('stop', f.workspace)).ok).toBe(false);
+    expect(cleanup).toHaveBeenCalledTimes(cleanupCalls + 1);
+    expect(inspectDeviceClaims({}, f.host.env)[0]?.claim).toMatchObject({
+      ownerToken: claim.ownerToken,
+      recordingCleanupPending: true,
+    });
+    expect(screenRecordingDurableResource.store.read(f.manifestPath)).toMatchObject({
+      status: 'decoded',
+      envelope: { lifecycle: 'open' },
+    });
+    fs.writeFileSync(secondChunk, 'second video chunk');
     expect(await f.record('stop', f.workspace)).toMatchObject({
       ok: true,
       data: { outPath: output },
     });
+    expect(cleanup).toHaveBeenCalledTimes(cleanupCalls + 1);
     expect(finish).toHaveBeenCalledOnce();
     expect(retryBinding).toHaveBeenCalledTimes(bindingFails ? 1 : 0);
     expect(screenRecordingDurableResource.store.read(f.manifestPath)).toMatchObject({
