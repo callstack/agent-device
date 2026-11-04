@@ -47,7 +47,7 @@ On an attached Android instance, agent-device does not replace an existing port 
 
 If your shell's account variables, or its instance variables for the platform you lease, differ from the ones the daemon started with, the first `install` or `open` refuses before it creates or attaches to an instance. See [Change credentials while the daemon runs](/docs/device-clouds#change-credentials-while-the-daemon-runs).
 
-`install`, and `apps` before the first `open`, need `LIMRUN_API_KEY` because they use Limrun asset storage. After `open`, `apps` lists the apps installed on the instance without the key. Install your app before you hand over the instance. From the Node.js runtime, `getDeviceSession(device).installRemoteApp(url)` installs from a signed asset URL without the API key.
+`install` and `reinstall` sync local app files directly to the instance. Attached instances need only their URL and token for these commands. `apps` before the first `open` needs `LIMRUN_API_KEY` to list stored assets. After `open`, `apps` lists the apps installed on the instance without the key. From the Node.js runtime, `getDeviceSession(device).installRemoteApp(url)` installs from a signed asset URL without the API key.
 
 ## Keep idle sessions alive
 
@@ -97,7 +97,7 @@ agent-device disconnect
 
 Use a selector from your app's snapshot in place of `Continue`.
 
-On Android, agent-device connects to Limrun over an ADB tunnel. Snapshots use the Android snapshot helper, installs upload the app through Limrun asset storage, and port reverse runs over ADB, including the usual reverse setup for a local Metro server.
+On Android, agent-device connects to Limrun over an ADB tunnel. Snapshots use the Android snapshot helper, local installs use HTTP delta sync, and port reverse runs over ADB, including the usual reverse setup for a local Metro server.
 
 ## Use an iOS simulator
 

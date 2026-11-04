@@ -55,7 +55,7 @@ export function stubLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
     },
     host: {
       runAdb: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-      archiveDirectory: async () => undefined,
+
       downloadFile: async () => undefined,
     },
     ios: {

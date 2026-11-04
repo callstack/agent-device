@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
@@ -7,18 +7,18 @@ import { withCommandHost } from '@agent-device/host-kit/command';
 import { createLimrunRuntimeDependencies } from './limrun-runtime-dependencies.ts';
 
 test.skipIf(process.platform === 'win32')(
-  'Limrun archive callbacks retain their owning host outside and across concurrent foreign scopes',
+  'Limrun ADB callbacks retain their owning host outside and across concurrent foreign scopes',
   async () => {
     const root = mkdtempForTestSync('agent-device-limrun-host-');
     const bin = path.join(root, 'bin');
     mkdirSync(bin);
-    const zip = path.join(bin, 'zip');
+    const adb = path.join(bin, 'adb');
     writeFileSync(
-      zip,
+      adb,
       `#!${process.execPath}\n` +
-        `require('node:fs').writeFileSync(process.argv[3], JSON.stringify({args:process.argv.slice(2),host:process.env.LIMRUN_OWNER}));\n`,
+        `process.stdout.write(JSON.stringify({args:process.argv.slice(2),host:process.env.LIMRUN_OWNER}));\n`,
     );
-    chmodSync(zip, 0o755);
+    chmodSync(adb, 0o755);
     const owner = (name: string) =>
       createLimrunRuntimeDependencies({
         env: { ...process.env, PATH: bin, LIMRUN_OWNER: name },
@@ -26,35 +26,28 @@ test.skipIf(process.platform === 'win32')(
       });
     const first = owner('first');
     const second = owner('second');
-    const archive = (name: string) => ({
-      sourceDirectory: root,
-      entryName: 'Example.app',
-      archivePath: path.join(root, `${name}.zip`),
-    });
+    const invocation = {
+      target: { selector: { kind: 'unspecified' as const }, server: { kind: 'ambient' as const } },
+      command: ['devices'],
+    };
     const previous = { PATH: process.env.PATH, LIMRUN_OWNER: process.env.LIMRUN_OWNER };
     process.env.PATH = bin;
     process.env.LIMRUN_OWNER = 'ambient';
     try {
-      const standalone = archive('standalone');
-      await first.host.archiveDirectory(standalone);
-      const left = archive('left'),
-        right = archive('right');
-      await withCommandHost(
+      const standalone = await first.host.runAdb(invocation);
+      const [left, right] = await withCommandHost(
         {
           host: { env: { ...process.env, PATH: bin, LIMRUN_OWNER: 'foreign' }, cwd: root },
           requestEnv: { LIMRUN_OWNER: 'foreign-request' },
         },
-        () => Promise.all([first.host.archiveDirectory(left), second.host.archiveDirectory(right)]),
+        () => Promise.all([first.host.runAdb(invocation), second.host.runAdb(invocation)]),
       );
-      for (const [request, host] of [
+      for (const [result, host] of [
         [standalone, 'first'],
         [left, 'first'],
         [right, 'second'],
       ] as const) {
-        assert.deepEqual(JSON.parse(readFileSync(request.archivePath, 'utf8')), {
-          args: ['-qr', request.archivePath, 'Example.app'],
-          host,
-        });
+        assert.deepEqual(JSON.parse(result.stdout), { args: ['devices'], host });
       }
     } finally {
       for (const [key, value] of Object.entries(previous)) {

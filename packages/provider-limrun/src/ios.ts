@@ -7,13 +7,11 @@ import type {
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type Limrun from '@limrun/api';
 import {
   createInstanceClient as createIosInstanceClient,
   type InstanceClient as LimrunIosClient,
 } from '@limrun/api/ios-client';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { normalizeOptionalString } from './strings.ts';
@@ -77,7 +75,6 @@ export async function createLimrunIosSession(
 }
 
 export async function installLimrunIosApp(
-  limrun: Limrun,
   session: LimrunIosSession,
   installablePath: string,
   options?: ProviderDeviceInstallOptions,
@@ -85,44 +82,67 @@ export async function installLimrunIosApp(
   operationDrain?: LimrunRequestOperationDrain,
 ): Promise<ProviderDeviceInstallResult> {
   signal?.throwIfAborted();
-  const prepared = await prepareLimrunIosAsset(installablePath, session.dependencies);
-  try {
-    signal?.throwIfAborted();
-    const asset = await awaitLimrunDeploymentOperation(
-      operationDrain,
-      limrun.assets.getOrUpload(
-        {
-          path: prepared.uploadPath,
-          name: prepared.assetName,
-        },
-        { signal },
-      ),
-      signal,
-    );
-    const result = await installLimrunIosRemoteApp(
-      session,
-      asset.signedDownloadUrl,
-      {
-        md5: asset.md5,
-        relaunch: options?.relaunch,
-        appIdentifierHint: options?.appIdentifierHint,
-      },
-      signal,
-      operationDrain,
-    );
-    const bundleId = result.appId;
-    return {
-      ...(bundleId ? { bundleId, launchTarget: bundleId } : {}),
-      ...(prepared.appName ? { appName: prepared.appName } : {}),
-    };
-  } finally {
-    await prepared.cleanup();
-  }
+  const stat = await fs.promises.stat(installablePath);
+  const appName =
+    (stat.isDirectory()
+      ? await session.dependencies.ios.readBundleAppName(installablePath)
+      : undefined) ?? inferAppNameFromPath(installablePath);
+  const result = await verifyLimrunIosInstall(
+    session,
+    async () => {
+      signal?.throwIfAborted();
+      // The shared deployment owner must retain the artifact until sync finishes reading it.
+      const synced = await awaitLimrunDeploymentOperation(
+        operationDrain,
+        session.client.syncApp(installablePath, {
+          install: true,
+          watch: false,
+          launchMode: options?.relaunch ? 'RelaunchIfRunning' : 'None',
+        }),
+      );
+      signal?.throwIfAborted();
+      return synced.installedBundleId;
+    },
+    options,
+    signal,
+    operationDrain,
+  );
+  const bundleId = result.appId;
+  return {
+    ...(bundleId ? { bundleId, launchTarget: bundleId } : {}),
+    ...(appName ? { appName } : {}),
+  };
 }
 
 export async function installLimrunIosRemoteApp(
   session: LimrunIosSession,
   url: string,
+  options?: LimrunIosRemoteInstallOptions,
+  signal?: AbortSignal,
+  operationDrain?: LimrunRequestOperationDrain,
+): Promise<LimrunIosRemoteInstallResult> {
+  return await verifyLimrunIosInstall(
+    session,
+    async () => {
+      const result = await awaitLimrunDeploymentOperation(
+        operationDrain,
+        session.client.installApp(url, {
+          // The server's digest cache survives uninstall, so every requested install must run.
+          launchMode: options?.relaunch ? 'RelaunchIfRunning' : undefined,
+        }),
+        signal,
+      );
+      return result.bundleId;
+    },
+    options,
+    signal,
+    operationDrain,
+  );
+}
+
+async function verifyLimrunIosInstall(
+  session: LimrunIosSession,
+  install: () => Promise<string | undefined>,
   options?: LimrunIosRemoteInstallOptions,
   signal?: AbortSignal,
   operationDrain?: LimrunRequestOperationDrain,
@@ -136,15 +156,7 @@ export async function installLimrunIosRemoteApp(
     if (signal?.aborted) throw error;
     return undefined;
   });
-  const result = await awaitLimrunDeploymentOperation(
-    operationDrain,
-    session.client.installApp(url, {
-      // The server's digest cache survives uninstall, so every requested install must run.
-      launchMode: options?.relaunch ? 'RelaunchIfRunning' : undefined,
-    }),
-    signal,
-  );
-  const resultBundleId = normalizeOptionalString(result.bundleId);
+  const resultBundleId = normalizeOptionalString(await install());
   const requestedBundleId = normalizeOptionalString(options?.appIdentifierHint);
   let afterInstallApps: LimrunIosApp[] = [];
   for (const delayMs of IOS_APP_INVENTORY_RETRY_DELAYS_MS) {
@@ -249,49 +261,6 @@ class LimrunIosHostInteractor {
     }
     return await this.shared.setSetting(setting, state, appId, options);
   }
-}
-
-async function prepareLimrunIosAsset(
-  artifactPath: string,
-  dependencies: Pick<LimrunRuntimeDependencies, 'host' | 'ios'>,
-): Promise<{
-  uploadPath: string;
-  assetName: string;
-  appName?: string;
-  cleanup: () => Promise<void>;
-}> {
-  const stat = await fs.promises.stat(artifactPath);
-  if (!stat.isDirectory()) {
-    return {
-      uploadPath: artifactPath,
-      assetName: path.basename(artifactPath),
-      appName: inferAppNameFromPath(artifactPath),
-      cleanup: async () => {},
-    };
-  }
-
-  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'agent-device-limrun-ios-app-'));
-  const zipPath = path.join(tempDir, `${path.basename(artifactPath)}.zip`);
-  try {
-    await dependencies.host.archiveDirectory({
-      sourceDirectory: path.dirname(artifactPath),
-      entryName: path.basename(artifactPath),
-      archivePath: zipPath,
-    });
-  } catch (error) {
-    await fs.promises.rm(tempDir, { recursive: true, force: true });
-    throw error;
-  }
-  return {
-    uploadPath: zipPath,
-    assetName: path.basename(zipPath),
-    appName:
-      (await dependencies.ios.readBundleAppName(artifactPath)) ??
-      inferAppNameFromPath(artifactPath),
-    cleanup: async () => {
-      await fs.promises.rm(tempDir, { recursive: true, force: true });
-    },
-  };
 }
 
 function inferAppNameFromPath(appPath: string): string | undefined {

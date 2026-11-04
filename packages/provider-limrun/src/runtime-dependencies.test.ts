@@ -355,7 +355,7 @@ function createContractFixture() {
         adbCalls.push([...serializeAndroidAdbInvocation(invocation)]);
         return { stdout: '', stderr: '', exitCode: 0 };
       },
-      archiveDirectory: async () => undefined,
+
       downloadFile: async () => undefined,
     },
     ios: {

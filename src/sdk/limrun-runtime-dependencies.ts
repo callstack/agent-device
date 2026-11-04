@@ -1,7 +1,6 @@
 import { createLimrunIosAppLogReader } from '../core/interactors/limrun-ios-app-logs.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { withMethodScope } from '@agent-device/kernel/scoped-provider';
-import { AppError } from '@agent-device/kernel/errors';
 import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import '../platform-runtime-android-adb-host.ts';
 // ProviderDeviceRuntime.getInteractor is synchronous, so this factory is the deliberate static edge;
@@ -13,7 +12,7 @@ import {
   androidAdbSerialTarget,
   runAndroidHostAdb,
 } from '@agent-device/platform-android/mechanics';
-import { execFailureDetails, runCmd, withCommandHost } from '@agent-device/host-kit/command';
+import { withCommandHost } from '@agent-device/host-kit/command';
 import { readVersion } from '@agent-device/host-kit/version';
 
 export function createLimrunRuntimeDependencies(host: HostEnvironment): LimrunRuntimeDependencies {
@@ -106,19 +105,6 @@ export function createLimrunRuntimeDependencies(host: HostEnvironment): LimrunRu
         downloadFile: async (options) => {
           const { downloadLimrunFile } = await import('../core/limrun-download-file.ts');
           await downloadLimrunFile(options);
-        },
-        archiveDirectory: async ({ sourceDirectory, entryName, archivePath }) => {
-          const args = ['-qr', archivePath, entryName];
-          const result = await runCmd('zip', args, {
-            cwd: sourceDirectory,
-            timeoutMs: 120_000,
-          });
-          if (result.exitCode !== 0) {
-            throw new AppError('COMMAND_FAILED', 'Failed to package iOS .app for Limrun install', {
-              command: ['zip', ...args].join(' '),
-              ...execFailureDetails(result),
-            });
-          }
         },
       },
       runOnHost,

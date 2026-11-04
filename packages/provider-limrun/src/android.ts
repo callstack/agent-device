@@ -1,6 +1,4 @@
-import path from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type Limrun from '@limrun/api';
 import {
   createInstanceClient as createAndroidInstanceClient,
   type InstanceClient as LimrunAndroidClient,
@@ -114,7 +112,6 @@ export function createLimrunAndroidInteractor(session: LimrunAndroidSession): In
 }
 
 export async function installLimrunAndroidApp(
-  limrun: Limrun,
   session: LimrunAndroidSession,
   installablePath: string,
   options?: ProviderDeviceInstallOptions,
@@ -122,31 +119,19 @@ export async function installLimrunAndroidApp(
   operationDrain?: LimrunRequestOperationDrain,
 ): Promise<ProviderDeviceInstallResult> {
   signal?.throwIfAborted();
-  const packageName = normalizeOptionalString(options?.packageNameHint);
-  if (options?.relaunch && packageName) {
-    await session.dependencies.android.forceStopApp(
-      async (adbArgs, adbOptions) => await runLimrunAndroidAdb(session, adbArgs, adbOptions),
-      packageName,
-      signal,
-    );
-  }
-  const asset = await awaitLimrunDeploymentOperation(
+  // The shared deployment owner must retain the artifact until sync finishes reading it.
+  const result = await awaitLimrunDeploymentOperation(
     operationDrain,
-    limrun.assets.getOrUpload(
-      {
-        path: installablePath,
-        name: buildAndroidAssetName(packageName, installablePath),
-      },
-      { signal },
-    ),
-    signal,
-  );
-  await awaitLimrunDeploymentOperation(
-    operationDrain,
-    session.client.sendAsset(asset.signedDownloadUrl),
-    signal,
+    session.client.syncApp(installablePath, {
+      install: true,
+      watch: false,
+      launchMode: options?.relaunch ? 'RelaunchIfRunning' : 'None',
+    }),
   );
   signal?.throwIfAborted();
+  const packageName =
+    normalizeOptionalString(result.installedBundleId) ??
+    normalizeOptionalString(options?.packageNameHint);
   const appName = packageName
     ? await session.dependencies.android.inferAppName(packageName)
     : undefined;
@@ -363,10 +348,4 @@ function tcpEndpoint(port: number): LimrunPortReverseEndpoint {
     throw new AppError('INVALID_ARGS', `Invalid Android tcp reverse port: ${port}`);
   }
   return `tcp:${port}`;
-}
-
-function buildAndroidAssetName(packageName: string | undefined, artifactPath: string): string {
-  const extension = path.extname(artifactPath) || '.apk';
-  const prefix = packageName?.replaceAll(/[^a-zA-Z0-9_.-]+/g, '-') || 'android-app';
-  return `${prefix}${extension}`;
 }

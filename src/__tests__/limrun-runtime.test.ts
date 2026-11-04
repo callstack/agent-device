@@ -29,6 +29,8 @@ const limrunMockState = vi.hoisted(() => {
       bundleId: 'com.example.ios',
       url: 'https://assets.example/app',
     })),
+    iosSyncApp: vi.fn(async () => ({ installedBundleId: 'com.example.ios' })),
+    androidSyncApp: vi.fn(async () => ({ installedBundleId: 'com.example.android' })),
     iosSimctl: vi.fn(),
     iosLaunchApp: vi.fn(async () => undefined),
     iosOpenUrl: vi.fn(async () => undefined),
@@ -112,6 +114,7 @@ vi.mock('@limrun/api/ios-client', async (importOriginal) => {
     createInstanceClient: vi.fn(async () => ({
       disconnect: vi.fn(),
       installApp: limrunMockState.iosInstallApp,
+      syncApp: limrunMockState.iosSyncApp,
       launchApp: limrunMockState.iosLaunchApp,
       openUrl: limrunMockState.iosOpenUrl,
       listApps: limrunMockState.iosListApps,
@@ -132,6 +135,7 @@ vi.mock('@limrun/api/instance-client', () => ({
     keepAlive: limrunMockState.androidKeepAlive,
     openUrl: limrunMockState.androidOpenUrl,
     sendAsset: limrunMockState.androidSendAsset,
+    syncApp: limrunMockState.androidSyncApp,
     startAdbTunnel: limrunMockState.androidStartAdbTunnel,
   })),
 }));
@@ -440,7 +444,7 @@ function assertAndroidTunnelLifecycle(openUrl: string): void {
   assert.equal(limrunMockState.androidTunnelClose.mock.calls.length, 1);
 }
 
-test('Limrun Android installs direct local artifacts through Limrun assets', async () => {
+test('Limrun Android syncs direct local artifacts', async () => {
   const runtime = new LimrunRuntime({
     apiKey: 'lim_test_key',
   });
@@ -473,15 +477,11 @@ test('Limrun Android installs direct local artifacts through Limrun assets', asy
       '/tmp/app-debug.apk',
     );
 
-    const assetCalls = limrunMockState.assetsGetOrUpload.mock.calls as unknown as Array<
-      [Record<string, unknown>]
-    >;
-    assert.deepEqual(assetCalls[0]?.[0], {
-      path: '/tmp/app-debug.apk',
-      name: 'com.example.android.apk',
-    });
-    assert.deepEqual(limrunMockState.androidSendAsset.mock.calls[0], [
-      'https://assets.example/app',
+    assert.equal(limrunMockState.assetsGetOrUpload.mock.calls.length, 0);
+    assert.equal(limrunMockState.androidSendAsset.mock.calls.length, 0);
+    assert.deepEqual(limrunMockState.androidSyncApp.mock.calls[0], [
+      '/tmp/app-debug.apk',
+      { install: true, watch: false, launchMode: 'None' },
     ]);
     assert.deepEqual(result, {
       packageName: 'com.example.android',
@@ -519,7 +519,7 @@ test('Limrun Android shares an in-flight ADB tunnel across concurrent port rever
   }
 });
 
-test('Limrun iOS installs direct local artifacts through Limrun assets', async () => {
+test('Limrun iOS syncs direct local artifacts', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-limrun-install-');
   const ipaPath = path.join(tempRoot, 'Demo.ipa');
   fs.writeFileSync(ipaPath, 'demo');
@@ -553,16 +553,11 @@ test('Limrun iOS installs direct local artifacts through Limrun assets', async (
       { relaunch: true },
     );
 
-    const assetCalls = limrunMockState.assetsGetOrUpload.mock.calls as unknown as Array<
-      [Record<string, unknown>]
-    >;
-    assert.deepEqual(assetCalls[0]?.[0], {
-      path: ipaPath,
-      name: 'Demo.ipa',
-    });
-    assert.deepEqual(limrunMockState.iosInstallApp.mock.calls[0], [
-      'https://assets.example/app',
-      { launchMode: 'RelaunchIfRunning' },
+    assert.equal(limrunMockState.assetsGetOrUpload.mock.calls.length, 0);
+    assert.equal(limrunMockState.iosInstallApp.mock.calls.length, 0);
+    assert.deepEqual(limrunMockState.iosSyncApp.mock.calls[0], [
+      ipaPath,
+      { install: true, watch: false, launchMode: 'RelaunchIfRunning' },
     ]);
     assert.deepEqual(result, {
       bundleId: 'com.example.ios',
@@ -575,7 +570,7 @@ test('Limrun iOS installs direct local artifacts through Limrun assets', async (
   }
 });
 
-test('Limrun iOS reads the bundle display name before uploading an app bundle', async () => {
+test('Limrun iOS reads the bundle display name before syncing an app bundle', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-limrun-app-name-');
   const appPath = path.join(tempRoot, 'Renamed.app');
   fs.mkdirSync(appPath);
@@ -936,11 +931,6 @@ test('Limrun without an API key refuses operations that need one', async () => {
   const runtime = new LimrunRuntime({ instances: { ios: ATTACHED_IOS } });
 
   try {
-    const device = await allocateLimrunDevice(runtime, iosLease('lease-attached-ios'));
-    await assert.rejects(runtime.installInstallablePath(device, '/tmp/Example.app'), {
-      code: 'UNSUPPORTED_OPERATION',
-      message: 'Uploading an app requires a Limrun API key.',
-    });
     await assert.rejects(allocateLimrunDevice(runtime, androidLease()), {
       code: 'UNSUPPORTED_OPERATION',
       message: 'Creating an instance requires a Limrun API key.',
