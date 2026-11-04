@@ -77,7 +77,7 @@ test('daemon shutdown asks the platform to close an open web session', async () 
 
 test('daemon shutdown reports a web close failure on stderr instead of losing it silently', async () => {
   const sessionStore = openStore('agent-device-shutdown-web-close-failure-');
-  const session = makeWebSession('shutdown-web-close-failure-session');
+  const session = makeWebSession('shutdown-web-close-failure');
   sessionStore.publish(session.name, session);
   const platformCleanup = platformResourceCleanupFixture({
     closeManagedBrowser: async () => {
