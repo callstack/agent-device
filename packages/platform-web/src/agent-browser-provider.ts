@@ -608,7 +608,7 @@ function settleFleetMembership(
 ): void {
   const succeeded = params.commandCompleted && params.semanticSuccess && params.exitCode === 0;
   if (params.cliArgs[0] === 'open') fleet.openSettled(session, succeeded);
-  else if (params.cliArgs[0] === 'close' && succeeded) fleet.closed(session);
+  else if (params.cliArgs[0] === 'close' && params.commandCompleted) fleet.closed(session);
 }
 
 /**
