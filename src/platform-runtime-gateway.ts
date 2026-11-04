@@ -88,6 +88,9 @@ export function createComposedPlatformRuntimeGateway(options: {
     prepareRecordingRecovery: async () => {
       await (await loadHost()).applicationResources.prepareRecordingRecovery();
     },
+    closeRecordingPreparation: async () => {
+      await (await loadHost()).applicationResources.closeRecordingPreparation();
+    },
     recoverStartupResources: async (input: Readonly<{ stateDir: string }>) => {
       await runStartupRecoveryFence(input.stateDir, async () => {
         await (await loadHost()).applicationResources.recoverStartupResources(input);

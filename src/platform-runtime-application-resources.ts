@@ -25,6 +25,21 @@ export function createApplicationResourceLifecycle(tools: {
     prepareRecordingRecovery: async () => {
       await tools.recording.finalize.prepare({ container: 'mp4' });
     },
+    closeRecordingPreparation: async () => {
+      try {
+        await tools.recording.closeValidatorPreparation();
+      } catch (error) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          'Recording preparation cleanup failed',
+          {
+            reason: 'recording_preparation_cleanup_failed',
+            shutdownFailures: [normalizeShutdownFailure(error)],
+          },
+          error,
+        );
+      }
+    },
     // Android test IME is the one durable device mutation that outlives a crashed daemon. The
     // marker read is the evidence gate: without it the Android mechanics are never imported.
     recoverStartupResources: async (input) => {

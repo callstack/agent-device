@@ -178,10 +178,25 @@ export async function startDaemonRuntime(
       await withCommandHost({ host: options.host, requestEnv: undefined }, async () => {
         const rollback = createStartupRollback();
         rollback.onRollback(() => runtimeState.dispose());
+        let recordingCleanupFailure: { error: unknown } | undefined;
         try {
-          return await startDaemonRuntimeOnHost(runtimeOptions, rollback, runtimeState);
+          return await startDaemonRuntimeOnHost(runtimeOptions, rollback, runtimeState, (error) => {
+            recordingCleanupFailure = { error };
+          });
         } catch (error) {
           await rollback.run();
+          if (recordingCleanupFailure !== undefined) {
+            const primary = asAppError(error);
+            throw new AppError(
+              primary.code,
+              primary.message,
+              {
+                ...primary.details,
+                recordingCleanupFailure: normalizeError(recordingCleanupFailure.error),
+              },
+              primary,
+            );
+          }
           throw error;
         }
       }),
@@ -194,6 +209,7 @@ async function startDaemonRuntimeOnHost(
   },
   rollback: StartupRollback,
   runtimeState: RuntimeStateHandle,
+  onRecordingCleanupFailure: (error: unknown) => void,
 ): Promise<DaemonRuntimeController> {
   const { host } = options;
   const { env } = host;
@@ -604,6 +620,9 @@ async function startDaemonRuntimeOnHost(
     stateDir: baseDir,
     openWebSessionNames: openWebSessionNames(sessionStore),
     ownedProcessRecords: deps.ownedProcessRecords,
+  });
+  rollback.onRollback(async () => {
+    await applicationLifecycle.closeRecordingPreparation().catch(onRecordingCleanupFailure);
   });
   if (hasRecordingRecoveryNeedingValidator(sessionsDir)) {
     await applicationLifecycle.prepareRecordingRecovery().catch((error: unknown) => {
