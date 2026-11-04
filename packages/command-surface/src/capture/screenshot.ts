@@ -41,7 +41,10 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
     pixelDensity: integerField('Output screenshot pixel density in pixels per logical point.', {
       min: 1,
     }),
-    screenMask: enumField(SCREENSHOT_SCREEN_MASKS),
+    screenMask: enumField(
+      SCREENSHOT_SCREEN_MASKS,
+      'Fill the iOS simulator screen outline with black for this capture. Requires simctl; omit for the default image.',
+    ),
     fullscreen: booleanField(),
     scale: numberField('Screenshot scale factor.', SCREENSHOT_SCALE_LIMITS),
     maxSize: retiredField(RETIRED_SCREENSHOT_MAX_SIZE.migration.screenshot),
