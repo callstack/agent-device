@@ -291,8 +291,10 @@ export function acceptSnapshotBridgeEnvelope(
   expected: Readonly<{ requestId: string; pid: number; generation: string }>,
 ): SnapshotBridgeEnvelope {
   assertSnapshotBridgeEnvelope(envelope, expected.requestId);
-  assertSnapshotBridgeTargetIdentity(envelope, expected);
+  // A refusal of the request itself, such as bounds-invalid, names no target, so it is typed before
+  // identity can read its missing pid as a stale target.
   if (envelope.ok !== true) bridgeFailureFromEnvelope(envelope);
+  assertSnapshotBridgeTargetIdentity(envelope, expected);
   if (typeof envelope.truncated !== 'boolean') {
     throw snapshotSourceError('malformed-tree', 'truncated-invalid');
   }

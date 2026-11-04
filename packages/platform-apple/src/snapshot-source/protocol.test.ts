@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test } from 'vitest';
 import {
+  acceptSnapshotBridgeEnvelope,
   assertSnapshotBridgeEnvelope,
   bridgeFailureFromEnvelope,
   createSnapshotBridgeDescribeRequest,
@@ -120,6 +121,27 @@ test('snapshot bridge failures stay typed at the guest boundary', () => {
         (error as { failureKind: string }).failureKind === expectedKind,
     );
   }
+});
+
+test('a refusal that names no target keeps its own typed failure', () => {
+  assert.throws(
+    () =>
+      acceptSnapshotBridgeEnvelope(
+        {
+          protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
+          sourceVersion: SNAPSHOT_SOURCE_VERSION,
+          requestId: 'request-1',
+          ok: false,
+          error_kind: 'bad_request',
+          error_code: 'bounds-invalid',
+        },
+        { requestId: 'request-1', pid: 123, generation: 'generation-1' },
+      ),
+    (error: unknown) =>
+      error instanceof SnapshotSourceError &&
+      error.failureKind === 'malformed-tree' &&
+      error.failureCode === 'bounds-invalid',
+  );
 });
 
 test('a surface host refusal names the running host executable', () => {
