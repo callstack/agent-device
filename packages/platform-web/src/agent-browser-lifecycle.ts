@@ -81,7 +81,7 @@ export async function cleanupManagedAgentBrowserOrphans(
     if (fleet.sessions().length > 0 && (await managedWebBrowserProcessRecordIsDead(store))) {
       fleet.evictLaunched();
     }
-    const fleetSessions = fleet.sessions().filter((value) => value.length > 0);
+    const fleetSessions = fleet.sessions();
     if (fleetSessions.length > 0) {
       return skippedCleanupResult('open-web-session', { openWebSessionNames: fleetSessions });
     }

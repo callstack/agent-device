@@ -78,6 +78,7 @@ export function createPlatformResourceCleanup(
       await stopAndroidSnapshotHelperRuntimeForDevice(device);
     },
     async closeManagedBrowser(params) {
+      if (params.device.platform !== 'web') return;
       const backendKey = webBackendKeyOf(params.device.id);
       if (backendKey === undefined) return;
       await closeManagedWebRuntimeSession(
