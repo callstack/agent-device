@@ -923,7 +923,7 @@ test.each([
   },
 );
 
-test('a macOS runner capture under a runner-backed tool provider keeps its requested fullscreen', async () => {
+test('a macOS runner capture under a runner-backed tool provider skips the fullscreen default', async () => {
   mockRunAppleRunnerCommand.mockRejectedValue(new Error('stop after the runner request'));
   await withAppleToolProvider(
     { ...resolveAppleToolProvider(), simulatorScreenshotBackend: 'runner' },
