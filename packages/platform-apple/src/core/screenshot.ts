@@ -292,7 +292,7 @@ export async function captureScreenshotViaRunner(
 ): Promise<RunnerScreenCaptureMetadata | undefined> {
   const fullscreen =
     requestedFullscreen ??
-    (device.kind === 'simulator' &&
+    (capturesThroughSimulatorStatusBar(device) &&
     resolveAppleToolProvider().simulatorScreenshotBackend === 'runner'
       ? true
       : undefined);

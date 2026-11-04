@@ -923,6 +923,27 @@ test.each([
   },
 );
 
+test('a macOS runner capture under a runner-backed tool provider keeps its requested fullscreen', async () => {
+  mockRunAppleRunnerCommand.mockRejectedValue(new Error('stop after the runner request'));
+  await withAppleToolProvider(
+    { ...resolveAppleToolProvider(), simulatorScreenshotBackend: 'runner' },
+    async () => {
+      await assert.rejects(
+        captureScreenshotViaRunner(
+          { ...MACOS_TEST_DEVICE, kind: 'simulator' },
+          '/tmp/runner.png',
+          undefined,
+          undefined,
+          undefined,
+          {},
+        ),
+        /stop after the runner request/,
+      );
+    },
+  );
+  assert.equal(mockRunAppleRunnerCommand.mock.calls[0]?.[1]?.fullscreen, undefined);
+});
+
 test('an explicit runner capture outside a runner-backed tool provider leaves fullscreen unset', async () => {
   mockRunAppleRunnerCommand.mockRejectedValue(new Error('stop after the runner request'));
   await assert.rejects(
