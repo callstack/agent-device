@@ -59,22 +59,9 @@ export const diffScreenshotCommand: RuntimeCommand<
     throw new AppError('INVALID_ARGS', 'diff screenshot requires a baseline image');
   }
 
-  readScreenshotScreenMask(options.screenMask);
   const threshold = normalizeThreshold(options.threshold);
   const currentRef = options.current ?? { kind: 'live' };
-  if (options.overlayRefs && !isLiveCurrentRef(currentRef)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'diff screenshot <current.png> cannot use --overlay-refs because saved-image comparisons have no live accessibility refs',
-    );
-  }
-
-  if (options.screenMask !== undefined && !isLiveCurrentRef(currentRef)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      '--screen-mask requires a live screenshot, not a saved current image',
-    );
-  }
+  validateLiveCaptureOptions(options, currentRef);
 
   const baseline = await resolveCommandInput(runtime, options.baseline, {
     usage: 'diff screenshot baseline',
@@ -133,6 +120,26 @@ export const diffScreenshotCommand: RuntimeCommand<
     await liveCurrent?.cleanup?.();
   }
 };
+
+function validateLiveCaptureOptions(
+  options: DiffScreenshotCommandOptions,
+  currentRef: FileInputRef | LiveScreenshotInputRef,
+): void {
+  readScreenshotScreenMask(options.screenMask);
+  if (isLiveCurrentRef(currentRef)) return;
+  if (options.overlayRefs) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'diff screenshot <current.png> cannot use --overlay-refs because saved-image comparisons have no live accessibility refs',
+    );
+  }
+  if (options.screenMask !== undefined) {
+    throw new AppError(
+      'INVALID_ARGS',
+      '--screen-mask requires a live screenshot, not a saved current image',
+    );
+  }
+}
 
 function normalizeThreshold(threshold: unknown): number {
   if (threshold == null || threshold === '') return DEFAULT_SCREENSHOT_DIFF_THRESHOLD;

@@ -1022,7 +1022,8 @@ agent-device screenshot page.png        # Explicit screenshot path
 agent-device screenshot page.png --scale 0.3  # Resize both dimensions to 30% for agent context
 agent-device screenshot page.png --overlay-refs  # Draw current @eN refs and target rectangles onto the PNG
 agent-device screenshot page.png --crop-on 'label="Save"'  # Crop the capture to the frame the selector resolves on the same screen
-agent-device screenshot baseline.png --screen-mask black --normalize-status-bar  # Normalize iOS simulator or ADB-backed Android chrome for reusable diff baselines
+agent-device screenshot baseline.png --normalize-status-bar  # Normalize iOS simulator or ADB-backed Android chrome for reusable diff baselines
+agent-device screenshot baseline.png --screen-mask black --normalize-status-bar  # Capture an iOS simulator baseline with a black screen outline
 agent-device screenshot page.png --platform web --fullscreen  # On web, --fullscreen/--full/-f captures the entire document
 agent-device viewport 1280 900 --platform web                # Resize the active web viewport for fixed-layout or 100vh apps
 agent-device screenshot textedit.png    # App-session window capture on macOS
