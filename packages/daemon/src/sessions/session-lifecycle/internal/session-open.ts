@@ -83,6 +83,15 @@ function firstSessionOpenLocks(sessionStore: SessionStore): Map<string, Promise<
   return locks;
 }
 
+/**
+ * The key first opens serialize on. An app device keys by its host, so a whole-host open and an
+ * app device open never both pass the session check (ADR 0035). A web host has no whole-host open,
+ * so a web session device keys by itself and web sessions of one host open in parallel.
+ */
+function firstSessionOpenLockKey(device: DeviceInfo): string {
+  return device.hostApp?.hostDeviceId ?? device.id;
+}
+
 type OpenRuntimeAdmission =
   | Readonly<{
       type: 'runtime';
@@ -397,11 +406,9 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     return { type: 'response', response: runtimePlanAdmission.response };
   const { admission, runtimeHintPlan } = runtimePlanAdmission;
 
-  // Keyed by the host: the session check and publication of first opens on one host run one at a
-  // time, so a whole-host open and an app device open never both pass the check (ADR 0035).
   return await withKeyedLock(
     firstSessionOpenLocks(sessionStore),
-    device.hostApp?.hostDeviceId ?? device.id,
+    firstSessionOpenLockKey(device),
     async () =>
       await openNewSessionWithDeviceClaim({
         host: params.host,
