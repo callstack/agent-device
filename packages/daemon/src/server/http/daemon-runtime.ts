@@ -809,7 +809,14 @@ async function startDaemonRuntimeOnHost(
         [failure.step]: failure.error,
       });
     }
-    const stoppedRunners = await applicationLifecycle.finalizeDaemonShutdown();
+    const stoppedRunners = await applicationLifecycle
+      .finalizeDaemonShutdown()
+      .catch(async (error: unknown) => {
+        await emitDaemonDiagnostic(logPath, 'daemon_shutdown_application_resources_failed', {
+          error: normalizeError(error),
+        });
+        throw error;
+      });
     const unknownLeaseIds = new Set(providerReleaseDrain.unknown.map((lease) => lease.leaseId));
     const report: ShutdownReport = {
       providerReleases: {

@@ -48,7 +48,10 @@ export function createPlatformRuntimeShutdownError(
   );
 }
 
-function normalizeShutdownFailure(error: unknown, ancestors = new Set<unknown>()): NormalizedError {
+export function normalizeShutdownFailure(
+  error: unknown,
+  ancestors = new Set<unknown>(),
+): NormalizedError {
   const normalized = redactDiagnosticData(normalizeError(error));
   if (ancestors.has(error)) return normalized;
   const aggregate =

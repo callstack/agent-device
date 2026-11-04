@@ -3,6 +3,8 @@ import type {
   AppleApplicationTools,
   ApplicationLifecycleResourceLifecycle,
 } from '@agent-device/contracts/application-lifecycle-runtime';
+import { AppError } from '@agent-device/kernel/errors';
+import { normalizeShutdownFailure } from './platform-runtime-shutdown-error.ts';
 
 /**
  * The durable lifecycle resources this host composes. Each phase names the platforms that own
@@ -37,16 +39,17 @@ export function createApplicationResourceLifecycle(tools: {
         .finalizeRunnerSessionsForShutdown()
         .then((devices) => ({ failed: false, devices }) as const)
         .catch((error: unknown) => ({ failed: true, error }) as const);
-      if (sweep.failed) {
-        if (validatorFailure.failed)
-          throw new AggregateError(
-            [sweep.error, validatorFailure.error],
-            'Daemon shutdown cleanup failed',
-            { cause: sweep.error },
-          );
-        throw sweep.error;
+      const failures = [
+        ...(sweep.failed ? [sweep.error] : []),
+        ...(validatorFailure.failed ? [validatorFailure.error] : []),
+      ];
+      if (failures.length) {
+        throw new AppError('COMMAND_FAILED', 'Daemon shutdown cleanup failed', {
+          reason: 'application_resource_shutdown_failed',
+          shutdownFailures: failures.map((failure) => normalizeShutdownFailure(failure)),
+        });
       }
-      if (validatorFailure.failed) throw validatorFailure.error;
+      if (sweep.failed) throw sweep.error;
       return sweep.devices;
     },
   });

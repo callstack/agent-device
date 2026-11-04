@@ -116,9 +116,10 @@ test('a macOS frontmost-app open resolves the identity of the frontmost applicat
 test('runner preparation succeeds when the optional recording helper cannot be prepared', async () => {
   mockPrepareIosRunner.mockClear();
   const failure = new Error('video validator compile failed');
-  const tools = createAppleApplicationTools(process.env, async () => {
+  const prepareRecording = vi.fn(async () => {
     throw failure;
   });
+  const tools = createAppleApplicationTools(process.env, prepareRecording);
   await expect(
     tools.prepareRunner(
       iosSimulator,
@@ -129,5 +130,6 @@ test('runner preparation succeeds when the optional recording helper cannot be p
       new AbortController().signal,
     ),
   ).resolves.toMatchObject({ runner: { currentUptimeMs: 42 } });
+  expect(prepareRecording).toHaveBeenCalledExactlyOnceWith({ container: 'mp4' });
   expect(mockPrepareIosRunner).toHaveBeenCalledOnce();
 });

@@ -631,19 +631,25 @@ test('compensates a runner finalizer failure without stopping the runner twice',
 
 test('starts capture while video validation preparation is pending', async () => {
   let ready!: () => void;
+  const events: string[] = [];
   const preparing = new Promise<void>((resolve) => {
     ready = resolve;
   });
   const host = appleHost({
     prepare: async () => {
+      events.push('preparation');
       await preparing;
+      events.push('prepared');
     },
     apple: {
-      startSimulator: async () => ({
-        markers: [processIdentity],
-        wait: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
-        terminate: async () => {},
-      }),
+      startSimulator: async () => (
+        events.push('recorder'),
+        {
+          markers: [processIdentity],
+          wait: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
+          terminate: async () => {},
+        }
+      ),
     },
   });
   const clockAnchor = vi.spyOn(host.screenRecording.apple, 'captureClockAnchor');
@@ -657,6 +663,7 @@ test('starts capture while video validation preparation is pending', async () =>
   });
   const starting = operations.screenRecordingStart(input());
   const started = await starting;
+  expect(events).toEqual(['preparation', 'recorder']);
   expect(startRecorder).toHaveBeenCalledOnce();
   expect(prepareOutput).toHaveBeenCalledOnce();
   expect(clockAnchor).toHaveBeenCalledOnce();
