@@ -8,6 +8,7 @@ import {
   isMacOsBundleId,
   normalizeWebSessionName,
   resolveDevice,
+  WEB_BACKEND_KEY_MAX_LENGTH,
   webSessionDevice,
   type DeviceInfo,
 } from './device.ts';
@@ -74,16 +75,33 @@ test('web session names that drive one browser are one device', () => {
   assert.equal(normalizeWebSessionName(' one '), 'one');
 });
 
-test.each(['', ' ', '\t', 'one:session:two', 'one:app:two', 'a:b', ':'])(
-  'a web session name of %j is refused with a typed reason',
+test.each([
+  '',
+  ' ',
+  '\t',
+  'one:session:two',
+  'one:app:two',
+  'a:b',
+  ':',
+  'a b',
+  'a/b',
+  'a.b',
+  'é',
+  'a'.repeat(WEB_BACKEND_KEY_MAX_LENGTH + 1),
+])('a web session name of %j is refused with a typed reason', (name) => {
+  assert.throws(
+    () => webSessionDevice(browser, name),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.details?.reason === 'web_session_name_invalid',
+  );
+});
+
+test.each(['a', 'Run_One-1', '0', 'a'.repeat(WEB_BACKEND_KEY_MAX_LENGTH)])(
+  'a web session name of %j is accepted',
   (name) => {
-    assert.throws(
-      () => webSessionDevice(browser, name),
-      (error: unknown) =>
-        error instanceof AppError &&
-        error.code === 'INVALID_ARGS' &&
-        error.details?.reason === 'web_session_name_invalid',
-    );
+    assert.equal(webSessionDevice(browser, name).id, `${browser.id}:session:${name}`);
   },
 );
 

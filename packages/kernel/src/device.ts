@@ -127,19 +127,34 @@ export function normalizeWebSessionName(sessionName: string): string {
   return sessionName.trim();
 }
 
+const WEB_SESSION_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+// agent-browser binds its control socket at `<tmpdir>/adw/<12 hex>/<session>.sock` and refuses a
+// path over 103 bytes. The macOS per-user tmpdir is 48 bytes, the longest of the supported hosts.
+const SOCKET_PATH_MAX_BYTES = 103;
+const SOCKET_DIR_BYTES = 48 + '/adw/'.length + 12;
+const SOCKET_FILE_OVERHEAD_BYTES = '/'.length + '.sock'.length;
+
+/** The most characters the backend session key of a web session can hold. */
+export const WEB_BACKEND_KEY_MAX_LENGTH =
+  SOCKET_PATH_MAX_BYTES - SOCKET_DIR_BYTES - SOCKET_FILE_OVERHEAD_BYTES;
+
 /**
- * The normalized name of a web session, refused when it is empty or holds `:`: `:` would parse as
- * the `:session:` or `:app:` infix of another device id.
+ * The normalized name of a web session, refused with `web_session_name_invalid` unless it is
+ * non-empty, holds only letters, digits, `_` and `-` (the characters the backend accepts in a
+ * session name), and fits the socket path limit. That also keeps `:` out of the name, which would
+ * parse as the `:session:` or `:app:` infix of another device id.
  */
 export function requireWebSessionName(sessionName: string): string {
   const name = normalizeWebSessionName(sessionName);
-  if (name.length === 0 || name.includes(':')) {
+  if (!WEB_SESSION_NAME_PATTERN.test(name) || name.length > WEB_BACKEND_KEY_MAX_LENGTH) {
     throw new AppError(
       'INVALID_ARGS',
-      'A web session name must be non-empty and not contain ":".',
+      `A web session name must be 1 to ${WEB_BACKEND_KEY_MAX_LENGTH} characters of letters, digits, "_" and "-".`,
       {
         reason: 'web_session_name_invalid',
         sessionName,
+        maxLength: WEB_BACKEND_KEY_MAX_LENGTH,
         hint: 'Pass --session with a name such as "checkout-1".',
       },
     );
