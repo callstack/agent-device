@@ -110,6 +110,23 @@ test('a label inside an enabled field aims at that field when promotion passes i
   assert.deepEqual(resolve(label, form, nodes), { kind: 'target', node: field });
 });
 
+test('a published password fact makes an unrecognized type a text field', () => {
+  const card = child(1, { type: 'Other', rect: { x: 0, y: 0, width: 400, height: 400 } });
+  const secret = child(2, { parentIndex: 1, type: 'Other', password: true });
+  assert.deepEqual(resolve(card, card, [card, secret]), { kind: 'target', node: secret });
+});
+
+test.each([
+  ['no rect', undefined],
+  ['an empty rect', { x: 20, y: 200, width: 0, height: 0 }],
+])('a field with %s neither takes the focus nor counts', (_name, rect) => {
+  const card = child(1, { type: 'Other', rect: { x: 0, y: 0, width: 400, height: 400 } });
+  const unmeasured = { ...child(2, { parentIndex: 1, type: 'TextField' }), rect };
+  const field = child(3, { parentIndex: 1, type: 'TextField' });
+  assert.deepEqual(resolve(card, card, [card, unmeasured, field]), { kind: 'target', node: field });
+  assert.deepEqual(resolve(card, card, [card, unmeasured]), { kind: 'target', node: card });
+});
+
 test('android reads its own field types', () => {
   const row = child(1, {
     type: 'android.widget.LinearLayout',

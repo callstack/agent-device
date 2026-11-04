@@ -144,12 +144,12 @@ export function issueSettleRefs(
  * owe that contract run their error through here — the acting touch runtime
  * (`press`/`click`/`fill`) and the strict-read dispatches (`is`, `get attrs`)
  * — so the rule has one implementation beside the partial-frame primitive it
- * wraps, exactly like {@link issueSettleRefs}. The `find` refusal
- * (`buildAmbiguousMatchError`) deliberately does NOT consume this rule: it
- * predates it (#1597), prints no `refsGeneration`, and its hint routes the
- * caller to narrow the locator; unlike this rule, it does not pin the printed
- * candidate refs to a generation. Making those refs issuable is a separate
- * contract decision.
+ * wraps, exactly like {@link issueSettleRefs}. The `find` refusals
+ * (`buildAmbiguousMatchError`, `buildNestedTextFieldsError`) deliberately do
+ * NOT consume this rule: the first predates it (#1597), neither prints a
+ * `refsGeneration`, and both route the caller to narrow the locator; unlike
+ * this rule, they do not pin the printed candidate refs to a generation.
+ * Making those refs issuable is a separate contract decision.
  *
  * The two branches are one decision, not two features:
  * - The request's consumed capture IS the session's stored tree (node

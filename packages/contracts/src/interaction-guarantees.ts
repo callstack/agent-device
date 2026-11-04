@@ -589,7 +589,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       nonHittable: {
         kind: 'waived',
         reason:
-          "gap: the promotion half does run — the `findAct` row declares `hittable-ancestor-below-root`, so the seam dispatches the promoted ancestor's touch point unless `resolveFocusTarget` keeps a text field the locator named (regression-proven in packages/daemon/src/execution/interaction/internal/__tests__/find.test.ts) — but the annotation half never does: the response is the focus runtime's point payload, so a match still reporting `hittable: false` after promotion is accepted silently, where press/click/fill answer with `targetHittable: false` plus a hint. Closing it needs the annotation composed at this seam, which is response-shape work the `responseIdentity` waiver below also records.",
+          "gap: the promotion half does run — the `findAct` row declares `hittable-ancestor-below-root`, so the seam dispatches the promoted ancestor's touch point unless `resolveFocusTarget` chooses a text field instead (regression-proven in packages/daemon/src/execution/interaction/internal/__tests__/find.test.ts) — but the annotation half never does: the response is the focus runtime's point payload, so a match still reporting `hittable: false` after promotion is accepted silently, where press/click/fill answer with `targetHittable: false` plus a hint. Closing it needs the annotation composed at this seam, which is response-shape work the `responseIdentity` waiver below also records.",
         trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
       },
       // One construction site per dispatch kind, both shared with the plain commands: the focus

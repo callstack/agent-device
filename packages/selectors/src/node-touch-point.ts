@@ -5,6 +5,7 @@ import type {
   SnapshotNode,
   SnapshotState,
 } from '@agent-device/kernel/snapshot';
+import { normalizeRect } from '@agent-device/kernel/rect-center';
 import { normalizeRef } from '@agent-device/kernel/snapshot';
 import { createSnapshotVisibility, isFillableType } from '@agent-device/contracts/snapshot';
 import type { Platform } from '@agent-device/kernel/device';
@@ -82,9 +83,16 @@ function collectOutermostTextFields(
       isAddressable(candidate) &&
       isTextField(candidate, platform) &&
       isDescendantOf(candidate, node, byIndex) &&
+      hasUsableRect(candidate) &&
       visibility.isVisibleOnScreen(candidate),
   );
   return fields.filter((field) => !fields.some((other) => isDescendantOf(field, other, byIndex)));
+}
+
+/** Visibility reads a node without bounds as visible, but a touch point could not aim at it. */
+function hasUsableRect(node: SnapshotNode): boolean {
+  const rect = normalizeRect(node.rect);
+  return rect !== null && rect.width > 0 && rect.height > 0;
 }
 
 function isAddressable(node: SnapshotNode): node is SnapshotAddressableNode {
@@ -93,7 +101,11 @@ function isAddressable(node: SnapshotNode): node is SnapshotAddressableNode {
 
 /** An untyped node is lenient for a fill guard, but here being a field would make it the target. */
 function isTextField(node: SnapshotNode, platform: Platform): boolean {
-  return node.editable ?? (Boolean(node.type?.trim()) && isFillableType(node.type ?? '', platform));
+  return (
+    node.editable ??
+    (node.password === true ||
+      (Boolean(node.type?.trim()) && isFillableType(node.type ?? '', platform)))
+  );
 }
 
 export function resolveNodeTouchPoint(

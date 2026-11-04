@@ -27,7 +27,11 @@ export function buildAmbiguousMatchError(
   );
 }
 
-/** The match is one element, but which of its text fields `find focus` or `find type` means is not. */
+/**
+ * The match is one element, but which of its text fields `find focus` or `find type` means is not.
+ * It follows find's refusal contract: its message routes the caller to narrow the locator, and it
+ * does not pin the printed refs to a generation (see `publishAmbiguousMatchCandidateRefs`).
+ */
 export function buildNestedTextFieldsError(
   ref: string,
   fields: SnapshotState['nodes'],
