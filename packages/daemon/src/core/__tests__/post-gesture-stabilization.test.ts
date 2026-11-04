@@ -1,5 +1,8 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { acquireProviderKeyboard } from '@agent-device/contracts/tap-keyboard-occlusion';
+import {
+  acquireProviderKeyboard,
+  observeCompleteTreeKeyboard,
+} from '@agent-device/contracts/tap-keyboard-occlusion';
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
@@ -606,6 +609,84 @@ test('capturePostGestureStabilizedResult still distrusts a stale WebDriver sourc
 
   assert.equal(staleAccepts, 1);
   assert.equal(settled, 0);
+});
+
+/** A Simulator AX bridge capture: one complete read of the app's tree, keyboard window included. */
+function bridgeCapture(keyboard: boolean) {
+  const source = makeSnapshotState([
+    ...pickupSnapshot(500).nodes,
+    ...(keyboard ? keyboardWindowNodes() : []),
+  ]);
+  return {
+    ...source,
+    keyboard: observeCompleteTreeKeyboard({
+      nodes: source.nodes,
+      viewport: { x: 0, y: 0, width: 390, height: 844 },
+      complete: true,
+    }),
+  };
+}
+
+async function stabilizeBridgeCaptures(params: { before: boolean; after: boolean }) {
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  session.snapshot = bridgeCapture(params.before);
+  markPostGestureStabilization(session, 'swipe');
+  const baselineKeyboard = session.snapshot.keyboard;
+  const capture = vi.fn(async () => bridgeCapture(params.after));
+
+  const resultPromise = withDiagnosticsScope({}, async () => {
+    const result = await capturePostGestureStabilizedResult({
+      session,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    });
+    return {
+      result,
+      staleAccepts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stale_accept']),
+      settled: countDiagnosticEventsByPhase(['post_gesture_snapshot_stabilized']),
+    };
+  });
+
+  await vi.advanceTimersByTimeAsync(10_000);
+  const { result, staleAccepts, settled } = await resultPromise;
+  return {
+    staleAccepts,
+    settled,
+    baselineKeyboard,
+    quietKeyboard: result.value.keyboard,
+    postGestureOutcome: result.postGestureOutcome,
+    captures: capture.mock.calls.length,
+  };
+}
+
+test('capturePostGestureStabilizedResult settles when a complete bridge tree loses the keyboard it derived (iOS)', async () => {
+  const outcome = await stabilizeBridgeCaptures({ before: true, after: false });
+
+  assert.deepEqual(outcome.baselineKeyboard, {
+    kind: 'derived',
+    derivation: 'docked-tree',
+    frame: { x: 0, y: 500, width: 390, height: 344 },
+    treeBound: true,
+  });
+  assert.deepEqual(outcome.quietKeyboard, { kind: 'absent', treeBound: true });
+  assert.equal(outcome.settled, 1);
+  assert.equal(outcome.staleAccepts, 0);
+  assert.equal(outcome.postGestureOutcome, undefined);
+  assert.equal(outcome.captures, 2);
+});
+
+test('capturePostGestureStabilizedResult still distrusts bridge trees whose keyboard fact did not change (iOS)', async () => {
+  // The same fact on both sides proves nothing, so the content comparison decides, and it never moved.
+  for (const keyboard of [false, true]) {
+    const outcome = await stabilizeBridgeCaptures({ before: keyboard, after: keyboard });
+
+    assert.equal(outcome.quietKeyboard?.kind, keyboard ? 'derived' : 'absent');
+    assert.deepEqual(outcome.quietKeyboard, outcome.baselineKeyboard);
+    assert.equal(outcome.staleAccepts, 1, `keyboard ${keyboard}`);
+    assert.equal(outcome.settled, 0, `keyboard ${keyboard}`);
+    vi.useRealTimers();
+  }
 });
 
 // --- #1569: a backend swap mid-poll is not comparable evidence ---

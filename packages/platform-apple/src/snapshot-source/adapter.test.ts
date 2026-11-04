@@ -16,6 +16,7 @@ import { readSnapshotTargetProcessStartTime } from '../snapshot-process.ts';
 import { DEPTH_HINT_PROBE_BACK_AFTER_USES } from './depth-hints.ts';
 import { SNAPSHOT_BRIDGE_SOURCE_FILENAMES } from './cache-identity.ts';
 import { MAXIMUM_REQUEST_LEVELS } from './limits.ts';
+import { ADAPTER_KEYBOARD_CASES } from './adapter-keyboard.fixtures.ts';
 import {
   encodeSnapshotBridgeFrame,
   SNAPSHOT_SOURCE_PROTOCOL_VERSION,
@@ -554,6 +555,8 @@ type AdapterFixture = {
   runningSurfaceHost: boolean;
   /** The surface host check each request carried: its executables and Simulator, or undefined. */
   surfaceHostChecks: Array<Readonly<{ executables: unknown; simulatorUdid: unknown }> | undefined>;
+  /** The windows the fake guest reports under its root when no other tree shape is selected. */
+  windows: readonly Record<string, unknown>[];
   omitRecovery: boolean;
   diagnostics: Record<string, unknown>[];
   startedTargets: Array<Parameters<SnapshotSourceHost['start']>[0]>;
@@ -591,6 +594,7 @@ function createAdapterHost(buildDelayMs = 0): AdapterFixture {
     omitViewport: false,
     runningSurfaceHost: false,
     surfaceHostChecks: [],
+    windows: [],
     omitRecovery: false,
     diagnostics: [],
     startedTargets: [],
@@ -813,7 +817,7 @@ class AdapterSocket extends EventEmitter implements SnapshotSourceSocket {
                                 ],
                               },
                             ]
-                          : [],
+                          : this.fixture.windows,
                 },
           },
           {
@@ -868,6 +872,46 @@ test('the Simulator AX source refuses a window whose coordinate space it cannot 
       hint: deriveIosCaptureHint(createIosSnapshotRequest()),
     });
     assert.equal(recovered.stage, 'acquired');
+  } finally {
+    await source.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('the Simulator AX source publishes absence only from a complete tree with no keyboard trace', async () => {
+  const root = await mkdtempForTest('agent-device-snapshot-adapter-keyboard-');
+  const sourceRoot = path.join(root, 'source');
+  await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
+    await writeFile(path.join(sourceRoot, name), 'native source');
+  }
+  const fixture = createAdapterHost();
+  const source = createSimulatorSnapshotSource({
+    host: fixture.host,
+    sourceRoot,
+    cacheRoot: path.join(root, 'cache'),
+  });
+  const target = { ...targetForTest(), generation: 'generation-1', targetId: 'target-1' };
+
+  try {
+    for (const entry of ADAPTER_KEYBOARD_CASES) {
+      fixture.windows = entry.windows;
+      fixture.truncated = entry.truncated;
+      for (const acquisitionIntent of ['full', 'surface-observation'] as const) {
+        const outcome = await source.acquire({
+          target,
+          hint: deriveIosCaptureHint(createIosSnapshotRequest({ acquisitionIntent })),
+        });
+        assert.equal(outcome.stage, 'acquired', `${entry.name} (${acquisitionIntent})`);
+        if (outcome.stage !== 'acquired') continue;
+        assert.equal(outcome.acquisition.truncated, entry.truncated);
+        assert.deepEqual(
+          outcome.acquisition.keyboard,
+          entry.keyboard,
+          `${entry.name} (${acquisitionIntent})`,
+        );
+      }
+    }
   } finally {
     await source.close();
     await rm(root, { recursive: true, force: true });

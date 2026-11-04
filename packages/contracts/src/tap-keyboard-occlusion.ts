@@ -66,6 +66,8 @@ export const TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS = Object.freeze({
 });
 
 const IOS_KEYBOARD_TYPE_NAMES: ReadonlySet<string> = new Set(['keyboard', 'key']);
+/** The system window that hosts the remote keyboard, with or without keys in it. */
+const IOS_KEYBOARD_WINDOW_ROLE = 'UIRemoteKeyboardWindow';
 
 /** The occluding band of the visible keyboard, plus the rects that prove a tap meant the keyboard. */
 export type KeyboardSurface = {
@@ -354,6 +356,31 @@ export function acquireProviderKeyboard(params: ProviderKeyboardInput): {
     })),
     keyboard: observeProviderKeyboard(params),
   };
+}
+
+/**
+ * The keyboard fact of a producer that reads the target app's whole in-process tree in one capture,
+ * as the Simulator AX bridge does: the keyboard window is one of the app's own windows there, so a
+ * complete tree with no keyboard window and no keyboard node proves absence the way a full XCTest scan
+ * does. A truncated tree, or a keyboard window that exposes no keys, proves only presence.
+ */
+export function observeCompleteTreeKeyboard(
+  params: Readonly<{ nodes: readonly RawSnapshotNode[]; viewport: Rect | null; complete: boolean }>,
+): SnapshotKeyboardBandFact {
+  const fact = observeProviderKeyboard(params);
+  if (fact.kind !== 'unmeasurable' || !params.complete) return fact;
+  return params.nodes.some(isKeyboardTraceNode) ? fact : { kind: 'absent', treeBound: true };
+}
+
+/** Any node the keyboard leaves in the tree, including its window and the in-app placeholder. */
+function isKeyboardTraceNode(node: RawSnapshotNode): boolean {
+  return (
+    node.role === IOS_KEYBOARD_WINDOW_ROLE ||
+    isKeyboardSurfaceNode(node) ||
+    hasIosKeyboardRole(node, IOS_KEYBOARD_SETTLE_CHROME_ROLES) ||
+    hasIosKeyboardRole(node, IOS_KEYBOARD_SUBTREE_CHROME_ROLES) ||
+    hasIosKeyboardRole(node, IOS_KEYBOARD_CHROME_MARKER_ROLES)
+  );
 }
 
 function observeProviderKeyboard(params: ProviderKeyboardInput): SnapshotKeyboardBandFact {

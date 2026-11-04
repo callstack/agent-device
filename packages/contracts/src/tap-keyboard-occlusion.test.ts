@@ -9,6 +9,7 @@ import type {
 } from '@agent-device/kernel/snapshot';
 import {
   acquireProviderKeyboard,
+  observeCompleteTreeKeyboard,
   resolveKeyboardTapOcclusion,
   TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS,
   TAP_KEYBOARD_OCCLUDES_TARGET_REASON,
@@ -34,6 +35,8 @@ type FixtureCase = {
   target: { index: number } | { point: { x: number; y: number } };
   keyboard?: SnapshotKeyboardBandFact;
   observationVisibility?: boolean;
+  /** Whether a producer that reads the app's whole in-process tree captured `nodes` uncut. */
+  treeComplete?: boolean;
   expected: { kind: string; frame?: Rect; controlRects?: readonly Rect[] };
 };
 
@@ -82,6 +85,17 @@ test('keyboard tap occlusion agrees with every golden parity table case', () => 
         }).keyboard,
         fixture.keyboard,
         `${fixture.name}: acquisition observation`,
+      );
+    }
+    if (fixture.treeComplete !== undefined) {
+      assert.deepEqual(
+        observeCompleteTreeKeyboard({
+          nodes,
+          viewport: fixture.viewport,
+          complete: fixture.treeComplete,
+        }),
+        fixture.keyboard,
+        `${fixture.name}: complete-tree observation`,
       );
     }
     const occlusion = resolveKeyboardTapOcclusion({
