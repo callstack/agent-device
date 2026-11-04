@@ -138,6 +138,7 @@ test.each(['batch', 'replay'] as const)(
 function createOpenHandler(
   sessionStore: ReturnType<typeof makeSessionStore>,
   leaseRegistry = new LeaseRegistry(),
+  deviceRuntimeGateway: typeof lifecycleDeviceRuntimeGateway = lifecycleDeviceRuntimeGateway,
 ) {
   return createRequestHandler({
     host: createTestHostEnvironment(),
@@ -146,7 +147,7 @@ function createOpenHandler(
     token: 'test-token',
     sessionStore,
     leaseRegistry,
-    deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+    deviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
@@ -168,13 +169,20 @@ test.each(['', '   '])(
   async (session) => {
     mockResolveTargetDevice.mockImplementation(webSessionResolution);
     const sessionStore = makeSessionStore('agent-device-router-web-blank-');
+    const bind = vi.fn<(typeof lifecycleDeviceRuntimeGateway)['bind']>((request) =>
+      lifecycleDeviceRuntimeGateway.bind(request),
+    );
 
-    const response = await createOpenHandler(sessionStore)(openWebRequest(session));
+    const response = await createOpenHandler(sessionStore, new LeaseRegistry(), {
+      ...lifecycleDeviceRuntimeGateway,
+      bind,
+    })(openWebRequest(session));
 
     expect(response).toMatchObject({
       ok: false,
       error: { code: 'INVALID_ARGS', details: { reason: 'web_session_name_invalid' } },
     });
+    expect(bind).not.toHaveBeenCalled();
     expect(sessionStore.toArray()).toEqual([]);
   },
 );
