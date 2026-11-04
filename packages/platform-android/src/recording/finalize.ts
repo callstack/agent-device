@@ -68,14 +68,12 @@ export async function finalizeAndroidRecording(
     progress,
     steps: {
       stop: async () => {
-        // `stopOwnedChunks` either observed each recorder gone or threw, and an artifact that stopped
-        // growing is the evidence the recorder stopped writing (ADR 0024 2.2). The platform limit is
+        // `stopOwnedChunks` either observed each recorder gone or threw. The platform limit is
         // disclosed here rather than at the export because it is a fact about the recorder, and the
         // journal is what keeps it attached to a stop that has to be driven again.
         const activeRecorderAlreadyGone = await stopOwnedChunks(transport, evidence.chunks);
         reachedLimit =
           (activeRecorderAlreadyGone && params.activeRecorderRetired !== true) || reachedLimit;
-        await waitForStableArtifacts(transport, evidence.chunks);
         return {
           observation: { recorder: 'confirmed' },
           ...(reachedLimit ? { warning: PLATFORM_LIMIT_WARNING } : {}),
@@ -83,7 +81,10 @@ export async function finalizeAndroidRecording(
       },
       // Each chunk is pulled until its host copy plays, which is the playability check for the pulled
       // set; the finalizer checks the export once more because that is the file the caller is served.
-      collect: (collectedPath) => pullChunks(transport, evidence.chunks, collectedPath),
+      collect: async (collectedPath) => {
+        await waitForStableArtifacts(transport, evidence.chunks);
+        await pullChunks(transport, evidence.chunks, collectedPath);
+      },
       finalize: ({ collectedPath, exportPath, stoppedAtMs }) =>
         exportCollectedChunks({
           host,

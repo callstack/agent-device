@@ -98,19 +98,27 @@ export async function stopOwnedChunks(
   transport: Transport,
   chunks: readonly NativeChunk[],
 ): Promise<boolean> {
+  return (await stopOwnedChunksWithObservation(transport, chunks)).activeAlreadyExited;
+}
+
+export async function stopOwnedChunksWithObservation(
+  transport: Transport,
+  chunks: readonly NativeChunk[],
+): Promise<{ activeAlreadyExited: boolean; activeSignalled: boolean }> {
   const active = chunks.at(-1);
-  let activeAlreadyExited = false;
+  let result = { activeAlreadyExited: false, activeSignalled: false };
   let failure: unknown;
   for (const chunk of [...chunks].reverse()) {
     try {
-      const alreadyExited = await stopChunk(transport, chunk);
-      if (chunk === active) activeAlreadyExited = alreadyExited;
+      const stopped = await stopChunkWithObservation(transport, chunk);
+      if (chunk === active)
+        result = { activeAlreadyExited: stopped.alreadyExited, activeSignalled: stopped.signalled };
     } catch (error) {
-      failure ??= error;
+      if (failure === undefined || error instanceof AndroidRecordingOwnershipLost) failure = error;
     }
   }
   if (failure) throw failure;
-  return activeAlreadyExited;
+  return result;
 }
 
 export async function waitForStableArtifacts(
@@ -215,25 +223,38 @@ async function rollbackStartedProcess(
   }
 }
 
+export class AndroidRecordingOwnershipLost extends Error {}
+
 export async function stopChunk(
   transport: Transport,
   chunk: NativeChunk | undefined,
 ): Promise<boolean> {
   if (!chunk) return false;
+  return (await stopChunkWithObservation(transport, chunk)).alreadyExited;
+}
+
+async function stopChunkWithObservation(
+  transport: Transport,
+  chunk: NativeChunk,
+): Promise<{ alreadyExited: boolean; signalled: boolean }> {
   const processIdentity = {
     pid: chunk.remotePid,
     remotePath: chunk.remotePath,
     startTime: chunk.remoteStartTime,
   };
   const graceful = await transport.stop(processIdentity);
-  if (graceful === 'already-missing') return true;
+  if (graceful === 'already-missing') return { alreadyExited: true, signalled: false };
   if (graceful === 'ownership-lost')
-    throw new Error(
+    throw new AndroidRecordingOwnershipLost(
       `Android screenrecord ownership could not be confirmed for pid ${chunk.remotePid}`,
     );
-  if (await waitForStopped(transport, processIdentity)) return false;
+  if (await waitForStopped(transport, processIdentity))
+    return { alreadyExited: false, signalled: graceful === 'stopped' };
   const forced = await transport.stop(processIdentity, { force: true });
-  if (forced === 'stopped' || forced === 'already-missing') return false;
+  if (forced === 'stopped' || forced === 'already-missing')
+    return { alreadyExited: false, signalled: graceful === 'stopped' || forced === 'stopped' };
+  if (forced === 'ownership-lost')
+    throw new AndroidRecordingOwnershipLost('Android recorder ownership lost');
   throw new Error(`failed to stop Android screenrecord pid ${chunk.remotePid}`);
 }
 
@@ -258,7 +279,7 @@ async function waitForStopped(
     const state = await transport.inspect(processIdentity);
     if (state === 'missing') return true;
     if (provesAndroidScreenRecordTermination(state)) {
-      throw new Error(
+      throw new AndroidRecordingOwnershipLost(
         `Android screenrecord ownership could not be confirmed for pid ${processIdentity.pid}`,
       );
     }

@@ -1,4 +1,8 @@
 import { expect, test, vi } from 'vitest';
+import path from 'node:path';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
+import type { DurableCaptureProgress } from '@agent-device/contracts/durable-resource';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
 import { bindAndroidScreenRecordingRuntime } from './runtime.ts';
@@ -6,6 +10,7 @@ import { bindAndroidScreenRecordingRuntime } from './runtime.ts';
 async function setup(initial: 'owned-alive' | 'missing' = 'owned-alive') {
   let manifest = '';
   let state: 'owned-alive' | 'missing' | 'ownership-lost' = initial;
+  let loseAtStop = false;
   const files = new Set<string>();
   const signal = vi.fn(async () => {
     state = 'missing';
@@ -27,7 +32,13 @@ async function setup(initial: 'owned-alive' | 'missing' = 'owned-alive') {
         return { remotePid: '42' };
       },
       inspect: async () => state,
-      stop: async () => (state === 'missing' ? ('already-missing' as const) : await signal()),
+      stop: async () => {
+        if (loseAtStop) {
+          state = 'ownership-lost';
+          return 'ownership-lost' as const;
+        }
+        return state === 'missing' ? ('already-missing' as const) : await signal();
+      },
       exists: async (name: string) => files.has(name),
       remove,
       removeManifest,
@@ -46,8 +57,34 @@ async function setup(initial: 'owned-alive' | 'missing' = 'owned-alive') {
   const attached = await runtime.screenRecordingReattach({ envelope: started.envelope });
   if (attached.status !== 'active' || !attached.handle.settleForExport)
     throw new Error('missing settlement authority');
+  const resourcePath = path.join(mkdtempForTestSync('settlement-progress-'), 'record.json');
+  screenRecordingResourceStore.write(resourcePath, started.envelope);
+  const readEnvelope = () => {
+    const record = screenRecordingResourceStore.read(resourcePath);
+    if (record.status !== 'decoded') throw new Error('missing recording');
+    return record.envelope;
+  };
+  const progress = (): DurableCaptureProgress => ({
+    learned: readEnvelope().metadata,
+    record: (fact) => {
+      const envelope = readEnvelope();
+      screenRecordingResourceStore.write(resourcePath, {
+        ...envelope,
+        metadata: { ...envelope.metadata, ...fact },
+      });
+    },
+  });
   return {
-    settle: attached.handle.settleForExport,
+    settle: async () => await attached.handle.settleForExport!(progress()),
+    finish: async () => {
+      const reattached = await runtime.screenRecordingReattach({ envelope: readEnvelope() });
+      if (reattached.status !== 'active') throw new Error('reattach failed');
+      return await reattached.handle.finish(progress());
+    },
+    metadata: () => readEnvelope().metadata,
+    loseAtStop: () => {
+      loseAtStop = true;
+    },
     files,
     signal,
     remove,
@@ -120,5 +157,52 @@ test('missing native material is reported without discarding the marker', async 
   await expect(f.settle()).resolves.toEqual({ status: 'retained', reason: 'resource-missing' });
   expect(f.signal).not.toHaveBeenCalled();
   expect(f.manifest()).toBe(marker);
+  expect(f.removeManifest).not.toHaveBeenCalled();
+});
+
+test('transport detects a replaced owner during stop without signalling it', async () => {
+  const f = await setup();
+  const marker = f.manifest();
+  f.loseAtStop();
+  await expect(f.settle()).resolves.toEqual({ status: 'retained', reason: 'ownership-fence-lost' });
+  expect(f.signal).not.toHaveBeenCalled();
+  expect(f.remove).not.toHaveBeenCalled();
+  expect(f.removeManifest).not.toHaveBeenCalled();
+  expect(f.files.size).toBe(1);
+  expect(f.manifest()).toBe(marker);
+  expect(f.metadata()?.stopObservation).toBeUndefined();
+});
+
+test('settlement journals an intentional stop for later reattachment and failed export retry', async () => {
+  const f = await setup();
+  await expect(f.settle()).resolves.toEqual({ status: 'export' });
+  expect(f.metadata()).toMatchObject({
+    stopObservation: { recorder: 'confirmed' },
+    stoppedAtMs: expect.any(Number),
+  });
+  f.finalize.mockRejectedValueOnce(new Error('export failed'));
+  await expect(f.finish()).rejects.toThrow('export failed');
+  expect(f.files.size).toBe(1);
+  const result = await f.finish();
+  expect(result.status).toBe('completed');
+  if (result.status === 'completed')
+    expect(result.result.warning ?? '').not.toContain('180s platform limit');
+  expect(f.signal).toHaveBeenCalledOnce();
+});
+
+test('a recorder already gone before settlement retains the natural limit warning', async () => {
+  const f = await setup('missing');
+  await expect(f.settle()).resolves.toEqual({ status: 'export' });
+  expect(f.metadata()?.stopObservation).toBeUndefined();
+  const result = await f.finish();
+  expect(result.status).toBe('completed');
+  if (result.status === 'completed') expect(result.result.warning).toContain('180s platform limit');
+});
+
+test('a missing chunk after a confirmed stop retains the stop checkpoint', async () => {
+  const f = await setup();
+  f.files.clear();
+  await expect(f.settle()).resolves.toEqual({ status: 'retained', reason: 'resource-missing' });
+  expect(f.metadata()).toMatchObject({ stopObservation: { recorder: 'confirmed' } });
   expect(f.removeManifest).not.toHaveBeenCalled();
 });

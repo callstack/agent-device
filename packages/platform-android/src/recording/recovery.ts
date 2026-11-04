@@ -1,4 +1,7 @@
-import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
+import type {
+  CleanupOutcome,
+  DurableCaptureProgress,
+} from '@agent-device/contracts/durable-resource';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type {
   ScreenRecordingRuntimeOperations,
@@ -16,7 +19,16 @@ import {
   type NativeManifest,
 } from './manifest.ts';
 import { cleanupVerifiedAndroidEvidence } from './cleanup.ts';
-import { nativeChunksDisposition, stopOwnedChunks } from './chunks.ts';
+import {
+  AndroidRecordingOwnershipLost,
+  nativeChunksDisposition,
+  stopOwnedChunksWithObservation,
+} from './chunks.ts';
+import { mustSignalRecorder } from '@agent-device/contracts/recording-stop-progress';
+import {
+  readStopCheckpoints,
+  writeStopCheckpoint,
+} from '@agent-device/capture-kit/recording-stop-sequence';
 import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
 import { snapshot } from './live-snapshot.ts';
 import { finalizeAndroidRecording } from './finalize.ts';
@@ -209,8 +221,8 @@ async function reattachEvidence(params: {
     status: 'active' as const,
     handle: Object.freeze({
       ...handle,
-      settleForExport: async () =>
-        await settleAndroidRecording({ transport, device, input, descriptor }),
+      settleForExport: async (progress: DurableCaptureProgress) =>
+        await settleAndroidRecording({ transport, device, input, descriptor, progress }),
     }),
   };
 }
@@ -220,7 +232,11 @@ async function settleAndroidRecording(params: {
   device: Parameters<typeof nativeManifestMatchesEnvelope>[1];
   input: Parameters<ScreenRecordingRuntimeOperations['screenRecordingReattach']>[0];
   descriptor: AndroidRecordingDescriptor;
+  progress: DurableCaptureProgress;
 }): Promise<ScreenRecordingSettlement> {
+  let intentionalStop = false;
+  let chunks: NativeManifest['chunks'] = [];
+  const stoppedAtMs = Date.now();
   try {
     const { transport, device, input, descriptor } = params;
     const current = await readDescriptorEvidence({
@@ -235,6 +251,7 @@ async function settleAndroidRecording(params: {
         reason: current.status === 'ownership-lost' ? 'ownership-fence-lost' : 'owner-unavailable',
       };
     const evidence = current.evidence;
+    chunks = evidence.chunks;
     if (evidence.pendingRemotePath !== undefined || evidence.completion !== undefined)
       return { status: 'retained', reason: 'stop-unconfirmed' };
     if (evidence.chunks.length === 0) return { status: 'retained', reason: 'resource-missing' };
@@ -250,7 +267,10 @@ async function settleAndroidRecording(params: {
       if (state === 'uncertain') return { status: 'retained', reason: 'owner-unavailable' };
       if (state === 'owned-alive') liveChunks.push(chunk);
     }
-    await stopOwnedChunks(transport, liveChunks);
+    const active = evidence.chunks.at(-1);
+    const activeWasLive = active !== undefined && liveChunks.includes(active);
+    const stopped = await stopOwnedChunksWithObservation(transport, liveChunks);
+    intentionalStop = activeWasLive && stopped.activeSignalled;
     for (const chunk of evidence.chunks) {
       const state = await transport.inspect({
         pid: chunk.remotePid,
@@ -260,14 +280,31 @@ async function settleAndroidRecording(params: {
       if (state === 'ownership-lost' || state === 'foreign-writer')
         return { status: 'retained', reason: 'ownership-fence-lost' };
       if (state !== 'missing') return { status: 'retained', reason: 'stop-unconfirmed' };
-      const exists = await transport.exists(chunk.remotePath);
+    }
+  } catch (error) {
+    return {
+      status: 'retained',
+      reason:
+        error instanceof AndroidRecordingOwnershipLost
+          ? 'ownership-fence-lost'
+          : 'stop-unconfirmed',
+    };
+  }
+  if (intentionalStop && mustSignalRecorder(readStopCheckpoints(params.progress.learned))) {
+    params.progress.record(
+      writeStopCheckpoint({ observation: { recorder: 'confirmed' }, stoppedAtMs }),
+    );
+  }
+  try {
+    for (const chunk of chunks) {
+      const exists = await params.transport.exists(chunk.remotePath);
       if (exists === false) return { status: 'retained', reason: 'resource-missing' };
       if (exists === 'uncertain') return { status: 'retained', reason: 'owner-unavailable' };
     }
-    return { status: 'export' };
   } catch {
-    return { status: 'retained', reason: 'stop-unconfirmed' };
+    return { status: 'retained', reason: 'owner-unavailable' };
   }
+  return { status: 'export' };
 }
 
 type CompletedEvidenceObservation =

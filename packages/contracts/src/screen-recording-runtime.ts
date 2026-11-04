@@ -4,7 +4,12 @@ import type { StopObservation } from './recording-stop-observation.ts';
 import type { NativePathDisposition } from './recording-native-path.ts';
 import type { RecordingExportQuality } from './recording-export-quality.ts';
 import type { RecordingScope } from './recording-scope.ts';
-import type { CleanupOutcome, LiveResourceHandle, ReattachOutcome } from './durable-resource.ts';
+import type {
+  CleanupOutcome,
+  DurableCaptureProgress,
+  LiveResourceHandle,
+  ReattachOutcome,
+} from './durable-resource.ts';
 import type { DurableResourceEnvelope } from './durable-resource-envelope.ts';
 import type { PendingTransferGuard } from './async-lifecycle.ts';
 import type { ResourceOwnershipFence } from './platform-runtime.ts';
@@ -139,7 +144,7 @@ export type ScreenRecordingLiveHandle = LiveResourceHandle<ScreenRecordingComple
      * Hold the recording fence and serialize handle operations until this returns. This does not
      * transfer or release the handle; forceCleanup and async disposal remain destructive.
      */
-    settleForExport?(): Promise<ScreenRecordingSettlement>;
+    settleForExport?(progress: DurableCaptureProgress): Promise<ScreenRecordingSettlement>;
     inspect(): ScreenRecordingLiveSnapshot;
     appendGestureEvents(events: readonly RecordingGestureEvent[]): void;
     setTouchReferenceFrame(frame: GestureReferenceFrame | undefined): void;

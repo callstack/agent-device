@@ -20,7 +20,7 @@ export { collectedRecordingPath, nativeRecordingPath } from './artifact-paths.ts
  * recoverable reads the same checkpoints this sequence resumes from, so the two cannot disagree about
  * what a retry would still have to do.
  */
-export { readStopCheckpoints } from './stop-checkpoints.ts';
+export { readStopCheckpoints, writeStopCheckpoint } from './stop-checkpoints.ts';
 
 /** What a backend learned while asking its recorder to stop (ADR 0024 2.2). */
 export type RecorderStop = Readonly<{
