@@ -17,7 +17,10 @@ import type { LiveResourceHandle } from '@agent-device/contracts/durable-resourc
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DurableCaptureAdmissionLedger } from './durable-capture-admission-ledger.ts';
-import { createNextDurableCaptureFence } from './durable-capture-start-preflight.ts';
+import {
+  createNextDurableCaptureFence,
+  listDurableCaptureStartConflicts,
+} from './durable-capture-start-preflight.ts';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import type { DurableSessionResourceKind } from './durable-session-resource-kinds.ts';
 
@@ -100,6 +103,29 @@ export function createDurableCaptureResource<
     },
     recoverOne(params: SessionCaptureRecoveryParams<K, H, C>, resourcePath: string) {
       return recoverDurableCaptureResource(recoveryParams(params), resourcePath);
+    },
+    /**
+     * Runs exact-owner recovery for the records that would refuse a start at `resourcePath` on
+     * `device` and whose session the daemon no longer holds. A held session's record belongs to
+     * its own stop or close; a record recovery cannot confirm stays open and still refuses.
+     */
+    async settleStartConflicts(
+      params: Omit<SessionCaptureRecoveryParams<K, H, C>, 'sessionsDir'> &
+        Readonly<{
+          resourcePath: string;
+          device: DeviceInfo;
+          holdsSession(sessionId: string): boolean;
+        }>,
+    ): Promise<void> {
+      const { resourcePath, device, holdsSession, ...recovery } = params;
+      const conflicts = listDurableCaptureStartConflicts(definition, resourcePath, device);
+      for (const record of conflicts.records) {
+        if (holdsSession(record.envelope.sessionId)) continue;
+        await recoverDurableCaptureResource(
+          recoveryParams({ ...recovery, sessionsDir: conflicts.sessionsDir }),
+          record.resourcePath,
+        );
+      }
     },
   });
 }
