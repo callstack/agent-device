@@ -12,7 +12,7 @@ import {
 } from '../core/daemon-command-registry.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';
-import { webSessionIdentity } from '../sessions/session-routing.ts';
+import { webSessionIdentity } from '../core/session-tenant-scope.ts';
 
 /**
  * Resolves the daemon-owned part of the request-provider seam.
@@ -83,14 +83,15 @@ async function resolveProviderTargetDevice(
   req: DaemonRequest,
   env: EnvMap,
 ): Promise<SessionState['device']> {
+  const webSession = webSessionIdentity(req);
   const options =
     req.command === 'open'
       ? buildOpenTargetDeviceResolutionOptions(
           req.positionals?.[0],
           env,
           req.flags?.surface,
-          webSessionIdentity(req),
+          webSession,
         )
-      : { env, androidAvdSelection: resolveCommandAndroidAvdSelection(req.command) };
+      : { env, androidAvdSelection: resolveCommandAndroidAvdSelection(req.command), webSession };
   return await resolveTargetDevice(req.flags ?? {}, { ...options, env });
 }

@@ -12,7 +12,7 @@ import type { SessionStore } from '../core/session-store.ts';
 import { hostAndDeviceIds, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef } from '../core/session-state.ts';
-import { webSessionIdentity } from '../sessions/session-routing.ts';
+import { webSessionIdentity } from '../core/session-tenant-scope.ts';
 
 export type RequestExecutionLockKey = `session:${string}` | `device:${string}`;
 

@@ -1,6 +1,11 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { hostDeviceIdOf, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  hostDeviceIdOf,
+  isIosFamily,
+  type DeviceInfo,
+  type WebSessionIdentity,
+} from '@agent-device/kernel/device';
 import { AppError, sessionOrDeviceSelectorRequiredDetails } from '@agent-device/kernel/errors';
 import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
@@ -54,6 +59,8 @@ export async function resolveCommandDevice(params: {
   flags: DaemonRequest['flags'] | undefined;
   env: EnvMap;
   androidAvdSelection?: 'running-only' | 'include-stopped';
+  /** A web selection binds this session's device, never the host. */
+  webSession: WebSessionIdentity;
   platformServices: DaemonPlatformServices;
 }): Promise<DeviceInfo> {
   const shouldUseExplicitIdentity = hasExplicitDeviceSelector(params.flags);
@@ -69,9 +76,10 @@ export async function resolveCommandDevice(params: {
   const device = await resolveTargetDevice(params.flags ?? {}, {
     env: params.env,
     androidAvdSelection: params.androidAvdSelection,
+    webSession: params.webSession,
   });
-  // A selector that names the host of the session's app device (ADR 0035) or web session device
-  // stays on that device: the session holds one app or browser, not the host.
+  // A selector that names the host of the session's app device (ADR 0035) stays on that device:
+  // the session holds one app, not the host.
   const held = params.session?.device;
   return held && held.id !== device.id && hostDeviceIdOf(held.id) === device.id ? held : device;
 }
@@ -89,6 +97,7 @@ export async function resolveBootCommandSelection(
   return await resolveTargetDeviceSelection(params.flags ?? {}, {
     env: params.env,
     androidAvdSelection: params.androidAvdSelection,
+    webSession: params.webSession,
     boot: { pick: params.flags?.pick },
   });
 }

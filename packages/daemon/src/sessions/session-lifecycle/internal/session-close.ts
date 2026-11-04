@@ -44,6 +44,7 @@ import type { PlatformResourceCleanup } from '../../../core/platform-resource-cl
 import { errorResponse } from '@agent-device/kernel/contracts';
 import { resolveCloseTargetRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import { admitRuntimeUse } from '../../../core/runtime-admission.ts';
+import { webSessionIdentity } from '../../../core/session-tenant-scope.ts';
 
 export type SessionCloseCommandInput = Readonly<{
   host: HostEnvironment;
@@ -486,6 +487,7 @@ async function closeWithoutSession(params: {
   if (!req.positionals || req.positionals.length === 0)
     return errorResponse('SESSION_NOT_FOUND', 'No active session');
   const device = await resolveCommandDevice({
+    webSession: webSessionIdentity(req),
     session: undefined,
     flags: req.flags,
     env,

@@ -1,7 +1,12 @@
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import type { SessionState } from '../../core/session-state.ts';
-import { hostAppDevice, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  hostAppDevice,
+  webSessionDevice,
+  type DeviceInfo,
+  type WebSessionIdentity,
+} from '@agent-device/kernel/device';
 
 import {
   requireSessionOrExplicitSelector,
@@ -35,6 +40,7 @@ const platformServices = daemonPlatformServicesFixture({
   },
 });
 const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
+const webSession: WebSessionIdentity = { name: 'default' };
 const mockIsActiveProviderDevice = vi.mocked(isActiveProviderDevice);
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 
@@ -94,6 +100,7 @@ test('resolveCommandDevice keeps an existing session for a platform-only filter'
         session: iosSimulatorSession,
         flags: { platform: 'ios' },
         env: process.env,
+        webSession,
       }),
   );
 
@@ -109,6 +116,7 @@ test('resolveCommandDevice does not prepare a sessionless device', async () => {
     session: undefined,
     flags: { platform: 'ios' },
     env: process.env,
+    webSession,
     platformServices: platformServices,
   });
 
@@ -130,12 +138,13 @@ test('command selection forwards stopped Android AVD scope', async () => {
     session: undefined,
     flags: { platform: 'android', device: 'Pixel_9' },
     env: process.env,
+    webSession,
     platformServices,
   });
   expect(selected).toBe(stopped);
   expect(mockResolveTargetDevice).toHaveBeenCalledWith(
     { platform: 'android', device: 'Pixel_9' },
-    { env: process.env, androidAvdSelection: 'include-stopped' },
+    { env: process.env, androidAvdSelection: 'include-stopped', webSession },
   );
 });
 
@@ -163,12 +172,14 @@ test('the first normal session resolution pins the device for repeated work in o
       session: iosSimulatorSession,
       flags: undefined,
       env: process.env,
+      webSession,
       platformServices: requestServices,
     }),
     await resolveCommandDevice({
       session: iosSimulatorSession,
       flags: undefined,
       env: process.env,
+      webSession,
       platformServices: requestServices,
     }),
   ]);
@@ -283,7 +294,37 @@ test('resolveCommandDevice keeps an app device session on its app when a selecto
     session,
     flags: { platform: 'macos', device: 'Mac' },
     env: process.env,
+    webSession,
   });
 
   expect(device).toBe(session.device);
+});
+
+test('a sessionless web selection binds the session device of the request, never the host', async () => {
+  const host: DeviceInfo = {
+    platform: 'web',
+    id: 'agent-browser-chrome',
+    name: 'Agent Browser Chrome',
+    kind: 'device',
+    target: 'desktop',
+    booted: true,
+  };
+  mockResolveTargetDevice.mockImplementation(async (_flags, options) =>
+    options?.webSession ? webSessionDevice(host, options.webSession) : host,
+  );
+
+  const device = await resolveCommandDevice({
+    session: undefined,
+    flags: { platform: 'web' },
+    env: process.env,
+    webSession: { name: 'wsd-one' },
+    platformServices,
+  });
+
+  expect(device).toEqual(webSessionDevice(host, { name: 'wsd-one' }));
+  expect(device.id).not.toBe(host.id);
+  expect(mockResolveTargetDevice).toHaveBeenCalledWith(
+    { platform: 'web' },
+    expect.objectContaining({ webSession: { name: 'wsd-one' } }),
+  );
 });

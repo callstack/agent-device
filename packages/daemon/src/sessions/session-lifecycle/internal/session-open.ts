@@ -16,7 +16,7 @@ import type { SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { refreshSessionDeviceIfNeeded } from '../../../resources/session-device-resolution.ts';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
-import { webSessionIdentity } from '../../session-routing.ts';
+import { webSessionIdentity } from '../../../core/session-tenant-scope.ts';
 import { isWebSession } from '../../web-session-names.ts';
 import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
 import {

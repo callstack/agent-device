@@ -37,6 +37,7 @@ import {
   requireRuntimeFacts,
   unavailableRuntimeOperationResponse,
 } from '../../core/session-runtime-admission.ts';
+import { webSessionIdentity } from '../../core/session-tenant-scope.ts';
 
 type Retention = Readonly<{ enabled: boolean; ttlMs?: number }>;
 type InstallFromSourceResult = Readonly<{
@@ -166,6 +167,7 @@ async function resolveInstallDevice(
     return session.device;
   }
   return await resolveCommandDevice({
+    webSession: webSessionIdentity(req),
     session,
     flags,
     env,

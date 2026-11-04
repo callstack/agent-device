@@ -29,8 +29,8 @@ import { assertSessionSelectorMatches } from '../core/session-selector.ts';
 import {
   resolveCallerScopeRoot,
   resolveEffectiveSessionName,
-  webSessionIdentity,
 } from '../sessions/session-routing.ts';
+import { webSessionIdentity } from '../core/session-tenant-scope.ts';
 import {
   assertRequestLeaseAdmissionPreflight,
   scopeRequestSession,
@@ -161,6 +161,7 @@ async function resolveBoundedClaimDevice(
     env,
     platformServices,
     androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),
+    webSession: webSessionIdentity(req),
   };
   if (req.command === 'boot') return (await resolveBootCommandSelection(params)).device;
   return await resolveCommandDevice(params);

@@ -36,6 +36,7 @@ import { snapshotOptionsToFlags } from '@agent-device/contracts/backend-snapshot
 import type { RequestCaptureProof } from '../core/capture-disclosure.ts';
 import { checkIsArgs } from '@agent-device/selectors';
 import { noActiveSessionError } from '@agent-device/kernel/contracts';
+import { webSessionIdentity } from '../core/session-tenant-scope.ts';
 
 export type SelectorRuntimeParams = {
   /** Builds the command surface this request's selector runtime executes through. */
@@ -129,7 +130,10 @@ async function resolveSelectorRuntimeDevice(
   if (!session && requireSession) return { ok: false, response: noActiveSessionError() };
   const device =
     session?.device ??
-    (await resolveTargetDevice(params.req.flags ?? {}, { env: params.sessionStore.host.env }));
+    (await resolveTargetDevice(params.req.flags ?? {}, {
+      env: params.sessionStore.host.env,
+      webSession: webSessionIdentity(params.req),
+    }));
   return { ok: true, ref, session, device };
 }
 

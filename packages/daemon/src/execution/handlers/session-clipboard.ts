@@ -31,6 +31,7 @@ import {
   errorResponse,
   type DaemonResponse,
 } from '@agent-device/kernel/contracts';
+import { webSessionIdentity } from '../../core/session-tenant-scope.ts';
 
 type ClipboardAction = 'read' | 'write';
 
@@ -168,6 +169,7 @@ export async function handleSessionClipboardCommand(params: {
   }
 
   const device = await resolveCommandDevice({
+    webSession: webSessionIdentity(req),
     session,
     flags,
     env: sessionStore.host.env,

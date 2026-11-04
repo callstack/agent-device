@@ -24,6 +24,9 @@ import {
 } from '../../__tests__/support/test-device-runtime-gateway.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
+import { webSessionIdentity } from '../../core/session-tenant-scope.ts';
+import { resolveCommandDevice } from '../../resources/session-device-resolution.ts';
 import { resolveRequestExecutionLockPlan } from '../request-binding.ts';
 
 vi.mock('../../core/device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
@@ -257,4 +260,35 @@ test('two tenants using one web session name each open their own browser, and on
     vi.unstubAllEnvs();
     fs.rmSync(claimsDir, { recursive: true, force: true });
   }
+});
+
+test('a sessionless web command locks the session device it binds, never the host', async () => {
+  mockResolveTargetDevice.mockImplementation(webSessionResolution);
+  const req: DaemonRequest = {
+    token: 'test-token',
+    session: 'wsd-sessionless',
+    command: 'snapshot',
+    positionals: [],
+    flags: { platform: 'web' },
+    meta: { requestId: 'req-snapshot-sessionless' },
+  };
+  const sessionStore = makeSessionStore('agent-device-router-web-sessionless-');
+
+  const plan = await resolveRequestExecutionLockPlan({
+    req,
+    sessionName: req.session,
+    sessionStore,
+  });
+  const bound = await resolveCommandDevice({
+    session: undefined,
+    flags: req.flags,
+    env: process.env,
+    webSession: webSessionIdentity(req),
+    platformServices: daemonPlatformServicesFixture(),
+  });
+
+  const sessionDeviceId = `${WEB_DESKTOP_DEVICE.id}:session:p_wsd-sessionless`;
+  expect(plan.deviceId).toBe(sessionDeviceId);
+  expect(plan.keys).toEqual(['session:wsd-sessionless', `device:${sessionDeviceId}`]);
+  expect(bound.id).toBe(sessionDeviceId);
 });

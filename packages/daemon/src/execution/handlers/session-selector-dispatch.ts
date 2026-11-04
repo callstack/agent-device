@@ -22,6 +22,7 @@ import type {
 } from '../../core/request-runtime-binding.ts';
 import type { DaemonCommandContext } from '../../core/context.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
+import { webSessionIdentity } from '../../core/session-tenant-scope.ts';
 
 /**
  * What `runSessionOrSelectorDispatch`'s `prepare` thunk reports: either the early-exit response an
@@ -75,6 +76,7 @@ async function runSessionOrSelectorDispatch(params: {
   if (guard) return guard;
 
   const device = await resolveCommandDevice({
+    webSession: webSessionIdentity(req),
     session,
     flags,
     env: sessionStore.host.env,
