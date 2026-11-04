@@ -121,8 +121,25 @@ export type ScreenRecordingCompletion = Readonly<{
   chunks?: readonly ScreenRecordingChunk[];
 }>;
 
+/** Result of stopping a recovered recorder while retaining its export material. */
+export type ScreenRecordingSettlement =
+  | Readonly<{ status: 'export' }>
+  | Readonly<{
+      status: 'retained';
+      reason:
+        | 'ownership-fence-lost'
+        | 'owner-unavailable'
+        | 'stop-unconfirmed'
+        | 'resource-missing';
+    }>;
+
 export type ScreenRecordingLiveHandle = LiveResourceHandle<ScreenRecordingCompletion> &
   Readonly<{
+    /**
+     * Hold the recording fence and serialize handle operations until this returns. This does not
+     * transfer or release the handle; forceCleanup and async disposal remain destructive.
+     */
+    settleForExport?(): Promise<ScreenRecordingSettlement>;
     inspect(): ScreenRecordingLiveSnapshot;
     appendGestureEvents(events: readonly RecordingGestureEvent[]): void;
     setTouchReferenceFrame(frame: GestureReferenceFrame | undefined): void;
