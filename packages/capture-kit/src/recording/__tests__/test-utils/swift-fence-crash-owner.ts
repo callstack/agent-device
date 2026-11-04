@@ -50,5 +50,5 @@ await new Promise<void>((resolve) => {
     }
   }, 10);
 });
-releaseSwiftAttempt(attempt);
+await releaseSwiftAttempt(attempt);
 await new Promise<void>(() => {});

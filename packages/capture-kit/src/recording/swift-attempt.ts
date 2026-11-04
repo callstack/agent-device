@@ -7,7 +7,11 @@ import {
   isProcessAlive,
   isProcessPid,
 } from '@agent-device/host-kit/process';
-import { publishFileSync } from '@agent-device/host-kit/file';
+import {
+  publishFileSync,
+  tryAcquireProcessLock,
+  type ProcessLockAcquisition,
+} from '@agent-device/host-kit/file';
 import { withRestrictedCommandEnvironment } from '@agent-device/host-kit/command';
 import {
   AppError,
@@ -23,10 +27,12 @@ const MAX_BATCHES = 8;
 const MAX_SWEEP_ROUNDS = 4;
 const active = new Set<string>();
 const closing = new Map<string, SwiftAttempt>();
+const releasing = new Map<string, Promise<void>>();
 const running = new Map<string, Promise<void>>();
 const queued = new Map<string, Set<string>>();
 const publicationRecovery = new Map<string, Promise<void>>();
-const reclaiming = new Map<string, Promise<void>>();
+const reclaiming = new Map<string, Promise<'fenced' | 'pending'>>();
+let currentIdentity: ReturnType<typeof readCurrentOwnerIdentity> | undefined;
 
 type AttemptKind = 'compiler' | 'overlay' | 'validator';
 type AttemptRecord = {
@@ -75,7 +81,7 @@ export function createSwiftAttempt(env: NodeJS.ProcessEnv, kind: AttemptKind): S
   const record: AttemptRecord = {
     version: 2,
     kind,
-    owner: readCurrentOwnerIdentity(),
+    owner: currentProcessIdentity(),
     closed: false,
   };
   if (kind === 'compiler') {
@@ -243,14 +249,43 @@ async function unlinkMatchingPublication(
 }
 
 /** Seals this attempt's published pathname. Open descendants can still hold unlinked inodes. */
-export function releaseSwiftAttempt(attempt: SwiftAttempt): void {
+export function releaseSwiftAttempt(attempt: SwiftAttempt): Promise<void> {
+  const current = releasing.get(attempt.directory);
+  if (current) return current;
   closing.set(attempt.directory, attempt);
-  writeRecord(attempt.directory, { ...attempt.record, closed: true });
-  attempt.record.closed = true;
-  seal(attempt.directory);
-  closing.delete(attempt.directory);
-  active.delete(attempt.directory);
-  scheduleSweep(path.dirname(path.dirname(attempt.directory)), attempt.directory);
+  const task = (async () => {
+    const lock = acquireAttemptLock(attempt.directory);
+    if (!lock)
+      throw new AppError('COMMAND_FAILED', 'Swift attempt is busy', {
+        reason: 'swift_attempt_busy',
+        attemptId: path.basename(attempt.directory),
+      });
+    try {
+      const record = await readRecord(attempt.directory);
+      if (
+        !record ||
+        record.kind !== attempt.record.kind ||
+        record.owner.pid !== attempt.record.owner.pid ||
+        record.owner.startTime !== attempt.record.owner.startTime
+      )
+        throw new AppError('COMMAND_FAILED', 'Swift attempt ownership is unverified', {
+          reason: 'swift_attempt_unverified',
+          attemptId: path.basename(attempt.directory),
+        });
+      lock.assertHeld();
+      if (!record.closed) writeRecord(attempt.directory, { ...record, closed: true });
+      seal(attempt.directory);
+    } finally {
+      await lock.release();
+    }
+    closing.delete(attempt.directory);
+    active.delete(attempt.directory);
+    scheduleSweep(path.dirname(path.dirname(attempt.directory)), attempt.directory);
+  })().finally(() => {
+    releasing.delete(attempt.directory);
+  });
+  releasing.set(attempt.directory, task);
+  return task;
 }
 
 /** Keeps operation failure primary when sealing this exact attempt also fails. */
@@ -269,7 +304,7 @@ export async function withSwiftAttemptRelease<T>(
     primary = error;
   }
   try {
-    releaseSwiftAttempt(attempt);
+    await releaseSwiftAttempt(attempt);
   } catch (error) {
     const evidence = {
       reason: 'swift_attempt_release_failed',
@@ -380,7 +415,7 @@ async function sweep(root: string, preferred?: string): Promise<void> {
         const retry = closing.get(candidate);
         if (retry) {
           try {
-            releaseSwiftAttempt(retry);
+            await releaseSwiftAttempt(retry);
           } catch {
             continue;
           }
@@ -405,26 +440,61 @@ async function sweep(root: string, preferred?: string): Promise<void> {
 export async function reclaimSwiftAttempt(
   env: NodeJS.ProcessEnv,
   attemptName: string,
-): Promise<void> {
-  if (!ATTEMPT_NAME.test(attemptName)) return;
+): Promise<'fenced' | 'pending'> {
+  if (!ATTEMPT_NAME.test(attemptName)) return 'pending';
   const root = getSwiftCacheRoot(env);
-  if (!(await safeAttemptsRoot(root))) return;
+  if (!(await safeAttemptsRoot(root))) return 'pending';
   const candidate = path.join(root, 'attempts', attemptName);
   const retry = closing.get(candidate);
-  if (retry) releaseSwiftAttempt(retry);
-  if (active.has(candidate)) return;
-  await reclaimOwnedCandidate(candidate);
+  if (retry) await releaseSwiftAttempt(retry);
+  if (active.has(candidate)) return 'pending';
+  return await reclaimOwnedCandidate(candidate);
 }
 
-function reclaimOwnedCandidate(directory: string): Promise<void> {
+function acquireAttemptLock(directory: string): ProcessLockAcquisition | undefined {
+  const owner = currentProcessIdentity();
+  const result = tryAcquireProcessLock({
+    lockDirPath: path.join(directory, 'transaction.lock'),
+    owner: { ...owner, acquiredAtMs: Date.now() },
+    description: `Swift attempt ${path.basename(directory)}`,
+  });
+  return result.status === 'acquired' ? result.acquisition : undefined;
+}
+
+function currentProcessIdentity(): ReturnType<typeof readCurrentOwnerIdentity> {
+  if (currentIdentity?.startTime) return currentIdentity;
+  currentIdentity = readCurrentOwnerIdentity();
+  return currentIdentity;
+}
+
+function reclaimOwnedCandidate(directory: string): Promise<'fenced' | 'pending'> {
   const current = reclaiming.get(directory);
   if (current) return current;
   const task = (async () => {
-    for (let batch = 0; batch < MAX_BATCHES; batch++) {
-      const result = await reclaimCandidate(directory);
-      if (result === 'fenced') await removePendingEntry(directory);
-      if (result !== 'more') break;
-      await new Promise<void>((resolve) => setImmediate(resolve));
+    let stat: fs.Stats;
+    try {
+      stat = await fs.promises.lstat(directory);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'pending' as const;
+      throw error;
+    }
+    if (!stat.isDirectory() || stat.isSymbolicLink()) return 'pending' as const;
+    const lock = acquireAttemptLock(directory);
+    if (!lock) return 'pending' as const;
+    try {
+      for (let batch = 0; batch < MAX_BATCHES; batch++) {
+        lock.assertHeld();
+        const result = await reclaimCandidate(directory);
+        if (result === 'fenced') {
+          lock.assertHeld();
+          return (await removePendingEntry(directory)) ? ('fenced' as const) : ('pending' as const);
+        }
+        if (result !== 'more') break;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+      return 'pending' as const;
+    } finally {
+      await lock.release();
     }
   })().finally(() => {
     reclaiming.delete(directory);
@@ -433,17 +503,25 @@ function reclaimOwnedCandidate(directory: string): Promise<void> {
   return task;
 }
 
-async function removePendingEntry(directory: string): Promise<void> {
+async function removePendingEntry(directory: string): Promise<boolean> {
   const root = path.dirname(path.dirname(directory));
   const pending = path.join(root, 'pending-attempts');
   const target = path.join(pending, path.basename(directory));
   try {
     const pendingStat = await fs.promises.lstat(pending);
-    if (!pendingStat.isDirectory() || pendingStat.isSymbolicLink()) return;
-    const stat = await fs.promises.lstat(target);
-    if (stat.isFile() && !stat.isSymbolicLink()) await fs.promises.unlink(target);
+    if (!pendingStat.isDirectory() || pendingStat.isSymbolicLink()) return false;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+  try {
+    const stat = await fs.promises.lstat(target);
+    if (!stat.isFile() || stat.isSymbolicLink()) return false;
+    await fs.promises.unlink(target);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return true;
+    throw error;
   }
 }
 
@@ -465,7 +543,11 @@ async function safeAttemptsRoot(root: string): Promise<boolean> {
 async function reclaimCandidate(directory: string): Promise<'retained' | 'more' | 'fenced'> {
   const record = await readRecord(directory);
   if (!record) return 'retained';
-  if (!record.closed && !(await parentGone(record.owner))) return 'retained';
+  if (!record.closed) {
+    if (!(await parentGone(record.owner))) return 'retained';
+    record.closed = true;
+    writeRecord(directory, record);
+  }
   const snapshot = path.join(directory, 'executable-snapshot');
   try {
     await fs.promises.lstat(snapshot);

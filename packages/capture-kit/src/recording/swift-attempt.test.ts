@@ -72,7 +72,7 @@ test.each(['root', 'nested'] as const)(
         pid,
         startTime,
       });
-      releaseSwiftAttempt(attempt);
+      await releaseSwiftAttempt(attempt);
       expect(fs.lstatSync(attempt.work).isFile()).toBe(true);
       await vi.waitFor(
         () => {
@@ -207,7 +207,7 @@ test('bounded exact retries reclaim a large attempt and refuse a symlinked attem
   try {
     await reclaimSwiftAttempt(env, attemptName);
     expect(fs.readdirSync(attempt.data)).toHaveLength(305);
-    releaseSwiftAttempt(attempt);
+    await releaseSwiftAttempt(attempt);
     for (let pass = 0; pass < 6; pass++) await reclaimSwiftAttempt(env, attemptName);
     expect(fs.lstatSync(attempt.data).isFile()).toBe(true);
     expect(fs.readFileSync(path.join(outside, 'sentinel'), 'utf8')).toBe('unchanged');
@@ -215,6 +215,7 @@ test('bounded exact retries reclaim a large attempt and refuse a symlinked attem
     fs.symlinkSync(outside, fake, 'dir');
     await reclaimSwiftAttempt(env, 'overlay-AAAAAA');
     expect(fs.lstatSync(fake).isSymbolicLink()).toBe(true);
+    expect(await reclaimSwiftAttempt(env, 'compiler-AAAAAA')).toBe('pending');
     expect(fs.readFileSync(path.join(outside, 'sentinel'), 'utf8')).toBe('unchanged');
     expect(fs.readdirSync(claims)).toEqual([]);
   } finally {
@@ -246,7 +247,7 @@ test('a failed live-owner closure can be retried exactly after the journal becom
     return rename(from, to);
   }) as typeof fs.renameSync);
   try {
-    expect(() => releaseSwiftAttempt(attempt)).toThrow(failure);
+    await expect(releaseSwiftAttempt(attempt)).rejects.toThrow(failure);
     expect(fs.lstatSync(attempt.work).isSymbolicLink()).toBe(true);
     expect(
       JSON.parse(fs.readFileSync(path.join(attempt.directory, 'pending.json'), 'utf8')).closed,
@@ -279,17 +280,26 @@ test('an absent legacy data directory can be fenced without adopting an unknown 
   };
   const missing = createSwiftAttempt(env, 'compiler');
   const unknown = createSwiftAttempt(env, 'compiler');
+  const unknownData = createSwiftAttempt(env, 'compiler');
   const unknownFence = path.join(unknown.directory, 'data-fence');
   fs.rmSync(missing.data, { recursive: true });
+  fs.rmSync(unknownData.data, { recursive: true });
+  fs.writeFileSync(unknownData.data, 'unknown data');
   fs.writeFileSync(unknownFence, 'unrecognized');
   try {
-    releaseSwiftAttempt(missing);
-    releaseSwiftAttempt(unknown);
+    await releaseSwiftAttempt(missing);
+    await releaseSwiftAttempt(unknown);
+    await releaseSwiftAttempt(unknownData);
     await reclaimSwiftAttempt(env, path.basename(missing.directory));
     await reclaimSwiftAttempt(env, path.basename(unknown.directory));
+    expect(await reclaimSwiftAttempt(env, path.basename(unknownData.directory))).toBe('pending');
     expect(fs.lstatSync(missing.data).isFile()).toBe(true);
     expect(fs.readFileSync(unknownFence, 'utf8')).toBe('unrecognized');
     expect(fs.lstatSync(unknown.data).isDirectory()).toBe(true);
+    expect(fs.readFileSync(unknownData.data, 'utf8')).toBe('unknown data');
+    expect(
+      fs.existsSync(path.join(cache, 'pending-attempts', path.basename(unknownData.directory))),
+    ).toBe(true);
     expect(
       JSON.parse(fs.readFileSync(path.join(unknown.directory, 'pending.json'), 'utf8'))
         .dataTombstone,
@@ -302,6 +312,118 @@ test('an absent legacy data directory can be fenced without adopting an unknown 
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('a live owner retry preserves a foreign fence while concurrent reclaimers serialize', async () => {
+  const root = mkdtempForTestSync('swift-attempt-transaction-');
+  const claims = path.join(root, 'claims');
+  const cache = path.join(root, 'cache');
+  const sentinel = path.join(root, 'sentinel');
+  fs.mkdirSync(claims);
+  fs.mkdirSync(sentinel);
+  fs.writeFileSync(path.join(sentinel, 'keep'), 'untouched');
+  const env = {
+    ...process.env,
+    AGENT_DEVICE_CLAIMS_DIR: claims,
+    AGENT_DEVICE_SWIFT_CACHE_DIR: cache,
+  };
+  const fixture = fileURLToPath(
+    new URL('./__tests__/test-utils/swift-attempt-transaction.ts', import.meta.url),
+  );
+  const children: Array<{
+    child: ReturnType<typeof spawn>;
+    exited: Promise<unknown>;
+    pid: number;
+    startTime: string;
+  }> = [];
+  const start = async (role: string, attempt?: string) => {
+    const child = spawn(
+      process.execPath,
+      ['--experimental-strip-types', fixture, root, role, ...(attempt ? [attempt] : [])],
+      { cwd: root, env, stdio: 'ignore' },
+    );
+    const exited = once(child, 'exit');
+    if (!child.pid) throw new Error('fixture did not start');
+    const startTime = (await readProcessIdentityFacts(child.pid)).startTime;
+    if (!startTime) throw new Error('missing fixture identity');
+    children.push({ child, exited, pid: child.pid, startTime });
+    console.log('attempt transaction process', {
+      root,
+      claims,
+      cache,
+      sentinel,
+      role,
+      pid: child.pid,
+      startTime,
+    });
+    return { exited };
+  };
+  const waitFile = async (name: string) =>
+    await vi.waitFor(() => expect(fs.existsSync(path.join(root, name))).toBe(true), {
+      timeout: 5000,
+    });
+  const signalFile = (name: string) => fs.writeFileSync(path.join(root, name), 'go');
+  try {
+    const owner = await start('owner');
+    await waitFile('owner-ready');
+    await waitFile('sweep-closed');
+    const { attempt, data } = JSON.parse(
+      fs.readFileSync(path.join(root, 'owner-ready'), 'utf8'),
+    ) as { attempt: string; data: string };
+    const directory = path.join(cache, 'attempts', attempt);
+    console.log('attempt transaction roots', { root, claims, cache, sentinel, attempt, data });
+    signalFile('owner-go');
+    await waitFile('owner-failed');
+    expect(JSON.parse(fs.readFileSync(path.join(directory, 'pending.json'), 'utf8')).closed).toBe(
+      true,
+    );
+    expect(fs.lstatSync(path.join(directory, 'alias', 'work')).isSymbolicLink()).toBe(true);
+    const first = await start('first', attempt);
+    await waitFile('first-ready');
+    signalFile('first-start');
+    await waitFile('first-holding');
+    const second = await start('second', attempt);
+    await waitFile('second-ready');
+    signalFile('second-start');
+    await waitFile('second-result');
+    expect(JSON.parse(fs.readFileSync(path.join(root, 'second-result'), 'utf8'))).toBe('pending');
+    signalFile('first-go');
+    await first.exited;
+    expect(JSON.parse(fs.readFileSync(path.join(root, 'first-result'), 'utf8'))).toBe('fenced');
+    const before = JSON.parse(fs.readFileSync(path.join(directory, 'pending.json'), 'utf8'));
+    const stat = fs.lstatSync(data, { bigint: true });
+    expect(before.dataTombstone).toEqual({ device: String(stat.dev), inode: String(stat.ino) });
+    expect(fs.existsSync(path.join(cache, 'pending-attempts', attempt))).toBe(false);
+    signalFile('second-retry');
+    await second.exited;
+    expect(JSON.parse(fs.readFileSync(path.join(root, 'second-retried'), 'utf8'))).toBe('fenced');
+    signalFile('owner-retry');
+    await waitFile('owner-retried');
+    const after = JSON.parse(fs.readFileSync(path.join(directory, 'pending.json'), 'utf8'));
+    expect(after.dataTombstone).toEqual(before.dataTombstone);
+    expect(fs.existsSync(path.join(cache, 'pending-attempts', attempt))).toBe(false);
+    expect(fs.readFileSync(path.join(sentinel, 'keep'), 'utf8')).toBe('untouched');
+    expect(fs.readdirSync(claims)).toEqual([]);
+    signalFile('owner-done');
+    await owner.exited;
+  } finally {
+    for (const name of [
+      'owner-go',
+      'owner-retry',
+      'owner-done',
+      'first-start',
+      'first-go',
+      'second-start',
+      'second-retry',
+    ])
+      signalFile(name);
+    for (const { exited, pid, startTime } of children) {
+      await exited;
+      const facts = await readProcessIdentityFacts(pid);
+      expect(facts.startTime !== startTime || facts.zombie).toBe(true);
+    }
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}, 20000);
 
 test.each(['rmdir', 'rmdir-recreate', 'create', 'journal', 'install'] as const)(
   'a crashed fence owner leaves %s recoverable or explicitly pending',
@@ -470,7 +592,7 @@ test('a bounded owner sweep progresses past earlier crash records', async () => 
     }
     expect(fs.readdirSync(claims)).toEqual([]);
   } finally {
-    if (successor) releaseSwiftAttempt(successor);
+    if (successor) await releaseSwiftAttempt(successor);
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
     await exited;
     if (pid && startTime) {

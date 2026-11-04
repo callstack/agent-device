@@ -609,3 +609,32 @@ test('close retains cleanup failures from successive attempts after a successful
   expect(failure).toBeInstanceOf(AggregateError);
   expect((failure as AggregateError).errors).toEqual([first, second]);
 });
+
+test('preparation bounds exact cleanup retries and advances past earlier unresolved attempts', async () => {
+  const attempts = await import('./swift-attempt.ts');
+  const reclaim = vi.spyOn(attempts, 'reclaimSwiftAttempt').mockResolvedValue('pending');
+  const ids = Array.from(
+    { length: 10 },
+    (_, index) => `compiler-${String(index).padStart(6, '0')}`,
+  );
+  const failure = new AppError('COMMAND_FAILED', 'cleanup', {
+    reason: 'swift_cache_cleanup_failed',
+    cleanupFailures: ids.map((attemptId) => ({
+      reason: 'swift_cache_temp_removal_failed',
+      attemptId,
+    })),
+  });
+  vi.mocked(compileSwiftSourceText).mockRejectedValueOnce(failure);
+  const preparation = createVideoValidatorPreparation(createTestHost());
+  try {
+    await expect(preparation.prepare()).rejects.toBe(failure);
+    await preparation.prepare();
+    expect(reclaim).toHaveBeenCalledTimes(8);
+    await preparation.prepare();
+    expect(reclaim).toHaveBeenCalledTimes(16);
+    expect(new Set(reclaim.mock.calls.map(([, id]) => id))).toEqual(new Set(ids));
+    await expect(preparation.close()).rejects.toBeInstanceOf(AggregateError);
+  } finally {
+    reclaim.mockRestore();
+  }
+});

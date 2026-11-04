@@ -6,7 +6,12 @@ import { compileSwiftSourceText, readCompiledSwiftSourceText } from './swift-cac
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 import { hasPlayableWebmStructure } from './video-webm.ts';
-import { createSwiftAttempt, withSwiftAttempt, withSwiftAttemptRelease } from './swift-attempt.ts';
+import {
+  createSwiftAttempt,
+  reclaimSwiftAttempt,
+  withSwiftAttempt,
+  withSwiftAttemptRelease,
+} from './swift-attempt.ts';
 
 // Duration zero must pass: a recording of a fully static screen legitimately contains a single
 // frame (screenrecord only encodes on screen updates), and AVFoundation reports its duration as 0.
@@ -37,6 +42,7 @@ exit(exitCode)
 `.trim();
 
 const VALIDATOR_RUN_TIMEOUT_MS = 10_000;
+const MAX_CLEANUP_RETRIES = 8;
 
 /** Host-selected validation authority; validation cannot compile. */
 export type PreparedVideoValidator =
@@ -77,39 +83,86 @@ type VideoValidatorCompile = {
 export function createVideoValidatorPreparation(host: HostEnvironment): VideoValidatorPreparation {
   let compile: VideoValidatorCompile | undefined;
   let closed = false;
-  const cleanupFailures: AppError[] = [];
+  const cleanupFailures: Array<{ error: AppError; attemptId?: string }> = [];
+  let reconciling: Promise<void> | undefined;
+  let cleanupCursor = 0;
+  const reconcile = (): Promise<void> => {
+    if (reconciling) return reconciling;
+    reconciling = (async () => {
+      const count = Math.min(cleanupFailures.length, MAX_CLEANUP_RETRIES);
+      for (let index = 0; index < count && cleanupFailures.length > 0; index++) {
+        if (cleanupCursor >= cleanupFailures.length) cleanupCursor = 0;
+        const failure = cleanupFailures[cleanupCursor]!;
+        let settled = false;
+        if (failure.attemptId) {
+          try {
+            settled = (await reclaimSwiftAttempt(host.env, failure.attemptId)) === 'fenced';
+          } catch {}
+        }
+        if (settled) cleanupFailures.splice(cleanupCursor, 1);
+        else cleanupCursor++;
+      }
+    })().finally(() => {
+      reconciling = undefined;
+    });
+    return reconciling;
+  };
+  const retainCleanup = (error: AppError): void => {
+    const evidence = error.details?.cleanupFailures;
+    if (!Array.isArray(evidence) || evidence.length === 0) {
+      cleanupFailures.push({ error });
+      return;
+    }
+    for (const entry of evidence) {
+      const item =
+        typeof entry === 'object' && entry !== null
+          ? (entry as Record<string, unknown>)
+          : undefined;
+      const attemptId =
+        item?.reason === 'swift_cache_temp_removal_failed' && typeof item.attemptId === 'string'
+          ? item.attemptId
+          : undefined;
+      if (attemptId) cleanupCursor = cleanupFailures.length;
+      cleanupFailures.push({
+        error: new AppError(
+          'COMMAND_FAILED',
+          'Swift cache cleanup failed',
+          { reason: 'swift_cache_cleanup_failed', cleanupFailures: [entry] },
+          error,
+        ),
+        ...(attemptId ? { attemptId } : {}),
+      });
+    }
+  };
   return Object.freeze({
     prepare: () => {
       if (closed) return Promise.reject(videoValidatorPreparationClosed());
       if (process.platform !== 'darwin') return Promise.resolve(containerVideoValidator);
-      if (!compile || compile.failed) {
-        const cancel = new AbortController();
-        const next: VideoValidatorCompile = {
-          cancel,
-          failed: false,
-          promise: compileVideoValidator(host, cancel.signal),
-        };
-        compile = next;
-        void next.promise.catch((error: unknown) => {
-          next.failed = true;
-          if (error instanceof AppError && error.details?.reason === 'swift_cache_cleanup_failed') {
-            cleanupFailures.push(error);
-          } else if (error instanceof AppError && Array.isArray(error.details?.cleanupFailures)) {
-            cleanupFailures.push(
-              new AppError(
-                'COMMAND_FAILED',
-                'Swift cache cleanup failed',
-                {
-                  reason: 'swift_cache_cleanup_failed',
-                  cleanupFailures: error.details.cleanupFailures,
-                },
-                error,
-              ),
-            );
-          }
-        });
+      if (compile && !compile.failed) {
+        const current = compile;
+        return cleanupFailures.length ? reconcile().then(() => current.promise) : current.promise;
       }
-      return compile.promise;
+      const cancel = new AbortController();
+      const next: VideoValidatorCompile = {
+        cancel,
+        failed: false,
+        promise: (async () => {
+          await reconcile();
+          if (cancel.signal.aborted) throw createRequestCanceledError();
+          return await compileVideoValidator(host, cancel.signal);
+        })(),
+      };
+      compile = next;
+      void next.promise.catch((error: unknown) => {
+        next.failed = true;
+        if (
+          error instanceof AppError &&
+          (error.details?.reason === 'swift_cache_cleanup_failed' ||
+            Array.isArray(error.details?.cleanupFailures))
+        )
+          retainCleanup(error);
+      });
+      return next.promise;
     },
     read: () => {
       if (process.platform !== 'darwin') return Promise.resolve(containerVideoValidator);
@@ -134,10 +187,11 @@ export function createVideoValidatorPreparation(host: HostEnvironment): VideoVal
       // temporary output and gives the cache lock back before this settles.
       pending.cancel.abort();
       await pending.promise.catch(() => undefined);
-      if (cleanupFailures.length === 1) throw cleanupFailures[0];
+      await reconcile();
+      if (cleanupFailures.length === 1) throw cleanupFailures[0]!.error;
       if (cleanupFailures.length > 1) {
         throw new AggregateError(
-          cleanupFailures,
+          cleanupFailures.map((failure) => failure.error),
           'Video validator cleanup failed on multiple attempts',
         );
       }

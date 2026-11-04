@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
+import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { createTestHost } from '../host-environment.fixtures.ts';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import { createVideoValidatorPreparation } from './video.ts';
@@ -23,9 +24,18 @@ async function runIsolationScenario(
 ): Promise<void> {
   Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
   const cacheDir = mkdtempForTestSync('video-cache-isolation-');
+  const claims = path.join(cacheDir, 'claims');
+  const sentinel = path.join(cacheDir, 'sentinel');
+  fs.mkdirSync(claims);
+  fs.mkdirSync(sentinel);
+  fs.writeFileSync(path.join(sentinel, 'keep'), 'untouched');
   const host = {
     ...createTestHost(),
-    env: { ...process.env, AGENT_DEVICE_SWIFT_CACHE_DIR: cacheDir },
+    env: {
+      ...process.env,
+      AGENT_DEVICE_CLAIMS_DIR: claims,
+      AGENT_DEVICE_SWIFT_CACHE_DIR: cacheDir,
+    },
   };
   const first = createVideoValidatorPreparation(host);
   const second = createVideoValidatorPreparation(host);
@@ -85,7 +95,7 @@ async function runIsolationScenario(
     }
     await first.close();
     expect(signals[0]!.aborted).toBe(true);
-    await expect(firstResult).rejects.toThrow('compiler cancelled');
+    await expect(firstResult).rejects.toSatisfy(isRequestCanceledError);
     await expect.poll(() => signals.length, { timeout: 5_000 }).toBe(2);
     expect(signals[1]!.aborted).toBe(false);
     finishSecond();
@@ -96,6 +106,8 @@ async function runIsolationScenario(
     expect(await warm.prepare()).toEqual(result);
     await warm.close();
     expect(signals).toHaveLength(2);
+    expect(fs.readdirSync(claims)).toEqual([]);
+    expect(fs.readFileSync(path.join(sentinel, 'keep'), 'utf8')).toBe('untouched');
     expect(
       fs.readdirSync(bin).some((entry) => entry.endsWith('.lock') || entry.startsWith('.')),
     ).toBe(false);

@@ -12,8 +12,13 @@ When you snapshot a compiled executable, use its recorded parent-owned inode and
 When you stop a recording, do not cancel the host's shared validator preparation.
 
 When an attempt ends, seal its work alias before you reclaim its private data.
+When you close or reclaim an attempt, hold its process lock through the journal and pending-entry updates.
+When you retry a close, read the current journal under that lock before you write it.
 When a live owner's close journal or alias seal fails, retain that owner's exact retry authority.
 When cancellation and cleanup fail together, keep the typed cancellation and its cleanup evidence.
+When preparation retries or closes, retry each retained attempt with bounded cache-owner work.
+When an exact attempt is closed, fenced, and removed from the pending queue, clear only its cleanup failure.
+When another cleanup failure lacks that proof, retain that failure.
 When private data is empty, create a fence candidate inside that data and record its identity before you link the candidate outside the data directory.
 When the recorded fence is linked outside the data directory, remove the data directory and link the recorded fence at its path.
 When a crash leaves an unrecorded candidate inside private data, remove it through the bounded private-data cleanup before you retry.

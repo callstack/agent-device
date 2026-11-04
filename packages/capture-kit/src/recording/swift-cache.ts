@@ -263,7 +263,7 @@ async function ensureSwiftExecutable(params: {
         );
       } finally {
         try {
-          releaseSwiftAttempt(attempt);
+          await releaseSwiftAttempt(attempt);
         } catch (error) {
           cleanupFailures.push(
             new AppError(
@@ -321,7 +321,12 @@ async function ensureSwiftExecutable(params: {
     throw new AppError(
       'COMMAND_FAILED',
       'Swift cache cleanup failed',
-      { reason: 'swift_cache_cleanup_failed' },
+      {
+        reason: 'swift_cache_cleanup_failed',
+        cleanupFailures: cleanupFailures.map((failure) =>
+          failure instanceof AppError ? failure.details : { reason: 'swift_cache_cleanup_failed' },
+        ),
+      },
       new AggregateError(taskFailed ? [taskFailure, ...cleanupFailures] : cleanupFailures),
     );
   }
