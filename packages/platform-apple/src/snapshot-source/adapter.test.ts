@@ -968,7 +968,24 @@ test('the Simulator AX source publishes absence only from a complete tree with n
       truncated: false,
       keyboard: notObserved,
     },
-    // A minimized keyboard leaves only its assistant bar.
+    // A keyboard window that exposes no keys is not proof that the keyboard is gone.
+    {
+      name: 'a keyboard window without keys',
+      windows: [guestNode('UIRemoteKeyboardWindow', APP_FRAME)],
+      truncated: false,
+      keyboard: notObserved,
+    },
+    {
+      name: 'a keyboard window that holds only a placeholder',
+      windows: [
+        guestNode('UIRemoteKeyboardWindow', APP_FRAME, [
+          guestNode('_UIRemoteKeyboardPlaceholderView', { X: 0, Y: 509, Width: 390, Height: 335 }),
+        ]),
+      ],
+      truncated: false,
+      keyboard: notObserved,
+    },
+    // A minimized or hardware keyboard leaves only its assistant bar.
     {
       name: 'an assistant bar without keys',
       windows: [

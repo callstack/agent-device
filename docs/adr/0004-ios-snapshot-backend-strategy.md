@@ -787,8 +787,9 @@ The bridge sets `truncated` on every cut that it makes.
 Decision. A bridge acquisition publishes a keyboard fact (`observeCompleteTreeKeyboard`) for both intents.
 A docked keyboard in the tree publishes the docked-tree band (`derived`, `treeBound`).
 A complete tree (`truncated: false`) with no keyboard trace publishes `absent` with `treeBound`.
-A keyboard trace is a `Keyboard` or `Key` node, or a node with an iOS keyboard role, which includes `_UIRemoteKeyboardPlaceholderView` and `TUISystemInputAssistantView`.
-A truncated tree, or a complete tree that holds only a trace, publishes no absence.
+A keyboard trace is the keyboard window (`UIRemoteKeyboardWindow`), a `Keyboard` or `Key` node, or a node with an iOS keyboard role, which includes `_UIRemoteKeyboardPlaceholderView` and `TUISystemInputAssistantView`.
+A truncated tree, or a complete tree that holds only a trace, publishes `unmeasurable`.
+Thus, a keyboard window that exposes no keys, for example a hardware keyboard that shows only the assistant bar, never publishes absence.
 
 Reason. Post-gesture stabilization counts a keyboard change as fresh only between two tree-bound facts.
 Without a bridge fact, a drag that only dismissed the keyboard waited for the distrust cap (about 3.5 s) on the default Simulator route.
