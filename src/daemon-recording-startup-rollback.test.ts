@@ -58,6 +58,7 @@ test.each([false, true])(
       loadHost: async () => operationHost,
     });
     let signal!: AbortSignal;
+    let compilerWork!: string;
     let release!: () => void;
     let started!: () => void;
     const compilerStarted = new Promise<void>((resolve) => {
@@ -72,6 +73,7 @@ test.each([false, true])(
     });
     vi.mocked(runCmd).mockImplementation(async (_command, _args, options) => {
       signal = options!.signal!;
+      compilerWork = String(options!.cwd);
       started();
       await compilerSettlement;
       throw new Error('compiler stopped');
@@ -86,7 +88,11 @@ test.each([false, true])(
     const remove = vi.spyOn(fs, 'rmSync');
     if (failCleanup)
       remove.mockImplementation((target, options) => {
-        if (String(target).startsWith(path.join(cache, 'bin', '.')))
+        if (
+          compilerWork &&
+          path.dirname(String(target)) === path.dirname(compilerWork) &&
+          path.basename(String(target)).startsWith('.sealed-')
+        )
           throw new Error('password=cleanupsecret');
         return originalRemove(target, options);
       });
@@ -112,7 +118,10 @@ test.each([false, true])(
       expect(settled).toBe(false);
       const bin = path.join(cache, 'bin');
       expect(fs.readdirSync(bin).some((entry) => entry.endsWith('.lock'))).toBe(true);
-      expect(fs.readdirSync(bin).some((entry) => entry.startsWith('.'))).toBe(true);
+      const attemptDirectory = path.dirname(path.dirname(compilerWork));
+      expect(path.dirname(attemptDirectory)).toBe(path.join(cache, 'attempts'));
+      expect(path.basename(attemptDirectory)).toMatch(/^compiler-/);
+      expect(fs.lstatSync(compilerWork).isSymbolicLink()).toBe(true);
       release();
       const error = await result;
       if (failCleanup) {
@@ -130,7 +139,11 @@ test.each([false, true])(
                     details: {
                       reason: 'swift_cache_cleanup_failed',
                       shutdownFailures: [
-                        { message: 'compiler stopped' },
+                        {
+                          message: 'request canceled',
+                          details: { reason: 'request_canceled' },
+                          cause: { message: 'compiler stopped' },
+                        },
                         {
                           details: { reason: 'swift_cache_temp_removal_failed' },
                           cause: { message: 'password=[REDACTED]' },
@@ -146,10 +159,12 @@ test.each([false, true])(
         const normalized = JSON.stringify(normalizeError(error));
         expect(normalized).not.toContain('cleanupsecret');
         expect(normalized).not.toContain('primarysecret');
-        expect(fs.readdirSync(bin).some((entry) => entry.startsWith('.'))).toBe(true);
+        expect(
+          fs.existsSync(path.join(cache, 'pending-attempts', path.basename(attemptDirectory))),
+        ).toBe(true);
       } else {
         expect(error).toBe(bindFailure);
-        expect(fs.readdirSync(bin).some((entry) => entry.startsWith('.'))).toBe(false);
+        if (fs.existsSync(compilerWork)) expect(fs.lstatSync(compilerWork).isFile()).toBe(true);
       }
       expect(fs.readdirSync(bin).some((entry) => entry.endsWith('.lock'))).toBe(false);
       if (!failCleanup) await operationHost.screenRecording.finalize.prepare({ container: 'mp4' });

@@ -153,26 +153,27 @@ function makeIosSimulatorRecordingSession(
   );
   session.appBundleId = 'com.example.app';
   const outPath = path.join(mkdtempForTestSync('test'), name + '.mp4');
-  const finish = vi.fn(async () =>
-    options.recorderExitCode
-      ? ({
-          status: 'cleanup-pending',
-          reason: 'transport-failed',
-          message: 'failed to stop recording',
-        } as const)
-      : ({
-          status: 'completed',
-          result: {
-            backend: 'simctl recordVideo',
-            outPath,
-            startedAt: Date.now() - 5_000,
-            completedAt: Date.now(),
-            scope: 'app',
-            showTouches: false,
-            recordOnlySession: false,
-          },
-        } as const),
-  );
+  const finish = vi.fn(async () => {
+    if (options.recorderExitCode)
+      return {
+        status: 'cleanup-pending',
+        reason: 'transport-failed',
+        message: 'failed to stop recording',
+      } as const;
+    fs.writeFileSync(outPath, 'recorded video');
+    return {
+      status: 'completed',
+      result: {
+        backend: 'simctl recordVideo',
+        outPath,
+        startedAt: Date.now() - 5_000,
+        completedAt: Date.now(),
+        scope: 'app',
+        showTouches: false,
+        recordOnlySession: false,
+      },
+    } as const;
+  });
   const forceCleanup = vi.fn(async () =>
     options.cleanupConfirmed === false
       ? ({
