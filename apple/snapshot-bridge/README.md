@@ -41,6 +41,14 @@ Objective-C shim for those operations, adding another native boundary. Keeping
 the guest in Objective-C also allows direct lazy compilation with `clang`
 without an Xcode project or Swift module for private headers.
 
+## Startup
+
+The helper initializes its framework runtime before it binds its listener, so a
+connectable socket means the runtime is ready. Readiness does not create a
+target root or change automation settings, and it does not prove that an app's
+accessibility server can answer a capture. The host bounds startup and shares
+one readiness allowance between binary preparation and helper startup.
+
 ## Foreground ownership
 
 The reader checks AXRuntime's primary foreground application before and after
