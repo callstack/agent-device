@@ -9,9 +9,13 @@ extension RunnerTests {
     attributes: .concurrent
   )
 
-  /// The largest envelope the transport carries when a request names no smaller bound. It matches the
-  /// guest bridge's frame bound, so a tree too large for one transport is too large for the other.
-  static let snapshotBridgeMaximumResponseBytes = 16 * 1024 * 1024
+  /// The largest envelope the transport carries when a request names no smaller bound. It is the
+  /// reader's own frame bound, so a tree too large for one transport is too large for the other.
+  static let snapshotBridgeMaximumResponseBytes = Int(RunnerSnapshotBridgeMaximumFrameBytes())
+
+  /// The guest bridge counts its 4-byte length prefix against `maxResponseBytes`, and so does the host's
+  /// frame decoder, so an envelope here is held to the same bound.
+  static let snapshotBridgeFrameHeaderBytes = MemoryLayout<UInt32>.size
 
   /// Serves one `snapshotBridge` command. The answer is always a bridge envelope, including the reader's
   /// own refusals; only a request the runner cannot read at all is a runner error.
@@ -54,14 +58,21 @@ extension RunnerTests {
       "snapshotTree": true,
       "automationMode": true,
     ]
-    request["generation"] = payload.generation
-    request["expectedPid"] = payload.expectedPid
-    request["expectedProcessStartTime"] = payload.expectedProcessStartTime
-    request["maxDepth"] = payload.maxDepth
-    request["maxNodes"] = payload.maxNodes
-    request["maxDurationMs"] = payload.maxDurationMs
-    request["maxResponseBytes"] = payload.maxResponseBytes
-    request["nativeLevelsHint"] = payload.nativeLevelsHint
+    // The reader tells an absent field from a present one, so a field the host did not send stays out.
+    if let generation = payload.generation { request["generation"] = generation }
+    if let expectedPid = payload.expectedPid { request["expectedPid"] = expectedPid }
+    if let expectedProcessStartTime = payload.expectedProcessStartTime {
+      request["expectedProcessStartTime"] = expectedProcessStartTime
+    }
+    if let maxDepth = payload.maxDepth { request["maxDepth"] = maxDepth }
+    if let maxNodes = payload.maxNodes { request["maxNodes"] = maxNodes }
+    if let maxDurationMs = payload.maxDurationMs { request["maxDurationMs"] = maxDurationMs }
+    if let maxResponseBytes = payload.maxResponseBytes {
+      request["maxResponseBytes"] = maxResponseBytes
+    }
+    if let nativeLevelsHint = payload.nativeLevelsHint {
+      request["nativeLevelsHint"] = nativeLevelsHint
+    }
     if let executables = payload.surfaceHostExecutables {
       // The runner runs inside the Simulator it reads, so it names that Simulator itself.
       request["surfaceHostExecutables"] = executables
@@ -80,7 +91,8 @@ extension RunnerTests {
   ) -> String {
     let data = JSONSerialization.isValidJSONObject(envelope)
       ? try? JSONSerialization.data(withJSONObject: envelope) : nil
-    if let data, data.count <= maxBytes, let text = String(data: data, encoding: .utf8) {
+    if let data, data.count + snapshotBridgeFrameHeaderBytes <= maxBytes,
+      let text = String(data: data, encoding: .utf8) {
       return text
     }
     var refusal: [String: Any] = data == nil

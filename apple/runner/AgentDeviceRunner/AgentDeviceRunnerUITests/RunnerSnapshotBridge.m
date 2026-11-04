@@ -232,6 +232,11 @@ static NSDictionary *RunnerSnapshotBridgeRead(NSDictionary *request,
   return answer.value;
 }
 
+uint32_t RunnerSnapshotBridgeMaximumFrameBytes(void)
+{
+  return kMaximumFrameBytes;
+}
+
 NSDictionary *RunnerSnapshotBridgeHandle(NSString *verb, NSString *bundleId, NSDictionary *request)
 {
   if ([verb isEqualToString:@"target"]) {
@@ -249,6 +254,11 @@ NSDictionary *RunnerSnapshotBridgeHandle(NSString *verb, NSString *bundleId, NSD
 }
 
 #else
+
+uint32_t RunnerSnapshotBridgeMaximumFrameBytes(void)
+{
+  return 0;
+}
 
 NSDictionary *RunnerSnapshotBridgeHandle(NSString *verb, NSString *bundleId, NSDictionary *request)
 {

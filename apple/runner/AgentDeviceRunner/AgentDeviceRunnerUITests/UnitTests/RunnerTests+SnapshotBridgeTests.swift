@@ -17,6 +17,60 @@ extension RunnerTests {
     XCTAssertEqual(response.error?.code, "INVALID_ARGS")
   }
 
+  private func firstReadPayload() throws -> SnapshotBridgeCommandPayload {
+    try JSONDecoder().decode(
+      SnapshotBridgeCommandPayload.self,
+      from: Data(
+        #"{"verb":"describe","requestId":"r","generation":"1:2.000001","expectedPid":9,"expectedProcessStartTime":"2.000001","maxDepth":8,"maxNodes":500,"maxDurationMs":2500,"maxResponseBytes":4096}"#
+          .utf8)
+    )
+  }
+
+  func testFirstReadOfAGenerationSendsNoKeyForAnAbsentHint() throws {
+    let request = Self.snapshotBridgeReaderRequest(try firstReadPayload()) as NSDictionary
+    XCTAssertNil(request["nativeLevelsHint"])
+    XCTAssertFalse(request.allKeys.contains { ($0 as? String) == "nativeLevelsHint" })
+    XCTAssertFalse(request.allValues.contains { $0 is NSNull })
+    XCTAssertEqual(request["generation"] as? String, "1:2.000001")
+    XCTAssertEqual(request["maxResponseBytes"] as? Int, 4096)
+  }
+
+  func testBridgedRequestKeepsAHintTheHostSent() throws {
+    let payload = try JSONDecoder().decode(
+      SnapshotBridgeCommandPayload.self,
+      from: Data(
+        #"{"verb":"describe","requestId":"r","generation":"g","nativeLevelsHint":3}"#.utf8)
+    )
+    let request = Self.snapshotBridgeReaderRequest(payload) as NSDictionary
+    XCTAssertEqual(request["nativeLevelsHint"] as? Int, 3)
+    XCTAssertNil(request["maxDepth"])
+  }
+
+  func testReaderDoesNotRefuseTheBoundsOfAFirstRead() throws {
+    var request = Self.snapshotBridgeReaderRequest(try firstReadPayload())
+    request["pid"] = 1
+    request["maxDurationMs"] = 500
+    let refusal = SnapshotBridgeHandleRequest(request)
+    XCTAssertNotEqual(refusal["error_code"] as? String, "bounds-invalid")
+    XCTAssertNotEqual(refusal["error_kind"] as? String, "bad_request")
+  }
+
+  func testEnvelopeAtTheBoundIncludingItsFrameHeaderIsServed() throws {
+    let envelope: [AnyHashable: Any] = ["requestId": "r", "ok": true, "pid": 7]
+    let size = try JSONSerialization.data(withJSONObject: envelope).count
+    let header = Self.snapshotBridgeFrameHeaderBytes
+    let served = Self.serializedSnapshotBridgeEnvelope(
+      envelope, requestId: "r", maxBytes: size + header)
+    XCTAssertEqual(
+      try JSONSerialization.jsonObject(with: Data(served.utf8)) as? NSDictionary,
+      envelope as NSDictionary)
+    let refused = Self.serializedSnapshotBridgeEnvelope(
+      envelope, requestId: "r", maxBytes: size + header - 1)
+    let refusal = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: Data(refused.utf8)) as? [String: Any])
+    XCTAssertEqual(refusal["error_code"] as? String, "response-too-large")
+  }
+
   func testUnserializableSnapshotBridgeEnvelopeIsRefusedAsNotJsonSafe() throws {
     let text = Self.serializedSnapshotBridgeEnvelope(
       ["requestId": "r", "ok": true, "pid": 7, "tree": Date()],

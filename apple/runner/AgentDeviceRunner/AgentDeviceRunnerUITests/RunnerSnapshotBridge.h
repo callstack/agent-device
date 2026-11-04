@@ -13,4 +13,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// bundle as `stale_target`, and it refuses a capture whose process changed while it was read.
 NSDictionary *RunnerSnapshotBridgeHandle(NSString *verb, NSString *bundleId, NSDictionary *request);
 
+/// The largest response the reader's frame carries: the bound a request that names none falls back to.
+uint32_t RunnerSnapshotBridgeMaximumFrameBytes(void);
+
 NS_ASSUME_NONNULL_END
