@@ -278,9 +278,9 @@ function attachPerfCapture(
 }
 
 test('daemon session teardown closes an open web session immediately, not on agent-browser idle timeout', async () => {
-  const sessionName = 'web-active-session-teardown-session';
+  const sessionName = 'web-active-teardown';
   const sessionStore = makeSessionStore();
-  const device = webSessionDevice(WEB_DESKTOP_DEVICE, { name: 'web-one' });
+  const device = webSessionDevice(WEB_DESKTOP_DEVICE, { name: sessionName });
   const session = makeSession(sessionName, device);
   // Teardown always runs while the session it is tearing down is still in the store (session
   // deletion happens after), which is what keeps the provider-startup orphan sweep from treating
