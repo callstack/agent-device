@@ -39,6 +39,7 @@ function completedProgress(learned: JsonObject): DurableCaptureProgress {
 test('writes terminal coordinates before removing a fenced Android artifact', async () => {
   const calls: string[] = [];
   const host = recordingHost({
+    initialManifest: evidenceFor([REMOTE_CHUNK]),
     writeManifest: async ({ contents }: { contents: string }) => {
       calls.push(JSON.parse(contents).completion ? 'completed' : 'active');
     },
@@ -65,6 +66,7 @@ test('writes terminal coordinates before removing a fenced Android artifact', as
 test('serves the export from a copy of the collected chunk and retires the copy', async () => {
   const files = recordingFileStore();
   const host = recordingHost({
+    initialManifest: evidenceFor([REMOTE_CHUNK]),
     files,
     finalize: {
       complete: async ({ outputPath }: { outputPath: string }) => {
@@ -95,6 +97,7 @@ test('a stop that already collected serves the export without signalling again',
   const calls: string[] = [];
   const files = recordingFileStore({ '/tmp/capture.collected.mp4': 'recorded' });
   const host = recordingHost({
+    initialManifest: evidenceFor([REMOTE_CHUNK]),
     files,
     stop: async () => {
       calls.push('stop');
@@ -131,6 +134,7 @@ test('a stop that already collected serves the export without signalling again',
 test('a chunked export the finalizer refuses leaves the caller paths empty and the pulled set for the retry', async () => {
   const files = recordingFileStore();
   const host = recordingHost({
+    initialManifest: evidenceFor([REMOTE_CHUNK]),
     files,
     finalize: {
       complete: async () => {
@@ -159,6 +163,7 @@ test('a chunked export the finalizer refuses leaves the caller paths empty and t
 
 test('answers with the disposition the device shows after disposal', async () => {
   const host = recordingHost({
+    initialManifest: evidenceFor([REMOTE_CHUNK]),
     // The device agrees to every removal and then keeps listing the file, which is the case the
     // disposition exists for: the caller is told the chunks are still owed a removal.
     exists: async () => true,
@@ -182,6 +187,7 @@ test('answers with the disposition the device shows after disposal', async () =>
 
 test('discloses the finalizer, the platform limit, and the split in one answer', async () => {
   const host = recordingHost({
+    initialManifest: evidenceFor([REMOTE_CHUNK]),
     finalize: {
       complete: async () => ({ warning: 'recording was exported without touch overlays' }),
     },
@@ -215,6 +221,7 @@ test('measures a pulled MP4 against the window the host bracketed around the rec
   const directory = mkdtempForTestSync('agent-device-android-finalize-');
   const calls: string[] = [];
   const host = recordingHost({
+    initialManifest: evidenceFor([REMOTE_CHUNK]),
     stop: async () => {
       calls.push('stop');
       return 'stopped' as const;
@@ -259,6 +266,7 @@ test('a retried commit serves every chunk and the captured length its first atte
   const files = recordingFileStore();
   let completedWrites = 0;
   const host = recordingHost({
+    initialManifest: evidenceFor([REMOTE_CHUNK]),
     files,
     isRunning: async () => false,
     pullPlayable: async ({ outputPath }: { outputPath: string }) => {
@@ -306,7 +314,7 @@ test('a stop resumed after its collect measures the window its first attempt sig
   const collectedPath = path.join(directory, 'capture.collected.mp4');
   fs.writeFileSync(collectedPath, playableMp4(7_000));
   const files = recordingFileStore({ [collectedPath]: 'pulled' });
-  const host = recordingHost({ files });
+  const host = recordingHost({ initialManifest: evidenceFor([REMOTE_CHUNK]), files });
   const input = { ...recordingInput(), outputPath: path.join(directory, 'capture.mp4') };
   const startedAtMs = Date.now() - 120_000;
   const transport = await host.screenRecording.android.resolve(androidRecordingDevice);

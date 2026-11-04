@@ -391,40 +391,12 @@ test('refuses stranded evidence whose recorder is still writing its artifact', a
   expect(rig.calls).toEqual([]);
 });
 
-test('retires a stranded interrupted launch and drops the artifact it never committed', async () => {
+test('retains a legacy interrupted launch even when no writer is visible', async () => {
   const rig = evidenceRig(strandedEvidence(interruptedEvidence()));
   const runtime = await rig.bind({ findRunning: async () => [] });
-  const started = await runtime.screenRecordingStart(newInput());
-  expect(rig.calls).toEqual(retirementOf('/sdcard/agent-device-recording-9.mp4'));
-  await started.pendingHandle.transfer().forceCleanup();
-});
-
-test('refuses a stranded interrupted launch whose artifact a recorder is still writing', async () => {
-  const rig = evidenceRig(strandedEvidence(interruptedEvidence()));
-  const runtime = await rig.bind({
-    findRunning: async () => ({
-      writers: [{ pid: '88', remotePath: '/sdcard/x', startTime: '4' }],
-      conclusive: true,
-    }),
-  });
   await expect(runtime.screenRecordingStart(newInput())).rejects.toMatchObject({
     code: 'DEVICE_IN_USE',
-    details: { reason: 'native_recording_artifact_claimed', writer: 'other-recorder' },
-  });
-  expect(rig.calls).toEqual([]);
-});
-
-test('refuses a stranded interrupted launch whose writers cannot be read', async () => {
-  const rig = evidenceRig(strandedEvidence(interruptedEvidence()));
-  const runtime = await rig.bind({
-    findRunning: async () => ({ writers: [], conclusive: false }),
-  });
-  await expect(runtime.screenRecordingStart(newInput())).rejects.toMatchObject({
-    code: 'COMMAND_FAILED',
-    details: {
-      reason: 'native_recording_recorder_unproven',
-      remotePath: '/sdcard/agent-device-recording-9.mp4',
-    },
+    details: { reason: 'native_recovery_evidence_open' },
   });
   expect(rig.calls).toEqual([]);
 });
@@ -533,7 +505,10 @@ function tamperCompletion(patch: Record<string, unknown>) {
 test('an incomplete start checkpoints no effect only after exact marker, writer and artifact proof', async () => {
   const input = { ...recordingInput(), claimToken: 'claim-token' };
   const pending = '/sdcard/agent-device-recording-1.mp4';
-  let marker = JSON.stringify(createNativeManifest(androidRecordingDevice, input, 1, [], pending));
+  let marker = JSON.stringify({
+    ...createNativeManifest(androidRecordingDevice, input, 1, [], pending),
+    launchDisposition: 'armed',
+  });
   let writers = true;
   let artifact = false;
   let signals = 0;
@@ -591,4 +566,33 @@ test('an incomplete start checkpoints no effect only after exact marker, writer 
   await reconcileStartEvidence(transport, androidRecordingDevice);
   expect(marker).toBe('');
   expect(signals).toBe(0);
+});
+
+test('retains an admitted launch even when no writer or artifact is visible', async () => {
+  const input = { ...recordingInput(), claimToken: 'claim-token' };
+  const pending = '/sdcard/agent-device-recording-1.mp4';
+  let marker = JSON.stringify({
+    ...createNativeManifest(androidRecordingDevice, input, 1, [], pending),
+    launchDisposition: 'admitted',
+  });
+  const runtime = await start({
+    readManifest: async (markerPath: string) =>
+      markerPath.startsWith('/sdcard')
+        ? { status: 'read' as const, contents: marker }
+        : { status: 'missing' as const },
+    writeManifest: async ({ contents }: { contents: string }) => {
+      marker = contents;
+    },
+    findRunning: async () => [],
+    exists: async () => false,
+  });
+  const before = marker;
+  expect(
+    await runtime.recoverIncompleteRecordingStart({
+      sessionId: input.sessionId,
+      fence: input.fence,
+      claimToken: input.claimToken,
+    }),
+  ).toBe('retained');
+  expect(marker).toBe(before);
 });

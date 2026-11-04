@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import type { AndroidScreenRecordingTransport } from '@agent-device/contracts/screen-recording-runtime-host';
+import { ScreenRecordingStartRolledBack } from '@agent-device/contracts/screen-recording-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import {
   androidRecordingDevice,
@@ -32,7 +32,7 @@ test('publishes fenced pending evidence before launching the first child', async
     },
   });
   const started = await runtime.screenRecordingStart(recordingInput());
-  expect(order.slice(0, 2)).toEqual(['manifest:0', 'start']);
+  expect(order.slice(0, 3)).toEqual(['manifest:0', 'manifest:0', 'start']);
   expect(pending).toMatchObject({
     fenceToken: 'fence-1',
     sessionId: 'one',
@@ -106,48 +106,18 @@ test('unavailable native evidence blocks replacement before output preparation o
   expect({ starts, writes, prepared }).toEqual({ starts: 0, writes: 0, prepared: 0 });
 });
 
-test('cleans a failed candidate before authorizing fallback and aborts if that cleanup is uncertain', async () => {
-  const live = new Set<string>();
+test('retains an uncertain dispatch without attempting another candidate', async () => {
   let starts = 0;
-  const order: string[] = [];
   const runtime = await start({
-    start: async ({ remotePath }: Parameters<AndroidScreenRecordingTransport['start']>[0]) => {
-      starts += 1;
-      order.push(`start:${remotePath}`);
-      if (starts === 1) throw new Error('sdcard unavailable');
-      return recordingProcess('42');
-    },
-    writeManifest: async ({ manifestPath }: { manifestPath: string }) => {
-      live.add(manifestPath);
-      order.push(`write:${manifestPath}`);
-    },
-    removeManifest: async (manifestPath: string) => {
-      order.push(`remove:${manifestPath}`);
-      return live.delete(manifestPath);
-    },
-  });
-  const started = await runtime.screenRecordingStart(recordingInput());
-  expect(order.slice(0, 3)).toEqual([
-    expect.stringContaining('write:/sdcard/'),
-    expect.stringContaining('start:/sdcard/'),
-    expect.stringContaining('remove:/sdcard/'),
-  ]);
-  expect(live).toEqual(new Set(['/data/local/tmp/agent-device-recording-active.json']));
-  await started.pendingHandle.transfer().forceCleanup();
-
-  const noFallback = await start({
     start: async () => {
       starts += 1;
-      throw new Error('unavailable');
-    },
-    removeManifest: async () => {
-      throw new Error('unavailable');
+      throw new Error('transport lost');
     },
   });
-  await expect(noFallback.screenRecordingStart(recordingInput())).rejects.toThrow(
-    'Android screenrecord launch rollback could not be confirmed',
+  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toThrow(
+    'rollback could not be confirmed',
   );
-  expect(starts).toBe(3);
+  expect(starts).toBe(1);
 });
 
 test('rejects an invalid process identity before committing active evidence', async () => {
@@ -176,16 +146,30 @@ test('rolls back a child when initial active evidence publication fails', async 
     },
     writeManifest: async () => {
       writes += 1;
-      if (writes === 2) throw new Error('manifest publication failed');
+      if (writes === 3) throw new Error('manifest publication failed');
     },
   });
-  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toThrow(
-    'manifest publication failed',
+  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBeInstanceOf(
+    ScreenRecordingStartRolledBack,
   );
   expect(calls).toEqual([
     'signal:42',
     expect.stringMatching(/^remove:\/sdcard\/agent-device-recording-\d+\.mp4$/),
   ]);
+});
+
+test('reports confirmed rollback when every candidate recorder exits and its artifact is absent', async () => {
+  let starts = 0;
+  const runtime = await start({
+    start: async () => recordingProcess(String(42 + starts++)),
+    exists: async () => false,
+    inspect: async () => 'missing' as const,
+    stop: async () => 'already-missing' as const,
+  });
+  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBeInstanceOf(
+    ScreenRecordingStartRolledBack,
+  );
+  expect(starts).toBe(2);
 });
 
 test('preserves cancellation before and after child acquisition without retries', async () => {
@@ -221,7 +205,9 @@ test('preserves cancellation before and after child acquisition without retries'
     },
     after.signal,
   );
-  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBe(reason);
+  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBeInstanceOf(
+    ScreenRecordingStartRolledBack,
+  );
   expect(calls).toEqual(['start', 'signal:42:undefined', 'remove']);
   expect(disposals).toBe(0);
 });
@@ -260,7 +246,9 @@ test('cancellation after child acquisition retires pending native evidence after
     controller.signal,
   );
 
-  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBe(reason);
+  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBeInstanceOf(
+    ScreenRecordingStartRolledBack,
+  );
   expect(calls).toEqual(['start', 'signal:42', 'remove-artifact', 'remove-manifest']);
   expect(manifest).toBe('');
 });
@@ -295,7 +283,9 @@ test('cancellation retains pending native evidence when rollback is unconfirmed'
     controller.signal,
   );
 
-  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBe(reason);
+  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toThrow(
+    'rollback could not be confirmed',
+  );
   expect(calls).toEqual(['start', 'signal:42']);
   expect(manifest).not.toBe('');
 });

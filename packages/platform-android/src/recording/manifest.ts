@@ -53,6 +53,7 @@ export type NativeManifest = Readonly<{
   transportMode: 'local' | 'transport-composed';
   chunks: readonly NativeChunk[];
   pendingRemotePath?: string;
+  launchDisposition?: 'armed' | 'admitted' | 'canceled';
   startNoEffectConfirmed?: true;
   completion?: ScreenRecordingCompletion;
 }>;

@@ -164,7 +164,11 @@ export type AndroidScreenRecordingStopOutcome =
 export type AndroidScreenRecordingTransport = Readonly<{
   mode: 'local' | 'transport-composed';
   start(
-    input: Readonly<{ remotePath: string; quality?: RecordingExportQuality }>,
+    input: Readonly<{
+      remotePath: string;
+      quality?: RecordingExportQuality;
+      admission: Readonly<{ manifestPath: string; expected: string; admitted: string }>;
+    }>,
     signal?: AbortSignal,
   ): Promise<Readonly<{ process: AndroidScreenRecordingProcessIdentity }>>;
   inspect(
@@ -192,11 +196,10 @@ export type AndroidScreenRecordingTransport = Readonly<{
     manifestPath: string,
     signal?: AbortSignal,
   ): Promise<AndroidScreenRecordingManifestReadOutcome>;
-  writeManifest(
-    input: Readonly<{ manifestPath: string; contents: string }>,
+  compareAndSetManifest(
+    input: Readonly<{ manifestPath: string; expected: string | null; contents: string | null }>,
     signal?: AbortSignal,
-  ): Promise<void>;
-  removeManifest(manifestPath: string, signal?: AbortSignal): Promise<boolean>;
+  ): Promise<'updated' | 'mismatch' | 'unavailable'>;
 }>;
 
 export type AndroidScreenRecordingHost = Readonly<{

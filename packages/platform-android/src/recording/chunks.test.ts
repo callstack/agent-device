@@ -183,9 +183,11 @@ test('rejects an invalid start identity without attempting a numeric PID stop', 
       transport,
       '/sdcard/agent-device-recording-2.mp4',
       recordingInput(),
+      '/sdcard/agent-device-recording-active.json',
+      {} as never,
       controller.signal,
     ),
-  ).rejects.toThrow('invalid process identity');
+  ).rejects.toThrow('launch rollback could not be confirmed');
   expect(stops).toEqual([]);
 });
 

@@ -63,7 +63,16 @@ test('uses the request-scoped Android ADB executor rather than a host fallback',
         preparedVideoValidator,
       );
       expect(transport.mode).toBe('transport-composed');
-      await expect(transport.start({ remotePath: '/sdcard/capture.mp4' })).resolves.toEqual({
+      await expect(
+        transport.start({
+          remotePath: '/sdcard/capture.mp4',
+          admission: {
+            manifestPath: '/sdcard/marker.json',
+            expected: 'armed',
+            admitted: 'admitted',
+          },
+        }),
+      ).resolves.toEqual({
         process: { pid: '42', remotePath: '/sdcard/capture.mp4', startTime: '42' },
       });
       await expect(transport.size('/sdcard/capture.mp4')).resolves.toBe(42);
@@ -433,7 +442,13 @@ test('retains unavailable manifest reads and confirms manifest deletion', async 
         status: 'unavailable',
         message: 'transport unavailable',
       });
-      await expect(transport.removeManifest('/sdcard/manifest.json')).resolves.toBe(false);
+      await expect(
+        transport.compareAndSetManifest({
+          manifestPath: '/sdcard/manifest.json',
+          expected: 'old',
+          contents: null,
+        }),
+      ).resolves.toBe('unavailable');
     },
   );
   expect(commands).toHaveLength(2);

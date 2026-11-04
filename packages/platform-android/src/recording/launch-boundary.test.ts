@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { ScreenRecordingStartRolledBack } from '@agent-device/contracts/screen-recording-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import {
   androidRecordingDevice,
@@ -7,6 +8,7 @@ import {
   recordingProcess,
 } from './fixtures.ts';
 import { bindAndroidScreenRecordingRuntime } from './runtime.ts';
+import { AndroidScreenRecordingStartRollbackUnconfirmed } from './chunks.ts';
 
 const start = async (overrides: Record<string, unknown>, signal = new AbortController().signal) =>
   await bindAndroidScreenRecordingRuntime({
@@ -27,7 +29,7 @@ test('cancellation during active manifest publication retires evidence after con
       writeManifest: async ({ contents }: { contents: string }) => {
         manifest = contents;
         writes += 1;
-        if (writes === 2) {
+        if (writes === 3) {
           controller.abort(reason);
           throw reason;
         }
@@ -51,7 +53,9 @@ test('cancellation during active manifest publication retires evidence after con
     controller.signal,
   );
 
-  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBe(reason);
+  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBeInstanceOf(
+    ScreenRecordingStartRolledBack,
+  );
   expect(calls).toEqual(['signal:42', 'remove-artifact', 'remove-manifest']);
   expect(manifest).toBe('');
 
@@ -73,12 +77,13 @@ test('cancellation during active manifest publication retains evidence after unc
   const reason = new Error('recording canceled with uncertain active cleanup');
   let manifest = '';
   let writes = 0;
+  let removals = 0;
   const runtime = await start(
     {
       writeManifest: async ({ contents }: { contents: string }) => {
         manifest = contents;
         writes += 1;
-        if (writes === 2) {
+        if (writes === 3) {
           controller.abort(reason);
           throw reason;
         }
@@ -86,13 +91,19 @@ test('cancellation during active manifest publication retains evidence after unc
       readManifest: async () =>
         manifest ? { status: 'read' as const, contents: manifest } : { status: 'missing' as const },
       stop: async () => 'ownership-lost' as const,
-      remove: async () => true,
+      remove: async () => {
+        removals += 1;
+        return true;
+      },
     },
     controller.signal,
   );
 
-  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBe(reason);
-  expect(manifest).not.toBe('');
+  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBeInstanceOf(
+    AndroidScreenRecordingStartRollbackUnconfirmed,
+  );
+  expect(JSON.parse(manifest).chunks).toMatchObject([{ remotePid: '42' }]);
+  expect(removals).toBe(0);
 
   const replacement = await start({
     readManifest: async () => ({ status: 'read' as const, contents: manifest }),
@@ -102,4 +113,34 @@ test('cancellation during active manifest publication retains evidence after unc
     code: 'DEVICE_IN_USE',
     details: { reason: 'native_recovery_evidence_open' },
   });
+});
+
+test('live cleanup refuses a replacement marker with a different claim token', async () => {
+  let manifest = '';
+  const signals: string[] = [];
+  const runtime = await start({
+    readManifest: async (path: string) =>
+      path.startsWith('/sdcard') && manifest
+        ? { status: 'read' as const, contents: manifest }
+        : { status: 'missing' as const },
+    writeManifest: async ({ contents }: { contents: string }) => {
+      manifest = contents;
+    },
+    stop: async ({ pid }: { pid: string }) => {
+      signals.push(pid);
+      return 'stopped' as const;
+    },
+  });
+  const started = await runtime.screenRecordingStart({
+    ...recordingInput(),
+    claimToken: 'claim-one',
+  });
+  manifest = JSON.stringify({ ...JSON.parse(manifest), claimToken: 'claim-successor' });
+  const replacement = manifest;
+  await expect(started.pendingHandle.transfer().forceCleanup()).resolves.toMatchObject({
+    status: 'cleanup-pending',
+    reason: 'ownership-fence-lost',
+  });
+  expect(signals).toEqual([]);
+  expect(manifest).toBe(replacement);
 });

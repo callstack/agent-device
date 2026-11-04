@@ -67,6 +67,7 @@ export async function readLiveEvidence(params: {
   deviceId: string;
   sessionId: string;
   fence: ScreenRecordingStartInput['fence'];
+  claimToken: ScreenRecordingStartInput['claimToken'];
   manifestPath: string;
 }): Promise<NativeManifest | undefined> {
   const nativeRead = await params.transport.readManifest(params.manifestPath);
@@ -83,7 +84,8 @@ function liveEvidenceMatches(
     evidence.deviceId === expected.deviceId &&
     evidence.sessionId === expected.sessionId &&
     evidence.fenceToken === expected.fence.token &&
-    evidence.fenceGeneration === expected.fence.generation
+    evidence.fenceGeneration === expected.fence.generation &&
+    evidence.claimToken === expected.claimToken
   );
 }
 

@@ -3,7 +3,8 @@ import { provesAndroidScreenRecordTermination } from '@agent-device/contracts/sc
 import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
 import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 import { chunkPathAt } from './chunk-path.ts';
-import type { NativeChunk } from './manifest.ts';
+import type { NativeChunk, NativeManifest } from './manifest.ts';
+import { ScreenRecordingStartRolledBack } from '@agent-device/contracts/screen-recording-runtime';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
 
@@ -44,12 +45,25 @@ export async function startChunkAt(
   transport: Transport,
   remotePath: string,
   input: ScreenRecordingStartInput,
+  manifestPath: string,
+  armed: NativeManifest,
   signal?: AbortSignal,
 ): Promise<NativeChunk> {
   let nativeProcess: Awaited<ReturnType<Transport['start']>>['process'] | undefined;
   try {
     nativeProcess = (
-      await transport.start({ remotePath, quality: input.exportQuality ?? 'medium' }, signal)
+      await transport.start(
+        {
+          remotePath,
+          quality: input.exportQuality ?? 'medium',
+          admission: {
+            manifestPath,
+            expected: JSON.stringify(armed),
+            admitted: JSON.stringify({ ...armed, launchDisposition: 'admitted' }),
+          },
+        },
+        signal,
+      )
     ).process;
     if (
       !/^\d+$/.test(nativeProcess.pid) ||
@@ -68,15 +82,11 @@ export async function startChunkAt(
       remoteStartTime: nativeProcess.startTime,
     };
   } catch (error) {
-    if (
-      nativeProcess &&
-      validProcessIdentity(nativeProcess) &&
-      !(await rollbackStartedProcess(transport, nativeProcess))
-    ) {
+    if (!nativeProcess || !validProcessIdentity(nativeProcess))
       throw new AndroidScreenRecordingStartRollbackUnconfirmed(error);
-    }
-    if (signal?.aborted) throw signal.reason;
-    throw error;
+    if (!(await rollbackStartedProcess(transport, nativeProcess)))
+      throw new AndroidScreenRecordingStartRollbackUnconfirmed(error);
+    throw new ScreenRecordingStartRolledBack(error);
   }
 }
 
@@ -193,10 +203,25 @@ export async function rollbackChunks(
   transport: Transport,
   chunks: readonly NativeChunk[],
 ): Promise<void> {
-  try {
-    await stopOwnedChunks(transport, chunks);
-  } finally {
-    await cleanupChunks(transport, chunks);
+  await stopOwnedChunks(transport, chunks);
+  for (const chunk of chunks) {
+    const process = {
+      pid: chunk.remotePid,
+      remotePath: chunk.remotePath,
+      startTime: chunk.remoteStartTime,
+    };
+    if (!(await waitForStopped(transport, process)))
+      throw new Error('Android recorder did not stop');
+  }
+  for (const chunk of chunks) {
+    const writers = await transport.probeRunningWriters(chunk.remotePath);
+    if (!writers.conclusive || writers.writers.length !== 0)
+      throw new Error('Android artifact ownership unconfirmed');
+  }
+  await cleanupChunks(transport, chunks);
+  for (const chunk of chunks) {
+    if ((await transport.exists(chunk.remotePath)) !== false)
+      throw new Error('Android artifact removal unconfirmed');
   }
 }
 
@@ -223,11 +248,19 @@ async function rollbackStartedProcess(
     const stopped = await transport.stop(nativeProcess, { force: true });
     return (
       (stopped === 'stopped' || stopped === 'already-missing') &&
-      (await transport.remove(nativeProcess.remotePath))
+      (await waitForStopped(transport, nativeProcess)) &&
+      (await pathHasNoWriters(transport, nativeProcess.remotePath)) &&
+      (await transport.remove(nativeProcess.remotePath)) &&
+      (await transport.exists(nativeProcess.remotePath)) === false
     );
   } catch {
     return false;
   }
+}
+
+async function pathHasNoWriters(transport: Transport, remotePath: string): Promise<boolean> {
+  const search = await transport.probeRunningWriters(remotePath);
+  return search.conclusive && search.writers.length === 0;
 }
 
 export class AndroidRecordingOwnershipLost extends Error {}

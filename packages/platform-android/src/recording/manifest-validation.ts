@@ -86,6 +86,10 @@ function manifestRecordingIsValid(candidate: Partial<NativeManifest>): boolean {
 function manifestOptionsAreValid(candidate: Partial<NativeManifest>): boolean {
   return (
     isTransportMode(candidate.transportMode) &&
+    (candidate.launchDisposition === undefined ||
+      candidate.launchDisposition === 'armed' ||
+      candidate.launchDisposition === 'admitted' ||
+      candidate.launchDisposition === 'canceled') &&
     (candidate.pendingRemotePath === undefined ||
       isNativeRecordingPath(candidate.pendingRemotePath))
   );
@@ -96,6 +100,8 @@ function hasValidManifestResources(candidate: Partial<NativeManifest>): boolean 
     Array.isArray(candidate.chunks) &&
     candidate.chunks.every(isValidNativeChunk) &&
     (candidate.chunks.length > 0 || candidate.pendingRemotePath !== undefined) &&
+    (candidate.launchDisposition !== 'canceled' || candidate.startNoEffectConfirmed === true) &&
+    (candidate.launchDisposition === undefined || candidate.pendingRemotePath !== undefined) &&
     (candidate.startNoEffectConfirmed === undefined ||
       (candidate.startNoEffectConfirmed === true &&
         candidate.claimToken !== undefined &&

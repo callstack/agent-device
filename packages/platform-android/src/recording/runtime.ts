@@ -19,7 +19,12 @@ import {
   recordingRequestFields,
   type NativeChunk,
 } from './manifest.ts';
-import { AndroidScreenRecordingStopClaimed, rollbackChunks, stopChunk } from './chunks.ts';
+import {
+  AndroidScreenRecordingStartRollbackUnconfirmed,
+  AndroidScreenRecordingStopClaimed,
+  rollbackChunks,
+  stopChunk,
+} from './chunks.ts';
 import { startInitialTransaction, startPendingChunk } from './launch.ts';
 import { recoverIncompleteAndroidRecordingStart } from './start-reconciliation.ts';
 import { persistNativeManifest } from './manifest-store.ts';
@@ -165,7 +170,10 @@ async function startAndroidRecording(params: {
     } catch (concurrentStartError) {
       // The stop refused this rotation before it dispatched anything. It must not retire the chunk
       // being replaced either: the stop owns that recorder now.
-      if (concurrentStartError instanceof AndroidScreenRecordingStopClaimed)
+      if (
+        concurrentStartError instanceof AndroidScreenRecordingStopClaimed ||
+        concurrentStartError instanceof AndroidScreenRecordingStartRollbackUnconfirmed
+      )
         throw concurrentStartError;
       // The stop owns the current recorder now, so do not begin retiring it for a replacement this
       // recording has already given up on. Finalization will stop it like any active chunk.
@@ -297,6 +305,7 @@ async function startAndroidRecording(params: {
         deviceId: device.id,
         sessionId: input.sessionId,
         fence: input.fence,
+        claimToken: input.claimToken,
         manifestPath,
       });
       if (!evidence) return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };

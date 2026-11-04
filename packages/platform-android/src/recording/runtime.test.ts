@@ -181,9 +181,9 @@ test('serializes a failed rotation so finish cannot publish completion', async (
     const started = await runtime.screenRecordingStart(recordingInput());
     await vi.advanceTimersByTimeAsync(170_000);
     expect(JSON.parse(manifest)).toMatchObject({ chunks: [{ remotePid: '42' }] });
-    expect(JSON.parse(manifest)).not.toHaveProperty('pendingRemotePath');
+    expect(JSON.parse(manifest)).toHaveProperty('pendingRemotePath');
     await expect(started.pendingHandle.transfer().finish()).rejects.toThrow(
-      'rotation start failed',
+      'rollback could not be confirmed',
     );
   } finally {
     vi.useRealTimers();
@@ -412,17 +412,19 @@ test('does not launch the sequential fallback after the stop was claimed', async
     const runtime = await start({
       start: async () => {
         starts += 1;
-        if (starts > 1) throw new Error('concurrent start unavailable');
-        return recordingProcess('42');
+        return recordingProcess(String(41 + starts));
       },
+      exists: async (remotePath: string) =>
+        starts === 1 || !remotePath.includes('agent-device-recording-'),
       stop: async ({ pid }: { pid: string }) => {
+        if (pid !== '42') return 'already-missing' as const;
         await retirement.intercept(pid);
         if (stopped.has(pid)) return 'already-missing' as const;
         stopped.add(pid);
         return 'stopped' as const;
       },
       inspect: async ({ pid }: { pid: string }) =>
-        stopped.has(pid) ? ('missing' as const) : ('owned-alive' as const),
+        pid !== '42' || stopped.has(pid) ? ('missing' as const) : ('owned-alive' as const),
       writeManifest: async ({ contents }: { contents: string }) => {
         manifest = contents;
       },
@@ -456,12 +458,14 @@ test('still discloses the platform limit when the recorder a fallback retired ha
     const runtime = await start({
       start: async () => {
         starts += 1;
-        if (starts > 1) throw new Error('concurrent start unavailable');
-        return recordingProcess('42');
+        return recordingProcess(String(41 + starts));
       },
       // The platform's 180 s cap ended this recorder just before the rotation reached it, so the
       // retirement is told the recorder was already gone rather than confirming a stop of its own.
+      exists: async (remotePath: string) =>
+        starts === 1 || !remotePath.includes('agent-device-recording-'),
       stop: async ({ pid }: { pid: string }) => {
+        if (pid !== '42') return 'already-missing' as const;
         await retirement.intercept(pid);
         return 'already-missing' as const;
       },
@@ -708,16 +712,19 @@ test('falls back to sequential rotation when concurrent start is unavailable', a
     const runtime = await start({
       start: async () => {
         starts += 1;
-        if (starts === 1 || starts > 4) return recordingProcess(String(41 + starts));
-        throw new Error('concurrent unavailable');
+        return recordingProcess(String(41 + starts));
       },
+      exists: async () => starts === 1 || starts > 3,
+      inspect: async ({ pid }: { pid: string }) =>
+        pid === '42' || Number(pid) > 44 ? ('owned-alive' as const) : ('missing' as const),
+      stop: async () => 'already-missing' as const,
       writeManifest: async ({ contents }: { contents: string }) => {
         manifest = contents;
       },
     });
     await runtime.screenRecordingStart(recordingInput());
     await vi.advanceTimersByTimeAsync(170_000);
-    expect(starts).toBe(5);
+    expect(starts).toBe(4);
     expect(JSON.parse(manifest).chunks).toHaveLength(2);
   } finally {
     vi.useRealTimers();
@@ -735,7 +742,7 @@ test('rolls back a failed concurrent rotation commit and restores prior active e
       start: async () => recordingProcess(String(42 + starts++)),
       writeManifest: async ({ contents }: { contents: string }) => {
         writes += 1;
-        if (writes === 4) throw new Error('rotation manifest failed');
+        if (writes === 6) throw new Error('rotation manifest failed');
         manifest = contents;
       },
       readManifest: async () =>

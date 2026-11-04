@@ -4,7 +4,7 @@ import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runti
 import { provesAndroidScreenRecordPathUnclaimed } from '@agent-device/contracts/screen-recording-runtime-host';
 import { candidateRemotePaths, cleanupChunks } from './chunks.ts';
 import { decodeNativeManifest, type NativeManifest } from './manifest.ts';
-import { persistNativeManifest, removeNativeManifest } from './manifest-store.ts';
+import { removeNativeManifest } from './manifest-store.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
 type ManifestCandidate = Readonly<{
@@ -66,9 +66,11 @@ function retireableCandidate(
  * those artifacts, and `proveArtifactsReleased` is what refuses while a recorder here is writing.
  */
 function isRetireableEvidence(evidence: NativeManifest, device: DeviceInfo): boolean {
+  if (evidence.pendingRemotePath !== undefined && evidence.launchDisposition !== 'canceled')
+    return false;
   return (
     evidence.completion !== undefined ||
-    evidence.startNoEffectConfirmed === true ||
+    (evidence.startNoEffectConfirmed === true && evidence.launchDisposition === 'canceled') ||
     evidence.deviceId !== device.id
   );
 }
@@ -82,14 +84,14 @@ async function retireEvidence(
   if (evidence.startNoEffectConfirmed) {
     if ((await transport.exists(evidence.pendingRemotePath!)) !== false)
       throw artifactClaimed(evidence.pendingRemotePath!, 'other-recorder');
-    await removeNativeManifest(transport, manifestPath);
+    await removeNativeManifest(transport, manifestPath, JSON.stringify(evidence));
     if ((await transport.readManifest(manifestPath)).status !== 'missing')
       throw retirementUnconfirmed(manifestPath);
     return;
   }
   await cleanupChunks(transport, evidence.chunks);
   await removePendingArtifact(transport, evidence);
-  await removeNativeManifest(transport, manifestPath);
+  await removeNativeManifest(transport, manifestPath, JSON.stringify(evidence));
   const confirmed = await transport.readManifest(manifestPath);
   if (confirmed.status !== 'missing') throw retirementUnconfirmed(manifestPath);
 }
@@ -268,7 +270,7 @@ export async function recoverIncompleteAndroidRecordingStart(
   }>,
 ): Promise<'confirmed-no-effect' | 'retained'> {
   const candidates = await readManifestCandidates(transport);
-  const proven: RetireableCandidate[] = [];
+  const proven: Array<RetireableCandidate & { contents: string }> = [];
   for (const candidate of candidates) {
     if (candidate.read.status === 'missing') continue;
     if (candidate.read.status !== 'read') return 'retained';
@@ -283,7 +285,9 @@ export async function recoverIncompleteAndroidRecordingStart(
       evidence.transportMode !== transport.mode ||
       evidence.chunks.length !== 0 ||
       evidence.pendingRemotePath === undefined ||
-      evidence.completion !== undefined
+      evidence.completion !== undefined ||
+      (evidence.launchDisposition !== 'armed' &&
+        !(evidence.launchDisposition === 'canceled' && evidence.startNoEffectConfirmed === true))
     )
       return 'retained';
     const writers = await transport.probeRunningWriters(evidence.pendingRemotePath);
@@ -293,15 +297,27 @@ export async function recoverIncompleteAndroidRecordingStart(
       (await transport.exists(evidence.pendingRemotePath)) !== false
     )
       return 'retained';
-    proven.push({ manifestPath: candidate.manifestPath, evidence });
+    proven.push({
+      manifestPath: candidate.manifestPath,
+      evidence,
+      contents: candidate.read.contents,
+    });
   }
   if (proven.length === 0) return 'retained';
-  for (const { manifestPath, evidence } of proven) {
-    const confirmed = { ...evidence, startNoEffectConfirmed: true as const };
-    if (!evidence.startNoEffectConfirmed)
-      await persistNativeManifest(transport, manifestPath, confirmed);
-    const after = await transport.readManifest(manifestPath);
-    if (after.status !== 'read' || after.contents !== JSON.stringify(confirmed)) return 'retained';
+  for (const { manifestPath, evidence, contents } of proven) {
+    const confirmed = {
+      ...evidence,
+      launchDisposition: 'canceled' as const,
+      startNoEffectConfirmed: true as const,
+    };
+    const outcome = await transport
+      .compareAndSetManifest({
+        manifestPath,
+        expected: contents,
+        contents: JSON.stringify(confirmed),
+      })
+      .catch(() => 'unavailable' as const);
+    if (outcome !== 'updated') return 'retained';
   }
   return 'confirmed-no-effect';
 }

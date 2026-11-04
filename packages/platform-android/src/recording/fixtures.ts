@@ -30,11 +30,41 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
   // The device's own files, so `exists` answers what a disposal did or failed to do rather than
   // always agreeing that an artifact is still there.
   const deviceFiles = new Set<string>();
+  const markers = new Map<string, string>();
   const legacy = overrides as Record<string, any>;
+  if (legacy.initialManifest)
+    markers.set(
+      '/sdcard/agent-device-recording-active.json',
+      JSON.stringify(legacy.initialManifest),
+    );
+  const read = async (manifestPath: string) => {
+    const external = legacy.readManifest
+      ? await legacy.readManifest(manifestPath)
+      : { status: 'missing' as const };
+    if (external.status !== 'missing' || !markers.has(manifestPath)) return external;
+    return { status: 'read' as const, contents: markers.get(manifestPath)! };
+  };
   const transport = {
     ...overrides,
     mode: legacy.mode ?? ('local' as const),
-    start: async ({ remotePath, quality }: { remotePath: string; quality: 'medium' | 'high' }) => {
+    start: async ({
+      remotePath,
+      quality,
+      admission,
+    }: {
+      remotePath: string;
+      quality: 'medium' | 'high';
+      admission: { manifestPath: string; expected: string; admitted: string };
+    }) => {
+      const current = await read(admission.manifestPath);
+      if (current.status !== 'read' || current.contents !== admission.expected)
+        throw new Error('launch admission rejected');
+      markers.set(admission.manifestPath, admission.admitted);
+      if (legacy.writeManifest)
+        await legacy.writeManifest({
+          manifestPath: admission.manifestPath,
+          contents: admission.admitted,
+        });
       const started = await (legacy.start?.({ remotePath, quality }) ??
         recordingProcess('42', remotePath));
       deviceFiles.add(remotePath);
@@ -56,9 +86,14 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
             ? 'missing'
             : 'owned-alive',
     stop: async (processIdentity: { pid: string }, options?: { force?: boolean }) => {
-      if (legacy.stop) return await legacy.stop(processIdentity, options);
+      if (legacy.stop) {
+        const result = await legacy.stop(processIdentity, options);
+        if (result === 'stopped' || result === 'already-missing') stopped.add(processIdentity.pid);
+        return result;
+      }
       if (legacy.signal) {
         const ok = await legacy.signal({ pid: processIdentity.pid, force: options?.force });
+        if (ok) stopped.add(processIdentity.pid);
         return ok ? ('stopped' as const) : ('uncertain' as const);
       }
       if (stopped.has(processIdentity.pid)) return 'already-missing' as const;
@@ -84,20 +119,47 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
     manifestPathFor: (remotePath: string) =>
       legacy.manifestPathFor?.(remotePath) ??
       `${remotePath.slice(0, remotePath.lastIndexOf('/'))}/agent-device-recording-active.json`,
-    readManifest: async (manifestPath: string) =>
-      legacy.readManifest
-        ? await legacy.readManifest(manifestPath)
-        : { status: 'missing' as const },
+    readManifest: read,
     writeManifest: async (
       request: { manifestPath: string; contents: string },
       signal?: AbortSignal,
     ) => {
       await legacy.writeManifest?.(request, signal);
     },
-    removeManifest: async (manifestPath: string) =>
-      legacy.removeManifest ? await legacy.removeManifest(manifestPath) : true,
+    compareAndSetManifest: async (
+      request: { manifestPath: string; expected: string | null; contents: string | null },
+      signal?: AbortSignal,
+    ) => {
+      if (legacy.compareAndSetManifest) return await legacy.compareAndSetManifest(request, signal);
+      const current = await read(request.manifestPath);
+      if (
+        (current.status === 'missing'
+          ? null
+          : current.status === 'read'
+            ? current.contents
+            : undefined) !== request.expected
+      )
+        return 'mismatch' as const;
+      if (request.contents === null) {
+        if (legacy.removeManifest && !(await legacy.removeManifest(request.manifestPath)))
+          return 'unavailable' as const;
+        markers.delete(request.manifestPath);
+      } else {
+        await legacy.writeManifest?.(
+          { manifestPath: request.manifestPath, contents: request.contents },
+          signal,
+        );
+        markers.set(request.manifestPath, request.contents);
+      }
+      return 'updated' as const;
+    },
+    removeManifest: async (manifestPath: string) => {
+      const removed = legacy.removeManifest ? await legacy.removeManifest(manifestPath) : true;
+      if (removed) markers.delete(manifestPath);
+      return removed;
+    },
     probeRunningWriters: async (remotePath: string) => {
-      const found = await (legacy.findRunning?.(remotePath) ?? ['42', '43', '66']);
+      const found = await (legacy.findRunning?.(remotePath) ?? []);
       if (!Array.isArray(found)) return found;
       return {
         writers: found.map(

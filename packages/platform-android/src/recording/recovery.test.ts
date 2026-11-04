@@ -314,7 +314,7 @@ test.each([
   },
 );
 
-test('makes matching pending evidence cleanup-eligible and stops discovered exact recorder pids', async () => {
+test('retains pending evidence without signalling an unproven writer', async () => {
   let manifest = '';
   const removed: string[] = [];
   const signals: string[] = [];
@@ -350,9 +350,11 @@ test('makes matching pending evidence cleanup-eligible and stops discovered exac
     reason: 'transport-not-reattachable',
     message: 'Android recording launch was interrupted before its process identity was committed.',
   });
-  await expect(runtime.screenRecordingCleanup({ envelope: started.envelope })).resolves.toEqual({
-    status: 'cleaned',
+  await expect(
+    runtime.screenRecordingCleanup({ envelope: started.envelope }),
+  ).resolves.toMatchObject({
+    status: 'cleanup-pending',
   });
-  expect(removed).toEqual(['/data/local/tmp/agent-device-recording-777.mp4']);
-  expect(signals).toEqual(['66']);
+  expect(removed).toEqual([]);
+  expect(signals).toEqual([]);
 });

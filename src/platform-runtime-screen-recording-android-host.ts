@@ -37,13 +37,38 @@ export async function createAndroidScreenRecordingTransport(
     if (probed.exitCode === 0) return 'present';
     return probed.exitCode === 1 && probed.stderr.trim() === '' ? 'absent' : 'uncertain';
   };
+  const markerLock = (manifestPath: string, operation: string) => {
+    const lock = shellQuote(`${manifestPath}.lock`);
+    return `mkdir ${lock} 2>/dev/null || exit 75; trap ${shellQuote(`rm -f ${lock}/expected ${lock}/next; rmdir ${lock}`)} EXIT; ${operation}`;
+  };
+  const markerTransition = (input: {
+    manifestPath: string;
+    expected: string | null;
+    contents: string | null;
+  }) => {
+    const marker = shellQuote(input.manifestPath);
+    const lock = shellQuote(`${input.manifestPath}.lock`);
+    if (input.expected === null) {
+      if (input.contents === null) return 'exit 73';
+      return `(set -C; printf %s ${shellQuote(input.contents)} > ${marker}) || exit 73`;
+    }
+    const check = `printf %s ${shellQuote(input.expected)} > ${lock}/expected && cmp -s ${lock}/expected ${marker} || exit 73`;
+    const write =
+      input.contents === null
+        ? `rm -f ${marker}`
+        : `printf %s ${shellQuote(input.contents)} > ${lock}/next && mv -f ${lock}/next ${marker}`;
+    return `${check}; ${write}`;
+  };
   return Object.freeze({
     mode: scoped.mode,
-    start: async ({ remotePath, quality = 'medium' }, signal) => {
+    start: async ({ remotePath, quality = 'medium', admission }, signal) => {
       const result = await shell(
         [
           shellFragment(
-            `screenrecord --bit-rate ${BIT_RATE[quality]} ${shellQuote(remotePath)} >/dev/null 2>&1 & echo $!`,
+            markerLock(
+              admission.manifestPath,
+              `${markerTransition({ manifestPath: admission.manifestPath, expected: admission.expected, contents: admission.admitted })} || exit 74; screenrecord --bit-rate ${BIT_RATE[quality]} ${shellQuote(remotePath)} >/dev/null 2>&1 & echo $!`,
+            ),
           ),
         ],
         signal,
@@ -135,20 +160,17 @@ export async function createAndroidScreenRecordingTransport(
             message: result.stderr.trim() || 'Android recording manifest could not be read',
           };
     },
-    writeManifest: async ({ manifestPath, contents }, signal) => {
-      const temporary = `${manifestPath}.tmp`;
+    compareAndSetManifest: async (input, signal) => {
       const result = await shell(
-        [
-          shellFragment(
-            `printf %s ${shellQuote(contents)} > ${shellQuote(temporary)} && mv -f ${shellQuote(temporary)} ${shellQuote(manifestPath)}`,
-          ),
-        ],
+        [shellFragment(markerLock(input.manifestPath, markerTransition(input)))],
         signal,
       );
-      if (result.exitCode !== 0) throw new Error('failed to write Android recording manifest');
+      return result.exitCode === 0
+        ? 'updated'
+        : result.exitCode === 73
+          ? 'mismatch'
+          : 'unavailable';
     },
-    removeManifest: async (manifestPath, signal) =>
-      (await shell(['rm', '-f', manifestPath], signal)).exitCode === 0,
   });
 }
 

@@ -2,6 +2,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import {
   markScreenRecordingStartNotDispatched,
+  ScreenRecordingStartRolledBack,
   type ScreenRecordingStartInput,
 } from '@agent-device/contracts/screen-recording-runtime';
 import {
@@ -32,71 +33,78 @@ export async function startInitialTransaction(params: {
   } catch (error) {
     throw markScreenRecordingStartNotDispatched(error);
   }
-  let last: unknown;
+  let last: ScreenRecordingStartRolledBack | undefined;
   for (const remotePath of candidateRemotePaths(undefined)) {
     const manifestPath = transport.manifestPathFor(remotePath);
-    await persistNativeManifest(
-      transport,
-      manifestPath,
-      createNativeManifest(device, input, startedAt, [], remotePath, transport.mode),
-      signal,
-    );
-    let chunk: NativeChunk;
-    let startedAtMs: number;
+    const armed = {
+      ...createNativeManifest(device, input, startedAt, [], remotePath, transport.mode),
+      launchDisposition: 'armed' as const,
+    };
     try {
-      // Timestamp immediately before launching, the way the stop signal is timestamped, so the
-      // window a short clip is measured against holds only the recording.
-      startedAtMs = Date.now();
-      chunk = await startChunkAt(transport, remotePath, input, signal);
+      await persistNativeManifest(transport, manifestPath, armed, signal, true);
     } catch (error) {
-      if (signal.aborted) {
-        await retireCanceledLaunchMarker(transport, manifestPath, error);
-        throw signal.reason;
-      }
-      await removeFailedCandidateManifest(transport, manifestPath, error);
+      if (last) throw new ScreenRecordingStartRolledBack(error);
+      throw markScreenRecordingStartNotDispatched(error);
+    }
+    let chunk: NativeChunk;
+    const startedAtMs = Date.now();
+    try {
+      chunk = await startChunkAt(transport, remotePath, input, manifestPath, armed, signal);
+    } catch (error) {
+      if (!(error instanceof ScreenRecordingStartRolledBack)) throw error;
+      await retireRolledBackMarker(transport, manifestPath, armed, undefined, error);
+      if (signal.aborted) throw new ScreenRecordingStartRolledBack(signal.reason);
       last = error;
       continue;
     }
+    const active = createNativeManifest(
+      device,
+      input,
+      startedAt,
+      [chunk],
+      undefined,
+      transport.mode,
+    );
     try {
-      await persistNativeManifest(
-        transport,
-        manifestPath,
-        createNativeManifest(device, input, startedAt, [chunk], undefined, transport.mode),
-        signal,
-      );
+      await persistNativeManifest(transport, manifestPath, active, signal);
     } catch (error) {
-      await rollbackPublishedChunk(transport, manifestPath, chunk);
-      throw error;
+      try {
+        await rollbackChunks(transport, [chunk]);
+      } catch (error) {
+        throw new AndroidScreenRecordingStartRollbackUnconfirmed(error);
+      }
+      await retireRolledBackMarker(transport, manifestPath, armed, active, error);
+      throw new ScreenRecordingStartRolledBack(error);
     }
     return { chunk, manifestPath, startedAtMs };
   }
-  throw last ?? new Error('Android screenrecord did not begin producing frames');
+  throw (
+    last ??
+    markScreenRecordingStartNotDispatched(
+      new Error('Android screenrecord did not begin producing frames'),
+    )
+  );
 }
 
-async function retireCanceledLaunchMarker(
+async function retireRolledBackMarker(
   transport: Transport,
   manifestPath: string,
-  launchError: unknown,
+  armed: ReturnType<typeof createNativeManifest>,
+  active: ReturnType<typeof createNativeManifest> | undefined,
+  cause: unknown,
 ): Promise<void> {
-  // `startChunkAt` has already rolled back the child and its artifact. Retire the pre-launch
-  // marker only when that cleanup is confirmed; otherwise leave it for fenced recovery.
-  if (launchError instanceof AndroidScreenRecordingStartRollbackUnconfirmed) return;
-  await removeNativeManifest(transport, manifestPath).catch(() => {});
-}
-
-async function rollbackPublishedChunk(
-  transport: Transport,
-  manifestPath: string,
-  chunk: NativeChunk,
-): Promise<void> {
+  const read = await transport.readManifest(manifestPath).catch(() => undefined);
+  const admitted = JSON.stringify({ ...armed, launchDisposition: 'admitted' });
+  if (
+    read?.status !== 'read' ||
+    (read.contents !== admitted && read.contents !== JSON.stringify(active))
+  )
+    throw new AndroidScreenRecordingStartRollbackUnconfirmed(cause);
   try {
-    await rollbackChunks(transport, [chunk]);
+    await removeNativeManifest(transport, manifestPath, read.contents);
   } catch {
-    // Retain the pending marker when native cleanup is uncertain so a fenced recovery can prove
-    // ownership before a later start is admitted.
-    return;
+    throw new AndroidScreenRecordingStartRollbackUnconfirmed(cause);
   }
-  await removeNativeManifest(transport, manifestPath).catch(() => {});
 }
 
 export async function startPendingChunk(params: {
@@ -123,16 +131,16 @@ export async function startPendingChunk(params: {
   let last: unknown;
   for (const remotePath of candidateRemotePaths(preferredDir)) {
     if (launchAdmission.aborted) throw new AndroidScreenRecordingStopClaimed();
-    await persistNativeManifest(
-      transport,
-      manifestPath,
-      createNativeManifest(device, input, startedAt, chunks, remotePath, transport.mode),
-    );
+    const armed = {
+      ...createNativeManifest(device, input, startedAt, chunks, remotePath, transport.mode),
+      launchDisposition: 'armed' as const,
+    };
+    await persistNativeManifest(transport, manifestPath, armed);
     try {
       // The pending evidence is on the device, but the stop may have been claimed while it was being
       // written. Refuse here rather than dispatch a recorder the recording has already given up.
       if (launchAdmission.aborted) throw new AndroidScreenRecordingStopClaimed();
-      return await startChunkAt(transport, remotePath, input);
+      return await startChunkAt(transport, remotePath, input, manifestPath, armed);
     } catch (error) {
       if (error instanceof AndroidScreenRecordingStartRollbackUnconfirmed) throw error;
       try {
@@ -150,17 +158,4 @@ export async function startPendingChunk(params: {
     }
   }
   throw last ?? new Error('failed to start next Android recording chunk');
-}
-
-async function removeFailedCandidateManifest(
-  transport: Transport,
-  manifestPath: string,
-  launchError: unknown,
-): Promise<void> {
-  if (launchError instanceof AndroidScreenRecordingStartRollbackUnconfirmed) throw launchError;
-  try {
-    await removeNativeManifest(transport, manifestPath);
-  } catch {
-    throw new AndroidScreenRecordingStartRollbackUnconfirmed(launchError);
-  }
 }
