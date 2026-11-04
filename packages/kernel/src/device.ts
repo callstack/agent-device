@@ -132,7 +132,7 @@ const SOCKET_DIR_BYTES = 48 + '/adw/'.length + 12;
 const SOCKET_FILE_OVERHEAD_BYTES = '/'.length + '.sock'.length;
 
 /** The most characters a web backend session key can hold. */
-export const WEB_BACKEND_KEY_MAX_LENGTH =
+const WEB_BACKEND_KEY_MAX_LENGTH =
   SOCKET_PATH_MAX_BYTES - SOCKET_DIR_BYTES - SOCKET_FILE_OVERHEAD_BYTES;
 
 /**

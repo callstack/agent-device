@@ -7,7 +7,6 @@ import {
   hostDeviceIdOf,
   isMacOsBundleId,
   resolveDevice,
-  WEB_BACKEND_KEY_MAX_LENGTH,
   webBackendKeyOf,
   webSessionBackendKey,
   webSessionDevice,
@@ -118,7 +117,7 @@ test.each([
   'a/b',
   'a.b',
   'é',
-  'a'.repeat(WEB_BACKEND_KEY_MAX_LENGTH),
+  'a'.repeat(31),
 ])('a web session name of %j is refused with a typed reason', (name) => {
   assert.throws(
     () => webDevice(name),
@@ -129,11 +128,12 @@ test.each([
   );
 });
 
-test('a tenant name that fits no tenant key is refused although it fits a plain one', () => {
-  const name = 'a'.repeat(WEB_BACKEND_KEY_MAX_LENGTH - 'p_'.length);
-  assert.equal(webSessionBackendKey({ name }).length, WEB_BACKEND_KEY_MAX_LENGTH);
+test('the longest name leaves a key that fits the socket path, and is shorter under a tenant', () => {
+  // 32 characters of key: agent-browser's 103-byte socket path less a 65-byte socket directory.
+  assert.equal(webSessionBackendKey({ name: 'a'.repeat(30) }).length, 32);
+  assert.equal(webSessionBackendKey({ name: 'a'.repeat(17), tenantId: 'tenant-1' }).length, 32);
   assert.throws(
-    () => webSessionBackendKey({ name, tenantId: 'tenant-1' }),
+    () => webSessionBackendKey({ name: 'a'.repeat(18), tenantId: 'tenant-1' }),
     (error: unknown) =>
       error instanceof AppError && error.details?.reason === 'web_session_name_invalid',
   );
