@@ -64,6 +64,7 @@ import { runCmd } from '@agent-device/host-kit/command';
 import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
+import { resolveAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 
 import { IOS_TEST_SIMULATOR, MACOS_TEST_DEVICE } from './apple-core-stub-helpers.ts';
 
@@ -887,3 +888,22 @@ test.each([MACOS_TEST_DEVICE, { ...IOS_TEST_SIMULATOR, kind: 'device' as const }
     assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
   },
 );
+
+test('screenshotIos rejects a screen mask before a provider-owned runner capture', async () => {
+  mockRunCmd.mockRejectedValue(new Error('unexpected native capture'));
+  mockRunAppleRunnerCommand.mockRejectedValue(new Error('unexpected runner capture'));
+  await withAppleToolProvider(
+    { ...resolveAppleToolProvider(), simulatorScreenshotBackend: 'runner' },
+    async () => {
+      await assert.rejects(
+        screenshotIos(IOS_TEST_SIMULATOR, '/tmp/masked.png', { env: {}, screenMask: 'black' }),
+        {
+          code: 'UNSUPPORTED_OPERATION',
+          details: { reason: 'screenshot-screen-mask-unsupported' },
+        },
+      );
+    },
+  );
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
+});
