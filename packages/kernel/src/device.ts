@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { AppError } from './errors.ts';
 import type { DeviceIdentity } from './device-identity.ts';
 import type { EnvMap } from './source-value.ts';
@@ -119,42 +120,51 @@ export function hostAppDevice(host: DeviceInfo, bundleId: string): DeviceInfo {
   };
 }
 
-/**
- * The name the web backend keys its browser on: it trims the name, so `a ` and `a` drive one
- * browser. The one owner of that rule; the provider and the session device id both read it.
- */
-export function normalizeWebSessionName(sessionName: string): string {
-  return sessionName.trim();
-}
+const WEB_BACKEND_KEY_PREFIX = 'p_';
+const WEB_TENANT_KEY_HASH_LENGTH = 12;
 
 const WEB_SESSION_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
 
-// agent-browser binds its control socket at `<tmpdir>/adw/<12 hex>/<session>.sock` and refuses a
-// path over 103 bytes. The macOS per-user tmpdir is 48 bytes, the longest of the supported hosts.
+// agent-browser binds its control socket at `<tmpdir>/adw/<12 hex>/<key>.sock` and refuses a path
+// over 103 bytes. The macOS per-user tmpdir is 48 bytes, the longest of the supported hosts.
 const SOCKET_PATH_MAX_BYTES = 103;
 const SOCKET_DIR_BYTES = 48 + '/adw/'.length + 12;
 const SOCKET_FILE_OVERHEAD_BYTES = '/'.length + '.sock'.length;
 
-/** The most characters the backend session key of a web session can hold. */
+/** The most characters a web backend session key can hold. */
 export const WEB_BACKEND_KEY_MAX_LENGTH =
   SOCKET_PATH_MAX_BYTES - SOCKET_DIR_BYTES - SOCKET_FILE_OVERHEAD_BYTES;
 
 /**
- * The normalized name of a web session, refused with `web_session_name_invalid` unless it is
- * non-empty, holds only letters, digits, `_` and `-` (the characters the backend accepts in a
- * session name), and fits the socket path limit. That also keeps `:` out of the name, which would
- * parse as the `:session:` or `:app:` infix of another device id.
+ * A web session as the caller names it. `name` is the tenant-relative public name, never the
+ * tenant-prefixed key the session store holds it under; `tenantId` is set under tenant isolation.
  */
-export function requireWebSessionName(sessionName: string): string {
-  const name = normalizeWebSessionName(sessionName);
-  if (!WEB_SESSION_NAME_PATTERN.test(name) || name.length > WEB_BACKEND_KEY_MAX_LENGTH) {
+export type WebSessionIdentity = Readonly<{ name: string; tenantId?: string }>;
+
+function webBackendKeyPrefix(tenantId: string | undefined): string {
+  if (tenantId === undefined) return WEB_BACKEND_KEY_PREFIX;
+  const hash = crypto.createHash('sha256').update(tenantId).digest('hex');
+  return `t_${hash.slice(0, WEB_TENANT_KEY_HASH_LENGTH)}_`;
+}
+
+/**
+ * The name of a web session without surrounding whitespace, refused with `web_session_name_invalid`
+ * unless it is non-empty, holds only letters, digits, `_` and `-` (the characters the backend
+ * accepts in a session name), and leaves room for `keyPrefixLength` characters of the backend key
+ * within the socket path limit. That also keeps `:` out of the name, which would parse as the
+ * `:session:` or `:app:` infix of another device id.
+ */
+function requireWebSessionName(sessionName: string, keyPrefixLength: number): string {
+  const name = sessionName.trim();
+  const maxLength = WEB_BACKEND_KEY_MAX_LENGTH - keyPrefixLength;
+  if (!WEB_SESSION_NAME_PATTERN.test(name) || name.length > maxLength) {
     throw new AppError(
       'INVALID_ARGS',
-      `A web session name must be 1 to ${WEB_BACKEND_KEY_MAX_LENGTH} characters of letters, digits, "_" and "-".`,
+      `A web session name must be 1 to ${maxLength} characters of letters, digits, "_" and "-".`,
       {
         reason: 'web_session_name_invalid',
         sessionName,
-        maxLength: WEB_BACKEND_KEY_MAX_LENGTH,
+        maxLength,
         hint: 'Pass --session with a name such as "checkout-1".',
       },
     );
@@ -163,12 +173,29 @@ export function requireWebSessionName(sessionName: string): string {
 }
 
 /**
- * One web session of `host`, held as a device of its own and named by the normalized session name,
- * so two names that drive one browser are one device.
+ * The key agent-browser isolates a browser on, derived once from the session: `p_<name>`, or
+ * `t_<hash12 of the tenant>_<name>` under tenant isolation so two tenants never share a browser.
  */
-export function webSessionDevice(host: DeviceInfo, sessionName: string): DeviceInfo {
-  const name = requireWebSessionName(sessionName);
-  return { ...host, id: `${host.id}${WEB_SESSION_DEVICE_ID_INFIX}${name}` };
+export function webSessionBackendKey(session: WebSessionIdentity): string {
+  const prefix = webBackendKeyPrefix(session.tenantId);
+  return `${prefix}${requireWebSessionName(session.name, prefix.length)}`;
+}
+
+/**
+ * One web session of `host`, held as a device of its own. Its id carries the backend key, so two
+ * names that drive one browser are one device and every reader takes the same key from it.
+ */
+export function webSessionDevice(host: DeviceInfo, session: WebSessionIdentity): DeviceInfo {
+  const id = `${host.id}${WEB_SESSION_DEVICE_ID_INFIX}${webSessionBackendKey(session)}`;
+  return { ...host, id };
+}
+
+/** The backend key a web session device id carries, or `undefined` for any other device id. */
+export function webBackendKeyOf(deviceId: string): string | undefined {
+  const rest = deviceId.slice(hostDeviceIdOf(deviceId).length);
+  return rest.startsWith(WEB_SESSION_DEVICE_ID_INFIX)
+    ? rest.slice(WEB_SESSION_DEVICE_ID_INFIX.length)
+    : undefined;
 }
 
 /** The host of an app device, then the device itself; any other device alone. */

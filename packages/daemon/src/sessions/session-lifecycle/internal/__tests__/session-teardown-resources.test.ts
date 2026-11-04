@@ -1,5 +1,6 @@
 import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { beforeEach, expect, test, vi } from 'vitest';
+import { webSessionDevice } from '@agent-device/kernel/device';
 import {
   sessionCloseShutdownFixture,
   type SessionState,
@@ -279,7 +280,8 @@ function attachPerfCapture(
 test('daemon session teardown closes an open web session immediately, not on agent-browser idle timeout', async () => {
   const sessionName = 'web-active-session-teardown-session';
   const sessionStore = makeSessionStore();
-  const session = makeSession(sessionName, WEB_DESKTOP_DEVICE);
+  const device = webSessionDevice(WEB_DESKTOP_DEVICE, { name: 'web-one' });
+  const session = makeSession(sessionName, device);
   // Teardown always runs while the session it is tearing down is still in the store (session
   // deletion happens after), which is what keeps the provider-startup orphan sweep from treating
   // this session's own browser as an orphan and scanning real host processes for it.
@@ -299,18 +301,21 @@ test('daemon session teardown closes an open web session immediately, not on age
   // reaches the agent-browser process is real mechanics, pinned root-owned in
   // src/platform-runtime-resource-cleanup.test.ts.
   expect(platformCleanup.closeManagedBrowser).toHaveBeenCalledWith({
-    device: WEB_DESKTOP_DEVICE,
-    sessionName,
+    device,
     stateDir: sessionStore.resolveDaemonStateDir(),
     openSessionNames: expect.any(Function),
   });
 });
 
-test('daemon session teardown closes the browser session its public name carries, and no other', async () => {
+test('daemon session teardown closes the browser its session device names, and no other', async () => {
   const sessionStore = makeSessionStore();
   const address = 'cwd:0123456789abcdef:web';
-  sessionStore.publish(address, makeSession('default', WEB_DESKTOP_DEVICE));
-  sessionStore.publish('web-sibling', makeSession('web-sibling', WEB_DESKTOP_DEVICE));
+  const device = webSessionDevice(WEB_DESKTOP_DEVICE, { name: 'default' });
+  sessionStore.publish(address, makeSession('default', device));
+  sessionStore.publish(
+    'web-sibling',
+    makeSession('web-sibling', webSessionDevice(WEB_DESKTOP_DEVICE, { name: 'web-sibling' })),
+  );
   const platformCleanup = platformResourceCleanupFixture();
 
   await teardownSessionResources({
@@ -321,10 +326,9 @@ test('daemon session teardown closes the browser session its public name carries
   });
 
   expect(platformCleanup.closeManagedBrowser).toHaveBeenCalledOnce();
-  const [{ sessionName, openSessionNames }] = vi.mocked(platformCleanup.closeManagedBrowser).mock
-    .calls[0]!;
-  expect(sessionName).toBe('default');
-  expect(openSessionNames()).toEqual(['default', 'web-sibling']);
+  const [params] = vi.mocked(platformCleanup.closeManagedBrowser).mock.calls[0]!;
+  expect(params.device).toBe(device);
+  expect(params.openSessionNames()).toEqual(['p_default', 'p_web-sibling']);
 });
 
 test('daemon session teardown surfaces a web close failure through the cleanup-failure channel', async () => {

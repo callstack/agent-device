@@ -450,7 +450,9 @@ test('a policy that allows the web host admits the open of any web session devic
   const { handler } = makeHandler(
     policy({ devices: { allow: [{ udid: WEB_DESKTOP_DEVICE.id }] } }),
   );
-  mockResolveTargetDevice.mockResolvedValue(webSessionDevice(WEB_DESKTOP_DEVICE, 'wsd-one'));
+  mockResolveTargetDevice.mockResolvedValue(
+    webSessionDevice(WEB_DESKTOP_DEVICE, { name: 'wsd-one' }),
+  );
 
   expect(
     await handler(
@@ -464,7 +466,7 @@ test('a policy that allows the web host admits the open of any web session devic
 });
 
 test('a policy that allows one web session device admits that session only, never the host', async () => {
-  const allowed = webSessionDevice(WEB_DESKTOP_DEVICE, 'wsd-one');
+  const allowed = webSessionDevice(WEB_DESKTOP_DEVICE, { name: 'wsd-one' });
   const { handler } = makeHandler(policy({ devices: { allow: [{ udid: allowed.id }] } }), {
     inventory: [WEB_DESKTOP_DEVICE],
   });
@@ -484,7 +486,8 @@ test('a policy that allows one web session device admits that session only, neve
     data: { devices: [expect.objectContaining({ id: WEB_DESKTOP_DEVICE.id })] },
   });
   expect(await handler(openWeb(allowed))).toMatchObject({ ok: true });
-  for (const denied of [webSessionDevice(WEB_DESKTOP_DEVICE, 'wsd-two'), WEB_DESKTOP_DEVICE]) {
+  const other = webSessionDevice(WEB_DESKTOP_DEVICE, { name: 'wsd-two' });
+  for (const denied of [other, WEB_DESKTOP_DEVICE]) {
     expectPolicyDenied(await handler(openWeb(denied)), 'device');
   }
 });

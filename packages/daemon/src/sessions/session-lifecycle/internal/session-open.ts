@@ -9,14 +9,14 @@ import {
   openApplicationWithRuntimeHintClearUse,
   resolveOpenApplicationRuntimePlan,
 } from '@agent-device/contracts/application-lifecycle-runtime-plan';
-import { requireWebSessionName, type DeviceInfo } from '@agent-device/kernel/device';
+import { webSessionBackendKey, type DeviceInfo } from '@agent-device/kernel/device';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { refreshSessionDeviceIfNeeded } from '../../../resources/session-device-resolution.ts';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
-import { suppliedSessionName } from '../../session-routing.ts';
+import { webSessionIdentity } from '../../session-routing.ts';
 import { isWebSession } from '../../web-session-names.ts';
 import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
 import {
@@ -250,7 +250,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
   if (existingRef) {
     const session = sessionStore.requireCurrent(existingRef);
     // A reopen names its browser by the supplied name too: a blank one is no alias of the default.
-    if (isWebSession(session)) requireWebSessionName(suppliedSessionName(req));
+    if (isWebSession(session)) webSessionBackendKey(webSessionIdentity(req));
     const resolved = await resolveExistingOpenRequest({
       req,
       session,
@@ -362,7 +362,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
       openTarget,
       params.host.env,
       req.flags?.surface,
-      suppliedSessionName(req),
+      webSessionIdentity(req),
     ),
   );
   const device = selection.device;

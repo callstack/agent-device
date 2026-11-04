@@ -2,7 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { webSessionDevice, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  webSessionBackendKey,
+  webSessionDevice,
+  type DeviceInfo,
+  type WebSessionIdentity,
+} from '@agent-device/kernel/device';
 import {
   WEB_DESKTOP_DEVICE,
   createTestHostEnvironment,
@@ -31,10 +36,10 @@ beforeEach(() => {
 
 const webSessionResolution = async (
   _flags: unknown,
-  options?: { webSessionName?: string },
+  options?: { webSession?: WebSessionIdentity },
 ): Promise<DeviceInfo> =>
-  options?.webSessionName
-    ? webSessionDevice(WEB_DESKTOP_DEVICE, options.webSessionName)
+  options?.webSession
+    ? webSessionDevice(WEB_DESKTOP_DEVICE, options.webSession)
     : WEB_DESKTOP_DEVICE;
 
 function freshWebRequest(
@@ -79,7 +84,7 @@ test.each(['batch', 'replay'] as const)(
         });
         expect(keys).toEqual([
           `session:${name}`,
-          `device:${WEB_DESKTOP_DEVICE.id}:session:${name}`,
+          `device:${WEB_DESKTOP_DEVICE.id}:session:p_${name}`,
         ]);
       }
 
@@ -116,7 +121,7 @@ test.each(['batch', 'replay'] as const)(
 
       for (const response of responses) expect(response).toMatchObject({ ok: true });
       expect([...bound].sort()).toEqual(
-        names.map((name) => `${WEB_DESKTOP_DEVICE.id}:session:${name}`),
+        names.map((name) => `${WEB_DESKTOP_DEVICE.id}:session:p_${name}`),
       );
     } finally {
       vi.unstubAllEnvs();
@@ -125,14 +130,17 @@ test.each(['batch', 'replay'] as const)(
   },
 );
 
-function createOpenHandler(sessionStore: ReturnType<typeof makeSessionStore>) {
+function createOpenHandler(
+  sessionStore: ReturnType<typeof makeSessionStore>,
+  leaseRegistry = new LeaseRegistry(),
+) {
   return createRequestHandler({
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
-    leaseRegistry: new LeaseRegistry(),
+    leaseRegistry,
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
@@ -171,7 +179,7 @@ test('an open with an empty session name does not reopen the default web session
   const sessionStore = makeSessionStore('agent-device-router-web-blank-reuse-');
   sessionStore.publish(
     'default',
-    makeSession('default', { device: webSessionDevice(WEB_DESKTOP_DEVICE, 'default') }),
+    makeSession('default', { device: webSessionDevice(WEB_DESKTOP_DEVICE, { name: 'default' }) }),
   );
 
   const response = await createOpenHandler(sessionStore)(openWebRequest(''));
@@ -181,4 +189,72 @@ test('an open with an empty session name does not reopen the default web session
     error: { code: 'INVALID_ARGS', details: { reason: 'web_session_name_invalid' } },
   });
   expect(sessionStore.get('default')?.actions).toEqual([]);
+});
+
+test('two tenants using one web session name each open their own browser, and one tenant conflicts with itself', async () => {
+  mockResolveTargetDevice.mockImplementation(webSessionResolution);
+  const claimsDir = mkdtempForTestSync('agent-device-router-web-tenant-claims-');
+  vi.stubEnv('AGENT_DEVICE_CLAIMS_DIR', claimsDir);
+  const sessionStore = makeSessionStore('agent-device-router-web-tenant-');
+  const leaseRegistry = new LeaseRegistry();
+  const handler = createOpenHandler(sessionStore, leaseRegistry);
+  // Web is admitted under a lease of any other backend: admission does not compare the two.
+  const leases = new Map(
+    ['tenant-1', 'tenant-2'].map((tenantId) => [
+      tenantId,
+      leaseRegistry.allocateLease({ tenantId, runId: 'run-1', leaseBackend: 'ios-simulator' }),
+    ]),
+  );
+  const tenantOpen = (tenantId: string, name: string, leaseId = leases.get(tenantId)!.leaseId) => ({
+    ...openWebRequest(name),
+    meta: {
+      requestId: `req-open-${tenantId}-${name}`,
+      tenantId,
+      runId: 'run-1',
+      leaseId,
+      leaseBackend: 'ios-simulator' as const,
+      sessionIsolation: 'tenant' as const,
+    },
+  });
+  const deviceId = (tenantId: string, name: string) =>
+    `${WEB_DESKTOP_DEVICE.id}:session:${webSessionBackendKey({ name, tenantId })}`;
+  try {
+    const [first, second] = await Promise.all([
+      handler(tenantOpen('tenant-1', 'shop')),
+      handler(tenantOpen('tenant-2', 'shop')),
+    ]);
+
+    expect(first).toMatchObject({ ok: true, data: { id: deviceId('tenant-1', 'shop') } });
+    expect(second).toMatchObject({ ok: true, data: { id: deviceId('tenant-2', 'shop') } });
+    expect(deviceId('tenant-1', 'shop')).not.toBe(deviceId('tenant-2', 'shop'));
+    expect(sessionStore.get('tenant-1:shop')?.device.id).toBe(deviceId('tenant-1', 'shop'));
+    expect(sessionStore.get('tenant-2:shop')?.device.id).toBe(deviceId('tenant-2', 'shop'));
+
+    // Another daemon on the host shares the claims: the same tenant and name is refused, and
+    // another name under the same tenant opens beside it.
+    const foreignLeases = new LeaseRegistry();
+    for (const [tenantId, lease] of leases) {
+      foreignLeases.allocateLease({
+        tenantId,
+        runId: 'run-1',
+        leaseBackend: 'ios-simulator',
+        leaseId: lease.leaseId,
+      });
+    }
+    const foreign = createOpenHandler(
+      makeSessionStore('agent-device-router-web-tenant-foreign-'),
+      foreignLeases,
+    );
+    expect(await foreign(tenantOpen('tenant-1', 'shop'))).toMatchObject({
+      ok: false,
+      error: { code: 'DEVICE_IN_USE' },
+    });
+    expect(await foreign(tenantOpen('tenant-1', 'cart'))).toMatchObject({
+      ok: true,
+      data: { id: deviceId('tenant-1', 'cart') },
+    });
+  } finally {
+    vi.unstubAllEnvs();
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
 });

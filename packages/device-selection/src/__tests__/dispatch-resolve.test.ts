@@ -18,7 +18,12 @@ import {
   withTestDeviceInventory,
   withTestDeviceInventoryProvider as withDeviceInventoryProvider,
 } from '../inventory-gateways.fixtures.ts';
-import { hostAppDevice, webSessionDevice, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  hostAppDevice,
+  webSessionDevice,
+  type DeviceInfo,
+  type WebSessionIdentity,
+} from '@agent-device/kernel/device';
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -160,7 +165,7 @@ test('an app target selects the app device in either order of one request', asyn
   );
 });
 
-test('a web open names the device of its session, and a request without one keeps the host', async () => {
+test('a web request names the device of its session, and a request without one keeps the host', async () => {
   const webHost: DeviceInfo = {
     platform: 'web',
     id: 'agent-browser-chrome',
@@ -169,22 +174,26 @@ test('a web open names the device of its session, and a request without one keep
     target: 'desktop',
     booted: true,
   };
-  const resolveWeb = async (webSessionName: string | undefined): Promise<DeviceInfo> =>
+  const resolveWeb = async (webSession: WebSessionIdentity | undefined): Promise<DeviceInfo> =>
     await withTestDeviceInventory(
       { local: async () => [webHost] },
       async () =>
         await resolveTargetDeviceInContext(
           { platform: 'web' },
-          webSessionName ? { env: {}, webSessionName } : { env: {} },
+          webSession ? { env: {}, webSession } : { env: {} },
         ),
     );
 
-  assert.deepEqual(await resolveWeb('one'), webSessionDevice(webHost, 'one'));
-  assert.notEqual((await resolveWeb('two')).id, (await resolveWeb('one')).id);
+  assert.deepEqual(await resolveWeb({ name: 'one' }), webSessionDevice(webHost, { name: 'one' }));
+  assert.notEqual((await resolveWeb({ name: 'two' })).id, (await resolveWeb({ name: 'one' })).id);
   assert.equal((await resolveWeb(undefined)).id, webHost.id);
-  assert.equal((await resolveWeb('one ')).id, (await resolveWeb('one')).id);
+  assert.equal((await resolveWeb({ name: 'one ' })).id, (await resolveWeb({ name: 'one' })).id);
+  assert.notEqual(
+    (await resolveWeb({ name: 'one', tenantId: 'tenant-1' })).id,
+    (await resolveWeb({ name: 'one', tenantId: 'tenant-2' })).id,
+  );
   await assert.rejects(
-    resolveWeb('one:app:two'),
+    resolveWeb({ name: 'one:app:two' }),
     (error: unknown) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
@@ -192,13 +201,13 @@ test('a web open names the device of its session, and a request without one keep
   );
 });
 
-test('a session name leaves a device other than the local web host as selected', async () => {
+test('a web session leaves a device other than the local web host as selected', async () => {
   const resolved = await withDeviceInventoryProvider(
     async () => [androidEmulator],
     async () =>
       await resolveTargetDeviceInContext(
         { platform: 'android' },
-        { env: {}, webSessionName: 'one' },
+        { env: {}, webSession: { name: 'one' } },
       ),
   );
 

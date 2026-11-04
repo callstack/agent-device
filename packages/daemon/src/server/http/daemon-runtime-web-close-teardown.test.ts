@@ -70,7 +70,6 @@ test('daemon shutdown asks the platform to close an open web session', async () 
   expect(platformCleanup.closeManagedBrowser).toHaveBeenCalledOnce();
   expect(platformCleanup.closeManagedBrowser).toHaveBeenCalledWith({
     device: session.device,
-    sessionName: session.name,
     stateDir: sessionStore.resolveDaemonStateDir(),
     openSessionNames: expect.any(Function),
   });

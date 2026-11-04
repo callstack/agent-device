@@ -186,7 +186,7 @@ test('fresh open uses app-aware device selection for advisory locking and dispat
       {
         appleSimulatorAppTarget: 'com.example.demo',
         appDeviceTarget: 'com.example.demo',
-        webSessionName: 'session-app-aware',
+        webSession: { name: 'session-app-aware' },
         env: process.env,
       },
     ],
@@ -195,7 +195,7 @@ test('fresh open uses app-aware device selection for advisory locking and dispat
       {
         appleSimulatorAppTarget: 'com.example.demo',
         appDeviceTarget: 'com.example.demo',
-        webSessionName: 'session-app-aware',
+        webSession: { name: 'session-app-aware' },
         env: process.env,
       },
     ],
@@ -266,7 +266,7 @@ test('fresh replay reserves its authored app simulator before any replay step', 
     expect.objectContaining({ platform: 'ios' }),
     {
       appleSimulatorAppTarget: 'com.example.demo',
-      webSessionName: 'fresh-replay',
+      webSession: { name: 'fresh-replay' },
       env: process.env,
     },
   );
@@ -875,8 +875,8 @@ test('open under a macos-app lease names no host path or device, and an unleased
 test('web sessions open side by side on one host, each holding a device of its own', async () => {
   // As the production selection does for a fresh open: the session names its browser's device.
   mockResolveTargetDevice.mockImplementation(async (_flags, options) =>
-    options?.webSessionName
-      ? webSessionDevice(WEB_DESKTOP_DEVICE, options.webSessionName)
+    options?.webSession
+      ? webSessionDevice(WEB_DESKTOP_DEVICE, options.webSession)
       : WEB_DESKTOP_DEVICE,
   );
   const claimsDir = mkdtempForTestSync('agent-device-router-open-web-claims-');
@@ -890,7 +890,7 @@ test('web sessions open side by side on one host, each holding a device of its o
       sessionName: 'web-a',
       sessionStore,
     });
-    expect(keys).toEqual(['session:web-a', `device:${WEB_DESKTOP_DEVICE.id}:session:web-a`]);
+    expect(keys).toEqual(['session:web-a', `device:${WEB_DESKTOP_DEVICE.id}:session:p_web-a`]);
 
     const [first, second] = await Promise.all([
       handler(openRequest('web-a', { platform: 'web' }, 'req-open-web-a', {}, ['about:blank'])),
@@ -899,11 +899,11 @@ test('web sessions open side by side on one host, each holding a device of its o
 
     expect(first).toMatchObject({
       ok: true,
-      data: { id: `${WEB_DESKTOP_DEVICE.id}:session:web-a` },
+      data: { id: `${WEB_DESKTOP_DEVICE.id}:session:p_web-a` },
     });
     expect(second).toMatchObject({
       ok: true,
-      data: { id: `${WEB_DESKTOP_DEVICE.id}:session:web-b` },
+      data: { id: `${WEB_DESKTOP_DEVICE.id}:session:p_web-b` },
     });
 
     // Another daemon on the host shares the claims: a session name it holds is refused, and an
@@ -918,7 +918,7 @@ test('web sessions open side by side on one host, each holding a device of its o
     );
     expect(otherName).toMatchObject({
       ok: true,
-      data: { id: `${WEB_DESKTOP_DEVICE.id}:session:web-c` },
+      data: { id: `${WEB_DESKTOP_DEVICE.id}:session:p_web-c` },
     });
   } finally {
     vi.unstubAllEnvs();

@@ -1,4 +1,5 @@
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
+import type { WebSessionIdentity } from '@agent-device/kernel/device';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { ResolveTargetDeviceOptions } from '@agent-device/device-selection/dispatch-resolve';
 
@@ -6,13 +7,13 @@ export function buildOpenTargetDeviceResolutionOptions(
   openTarget: string | undefined,
   env: EnvMap,
   surfaceFlag: string | undefined,
-  webSessionName: string | undefined,
+  webSession: WebSessionIdentity | undefined,
 ): ResolveTargetDeviceOptions {
   const appTarget = appleSimulatorAppTargetForOpenTarget(openTarget);
   return {
     env,
     appleSimulatorAppTarget: appTarget,
-    webSessionName,
+    webSession,
     // An app named on any other surface stays on the host: those surfaces reach past one app.
     ...(appTarget && (surfaceFlag === undefined || surfaceFlag === 'app')
       ? { appDeviceTarget: appTarget }

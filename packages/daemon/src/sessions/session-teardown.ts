@@ -51,9 +51,6 @@ async function stopSessionWebBrowser(params: {
   const session = sessionStore.resolveCurrent(ref) ?? ref.session;
   await platformCleanup.closeManagedBrowser({
     device: session.device,
-    // The browser session carries the public name, which differs from the store address of an
-    // implicit workspace session.
-    sessionName: session.name,
     stateDir: sessionStore.resolveDaemonStateDir(),
     openSessionNames: () => openWebSessionNames(sessionStore),
   });

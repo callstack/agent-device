@@ -7,11 +7,13 @@ import {
   PLATFORM_SELECTORS,
   type PlatformSelector,
   publicPlatformString,
+  type WebSessionIdentity,
 } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { SessionScope } from '@agent-device/contracts/session';
 import { SessionStore } from '../core/session-store.ts';
+import { tenantPublicSessionName } from '../core/session-tenant-scope.ts';
 import { namesSessionExplicitly } from '@agent-device/kernel/contracts';
 import {
   listSessionSelectorConflicts,
@@ -57,11 +59,16 @@ export function resolvePublicSessionName(req: DaemonRequest): string {
 }
 
 /**
- * The session name as the caller supplied it. A web session device is named from it, so a blank
- * name reaches web validation instead of becoming the default session's browser.
+ * The web session a request runs in: the tenant-relative name as the caller supplied it, and the
+ * tenant under tenant isolation. A web session device is derived from it alone, so a blank name
+ * reaches web validation instead of becoming the default session's browser, and the store key's
+ * `<tenant>:` prefix never enters the backend key.
  */
-export function suppliedSessionName(req: DaemonRequest): string {
-  return req.session;
+export function webSessionIdentity(req: DaemonRequest): WebSessionIdentity {
+  const tenantId = req.meta?.sessionIsolation === 'tenant' ? req.meta.tenantId : undefined;
+  return tenantId === undefined
+    ? { name: req.session }
+    : { name: tenantPublicSessionName(tenantId, req.session), tenantId };
 }
 
 export function resolveImplicitSessionScope(

@@ -40,7 +40,6 @@ import {
   recordManagedAgentBrowserProcesses,
 } from './agent-browser-process-record.ts';
 import { uniqueStrings } from '@agent-device/kernel/collections';
-import { normalizeWebSessionName } from '@agent-device/kernel/device';
 import { DEFAULT_SCROLL_AMOUNT } from '@agent-device/contracts/scroll-gesture';
 
 const AGENT_BROWSER = 'agent-browser';
@@ -51,8 +50,10 @@ const AGENT_BROWSER_DOCTOR_HINT =
 type AgentBrowserProviderOptions = {
   /** The composing runtime's host; every backend spawn and status read uses it. */
   host: HostEnvironment;
+  /** The backend session key, read from the session device id; omitted for no session. */
   session?: string;
   stateDir?: string;
+  /** The backend keys of the published web sessions. */
   openWebSessionNames?: () => readonly string[];
   ownedProcessRecords?: OwnedProcessRecordStore;
 };
@@ -63,12 +64,8 @@ type AgentBrowserRunOptions = {
   stdin?: string;
 };
 
-function normalizedSessionName(session: string | undefined): string | undefined {
-  return session === undefined ? undefined : normalizeWebSessionName(session);
-}
-
 export function createAgentBrowserWebProvider(options: AgentBrowserProviderOptions): WebProvider {
-  const session = normalizedSessionName(options.session);
+  const { session } = options;
   const runJson = async (args: string[], run?: AgentBrowserRunOptions): Promise<unknown> =>
     await runAgentBrowserJson(args, { session, options, ...run });
 
@@ -576,7 +573,7 @@ async function finalizeAgentBrowserProcessRecord(params: {
     if (!params.status.installed) return;
     try {
       const otherSessions = uniqueStrings([
-        ...(params.options.openWebSessionNames?.() ?? []).map(normalizeWebSessionName),
+        ...(params.options.openWebSessionNames?.() ?? []),
         ...fleet.sessions(),
       ]).filter((name) => name !== currentSession);
       if (canClearAgentBrowserRecord(params, otherSessions.length)) {
@@ -598,7 +595,7 @@ async function finalizeAgentBrowserProcessRecord(params: {
 
 /** The fleet names a provider without a session `''`, which no published session name equals. */
 function fleetSessionOf(options: AgentBrowserProviderOptions): string {
-  return normalizedSessionName(options.session) ?? '';
+  return options.session ?? '';
 }
 
 function settleFleetMembership(

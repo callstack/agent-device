@@ -145,7 +145,7 @@ test('open applies stored runtime launchUrl and reports runtime hints', async ()
     {
       appleSimulatorAppTarget: 'Demo',
       appDeviceTarget: 'Demo',
-      webSessionName: 'runtime-open',
+      webSession: { name: 'runtime-open' },
       env: process.env,
     },
   );

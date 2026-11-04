@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { isIosFamily } from '@agent-device/kernel/device';
+import { isIosFamily, webBackendKeyOf } from '@agent-device/kernel/device';
 import type { PlatformResourceCleanup } from '@agent-device/daemon';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
@@ -50,7 +50,7 @@ export async function cleanupManagedWebRuntimeOrphans(
 
 async function closeManagedWebRuntimeSession(
   params: {
-    sessionName: string;
+    backendKey: string;
     stateDir: string;
     openWebSessionNames: () => readonly string[];
     ownedProcessRecords?: OwnedProcessRecordStore;
@@ -60,7 +60,7 @@ async function closeManagedWebRuntimeSession(
   const { createAgentBrowserWebProvider } = await import('@agent-device/platform-web');
   const provider = await createAgentBrowserWebProvider({
     host,
-    session: params.sessionName,
+    session: params.backendKey,
     stateDir: params.stateDir,
     openWebSessionNames: params.openWebSessionNames,
     ownedProcessRecords: params.ownedProcessRecords,
@@ -78,10 +78,11 @@ export function createPlatformResourceCleanup(
       await stopAndroidSnapshotHelperRuntimeForDevice(device);
     },
     async closeManagedBrowser(params) {
-      if (params.device.platform !== 'web') return;
+      const backendKey = webBackendKeyOf(params.device.id);
+      if (backendKey === undefined) return;
       await closeManagedWebRuntimeSession(
         {
-          sessionName: params.sessionName,
+          backendKey,
           stateDir: params.stateDir,
           openWebSessionNames: params.openSessionNames,
           ownedProcessRecords,

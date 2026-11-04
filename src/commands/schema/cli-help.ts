@@ -772,7 +772,7 @@ Out of scope for agent-device web support:
 Rules:
   Do not claim web e2e CI exists unless a project workflow explicitly provides it.
   Do not use native mobile or desktop setup commands such as boot, apps, install, settings, alert, keyboard, perf, logs, or react-devtools for --platform web.
-  Keep browser plans session-scoped: open a URL, inspect refs, act on refs/selectors, verify with wait/get/is/snapshot, capture screenshot only when visual evidence is needed, then close. Each --session name is its own browser (cookies and storage) and its own device (agent-browser-chrome:session:<name>): web sessions with different names run in parallel and the same name conflicts. A name is trimmed and must be 1 to 32 characters of letters, digits, "_" and "-"; anything else is refused with web_session_name_invalid.`,
+  Keep browser plans session-scoped: open a URL, inspect refs, act on refs/selectors, verify with wait/get/is/snapshot, capture screenshot only when visual evidence is needed, then close. Each --session name is its own browser (cookies and storage) and its own device (agent-browser-chrome:session:p_<name>, or t_<tenant hash>_<name> under tenant isolation so tenants never share a browser): web sessions with different names run in parallel and the same name conflicts. A name is trimmed and must be 1 to 30 characters of letters, digits, "_" and "-" (1 to 17 under tenant isolation); anything else is refused with web_session_name_invalid.`,
   },
   ...qaReportHelpTopics,
 } as const satisfies Record<string, { summary: string; body: string }>;

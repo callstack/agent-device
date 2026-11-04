@@ -7,6 +7,7 @@ import {
   webSessionDevice,
   type DeviceInfo,
   type DeviceTarget,
+  type WebSessionIdentity,
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
@@ -71,10 +72,10 @@ export type ResolveTargetDeviceOptions = {
    */
   appDeviceTarget?: string;
   /**
-   * The session a fresh open starts. A web selection is then that session's device, so sessions
-   * hold, lock, and claim their own browser instead of the one host device.
+   * The web session the request runs in. A local web selection is then that session's device, so
+   * a web session holds, locks, and claims its own browser, and the host stays an inventory entry.
    */
-  webSessionName?: string;
+  webSession?: WebSessionIdentity;
   /** Only `boot` sets this; every other command keeps refusing a tie. */
   boot?: BootSelectionIntent;
 };
@@ -171,14 +172,14 @@ export async function resolveTargetDeviceSelection(
  */
 async function selectScopedDevice(
   selection: DeviceSelectionResult,
-  options: Pick<ResolveTargetDeviceOptions, 'appDeviceTarget' | 'webSessionName'>,
+  options: Pick<ResolveTargetDeviceOptions, 'appDeviceTarget' | 'webSession'>,
 ): Promise<DeviceSelectionResult> {
   if (
-    options.webSessionName !== undefined &&
+    options.webSession !== undefined &&
     selection.source === 'local' &&
     selection.device.platform === 'web'
   ) {
-    return { ...selection, device: webSessionDevice(selection.device, options.webSessionName) };
+    return { ...selection, device: webSessionDevice(selection.device, options.webSession) };
   }
   const appTarget = options.appDeviceTarget;
   const resolveAppDevice = appTarget ? readAppDeviceResolver() : undefined;
@@ -312,7 +313,7 @@ function buildResolveTargetDeviceCacheKey(
   const {
     appleSimulatorAppTarget: _appleSimulatorAppTarget,
     appDeviceTarget: _appDeviceTarget,
-    webSessionName: _webSessionName,
+    webSession: _webSession,
     ...cacheOptions
   } = options;
   return JSON.stringify({ request, options: cacheOptions });
