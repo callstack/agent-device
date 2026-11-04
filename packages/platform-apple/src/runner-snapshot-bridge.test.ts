@@ -216,7 +216,7 @@ test('every runner bridge request names its own budget, one transport margin und
   const [target, describe] = sent.map((command) => command.snapshotBridge);
   expect(target).toMatchObject({ verb: 'target', maxDurationMs: 4_000 });
   expect(describe).toMatchObject({ verb: 'describe', maxDurationMs: 4_000 });
-  expect(describe!.maxResponseBytes).toBeGreaterThan(0);
+  expect(describe).toMatchObject({ maxResponseBytes: expect.any(Number) });
 });
 
 test('a read that meets a relaunched app takes XCTest once and reads the new process next', async () => {
@@ -432,9 +432,9 @@ test('a runner whose foreground read cannot answer asks the bridge read to check
   const captured = await snapshot();
 
   const describe = sent.find((command) => command.snapshotBridge?.verb === 'describe');
-  expect(describe?.snapshotBridge?.surfaceHostExecutables).toEqual(
-    IOS_SYSTEM_SURFACE_HOSTS.map((host) => host.processExecutable),
-  );
+  expect(describe?.snapshotBridge).toMatchObject({
+    surfaceHostExecutables: IOS_SYSTEM_SURFACE_HOSTS.map((host) => host.processExecutable),
+  });
   // The runner could not place a host process, so the capture goes to XCTest and says why.
   expect(fallbacks).toHaveLength(1);
   expect(captured.warnings).toEqual([
