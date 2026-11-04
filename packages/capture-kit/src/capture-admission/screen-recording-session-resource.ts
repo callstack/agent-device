@@ -30,6 +30,7 @@ import type {
   DurableCaptureSessionBinding,
 } from '../durable-capture/index.ts';
 import { createDurableCaptureResource } from './durable-capture-resource.ts';
+import { assertScreenRecordingVideoArtifacts } from '../screen-recording-artifacts.ts';
 import type { DurableCaptureFinishIntent } from './durable-capture-resource.ts';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
 import {
@@ -48,6 +49,7 @@ const screenRecordingDefinition: DurableCaptureRecordDefinition<
   displayName: 'screen recording',
   store: screenRecordingResourceStore,
   completionMetadata: encodeScreenRecordingCompletionMetadata,
+  validateCompletion: assertScreenRecordingVideoArtifacts,
   pendingCompletionMetadata: (completion, envelope): JsonObject => {
     const binding = screenRecordingPendingCompletionBinding(envelope, completion);
     return binding ? { [SCREEN_RECORDING_PENDING_COMPLETION_BINDING_KEY]: binding } : {};

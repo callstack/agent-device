@@ -93,6 +93,7 @@ export async function finishRecoveredDurableCapture<
             });
           },
         });
+        definition.validateCompletion?.(result);
         return result;
       }
       case 'missing':

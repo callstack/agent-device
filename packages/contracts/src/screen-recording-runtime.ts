@@ -150,6 +150,15 @@ export type ScreenRecordingCompletion = Readonly<{
   chunks?: readonly ScreenRecordingChunk[];
 }>;
 
+/** The host-side video artifacts named by a completed recording. */
+export function screenRecordingVideoArtifactPaths(
+  completion: Pick<ScreenRecordingCompletion, 'outPath' | 'chunks'>,
+): readonly string[] {
+  return [
+    ...new Set([completion.outPath, ...(completion.chunks?.map((chunk) => chunk.path) ?? [])]),
+  ];
+}
+
 /** Result of stopping a recovered recorder while retaining its export material. */
 export type ScreenRecordingSettlement =
   | Readonly<{ status: 'export' }>

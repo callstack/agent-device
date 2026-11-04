@@ -349,6 +349,7 @@ export function transitionFinishOutcome<K extends string, C>(
   outcome: FinishOutcome<C>,
 ): void {
   if (outcome.status === 'completed') {
+    definition.validateCompletion?.(outcome.result);
     const metadata = { ...(lease.envelope.metadata ?? {}) };
     if (!outcome.cleanupPending) {
       delete metadata.cleanupPendingReason;

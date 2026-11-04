@@ -183,22 +183,17 @@ async function settleRecoveryAuthority<K extends string, H extends LiveResourceH
       case 'export':
         await authority.reattached.handle[Symbol.asyncDispose]();
         return false;
-      case 'completed':
-        if (authority.reattached.cleanupPending) {
-          const completed = authority.reattached;
-          await withDurableCaptureResourceFence({
-            store: params.definition.store,
-            resourcePath,
-            expected: envelope.fence,
-            onCompleted: () => undefined,
-            run: async (lease) => transitionFinishOutcome(params.definition, lease, completed),
-          });
-          return false;
-        }
-        await transitionTerminal(params, resourcePath, envelope, {
-          ...params.definition.completionMetadata(authority.reattached.result),
+      case 'completed': {
+        const completed = authority.reattached;
+        await withDurableCaptureResourceFence({
+          store: params.definition.store,
+          resourcePath,
+          expected: envelope.fence,
+          onCompleted: () => undefined,
+          run: async (lease) => transitionFinishOutcome(params.definition, lease, completed),
         });
-        return true;
+        return completed.cleanupPending === undefined;
+      }
       case 'missing':
         await transitionTerminal(params, resourcePath, envelope, {
           recoveryStatus: 'already-missing',

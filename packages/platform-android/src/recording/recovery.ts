@@ -171,10 +171,10 @@ async function reattachEvidence(params: {
     const released =
       observed.status === 'terminal' &&
       (await releaseQuiescentAdmission(transport, evidence, descriptor.manifestPath));
-    const availability = await androidExportAvailability(host, evidence.completion.outPath);
-    if (availability !== 'present')
+    const availability = await androidExportAvailability(host, evidence.completion);
+    if (availability.status !== 'present')
       return unreattachable(
-        availability === 'missing' ? 'resource-missing' : 'owner-unavailable',
+        availability.status === 'missing' ? 'resource-missing' : 'owner-unavailable',
         'Android recording export is unavailable.',
       );
     return {

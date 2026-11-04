@@ -1,10 +1,12 @@
 import { expect, test, vi } from 'vitest';
 import path from 'node:path';
+import { writeFileSync } from 'node:fs';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { recoverScreenRecordingResourceAfterDaemonLock } from '@agent-device/capture-kit/screen-recording-recovery';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
+import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
 import type { DurableCaptureProgress } from '@agent-device/contracts/durable-resource';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
@@ -13,6 +15,9 @@ import { persistNativeManifest } from './manifest-store.ts';
 import { recordingMarkerPath } from './native-path.ts';
 
 async function setup(initial: 'owned-alive' | 'missing' = 'owned-alive', twoChunks = false) {
+  const outputDir = mkdtempForTestSync('settlement-output-');
+  const input = { ...recordingInput(), outputPath: path.join(outputDir, 'capture.mp4') };
+  const outputFiles = recordingFileStore();
   let manifest = '';
   let state: 'owned-alive' | 'missing' | 'ownership-lost' = initial;
   let loseAtStop = false;
@@ -35,6 +40,13 @@ async function setup(initial: 'owned-alive' | 'missing' = 'owned-alive', twoChun
   });
   const finalize = vi.fn(async () => ({}));
   const host = recordingHost({
+    files: outputFiles,
+    outputs: {
+      copy: async ({ from, to }: { from: string; to: string }) => {
+        await outputFiles.outputs.copy({ from, to });
+        if (path.dirname(to) === outputDir) writeFileSync(to, outputFiles.files.get(to)!);
+      },
+    },
     start: async ({ remotePath }: { remotePath: string }) => {
       files.add(remotePath);
       return { remotePid: '42' };
@@ -81,7 +93,7 @@ async function setup(initial: 'owned-alive' | 'missing' = 'owned-alive', twoChun
     owner: localRuntimeOwner('android'),
     signal: new AbortController().signal,
   });
-  const started = await runtime.screenRecordingStart(recordingInput());
+  const started = await runtime.screenRecordingStart(input);
   if (twoChunks) {
     const marker = JSON.parse(manifest);
     const active = marker.chunks[0];
@@ -115,6 +127,7 @@ async function setup(initial: 'owned-alive' | 'missing' = 'owned-alive', twoChun
   });
   return {
     runtime,
+    outputPath: input.outputPath,
     transport,
     started,
     settle: async () => await attached.handle.settleForExport!(progress()),
@@ -220,12 +233,12 @@ test('a reattached finish keeps its exported completion until admission release 
     const finishing = f.finish();
     const completed = expect(finishing).resolves.toMatchObject({
       status: 'completed',
-      result: { outPath: '/tmp/capture.mp4', nativePathDisposition: 'pending' },
+      result: { outPath: f.outputPath, nativePathDisposition: 'pending' },
       cleanupPending: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
     });
     await Promise.all([vi.advanceTimersByTimeAsync(1_000), completed]);
     const marker = JSON.parse(f.manifest());
-    expect(marker).toMatchObject({ completion: { outPath: '/tmp/capture.mp4' } });
+    expect(marker).toMatchObject({ completion: { outPath: f.outputPath } });
     expect(marker.admissionReleased).toBeUndefined();
     expect(release).toHaveBeenCalledOnce();
     expect(f.finalize).toHaveBeenCalledOnce();
@@ -233,7 +246,7 @@ test('a reattached finish keeps its exported completion until admission release 
       f.runtime.screenRecordingReattach({ envelope: f.started.envelope }),
     ).resolves.toMatchObject({
       status: 'completed',
-      result: { outPath: '/tmp/capture.mp4', nativePathDisposition: 'pending' },
+      result: { outPath: f.outputPath, nativePathDisposition: 'pending' },
       cleanupPending: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
     });
     release.mockRestore();
@@ -241,7 +254,7 @@ test('a reattached finish keeps its exported completion until admission release 
       f.runtime.screenRecordingReattach({ envelope: f.started.envelope }),
     ).resolves.toMatchObject({
       status: 'completed',
-      result: { outPath: '/tmp/capture.mp4' },
+      result: { outPath: f.outputPath },
     });
     expect(JSON.parse(f.manifest())).toMatchObject({ admissionReleased: true });
     expect(f.finalize).toHaveBeenCalledOnce();
@@ -493,7 +506,7 @@ test('startup records an Android export without settling an unavailable admissio
         metadata: {
           phase: 'cleanup-pending',
           cleanupStatus: 'cleanup-pending',
-          completion: { outPath: '/tmp/capture.mp4', nativePathDisposition: 'pending' },
+          completion: { outPath: f.outputPath, nativePathDisposition: 'pending' },
         },
       },
     });

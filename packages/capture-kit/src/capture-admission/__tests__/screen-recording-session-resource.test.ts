@@ -49,11 +49,13 @@ test('screen recording persists durable truth before adopting only handle and en
   });
   const owner = localRuntimeOwner('android');
   const fence = { token: 'recording-fence', generation: 1 } as const;
+  const outPath = path.join(mkdtempForTestSync('recording-session-output-'), 'recording.mp4');
+  fs.writeFileSync(outPath, 'export');
   const finish = vi.fn(async () => ({
     status: 'completed' as const,
     result: {
       backend: 'android',
-      outPath: '/tmp/recording.mp4',
+      outPath,
       startedAt: 1,
       completedAt: 2,
       scope: 'app' as const,
@@ -64,7 +66,7 @@ test('screen recording persists durable truth before adopting only handle and en
   const handle: ScreenRecordingLiveHandle = {
     inspect: () => ({
       backend: 'android',
-      outPath: '/tmp/recording.mp4',
+      outPath,
       startedAt: 1,
       scope: 'app',
       showTouches: true,
@@ -113,7 +115,7 @@ test('screen recording persists durable truth before adopting only handle and en
   if (!active) throw new Error('Expected screen-recording session');
   await expect(finishLiveScreenRecording({ intent: 'capture', binding })).resolves.toMatchObject({
     backend: 'android',
-    outPath: '/tmp/recording.mp4',
+    outPath,
   });
   expect(finish).toHaveBeenCalledOnce();
   expect(sessionStore.get(sessionName)?.screenRecording).toBeUndefined();
@@ -348,10 +350,13 @@ test('a record stop that fails after collecting resumes through the fence withou
   });
   const owner = localRuntimeOwner('android');
   const fence = { token: 'recording-fence', generation: 1 } as const;
+  const outDir = mkdtempForTestSync('recording-resumed-output-');
+  const outPath = path.join(outDir, 'recording.mp4');
   const signals = vi.fn(async () => ({ observation: { recorder: 'confirmed' as const } }));
   const copies = vi.fn(async (_collectedPath: string) => {});
   const exports = vi.fn(async () => {
     if (exports.mock.calls.length === 1) throw new Error('overlay export failed');
+    fs.writeFileSync(outPath, 'export');
     return {
       telemetryPath: '/tmp/recording.telemetry.json',
       nativePathDisposition: 'retired' as const,
@@ -360,7 +365,7 @@ test('a record stop that fails after collecting resumes through the fence withou
   const handle = createScreenRecordingLiveHandle(
     {
       backend: 'android',
-      outPath: '/tmp/recording.mp4',
+      outPath,
       startedAt: 1,
       scope: 'app',
       showTouches: false,
@@ -412,13 +417,13 @@ test('a record stop that fails after collecting resumes through the fence withou
       lifecycle: 'open',
       metadata: {
         stopObservation: { recorder: 'confirmed' },
-        collectedPath: '/tmp/recording.collected.mp4',
+        collectedPath: path.join(outDir, 'recording.collected.mp4'),
       },
     },
   });
 
   await expect(stop()).resolves.toMatchObject({
-    outPath: '/tmp/recording.mp4',
+    outPath,
     telemetryPath: '/tmp/recording.telemetry.json',
     stopObservation: { recorder: 'confirmed' },
     nativePathDisposition: 'retired',

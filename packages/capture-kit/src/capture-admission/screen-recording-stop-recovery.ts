@@ -1,4 +1,4 @@
-import fs from 'node:fs';
+import { inspectScreenRecordingVideoArtifacts } from '../screen-recording-artifacts.ts';
 import type { JsonObject } from '@agent-device/contracts/client';
 import { isRecordingScope, type RecordingAppIdentity } from '@agent-device/contracts/recording';
 import { isNativePathDisposition } from '@agent-device/contracts/recording-native-path';
@@ -157,7 +157,9 @@ export function readReplayableStoredCompletion(
     return undefined;
   }
   const completion = stored as unknown as ScreenRecordingCompletion;
-  return fs.existsSync(completion.outPath) ? completion : undefined;
+  return inspectScreenRecordingVideoArtifacts(completion).status === 'present'
+    ? completion
+    : undefined;
 }
 
 export function readPendingScreenRecordingCompletion(

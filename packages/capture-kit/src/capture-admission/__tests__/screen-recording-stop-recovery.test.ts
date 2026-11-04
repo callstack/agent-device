@@ -44,7 +44,7 @@ test('a completed manifest with no surviving video serves nothing', async () => 
 test('a completed manifest hands back the whole stop response it stored', async () => {
   const harness = makeHarness();
   const completion = fullCompletion(harness.videoPath);
-  fs.writeFileSync(harness.videoPath, 'mp4');
+  writeCompletionVideos(completion);
   writeManifest(harness, encodeScreenRecordingCompletionMetadata(completion));
 
   expect(resolveScreenRecordingStopRecovery({ ...harness.params, device: SESSION_DEVICE })).toEqual(
@@ -55,8 +55,9 @@ test('a completed manifest hands back the whole stop response it stored', async 
 
 test('a completed manifest whose stored response is damaged serves nothing', async () => {
   const harness = makeHarness();
-  const stored = encodeScreenRecordingCompletionMetadata(fullCompletion(harness.videoPath));
-  fs.writeFileSync(harness.videoPath, 'mp4');
+  const completion = fullCompletion(harness.videoPath);
+  const stored = encodeScreenRecordingCompletionMetadata(completion);
+  writeCompletionVideos(completion);
 
   const damages: JsonObject[] = [
     { outPath: 0 },
@@ -123,7 +124,7 @@ test('an open manifest stays available for exact-owner recovery', async () => {
 test('an open cleanup obligation exposes its surviving export without becoming terminal', () => {
   const harness = makeHarness();
   const completion = fullCompletion(harness.videoPath);
-  fs.writeFileSync(harness.videoPath, 'mp4');
+  writeCompletionVideos(completion);
   const metadata = {
     ...encodeScreenRecordingCompletionMetadata(completion),
     phase: 'cleanup-pending',
@@ -157,6 +158,13 @@ test('an open cleanup obligation exposes its surviving export without becoming t
     },
   );
   expect(screenRecordingManifestIsTerminal(harness.params)).toBe(false);
+  const secondChunk = completion.chunks?.[1];
+  if (!secondChunk) throw new Error('Expected second video chunk');
+  fs.rmSync(secondChunk.path);
+  expect(resolveScreenRecordingStopRecovery({ ...harness.params, device: SESSION_DEVICE })).toEqual(
+    { kind: 'open', resourcePath },
+  );
+  fs.writeFileSync(secondChunk.path, 'mp4');
   fs.rmSync(harness.videoPath);
   expect(resolveScreenRecordingStopRecovery({ ...harness.params, device: SESSION_DEVICE })).toEqual(
     {
@@ -193,10 +201,15 @@ function fullCompletion(outPath: string): ScreenRecordingCompletion {
     overlayWarning: 'touch overlay burn-in is only available on macOS hosts',
     activeSessionApp: { bundleId: 'dev.example.app', name: 'Example' },
     chunks: [
-      { index: 0, path: '/daemon/capture-0.mp4', clientOutPath: '/workspace/capture-0.mp4' },
-      { index: 1, path: '/daemon/capture-1.mp4' },
+      { index: 1, path: outPath, clientOutPath: '/workspace/capture-0.mp4' },
+      { index: 2, path: path.join(path.dirname(outPath), 'capture.part-002.mp4') },
     ],
   };
+}
+
+function writeCompletionVideos(completion: ScreenRecordingCompletion): void {
+  fs.writeFileSync(completion.outPath, 'mp4');
+  for (const chunk of completion.chunks ?? []) fs.writeFileSync(chunk.path, 'mp4');
 }
 
 function withStoredCompletion(metadata: JsonObject, patch: JsonObject): JsonObject {

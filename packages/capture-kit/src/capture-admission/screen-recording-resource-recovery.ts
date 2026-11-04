@@ -4,6 +4,7 @@ import { sameDeviceIdentity, type DeviceIdentity } from '@agent-device/kernel/de
 import { AppError } from '@agent-device/kernel/errors';
 import { withDurableCaptureResourceFence } from '../durable-capture/fence.ts';
 import { createStopProgress } from '../durable-capture/transitions.ts';
+import { assertScreenRecordingVideoArtifacts } from '../screen-recording-artifacts.ts';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import {
   type BoundDeviceRuntime,
@@ -114,6 +115,7 @@ export async function recoverScreenRecordingResourceAfterDaemonLock(params: {
               return { status: 'retained' as const, reason: 'resource-missing' };
             case 'completed': {
               if (outcome.cleanupPending) {
+                assertScreenRecordingVideoArtifacts(outcome.result);
                 const binding = screenRecordingPendingCompletionBinding(
                   lease.envelope,
                   outcome.result,
@@ -149,7 +151,11 @@ export async function recoverScreenRecordingResourceAfterDaemonLock(params: {
         ? 'preservation-cancelled'
         : error instanceof AppError && error.details?.reason === 'ownership-fence-lost'
           ? 'ownership-fence-lost'
-          : 'preservation-failed',
+          : error instanceof AppError && error.details?.reason === 'resource-missing'
+            ? 'resource-missing'
+            : error instanceof AppError && error.details?.reason === 'owner-unavailable'
+              ? 'owner-unavailable'
+              : 'preservation-failed',
     };
   } finally {
     clearTimeout(timer);
