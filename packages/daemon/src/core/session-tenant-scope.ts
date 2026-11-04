@@ -52,17 +52,15 @@ export function tenantPublicSessionName(tenant: string, session: string): string
  * The web session a request runs in: the tenant-relative name as the caller supplied it, and the
  * tenant under tenant isolation. A web session device is derived from it alone, so a blank name
  * reaches web validation instead of becoming the default session's browser, and the store key's
- * `<tenant>:` prefix never enters the backend key. Under tenant isolation the supplied name is the
- * one `scopeRequestSession` kept, because the store key already holds `default` for a blank name.
+ * `<tenant>:` prefix never enters the backend key. The supplied name is the one
+ * `scopeRequestSession` kept, because the store key already holds `default` for a blank name.
  */
 export function webSessionIdentity(req: DaemonRequest): WebSessionIdentity {
   const tenantId = req.meta?.sessionIsolation === 'tenant' ? req.meta.tenantId : undefined;
+  const supplied = req.internal?.suppliedSession ?? req.session;
   return tenantId === undefined
-    ? { name: req.session }
-    : {
-        name: tenantPublicSessionName(tenantId, req.internal?.suppliedSession ?? req.session),
-        tenantId,
-      };
+    ? { name: supplied }
+    : { name: tenantPublicSessionName(tenantId, supplied), tenantId };
 }
 
 /**

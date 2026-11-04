@@ -10,7 +10,9 @@ import {
 } from '@agent-device/kernel/device';
 import {
   WEB_DESKTOP_DEVICE,
+  closeLoopbackServer,
   createTestHostEnvironment,
+  listenOnLoopback,
   mkdtempForTestSync,
 } from '@agent-device/test-kit';
 import { getResolveTargetDeviceMock } from '../../__tests__/support/request-router-dispatch-mocks.ts';
@@ -28,6 +30,7 @@ import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-
 import { webSessionIdentity } from '../../core/session-tenant-scope.ts';
 import { resolveCommandDevice } from '../../resources/session-device-resolution.ts';
 import { resolveRequestExecutionLockPlan } from '../request-binding.ts';
+import { createDaemonHttpServer } from '../http/http-server.ts';
 
 vi.mock('../../core/device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
@@ -176,6 +179,78 @@ test.each(['', '   '])(
     expect(sessionStore.toArray()).toEqual([]);
   },
 );
+
+test.each(['batch', 'replay'] as const)(
+  'a fresh web %s with an empty session name is refused and binds no browser',
+  async (command) => {
+    mockResolveTargetDevice.mockImplementation(webSessionResolution);
+    const root = mkdtempForTestSync('agent-device-router-web-blank-nested-');
+    const replayPath = path.join(root, 'flow.ad');
+    fs.writeFileSync(replayPath, 'context platform=web\nopen about:blank\n');
+    const sessionStore = makeSessionStore('agent-device-router-web-blank-nested-');
+    const bound: string[] = [];
+    const handler = createRequestHandler({
+      host: createTestHostEnvironment(),
+      createCommandSurface: fakeCreateCommandSurface,
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+      token: 'test-token',
+      sessionStore,
+      leaseRegistry: new LeaseRegistry(),
+      deviceRuntimeGateway: {
+        ...lifecycleDeviceRuntimeGateway,
+        bind: async (request) => {
+          bound.push(request.device.id);
+          return await lifecycleDeviceRuntimeGateway.bind(request);
+        },
+      },
+      deviceInventoryGateways: createTestDeviceInventoryGateways(),
+      trackDownloadableArtifact: () => 'artifact-id',
+    });
+
+    const response = await handler(freshWebRequest(command, '', replayPath));
+
+    expect(response.ok).toBe(false);
+    expect(bound).toEqual([]);
+    expect(sessionStore.toArray()).toEqual([]);
+  },
+);
+
+test('an HTTP RPC open with an empty session name is refused and opens no browser', async () => {
+  mockResolveTargetDevice.mockImplementation(webSessionResolution);
+  const sessionStore = makeSessionStore('agent-device-router-web-blank-rpc-');
+  const server = await createDaemonHttpServer({
+    token: 'test-token',
+    handleRequest: createOpenHandler(sessionStore),
+    env: {},
+    cwd: mkdtempForTestSync('agent-device-router-web-blank-rpc-cwd-'),
+  });
+  try {
+    const base = `http://127.0.0.1:${await listenOnLoopback(server)}`;
+    const reply = await fetch(`${base}/rpc`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer test-token', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'blank-open',
+        method: 'agent_device.command',
+        params: {
+          command: 'open',
+          session: '',
+          positionals: ['about:blank'],
+          flags: { platform: 'web' },
+        },
+      }),
+    });
+
+    expect((await reply.json()).result).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_ARGS', details: { reason: 'web_session_name_invalid' } },
+    });
+    expect(sessionStore.toArray()).toEqual([]);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
 
 test('an open with an empty session name does not reopen the default web session', async () => {
   mockResolveTargetDevice.mockImplementation(webSessionResolution);
