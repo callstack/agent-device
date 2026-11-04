@@ -5,6 +5,7 @@ import {
   type DeviceIdentity,
 } from '@agent-device/kernel/device';
 import { isRecord } from '@agent-device/kernel/record';
+import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 
 import { canonicalLocalDeviceKey } from './device-claim-paths.ts';
 
@@ -51,6 +52,7 @@ export type DeviceClaim = {
   claimOwnerKind: DeviceClaimOwnerKind;
   /** The command a `transient-command` claim is scoped to; present for exactly that kind. */
   transientCommand?: string;
+  recordingFence?: ResourceOwnershipFence;
   /** Set by `abandonDeviceClaim`; absent while the claim still holds the device for its owner. */
   abandonedAtMs?: number;
 };
@@ -101,9 +103,32 @@ function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
   if (claimOwnerKind === 'transient-command') {
     if (!isNonEmptyString(transientCommand)) return null;
     const claim = decodeClaimBody(raw, claimOwnerKind);
-    return claim ? { ...claim, transientCommand } : null;
+    if (!claim) return null;
+    const fence = raw.recordingFence;
+    if (
+      fence !== undefined &&
+      (transientCommand !== 'record' ||
+        !isRecord(fence) ||
+        !isNonEmptyString(fence.token) ||
+        !Number.isInteger(fence.generation) ||
+        typeof fence.generation !== 'number' ||
+        fence.generation < 0)
+    )
+      return null;
+    return {
+      ...claim,
+      transientCommand,
+      ...(fence === undefined
+        ? {}
+        : {
+            recordingFence: {
+              token: (fence as { token: string }).token,
+              generation: (fence as { generation: number }).generation,
+            },
+          }),
+    };
   }
-  if (transientCommand !== undefined) return null;
+  if (transientCommand !== undefined || raw.recordingFence !== undefined) return null;
   return decodeClaimBody(raw, claimOwnerKind);
 }
 

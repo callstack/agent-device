@@ -1,7 +1,8 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
-import type { SessionRef } from '../../../core/session-state.ts';
+import { sessionHasOwnersBeyondRecording, type SessionRef } from '../../../core/session-state.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { SessionStore } from '../../../core/session-store.ts';
 import type { DeviceClaimSessionOwnership } from '@agent-device/daemon-contracts/device-claims';
 import { clearSessionSnapshot } from '../../../execution/session-snapshot.ts';
@@ -68,4 +69,35 @@ export function publishOpenSession(params: {
     lease: resolveSessionLeaseForRequest({ req }),
     deviceClaim,
   });
+}
+
+export function adoptRecordOnlyRecordingClaim(
+  store: SessionStore,
+  ref: SessionRef,
+  ownership: DeviceClaimSessionOwnership,
+): void {
+  const session = store.requireCurrent(ref);
+  if (!session.recordOnlySession) return;
+  if (session.deviceClaim && session.deviceClaim.ownerToken !== ownership.ownerToken)
+    throw new AppError('COMMAND_FAILED', 'Recording device claim changed', {
+      reason: 'ownership-fence-lost',
+    });
+  session.deviceClaim = ownership;
+}
+
+export function releaseRecordOnlyRecordingClaim(
+  store: SessionStore,
+  address: string,
+  ownership: DeviceClaimSessionOwnership,
+): void {
+  const ref = store.lookup(address);
+  const session = ref?.session;
+  if (
+    !ref ||
+    !session?.recordOnlySession ||
+    session.deviceClaim?.ownerToken !== ownership.ownerToken
+  )
+    return;
+  session.deviceClaim = undefined;
+  if (!session.screenRecording && !sessionHasOwnersBeyondRecording(session)) store.retire(ref);
 }

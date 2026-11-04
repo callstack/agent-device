@@ -3,11 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
-  deviceIdentity,
-  isApplePlatform,
   canHostAppDevices,
   hostDeviceIdPrefix,
-  resolveDeviceAppleOs,
   type DeviceIdentity,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
@@ -25,7 +22,11 @@ import {
 } from './device-claim-inspection.ts';
 import type { TakenOverDeviceClaim } from './device-claim-reboot.ts';
 import { resolveDeviceClaimRoot } from '@agent-device/host-kit/file';
-import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from './device-claim-paths.ts';
+import {
+  canonicalLocalDeviceKey,
+  deviceClaimIdentity,
+  resolveDeviceClaimPath,
+} from './device-claim-paths.ts';
 import {
   DEVICE_CLAIM_SCHEMA_VERSION,
   ownershipFromClaim,
@@ -46,7 +47,7 @@ import {
 } from './device-claim-settlement.ts';
 import { withDeviceClaimLock, writeDeviceClaim } from './device-claim-store.ts';
 
-export { canonicalLocalDeviceKey } from './device-claim-paths.ts';
+export { canonicalLocalDeviceKey, deviceClaimIdentity } from './device-claim-paths.ts';
 export {
   deviceClaimOwnerCannotRelease,
   deviceClaimRequiresStaleInspection,
@@ -215,6 +216,7 @@ async function withAcquisitionLocks<Result extends TransientDeviceClaimResult>(
     env: EnvMap;
     claimOwnerKind: DeviceClaimAcquirerKind;
     transientCommand?: string;
+    refuseForeignClaim?: boolean;
     reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
     observeDeviceBoot?: DeviceBootObservationService;
   },
@@ -226,6 +228,10 @@ async function withAcquisitionLocks<Result extends TransientDeviceClaimResult>(
   const host: DeviceInfo = { ...params.device, id: hostDeviceId, hostApp: undefined };
   const hostKey = canonicalLocalDeviceKey(deviceClaimIdentity(host));
   return await withDeviceClaimLock(hostKey, params.env, async () => {
+    if (params.refuseForeignClaim) {
+      const existingHost = inspectDeviceClaimFile(resolveDeviceClaimPath(hostKey, params.env));
+      if (existingHost) return { status: 'conflict', conflict: existingHost };
+    }
     const hostClaim = await resolveExistingClaim({
       ...params,
       device: host,
@@ -280,6 +286,9 @@ export async function acquireTransientDeviceClaim(params: {
    * command-scoped claim stays attributable to the command that took it.
    */
   coveredBySession: string;
+  /** Preserve the routed session on a recording reservation. */
+  recordingSession?: string;
+  refuseForeignClaim?: boolean;
   /**
    * Whether the live claim under {@link coveredBySession} was taken by this request's
    * workspace rather than merely recorded under the same session string. Session
@@ -296,7 +305,7 @@ export async function acquireTransientDeviceClaim(params: {
 }): Promise<TransientDeviceClaimResult> {
   const identity = deviceClaimIdentity(params.device);
   const deviceKey = canonicalLocalDeviceKey(identity);
-  const session = transientDeviceClaimSession(params.command);
+  const session = params.recordingSession ?? transientDeviceClaimSession(params.command);
   const lockParams = {
     ...params,
     session,
@@ -309,6 +318,14 @@ export async function acquireTransientDeviceClaim(params: {
       existing && inspectTransientLocalClaim(existing, params, readCurrentOwnerIdentity());
     if (local === 'covered') return { status: 'covered-by-owned-claim' };
     if (local === 'conflict') return { status: 'conflict', conflict: existing! };
+    if (params.refuseForeignClaim && existing) return { status: 'conflict', conflict: existing };
+    if (params.refuseForeignClaim && !params.device.hostApp && canHostAppDevices(params.device)) {
+      const prefix = canonicalLocalDeviceKey({ ...identity, id: hostDeviceIdPrefix(identity.id) });
+      const overlapping = inspectDeviceClaims({}, params.env).find(
+        (entry) => !entry.claim || entry.claim.deviceKey.startsWith(prefix),
+      );
+      if (overlapping) return { status: 'conflict', conflict: overlapping };
+    }
     return await claimHeldDevice({
       device: params.device,
       deviceKey,
@@ -497,14 +514,6 @@ export function processOwnsActiveDeviceClaim(device: DeviceInfo, env: EnvMap): b
       readCurrentOwnerIdentity(),
     )
   );
-}
-
-/** The canonical claim-facing identity of a local device: family, Apple OS, and id. */
-export function deviceClaimIdentity(device: DeviceInfo): DeviceIdentity {
-  return deviceIdentity({
-    ...device,
-    ...(isApplePlatform(device.platform) ? { appleOs: resolveDeviceAppleOs(device) } : {}),
-  });
 }
 
 /**
@@ -849,3 +858,9 @@ function sweepMayReconcile(
   if (classification !== 'owner-daemon-superseded') return true;
   return path.resolve(ownerStateDir) === path.resolve(daemonStateDir);
 }
+
+export {
+  admitRecordingStop,
+  finishRecordingClaimRequest,
+  reserveRecordingClaimFence,
+} from './device-claim-recording.ts';

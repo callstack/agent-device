@@ -16,6 +16,7 @@ import { recoverPerfCaptureResourceAfterDaemonLock } from '@agent-device/capture
 import { perfCaptureDurableResource } from '@agent-device/capture-kit/perf-capture-session-resource';
 import { recoverScreenRecordingResourceAfterDaemonLock } from '@agent-device/capture-kit/screen-recording-recovery';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
+import { SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { classifyOwnerLiveness } from '@agent-device/host-kit/process';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
 
@@ -111,6 +112,22 @@ export function inspectDeviceClaimRecovery(claim: DeviceClaim): ClaimRecoveryIns
           resourcePath: ownership.resourcePath,
         });
         if (ownership.requiresRecovery) recoveryKinds.push(resource.resourceKind);
+      }
+    }
+    if (claim.claimOwnerKind === 'transient-command' && claim.transientCommand === 'record') {
+      const recording = ownedResources.find(
+        ({ resourceKind }) => resourceKind === 'screen-recording',
+      );
+      const record = recording && screenRecordingDurableResource.store.read(recording.resourcePath);
+      if (
+        !claim.recordingFence ||
+        !record ||
+        record.status !== 'decoded' ||
+        record.envelope.fence.token !== claim.recordingFence.token ||
+        record.envelope.fence.generation !== claim.recordingFence.generation ||
+        record.envelope.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] !== claim.ownerToken
+      ) {
+        return { status: 'retained', reason: 'screen-recording-start-unconfirmed' };
       }
     }
     return { status: 'inspectable', recoveryKinds, ownedResources };
@@ -210,7 +227,10 @@ function inspectResourceOwnership(
   }
   if (
     record.envelope.sessionId !== claim.session ||
-    !sameDeviceIdentity(record.envelope.device, claim.device)
+    !sameDeviceIdentity(record.envelope.device, claim.device) ||
+    (resource.resourceKind === 'screen-recording' &&
+      record.envelope.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] !== undefined &&
+      record.envelope.metadata[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] !== claim.ownerToken)
   ) {
     return { status: 'retained', reason: `${resource.resourceKind}-owner-mismatch` };
   }

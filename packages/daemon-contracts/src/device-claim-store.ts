@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { publishFileSync, acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
+import {
+  publishFileSync,
+  acquireProcessLockAcquisition,
+  withProcessLock,
+} from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 
@@ -26,15 +30,18 @@ export async function withDeviceClaimLock<T>(
   env: EnvMap,
   task: () => Promise<T>,
 ): Promise<T> {
-  const owner = readCurrentOwnerIdentity();
   return await withProcessLock({
-    acquire: () =>
-      acquireProcessLock({
-        lockDirPath: `${resolveDeviceClaimPath(deviceKey, env)}.lock`,
-        owner: { pid: owner.pid, startTime: owner.startTime, acquiredAtMs: Date.now() },
-        timeoutMs: DEVICE_CLAIM_LOCK_TIMEOUT_MS,
-        description: `device claim for ${deviceKey}`,
-      }),
+    acquire: async () => (await acquireDeviceClaimLock(deviceKey, env)).release,
     task,
+  });
+}
+
+export async function acquireDeviceClaimLock(deviceKey: string, env: EnvMap) {
+  const owner = readCurrentOwnerIdentity();
+  return await acquireProcessLockAcquisition({
+    lockDirPath: `${resolveDeviceClaimPath(deviceKey, env)}.lock`,
+    owner: { pid: owner.pid, startTime: owner.startTime, acquiredAtMs: Date.now() },
+    timeoutMs: DEVICE_CLAIM_LOCK_TIMEOUT_MS,
+    description: `device claim for ${deviceKey}`,
   });
 }

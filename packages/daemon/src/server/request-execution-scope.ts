@@ -1,3 +1,4 @@
+import { releaseRecordOnlyRecordingClaim } from '../sessions/session-lifecycle/internal/session-open.ts';
 import { restrictRemoteHostInputs } from './remote-host-input-policy.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -317,6 +318,7 @@ export async function createRequestExecutionScope(params: {
     const { claimAdmission, runtimeBindings } = createRequestDeviceAccess({
       env: params.host.env,
       req: scopedReq,
+      sessionStore,
       command,
       sessionName,
       dispatchLedger,
@@ -329,11 +331,25 @@ export async function createRequestExecutionScope(params: {
       claimRecoveryGateway: params.claimRecoveryGateway,
     });
 
+    if (command === 'record') {
+      scopedReq = {
+        ...scopedReq,
+        internal: {
+          ...scopedReq.internal,
+          recordStartAttempt: claimAdmission.recordingStartAttempt,
+          recordingClaimOwnership: claimAdmission.recordingClaimOwnership,
+          reserveRecordingFence: claimAdmission.reserveRecordingFence,
+        },
+      };
+    }
     let bindingCleanup: Promise<void> | undefined;
     const disposeBindings = (): Promise<void> => {
       bindingCleanup ??= (async () => {
         try {
           await runtimeBindings[Symbol.asyncDispose]();
+        } catch (error) {
+          claimAdmission.runtimeDisposalFailed();
+          throw error;
         } finally {
           await claimAdmission[Symbol.asyncDispose]();
         }
@@ -466,7 +482,10 @@ export async function createRequestExecutionScope(params: {
           admissionCompleted = true;
           const admittedLease = scopedReq.internal?.admittedLease;
           if (admittedLease) await assertMacOsAppLeaseProcess(admittedLease);
-          return await runAdmittedLeaseWork({ leaseRegistry, req: scopedReq, task });
+          const result = await runAdmittedLeaseWork({ leaseRegistry, req: scopedReq, task });
+          if (typeof result === 'object' && result !== null && 'ok' in result && result.ok === true)
+            claimAdmission.recordingSucceeded();
+          return result;
         } finally {
           // The #2833 inactivity deadline is measured from the END of the last command that ATTACHED
           // to this session, stamped here under the session's own execution lock. The lock is what
@@ -550,6 +569,7 @@ function createRequestDeviceAccess(params: {
   req: DaemonRequest;
   command: string;
   sessionName: string;
+  sessionStore: SessionStore;
   dispatchLedger: RequestDispatchLedger;
   workspace: string;
   callerCwd: string | undefined;
@@ -565,8 +585,11 @@ function createRequestDeviceAccess(params: {
   const { deviceRuntimeGateway, platformRequestScope, daemonPolicy } = params;
   const claimAdmission = createDeviceClaimAdmission({
     policy: resolveCommandDeviceClaimPolicy(params.command),
+    recordingAction: recordingClaimAction(params.req),
     command: params.command,
     session: params.sessionName,
+    recordingClaimReleased: (ownership) =>
+      releaseRecordOnlyRecordingClaim(params.sessionStore, params.sessionName, ownership),
     workspace: params.workspace,
     callerCwd: params.callerCwd,
     resolveScopeRoot: resolveCallerScopeRoot,
@@ -594,6 +617,18 @@ function createRequestDeviceAccess(params: {
         : undefined,
     }),
   };
+}
+
+function recordingClaimAction(req: DaemonRequest): 'start' | 'stop' | undefined {
+  if (req.command !== 'record') return undefined;
+  switch (req.positionals?.[0]?.toLowerCase()) {
+    case 'start':
+      return 'start';
+    case 'stop':
+      return 'stop';
+    default:
+      return undefined;
+  }
 }
 
 async function teardownExpiredSession(params: {

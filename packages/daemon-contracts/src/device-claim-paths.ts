@@ -3,6 +3,9 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
+  deviceIdentity,
+  isApplePlatform,
+  resolveDeviceAppleOs,
   type AppleOS,
   type DeviceIdentity,
   type DeviceInfo,
@@ -28,4 +31,12 @@ function formatLocalDeviceKey(
 export function resolveDeviceClaimPath(deviceKey: string, env: EnvMap): string {
   const hash = crypto.createHash('sha256').update(deviceKey).digest('hex');
   return path.join(resolveDeviceClaimRoot(env), `${hash}.json`);
+}
+
+/** The canonical claim-facing identity of a local device: family, Apple OS, and id. */
+export function deviceClaimIdentity(device: DeviceInfo): DeviceIdentity {
+  return deviceIdentity({
+    ...device,
+    ...(isApplePlatform(device.platform) ? { appleOs: resolveDeviceAppleOs(device) } : {}),
+  });
 }

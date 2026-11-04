@@ -428,3 +428,8 @@ export async function handleSessionOpenCommands(
     ref: result.ref,
   });
 }
+
+export {
+  adoptRecordOnlyRecordingClaim,
+  releaseRecordOnlyRecordingClaim,
+} from './session-open-state.ts';

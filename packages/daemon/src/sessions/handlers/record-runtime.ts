@@ -33,6 +33,7 @@ import { hasDeviceSelectionInput } from '../../core/device/device-selector-inten
 import { ensureBoundDeviceReady } from '../../core/request-runtime-binding.ts';
 import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { createScreenRecordingRecoveryControl } from '@agent-device/capture-kit/screen-recording-recovery';
+import { SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY } from '@agent-device/capture-kit/screen-recording-resource-store';
 import {
   adoptStartedScreenRecording,
   finishLiveScreenRecording,
@@ -55,6 +56,7 @@ import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import { sessionHasOwnersBeyondRecording } from '../../core/session-state.ts';
 import { withCaptureOutputOwnership } from '../../core/capture-output-ownership.ts';
 import { recordSessionAction } from '../../core/session-action-recorder.ts';
+import { adoptRecordOnlyRecordingClaim } from '../session-lifecycle/internal/session-open.ts';
 import {
   missingAppSessionResponse,
   prepareRecordingRequest,
@@ -256,10 +258,14 @@ async function startRecording(
   const runtime = await params.bindDevice(session.device, use);
   const { fence, outputPaths } = prepareRecordingStart(params, session);
   binding.assertAdoptable();
+  await params.req.internal?.reserveRecordingFence?.(fence);
+  params.req.internal?.recordStartAttempt?.();
   const started = await runtime.operations.screenRecordingStart(
     screenRecordingStartInput(params, session, prepared, fence, outputPaths),
   );
   const tenantId = session.lease?.tenantId ?? params.req.meta?.tenantId;
+  const recordingClaim = params.req.internal?.recordingClaimOwnership?.();
+  const claimToken = recordingClaim?.ownerToken;
   await adoptStartedScreenRecording({
     admissionLedger: params.admissionLedger,
     binding,
@@ -268,19 +274,22 @@ async function startRecording(
     fence,
     ...started,
     envelope:
-      params.req.internal?.publicNetworkOnly || tenantId
+      params.req.internal?.publicNetworkOnly || tenantId || claimToken
         ? {
             ...started.envelope,
             metadata: {
               ...started.envelope.metadata,
               ...(params.req.internal?.publicNetworkOnly ? { remoteCaptureOutput: true } : {}),
               ...(tenantId ? { remoteCaptureTenantId: tenantId } : {}),
+              ...(claimToken ? { [SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY]: claimToken } : {}),
             },
           }
         : started.envelope,
     throwIfCanceled: params.throwIfCanceled,
   });
   const adoptedRef = ref ?? draft!.requireRef();
+  if (recordingClaim)
+    adoptRecordOnlyRecordingClaim(params.sessionStore, adoptedRef, recordingClaim);
   const adopted = binding.read();
   if (!adopted) throw new TypeError('Screen recording adoption did not publish a live handle');
   const snapshot = adopted.handle.inspect();
@@ -403,6 +412,7 @@ async function stopRecording(
 ): Promise<DaemonResponse> {
   let stopped: ScreenRecordingStop;
   try {
+    if (kind === 'stop-live') await params.bindDevice(session.device, screenRecordingAdmissionUse);
     stopped =
       kind === 'stop-live'
         ? {
@@ -500,6 +510,7 @@ async function finishRecovered(
   if (recovery.kind === 'none') {
     throw new AppError('INVALID_ARGS', 'no active recording');
   }
+  await params.bindDevice(session.device, screenRecordingAdmissionUse);
   const completion = await finishRecoveredScreenRecording({
     resourcePath: recovery.resourcePath,
     scope: params.requestScope,

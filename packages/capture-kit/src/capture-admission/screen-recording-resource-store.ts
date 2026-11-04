@@ -23,3 +23,4 @@ export function hasRecordingRecoveryNeedingValidator(sessionsDir: string): boole
  * `screen-recording-stop-recovery.ts`; both name this key so a replay cannot miss what was written.
  */
 export const SCREEN_RECORDING_COMPLETION_METADATA_KEY = 'completion';
+export const SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY = 'deviceClaimToken';
