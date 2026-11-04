@@ -113,6 +113,7 @@ Run `agent-device help physical-device` for the same setup guidance from the CLI
 
 - Xcode is installed with `xcrun devicectl` and `xcrun xctrace` available.
 - The device is paired, trusted, connected, unlocked when needed, and listed by `xcrun devicectl list devices`.
+  A paired device that CoreDevice cannot reach (`tunnelState: unavailable`, for example unplugged and off the network) is listed by `devices` with `booted: false`. Commands refuse it with `details.kind: not_ready` and `details.tunnelState: unavailable`.
 - Developer Mode is on in the device's Settings.
 - The Apple runner must be signed before commands can run on the device. Start with Automatic Signing in Xcode and these environment variables; add the others below only when needed:
   - `AGENT_DEVICE_IOS_TEAM_ID`
