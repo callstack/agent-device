@@ -26,6 +26,12 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
    * client can claim a wait it did not perform.
    */
   openDeviceWait?: { waitedMs: number };
+  /**
+   * The session name the caller supplied, kept by `scopeRequestSession` before tenant scoping
+   * rewrites a blank name to `default`. Web validation reads it so a blank name is refused instead
+   * of driving the tenant's default browser.
+   */
+  suppliedSession?: string;
   publicNetworkOnly?: true;
   /**
    * The steps a batch still has ahead of this one. The open seam derives platform readiness

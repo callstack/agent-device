@@ -194,6 +194,41 @@ test('an open with an empty session name does not reopen the default web session
   expect(sessionStore.get('default')?.actions).toEqual([]);
 });
 
+test.each(['', '   '])(
+  'a tenant-isolated web open with the blank session name %j is refused and drives no default browser',
+  async (session) => {
+    mockResolveTargetDevice.mockImplementation(webSessionResolution);
+    const sessionStore = makeSessionStore('agent-device-router-web-tenant-blank-');
+    const leaseRegistry = new LeaseRegistry();
+    const lease = leaseRegistry.allocateLease({
+      tenantId: 'tenant-1',
+      runId: 'run-1',
+      leaseBackend: 'ios-simulator',
+    });
+
+    const response = await createOpenHandler(
+      sessionStore,
+      leaseRegistry,
+    )({
+      ...openWebRequest(session),
+      meta: {
+        requestId: `req-open-tenant-blank-${JSON.stringify(session)}`,
+        tenantId: 'tenant-1',
+        runId: 'run-1',
+        leaseId: lease.leaseId,
+        leaseBackend: 'ios-simulator',
+        sessionIsolation: 'tenant',
+      },
+    });
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_ARGS', details: { reason: 'web_session_name_invalid' } },
+    });
+    expect(sessionStore.toArray()).toEqual([]);
+  },
+);
+
 test('two tenants using one web session name each open their own browser, and one tenant conflicts with itself', async () => {
   mockResolveTargetDevice.mockImplementation(webSessionResolution);
   const claimsDir = mkdtempForTestSync('agent-device-router-web-tenant-claims-');

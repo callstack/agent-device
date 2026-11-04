@@ -45,10 +45,13 @@ export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
       'session isolation mode tenant requires --tenant (or meta.tenantId).',
     );
   }
+  const suppliedSession = req.internal?.suppliedSession ?? req.session;
   const requestedSession = req.session || 'default';
+  const internal = { ...req.internal, suppliedSession };
   if (isTenantOwnedSessionName(tenant, requestedSession)) {
     return {
       ...req,
+      internal,
       meta: {
         ...req.meta,
         tenantId: tenant,
@@ -59,6 +62,7 @@ export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
   return {
     ...req,
     session: tenantScopedSessionName(tenant, requestedSession),
+    internal,
     meta: {
       ...req.meta,
       tenantId: tenant,
