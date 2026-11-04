@@ -1,5 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
 import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
 import { bindAndroidScreenRecordingRuntime } from './runtime.ts';
 import { AndroidScreenRecordingStartRollbackUnconfirmed } from './chunks.ts';
@@ -11,6 +12,160 @@ const start = async (overrides: Record<string, unknown>) =>
     owner: localRuntimeOwner('android'),
     signal: new AbortController().signal,
   });
+
+test.each([
+  'empty',
+  'inconclusive',
+  'foreign-writer',
+  'released-with-successor',
+  'released-with-successor-and-writer',
+] as const)('direct cleanup checks a reused PID and path writers when %s', async (caseName) => {
+  const markers = new Map<string, string>();
+  const markerWrites: { manifestPath: string; contents: string }[] = [];
+  const files = recordingFileStore();
+  const stop = vi.fn(async () => 'ownership-lost' as const);
+  const signals: string[] = [];
+  let writerAfterReceipt = false;
+  const scan = vi.fn(async (remotePath: string) => ({
+    writers:
+      caseName === 'foreign-writer' || writerAfterReceipt
+        ? [{ pid: '42', remotePath, startTime: '99' }]
+        : [],
+    conclusive: caseName !== 'inconclusive',
+  }));
+  const remove = vi.fn(async () => true);
+  const host = recordingHost({
+    files,
+    writeManifest: async ({
+      manifestPath,
+      contents,
+    }: {
+      manifestPath: string;
+      contents: string;
+    }) => {
+      markers.set(manifestPath, contents);
+      markerWrites.push({ manifestPath, contents });
+    },
+    readManifest: async (manifestPath: string) =>
+      markers.has(manifestPath)
+        ? { status: 'read' as const, contents: markers.get(manifestPath)! }
+        : { status: 'missing' as const },
+    removeManifest: async (manifestPath: string) => {
+      markers.delete(manifestPath);
+      return true;
+    },
+    inspect: async () => 'ownership-lost' as const,
+    stop,
+    signal: async ({ pid }: { pid: string }) => {
+      signals.push(pid);
+      return true;
+    },
+    findRunning: scan,
+    remove,
+  });
+  const transport = await host.screenRecording.android.resolve(androidRecordingDevice);
+  const release = vi.spyOn(transport, 'releaseAdmission');
+  const runtime = await bindAndroidScreenRecordingRuntime({
+    host,
+    device: androidRecordingDevice,
+    owner: localRuntimeOwner('android'),
+    signal: new AbortController().signal,
+  });
+  const input = recordingInput();
+  const started = await runtime.screenRecordingStart(input);
+  const markerPath = started.envelope.descriptor.body.manifestPath;
+  if (typeof markerPath !== 'string') throw new Error('Expected generation marker');
+  const active = JSON.parse(markers.get(markerPath)!);
+  const completed = JSON.stringify({
+    ...active,
+    completion: {
+      backend: 'adb screenrecord',
+      outPath: input.outputPath,
+      startedAt: active.startedAt,
+      completedAt: active.startedAt + 1,
+      scope: input.scope,
+      showTouches: input.showTouches,
+      recordOnlySession: input.recordOnlySession,
+    },
+  });
+  markers.set(markerPath, completed);
+  files.files.set(input.outputPath, 'export');
+  expect(started.envelope).toMatchObject({
+    fence: input.fence,
+    metadata: { deviceClaimToken: input.claimToken },
+  });
+  for (const envelope of [
+    { ...started.envelope, fence: { ...input.fence, generation: input.fence.generation + 1 } },
+    {
+      ...started.envelope,
+      metadata: { ...started.envelope.metadata, deviceClaimToken: 'replacement-claim' },
+    },
+  ]) {
+    await expect(runtime.screenRecordingCleanup({ envelope })).resolves.toMatchObject({
+      status: 'cleanup-pending',
+      reason: 'ownership-fence-lost',
+    });
+  }
+  expect(stop).not.toHaveBeenCalled();
+  expect(scan).not.toHaveBeenCalled();
+  expect(markers.get(markerPath)).toBe(completed);
+  if (caseName === 'released-with-successor' || caseName === 'released-with-successor-and-writer') {
+    await expect(
+      runtime.screenRecordingReattach({ envelope: started.envelope }),
+    ).resolves.toMatchObject({
+      status: 'completed',
+    });
+    expect(JSON.parse(markers.get(markerPath)!)).toMatchObject({ admissionReleased: true });
+    expect(await transport.acquireAdmission('b'.repeat(64))).toBe('acquired');
+    const successorPath = `/sdcard/agent-device-recording-v2-admitted-${'b'.repeat(64)}.json`;
+    expect(
+      await transport.compareAndSetManifest({
+        manifestPath: successorPath,
+        expected: null,
+        contents: 'successor bytes',
+      }),
+    ).toBe('updated');
+    release.mockClear();
+    scan.mockClear();
+    writerAfterReceipt = caseName === 'released-with-successor-and-writer';
+  }
+  const before = markers.get(markerPath);
+  const result = await runtime.screenRecordingCleanup({ envelope: started.envelope });
+  expect(stop).toHaveBeenCalledOnce();
+  expect(signals).toEqual([]);
+  expect(scan).toHaveBeenCalledWith(active.chunks[0].remotePath);
+  if (
+    caseName === 'inconclusive' ||
+    caseName === 'foreign-writer' ||
+    caseName === 'released-with-successor-and-writer'
+  ) {
+    expect(result).toMatchObject({ status: 'cleanup-pending', reason: 'cleanup-unconfirmed' });
+    expect(markers.get(markerPath)).toBe(before);
+    expect(remove).not.toHaveBeenCalled();
+    expect(release).not.toHaveBeenCalled();
+    expect(await transport.acquireAdmission('c'.repeat(64))).toBe('busy');
+    if (caseName === 'released-with-successor-and-writer') {
+      const successorPath = `/sdcard/agent-device-recording-v2-admitted-${'b'.repeat(64)}.json`;
+      expect(markers.get(successorPath)).toBe('successor bytes');
+    }
+  } else {
+    expect(result).toEqual({ status: 'cleaned' });
+    expect(markers.has(markerPath)).toBe(false);
+    expect(remove).toHaveBeenCalledExactlyOnceWith(active.chunks[0].remotePath);
+    expect(
+      markerWrites
+        .filter((write) => write.manifestPath === markerPath)
+        .some((write) => JSON.parse(write.contents).admissionReleased === true),
+    ).toBe(true);
+    if (caseName === 'empty') expect(release).toHaveBeenCalledOnce();
+    else {
+      expect(release).not.toHaveBeenCalled();
+      const successorPath = `/sdcard/agent-device-recording-v2-admitted-${'b'.repeat(64)}.json`;
+      expect(markers.get(successorPath)).toBe('successor bytes');
+      expect(await transport.acquireAdmission('c'.repeat(64))).toBe('busy');
+    }
+  }
+});
 
 test('rejects corrupt native chunk paths with zero side effects', async () => {
   let manifest = '';

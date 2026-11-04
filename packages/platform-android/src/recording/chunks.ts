@@ -203,14 +203,33 @@ export async function rollbackChunks(
   transport: Transport,
   chunks: readonly NativeChunk[],
 ): Promise<void> {
-  await stopOwnedChunks(transport, chunks);
+  let stopFailure: unknown;
+  for (const chunk of [...chunks].reverse()) {
+    try {
+      await stopChunk(transport, chunk);
+    } catch (error) {
+      if (!(error instanceof AndroidRecordingOwnershipLost)) {
+        stopFailure ??= error;
+        continue;
+      }
+      const state = await transport
+        .inspect({
+          pid: chunk.remotePid,
+          remotePath: chunk.remotePath,
+          startTime: chunk.remoteStartTime,
+        })
+        .catch(() => 'uncertain' as const);
+      if (!provesAndroidScreenRecordTermination(state)) stopFailure ??= error;
+    }
+  }
+  if (stopFailure) throw stopFailure;
   for (const chunk of chunks) {
     const process = {
       pid: chunk.remotePid,
       remotePath: chunk.remotePath,
       startTime: chunk.remoteStartTime,
     };
-    if (!(await waitForStopped(transport, process)))
+    if (!(await waitForStopped(transport, process, undefined, { allowReassigned: true })))
       throw new Error('Android recorder did not stop');
   }
   for (const chunk of chunks) {
@@ -319,12 +338,14 @@ async function waitForStopped(
   transport: Transport,
   processIdentity: Awaited<ReturnType<Transport['start']>>['process'],
   signal?: AbortSignal,
+  options?: Readonly<{ allowReassigned: boolean }>,
 ): Promise<boolean> {
   for (let elapsed = 0; elapsed <= GRACEFUL_STOP_TIMEOUT_MS; elapsed += STOP_POLL_INTERVAL_MS) {
     signal?.throwIfAborted();
     const state = await transport.inspect(processIdentity, signal);
     if (state === 'missing') return true;
     if (provesAndroidScreenRecordTermination(state)) {
+      if (options?.allowReassigned) return true;
       throw new AndroidRecordingOwnershipLost(
         `Android screenrecord ownership could not be confirmed for pid ${processIdentity.pid}`,
       );
