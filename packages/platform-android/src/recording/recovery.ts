@@ -269,7 +269,24 @@ async function settleAndroidRecording(params: {
     }
     const active = evidence.chunks.at(-1);
     const activeWasLive = active !== undefined && liveChunks.includes(active);
-    const stopped = await stopOwnedChunksWithObservation(transport, liveChunks);
+    const stopped = await stopOwnedChunksWithObservation(
+      transport,
+      liveChunks,
+      activeWasLive && active !== undefined
+        ? () => {
+            params.progress.record(
+              writeStopCheckpoint({
+                activeRecorderSignal: {
+                  pid: active.remotePid,
+                  startTime: active.remoteStartTime,
+                  remotePath: active.remotePath,
+                },
+                stoppedAtMs,
+              }),
+            );
+          }
+        : undefined,
+    );
     intentionalStop = activeWasLive && stopped.activeSignalled;
     for (const chunk of evidence.chunks) {
       const state = await transport.inspect({

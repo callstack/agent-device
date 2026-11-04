@@ -50,7 +50,8 @@ export type ResourceUnreattachableReason =
   | 'owner-unavailable'
   | 'transport-not-reattachable'
   | 'ownership-fence-lost'
-  | 'preservation-unavailable';
+  | 'preservation-unavailable'
+  | 'resource-missing';
 
 export type ReattachOutcome<Handle extends AsyncDisposable, Result> =
   | Readonly<{ status: 'active'; handle: Handle }>

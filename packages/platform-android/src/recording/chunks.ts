@@ -104,13 +104,18 @@ export async function stopOwnedChunks(
 export async function stopOwnedChunksWithObservation(
   transport: Transport,
   chunks: readonly NativeChunk[],
+  onActiveSignalled?: () => void,
 ): Promise<{ activeAlreadyExited: boolean; activeSignalled: boolean }> {
   const active = chunks.at(-1);
   let result = { activeAlreadyExited: false, activeSignalled: false };
   let failure: unknown;
   for (const chunk of [...chunks].reverse()) {
     try {
-      const stopped = await stopChunkWithObservation(transport, chunk);
+      const stopped = await stopChunkWithObservation(
+        transport,
+        chunk,
+        chunk === active ? onActiveSignalled : undefined,
+      );
       if (chunk === active)
         result = { activeAlreadyExited: stopped.alreadyExited, activeSignalled: stopped.signalled };
     } catch (error) {
@@ -236,6 +241,7 @@ export async function stopChunk(
 async function stopChunkWithObservation(
   transport: Transport,
   chunk: NativeChunk,
+  onSignalled?: () => void,
 ): Promise<{ alreadyExited: boolean; signalled: boolean }> {
   const processIdentity = {
     pid: chunk.remotePid,
@@ -243,6 +249,7 @@ async function stopChunkWithObservation(
     startTime: chunk.remoteStartTime,
   };
   const graceful = await transport.stop(processIdentity);
+  if (graceful === 'stopped') onSignalled?.();
   if (graceful === 'already-missing') return { alreadyExited: true, signalled: false };
   if (graceful === 'ownership-lost')
     throw new AndroidRecordingOwnershipLost(
@@ -251,6 +258,7 @@ async function stopChunkWithObservation(
   if (await waitForStopped(transport, processIdentity))
     return { alreadyExited: false, signalled: graceful === 'stopped' };
   const forced = await transport.stop(processIdentity, { force: true });
+  if (forced === 'stopped' && graceful !== 'stopped') onSignalled?.();
   if (forced === 'stopped' || forced === 'already-missing')
     return { alreadyExited: false, signalled: graceful === 'stopped' || forced === 'stopped' };
   if (forced === 'ownership-lost')

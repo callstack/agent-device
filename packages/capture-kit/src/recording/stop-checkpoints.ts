@@ -20,6 +20,7 @@ import type { ScreenRecordingChunk } from '@agent-device/contracts/screen-record
  * noticed. Anything this cannot vouch for comes back absent, so the next attempt redoes that step.
  */
 const OBSERVATION_KEY = 'stopObservation';
+const ACTIVE_SIGNALLED_KEY = 'activeRecorderSignal';
 const STOPPED_AT_KEY = 'stoppedAtMs';
 const RECORDER_WARNING_KEY = 'stopRecorderWarning';
 const COLLECTED_PATH_KEY = 'collectedPath';
@@ -66,6 +67,9 @@ const FINALIZATION_FIELDS: {
 
 export function writeStopCheckpoint(fact: Partial<RecordingStopProgress>): JsonObject {
   return {
+    ...(fact.activeRecorderSignal === undefined
+      ? {}
+      : { [ACTIVE_SIGNALLED_KEY]: { ...fact.activeRecorderSignal } }),
     ...(fact.observation === undefined
       ? {}
       : { [OBSERVATION_KEY]: encodeObservation(fact.observation) }),
@@ -80,6 +84,7 @@ export function writeStopCheckpoint(fact: Partial<RecordingStopProgress>): JsonO
 }
 
 export function readStopCheckpoints(metadata: JsonObject | undefined): RecordingStopProgress {
+  const activeRecorderSignal = readActiveRecorderSignal(metadata?.[ACTIVE_SIGNALLED_KEY]);
   const observation = metadata?.[OBSERVATION_KEY];
   const stoppedAtMs = metadata?.[STOPPED_AT_KEY];
   const recorderWarning = readNonEmptyString(metadata?.[RECORDER_WARNING_KEY]);
@@ -87,6 +92,7 @@ export function readStopCheckpoints(metadata: JsonObject | undefined): Recording
   const exportPath = readNonEmptyString(metadata?.[EXPORT_PATH_KEY]);
   const finalization = readFinalization(metadata?.[FINALIZATION_KEY]);
   return {
+    ...(activeRecorderSignal === undefined ? {} : { activeRecorderSignal }),
     ...(isStopObservation(observation) ? { observation } : {}),
     ...(isNonNegativeNumber(stoppedAtMs) ? { stoppedAtMs } : {}),
     ...(recorderWarning === undefined ? {} : { recorderWarning }),
@@ -172,4 +178,13 @@ function isNonNegativeNumber(value: unknown): value is number {
 
 function readNonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function readActiveRecorderSignal(value: unknown): RecordingStopProgress['activeRecorderSignal'] {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const signal = value as Record<string, unknown>;
+  const pid = readNonEmptyString(signal.pid);
+  const startTime = readNonEmptyString(signal.startTime);
+  const remotePath = readNonEmptyString(signal.remotePath);
+  return pid && startTime && remotePath ? { pid, startTime, remotePath } : undefined;
 }

@@ -71,8 +71,14 @@ export function createScreenRecordingRecoveryControl(params: {
   ScreenRecordingCompletion
 > {
   return Object.freeze({
-    reattach: async (resource: DurableResourceEnvelope<'screen-recording'>) =>
-      await params.runtime.operations.screenRecordingReattach({ envelope: resource }),
+    reattach: async (resource: DurableResourceEnvelope<'screen-recording'>) => {
+      const outcome = await params.runtime.operations.screenRecordingReattach({
+        envelope: resource,
+      });
+      return outcome.status === 'missing'
+        ? { status: 'unreattachable' as const, reason: 'resource-missing' as const }
+        : outcome;
+    },
     cleanup: async (resource: DurableResourceEnvelope<'screen-recording'>) =>
       await params.runtime.operations.screenRecordingCleanup({ envelope: resource }),
     [Symbol.asyncDispose]: params.dispose,

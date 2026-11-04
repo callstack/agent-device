@@ -7,10 +7,14 @@ import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
 import { bindAndroidScreenRecordingRuntime } from './runtime.ts';
 
-async function setup(initial: 'owned-alive' | 'missing' = 'owned-alive') {
+async function setup(initial: 'owned-alive' | 'missing' = 'owned-alive', twoChunks = false) {
   let manifest = '';
   let state: 'owned-alive' | 'missing' | 'ownership-lost' = initial;
   let loseAtStop = false;
+  let olderState: 'owned-alive' | 'missing' = 'owned-alive';
+  let olderFailure = twoChunks;
+  let failAfterSignal: 'throw' | 'uncertain' | undefined;
+  let missingProbes = 0;
   const files = new Set<string>();
   const signal = vi.fn(async () => {
     state = 'missing';
@@ -31,8 +35,25 @@ async function setup(initial: 'owned-alive' | 'missing' = 'owned-alive') {
         files.add(remotePath);
         return { remotePid: '42' };
       },
-      inspect: async () => state,
-      stop: async () => {
+      inspect: async (identity: { pid: string }) => {
+        if (identity.pid === '41') return olderState;
+        if (state === 'missing' && failAfterSignal && ++missingProbes === 2) {
+          const failure = failAfterSignal;
+          failAfterSignal = undefined;
+          if (failure === 'throw') throw new Error('probe unavailable');
+          return 'uncertain' as const;
+        }
+        return state;
+      },
+      stop: async (identity: { pid: string }) => {
+        if (identity.pid === '41') {
+          if (olderFailure) {
+            olderFailure = false;
+            throw new Error('older stop failed');
+          }
+          olderState = 'missing';
+          return 'stopped' as const;
+        }
         if (loseAtStop) {
           state = 'ownership-lost';
           return 'ownership-lost' as const;
@@ -54,6 +75,17 @@ async function setup(initial: 'owned-alive' | 'missing' = 'owned-alive') {
     signal: new AbortController().signal,
   });
   const started = await runtime.screenRecordingStart(recordingInput());
+  if (twoChunks) {
+    const marker = JSON.parse(manifest);
+    const active = marker.chunks[0];
+    const olderPath = '/sdcard/agent-device-recording-123.mp4';
+    files.add(olderPath);
+    marker.chunks = [
+      { ...active, index: 1, remotePid: '41', remotePath: olderPath },
+      { ...active, index: 2 },
+    ];
+    manifest = JSON.stringify(marker);
+  }
   const attached = await runtime.screenRecordingReattach({ envelope: started.envelope });
   if (attached.status !== 'active' || !attached.handle.settleForExport)
     throw new Error('missing settlement authority');
@@ -82,6 +114,10 @@ async function setup(initial: 'owned-alive' | 'missing' = 'owned-alive') {
       return await reattached.handle.finish(progress());
     },
     metadata: () => readEnvelope().metadata,
+    progress,
+    failAfterSignal: (value: 'throw' | 'uncertain') => {
+      failAfterSignal = value;
+    },
     loseAtStop: () => {
       loseAtStop = true;
     },
@@ -205,4 +241,52 @@ test('a missing chunk after a confirmed stop retains the stop checkpoint', async
   await expect(f.settle()).resolves.toEqual({ status: 'retained', reason: 'resource-missing' });
   expect(f.metadata()).toMatchObject({ stopObservation: { recorder: 'confirmed' } });
   expect(f.removeManifest).not.toHaveBeenCalled();
+});
+
+test.each(['throw', 'uncertain'] as const)(
+  'successful signal followed by %s probe remains intentional after reattach',
+  async (failure) => {
+    const f = await setup();
+    f.failAfterSignal(failure);
+    await expect(f.settle()).resolves.toMatchObject({ status: 'retained' });
+    expect(f.metadata()).toMatchObject({
+      activeRecorderSignal: { pid: '42', startTime: '1', remotePath: expect.any(String) },
+    });
+    expect(f.metadata()?.stopObservation).toBeUndefined();
+    expect(f.files.size).toBe(1);
+    f.finalize.mockRejectedValueOnce(new Error('retry export'));
+    await expect(f.finish()).rejects.toThrow('retry export');
+    const result = await f.finish();
+    expect(result.status).toBe('completed');
+    if (result.status === 'completed')
+      expect(result.result.warning ?? '').not.toContain('180s platform limit');
+    expect(f.signal).toHaveBeenCalledOnce();
+  },
+);
+
+test('an older chunk stop failure preserves the active signal for the next stop', async () => {
+  const f = await setup('owned-alive', true);
+  await expect(f.settle()).resolves.toEqual({ status: 'retained', reason: 'stop-unconfirmed' });
+  expect(f.metadata()).toMatchObject({ activeRecorderSignal: { pid: '42' } });
+  expect(f.metadata()?.stopObservation).toBeUndefined();
+  expect(f.files.size).toBe(2);
+  const result = await f.finish();
+  expect(result.status).toBe('completed');
+  if (result.status === 'completed')
+    expect(result.result.warning ?? '').not.toContain('180s platform limit');
+  expect(f.signal).toHaveBeenCalledOnce();
+});
+
+test('a signal checkpoint for another recorder does not suppress the natural limit warning', async () => {
+  const f = await setup('missing');
+  f.progress().record({
+    activeRecorderSignal: {
+      pid: '99',
+      startTime: '1',
+      remotePath: '/sdcard/agent-device-recording-123.mp4',
+    },
+  });
+  const result = await f.finish();
+  expect(result.status).toBe('completed');
+  if (result.status === 'completed') expect(result.result.warning).toContain('180s platform limit');
 });

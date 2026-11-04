@@ -27,6 +27,8 @@ export type ScreenRecordingFinalization = Readonly<{
  */
 export type RecordingStopProgress = Readonly<{
   observation?: StopObservation;
+  /** The active Android recorder accepted our signal, independently of other recorders. */
+  activeRecorderSignal?: Readonly<{ pid: string; startTime: string; remotePath: string }>;
   /** Host instant the recorder was signalled, so a resumed stop measures the same capture window. */
   stoppedAtMs?: number;
   collectedPath?: string;

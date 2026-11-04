@@ -242,6 +242,7 @@ export function allowsDurableCaptureDescriptorCleanup(
     case 'descriptor-version-unsupported':
     case 'ownership-fence-lost':
     case 'preservation-unavailable':
+    case 'resource-missing':
       return false;
     case 'owner-unavailable':
     case 'transport-not-reattachable':

@@ -9,7 +9,10 @@ import type {
   ScreenRecordingLiveSnapshot,
 } from '@agent-device/contracts/screen-recording-runtime';
 import type { ScreenRecordingFinalization } from '@agent-device/contracts/recording-stop-progress';
-import { stopAndExportScreenRecording } from '@agent-device/capture-kit/recording-stop-sequence';
+import {
+  readStopCheckpoints,
+  stopAndExportScreenRecording,
+} from '@agent-device/capture-kit/recording-stop-sequence';
 import { measureCapturedWindow } from './captured-window.ts';
 import { chunkPathAt } from './chunk-path.ts';
 import {
@@ -62,7 +65,15 @@ export async function finalizeAndroidRecording(
   }>,
 ): Promise<FinishOutcome<ScreenRecordingCompletion>> {
   const { host, transport, evidence, recording, startedAtMs, progress } = params;
-  let reachedLimit = params.reachedLimit === true;
+  const signalled = readStopCheckpoints(progress?.learned).activeRecorderSignal;
+  const active = evidence.chunks.at(-1);
+  const intentionalStop =
+    signalled !== undefined &&
+    active !== undefined &&
+    signalled.pid === active.remotePid &&
+    signalled.startTime === active.remoteStartTime &&
+    signalled.remotePath === active.remotePath;
+  let reachedLimit = params.reachedLimit === true && !intentionalStop;
   const outcome = await stopAndExportScreenRecording({
     snapshot: recording,
     progress,
@@ -73,7 +84,10 @@ export async function finalizeAndroidRecording(
         // journal is what keeps it attached to a stop that has to be driven again.
         const activeRecorderAlreadyGone = await stopOwnedChunks(transport, evidence.chunks);
         reachedLimit =
-          (activeRecorderAlreadyGone && params.activeRecorderRetired !== true) || reachedLimit;
+          (activeRecorderAlreadyGone &&
+            params.activeRecorderRetired !== true &&
+            !intentionalStop) ||
+          reachedLimit;
         return {
           observation: { recorder: 'confirmed' },
           ...(reachedLimit ? { warning: PLATFORM_LIMIT_WARNING } : {}),

@@ -4,6 +4,7 @@ import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-r
 import { audioProbeDurableResource } from '@agent-device/capture-kit/audio-probe-session-resource';
 import { perfCaptureDurableResource } from '@agent-device/capture-kit/perf-capture-session-resource';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
+import { createScreenRecordingRecoveryControl } from '@agent-device/capture-kit/screen-recording-recovery';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
@@ -355,3 +356,93 @@ function makeClaim(stateDir: string): DeviceClaim {
     updatedAtMs: 1,
   };
 }
+
+test('missing finalized simulator export retains the claim and recovered stop reports missing', async () => {
+  const stateDir = mkdtempForTestSync('missing-recording-claim-');
+  const claim = {
+    ...makeClaim(stateDir),
+    deviceKey: 'local:apple:ios:sim',
+    device: {
+      family: 'apple' as const,
+      appleOs: 'ios' as const,
+      id: 'sim',
+      name: 'sim',
+      kind: 'simulator' as const,
+    },
+  };
+  const env = { AGENT_DEVICE_CLAIMS_DIR: path.join(stateDir, 'claims') };
+  writeDeviceClaim(claim, env);
+  const native = path.join(stateDir, 'native.mp4');
+  const output = path.join(stateDir, 'missing.mp4');
+  fs.writeFileSync(native, 'native bytes');
+  const resourcePath = screenRecordingDurableResource.store.resolvePath(
+    path.join(stateDir, 'sessions', claim.session),
+  );
+  screenRecordingDurableResource.store.write(
+    resourcePath,
+    createDurableResourceEnvelope({
+      resourceKind: 'screen-recording',
+      sessionId: claim.session,
+      device: claim.device,
+      owner: localRuntimeOwner('apple'),
+      fence: { token: 'screen-fence', generation: 1 },
+      lifecycle: 'open',
+      descriptor: { version: 1, body: { backend: 'simctl', outputPath: native } },
+      metadata: {
+        stopObservation: { recorder: 'confirmed' },
+        stoppedAtMs: 1,
+        exportPath: output,
+        stopFinalization: { telemetryPath: '/tmp/telemetry' },
+      },
+    }),
+  );
+  const cleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
+  const operations = {
+    screenRecordingReattach: async () => ({ status: 'missing' as const }),
+    screenRecordingCleanup: cleanup,
+  };
+  const bind = async ({ device }: { device: unknown }) => ({
+    device,
+    owner: localRuntimeOwner('apple'),
+    facts: {
+      device: { family: 'apple', kind: 'simulator', providerMode: 'local' },
+      operations: {
+        screenRecordingReattach: { available: true },
+        screenRecordingCleanup: { available: true },
+      },
+    },
+    operations,
+    [Symbol.asyncDispose]: async () => {},
+  });
+  const gateway = {
+    bind,
+    shutdown: async () => {},
+  } as unknown as DeviceRuntimeGateway<PlatformRuntimeOperations>;
+  const result = await settleVerifiedOrphanedClaim(
+    claim,
+    createDeviceClaimReconciler({ gateway, scope }),
+    env,
+  );
+  expect(result).toEqual({ status: 'retained', reason: 'screen-recording-cleanup-pending' });
+  const claimPath = resolveDeviceClaimPath(claim.deviceKey, env);
+  expect(JSON.parse(fs.readFileSync(claimPath, 'utf8')).ownerToken).toBe(claim.ownerToken);
+  expect(screenRecordingDurableResource.store.read(resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'open' },
+  });
+  await expect(
+    screenRecordingDurableResource.finishRecovered({
+      resourcePath,
+      scope,
+      acquireControl: async () =>
+        createScreenRecordingRecoveryControl({
+          runtime: { operations } as never,
+          dispose: async () => {},
+        }),
+    }),
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED', details: { reason: 'resource-missing' } });
+  expect(cleanup).not.toHaveBeenCalled();
+  expect(fs.readFileSync(native, 'utf8')).toBe('native bytes');
+  expect(fs.existsSync(output)).toBe(false);
+  expect(JSON.parse(fs.readFileSync(claimPath, 'utf8')).ownerToken).toBe(claim.ownerToken);
+});
