@@ -556,7 +556,9 @@ test('live record stop writes its action under the captured scoped address after
 });
 
 test('a sessionless web record start resolves the session device of its request, never the host', async () => {
-  const harness = makeRecordRuntimeHarness('record-runtime-web-sessionless-');
+  const harness = makeRecordRuntimeHarness('record-runtime-web-sessionless-', {
+    device: webSessionDevice(WEB_HOST, { name: 'recording' }),
+  });
   const ref = harness.sessionStore.lookup(harness.sessionName);
   if (!ref) throw new Error('Expected the harness session');
   harness.sessionStore.retire(ref);

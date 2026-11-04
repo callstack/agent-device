@@ -146,6 +146,7 @@ test('agent-browser provider runs provider-startup cleanup before the first mana
   assert.deepEqual(mockProviderStartupCleanup.mock.calls[0]?.[1], {
     env: process.env,
     openWebSessionNames: [],
+    startingSession: 'web-session',
   });
 });
 

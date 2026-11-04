@@ -256,9 +256,8 @@ test('an HTTP RPC open with an empty session name is refused and opens no browse
       }),
     });
 
-    expect((await reply.json()).result).toMatchObject({
-      ok: false,
-      error: { code: 'INVALID_ARGS', details: { reason: 'web_session_name_invalid' } },
+    expect(await reply.json()).toMatchObject({
+      error: { data: { code: 'INVALID_ARGS', details: { reason: 'web_session_name_invalid' } } },
     });
     expect(sessionStore.toArray()).toEqual([]);
   } finally {
