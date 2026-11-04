@@ -5,7 +5,7 @@ import { runCmd } from '@agent-device/host-kit/command';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { androidScreenRecordingDescriptorCodec } from '../packages/platform-android/src/recording/manifest.ts';
 import { createPlatformRuntimeHost } from './platform-runtime-operation-host.ts';
 import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway.ts';
@@ -19,111 +19,164 @@ vi.mock('@agent-device/host-kit/command', async (original) => ({
   runCmd: vi.fn(),
 }));
 
-test('startup rollback settles the recovery validator before releasing its cache', async () => {
-  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
-  Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
-  const stateDir = mkdtempForTestSync('startup-rollback-state-');
-  const cache = mkdtempForTestSync('startup-rollback-cache-');
-  const paths = resolveDaemonPaths(stateDir);
-  const resource = makeTestScreenRecordingResource({
-    name: 'session',
-    device: { platform: 'android', id: 'emulator-5554', name: 'fixture', kind: 'emulator' },
-  });
-  const resourcePath = screenRecordingResourceStore.resolvePath(
-    path.join(paths.sessionsDir, 'session'),
-  );
-  const descriptor = androidScreenRecordingDescriptorCodec.encode({
-    backend: 'adb-screenrecord',
-    manifestPath: '/data/local/tmp/agent-device-recording-active.json',
-    outputPath: '/tmp/capture.mp4',
-    scope: 'device',
-    showTouches: true,
-    recordOnlySession: false,
-    transportMode: 'local',
-  });
-  expect(androidScreenRecordingDescriptorCodec.decode(descriptor)).toMatchObject({
-    status: 'decoded',
-  });
-  screenRecordingResourceStore.write(resourcePath, {
-    ...resource.envelope,
-    descriptor: { version: 1, body: descriptor },
-  });
-  const host = createTestHostEnvironment({
-    env: {
-      ...process.env,
-      AGENT_DEVICE_STATE_DIR: stateDir,
-      AGENT_DEVICE_SWIFT_CACHE_DIR: cache,
-      AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-      AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-    },
-  });
-  const operationHost = createPlatformRuntimeHost({
-    host,
-    sessionsDir: paths.sessionsDir,
-    resolveSessionArtifacts: () => ({ outputPath: '/tmp/unused', pidPath: '/tmp/unused.pid' }),
-    shutdownLoaders: {} as Parameters<typeof createPlatformRuntimeHost>[0]['shutdownLoaders'],
-    snapshot: {} as Parameters<typeof createPlatformRuntimeHost>[0]['snapshot'],
-  });
-  const gateway = createComposedPlatformRuntimeGateway({
-    modules: new Map(),
-    loadHost: async () => operationHost,
-  });
-  let signal!: AbortSignal;
-  let release!: () => void;
-  let started!: () => void;
-  const compilerStarted = new Promise<void>((resolve) => {
-    started = resolve;
-  });
-  const compilerSettlement = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  vi.mocked(runCmd).mockImplementation(async (_command, _args, options) => {
-    signal = options!.signal!;
-    started();
-    await compilerSettlement;
-    throw new Error('compiler stopped');
-  });
-  const bindFailure = new AppError('COMMAND_FAILED', 'bind failed', { reason: 'bind_failed' });
-  const listen = vi.spyOn(transport, 'listenHttpServer').mockImplementation(async () => {
-    await compilerStarted;
-    throw bindFailure;
-  });
-  try {
-    let settled = false;
-    const startup = startDaemonRuntime({
-      host,
-      stdout: { write: () => {} },
-      stderr: { write: () => {} },
-      composeDeps: daemonRuntimeDepsFixture({ deviceRuntimeGateway: gateway }),
+test.each([false, true])(
+  'startup rollback settles the recovery validator (cleanup failure: %s)',
+  async (failCleanup) => {
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+    const stateDir = mkdtempForTestSync('startup-rollback-state-');
+    const cache = mkdtempForTestSync('startup-rollback-cache-');
+    const paths = resolveDaemonPaths(stateDir);
+    const resource = makeTestScreenRecordingResource({
+      name: 'session',
+      device: { platform: 'android', id: 'emulator-5554', name: 'fixture', kind: 'emulator' },
     });
-    const result = startup.catch((error: unknown) => {
-      settled = true;
-      return error;
+    const resourcePath = screenRecordingResourceStore.resolvePath(
+      path.join(paths.sessionsDir, 'session'),
+    );
+    const descriptor = androidScreenRecordingDescriptorCodec.encode({
+      backend: 'adb-screenrecord',
+      manifestPath: '/data/local/tmp/agent-device-recording-active.json',
+      outputPath: '/tmp/capture.mp4',
+      scope: 'device',
+      showTouches: true,
+      recordOnlySession: false,
+      transportMode: 'local',
     });
-    await compilerStarted;
-    await expect.poll(() => signal.aborted).toBe(true);
-    expect(settled).toBe(false);
-    const bin = path.join(cache, 'bin');
-    expect(fs.readdirSync(bin).some((entry) => entry.endsWith('.lock'))).toBe(true);
-    expect(fs.readdirSync(bin).some((entry) => entry.startsWith('.'))).toBe(true);
-    release();
-    expect(await result).toBe(bindFailure);
-    expect(
-      fs.readdirSync(bin).some((entry) => entry.endsWith('.lock') || entry.startsWith('.')),
-    ).toBe(false);
-    await operationHost.screenRecording.finalize.prepare({ container: 'mp4' });
-    expect(runCmd).toHaveBeenCalledOnce();
-    expect(screenRecordingResourceStore.read(resourcePath)).toMatchObject({
+    expect(androidScreenRecordingDescriptorCodec.decode(descriptor)).toMatchObject({
       status: 'decoded',
-      envelope: { lifecycle: 'open' },
     });
-  } finally {
-    release();
-    listen.mockRestore();
-    vi.mocked(runCmd).mockReset();
-    Object.defineProperty(process, 'platform', platform);
-  }
-});
+    screenRecordingResourceStore.write(resourcePath, {
+      ...resource.envelope,
+      descriptor: { version: 1, body: descriptor },
+    });
+    const host = createTestHostEnvironment({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_SWIFT_CACHE_DIR: cache,
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+      },
+    });
+    const operationHost = createPlatformRuntimeHost({
+      host,
+      sessionsDir: paths.sessionsDir,
+      resolveSessionArtifacts: () => ({ outputPath: '/tmp/unused', pidPath: '/tmp/unused.pid' }),
+      shutdownLoaders: {} as Parameters<typeof createPlatformRuntimeHost>[0]['shutdownLoaders'],
+      snapshot: {} as Parameters<typeof createPlatformRuntimeHost>[0]['snapshot'],
+    });
+    const gateway = createComposedPlatformRuntimeGateway({
+      modules: new Map(),
+      loadHost: async () => operationHost,
+    });
+    let signal!: AbortSignal;
+    let release!: () => void;
+    let started!: () => void;
+    const compilerStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const compilerSettlement = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.mocked(runCmd).mockImplementation(async (_command, _args, options) => {
+      signal = options!.signal!;
+      started();
+      await compilerSettlement;
+      throw new Error('compiler stopped');
+    });
+    const bindFailure = new AppError(
+      'COMMAND_FAILED',
+      'bind failed',
+      { reason: 'bind_failed', exitCode: 7, token: 'primarysecret' },
+      new Error('original bind cause'),
+    );
+    const originalRemove = fs.rmSync;
+    const remove = vi.spyOn(fs, 'rmSync');
+    if (failCleanup)
+      remove.mockImplementation((target, options) => {
+        if (String(target).startsWith(path.join(cache, 'bin', '.')))
+          throw new Error('password=cleanupsecret');
+        return originalRemove(target, options);
+      });
+    const listen = vi.spyOn(transport, 'listenHttpServer').mockImplementation(async () => {
+      await compilerStarted;
+      throw bindFailure;
+    });
+    let result: Promise<unknown> | undefined;
+    try {
+      let settled = false;
+      const startup = startDaemonRuntime({
+        host,
+        stdout: { write: () => {} },
+        stderr: { write: () => {} },
+        composeDeps: daemonRuntimeDepsFixture({ deviceRuntimeGateway: gateway }),
+      });
+      result = startup.catch((error: unknown) => {
+        settled = true;
+        return error;
+      });
+      await expect.poll(() => signal?.aborted, { timeout: 3000 }).toBe(true);
+      expect(settled).toBe(false);
+      const bin = path.join(cache, 'bin');
+      expect(fs.readdirSync(bin).some((entry) => entry.endsWith('.lock'))).toBe(true);
+      expect(fs.readdirSync(bin).some((entry) => entry.startsWith('.'))).toBe(true);
+      release();
+      const error = await result;
+      if (failCleanup) {
+        expect(error).toMatchObject({
+          code: bindFailure.code,
+          message: bindFailure.message,
+          cause: bindFailure,
+          details: {
+            reason: 'bind_failed',
+            exitCode: 7,
+            recordingCleanupFailure: {
+              details: {
+                shutdownFailures: [
+                  {
+                    details: {
+                      reason: 'swift_cache_cleanup_failed',
+                      shutdownFailures: [
+                        { message: 'compiler stopped' },
+                        {
+                          details: { reason: 'swift_cache_temp_removal_failed' },
+                          cause: { message: 'password=[REDACTED]' },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        });
+        const normalized = JSON.stringify(normalizeError(error));
+        expect(normalized).not.toContain('cleanupsecret');
+        expect(normalized).not.toContain('primarysecret');
+        expect(fs.readdirSync(bin).some((entry) => entry.startsWith('.'))).toBe(true);
+      } else {
+        expect(error).toBe(bindFailure);
+        expect(fs.readdirSync(bin).some((entry) => entry.startsWith('.'))).toBe(false);
+      }
+      expect(fs.readdirSync(bin).some((entry) => entry.endsWith('.lock'))).toBe(false);
+      if (!failCleanup) await operationHost.screenRecording.finalize.prepare({ container: 'mp4' });
+      expect(runCmd).toHaveBeenCalledOnce();
+      expect(screenRecordingResourceStore.read(resourcePath)).toMatchObject({
+        status: 'decoded',
+        envelope: { lifecycle: 'open' },
+      });
+    } finally {
+      release();
+      await result;
+      remove.mockRestore();
+      fs.rmSync(cache, { recursive: true, force: true });
+      listen.mockRestore();
+      vi.mocked(runCmd).mockReset();
+      Object.defineProperty(process, 'platform', platform);
+    }
+  },
+);
 
 test('rollback closes the host before a late recording import', async () => {
   const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
@@ -249,5 +302,106 @@ test('startup failure retains nested recording cleanup diagnostics', async () =>
     });
   } finally {
     listen.mockRestore();
+  }
+});
+
+test('a daemon admits requests while its recovery compiler remains pending', async () => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+  const stateDir = mkdtempForTestSync('startup-warm-admission-');
+  const cache = mkdtempForTestSync('startup-warm-cache-');
+  const paths = resolveDaemonPaths(stateDir);
+  const resource = makeTestScreenRecordingResource({
+    name: 'session',
+    device: { platform: 'android', id: 'emulator-5554', name: 'fixture', kind: 'emulator' },
+  });
+  const resourcePath = screenRecordingResourceStore.resolvePath(
+    path.join(paths.sessionsDir, 'session'),
+  );
+  const descriptor = androidScreenRecordingDescriptorCodec.encode({
+    backend: 'adb-screenrecord',
+    manifestPath: '/data/local/tmp/agent-device-recording-active.json',
+    outputPath: '/tmp/capture.mp4',
+    scope: 'device',
+    showTouches: true,
+    recordOnlySession: false,
+    transportMode: 'local',
+  });
+  screenRecordingResourceStore.write(resourcePath, {
+    ...resource.envelope,
+    descriptor: { version: 1, body: descriptor },
+  });
+  const originalResource = fs.readFileSync(resourcePath);
+  const host = createTestHostEnvironment({
+    env: {
+      ...process.env,
+      AGENT_DEVICE_STATE_DIR: stateDir,
+      AGENT_DEVICE_SWIFT_CACHE_DIR: cache,
+      AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+      AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+    },
+  });
+  const operationHost = createPlatformRuntimeHost({
+    host,
+    sessionsDir: paths.sessionsDir,
+    resolveSessionArtifacts: () => ({ outputPath: '/tmp/unused', pidPath: '/tmp/unused.pid' }),
+    shutdownLoaders: {} as Parameters<typeof createPlatformRuntimeHost>[0]['shutdownLoaders'],
+    snapshot: {} as Parameters<typeof createPlatformRuntimeHost>[0]['snapshot'],
+  });
+  const gateway = createComposedPlatformRuntimeGateway({
+    modules: new Map(),
+    loadHost: async () => operationHost,
+  });
+  let release!: () => void;
+  const compilerSettlement = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let signal: AbortSignal | undefined;
+  vi.mocked(runCmd).mockImplementation(async (_command, _args, options) => {
+    signal = options!.signal!;
+    await compilerSettlement;
+    throw new Error('compiler stopped');
+  });
+  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> | undefined;
+  let startup: Promise<Awaited<ReturnType<typeof startDaemonRuntime>>> | undefined;
+  try {
+    startup = startDaemonRuntime({
+      host,
+      stdout: { write: () => {} },
+      stderr: { write: () => {} },
+      composeDeps: daemonRuntimeDepsFixture({ deviceRuntimeGateway: gateway }),
+    });
+    await expect.poll(() => signal !== undefined, { timeout: 5000 }).toBe(true);
+    runtime = await Promise.race([
+      startup,
+      new Promise<never>((_, reject) => {
+        const timer = setTimeout(() => reject(new Error('startup waited for compiler')), 5000);
+        timer.unref();
+        void startup!.finally(() => clearTimeout(timer)).catch(() => {});
+      }),
+    ]);
+    const response = await fetch(`http://127.0.0.1:${runtime.httpPort}/rpc`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(5000),
+      headers: { authorization: `Bearer ${runtime.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'warm',
+        method: 'agent_device.command',
+        params: { command: 'session_list', meta: { requestId: 'warm' } },
+      }),
+    });
+    const body = (await response.json()) as { result?: { ok: boolean }; error?: unknown };
+    expect(body.error).toBeUndefined();
+    expect(body.result?.ok).toBe(true);
+    expect(signal!.aborted).toBe(false);
+    expect(runCmd).toHaveBeenCalledOnce();
+    expect(fs.readFileSync(resourcePath)).toEqual(originalResource);
+  } finally {
+    release();
+    if (!runtime && startup) runtime = await startup.catch(() => undefined);
+    await runtime?.close();
+    vi.mocked(runCmd).mockReset();
+    Object.defineProperty(process, 'platform', platform);
   }
 });
