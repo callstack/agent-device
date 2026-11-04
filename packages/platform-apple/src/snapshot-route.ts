@@ -216,12 +216,7 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
       // A ready runner answers first, with the foreground state of every registered host: the
       // predicate it serves a surface by, read in a few milliseconds. When it cannot answer, the
       // bridge itself refuses the capture while a host process runs for this Simulator.
-      const foreground = await readSurfaceForeground(
-        device,
-        input,
-        signal,
-        surfaceForeground,
-      );
+      const foreground = await readSurfaceForeground(device, input, signal, surfaceForeground);
       if (foreground !== 'background' && foreground !== 'unknown') {
         return await runSurfaceFallback(device, input, fallback, foreground.host.bundleId);
       }

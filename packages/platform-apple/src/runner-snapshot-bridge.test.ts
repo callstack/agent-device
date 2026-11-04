@@ -1,3 +1,4 @@
+import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { AppleRunnerProvider, RunnerCommand } from '@agent-device/apple-runner';
 import type { CaptureSnapshotInput } from '@agent-device/contracts/snapshot-runtime';
@@ -38,7 +39,8 @@ type RunnerProcess = { pid: number; processStartTime: string };
  * foreground process, and `describe` reads it unless the host planned another process, or answers
  * the refusal `refuseDescribe` names. A describe given `holdNextDescribe` reads until that promise
  * settles, and, like the runner, it keeps reading after the daemon stops waiting: a describe that
- * arrives meanwhile is refused as `bridge-read-in-flight`.
+ * arrives meanwhile is refused as `bridge-read-in-flight`. A describe that names surface hosts is
+ * refused as `system-surface-host-unverified`, as a sandbox that refuses the process table does.
  */
 function bridgeRunner(state: {
   process: RunnerProcess;
@@ -84,6 +86,8 @@ function bridgeRunner(state: {
       ) {
         return refusal('stale_target', 'target-process-changed');
       }
+      if (request.surfaceHostExecutables)
+        return refusal('unsupported', 'system-surface-host-unverified');
       if (state.refuseDescribe) return refusal('application_not_responding', state.refuseDescribe);
       if (reading) return refusal('application_not_responding', 'bridge-read-in-flight');
       const hold = state.holdNextDescribe;
@@ -159,10 +163,7 @@ function bridgeRoute(provider: AppleRunnerProvider) {
       isDiscoveryPending: () => false,
       targetFreshness: 'cached',
     },
-    {
-      systemSurfacePresent: async () => 'unknown',
-      systemSurfaceForeground: async () => 'background',
-    },
+    async () => 'background',
   );
   const snapshot = (signal = new AbortController().signal) =>
     route.capture(
@@ -408,7 +409,7 @@ test('the runner runtime reads a remote Simulator through the bridge once its fo
   expect(verbs(sent)).toEqual(['target', 'describe']);
 });
 
-test('a runner whose foreground read cannot answer sends the capture to XCTest without a bridge read', async () => {
+test('a runner whose foreground read cannot answer asks the bridge read to check the surface hosts', async () => {
   const { provider, sent } = bridgeRunner({
     process: { pid: 41, processStartTime: '1700000000.000001' },
   });
@@ -416,12 +417,15 @@ test('a runner whose foreground read cannot answer sends the capture to XCTest w
 
   const captured = await snapshot();
 
-  // The host cannot read a remote Simulator's processes, so nothing else can prove absence.
+  const describe = sent.find((command) => command.snapshotBridge?.verb === 'describe');
+  expect(describe?.snapshotBridge?.surfaceHostExecutables).toEqual(
+    IOS_SYSTEM_SURFACE_HOSTS.map((host) => host.processExecutable),
+  );
+  // The runner could not place a host process, so the capture goes to XCTest and says why.
   expect(fallbacks).toHaveLength(1);
   expect(captured.warnings).toEqual([
-    'Simulator AX snapshot unavailable (system-surface-probe-unavailable); used XCTest for an unverified app generation.',
+    'Simulator AX snapshot unavailable (system-surface-host-unverified); used XCTest for this app generation.',
   ]);
-  expect(verbs(sent)).not.toContain('describe');
 });
 
 test('the foreground proof starts the runner when none is live, then reads only that session', async () => {

@@ -825,11 +825,12 @@ If that request fails, the channel keeps its cached target.
 The capture names no generation, because the app may have relaunched.
 
 A presented system surface stays invisible to the bridge (#2438 amendment), so the route still needs proven absence.
-The daemon cannot read the processes of a provider iOS Simulator.
-Thus, the runner's foreground read is the only read that can prove absence there.
-Every capture of a provider iOS Simulator needs the runner, so that read starts a runner that is not up yet.
+The proof is the same on both channels: the runner's foreground read first, and the bridge's own process check when that read cannot answer.
+Every capture of a provider iOS Simulator needs the runner, so the foreground read starts a runner that is not up yet.
 The proof starts the runner when none is live, and then reads only that runner session.
-If the session id cannot be read, the proof answers `unknown` and the capture uses XCTest.
+If the session id cannot be read, the read answers `unknown`, and the bridge read names the surface hosts.
+The runner then reads the process table of the Simulator it runs in, which it names itself.
+A sandbox that refuses that table gives `system-surface-host-unverified`, and the capture uses XCTest.
 
 An observe-only capture skips the route and goes straight to the provider's capture.
 An observe-only capture must not activate the app or start work, so the provider's capture decides how to observe.

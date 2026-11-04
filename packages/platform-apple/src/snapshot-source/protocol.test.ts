@@ -143,7 +143,7 @@ test('a surface host refusal names the running host executable', () => {
 // registry must stay inside the bounds the guest validates.
 test('every registered surface host fits the bounds the guest validates', async () => {
   const native = await readFile(
-    path.join(import.meta.dirname, '../../../../apple/snapshot-bridge/SnapshotBridge.m'),
+    path.join(import.meta.dirname, '../../../../apple/snapshot-bridge/SnapshotBridgeRequest.m'),
     'utf8',
   );
   const bound = (name: string) => Number(native.match(new RegExp(`${name} = (\\d+);`))?.[1]);

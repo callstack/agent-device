@@ -141,7 +141,8 @@ test('the policy gives each code of the shared refusal table its scope and conse
   for (const { code, consequence } of fixture.captureScoped) {
     // A preparation still running is classified by its failure kind, not by its code.
     const kind = consequence === 'bridge-preparation' ? 'preparing' : 'unsupported';
-    expect(bridgeFailureDisposition({ kind, code }), code).toEqual({
+    // A surface-host refusal also names the host it saw; this table fixes only scope and consequence.
+    expect(bridgeFailureDisposition({ kind, code }), code).toMatchObject({
       scope: 'capture',
       code,
       consequence,

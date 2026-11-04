@@ -1,3 +1,4 @@
+import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
 import {
   assertProducedRunnerRequests,
   bindTestCommandHost,
@@ -331,6 +332,18 @@ const SNAPSHOT_BRIDGE_SITES: Record<
         generation: '41:1700000000.000001',
       },
       hint: deriveIosCaptureHint(createIosSnapshotRequest({ interactiveOnly: true })),
+    }),
+  'ios-simulator.runner-snapshot-bridge.describe-surface-hosts': (bridge) =>
+    bridge.source.acquire({
+      target: {
+        appBundleId: APP,
+        targetId: `${IOS_SIMULATOR.id}:${APP}`,
+        pid: 41,
+        processStartTime: '1700000000.000001',
+        generation: '41:1700000000.000001',
+      },
+      hint: deriveIosCaptureHint(createIosSnapshotRequest({ interactiveOnly: true })),
+      surfaceHostExecutables: IOS_SYSTEM_SURFACE_HOSTS.map((host) => host.processExecutable),
     }),
 };
 

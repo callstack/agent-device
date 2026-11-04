@@ -28,6 +28,14 @@
     {
       "code": "snapshot-tree-changed",
       "consequence": "tree-changed"
+    },
+    {
+      "code": "system-surface-host-present",
+      "consequence": "system-surface-host"
+    },
+    {
+      "code": "system-surface-host-unverified",
+      "consequence": "system-surface-host"
     }
   ],
   "generationScoped": [
@@ -94,6 +102,7 @@
     "snapshot-tree-required",
     "source-closed",
     "source-version-mismatch",
+    "surface-hosts-invalid",
     "target-process-changed",
     "target-process-unavailable",
     "traits-invalid",
