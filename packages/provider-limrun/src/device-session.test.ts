@@ -73,8 +73,8 @@ const TEST_DEPENDENCIES = {
 test('iOS device session exposes reusable capabilities without its raw client', async () => {
   const pressKey = vi.fn(async () => undefined);
   const readLogs = vi.fn(async () => 'line one\nline two\n');
-  const startRecording = vi.fn(async () => undefined);
-  const stopRecording = vi.fn(async () => 'https://ios.example/recording');
+  const startRecordingSession = vi.fn(async () => 'recording-id');
+  const stopRecordingSession = vi.fn(async () => 'https://ios.example/recording');
   const simctlWait = vi.fn(async () => ({ code: 0, stdout: 'ok', stderr: '' }));
   const simctl = vi.fn(() => commandExecution(simctlWait));
   const session = createLimrunDeviceSession(
@@ -83,8 +83,8 @@ test('iOS device session exposes reusable capabilities without its raw client', 
       listApps: vi.fn(async () => IOS_APPS),
       pressKey,
       appLogTail: readLogs,
-      startRecording,
-      stopRecording,
+      startRecordingSession,
+      stopRecordingSession,
       simctl,
     }),
   );
@@ -103,8 +103,10 @@ test('iOS device session exposes reusable capabilities without its raw client', 
   assert.deepEqual(session.viewport, { width: 402, height: 874 });
   await session.pressKey('enter', ['command']);
   assert.equal(await session.readLogs('com.example.ios', 200), 'line one\nline two\n');
-  await session.startRecording({ quality: 8 });
-  assert.deepEqual(await session.stopRecording(), { downloadUrl: 'https://ios.example/recording' });
+  await session.startRecording({ recordingId: 'recording-id', quality: 8 });
+  assert.deepEqual(await session.stopRecording('recording-id'), {
+    downloadUrl: 'https://ios.example/recording',
+  });
   await session.downloadRecording({
     downloadUrl: 'https://ios.example/recording',
     outPath: '/tmp/ios-recording.mp4',
@@ -117,8 +119,10 @@ test('iOS device session exposes reusable capabilities without its raw client', 
 
   assert.deepEqual(pressKey.mock.calls[0], ['enter', ['command']]);
   assert.deepEqual(readLogs.mock.calls[0], ['com.example.ios', 200]);
-  assert.deepEqual(startRecording.mock.calls[0], [{ quality: 8 }]);
-  assert.deepEqual(stopRecording.mock.calls[0], [{}]);
+  assert.deepEqual(startRecordingSession.mock.calls[0], [
+    { recordingId: 'recording-id', quality: 8 },
+  ]);
+  assert.deepEqual(stopRecordingSession.mock.calls[0], ['recording-id']);
   assert.deepEqual(downloadFile.mock.calls.at(-1), [
     {
       url: 'https://ios.example/recording',
@@ -175,11 +179,11 @@ test('Android device session exposes semantic ADB capabilities without its raw c
     },
   };
   const pressKey = vi.fn(async () => undefined);
-  const startRecording = vi.fn(async () => undefined);
-  const stopRecording = vi.fn(async () => 'https://android.example/recording');
+  const startRecordingSession = vi.fn(async () => 'recording-id');
+  const stopRecordingSession = vi.fn(async () => 'https://android.example/recording');
   const sendAsset = vi.fn(async () => undefined);
   const session = createLimrunDeviceSession(
-    androidSession(provider, { pressKey, startRecording, stopRecording, sendAsset }),
+    androidSession(provider, { pressKey, startRecordingSession, stopRecordingSession, sendAsset }),
   );
 
   assert.equal(session.platform, 'android');
@@ -195,8 +199,8 @@ test('Android device session exposes semantic ADB capabilities without its raw c
   assert.equal(await session.readLogs(20), 'log line\n');
   assert.equal(await session.installRemoteApp('https://assets.example/android.apk'), undefined);
   await session.pressKey('KEYCODE_ENTER', ['shift']);
-  await session.startRecording({ quality: 7 });
-  assert.deepEqual(await session.stopRecording(), {
+  await session.startRecording({ recordingId: 'recording-id', quality: 7 });
+  assert.deepEqual(await session.stopRecording('recording-id'), {
     downloadUrl: 'https://android.example/recording',
   });
   await session.downloadRecording({
@@ -207,8 +211,10 @@ test('Android device session exposes semantic ADB capabilities without its raw c
 
   assert.deepEqual(sendAsset.mock.calls[0], ['https://assets.example/android.apk']);
   assert.deepEqual(pressKey.mock.calls[0], ['KEYCODE_ENTER', ['shift']]);
-  assert.deepEqual(startRecording.mock.calls[0], [{ quality: 7 }]);
-  assert.deepEqual(stopRecording.mock.calls[0], [{}]);
+  assert.deepEqual(startRecordingSession.mock.calls[0], [
+    { recordingId: 'recording-id', quality: 7 },
+  ]);
+  assert.deepEqual(stopRecordingSession.mock.calls[0], ['recording-id']);
   assert.deepEqual(downloadFile.mock.calls.at(-1), [
     {
       url: 'https://android.example/recording',
