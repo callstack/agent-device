@@ -9,7 +9,13 @@ test('an explicit null fixture start time reaches the manager as an unavailable 
   const manager = new SnapshotBridgeManager(fixture.host);
   try {
     await assert.rejects(
-      manager.request({ target, bridge, limits, maxDepth: 10, deadline: deadline() }),
+      manager.request({
+        target,
+        bridge,
+        limits,
+        maxDepth: 10,
+        deadline: deadline(undefined, 5000),
+      }),
       (error: unknown) =>
         error instanceof SnapshotSourceError &&
         error.failureKind === 'stale-target' &&
@@ -27,7 +33,13 @@ test.each([undefined, 'application_not_responding'])(
     const manager = new SnapshotBridgeManager(fixture.host);
     try {
       await assert.rejects(
-        manager.request({ target, bridge, limits, maxDepth: 10, deadline: deadline() }),
+        manager.request({
+          target,
+          bridge,
+          limits,
+          maxDepth: 10,
+          deadline: deadline(undefined, 5000),
+        }),
         (error: unknown) =>
           error instanceof SnapshotSourceError &&
           error.failureKind === 'stale-target' &&

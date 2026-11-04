@@ -23,7 +23,7 @@ int main(int argc, const char *argv[]) {
     pid_t client = -1;
     if (!failInitialization) {
       client = fork();
-      if (client < 0) return 44;
+      if (client < 0) return 45;
       if (client == 0) {
         for (int i = 0; i < 100; i++) {
           int fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -41,7 +41,7 @@ int main(int argc, const char *argv[]) {
     if (!initialized) return 42;
     if (failInitialization) return result == 1 && access(fixtureSocket.fileSystemRepresentation, F_OK) != 0 ? 0 : 43;
     int status = 0;
-    if (waitpid(client, &status, 0) != client) return 44;
+    if (waitpid(client, &status, 0) != client) return 46;
     return result == 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : 44;
   }
 }
