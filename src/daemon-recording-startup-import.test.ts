@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
-import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createPlatformRuntimeHost } from './platform-runtime-operation-host.ts';
 import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway.ts';
@@ -10,6 +10,7 @@ import { startDaemonRuntime } from '@agent-device/daemon';
 import {
   failDaemonHttpListen,
   recordingDaemonDeps,
+  recordingDaemonHost,
 } from './__tests__/test-utils/recording-daemon.ts';
 
 const gate = vi.hoisted(() => {
@@ -42,7 +43,7 @@ test('rollback closes a recording import already started by the composed runner 
   const stateDir = mkdtempForTestSync('startup-import-race-');
   const cache = path.join(stateDir, 'cache');
   const paths = resolveDaemonPaths(stateDir);
-  const host = createTestHostEnvironment({
+  const host = recordingDaemonHost({
     env: {
       AGENT_DEVICE_STATE_DIR: stateDir,
       AGENT_DEVICE_SWIFT_CACHE_DIR: cache,

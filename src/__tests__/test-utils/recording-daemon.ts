@@ -5,9 +5,17 @@ import type { ComposeDaemonRuntimeDeps, DaemonRuntimeDeps } from '@agent-device/
 import type { JsonObject } from '@agent-device/contracts/client';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { deviceIdentity } from '@agent-device/kernel/device';
+import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { composeDaemonRuntimeDeps } from '../../daemon-composition.ts';
 
 type Gateway = DaemonRuntimeDeps['deviceRuntimeGateway'];
+
+export function recordingDaemonHost(options: Parameters<typeof createTestHostEnvironment>[0] = {}) {
+  return createTestHostEnvironment({
+    ...options,
+    env: { ...options.env, AGENT_DEVICE_CLAIMS_DIR: mkdtempForTestSync('recording-test-claims-') },
+  });
+}
 
 export function recordingDaemonDeps(
   gateway: (composed: Gateway) => Gateway,

@@ -2,11 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
-import {
-  androidRecordingDescriptorFixture,
-  createTestHostEnvironment,
-  mkdtempForTestSync,
-} from '@agent-device/test-kit';
+import { androidRecordingDescriptorFixture, mkdtempForTestSync } from '@agent-device/test-kit';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
@@ -16,6 +12,7 @@ import { startDaemonRuntime } from '@agent-device/daemon';
 import {
   failDaemonHttpListen,
   recordingDaemonDeps,
+  recordingDaemonHost,
   recordingRecoveryEnvelope,
 } from './__tests__/test-utils/recording-daemon.ts';
 
@@ -41,7 +38,7 @@ test.each([false, true])(
       status: 'decoded',
       envelope: { descriptor: { body: descriptor } },
     });
-    const host = createTestHostEnvironment({
+    const host = recordingDaemonHost({
       env: {
         AGENT_DEVICE_STATE_DIR: stateDir,
         AGENT_DEVICE_SWIFT_CACHE_DIR: cache,
@@ -180,7 +177,7 @@ test('rollback closes the host before a late recording import', async () => {
   const stateDir = mkdtempForTestSync('startup-rollback-late-state-');
   const cache = path.join(stateDir, 'cache');
   const paths = resolveDaemonPaths(stateDir);
-  const host = createTestHostEnvironment({
+  const host = recordingDaemonHost({
     env: {
       AGENT_DEVICE_STATE_DIR: stateDir,
       AGENT_DEVICE_SWIFT_CACHE_DIR: cache,
@@ -222,7 +219,7 @@ test('rollback closes the host before a late recording import', async () => {
 
 test('startup failure retains nested recording cleanup diagnostics', async () => {
   const stateDir = mkdtempForTestSync('startup-rollback-failure-');
-  const host = createTestHostEnvironment({
+  const host = recordingDaemonHost({
     env: {
       AGENT_DEVICE_STATE_DIR: stateDir,
       AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
@@ -311,7 +308,7 @@ test('a daemon admits requests while its recovery compiler remains pending', asy
   const descriptor = androidRecordingDescriptorFixture;
   screenRecordingResourceStore.write(resourcePath, recordingRecoveryEnvelope(descriptor));
   const originalResource = fs.readFileSync(resourcePath);
-  const host = createTestHostEnvironment({
+  const host = recordingDaemonHost({
     env: {
       AGENT_DEVICE_STATE_DIR: stateDir,
       AGENT_DEVICE_SWIFT_CACHE_DIR: cache,

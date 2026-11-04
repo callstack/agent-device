@@ -6,10 +6,19 @@ import type {
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { createApplicationResourceLifecycle } from './platform-runtime-application-resources.ts';
 import fs from 'node:fs';
-import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { resolveDeviceClaimRoot } from '@agent-device/host-kit/file';
+import { canonicalLocalDeviceKey } from '@agent-device/daemon-contracts/device-claims';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { startDaemonRuntime } from '@agent-device/daemon';
-import { recordingDaemonDeps } from './__tests__/test-utils/recording-daemon.ts';
+import {
+  recordingDaemonDeps,
+  recordingDaemonHost,
+} from './__tests__/test-utils/recording-daemon.ts';
 
 function lifecycle(overrides: {
   hasTestImeRecoveryEvidence: AndroidApplicationTools['hasTestImeRecoveryEvidence'];
@@ -276,7 +285,7 @@ test('daemon close records sanitized application resource cleanup failures', asy
     },
   });
   const runtime = await startDaemonRuntime({
-    host: createTestHostEnvironment({
+    host: recordingDaemonHost({
       env: {
         AGENT_DEVICE_STATE_DIR: stateDir,
         AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
@@ -300,4 +309,64 @@ test('daemon close records sanitized application resource cleanup failures', asy
   expect(log).toContain('swift_cache_temp_removal_failed');
   expect(log).toContain('swift_cache_lock_release_failed');
   expect(log).not.toContain('private');
+});
+
+test('a composed daemon uses its isolated claim root and leaves a foreign dead claim untouched', async () => {
+  const sentinelRoot = mkdtempForTestSync('recording-foreign-claims-');
+  const foreignState = mkdtempForTestSync('recording-foreign-state-');
+  const stateDir = mkdtempForTestSync('recording-isolated-state-');
+  const child = spawn(process.execPath, ['-e', '']);
+  const pid = child.pid;
+  if (!pid) throw new Error('test child did not start');
+  await once(child, 'exit');
+  const key = canonicalLocalDeviceKey({
+    family: 'android',
+    id: 'foreign-device',
+    kind: 'emulator',
+  });
+  const claimPath = path.join(
+    sentinelRoot,
+    `${crypto.createHash('sha256').update(key).digest('hex')}.json`,
+  );
+  const claim = JSON.stringify({
+    schemaVersion: 3,
+    deviceKey: key,
+    device: { family: 'android', id: 'foreign-device', kind: 'emulator', name: 'foreign' },
+    session: 'foreign',
+    workspace: foreignState,
+    stateDir: foreignState,
+    ownerPid: pid,
+    ownerStartTime: null,
+    ownerToken: 'foreign-token',
+    createdAtMs: 1,
+    updatedAtMs: 1,
+    claimOwnerKind: 'open-session',
+  });
+  fs.writeFileSync(claimPath, claim);
+  const oldClaimRoot = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  process.env.AGENT_DEVICE_CLAIMS_DIR = sentinelRoot;
+  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> | undefined;
+  try {
+    const host = recordingDaemonHost({
+      env: {
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+      },
+    });
+    expect(host.env.AGENT_DEVICE_CLAIMS_DIR).toBeDefined();
+    expect(resolveDeviceClaimRoot(host.env)).toBe(host.env.AGENT_DEVICE_CLAIMS_DIR);
+    expect(host.env.AGENT_DEVICE_CLAIMS_DIR).not.toBe(sentinelRoot);
+    runtime = await startDaemonRuntime({
+      host,
+      stdout: { write: () => {} },
+      stderr: { write: () => {} },
+      composeDeps: recordingDaemonDeps((gateway) => gateway),
+    });
+    expect(fs.readFileSync(claimPath, 'utf8')).toBe(claim);
+  } finally {
+    if (runtime) await runtime.close();
+    if (oldClaimRoot === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = oldClaimRoot;
+  }
 });
