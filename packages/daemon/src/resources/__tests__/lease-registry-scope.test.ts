@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { CLOUD_DEVICE_LEASE_TTL_MS } from '@agent-device/contracts/lease-scope';
 import {
   createLeaseTtlResolver,
   leaseDeviceBindingKey,
@@ -48,4 +49,10 @@ test('lease TTL normalization retains defaults, limits, and invalid configuratio
   assert.equal(configured(undefined), 1);
   assert.equal(configured(1), 1);
   assert.throws(() => configured(2), { code: 'INVALID_ARGS' });
+});
+
+test('a lowered ceiling grants the cloud device TTL its ceiling and still refuses other excess', () => {
+  const lowered = createLeaseTtlResolver({ maxLeaseTtlMs: 300_000 });
+  assert.equal(lowered(CLOUD_DEVICE_LEASE_TTL_MS), 300_000);
+  assert.throws(() => lowered(300_001), { code: 'INVALID_ARGS' });
 });

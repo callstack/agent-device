@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { CLOUD_DEVICE_LEASE_TTL_MS } from '@agent-device/contracts/lease-scope';
 import { AppError } from '@agent-device/kernel/errors';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
@@ -18,10 +19,11 @@ const leaseDeferredCommands = new Set([
   'session',
 ]);
 export const PROXY_REMOTE_LEASE_TTL_MS = 5 * 60 * 1000;
-export const CLOUD_DEVICE_LEASE_TTL_MS = 10 * 60 * 1000;
 
+/** A cloud device lease is one that declares `usesCloudWebDriverLease` or `holdsCloudDevice`. */
 function cloudDeviceLeaseTtlMs(state: RemoteConnectionState): number | undefined {
-  return connectionProviderCapabilities(state.leaseProvider).holdsCloudDevice
+  const capabilities = connectionProviderCapabilities(state.leaseProvider);
+  return capabilities.usesCloudWebDriverLease || capabilities.holdsCloudDevice === true
     ? CLOUD_DEVICE_LEASE_TTL_MS
     : undefined;
 }
@@ -96,6 +98,6 @@ const MACOS_APP_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
 
 const CLOUD_WEBDRIVER_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
   shouldAllocate: (command) => !leaseDeferredCommands.has(command),
-  ttlMs: () => CLOUD_DEVICE_LEASE_TTL_MS,
+  ttlMs: cloudDeviceLeaseTtlMs,
   resolveLeaseState: async (options) => ({ state: options.state }),
 };
