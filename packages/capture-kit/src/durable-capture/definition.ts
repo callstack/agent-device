@@ -87,6 +87,7 @@ export type DurableCaptureCleanupOutcome =
 
 export type AdoptStartedDurableCaptureParams<K extends string, H extends AsyncDisposable> = {
   reportUndurableCleanup(device: DeviceInfo, outcome: DurableCaptureCleanupOutcome): void;
+  reportConfirmedStartRollback?(): void;
   binding: DurableCaptureSessionBinding<K, H>;
   device: DeviceInfo;
   owner: RuntimeOwnerRef;

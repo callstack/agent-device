@@ -1,3 +1,4 @@
+import { SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY } from '@agent-device/capture-kit/screen-recording-resource-store';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   type ScreenRecordingCompletion,
@@ -36,6 +37,7 @@ export type NativeManifest = Readonly<{
   version: 1;
   resourceKind: 'screen-recording';
   fenceToken: string;
+  claimToken?: string;
   fenceGeneration: number;
   sessionId: string;
   deviceId: string;
@@ -119,6 +121,7 @@ export function createNativeManifest(
     version: 1,
     resourceKind: 'screen-recording',
     fenceToken: input.fence.token,
+    ...(input.claimToken ? { claimToken: input.claimToken } : {}),
     fenceGeneration: input.fence.generation,
     sessionId: input.sessionId,
     deviceId: device.id,
@@ -161,6 +164,8 @@ export function nativeManifestMatchesEnvelope(
     manifest.deviceId === envelope.device.id &&
     manifest.fenceToken === envelope.fence.token &&
     manifest.fenceGeneration === envelope.fence.generation &&
+    (manifest.claimToken === undefined ||
+      manifest.claimToken === envelope.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY]) &&
     manifest.sessionId === envelope.sessionId
   );
 }

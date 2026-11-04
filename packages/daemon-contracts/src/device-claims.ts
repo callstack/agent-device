@@ -81,7 +81,7 @@ export type DeviceClaimAcquireResult =
  */
 export type TransientDeviceClaimResult =
   | DeviceClaimAcquireResult
-  | { status: 'covered-by-owned-claim' };
+  | { status: 'covered-by-owned-claim'; ownership: DeviceClaimSessionOwnership };
 
 type ClaimAcquisitionInspectionParams = {
   device: DeviceInfo;
@@ -286,6 +286,7 @@ export async function acquireTransientDeviceClaim(params: {
    * command-scoped claim stays attributable to the command that took it.
    */
   coveredBySession: string;
+  coveredRecordingOwnership?: DeviceClaimSessionOwnership;
   /** Preserve the routed session on a recording reservation. */
   recordingSession?: string;
   refuseForeignClaim?: boolean;
@@ -316,7 +317,8 @@ export async function acquireTransientDeviceClaim(params: {
     const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey, params.env));
     const local =
       existing && inspectTransientLocalClaim(existing, params, readCurrentOwnerIdentity());
-    if (local === 'covered') return { status: 'covered-by-owned-claim' };
+    if (local === 'covered' && existing?.claim)
+      return { status: 'covered-by-owned-claim', ownership: ownershipFromClaim(existing.claim) };
     if (local === 'conflict') return { status: 'conflict', conflict: existing! };
     if (params.refuseForeignClaim && existing) return { status: 'conflict', conflict: existing };
     if (params.refuseForeignClaim && !params.device.hostApp && canHostAppDevices(params.device)) {
@@ -344,6 +346,7 @@ function inspectTransientLocalClaim(
   existing: InspectedDeviceClaim,
   params: {
     coveredBySession: string;
+    coveredRecordingOwnership?: DeviceClaimSessionOwnership;
     coveredClaimIsOwnedByRequest: (claim: DeviceClaim) => boolean;
     stateDir: string;
   },
@@ -357,11 +360,27 @@ function inspectTransientLocalClaim(
   ) {
     return undefined;
   }
+  if (claim.recordingCleanupPending || claim.recordingStartPending) return 'conflict';
   if (claim.claimOwnerKind === 'open-session') {
     return claim.session === params.coveredBySession && params.coveredClaimIsOwnedByRequest(claim)
       ? 'covered'
       : undefined;
   }
+  const ownership = params.coveredRecordingOwnership;
+  if (
+    claim.claimOwnerKind === 'transient-command' &&
+    claim.transientCommand === 'record' &&
+    ownership &&
+    claim.session === params.coveredBySession &&
+    claim.ownerToken === ownership.ownerToken &&
+    claim.deviceKey === ownership.deviceKey &&
+    ownerIdentityMatches(
+      { pid: claim.ownerPid, startTime: claim.ownerStartTime },
+      { pid: ownership.ownerPid, startTime: ownership.ownerStartTime },
+    ) &&
+    params.coveredClaimIsOwnedByRequest(claim)
+  )
+    return 'covered';
   return 'conflict';
 }
 
@@ -636,13 +655,19 @@ function staleReleaseRefusalReason(classification: DeviceClaimClassification): s
  *  - `absent`           — no claim remains for the device; nothing to remove.
  *  - `ownership-changed`— a decodable claim remains and it is not the one we
  *                         acquired, so a successor owns the device now.
+ *  - `cleanup-pending`  — recording runtime cleanup is not confirmed.
  *  - `unattributable`   — a record remains that yields no attributable claim:
  *                         unreadable or undecodable. This says nothing about who owns the
  *                         device and is NOT evidence we released anything, so a
  *                         caller that is about to forget this claim must hold it
  *                         back and try again rather than read it as superseded.
  */
-export type DeviceClaimClearOutcome = 'deleted' | 'absent' | 'ownership-changed' | 'unattributable';
+export type DeviceClaimClearOutcome =
+  | 'deleted'
+  | 'absent'
+  | 'ownership-changed'
+  | 'unattributable'
+  | 'cleanup-pending';
 
 export async function clearDeviceClaim(
   ownership: DeviceClaimSessionOwnership | undefined,
@@ -652,7 +677,8 @@ export async function clearDeviceClaim(
   return await writeOwnedDeviceClaim(
     ownership,
     env,
-    (_claim, claimPath) => {
+    (claim, claimPath) => {
+      if (claim.recordingCleanupPending || claim.recordingStartPending) return 'cleanup-pending';
       try {
         fs.unlinkSync(claimPath);
       } catch (error) {
@@ -677,8 +703,13 @@ export async function clearDeviceClaim(
  *  - `abandoned`        — the claim we acquired now holds the device for nobody.
  *  - `absent`           — no claim remains for the device; nothing to mark.
  *  - `ownership-changed`— a claim remains, but it is not the one we acquired.
+ *  - `cleanup-pending`  — recording runtime cleanup is not confirmed.
  */
-export type DeviceClaimAbandonOutcome = 'abandoned' | 'absent' | 'ownership-changed';
+export type DeviceClaimAbandonOutcome =
+  | 'abandoned'
+  | 'absent'
+  | 'ownership-changed'
+  | 'cleanup-pending';
 
 /**
  * Keeps the device fenced against every other owner while recording that this claim holds it for
@@ -693,6 +724,7 @@ export async function abandonDeviceClaim(
     ownership,
     env,
     (claim) => {
+      if (claim.recordingCleanupPending || claim.recordingStartPending) return 'cleanup-pending';
       const now = Date.now();
       writeDeviceClaim({ ...claim, abandonedAtMs: now, updatedAtMs: now }, env);
       return 'abandoned';
@@ -863,4 +895,7 @@ export {
   admitRecordingStop,
   finishRecordingClaimRequest,
   reserveRecordingClaimFence,
+  retryRecordingClaimCleanup,
+  recoverIncompleteRecordingStartClaim,
+  type RetainedRecordingCleanup,
 } from './device-claim-recording.ts';

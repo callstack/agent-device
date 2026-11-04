@@ -61,6 +61,7 @@ async function recoverFailedAdoption<K extends string, H extends LiveResourceHan
       ? mayPersist && persistRecoveryTombstone(definition, params, resourcePath)
       : true;
   const initialCleanupError = await disposeFailedAdoption(params, state);
+  if (initialCleanupError === undefined) params.reportConfirmedStartRollback?.();
   const transition = confirmFailedAdoptionTransition(
     definition,
     params,

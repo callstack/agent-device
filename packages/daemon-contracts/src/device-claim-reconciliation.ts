@@ -1,10 +1,13 @@
 import { appLogDurableResource } from '@agent-device/capture-kit/app-log-durable-resource';
 import { recoverAppLogResourceAfterDaemonLock } from '@agent-device/capture-kit/app-log-resource-recovery';
 import path from 'node:path';
-import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
+import {
+  sameRuntimeOwner,
+  type DeviceRuntimeGateway,
+} from '@agent-device/contracts/platform-runtime';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { sameDeviceIdentity } from '@agent-device/kernel/device';
+import { deviceIdentity, sameDeviceIdentity } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { resolveDaemonPaths } from './daemon-resolution.ts';
 import type { DeviceClaim, DeviceClaimReconciler } from './device-claims.ts';
@@ -16,7 +19,10 @@ import { recoverPerfCaptureResourceAfterDaemonLock } from '@agent-device/capture
 import { perfCaptureDurableResource } from '@agent-device/capture-kit/perf-capture-session-resource';
 import { recoverScreenRecordingResourceAfterDaemonLock } from '@agent-device/capture-kit/screen-recording-recovery';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
-import { SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY } from '@agent-device/capture-kit/screen-recording-resource-store';
+import {
+  SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY,
+  SCREEN_RECORDING_CLAIM_BINDING_VERSION_KEY,
+} from '@agent-device/capture-kit/screen-recording-resource-store';
 import { classifyOwnerLiveness } from '@agent-device/host-kit/process';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
 
@@ -28,6 +34,17 @@ export function createDeviceClaimReconciler(params: {
   inspection?: ClaimRecoveryInspection,
 ) => ReturnType<DeviceClaimReconciler> {
   return async (claim, suppliedInspection) => {
+    if (claim.claimOwnerKind === 'transient-command' && isIncompleteRecordingStartClaim(claim)) {
+      const liveness = classifyOwnerLiveness({
+        owner: { pid: claim.ownerPid, startTime: claim.ownerStartTime },
+      });
+      if (liveness !== 'owner-process-dead' && liveness !== 'owner-process-reused')
+        return { status: 'retained', reason: 'screen-recording-owner-unsettled' };
+      const settled = await recoverIncompleteRecordingClaim(claim, params.gateway, params.scope);
+      return settled === 'confirmed-no-effect'
+        ? { status: 'reconciled' }
+        : { status: 'retained', reason: 'screen-recording-start-unconfirmed' };
+    }
     const inspection = suppliedInspection ?? inspectDeviceClaimRecovery(claim);
     if (inspection.status === 'retained') return inspection;
     try {
@@ -99,6 +116,8 @@ export type ClaimRecoveryInspection =
 /** Inspect exact-owner durable manifests without composing a gateway or settling a resource. */
 export function inspectDeviceClaimRecovery(claim: DeviceClaim): ClaimRecoveryInspection {
   try {
+    if (claim.recordingCleanupPending)
+      return { status: 'retained', reason: 'screen-recording-binding-cleanup-pending' };
     const sessionsDir = resolveDaemonPaths(claim.stateDir).sessionsDir;
     const sessionDir = path.join(sessionsDir, safeSessionName(claim.session));
     const recoveryKinds: DurableSessionResourceKind[] = [];
@@ -229,10 +248,90 @@ function inspectResourceOwnership(
     record.envelope.sessionId !== claim.session ||
     !sameDeviceIdentity(record.envelope.device, claim.device) ||
     (resource.resourceKind === 'screen-recording' &&
-      record.envelope.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] !== undefined &&
-      record.envelope.metadata[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] !== claim.ownerToken)
+      ((record.envelope.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] === undefined &&
+        claim.recordingFence !== undefined) ||
+        (record.envelope.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] !== undefined &&
+          record.envelope.metadata[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] !==
+            claim.ownerToken) ||
+        (record.envelope.metadata?.[SCREEN_RECORDING_CLAIM_BINDING_VERSION_KEY] !== undefined &&
+          record.envelope.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] === undefined)))
   ) {
     return { status: 'retained', reason: `${resource.resourceKind}-owner-mismatch` };
   }
   return { status: 'owned', resourcePath, requiresRecovery: record.envelope.lifecycle === 'open' };
+}
+
+/** Called under the claim locks; no matching manifest may be retired by this path. */
+export function isIncompleteRecordingStartClaim(claim: DeviceClaim): boolean {
+  if (
+    !(
+      claim.claimOwnerKind === 'open-session' ||
+      (claim.claimOwnerKind === 'transient-command' && claim.transientCommand === 'record')
+    ) ||
+    !claim.recordingStartPending ||
+    claim.recordingCleanupPending ||
+    !claim.recordingFence ||
+    !claim.recordingRuntimeOwner
+  )
+    return false;
+  const resourcePath = screenRecordingDurableResource.store.resolvePath(
+    path.join(resolveDaemonPaths(claim.stateDir).sessionsDir, safeSessionName(claim.session)),
+  );
+  const record = screenRecordingDurableResource.store.read(resourcePath);
+  if (record.status === 'unreattachable') return false;
+  return (
+    record.status === 'missing' ||
+    record.envelope.fence.token !== claim.recordingFence.token ||
+    record.envelope.fence.generation !== claim.recordingFence.generation
+  );
+}
+
+/** The runtime owns native marker interpretation and confirms disposal before this returns. */
+export async function recoverIncompleteRecordingClaim(
+  claim: DeviceClaim,
+  gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>,
+  scope: PlatformRequestScope,
+): Promise<'confirmed-no-effect' | 'retained'> {
+  if (
+    !claim.recordingFence ||
+    !claim.recordingRuntimeOwner ||
+    !isIncompleteRecordingStartClaim(claim)
+  )
+    return 'retained';
+  const device = { ...claim.device, platform: claim.device.family };
+  let binding: Awaited<ReturnType<typeof gateway.bind>> | undefined;
+  try {
+    binding = await gateway.bind({
+      device,
+      intent: {
+        kind: 'exact-owner',
+        owner: claim.recordingRuntimeOwner,
+        fence: claim.recordingFence,
+      },
+      scope,
+    });
+    if (
+      !sameDeviceIdentity(deviceIdentity(binding.device), claim.device) ||
+      !sameRuntimeOwner(binding.owner, claim.recordingRuntimeOwner) ||
+      !binding.recoverIncompleteRecordingStart
+    )
+      return 'retained';
+    const result = await binding.recoverIncompleteRecordingStart({
+      sessionId: claim.session,
+      fence: claim.recordingFence,
+      claimToken: claim.ownerToken,
+    });
+    const adopted = binding;
+    binding = undefined;
+    await adopted[Symbol.asyncDispose]();
+    return result;
+  } catch {
+    return 'retained';
+  } finally {
+    if (binding) {
+      try {
+        await binding[Symbol.asyncDispose]();
+      } catch {}
+    }
+  }
 }

@@ -1,3 +1,4 @@
+import { sessionHasNonRecordingOwners } from '../core/session-state.ts';
 import { releaseRecordOnlyRecordingClaim } from '../sessions/session-lifecycle/internal/session-open.ts';
 import { restrictRemoteHostInputs } from './remote-host-input-policy.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
@@ -337,8 +338,19 @@ export async function createRequestExecutionScope(params: {
         internal: {
           ...scopedReq.internal,
           recordStartAttempt: claimAdmission.recordingStartAttempt,
+          recordStartNoEffect: claimAdmission.recordingStartNoEffect,
+          recoverIncompleteRecordingStart: claimAdmission.recoverIncompleteStart,
           recordingClaimOwnership: claimAdmission.recordingClaimOwnership,
           reserveRecordingFence: claimAdmission.reserveRecordingFence,
+          retryRecordingCleanup: async (device) => {
+            const retained = sessionStore.recordingCleanup(sessionName);
+            const result = await claimAdmission.retryRecordingCleanup(device, retained);
+            if (retained && result !== 'none') {
+              sessionStore.clearRecordingCleanup(sessionName, retained);
+              if (result === 'released')
+                releaseRecordOnlyRecordingClaim(sessionStore, sessionName, retained.ownership);
+            }
+          },
         },
       };
     }
@@ -349,6 +361,9 @@ export async function createRequestExecutionScope(params: {
           await runtimeBindings[Symbol.asyncDispose]();
         } catch (error) {
           claimAdmission.runtimeDisposalFailed();
+          const retry = runtimeBindings.failedDisposal();
+          const retained = retry && claimAdmission.retainedRecordingCleanup(retry);
+          if (retained) sessionStore.retainRecordingCleanup(sessionName, retained);
           throw error;
         } finally {
           await claimAdmission[Symbol.asyncDispose]();
@@ -590,11 +605,18 @@ function createRequestDeviceAccess(params: {
     session: params.sessionName,
     recordingClaimReleased: (ownership) =>
       releaseRecordOnlyRecordingClaim(params.sessionStore, params.sessionName, ownership),
+    currentSessionClaim: () => params.sessionStore.lookup(params.sessionName)?.session.deviceClaim,
+    recordingHasOtherOwners: () => {
+      const session = params.sessionStore.lookup(params.sessionName)?.session;
+      return Boolean(session && sessionHasNonRecordingOwners(session));
+    },
     workspace: params.workspace,
     callerCwd: params.callerCwd,
     resolveScopeRoot: resolveCallerScopeRoot,
     stateDir: params.stateDir,
     env: params.env,
+    gateway: params.deviceRuntimeGateway,
+    scope: params.platformRequestScope,
     reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler({
       scope: platformRequestScope,
       beforeGateway: async (claim) => {

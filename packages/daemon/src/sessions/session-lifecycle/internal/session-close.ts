@@ -400,7 +400,12 @@ async function runCloseTeardownAndRelease(params: {
       });
     }
   } else {
-    await clearDeviceClaim(session.deviceClaim, params.env);
+    const outcome = await clearDeviceClaim(session.deviceClaim, params.env);
+    if (outcome === 'cleanup-pending')
+      throw new AppError('COMMAND_FAILED', 'Recording runtime cleanup is not confirmed', {
+        reason: 'cleanup-unconfirmed',
+        retriable: true,
+      });
   }
   sessionStore.retire(ref, { retainExecutionHost });
   if (deviceClaimBlockingError) throw deviceClaimBlockingError;

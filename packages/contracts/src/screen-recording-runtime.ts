@@ -16,6 +16,23 @@ import type { ResourceOwnershipFence } from './platform-runtime.ts';
 
 export const SCREEN_RECORDING_RESOURCE_KIND = 'screen-recording' as const;
 
+const START_NOT_DISPATCHED = Symbol('screen-recording-start-not-dispatched');
+
+/** Mark the original error only when the platform proves that no recorder was dispatched. */
+export function markScreenRecordingStartNotDispatched(error: unknown): unknown {
+  if (typeof error === 'object' && error !== null && Object.isExtensible(error))
+    Object.defineProperty(error, START_NOT_DISPATCHED, { value: true });
+  return error;
+}
+
+export function isScreenRecordingStartNotDispatched(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as Record<symbol, unknown>)[START_NOT_DISPATCHED] === true
+  );
+}
+
 /** The recording's file exists and is not a video, which only a still-finalizing recorder can undo. */
 export const RECORDING_OUTPUT_UNPLAYABLE_REASON = 'recording-output-unplayable';
 
@@ -157,6 +174,7 @@ export type ScreenRecordingLiveHandle = LiveResourceHandle<ScreenRecordingComple
 
 export type ScreenRecordingStartInput = Readonly<{
   sessionId: string;
+  claimToken?: string;
   requestId?: string;
   outputPath: string;
   clientOutputPath?: string;

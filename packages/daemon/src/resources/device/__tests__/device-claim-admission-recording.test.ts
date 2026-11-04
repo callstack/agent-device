@@ -529,7 +529,7 @@ test('an unconfirmed native start keeps its reservation even when an older manif
   });
   expect(await reconcile(retained!)).toMatchObject({
     status: 'retained',
-    reason: 'screen-recording-start-unconfirmed',
+    reason: 'screen-recording-owner-unsettled',
   });
   expect(fs.existsSync(rt.native)).toBe(true);
 });

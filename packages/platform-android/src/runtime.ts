@@ -444,6 +444,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         device: logs.device,
         owner,
         facts,
+        recoverIncompleteRecordingStart: recording.recoverIncompleteRecordingStart,
         operations: Object.freeze({
           ...logs.operations,
           ...createAndroidAppDeploymentOperations({

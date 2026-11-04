@@ -4,6 +4,7 @@ import {
   resolveSessionAppLogPidPath,
 } from '@agent-device/daemon-contracts/session-artifact-paths';
 import { DAEMON_SHUTTING_DOWN_REASON } from '@agent-device/daemon-contracts/daemon-resolution';
+import type { RetainedRecordingCleanup } from '@agent-device/daemon-contracts/device-claims';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -58,6 +59,7 @@ export type RetainedExecutionHost = Readonly<{
 export class SessionStore {
   private readonly sessions = new Map<string, SessionEntry>();
   private readonly retainedExecutionHosts = new Map<string, RetainedExecutionHost>();
+  private readonly recordingCleanups = new Map<string, RetainedRecordingCleanup>();
   private acceptingSessions = true;
   private readonly runtimeHints = new Map<string, SessionRuntimeHints>();
   private readonly sessionsDir: string;
@@ -179,6 +181,22 @@ export class SessionStore {
   releaseRetainedExecutionHost(host: RetainedExecutionHost): boolean {
     if (!this.ownsRetainedExecutionHost(host)) return false;
     return this.retainedExecutionHosts.delete(host.device.id);
+  }
+
+  retainRecordingCleanup(address: string, cleanup: RetainedRecordingCleanup): void {
+    if (this.recordingCleanups.has(address))
+      throw new AppError('COMMAND_FAILED', 'Recording cleanup authority already exists', {
+        reason: 'cleanup-unconfirmed',
+      });
+    this.recordingCleanups.set(address, cleanup);
+  }
+
+  recordingCleanup(address: string): RetainedRecordingCleanup | undefined {
+    return this.recordingCleanups.get(address);
+  }
+
+  clearRecordingCleanup(address: string, cleanup: RetainedRecordingCleanup): void {
+    if (this.recordingCleanups.get(address) === cleanup) this.recordingCleanups.delete(address);
   }
 
   private captureRef(address: string, entry: SessionEntry): SessionRef {

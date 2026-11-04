@@ -528,3 +528,47 @@ function tamperCompletion(patch: Record<string, unknown>) {
   const evidence = completedEvidence();
   return { ...evidence, completion: { ...evidence.completion!, ...patch } };
 }
+
+test('an incomplete start is retired only after exact marker, writer absence and artifact absence are proven', async () => {
+  const input = { ...recordingInput(), claimToken: 'claim-token' };
+  const pending = '/sdcard/agent-device-recording-1.mp4';
+  let marker = JSON.stringify(createNativeManifest(androidRecordingDevice, input, 1, [], pending));
+  let writers = true;
+  let artifact = false;
+  let signals = 0;
+  const runtime = await start({
+    readManifest: async (markerPath: string) =>
+      markerPath.startsWith('/sdcard') && marker
+        ? { status: 'read' as const, contents: marker }
+        : { status: 'missing' as const },
+    findRunning: async () => (writers ? [{ pid: '42', startTime: '1', remotePath: pending }] : []),
+    exists: async () => artifact,
+    stop: async () => {
+      signals += 1;
+      return 'stopped' as const;
+    },
+    removeManifest: async () => {
+      marker = '';
+      return true;
+    },
+  });
+  const recovery = { sessionId: input.sessionId, fence: input.fence, claimToken: input.claimToken };
+  expect(
+    await runtime.recoverIncompleteRecordingStart({ ...recovery, claimToken: 'foreign-token' }),
+  ).toBe('retained');
+  expect(
+    await runtime.recoverIncompleteRecordingStart({
+      ...recovery,
+      fence: { ...input.fence, token: 'foreign' },
+    }),
+  ).toBe('retained');
+  expect(await runtime.recoverIncompleteRecordingStart(recovery)).toBe('retained');
+  writers = false;
+  artifact = true;
+  expect(await runtime.recoverIncompleteRecordingStart(recovery)).toBe('retained');
+  expect(marker).not.toBe('');
+  artifact = false;
+  expect(await runtime.recoverIncompleteRecordingStart(recovery)).toBe('confirmed-no-effect');
+  expect(marker).toBe('');
+  expect(signals).toBe(0);
+});

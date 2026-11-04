@@ -251,6 +251,11 @@ export type DeviceBinding<Operations extends object> = AsyncDisposable &
     owner: RuntimeOwnerRef;
     facts: RuntimeFacts<Operations>;
     operations: Readonly<Partial<Pick<Operations, RuntimeOperationKey<Operations>>>>;
+    /** Resolves only after a failed disposal and all binding-owned work have settled. */
+    retryDisposal?: () => Promise<void>;
+    recoverIncompleteRecordingStart?: (
+      input: Readonly<{ sessionId: string; fence: ResourceOwnershipFence; claimToken: string }>,
+    ) => Promise<'confirmed-no-effect' | 'retained'>;
   }>;
 
 export type ResourceOwnershipFence = Readonly<{

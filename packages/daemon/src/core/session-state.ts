@@ -320,9 +320,12 @@ export type SessionState = {
  * `appLogFailure` is absent too: it records a start that attached nothing.
  */
 export function sessionHasOwnersBeyondRecording(session: SessionState): boolean {
+  return session.deviceClaim !== undefined || sessionHasNonRecordingOwners(session);
+}
+
+export function sessionHasNonRecordingOwners(session: SessionState): boolean {
   return (
     session.appBundleId !== undefined ||
-    session.deviceClaim !== undefined ||
     session.lease !== undefined ||
     session.appLog !== undefined ||
     session.audioProbe !== undefined ||

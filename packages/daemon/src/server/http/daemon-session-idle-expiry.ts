@@ -34,6 +34,7 @@ const CLAIM_GONE: Readonly<Record<DeviceClaimClearOutcome, boolean>> = Object.fr
   absent: true,
   'ownership-changed': true,
   unattributable: false,
+  'cleanup-pending': false,
 });
 
 /**

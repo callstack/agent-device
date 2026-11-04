@@ -66,6 +66,7 @@ export function adoptStartedScreenRecording(params: {
   owner: RuntimeOwnerRef;
   fence: ResourceOwnershipFence;
   pendingHandle: PendingTransferGuard<ScreenRecordingLiveHandle>;
+  reportConfirmedStartRollback?(): void;
   envelope: DurableResourceEnvelope<'screen-recording'>;
   throwIfCanceled(): void;
 }): Promise<void> {

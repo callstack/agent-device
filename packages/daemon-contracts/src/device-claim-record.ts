@@ -5,7 +5,10 @@ import {
   type DeviceIdentity,
 } from '@agent-device/kernel/device';
 import { isRecord } from '@agent-device/kernel/record';
-import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
+import type {
+  ResourceOwnershipFence,
+  RuntimeOwnerRef,
+} from '@agent-device/contracts/platform-runtime';
 
 import { canonicalLocalDeviceKey } from './device-claim-paths.ts';
 
@@ -53,6 +56,10 @@ export type DeviceClaim = {
   /** The command a `transient-command` claim is scoped to; present for exactly that kind. */
   transientCommand?: string;
   recordingFence?: ResourceOwnershipFence;
+  recordingRuntimeOwner?: RuntimeOwnerRef;
+  /** The request still owes verified cleanup of recording runtime bindings. */
+  recordingCleanupPending?: true;
+  recordingStartPending?: true;
   /** Set by `abandonDeviceClaim`; absent while the claim still holds the device for its owner. */
   abandonedAtMs?: number;
 };
@@ -98,38 +105,71 @@ export function decodeStoredDeviceClaim(value: unknown): DeviceClaim | null {
  * guessing which owner a session label suggests.
  */
 function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
-  const { claimOwnerKind, transientCommand } = raw;
+  const {
+    claimOwnerKind,
+    transientCommand,
+    recordingFence,
+    recordingCleanupPending,
+    recordingRuntimeOwner,
+    recordingStartPending,
+  } = raw;
   if (!isKnownOwnerKind(claimOwnerKind)) return null;
   if (claimOwnerKind === 'transient-command') {
     if (!isNonEmptyString(transientCommand)) return null;
-    const claim = decodeClaimBody(raw, claimOwnerKind);
-    if (!claim) return null;
-    const fence = raw.recordingFence;
-    if (
-      fence !== undefined &&
-      (transientCommand !== 'record' ||
-        !isRecord(fence) ||
-        !isNonEmptyString(fence.token) ||
-        !Number.isInteger(fence.generation) ||
-        typeof fence.generation !== 'number' ||
-        fence.generation < 0)
-    )
-      return null;
-    return {
-      ...claim,
-      transientCommand,
-      ...(fence === undefined
-        ? {}
-        : {
-            recordingFence: {
-              token: (fence as { token: string }).token,
-              generation: (fence as { generation: number }).generation,
-            },
-          }),
-    };
-  }
-  if (transientCommand !== undefined || raw.recordingFence !== undefined) return null;
-  return decodeClaimBody(raw, claimOwnerKind);
+  } else if (transientCommand !== undefined) return null;
+  const recordingKind =
+    claimOwnerKind === 'open-session' ||
+    (claimOwnerKind === 'transient-command' && transientCommand === 'record');
+  if (recordingCleanupPending !== undefined && (recordingCleanupPending !== true || !recordingKind))
+    return null;
+  if (
+    recordingFence !== undefined &&
+    (!recordingKind ||
+      !isRecord(recordingFence) ||
+      !isNonEmptyString(recordingFence.token) ||
+      typeof recordingFence.generation !== 'number' ||
+      !Number.isInteger(recordingFence.generation) ||
+      recordingFence.generation < 0)
+  )
+    return null;
+  if (recordingCleanupPending && recordingFence === undefined) return null;
+  if (
+    recordingStartPending !== undefined &&
+    (recordingStartPending !== true ||
+      !recordingKind ||
+      recordingFence === undefined ||
+      recordingRuntimeOwner === undefined)
+  )
+    return null;
+  const claim = decodeClaimBody(raw, claimOwnerKind);
+  if (!claim) return null;
+  if (
+    recordingRuntimeOwner !== undefined &&
+    (!recordingKind ||
+      !isRecord(recordingRuntimeOwner) ||
+      recordingRuntimeOwner.kind !== 'local-family' ||
+      recordingRuntimeOwner.family !== claim.device.family)
+  )
+    return null;
+  return {
+    ...claim,
+    ...(claimOwnerKind === 'transient-command'
+      ? { transientCommand: transientCommand as string }
+      : {}),
+    ...(recordingCleanupPending ? { recordingCleanupPending: true as const } : {}),
+    ...(recordingStartPending ? { recordingStartPending: true as const } : {}),
+    ...(recordingRuntimeOwner === undefined
+      ? {}
+      : { recordingRuntimeOwner: { kind: 'local-family' as const, family: claim.device.family } }),
+    ...(recordingFence === undefined
+      ? {}
+      : {
+          recordingFence: {
+            token: (recordingFence as { token: string }).token,
+            generation: (recordingFence as { generation: number }).generation,
+          },
+        }),
+  };
 }
 
 function isKnownOwnerKind(value: unknown): value is DeviceClaimOwnerKind {

@@ -1,7 +1,10 @@
 import { deviceIdentity, sameDeviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   sameRuntimeOwner,
+  type DeviceRuntimeGateway,
   type RuntimeOwnerRef,
   type ResourceOwnershipFence,
 } from '@agent-device/contracts/platform-runtime';
@@ -19,6 +22,9 @@ import {
   admitRecordingStop,
   finishRecordingClaimRequest,
   reserveRecordingClaimFence,
+  retryRecordingClaimCleanup,
+  recoverIncompleteRecordingStartClaim,
+  type RetainedRecordingCleanup,
   clearDeviceClaim,
   type DeviceClaimReconciler,
   type DeviceClaimSessionOwnership,
@@ -45,15 +51,24 @@ export type DeviceClaimAdmission = AsyncDisposable &
     admit(device: DeviceInfo, owner: RuntimeOwnerRef): Promise<void>;
     recordingSucceeded(): void;
     recordingStartAttempt(): void;
+    recordingStartNoEffect(proof: 'not-dispatched' | 'rolled-back'): void;
     recordingClaimOwnership(): DeviceClaimSessionOwnership | undefined;
     reserveRecordingFence(fence: ResourceOwnershipFence): Promise<void>;
     runtimeDisposalFailed(): void;
+    recoverIncompleteStart(device: DeviceInfo): Promise<boolean>;
+    retainedRecordingCleanup(retry: () => Promise<void>): RetainedRecordingCleanup | undefined;
+    retryRecordingCleanup(
+      device: DeviceInfo,
+      retained?: RetainedRecordingCleanup,
+    ): Promise<'none' | 'settled' | 'released'>;
   }>;
 
 export function createDeviceClaimAdmission(params: {
   policy: DeviceClaimPolicy;
   recordingAction?: 'start' | 'stop';
   recordingClaimReleased?: (ownership: DeviceClaimSessionOwnership) => void;
+  currentSessionClaim?: () => DeviceClaimSessionOwnership | undefined;
+  recordingHasOtherOwners?: (ownership: DeviceClaimSessionOwnership) => boolean;
   command: string;
   /**
    * The session this request runs in, which is the only session whose own claim
@@ -81,6 +96,8 @@ export function createDeviceClaimAdmission(params: {
   resolveScopeRoot: (workspace: string | undefined) => string | undefined;
   stateDir: string;
   env: EnvMap;
+  gateway?: DeviceRuntimeGateway<PlatformRuntimeOperations>;
+  scope?: PlatformRequestScope;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
 }): DeviceClaimAdmission {
   // The caller admits once per device binding, so this only has to remember what
@@ -88,27 +105,32 @@ export function createDeviceClaimAdmission(params: {
   const acquired: DeviceClaimSessionOwnership[] = [];
   let recordingSucceeded = false;
   let startAttempted = false;
+  let startProof: 'not-dispatched' | 'rolled-back' | undefined;
+  let startFence: ResourceOwnershipFence | undefined;
   let runtimeDisposed = true;
   let recording:
     | {
         device: DeviceInfo;
         owner: RuntimeOwnerRef;
         ownership?: DeviceClaimSessionOwnership;
+        coveredOwnership?: DeviceClaimSessionOwnership;
         stopLease?: Awaited<ReturnType<typeof admitRecordingStop>>;
       }
     | undefined;
   const recordingResourcePath = screenRecordingDurableResource.store.resolvePath(
     path.join(resolveDaemonPaths(params.stateDir).sessionsDir, safeSessionName(params.session)),
   );
+  const requestScopeRoot = params.resolveScopeRoot(params.callerCwd);
   const recordingContext = (device: DeviceInfo) => ({
     device,
     session: params.session,
     workspace: params.workspace,
     stateDir: params.stateDir,
     resourcePath: recordingResourcePath,
+    workspaceMatches: (workspace: string) =>
+      !requestScopeRoot || params.resolveScopeRoot(workspace) === requestScopeRoot,
     env: params.env,
   });
-  const requestScopeRoot = params.resolveScopeRoot(params.callerCwd);
 
   /**
    * Only `transient-exclusive` writes the claim store here: `observe`/`require-owner` never do,
@@ -124,10 +146,9 @@ export function createDeviceClaimAdmission(params: {
         ? { recordingSession: params.session, refuseForeignClaim: true }
         : {}),
       coveredBySession: params.session,
+      coveredRecordingOwnership: params.currentSessionClaim?.(),
       coveredClaimIsOwnedByRequest: (claim) =>
-        params.recordingAction
-          ? path.resolve(claim.workspace) === path.resolve(params.workspace)
-          : !requestScopeRoot || params.resolveScopeRoot(claim.workspace) === requestScopeRoot,
+        !requestScopeRoot || params.resolveScopeRoot(claim.workspace) === requestScopeRoot,
       workspace: params.workspace,
       stateDir: params.stateDir,
       env: params.env,
@@ -139,6 +160,10 @@ export function createDeviceClaimAdmission(params: {
       } else {
         acquired.push(result.ownership);
       }
+      return;
+    }
+    if (result.status === 'covered-by-owned-claim' && params.recordingAction === 'start') {
+      recording!.coveredOwnership = result.ownership;
       return;
     }
     if (result.status === 'conflict') {
@@ -184,14 +209,59 @@ export function createDeviceClaimAdmission(params: {
     recordingStartAttempt: () => {
       startAttempted = true;
     },
-    recordingClaimOwnership: () => recording?.ownership,
+    recordingStartNoEffect: (proof) => {
+      startProof = proof;
+    },
+    recordingClaimOwnership: () => recording?.ownership ?? recording?.coveredOwnership,
     reserveRecordingFence: async (fence) => {
-      if (recording?.ownership)
+      const ownership = recording?.ownership ?? recording?.coveredOwnership;
+      if (recording && ownership) {
         await reserveRecordingClaimFence({
           ...recordingContext(recording.device),
-          ownership: recording.ownership,
+          ownership,
           fence,
+          owner: recording.owner,
         });
+        startFence = fence;
+      }
+    },
+    retainedRecordingCleanup: (retry) => {
+      if (recording?.stopLease)
+        return {
+          device: recording.device,
+          owner: recording.stopLease.owner,
+          fence: recording.stopLease.fence,
+          ownership: recording.stopLease.ownership,
+          purpose: 'stop',
+          retry,
+        };
+      const ownership = recording?.ownership ?? recording?.coveredOwnership;
+      if (recording && ownership && startFence)
+        return {
+          device: recording.device,
+          owner: recording.owner,
+          fence: startFence,
+          ownership,
+          purpose: 'start',
+          startProof,
+          releaseWhenComplete: recording.ownership !== undefined,
+          retry,
+        };
+      return undefined;
+    },
+    retryRecordingCleanup: async (device, retained) =>
+      await retryRecordingClaimCleanup({
+        ...recordingContext(device),
+        retained,
+        retainForSession: params.recordingHasOtherOwners,
+      }),
+    recoverIncompleteStart: async (device) => {
+      if (!params.gateway || !params.scope) return false;
+      return await recoverIncompleteRecordingStartClaim({
+        ...recordingContext(device),
+        gateway: params.gateway,
+        scope: params.scope,
+      });
     },
     runtimeDisposalFailed: () => {
       runtimeDisposed = false;
@@ -203,18 +273,28 @@ export function createDeviceClaimAdmission(params: {
           succeeded: recordingSucceeded,
           runtimeDisposed,
           startAttempted,
+          retainForSession: params.recordingHasOtherOwners?.(recording.stopLease.ownership),
         });
         if (released && recording.ownership) params.recordingClaimReleased?.(recording.ownership);
-      } else if (recording?.ownership && params.recordingAction === 'start') {
+      } else if (
+        recording &&
+        (recording.ownership || recording.coveredOwnership) &&
+        params.recordingAction === 'start'
+      ) {
+        const ownership = recording.ownership ?? recording.coveredOwnership!;
         const released = await finishRecordingClaimRequest({
           ...recordingContext(recording.device),
-          ownership: recording.ownership,
+          ownership,
           action: 'start',
           succeeded: recordingSucceeded,
           runtimeDisposed,
           startAttempted,
+          startProof,
+          startFence,
+          expectedOwner: recording.owner,
+          releaseWhenComplete: recording.ownership !== undefined,
         });
-        if (released) params.recordingClaimReleased?.(recording.ownership);
+        if (released) params.recordingClaimReleased?.(ownership);
       }
       for (const ownership of acquired.splice(0)) {
         try {

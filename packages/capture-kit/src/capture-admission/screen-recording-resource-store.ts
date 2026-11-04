@@ -24,3 +24,5 @@ export function hasRecordingRecoveryNeedingValidator(sessionsDir: string): boole
  */
 export const SCREEN_RECORDING_COMPLETION_METADATA_KEY = 'completion';
 export const SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY = 'deviceClaimToken';
+
+export const SCREEN_RECORDING_CLAIM_BINDING_VERSION_KEY = 'deviceClaimBindingVersion';

@@ -66,6 +66,8 @@ function manifestIdentityIsValid(candidate: Partial<NativeManifest>): boolean {
     candidate.version === 1 &&
     candidate.resourceKind === 'screen-recording' &&
     typeof candidate.fenceToken === 'string' &&
+    (candidate.claimToken === undefined ||
+      (typeof candidate.claimToken === 'string' && candidate.claimToken.length > 0)) &&
     Number.isInteger(candidate.fenceGeneration) &&
     typeof candidate.sessionId === 'string' &&
     typeof candidate.deviceId === 'string' &&

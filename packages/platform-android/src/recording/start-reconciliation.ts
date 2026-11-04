@@ -244,3 +244,49 @@ function unprovenRecorder(remotePath: string): AppError {
 function markerRemovalHint(manifestPath: string): string {
   return `no recording session can retire this marker; remove it on the device with \`adb shell rm -f ${manifestPath}\`.`;
 }
+
+/** Inspect an interrupted launch without signalling a recorder or deleting recoverable output. */
+export async function recoverIncompleteAndroidRecordingStart(
+  transport: Transport,
+  device: DeviceInfo,
+  input: Readonly<{
+    sessionId: string;
+    fence: { token: string; generation: number };
+    claimToken: string;
+  }>,
+): Promise<'confirmed-no-effect' | 'retained'> {
+  const candidates = await readManifestCandidates(transport);
+  const paths = new Set<string>();
+  for (const candidate of candidates) {
+    if (candidate.read.status === 'missing') continue;
+    if (candidate.read.status !== 'read') return 'retained';
+    const evidence = decodeNativeManifest(candidate.read.contents);
+    if (
+      !evidence ||
+      evidence.deviceId !== device.id ||
+      evidence.sessionId !== input.sessionId ||
+      evidence.fenceToken !== input.fence.token ||
+      evidence.fenceGeneration !== input.fence.generation ||
+      evidence.claimToken !== input.claimToken ||
+      evidence.transportMode !== transport.mode ||
+      evidence.chunks.length !== 0 ||
+      evidence.pendingRemotePath === undefined ||
+      evidence.completion !== undefined
+    )
+      return 'retained';
+    const writers = await transport.probeRunningWriters(evidence.pendingRemotePath);
+    if (
+      !writers.conclusive ||
+      writers.writers.length !== 0 ||
+      (await transport.exists(evidence.pendingRemotePath)) !== false
+    )
+      return 'retained';
+    paths.add(candidate.manifestPath);
+  }
+  if (paths.size === 0) return 'retained';
+  for (const marker of paths) {
+    if (!(await transport.removeManifest(marker))) return 'retained';
+    if ((await transport.readManifest(marker)).status !== 'missing') return 'retained';
+  }
+  return 'confirmed-no-effect';
+}

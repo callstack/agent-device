@@ -1,4 +1,5 @@
 import type { DeviceClaimSessionOwnership } from '@agent-device/daemon-contracts/device-claims';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 import type { ExecutionPlan } from './execution-plan.ts';
 import type { PreresolvedInteractionTarget } from '@agent-device/contracts/interaction';
@@ -30,8 +31,11 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
   openDeviceWait?: { waitedMs: number };
   publicNetworkOnly?: true;
   recordStartAttempt?: () => void;
+  recordStartNoEffect?: (proof: 'not-dispatched' | 'rolled-back') => void;
   recordingClaimOwnership?: () => DeviceClaimSessionOwnership | undefined;
   reserveRecordingFence?: (fence: ResourceOwnershipFence) => Promise<void>;
+  retryRecordingCleanup?: (device: DeviceInfo) => Promise<void>;
+  recoverIncompleteRecordingStart?: (device: DeviceInfo) => Promise<boolean>;
   /**
    * The steps a batch still has ahead of this one. The open seam derives platform readiness
    * policy (runner demand) from it; the transport strips `internal`, so it never arrives from a

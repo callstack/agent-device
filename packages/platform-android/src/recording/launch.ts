@@ -1,6 +1,9 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
+import {
+  markScreenRecordingStartNotDispatched,
+  type ScreenRecordingStartInput,
+} from '@agent-device/contracts/screen-recording-runtime';
 import {
   AndroidScreenRecordingStartRollbackUnconfirmed,
   AndroidScreenRecordingStopClaimed,
@@ -23,8 +26,12 @@ export async function startInitialTransaction(params: {
   prepareOutput: () => Promise<void>;
 }): Promise<Readonly<{ chunk: NativeChunk; manifestPath: string; startedAtMs: number }>> {
   const { transport, device, input, startedAt, signal, prepareOutput } = params;
-  await reconcileStartEvidence(transport, device);
-  await prepareOutput();
+  try {
+    await reconcileStartEvidence(transport, device);
+    await prepareOutput();
+  } catch (error) {
+    throw markScreenRecordingStartNotDispatched(error);
+  }
   let last: unknown;
   for (const remotePath of candidateRemotePaths(undefined)) {
     const manifestPath = transport.manifestPathFor(remotePath);

@@ -21,6 +21,7 @@ import {
 } from './manifest.ts';
 import { AndroidScreenRecordingStopClaimed, rollbackChunks, stopChunk } from './chunks.ts';
 import { startInitialTransaction, startPendingChunk } from './launch.ts';
+import { recoverIncompleteAndroidRecordingStart } from './start-reconciliation.ts';
 import { persistNativeManifest } from './manifest-store.ts';
 import { snapshot } from './live-snapshot.ts';
 import { finalizeAndroidRecording } from './finalize.ts';
@@ -42,7 +43,15 @@ export async function bindAndroidScreenRecordingRuntime(params: {
   device: DeviceInfo;
   owner: RuntimeOwnerRef;
   signal: AbortSignal;
-}): Promise<ScreenRecordingRuntimeOperations> {
+}): Promise<
+  ScreenRecordingRuntimeOperations &
+    Required<
+      Pick<
+        import('@agent-device/contracts/platform-runtime').DeviceBinding<ScreenRecordingRuntimeOperations>,
+        'recoverIncompleteRecordingStart'
+      >
+    >
+> {
   const { host, device, owner, signal } = params;
   const transport = await host.screenRecording.android.resolve(device);
   return Object.freeze({
@@ -52,7 +61,13 @@ export async function bindAndroidScreenRecordingRuntime(params: {
       await reattachAndroidRecording({ host, transport, device, input, signal }),
     screenRecordingCleanup: async (input) =>
       await cleanupAndroidRecording({ transport, device, input }),
-  } satisfies ScreenRecordingRuntimeOperations);
+    recoverIncompleteRecordingStart: async (input) =>
+      await recoverIncompleteAndroidRecordingStart(transport, device, input),
+  } satisfies ScreenRecordingRuntimeOperations &
+    Pick<
+      import('@agent-device/contracts/platform-runtime').DeviceBinding<ScreenRecordingRuntimeOperations>,
+      'recoverIncompleteRecordingStart'
+    >);
 }
 
 async function startAndroidRecording(params: {

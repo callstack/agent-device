@@ -1,5 +1,5 @@
 import { deviceIdentity, deviceIdentityKey, type DeviceInfo } from '@agent-device/kernel/device';
-import { errorMessage } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
 import {
   type BoundDeviceRuntime,
@@ -99,6 +99,7 @@ export type RequestRuntimeBindings = AsyncDisposable &
     inspectFacts: InspectDeviceRuntimeFacts;
     bindDevice: BindDeviceRuntime;
     bindExactDevice: BindExactDeviceRuntime;
+    failedDisposal(): (() => Promise<void>) | undefined;
   }>;
 
 /**
@@ -116,6 +117,18 @@ export function createRequestRuntimeBindings(params: {
 }): RequestRuntimeBindings {
   const cleanups = new AsyncCleanupStack();
   const bindings = new Map<string, Promise<DeviceBinding<PlatformRuntimeOperations>>>();
+  const failed: Array<(() => Promise<void>) | undefined> = [];
+  const track = (binding: DeviceBinding<PlatformRuntimeOperations>) => {
+    cleanups.defer(async () => {
+      try {
+        await binding[Symbol.asyncDispose]();
+      } catch (error) {
+        failed.push(binding.retryDisposal ? async () => await binding.retryDisposal!() : undefined);
+        throw error;
+      }
+    });
+    return binding;
+  };
 
   const admitBinding = async (
     binding: DeviceBinding<PlatformRuntimeOperations>,
@@ -132,7 +145,7 @@ export function createRequestRuntimeBindings(params: {
       const intent: DeviceBindingIntent = { kind: 'ordinary' };
       bindingPromise = params.gateway
         .bind({ device, intent, scope: params.scope })
-        .then((binding) => cleanups.use(binding))
+        .then(track)
         .then(admitBinding);
       bindings.set(key, bindingPromise);
       void bindingPromise.catch(() => {
@@ -149,7 +162,7 @@ export function createRequestRuntimeBindings(params: {
     params.admitDevice?.(device);
     const intent: DeviceBindingIntent = { kind: 'exact-owner', owner, fence };
     const published = await params.gateway.bind({ device, intent, scope });
-    const adopted = await adoptExactBinding(cleanups, published, scope);
+    const adopted = await adoptExactBinding(track, published, scope);
     const binding = await admitBinding(adopted);
     return recordBoundMutations(narrowDeviceBinding(binding, use), params.dispatchLedger);
   };
@@ -161,6 +174,21 @@ export function createRequestRuntimeBindings(params: {
     },
     bindDevice,
     bindExactDevice,
+    failedDisposal: () => {
+      if (!failed.length) return undefined;
+      return async () => {
+        while (failed.length) {
+          const retry = failed[0];
+          if (!retry)
+            throw new AppError('COMMAND_FAILED', 'Recording runtime cleanup cannot be retried', {
+              reason: 'cleanup-unconfirmed',
+              retriable: false,
+            });
+          await retry();
+          failed.shift();
+        }
+      };
+    },
     [Symbol.asyncDispose]: async () => {
       await cleanups[Symbol.asyncDispose]();
     },
@@ -168,12 +196,14 @@ export function createRequestRuntimeBindings(params: {
 }
 
 async function adoptExactBinding(
-  cleanups: AsyncCleanupStack,
+  track: (
+    binding: DeviceBinding<PlatformRuntimeOperations>,
+  ) => DeviceBinding<PlatformRuntimeOperations>,
   binding: DeviceBinding<PlatformRuntimeOperations>,
   scope: PlatformRequestScope,
 ): Promise<DeviceBinding<PlatformRuntimeOperations>> {
   try {
-    return cleanups.use(binding);
+    return track(binding);
   } catch (primaryError) {
     try {
       await binding[Symbol.asyncDispose]();

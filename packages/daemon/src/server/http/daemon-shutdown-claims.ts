@@ -115,6 +115,7 @@ export function createDaemonShutdownClaimLedger(
         case 'unattributable':
           claims.unattributable.push(record);
           return;
+        case 'cleanup-pending':
         case CLEAR_UNRECORDED:
         case undefined:
           // The clear never reported: the claim may still be on disk.

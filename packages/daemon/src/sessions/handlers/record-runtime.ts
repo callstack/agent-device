@@ -2,6 +2,7 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import path from 'node:path';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
+import { isScreenRecordingStartNotDispatched } from '@agent-device/contracts/screen-recording-runtime';
 import type {
   ScreenRecordingCompletion,
   ScreenRecordingStartInput,
@@ -33,7 +34,10 @@ import { hasDeviceSelectionInput } from '../../core/device/device-selector-inten
 import { ensureBoundDeviceReady } from '../../core/request-runtime-binding.ts';
 import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { createScreenRecordingRecoveryControl } from '@agent-device/capture-kit/screen-recording-recovery';
-import { SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY } from '@agent-device/capture-kit/screen-recording-resource-store';
+import {
+  SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY,
+  SCREEN_RECORDING_CLAIM_BINDING_VERSION_KEY,
+} from '@agent-device/capture-kit/screen-recording-resource-store';
 import {
   adoptStartedScreenRecording,
   finishLiveScreenRecording,
@@ -260,9 +264,16 @@ async function startRecording(
   binding.assertAdoptable();
   await params.req.internal?.reserveRecordingFence?.(fence);
   params.req.internal?.recordStartAttempt?.();
-  const started = await runtime.operations.screenRecordingStart(
-    screenRecordingStartInput(params, session, prepared, fence, outputPaths),
-  );
+  let started: Awaited<ReturnType<typeof runtime.operations.screenRecordingStart>>;
+  try {
+    started = await runtime.operations.screenRecordingStart(
+      screenRecordingStartInput(params, session, prepared, fence, outputPaths),
+    );
+  } catch (error) {
+    if (isScreenRecordingStartNotDispatched(error))
+      params.req.internal?.recordStartNoEffect?.('not-dispatched');
+    throw error;
+  }
   const tenantId = session.lease?.tenantId ?? params.req.meta?.tenantId;
   const recordingClaim = params.req.internal?.recordingClaimOwnership?.();
   const claimToken = recordingClaim?.ownerToken;
@@ -273,6 +284,7 @@ async function startRecording(
     owner: runtime.owner,
     fence,
     ...started,
+    reportConfirmedStartRollback: () => params.req.internal?.recordStartNoEffect?.('rolled-back'),
     envelope:
       params.req.internal?.publicNetworkOnly || tenantId || claimToken
         ? {
@@ -281,7 +293,12 @@ async function startRecording(
               ...started.envelope.metadata,
               ...(params.req.internal?.publicNetworkOnly ? { remoteCaptureOutput: true } : {}),
               ...(tenantId ? { remoteCaptureTenantId: tenantId } : {}),
-              ...(claimToken ? { [SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY]: claimToken } : {}),
+              ...(claimToken
+                ? {
+                    [SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY]: claimToken,
+                    [SCREEN_RECORDING_CLAIM_BINDING_VERSION_KEY]: 1,
+                  }
+                : {}),
             },
           }
         : started.envelope,
@@ -382,6 +399,9 @@ function screenRecordingStartInput(
 ): ScreenRecordingStartInput {
   return {
     sessionId: params.sessionName,
+    ...(params.req.internal?.recordingClaimOwnership?.()?.ownerToken
+      ? { claimToken: params.req.internal.recordingClaimOwnership()!.ownerToken }
+      : {}),
     requestId: params.req.meta?.requestId,
     outputPath: outputPaths.outputPath,
     clientOutputPath: outputPaths.clientOutputPath,
@@ -412,7 +432,10 @@ async function stopRecording(
 ): Promise<DaemonResponse> {
   let stopped: ScreenRecordingStop;
   try {
-    if (kind === 'stop-live') await params.bindDevice(session.device, screenRecordingAdmissionUse);
+    if (kind === 'stop-live') {
+      await params.req.internal?.retryRecordingCleanup?.(session.device);
+      await params.bindDevice(session.device, screenRecordingAdmissionUse);
+    }
     stopped =
       kind === 'stop-live'
         ? {
@@ -504,11 +527,17 @@ async function finishRecovered(
     sessionStore: params.sessionStore,
     device: session.device,
   });
+  await params.req.internal?.retryRecordingCleanup?.(session.device);
+  const settled = await params.req.internal?.recoverIncompleteRecordingStart?.(session.device);
+  if (recovery.kind === 'none' || settled) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'no active recording',
+      settled ? { reason: 'recording-start-rolled-back' } : undefined,
+    );
+  }
   if (recovery.kind === 'completed') {
     return { completion: recovery.completion, recordsSessionAction: false };
-  }
-  if (recovery.kind === 'none') {
-    throw new AppError('INVALID_ARGS', 'no active recording');
   }
   await params.bindDevice(session.device, screenRecordingAdmissionUse);
   const completion = await finishRecoveredScreenRecording({
