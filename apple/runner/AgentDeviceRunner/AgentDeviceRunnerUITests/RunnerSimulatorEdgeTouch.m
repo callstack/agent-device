@@ -160,12 +160,12 @@ static NSString * _Nullable RunnerResolveTouchscreenSender(
     if (serviceDisplayUUID != displayUUID && ![serviceDisplayUUID isEqualToString:displayUUID]) continue;
     CFTypeRef registryID = functions->getServiceRegistryID(service);
     uint64_t candidate = 0;
-    if (registryID != NULL && CFGetTypeID(registryID) == CFNumberGetTypeID() &&
-        CFNumberGetValue((CFNumberRef)registryID, kCFNumberSInt64Type, &candidate) &&
-        (matches == 0 || candidate < *sender)) {
-      *sender = candidate;
+    if (registryID == NULL || CFGetTypeID(registryID) != CFNumberGetTypeID() ||
+        !CFNumberGetValue((CFNumberRef)registryID, kCFNumberSInt64Type, &candidate)) {
+      continue;
     }
-    if (registryID != NULL) matches += 1;
+    if (matches == 0 || candidate < *sender) *sender = candidate;
+    matches += 1;
   }
   if (services != NULL) CFRelease(services);
   if (matches > 0) return nil;
