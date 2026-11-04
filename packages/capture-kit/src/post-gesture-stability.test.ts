@@ -90,7 +90,7 @@ function hooksFor(
     }),
     signaturesStable: same,
     classifyBaselineEvidence: (baseline, quiet) =>
-      same(baseline, quiet) ? 'unchanged' : 'changed',
+      same(baseline.signature, quiet.signature) ? 'unchanged' : 'changed',
     surfacesIdentical: same,
     summarizeDivergence: () => ({}),
   };

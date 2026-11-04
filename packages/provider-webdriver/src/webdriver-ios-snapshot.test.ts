@@ -122,6 +122,7 @@ test('Appium carries visibility-only and derived keyboard facts before projectio
     kind: 'derived',
     derivation: 'docked-tree',
     frame: { x: 0, y: 580, width: 390, height: 264 },
+    treeBound: true,
   });
 });
 

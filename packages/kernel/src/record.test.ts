@@ -110,3 +110,27 @@ test('typed tree rejection preserves optional visibility without trusting a reas
     { kind: 'unmeasurable', reason: 'keyboard-tree-geometry-unusable' },
   );
 });
+
+test('a tree binding survives only as the literal true on the kinds that carry it', () => {
+  for (const fact of [
+    { kind: 'visible', frame: FRAME, treeBound: true },
+    { kind: 'derived', derivation: 'docked-tree', frame: FRAME, treeBound: true },
+    { kind: 'absent', treeBound: true },
+  ]) {
+    assert.deepEqual(readSnapshotKeyboardBandFact(fact), fact);
+  }
+  // Anything else reads as unbound: a reader loses evidence, but never gains a binding.
+  for (const treeBound of [false, 'true', 1, null]) {
+    assert.deepEqual(readSnapshotKeyboardBandFact({ kind: 'absent', treeBound }), {
+      kind: 'absent',
+    });
+    assert.deepEqual(readSnapshotKeyboardBandFact({ kind: 'visible', frame: FRAME, treeBound }), {
+      kind: 'visible',
+      frame: FRAME,
+    });
+  }
+  assert.deepEqual(
+    readSnapshotKeyboardBandFact({ kind: 'visibility-only', visible: false, treeBound: true }),
+    { kind: 'visibility-only', visible: false },
+  );
+});

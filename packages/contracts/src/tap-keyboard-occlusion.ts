@@ -358,7 +358,8 @@ export function acquireProviderKeyboard(params: ProviderKeyboardInput): {
 
 function observeProviderKeyboard(params: ProviderKeyboardInput): SnapshotKeyboardBandFact {
   const frame = deriveDockedKeyboardFrame(params.nodes, params.viewport);
-  if (frame) return { kind: 'derived', derivation: 'docked-tree', frame };
+  // Derived from the nodes this capture returns, so a stale tree derives the stale tree's band.
+  if (frame) return { kind: 'derived', derivation: 'docked-tree', frame, treeBound: true };
   if (isMeasurableViewport(params.viewport) && params.nodes.some(isKeyboardAnchorNode)) {
     return {
       kind: 'tree-rejected',
