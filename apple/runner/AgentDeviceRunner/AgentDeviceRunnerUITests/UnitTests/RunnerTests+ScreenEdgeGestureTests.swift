@@ -32,6 +32,11 @@ extension RunnerTests {
 
       XCTAssertNotNil(failure, "frame \(failingFrame)")
       XCTAssertEqual(events.count, 2 + movesBeforeCancel, "frame \(failingFrame): down, moves, cancel")
+      XCTAssertEqual(
+        events.dropLast().map { $0["touching"]?.boolValue },
+        Array(repeating: true, count: 1 + movesBeforeCancel),
+        "frame \(failingFrame): touch-down and every move before the cancel touched"
+      )
       XCTAssertEqual(terminal?["touching"]?.boolValue, false, "frame \(failingFrame)")
       XCTAssertNotEqual((terminal?["mask"]?.uint32Value ?? 0) & cancelBit, 0, "frame \(failingFrame)")
       XCTAssertEqual(terminal?["restamped"]?.boolValue, true, "frame \(failingFrame): stamped at dispatch")

@@ -1,7 +1,6 @@
-import {
-  isGestureExecutedProfile,
-  type GestureContactCount,
-  type GestureIntent,
+import type {
+  GestureContactCount,
+  GestureIntent,
 } from '@agent-device/contracts/gesture-plan-types';
 import type { Point } from '@agent-device/kernel/snapshot';
 
@@ -26,11 +25,12 @@ export function gestureResponseData(
   extra: Record<string, unknown> = {},
 ): Record<string, unknown> {
   const reported = result.backendResult?.executionProfile;
-  const executionProfile = isGestureExecutedProfile(reported)
-    ? reported
-    : typeof extra.executionProfile === 'string'
-      ? extra.executionProfile
-      : undefined;
+  const executionProfile =
+    typeof reported === 'string' && reported !== ''
+      ? reported
+      : typeof extra.executionProfile === 'string'
+        ? extra.executionProfile
+        : undefined;
   return {
     kind: result.kind,
     durationMs: result.durationMs,

@@ -22,8 +22,7 @@ extension RunnerTests {
     case screenEdgeTouch
 #endif
 
-    /// The schedule the response reports. Mirrors `GestureExecutedProfile` in
-    /// packages/contracts/src/gesture-plan-types.ts.
+    /// The schedule the response reports as `executionProfile`; ADR 0013 names each one.
     var schedule: String? {
       switch self {
       case .fastSwipe:

@@ -31,7 +31,7 @@ test('gesture response builder preserves the dual-target drag disclosure and tim
   });
 });
 
-test('the schedule a backend reports it ran replaces the planned one, and an unknown one does not', () => {
+test('the schedule a backend reports it ran replaces the planned one', () => {
   const fling = (backendResult: Record<string, unknown>) =>
     gestureResponseData(
       {
@@ -54,7 +54,11 @@ test('the schedule a backend reports it ran replaces the planned one, and an unk
     executionProfile: 'endpoint-hold',
     timing: { executionProfile: 'endpoint-hold' },
   });
-  expect(fling({ executionProfile: 'warp' })).toMatchObject({
+  expect(fling({ executionProfile: 'future-schedule' })).toMatchObject({
+    executionProfile: 'future-schedule',
+    timing: { executionProfile: 'future-schedule' },
+  });
+  expect(fling({ executionProfile: 42 })).toMatchObject({
     executionProfile: 'endpoint-hold',
     timing: { executionProfile: 'endpoint-hold' },
   });
