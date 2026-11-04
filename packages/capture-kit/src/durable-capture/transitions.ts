@@ -357,7 +357,7 @@ export function transitionFinishOutcome<K extends string, C>(
  * back what is already there, so a stop that dies mid-way leaves its own facts beside the open
  * record and the next attempt reads them instead of redoing durable work.
  */
-function createStopProgress<K extends string>(
+export function createStopProgress<K extends string>(
   lease: DurableCaptureOpenResourceFenceLease<K>,
 ): DurableCaptureProgress {
   return Object.freeze({

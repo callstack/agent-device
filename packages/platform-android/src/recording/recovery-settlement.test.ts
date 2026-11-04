@@ -1,6 +1,9 @@
 import { expect, test, vi } from 'vitest';
 import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { recoverScreenRecordingResourceAfterDaemonLock } from '@agent-device/capture-kit/screen-recording-recovery';
+import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import type { DurableCaptureProgress } from '@agent-device/contracts/durable-resource';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
@@ -107,6 +110,8 @@ async function setup(initial: 'owned-alive' | 'missing' = 'owned-alive', twoChun
     },
   });
   return {
+    runtime,
+    started,
     settle: async () => await attached.handle.settleForExport!(progress()),
     finish: async () => {
       const reattached = await runtime.screenRecordingReattach({ envelope: readEnvelope() });
@@ -289,4 +294,55 @@ test('a signal checkpoint for another recorder does not suppress the natural lim
   const result = await f.finish();
   expect(result.status).toBe('completed');
   if (result.status === 'completed') expect(result.result.warning).toContain('180s platform limit');
+});
+
+test('startup preservation fences and journals the real Android reattach without removing device material', async () => {
+  const f = await setup();
+  const sessionsDir = mkdtempForTestSync('startup-recording-preservation-');
+  const resourcePath = screenRecordingResourceStore.resolvePath(path.join(sessionsDir, 'one'));
+  screenRecordingResourceStore.write(resourcePath, f.started.envelope);
+  const marker = f.manifest();
+  const material = [...f.files];
+  const dispose = vi.fn(async () => {});
+  const gateway = {
+    bind: async ({ device }: { device: unknown }) => ({
+      device,
+      owner: localRuntimeOwner('android'),
+      facts: {
+        device: { family: 'android', kind: 'emulator', providerMode: 'local' },
+        operations: {
+          screenRecordingReattach: { available: true },
+          screenRecordingCleanup: { available: true },
+        },
+      },
+      operations: f.runtime,
+      [Symbol.asyncDispose]: dispose,
+    }),
+  } as unknown as DeviceRuntimeGateway<PlatformRuntimeOperations>;
+  const outcome = await recoverScreenRecordingResourceAfterDaemonLock({
+    sessionsDir,
+    resourcePath,
+    gateway,
+    claim: { sessionId: f.started.envelope.sessionId, device: f.started.envelope.device },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+  expect(outcome).toEqual({ status: 'retained', reason: 'export-pending' });
+  expect(f.signal).toHaveBeenCalledOnce();
+  expect(f.manifest()).toBe(marker);
+  expect([...f.files]).toEqual(material);
+  expect(f.remove).not.toHaveBeenCalled();
+  expect(f.removeManifest).not.toHaveBeenCalled();
+  expect(f.finalize).not.toHaveBeenCalled();
+  expect(dispose).toHaveBeenCalledOnce();
+  expect(screenRecordingResourceStore.read(resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: {
+      lifecycle: 'open',
+      metadata: { activeRecorderSignal: { pid: '42' }, stopObservation: { recorder: 'confirmed' } },
+    },
+  });
 });

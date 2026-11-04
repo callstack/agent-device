@@ -105,6 +105,7 @@ export async function stopOwnedChunksWithObservation(
   transport: Transport,
   chunks: readonly NativeChunk[],
   onActiveSignalled?: () => void,
+  signal?: AbortSignal,
 ): Promise<{ activeAlreadyExited: boolean; activeSignalled: boolean }> {
   const active = chunks.at(-1);
   let result = { activeAlreadyExited: false, activeSignalled: false };
@@ -115,6 +116,7 @@ export async function stopOwnedChunksWithObservation(
         transport,
         chunk,
         chunk === active ? onActiveSignalled : undefined,
+        signal,
       );
       if (chunk === active)
         result = { activeAlreadyExited: stopped.alreadyExited, activeSignalled: stopped.signalled };
@@ -242,22 +244,23 @@ async function stopChunkWithObservation(
   transport: Transport,
   chunk: NativeChunk,
   onSignalled?: () => void,
+  signal?: AbortSignal,
 ): Promise<{ alreadyExited: boolean; signalled: boolean }> {
   const processIdentity = {
     pid: chunk.remotePid,
     remotePath: chunk.remotePath,
     startTime: chunk.remoteStartTime,
   };
-  const graceful = await transport.stop(processIdentity);
+  const graceful = await transport.stop(processIdentity, undefined, signal);
   if (graceful === 'stopped') onSignalled?.();
   if (graceful === 'already-missing') return { alreadyExited: true, signalled: false };
   if (graceful === 'ownership-lost')
     throw new AndroidRecordingOwnershipLost(
       `Android screenrecord ownership could not be confirmed for pid ${chunk.remotePid}`,
     );
-  if (await waitForStopped(transport, processIdentity))
+  if (await waitForStopped(transport, processIdentity, signal))
     return { alreadyExited: false, signalled: graceful === 'stopped' };
-  const forced = await transport.stop(processIdentity, { force: true });
+  const forced = await transport.stop(processIdentity, { force: true }, signal);
   if (forced === 'stopped' && graceful !== 'stopped') onSignalled?.();
   if (forced === 'stopped' || forced === 'already-missing')
     return { alreadyExited: false, signalled: graceful === 'stopped' || forced === 'stopped' };
@@ -282,9 +285,11 @@ async function pullPlayableChunk(
 async function waitForStopped(
   transport: Transport,
   processIdentity: Awaited<ReturnType<Transport['start']>>['process'],
+  signal?: AbortSignal,
 ): Promise<boolean> {
   for (let elapsed = 0; elapsed <= GRACEFUL_STOP_TIMEOUT_MS; elapsed += STOP_POLL_INTERVAL_MS) {
-    const state = await transport.inspect(processIdentity);
+    signal?.throwIfAborted();
+    const state = await transport.inspect(processIdentity, signal);
     if (state === 'missing') return true;
     if (provesAndroidScreenRecordTermination(state)) {
       throw new AndroidRecordingOwnershipLost(

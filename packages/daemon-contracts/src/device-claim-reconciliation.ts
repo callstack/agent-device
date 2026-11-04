@@ -16,6 +16,7 @@ import { recoverPerfCaptureResourceAfterDaemonLock } from '@agent-device/capture
 import { perfCaptureDurableResource } from '@agent-device/capture-kit/perf-capture-session-resource';
 import { recoverScreenRecordingResourceAfterDaemonLock } from '@agent-device/capture-kit/screen-recording-recovery';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
+import { classifyOwnerLiveness } from '@agent-device/host-kit/process';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
 
 export function createDeviceClaimReconciler(params: {
@@ -38,7 +39,16 @@ export function createDeviceClaimReconciler(params: {
         if (currentOwnership.status === 'missing') continue;
         // Recovery is intentionally sequential: resources can bind the same exact
         // device/runtime owner, so one must release its binding before the next starts.
-        const outcome = await resource.recover(params, sessionsDir, resourcePath);
+        if (resourceKind === 'screen-recording' && currentOwnership.requiresRecovery) {
+          const liveness = classifyOwnerLiveness({
+            owner: { pid: claim.ownerPid, startTime: claim.ownerStartTime },
+          });
+          if (liveness !== 'owner-process-dead' && liveness !== 'owner-process-reused')
+            return { status: 'retained', reason: 'screen-recording-owner-unsettled' };
+        }
+        const outcome = await resource.recover(params, sessionsDir, resourcePath, claim);
+        if (typeof outcome === 'object')
+          return { status: 'retained', reason: `screen-recording-${outcome.reason}` };
         if (outcome === 'retained') {
           return {
             status: 'retained',
@@ -129,7 +139,8 @@ type ClaimDurableResource = Readonly<{
     params: Parameters<typeof createDeviceClaimReconciler>[0],
     sessionsDir: string,
     resourcePath: string,
-  ): Promise<DurableCaptureRecoveryOutcome>;
+    claim: DeviceClaim,
+  ): Promise<DurableCaptureRecoveryOutcome | { status: 'retained'; reason: string }>;
 }>;
 
 const DEVICE_CLAIM_DURABLE_RESOURCES = {
@@ -147,12 +158,13 @@ const DEVICE_CLAIM_DURABLE_RESOURCES = {
   'screen-recording': {
     resourceKind: 'screen-recording',
     store: screenRecordingDurableResource.store,
-    recover: async (params, sessionsDir, resourcePath) =>
+    recover: async (params, sessionsDir, resourcePath, claim) =>
       await recoverScreenRecordingResourceAfterDaemonLock({
         sessionsDir,
         resourcePath,
         gateway: params.gateway,
         scope: params.scope,
+        claim: { sessionId: claim.session, device: claim.device },
       }),
   },
   'audio-probe': {

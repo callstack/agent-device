@@ -26,7 +26,7 @@ const scope = {
   progress: { report: () => {} },
 };
 
-test('recovery cleans a recording through its exact runtime owner', async () => {
+test('recovery retains a recording whose runtime lacks preservation authority', async () => {
   const sessionsDir = mkdtempForTestSync('screen-recording-recovery-');
   const session = { name: 'session', device };
   const resource = makeTestScreenRecordingResource(session);
@@ -92,15 +92,86 @@ test('recovery cleans a recording through its exact runtime owner', async () => 
       resourcePath,
       gateway,
       scope,
+      claim: { sessionId: resource.envelope.sessionId, device: resource.envelope.device },
     }),
-  ).resolves.toBe('recovered');
+  ).resolves.toEqual({ status: 'retained', reason: 'preservation-unavailable' });
   expect(screenRecordingResourceStore.read(resourcePath)).toMatchObject({
     status: 'decoded',
-    envelope: { lifecycle: 'completed' },
+    envelope: { lifecycle: 'open' },
   });
 });
 
 const unavailable = Object.freeze({
   available: false as const,
   reason: 'owner-capability-missing' as const,
+});
+
+test('a cancelled late recording reattach settles before releasing control and never disposes the live handle', async () => {
+  const sessionsDir = mkdtempForTestSync('recording-late-preservation-');
+  const resource = makeTestScreenRecordingResource({ name: 'session', device });
+  const resourcePath = screenRecordingResourceStore.resolvePath(path.join(sessionsDir, 'session'));
+  screenRecordingResourceStore.write(resourcePath, resource.envelope);
+  let release!: () => void;
+  let entered!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const forceCleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
+  const disposeHandle = vi.fn(async () => {});
+  const settle = vi.fn(async () => ({ status: 'export' as const }));
+  const disposeControl = vi.fn(async () => {});
+  const handle = {
+    ...resource.handle,
+    forceCleanup,
+    settleForExport: settle,
+    [Symbol.asyncDispose]: disposeHandle,
+  };
+  const gateway = {
+    bind: async ({ device: boundDevice }: { device: unknown }) => ({
+      device: boundDevice,
+      owner: localRuntimeOwner('android'),
+      facts: {
+        device: { family: 'android', kind: 'emulator', providerMode: 'local' },
+        operations: {
+          screenRecordingReattach: { available: true },
+          screenRecordingCleanup: { available: true },
+        },
+      },
+      operations: {
+        screenRecordingReattach: async () => {
+          entered();
+          await pending;
+          return { status: 'active' as const, handle };
+        },
+        screenRecordingCleanup: forceCleanup,
+      },
+      [Symbol.asyncDispose]: disposeControl,
+    }),
+  } as unknown as DeviceRuntimeGateway<PlatformRuntimeOperations>;
+  const controller = new AbortController();
+  const task = recoverScreenRecordingResourceAfterDaemonLock({
+    sessionsDir,
+    resourcePath,
+    gateway,
+    scope: { ...scope, signal: controller.signal },
+    claim: { sessionId: resource.envelope.sessionId, device: resource.envelope.device },
+  });
+  await started;
+  controller.abort();
+  await Promise.resolve();
+  expect(disposeControl).not.toHaveBeenCalled();
+  expect(forceCleanup).not.toHaveBeenCalled();
+  release();
+  await expect(task).resolves.toEqual({ status: 'retained', reason: 'preservation-cancelled' });
+  expect(settle).not.toHaveBeenCalled();
+  expect(forceCleanup).not.toHaveBeenCalled();
+  expect(disposeHandle).not.toHaveBeenCalled();
+  expect(disposeControl).toHaveBeenCalledOnce();
+  expect(screenRecordingResourceStore.read(resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'open' },
+  });
 });

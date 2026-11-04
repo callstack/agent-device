@@ -8,7 +8,10 @@ import { createScreenRecordingRecoveryControl } from '@agent-device/capture-kit/
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import {
+  createDurableResourceEnvelope,
+  createScreenRecordingLiveHandle,
+} from '@agent-device/capture-kit';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   type DeviceRuntimeGateway,
@@ -423,7 +426,7 @@ test('missing finalized simulator export retains the claim and recovered stop re
     createDeviceClaimReconciler({ gateway, scope }),
     env,
   );
-  expect(result).toEqual({ status: 'retained', reason: 'screen-recording-cleanup-pending' });
+  expect(result).toEqual({ status: 'retained', reason: 'screen-recording-resource-missing' });
   const claimPath = resolveDeviceClaimPath(claim.deviceKey, env);
   expect(JSON.parse(fs.readFileSync(claimPath, 'utf8')).ownerToken).toBe(claim.ownerToken);
   expect(screenRecordingDurableResource.store.read(resourcePath)).toMatchObject({
@@ -445,4 +448,127 @@ test('missing finalized simulator export retains the claim and recovered stop re
   expect(fs.readFileSync(native, 'utf8')).toBe('native bytes');
   expect(fs.existsSync(output)).toBe(false);
   expect(JSON.parse(fs.readFileSync(claimPath, 'utf8')).ownerToken).toBe(claim.ownerToken);
+});
+
+test('claim reconciliation retains the exact recording claim and journals settlement without cleaning material', async () => {
+  const stateDir = mkdtempForTestSync('preservation-claim-');
+  const claim = makeClaim(stateDir);
+  const env = { AGENT_DEVICE_CLAIMS_DIR: path.join(stateDir, 'claims') };
+  writeDeviceClaim(claim, env);
+  const resourcePath = screenRecordingDurableResource.store.resolvePath(
+    path.join(stateDir, 'sessions', claim.session),
+  );
+  const native = path.join(stateDir, 'chunk.mp4');
+  const marker = path.join(stateDir, 'device-marker.json');
+  fs.writeFileSync(native, 'native bytes');
+  fs.writeFileSync(marker, 'device marker');
+  screenRecordingDurableResource.store.write(
+    resourcePath,
+    createDurableResourceEnvelope({
+      resourceKind: 'screen-recording',
+      sessionId: claim.session,
+      device: claim.device,
+      owner: localRuntimeOwner('android'),
+      fence: { token: 'fence', generation: 1 },
+      lifecycle: 'open',
+      descriptor: { version: 1, body: {} },
+    }),
+  );
+  const cleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
+  const signal = vi.fn();
+  const handle = createScreenRecordingLiveHandle(
+    {
+      backend: 'fixture',
+      outPath: '/tmp/output',
+      startedAt: 1,
+      scope: 'device',
+      showTouches: false,
+      recordOnlySession: false,
+      gestureEvents: [],
+    },
+    {
+      finish: async () => {
+        throw new Error('unexpected finish');
+      },
+      forceCleanup: cleanup,
+    },
+  );
+  const disposeControl = vi.fn(async () => {});
+  const operations = {
+    screenRecordingReattach: async () => ({
+      status: 'active' as const,
+      handle: {
+        ...handle,
+        settleForExport: async (progress: {
+          record(fact: { stopObservation: { recorder: 'confirmed' } }): void;
+        }) => {
+          signal();
+          progress.record({ stopObservation: { recorder: 'confirmed' } });
+          return { status: 'export' as const };
+        },
+      },
+    }),
+    screenRecordingCleanup: cleanup,
+  };
+  const gateway = {
+    bind: async ({ device }: { device: unknown }) => ({
+      device,
+      owner: localRuntimeOwner('android'),
+      facts: {
+        device: { family: 'android', kind: 'emulator', providerMode: 'local' },
+        operations: {
+          screenRecordingReattach: { available: true },
+          screenRecordingCleanup: { available: true },
+        },
+      },
+      operations,
+      [Symbol.asyncDispose]: disposeControl,
+    }),
+  } as unknown as DeviceRuntimeGateway<PlatformRuntimeOperations>;
+  await expect(
+    settleVerifiedOrphanedClaim(claim, createDeviceClaimReconciler({ gateway, scope }), env),
+  ).resolves.toEqual({ status: 'retained', reason: 'screen-recording-export-pending' });
+  expect(signal).toHaveBeenCalledOnce();
+  expect(cleanup).not.toHaveBeenCalled();
+  expect(disposeControl).toHaveBeenCalledOnce();
+  expect(fs.readFileSync(native, 'utf8')).toBe('native bytes');
+  expect(fs.readFileSync(marker, 'utf8')).toBe('device marker');
+  expect(
+    JSON.parse(fs.readFileSync(resolveDeviceClaimPath(claim.deviceKey, env), 'utf8')).ownerToken,
+  ).toBe(claim.ownerToken);
+  expect(screenRecordingDurableResource.store.read(resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'open', metadata: { stopObservation: { recorder: 'confirmed' } } },
+  });
+});
+
+test('a still-live previous daemon cannot be settled while it may publish another chunk', async () => {
+  const stateDir = mkdtempForTestSync('recording-live-owner-');
+  const claim = { ...makeClaim(stateDir), ownerPid: process.pid, ownerStartTime: null };
+  const resourcePath = screenRecordingDurableResource.store.resolvePath(
+    path.join(stateDir, 'sessions', claim.session),
+  );
+  screenRecordingDurableResource.store.write(
+    resourcePath,
+    createDurableResourceEnvelope({
+      resourceKind: 'screen-recording',
+      sessionId: claim.session,
+      device: claim.device,
+      owner: localRuntimeOwner('android'),
+      fence: { token: 'fence', generation: 1 },
+      lifecycle: 'open',
+      descriptor: { version: 1, body: {} },
+    }),
+  );
+  const bind = vi.fn();
+  const gateway = { bind } as unknown as DeviceRuntimeGateway<PlatformRuntimeOperations>;
+  await expect(createDeviceClaimReconciler({ gateway, scope })(claim)).resolves.toEqual({
+    status: 'retained',
+    reason: 'screen-recording-owner-unsettled',
+  });
+  expect(bind).not.toHaveBeenCalled();
+  expect(screenRecordingDurableResource.store.read(resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'open' },
+  });
 });

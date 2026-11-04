@@ -144,7 +144,10 @@ export type ScreenRecordingLiveHandle = LiveResourceHandle<ScreenRecordingComple
      * Hold the recording fence and serialize handle operations until this returns. This does not
      * transfer or release the handle; forceCleanup and async disposal remain destructive.
      */
-    settleForExport?(progress: DurableCaptureProgress): Promise<ScreenRecordingSettlement>;
+    settleForExport?(
+      progress: DurableCaptureProgress,
+      signal?: AbortSignal,
+    ): Promise<ScreenRecordingSettlement>;
     inspect(): ScreenRecordingLiveSnapshot;
     appendGestureEvents(events: readonly RecordingGestureEvent[]): void;
     setTouchReferenceFrame(frame: GestureReferenceFrame | undefined): void;

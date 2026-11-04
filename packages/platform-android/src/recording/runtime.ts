@@ -49,7 +49,7 @@ export async function bindAndroidScreenRecordingRuntime(params: {
     screenRecordingStart: async (input) =>
       await startAndroidRecording({ host, transport, device, owner, input, signal }),
     screenRecordingReattach: async (input) =>
-      await reattachAndroidRecording({ host, transport, device, input }),
+      await reattachAndroidRecording({ host, transport, device, input, signal }),
     screenRecordingCleanup: async (input) =>
       await cleanupAndroidRecording({ transport, device, input }),
   } satisfies ScreenRecordingRuntimeOperations);

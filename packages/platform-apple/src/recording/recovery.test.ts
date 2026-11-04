@@ -1,4 +1,10 @@
 import { expect, test, vi } from 'vitest';
+import path from 'node:path';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { recoverScreenRecordingResourceAfterDaemonLock } from '@agent-device/capture-kit/screen-recording-recovery';
+import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
+import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { DurableCaptureProgress } from '@agent-device/contracts/durable-resource';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
@@ -488,4 +494,57 @@ test('a missing finalized export cannot be restored from its checkpoint', async 
     recoveryOperations(simulatorHost(files)).screenRecordingReattach({ envelope }),
   ).resolves.toEqual({ status: 'missing' });
   expect(files.exists(nativeRecordingPath(recordingOutputPath()))).toBe(true);
+});
+
+test('startup preserves a real recovered simulator export without finalization or cleanup', async () => {
+  const files = recordingFileStore();
+  const started = await startSimulatorRecording(files);
+  const native = nativeRecordingPath(recordingOutputPath());
+  const complete = vi.fn(async () => ({}));
+  const prepare = vi.fn(async () => {});
+  const terminateProcess = vi.fn(async () => 'terminated' as const);
+  const operations = recoveryOperations(
+    simulatorHost(files, { complete, prepare, apple: { terminateProcess } }),
+  );
+  const sessionsDir = mkdtempForTestSync('apple-preservation-');
+  const resourcePath = screenRecordingResourceStore.resolvePath(path.join(sessionsDir, 'one'));
+  screenRecordingResourceStore.write(resourcePath, started.envelope);
+  const dispose = vi.fn(async () => {});
+  const gateway = {
+    bind: async ({ device }: { device: unknown }) => ({
+      device,
+      owner: localRuntimeOwner('apple'),
+      facts: {
+        device: { family: 'apple', kind: 'simulator', providerMode: 'local' },
+        operations: {
+          screenRecordingReattach: { available: true },
+          screenRecordingCleanup: { available: true },
+        },
+      },
+      operations,
+      [Symbol.asyncDispose]: dispose,
+    }),
+  } as unknown as DeviceRuntimeGateway<PlatformRuntimeOperations>;
+  await expect(
+    recoverScreenRecordingResourceAfterDaemonLock({
+      sessionsDir,
+      resourcePath,
+      gateway,
+      claim: { sessionId: started.envelope.sessionId, device: started.envelope.device },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    }),
+  ).resolves.toEqual({ status: 'retained', reason: 'export-pending' });
+  expect(files.exists(native)).toBe(true);
+  expect(screenRecordingResourceStore.read(resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'open' },
+  });
+  expect(dispose).toHaveBeenCalledOnce();
+  expect(prepare).not.toHaveBeenCalled();
+  expect(complete).not.toHaveBeenCalled();
+  expect(terminateProcess).not.toHaveBeenCalled();
 });

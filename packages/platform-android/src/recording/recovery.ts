@@ -47,10 +47,11 @@ async function readDescriptorEvidence(params: {
   device: Parameters<typeof nativeManifestMatchesEnvelope>[1];
   envelope: Envelope;
   descriptor: AndroidRecordingDescriptor;
+  signal?: AbortSignal;
 }): Promise<DescriptorEvidence> {
   const { transport, device, envelope, descriptor } = params;
   if (descriptor.transportMode !== transport.mode) return { status: 'transport-unavailable' };
-  const nativeRead = await transport.readManifest(descriptor.manifestPath);
+  const nativeRead = await transport.readManifest(descriptor.manifestPath, params.signal);
   if (nativeRead.status === 'unavailable') return { status: 'transport-unavailable' };
   const evidence =
     nativeRead.status === 'read' ? decodeNativeManifest(nativeRead.contents) : undefined;
@@ -91,8 +92,9 @@ export async function reattachAndroidRecording(params: {
   transport: Transport;
   device: Parameters<typeof nativeManifestMatchesEnvelope>[1];
   input: Parameters<ScreenRecordingRuntimeOperations['screenRecordingReattach']>[0];
+  signal?: AbortSignal;
 }) {
-  const { host, transport, device, input } = params;
+  const { host, transport, device, input, signal } = params;
   const parsed = androidScreenRecordingDescriptorCodec.decode(input.envelope.descriptor.body);
   if (parsed.status !== 'decoded') return unreattachable('descriptor-invalid');
   const recovered = await readDescriptorEvidence({
@@ -100,6 +102,7 @@ export async function reattachAndroidRecording(params: {
     device,
     envelope: input.envelope,
     descriptor: parsed.descriptor,
+    signal,
   });
   if (recovered.status !== 'matched')
     return unreattachable(
@@ -114,6 +117,7 @@ export async function reattachAndroidRecording(params: {
     input,
     descriptor: parsed.descriptor,
     evidence: recovered.evidence,
+    signal,
   });
 }
 
@@ -151,10 +155,11 @@ async function reattachEvidence(params: {
   input: Parameters<ScreenRecordingRuntimeOperations['screenRecordingReattach']>[0];
   descriptor: AndroidRecordingDescriptor;
   evidence: NativeManifest;
+  signal?: AbortSignal;
 }) {
-  const { host, transport, device, input, descriptor, evidence } = params;
+  const { host, transport, device, input, descriptor, evidence, signal } = params;
   if (evidence.completion !== undefined) {
-    const observed = await observeCompletedEvidence(transport, evidence);
+    const observed = await observeCompletedEvidence(transport, evidence, signal);
     if (observed.status === 'terminal')
       return {
         status: 'completed' as const,
@@ -178,15 +183,18 @@ async function reattachEvidence(params: {
     );
   const active = evidence.chunks.at(-1);
   if (!active) return { status: 'missing' as const };
-  const running = await transport.inspect({
-    pid: active.remotePid,
-    remotePath: active.remotePath,
-    startTime: active.remoteStartTime,
-  });
+  const running = await transport.inspect(
+    {
+      pid: active.remotePid,
+      remotePath: active.remotePath,
+      startTime: active.remoteStartTime,
+    },
+    signal,
+  );
   // A recorder that is not running is only finished with once the device has *answered* that its
   // artifact is gone: a probe that could not run leaves the recording finishable, so the caller can
   // pull it when the device answers again instead of being told a loss nobody observed (ADR 0024).
-  if (running !== 'owned-alive' && (await transport.exists(active.remotePath)) === false)
+  if (running !== 'owned-alive' && (await transport.exists(active.remotePath, signal)) === false)
     return unreattachable(
       'transport-not-reattachable',
       'Android recording process ended before its artifact could be recovered.',
@@ -221,8 +229,8 @@ async function reattachEvidence(params: {
     status: 'active' as const,
     handle: Object.freeze({
       ...handle,
-      settleForExport: async (progress: DurableCaptureProgress) =>
-        await settleAndroidRecording({ transport, device, input, descriptor, progress }),
+      settleForExport: async (progress: DurableCaptureProgress, signal?: AbortSignal) =>
+        await settleAndroidRecording({ transport, device, input, descriptor, progress, signal }),
     }),
   };
 }
@@ -233,6 +241,7 @@ async function settleAndroidRecording(params: {
   input: Parameters<ScreenRecordingRuntimeOperations['screenRecordingReattach']>[0];
   descriptor: AndroidRecordingDescriptor;
   progress: DurableCaptureProgress;
+  signal?: AbortSignal;
 }): Promise<ScreenRecordingSettlement> {
   let intentionalStop = false;
   let chunks: NativeManifest['chunks'] = [];
@@ -244,6 +253,7 @@ async function settleAndroidRecording(params: {
       device,
       envelope: input.envelope,
       descriptor,
+      signal: params.signal,
     });
     if (current.status !== 'matched')
       return {
@@ -257,11 +267,14 @@ async function settleAndroidRecording(params: {
     if (evidence.chunks.length === 0) return { status: 'retained', reason: 'resource-missing' };
     const liveChunks: NativeManifest['chunks'][number][] = [];
     for (const chunk of evidence.chunks) {
-      const state = await transport.inspect({
-        pid: chunk.remotePid,
-        remotePath: chunk.remotePath,
-        startTime: chunk.remoteStartTime,
-      });
+      const state = await transport.inspect(
+        {
+          pid: chunk.remotePid,
+          remotePath: chunk.remotePath,
+          startTime: chunk.remoteStartTime,
+        },
+        params.signal,
+      );
       if (state === 'ownership-lost' || state === 'foreign-writer')
         return { status: 'retained', reason: 'ownership-fence-lost' };
       if (state === 'uncertain') return { status: 'retained', reason: 'owner-unavailable' };
@@ -286,14 +299,18 @@ async function settleAndroidRecording(params: {
             );
           }
         : undefined,
+      params.signal,
     );
     intentionalStop = activeWasLive && stopped.activeSignalled;
     for (const chunk of evidence.chunks) {
-      const state = await transport.inspect({
-        pid: chunk.remotePid,
-        remotePath: chunk.remotePath,
-        startTime: chunk.remoteStartTime,
-      });
+      const state = await transport.inspect(
+        {
+          pid: chunk.remotePid,
+          remotePath: chunk.remotePath,
+          startTime: chunk.remoteStartTime,
+        },
+        params.signal,
+      );
       if (state === 'ownership-lost' || state === 'foreign-writer')
         return { status: 'retained', reason: 'ownership-fence-lost' };
       if (state !== 'missing') return { status: 'retained', reason: 'stop-unconfirmed' };
@@ -314,7 +331,7 @@ async function settleAndroidRecording(params: {
   }
   try {
     for (const chunk of chunks) {
-      const exists = await params.transport.exists(chunk.remotePath);
+      const exists = await params.transport.exists(chunk.remotePath, params.signal);
       if (exists === false) return { status: 'retained', reason: 'resource-missing' };
       if (exists === 'uncertain') return { status: 'retained', reason: 'owner-unavailable' };
     }
@@ -331,16 +348,20 @@ type CompletedEvidenceObservation =
 async function observeCompletedEvidence(
   transport: Transport,
   evidence: NativeManifest,
+  signal?: AbortSignal,
 ): Promise<CompletedEvidenceObservation> {
   try {
     for (const chunk of evidence.chunks) {
       if (
         !provesAndroidScreenRecordTermination(
-          await transport.inspect({
-            pid: chunk.remotePid,
-            remotePath: chunk.remotePath,
-            startTime: chunk.remoteStartTime,
-          }),
+          await transport.inspect(
+            {
+              pid: chunk.remotePid,
+              remotePath: chunk.remotePath,
+              startTime: chunk.remoteStartTime,
+            },
+            signal,
+          ),
         )
       )
         return { status: 'retained' };
