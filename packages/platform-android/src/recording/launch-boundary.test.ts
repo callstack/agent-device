@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   isScreenRecordingStartNotDispatched,
   ScreenRecordingStartRolledBack,
@@ -223,4 +224,163 @@ test('reports a pre-aborted request as not dispatched without touching native ev
   expect(error).toBe(reason);
   expect(isScreenRecordingStartNotDispatched(error)).toBe(true);
   expect(effects).toEqual([]);
+});
+
+test.each([
+  ['completed marker failure', 'failed', true],
+  ['unconfirmed marker write', 'unavailable', false],
+] as const)(
+  '%s reports no dispatch only when publication is known drained',
+  async (_name, outcome, noDispatch) => {
+    let starts = 0;
+    const runtime = await start({
+      compareAndSetManifest: async () => outcome,
+      start: async () => {
+        starts += 1;
+        return recordingProcess('42');
+      },
+    });
+    const error = await runtime
+      .screenRecordingStart(recordingInput())
+      .catch((error: unknown) => error);
+    expect(isScreenRecordingStartNotDispatched(error)).toBe(noDispatch);
+    if (noDispatch)
+      expect(error).toMatchObject({
+        code: 'COMMAND_FAILED',
+        details: { reason: 'native_recording_marker_not_written' },
+      });
+    else expect(error).toBeInstanceOf(AndroidScreenRecordingStartRollbackUnconfirmed);
+    expect(starts).toBe(0);
+  },
+);
+
+test('device admission remains busy until exact cleanup completes', async () => {
+  const runtime = await start({});
+  const first = await runtime.screenRecordingStart(recordingInput());
+  const nextInput = {
+    ...recordingInput(),
+    claimToken: 'second-claim',
+    fence: { token: 'second-fence', generation: 3 },
+  };
+  const refusal = await runtime.screenRecordingStart(nextInput).catch((error: unknown) => error);
+  expect(refusal).toMatchObject({
+    code: 'DEVICE_IN_USE',
+    details: { reason: 'android_recording_admission_busy' },
+  });
+  expect(isScreenRecordingStartNotDispatched(refusal)).toBe(true);
+  await expect(first.pendingHandle.transfer().forceCleanup()).resolves.toMatchObject({
+    status: 'cleaned',
+  });
+  const second = await runtime.screenRecordingStart(nextInput);
+  await expect(second.pendingHandle.transfer().forceCleanup()).resolves.toMatchObject({
+    status: 'cleaned',
+  });
+});
+
+test('retains the native marker when device-wide admission release is unconfirmed', async () => {
+  let marker = '';
+  let markerRemovals = 0;
+  const runtime = await start({
+    readManifest: async (path: string) =>
+      path.includes('recording-v2-') && marker
+        ? { status: 'read' as const, contents: marker }
+        : { status: 'missing' as const },
+    writeManifest: async ({ contents }: { contents: string }) => {
+      marker = contents;
+    },
+    removeManifest: async () => {
+      markerRemovals += 1;
+      marker = '';
+      return true;
+    },
+    releaseAdmission: async () => 'unavailable' as const,
+  });
+  const started = await runtime.screenRecordingStart(recordingInput());
+  const before = marker;
+  await expect(started.pendingHandle.transfer().forceCleanup()).resolves.toMatchObject({
+    status: 'cleanup-pending',
+    reason: 'cleanup-unconfirmed',
+  });
+  expect(marker).toBe(before);
+  expect(markerRemovals).toBe(0);
+});
+
+test.each([null, Object.freeze(new Error('frozen cancellation'))])(
+  'preserves typed no-dispatch proof for a non-mutable cancellation reason',
+  async (reason) => {
+    const controller = new AbortController();
+    controller.abort(reason);
+    const runtime = await start({}, controller.signal);
+    const error = await runtime
+      .screenRecordingStart(recordingInput())
+      .catch((error: unknown) => error);
+    expect(error).toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'recording-start-not-dispatched' },
+    });
+    expect(isScreenRecordingStartNotDispatched(error)).toBe(true);
+  },
+);
+
+test('keeps a frozen typed refusal when it must carry no-dispatch proof', async () => {
+  const controller = new AbortController();
+  controller.abort(
+    Object.freeze(new AppError('DEVICE_IN_USE', 'owned', { reason: 'typed-owner' })),
+  );
+  const runtime = await start({}, controller.signal);
+  const error = await runtime
+    .screenRecordingStart(recordingInput())
+    .catch((error: unknown) => error);
+  expect(error).toMatchObject({ code: 'DEVICE_IN_USE', details: { reason: 'typed-owner' } });
+  expect(isScreenRecordingStartNotDispatched(error)).toBe(true);
+});
+
+test('waits for admission release before reporting an output-preparation refusal', async () => {
+  const reason = new AppError('COMMAND_FAILED', 'output unavailable', {
+    reason: 'output-unavailable',
+  });
+  let entered!: () => void;
+  let release!: () => void;
+  const inRelease = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const finishRelease = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let settled = false;
+  let starts = 0;
+  const runtime = await start({
+    outputs: {
+      prepare: async () => {
+        throw reason;
+      },
+    },
+    releaseAdmission: async () => {
+      entered();
+      await finishRelease;
+      return 'released' as const;
+    },
+    start: async () => {
+      starts += 1;
+      return recordingProcess('42');
+    },
+  });
+  const outcome = runtime
+    .screenRecordingStart(recordingInput())
+    .catch((error: unknown) => error)
+    .then((error) => {
+      settled = true;
+      return error;
+    });
+  await inRelease;
+  expect(settled).toBe(false);
+  release();
+  const error = await outcome;
+  expect(error).toBe(reason);
+  expect(error).toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'output-unavailable' },
+  });
+  expect(isScreenRecordingStartNotDispatched(error)).toBe(true);
+  expect(starts).toBe(0);
 });

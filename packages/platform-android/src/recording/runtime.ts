@@ -3,7 +3,6 @@ import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import {
-  markScreenRecordingStartNotDispatched,
   type ScreenRecordingRuntimeOperations,
   type ScreenRecordingStartInput,
   SCREEN_RECORDING_RESOURCE_KIND,
@@ -27,9 +26,14 @@ import {
   rollbackChunks,
   stopChunk,
 } from './chunks.ts';
-import { startInitialTransaction, startPendingChunk } from './launch.ts';
+import {
+  markAndroidStartNotDispatched,
+  startInitialTransaction,
+  startPendingChunk,
+} from './launch.ts';
 import { recoverIncompleteAndroidRecordingStart } from './start-reconciliation.ts';
 import { persistNativeManifest } from './manifest-store.ts';
+import { releaseQuiescentAdmission } from './admission.ts';
 import { snapshot } from './live-snapshot.ts';
 import { finalizeAndroidRecording } from './finalize.ts';
 import { cleanupVerifiedAndroidEvidence } from './cleanup.ts';
@@ -93,7 +97,7 @@ async function startAndroidRecording(params: {
         reason: 'recording-claim-token-required',
       });
   } catch (error) {
-    throw markScreenRecordingStartNotDispatched(error);
+    throw markAndroidStartNotDispatched(error);
   }
   void host.screenRecording.finalize.prepare({ container: 'mp4' }).catch(() => {});
   const startedAt = Date.now();
@@ -298,6 +302,7 @@ async function startAndroidRecording(params: {
         progress,
         activeRecorderRetired: retiredActiveRecorder,
       });
+      await releaseQuiescentAdmission(transport, activeEvidence(chunks), manifestPath);
       confirmNativeCleanup();
       return outcome;
     },
@@ -334,7 +339,7 @@ async function startAndroidRecording(params: {
         ? { metadata: { [SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY]: input.claimToken } }
         : {}),
       descriptor: encodeDurableDescriptor(androidScreenRecordingDescriptorCodec, {
-        backend: 'adb-screenrecord-v2',
+        backend: 'adb-screenrecord-v2-admitted',
         manifestPath,
         ...recordingRequestFields(input),
         transportMode: transport.mode,

@@ -12,6 +12,7 @@ import {
 } from '@agent-device/capture-kit/recording-video';
 import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
+const ANDROID_ADMISSION_PATH = '/sdcard/agent-device-recording-v2-admitted-admission.lock';
 const ADB_TIMEOUT_MS = 5_000;
 const BIT_RATE = { medium: 8_000_000, high: 20_000_000 } as const;
 
@@ -38,7 +39,7 @@ export async function createAndroidScreenRecordingTransport(
   };
   const markerLock = (manifestPath: string, operation: string) => {
     const lock = shellQuote(`${manifestPath}.lock`);
-    return `mkdir ${lock} 2>/dev/null || exit 75; trap ${shellQuote(`rm -f ${lock}/expected ${lock}/next; rmdir ${lock}`)} EXIT; ${operation}`;
+    return `mkdir ${lock} 2>/dev/null || exit 75; trap ${shellQuote(`rm -f ${lock}/expected ${lock}/next ${lock}/lease-owner; rmdir ${lock}`)} EXIT; ${operation}`;
   };
   const markerTransition = (input: {
     manifestPath: string;
@@ -49,7 +50,7 @@ export async function createAndroidScreenRecordingTransport(
     const lock = shellQuote(`${input.manifestPath}.lock`);
     if (input.expected === null) {
       if (input.contents === null) return 'exit 73';
-      return `(set -C; printf %s ${shellQuote(input.contents)} > ${marker}) || exit 73`;
+      return `(set -C; printf %s ${shellQuote(input.contents)} > ${marker}) || { if test -e ${marker}; then exit 73; else exit 74; fi; }`;
     }
     const check = `printf %s ${shellQuote(input.expected)} > ${lock}/expected && cmp -s ${lock}/expected ${marker} || exit 73`;
     const write =
@@ -60,13 +61,41 @@ export async function createAndroidScreenRecordingTransport(
   };
   return Object.freeze({
     mode: scoped.mode,
+    acquireAdmission: async (owner) => {
+      const lease = shellQuote(ANDROID_ADMISSION_PATH);
+      const result = await shell([
+        shellFragment(
+          `if mkdir ${lease} 2>/dev/null; then printf %s ${shellQuote(owner)} > ${lease}/owner || exit 74; else if test -d ${lease}; then exit 73; else exit 74; fi; fi`,
+        ),
+      ]);
+      return result.exitCode === 0 ? 'acquired' : result.exitCode === 73 ? 'busy' : 'unavailable';
+    },
+    releaseAdmission: async (input) => {
+      const lease = shellQuote(ANDROID_ADMISSION_PATH);
+      const release = `${lease}/releasing`;
+      const marker = shellQuote(input.manifestPath);
+      const lock = shellQuote(`${input.manifestPath}.lock`);
+      const checkMarker =
+        input.expected === null
+          ? `if test -e ${marker} || test -L ${marker}; then exit 73; fi`
+          : `printf %s ${shellQuote(input.expected)} > ${lock}/expected && cmp -s ${lock}/expected ${marker} || exit 73`;
+      const operation = `${checkMarker}; mkdir ${release} 2>/dev/null || { if test -e ${lease} || test -L ${lease}; then exit 74; else exit 76; fi; }; printf %s ${shellQuote(input.owner)} > ${release}/expected && cmp -s ${release}/expected ${lease}/owner || { rm -f ${release}/expected; rmdir ${release}; exit 73; }; rm -f ${lease}/owner ${release}/expected && rmdir ${release} && rmdir ${lease}`;
+      const result = await shell([shellFragment(markerLock(input.manifestPath, operation))]);
+      return result.exitCode === 0
+        ? 'released'
+        : result.exitCode === 76
+          ? 'absent'
+          : result.exitCode === 73
+            ? 'not-owner'
+            : 'unavailable';
+    },
     start: async ({ remotePath, quality = 'medium', admission }, signal) => {
       const result = await shell(
         [
           shellFragment(
             markerLock(
               admission.manifestPath,
-              `${markerTransition({ manifestPath: admission.manifestPath, expected: admission.expected, contents: admission.admitted })} || exit 74; screenrecord --bit-rate ${BIT_RATE[quality]} ${shellQuote(remotePath)} >/dev/null 2>&1 & echo $!`,
+              `printf %s ${shellQuote(admission.owner)} > ${shellQuote(`${admission.manifestPath}.lock`)}/lease-owner && cmp -s ${shellQuote(`${admission.manifestPath}.lock`)}/lease-owner ${shellQuote(ANDROID_ADMISSION_PATH)}/owner || exit 73; ${markerTransition({ manifestPath: admission.manifestPath, expected: admission.expected, contents: admission.admitted })} || exit 74; screenrecord --bit-rate ${BIT_RATE[quality]} ${shellQuote(remotePath)} >/dev/null 2>&1 & echo $!`,
             ),
           ),
         ],
@@ -142,10 +171,10 @@ export async function createAndroidScreenRecordingTransport(
       (await shell(['rm', '-f', remotePath], signal)).exitCode === 0,
     manifestPathFor: (remotePath) => {
       const name = path.posix.basename(remotePath);
-      const match = /^agent-device-recording-v2-([a-f0-9]{64})-\d{1,20}\.mp4$/.exec(name);
+      const match = /^agent-device-recording-v2-admitted-([a-f0-9]{64})-\d{1,20}\.mp4$/.exec(name);
       if (!match || path.posix.dirname(remotePath) !== '/sdcard')
         throw new Error('Invalid Android recording artifact path');
-      return `${path.posix.dirname(remotePath)}/agent-device-recording-v2-${match[1]}.json`;
+      return `${path.posix.dirname(remotePath)}/agent-device-recording-v2-admitted-${match[1]}.json`;
     },
     readManifest: async (manifestPath, signal) => {
       const exists = await shell(['test', '-e', manifestPath], signal);
@@ -174,7 +203,9 @@ export async function createAndroidScreenRecordingTransport(
         ? 'updated'
         : result.exitCode === 73
           ? 'mismatch'
-          : 'unavailable';
+          : result.exitCode === 74
+            ? 'failed'
+            : 'unavailable';
     },
   });
 }

@@ -64,7 +64,7 @@ First, examine the underlying error. A generic startup or cleanup failure does n
 
 ## Android recording marker lock
 
-A version 2 Android recording marker uses a generation-specific device lock.
+An admission-aware Android recording marker uses a generation-specific device lock.
 If a device command dies while it holds that lock, recovery retains the recording claim.
 Before you reboot the device or remove the lock, obtain the device owner's approval.
 Before you reboot the device or remove the lock, isolate the device from unrelated work.
@@ -80,5 +80,13 @@ If you cannot prove that every old command is drained, retain the lock and claim
 A version 1 shared marker has no verified claim provenance.
 If a version 1 marker is present, retain its marker and artifacts for explicit recovery.
 
-Version 2 uses `/sdcard` for its marker and recording artifacts.
-If `/sdcard` is unavailable, the version 2 start does not use the legacy fallback directory.
+Admission-aware Android recording uses `/sdcard` for its marker and recording artifacts.
+If `/sdcard` is unavailable, Android recording does not use the legacy fallback directory.
+
+Admission-aware Android recording also uses a device-wide admission lock.
+For one device, use only admission-aware controllers on every host that can start a recording.
+If an older controller or its recorder can still run, do not assume that the admission lock excludes it.
+If that admission lock has an unknown owner, retain the lock and claim.
+If admission release cannot be confirmed, retain the recording evidence and claim.
+Before you inspect or remove an admission lock, use the same approved isolated-device procedure.
+Do not treat admission lock removal as proof that a recorder exited or that an artifact is absent.

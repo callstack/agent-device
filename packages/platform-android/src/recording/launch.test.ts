@@ -152,7 +152,9 @@ test('rolls back a child when initial active evidence publication fails', async 
   );
   expect(calls).toEqual([
     'signal:42',
-    expect.stringMatching(/^remove:\/sdcard\/agent-device-recording-v2-[a-f0-9]{64}-\d+\.mp4$/),
+    expect.stringMatching(
+      /^remove:\/sdcard\/agent-device-recording-v2-admitted-[a-f0-9]{64}-\d+\.mp4$/,
+    ),
   ]);
 });
 

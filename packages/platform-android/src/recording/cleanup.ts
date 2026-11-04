@@ -1,5 +1,6 @@
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import { releaseExactAdmission } from './admission.ts';
 import { rollbackChunks } from './chunks.ts';
 import type { NativeManifest } from './manifest.ts';
 import { removeNativeManifest } from './manifest-store.ts';
@@ -19,6 +20,8 @@ export async function cleanupVerifiedAndroidEvidence(
     await rollbackChunks(transport, evidence.chunks);
     if (pendingPath !== undefined && (await transport.exists(pendingPath)) !== false)
       throw new Error('Android canceled launch artifact absence is unconfirmed');
+    if (!(await releaseExactAdmission(transport, evidence, manifestPath, JSON.stringify(evidence))))
+      throw new Error('Android recording admission release unconfirmed');
     await removeNativeManifest(transport, manifestPath, JSON.stringify(evidence));
     return { status: 'cleaned' };
   } catch (error) {

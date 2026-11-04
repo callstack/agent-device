@@ -1,7 +1,16 @@
+import { AppError } from '@agent-device/kernel/errors';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { decodeNativeManifest, type NativeManifest } from './manifest.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
+
+export class AndroidMarkerWriteNotStarted extends AppError {
+  constructor() {
+    super('COMMAND_FAILED', 'Android recording marker could not be prepared', {
+      reason: 'native_recording_marker_not_written',
+    });
+  }
+}
 
 export async function persistNativeManifest(
   transport: Transport,
@@ -11,7 +20,7 @@ export async function persistNativeManifest(
   create = false,
 ): Promise<void> {
   const read = await transport.readManifest(manifestPath, signal);
-  if (read.status === 'unavailable') throw new Error('Android recording marker unavailable');
+  if (read.status === 'unavailable') throw new AndroidMarkerWriteNotStarted();
   if (create ? read.status !== 'missing' : read.status !== 'read')
     throw new Error('Android recording marker changed');
   if (read.status === 'read') {
@@ -35,6 +44,7 @@ export async function persistNativeManifest(
     },
     signal,
   );
+  if (outcome === 'failed' && create) throw new AndroidMarkerWriteNotStarted();
   if (outcome !== 'updated') throw new Error('Android recording marker update unconfirmed');
 }
 

@@ -6,6 +6,7 @@ import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/tes
 import { createAndroidRuntimeModule } from '@agent-device/platform-android';
 import { withAndroidAdbProvider } from '@agent-device/platform-android/mechanics';
 import type { VideoValidatorPreparation } from '@agent-device/capture-kit/recording-video';
+import { isScreenRecordingStartNotDispatched } from '@agent-device/contracts/screen-recording-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { createAndroidScreenRecordingTransport } from './platform-runtime-screen-recording-android-host.ts';
 import './platform-runtime-android-adb-host.ts';
@@ -16,8 +17,8 @@ const validator: VideoValidatorPreparation = {
   close: async () => {},
 };
 const key = 'ccf89eb2e95b701cb64e560b9be91a9cdb00a1ea4817fdee5e9d58a4e3eba315';
-const marker = `/sdcard/agent-device-recording-v2-${key}.json`;
-const artifact = `/sdcard/agent-device-recording-v2-${key}-123.mp4`;
+const marker = `/sdcard/agent-device-recording-v2-admitted-${key}.json`;
+const artifact = `/sdcard/agent-device-recording-v2-admitted-${key}-123.mp4`;
 const androidRecordingDevice = {
   platform: 'android' as const,
   id: 'emulator-5554',
@@ -32,7 +33,7 @@ const recovery = {
   claimToken: 'claim-token',
 };
 const armed = JSON.stringify({
-  version: 2,
+  version: 3,
   resourceKind: 'screen-recording',
   fenceToken: recovery.fence.token,
   claimToken: recovery.claimToken,
@@ -63,6 +64,7 @@ async function rig(
   run: (rig: {
     transport: Awaited<ReturnType<typeof createAndroidScreenRecordingTransport>>;
     recover: () => Promise<'confirmed-no-effect' | 'retained'>;
+    startOther: () => Promise<unknown>;
     dispatch: () => ReturnType<typeof launch>;
     markerFile: string;
     ledger: string;
@@ -71,6 +73,8 @@ async function rig(
     checkpointGate: string;
     legacyMarker: string;
     legacyArtifact: string;
+    admissionDir: string;
+    otherPrepared: () => number;
     legacyWrite: (contents: string) => Promise<void>;
     pauseDispatch: ReturnType<typeof barrier>;
     seenDispatch: ReturnType<typeof barrier>;
@@ -89,6 +93,10 @@ async function rig(
   const claimsDir = path.join(root, 'claims');
   mkdirSync(claimsDir);
   const claimsSentinel = path.join(claimsDir, 'sentinel');
+  const otherClaimsDir = path.join(root, 'other-claims');
+  mkdirSync(otherClaimsDir);
+  const otherSentinel = path.join(otherClaimsDir, 'sentinel');
+  writeFileSync(otherSentinel, 'untouched');
   writeFileSync(claimsSentinel, 'untouched');
   process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
   const sdcard = path.join(root, 'sdcard');
@@ -104,6 +112,8 @@ async function rig(
   const checkpointGate = path.join(root, 'checkpoint-gate');
   const legacyMarker = path.join(sdcard, 'agent-device-recording-active.json');
   const legacyArtifact = path.join(sdcard, 'agent-device-recording-123.mp4');
+  const admissionDir = path.join(sdcard, 'agent-device-recording-v2-admitted-admission.lock');
+  let prepareCount = 0;
   const ready = path.join(root, 'child-ready');
   const childPid = path.join(root, 'child-pid');
   writeFileSync(
@@ -204,12 +214,48 @@ rm -f '${childPid}'
           },
         },
         audioProbe: { hostCapture: {} },
-        screenRecording: { android: { resolve: async () => transport } },
+        screenRecording: {
+          android: { resolve: async () => transport },
+          outputs: { prepare: async () => {} },
+          finalize: { prepare: async () => {} },
+        },
       } as unknown as PlatformRuntimeHost;
       const platform = await createAndroidRuntimeModule({
         bindAdbHost: async () => {},
       }).loadRuntime(host);
       const binding = await platform.bind({
+        device: androidRecordingDevice,
+        intent: { kind: 'ordinary' },
+        scope: {
+          signal: new AbortController().signal,
+          diagnostics: { emit: () => {} },
+          progress: { report: () => {} },
+        },
+      });
+      const otherTransport = await createAndroidScreenRecordingTransport(
+        androidRecordingDevice,
+        validator,
+      );
+      const otherHost = {
+        ...host,
+        hostEnvironment: createTestHostEnvironment({
+          env: { ...process.env, AGENT_DEVICE_CLAIMS_DIR: otherClaimsDir },
+        }),
+        screenRecording: {
+          ...host.screenRecording,
+          android: { resolve: async () => otherTransport },
+          outputs: {
+            ...host.screenRecording.outputs,
+            prepare: async () => {
+              prepareCount += 1;
+            },
+          },
+        },
+      } as PlatformRuntimeHost;
+      const otherPlatform = await createAndroidRuntimeModule({
+        bindAdbHost: async () => {},
+      }).loadRuntime(otherHost);
+      const otherBinding = await otherPlatform.bind({
         device: androidRecordingDevice,
         intent: { kind: 'ordinary' },
         scope: {
@@ -230,6 +276,17 @@ rm -f '${childPid}'
             );
             return pending;
           },
+          startOther: async () =>
+            await otherBinding.operations.screenRecordingStart!({
+              sessionId: 'other',
+              claimToken: 'other-claim',
+              fence: { token: 'other-fence', generation: 1 },
+              outputPath: path.join(root, 'other.mp4'),
+              scope: 'device',
+              showTouches: false,
+              hideTouchesRequested: false,
+              recordOnlySession: false,
+            }),
           dispatch: () => {
             const pending = launch(transport);
             pendingLaunches.add(pending);
@@ -246,6 +303,8 @@ rm -f '${childPid}'
           checkpointGate,
           legacyMarker,
           legacyArtifact,
+          admissionDir,
+          otherPrepared: () => prepareCount,
           legacyWrite: async (contents) => {
             await new Promise<void>((resolve, reject) => {
               const child = spawn('/bin/sh', [
@@ -271,6 +330,7 @@ rm -f '${childPid}'
           signals,
         });
       } finally {
+        await otherBinding[Symbol.asyncDispose]();
         await binding[Symbol.asyncDispose]();
       }
     });
@@ -288,6 +348,7 @@ rm -f '${childPid}'
       );
       if (existsSync(childPid)) await vi.waitFor(() => expect(existsSync(childPid)).toBe(false));
       expect(readFileSync(claimsSentinel, 'utf8')).toBe('untouched');
+      expect(readFileSync(otherSentinel, 'utf8')).toBe('untouched');
     } finally {
       if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
       else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
@@ -297,6 +358,7 @@ rm -f '${childPid}'
 }
 
 async function seed(transport: Awaited<ReturnType<typeof createAndroidScreenRecordingTransport>>) {
+  expect(await transport.acquireAdmission(key)).toBe('acquired');
   expect(
     await transport.compareAndSetManifest({
       manifestPath: marker,
@@ -309,7 +371,7 @@ async function seed(transport: Awaited<ReturnType<typeof createAndroidScreenReco
 const launch = (transport: Awaited<ReturnType<typeof createAndroidScreenRecordingTransport>>) =>
   transport.start({
     remotePath: artifact,
-    admission: { manifestPath: marker, expected: armed, admitted },
+    admission: { owner: key, manifestPath: marker, expected: armed, admitted },
   });
 
 test('cancels a dispatched but not admitted launch on the device before it can create a writer', async () => {
@@ -329,6 +391,7 @@ test('cancels a dispatched but not admitted launch on the device before it can c
       options.pauseBeforeDispatch = true;
       const old = dispatch().catch((error: unknown) => error);
       await seenDispatch.promise;
+      expect(await recover()).toBe('confirmed-no-effect');
       expect(await recover()).toBe('confirmed-no-effect');
       expect(JSON.parse(readFileSync(markerFile, 'utf8')).launchDisposition).toBe('canceled');
       pauseDispatch.release();
@@ -439,5 +502,105 @@ test('maps only version-two artifact paths to their generation-specific marker',
     expect(marker).not.toBe('/sdcard/agent-device-recording-active.json');
     expect(artifact).not.toBe('/sdcard/agent-device-recording-123.mp4');
     expect(() => transport.manifestPathFor('/sdcard/agent-device-recording-123.mp4')).toThrow();
+  });
+});
+
+test('independent v2 hosts refuse a second generation while the first owns admission', async () => {
+  await rig(
+    async ({
+      transport,
+      startOther,
+      dispatch,
+      options,
+      seenDispatch,
+      markerFile,
+      gate,
+      signals,
+      otherPrepared,
+    }) => {
+      await seed(transport);
+      options.pauseBeforeWriter = true;
+      const first = dispatch().catch((error: unknown) => error);
+      await seenDispatch.promise;
+      await vi.waitFor(() =>
+        expect(JSON.parse(readFileSync(markerFile, 'utf8')).launchDisposition).toBe('admitted'),
+      );
+      const before = readFileSync(markerFile, 'utf8');
+      const error = await startOther().catch((error: unknown) => error);
+      expect(error).toMatchObject({
+        code: 'DEVICE_IN_USE',
+        details: { reason: 'android_recording_admission_busy' },
+      });
+      expect(isScreenRecordingStartNotDispatched(error)).toBe(true);
+      expect(otherPrepared()).toBe(0);
+      expect(readFileSync(markerFile, 'utf8')).toBe(before);
+      expect(signals).toEqual([]);
+      writeFileSync(gate, 'resume');
+      await first;
+    },
+  );
+});
+
+test('simultaneous v2 admission commands admit one generation and refuse foreign release', async () => {
+  await rig(async ({ transport }) => {
+    const other = 'b'.repeat(64);
+    const results = await Promise.all([
+      transport.acquireAdmission(key),
+      transport.acquireAdmission(other),
+    ]);
+    expect([...results].sort()).toEqual(['acquired', 'busy']);
+    const winner = results[0] === 'acquired' ? key : other;
+    const loser = winner === key ? other : key;
+    expect(
+      await transport.releaseAdmission({ owner: loser, manifestPath: marker, expected: null }),
+    ).toBe('not-owner');
+    expect(await transport.acquireAdmission(loser)).toBe('busy');
+    expect(
+      await transport.releaseAdmission({ owner: winner, manifestPath: marker, expected: null }),
+    ).toBe('released');
+    expect(await transport.acquireAdmission(loser)).toBe('acquired');
+  });
+});
+
+test('a launch without its exact device-wide owner cannot change the marker or start a writer', async () => {
+  await rig(async ({ transport, markerFile, ledger }) => {
+    await seed(transport);
+    const before = readFileSync(markerFile, 'utf8');
+    const error = await transport
+      .start({
+        remotePath: artifact,
+        admission: { owner: 'b'.repeat(64), manifestPath: marker, expected: armed, admitted },
+      })
+      .catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(Error);
+    expect(readFileSync(markerFile, 'utf8')).toBe(before);
+    expect(existsSync(ledger)).toBe(false);
+  });
+});
+
+test('retains an admission directory whose owner was never published', async () => {
+  await rig(async ({ transport, admissionDir, markerFile }) => {
+    mkdirSync(admissionDir);
+    const evidence = path.join(admissionDir, 'unknown-owner-evidence');
+    writeFileSync(evidence, 'untouched');
+    expect(await transport.acquireAdmission(key)).toBe('busy');
+    expect(
+      await transport.releaseAdmission({ owner: key, manifestPath: marker, expected: null }),
+    ).toBe('not-owner');
+    expect(readFileSync(evidence, 'utf8')).toBe('untouched');
+    expect(existsSync(markerFile)).toBe(false);
+  });
+});
+
+test('does not release device admission when the generation marker was replaced', async () => {
+  await rig(async ({ transport, markerFile }) => {
+    await seed(transport);
+    const successor = '{"successor":"preserved"}\n';
+    writeFileSync(markerFile, successor);
+    expect(
+      await transport.releaseAdmission({ owner: key, manifestPath: marker, expected: armed }),
+    ).toBe('not-owner');
+    expect(readFileSync(markerFile, 'utf8')).toBe(successor);
+    expect(await transport.acquireAdmission('b'.repeat(64))).toBe('busy');
   });
 });

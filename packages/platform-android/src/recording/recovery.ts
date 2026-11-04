@@ -21,6 +21,7 @@ import {
   type AndroidRecordingDescriptor,
   type NativeManifest,
 } from './manifest.ts';
+import { releaseQuiescentAdmission } from './admission.ts';
 import { cleanupVerifiedAndroidEvidence } from './cleanup.ts';
 import {
   AndroidRecordingOwnershipLost,
@@ -166,7 +167,8 @@ async function reattachEvidence(params: {
   const { host, transport, device, input, descriptor, evidence, signal } = params;
   if (evidence.completion !== undefined) {
     const observed = await observeCompletedEvidence(transport, evidence, signal);
-    if (observed.status === 'terminal')
+    if (observed.status === 'terminal') {
+      await releaseQuiescentAdmission(transport, evidence, descriptor.manifestPath);
       return {
         status: 'completed' as const,
         // The marker froze its disposition when the chunks were still owed a removal, so the replay
@@ -177,6 +179,7 @@ async function reattachEvidence(params: {
           nativePathDisposition: observed.nativePathDisposition,
         },
       };
+    }
     return unreattachable(
       'ownership-fence-lost',
       'Android recording completed evidence still names a live or unverifiable recorder.',
@@ -223,6 +226,7 @@ async function reattachEvidence(params: {
         reachedLimit: provesAndroidScreenRecordTermination(running),
         progress,
       });
+      await releaseQuiescentAdmission(transport, evidence, descriptor.manifestPath);
       nativeCleanupConfirmed = true;
       return outcome;
     },
@@ -330,6 +334,19 @@ async function settleAndroidRecording(params: {
           : 'stop-unconfirmed',
     };
   }
+  const latest = await readDescriptorEvidence({
+    transport: params.transport,
+    device: params.device,
+    envelope: params.input.envelope,
+    descriptor: params.descriptor,
+    signal: params.signal,
+  });
+  if (latest.status === 'matched')
+    await releaseQuiescentAdmission(
+      params.transport,
+      latest.evidence,
+      params.descriptor.manifestPath,
+    );
   if (intentionalStop && mustSignalRecorder(readStopCheckpoints(params.progress.learned))) {
     params.progress.record(
       writeStopCheckpoint({ observation: { recorder: 'confirmed' }, stoppedAtMs }),

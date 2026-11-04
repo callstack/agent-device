@@ -67,6 +67,7 @@ test('uses the request-scoped Android ADB executor rather than a host fallback',
         transport.start({
           remotePath: '/sdcard/capture.mp4',
           admission: {
+            owner: 'owner',
             manifestPath: '/sdcard/marker.json',
             expected: 'armed',
             admitted: 'admitted',

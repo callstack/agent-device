@@ -4,6 +4,7 @@ import type { NativePathDisposition } from '@agent-device/contracts/recording-na
 import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 import { chunkPathAt } from './chunk-path.ts';
 import type { NativeChunk, NativeManifest } from './manifest.ts';
+import { admissionOwner } from './admission.ts';
 import { recordingArtifactPath, type AndroidRecordingGeneration } from './native-path.ts';
 import { ScreenRecordingStartRolledBack } from '@agent-device/contracts/screen-recording-runtime';
 
@@ -55,6 +56,7 @@ export async function startChunkAt(
           remotePath,
           quality: input.exportQuality ?? 'medium',
           admission: {
+            owner: admissionOwner(armed),
             manifestPath,
             expected: JSON.stringify(armed),
             admitted: JSON.stringify({ ...armed, launchDisposition: 'admitted' }),

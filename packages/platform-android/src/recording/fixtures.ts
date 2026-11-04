@@ -28,6 +28,7 @@ export function recordingInput() {
 
 export function recordingHost(overrides: Record<string, unknown>): PlatformRuntimeHost {
   const stopped = new Set<string>();
+  let admissionOwner: string | undefined;
   const store =
     (overrides as { files?: ReturnType<typeof recordingFileStore> }).files ?? recordingFileStore();
   // The device's own files, so `exists` answers what a disposal did or failed to do rather than
@@ -58,7 +59,7 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
       external.status === 'read'
     ) {
       try {
-        if (JSON.parse(external.contents).version === 2) return { status: 'missing' as const };
+        if (JSON.parse(external.contents).version === 3) return { status: 'missing' as const };
       } catch {}
     }
     if (external.status !== 'missing' || !markers.has(manifestPath)) return external;
@@ -67,6 +68,32 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
   const transport = {
     ...overrides,
     mode: legacy.mode ?? ('local' as const),
+    acquireAdmission: async (owner: string) => {
+      if (legacy.acquireAdmission) return await legacy.acquireAdmission(owner);
+      if (admissionOwner !== undefined) return 'busy' as const;
+      admissionOwner = owner;
+      return 'acquired' as const;
+    },
+    releaseAdmission: async (input: {
+      owner: string;
+      manifestPath: string;
+      expected: string | null;
+    }) => {
+      if (legacy.releaseAdmission) return await legacy.releaseAdmission(input);
+      const current = await read(input.manifestPath);
+      if (
+        (current.status === 'missing'
+          ? null
+          : current.status === 'read'
+            ? current.contents
+            : undefined) !== input.expected
+      )
+        return 'not-owner' as const;
+      if (admissionOwner === undefined) return 'absent' as const;
+      if (admissionOwner !== input.owner) return 'not-owner' as const;
+      admissionOwner = undefined;
+      return 'released' as const;
+    },
     start: async ({
       remotePath,
       quality,
@@ -74,8 +101,9 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
     }: {
       remotePath: string;
       quality: 'medium' | 'high';
-      admission: { manifestPath: string; expected: string; admitted: string };
+      admission: { owner: string; manifestPath: string; expected: string; admitted: string };
     }) => {
+      if (admissionOwner !== admission.owner) throw new Error('launch admission lost');
       const current = await read(admission.manifestPath);
       if (current.status !== 'read' || current.contents !== admission.expected)
         throw new Error('launch admission rejected');

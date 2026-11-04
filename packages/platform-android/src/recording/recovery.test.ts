@@ -370,41 +370,44 @@ test('retains pending evidence without signalling an unproven writer', async () 
   expect(signals).toEqual([]);
 });
 
-test('rejects a version-one descriptor before it can signal or remove generation material', async () => {
-  let marker = '';
-  const effects: string[] = [];
-  const runtime = await start({
-    readManifest: async () =>
-      marker ? { status: 'read' as const, contents: marker } : { status: 'missing' as const },
-    writeManifest: async ({ contents }: { contents: string }) => {
-      marker = contents;
-    },
-    stop: async () => {
-      effects.push('signal');
-      return 'stopped' as const;
-    },
-    remove: async () => {
-      effects.push('remove');
-      return true;
-    },
-  });
-  const started = await runtime.screenRecordingStart(recordingInput());
-  const before = marker;
-  const envelope = {
-    ...started.envelope,
-    descriptor: { ...started.envelope.descriptor, version: 1 },
-  };
-  await expect(runtime.screenRecordingReattach({ envelope })).resolves.toMatchObject({
-    status: 'unreattachable',
-    reason: 'descriptor-invalid',
-  });
-  await expect(runtime.screenRecordingCleanup({ envelope })).resolves.toMatchObject({
-    status: 'cleanup-pending',
-    reason: 'manual-recovery-required',
-  });
-  expect(marker).toBe(before);
-  expect(effects).toEqual([]);
-});
+test.each([1, 2])(
+  'rejects descriptor version %s before it can signal or remove generation material',
+  async (version) => {
+    let marker = '';
+    const effects: string[] = [];
+    const runtime = await start({
+      readManifest: async () =>
+        marker ? { status: 'read' as const, contents: marker } : { status: 'missing' as const },
+      writeManifest: async ({ contents }: { contents: string }) => {
+        marker = contents;
+      },
+      stop: async () => {
+        effects.push('signal');
+        return 'stopped' as const;
+      },
+      remove: async () => {
+        effects.push('remove');
+        return true;
+      },
+    });
+    const started = await runtime.screenRecordingStart(recordingInput());
+    const before = marker;
+    const envelope = {
+      ...started.envelope,
+      descriptor: { ...started.envelope.descriptor, version },
+    };
+    await expect(runtime.screenRecordingReattach({ envelope })).resolves.toMatchObject({
+      status: 'unreattachable',
+      reason: 'descriptor-invalid',
+    });
+    await expect(runtime.screenRecordingCleanup({ envelope })).resolves.toMatchObject({
+      status: 'cleanup-pending',
+      reason: 'manual-recovery-required',
+    });
+    expect(marker).toBe(before);
+    expect(effects).toEqual([]);
+  },
+);
 
 test('rejects another generation marker path without signalling the recorder', async () => {
   let marker = '';
@@ -423,7 +426,7 @@ test('rejects another generation marker path without signalling the recorder', a
   const started = await runtime.screenRecordingStart(recordingInput());
   const body = {
     ...started.envelope.descriptor.body,
-    manifestPath: `/sdcard/agent-device-recording-v2-${'a'.repeat(64)}.json`,
+    manifestPath: `/sdcard/agent-device-recording-v2-admitted-${'a'.repeat(64)}.json`,
   };
   const envelope = { ...started.envelope, descriptor: { ...started.envelope.descriptor, body } };
   await expect(runtime.screenRecordingReattach({ envelope })).resolves.toMatchObject({

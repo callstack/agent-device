@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
@@ -15,45 +15,49 @@ test.each(['forced-still-alive', 'artifact-still-present', 'writer-unconfirmed']
     vi.useFakeTimers();
     const root = mkdtempForTestSync('android-adoption-proof-');
     const oldClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
-    process.env.AGENT_DEVICE_CLAIMS_DIR = path.join(root, 'claims');
+    const claimsDir = path.join(root, 'claims');
+    mkdirSync(claimsDir);
+    const sentinel = path.join(claimsDir, 'sentinel');
+    writeFileSync(sentinel, 'untouched');
+    process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
     const sessionDir = path.join(root, 'session');
     mkdirSync(sessionDir);
     let nativeMarker = '';
     let alive = true;
     let forced = false;
     let removed = false;
-    const runtime = await bindAndroidScreenRecordingRuntime({
-      host: recordingHost({
-        readManifest: async (path: string) =>
-          path.includes('recording-v2-') && nativeMarker
-            ? { status: 'read' as const, contents: nativeMarker }
-            : { status: 'missing' as const },
-        writeManifest: async ({ contents }: { contents: string }) => {
-          nativeMarker = contents;
-        },
-        removeManifest: async () => {
-          nativeMarker = '';
-          return true;
-        },
-        stop: async (_identity: unknown, options?: { force?: boolean }) => {
-          if (options?.force) forced = true;
-          if (failure !== 'forced-still-alive') alive = false;
-          return 'stopped' as const;
-        },
-        inspect: async () => (alive ? ('owned-alive' as const) : ('missing' as const)),
-        findRunning: async () =>
-          failure === 'writer-unconfirmed' ? { writers: [], conclusive: false } : [],
-        exists: async () => failure === 'artifact-still-present' || !removed,
-        remove: async () => {
-          removed = true;
-          return true;
-        },
-      }),
-      device: androidRecordingDevice,
-      owner: localRuntimeOwner('android'),
-      signal: new AbortController().signal,
-    });
     try {
+      const runtime = await bindAndroidScreenRecordingRuntime({
+        host: recordingHost({
+          readManifest: async (path: string) =>
+            path.includes('recording-v2-') && nativeMarker
+              ? { status: 'read' as const, contents: nativeMarker }
+              : { status: 'missing' as const },
+          writeManifest: async ({ contents }: { contents: string }) => {
+            nativeMarker = contents;
+          },
+          removeManifest: async () => {
+            nativeMarker = '';
+            return true;
+          },
+          stop: async (_identity: unknown, options?: { force?: boolean }) => {
+            if (options?.force) forced = true;
+            if (failure !== 'forced-still-alive') alive = false;
+            return 'stopped' as const;
+          },
+          inspect: async () => (alive ? ('owned-alive' as const) : ('missing' as const)),
+          findRunning: async () =>
+            failure === 'writer-unconfirmed' ? { writers: [], conclusive: false } : [],
+          exists: async () => failure === 'artifact-still-present' || !removed,
+          remove: async () => {
+            removed = true;
+            return true;
+          },
+        }),
+        device: androidRecordingDevice,
+        owner: localRuntimeOwner('android'),
+        signal: new AbortController().signal,
+      });
       const input = recordingInput();
       const started = await runtime.screenRecordingStart(input);
       const before = nativeMarker;
@@ -98,6 +102,7 @@ test.each(['forced-still-alive', 'artifact-still-present', 'writer-unconfirmed']
         status: 'decoded',
         envelope: { lifecycle: 'open', metadata: { phase: 'cleanup-pending' } },
       });
+      expect(readFileSync(sentinel, 'utf8')).toBe('untouched');
     } finally {
       vi.useRealTimers();
       if (oldClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;

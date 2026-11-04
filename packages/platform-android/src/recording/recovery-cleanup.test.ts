@@ -1,7 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
-import { AndroidScreenRecordingStartRollbackUnconfirmed } from './chunks.ts';
 import { bindAndroidScreenRecordingRuntime } from './runtime.ts';
 
 const start = async (overrides: Record<string, unknown>) =>
@@ -204,9 +203,10 @@ test('retains evidence when the recorder presence probe is uncertain', async () 
       reason: 'cleanup-unconfirmed',
     });
     expect(manifest).not.toBe('');
-    await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBeInstanceOf(
-      AndroidScreenRecordingStartRollbackUnconfirmed,
-    );
+    await expect(runtime.screenRecordingStart(recordingInput())).rejects.toMatchObject({
+      code: 'DEVICE_IN_USE',
+      details: { reason: 'android_recording_admission_busy' },
+    });
   } finally {
     vi.useRealTimers();
   }

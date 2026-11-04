@@ -13,7 +13,7 @@ const generation = {
 test('validates descriptor structure independently of descriptor decoding', () => {
   expect(
     isValidAndroidRecordingDescriptor({
-      backend: 'adb-screenrecord-v2',
+      backend: 'adb-screenrecord-v2-admitted',
       manifestPath: recordingMarkerPath('/sdcard', generation),
       outputPath: '/tmp/capture.mp4',
       scope: 'device',
@@ -24,7 +24,7 @@ test('validates descriptor structure independently of descriptor decoding', () =
   ).toBe(true);
   expect(
     isValidAndroidRecordingDescriptor({
-      backend: 'adb-screenrecord-v2',
+      backend: 'adb-screenrecord-v2-admitted',
       manifestPath: '/tmp/active.json',
       outputPath: '/tmp/capture.mp4',
       scope: 'device',

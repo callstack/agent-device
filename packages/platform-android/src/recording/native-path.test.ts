@@ -11,8 +11,8 @@ const generation = {
 test('isolates marker and artifact names by the complete recording generation', () => {
   const marker = recordingMarkerPath('/sdcard', generation);
   const artifact = recordingArtifactPath('/sdcard', generation, 123);
-  expect(marker).toMatch(/^\/sdcard\/agent-device-recording-v2-[a-f0-9]{64}\.json$/);
-  expect(artifact).toMatch(/^\/sdcard\/agent-device-recording-v2-[a-f0-9]{64}-123\.mp4$/);
+  expect(marker).toMatch(/^\/sdcard\/agent-device-recording-v2-admitted-[a-f0-9]{64}\.json$/);
+  expect(artifact).toMatch(/^\/sdcard\/agent-device-recording-v2-admitted-[a-f0-9]{64}-123\.mp4$/);
   for (const different of [
     { ...generation, deviceId: 'other' },
     { ...generation, sessionId: 'other' },

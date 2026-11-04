@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import { isScreenRecordingStartNotDispatched } from '@agent-device/contracts/screen-recording-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
@@ -93,6 +94,7 @@ test('cancels only an exact armed generation after writer and artifact proof', a
     writeManifest: async ({ contents }: { contents: string }) => {
       marker = contents;
     },
+    releaseAdmission: async () => 'released' as const,
     findRunning: async () => (writers ? ['42'] : []),
     exists: async () => exists,
     stop: async ({ pid }: { pid: string }) => {
@@ -117,7 +119,7 @@ test('cancels only an exact armed generation after writer and artifact proof', a
   expect(signals).toEqual([]);
 });
 
-test('retains admitted and version-one shared evidence even when no writer is visible', async () => {
+test('retains admitted and older evidence even when no writer is visible', async () => {
   const evidence = createNativeManifest(androidRecordingDevice, input, 1, [], pending);
   let marker = JSON.stringify({ ...evidence, launchDisposition: 'admitted' });
   const runtime = await bind({
@@ -134,6 +136,21 @@ test('retains admitted and version-one shared evidence even when no writer is vi
   const before = marker;
   expect(await runtime.recoverIncompleteRecordingStart(recovery)).toBe('retained');
   expect(marker).toBe(before);
-  marker = JSON.stringify({ ...evidence, version: 1, launchDisposition: 'armed' });
-  expect(await runtime.recoverIncompleteRecordingStart(recovery)).toBe('retained');
+  for (const version of [1, 2]) {
+    marker = JSON.stringify({ ...evidence, version, launchDisposition: 'armed' });
+    expect(await runtime.recoverIncompleteRecordingStart(recovery)).toBe('retained');
+  }
+});
+
+test('preserves a typed device refusal raised before dispatch', async () => {
+  const refusal = new AppError('DEVICE_IN_USE', 'device owned', { reason: 'typed-device-owner' });
+  const runtime = await bind({
+    readManifest: async () => {
+      throw refusal;
+    },
+  });
+  const error = await runtime.screenRecordingStart(input).catch((error: unknown) => error);
+  expect(error).toBe(refusal);
+  expect(error).toMatchObject({ code: 'DEVICE_IN_USE', details: { reason: 'typed-device-owner' } });
+  expect(isScreenRecordingStartNotDispatched(error)).toBe(true);
 });

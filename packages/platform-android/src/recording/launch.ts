@@ -1,6 +1,8 @@
+import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import {
+  isScreenRecordingStartNotDispatched,
   markScreenRecordingStartNotDispatched,
   ScreenRecordingStartRolledBack,
   type ScreenRecordingStartInput,
@@ -13,11 +15,31 @@ import {
   startChunkAt,
 } from './chunks.ts';
 import { createNativeManifest, type NativeChunk } from './manifest.ts';
-import { persistNativeManifest, removeNativeManifest } from './manifest-store.ts';
+import {
+  AndroidMarkerWriteNotStarted,
+  persistNativeManifest,
+  removeNativeManifest,
+} from './manifest-store.ts';
 import { reconcileStartEvidence } from './start-reconciliation.ts';
-import type { AndroidRecordingGeneration } from './native-path.ts';
+import { recordingGenerationKey, type AndroidRecordingGeneration } from './native-path.ts';
+import { releaseExactAdmission } from './admission.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
+
+export function markAndroidStartNotDispatched(error: unknown): unknown {
+  const marked = markScreenRecordingStartNotDispatched(error);
+  if (isScreenRecordingStartNotDispatched(marked)) return marked;
+  const normalized =
+    error instanceof AppError
+      ? new AppError(error.code, error.message, error.details, error.cause)
+      : new AppError(
+          'COMMAND_FAILED',
+          'Android recording start was not dispatched',
+          { reason: 'recording-start-not-dispatched' },
+          error,
+        );
+  return markScreenRecordingStartNotDispatched(normalized);
+}
 
 export async function startInitialTransaction(params: {
   transport: Transport;
@@ -36,10 +58,27 @@ export async function startInitialTransaction(params: {
   };
   try {
     await reconcileStartEvidence(transport);
-    await prepareOutput();
   } catch (error) {
-    throw markScreenRecordingStartNotDispatched(error);
+    throw markAndroidStartNotDispatched(error);
   }
+  try {
+    signal.throwIfAborted();
+  } catch (error) {
+    throw markAndroidStartNotDispatched(error);
+  }
+  const admission = await transport
+    .acquireAdmission(recordingGenerationKey(generation))
+    .catch(() => 'unavailable' as const);
+  if (admission === 'busy')
+    throw markAndroidStartNotDispatched(
+      new AppError('DEVICE_IN_USE', 'Android screen recording is already owned on this device', {
+        reason: 'android_recording_admission_busy',
+      }),
+    );
+  if (admission !== 'acquired')
+    throw new AndroidScreenRecordingStartRollbackUnconfirmed(
+      new Error('Android recording admission is unconfirmed'),
+    );
   let last: ScreenRecordingStartRolledBack | undefined;
   for (const remotePath of candidateRemotePaths(generation)) {
     const manifestPath = transport.manifestPathFor(remotePath);
@@ -49,18 +88,29 @@ export async function startInitialTransaction(params: {
     };
     try {
       signal.throwIfAborted();
+      await prepareOutput();
+      signal.throwIfAborted();
     } catch (error) {
-      throw markScreenRecordingStartNotDispatched(error);
+      if (!(await releaseExactAdmission(transport, armed, manifestPath, null)))
+        throw new AndroidScreenRecordingStartRollbackUnconfirmed(error);
+      throw markAndroidStartNotDispatched(error);
     }
     try {
       await persistNativeManifest(transport, manifestPath, armed, undefined, true);
     } catch (error) {
+      if (
+        error instanceof AndroidMarkerWriteNotStarted &&
+        (await releaseExactAdmission(transport, armed, manifestPath, null))
+      )
+        throw markAndroidStartNotDispatched(error);
       throw new AndroidScreenRecordingStartRollbackUnconfirmed(error);
     }
     try {
       signal.throwIfAborted();
     } catch (error) {
-      throw markScreenRecordingStartNotDispatched(error);
+      if (!(await releaseExactAdmission(transport, armed, manifestPath, JSON.stringify(armed))))
+        throw new AndroidScreenRecordingStartRollbackUnconfirmed(error);
+      throw markAndroidStartNotDispatched(error);
     }
     let chunk: NativeChunk;
     const startedAtMs = Date.now();
@@ -96,9 +146,7 @@ export async function startInitialTransaction(params: {
   }
   throw (
     last ??
-    markScreenRecordingStartNotDispatched(
-      new Error('Android screenrecord did not begin producing frames'),
-    )
+    markAndroidStartNotDispatched(new Error('Android screenrecord did not begin producing frames'))
   );
 }
 
@@ -117,6 +165,8 @@ async function retireRolledBackMarker(
   )
     throw new AndroidScreenRecordingStartRollbackUnconfirmed(cause);
   try {
+    if (!(await releaseExactAdmission(transport, armed, manifestPath, read.contents)))
+      throw new Error('Android recording admission release unconfirmed');
     await removeNativeManifest(transport, manifestPath, read.contents);
   } catch {
     throw new AndroidScreenRecordingStartRollbackUnconfirmed(cause);

@@ -63,7 +63,7 @@ test('accepts only a durable Android manifest path in the descriptor', () => {
   expect(
     androidScreenRecordingDescriptorCodec.decode({
       ...androidRecordingDescriptorFixture,
-      backend: 'adb-screenrecord-v2',
+      backend: 'adb-screenrecord-v2-admitted',
       manifestPath: recordingMarkerPath('/sdcard', generation),
     }),
   ).toMatchObject({ status: 'decoded' });
@@ -117,5 +117,12 @@ test('rejects legacy descriptor names and paths rather than adopting their marke
   expect(
     androidScreenRecordingDescriptorCodec.decode(androidRecordingDescriptorFixture),
   ).toMatchObject({ status: 'invalid' });
-  expect(androidScreenRecordingDescriptorCodec.version).toBe(2);
+  expect(
+    androidScreenRecordingDescriptorCodec.decode({
+      ...androidRecordingDescriptorFixture,
+      backend: 'adb-screenrecord-v2',
+      manifestPath: `/sdcard/agent-device-recording-v2-${'a'.repeat(64)}.json`,
+    }),
+  ).toMatchObject({ status: 'invalid' });
+  expect(androidScreenRecordingDescriptorCodec.version).toBe(3);
 });

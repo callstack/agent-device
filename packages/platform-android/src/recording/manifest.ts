@@ -15,7 +15,7 @@ import {
 } from './manifest-validation.ts';
 
 export type AndroidRecordingDescriptor = Readonly<{
-  backend: 'adb-screenrecord-v2';
+  backend: 'adb-screenrecord-v2-admitted';
   manifestPath: string;
   outputPath: string;
   clientOutputPath?: string;
@@ -36,7 +36,7 @@ export type NativeChunk = Readonly<{
 }>;
 
 export type NativeManifest = Readonly<{
-  version: 2;
+  version: 3;
   resourceKind: 'screen-recording';
   fenceToken: string;
   claimToken?: string;
@@ -62,14 +62,14 @@ export type NativeManifest = Readonly<{
 
 export const androidScreenRecordingDescriptorCodec = Object.freeze({
   resourceKind: SCREEN_RECORDING_RESOURCE_KIND,
-  version: 2,
+  version: 3,
   encode: (descriptor: AndroidRecordingDescriptor) => ({ ...descriptor }),
   decode: (body: Record<string, unknown>) =>
     isValidAndroidRecordingDescriptor(body)
       ? ({
           status: 'decoded',
           descriptor: Object.freeze({
-            backend: 'adb-screenrecord-v2',
+            backend: 'adb-screenrecord-v2-admitted',
             manifestPath: body.manifestPath,
             outputPath: body.outputPath,
             ...(body.clientOutputPath === undefined
@@ -122,7 +122,7 @@ export function createNativeManifest(
   transportMode: NativeManifest['transportMode'] = 'local',
 ): NativeManifest {
   return Object.freeze({
-    version: 2,
+    version: 3,
     resourceKind: 'screen-recording',
     fenceToken: input.fence.token,
     ...(input.claimToken ? { claimToken: input.claimToken } : {}),

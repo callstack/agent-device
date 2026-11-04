@@ -25,7 +25,7 @@ export function recordingMarkerPath(
   directory: string,
   generation: AndroidRecordingGeneration,
 ): string {
-  return `${directory}/agent-device-recording-v2-${recordingGenerationKey(generation)}.json`;
+  return `${directory}/agent-device-recording-v2-admitted-${recordingGenerationKey(generation)}.json`;
 }
 
 export function recordingArtifactPath(
@@ -33,7 +33,7 @@ export function recordingArtifactPath(
   generation: AndroidRecordingGeneration,
   now: number,
 ): string {
-  return `${directory}/agent-device-recording-v2-${recordingGenerationKey(generation)}-${now}.mp4`;
+  return `${directory}/agent-device-recording-v2-admitted-${recordingGenerationKey(generation)}-${now}.mp4`;
 }
 
 export function legacyRecordingMarkerPaths(): readonly string[] {

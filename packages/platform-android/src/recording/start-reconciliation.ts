@@ -1,6 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import { releaseExactAdmission } from './admission.ts';
 import { decodeNativeManifest } from './manifest.ts';
 import { legacyRecordingMarkerPaths, recordingMarkerPath } from './native-path.ts';
 
@@ -8,8 +9,8 @@ type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['andr
 
 export async function reconcileStartEvidence(transport: Transport): Promise<void> {
   for (const manifestPath of legacyRecordingMarkerPaths()) {
-    const read = await transport.readManifest(manifestPath).catch(() => undefined);
-    if (!read || read.status === 'unavailable') {
+    const read = await transport.readManifest(manifestPath);
+    if (read.status === 'unavailable') {
       throw new AppError(
         'COMMAND_FAILED',
         `Android recording evidence is unavailable: ${manifestPath}`,
@@ -85,5 +86,7 @@ export async function recoverIncompleteAndroidRecordingStart(
     })
     .catch(() => 'unavailable' as const);
   if (outcome !== 'updated') return 'retained';
+  if (!(await releaseExactAdmission(transport, confirmed, manifestPath, JSON.stringify(confirmed))))
+    return 'retained';
   return 'confirmed-no-effect';
 }
