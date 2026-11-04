@@ -30,6 +30,7 @@ import { webSessionIdentity } from '../../core/session-tenant-scope.ts';
 import { resolveCommandDevice } from '../../resources/session-device-resolution.ts';
 import { resolveRequestExecutionLockPlan } from '../request-binding.ts';
 import { createDaemonHttpServer } from '../http/http-server.ts';
+import { methodToDaemonRequest } from '../http/http-rpc-methods.ts';
 
 vi.mock('../../core/device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
@@ -385,16 +386,20 @@ test('two tenants using one web session name each open their own browser, and on
   }
 });
 
-test('a sessionless web command locks the session device it binds, never the host', async () => {
+test('a sessionless web command locks the implicit default session device it binds, never the host', async () => {
   mockResolveTargetDevice.mockImplementation(webSessionResolution);
-  const req: DaemonRequest = {
-    token: 'test-token',
-    session: 'wsd-sessionless',
-    command: 'snapshot',
-    positionals: [],
-    flags: { platform: 'web' },
-    meta: { requestId: 'req-snapshot-sessionless' },
-  };
+  // The RPC boundary names the session `default` for a request that carries none.
+  const req = methodToDaemonRequest(
+    'agent_device.command',
+    {
+      token: 'test-token',
+      command: 'snapshot',
+      positionals: [],
+      flags: { platform: 'web' },
+      meta: { requestId: 'req-snapshot-sessionless' },
+    },
+    {},
+  );
   const sessionStore = makeSessionStore('agent-device-router-web-sessionless-');
 
   const plan = await resolveRequestExecutionLockPlan({
@@ -410,8 +415,10 @@ test('a sessionless web command locks the session device it binds, never the hos
     platformServices: daemonPlatformServicesFixture(),
   });
 
-  const sessionDeviceId = `${WEB_DESKTOP_DEVICE.id}:session:p_wsd-sessionless`;
-  expect(plan.deviceId).toBe(sessionDeviceId);
-  expect(plan.keys).toEqual(['session:wsd-sessionless', `device:${sessionDeviceId}`]);
-  expect(bound.id).toBe(sessionDeviceId);
+  const implicitDeviceId = `${WEB_DESKTOP_DEVICE.id}:session:p_default`;
+  expect(req.session).toBe('default');
+  expect(plan.deviceId).toBe(implicitDeviceId);
+  expect(plan.keys).toEqual(['session:default', `device:${implicitDeviceId}`]);
+  expect(bound.id).toBe(implicitDeviceId);
+  expect(bound.id).not.toBe(WEB_DESKTOP_DEVICE.id);
 });
