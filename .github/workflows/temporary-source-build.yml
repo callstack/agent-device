@@ -1,0 +1,241 @@
+# Draft only. Replace both SOURCE_SHA values with the reviewed full source commit.
+name: Temporary source build
+on:
+  push:
+    branches: ['temporary-ci-build-*']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  apple:
+    runs-on: blacksmith-6vcpu-macos-26
+    timeout-minutes: 90
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      artifact-url: ${{ steps.upload.outputs.artifact-url }}
+    env:
+      SOURCE_SHA: d48fa7c2a1d51798f294f244fd5da679e46361b3
+      AGENT_DEVICE_XCUITEST_ARCHS: arm64
+      AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS: '1'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Require exact clean source
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          mkdir -p .tmp/ci-build/output
+          { git rev-parse HEAD; git rev-parse 'HEAD^{tree}'; printf 'initial-status=clean\n'; } > .tmp/ci-build/output/source.txt
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          cache-store: 'false'
+      - name: Build JS
+        run: pnpm build
+      - name: Reserve exact-path runner candidate
+        shell: bash
+        env:
+          CI_RUNNER_SOURCE_HASH: ${{ hashFiles('apple/runner/**', 'apple/snapshot-presentation/**', 'apple/snapshot-bridge/ForegroundApplicationGeometry.h') }}
+          CI_RUNNER_SCHEMA_HASH: ${{ hashFiles('.github/actions/setup-apple-runner-build/action.yml', 'scripts/build-xcuitest-apple.sh') }}
+        run: |
+          set -euo pipefail
+          test -n "$CI_RUNNER_SOURCE_HASH" && test -n "$CI_RUNNER_SCHEMA_HASH"
+          IDENTITY="$(printf '%s\n' "$SOURCE_SHA" "$CI_RUNNER_SOURCE_HASH" "$CI_RUNNER_SCHEMA_HASH" "$(xcodebuild -version)" "$(xcrun --sdk iphonesimulator --show-sdk-version)" "$(xcrun --sdk iphonesimulator --show-sdk-build-version)" "$(uname -m)" 'ios' 'generic/platform=iOS Simulator' 'arm64' 'unit-tests=1' | shasum -a 256 | cut -d' ' -f1)"
+          ROOT="/private/tmp/agent-device-ci-reuse/$SOURCE_SHA/$IDENTITY/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          PARENT="$(dirname "$ROOT")"
+          mkdir -p "$PARENT"
+          test "$(cd "$PARENT" && pwd -P)" = "$PARENT"
+          mkdir "$ROOT"
+          printf '%s\n' "$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT:$SOURCE_SHA" > "$ROOT/owner.txt"
+          echo "RUNNER_ROOT=$ROOT" >> "$GITHUB_ENV"
+          echo "AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH=$ROOT/derived" >> "$GITHUB_ENV"
+      - name: Restore or verify iOS runner
+        id: runner
+        uses: ./.github/actions/setup-apple-runner-build
+        with:
+          derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
+          cache-key-prefix: ios-runner-prebuilt
+          cache-key-suffix: -ios-26.2-arm64
+          gate: swift-runner-ios
+          xcuitest-platform: ios
+          xcuitest-destination: generic/platform=iOS Simulator
+      - name: Produce verification bridge and package evidence
+        shell: bash
+        env:
+          RUNNER_CACHE_HIT: ${{ steps.runner.outputs.cache-hit }}
+          CI_RUNNER_SOURCE_HASH: ${{ hashFiles('apple/runner/**', 'apple/snapshot-presentation/**', 'apple/snapshot-bridge/ForegroundApplicationGeometry.h') }}
+          CI_RUNNER_SCHEMA_HASH: ${{ hashFiles('.github/actions/setup-apple-runner-build/action.yml', 'scripts/build-xcuitest-apple.sh') }}
+        run: |
+          set -euo pipefail
+          pnpm --filter @agent-device/platform-apple run verify-installed-snapshot-bridge "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tmp/ci-build/bridge-verification-only"
+          test -f "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/.agent-device-runner-cache.json"
+          test -f "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Logs/agent-device-build-for-testing.log"
+          find "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Build/Products" -maxdepth 1 -name '*.xctestrun' -print | grep -q .
+          git diff --exit-code
+          git diff --cached --exit-code
+          {
+            cat .tmp/ci-build/output/source.txt
+            printf 'tracked-source-after-build=clean\nrunner-cache-hit=%s\nci-runner-source-hash=%s\nci-runner-schema-hash=%s\n' "$RUNNER_CACHE_HIT" "$CI_RUNNER_SOURCE_HASH" "$CI_RUNNER_SCHEMA_HASH"
+            printf 'runner-absolute-root=%s\n' "$RUNNER_ROOT"
+            printf 'runner-platform=ios\nrunner-destination=generic/platform=iOS Simulator\nrunner-archs=arm64\nrunner-unit-tests=1\nci-cache-runtime-suffix=26.2\nbridge-runtime-identity=installed-package-verification\n'
+            uname -a; sw_vers; xcode-select -p; xcodebuild -version; xcodebuild -showsdks
+            xcrun --sdk iphonesimulator --show-sdk-version; xcrun --sdk iphonesimulator --show-sdk-build-version
+            xcrun clang --version; node --version; pnpm --version
+            printf '\nCI action cache identity and outcome:\n'; cat "$GITHUB_STEP_SUMMARY"
+            printf '\nBridge owner manifest(s), including sourceHash, runtime identity, key and binary digest:\n'
+            find .tmp/ci-build/bridge-verification-only -name manifest.json -exec cat {} \;
+            printf '\nTracked build input object IDs:\n'
+            git ls-files -s apple/runner apple/snapshot-presentation apple/snapshot-bridge packages/apple-runner/src packages/platform-apple/src/snapshot-source packages/platform-apple/src/native-build scripts/build-xcuitest-apple.sh scripts/write-xcuitest-cache-metadata.ts .github/actions/setup-apple-runner-build/action.yml package.json pnpm-lock.yaml
+          } > .tmp/ci-build/output/provenance.txt
+          COPYFILE_DISABLE=1 tar -czf .tmp/ci-build/output/products.tar.gz -C "$RUNNER_ROOT" owner.txt derived/Build/Products derived/.agent-device-runner-cache.json derived/Logs/agent-device-build-for-testing.log derived/Logs/agent-device-build-for-testing.status -C "$GITHUB_WORKSPACE/.tmp/ci-build" bridge-verification-only -C "$GITHUB_WORKSPACE" dist
+          (cd .tmp/ci-build/output && shasum -a 256 products.tar.gz > SHA256SUMS)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        id: upload
+        with:
+          name: temporary-apple-build
+          path: .tmp/ci-build/output/
+          if-no-files-found: error
+          retention-days: 7
+  android:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      artifact-url: ${{ steps.upload.outputs.artifact-url }}
+    env:
+      SOURCE_SHA: d48fa7c2a1d51798f294f244fd5da679e46361b3
+      AGENT_DEVICE_ANDROID_BUILD_TOOLS: 36.0.0
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Require exact clean source
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          mkdir -p .tmp/ci-build/output
+          { git rev-parse HEAD; git rev-parse 'HEAD^{tree}'; printf 'initial-status=clean\n'; } > .tmp/ci-build/output/source.txt
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          cache-store: 'false'
+      - name: Resolve helper identity
+        id: helper
+        env:
+          HELPER_SOURCE_HASH: ${{ hashFiles('android/snapshot-helper/AndroidManifest.xml', 'android/snapshot-helper/debug.keystore', 'android/snapshot-helper/src/**', 'android/ime-helper/AndroidManifest.xml', 'android/ime-helper/res/**', 'android/ime-helper/src/**', 'scripts/build-android-helper.sh', 'scripts/package-android-helper.sh', '.github/actions/setup-android-replay-host/action.yml') }}
+        run: |
+          test -n "$HELPER_SOURCE_HASH"
+          echo "version=$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
+          echo "source-hash=$HELPER_SOURCE_HASH" >> "$GITHUB_OUTPUT"
+      - name: Restore exact helper cache
+        id: cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            android/snapshot-helper/dist
+            android/ime-helper/dist
+          key: android-helpers-${{ runner.os }}-${{ runner.arch }}-api36-bt36.0.0-v${{ steps.helper.outputs.version }}-${{ steps.helper.outputs.source-hash }}
+      - name: Install helper SDK on miss
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$SDK_ROOT/cmdline-tools/bin/sdkmanager"; fi
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Build helpers on miss
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: ./.github/actions/run-gate
+        with:
+          gate: android-helpers
+      - name: Verify and package helper evidence
+        shell: bash
+        env:
+          HELPER_VERSION: ${{ steps.helper.outputs.version }}
+          HELPER_SOURCE_HASH: ${{ steps.helper.outputs.source-hash }}
+          CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
+          CACHE_KEY: ${{ steps.cache.outputs.cache-primary-key }}
+        run: |
+          set -euo pipefail
+          test -f "android/snapshot-helper/dist/agent-device-android-snapshot-helper-$HELPER_VERSION.manifest.json"
+          test -f "android/ime-helper/dist/agent-device-android-ime-helper-$HELPER_VERSION.manifest.json"
+          git diff --exit-code
+          git diff --cached --exit-code
+          {
+            cat .tmp/ci-build/output/source.txt
+            printf 'tracked-source-after-build=clean\nhelper-cache-hit=%s\nhelper-cache-key=%s\nhelper-source-hash=%s\nandroid-platform=36 build-tools=36.0.0\n' "$CACHE_HIT" "$CACHE_KEY" "$HELPER_SOURCE_HASH"
+            uname -a; java -version 2>&1; javac -version 2>&1; node --version; pnpm --version
+            git ls-files -s android/snapshot-helper android/ime-helper scripts/build-android-helper.sh scripts/package-android-helper.sh .github/actions/setup-android-replay-host/action.yml package.json pnpm-lock.yaml
+          } > .tmp/ci-build/output/provenance.txt
+          tar -czf .tmp/ci-build/output/helpers.tar.gz android/snapshot-helper/dist android/ime-helper/dist
+          (cd .tmp/ci-build/output && sha256sum helpers.tar.gz > SHA256SUMS)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        id: upload
+        with:
+          name: temporary-android-helpers
+          path: .tmp/ci-build/output/
+          if-no-files-found: error
+          retention-days: 7
+  report:
+    if: ${{ always() }}
+    needs: [apple, android]
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_SHA: d48fa7c2a1d51798f294f244fd5da679e46361b3
+      WORKFLOW_SHA: ${{ github.sha }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      APPLE_RESULT: ${{ needs.apple.result }}
+      ANDROID_RESULT: ${{ needs.android.result }}
+      APPLE_ID: ${{ needs.apple.outputs.artifact-id }}
+      ANDROID_ID: ${{ needs.android.outputs.artifact-id }}
+      MARKER: '<!-- temporary-ci-build-d48-20261104-research-9a8f2e -->'
+    steps:
+      - name: Publish checkpoint evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const {execFileSync} = require('node:child_process');
+          const fs = require('node:fs');
+          const env = process.env;
+          const api = (...args) => execFileSync('gh', ['api', ...args], {encoding: 'utf8'});
+          const repository = 'callstack/agent-device';
+          if (!/^[0-9a-f]{40}$/.test(env.SOURCE_SHA) || !/^[0-9a-f]{40}$/.test(env.WORKFLOW_SHA)) throw Error('Invalid commit identity');
+          if (!/^https:\/\/github\.com\/callstack\/agent-device\/actions\/runs\/\d+$/.test(env.RUN_URL)) throw Error('Invalid run URL');
+          const status = value => ['success','failure','cancelled','skipped'].includes(value) ? value : 'unknown';
+          const artifact = (name, id) => {
+            if (!id) return `${name}: unavailable`;
+            if (!/^\d+$/.test(id)) throw Error('Invalid artifact ID');
+            const data = JSON.parse(api(`repos/${repository}/actions/artifacts/${id}`));
+            if (String(data.id) !== id || data.name !== name) throw Error('Artifact identity mismatch');
+            const url = `${env.RUN_URL}/artifacts/${id}`;
+            return `${name}: [${id}](${url}), expires ${data.expires_at}, digest ${data.digest || 'unavailable'}`;
+          };
+          const lines = [env.MARKER, '### Unpublished checkpoint build', '',
+            'This is **not final CI, PR readiness, or device proof**.', '',
+            `Source: \`${env.SOURCE_SHA}\``, `Workflow commit: \`${env.WORKFLOW_SHA}\``,
+            `Run: ${env.RUN_URL}`, `Apple: ${status(env.APPLE_RESULT)}`, `Android: ${status(env.ANDROID_RESULT)}`,
+            artifact('temporary-apple-build', env.APPLE_ID), artifact('temporary-android-helpers', env.ANDROID_ID)];
+          const pages = JSON.parse(api('--paginate','--slurp', `repos/${repository}/issues/4188/comments?per_page=100`));
+          const ours = pages.flat().filter(c => c.user?.login === 'github-actions[bot]' && c.body?.includes(env.MARKER));
+          if (ours.length > 1) throw Error('Duplicate workload markers');
+          const file = `${process.env.RUNNER_TEMP}/checkpoint-comment.json`;
+          fs.writeFileSync(file, JSON.stringify({body: lines.join('\n')}));
+          if (ours.length === 1) api('--method','PATCH',`repos/${repository}/issues/comments/${ours[0].id}`,'--input',file);
+          else api('--method','POST',`repos/${repository}/issues/4188/comments`,'--input',file);
+          NODE
