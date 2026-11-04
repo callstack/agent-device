@@ -71,7 +71,7 @@ validatorShutdownTest(
     expect(compiler.cacheBinEntries().some((entry) => entry.endsWith('.lock'))).toBe(true);
     const attempts = path.join(compiler.cacheDir, 'attempts');
     const [attempt] = fs.readdirSync(attempts);
-    expect(fs.existsSync(path.join(attempts, attempt!, 'work'))).toBe(true);
+    expect(fs.existsSync(path.join(attempts, attempt!, 'alias', 'work'))).toBe(true);
 
     await host.applicationResources.finalizeDaemonShutdown();
 
@@ -82,7 +82,7 @@ validatorShutdownTest(
     expect(compiler.cacheBinEntries().some((entry) => entry.endsWith('.lock'))).toBe(false);
     expect(compiler.cacheBinEntries().filter((entry) => entry.startsWith('.'))).toEqual([]);
     expect(fs.existsSync(path.join(attempts, attempt!, 'pending.json'))).toBe(true);
-    expect(fs.existsSync(path.join(attempts, attempt!, 'work'))).toBe(false);
+    expect(fs.lstatSync(path.join(attempts, attempt!, 'alias', 'work')).isFile()).toBe(true);
   },
 );
 

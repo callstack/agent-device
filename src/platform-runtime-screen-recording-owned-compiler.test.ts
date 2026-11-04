@@ -155,11 +155,16 @@ test.each(['warmup', 'overlay'] as const)(
         daemonIdentity,
         frontend,
       });
-      fs.writeFileSync(path.join(root, 'frontend-trigger'), 'continue');
+      const work = written.split(`${path.sep}alias${path.sep}work${path.sep}`)[0]!;
       await vi.waitFor(() =>
-        expect(fs.readFileSync(path.join(root, 'frontend-done'), 'utf8')).toBe('done'),
+        expect(fs.lstatSync(path.join(work, 'alias', 'work')).isFile()).toBe(true),
       );
-      expect(fs.readFileSync(written, 'utf8')).toBe('late compiler write');
+      fs.writeFileSync(path.join(root, 'frontend-trigger'), 'continue');
+      await vi.waitFor(() => expect(fs.existsSync(path.join(root, 'frontend-done'))).toBe(true));
+      expect(['ENOTDIR', 'EEXIST']).toContain(
+        fs.readFileSync(path.join(root, 'frontend-done'), 'utf8'),
+      );
+      expect(fs.existsSync(written)).toBe(false);
       expect(fs.readFileSync(published, 'utf8')).toBe('successor validator');
       expect(fs.readFileSync(claimPath, 'utf8')).toBe(before);
       expect(screenRecordingDurableResource.store.read(resourcePath)).toMatchObject({

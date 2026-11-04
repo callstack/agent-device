@@ -88,10 +88,11 @@ test('requires stable playable media before publishing finalization telemetry', 
     targetLabel: 'test recording',
   });
 
-  expect(video.stable).toHaveBeenCalledWith('/tmp/capture.mp4');
+  expect(video.stable).toHaveBeenCalledWith('/tmp/capture.mp4', { signal: undefined });
   expect(video.playable).toHaveBeenCalledWith('/tmp/capture.mp4', {
     validator: preparation.reading,
     deadline: expect.any(Deadline),
+    signal: undefined,
   });
   expect(result).toEqual({ telemetryPath: '/tmp/capture.telemetry.json' });
 });

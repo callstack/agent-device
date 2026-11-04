@@ -1,13 +1,20 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { trimEdgeDashes } from '@agent-device/kernel/collections';
-import { AppError } from '@agent-device/kernel/errors';
-import { runCmd, withRestrictedCommandEnvironment } from '@agent-device/host-kit/command';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import { runCmd } from '@agent-device/host-kit/command';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
+import {
+  createSwiftAttempt,
+  getSwiftCacheRoot,
+  releaseSwiftAttempt,
+  withSwiftAttempt,
+} from './swift-attempt.ts';
+export { getSwiftCacheRoot } from './swift-attempt.ts';
+
 import {
   acquireProcessLock,
   publishFileSync,
@@ -95,6 +102,7 @@ export async function compileSwiftSourceFile(params: {
   extraSourcePaths?: string[];
   cacheName?: string;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<string> {
   const sourcePaths = [params.sourcePath, ...(params.extraSourcePaths ?? [])];
   const sources = sourcePaths.map((sourcePath) => ({
@@ -128,6 +136,7 @@ export async function compileSwiftSourceFile(params: {
     })),
     executablePath,
     timeoutMs: params.timeoutMs,
+    signal: params.signal,
   });
   return executablePath;
 }
@@ -175,68 +184,6 @@ export async function compileSwiftSourceText(
     signal: params.signal,
   });
   return executablePath;
-}
-
-/** The directory compiled helpers land in for `env`: what a cached helper path is valid for. */
-export function getSwiftCacheRoot(env: NodeJS.ProcessEnv): string {
-  const configured = env.AGENT_DEVICE_SWIFT_CACHE_DIR?.trim();
-  if (configured) {
-    return path.resolve(configured);
-  }
-  return path.join(os.tmpdir(), 'agent-device-swift-cache');
-}
-
-/** Creates a unique cache-owned work area. Its record remains until its owner can prove cleanup. */
-export function createSwiftAttempt(
-  env: NodeJS.ProcessEnv,
-  kind: 'compiler' | 'overlay' | 'validator',
-) {
-  const attempts = path.join(getSwiftCacheRoot(env), 'attempts');
-  fs.mkdirSync(attempts, { recursive: true });
-  const directory = fs.mkdtempSync(path.join(attempts, `${kind}-`));
-  const work = path.join(directory, 'work');
-  fs.mkdirSync(work);
-  const home = path.join(work, 'home');
-  const tmp = path.join(work, 'tmp');
-  const moduleCache = path.join(work, 'module-cache');
-  const xdgCache = path.join(work, 'xdg-cache');
-  for (const dir of [home, tmp, moduleCache, xdgCache]) fs.mkdirSync(dir);
-  fs.writeFileSync(path.join(directory, 'pending.json'), JSON.stringify({ version: 1, kind }), {
-    flag: 'wx',
-  });
-  const toolEnv: NodeJS.ProcessEnv = {};
-  for (const key of [
-    'PATH',
-    'DEVELOPER_DIR',
-    'SDKROOT',
-    'TOOLCHAINS',
-    'LANG',
-    'LC_ALL',
-    'LC_CTYPE',
-  ]) {
-    if (env[key] !== undefined) toolEnv[key] = env[key];
-  }
-  Object.assign(toolEnv, {
-    HOME: home,
-    CFFIXED_USER_HOME: home,
-    TMPDIR: tmp,
-    TMP: tmp,
-    TEMP: tmp,
-    XDG_CACHE_HOME: xdgCache,
-    XDG_CONFIG_HOME: path.join(home, '.config'),
-    XDG_DATA_HOME: path.join(home, '.local', 'share'),
-    CLANG_MODULE_CACHE_PATH: moduleCache,
-    SWIFT_MODULECACHE_PATH: moduleCache,
-  });
-  return { directory, work, env: toolEnv };
-}
-
-/** Prevents a request environment from replacing an attempt's private writable paths. */
-export async function withSwiftAttempt<T>(
-  attempt: ReturnType<typeof createSwiftAttempt>,
-  run: (env: NodeJS.ProcessEnv) => Promise<T>,
-): Promise<T> {
-  return await withRestrictedCommandEnvironment({ cwd: attempt.work, env: attempt.env }, run);
 }
 
 async function ensureSwiftExecutable(params: {
@@ -302,7 +249,9 @@ async function ensureSwiftExecutable(params: {
             },
           ),
         );
+        if (params.signal?.aborted) throw createRequestCanceledError();
         const snapshot = snapshotSwiftExecutable(tempExecutablePath);
+        if (params.signal?.aborted) throw createRequestCanceledError();
         publishFileSync({
           destination: params.executablePath,
           contents: snapshot.contents,
@@ -310,12 +259,12 @@ async function ensureSwiftExecutable(params: {
         });
       } finally {
         try {
-          fs.rmSync(attempt.work, { recursive: true, force: true });
+          releaseSwiftAttempt(attempt);
         } catch (error) {
           cleanupFailures.push(
             new AppError(
               'COMMAND_FAILED',
-              'Swift temporary output removal failed',
+              'Swift attempt sealing failed',
               { reason: 'swift_cache_temp_removal_failed' },
               error,
             ),

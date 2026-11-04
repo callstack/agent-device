@@ -1,16 +1,22 @@
 import fs from 'node:fs';
+import { pipeline } from 'node:stream/promises';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import { runCmd } from '@agent-device/host-kit/command';
 import { Deadline } from '@agent-device/host-kit/retry';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { findProjectRoot } from '@agent-device/host-kit/version';
+import { compileSwiftSourceFile, resolveRecordingScriptPath } from './swift-cache.ts';
 import {
-  compileSwiftSourceFile,
   createSwiftAttempt,
-  resolveRecordingScriptPath,
+  recordSwiftPublication,
+  releaseSwiftAttempt,
+  scheduleSwiftPublicationRemoval,
+  scheduleSwiftPublicationRecovery,
+  swiftPublicationPath,
   withSwiftAttempt,
-} from './swift-cache.ts';
+  type SwiftAttempt,
+} from './swift-attempt.ts';
 import { waitForPlayableVideo, type VideoValidator } from './video.ts';
 import {
   DEFAULT_RECORDING_EXPORT_QUALITY,
@@ -81,13 +87,19 @@ async function exportProcessedVideo(params: {
   scriptArgs: string[];
   commandDescription: string;
   deadline: Deadline;
+  signal?: AbortSignal;
   validator: VideoValidator | undefined;
 }): Promise<void> {
   const { host, videoPath, telemetryPath, scriptPath, scriptArgs, commandDescription, deadline } =
     params;
-  const publicationPath = temporarySiblingVideoPath(videoPath);
-  let work: string | undefined;
+  let attempt: SwiftAttempt | undefined;
   let exportOverran = false;
+  const deadlineAbort = new AbortController();
+  const timer = setTimeout(() => deadlineAbort.abort(), deadline.remainingMs());
+  const signal = params.signal
+    ? AbortSignal.any([params.signal, deadlineAbort.signal])
+    : deadlineAbort.signal;
+  scheduleSwiftPublicationRecovery(host.env, videoPath);
   try {
     const executablePath = await compileSwiftSourceFile({
       host,
@@ -95,6 +107,7 @@ async function exportProcessedVideo(params: {
       extraSourcePaths: [getExportSupportScriptPath(host)],
       // `runCmd` reads a timeout of 0 as none.
       timeoutMs: Math.max(1, deadline.remainingMs()),
+      signal,
     });
     if (deadline.remainingMs() <= HELPER_EXIT_GRACE_MS) {
       throw new AppError(
@@ -102,13 +115,14 @@ async function exportProcessedVideo(params: {
         `No time was left for the export within the ${OVERLAY_BUDGET_MS}ms budget`,
       );
     }
-    const attempt = createSwiftAttempt(host.env, 'overlay');
-    work = attempt.work;
+    attempt = createSwiftAttempt(host.env, 'overlay');
+    const publicationPath = swiftPublicationPath(videoPath, path.basename(attempt.directory));
+    const work = attempt.work;
     const inputPath = path.join(work, `input${path.extname(videoPath) || '.mp4'}`);
     const outputPath = path.join(work, `output${path.extname(videoPath) || '.mp4'}`);
     const eventsPath = path.join(work, 'events.json');
-    fs.copyFileSync(videoPath, inputPath);
-    fs.copyFileSync(telemetryPath, eventsPath);
+    await copyOverlayFile(videoPath, inputPath, signal);
+    await copyOverlayFile(telemetryPath, eventsPath, signal);
     const helperMs = deadline.remainingMs();
     const exportMs = helperMs - HELPER_EXIT_GRACE_MS;
     if (exportMs <= 0) {
@@ -132,20 +146,30 @@ async function exportProcessedVideo(params: {
             '--timeout-ms',
             String(Math.round(exportMs)),
           ],
-          { timeoutMs: helperMs, cwd: work, env },
+          { timeoutMs: helperMs, cwd: work, env, signal },
         ),
       );
     } catch (error) {
       exportOverran = deadline.remainingMs() <= HELPER_EXIT_GRACE_MS;
       throw error;
     }
-    copyStableOverlay(outputPath, publicationPath);
-    if (!(await waitForPlayableVideo(publicationPath, { validator: params.validator, deadline }))) {
+    await copyStableOverlay(outputPath, publicationPath, signal, attempt);
+    if (
+      !(await waitForPlayableVideo(publicationPath, {
+        validator: params.validator,
+        deadline,
+        signal,
+      }))
+    ) {
       exportOverran = deadline.isExpired();
       throw new AppError('COMMAND_FAILED', 'The composited video was not verified as playable');
     }
-    fs.renameSync(publicationPath, videoPath);
+    if (signal.aborted)
+      throw new AppError('COMMAND_FAILED', 'Overlay finalization deadline expired');
+    await fs.promises.rename(publicationPath, videoPath);
   } catch (error) {
+    if (params.signal?.aborted) throw createRequestCanceledError();
+    if (deadlineAbort.signal.aborted) exportOverran = true;
     const description = exportOverran
       ? `${commandDescription}: the export did not finish within its ${OVERLAY_BUDGET_MS}ms budget; a lower --fps renders faster`
       : commandDescription;
@@ -169,18 +193,48 @@ async function exportProcessedVideo(params: {
       cause,
     );
   } finally {
-    fs.rmSync(publicationPath, { force: true });
-    if (work) fs.rmSync(work, { recursive: true, force: true });
+    clearTimeout(timer);
+    if (attempt) {
+      try {
+        releaseSwiftAttempt(attempt);
+      } finally {
+        scheduleSwiftPublicationRemoval(attempt, videoPath);
+      }
+    }
   }
 }
 
-function copyStableOverlay(source: string, destination: string): void {
-  const before = fs.statSync(source, { bigint: true });
+async function copyOverlayFile(
+  source: string,
+  destination: string,
+  signal: AbortSignal,
+): Promise<void> {
+  await pipeline(fs.createReadStream(source), fs.createWriteStream(destination, { flags: 'wx' }), {
+    signal,
+  });
+}
+
+async function copyStableOverlay(
+  source: string,
+  destination: string,
+  signal: AbortSignal,
+  attempt: SwiftAttempt,
+): Promise<void> {
+  const before = await fs.promises.stat(source, { bigint: true });
   if (!before.isFile() || before.size === 0n) {
     throw new AppError('COMMAND_FAILED', 'The overlay helper did not produce a video');
   }
-  fs.copyFileSync(source, destination, fs.constants.COPYFILE_EXCL);
-  const after = fs.statSync(source, { bigint: true });
+  const fd = fs.openSync(destination, 'wx', 0o600);
+  let ownedByStream = false;
+  try {
+    recordSwiftPublication(attempt, fs.fstatSync(fd, { bigint: true }));
+    const output = fs.createWriteStream(destination, { fd, autoClose: true });
+    ownedByStream = true;
+    await pipeline(fs.createReadStream(source), output, { signal });
+  } finally {
+    if (!ownedByStream) fs.closeSync(fd);
+  }
+  const after = await fs.promises.stat(source, { bigint: true });
   if (
     before.dev !== after.dev ||
     before.ino !== after.ino ||
@@ -194,12 +248,6 @@ function copyStableOverlay(source: string, destination: string): void {
   }
 }
 
-function temporarySiblingVideoPath(videoPath: string): string {
-  const parsed = path.parse(videoPath);
-  const suffix = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  return path.join(parsed.dir, `.${parsed.name}.agent-device-${suffix}${parsed.ext || '.mp4'}`);
-}
-
 export async function overlayRecordingTouches(params: {
   host: HostEnvironment;
   validator: VideoValidator | undefined;
@@ -211,6 +259,7 @@ export async function overlayRecordingTouches(params: {
   targetLabel?: string;
   /** From `startRecordingOverlayBudget`, taken when the stop's finalization started. */
   deadline: Deadline;
+  signal?: AbortSignal;
 }): Promise<void> {
   const {
     videoPath,
@@ -230,6 +279,7 @@ export async function overlayRecordingTouches(params: {
     ],
     commandDescription: `Failed to add touch overlays to the ${targetLabel}`,
     deadline: params.deadline,
+    signal: params.signal,
     validator: params.validator,
   });
 }

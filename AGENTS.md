@@ -19,6 +19,7 @@ Read only your task's row. Follow other links only when they apply.
 | Mutation experiments or base comparisons | `docs/agents/test-experiments.md` |
 | Gate selection, fuzzing, or mutation harnesses | `docs/agents/gates.md` |
 | Selector capture, polling, interaction fast paths, replay | `docs/agents/selector-capture.md` |
+| Recording helper finalization or cache reclamation | `docs/agents/recording-finalizer.md` |
 | A new or changed CLI flag | `docs/agents/cli-flags.md` |
 | A PR to open or update | `docs/agents/pull-requests.md` |
 | A change to review | `docs/agents/review.md` |

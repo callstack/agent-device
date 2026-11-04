@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { RECORDING_OUTPUT_UNPLAYABLE_REASON } from '@agent-device/contracts/screen-recording-runtime';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
@@ -28,7 +28,8 @@ export function createScreenRecordingFinalizer(
       if (input.container === 'mp4') void validator.prepare().catch(() => undefined);
     },
     sniff: async (input) => await sniffRecording(input),
-    complete: async (input) => await finalizeScreenRecording(host, validator, input),
+    complete: async (input, signal) =>
+      await finalizeScreenRecording(host, validator, input, signal),
   });
 }
 
@@ -40,14 +41,16 @@ async function finalizeScreenRecording(
   host: HostEnvironment,
   validator: VideoValidatorPreparation,
   input: Parameters<ScreenRecordingRuntimeHost['finalize']['complete']>[0],
+  signal: AbortSignal | undefined,
 ) {
   const prepared = validator.read();
   const finalizeDeadline = startRecordingOverlayBudget();
-  await waitForStableFile(input.outputPath);
+  await waitForStableFile(input.outputPath, { signal });
   if (
     !(await waitForPlayableVideo(input.outputPath, {
       validator: prepared,
       deadline: finalizeDeadline,
+      signal,
     }))
   ) {
     throw unplayableRecording(input.outputPath);
@@ -56,7 +59,7 @@ async function finalizeScreenRecording(
     recording: { outPath: input.outputPath, gestureEvents: [...input.gestureEvents] },
   });
   if (!input.showTouches || input.gestureEvents.length === 0) return { telemetryPath };
-  return await overlayTouches(host, input, telemetryPath, finalizeDeadline, prepared);
+  return await overlayTouches(host, input, telemetryPath, finalizeDeadline, prepared, signal);
 }
 
 async function overlayTouches(
@@ -65,6 +68,7 @@ async function overlayTouches(
   telemetryPath: string,
   deadline: Deadline,
   validator: VideoValidator | undefined,
+  signal: AbortSignal | undefined,
 ) {
   const warning = getRecordingOverlaySupportWarning();
   if (warning) return { telemetryPath, overlayWarning: warning };
@@ -78,9 +82,11 @@ async function overlayTouches(
       targetLabel: input.targetLabel,
       deadline,
       validator,
+      signal,
     });
     return { telemetryPath };
   } catch (error) {
+    if (signal?.aborted) throw createRequestCanceledError();
     return {
       telemetryPath,
       overlayWarning: `failed to overlay recording touches: ${error instanceof Error ? error.message : String(error)}`,

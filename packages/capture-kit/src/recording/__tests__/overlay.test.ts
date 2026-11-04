@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createTestHost } from '../../host-environment.fixtures.ts';
 import fs from 'node:fs';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
@@ -143,13 +144,14 @@ test('refuses an overlay that changes while the parent copies it', async () => {
   const telemetryPath = path.join(tmpDir, 'events.json');
   fs.writeFileSync(videoPath, 'original');
   fs.writeFileSync(telemetryPath, '{"events":[]}');
-  const copy = fs.copyFileSync;
-  const spy = vi.spyOn(fs, 'copyFileSync').mockImplementation((source, destination, flags) => {
-    copy(source, destination, flags);
+  const create = fs.createReadStream;
+  const spy = vi.spyOn(fs, 'createReadStream').mockImplementation(((source, options) => {
+    const stream = create(source, options);
     if (typeof source === 'string' && path.basename(source) === 'output.mp4') {
-      fs.appendFileSync(source, 'late');
+      stream.once('end', () => fs.appendFileSync(source, 'late'));
     }
-  });
+    return stream;
+  }) as typeof fs.createReadStream);
   try {
     await expect(
       overlayRecordingTouches({
@@ -160,6 +162,110 @@ test('refuses an overlay that changes while the parent copies it', async () => {
         deadline: startRecordingOverlayBudget(),
       }),
     ).rejects.toMatchObject({ details: { reason: 'recording_overlay_output_changed' } });
+    expect(fs.readFileSync(videoPath, 'utf8')).toBe('original');
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test.each(['input', 'output'] as const)(
+  'a stalled %s copy is canceled by the finalization deadline and retains the raw video',
+  async (stage) => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    const videoPath = path.join(tmpDir, 'recording.mp4');
+    const telemetryPath = path.join(tmpDir, 'events.json');
+    fs.writeFileSync(videoPath, 'original');
+    fs.writeFileSync(telemetryPath, '{"events":[]}');
+    let destroyed = false;
+    let notifyRead!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      notifyRead = resolve;
+    });
+    const create = fs.createReadStream;
+    const spy = vi.spyOn(fs, 'createReadStream').mockImplementation(((source, options) => {
+      const target =
+        stage === 'input'
+          ? source === videoPath
+          : typeof source === 'string' && path.basename(source) === 'output.mp4';
+      if (!target) return create(source, options);
+      return new Readable({
+        read() {
+          notifyRead();
+        },
+        destroy(error, callback) {
+          destroyed = true;
+          callback(error);
+        },
+      }) as fs.ReadStream;
+    }) as typeof fs.createReadStream);
+    const deadline = startRecordingOverlayBudget();
+    try {
+      const outcome = overlayRecordingTouches({
+        host: createTestHost(),
+        validator: undefined,
+        videoPath,
+        telemetryPath,
+        deadline,
+      }).then(
+        () => ({ status: 'resolved' as const }),
+        (error: unknown) => ({ status: 'rejected' as const, error }),
+      );
+      const first = await Promise.race([
+        entered.then(() => 'entered'),
+        outcome.then(() => 'completed'),
+      ]);
+      expect(first).toBe('entered');
+      const started = performance.now();
+      await vi.advanceTimersByTimeAsync(OVERLAY_BUDGET_MS);
+      expect(await outcome).toMatchObject({
+        status: 'rejected',
+        error: { code: 'COMMAND_FAILED' },
+      });
+      expect(performance.now() - started).toBeLessThan(1000);
+      expect(destroyed).toBe(true);
+      expect(fs.readFileSync(videoPath, 'utf8')).toBe('original');
+      expect(mockRunCmd.mock.calls.filter(([command]) => command !== 'xcrun')).toHaveLength(
+        stage === 'input' ? 0 : 1,
+      );
+    } finally {
+      vi.useRealTimers();
+      spy.mockRestore();
+    }
+  },
+);
+
+test('caller cancellation waits for a stalled copy to close and preserves its typed reason', async () => {
+  const videoPath = path.join(tmpDir, 'recording.mp4');
+  const telemetryPath = path.join(tmpDir, 'events.json');
+  fs.writeFileSync(videoPath, 'original');
+  fs.writeFileSync(telemetryPath, '{"events":[]}');
+  const cancel = new AbortController();
+  let destroyed = false;
+  const create = fs.createReadStream;
+  const spy = vi.spyOn(fs, 'createReadStream').mockImplementation(((source, options) => {
+    if (source !== videoPath) return create(source, options);
+    return new Readable({
+      read() {
+        cancel.abort();
+      },
+      destroy(error, callback) {
+        destroyed = true;
+        callback(error);
+      },
+    }) as fs.ReadStream;
+  }) as typeof fs.createReadStream);
+  try {
+    await expect(
+      overlayRecordingTouches({
+        host: createTestHost(),
+        validator: undefined,
+        videoPath,
+        telemetryPath,
+        deadline: startRecordingOverlayBudget(),
+        signal: cancel.signal,
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'request_canceled' } });
+    expect(destroyed).toBe(true);
     expect(fs.readFileSync(videoPath, 'utf8')).toBe('original');
   } finally {
     spy.mockRestore();
@@ -422,7 +528,10 @@ test('overlay keeps the video as recorded when verifying the export spent its bu
   expect(vi.mocked(waitForPlayableVideo)).toHaveBeenCalledWith(expect.any(String), {
     validator: undefined,
     deadline,
+    signal: expect.any(AbortSignal),
   });
   expect(fs.readFileSync(videoPath, 'utf8')).toBe('original');
-  expect(fs.readdirSync(tmpDir).filter((name) => name.includes('agent-device-'))).toEqual([]);
+  await vi.waitFor(() =>
+    expect(fs.readdirSync(tmpDir).filter((name) => name.includes('agent-device-'))).toEqual([]),
+  );
 });

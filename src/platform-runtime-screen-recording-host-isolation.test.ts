@@ -37,14 +37,14 @@ const frontendScript = String.raw`
   fs.writeFileSync(ready, 'ready');
   const timer = setInterval(() => {
     if (!fs.existsSync(trigger)) return;
+    const blocked = [];
     for (let index = 0; index < targets.length; index++) {
       const target = targets[index];
       fs.writeSync(fds[index], ' late via open descriptor');
       fs.closeSync(fds[index]);
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.writeFileSync(target, 'late private write');
+      try { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, 'late private write'); blocked.push('wrote'); } catch (error) { blocked.push(error.code); }
     }
-    fs.writeFileSync(done, 'done'); clearInterval(timer);
+    fs.writeFileSync(done, JSON.stringify(blocked)); clearInterval(timer);
   }, 10);
   setTimeout(() => clearInterval(timer), 10000).unref();
 `;
@@ -101,9 +101,12 @@ async function startDescendant(
 
 async function releaseDescendant(child: Descendant): Promise<void> {
   fs.writeFileSync(child.trigger, 'continue');
-  await vi.waitFor(() => expect(fs.readFileSync(child.done, 'utf8')).toBe('done'), {
+  await vi.waitFor(() => expect(fs.existsSync(child.done)).toBe(true), {
     timeout: 3000,
   });
+  const blocked = JSON.parse(fs.readFileSync(child.done, 'utf8')) as string[];
+  expect(blocked).toHaveLength(child.targets.length);
+  for (const reason of blocked) expect(['ENOTDIR', 'EEXIST']).toContain(reason);
   await vi.waitFor(
     async () => {
       const facts = await withoutCommandExecutorOverride(() =>
@@ -249,18 +252,11 @@ test('a late compiler cannot mutate a parent-published executable reused by anot
             });
             await releaseDescendant(children[0]!);
             expect(fs.readFileSync(executable, 'utf8')).toBe('published compiler bytes');
-            for (const target of children[0]!.targets)
-              expect(fs.readFileSync(target, 'utf8')).toBe('late private write');
-            expect(
-              fs.existsSync(
-                path.join(
-                  path.dirname(path.dirname(children[0]!.targets[0]!)),
-                  '..',
-                  '..',
-                  'pending.json',
-                ),
-              ),
-            ).toBe(true);
+            for (const target of children[0]!.targets) expect(fs.existsSync(target)).toBe(false);
+            const attempt = children[0]!.targets[0]!.split(
+              `${path.sep}alias${path.sep}work${path.sep}`,
+            )[0]!;
+            expect(fs.existsSync(path.join(attempt, 'pending.json'))).toBe(true);
           },
         ),
     );
@@ -362,9 +358,10 @@ test.each(['compiler-warning', 'helper-warning', 'helper-success'] as const)(
           expect(fs.readFileSync(first.outputPath)).toEqual(beforeFirst);
           expect(fs.readFileSync(second.outputPath)).toEqual(beforeSecond);
           expect(fs.readFileSync(overlayBin)).toEqual(cached);
-          for (const target of children[0]!.targets)
-            expect(fs.readFileSync(target, 'utf8')).toBe('late private write');
-          const attemptDir = children[0]!.targets[0]!.split(`${path.sep}work${path.sep}`)[0]!;
+          for (const target of children[0]!.targets) expect(fs.existsSync(target)).toBe(false);
+          const attemptDir = children[0]!.targets[0]!.split(
+            `${path.sep}alias${path.sep}work${path.sep}`,
+          )[0]!;
           expect(fs.readFileSync(path.join(attemptDir, 'pending.json'), 'utf8')).toContain(
             '"kind"',
           );
@@ -438,8 +435,10 @@ test('failed early stop leaves shared validator preparation running in its priva
         });
         await releaseDescendant(children[0]!);
         expect(fs.readFileSync(executable, 'utf8')).toBe('validator snapshot');
-        expect(fs.readFileSync(children[0]!.targets[0]!, 'utf8')).toBe('late private write');
-        const attempt = children[0]!.targets[0]!.split(`${path.sep}work${path.sep}`)[0]!;
+        expect(fs.existsSync(children[0]!.targets[0]!)).toBe(false);
+        const attempt = children[0]!.targets[0]!.split(
+          `${path.sep}alias${path.sep}work${path.sep}`,
+        )[0]!;
         expect(fs.existsSync(path.join(attempt, 'pending.json'))).toBe(true);
       },
     );

@@ -93,9 +93,13 @@ const script = String.raw`
   fs.writeFileSync(ready, 'ready');
   const poll = setInterval(() => {
     if (!fs.existsSync(trigger)) return;
-    fs.mkdirSync(require('node:path').dirname(written), { recursive: true });
-    fs.writeFileSync(written, 'late compiler write');
-    fs.writeFileSync(done, 'done');
+    try {
+      fs.mkdirSync(require('node:path').dirname(written), { recursive: true });
+      fs.writeFileSync(written, 'late compiler write');
+      fs.writeFileSync(done, 'wrote');
+    } catch (error) {
+      fs.writeFileSync(done, error.code);
+    }
     clearInterval(poll);
   }, 10);
   setTimeout(() => { clearInterval(poll); fs.writeFileSync(done, 'expired'); }, 15000).unref();

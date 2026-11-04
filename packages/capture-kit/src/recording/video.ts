@@ -1,16 +1,12 @@
 import fs from 'node:fs';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { isCommandTimeoutError, runCmd } from '@agent-device/host-kit/command';
 import { type Deadline, sleep } from '@agent-device/host-kit/retry';
-import {
-  compileSwiftSourceText,
-  createSwiftAttempt,
-  readCompiledSwiftSourceText,
-  withSwiftAttempt,
-} from './swift-cache.ts';
+import { compileSwiftSourceText, readCompiledSwiftSourceText } from './swift-cache.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 import { hasPlayableWebmStructure } from './video-webm.ts';
+import { createSwiftAttempt, releaseSwiftAttempt, withSwiftAttempt } from './swift-attempt.ts';
 
 // Duration zero must pass: a recording of a fully static screen legitimately contains a single
 // frame (screenrecord only encodes on screen updates), and AVFoundation reports its duration as 0.
@@ -212,7 +208,7 @@ function isUnavailableVideoValidatorError(error: unknown): error is AppError {
 
 export async function waitForStableFile(
   filePath: string,
-  options: { pollMs?: number; attempts?: number } = {},
+  options: { pollMs?: number; attempts?: number; signal?: AbortSignal } = {},
 ): Promise<void> {
   const pollMs = options.pollMs ?? 150;
   const attempts = options.attempts ?? 12;
@@ -220,6 +216,7 @@ export async function waitForStableFile(
   let stableCount = 0;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (options.signal?.aborted) throw createRequestCanceledError();
     let currentSize = 0;
     try {
       currentSize = fs.statSync(filePath).size;
@@ -237,7 +234,7 @@ export async function waitForStableFile(
     }
 
     previousSize = currentSize;
-    await sleep(pollMs);
+    await sleep(pollMs, options.signal);
   }
 }
 
@@ -246,8 +243,11 @@ export async function isPlayableVideo(
   filePath: string,
   validator: VideoValidator | undefined,
   deadline?: Deadline,
+  signal?: AbortSignal,
 ): Promise<boolean> {
+  if (signal?.aborted) throw createRequestCanceledError();
   const container = await readVideoContainerKind(filePath);
+  if (signal?.aborted) throw createRequestCanceledError();
   if (!container) return false;
   // AVFoundation is the MP4 semantic validator. It does not reliably load WebM on supported
   // macOS hosts, so WebM completion is established by its EBML document type + Segment marker.
@@ -270,6 +270,7 @@ export async function isPlayableVideo(
     });
   }
   let timer: NodeJS.Timeout | undefined;
+  let onAbort: (() => void) | undefined;
   let prepared: PreparedVideoValidator;
   try {
     prepared = await Promise.race([
@@ -280,9 +281,15 @@ export async function isPlayableVideo(
           deadline?.remainingMs() ?? VALIDATOR_RUN_TIMEOUT_MS,
         );
       }),
+      new Promise<never>((_, reject) => {
+        onAbort = () => reject(createRequestCanceledError());
+        if (signal?.aborted) onAbort();
+        else signal?.addEventListener('abort', onAbort, { once: true });
+      }),
     ]);
   } finally {
     clearTimeout(timer);
+    if (onAbort) signal?.removeEventListener('abort', onAbort);
   }
   if (prepared.kind === 'container') return true;
   const runTimeoutMs = Math.min(
@@ -297,6 +304,7 @@ export async function isPlayableVideo(
       runCmd(prepared.executablePath, [filePath], {
         allowFailure: true,
         timeoutMs: runTimeoutMs,
+        signal,
         cwd: attempt.work,
         env,
       }),
@@ -306,7 +314,7 @@ export async function isPlayableVideo(
       throw error;
     });
   } finally {
-    fs.rmSync(attempt.work, { recursive: true, force: true });
+    releaseSwiftAttempt(attempt);
   }
   if (!result) return false;
   if (isSwiftVideoValidatorUnavailable(result.stderr, result.stdout)) {
@@ -328,19 +336,20 @@ export async function waitForPlayableVideo(
     pollMs?: number;
     attempts?: number;
     deadline?: Deadline;
+    signal?: AbortSignal;
   },
 ): Promise<boolean> {
   const pollMs = options.pollMs ?? 150;
   const attempts = options.attempts ?? 12;
 
   for (let attempt = 1; ; attempt += 1) {
-    if (await isPlayableVideo(filePath, options.validator, options.deadline)) {
+    if (await isPlayableVideo(filePath, options.validator, options.deadline, options.signal)) {
       return true;
     }
     if (attempt >= attempts || options.deadline?.isExpired()) {
       return false;
     }
-    await sleep(pollMs);
+    await sleep(pollMs, options.signal);
   }
 }
 

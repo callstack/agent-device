@@ -19,14 +19,20 @@ vi.mock(import('./swift-cache.ts'), async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
+    buildSwiftToolEnv: () => ({}),
+    readCompiledSwiftSourceText: vi.fn(() => undefined),
+    compileSwiftSourceText: vi.fn(async () => '/bin/true'),
+  };
+});
+vi.mock(import('./swift-attempt.ts'), async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
     createSwiftAttempt: (env: NodeJS.ProcessEnv, kind: 'compiler' | 'overlay' | 'validator') =>
       actual.createSwiftAttempt(
         { ...env, AGENT_DEVICE_SWIFT_CACHE_DIR: process.env.AGENT_DEVICE_SWIFT_CACHE_DIR },
         kind,
       ),
-    buildSwiftToolEnv: () => ({}),
-    readCompiledSwiftSourceText: vi.fn(() => undefined),
-    compileSwiftSourceText: vi.fn(async () => '/bin/true'),
   };
 });
 
@@ -150,6 +156,29 @@ test('a stop deadline leaves preparation running and a later stop uses the same 
   finish('/prepared/validator');
   await expect(isPlayableVideo(mp4, preparing)).resolves.toBe(true);
   expect(compileSwiftSourceText).toHaveBeenCalledTimes(1);
+});
+
+test('canceling a stop leaves the shared validator preparation running', async () => {
+  const mp4 = writeFixture('canceled-pending.mp4', Buffer.concat([ftyp, moov]));
+  let finish!: (path: string) => void;
+  let compilerSignal: AbortSignal | undefined;
+  vi.mocked(compileSwiftSourceText).mockImplementationOnce((params) => {
+    compilerSignal = params.signal;
+    return new Promise((resolve) => {
+      finish = resolve;
+    });
+  });
+  const preparation = createVideoValidatorPreparation(createTestHost());
+  const preparing = preparation.prepare();
+  await vi.waitFor(() => expect(compilerSignal).toBeDefined());
+  const cancel = new AbortController();
+  const validation = isPlayableVideo(mp4, preparing, undefined, cancel.signal);
+  cancel.abort();
+  await expect(validation).rejects.toMatchObject({ details: { reason: 'request_canceled' } });
+  expect(compilerSignal?.aborted).toBe(false);
+  expect(compileSwiftSourceText).toHaveBeenCalledOnce();
+  finish('/prepared/validator');
+  await expect(isPlayableVideo(mp4, preparing)).resolves.toBe(true);
 });
 
 test('each runtime owner compiles for itself instead of sharing a module-global preparation', async () => {

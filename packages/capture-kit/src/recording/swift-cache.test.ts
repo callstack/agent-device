@@ -445,16 +445,12 @@ test('a temp removal failure survives a canceled compile', async () => {
   const removalFailure = new Error('removal failed');
   const cancelFailure = createRequestCanceledError();
   mockRunCmd.mockRejectedValueOnce(cancelFailure);
-  const original = fs.rmSync;
-  const spy = vi.spyOn(fs, 'rmSync').mockImplementation(((target, options) => {
-    if (
-      typeof target === 'string' &&
-      path.basename(target) === 'work' &&
-      target.includes(`${path.sep}attempts${path.sep}`)
-    )
+  const original = fs.renameSync;
+  const spy = vi.spyOn(fs, 'renameSync').mockImplementation(((source, target) => {
+    if (typeof target === 'string' && target.endsWith(`${path.sep}alias${path.sep}work`))
       throw removalFailure;
-    return original(target, options);
-  }) as typeof fs.rmSync);
+    return original(source, target);
+  }) as typeof fs.renameSync);
   try {
     const error = await compileSwiftSourceText({
       host: createTestHost(),
@@ -485,16 +481,12 @@ test('simultaneous temp removal and lock release failures preserve all evidence'
     fs.mkdirSync(owner);
     throw compileFailure;
   });
-  const original = fs.rmSync;
-  const spy = vi.spyOn(fs, 'rmSync').mockImplementation(((target, options) => {
-    if (
-      typeof target === 'string' &&
-      path.basename(target) === 'work' &&
-      target.includes(`${path.sep}attempts${path.sep}`)
-    )
+  const original = fs.renameSync;
+  const spy = vi.spyOn(fs, 'renameSync').mockImplementation(((source, target) => {
+    if (typeof target === 'string' && target.endsWith(`${path.sep}alias${path.sep}work`))
       throw removalFailure;
-    return original(target, options);
-  }) as typeof fs.rmSync);
+    return original(source, target);
+  }) as typeof fs.renameSync);
   try {
     const error = await compileSwiftSourceText({
       host: createTestHost(),
@@ -519,16 +511,12 @@ test('simultaneous temp removal and lock release failures preserve all evidence'
 
 test('successful compilation still reports failure to remove temporary output', async () => {
   const removalFailure = new Error('temp removal failed');
-  const original = fs.rmSync;
-  const spy = vi.spyOn(fs, 'rmSync').mockImplementation(((target, options) => {
-    if (
-      typeof target === 'string' &&
-      path.basename(target) === 'work' &&
-      target.includes(`${path.sep}attempts${path.sep}`)
-    )
+  const original = fs.renameSync;
+  const spy = vi.spyOn(fs, 'renameSync').mockImplementation(((source, target) => {
+    if (typeof target === 'string' && target.endsWith(`${path.sep}alias${path.sep}work`))
       throw removalFailure;
-    return original(target, options);
-  }) as typeof fs.rmSync);
+    return original(source, target);
+  }) as typeof fs.renameSync);
   try {
     const error = await compileSwiftSourceText({
       host: createTestHost(),
