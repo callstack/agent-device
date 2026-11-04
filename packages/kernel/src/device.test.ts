@@ -129,7 +129,8 @@ test.each([
 });
 
 test('the longest name leaves a key that fits the socket path, and is shorter under a tenant', () => {
-  // 32 characters of key: agent-browser's 103-byte socket path less a 65-byte socket directory.
+  // 32 characters of key: agent-browser's 103-byte socket path less a 65-byte socket directory and 6 bytes
+  // for `/` and `.sock`.
   assert.equal(webSessionBackendKey({ name: 'a'.repeat(30) }).length, 32);
   assert.equal(webSessionBackendKey({ name: 'a'.repeat(17), tenantId: 'tenant-1' }).length, 32);
   assert.throws(
