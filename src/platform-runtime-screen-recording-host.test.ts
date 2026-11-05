@@ -3,18 +3,22 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import * as video from '@agent-device/capture-kit/recording-video';
-import { createAppleScreenRecordingOperations } from '../packages/platform-apple/src/recording/runtime.ts';
-import {
-  appleRecordingHost,
-  coreDevice,
-  recordingInput,
-  simulator,
-  simulatorRecorderStart,
-} from '../packages/platform-apple/src/recording/runtime.fixtures.ts';
-import { createScreenRecordingRuntimeHost } from './platform-runtime-screen-recording-host.ts';
+import { runtimeModule } from '@agent-device/platform-apple';
+import { createPlatformRuntimeHost } from './platform-runtime-operation-host.ts';
+
+const devices: DeviceInfo[] = ['simulator', 'device'].map((kind) => ({
+  platform: 'apple',
+  appleOs: 'ios',
+  id: kind,
+  name: kind,
+  kind: kind as 'simulator' | 'device',
+  target: 'mobile',
+  booted: true,
+  ...(kind === 'device' ? { iosPhysicalDeviceBackend: 'coredevice' as const } : {}),
+}));
 
 vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -22,18 +26,77 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
 }));
 afterEach(() => vi.restoreAllMocks());
 
-function harness() {
+async function harness(device: DeviceInfo, launch = () => {}) {
   const root = mkdtempForTestSync('warm-video-validator-');
-  const host = createScreenRecordingRuntimeHost({
+  const unused = async (): Promise<never> => {
+    throw new Error('unused');
+  };
+  const host = createPlatformRuntimeHost({
     host: { ...createLiveTestHostEnvironment(), env: { AGENT_DEVICE_SWIFT_CACHE_DIR: root } },
+    sessionsDir: root,
+    resolveSessionArtifacts: () => {
+      throw new Error('unused');
+    },
+    snapshot: { captureSurface: unused, presentIosAcquisition: unused },
+    shutdownLoaders: { apple: unused, android: unused },
   });
-  return { host, input: recordingInput({ outputPath: path.join(root, 'capture.mp4') }) };
+  const runtime = await runtimeModule.loadRuntime({
+    ...host,
+    screenRecording: {
+      ...host.screenRecording,
+      apple: {
+        ...host.screenRecording.apple,
+        availability: async () => ({ available: true }),
+        isRunnerBundleId: async () => false,
+        captureClockAnchor: async () => undefined,
+        startSimulator: async () => {
+          launch();
+          return {
+            markers: [{ pid: 42, startTime: 'start', command: 'recorder' }],
+            wait: new Promise<never>(() => {}),
+            terminate: async () => {},
+          };
+        },
+        runRunner: async (_device, request) => {
+          if (request.kind !== 'start') return {};
+          launch();
+          return {
+            runnerSessionId: 'runner',
+            runnerAuthority: 'local-lease',
+            remotePath: 'tmp/agent-device-recording-123.mp4',
+          };
+        },
+        retrieveRunnerRecording: async (_device, _remote, outputPath) => {
+          fs.copyFileSync('website/docs/public/agent-device-contacts.mp4', outputPath);
+        },
+      },
+    },
+  });
+  const binding = await runtime.bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+  const input = {
+    sessionId: 'one',
+    outputPath: path.join(root, 'capture.mp4'),
+    scope: 'device' as const,
+    showTouches: false,
+    hideTouchesRequested: false,
+    recordOnlySession: false,
+    activeSessionApp: { bundleId: 'com.example.app' },
+    fence: { token: 'fence', generation: 1 },
+  };
+  return { input, start: () => binding.operations.screenRecordingStart!(input) };
 }
 
-test.each([simulator, coreDevice])(
+test.each(devices)(
   'warms before $kind capture and starts while preparation is pending',
   async (device) => {
-    const { host, input } = harness();
     let resolvePreparation!: (value: string) => void;
     const pending = new Promise<string>((resolve) => {
       resolvePreparation = resolve;
@@ -41,39 +104,10 @@ test.each([simulator, coreDevice])(
     const preparation = vi.spyOn(video, 'prepareVideoValidator').mockReturnValue(pending);
     const launched = vi.fn(() => {
       expect(preparation).toHaveBeenCalledOnce();
-      return {
-        runnerSessionId: 'runner-session',
-        runnerAuthority: 'local-lease' as const,
-        remotePath: 'tmp/agent-device-recording-123.mp4',
-      };
     });
-    const fake = appleRecordingHost({
-      apple: {
-        ...simulatorRecorderStart(),
-        runRunner: async () => launched(),
-      },
-    });
-    const startSimulator = fake.screenRecording.apple.startSimulator;
-    const operations = createAppleScreenRecordingOperations({
-      host: {
-        screenRecording: {
-          ...fake.screenRecording,
-          outputs: host.outputs,
-          apple: {
-            ...fake.screenRecording.apple,
-            startSimulator: async (...args) => {
-              launched();
-              return await startSimulator(...args);
-            },
-          },
-        },
-      },
-      device,
-      owner: localRuntimeOwner('apple'),
-      signal: new AbortController().signal,
-    });
+    const { start } = await harness(device, launched);
     let started = false;
-    const starting = operations.screenRecordingStart(input).then((result) => {
+    const starting = start().then((result) => {
       started = true;
       return result;
     });
@@ -89,7 +123,7 @@ test.each([simulator, coreDevice])(
 );
 
 test('a runCmd compile failure survives capture start and reaches the real stop finalizer', async () => {
-  const { host, input } = harness();
+  const { start, input } = await harness(devices[1]!);
   const failure = new AppError('COMMAND_FAILED', 'xcrun exited with code 72', {
     stderr: 'xcrun: error: unable to find utility "swiftc", not a developer tool or in PATH',
   });
@@ -100,23 +134,8 @@ test('a runCmd compile failure survives capture start and reaches the real stop 
   void compile.catch(() => {});
   vi.mocked(runCmd).mockClear().mockReturnValue(compile);
   const preparation = vi.spyOn(video, 'prepareVideoValidator');
-  const fake = appleRecordingHost({
-    apple: {
-      retrieveRunnerRecording: async (_device, _remote, outputPath) => {
-        fs.copyFileSync('website/docs/public/agent-device-contacts.mp4', outputPath);
-      },
-    },
-  });
-  const operations = createAppleScreenRecordingOperations({
-    host: {
-      screenRecording: { ...fake.screenRecording, outputs: host.outputs, finalize: host.finalize },
-    },
-    device: coreDevice,
-    owner: localRuntimeOwner('apple'),
-    signal: new AbortController().signal,
-  });
   let captureStarted = false;
-  const starting = operations.screenRecordingStart(input).then((result) => {
+  const starting = start().then((result) => {
     captureStarted = true;
     return result;
   });
