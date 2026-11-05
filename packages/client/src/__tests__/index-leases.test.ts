@@ -71,3 +71,33 @@ test('lease allocation sends the device spec and returns the device the backend 
     physical: false,
   });
 });
+
+test('lease allocation sends the iOS simulator mode and returns the mode the backend granted', async () => {
+  const device = { model: 'iPhone 17 Pro', osVersion: '26.2', deviceMode: 'full', physical: false };
+  const setup = createClientTransport(async (req) => ({
+    ok: true,
+    data: {
+      lease: {
+        leaseId: 'lease-mode',
+        tenantId: req.meta?.tenantId,
+        runId: req.meta?.runId,
+        backend: req.meta?.leaseBackend,
+        deviceKey: 'ios:mobile:SIM-1',
+        device,
+      },
+    },
+  }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const lease = await client.leases.allocate({
+    tenant: 'proxy',
+    runId: 'proxy-run',
+    leaseBackend: 'ios-instance',
+    leaseProvider: 'proxy',
+    platform: 'ios',
+    deviceMode: 'full',
+  });
+
+  assert.equal(setup.calls[0]?.flags?.deviceMode, 'full');
+  assert.deepEqual(lease.device, device);
+});

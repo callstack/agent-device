@@ -14,6 +14,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import {
   deviceSpecUnsupportedError,
+  LEASE_DEVICE_SPEC_KEYS,
   requireLeaseDeviceSpec,
 } from '@agent-device/contracts/lease-scope';
 import type { Lease, LeaseDevice, LeaseDeviceSpec } from '@agent-device/contracts/client';
@@ -63,7 +64,7 @@ export async function resolveProxyLeaseState(options: {
     if (!options.leaseBackend) {
       throw new AppError(
         'INVALID_ARGS',
-        `${options.command} with --os, --image-tag or --physical requires --platform or --lease-backend so the proxy backend knows which device family to pick from.`,
+        `${options.command} with --os, --image-tag, --device-mode or --physical requires --platform or --lease-backend so the proxy backend knows which device family to pick from.`,
       );
     }
     return { state: options.state, allocateBySpec: true };
@@ -109,8 +110,9 @@ async function resolveProxyLeaseStateLocally(options: {
  * none was supplied from outside, so it is refused and never released.
  *
  * A request that names a device spec has no such fallback: a new lease that does not echo the
- * granted device in `lease.device` came from a backend that ignored the spec, so it is released and
- * the request fails with `device-spec-unsupported`. A renewed lease serves the request only when
+ * granted device in `lease.device`, or that reports a slim simulator for a `full` request,
+ * did not honour the spec, so it is released and the request fails with `device-spec-unsupported`.
+ * A lease that reports no mode is accepted: the mode is then unconfirmed. A renewed lease serves the request only when
  * every spec key the request names equals the one the lease was allocated by. Once a lease is bound,
  * the spec leaves the command flags: the device it chose is named by its identity instead.
  */
@@ -127,7 +129,7 @@ export async function bindLeaseNamedDevice(options: {
   const { lease, acquired } = materialized;
   const { spec, keys: specKeys } = requireLeaseDeviceSpec(flags);
   const leased = parseConnectionDeviceKey(lease.deviceKey);
-  if (acquired && specKeys.length > 0 && (!lease.device || !leased)) {
+  if (acquired && specKeys.length > 0 && (!leased || !leaseHonoursSpec(lease, spec))) {
     throw await refuseUnhonouredSpecLease(leaseLedger, options.state, lease, specKeys);
   }
   if (leased) {
@@ -138,9 +140,7 @@ export async function bindLeaseNamedDevice(options: {
       await assertLeasedDeviceMatchesRequest(client, options.state, flags, leased);
     }
     applyDeviceScopeSelector(flags, leased);
-    delete flags.osVersion;
-    delete flags.imageTag;
-    delete flags.physical;
+    for (const key of LEASE_DEVICE_SPEC_KEYS) delete flags[key];
     return {
       state: {
         ...options.state,
@@ -165,6 +165,12 @@ export async function bindLeaseNamedDevice(options: {
 }
 
 /** A refused allocation is discarded unless the daemon explicitly reported reuse. */
+function leaseHonoursSpec(lease: Lease, spec: LeaseDeviceSpec): boolean {
+  if (!lease.device) return false;
+  // Full is a guarantee and slim is best effort, so a full grant serves a slim request.
+  return !(spec.deviceMode === 'full' && lease.device.deviceMode === 'slim');
+}
+
 async function refuseUnhonouredSpecLease(
   leaseLedger: LeaseLedger,
   state: RemoteConnectionState,
