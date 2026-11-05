@@ -83,6 +83,19 @@ extension RunnerTests {
     XCTAssertEqual(refusal["error_code"] as? String, "response-too-large")
   }
 
+  func testTheRunnersOwnRefusalFitsTheDefaultBound() throws {
+    let refusal = RunnerSnapshotBridgeHandle("describe", "", ["requestId": "request-1"])
+    let text = Self.serializedSnapshotBridgeEnvelope(
+      refusal,
+      requestId: "request-1",
+      maxBytes: Self.snapshotBridgeMaximumResponseBytes
+    )
+    let envelope = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
+    )
+    XCTAssertNotEqual(envelope["error_code"] as? String, "response-too-large")
+  }
+
   func testUnserializableSnapshotBridgeEnvelopeIsRefusedAsNotJsonSafe() throws {
     let text = Self.serializedSnapshotBridgeEnvelope(
       ["requestId": "r", "ok": true, "pid": 7, "tree": Date()],

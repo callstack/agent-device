@@ -255,9 +255,12 @@ NSDictionary *RunnerSnapshotBridgeHandle(NSString *verb, NSString *bundleId, NSD
 
 #else
 
+/// Off the iOS Simulator the runner has no reader, so its only envelope is the refusal below.
+static const uint32_t kRunnerSnapshotBridgeRefusalFrameBytes = 4096;
+
 uint32_t RunnerSnapshotBridgeMaximumFrameBytes(void)
 {
-  return 0;
+  return kRunnerSnapshotBridgeRefusalFrameBytes;
 }
 
 NSDictionary *RunnerSnapshotBridgeHandle(NSString *verb, NSString *bundleId, NSDictionary *request)
