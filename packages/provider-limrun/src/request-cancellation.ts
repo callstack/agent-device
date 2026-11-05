@@ -1,6 +1,6 @@
 import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
 /**
- * The Limrun SDK does not expose an AbortSignal parameter. Keep the request-bound
+ * The instance-client operations wrapped here do not accept an AbortSignal. Keep the request-bound
  * caller cancellable while retaining a handled continuation for the provider operation it started.
  */
 export async function awaitLimrunOperation<Value>(

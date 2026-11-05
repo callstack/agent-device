@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import { setTimeout as realDelay } from 'node:timers/promises';
 import { DEFAULT_ALERT_TIMEOUT_MS } from '@agent-device/contracts/alert-contract';
 import { awaitAppleAlert, readAppleAlert } from './alert.ts';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
@@ -218,17 +219,20 @@ test.each([
  */
 function wedgedCoreSimulator(
   answers: Readonly<Record<string, string>> = {},
+  onSpawn?: (count: number) => void,
 ): AppleToolProvider & { spawns: () => number } {
   let spawns = 0;
   const answered = (key: string): ExecResult | undefined => {
     const stdout = answers[key];
     if (stdout === undefined) return undefined;
     spawns += 1;
+    onSpawn?.(spawns);
     return { stdout, stderr: '', exitCode: 0 } as ExecResult;
   };
   const hang = async (options?: ExecOptions): Promise<ExecResult> =>
     await new Promise((_resolve, reject) => {
       spawns += 1;
+      onSpawn?.(spawns);
       if (options?.signal?.aborted) {
         reject(options.signal.reason);
         return;
@@ -257,14 +261,6 @@ function wedgedCoreSimulator(
   };
 }
 
-/** Real I/O turns until the provider saw `count` spawns; bounded so a lookup that stops early fails here, not at the test timeout. */
-async function untilSpawned(coreSimulator: { spawns: () => number }, count: number): Promise<void> {
-  for (let turn = 0; turn < 1000 && coreSimulator.spawns() < count; turn += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-  expect(coreSimulator.spawns()).toBe(count);
-}
-
 const LISTED_APP = JSON.stringify({
   'com.example.app': {
     ApplicationType: 'User',
@@ -286,21 +282,42 @@ test.each([
     // spawns plutil, and that I/O must complete before the budget is advanced past.
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     vi.mocked(emitDiagnostic).mockClear();
+    const lookupAbort = new AbortController();
     try {
       const { interactor, acceptAlert } = confirmationRunner();
-      const coreSimulator = wedgedCoreSimulator(answers);
+      let signalLookupStarted: () => void;
+      const lookupStarted = new Promise<void>((resolve) => {
+        signalLookupStarted = resolve;
+      });
+      const coreSimulator = wedgedCoreSimulator(answers, (count) => {
+        if (count === 2) signalLookupStarted();
+      });
       let answered: unknown = 'pending';
       const answer = withAppleToolProvider(coreSimulator, async () =>
         answerSimulatorLaunchConfirmation(
           simulator,
           { url: 'example://automation', appBundleId: 'com.example.app' },
           Promise.resolve(interactor),
-          new AbortController().signal,
+          lookupAbort.signal,
           undefined,
         ).then((value) => (answered = value)),
       );
 
-      await untilSpawned(coreSimulator, 2);
+      const ioWait = new AbortController();
+      try {
+        await Promise.race([
+          lookupStarted,
+          answer.then(() => {
+            throw new Error('Owner lookup completed before the second command started');
+          }),
+          realDelay(1_000, undefined, { signal: ioWait.signal }).then(() => {
+            throw new Error('Owner lookup did not start its second command');
+          }),
+        ]);
+      } finally {
+        ioWait.abort();
+      }
+      expect(coreSimulator.spawns()).toBe(2);
       await vi.advanceTimersByTimeAsync(URL_OWNER_LOOKUP_TIMEOUT_MS + 1);
       expect(answered).toEqual({ outcome: 'unreadable', step: 'url-owner' });
       await answer;
@@ -311,6 +328,7 @@ test.each([
         }),
       );
     } finally {
+      lookupAbort.abort();
       vi.useRealTimers();
     }
   },

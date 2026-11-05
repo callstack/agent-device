@@ -54,7 +54,8 @@ test('cache teardown waits for serialized APK syncs to finish reading their basi
   });
   await entered;
   let secondRan = false;
-  const second = cache.run(apk, 'android', async () => {
+  const second = cache.run(apk, 'android', async (directory) => {
+    expect(await fs.readFile(path.join(directory, 'Example.apk'), 'utf8')).toBe('apk');
     secondRan = true;
   });
   const disposal = cache.dispose();
