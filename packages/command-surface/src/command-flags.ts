@@ -62,6 +62,7 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     osVersion: options.osVersion,
     imageTag: options.imageTag,
     deviceMode: options.deviceMode,
+    deviceBaseline: options.deviceBaseline,
     physical: options.physical,
     surface: options.surface,
     activity: options.activity,

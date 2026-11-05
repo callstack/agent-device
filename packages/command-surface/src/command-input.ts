@@ -12,7 +12,10 @@ import {
 import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-registry';
 import type { FlagDefinition, FlagKey } from '@agent-device/command-registry/flag-types';
 import { AppError } from '@agent-device/kernel/errors';
-import { requireLeaseDeviceSpec } from '@agent-device/contracts/lease-scope';
+import {
+  type LEASE_DEVICE_SPEC_KEYS,
+  requireLeaseDeviceSpec,
+} from '@agent-device/contracts/lease-scope';
 import type { RepeatedInput } from '@agent-device/contracts/interaction';
 import type { JsonSchema } from './command-contract.ts';
 import {
@@ -446,13 +449,12 @@ export function leaseDeviceSpecFields() {
     osVersion: leaseDeviceSpecField('osVersion'),
     imageTag: leaseDeviceSpecField('imageTag'),
     deviceMode: leaseDeviceSpecField('deviceMode'),
+    deviceBaseline: leaseDeviceSpecField('deviceBaseline'),
     physical: leaseDeviceSpecField('physical'),
   };
 }
 
-function leaseDeviceSpecField<TKey extends 'osVersion' | 'imageTag' | 'deviceMode' | 'physical'>(
-  key: TKey,
-) {
+function leaseDeviceSpecField<TKey extends (typeof LEASE_DEVICE_SPEC_KEYS)[number]>(key: TKey) {
   return customField(
     optionField(key).schema,
     (record) => requireLeaseDeviceSpec({ [key]: record[key] }).spec[key],

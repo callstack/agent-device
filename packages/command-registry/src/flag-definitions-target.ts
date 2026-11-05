@@ -89,6 +89,18 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
+    key: 'deviceBaseline',
+    names: ['--device-baseline'],
+    type: 'string',
+    usageLabel: '--device-baseline <name>',
+    usageDescription:
+      'Proxy lease: saved device state (baseline) the backend restores on the leased device; refused without such a backend',
+    inputDescription:
+      'Name of a saved, prepared device state (baseline) that a proxy backend restores on the device it leases, sent as given; the backend validates it. A blank string names nothing; a non-string fails with INVALID_ARGS, reason device-spec-invalid. A new lease that does not report this baseline in lease.device.baseline is released and fails with reason device-spec-unsupported. Only the CLI allocating a lease through connect proxy sends it to that backend; a daemon refuses every other request that names it, with reason device-spec-unsupported.',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'physical',
     names: ['--physical'],
     type: 'boolean',
