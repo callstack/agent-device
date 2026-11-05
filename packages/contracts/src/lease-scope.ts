@@ -483,13 +483,6 @@ export function findMissingProxyLeaseFields(scope: LeaseScope): string[] {
  * yet must assume this one, or it can be planning for a window the daemon would never grant.
  */
 export const MIN_LEASE_WINDOW_MS = 5_000;
-/** The default ceiling for a lease TTL a caller may request. */
-export const MAX_LEASE_TTL_MS = 10 * 60_000;
-/**
- * The TTL a cloud device lease requests so a session survives an agent's think time. A daemon whose
- * ceiling is lower than this grants its ceiling instead of refusing the request.
- */
-export const CLOUD_DEVICE_LEASE_TTL_MS = MAX_LEASE_TTL_MS;
 
 /**
  * Why a lease stopped being ours: it is gone, spent, or taken back.

@@ -27,8 +27,8 @@ export type ConnectionProviderCapabilities = {
   supportsDirectPortReverse: boolean;
   usesCloudWebDriverLease: boolean;
   /**
-   * The provider leases a cloud-hosted device that bills while held. A lease with this capability or
-   * `usesCloudWebDriverLease` requests the cloud device lease TTL on each lease-using command.
+   * The provider leases a cloud-hosted device that bills while held. Its lease requests the same
+   * idle window as a proxy lease on each lease-using command, not the daemon default.
    */
   holdsCloudDevice?: boolean;
 };

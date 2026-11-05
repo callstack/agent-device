@@ -1,6 +1,5 @@
 import crypto from 'node:crypto';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { CLOUD_DEVICE_LEASE_TTL_MS } from '@agent-device/contracts/lease-scope';
 import { AppError } from '@agent-device/kernel/errors';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
@@ -18,13 +17,13 @@ const leaseDeferredCommands = new Set([
   'metro',
   'session',
 ]);
-export const PROXY_REMOTE_LEASE_TTL_MS = 5 * 60 * 1000;
+/** The idle window of a remote device lease: a proxy lease or a provider that `holdsCloudDevice`. */
+export const REMOTE_DEVICE_LEASE_TTL_MS = 5 * 60 * 1000;
+export const CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS = 10 * 60 * 1000;
 
-/** A cloud device lease is one that declares `usesCloudWebDriverLease` or `holdsCloudDevice`. */
 function cloudDeviceLeaseTtlMs(state: RemoteConnectionState): number | undefined {
-  const capabilities = connectionProviderCapabilities(state.leaseProvider);
-  return capabilities.usesCloudWebDriverLease || capabilities.holdsCloudDevice === true
-    ? CLOUD_DEVICE_LEASE_TTL_MS
+  return connectionProviderCapabilities(state.leaseProvider).holdsCloudDevice === true
+    ? REMOTE_DEVICE_LEASE_TTL_MS
     : undefined;
 }
 
@@ -72,7 +71,7 @@ const DEFAULT_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
 
 const PROXY_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
   shouldAllocate: (command) => command !== 'devices' && !leaseDeferredCommands.has(command),
-  ttlMs: () => PROXY_REMOTE_LEASE_TTL_MS,
+  ttlMs: () => REMOTE_DEVICE_LEASE_TTL_MS,
   // Known before the daemon allocates, so a host in front of it can name the lease with the same id.
   newLeaseId: () => crypto.randomBytes(16).toString('hex'),
   resolveLeaseState: resolveProxyLeaseState,
@@ -98,6 +97,6 @@ const MACOS_APP_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
 
 const CLOUD_WEBDRIVER_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
   shouldAllocate: (command) => !leaseDeferredCommands.has(command),
-  ttlMs: cloudDeviceLeaseTtlMs,
+  ttlMs: () => CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS,
   resolveLeaseState: async (options) => ({ state: options.state }),
 };

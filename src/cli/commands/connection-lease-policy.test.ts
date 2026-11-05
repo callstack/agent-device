@@ -1,8 +1,11 @@
 import { expect, test, vi } from 'vitest';
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
-import { CLOUD_DEVICE_LEASE_TTL_MS } from '@agent-device/contracts/lease-scope';
 import type { RemoteConnectionState } from '@agent-device/remote/remote-connection-state';
-import { connectionLeasePolicyForState } from './connection-lease-policy.ts';
+import {
+  CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS,
+  REMOTE_DEVICE_LEASE_TTL_MS,
+  connectionLeasePolicyForState,
+} from './connection-lease-policy.ts';
 
 const LOCAL_PROVIDER: ConnectionProviderCapabilities = {
   leaseKind: 'direct-device-provider',
@@ -35,12 +38,16 @@ function ttlFor(leaseProvider: string): number | undefined {
   return connectionLeasePolicyForState(state).ttlMs(state);
 }
 
-test.each(['cloud-device', 'cloud-device-deferred', 'cloud-webdriver'])(
-  'a %s lease uses the cloud device TTL',
+test.each(['cloud-device', 'cloud-device-deferred'])(
+  'a %s lease uses the remote device TTL',
   (provider) => {
-    expect(ttlFor(provider)).toBe(CLOUD_DEVICE_LEASE_TTL_MS);
+    expect(ttlFor(provider)).toBe(REMOTE_DEVICE_LEASE_TTL_MS);
   },
 );
+
+test('a cloud WebDriver lease keeps its own TTL', () => {
+  expect(ttlFor('cloud-webdriver')).toBe(CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS);
+});
 
 test.each(['local-device', 'malformed-flag'])(
   'a %s lease keeps the daemon default TTL',

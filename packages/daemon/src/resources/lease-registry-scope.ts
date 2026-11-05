@@ -1,8 +1,6 @@
 import crypto from 'node:crypto';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import {
-  CLOUD_DEVICE_LEASE_TTL_MS,
-  MAX_LEASE_TTL_MS,
   MIN_LEASE_WINDOW_MS,
   leaseScopeToReleaseRequest,
 } from '@agent-device/contracts/lease-scope';
@@ -100,6 +98,7 @@ export type NormalizedAllocateLeaseRequest = {
 };
 
 const DEFAULT_LEASE_TTL_MS = 60_000;
+const MAX_LEASE_TTL_MS = 10 * 60_000;
 const DEFAULT_LEASE_PROVIDER = 'default';
 
 export function createLeaseTtlResolver(options: LeaseRegistryOptions) {
@@ -115,7 +114,6 @@ export function createLeaseTtlResolver(options: LeaseRegistryOptions) {
   return (raw: number | undefined): number => {
     if (!Number.isInteger(raw)) return defaultTtl;
     const value = Number(raw);
-    if (value === CLOUD_DEVICE_LEASE_TTL_MS && value > maxTtl) return maxTtl;
     if (value < minTtl || value > maxTtl) {
       throw new AppError('INVALID_ARGS', `Lease ttlMs must be between ${minTtl} and ${maxTtl}.`);
     }
