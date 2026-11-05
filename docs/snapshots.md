@@ -229,7 +229,7 @@ the tree to work out whether a sheet or alert was up.
   evidence absence needs. Absence is only reachable from a capture that reads UIKit class names, so a
   screen served by a backend that publishes none answers `"unknown"` even when nothing is presented.
   That is the private accessibility backend (`snapshotQuality.backend: "private-ax"`, which `--actions`
-  asks for) and an Appium tree. Limrun iOS uses the Apple XCTest runner. Never treat `"unknown"` as `"absent"`.
+  asks for) and an Appium tree. Never treat `"unknown"` as `"absent"`.
 - A physical iOS device has one capture backend, and it publishes no class names, so there the answer
   is `"presented"` or `"unknown"` and never `"absent"`.
 - The field is absent entirely when the platform publishes no reading at all: Android, web, Linux,

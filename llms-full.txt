@@ -3948,7 +3948,7 @@ On Android, agent-device connects to Limrun over an ADB tunnel. Snapshots use th
 
 ## Use an iOS simulator
 
-Use the same snapshot, selector, text-entry, gesture, navigation, clipboard, and alert commands as on a local iOS simulator. Limrun iOS uses the agent-device XCTest runner, so snapshots include the same tab contents, hierarchy, and keyboard observations as local XCTest snapshots. `fill` replaces text and `type` appends it; both support `--delay-ms`.
+Use the same snapshot, selector, text-entry, gesture, navigation, clipboard, and alert commands as on a local iOS simulator. Limrun iOS uses the agent-device XCTest runner. The runner reads snapshots with the same accessibility reader as a local iOS simulator, so snapshot output, selectors, and refs match local runs. When that reader cannot serve the screen, for example while a system sign-in sheet is open, the snapshot uses XCTest instead and says so in a warning. `fill` replaces text and `type` appends it; both support `--delay-ms`.
 
 Use a stable agent-device release. It downloads and starts the matching runner automatically. You do not need local Xcode or any runner network configuration. Stop Appium or other XCTest sessions on the simulator before you start, because only one XCTest run can use it at a time. Limrun limits each XCTest run to one hour; close and reopen your session when it reaches that limit.
 
@@ -3958,7 +3958,7 @@ Open your app before taking a snapshot. Snapshots target the app you opened in t
 
 `install` leaves your app stopped. Use `open` to launch it. To change launch arguments on an app that is already running, use `open --relaunch --launch-args`. Screenshots download as lossless PNG files, and recording downloads the finished MP4 when you stop it. Push notifications use the same command and payload format as local simulators.
 
-If you use a nightly or unpublished agent-device build, obtain a matching packaged iOS runner from the build’s maintainer. Set `AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP` to the extracted `.app` path before starting agent-device. If the daemon is already running, stop it with `agent-device daemon stop` using the same `--state-dir`, then reconnect.
+If you use a nightly or unpublished agent-device build, obtain a matching packaged iOS runner from the build’s maintainer. Set `AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP` to the extracted `.app` path before starting agent-device. The runner must be built with Xcode 26, because Limrun simulators run iOS 26 and an Xcode 27 build does not include the XCTest frameworks it needs there; agent-device refuses such a runner. If the daemon is already running, stop it with `agent-device daemon stop` using the same `--state-dir`, then reconnect.
 
 ## Connect an iOS app to Metro
 
@@ -5833,7 +5833,7 @@ For Android pixel units and density, see [Android node metadata](#android-node-m
 
 * `"presented"` means the capture saw the presentation directly — a dimming view, an alert’s own view classes, or an element typed as a sheet, drawer, alert, or dialog.
 * `"absent"` is an earned answer, not a default. The capture checked every window it read and each one held only its own content. This is the answer you can act on, for example to confirm a tap dismissed a sheet.
-* `"unknown"` means the capture could not tell, and it is not a hedge — it says the capture lacks the evidence absence needs. Absence is only reachable from a capture that reads UIKit class names, so a screen served by a backend that publishes none answers `"unknown"` even when nothing is presented. That is the private accessibility backend (`snapshotQuality.backend: "private-ax"`, which `--actions` asks for) and an Appium tree. Limrun iOS uses the Apple XCTest runner. Never treat `"unknown"` as `"absent"`.
+* `"unknown"` means the capture could not tell, and it is not a hedge — it says the capture lacks the evidence absence needs. Absence is only reachable from a capture that reads UIKit class names, so a screen served by a backend that publishes none answers `"unknown"` even when nothing is presented. That is the private accessibility backend (`snapshotQuality.backend: "private-ax"`, which `--actions` asks for) and an Appium tree. Never treat `"unknown"` as `"absent"`.
 * A physical iOS device has one capture backend, and it publishes no class names, so there the answer is `"presented"` or `"unknown"` and never `"absent"`.
 * The field is absent entirely when the platform publishes no reading at all: Android, web, Linux, and macOS captures.
 
