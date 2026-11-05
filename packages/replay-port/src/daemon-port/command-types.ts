@@ -5,6 +5,7 @@ import type {
   ReplayBackendSession,
 } from '@agent-device/contracts/replay-backend';
 import type { SessionAction, SessionScope } from '@agent-device/contracts/session';
+import type { WebSessionIdentity } from '@agent-device/kernel/device';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 
 /** Immutable read projection of the repair-transaction fields the coordinator's writers touch. */
@@ -77,6 +78,8 @@ export type ReplayCommand = Omit<ReplayBackendCommand, 'session'> &
 type ReplayRequestContext = Readonly<{
   token: DaemonWireRequest['token'];
   meta: DaemonWireRequest['meta'];
+  /** The web session the daemon's request scope derived for the suite request, as the video record request must carry it. */
+  webSession?: WebSessionIdentity;
 }>;
 
 export type ReplayRecordVideoRequest = Readonly<
@@ -100,4 +103,6 @@ export type ReplayTestCommand = ReplayCommand &
     createSession: ReplayTestSessionFactory;
     cleanupSession: ReplayTestSessionCleanup;
     video?: ReplayTestVideoOwner;
+    /** The web session identity from the daemon-side request's private half, which the split strips. */
+    webSession?: WebSessionIdentity;
   }>;

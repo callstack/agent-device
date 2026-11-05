@@ -121,6 +121,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
         platformResourceCleanup,
       }),
     ...(video ? { video } : {}),
+    ...(req.internal?.webSession ? { webSession: req.internal.webSession } : {}),
   });
 };
 
