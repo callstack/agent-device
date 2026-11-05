@@ -339,17 +339,46 @@ extension RunnerTests {
     XCTAssertEqual(RunnerCoordinatePressCounter.presses, 1)
   }
 
-  /// A refused coordinate tap answers `UNSUPPORTED_OPERATION` with a hint, not an uncoded failure:
-  /// the daemon surfaces the code, and the runner stays up.
+  /// A coordinate gesture refused inside a sequence is that step's outcome: the step before it keeps
+  /// its result, and the command reports the refused step instead of failing as a whole.
   @MainActor
-  func testRefusedCoordinateTapAnswersACodedUnsupportedOperationWithAHint() throws {
-    let restoreSynthesizedTap = try forceSynthesizedTapFailure()
+  func testRefusedSequenceStepKeepsEarlierStepResultsAndReportsTheCodedRefusal() throws {
     app.launch()
     mainOwned.app = app
     let restoreXCTest = try simulateUnserializableAppTree()
     defer {
       restoreXCTest()
-      restoreSynthesizedTap()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    try XCTSkipUnless(soleScreenRouteIsOpen(for: app), "the sole-screen route is closed on this device")
+    let sequence = try runnerCommandFixture(
+      #"{"command":"sequence","commandId":"refused-sequence-step","steps":[{"kind":"tap","x":40,"y":40},{"kind":"doubleTap","x":40,"y":40}]}"#
+    )
+
+    let response = try executeOnMainPrepared(command: sequence, activeApp: app)
+
+    XCTAssertEqual(response.data?.completedSteps, 1)
+    XCTAssertEqual(response.data?.failedStepIndex, 1)
+    let steps = response.data?.sequenceResults ?? []
+    XCTAssertEqual(steps.count, 2)
+    XCTAssertEqual(steps.first?.ok, true)
+    XCTAssertEqual(steps.last?.ok, false)
+    XCTAssertEqual(steps.last?.errorCode, "UNSUPPORTED_OPERATION")
+    XCTAssertEqual(RunnerCoordinateTapCounter.taps, 0)
+  }
+
+  /// A refused coordinate tap answers `UNSUPPORTED_OPERATION` with a hint, not an uncoded failure:
+  /// the daemon surfaces the code, and the runner stays up.
+  @MainActor
+  func testRefusedCoordinateTapAnswersACodedUnsupportedOperationWithAHint() throws {
+    let restoreSynthesizedTap = try forceSynthesizedTapFailure()
+    defer { restoreSynthesizedTap() }
+    app.launch()
+    mainOwned.app = app
+    let restoreXCTest = try simulateUnserializableAppTree()
+    defer {
+      restoreXCTest()
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }

@@ -475,13 +475,13 @@ extension RunnerTests {
 
   /// Whether the app's own frame reads, held inside an issue scope: on a tree XCTest cannot snapshot
   /// that read fails after its retries, and an unheld issue ends the runner test.
-  private func appFrameIsReadable(app: XCUIApplication) -> Bool {
+  func appFrameIsReadable(app: XCUIApplication) -> Bool {
     var frame = CGRect.null
     let held = holdingRecordedIssues { frame = app.frame }
     return held.issues.isEmpty && held.exceptionMessage == nil && SnapshotGeometry.isPositiveFinite(frame)
   }
 
-  private var unreadableTreeRefusal: RunnerCoordinateRefusal {
+  var unreadableTreeRefusal: RunnerCoordinateRefusal {
     RunnerCoordinateRefusal(
       message: "XCTest cannot anchor a coordinate gesture: the app's accessibility tree answered no window and no frame",
       hint: "XCTest cannot snapshot this app's accessibility tree, so the runner dispatched nothing. Retry on a shallower screen, or run snapshot -i and act on a ref once its capture reads back."
@@ -491,8 +491,9 @@ extension RunnerTests {
   /// The element an XCTest coordinate gesture anchors on: the resolved window, or the app itself
   /// where no window answers but the app's own frame does. When neither reads, the tree is
   /// unreadable and the gesture refuses. Every iOS XCUICoordinate that does not come with a proven
-  /// tree resolves through here, so no gesture builds a coordinate from an application XCTest
-  /// cannot snapshot.
+  /// tree resolves through here, so no XCUICoordinate gesture builds a coordinate from an
+  /// application XCTest cannot snapshot. The gesture viewport reads its frame through the same
+  /// held `appFrameIsReadable` check.
   private func requireReadableTreeAnchor(app: XCUIApplication) throws -> XCUIElement {
     if requestLitPanel != nil {
       return try requireRequestLitPanelSurface(app: app).window

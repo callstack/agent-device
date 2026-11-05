@@ -187,14 +187,20 @@ extension RunnerTests {
       }
     }
     let (timing, outcome) = try performGesture(activeApp) {
-      switch step.kind {
-      case "doubleTap":
-        // doubleTapAt per step, matching the behavior of the retired tapSeries doubleTap path.
-        return try doubleTapAt(app: activeApp, x: x, y: y)
-      case "longPress":
-        return try longPressAt(app: activeApp, x: x, y: y, duration: longPressDurationMs / 1000.0)
-      default:
-        return try tapAt(app: activeApp, x: x, y: y)
+      // A refused coordinate gesture is this step's outcome: the steps that already ran keep their
+      // results, and the failed step reports the coded refusal instead of aborting the command.
+      do {
+        switch step.kind {
+        case "doubleTap":
+          // doubleTapAt per step, matching the behavior of the retired tapSeries doubleTap path.
+          return try doubleTapAt(app: activeApp, x: x, y: y)
+        case "longPress":
+          return try longPressAt(app: activeApp, x: x, y: y, duration: longPressDurationMs / 1000.0)
+        default:
+          return try tapAt(app: activeApp, x: x, y: y)
+        }
+      } catch let refusal as RunnerCoordinateRefusal {
+        return .unsupported(message: refusal.message, hint: refusal.hint)
       }
     }
     return finishedSequenceStep(step, timing: timing, outcome: outcome)
