@@ -4,8 +4,8 @@ import {
   type ResolveTargetDeviceOptions,
 } from '@agent-device/device-selection/dispatch-resolve';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from './daemon-request.ts';
+import { requestWebSession } from './session-tenant-scope.ts';
 
 type RequestTargetDeviceOptions = Omit<ResolveTargetDeviceOptions, 'webSession'>;
 type RequestTargetDeviceFlags = Parameters<typeof resolveTargetDevice>[0];
@@ -15,10 +15,7 @@ type RequestTargetDeviceFlags = Parameters<typeof resolveTargetDevice>[0];
  * web device resolved for a request without that identity is refused.
  */
 function assertWebSelectionHasIdentity(req: DaemonRequest, device: DeviceInfo): void {
-  if (device.platform !== 'web' || req.internal?.webSession !== undefined) return;
-  throw new AppError('UNKNOWN', 'A web device was resolved outside a request scope.', {
-    reason: 'request_web_session_missing',
-  });
+  if (device.platform === 'web') requestWebSession(req);
 }
 
 /** Resolves the device a request targets, with the request's own web session. */
