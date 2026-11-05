@@ -1,6 +1,7 @@
 #import "RunnerSnapshotBridge.h"
 
 #import <TargetConditionals.h>
+#import "SnapshotBridgeRuntime.h"
 
 #if TARGET_OS_IOS && TARGET_OS_SIMULATOR
 
@@ -239,6 +240,13 @@ uint32_t RunnerSnapshotBridgeMaximumFrameBytes(void)
 
 NSDictionary *RunnerSnapshotBridgeHandle(NSString *verb, NSString *bundleId, NSDictionary *request)
 {
+  if ([verb isEqualToString:@"describe"] && request[@"surfaceHostExecutables"] != nil) {
+    id udid = request[@"simulatorUdid"];
+    if (![udid isKindOfClass:NSString.class] || [udid length] == 0 || [udid length] > 64) {
+      return RunnerSnapshotBridgeFailure(request, @"unsupported", @"system-surface-host-unverified",
+                                         @"the runner cannot identify its Simulator for the surface host check");
+    }
+  }
   if ([verb isEqualToString:@"target"]) {
     return RunnerSnapshotBridgeRead(request, RunnerSnapshotBridgeBudgetMs(request), ^{
       return RunnerSnapshotBridgeTarget(bundleId, request);
@@ -269,6 +277,8 @@ NSDictionary *RunnerSnapshotBridgeHandle(NSString *verb, NSString *bundleId, NSD
   (void)bundleId;
   id requestId = request[@"requestId"];
   return @{
+    @"protocolVersion" : @(SNAPSHOT_BRIDGE_PROTOCOL_VERSION),
+    @"sourceVersion" : SNAPSHOT_BRIDGE_SOURCE_VERSION,
     @"requestId" : [requestId isKindOfClass:NSString.class] ? requestId : @"",
     @"ok" : @NO,
     @"error_kind" : @"unsupported",

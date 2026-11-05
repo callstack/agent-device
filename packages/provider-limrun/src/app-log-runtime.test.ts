@@ -16,6 +16,23 @@ import {
   unusedLimrunHost as unusedHost,
 } from './app-log-runtime.fixtures.ts';
 import { createLimrunPlatformRuntimeOwner } from './app-log-runtime.ts';
+import { testIosRunner } from './ios-runner.fixtures.ts';
+
+test('bindings for one Limrun runner pass the same host snapshot presenter', async () => {
+  const host = unusedHost();
+  const bind = vi.fn(testIosRunner.bindRunnerOperations);
+  const owner = createLimrunPlatformRuntimeOwner(
+    limrunOwnerOptions({
+      host,
+      getIosRunner: () => ({ ...testIosRunner, bindRunnerOperations: bind }),
+    }),
+  );
+  await owner.bind({ device, intent: { kind: 'ordinary' }, scope });
+  await owner.bind({ device, intent: { kind: 'ordinary' }, scope });
+  expect(bind).toHaveBeenCalledTimes(2);
+  expect(bind.mock.calls[0]?.[0].snapshot.present).toBe(host.snapshot.presentIosAcquisition);
+  expect(bind.mock.calls[1]?.[0].snapshot.present).toBe(host.snapshot.presentIosAcquisition);
+});
 
 test('rejects a cross-platform durable descriptor before provider reconnection', async () => {
   const reconnect = vi.fn(async () => ({ status: 'missing' as const }));

@@ -48,6 +48,17 @@ extension RunnerTests {
 
   // The runner compiles the shared reader only for the iOS Simulator (RunnerSnapshotBridge.m).
   #if os(iOS) && targetEnvironment(simulator)
+  func testMissingSimulatorIdentityRefusesSurfaceProofForThisCapture() {
+    for udid in ["", String(repeating: "x", count: 65)] {
+      let response = RunnerSnapshotBridgeHandle("describe", "com.example.app", [
+        "requestId": "r", "surfaceHostExecutables": ["host"], "simulatorUdid": udid,
+        "expectedPid": 9, "generation": "g",
+      ])
+      XCTAssertEqual(response["error_code"] as? String, "system-surface-host-unverified")
+      XCTAssertEqual(response["pid"] as? Int, 9)
+      XCTAssertEqual(response["generation"] as? String, "g")
+    }
+  }
   func testReaderDoesNotRefuseTheBoundsOfAFirstRead() throws {
     var request = Self.snapshotBridgeReaderRequest(try firstReadPayload())
     request["pid"] = 1
@@ -64,6 +75,15 @@ extension RunnerTests {
     request["pid"] = 1
     request["maxDepth"] = false
     XCTAssertEqual(SnapshotBridgeHandleRequest(request)["error_code"] as? String, "bounds-invalid")
+  }
+  #endif
+
+  #if !(os(iOS) && targetEnvironment(simulator))
+  func testUnavailableBridgeRefusalCarriesProtocolVersions() throws {
+    let envelope = RunnerSnapshotBridgeHandle("describe", "app", ["requestId": "r"])
+    XCTAssertEqual(envelope["protocolVersion"] as? Int, 1)
+    XCTAssertEqual(envelope["sourceVersion"] as? String, "agent-device-simulator-ax-v1.10.0")
+    XCTAssertEqual(envelope["error_code"] as? String, "runner-bridge-unavailable")
   }
   #endif
 
@@ -84,15 +104,10 @@ extension RunnerTests {
   }
 
   func testTheRunnersOwnRefusalFitsTheDefaultBound() throws {
-    let refusal = RunnerSnapshotBridgeHandle("describe", "", ["requestId": "request-1"])
-    let text = Self.serializedSnapshotBridgeEnvelope(
-      refusal,
-      requestId: "request-1",
-      maxBytes: Self.snapshotBridgeMaximumResponseBytes
+    let command = try runnerCommandFixture(
+      #"{"command":"snapshotBridge","appBundleId":"com.example.app","snapshotBridge":{"verb":"invalid","requestId":"request-1"}}"#
     )
-    let envelope = try XCTUnwrap(
-      JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
-    )
+    let envelope = try snapshotBridgeEnvelope(executeSnapshotBridge(command: command))
     XCTAssertNotEqual(envelope["error_code"] as? String, "response-too-large")
   }
 

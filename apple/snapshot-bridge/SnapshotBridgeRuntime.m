@@ -18,8 +18,8 @@
 NSString *const kProtocolVersionKey = @"protocolVersion";
 NSString *const kSourceVersionKey = @"sourceVersion";
 NSString *const kRequestIdKey = @"requestId";
-NSString *const kSourceVersion = @"agent-device-simulator-ax-v1.10.0";
-const NSUInteger kProtocolVersion = 1;
+NSString *const kSourceVersion = SNAPSHOT_BRIDGE_SOURCE_VERSION;
+const NSUInteger kProtocolVersion = SNAPSHOT_BRIDGE_PROTOCOL_VERSION;
 const uint32_t kMaximumFrameBytes = 16 * 1024 * 1024;
 const NSUInteger kMaximumDepth = 128;
 const NSUInteger kMaximumNodes = 10000;

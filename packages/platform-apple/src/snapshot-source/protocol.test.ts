@@ -204,8 +204,11 @@ test('wire vocabulary guard keeps TS and Objective-C literals aligned', async ()
   assert.deepEqual(wireVocabulary.requestKeys, SNAPSHOT_SOURCE_WIRE_KEYS);
   assert.deepEqual(wireVocabulary.responseKeys, SNAPSHOT_SOURCE_RESPONSE_KEYS);
   assert.deepEqual(wireVocabulary.attributeKeys, SNAPSHOT_SOURCE_ATTRIBUTE_KEYS);
-  assert.match(nativeSource, /kProtocolVersion = 1/);
-  assert.match(nativeSource, /kSourceVersion = @"agent-device-simulator-ax-v1\.10\.0"/);
+  assert.match(nativeSource, /SNAPSHOT_BRIDGE_PROTOCOL_VERSION 1/);
+  assert.match(
+    nativeSource,
+    /SNAPSHOT_BRIDGE_SOURCE_VERSION @"agent-device-simulator-ax-v1\.10\.0"/,
+  );
   for (const key of [
     ...wireVocabulary.requestKeys,
     ...wireVocabulary.responseKeys,
