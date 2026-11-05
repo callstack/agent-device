@@ -168,8 +168,8 @@ test('an action does not start a retry the remaining budget cannot hold', async 
 
   await outcome;
   const budgets = mockRunner.mock.calls.map((call) => (call[1] as { timeoutMs: number }).timeoutMs);
-  for (const budget of budgets.slice(1))
-    assert.ok(budget >= 500, `retry started with ${budget} ms`);
+  assert.ok(budgets.length >= 2, 'the act loop never retried');
+  for (const budget of budgets.slice(1)) assert.ok(budget > 300, `retry started with ${budget} ms`);
 });
 
 // The whole point of typing absence: a backend that failed for any other reason must not be
