@@ -378,9 +378,15 @@ function summarizeProviderScenarioFlagExclusions() {
       keys: ['waitMs'],
     },
     {
+      // A provider scenario has no XCTest runner capture to select, so these stay on the owner's tests.
       name: 'Apple simulator screenshot rendering options',
       owner: 'iOS platform and screenshot-diff runtime tests',
-      keys: ['screenshotNormalizeStatusBar', 'screenshotPixelDensity', 'screenshotScreenMask'],
+      keys: [
+        'screenshotNormalizeStatusBar',
+        'screenshotPixelDensity',
+        'screenshotScreenMask',
+        'screenshotCaptureBackend',
+      ],
     },
     {
       // Reading accessibility custom actions has no provider-scenario surface:

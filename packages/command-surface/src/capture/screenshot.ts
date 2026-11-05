@@ -3,6 +3,7 @@ import type { CaptureScreenshotOptions } from '@agent-device/contracts/client';
 import { SESSION_SURFACES } from '@agent-device/contracts/session';
 import {
   RETIRED_SCREENSHOT_MAX_SIZE,
+  SCREENSHOT_CAPTURE_BACKENDS,
   SCREENSHOT_COMMAND_FLAG_KEYS,
   SCREENSHOT_SCALE_LIMITS,
   SCREENSHOT_SCREEN_MASKS,
@@ -50,6 +51,10 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
     maxSize: retiredField(RETIRED_SCREENSHOT_MAX_SIZE.migration.screenshot),
     stabilize: booleanField(),
     normalizeStatusBar: booleanField(),
+    captureBackend: enumField(
+      SCREENSHOT_CAPTURE_BACKENDS,
+      'Capture through the XCTest runner instead of the platform default, which leaves out the simulator-drawn Dynamic Island. Local Apple targets only; refused on provider sessions and on a macOS surface the helper captures, and with pixelDensity, screenMask or normalizeStatusBar.',
+    ),
     surface: enumField(SESSION_SURFACES),
   },
 );

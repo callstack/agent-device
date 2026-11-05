@@ -293,6 +293,15 @@ test('captures through only the active exact WebDriver interactor', async () => 
   expect(binding.operations.setViewport).toBeUndefined();
   expect(binding.facts.operations.captureScreenshot).toEqual({ available: true });
   expect(binding.operations.captureScreenshot).toBeTypeOf('function');
+  await expect(
+    binding.operations.captureScreenshot!({
+      outPath: '/tmp/runner.png',
+      options: { captureBackend: 'runner' },
+    }),
+  ).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    details: { reason: 'screenshot-capture-backend-unsupported' },
+  });
   // R40/R41: interaction cells share the captures' reachability gate and interactor.
   expect(binding.facts.operations.focusPoint).toEqual({ available: true });
   expect(binding.facts.operations.typeText).toEqual({ available: true });

@@ -558,7 +558,7 @@ async function runAppleScreenshot(
 ): Promise<ScreenshotCaptureFacts> {
   await assertScreenshotCaptureSupport(
     options,
-    appleScreenshotCaptureCapabilities(device, options),
+    appleScreenshotCaptureCapabilities(device, options, helper),
   );
   if (helper) {
     if (options.fullscreen) {

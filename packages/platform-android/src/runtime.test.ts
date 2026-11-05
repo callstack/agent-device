@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import type { Interactor } from '@agent-device/contracts/interactor-types';
 import {
   HARDWARE_BUTTON_NAMES,
   parseHardwareButtonPositionals,
@@ -663,3 +664,27 @@ function deviceSerial(invocation: AndroidAdbInvocation): string {
   if (invocation.target.selector.kind !== 'serial') throw new Error('expected a serial target');
   return invocation.target.selector.serial;
 }
+
+test('an Android capture refuses an explicit runner request at its own binding', async () => {
+  const screenshot = vi.fn(async () => ({}));
+  const resolve = vi.fn(async () => ({ screenshot }) as unknown as Interactor);
+  const binding = await bindOrdinary(
+    createAndroidPlatformRuntime({
+      ...androidRuntimeHost(),
+      localInteractors: { resolve },
+    }),
+    ANDROID_EMULATOR,
+  );
+
+  await expect(
+    binding.operations.captureScreenshot!({
+      outPath: '/tmp/runner.png',
+      options: { captureBackend: 'runner' },
+    }),
+  ).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    message: expect.stringContaining('adb'),
+    details: { reason: 'screenshot-capture-backend-unsupported' },
+  });
+  expect(resolve).not.toHaveBeenCalled();
+});

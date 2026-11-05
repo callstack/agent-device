@@ -25,6 +25,7 @@ test('screenshot flag projection maps CLI flags to runtime options', () => {
       screenshotScale: 0.3,
       screenshotNoStabilize: true,
       screenshotNormalizeStatusBar: true,
+      screenshotCaptureBackend: 'runner',
     }),
     {
       overlayRefs: true,
@@ -35,6 +36,7 @@ test('screenshot flag projection maps CLI flags to runtime options', () => {
       scale: 0.3,
       stabilize: false,
       normalizeStatusBar: true,
+      captureBackend: 'runner',
     },
   );
 });
@@ -49,6 +51,7 @@ test('screenshot flag projection maps public options to request flags', () => {
       fullscreen: true,
       stabilize: false,
       normalizeStatusBar: true,
+      captureBackend: 'runner',
     }),
     {
       overlayRefs: true,
@@ -58,6 +61,7 @@ test('screenshot flag projection maps public options to request flags', () => {
       screenshotFullscreen: true,
       screenshotNoStabilize: true,
       screenshotNormalizeStatusBar: true,
+      screenshotCaptureBackend: 'runner',
     },
   );
 });
@@ -152,6 +156,7 @@ test('screenshot script flags use the shared recorded flag contract', () => {
     'screenshotScale',
     'screenshotNoStabilize',
     'screenshotNormalizeStatusBar',
+    'screenshotCaptureBackend',
   ]);
   assert.deepEqual(
     SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS.map((definition) => definition.key),
@@ -167,7 +172,19 @@ test('screenshot script flags use the shared recorded flag contract', () => {
     'screenshotScale',
     'screenshotNoStabilize',
     'screenshotNormalizeStatusBar',
+    'screenshotCaptureBackend',
   ]);
+});
+
+test('the capture backend stays out of recorded scripts', () => {
+  const parts: string[] = [];
+  appendScreenshotScriptFlags(parts, { screenshotCaptureBackend: 'runner' });
+  assert.deepEqual(parts, []);
+  assert.equal(
+    SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS.find(({ key }) => key === 'screenshotCaptureBackend')
+      ?.recorded,
+    false,
+  );
 });
 
 test('explicit screenshot stabilization survives SDK projection and script recording', () => {
