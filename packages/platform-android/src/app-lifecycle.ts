@@ -2,6 +2,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import { Deadline, sleep } from '@agent-device/host-kit/retry';
 import { isCommandTimeoutError } from '@agent-device/host-kit/command';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
@@ -710,7 +711,20 @@ async function waitForAndroidPackageStopped(
 ): Promise<AndroidStopFencePhase | undefined> {
   if (!(await waitForAndroidPackageNotForeground(device, packageName))) return 'foreground';
   if (!(await waitForAndroidKilledProcessesExit(device, packageName, killed))) return 'exit';
-  if (!(await waitForAndroidPackageProcessGone(device, packageName))) return 'process';
+  const process = await waitForAndroidPackageProcessGone(device, packageName);
+  if (process === 'running') return 'process';
+  if (process === 'unknown') {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Could not confirm Android app ${packageName} stopped after close`,
+      {
+        reason: 'android-app-close-unconfirmed',
+        phase: 'process',
+        packageName,
+        timeoutMs: ANDROID_CLOSE_PROCESS_TIMEOUT_MS,
+      },
+    );
+  }
   return undefined;
 }
 
@@ -805,33 +819,53 @@ async function waitForAndroidKilledProcessesExit(
 async function waitForAndroidPackageProcessGone(
   device: DeviceInfo,
   packageName: string,
-): Promise<boolean> {
+): Promise<AndroidPackageProcessState> {
   const deadline = Deadline.fromTimeoutMs(ANDROID_CLOSE_PROCESS_TIMEOUT_MS);
-  const probeProcessRunning = () =>
-    probeBeforeDeadline(
-      deadline,
-      async () => (await readAndroidPackageProcessState(device, packageName)) === 'running',
+  let ordinal = 0;
+  const observation: { state: AndroidPackageProcessState } = { state: 'unknown' };
+  const probeProcess = async () => {
+    const remainingMs = deadline.remainingMs();
+    if (remainingMs <= 0) return undefined;
+    const startedAt = Date.now();
+    const process = await probeBeforeDeadline(deadline, () =>
+      readAndroidPackageProcessState(device, packageName, remainingMs),
     );
+    observation.state = process?.value ?? 'unknown';
+    emitDiagnostic({
+      phase: 'android.close.process-probe',
+      durationMs: Date.now() - startedAt,
+      data: {
+        ordinal: ++ordinal,
+        state: observation.state,
+        elapsedMs: ANDROID_CLOSE_PROCESS_TIMEOUT_MS - deadline.remainingMs(),
+        remainingMs: deadline.remainingMs(),
+      },
+    });
+    return process;
+  };
   while (!deadline.isExpired()) {
-    const processRunning = await probeProcessRunning();
-    if (!processRunning) break;
-    if (!processRunning.value) {
-      await sleep(ANDROID_CLOSE_PROCESS_GONE_STABLE_MS);
+    const process = await probeProcess();
+    if (!process) break;
+    if (process.value === 'gone') {
+      await sleep(Math.min(ANDROID_CLOSE_PROCESS_GONE_STABLE_MS, deadline.remainingMs()));
       if (deadline.isExpired()) break;
-      const processStillRunning = await probeProcessRunning();
-      if (!processStillRunning) break;
-      if (!processStillRunning.value) return true;
+      const processStillGone = await probeProcess();
+      if (!processStillGone) break;
+      if (processStillGone.value === 'gone') return 'gone';
     }
-    await sleep(ANDROID_CLOSE_PROCESS_POLL_MS);
+    await sleep(Math.min(ANDROID_CLOSE_PROCESS_POLL_MS, deadline.remainingMs()));
   }
-  return false;
+  return observation.state === 'running' ? 'running' : 'unknown';
 }
+
+type AndroidPackageProcessState = 'running' | 'gone' | 'unknown';
 
 async function readAndroidPackageProcessState(
   device: DeviceInfo,
   packageName: string,
-): Promise<'running' | 'gone' | 'unknown'> {
-  const pids = await readAndroidPackagePids(device, packageName);
+  timeoutMs?: number,
+): Promise<AndroidPackageProcessState> {
+  const pids = await readAndroidPackagePids(device, packageName, timeoutMs);
   if (!pids) return 'unknown';
   return pids.size > 0 ? 'running' : 'gone';
 }
