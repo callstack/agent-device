@@ -77,6 +77,7 @@ describe.skipIf(process.platform !== 'darwin')('native snapshot capture', () => 
     'depth-negative-count',
     'depth-continuation-count',
     'depth-incomplete',
+    'depth-malformed-continuation',
     'depth-bound',
     'depth-nodes',
     'depth-owner-change',

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME } from './apple-runner-platform.ts';
+import { SHARED_SNAPSHOT_BRIDGE_READER_FILENAMES } from './apple-runner-platform.ts';
 
 const APPLE_RUNNER_SOURCE_ROOT = path.join('apple', 'runner', 'AgentDeviceRunner');
 const PACKAGED_APPLE_RUNNER_SOURCE_ROOT = path.join('dist', 'apple', 'runner', 'AgentDeviceRunner');
@@ -11,14 +11,12 @@ const PACKAGED_APPLE_SNAPSHOT_PRESENTATION_SOURCE_ROOT = path.join(
   'apple',
   'snapshot-presentation',
 );
-// The UITests target compiles RunnerXCTestEventBridge.m against this header through
-// HEADER_SEARCH_PATHS. It is one exact file whose bytes change the compiled runner, and the
-// package ships it at the same root-relative path the checkout keeps it at, so the fingerprint
-// reads it from `projectRoot` in whichever layout produced it.
-const RUNNER_SHARED_HEADER_PATH = path.join(
-  'apple',
-  'snapshot-bridge',
-  SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME,
+// The UITests target compiles the snapshot bridge reader and its shared header from
+// apple/snapshot-bridge through HEADER_SEARCH_PATHS. Their bytes change the compiled runner, and the
+// package ships them at the same root-relative path the checkout keeps them at, so the fingerprint
+// reads them from `projectRoot` in whichever layout produced it.
+const RUNNER_SHARED_BRIDGE_PATHS = SHARED_SNAPSHOT_BRIDGE_READER_FILENAMES.map((filename) =>
+  path.join('apple', 'snapshot-bridge', filename),
 );
 
 export function resolveAppleRunnerSourceRoot(projectRoot: string): string {
@@ -76,9 +74,9 @@ export function computeRunnerSourceFingerprint(projectRoot: string): string {
     },
   ];
   const files = collectRunnerSourceFiles(sourceRoots);
-  const sharedHeader = path.join(projectRoot, RUNNER_SHARED_HEADER_PATH);
-  if (fs.existsSync(sharedHeader)) {
-    files.push(sharedHeader);
+  for (const sharedPath of RUNNER_SHARED_BRIDGE_PATHS) {
+    const sharedFile = path.join(projectRoot, sharedPath);
+    if (fs.existsSync(sharedFile)) files.push(sharedFile);
   }
   files.sort((a, b) => a.localeCompare(b));
   const fileStatsFingerprint = computeRunnerSourceFileStatsFingerprint(projectRoot, files);

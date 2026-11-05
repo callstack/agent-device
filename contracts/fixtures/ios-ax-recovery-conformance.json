@@ -360,6 +360,35 @@
       }
     },
     {
+      "name": "children-shrink-during-continuation",
+      "request": {
+        "traversalDepth": 64,
+        "explicitDepth": false,
+        "nodeBudget": 1500
+      },
+      "native": {
+        "tree": {
+          "chain": 45
+        },
+        "rejectLevelsAbove": 48,
+        "frontierEvidence": "counted",
+        "shrinkOnContinuation": true
+      },
+      "expected": {
+        "host-bridge": {
+          "outcome": "failed",
+          "failure": "tree-changed",
+          "requests": 3,
+          "rejected": 1,
+          "continuations": 1
+        },
+        "runner": {
+          "outcome": "not-applicable",
+          "reason": "the runner's private AX bridge has no child counts, so it cannot see a shrink; the reader that the runner compiles from apple/snapshot-bridge is the host-bridge producer"
+        }
+      }
+    },
+    {
       "name": "host-request-budget",
       "request": {
         "traversalDepth": 64,

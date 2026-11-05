@@ -1,3 +1,4 @@
+import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
 import {
   assertProducedRunnerRequests,
   bindTestCommandHost,
@@ -25,6 +26,11 @@ import {
   type RecordedRunnerCall,
 } from './recording-runner-provider.ts';
 import { mkdtempForTest } from './tmp-dir.ts';
+import { createRunnerSnapshotBridge } from '../runner-snapshot-bridge.ts';
+import {
+  deriveIosCaptureHint,
+  createIosSnapshotRequest,
+} from '@agent-device/capture-kit/ios-snapshot-planning';
 
 bindTestCommandHost();
 
@@ -295,8 +301,51 @@ test('every Apple request site builds exactly its golden runner request', async 
     );
     captured.push([name, onlyRequest(name, calls)]);
   }
+  for (const [name, drive] of Object.entries(SNAPSHOT_BRIDGE_SITES)) {
+    const calls: RecordedRunnerCall[] = [];
+    await drive(
+      createRunnerSnapshotBridge({
+        device: IOS_SIMULATOR,
+        provider: recordingRunnerProvider(calls),
+      }),
+    );
+    captured.push([name, onlyRequest(name, calls)]);
+  }
   assertProducedRunnerRequests(import.meta.filename, captured);
 });
+
+// Each drive sends one bridge read; the recording runner answers it with no envelope, which the
+// bridge reports as a failed read rather than a request it did not send.
+const SNAPSHOT_BRIDGE_SITES: Record<
+  string,
+  (bridge: ReturnType<typeof createRunnerSnapshotBridge>) => Promise<unknown>
+> = {
+  'ios-simulator.runner-snapshot-bridge.target': (bridge) =>
+    bridge.resolveTarget(IOS_SIMULATOR, APP, new AbortController().signal).catch(() => undefined),
+  'ios-simulator.runner-snapshot-bridge.describe': (bridge) =>
+    bridge.source.acquire({
+      target: {
+        appBundleId: APP,
+        targetId: `${IOS_SIMULATOR.id}:${APP}`,
+        pid: 41,
+        processStartTime: '1700000000.000001',
+        generation: '41:1700000000.000001',
+      },
+      hint: deriveIosCaptureHint(createIosSnapshotRequest({ interactiveOnly: true })),
+    }),
+  'ios-simulator.runner-snapshot-bridge.describe-surface-hosts': (bridge) =>
+    bridge.source.acquire({
+      target: {
+        appBundleId: APP,
+        targetId: `${IOS_SIMULATOR.id}:${APP}`,
+        pid: 41,
+        processStartTime: '1700000000.000001',
+        generation: '41:1700000000.000001',
+      },
+      hint: deriveIosCaptureHint(createIosSnapshotRequest({ interactiveOnly: true })),
+      surfaceHostExecutables: IOS_SYSTEM_SURFACE_HOSTS.map((host) => host.processExecutable),
+    }),
+};
 
 function onlyRequest(name: string, calls: RecordedRunnerCall[]): RunnerCommand {
   if (calls.length !== 1) throw new Error(`${name} sent ${calls.length} runner requests`);

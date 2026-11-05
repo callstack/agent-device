@@ -119,6 +119,22 @@ export async function prepareLimrunRunnerProducts(input: {
       'INVALID_ARGS',
     );
   }
+  // A remote simulator cannot reach the build machine's Xcode, so the runner must carry XCTest
+  // itself. Xcode 26 embeds it in the runner app; Xcode 27 leaves it out and resolves it from the
+  // build machine, so such a runner never starts on a Limrun simulator.
+  const xctest = await fs
+    .stat(path.join(appPath, 'Frameworks', 'XCTest.framework'))
+    .catch(() => null);
+  if (!xctest?.isDirectory()) {
+    throw limrunRunnerError(
+      'limrun_runner_products_invalid',
+      'The Limrun XCTest runner does not embed XCTest.framework',
+      {
+        hint: 'Build and package the simulator runner with Xcode 26, for example with DEVELOPER_DIR set to an Xcode 26 install.',
+      },
+      'INVALID_ARGS',
+    );
+  }
   await fs.cp(appPath, path.join(products, 'Runner.app'), { recursive: true });
   await writeLimrunRunnerConfiguration(products, input.bindAddress, input.endpoint);
   return products;

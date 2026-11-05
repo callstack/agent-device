@@ -21,6 +21,10 @@ import type {
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeFacts } from '@agent-device/contracts/platform-runtime';
+import type {
+  SnapshotRuntimeOperations,
+  SnapshotRuntimePresenter,
+} from '@agent-device/contracts/snapshot-runtime';
 
 export type LimrunAdbCommandOptions = {
   allowFailure?: boolean;
@@ -178,10 +182,16 @@ export type LimrunIosRunner = {
   bindRunnerOperations(request: {
     signal: AbortSignal;
     resolveInteractor(device: DeviceInfo, context: RunnerContext): Promise<Interactor>;
+    /**
+     * The provider's own capture. The runner serves the Simulator AX bridge over it and falls back
+     * to this capture whenever the bridge cannot serve the screen.
+     */
+    snapshot: Readonly<{ capture: SnapshotRuntimeOperations; present: SnapshotRuntimePresenter }>;
   }): Pick<
     PlatformRuntimeOperations,
     'appState' | 'findText' | 'querySelector' | 'readTextAtPoint'
-  >;
+  > &
+    SnapshotRuntimeOperations;
   dispose(): Promise<void>;
 };
 

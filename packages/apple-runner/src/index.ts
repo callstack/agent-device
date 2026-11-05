@@ -39,6 +39,7 @@ export {
   parseRunnerSequenceResult,
   resolveRunnerRequestSignal,
   type RunnerCommand,
+  type RunnerSnapshotBridgeRequest,
 } from './runner-contract.ts';
 export { runnerCommandResolvesSurface } from './runner-command-traits.ts';
 export { isRunnerMainThreadTimeoutError } from './runner-error-classification.ts';
@@ -59,7 +60,7 @@ export {
   resolveRunnerSigningBuildSettings,
 } from './runner-cache-metadata.ts';
 export {
-  SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME,
+  SHARED_SNAPSHOT_BRIDGE_READER_FILENAMES,
   resolveRunnerDerivedOverride,
 } from './apple-runner-platform.ts';
 export {

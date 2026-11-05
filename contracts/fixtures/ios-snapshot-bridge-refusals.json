@@ -1,0 +1,116 @@
+{
+  "description": "Every refusal code the snapshot bridge emits, with the scope the route gives it. A capture-scoped refusal speaks for one capture and keeps the app generation on the bridge; every other code retires the generation. Emitters: the Objective-C reader (apple/snapshot-bridge), the runner-served bridge (RunnerSnapshotBridge.m, RunnerTests+SnapshotBridge.swift), and the TypeScript snapshot source (packages/platform-apple/src/snapshot-source, runner-snapshot-bridge.ts). The TypeScript policy packages/platform-apple/src/snapshot-route-failure-policy.ts mirrors this table. test/repo-guards/snapshot-bridge-refusals.test.ts fails when an emitted code is missing here, when a code here is emitted nowhere, or when the policy disagrees. Classify a new code here by an explicit decision; an unlisted code fails the guard.",
+  "captureScoped": [
+    {
+      "code": "window-coordinate-space-unresolved",
+      "consequence": "coordinate-space-unresolved"
+    },
+    {
+      "code": "app-window-not-full-screen",
+      "consequence": "window-not-full-screen"
+    },
+    {
+      "code": "foreground-owner-unverified",
+      "consequence": "foreground-ownership"
+    },
+    {
+      "code": "foreground-owner-changed",
+      "consequence": "foreground-ownership"
+    },
+    {
+      "code": "bridge-read-in-flight",
+      "consequence": "bridge-read-busy"
+    },
+    {
+      "code": "bridge-preparation-pending",
+      "consequence": "bridge-preparation"
+    },
+    {
+      "code": "snapshot-tree-changed",
+      "consequence": "tree-changed"
+    },
+    {
+      "code": "system-surface-host-present",
+      "consequence": "system-surface-host"
+    },
+    {
+      "code": "system-surface-host-unverified",
+      "consequence": "system-surface-host"
+    }
+  ],
+  "generationScoped": [
+    "abort-signal",
+    "application-element-missing",
+    "application-server-unavailable",
+    "application-timeout",
+    "attribute-vocabulary-mismatch",
+    "automation-mode-required",
+    "automation-mode-unavailable",
+    "automation-type-invalid",
+    "bounds-invalid",
+    "bridge-closed-before-connect",
+    "bridge-connect-timeout",
+    "bridge-connection-closed",
+    "bridge-data-invalid",
+    "bridge-exit-deadline",
+    "bridge-exited",
+    "bridge-frame-incomplete",
+    "bridge-generation-mismatch",
+    "bridge-pid-mismatch",
+    "bridge-process-pid-missing",
+    "bridge-read-abandoned",
+    "bridge-request-deadline",
+    "child-invalid",
+    "children-invalid",
+    "continuation-budget-exhausted",
+    "empty-response",
+    "frame-invalid",
+    "frame-limit-exceeded",
+    "frame-limit-invalid",
+    "generation-invalid",
+    "generation-required",
+    "guest-error",
+    "guest-tree-root-invalid",
+    "host-operation-timeout",
+    "json-object-required",
+    "multiple-frames",
+    "native-build-failed",
+    "native-source-missing",
+    "node-contains-unknown-field",
+    "node-limit-exceeded",
+    "pid-required",
+    "private-api-exception",
+    "protocol-version-mismatch",
+    "reader-exception",
+    "recovery-invalid",
+    "remote-content-boundary",
+    "request-id-mismatch",
+    "request-limit-exceeded",
+    "request-not-json",
+    "response-not-json",
+    "response-not-json-safe",
+    "response-not-object",
+    "response-too-large",
+    "runner-bridge-unavailable",
+    "runner-envelope-missing",
+    "runner-exchange-failed",
+    "runtime-unavailable",
+    "scalar-invalid",
+    "simulator-runtime-missing",
+    "snapshot-root-invalid",
+    "snapshot-tree-malformed",
+    "snapshot-tree-required",
+    "source-closed",
+    "source-version-mismatch",
+    "surface-hosts-invalid",
+    "target-process-changed",
+    "target-process-unavailable",
+    "traits-invalid",
+    "traversal-depth-exceeded",
+    "truncated-invalid",
+    "unexpected-host-error",
+    "unknown",
+    "user-interaction-invalid",
+    "verb-not-supported"
+  ]
+}

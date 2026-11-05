@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
 import { bridgeFailureDisposition } from './snapshot-route-failure-policy.ts';
@@ -23,6 +25,20 @@ describe('capture-scoped screen refusals', () => {
       });
     },
   );
+
+  test('a runner-served read still running classifies as capture-scoped; an abandoned one does not', () => {
+    // The refusal says only that another read is running; abandoning a read past its budget is
+    // evidence about the app's tree, so that one still retires the generation.
+    expect(bridgeFailureDisposition({ kind: 'timeout', code: 'bridge-read-in-flight' })).toEqual({
+      scope: 'capture',
+      code: 'bridge-read-in-flight',
+      consequence: 'bridge-read-busy',
+    });
+    expect(bridgeFailureDisposition({ kind: 'timeout', code: 'bridge-read-abandoned' })).toEqual({
+      scope: 'generation',
+      code: 'bridge-read-abandoned',
+    });
+  });
 
   test('a bridge still being prepared classifies as capture-scoped preparation', () => {
     // The kind carries this one, not a code: the preparation owner reports a pending attempt, not
@@ -108,4 +124,34 @@ describe('generation-wide failures', () => {
       });
     },
   );
+});
+
+// The table is shared with the emitter guard in test/repo-guards/snapshot-bridge-refusals.test.ts.
+const fixture = JSON.parse(
+  fs.readFileSync(
+    path.resolve(
+      import.meta.dirname,
+      '../../../contracts/fixtures/ios-snapshot-bridge-refusals.json',
+    ),
+    'utf8',
+  ),
+) as { captureScoped: { code: string; consequence: string }[]; generationScoped: string[] };
+
+test('the policy gives each code of the shared refusal table its scope and consequence', () => {
+  for (const { code, consequence } of fixture.captureScoped) {
+    // A preparation still running is classified by its failure kind, not by its code.
+    const kind = consequence === 'bridge-preparation' ? 'preparing' : 'unsupported';
+    // A surface-host refusal also names the host it saw; this table fixes only scope and consequence.
+    expect(bridgeFailureDisposition({ kind, code }), code).toMatchObject({
+      scope: 'capture',
+      code,
+      consequence,
+    });
+  }
+  for (const code of fixture.generationScoped) {
+    expect(bridgeFailureDisposition({ kind: 'unsupported', code }), code).toEqual({
+      scope: 'generation',
+      code,
+    });
+  }
 });

@@ -1,6 +1,6 @@
 import { MAXIMUM_REQUEST_LEVELS } from './limits.ts';
 import type { SnapshotBridgeRecovery } from './protocol.ts';
-import type { SnapshotSourceTarget } from './types.ts';
+import type { SnapshotBridgeTarget } from './types.ts';
 
 /**
  * Hinted captures allowed before the owner probes the full requested depth again. A hint is not
@@ -30,7 +30,7 @@ type HintEntry = {
   remainingUses: number;
 };
 
-type HintTarget = Pick<SnapshotSourceTarget, 'targetId' | 'generation'>;
+type HintTarget = Pick<SnapshotBridgeTarget, 'targetId' | 'generation'>;
 
 /**
  * Accepted native depth per resolved app generation for one producer. A hint only changes which

@@ -569,7 +569,7 @@ export function formatRole(type: string): string {
 
 /**
  * The channel↔producer pairs that can actually occur. `xctest` trees come from the local Apple
- * runner, Appium page-source XML, or a cloud provider's AX element tree (Limrun, Revyl), and only
+ * runner, Appium page-source XML, or a cloud provider's AX element tree (Revyl), and only
  * the runner's output has been through its presentation (clip fold, effective geometry, scope).
  * Logic that assumes those guarantees must key on the producer, never on the channel alone.
  *

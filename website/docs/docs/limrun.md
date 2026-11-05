@@ -101,7 +101,7 @@ On Android, agent-device connects to Limrun over an ADB tunnel. Snapshots use th
 
 ## Use an iOS simulator
 
-Use the same snapshot, selector, text-entry, gesture, navigation, clipboard, and alert commands as on a local iOS simulator. Limrun iOS uses the agent-device XCTest runner, so snapshots include the same tab contents, hierarchy, and keyboard observations as local XCTest snapshots. `fill` replaces text and `type` appends it; both support `--delay-ms`.
+Use the same snapshot, selector, text-entry, gesture, navigation, clipboard, and alert commands as on a local iOS simulator. Limrun iOS uses the agent-device XCTest runner. The runner reads snapshots with the same accessibility reader as a local iOS simulator, so snapshot output, selectors, and refs match local runs. When that reader cannot serve the screen, for example while a system sign-in sheet is open, the snapshot uses XCTest instead and says so in a warning. `fill` replaces text and `type` appends it; both support `--delay-ms`.
 
 Use a stable agent-device release. It downloads and starts the matching runner automatically. You do not need local Xcode or any runner network configuration. Stop Appium or other XCTest sessions on the simulator before you start, because only one XCTest run can use it at a time. Limrun limits each XCTest run to one hour; close and reopen your session when it reaches that limit.
 
@@ -111,7 +111,7 @@ Open your app before taking a snapshot. Snapshots target the app you opened in t
 
 `install` leaves your app stopped. Use `open` to launch it. To change launch arguments on an app that is already running, use `open --relaunch --launch-args`. Screenshots download as lossless PNG files, and recording downloads the finished MP4 when you stop it. Push notifications use the same command and payload format as local simulators.
 
-If you use a nightly or unpublished agent-device build, obtain a matching packaged iOS runner from the build's maintainer. Set `AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP` to the extracted `.app` path before starting agent-device. If the daemon is already running, stop it with `agent-device daemon stop` using the same `--state-dir`, then reconnect.
+If you use a nightly or unpublished agent-device build, obtain a matching packaged iOS runner from the build's maintainer. Set `AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP` to the extracted `.app` path before starting agent-device. The runner must be built with Xcode 26, because Limrun simulators run iOS 26 and an Xcode 27 build does not include the XCTest frameworks it needs there; agent-device refuses such a runner. If the daemon is already running, stop it with `agent-device daemon stop` using the same `--state-dir`, then reconnect.
 
 ## Connect an iOS app to Metro
 

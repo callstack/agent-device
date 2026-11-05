@@ -10,7 +10,7 @@ import {
   RUNNER_COMMAND_TRAITS,
   type RunnerCommandTraits,
 } from '../runner-command-traits.ts';
-import { readSwiftInlineCommands } from './runner-swift-settlement-fixtures.ts';
+import { readSwiftOffQueueCommands } from './runner-swift-settlement-fixtures.ts';
 
 const RUNNER_COMMANDS = Object.keys(RUNNER_COMMAND_TRAITS) as Array<RunnerCommand['command']>;
 
@@ -20,6 +20,7 @@ test('runner command trait table pins lifecycle-sensitive command groups', () =>
     readOnly: commandsWithTraits(readOnly()),
     payloadDependent: payloadDependentCommands(),
     readOnlyReadinessProbe: commandsWithTraits(readOnlyReadinessProbe()),
+    offQueueRead: commandsWithTraits(offQueueRead()),
     readinessPreflightExemptMutation: commandsWithTraits(preflightExemptMutation()),
     default: commandsWithTraits(defaults()),
   };
@@ -45,6 +46,7 @@ test('runner command trait table pins lifecycle-sensitive command groups', () =>
     ],
     payloadDependent: ['alert'],
     readOnlyReadinessProbe: ['status', 'uptime'],
+    offQueueRead: ['snapshotBridge'],
     readinessPreflightExemptMutation: ['activate', 'targetReset', 'terminate'],
     default: [
       'actionButton',
@@ -93,11 +95,11 @@ test('queued command read-only traits match the Swift parity fixture', () => {
       'utf8',
     ),
   ) as Array<{ command: RunnerCommand; readOnly: boolean }>;
-  const inline = new Set(readSwiftInlineCommands());
+  const offQueue = new Set(readSwiftOffQueueCommands());
   const queued = new Set(
     readRunnerRequestFixture()
       .map(({ request }) => String(request.command))
-      .filter((command) => !inline.has(command)),
+      .filter((command) => !offQueue.has(command)),
   );
   assert.deepEqual(new Set(cases.map(({ command }) => command.command)), queued);
   for (const { command, readOnly } of cases) {
@@ -122,6 +124,7 @@ function payloadDependentCommands(): RunnerCommand['command'][] {
 function defaults(): RunnerCommandTraits {
   return {
     readOnly: false,
+    queued: true,
     readinessProbe: false,
     readinessPreflightExempt: false,
     readinessPreflightSkipEligibleAfterHealthyMutation: false,
@@ -138,7 +141,16 @@ function readOnly(): RunnerCommandTraits {
 function readOnlyReadinessProbe(): RunnerCommandTraits {
   return {
     ...readOnly(),
+    queued: false,
     readinessProbe: true,
+  };
+}
+
+function offQueueRead(): RunnerCommandTraits {
+  return {
+    ...readOnly(),
+    queued: false,
+    readinessPreflightExempt: true,
   };
 }
 

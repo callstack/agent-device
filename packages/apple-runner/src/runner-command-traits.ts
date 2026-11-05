@@ -2,6 +2,12 @@ import type { RunnerCommand } from './runner-contract.ts';
 
 export type RunnerCommandTraits = Readonly<{
   readOnly: boolean;
+  /**
+   * Whether the runner puts the command on its journal and serial command queue. A reply to a
+   * command it serves off that queue proves nothing about queued work, so the session charges none.
+   */
+  queued: boolean;
+  /** Whether the command only probes the runner, so answering it does not use a speculative runner. */
   readinessProbe: boolean;
   readinessPreflightExempt: boolean;
   readinessPreflightSkipEligibleAfterHealthyMutation: boolean;
@@ -9,6 +15,7 @@ export type RunnerCommandTraits = Readonly<{
 
 const DEFAULT_TRAITS: RunnerCommandTraits = {
   readOnly: false,
+  queued: true,
   readinessProbe: false,
   readinessPreflightExempt: false,
   readinessPreflightSkipEligibleAfterHealthyMutation: false,
@@ -26,7 +33,16 @@ const READ_ONLY_TRAITS: RunnerCommandTraits = {
 
 const READ_ONLY_READINESS_PROBE_TRAITS: RunnerCommandTraits = {
   ...READ_ONLY_TRAITS,
+  queued: false,
   readinessProbe: true,
+};
+
+// A bridge read answers from the runner's own accessibility client, so its reply proves the runner
+// answers and needs no readiness probe first, and it brings no app forward to probe for.
+const OFF_QUEUE_READ_TRAITS: RunnerCommandTraits = {
+  ...READ_ONLY_TRAITS,
+  queued: false,
+  readinessPreflightExempt: true,
 };
 
 // Only runner commands this daemon actually sends should become preflight-skip eligible.
@@ -85,6 +101,7 @@ export const RUNNER_COMMAND_TRAITS = {
   status: READ_ONLY_READINESS_PROBE_TRAITS,
   uptime: READ_ONLY_READINESS_PROBE_TRAITS,
   appState: READ_ONLY_TRAITS,
+  snapshotBridge: OFF_QUEUE_READ_TRAITS,
   pasteboardWrite: DEFAULT_TRAITS,
   activate: READINESS_PREFLIGHT_EXEMPT_MUTATION_TRAITS,
   terminate: READINESS_PREFLIGHT_EXEMPT_MUTATION_TRAITS,
@@ -131,6 +148,7 @@ const RUNNER_COMMAND_RESOLVES_SURFACE = {
   status: false,
   uptime: false,
   appState: false,
+  snapshotBridge: false,
   pasteboardWrite: false,
   activate: false,
   terminate: false,
@@ -144,6 +162,10 @@ export function runnerCommandResolvesSurface(command: RunnerCommand): boolean {
 
 export function isReadOnlyRunnerCommand(command: RunnerCommand): boolean {
   return readRunnerCommandTraits(command).readOnly;
+}
+
+export function isQueuedRunnerCommand(command: RunnerCommand): boolean {
+  return readRunnerCommandTraits(command).queued;
 }
 
 export function isRunnerReadinessProbeCommand(command: RunnerCommand): boolean {

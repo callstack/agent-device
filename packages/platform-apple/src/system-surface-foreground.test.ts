@@ -55,6 +55,26 @@ test('every registered host off screen is background, read only from the ready r
   );
 });
 
+test('a decisive first host answers without waiting for the hosts after it', async () => {
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  runner.runAppleRunnerCommand.mockImplementation(async (_device, command) => {
+    if (command.appBundleId === safari) return { applicationState: 'runningForeground' };
+    await pending;
+    return { applicationState: 'notRunning' };
+  });
+
+  await expect(probe()).resolves.toEqual({
+    kind: 'foreground',
+    host: IOS_SYSTEM_SURFACE_HOSTS.find((host) => host.bundleId === safari),
+  });
+  // Every read still went out together.
+  expect(runner.runAppleRunnerCommand).toHaveBeenCalledTimes(IOS_SYSTEM_SURFACE_HOSTS.length);
+  release();
+});
+
 test('one background host does not hide another one presenting', async () => {
   statesByHost({ [safari!]: 'runningBackground', [passbook!]: 'runningForeground' });
 

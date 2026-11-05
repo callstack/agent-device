@@ -32,6 +32,32 @@ test('a normal app without a test bundle reports the invalid runner path', async
   expect(fetch).not.toHaveBeenCalled();
 });
 
+test('a runner built without its own XCTest is refused before it reaches Limrun', async () => {
+  const directory = await mkdtempForTest('runner-products-');
+  const appPath = path.join(directory, 'AgentDeviceRunnerUITests-Runner.app');
+  // An Xcode 27 build: the test bundle is there, the XCTest frameworks are not.
+  await fs.mkdir(path.join(appPath, 'PlugIns', 'AgentDeviceRunnerUITests.xctest'), {
+    recursive: true,
+  });
+  const fetch = vi.fn();
+  vi.stubGlobal('fetch', fetch);
+  await expect(
+    prepareLimrunRunnerProducts({
+      directory,
+      appPath,
+      version: '0.1.0',
+      bindAddress: '10.244.1.2',
+      endpoint,
+      signal: new AbortController().signal,
+    }),
+  ).rejects.toMatchObject({
+    code: 'INVALID_ARGS',
+    message: 'The Limrun XCTest runner does not embed XCTest.framework',
+    details: { reason: 'limrun_runner_products_invalid' },
+  });
+  expect(fetch).not.toHaveBeenCalled();
+});
+
 test('an HTML upload failure preserves the HTTP status', async () => {
   const directory = await mkdtempForTest('runner-products-');
   await fs.writeFile(path.join(directory, 'Runner.xctestrun'), '<plist/>');

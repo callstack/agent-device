@@ -11,7 +11,7 @@ import {
 } from '@agent-device/apple-runner';
 import { Deadline } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
-import { runAppleRunnerCommand } from './core/runner-client.ts';
+import { readRunnerSessionLiveness, runAppleRunnerCommand } from './core/runner-client.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
@@ -23,6 +23,15 @@ import { bindAppleAppStateRuntime } from './app-state-runtime.ts';
 import { bindAppleFindTextRuntime } from './runtime-snapshot.ts';
 import { bindAppleQuerySelectorRuntime } from './runtime-selector-query.ts';
 import { bindElementTextRuntime } from '@agent-device/contracts/element-text-runtime';
+import {
+  captureSnapshotSignal,
+  type CaptureSnapshotInput,
+  type SnapshotRuntimeOperations,
+  type SnapshotRuntimePresenter,
+} from '@agent-device/contracts/snapshot-runtime';
+import { createRunnerSnapshotBridge } from './runner-snapshot-bridge.ts';
+import { createSnapshotBridgeRoute, type SnapshotBridgeRoute } from './snapshot-route.ts';
+import { createSystemSurfaceForegroundProbe } from './system-surface-foreground.ts';
 
 /** Binds a provider-owned runner session to the shared Apple command and runtime implementation. */
 export function createAppleRunnerRuntime(options: {
@@ -45,6 +54,79 @@ export function createAppleRunnerRuntime(options: {
         return await interactor.snapshot(input);
       },
     };
+  };
+  const bridge = createRunnerSnapshotBridge({ device: options.device, provider: options.provider });
+  // Every capture of a remote Simulator reaches the runner, through the bridge or through XCTest. So
+  // the foreground read starts a runner that is not up yet, under the capture's own budget, instead
+  // of giving up the proof that keeps the capture on the bridge.
+  const readForeground = createSystemSurfaceForegroundProbe(async (device, input) => {
+    if (!options.provider.hasLiveSession(device)) {
+      try {
+        await runAppleRunnerCommand(
+          device,
+          { command: 'uptime' },
+          { signal: input.signal, ...(input.requestId ? { requestId: input.requestId } : {}) },
+        );
+      } catch {
+        input.signal.throwIfAborted();
+        return undefined;
+      }
+    }
+    const session = readRunnerSessionLiveness(device.id);
+    return session?.liveness === 'ready' ? { sessionId: session.sessionId } : undefined;
+  });
+  let snapshotRoute: SnapshotBridgeRoute | undefined;
+  /**
+   * The route outlives every request binding: its circuit, depth hints, and cached target describe
+   * the app generations this runner has read. The presenter comes with the first binding and is the
+   * device host's own, so every later binding hands over the same one.
+   */
+  const routeFor = (present: SnapshotRuntimePresenter) =>
+    (snapshotRoute ??= createSnapshotBridgeRoute(
+      {
+        snapshot: { presentIosAcquisition: present },
+        appleApplications: {
+          hasLiveRunnerSession: async () => options.provider.hasLiveSession(options.device),
+        },
+      },
+      {
+        source: bridge.source,
+        resolveTarget: bridge.resolveTarget,
+        // The runner answers the target read itself; there is no detached discovery to wait on.
+        isDiscoveryPending: () => false,
+        targetFreshness: 'cached',
+      },
+      async (device, input) =>
+        await withAppleRunnerProvider(
+          runCommand,
+          { deviceId: device.id, ...(input.requestId ? { requestId: input.requestId } : {}) },
+          () => readForeground(device, input),
+        ),
+    ));
+  /**
+   * Routes app captures through the runner-served bridge, falling back to the provider's own XCTest
+   * capture. An observation-only capture goes to the provider's capture, which decides whether it can
+   * observe without activation.
+   */
+  const bindBridgeSnapshot = (
+    signal: AbortSignal,
+    snapshot: Readonly<{ capture: SnapshotRuntimeOperations; present: SnapshotRuntimePresenter }>,
+  ): SnapshotRuntimeOperations => {
+    const route = routeFor(snapshot.present);
+    const captureSnapshot = async (input: CaptureSnapshotInput) => {
+      if (input.options?.observeOnly === true) return await snapshot.capture.captureSnapshot(input);
+      return await route.capture(
+        options.device,
+        input,
+        captureSnapshotSignal(signal, input),
+        async (fallbackInput) => await snapshot.capture.captureSnapshot(fallbackInput),
+      );
+    };
+    return Object.freeze({
+      captureSnapshot,
+      captureSnapshotWithCustomActions: captureSnapshot,
+      captureSnapshotWithoutActiveApp: captureSnapshot,
+    });
   };
   return {
     facts: appleRunnerInteractionFacts(options.device),
@@ -109,6 +191,8 @@ export function createAppleRunnerRuntime(options: {
     bindRunnerOperations: (request: {
       signal: AbortSignal;
       resolveInteractor(device: DeviceInfo, context: RunnerContext): Promise<Interactor>;
+      /** The provider's own capture, which the runner-served bridge falls back to. */
+      snapshot: Readonly<{ capture: SnapshotRuntimeOperations; present: SnapshotRuntimePresenter }>;
     }) => {
       const host = {
         appleApplications: {
@@ -128,7 +212,12 @@ export function createAppleRunnerRuntime(options: {
             { deviceId: options.device.id, requestId: input.execution?.requestId },
             () => query.querySelector(input),
           ),
+        ...bindBridgeSnapshot(request.signal, request.snapshot),
       };
+    },
+    /** Closes the runner-served bridge source; the runner session itself is the provider's to stop. */
+    shutdown: async () => {
+      await snapshotRoute?.shutdown();
     },
   };
 }

@@ -71,6 +71,27 @@ test('computeRunnerSourceFingerprint covers the shared foreground geometry heade
   assert.notEqual(computeRunnerSourceFingerprint(root), before);
 });
 
+test('computeRunnerSourceFingerprint covers the snapshot bridge reader the runner compiles, not the guest server', () => {
+  const root = makeTempRoot();
+  fs.mkdirSync(path.join(root, 'apple', 'runner', 'AgentDeviceRunner'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'apple', 'runner', 'AgentDeviceRunner', 'Runner.swift'),
+    'runner\n',
+  );
+  const bridgeRoot = path.join(root, 'apple', 'snapshot-bridge');
+  fs.mkdirSync(bridgeRoot, { recursive: true });
+  const reader = path.join(bridgeRoot, 'SnapshotBridgeRequest.m');
+  const guestServer = path.join(bridgeRoot, 'SnapshotBridge.m');
+  fs.writeFileSync(reader, 'reader-one\n');
+  fs.writeFileSync(guestServer, 'server-one\n');
+
+  const before = computeRunnerSourceFingerprint(root);
+  fs.writeFileSync(guestServer, 'server-one\n// changed\n');
+  assert.equal(computeRunnerSourceFingerprint(root), before);
+  fs.writeFileSync(reader, 'reader-one\n// changed\n');
+  assert.notEqual(computeRunnerSourceFingerprint(root), before);
+});
+
 test('computeRunnerSourceFingerprint covers the shared snapshot presentation sources', () => {
   const root = makeTempRoot();
   fs.mkdirSync(path.join(root, 'apple', 'runner', 'AgentDeviceRunner'), { recursive: true });

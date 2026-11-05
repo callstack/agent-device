@@ -429,6 +429,7 @@ test.for([
   ],
   ['foreground-owner-unverified', 'while another surface owned the foreground'],
   ['foreground-owner-changed', 'while another surface owned the foreground'],
+  ['snapshot-tree-changed', 'while the screen changed during the bridge read'],
   [
     'app-window-not-full-screen',
     'while the app window did not fill the screen; the runner republishes a windowed capture in screen space',
