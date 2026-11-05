@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
-import { isCommandTimeoutError, runCmd } from '@agent-device/host-kit/command';
+import { execFailureDetails, isCommandTimeoutError, runCmd } from '@agent-device/host-kit/command';
 import { type Deadline, sleep } from '@agent-device/host-kit/retry';
 import { buildSwiftToolEnv, compileSwiftSourceText, getSwiftCacheRoot } from './swift-cache.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -145,11 +145,7 @@ export async function isPlayableVideo(
     }
     if (isSwiftVideoValidatorUnavailable(result.stderr, result.stdout)) {
       throw unavailableVideoValidator(
-        new AppError('COMMAND_FAILED', result.stderr, {
-          stderr: result.stderr,
-          stdout: result.stdout,
-          exitCode: result.exitCode,
-        }),
+        new AppError('COMMAND_FAILED', result.stderr, execFailureDetails(result)),
       );
     }
     return false;

@@ -3,7 +3,7 @@ import { createTestHost } from '../host-environment.fixtures.ts';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { likelyPlayableWebmContainer } from '../__tests__/test-utils/video-fixtures.ts';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import { mp4Atom, mp4MovieHeader } from './mp4.fixtures.ts';
@@ -215,15 +215,28 @@ test.each([
   {
     stderr: `xcrun: error: unable to find utility "swiftc", not a developer tool or in PATH`,
     stdout: '',
+    recoveryHint: 'DEVELOPER_DIR',
+    messageExcerpt: 'unable to find utility "swiftc"',
   },
-  { stderr: `validator.swift:2:8: error: no such module 'AVFoundation'`, stdout: '' },
-  { stderr: '', stdout: `validator.swift:2:8: error: no such module 'AVFoundation'` },
+  {
+    stderr: `validator.swift:2:8: error: no such module 'AVFoundation'`,
+    stdout: '',
+    recoveryHint: 'AVFoundation',
+    messageExcerpt: "no such module 'AVFoundation'",
+  },
+  {
+    stderr: '',
+    stdout: `validator.swift:2:8: error: no such module 'AVFoundation'`,
+    recoveryHint: 'AVFoundation',
+    messageExcerpt: 'MP4 playability could not be verified.',
+  },
 ])(
   'preserves unavailable validator output and selects its recovery hint: %j',
-  async ({ stderr, stdout }) => {
+  async ({ stderr, stdout, recoveryHint, messageExcerpt }) => {
     const mp4 = writeFixture('unavailable.mp4', Buffer.concat([ftyp, moov]));
     vi.mocked(runCmd).mockResolvedValueOnce({ exitCode: 1, stderr, stdout });
-    await expect(isPlayableVideo(mp4, createTestHost())).rejects.toMatchObject({
+    const playable = isPlayableVideo(mp4, createTestHost());
+    await expect(playable).rejects.toMatchObject({
       code: 'COMMAND_FAILED',
       details: {
         reason: 'video_validator_unavailable',
@@ -231,8 +244,11 @@ test.each([
         stderr,
         stdout,
         exitCode: 1,
-        hint: expect.stringContaining('AVFoundation'),
+        hint: expect.stringContaining(recoveryHint),
       },
+    });
+    await expect(playable.catch(normalizeError)).resolves.toMatchObject({
+      message: expect.stringContaining(messageExcerpt),
     });
   },
 );
