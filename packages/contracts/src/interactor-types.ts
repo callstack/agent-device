@@ -173,7 +173,7 @@ export type CloudTextEntryReadiness = (typeof CLOUD_TEXT_ENTRY_READINESS)[number
 
 /**
  * What `Interactor.fill` reports back about the entry it performed. The cloud
- * interactors (WebDriver and the Limrun iOS session) populate
+ * interactors using tree-based entry populate
  * `textEntryReadiness`; Android and the Apple runner may return target-bound
  * `verification: 'unconfirmed'` evidence when the field changed but its value
  * cannot confirm the text (app-owned formatting, or an accessibility value that

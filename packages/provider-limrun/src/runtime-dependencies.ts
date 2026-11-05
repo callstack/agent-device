@@ -197,7 +197,6 @@ export type LimrunIosRuntimeAdapter = {
     token: string;
     device: DeviceInfo;
   }): Promise<LimrunIosRunner>;
-  resolveAppAlias(app: string): Promise<string>;
   readBundleAppName(appPath: string): Promise<string | undefined>;
 };
 

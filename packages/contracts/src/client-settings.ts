@@ -82,10 +82,10 @@ export type SettingsUpdateOptions =
       mode?: PermissionMode;
       /**
        * The app the permission changes, by bundle id, package name, or app name, resolved as `open`
-       * resolves it: an iOS simulator matches display names and accepts only an installed bundle
-       * id, Android accepts only an installed package and refuses a name that resolves to an intent
-       * with `setting_app_not_package`, and a Limrun iOS session resolves only the `settings`
-       * alias. Without it the session app is used; no app has to be running or open. macOS
+       * resolves it: an iOS simulator, including Limrun, matches display names and accepts only an
+       * installed bundle id. Android accepts only an installed package and refuses a name that
+       * resolves to an intent with `setting_app_not_package`. Without it the session app is used;
+       * no app has to be running or open. macOS
        * permissions are host-level TCC grants, so naming an app there is refused.
        */
       app?: string;

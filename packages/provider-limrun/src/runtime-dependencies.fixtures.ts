@@ -67,7 +67,6 @@ export function stubLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
         createTestIosRunner(() => {
           throw new Error('Unexpected XCTest runner command');
         }, session.device),
-      resolveAppAlias: async (app) => app,
       readBundleAppName: async () => undefined,
     },
   };

@@ -11,7 +11,7 @@ import type { IosViewportEvidence } from '@agent-device/contracts/ios-snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
-// #3182: the provider acquisitions — the simulator AX bridge, an Appium page source, a Limrun tree —
+// #3182: the provider acquisitions — the simulator AX bridge or an Appium page source —
 // already resolve the box their nodes are measured in, and this presenter is the one seam that turns
 // an acquisition into a snapshot result. Publishing nothing here left the default local-iOS producer
 // without a viewport while it held the evidence, which is the issue's first `Done when` line.

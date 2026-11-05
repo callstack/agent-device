@@ -257,7 +257,6 @@ export const limrunTestDependencies: LimrunRuntimeDependencies = {
       [Symbol.asyncDispose]: async () => {},
     }),
     createRunner: async (session) => createTestLimrunIosRunner(session.device),
-    resolveAppAlias: async (app: string) => app,
     readBundleAppName: async () => undefined,
   },
 } satisfies LimrunRuntimeDependencies;

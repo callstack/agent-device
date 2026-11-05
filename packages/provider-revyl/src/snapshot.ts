@@ -47,7 +47,7 @@ export async function captureRevylSnapshot(
 }
 
 /**
- * iOS: the AX node tree goes through the same reader and interpreter as Limrun's iOS tree, and comes
+ * iOS: the AX node tree goes through the shared reader and interpreter, and comes
  * back as an acquisition for the host to present. The viewport is the tree's own application root,
  * because that is the box its frames were measured in; without a usable root it is `health`'s screen,
  * which Revyl reports in the same points on iOS.

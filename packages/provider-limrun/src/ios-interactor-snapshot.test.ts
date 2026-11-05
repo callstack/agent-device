@@ -36,7 +36,6 @@ test('shared runner targets follow open, request overrides, home and close', asy
     device: iosRunnerDevice,
     runner,
     client: { elementTree, launchApp: async () => {} },
-    dependencies: { ios: { resolveAppAlias: async () => 'com.apple.Preferences' } },
   } as unknown as LimrunIosSession;
   const interactor = createLimrunIosInteractor(session);
   await interactor.open('settings');

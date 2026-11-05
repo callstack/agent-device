@@ -366,7 +366,6 @@ function createContractFixture() {
       createRunner: async () => {
         return testIosRunner;
       },
-      resolveAppAlias: async (app: string) => app,
       readBundleAppName: async () => undefined,
     },
   } satisfies LimrunRuntimeDependencies;

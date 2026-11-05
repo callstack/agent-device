@@ -135,11 +135,6 @@ export function createLimrunRuntimeDependencies(host: HostEnvironment): LimrunRu
               await import('../platform-runtime-apple-application-tools.ts');
             return createLimrunIosRunner(session, host, createAppleApplicationTools(host.env));
           },
-          resolveAppAlias: async (app) => {
-            const { resolveIosAppAlias } =
-              await import('@agent-device/platform-apple/app-resolution');
-            return resolveIosAppAlias(app);
-          },
           readBundleAppName: async (appPath) => {
             const { readIosBundleInfo } =
               await import('@agent-device/platform-apple/install-artifact');
