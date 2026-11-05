@@ -51,7 +51,10 @@ extension RunnerTests {
 
   /// The reader's request dictionary. The tree and automation flags are the guest bridge's fixed
   /// `describe` contract, so the host does not repeat them on the runner transport.
-  static func snapshotBridgeReaderRequest(_ payload: SnapshotBridgeCommandPayload) -> [String: Any] {
+  static func snapshotBridgeReaderRequest(
+    _ payload: SnapshotBridgeCommandPayload,
+    simulatorUdid: String? = ProcessInfo.processInfo.environment["SIMULATOR_UDID"]
+  ) -> [String: Any] {
     var request: [String: Any] = [
       "verb": "describe",
       "requestId": payload.requestId,
@@ -74,9 +77,10 @@ extension RunnerTests {
       request["nativeLevelsHint"] = nativeLevelsHint
     }
     if let executables = payload.surfaceHostExecutables {
-      // The runner runs inside the Simulator it reads, so it names that Simulator itself.
+      // The runner runs inside the Simulator it reads, so it names that Simulator itself. Without one
+      // the key stays out, and the runner refuses the surface proof for this capture.
       request["surfaceHostExecutables"] = executables
-      request["simulatorUdid"] = ProcessInfo.processInfo.environment["SIMULATOR_UDID"] ?? ""
+      if let simulatorUdid, !simulatorUdid.isEmpty { request["simulatorUdid"] = simulatorUdid }
     }
     return request
   }

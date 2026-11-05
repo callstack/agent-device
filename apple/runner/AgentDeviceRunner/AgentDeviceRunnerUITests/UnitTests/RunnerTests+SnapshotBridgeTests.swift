@@ -48,16 +48,23 @@ extension RunnerTests {
 
   // The runner compiles the shared reader only for the iOS Simulator (RunnerSnapshotBridge.m).
   #if os(iOS) && targetEnvironment(simulator)
-  func testMissingSimulatorIdentityRefusesSurfaceProofForThisCapture() {
-    for udid in ["", String(repeating: "x", count: 65)] {
-      let response = RunnerSnapshotBridgeHandle("describe", "com.example.app", [
-        "requestId": "r", "surfaceHostExecutables": ["host"], "simulatorUdid": udid,
-        "expectedPid": 9, "generation": "g",
-      ])
+  func testMissingSimulatorIdentityRefusesSurfaceProofForThisCapture() throws {
+    let payload = try JSONDecoder().decode(
+      SnapshotBridgeCommandPayload.self,
+      from: Data(
+        #"{"verb":"describe","requestId":"r","generation":"g","expectedPid":9,"surfaceHostExecutables":["host"]}"#
+          .utf8)
+    )
+    for udid: String? in [nil, ""] {
+      let request = Self.snapshotBridgeReaderRequest(payload, simulatorUdid: udid)
+      XCTAssertNil(request["simulatorUdid"])
+      let response = RunnerSnapshotBridgeHandle("describe", "com.example.app", request)
       XCTAssertEqual(response["error_code"] as? String, "system-surface-host-unverified")
       XCTAssertEqual(response["pid"] as? Int, 9)
       XCTAssertEqual(response["generation"] as? String, "g")
     }
+    let named = Self.snapshotBridgeReaderRequest(payload, simulatorUdid: "SIM")
+    XCTAssertEqual(named["simulatorUdid"] as? String, "SIM")
   }
   func testReaderDoesNotRefuseTheBoundsOfAFirstRead() throws {
     var request = Self.snapshotBridgeReaderRequest(try firstReadPayload())

@@ -240,12 +240,10 @@ uint32_t RunnerSnapshotBridgeMaximumFrameBytes(void)
 
 NSDictionary *RunnerSnapshotBridgeHandle(NSString *verb, NSString *bundleId, NSDictionary *request)
 {
-  if ([verb isEqualToString:@"describe"] && request[@"surfaceHostExecutables"] != nil) {
-    id udid = request[@"simulatorUdid"];
-    if (![udid isKindOfClass:NSString.class] || [udid length] == 0 || [udid length] > 64) {
-      return RunnerSnapshotBridgeFailure(request, @"unsupported", @"system-surface-host-unverified",
-                                         @"the runner cannot identify its Simulator for the surface host check");
-    }
+  if ([verb isEqualToString:@"describe"] && request[@"surfaceHostExecutables"] != nil &&
+      request[@"simulatorUdid"] == nil) {
+    return RunnerSnapshotBridgeFailure(request, @"unsupported", @"system-surface-host-unverified",
+                                       @"the runner cannot identify its Simulator for the surface host check");
   }
   if ([verb isEqualToString:@"target"]) {
     return RunnerSnapshotBridgeRead(request, RunnerSnapshotBridgeBudgetMs(request), ^{
