@@ -21,8 +21,7 @@ export async function resolveSessionDevice(
     requireNamedSessionHoldsDevice({ req, sessionAddress: sessionName, session });
   }
   const device =
-    session?.device ??
-    (await resolveRequestTargetDevice(req, { env: sessionStore.host.env }));
+    session?.device ?? (await resolveRequestTargetDevice(req, { env: sessionStore.host.env }));
   return { ref, session, device };
 }
 

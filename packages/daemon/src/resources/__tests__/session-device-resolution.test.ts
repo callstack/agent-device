@@ -50,6 +50,7 @@ const requestWith = (
   token: 'test-token',
   session: 'default',
   command: 'snapshot',
+  positionals: [],
   flags,
   internal: { webSession: identity },
 });

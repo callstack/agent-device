@@ -61,8 +61,7 @@ export function deriveWebSessionIdentity(
   supplied: string,
   scoped: Pick<DaemonRequest, 'meta'>,
 ): WebSessionIdentity {
-  const tenantId =
-    scoped.meta?.sessionIsolation === 'tenant' ? scoped.meta.tenantId : undefined;
+  const tenantId = scoped.meta?.sessionIsolation === 'tenant' ? scoped.meta.tenantId : undefined;
   return tenantId === undefined
     ? { name: supplied }
     : { name: tenantPublicSessionName(tenantId, supplied), tenantId };
