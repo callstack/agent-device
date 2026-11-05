@@ -28,7 +28,8 @@ export type ConnectionProviderCapabilities = {
   usesCloudWebDriverLease: boolean;
   /**
    * The provider leases a cloud-hosted device that bills while held. Its lease requests the same
-   * idle window as a proxy lease on each lease-using command, not the daemon default.
+   * idle window as a proxy or cloud WebDriver lease on each lease-using command, not the daemon
+   * default.
    */
   holdsCloudDevice?: boolean;
 };

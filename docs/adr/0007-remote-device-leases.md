@@ -146,7 +146,7 @@ Thus, a handler that ignores its cancellation cannot hold a rented device open.
 
 The inactivity TTL that the client asked for determines which leases this preservation reaches.
 The daemon default is one minute.
-A cloud WebDriver connection profile asks for ten minutes.
+A remote device connection profile asks for five minutes.
 Thus, a single command that runs longer than its own lease is ordinary on the default.
 On the longer window, such a command is only reachable through a profile.
 
