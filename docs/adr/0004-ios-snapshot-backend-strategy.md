@@ -623,7 +623,7 @@ Thus, the pass returns that tree exactly as reported.
 This is a structural consequence of the same rule applied uniformly.
 It is not the per-tier omission that a hand-threaded space would have made it.
 
-The provider producers (`appium-source`, `limrun-ios-tree`) never see the app's windows either.
+The provider producers (`appium-source`) never see the app's windows either.
 A capture from any of them publishes no keyboard fact.
 A consumer reads that silence as "this producer did not measure".
 Those paths publish what the platform reported.
@@ -728,7 +728,7 @@ Producers that report no UIKit class names or no dimming-view interaction state 
 That is a fact about their output, not a backend exception in the fold:
 
 - The runner already omits modal-contained content from its own queries.
-- `appium-source` and `limrun-ios-tree` report element types and no classes.
+- `appium-source` reports element types and no classes.
 - The macOS desktop surface arrives already presented.
 
 A scope that names a modal-contained screen now publishes an empty projection.

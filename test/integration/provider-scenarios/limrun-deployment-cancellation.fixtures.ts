@@ -19,12 +19,37 @@ export const LIMRUN_IOS_APPS = [
   { bundleId: 'com.example.ios', name: 'Example', installType: 'User' },
 ];
 
-export async function bindLimrunDeployment(platform: 'android' | 'ios', signal: AbortSignal) {
-  const registration = createLimrunRuntime({ apiKey: 'limrun-test-key' }, limrunDependencies(), {
+export async function bindLimrunDeployment(
+  platform: 'android' | 'ios',
+  signal: AbortSignal,
+  ios: LimrunRuntimeDependencies['ios'] = limrunTestDependencies.ios,
+) {
+  const registration = createLimrunRuntime({ apiKey: 'limrun-test-key' }, limrunDependencies(ios), {
     includePlatformModule: true,
   });
   const device = await allocatedDevice(registration.runtime, lease(platform));
+  const deployment = {
+    prepareArtifact: async (input: { source: { path: string } }) => ({
+      installablePath: input.source.path,
+      bundleId: 'com.example.ios',
+      packageName: 'com.example.android',
+      cleanup: async () => {},
+    }),
+    withInvalidatedAppResolutionCache: async (
+      _device: unknown,
+      operation: () => Promise<unknown>,
+    ) => operation(),
+  };
   const owner = await registration.platformModule.loadRuntime({
+    appleDeployment: deployment,
+    androidDeployment: deployment,
+    deviceReadiness: {
+      appleAutomation: {
+        wasRecentlyObservedBooted: async () => true,
+        keepHot: () => {},
+        markBooted: () => {},
+      },
+    },
     snapshot: {
       captureSurface: async () => ({
         backend: 'xctest' as const,
@@ -99,10 +124,15 @@ function lease(platform: 'android' | 'ios'): DeviceLease {
   };
 }
 
-function limrunDependencies(): LimrunRuntimeDependencies {
+function limrunDependencies(ios: LimrunRuntimeDependencies['ios']): LimrunRuntimeDependencies {
   return {
     clientVersion: 'test',
     android: {
+      bindDeployment: async (device, _adb, request) => {
+        const { createAndroidAppDeploymentOperations } =
+          await import('@agent-device/platform-android/mechanics');
+        return createAndroidAppDeploymentOperations({ ...request, device });
+      },
       createInteractor: () => ({}) as never,
       createPortReverse: async () => ({
         ensure: async () => {},
@@ -137,6 +167,6 @@ function limrunDependencies(): LimrunRuntimeDependencies {
       downloadFile: async () => undefined,
       archiveDirectory: async () => {},
     },
-    ios: limrunTestDependencies.ios,
+    ios,
   };
 }

@@ -31,7 +31,9 @@ test.each([
     expect(operation).toMatchObject({ available: false });
   }
   expect(facts.deployApp).toMatchObject({ reason: 'owner-capability-missing' });
-  expect(facts.sendPushNotification).toMatchObject({ reason: 'unsupported-provider-mode' });
+  expect(facts.sendPushNotification).toMatchObject({
+    reason: device.platform === 'apple' ? 'owner-capability-missing' : 'unsupported-provider-mode',
+  });
 });
 
 test.each([
@@ -58,6 +60,7 @@ test.each([
       installablePath: '/tmp/app.apk',
       cleanup: async () => {},
     }));
+    const sendPushNotification = vi.fn(async () => ({}));
     const base = unusedLimrunRuntimeHost();
     const options = {
       host: {
@@ -66,8 +69,13 @@ test.each([
         androidDeployment: { ...base.androidDeployment, prepareArtifact: materializeAndroid },
       },
       ownsDevice: () => true,
-      deployApp,
-      deployMaterializedApp,
+      bindDeployment: async () => ({
+        deployApp,
+        deployMaterializedApp,
+        sendPushNotification,
+        materializeAppSource: device.platform === 'apple' ? materializeApple : materializeAndroid,
+        uninstallApp: async () => ({ wasInstalled: false as const }),
+      }),
     };
     const facts = limrunAppDeploymentFacts(options, device);
     const operations = createLimrunAppDeploymentOperations(
@@ -79,7 +87,14 @@ test.each([
     for (const fact of [facts.deployApp, facts.materializeAppSource, facts.deployMaterializedApp]) {
       expect(fact).toEqual({ available: true });
     }
-    expect(facts.sendPushNotification).toMatchObject({ available: false });
+    expect(facts.sendPushNotification).toMatchObject({ available: device.platform === 'apple' });
+    if (device.platform === 'apple') {
+      await operations.sendPushNotification?.({
+        appId: 'com.example.app',
+        payload: { aps: { alert: 'hello' } },
+      });
+      expect(sendPushNotification).toHaveBeenCalledOnce();
+    }
     await operations.deployApp?.({
       app: 'com.example.app',
       appPath: '/tmp/app',
@@ -117,27 +132,41 @@ test.each([
   'aborts an in-flight Limrun %s callback with the binding signal',
   async (_name, invoke) => {
     const controller = new AbortController();
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
     const abortReason = new Error('request cancelled during Limrun deployment');
     const deployApp = vi.fn(async (_device, _input, signal?: AbortSignal) => {
       expect(signal).toBe(controller.signal);
+      markStarted();
       return await rejectWhenAborted(signal);
     });
     const deployMaterializedApp = vi.fn(async (_device, _input, signal?: AbortSignal) => {
       expect(signal).toBe(controller.signal);
+      markStarted();
       return await rejectWhenAborted(signal);
     });
     const operations = createLimrunAppDeploymentOperations(
       {
         host: unusedLimrunRuntimeHost(),
         ownsDevice: () => true,
-        deployApp,
-        deployMaterializedApp,
+        bindDeployment: async (_device, signal) => ({
+          uninstallApp: async () => ({ wasInstalled: false as const }),
+          materializeAppSource: async () => ({
+            installablePath: '/tmp/app',
+            cleanup: async () => {},
+          }),
+          deployApp: (input) => deployApp(_device, input, signal),
+          deployMaterializedApp: (input) => deployMaterializedApp(_device, input, signal),
+        }),
       },
       limrunIosDevice,
       controller.signal,
     );
 
     const pending = invoke(operations);
+    await started;
     controller.abort(abortReason);
 
     await expect(pending).rejects.toBe(abortReason);

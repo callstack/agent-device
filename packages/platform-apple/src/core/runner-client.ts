@@ -41,6 +41,11 @@ export async function runAppleRunnerCommand(
 }
 
 export {
+  RUNNER_STARTUP_TIMEOUT_MS,
+  createLaunchedAppleRunnerProvider,
+  mintRunnerToken,
+  runnerListenerEnv,
+  RUNNER_XCTESTRUN_CAPTURE_OPTIONS,
   applyXctestRunnerAppIconFromDerivedPath,
   cleanupRunnerLeasesForOwner,
   detachIosRunnerSessionsForShutdown,

@@ -31,12 +31,7 @@ const fixture = JSON.parse(
 };
 
 test('host iOS presentation publishes shared clipping notes without inventing a capture verdict', () => {
-  for (const producer of [
-    'simulator-ax-bridge',
-    'appium-source',
-    'limrun-ios-tree',
-    'revyl-ios-tree',
-  ] as const) {
+  for (const producer of ['simulator-ax-bridge', 'appium-source', 'revyl-ios-tree'] as const) {
     for (const row of fixture.cases) {
       const acquired = createIosSnapshotAcquisition({
         producer: producer === 'simulator-ax-bridge' ? 'appium-source' : producer,

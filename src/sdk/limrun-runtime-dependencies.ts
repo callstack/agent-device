@@ -1,3 +1,4 @@
+import { createLimrunIosAppLogReader } from '../core/interactors/limrun-ios-app-logs.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { withMethodScope } from '@agent-device/kernel/scoped-provider';
 import { AppError } from '@agent-device/kernel/errors';
@@ -21,6 +22,14 @@ export function createLimrunRuntimeDependencies(host: HostEnvironment): LimrunRu
   return {
     clientVersion: readVersion(),
     android: {
+      bindDeployment: async (device, adb, request) => {
+        const { createAndroidAppDeploymentOperations, withAndroidAdbProvider } =
+          await import('@agent-device/platform-android/mechanics');
+        const operations = await createAndroidAppDeploymentOperations({ ...request, device });
+        return withMethodScope({ ...operations }, (task) =>
+          runOnHost(() => withAndroidAdbProvider(adb, { serial: device.id }, task)),
+        );
+      },
       createInteractor: (device, adb) =>
         withMethodScope(createAndroidInteractor(device, adb), runOnHost),
       createPortReverse: async (adb, options) => {
@@ -95,7 +104,7 @@ export function createLimrunRuntimeDependencies(host: HostEnvironment): LimrunRu
       {
         runAdb: async (invocation, options) => await runAndroidHostAdb(invocation, options),
         downloadFile: async (options) => {
-          const { downloadLimrunFile } = await import('./limrun-download-file.ts');
+          const { downloadLimrunFile } = await import('../core/limrun-download-file.ts');
           await downloadLimrunFile(options);
         },
         archiveDirectory: async ({ sourceDirectory, entryName, archivePath }) => {
@@ -114,25 +123,31 @@ export function createLimrunRuntimeDependencies(host: HostEnvironment): LimrunRu
       },
       runOnHost,
     ),
-    ios: withMethodScope<LimrunRuntimeDependencies['ios']>(
-      {
-        applySimctlSetting: async (request) => {
-          const { applySimctlSetting } =
-            await import('@agent-device/platform-apple/simctl-settings');
-          return await applySimctlSetting(request);
+    ios: {
+      // The scoped wrapper returns promises; this factory must return its reader synchronously.
+      createAppLogReader: createLimrunIosAppLogReader,
+      ...withMethodScope<Omit<LimrunRuntimeDependencies['ios'], 'createAppLogReader'>>(
+        {
+          createRunner: async (session) => {
+            const { createLimrunIosRunner } =
+              await import('../core/interactors/limrun-ios-runner.ts');
+            const { createAppleApplicationTools } =
+              await import('../platform-runtime-apple-application-tools.ts');
+            return createLimrunIosRunner(session, host, createAppleApplicationTools(host.env));
+          },
+          resolveAppAlias: async (app) => {
+            const { resolveIosAppAlias } =
+              await import('@agent-device/platform-apple/app-resolution');
+            return resolveIosAppAlias(app);
+          },
+          readBundleAppName: async (appPath) => {
+            const { readIosBundleInfo } =
+              await import('@agent-device/platform-apple/install-artifact');
+            return (await readIosBundleInfo(appPath)).appName;
+          },
         },
-        resolveAppAlias: async (app) => {
-          const { resolveIosAppAlias } =
-            await import('@agent-device/platform-apple/app-resolution');
-          return resolveIosAppAlias(app);
-        },
-        readBundleAppName: async (appPath) => {
-          const { readIosBundleInfo } =
-            await import('@agent-device/platform-apple/install-artifact');
-          return (await readIosBundleInfo(appPath)).appName;
-        },
-      },
-      runOnHost,
-    ),
+        runOnHost,
+      ),
+    },
   };
 }

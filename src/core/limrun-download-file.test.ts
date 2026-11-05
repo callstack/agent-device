@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { afterEach, expect, test } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
+import { afterEach, expect, test, vi } from 'vitest';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { mkdtempForTest } from '@agent-device/test-kit';
 import { downloadLimrunFile } from './limrun-download-file.ts';
 
@@ -152,3 +152,51 @@ test('an error body is read only up to the preview, without waiting for the rest
     details: { statusCode: 502, body: 'x'.repeat(500) },
   });
 });
+
+test.each(['default', 'typed', 'deadline'] as const)(
+  'a %s abort keeps its failure classification and removes partial downloads',
+  async (kind) => {
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const url = await serve((_request, response) => {
+      response.writeHead(200);
+      response.write('partial');
+      markStarted();
+    });
+    const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+    const controller = new AbortController();
+    const reason =
+      kind === 'typed'
+        ? createRequestCanceledError()
+        : kind === 'deadline'
+          ? new DOMException('deadline expired', 'TimeoutError')
+          : undefined;
+    const pending = downloadLimrunFile({
+      url,
+      headers: {},
+      destinationPath,
+      timeoutMs: 5000,
+      signal: controller.signal,
+    });
+    const outcome =
+      kind === 'typed'
+        ? expect(pending).rejects.toBe(reason)
+        : kind === 'default'
+          ? expect(pending).rejects.toMatchObject({
+              code: 'COMMAND_FAILED',
+              details: { reason: 'request_canceled' },
+            })
+          : expect(pending).rejects.toMatchObject({
+              code: 'COMMAND_FAILED',
+              message: 'Limrun download deadline expired',
+              details: { reason: 'limrun_download_timeout', timeoutMs: 5000 },
+            });
+    await started;
+    await vi.waitFor(() => expect(fs.readFileSync(destinationPath, 'utf8')).toBe('partial'));
+    controller.abort(reason);
+    await outcome;
+    expect(fs.existsSync(destinationPath)).toBe(false);
+  },
+);

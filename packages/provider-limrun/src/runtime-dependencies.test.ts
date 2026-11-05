@@ -1,3 +1,4 @@
+import { testIosRunner } from './ios-runner.fixtures.ts';
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import type { AppsFilter, DeviceLease } from '@agent-device/contracts/device';
@@ -324,6 +325,9 @@ function createContractFixture() {
   const dependencies = {
     clientVersion: 'test-version',
     android: {
+      bindDeployment: async () => {
+        throw new Error('Unexpected deployment binding');
+      },
       createInteractor,
       createPortReverse: async (adb: LimrunAdbExecutor) =>
         createInMemoryPortReverse(adb, activeReverseMappings),
@@ -355,7 +359,13 @@ function createContractFixture() {
       downloadFile: async () => undefined,
     },
     ios: {
-      applySimctlSetting: vi.fn(async () => undefined),
+      createAppLogReader: () => ({
+        readLogs: async () => 'log line\n',
+        [Symbol.asyncDispose]: async () => {},
+      }),
+      createRunner: async () => {
+        return testIosRunner;
+      },
       resolveAppAlias: async (app: string) => app,
       readBundleAppName: async () => undefined,
     },

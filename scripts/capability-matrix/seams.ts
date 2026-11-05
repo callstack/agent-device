@@ -141,7 +141,6 @@ const limrunInstanceClientStub = `
 const handlers = {
   deviceInfo: { screenWidth: 393, screenHeight: 852 },
   disconnect: async () => {},
-  elementTree: async () => ({ type: 'Application', children: [] }),
 };
 export const createInstanceClient = async () => handlers;
 export default { createInstanceClient };

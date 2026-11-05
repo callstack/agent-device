@@ -73,7 +73,7 @@ test('normalization makes raw, scope, and absent values explicit', () => {
 });
 
 test('acquisition derives unavailable provider facts from the registry', () => {
-  for (const producer of ['appium-source', 'limrun-ios-tree'] as const) {
+  for (const producer of ['appium-source', 'revyl-ios-tree'] as const) {
     assert.deepEqual(
       createIosSnapshotAcquisition({
         producer,
@@ -102,7 +102,6 @@ test('truncation evidence is declared for every iOS producer', () => {
     'apple-runner': 'available',
     'simulator-ax-bridge': 'available',
     'appium-source': 'unavailable',
-    'limrun-ios-tree': 'unavailable',
     'revyl-ios-tree': 'unavailable',
   } as const satisfies Record<IosSnapshotProducer, IosSnapshotEvidenceAvailability>;
 
@@ -114,7 +113,7 @@ test('truncation evidence is declared for every iOS producer', () => {
 test('comparison identity rejects every identity axis and residue mismatch', () => {
   const base = comparisonIdentity();
   const mismatches: IosSnapshotComparisonIdentity[] = [
-    { ...base, producer: 'limrun-ios-tree' },
+    { ...base, producer: 'revyl-ios-tree' },
     { ...base, intent: 'surface-observation' },
     { ...base, lineage: { targetId: 'simulator-1', generation: 'generation-2' } },
     { ...base, presentationKey: { ...base.presentationKey, depth: 1 } },

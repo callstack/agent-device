@@ -70,7 +70,7 @@ describe('snapshotRefMinting', () => {
     { backend: 'xctest', producer: 'apple-runner' },
     { backend: 'xctest', producer: 'simulator-ax-bridge' },
     { backend: 'xctest', producer: 'appium-source' },
-    { backend: 'xctest', producer: 'limrun-ios-tree' },
+    { backend: 'xctest', producer: 'revyl-ios-tree' },
     { backend: 'android', producer: 'android-uiautomator' },
     { backend: 'android', producer: 'appium-source' },
     { backend: 'harmonyos-arkui', producer: 'harmonyos-uitest' },

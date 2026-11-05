@@ -19,7 +19,6 @@ import type {
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
-import { applySimctlSetting } from '@agent-device/platform-apple/simctl-settings';
 import {
   createUnavailableRuntimeFactsForTest,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
@@ -210,9 +209,12 @@ function lifecycleOperations(): ApplicationLifecycleRuntimeOperations {
   };
 }
 
-export const limrunTestDependencies = {
+export const limrunTestDependencies: LimrunRuntimeDependencies = {
   clientVersion: 'test',
   android: {
+    bindDeployment: async () => {
+      throw new Error('Unexpected deployment binding');
+    },
     createInteractor: () => ({}) as Interactor,
     createPortReverse: async () => ({
       ensure: async () => {},
@@ -250,8 +252,66 @@ export const limrunTestDependencies = {
     archiveDirectory: async () => {},
   },
   ios: {
-    applySimctlSetting,
+    createAppLogReader: ({ client }) => ({
+      readLogs: async (app, limit) => client.appLogTail(app, limit),
+      [Symbol.asyncDispose]: async () => {},
+    }),
+    createRunner: async (session) => createTestLimrunIosRunner(session.device),
     resolveAppAlias: async (app: string) => app,
     readBundleAppName: async () => undefined,
   },
 } satisfies LimrunRuntimeDependencies;
+
+export async function createTestLimrunIosRunner(
+  device: DeviceInfo,
+  respond?: (command: Record<string, unknown>) => Promise<Record<string, unknown>>,
+): Promise<Awaited<ReturnType<LimrunRuntimeDependencies['ios']['createRunner']>>> {
+  const { createAppleRunnerRuntime } =
+    await import('@agent-device/platform-apple/runner/operations');
+  const { createLimrunAppleApplicationTools } =
+    await import('./core/interactors/limrun-ios-application-tools.ts');
+  const runner = await createAppleRunnerRuntime({
+    device,
+    host: { env: {}, cwd: process.cwd() },
+    provider: {
+      hasLiveSession: () => false,
+      runCommand: async (_device, command) => {
+        if (!respond) throw new Error('Unexpected XCTest runner command');
+        return await respond(command);
+      },
+    },
+  });
+  const applicationTools = createLimrunAppleApplicationTools(
+    device,
+    {
+      prepareCache: async () => {},
+      prewarm: async () => {},
+      release: async () => {},
+      prepare: (_device, input, signal) => runner.prepare(input, signal),
+      resetTarget: async () => {},
+      isReady: () => false,
+      isStarted: () => false,
+      stop: async () => {},
+      releaseSpeculative: async () => false,
+    },
+    {
+      resolveOpenTarget: async (_device, input) => ({
+        appBundleId: input.target ?? input.currentAppBundleId,
+        appName: input.target,
+      }),
+      applyRuntimeHints: async () => {},
+      clearRuntimeHints: async () => {},
+    },
+  );
+  return {
+    ...runner,
+    applicationTools,
+    bindApplicationLifecycle: (request) =>
+      runner.bindApplicationLifecycle({
+        ...request,
+        appleApplications: applicationTools,
+        ensureReady: async (target) => target,
+      }),
+    dispose: async () => {},
+  };
+}

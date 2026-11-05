@@ -114,10 +114,10 @@ What a **Yes** does not claim:
 | [Type into the focused field](/docs/commands#interactions) | Yes | Yes | Yes | Yes | Yes | Yes | No | No |
 | [Long press](/docs/commands#interactions) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Scroll](/docs/commands#scroll) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| [Gesture plans and swipes](/docs/commands#pointer-and-gestures) | Yes | Yes | Yes | Yes | No | Yes | No | No |
+| [Gesture plans and swipes](/docs/commands#pointer-and-gestures) | Yes | Yes | Yes | Yes | Yes | Yes | No | No |
 | [Hover and viewport size](/docs/commands#web-automation) | No | No | No | No | No | No | No | No |
 | [Read, accept, and dismiss system alerts](/docs/commands#wait-and-alerts) | No | No | No | No | Yes | Yes | No | No |
-| [Keyboard dismiss, enter, and status](/docs/commands#keyboard) | Yes | Dismiss only; status and enter unsupported | Yes | Dismiss only; status and enter unsupported | No | Yes | No | No |
+| [Keyboard dismiss, enter, and status](/docs/commands#keyboard) | Yes | Dismiss only; status and enter unsupported | Yes | Dismiss only; status and enter unsupported | Dismiss and enter; status unsupported | Yes | No | No |
 | [React Native overlay dismissal](/docs/commands#react-native-overlays) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 
 What a **Yes** does not claim:
@@ -180,14 +180,14 @@ What a **Yes** does not claim:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [Open and close apps, URLs, and deep links](/docs/commands#navigation) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Install and reinstall an app](/docs/commands#app-install-in-place) | Yes | Yes | No | No | Yes | Yes | No | No |
-| [Uninstall an app](/docs/commands#app-uninstall) | No | No | No | No | No | No | No | No |
+| [Uninstall an app](/docs/commands#app-uninstall) | No | No | No | No | Yes | Yes | No | No |
 | [Install from a source URL](/docs/commands#app-install-from-source-url) | Yes | Yes | No | No | Yes | Yes | No | No |
 | [Installed app list](/docs/commands#app-state-and-app-lists) | No | No | No | No | Yes | Yes | No | No |
-| [Foreground app state](/docs/commands#app-state-and-app-lists) | No | No | No | No | Last opened app, once the instance answers; no foreground read | Yes | No | No |
-| [App switcher](/docs/commands#navigation) | Yes | Yes | Yes | Yes | No | Yes | No | No |
+| [Foreground app state](/docs/commands#app-state-and-app-lists) | No | No | No | No | XCTest foreground state; without runner state, checks the instance and returns session identity only | Yes | No | No |
+| [App switcher](/docs/commands#navigation) | Yes | Yes | Yes | Yes | Yes | Yes | No | No |
 | [Get the device ready and boot simulators and emulators](/docs/commands#navigation) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Shut down a simulator or emulator](/docs/commands#navigation) | No | No | No | No | No | No | No | No |
-| [Prepare the Apple runner](/docs/commands#prepare-apple-runner) | No | No | No | No | No | No | No | No |
+| [Prepare the Apple runner](/docs/commands#prepare-apple-runner) | No | No | No | No | Yes | No | No | No |
 
 What a **Yes** does not claim:
 
@@ -303,12 +303,12 @@ What a **Yes** does not claim:
 | [Home](/docs/commands#navigation) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Set screen orientation](/docs/commands#navigation) | Set only; unlock unsupported | Set only; unlock unsupported | Set only; unlock unsupported | Set only; unlock unsupported | Set only; unlock unsupported | Yes | No | No |
 | [Phone hardware buttons](/docs/commands#navigation) | Yes | Yes | Yes | Yes | No | Yes | No | No |
-| [iPhone Action Button](/docs/commands#navigation) | No | No | No | No | No | No | No | No |
+| [iPhone Action Button](/docs/commands#navigation) | No | No | No | No | Models with an Action Button only | No | No | No |
 | [Foldable pose](/docs/commands#navigation) | No | No | No | No | No | No | No | No |
 | [TV remote keys](/docs/commands#tv-targets) | No | No | No | No | No | No | No | No |
-| [System and app settings helpers](/docs/commands#settings-helpers) | No | No | No | No | Set only; no reads | Yes | No | No |
+| [System and app settings helpers](/docs/commands#settings-helpers) | No | No | No | No | Yes | Yes | No | No |
 | [Clipboard read and write](/docs/commands#clipboard) | Yes | Yes | Yes | Yes | Yes | Yes | No | No |
-| [Push notification simulation](/docs/commands#push-notification-simulation) | No | No | No | No | No | No | No | No |
+| [Push notification simulation](/docs/commands#push-notification-simulation) | No | No | No | No | Yes | No | No | No |
 | [App event triggers through the app hook](/docs/commands#app-event-triggers-app-hook) | Yes | Yes | Yes | Yes | Yes | Yes | No | No |
 | [Call and SMS simulation](/docs/commands#navigation) | No | No | No | No | No | No | No | No |
 

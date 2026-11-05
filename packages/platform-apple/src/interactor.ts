@@ -382,7 +382,10 @@ function assertReportedRunnerSnapshotNodes(
   if ((result.nodes?.length ?? 0) > 0) return;
   if (acceptsEmptyScopedSnapshot(options, result)) return;
   if (device.kind !== 'simulator') return;
-  throw new AppError('COMMAND_FAILED', 'XCTest snapshot returned 0 nodes on iOS simulator.');
+  throw new AppError('COMMAND_FAILED', 'XCTest snapshot returned 0 nodes on iOS simulator.', {
+    reason: 'empty-snapshot',
+    ...(result.quality ? { snapshotQuality: result.quality } : {}),
+  });
 }
 
 /**

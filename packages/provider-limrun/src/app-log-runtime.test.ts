@@ -292,7 +292,9 @@ test.each([
   expect(binding.facts.operations.captureSnapshotWithCustomActions.available).toBe(
     runtimeDevice.platform === 'apple',
   );
-  expect(binding.facts.operations.captureSnapshotWithoutActiveApp).toEqual({ available: true });
+  expect(binding.facts.operations.captureSnapshotWithoutActiveApp.available).toBe(
+    runtimeDevice.platform === 'android',
+  );
   expect(binding.facts.operations.setViewport).toMatchObject({ available: false });
   expect(binding.operations.setViewport).toBeUndefined();
   expect(binding.facts.operations.captureScreenshot).toEqual({ available: true });
@@ -303,13 +305,12 @@ test.each([
   expect(binding.operations.focusPoint).toBeTypeOf('function');
   expect(binding.operations.typeText).toBeTypeOf('function');
   expect(binding.operations.captureSnapshot).toBeTypeOf('function');
-  // Limrun owns the device remotely and exposes no local point-read tool, so the live read is
-  // unavailable and `get` answers from the captured tree — never by borrowing the local runtime.
-  expect(binding.facts.operations.readTextAtPoint).toMatchObject({
-    available: false,
-    reason: 'unsupported-provider-mode',
-  });
-  expect(binding.operations.readTextAtPoint).toBeUndefined();
+  expect(binding.facts.operations.readTextAtPoint.available).toBe(
+    runtimeDevice.platform === 'apple',
+  );
+  expect(binding.operations.readTextAtPoint).toBeTypeOf(
+    runtimeDevice.platform === 'apple' ? 'function' : 'undefined',
+  );
   expectLimrunNavigationAndKeyboardFacts(binding, runtimeDevice);
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),
@@ -322,9 +323,14 @@ test.each([
     id: runtimeDevice.id,
     booted: true,
   });
-  await expect(binding.operations.appState?.()).resolves.toEqual(
-    runtimeDevice.platform === 'android' ? ANDROID_APP_STATE : {},
-  );
+  if (runtimeDevice.platform === 'android') {
+    await expect(binding.operations.appState?.()).resolves.toEqual({
+      package: 'com.example.app',
+      activity: '.MainActivity',
+    });
+  } else {
+    await expect(binding.operations.appState?.()).resolves.toEqual({});
+  }
 });
 
 test('fails closed for a stale Android identity before exposing facts or binding operations', async () => {
@@ -383,11 +389,6 @@ test('fails closed for a stale Android identity before exposing facts or binding
   expect(getAppState).not.toHaveBeenCalled();
 });
 
-/**
- * back/orientation/home are admitted on both direct-session platforms; tv-remote differs by
- * platform (the Android leg reuses the local family's interactor factory, the iOS leg refuses
- * it explicitly); keyboard status/dismiss/enter reuse that same Android-only interactor.
- */
 function expectLimrunNavigationAndKeyboardFacts(
   binding: DeviceBinding<PlatformRuntimeOperations>,
   runtimeDevice: DeviceInfo,
@@ -405,23 +406,21 @@ function expectLimrunNavigationAndKeyboardFacts(
   expect(binding.facts.operations.tvRemote).toMatchObject({
     hint: isAndroid
       ? 'tv-remote is supported only on Android TV targets.'
-      : 'Limrun iOS direct sessions do not expose tv remote control.',
+      : 'tv-remote is supported only on tvOS devices.',
   });
+  if (!isAndroid) {
+    expect(binding.facts.operations.keyboardStatus).toMatchObject({
+      reason: 'unsupported-platform-leaf',
+      hint: 'keyboard status/get is currently supported only on Android; use keyboard dismiss or enter on iOS',
+    });
+  }
   for (const operation of ['keyboardStatus', 'keyboardDismiss', 'keyboardEnter'] as const) {
-    expect(binding.facts.operations[operation].available).toBe(isAndroid);
-    expect(binding.operations[operation]).toBeTypeOf(isAndroid ? 'function' : 'undefined');
-    if (!isAndroid) {
-      expect(binding.facts.operations[operation]).toMatchObject({
-        hint: 'Limrun iOS direct sessions do not expose keyboard actions.',
-      });
-    }
+    const available = isAndroid || operation !== 'keyboardStatus';
+    expect(binding.facts.operations[operation].available).toBe(available);
+    expect(binding.operations[operation]).toBeTypeOf(available ? 'function' : 'undefined');
   }
 }
 
-// R52/R53: Limrun's two session kinds run different interactors. The Android emulator session
-// runs the ordinary Android interactor (every tier); the iOS direct session's own
-// `performGesture` refuses, so stating that as a fact refuses at admission instead of
-// mid-execution — with the interactor's wording preserved.
 const limrunAndroid = {
   platform: 'android' as const,
   id: 'limrun:android:lease-a',
@@ -453,7 +452,7 @@ test('admits every gesture tier on a Limrun Android session', async () => {
   }
 });
 
-test('refuses Limrun iOS gestures at admission while keeping its scroll', async () => {
+test('admits the shared Apple runner gestures on Limrun iOS', async () => {
   const owner = createLimrunPlatformRuntimeOwner(
     limrunOwnerOptions({ getInteractor: () => ({}) as never }),
   );
@@ -465,14 +464,9 @@ test('refuses Limrun iOS gestures at admission while keeping its scroll', async 
     'performTargetAuthoredDrag',
     'gestureViewport',
   ] as const) {
-    expect(binding.facts.operations[operation]).toEqual({
-      available: false,
-      reason: 'unsupported-provider-mode',
-      hint: 'Limrun iOS direct sessions do not expose portable gesture execution yet.',
-    });
-    expect(binding.operations[operation]).toBeUndefined();
+    expect(binding.facts.operations[operation]).toEqual({ available: true });
+    expect(binding.operations[operation]).toBeTypeOf('function');
   }
-  // The iOS direct session exposes scrolling directly — no gesture synthesis involved.
   expect(binding.facts.operations.scrollDirection).toEqual({ available: true });
   expect(binding.operations.scrollDirection).toBeTypeOf('function');
 });

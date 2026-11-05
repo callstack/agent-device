@@ -62,3 +62,13 @@ function readXmlPlistString(plist: string, key: string): string | undefined {
   });
   return result;
 }
+
+/** Parses downloaded app metadata on hosts without Apple's plist tools. */
+export async function parseApplePlist(bytes: Uint8Array): Promise<Record<string, unknown> | null> {
+  const { parse } = await import('plist');
+  const binary = new TextDecoder().decode(bytes.subarray(0, 8)) === 'bplist00';
+  const value = parse(binary ? bytes : new TextDecoder().decode(bytes));
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}

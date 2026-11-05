@@ -423,7 +423,7 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--launch-console <path>',
     usageDescription:
-      'open: capture the initial local iOS simulator launch console window to a file',
+      'open: capture the initial local or Limrun iOS simulator launch console window to a file',
     projectConfig: false,
     recorded: false,
   },
