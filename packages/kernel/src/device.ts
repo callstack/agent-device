@@ -159,7 +159,7 @@ function webBackendKeyPrefix(tenantId: string | undefined): string {
 function requireWebSessionName(sessionName: string, keyPrefixLength: number): string {
   const name = sessionName.toLowerCase();
   const maxLength = WEB_BACKEND_KEY_MAX_LENGTH - keyPrefixLength;
-  if (!WEB_SESSION_NAME_PATTERN.test(name) || name.length > maxLength) {
+  if (!WEB_SESSION_NAME_PATTERN.test(sessionName) || name.length > maxLength) {
     throw new AppError(
       'INVALID_ARGS',
       `A web session name must be 1 to ${maxLength} characters of letters, digits, "_" and "-".`,

@@ -119,6 +119,7 @@ test.each([
   'a/b',
   'a.b',
   'é',
+  'K',
   'a'.repeat(31),
 ])('a web session name of %j is refused with a typed reason', (name) => {
   assert.throws(
