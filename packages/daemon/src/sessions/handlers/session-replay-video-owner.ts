@@ -66,7 +66,7 @@ export function createReplayTestVideoOwner(
 }
 
 function recordRequest(request: ReplayRecordVideoRequest): DaemonRequest {
-  const webSession = request.request.webSession;
+  const webSession = request.request.internal?.webSession;
   return {
     token: request.request.token,
     session: request.sessionName,

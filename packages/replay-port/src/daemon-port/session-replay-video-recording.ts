@@ -14,8 +14,7 @@ import {
   defaultRecordingPath,
   recordingExtensionForPlatform,
 } from '@agent-device/capture-kit/recording-output-path';
-import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import type { WebSessionIdentity } from '@agent-device/kernel/device';
+import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
 const REPLAY_TEST_VIDEO_RECORDING_PREROLL_MS = 1_000;
 const REPLAY_TEST_VIDEO_RECORDING_TAIL_MS = 3_000;
@@ -36,14 +35,12 @@ type ReplayTestVideoRecordingParams = {
   artifactsDir: string | undefined;
   video: ReplayTestVideoOwner;
   appendTimingEvent: (event: Record<string, unknown>) => void;
-  /** The web session the daemon resolved for the suite request; the record request carries it unchanged. */
-  webSession?: WebSessionIdentity;
 };
 
 export async function startReplayTestVideoRecordingIfReady(
   params: ReplayTestVideoRecordingParams,
 ): Promise<DaemonResponse | undefined> {
-  const { req, sessionName, sessionStore, artifactsDir, appendTimingEvent, webSession } = params;
+  const { req, sessionName, sessionStore, artifactsDir, appendTimingEvent } = params;
   if (req.flags?.recordVideo !== true) return undefined;
   const activeSession = sessionStore.get();
   if (!activeSession || activeSession.screenRecording) return undefined;
@@ -63,13 +60,7 @@ export async function startReplayTestVideoRecordingIfReady(
   });
   params.video.throwIfCanceled();
   const startResponse = await params.video.record(
-    replayVideoRecordRequest({
-      req,
-      sessionName,
-      phase: 'start',
-      outputPath: videoPath,
-      ...(webSession === undefined ? {} : { webSession }),
-    }),
+    replayVideoRecordRequest({ req, sessionName, phase: 'start', outputPath: videoPath }),
   );
   if (!startResponse.ok) {
     appendVideoTimingEvent(appendTimingEvent, {
@@ -102,7 +93,7 @@ export async function finalizeReplayTestVideoRecording(
     artifactPaths: Set<string>;
   },
 ): Promise<DaemonResponse | undefined> {
-  const { req, sessionName, sessionStore, artifactPaths, appendTimingEvent, webSession } = params;
+  const { req, sessionName, sessionStore, artifactPaths, appendTimingEvent } = params;
   if (req.flags?.recordVideo !== true) return undefined;
   if (!sessionStore.get()?.screenRecording) return undefined;
 
@@ -115,12 +106,7 @@ export async function finalizeReplayTestVideoRecording(
   await sleep(REPLAY_TEST_VIDEO_RECORDING_TAIL_MS);
   const stopStartedAt = Date.now();
   const stopResponse = await params.video.record(
-    replayVideoRecordRequest({
-      req,
-      sessionName,
-      phase: 'stop',
-      ...(webSession === undefined ? {} : { webSession }),
-    }),
+    replayVideoRecordRequest({ req, sessionName, phase: 'stop' }),
   );
   collectReplayActionArtifactPaths(stopResponse).forEach((entry) => artifactPaths.add(entry));
   appendVideoTimingEvent(appendTimingEvent, {
@@ -153,18 +139,13 @@ function appendVideoTimingEvent(
 type ReplayVideoRecordRequestParams = Readonly<{
   req: DaemonWireRequest;
   sessionName: string;
-  webSession?: WebSessionIdentity;
 }> &
   ({ phase: 'start'; outputPath: string } | { phase: 'stop' });
 
 function replayVideoRecordRequest(
   params: ReplayVideoRecordRequestParams,
 ): ReplayRecordVideoRequest {
-  const request = {
-    token: params.req.token,
-    meta: params.req.meta,
-    ...(params.webSession === undefined ? {} : { webSession: params.webSession }),
-  };
+  const request = { token: params.req.token, meta: params.req.meta };
   if (params.phase === 'start') {
     return {
       request,

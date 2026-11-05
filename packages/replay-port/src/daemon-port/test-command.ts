@@ -160,7 +160,6 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
     invoke,
     cleanupSession,
     video,
-    webSession,
   } = command;
   if (req.flags?.recordVideo === true && video === undefined) {
     return errorResponse(
@@ -241,7 +240,6 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
             artifactsDir,
             appendTimingEvent,
             video,
-            ...(webSession === undefined ? {} : { webSession }),
           }
         : undefined;
       const openLifecycle = videoRecordingParams
@@ -293,7 +291,6 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
           appendTimingEvent,
           artifactPaths,
           video,
-          ...(webSession === undefined ? {} : { webSession }),
         }),
       );
     },
