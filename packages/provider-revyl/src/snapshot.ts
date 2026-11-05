@@ -47,8 +47,8 @@ export async function captureRevylSnapshot(
 }
 
 /**
- * iOS: the AX node tree goes through the capture kit's iOS AX tree reader and interpreter, and comes
- * back as an acquisition for the host to present. The viewport is the tree's own application root,
+ * iOS: Revyl's hierarchy JSON is parsed here into an AX node tree; the capture kit then flattens and
+ * interprets it, and it comes back as an acquisition for the host to present. The viewport is the tree's own application root,
  * because that is the box its frames were measured in; without a usable root it is `health`'s screen,
  * which Revyl reports in the same points on iOS.
  */
