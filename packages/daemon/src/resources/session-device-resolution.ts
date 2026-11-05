@@ -52,7 +52,7 @@ export function requireSessionOrExplicitSelector(
 
 export async function resolveCommandDevice(params: {
   session: SessionState | undefined;
-  /** Its flags select the device, and a web selection binds the session device it carries. */
+  /** Its flags select the device; a web selection binds the device derived from its web session identity. */
   req: DaemonRequest;
   env: EnvMap;
   androidAvdSelection?: 'running-only' | 'include-stopped';
