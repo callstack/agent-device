@@ -83,6 +83,38 @@ test('markPostGestureStabilization honors an explicit opt-out', () => {
   assert.equal(pendingSurfaceStabilization(session), undefined);
 });
 
+test.for([
+  ['scroll', ['down']],
+  ['swipe', []],
+  ['gesture', ['swipe', 'left']],
+] as const)(
+  'an opted-out %s on iOS leaves nothing pending, so the next capture is one plain read',
+  async ([action, positionals]) => {
+    const optedOut = makeSession('ios');
+    optedOut.snapshot = pickupSnapshot(500);
+    markPostGestureStabilization(optedOut, action, [...positionals], {
+      postGestureStabilization: false,
+    });
+    const asked = makeSession('ios');
+    asked.snapshot = pickupSnapshot(500);
+    markPostGestureStabilization(asked, action, [...positionals]);
+
+    // The opt-out is the only difference: the same gesture without it owes the loop.
+    assert.equal(pendingSurfaceStabilization(asked)?.action, action);
+    assert.equal(pendingSurfaceStabilization(optedOut), undefined);
+
+    const capture = vi.fn(async () => pickupSnapshot(500));
+    const result = await capturePostGestureStabilizedResult({
+      session: optedOut,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    });
+
+    assert.equal(capture.mock.calls.length, 1);
+    assert.equal(result.postGestureOutcome, undefined);
+  },
+);
+
 test('markPostGestureStabilization ignores non-swipe gesture sessions', () => {
   const session = makeSession('android');
 

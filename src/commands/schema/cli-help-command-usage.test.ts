@@ -314,6 +314,17 @@ test('command usage shows command flags without global flags', async () => {
   assert.doesNotMatch(help, /--platform ios\|macos\|android\|linux\|web\|apple/);
 });
 
+test('scroll and swipe document the synopsis-hidden stabilization opt-out', async () => {
+  for (const command of ['scroll', 'swipe']) {
+    const help = await usageForCommand(command);
+    if (help === null) throw new Error(`Expected ${command} help text`);
+    assert.doesNotMatch(help, new RegExp(`agent-device ${command} [^\\n]*--no-post-gesture`));
+    assert.match(help, /Command flags:[\s\S]*--no-post-gesture-stabilization\s+\S/);
+  }
+  const press = await usageForCommand('press');
+  assert.doesNotMatch(press ?? '', /--no-post-gesture-stabilization/);
+});
+
 test('back command usage documents explicit mode flags', async () => {
   const help = await usageForCommand('back');
   if (help === null) throw new Error('Expected command help text');

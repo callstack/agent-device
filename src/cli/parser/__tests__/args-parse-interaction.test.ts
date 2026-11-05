@@ -52,6 +52,28 @@ test('parseArgs accepts scroll pixel distance and duration flags', () => {
   assert.equal(parsed.flags.durationMs, 50);
 });
 
+test('parseArgs accepts the post-gesture stabilization opt-out on scroll and swipe only', () => {
+  const scroll = parseArgs(['scroll', 'down', '--no-post-gesture-stabilization'], {
+    strictFlags: true,
+  });
+  assert.equal(scroll.flags.noPostGestureStabilization, true);
+
+  const swipe = parseArgs(['swipe', '0', '0', '10', '10', '--no-post-gesture-stabilization'], {
+    strictFlags: true,
+  });
+  assert.equal(swipe.flags.noPostGestureStabilization, true);
+
+  assert.equal(parseArgs(['scroll', 'down']).flags.noPostGestureStabilization, undefined);
+  assert.throws(
+    () =>
+      parseArgs(['press', '10', '10', '--no-post-gesture-stabilization'], { strictFlags: true }),
+    (error) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      /--no-post-gesture-stabilization is not supported for command press/.test(error.message),
+  );
+});
+
 test('parseArgs keeps no-record accepted on recordable commands', () => {
   const press = parseArgs(['press', '10', '10', '--no-record'], { strictFlags: true });
   assert.equal(press.flags.noRecord, true);

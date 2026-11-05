@@ -35,6 +35,7 @@ import {
   operatorField,
   pointArrayField,
   pointField,
+  postGestureStabilizationFields,
   repeatedFields,
   requiredField,
   selectorSnapshotFields,
@@ -74,7 +75,7 @@ const interactionCommandDescriptions = {
     'Move input focus to explicit screen coordinates without entering text. Prefer semantic interactions when a snapshot ref or selector is available; use type or fill after focus.',
   type: 'Append text to the currently focused input. Use fill when the existing field value should be replaced, and focus first when no input is active.',
   scroll:
-    'Scroll in a direction, or toward the top/bottom edge of scrollable content. Set until to a selector to reach an off-screen target in one command rather than a scroll-and-check loop. The optional amount is the finger-path fraction of the viewport axis, honored up to 0.8 of it; directional scrolls reduce release momentum, while app scroll physics determine the final content offset. A visible keyboard shortens the swiped band instead of being dismissed; when too little is left, the command refuses with scroll_keyboard_occludes_surface. A directional scroll also reports the movement it observed as movement: moved, at-edge, unchanged, or unobserved when the two reads could not back a claim either way; an unchanged surface inside a container that still hides content in that direction refuses with scroll_no_progress rather than repeating the requested distance. The movement field is absent where a tier verifies per pass (top/bottom, until), where the runtime cannot read a screen, or where a settle observation or a replay already owns that observation.',
+    'Scroll in a direction, or toward the top/bottom edge of scrollable content. Set until to a selector to reach an off-screen target in one command rather than a scroll-and-check loop. The optional amount is the finger-path fraction of the viewport axis, honored up to 0.8 of it; directional scrolls reduce release momentum, while app scroll physics determine the final content offset. A visible keyboard shortens the swiped band instead of being dismissed; when too little is left, the command refuses with scroll_keyboard_occludes_surface. A directional scroll also reports the movement it observed as movement: moved, at-edge, unchanged, or unobserved when the two reads could not back a claim either way; an unchanged surface inside a container that still hides content in that direction refuses with scroll_no_progress rather than repeating the requested distance. The movement field is absent where a tier verifies per pass (top/bottom, until), where the runtime cannot read a screen, where a settle observation or a replay already owns that observation, or where the operator opted out of it.',
   get: 'Read text or accessibility attributes from a snapshot ref or selector without changing the app. Use format text for visible content or attrs for the element attribute map.',
   is: 'Check whether a selector satisfies a UI predicate such as visible, hidden, exists, absent, editable, selected, focused, or text. `absent` passes only when one readable, complete, settled, unscoped, full-depth accessibility capture has zero matches. Use wait when the condition may appear asynchronously.',
   find: 'Find by text/label/value/role/id and run action; the action defaults to click. The role locator matches snapshot kind vocabulary (button, text, text-field, switch, ...); pre-reconciliation leaf spellings (statictext, edittext, textview) stay accepted on the nodes that carried them during a deprecation window. The focus and type actions aim at a text field: the match or the field holding it, even beside other fields, or else the one enabled on-screen field inside the match. Several enabled on-screen fields inside the match refuse with AMBIGUOUS_MATCH and the field candidates, and a disabled target refuses with reason target_disabled. Web text boxes are not recognized as text fields.',
@@ -142,6 +143,7 @@ const swipeFields = {
   count: integerField('Number of swipe repetitions.', { min: 1, max: SWIPE_REPETITION_MAX }),
   pauseMs: integerField('Pause between repeated swipes.', { min: 0, max: SWIPE_PAUSE_MAX_MS }),
   pattern: enumField(SWIPE_PATTERNS),
+  ...postGestureStabilizationFields(),
 };
 
 const focusFields = {
@@ -173,6 +175,7 @@ const scrollFields = {
     max: SCROLL_DURATION_MAX_MS,
   }),
   ...postActionObservationFields('scroll'),
+  ...postGestureStabilizationFields(),
 };
 
 // #1271 stage 2 (ADR 0012 amendment): `get`/`is`/`find` are observation-only,

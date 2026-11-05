@@ -41,6 +41,31 @@ test('client commands refuse the retired readinessTimeoutMs before sending anyth
   assert.deepEqual(setup.calls, []);
 });
 
+test('the stabilization opt-out is sent as the daemon flag, and only when the caller asks', async () => {
+  const setup = createClientTransport(async () => ({ ok: true, data: {} }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+  const swipe = { from: { x: 1, y: 1 }, to: { x: 1, y: 9 } };
+
+  await client.interactions.scroll({ direction: 'down', noPostGestureStabilization: true });
+  await client.interactions.swipe({ ...swipe, noPostGestureStabilization: true });
+  await client.interactions.scroll({ direction: 'down' });
+  await client.interactions.swipe({ ...swipe, noPostGestureStabilization: false });
+
+  assert.deepEqual(
+    setup.calls.map((call) => [call.command, call.flags?.postGestureStabilization]),
+    [
+      ['scroll', false],
+      ['swipe', false],
+      ['scroll', undefined],
+      ['swipe', undefined],
+    ],
+  );
+  for (const call of setup.calls) {
+    assert.equal(Object.hasOwn(call.flags ?? {}, 'noPostGestureStabilization'), false);
+    assert.equal(Object.hasOwn(call.input ?? {}, 'noPostGestureStabilization'), false);
+  }
+});
+
 test('tap commands still carry post-action observation flags', async () => {
   const setup = createClientTransport(async () => ({ ok: true, data: {} }));
   const client = createAgentDeviceClient(setup.config, { transport: setup.transport });

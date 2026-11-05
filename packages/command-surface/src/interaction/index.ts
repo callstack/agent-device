@@ -403,7 +403,7 @@ const interactionCliSchemas = {
     // Arity is enforced by swipePayloadFromPositionals (assertGestureArity), so
     // an extra positional reaches that migration-hint error, not this schema's.
     allowsExtraPositionals: true,
-    allowedFlags: ['count', 'pauseMs', 'pattern'],
+    allowedFlags: ['count', 'pauseMs', 'pattern', 'noPostGestureStabilization'],
   },
   gesture: {
     usageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform|tap|drag> ...',
@@ -446,6 +446,7 @@ const interactionCliSchemas = {
       'until',
       'maxPasses',
       ...postActionObservationCliFlags('scroll'),
+      'noPostGestureStabilization',
     ],
   },
 } as const satisfies Record<string, CommandSchemaOverride>;
@@ -523,6 +524,8 @@ const swipeCommandFacet = defineCommandFacet({
   name: 'swipe',
   text: {
     summary: 'Fling between coordinates',
+    cliDetail:
+      'The first read after a swipe waits for two captures to agree. --no-post-gesture-stabilization skips that wait for a caller whose own polling verifies the screen.',
   },
   metadata: metadata('swipe'),
   run: (client, input) => client.interactions.swipe(input as SwipeOptions),
@@ -559,6 +562,8 @@ const scrollCommandFacet = defineCommandFacet({
   name: 'scroll',
   text: {
     summary: 'Scroll in a direction or to an edge',
+    cliDetail:
+      'A caller that verifies the screen by polling can add --no-post-gesture-stabilization. The scroll then returns right after its gesture, with no movement field and no scroll_no_progress refusal, and the next read skips the stabilization wait. With --settle the settle observation already reports the outcome, and the option removes the same wait from its first capture.',
   },
   metadata: metadata('scroll'),
   run: (client, input) => client.interactions.scroll(input as ScrollOptions),

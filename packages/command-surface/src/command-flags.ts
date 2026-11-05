@@ -16,6 +16,15 @@ const CLI_FLAG_KEYS: ReadonlySet<string> = new Set(
   getFlagDefinitions().map((definition) => definition.key),
 );
 
+/**
+ * Caller opt-outs the daemon reads as a flag of its own. The caller states the opt-out; the
+ * request carries the daemon's flag and nothing under the caller's key, so the daemon keeps one
+ * spelling for each decision.
+ */
+const DAEMON_FLAGS_FOR_OPT_OUT: Readonly<Record<string, Partial<CommandFlags>>> = {
+  noPostGestureStabilization: { postGestureStabilization: false },
+};
+
 function buildFlags(options: InternalRequestOptions): CommandFlags {
   const leaseScope = leaseScopeFromOptions(options);
   return stripUndefined({
@@ -155,6 +164,10 @@ export function readMetadataCommandFlags(
   for (const key of Object.keys(properties)) {
     if (!CLI_FLAG_KEYS.has(key)) continue;
     const value = record[key];
+    if (Object.hasOwn(DAEMON_FLAGS_FOR_OPT_OUT, key)) {
+      if (value === true) Object.assign(flags, DAEMON_FLAGS_FOR_OPT_OUT[key]);
+      continue;
+    }
     if (isMetadataFlagValue(value)) flags[key] = value;
   }
   return flags as Partial<CommandFlags>;

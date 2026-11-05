@@ -61,6 +61,7 @@ export type {
   LongPressOptions,
   PanOptions,
   PinchOptions,
+  PostGestureStabilizationOptions,
   PressOptions,
   RepeatedPressOptions,
   RotateGestureOptions,

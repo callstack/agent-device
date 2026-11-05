@@ -125,6 +125,8 @@ export type CliFlags = CloudProviderProfileFields &
     verify?: boolean;
     settle?: boolean;
     settleQuietMs?: number;
+    /** The daemon reads this as `postGestureStabilization: false`; the key itself never crosses the wire. */
+    noPostGestureStabilization?: boolean;
     clickButton?: ClickButton;
     backMode?: BackMode;
     pauseMs?: number;
@@ -182,4 +184,5 @@ export type DaemonExcludedCliFlag =
   | 'version'
   | 'batchSteps'
   | 'replayMaestro'
-  | 'daemonAuthToken';
+  | 'daemonAuthToken'
+  | 'noPostGestureStabilization';

@@ -2,6 +2,11 @@ import { expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { interactionCommandMetadata } from './metadata.ts';
 
+const EXAMPLE_INPUT = {
+  scroll: { direction: 'down' },
+  swipe: { from: { x: 1, y: 1 }, to: { x: 1, y: 9 } },
+} as const;
+
 // `fill <target> ""` is the clear-field primitive (#2063): before it existed, emptying an input
 // was not expressible at all — `fill` refused the empty string and `keyboard` had no delete verb.
 // The empty string therefore has to survive input validation, while a MISSING text argument must
@@ -39,6 +44,24 @@ test('fill refuses a non-string text', () => {
     expect((error as AppError).code).toBe('INVALID_ARGS');
   }
 });
+
+// The audience narrows the model-facing tool schemas only: the CLI and the Node client read the
+// same schema, and that is where a caller that polls the screen states the opt-out.
+test.for(['scroll', 'swipe'] as const)(
+  '%s offers the stabilization opt-out to the Node client and declares it operator-owned',
+  (name) => {
+    const metadata = interactionCommandMetadata.find((entry) => entry.name === name);
+    if (!metadata) throw new Error(`expected ${name} metadata`);
+
+    expect(metadata.inputSchema.properties?.noPostGestureStabilization?.type).toBe('boolean');
+    expect(metadata.inputAudience.noPostGestureStabilization?.kind).toBe('operator');
+    expect(
+      metadata.readInput({ ...EXAMPLE_INPUT[name], noPostGestureStabilization: true }),
+    ).toMatchObject({
+      noPostGestureStabilization: true,
+    });
+  },
+);
 
 test('type keeps refusing an empty text: appending nothing is not a clear', () => {
   const typeMetadata = interactionCommandMetadata.find((metadata) => metadata.name === 'type');

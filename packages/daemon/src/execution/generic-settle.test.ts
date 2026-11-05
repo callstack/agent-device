@@ -410,6 +410,27 @@ test('the settle observation runs after the post-gesture stabilization marker', 
   expect(captureObservations[0]?.postGestureStabilizationPending).toBe(true);
 });
 
+test('a stabilization opt-out leaves the settle observation, and drops the wait its first capture folds in', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'generic-settle-opt-out';
+  seedSession(sessionName, sessionStore);
+  mockCommandDispatch([AFTER_NODES]);
+
+  const response = await dispatchGeneric({
+    sessionName,
+    sessionStore,
+    command: 'scroll',
+    positionals: ['down'],
+    flags: { ...SETTLE_FLAGS, postGestureStabilization: false },
+  });
+
+  expect((expectOkData(response).settle as SettlePayload).settled).toBe(true);
+  expect(captureObservations.length).toBeGreaterThan(0);
+  expect(
+    captureObservations.map((observation) => observation.postGestureStabilizationPending),
+  ).toEqual(captureObservations.map(() => false));
+});
+
 test('scroll --settle observes through the request-bound capture, once admitted', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'generic-settle-bound-capture';

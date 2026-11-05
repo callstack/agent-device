@@ -118,6 +118,19 @@ test('MCP transport/config controls are hidden from the schema and cannot reach 
   ]);
 });
 
+test('the stabilization opt-out is caller policy, so no tool schema offers it', async () => {
+  const { tools } = await createAgentDeviceTools({ session: 'my-session', set: 'all' });
+
+  for (const name of ['scroll', 'swipe']) {
+    assert.ok(name in tools, `${name} is part of the tool set`);
+    assert.equal(
+      'noPostGestureStabilization' in rawSchemaOf(tools, name).properties,
+      false,
+      `${name} offers the opt-out to the model`,
+    );
+  }
+});
+
 test("set: 'all' includes extended-tier commands too", async () => {
   const { tools } = await createAgentDeviceTools({ session: 's', set: 'all' });
   assert.ok('devices' in tools, 'set: all reaches every MCP-exposed command, not just core');
