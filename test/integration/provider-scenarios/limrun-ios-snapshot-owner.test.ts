@@ -57,13 +57,14 @@ vi.mock('@limrun/api/ios-client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@limrun/api/ios-client')>();
   limrunApiState.simctl.mockImplementation((args: string[]) => {
     const execution = new actual.SimctlExecution(() => {});
-    if (args[0] === 'list')
-      execution._handleStdout(
-        Buffer.from(
-          JSON.stringify({ devices: { ios: [{ udid: 'remote-udid', state: 'Booted' }] } }),
-        ),
-      );
-    execution._handleExit(0);
+    vi.spyOn(execution, 'wait').mockResolvedValue({
+      code: 0,
+      stdout:
+        args[0] === 'list'
+          ? JSON.stringify({ devices: { ios: [{ udid: 'remote-udid', state: 'Booted' }] } })
+          : '',
+      stderr: '',
+    });
     return execution;
   });
   return {
