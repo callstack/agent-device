@@ -55,6 +55,11 @@ type CommandToolExecutorDeps = {
     name: CommandName,
     input: Record<string, unknown>,
   ) => Promise<CommandExecutionResult>;
+  /**
+   * `always` returns `structuredContent` for every successful call. A host that reads results as
+   * data, such as the AI SDK adapter, sets it; the MCP server leaves it unset.
+   */
+  structuredContent?: 'always';
 };
 
 type CommandToolExecutor = {
@@ -199,7 +204,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
         refPins.mergeCommandResult(name, result, config.client.stateDir, commandInput.session);
         return {
           isError: false,
-          ...(returnsStructuredContent(name, config)
+          ...(deps.structuredContent === 'always' || returnsStructuredContent(name, config)
             ? { structuredContent: await projectStructuredContent(name, result) }
             : {}),
           content: [

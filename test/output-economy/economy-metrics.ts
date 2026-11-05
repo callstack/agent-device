@@ -29,10 +29,25 @@ export function measureEconomySample(sample: EconomySample): EconomyMetrics {
   return {
     bytes: Buffer.byteLength(serialized),
     lines: 1,
-    refs: counters.refs,
+    refs: counters.refs + textOnlyToolResultRefs(sample.data),
     hints: counters.hints,
     shape,
   };
+}
+
+/**
+ * A text-only MCP tool result carries its refs in the text the model reads. A result with
+ * structuredContent counts its refs there, so no ref is counted twice.
+ */
+function textOnlyToolResultRefs(data: unknown): number {
+  if (!data || typeof data !== 'object' || 'structuredContent' in data) return 0;
+  const content = (data as { content?: unknown }).content;
+  if (!Array.isArray(content)) return 0;
+  const text = content
+    .map((entry) => (entry as { text?: unknown }).text)
+    .filter((entry): entry is string => typeof entry === 'string')
+    .join('\n');
+  return new Set(text.match(REF_TOKEN_PATTERN) ?? []).size;
 }
 
 function collectShape(
@@ -64,10 +79,6 @@ function collectObjectShape(
   )) {
     if (entry === undefined) continue;
     if (key === 'ref' && typeof entry === 'string') counters.refs++;
-    // An MCP tool result carries its refs in the text the model reads.
-    if (key === 'text' && path === '$.content[]' && typeof entry === 'string') {
-      counters.refs += new Set(entry.match(REF_TOKEN_PATTERN) ?? []).size;
-    }
     if (key === 'hint' && typeof entry === 'string' && entry.length > 0) counters.hints++;
     paths.push(...collectShape(entry, `${path}.${key}`, counters));
   }

@@ -26,3 +26,16 @@ test('MCP returns structuredContent for typed tools, and for untyped tools only 
   const press = await executor.execute('press', { target: { kind: 'ref', ref: '@e2' } });
   assert.deepEqual(press.structuredContent, { message: 'Tapped @e2 (10, 20)' });
 });
+
+test('a data host gets structuredContent from untyped tools by default', async () => {
+  const snapshotResult = { nodes: [{ ref: 'e2', label: 'Save' }], truncated: false };
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async () => snapshotResult,
+    structuredContent: 'always',
+  });
+
+  const result = await executor.execute('snapshot', {});
+
+  assert.deepEqual(result.structuredContent, snapshotResult);
+});
