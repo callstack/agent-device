@@ -351,8 +351,8 @@ extension RunnerTests {
       else {
         return invalidScrollDirectionResponse(commandName: "desktopScroll")
       }
-      let appFrame = activeApp.frame
-      let frame = try resolvedTouchReferenceFrame(app: activeApp, appFrame: appFrame)
+      let appFrame = try readableAppFrame(app: activeApp)
+      let frame = try resolvedTouchReferenceFrame(app: activeApp)
       guard frame.width > 0, frame.height > 0 else {
         return Response(
           ok: false,

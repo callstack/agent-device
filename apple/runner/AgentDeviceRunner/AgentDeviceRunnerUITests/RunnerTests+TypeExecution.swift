@@ -144,7 +144,8 @@ extension RunnerTests {
     if let resolvedCoordinateContext {
       frame = resolvedCoordinateContext.geometry.windowOnScreen.rect
     } else if point != nil {
-      frame = activeApp.frame
+      // The text is already typed, so a frame that does not read leaves the reference size out.
+      frame = heldAppFrame(app: activeApp) ?? .zero
     } else {
       // Bare `type` has no coordinate response to normalize. Avoid serializing the
       // application AX tree only to emit unused reference dimensions.

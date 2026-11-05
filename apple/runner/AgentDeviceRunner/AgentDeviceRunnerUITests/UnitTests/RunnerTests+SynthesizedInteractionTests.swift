@@ -6,7 +6,9 @@ import ObjectiveC.runtime
 
 /// Stands in for XCTest on an app tree it cannot serialize (a React Native feed at accessibility
 /// depth 62 or more): the windows query finds no window and every element frame, the application's
-/// included, reads as null.
+/// included, reads as null after recording an issue on the running test, as XCTest does. The issue
+/// uses an XCTest wording the runner does not mute, so an unheld read fails the test the way an
+/// unmuted issue ends the runner test.
 private final class RunnerUnserializableTreeStub: NSObject {
   /// Each element frame read costs XCTest's retries on such a tree, about 2 s each.
   static var frameReads = 0
@@ -46,7 +48,7 @@ private final class RunnerWindowlessQueryStub: NSObject {
 }
 
 /// Counts XCTest coordinate taps without performing them.
-private final class RunnerCoordinateTapCounter: NSObject {
+final class RunnerCoordinateTapCounter: NSObject {
   static var taps = 0
   @objc func tap() {
     Self.taps += 1
@@ -80,7 +82,7 @@ extension RunnerTests {
     return { method_setImplementation(target, original) }
   }
 
-  private func simulateUnreadableDisplay() throws -> () -> Void {
+  func simulateUnreadableDisplay() throws -> () -> Void {
     try overrideSoleScreenValues(["scale": NSNumber(value: 0)])
   }
 
@@ -191,7 +193,7 @@ extension RunnerTests {
   }
 
   /// Installs `RunnerUnserializableTreeStub` until the returned closure restores XCTest.
-  private func simulateUnserializableAppTree(framesReadable: Bool = false) throws -> () -> Void {
+  func simulateUnserializableAppTree(framesReadable: Bool = false) throws -> () -> Void {
     var swaps: [(Method?, Method?)] = [
       (class_getInstanceMethod(XCUIElementQuery.self, #selector(getter: XCUIElementQuery.allElementsBoundByIndex)),
        class_getInstanceMethod(RunnerUnserializableTreeStub.self, #selector(getter: RunnerUnserializableTreeStub.allElementsBoundByIndex))),
@@ -319,7 +321,6 @@ extension RunnerTests {
       ("back", { try self.performBackGesture(app: self.app) }),
       ("appSwitcher", { try self.performAppSwitcherGesture(app: self.app) }),
       ("touchFrame", { _ = try self.resolvedTouchVisualizationFrame(app: self.app, x: 40, y: 40) }),
-      ("windowFrame", { _ = try self.onScreenWindowFrame(app: self.app) }),
     ]
     let failureCountBefore = currentXCTestFailureCount()
     defer { XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore)) }
@@ -410,6 +411,27 @@ extension RunnerTests {
     XCTAssertEqual(response.data?.sequenceResults?.first?.errorCode, "UNSUPPORTED_OPERATION")
     XCTAssertNotNil(response.data?.sequenceResults?.first?.errorHint)
     XCTAssertEqual(RunnerCoordinateTapCounter.taps, 0)
+  }
+
+  /// A read that is not a coordinate gesture keeps its answer on a tree XCTest cannot snapshot: the
+  /// window frame and the snapshot viewport read the held app frame, empty here, and neither throws
+  /// the coordinate-gesture refusal or records an issue.
+  @MainActor
+  func testNonGestureWindowReadsOnAnUnserializableTreeKeepTheirAnswerWithoutTheGestureRefusal() throws {
+    app.launch()
+    mainOwned.app = app
+    let restoreXCTest = try simulateUnserializableAppTree()
+    defer {
+      restoreXCTest()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let failureCountBefore = currentXCTestFailureCount()
+
+    XCTAssertEqual(try onScreenWindowFrame(app: app), .zero)
+    XCTAssertNoThrow(try safeSnapshotViewport(app: app, readingOrientation: false))
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
   }
 
   /// A refused coordinate tap answers `UNSUPPORTED_OPERATION` with a hint, not an uncoded failure:

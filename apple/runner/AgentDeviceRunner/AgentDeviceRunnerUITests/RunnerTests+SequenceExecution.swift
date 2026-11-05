@@ -39,38 +39,25 @@ extension RunnerTests {
     let synthesizedContext = try synthesizedSequenceCoordinateContext(steps: steps, app: activeApp)
 
     // Touch frame resolves from the first step's coords so recording-gestures works unchanged. A
-    // synthesized context already names the frame, so the app tree is not read for it again.
+    // synthesized context already names the frame, so the app tree is not read for it again. Where
+    // the app frame refuses that read, a first step with no synthesized route would anchor through the
+    // same read, so it refuses before any step runs; a synthesized one needs no app frame and runs
+    // without a touch frame, as a synthesized `tap` command does.
     let firstStep = steps[0]
-    let firstFrame: TouchVisualizationFrame?
-    do {
-      firstFrame = try (firstStep.x != nil && firstStep.y != nil)
-        ? synthesizedContext.map { touchVisualizationFrame(point: SurfacePoint(CGPoint(x: firstStep.x!, y: firstStep.y!)), context: $0) }
-          ?? resolvedTouchVisualizationFrame(app: activeApp, x: firstStep.x!, y: firstStep.y!)
-        : nil
-    } catch let refusal as RunnerCoordinateRefusal {
-      // The frame read is the first tree read of a step with no synthesized context: its refusal is
-      // the first step's outcome, with nothing dispatched.
-      return sequenceResponse(
-        execution: SequenceExecutionResult(
-          results: [
-            SequenceStepResult(
-              ok: false,
-              kind: firstStep.kind,
-              errorCode: "UNSUPPORTED_OPERATION",
-              errorMessage: refusal.message,
-              errorHint: refusal.hint,
-              gestureStartUptimeMs: nil,
-              gestureEndUptimeMs: nil
-            )
-          ],
-          completedSteps: 0,
-          failedStepIndex: 0,
-          gestureStartUptimeMs: nil,
-          gestureEndUptimeMs: nil
-        ),
-        touchFrame: nil,
-        sequenceOrientation: nil
-      )
+    var firstFrame: TouchVisualizationFrame?
+    var firstStepRefusal: RunnerCoordinateRefusal?
+    if let x = firstStep.x, let y = firstStep.y {
+      if let synthesizedContext {
+        firstFrame = touchVisualizationFrame(point: SurfacePoint(CGPoint(x: x, y: y)), context: synthesizedContext)
+      } else {
+        do {
+          firstFrame = try resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
+        } catch let refusal as RunnerCoordinateRefusal {
+          if synthesizedPolicyKind(forSequenceStep: firstStep) == nil {
+            firstStepRefusal = refusal
+          }
+        }
+      }
     }
 
 #if os(iOS)
@@ -79,7 +66,13 @@ extension RunnerTests {
 #else
     let orientation: Int? = nil
 #endif
-    let execution = try assembleSequenceExecution(steps: steps) { _, step in
+    let execution = try assembleSequenceExecution(steps: steps) { index, step in
+      if index == 0, let firstStepRefusal {
+        return finishedSequenceStep(step, timing: measureGesture {}, outcome: .unsupported(
+          message: firstStepRefusal.message,
+          hint: firstStepRefusal.hint
+        ))
+      }
 #if os(iOS)
       if orientation != Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: activeApp)) {
         return finishedSequenceStep(step, timing: measureGesture {}, outcome: .unsupported(

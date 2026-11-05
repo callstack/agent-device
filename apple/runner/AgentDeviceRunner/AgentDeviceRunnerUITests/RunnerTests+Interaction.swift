@@ -244,7 +244,9 @@ extension RunnerTests {
   // lit-panel request uses its booked window, because app.frame names one
   // panel (ADR 0025).
   private func hasTappableFrame(app: XCUIApplication, element: XCUIElement) throws -> Bool {
-    let windowFrame = try requestLitPanel == nil ? app.frame : requireRequestLitPanelSurface(app: app).geometry.windowOnScreen.rect
+    let windowFrame = try requestLitPanel == nil
+      ? readableAppFrame(app: app)
+      : requireRequestLitPanelSurface(app: app).geometry.windowOnScreen.rect
     let frame = element.frame
     if frame.isEmpty {
       return false
@@ -271,19 +273,59 @@ extension RunnerTests {
   /// The read that remains is not atomic: a window vanishing while it is the one being resolved still
   /// records, and the chosen window is read again on its way to a display ID
   /// (`RunnerResolveWindowDisplayID`).
+  ///
+  /// Without a window the frame is the app's own, from the held `heldAppFrame` read, and empty when
+  /// that does not read either. A coordinate gesture resolves through `resolveCoordinateWindow`
+  /// instead, which refuses there.
   func resolveRunnerWindow(app: XCUIApplication) throws -> (window: XCUIElement?, frame: CGRect) {
+    try resolveRunnerWindow(app: app) { heldAppFrame(app: $0) ?? .zero }
+  }
+
+  /// `resolveRunnerWindow` for a coordinate gesture: without a window it reads the app frame through
+  /// `readableAppFrame`, so a tree that answers neither refuses the gesture.
+  func resolveCoordinateWindow(app: XCUIApplication) throws -> (window: XCUIElement?, frame: CGRect) {
+    try resolveRunnerWindow(app: app, appFrame: readableAppFrame)
+  }
+
+  private func resolveRunnerWindow(
+    app: XCUIApplication,
+    appFrame: (XCUIApplication) throws -> CGRect
+  ) throws -> (window: XCUIElement?, frame: CGRect) {
     if requestLitPanel != nil {
       let booked = try requireRequestLitPanelSurface(app: app)
       return (booked.window, booked.geometry.windowOnScreen.rect)
     }
-    guard let resolved = resolveRunnerWindowElement(app: app) else {
-#if os(iOS)
-      return (nil, try readableAppFrame(app: app))
-#else
-      return (nil, app.frame)
-#endif
-    }
+    guard let resolved = resolveRunnerWindowElement(app: app) else { return (nil, try appFrame(app)) }
     return (resolved.window, resolved.frame)
+  }
+
+  /// The app's own frame, or nil where it does not read. On iOS the read is held inside an issue
+  /// scope: on a tree XCTest cannot snapshot it fails after its retries, and an unheld issue ends the
+  /// runner test. A read that records an issue or leaves a non-finite frame (the infinite point XCTest
+  /// would anchor on) is nil; a finite empty frame reads. Every iOS read of the app frame goes through
+  /// here.
+  func heldAppFrame(app: XCUIApplication) -> CGRect? {
+#if os(iOS)
+    var frame = CGRect.null
+    let held = holdingRecordedIssues { frame = app.frame }
+    let finite = !frame.isNull && !frame.isInfinite
+      && frame.minX.isFinite && frame.minY.isFinite && frame.maxX.isFinite && frame.maxY.isFinite
+    guard held.issues.isEmpty, held.exceptionMessage == nil, finite else { return nil }
+    return frame
+#else
+    return app.frame
+#endif
+  }
+
+  /// The app frame a coordinate gesture decides on: `heldAppFrame`, refusing with the coded
+  /// `RunnerCoordinateRefusal` where it does not read.
+  func readableAppFrame(app: XCUIApplication) throws -> CGRect {
+#if os(iOS)
+    guard let frame = heldAppFrame(app: app) else { throw unreadableTreeRefusal }
+    return frame
+#else
+    return app.frame
+#endif
   }
 
   /// The app's first window with a usable frame, or nil. Unlike `resolveRunnerWindow` it never falls
@@ -479,18 +521,6 @@ extension RunnerTests {
     }
   }
 
-  /// The app's own frame, the one iOS owner of that read: held inside an issue scope, because on a tree
-  /// XCTest cannot snapshot the read fails after its retries and an unheld issue ends the runner test.
-  /// It throws the coded refusal when the frame does not read, so every caller decides on the same read.
-  func readableAppFrame(app: XCUIApplication) throws -> CGRect {
-    var frame = CGRect.null
-    let held = holdingRecordedIssues { frame = app.frame }
-    guard held.issues.isEmpty, held.exceptionMessage == nil, SnapshotGeometry.isPositiveFinite(frame) else {
-      throw unreadableTreeRefusal
-    }
-    return frame
-  }
-
   var unreadableTreeRefusal: RunnerCoordinateRefusal {
     RunnerCoordinateRefusal(
       message: "XCTest cannot anchor a coordinate gesture: the app's accessibility tree answered no window and no frame",
@@ -501,9 +531,7 @@ extension RunnerTests {
   /// The element an XCTest coordinate gesture anchors on: the resolved window, or the app itself
   /// where no window answers but the app's own frame does. When neither reads, the tree is
   /// unreadable and the gesture refuses. Every iOS XCUICoordinate that does not come with a proven
-  /// tree resolves through here, so no XCUICoordinate gesture builds a coordinate from an
-  /// application XCTest cannot snapshot. Every iOS read of the app frame goes through
-  /// `readableAppFrame`.
+  /// tree resolves through here, and the app frame reads only through `readableAppFrame`.
   private func requireReadableTreeAnchor(app: XCUIApplication) throws -> XCUIElement {
     if requestLitPanel != nil {
       return try requireRequestLitPanelSurface(app: app).window
@@ -731,7 +759,7 @@ extension RunnerTests {
 #if os(iOS)
     return try requireReadableTreeAnchor(app: app)
 #else
-    return try resolveRunnerWindow(app: app).window ?? app
+    return try resolveCoordinateWindow(app: app).window ?? app
 #endif
   }
 
@@ -763,7 +791,7 @@ extension RunnerTests {
     let point = booked.geometry.contentPoint(from: SurfacePoint(CGPoint(x: x, y: y))).point
     return origin.withOffset(CGVector(dx: point.x, dy: point.y))
 #else
-    let resolved = try resolveRunnerWindow(app: app)
+    let resolved = try resolveCoordinateWindow(app: app)
     let root = resolved.window ?? app
     let origin = root.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
     let offsetX = x - Double(resolved.frame.origin.x)

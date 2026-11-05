@@ -214,7 +214,7 @@ extension RunnerTests {
     }
     return ScrollViewportPolicy.frames(referenceFrame: context.geometry.windowOnScreen.rect, clip: clip)
 #else
-    let fallbackFrame = try resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
+    let fallbackFrame = try resolvedTouchReferenceFrame(app: app)
     return ScrollViewportPolicy.frames(referenceFrame: fallbackFrame, clip: .unobstructed)
 #endif
   }

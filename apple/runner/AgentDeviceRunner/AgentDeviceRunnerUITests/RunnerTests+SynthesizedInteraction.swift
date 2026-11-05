@@ -255,17 +255,10 @@ extension RunnerTests {
   }
 
   func resolvedTouchVisualizationFrame(app: XCUIApplication, x: Double, y: Double) throws -> TouchVisualizationFrame {
-#if os(iOS)
-    let appFrame: CGRect
-    if requestLitPanel == nil {
-      appFrame = try readableAppFrame(app: app)
-    } else {
-      appFrame = app.frame
-    }
-#else
-    let appFrame = app.frame
-#endif
-    let referenceFrame = try resolvedTouchReferenceFrame(app: app, appFrame: appFrame)
+    let resolved = try resolveCoordinateWindow(app: app)
+    // Without a window the fallback frame is the app's own, so a windowless tree reads it once.
+    let appFrame = resolved.window == nil ? resolved.frame : try readableAppFrame(app: app)
+    let referenceFrame = touchReferenceFrame(app: app, resolved: resolved)
     let originX = appFrame.isEmpty ? referenceFrame.minX : appFrame.minX
     let originY = appFrame.isEmpty ? referenceFrame.minY : appFrame.minY
     return TouchVisualizationFrame(
@@ -309,13 +302,15 @@ extension RunnerTests {
     )
   }
 
-  func resolvedTouchReferenceFrame(app: XCUIApplication, appFrame: CGRect) throws -> CGRect {
-    let resolved = try resolveRunnerWindow(app: app)
-    if resolved.window != nil {
+  /// The resolved window's frame, or the app's own frame where no window answers, clear of the
+  /// keyboard.
+  func resolvedTouchReferenceFrame(app: XCUIApplication) throws -> CGRect {
+    touchReferenceFrame(app: app, resolved: try resolveCoordinateWindow(app: app))
+  }
+
+  private func touchReferenceFrame(app: XCUIApplication, resolved: (window: XCUIElement?, frame: CGRect)) -> CGRect {
+    if resolved.window != nil || !resolved.frame.isEmpty {
       return frameAvoidingKeyboard(app: app, frame: resolved.frame)
-    }
-    if !appFrame.isEmpty {
-      return frameAvoidingKeyboard(app: app, frame: appFrame)
     }
     return CGRect(x: 0, y: 0, width: 0, height: 0)
   }
@@ -334,7 +329,7 @@ extension RunnerTests {
       ? context.geometry.windowOnScreen.rect
       : frameAvoidingKeyboard(app: app, frame: context.geometry.windowOnScreen.rect)
 #else
-    return try resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
+    return try resolvedTouchReferenceFrame(app: app)
 #endif
   }
 
@@ -637,7 +632,7 @@ extension RunnerTests {
 
   func swipe(app: XCUIApplication, direction: String) throws -> DragVisualizationFrame? {
     if performTvRemoteSwipeIfAvailable(direction: direction) {
-      let frame = try resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
+      let frame = try resolvedTouchReferenceFrame(app: app)
       let midX = frame.midX
       let midY = frame.midY
       return DragVisualizationFrame(
