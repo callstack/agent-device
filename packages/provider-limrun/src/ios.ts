@@ -1,3 +1,4 @@
+import type { LimrunSyncCache } from './sync-cache.ts';
 import type { SettingOptions } from '@agent-device/contracts/settings';
 import type {
   DeviceLease,
@@ -31,6 +32,7 @@ export type LimrunIosSession = {
   appBundleId?: string;
   readonly ownership: LimrunInstanceOwnership;
   device: DeviceInfo;
+  syncCache?: LimrunSyncCache;
   client: LimrunIosClient;
   /** Instance bearer token; the recording download the SDK would run inline is done by the host instead. */
   readonly token: string;
@@ -82,6 +84,8 @@ export async function installLimrunIosApp(
   operationDrain?: LimrunRequestOperationDrain,
 ): Promise<ProviderDeviceInstallResult> {
   signal?.throwIfAborted();
+  const { LimrunSyncCache } = await import('./sync-cache.ts');
+  const syncCache = (session.syncCache ??= new LimrunSyncCache());
   const stat = await fs.promises.stat(installablePath);
   const appName =
     (stat.isDirectory()
@@ -94,11 +98,18 @@ export async function installLimrunIosApp(
       // The shared deployment owner must retain the artifact until sync finishes reading it.
       const synced = await awaitLimrunDeploymentOperation(
         operationDrain,
-        session.client.syncApp(installablePath, {
-          install: true,
-          watch: false,
-          launchMode: options?.relaunch ? 'RelaunchIfRunning' : 'None',
-        }),
+        syncCache.run(
+          installablePath,
+          'ios',
+          (basisCacheDir) =>
+            session.client.syncApp(installablePath, {
+              basisCacheDir,
+              install: true,
+              watch: false,
+              launchMode: options?.relaunch ? 'RelaunchIfRunning' : 'None',
+            }),
+          signal,
+        ),
       );
       signal?.throwIfAborted();
       return synced.installedBundleId;

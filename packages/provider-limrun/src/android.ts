@@ -1,3 +1,4 @@
+import type { LimrunSyncCache } from './sync-cache.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   createInstanceClient as createAndroidInstanceClient,
@@ -36,6 +37,7 @@ type LimrunAndroidAdbSession = {
   instanceId: string;
   readonly ownership: LimrunInstanceOwnership;
   device: DeviceInfo;
+  syncCache?: LimrunSyncCache;
   client: LimrunAndroidClient;
   /** Instance bearer token; the recording download the SDK would run inline is done by the host instead. */
   readonly token: string;
@@ -119,14 +121,23 @@ export async function installLimrunAndroidApp(
   operationDrain?: LimrunRequestOperationDrain,
 ): Promise<ProviderDeviceInstallResult> {
   signal?.throwIfAborted();
+  const { LimrunSyncCache } = await import('./sync-cache.ts');
+  const syncCache = (session.syncCache ??= new LimrunSyncCache());
   // The shared deployment owner must retain the artifact until sync finishes reading it.
   const result = await awaitLimrunDeploymentOperation(
     operationDrain,
-    session.client.syncApp(installablePath, {
-      install: true,
-      watch: false,
-      launchMode: options?.relaunch ? 'RelaunchIfRunning' : 'None',
-    }),
+    syncCache.run(
+      installablePath,
+      'android',
+      (basisCacheDir) =>
+        session.client.syncApp(installablePath, {
+          basisCacheDir,
+          install: true,
+          watch: false,
+          launchMode: options?.relaunch ? 'RelaunchIfRunning' : 'None',
+        }),
+      signal,
+    ),
   );
   signal?.throwIfAborted();
   const packageName =

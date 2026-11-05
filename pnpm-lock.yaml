@@ -876,6 +876,9 @@ importers:
       '@agent-device/platform-apple':
         specifier: workspace:*
         version: link:../platform-apple
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
       '@limrun/api':
         specifier: ^0.69.1
         version: 0.69.1(supports-color@7.2.0)

@@ -22,6 +22,7 @@ await build({
       'distinct',
       'unused',
       'jpeg-js',
+      '@limrun/xdelta3-wasm',
       'included-extra',
       'included.extra',
       'included_extra',

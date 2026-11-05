@@ -628,7 +628,7 @@ Limrun direct-device flow:
   agent-device connect limrun --platform android
 
   Limrun creates remote iOS simulators and Android emulators only. Do not pass local device selectors such as --udid, --serial, or --device.
-  To drive an existing instance without the API key, set LIM_IOS_INSTANCE_URL and LIM_IOS_INSTANCE_TOKEN, or LIM_ANDROID_INSTANCE_URL, LIM_ANDROID_INSTANCE_TOKEN, and LIM_ANDROID_INSTANCE_ADB_URL, from the instance status before connect. agent-device then never creates or deletes that instance; install, and apps before the first open, still need LIMRUN_API_KEY.
+  To drive an existing instance without the API key, set LIM_IOS_INSTANCE_URL and LIM_IOS_INSTANCE_TOKEN, or LIM_ANDROID_INSTANCE_URL, LIM_ANDROID_INSTANCE_TOKEN, and LIM_ANDROID_INSTANCE_ADB_URL, from the instance status before connect. agent-device then never creates or deletes that instance; install and reinstall sync local app files without LIMRUN_API_KEY. Android still needs its ADB URL to connect. apps before the first open needs LIMRUN_API_KEY to list stored assets.
   Set LIMRUN_KEEP_ALIVE=1 to ping the instance every 30 seconds while a session is open, so an idle session does not hit the Limrun inactivity timeout. It is off by default.
   To capture network traffic, connect with --provider-network-logs --provider-network-hosts <app API hosts>. artifacts and close write the HAR and print its path and any capture failures; the HAR holds raw headers and bodies, and captured traffic exits through the daemon host.
   agent-device apps

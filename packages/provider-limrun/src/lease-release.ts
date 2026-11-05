@@ -306,10 +306,15 @@ async function releaseLocalResources(owner: LimrunLeaseOwner): Promise<void> {
   const session = owner.session ?? (await sessionTheCreateBuilt(owner));
   if (session === undefined) return;
   const { awaitLimrunWithinBudget } = await import('./lifecycle-budget.ts');
-  const platformResources =
+  const platformResources = Promise.allSettled([
+    session.syncCache?.dispose(),
     session.platform === 'android'
       ? cleanupLimrunAndroidAdbTunnel(session)
-      : session.runner.dispose();
+      : session.runner.dispose(),
+  ]).then((outcomes) => {
+    const refused = outcomes.find((outcome) => outcome.status === 'rejected');
+    if (refused?.status === 'rejected') throw refused.reason;
+  });
   // Runner and reverse cleanup use the connection, but cannot postpone disconnect beyond their budget.
   const disconnect = awaitLimrunWithinBudget(platformResources, LOCAL_TEARDOWN_BUDGET_MS).then(
     () => {

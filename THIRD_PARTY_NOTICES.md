@@ -15,6 +15,12 @@ the package-level BSD license. These are retained in
 [`LICENSES/jpeg-js.txt`](LICENSES/jpeg-js.txt) and included with the Apache License
 2.0 in the generated notice file whenever `jpeg-js` is bundled.
 
+`@limrun/xdelta3-wasm` 0.2.0 omits license files from its npm archive. Its Apache-2.0
+license text and xdelta3 source attribution are retained through
+[`LICENSES/xdelta3-wasm.txt`](LICENSES/xdelta3-wasm.txt) and
+[`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt). The build verifies the package
+version before including these notices.
+
 ## Maestro conformance fixtures
 
 The 42 upstream flows in `scripts/maestro-conformance/corpus/upstream/` are copied

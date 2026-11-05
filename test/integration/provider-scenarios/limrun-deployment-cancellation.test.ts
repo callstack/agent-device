@@ -5,10 +5,6 @@ import {
 } from './limrun-deployment-cancellation.fixtures.ts';
 
 const state = vi.hoisted(() => ({
-  assetsGetOrUpload: vi.fn(async (_input: unknown, _options: { signal?: AbortSignal }) => ({
-    signedDownloadUrl: 'https://assets.example.test/app',
-    md5: 'asset-md5',
-  })),
   androidCreate: vi.fn(async () => ({
     metadata: { id: 'limrun-android-instance' },
     status: {
@@ -45,7 +41,6 @@ vi.mock('@limrun/api', () => ({
       list: vi.fn(async () => ({ getPaginatedItems: () => [] })),
       delete: state.iosDelete,
     };
-    readonly assets = { getOrUpload: state.assetsGetOrUpload };
   },
 }));
 
@@ -119,6 +114,7 @@ for (const platform of ['android', 'ios'] as const) {
           install: true,
           watch: false,
           launchMode: 'None',
+          basisCacheDir: expect.any(String),
         });
         expect(deployment.events).toEqual([
           ...(replaceExisting ? ['uninstall'] : []),
@@ -127,7 +123,6 @@ for (const platform of ['android', 'ios'] as const) {
           'cleanup',
         ]);
         expect(deployment.artifactExists()).toBe(false);
-        expect(state.assetsGetOrUpload).not.toHaveBeenCalled();
         expect(state.iosCreate).not.toHaveBeenCalled();
         expect(state.androidCreate).not.toHaveBeenCalled();
       } finally {
@@ -135,6 +130,22 @@ for (const platform of ['android', 'ios'] as const) {
       }
     });
   }
+
+  test(`Limrun ${platform} reports plain SDK sync errors with a typed reason`, async () => {
+    const cause = new Error('SDK sync refused');
+    sync.mockRejectedValueOnce(cause);
+    const deployment = await bindLimrunDeployment(platform, new AbortController().signal);
+    try {
+      await expect(deployment.deploy()).rejects.toMatchObject({
+        code: 'COMMAND_FAILED',
+        details: { reason: 'limrun_app_sync_failed', platform },
+        cause,
+      });
+      expect(deployment.artifactExists()).toBe(false);
+    } finally {
+      await deployment.dispose();
+    }
+  });
 
   for (const fail of [false, true]) {
     test(`Limrun ${platform} cancellation retains the materialized app until sync ${fail ? 'fails' : 'finishes'}`, async () => {
