@@ -70,8 +70,9 @@ async function leaveOrphanedRecord(harness: ReturnType<typeof makeRecordRuntimeH
   expect(recordLifecycle(harness)).toBe('open');
 }
 
-test('record start settles an orphaned recording record on its device instead of refusing', async () => {
-  const harness = makeRecordRuntimeHarness('record-runtime-orphan-settle-', {
+// The start does what the record's own stop would: a recording that can still export is finished.
+test('record start finishes an orphaned recording record on its device instead of refusing', async () => {
+  const harness = makeRecordRuntimeHarness('record-runtime-orphan-finish-', {
     runtime: { reattachActive: true },
   });
   await leaveOrphanedRecord(harness);
@@ -80,7 +81,20 @@ test('record start settles an orphaned recording record on its device instead of
 
   expect(response).toMatchObject({ ok: true, data: { recording: 'started' } });
   expect(recordLifecycle(harness)).toBe('completed');
-  expect(harness.runtime.reattach).toHaveBeenCalledOnce();
+  expect(harness.runtime.finish).toHaveBeenCalledOnce();
+  expect(harness.runtime.forceCleanup).not.toHaveBeenCalled();
+});
+
+test('record start cleans an orphaned recording record that cannot finish', async () => {
+  const harness = makeRecordRuntimeHarness('record-runtime-orphan-settle-', {
+    runtime: { reattachActive: true, finishError: new Error('artifact is not stable') },
+  });
+  await leaveOrphanedRecord(harness);
+
+  const response = await startOnSecondSession(harness);
+
+  expect(response).toMatchObject({ ok: true, data: { recording: 'started' } });
+  expect(recordLifecycle(harness)).toBe('completed');
   expect(harness.runtime.forceCleanup).toHaveBeenCalledOnce();
 });
 
@@ -92,8 +106,6 @@ test('record start completes an orphaned record whose recording is gone from its
 
   expect(response).toMatchObject({ ok: true, data: { recording: 'started' } });
   expect(recordLifecycle(harness)).toBe('completed');
-  // Reattach finds no recording, so nothing is left to clean.
-  expect(harness.runtime.reattach).toHaveBeenCalledOnce();
 });
 
 test('record start leaves an orphaned record on another device open', async () => {
@@ -140,6 +152,7 @@ test('record start still refuses when the orphaned record cannot be confirmed cl
   const harness = makeRecordRuntimeHarness('record-runtime-orphan-pending-', {
     runtime: {
       reattachActive: true,
+      finishError: new Error('artifact is not stable'),
       cleanup: { status: 'cleanup-pending', reason: 'transport-failed' },
     },
   });

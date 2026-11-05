@@ -105,10 +105,11 @@ export function createDurableCaptureResource<
       return recoverDurableCaptureResource(recoveryParams(params), resourcePath);
     },
     /**
-     * Runs exact-owner recovery for the records on `device` that would refuse a start at
-     * `resourcePath` and whose session the daemon no longer holds. A held session's record belongs
-     * to its own stop or close. A record on another device is never recovered through the start
-     * device. A record left open still refuses.
+     * Finishes the records on `device` that would refuse a start at `resourcePath` and whose
+     * session the daemon no longer holds, as their own stop would, and runs exact-owner recovery
+     * only for a record that cannot finish. A held session's record belongs to its own stop or
+     * close. A record on another device is never recovered through the start device. A record
+     * left open still refuses.
      */
     async settleStartConflicts(
       params: Omit<SessionCaptureRecoveryParams<K, H, C>, 'sessionsDir'> &
@@ -124,10 +125,18 @@ export function createDurableCaptureResource<
       for (const record of conflicts.records) {
         if (holdsSession(record.envelope.sessionId)) continue;
         if (deviceIdentityKey(record.envelope.device) !== deviceKey) continue;
-        await recoverDurableCaptureResource(
-          recoveryParams({ ...recovery, sessionsDir: conflicts.sessionsDir }),
-          record.resourcePath,
-        );
+        try {
+          await finishRecoveredDurableCapture(definition, {
+            resourcePath: record.resourcePath,
+            scope: recovery.scope,
+            acquireControl: recovery.acquireControl,
+          });
+        } catch {
+          await recoverDurableCaptureResource(
+            recoveryParams({ ...recovery, sessionsDir: conflicts.sessionsDir }),
+            record.resourcePath,
+          );
+        }
       }
     },
   });
