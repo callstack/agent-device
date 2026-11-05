@@ -172,13 +172,12 @@ export const CLOUD_TEXT_ENTRY_READINESS = ['focused-element'] as const;
 export type CloudTextEntryReadiness = (typeof CLOUD_TEXT_ENTRY_READINESS)[number];
 
 /**
- * What `Interactor.fill` reports back about the entry it performed. The cloud
- * interactors (WebDriver and the Limrun iOS session) populate
- * `textEntryReadiness`; Android and the Apple runner may return target-bound
- * `verification: 'unconfirmed'` evidence when the field changed but its value
- * cannot confirm the text (app-owned formatting, or an accessibility value that
- * does not echo the entry). The Apple runner carries its own readiness
- * equivalent in Swift.
+ * What `Interactor.fill` reports back about the entry it performed. The
+ * WebDriver interactor populates `textEntryReadiness`; Android and the Apple
+ * runner may return target-bound `verification: 'unconfirmed'` evidence when the
+ * field changed but its value cannot confirm the text (app-owned formatting, or
+ * an accessibility value that does not echo the entry). The Apple runner
+ * carries its own readiness equivalent in Swift.
  */
 export type FillBackendResult =
   | {

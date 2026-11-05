@@ -127,7 +127,7 @@ function isUnresolvedInstalledApp(error: unknown): boolean {
   );
 }
 
-export function resolveIosAppAlias(app: string): string {
+function resolveIosAppAlias(app: string): string {
   const trimmed = app.trim();
   return ALIASES[trimmed.toLowerCase()] ?? app;
 }

@@ -18,17 +18,16 @@ import { AppError, createRequestCanceledError } from '@agent-device/kernel/error
 import { successText } from '@agent-device/kernel/success-text';
 
 /**
- * The one driver for every backend that reads alerts from a capture tree (Android ADB, Limrun
- * iOS). A backend supplies only its observation (`capture` + `findCandidate`), its acting
- * policy (`choose`), and its press seam (`press`). It lives in the capture kit: an iOS provider
+ * The one driver for every backend that reads alerts from a capture tree (Android ADB). A
+ * backend supplies only its observation (`capture` + `findCandidate`), its acting policy
+ * (`choose`), and its press seam (`press`). It lives in the capture kit: an iOS provider
  * must not depend on the Android package to poll a tree.
  *
  * The budget rule: `pollUntilSettled` owns it — every probe started inside the budget is
  * awaited and counts; the deadline ends only the LOOP, never a capture in flight. Only the
  * caller's cancellation stops a transport. A quiet screen therefore answers `alert-not-found`
- * on every backend. The cost: a transport with no abort (Limrun's client) can overrun the
- * budget by one call, and a capture that never returns keeps the leg open until the caller
- * cancels it.
+ * on every backend. The cost: a transport with no abort can overrun the budget by one call, and
+ * a capture that never returns keeps the leg open until the caller cancels it.
  */
 
 /** The point a press seam aims at: a button's center in the backend's own coordinate space. */
@@ -56,8 +55,8 @@ export type TreeAlertCandidate<
 /**
  * The seams one tree-based backend owns. `signal` is always the daemon request's own
  * cancellation, never a budget timer: it is what may stop a transport in flight. A transport
- * with no abort (Limrun's client) cannot be stopped this way — its in-flight call keeps running
- * and the leg waits for the answer it started (the overrun named above). The caller meanwhile
+ * with no abort cannot be stopped this way — its in-flight call keeps running and the leg waits
+ * for the answer it started (the overrun named above). The caller meanwhile
  * learns of its cancellation from its own client transport; the daemon's own answer lands once
  * the leg settles on the started probe's answer.
  */
