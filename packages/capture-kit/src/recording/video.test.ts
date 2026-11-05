@@ -159,6 +159,37 @@ test('a rejected compile is evicted so the next attempt compiles and verifies', 
   expect(runCmd).toHaveBeenCalledOnce();
 });
 
+test('preserves compiler stderr and recovery hint without replacing the typed validator reason', async () => {
+  const mp4 = writeFixture('compiler-diagnostics.mp4', Buffer.concat([ftyp, moov]));
+  const host = {
+    env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/compiler-diagnostics' },
+    cwd: directory,
+  };
+  const stderr = 'xcrun: error: unable to find utility "swiftc", not a developer tool or in PATH';
+  const hint =
+    'Export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer before running agent-device.';
+  const failure = new AppError('COMMAND_FAILED', 'xcrun exited with code 72', {
+    stderr,
+    stdout: '',
+    exitCode: 72,
+    reason: 'xcrun-tool-not-found',
+    hint,
+  });
+  vi.mocked(compileSwiftSourceText).mockRejectedValueOnce(failure);
+  await expect(isPlayableVideo(mp4, host)).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: {
+      reason: 'video_validator_unavailable',
+      retriable: false,
+      stderr,
+      stdout: '',
+      exitCode: 72,
+      hint,
+    },
+    cause: failure,
+  });
+});
+
 test('retains main container-only completion when the Swift compiler is missing', async () => {
   const mp4 = writeFixture('missing-compiler.mp4', Buffer.concat([ftyp, moov]));
   const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/missing-compiler' }, cwd: directory };

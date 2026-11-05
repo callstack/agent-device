@@ -186,13 +186,21 @@ async function waitForValidatorCompile(host: HostEnvironment, waitMs: number): P
 }
 
 function unavailableVideoValidator(cause: unknown): AppError {
+  if (cause instanceof AppError && cause.details?.reason === 'video_validator_unavailable')
+    return cause;
+  const details = cause instanceof AppError ? cause.details : undefined;
   return new AppError(
     'COMMAND_FAILED',
     'The video validator is unavailable; MP4 playability could not be verified.',
     {
+      ...details,
       reason: 'video_validator_unavailable',
       retriable: false,
-      hint: 'Repair the Swift toolchain or validator executable on the daemon host, then retry record stop.',
+      hint:
+        details?.hint ??
+        (isSwiftVideoValidatorUnavailable(details?.stderr ?? '', details?.stdout ?? '')
+          ? 'Ensure Swift and AVFoundation are available on the daemon host, then retry record stop.'
+          : 'Repair the Swift toolchain or validator executable on the daemon host, then retry record stop.'),
     },
     cause,
   );

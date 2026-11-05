@@ -133,7 +133,10 @@ test.each(['COMMAND_FAILED', 'TOOL_MISSING'])(
   async (code) => {
     const { start, input } = await harness(devices[1]!);
     const failure = new AppError(code, 'xcrun exited with code 72', {
-      stderr: 'xcrun: error: unable to find utility "swiftc", not a developer tool or in PATH',
+      stderr:
+        code === 'TOOL_MISSING'
+          ? 'xcrun: error: unable to find utility "swiftc", not a developer tool or in PATH'
+          : "video-validator.swift:2:8: error: no such module 'AVFoundation'",
     });
     let rejectCompile!: (error: unknown) => void;
     const compile = new Promise<never>((_resolve, reject) => {
@@ -165,7 +168,12 @@ test.each(['COMMAND_FAILED', 'TOOL_MISSING'])(
     } else {
       await expect(handle.finish()).rejects.toMatchObject({
         code: 'COMMAND_FAILED',
-        details: { reason: 'video_validator_unavailable', retriable: false },
+        details: {
+          reason: 'video_validator_unavailable',
+          retriable: false,
+          stderr: failure.details?.stderr,
+          hint: expect.stringContaining('AVFoundation'),
+        },
         cause: failure,
       });
     }
