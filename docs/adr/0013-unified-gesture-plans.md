@@ -24,6 +24,8 @@ Completed process history is in git history.
 - For target-authored drag, resolve both endpoints before device injection. On replay, verify both identities before pointer-down.
 - Admit target-authored drag only on Android touch devices and iOS/iPadOS.
 - iOS timing changes require live simulator evidence from an independent app-observed postcondition.
+- A backend reports the one-pointer schedule it ran as `executionProfile`. The daemon reports the planned profile only for a backend that reports none.
+  `edge-ease-in` is a reported schedule that no plan can request (amended 2026-11, issue #4208).
 
 ## Context
 
@@ -155,7 +157,7 @@ Platform adapters consume the canonical plan:
   Core admission and the Apple adapter both consume the same shared multi-touch support policy.
   Multi-touch is capability-gated to iOS and iPadOS, on simulators and physical devices, through the XCTest runner.
 
-  iOS deliberately retains three one-contact motion schedules behind the shared private-XCTest event bridge.
+  iOS deliberately retains three one-contact motion schedules behind the shared private-XCTest event bridge, and a fourth outside it.
   Apple's public drag API models the phases independently as an [initial hold, movement velocity, and destination hold](https://developer.apple.com/documentation/xcuiautomation/xcuicoordinate/press%28forduration%3Athendragto%3Awithvelocity%3Athenholdforduration%3A%29).
   UIKit also reports the finger-up velocity together with the scroll view's predicted [resting content offset](https://developer.apple.com/documentation/uikit/uiscrollviewdelegate/scrollviewwillenddragging%28_%3Awithvelocity%3Atargetcontentoffset%3A%29).
   UIKit then applies the scroll view's configured [post-lift deceleration rate](https://developer.apple.com/documentation/uikit/uiscrollview/decelerationrate-swift.property).
@@ -169,6 +171,16 @@ Platform adapters consume the canonical plan:
   - The runner's fused `scroll` reuses `endpoint-hold` for inertial release.
     For controlled release, the fused `scroll` instead expands the movement to evenly spaced samples, one per approximately 16 ms, capped at 30.
     Controlled release uses cubic ease-out `s(t) = 1 - (1 - t)³`.
+  - `edge-ease-in` runs only on an iOS simulator, for a plan whose `contactOrigin` is `screen-edge` (the `left-edge` and `right-edge` presets).
+    XCTest touches carry no edge information, even at x = 0, so UIKit edge recognizers never begin.
+    The runner therefore sends one HID digitizer contact through the touchscreen service of the app's display, as a hand swipe arrives:
+    every frame carries `SwipeLocked` and the native swipe direction.
+    The contact eases in quadratically along the planned samples in 16 ms frames and lifts one frame after the last.
+    A first move that leaves the edge region in one frame fails the recognizer on a wide panel, such as the iPhone Duo inner panel.
+    The cancel event is built before touch-down; after touch-down every exit sends the touch-up or that cancel.
+    Physical devices keep `endpoint-hold` for the same plan.
+    Rejected: an XCTest swipe from x = 0 carries no edge either; the `FromEdgeFlat`/`FromEdgeTip` mask names no direction and fails on a rotated panel;
+    a longer preset duration in the shared planner would move simulator policy into planning and change every platform.
 
   A linear segment has constant movement velocity through its endpoint, unless a destination hold follows it.
   Cubic ease-out decelerates from the first movement and has zero slope at lift.

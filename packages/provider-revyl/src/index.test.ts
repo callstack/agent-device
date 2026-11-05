@@ -70,6 +70,7 @@ test('the plugin declares what a Revyl lease is and is not', () => {
     supportsDeferredAppSelection: false,
     supportsDirectPortReverse: false,
     usesCloudWebDriverLease: false,
+    holdsCloudDevice: true,
   });
 });
 

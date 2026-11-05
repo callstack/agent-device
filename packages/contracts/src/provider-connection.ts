@@ -26,4 +26,10 @@ export type ConnectionProviderCapabilities = {
   supportsDeferredAppSelection: boolean;
   supportsDirectPortReverse: boolean;
   usesCloudWebDriverLease: boolean;
+  /**
+   * The provider leases a cloud-hosted device that bills while held. Its lease requests the same
+   * idle window as a proxy or cloud WebDriver lease on each lease-using command, not the daemon
+   * default.
+   */
+  holdsCloudDevice?: boolean;
 };

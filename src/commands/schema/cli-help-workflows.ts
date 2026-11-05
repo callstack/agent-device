@@ -80,7 +80,7 @@ Logs:
   On iOS physical devices, logs clear --restart relaunches the session app through devicectl process launch --console so stdout/stderr can be captured.
   For iOS simulator launch-time stdout/stderr, use --launch-console on the direct app launch:
     agent-device open MyApp --platform ios --relaunch --launch-console ./artifacts/app.console.log
-  --launch-console is only for local iOS simulator app launches, not URL opens.
+  --launch-console is only for local or Limrun iOS simulator app launches, not URL opens.
 
 Events:
   Use events for a compact session timeline without dumping full app logs.
@@ -183,6 +183,7 @@ Stabilizers:
   Re-enable settings you changed before finishing.
 
 Text-entry quirks:
+  Local iOS fill reuses focus when the current command identifies the target input and reads its keyboard focus. Readable focused inputs use select-all/delete with read-back before any fallback caret tap.
   iOS Allow Paste cannot be exercised under XCUITest; prefill with clipboard write "some text" instead and test the system prompt manually.
   Android Gboard handwriting/stylus UI can capture text in an IME-owned input instead of the app field. If fill reports that input was captured by the keyboard/IME, use the diagnostic targetInput/actualInput details, inspect keyboard status/get if needed, and switch or disable handwriting outside the command plan before retrying. Do not keep retrying fill/type against the same field while the IME owns focus. If the exact target changes but app-owned formatting prevents raw equality, fill succeeds with verification: "unconfirmed" plus target-bound requested/before/after evidence; inspect that evidence instead of retrying the same mutation.
   iOS accessibility-driven fill types the replacement once and never clears and retypes a read-back mismatch. Exact settled text confirms the entry. Nonempty replacements wait until the confirmation deadline before reporting TEXT_ENTRY_MISMATCH. A value containing only characters in order from the post-clear value plus the request fails with TEXT_ENTRY_MISMATCH, including plain dropped characters and unchanged values; legitimate trimming or masks can also hit this limit ("5" into "$0.00" displaying "$0.05"). Other settled values return verification: "unconfirmed" with requested/before/after/target evidence, including grouping ("00 062 91 77" for "000629177"), currency ("$10.00" for "1000"), and OTP summaries. Missing, reordered, duplicated or stale text can also be unconfirmed, so assert the expected value with a value selector, get/is, or the resulting screen before continuing. For single-line fills ending in a submit key, any non-matching value observed on the same target succeeds unverified, including partial or cleared text; this exception skips dropped-character checks because the submit may change the field. Assert the resulting screen. Multiline fields compare newlines as content. Unreadable or removed fields remain unverified. The coordinate-driven fill route still requires an exact match. After TEXT_ENTRY_MISMATCH, inspect the field and retry fill only if it needs correction, using the --delay-ms value from the error hint.

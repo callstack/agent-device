@@ -12,7 +12,7 @@ import { errorResponse } from '@agent-device/kernel/contracts';
 // (`elementMatchCandidateDetails`), beside the renderer — `matches` (the true
 // total) is what a
 // "+N more" marker is computed from at render time by the surface owners.
-// Exported as the single AMBIGUOUS_MATCH producer so the help-benchmark
+// Exported as find's locator AMBIGUOUS_MATCH producer so the help-benchmark
 // sample parity test renders the exact error this handler returns; a message
 // change here fails that gate instead of drifting past it.
 export function buildAmbiguousMatchError(
@@ -24,5 +24,21 @@ export function buildAmbiguousMatchError(
     'AMBIGUOUS_MATCH',
     `find matched ${matches.length} elements for ${locator} "${query}". Use a more specific locator or selector.`,
     { locator, query, ...elementMatchCandidateDetails(matches) },
+  );
+}
+
+/**
+ * The match is one element, but which of its text fields `find focus` or `find type` means is not.
+ * It follows find's refusal contract: its message routes the caller to narrow the locator, and it
+ * does not pin the printed refs to a generation (see `publishAmbiguousMatchCandidateRefs`).
+ */
+export function buildNestedTextFieldsError(
+  ref: string,
+  fields: SnapshotState['nodes'],
+): DaemonResponse {
+  return errorResponse(
+    'AMBIGUOUS_MATCH',
+    `find matched ${ref}, which contains ${fields.length} text fields. Use a more specific locator or selector.`,
+    { ref, ...elementMatchCandidateDetails(fields) },
   );
 }

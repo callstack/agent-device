@@ -92,6 +92,10 @@
     "./validation": {
       "types": "./src/validation.ts",
       "default": "./src/validation.ts"
+    },
+    "./await-with-signal": {
+      "types": "./src/await-with-signal.ts",
+      "default": "./src/await-with-signal.ts"
     }
   }
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
@@ -67,6 +68,7 @@ async function startLimrunRecording(
       { deviceId: params.device.id },
     );
   }
+  const recordingId = randomUUID();
   return await startTransportScreenRecording({
     host: params.host,
     device: params.device,
@@ -78,10 +80,11 @@ async function startLimrunRecording(
       targetLabel: 'Limrun recording',
       start: async () => {
         await session.startRecording({
+          recordingId,
           quality: LIMRUN_QUALITY_BY_EXPORT[input.exportQuality ?? 'medium'],
         });
       },
-      stop: async () => (await session.stopRecording()).downloadUrl,
+      stop: async () => (await session.stopRecording(recordingId)).downloadUrl,
       collect: async (downloadUrl, outputPath) => {
         await session.downloadRecording({ downloadUrl, outPath: outputPath });
       },

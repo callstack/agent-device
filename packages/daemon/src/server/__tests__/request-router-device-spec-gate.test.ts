@@ -76,6 +76,19 @@ test('a command naming a spec is refused with device-spec-unsupported before it 
   expect(systemRuntimeSpies.appSwitcher).not.toHaveBeenCalled();
 });
 
+test('a command naming a device mode is refused with device-spec-unsupported before it runs', async () => {
+  const response = await sendAppSwitcher({ deviceMode: 'full' });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'UNSUPPORTED_OPERATION',
+      details: { reason: 'device-spec-unsupported', keys: ['deviceMode'] },
+    },
+  });
+  expect(systemRuntimeSpies.appSwitcher).not.toHaveBeenCalled();
+});
+
 test('a command giving a spec key the wrong type is refused with device-spec-invalid before it runs', async () => {
   // The named osVersion would be refused as unsupported; the invalid key is reported instead.
   const response = await sendAppSwitcher({

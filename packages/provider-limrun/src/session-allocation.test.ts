@@ -63,6 +63,27 @@ test('the iOS instance create asks the SDK for one attempt, so a lost answer ren
   assert.deepEqual(rented, []);
 });
 
+test.each([
+  ['Android', allocateLimrunAndroidSession, 'POST /v1/android_instances'],
+  ['iOS', allocateLimrunIosSession, 'POST /v1/ios_instances'],
+] as const)(
+  'the %s instance create asks for a five minute inactivity timeout',
+  async (_platform, allocate, route) => {
+    const bodies: string[] = [];
+    const server = await startInstanceServer(async (request) => {
+      if (`${String(request.method)} ${request.path}` === route) bodies.push(request.body);
+      request.drop();
+    });
+    try {
+      await assert.rejects(async () => await allocate(allocationParams(server), () => {}));
+    } finally {
+      await server.close();
+    }
+    const spec = (JSON.parse(bodies[0] ?? '{}') as { spec?: { inactivityTimeout?: string } }).spec;
+    assert.equal(spec?.inactivityTimeout, '5m');
+  },
+);
+
 test('an Android instance that answers without its endpoints is reported as rented and left for its owner', async () => {
   const routes: string[] = [];
   const server = await startInstanceServer(async (request) => {
@@ -177,6 +198,7 @@ type InstanceServer = Readonly<{
 type ReceivedRequest = Readonly<{
   method: string | undefined;
   path: string;
+  body: string;
   /** Ends the connection without an answer, the ambiguity a retry must not resolve by POSTing again. */
   drop(): void;
   respond(status: number, body: string): Promise<void>;
@@ -193,6 +215,7 @@ function startInstanceServer(
         method: req.method,
         // The query is Limrun's own create parameters, not part of the route a retry would repeat.
         path: (req.url ?? '').split('?')[0] ?? '',
+        body: Buffer.concat(chunks).toString('utf8'),
         drop: () => req.socket.destroy(),
         respond: async (status, body) => {
           res.writeHead(status, { 'content-type': 'application/json' });

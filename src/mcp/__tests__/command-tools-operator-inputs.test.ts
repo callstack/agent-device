@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
+import { LEASE_DEVICE_SPEC_KEYS } from '@agent-device/contracts/lease-scope';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
 
@@ -265,7 +266,7 @@ test('MCP open, install, reinstall and uninstall advertise the proxy lease devic
     const tool = listCommandTools().find((candidate) => candidate.name === name);
     assert.ok(tool, `expected an MCP tool named ${name}`);
     const properties = tool.inputSchema.properties ?? {};
-    for (const key of ['osVersion', 'imageTag', 'physical']) {
+    for (const key of LEASE_DEVICE_SPEC_KEYS) {
       assert.equal(key in properties, true, `${name} does not advertise ${key}`);
     }
   }

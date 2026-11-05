@@ -161,6 +161,7 @@ extension RunnerTests {
     let prefersFocusedElement: Bool
     let contentTranslation: TextEntryContentTranslation
     let fromTapWitness: Bool
+    let reusesCurrentFocus: Bool
     /// The input the first resolved element was. Once bound, resolution refuses any other input.
     let boundIdentity: TextEntryInputIdentity?
     /// The text input that sat under `refreshPoint` before the focus tap, which binds the target to
@@ -179,6 +180,7 @@ extension RunnerTests {
       prefersFocusedElement: Bool,
       contentTranslation: TextEntryContentTranslation,
       fromTapWitness: Bool = false,
+      reusesCurrentFocus: Bool = false,
       boundIdentity: TextEntryInputIdentity? = nil,
       inputAtRefreshPoint: TextInputAtPoint? = nil,
       postFocusRead: ResolvedTextEntryInput? = nil
@@ -188,6 +190,7 @@ extension RunnerTests {
       self.prefersFocusedElement = prefersFocusedElement
       self.contentTranslation = contentTranslation
       self.fromTapWitness = fromTapWitness
+      self.reusesCurrentFocus = reusesCurrentFocus
       self.boundIdentity = boundIdentity ?? inputAtRefreshPoint?.identity
       self.inputAtRefreshPoint = inputAtRefreshPoint
       self.postFocusRead = postFocusRead
@@ -206,6 +209,7 @@ extension RunnerTests {
         prefersFocusedElement: prefersFocusedElement,
         contentTranslation: contentTranslation,
         fromTapWitness: fromTapWitness,
+        reusesCurrentFocus: reusesCurrentFocus,
         boundIdentity: boundIdentity ?? input.identity,
         inputAtRefreshPoint: inputAtRefreshPoint
       )
@@ -411,11 +415,13 @@ extension RunnerTests {
     if existing?.isEmpty == true {
       return
     }
-    // Read before the caret tap, which dispatches to the app.
+    let defersCaretTap = reader.target.reusesCurrentFocus
     var valueLength = normalizedElementText(input.attributes.value).count
     // The tap also focuses the field, which a clear can reach with focus unconfirmed.
 #if !os(tvOS)
-    try reader.dispatch { try moveCaretToEnd(app: app, input: input) }
+    if !defersCaretTap {
+      try reader.dispatch { try moveCaretToEnd(app: app, input: input) }
+    }
 #endif
     // An input that stops answering once focused (#3060) cannot be read back, so it gets one burst.
     guard try reader.input() != nil else {
@@ -456,6 +462,19 @@ extension RunnerTests {
       valueLength = remaining.count
     }
 #endif
+    if defersCaretTap {
+      guard let fallbackInput = try reader.input() else {
+        return
+      }
+#if !os(tvOS)
+      try reader.dispatch { try moveCaretToEnd(app: app, input: fallbackInput) }
+#endif
+      guard try reader.input() != nil else {
+        let burst = Self.textClearBurst(valueLength: valueLength)
+        reader.dispatch { fallbackInput.element.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: burst)) }
+        return
+      }
+    }
     for _ in 0...(valueLength / Self.maxTextClearBurst + 1) {
       guard let input = try reader.input() else {
         return

@@ -54,7 +54,6 @@ const IOS_PROVENANCE_LITERALS: ReadonlySet<string> = new Set([
   'apple-runner',
   'simulator-ax-bridge',
   'appium-source',
-  'limrun-ios-tree',
   'revyl-ios-tree',
 ]);
 

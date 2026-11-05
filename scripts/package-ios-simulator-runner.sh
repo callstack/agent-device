@@ -103,6 +103,14 @@ elif [ -d "$STAGED_APP_PATH/Frameworks/Testing.framework" ] &&
   echo "Testing.framework requires lib_TestingInterop.dylib, but it was not found at $INTEROP_LIBRARY" >&2
   exit 1
 fi
+# Swift Testing loads overlays at runtime; keep them from the same toolchain as its bundled framework.
+if [ -d "$STAGED_APP_PATH/Frameworks/Testing.framework" ]; then
+  for FRAMEWORK in "$PLATFORM_PATH"/Developer/Library/Frameworks/_Testing_*.framework; do
+    if [ -d "$FRAMEWORK" ]; then
+      ditto "$FRAMEWORK" "$STAGED_APP_PATH/Frameworks/$(basename "$FRAMEWORK")"
+    fi
+  done
+fi
 rm -f "$ARCHIVE_PATH"
 (
   cd "$STAGE_DIR"

@@ -38,6 +38,7 @@ export const METRO_RELOAD_FLAGS = flagKeys('metroHost', 'metroPort', 'bundleUrl'
 export const LEASE_DEVICE_SPEC_FLAGS = flagKeys(
   'osVersion',
   'imageTag',
+  'deviceMode',
   'physical',
 ) satisfies typeof LEASE_DEVICE_SPEC_KEYS;
 export const REPEATED_TOUCH_FLAGS = flagKeys(

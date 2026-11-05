@@ -124,7 +124,7 @@ test('iOS snapshot host presents provider facts and keeps raw truncation evidenc
   const acquired: SnapshotRuntimeAcquiredResult = {
     stage: 'acquired',
     acquisition: {
-      producer: 'limrun-ios-tree',
+      producer: 'revyl-ios-tree',
       intent: 'full',
       nodes: [
         {
@@ -156,7 +156,7 @@ test('iOS snapshot host presents provider facts and keeps raw truncation evidenc
 
   const host = createHost();
   const regular = await host.presentIosAcquisition(acquired, {});
-  expect(regular).toMatchObject({ backend: 'xctest', producer: 'limrun-ios-tree' });
+  expect(regular).toMatchObject({ backend: 'xctest', producer: 'revyl-ios-tree' });
   expect(regular.nodes?.map((node) => node.label)).toEqual(['App', 'Continue']);
   expect(regular.nodes?.[1]).not.toHaveProperty('hittable');
   expect(regular.warnings).toHaveLength(3);

@@ -222,6 +222,9 @@ async function limrunSupport(
   // The hooks must be in place before the provider's own `@limrun/api` import resolves.
   stubLimrunSdk();
   const { createLimrunRuntime } = await import('@agent-device/provider-limrun');
+  const { createLimrunIosRunner } = await import('../../src/core/interactors/limrun-ios-runner.ts');
+  const { createAppleApplicationTools } =
+    await import('../../src/platform-runtime-apple-application-tools.ts');
   const runtime = createLimrunRuntime(
     {
       instances: {
@@ -237,7 +240,14 @@ async function limrunSupport(
       clientVersion: '0.0.0',
       android: { createPortReverse: async () => ({}) },
       host: {},
-      ios: {},
+      ios: {
+        createRunner: (session: Parameters<typeof createLimrunIosRunner>[0]) =>
+          createLimrunIosRunner(
+            session,
+            { env: {}, cwd: process.cwd() },
+            createAppleApplicationTools({}),
+          ),
+      },
     } as never,
     { includePlatformModule: true },
   );

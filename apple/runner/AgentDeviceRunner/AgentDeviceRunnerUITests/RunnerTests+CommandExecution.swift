@@ -661,12 +661,14 @@ extension RunnerTests {
           error: ErrorPayload(code: "INVALID_ARGS", message: validationError)
         )
       }
-      switch plannedGestureExecution(for: plan) {
+      let execution = plannedGestureExecution(for: plan)
+      let response: Response
+      switch execution {
       case .fastSwipe:
         // Validation above guarantees a non-empty, single-pointer path for this execution kind.
         let first = plan.pointers[0].samples.first!.point
         let last = plan.pointers[0].samples.last!.point
-        return canonicalPlannedGestureResponse(
+        response = canonicalPlannedGestureResponse(
           try executeDragGesture(
             activeApp: activeApp,
             x: first.x,
@@ -682,8 +684,16 @@ extension RunnerTests {
         let (timing, outcome) = try performGesture(activeApp, idleTimeout: false) {
           try sampledPlannedGesture(app: activeApp, plan: plan)
         }
-        return plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
+        response = plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
+#if os(iOS) && targetEnvironment(simulator)
+      case .screenEdgeTouch:
+        let (timing, outcome) = try performGesture(activeApp, idleTimeout: false) {
+          try screenEdgePlannedGesture(app: activeApp, plan: plan)
+        }
+        response = plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
+#endif
       }
+      return Self.reportingSchedule(execution.schedule, in: response)
     case .gestureViewport:
       let frame = try gestureViewportFrame(app: activeApp)
       guard !frame.isNull, !frame.isInfinite, !frame.isEmpty else {

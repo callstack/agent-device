@@ -65,7 +65,7 @@ extension RunnerTests {
     if let resolvedCoordinateTarget {
       target = resolvedCoordinateTarget
     } else {
-      target = try focusTextInputForTextEntry(app: activeApp, x: command.x, y: command.y)
+      target = try focusTextInputForTextEntry(app: activeApp, x: command.x, y: command.y, reusingFocusedInput: textEntryMode == .replacement)
     }
     NSLog(
       "AGENT_DEVICE_RUNNER_TEXT_ENTRY_PHASE commandId=%@ phase=focus durationMs=%.1f chars=%d mode=%@",

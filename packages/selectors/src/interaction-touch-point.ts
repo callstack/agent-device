@@ -87,7 +87,7 @@ function collectInteractiveDescendantRects(
   );
 }
 
-function isDescendantOf(
+export function isDescendantOf(
   candidate: SnapshotNode,
   ancestor: SnapshotNode,
   byIndex: ReadonlyMap<number, SnapshotNode>,
