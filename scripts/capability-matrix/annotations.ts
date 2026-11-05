@@ -261,11 +261,6 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
         label: 'Foreground app state',
         commands: ['appstate'],
         link: docs('commands', 'app-state-and-app-lists'),
-        cells: {
-          'limrun-ios': {
-            text: 'Last opened app, once the instance answers; no foreground read',
-          },
-        },
         note: 'On iOS and macOS a bound session that owns an app identity or surface answers this from its own state, even where the sessionless probe cannot see a foreground app.',
       },
       {

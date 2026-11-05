@@ -161,12 +161,19 @@ function bindLimrunAppLogs(
     reconnect: async (descriptor, reconnectSignal) =>
       await options.reconnect(descriptor, reconnectSignal),
   });
+  const runnerOperations = options.getIosRunner(device)?.bindRunnerOperations({
+    signal,
+    resolveInteractor: async (target, context) => {
+      const interactor = options.getInteractor(target, context);
+      if (!interactor) throw new AppError('DEVICE_NOT_FOUND', 'Limrun session is unavailable');
+      return interactor;
+    },
+  });
   const operations = {
     ...appLogs,
     ensureReady: async () => ({ ...device, booted: true }),
     bootTarget: async () => ({ ...device, booted: true }),
     listApps: async (input) => await options.listApps(input.device, input.filter, signal),
-    appState: async () => await options.getAppState(device, signal),
     ...availableApplicationLifecycleOperations(
       bindLimrunApplicationLifecycle(
         {
@@ -196,14 +203,11 @@ function bindLimrunAppLogs(
       presentIosAcquisition: options.host.snapshot.presentIosAcquisition,
       facts: runtimeFacts.operations,
     }),
-    ...options.getIosRunner(device)?.bindRunnerOperations({
-      signal,
-      resolveInteractor: async (target, context) => {
-        const interactor = options.getInteractor(target, context);
-        if (!interactor) throw new AppError('DEVICE_NOT_FOUND', 'Limrun session is unavailable');
-        return interactor;
-      },
-    }),
+    ...runnerOperations,
+    appState: async (input) => {
+      const state = await options.getAppState(device, signal);
+      return runnerOperations ? await runnerOperations.appState(input) : state;
+    },
     ...bindAdmittedProviderInteractorOperations({
       device,
       signal,

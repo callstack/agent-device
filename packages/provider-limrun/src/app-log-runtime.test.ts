@@ -330,6 +330,36 @@ test.each([
   }
 });
 
+test('checks the instance before reading iOS app state through the runner', async () => {
+  const getAppState = vi.fn(async () => ({}));
+  const appState = vi.fn(async () => ({ applicationState: 'runningForeground' as const }));
+  const owner = createLimrunPlatformRuntimeOwner(
+    limrunOwnerOptions({
+      getAppState,
+      getInteractor: () => ({ appState }) as never,
+    }),
+  );
+  const binding = await owner.bind({ device, intent: { kind: 'ordinary' }, scope });
+  await expect(binding.operations.appState?.({ appBundleId: 'com.example.app' })).resolves.toEqual({
+    applicationState: 'runningForeground',
+  });
+  expect(getAppState).toHaveBeenCalledOnce();
+  expect(appState).toHaveBeenCalledOnce();
+  expect(getAppState.mock.invocationCallOrder[0]).toBeLessThan(
+    appState.mock.invocationCallOrder[0]!,
+  );
+});
+
+test('checks the iOS instance even when the session has no bundle id', async () => {
+  const failure = new Error('instance unreachable');
+  const getAppState = vi.fn(async () => {
+    throw failure;
+  });
+  const owner = createLimrunPlatformRuntimeOwner(limrunOwnerOptions({ getAppState }));
+  const binding = await owner.bind({ device, intent: { kind: 'ordinary' }, scope });
+  await expect(binding.operations.appState?.({})).rejects.toBe(failure);
+});
+
 test('fails closed for a stale Android identity before exposing facts or binding operations', async () => {
   const getAppState = vi.fn(async () => ({
     package: 'com.example.app',
