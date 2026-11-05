@@ -44,7 +44,7 @@ import {
   type InferCommandInput,
 } from '../command-input.ts';
 import { readCommonInput, type CommonCommandInput } from '../common-input-fields.ts';
-import { readInputRecord } from '../input-readers.ts';
+import { optionalBoolean, readInputRecord } from '../input-readers.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { postActionObservationFields } from '../post-action-observation-grammar.ts';
 
@@ -226,6 +226,7 @@ const gestureFields = {
   kind: requiredField(enumField(GESTURE_KINDS, 'Gesture variant.')),
   direction: enumField(SCROLL_DIRECTIONS, 'Fling direction.'),
   preset: enumField(SWIPE_PRESETS, 'Swipe preset.'),
+  ...postGestureStabilizationFields(),
   origin: pointField('Gesture origin point.'),
   delta: pointField('Movement delta for pan or transform gestures.'),
   distance: integerField('Fling distance.', { min: 0 }),
@@ -268,6 +269,9 @@ export type GetInput = InferCommandInput<typeof getFields>;
 
 export type GestureInput = CommonCommandInput & GesturePayload;
 
+/** What `gesture` reads from a caller: the daemon's input, plus the opt-out a swipe may carry. */
+export type GestureCommandInput = GestureInput & { noPostGestureStabilization?: boolean };
+
 export const interactionCommandMetadata = [
   defineInteractionCommandMetadata('click', clickFields),
   defineInteractionCommandMetadata('press', pressFields),
@@ -282,13 +286,23 @@ export const interactionCommandMetadata = [
   defineInteractionCommandMetadata('is', isFields),
   defineInteractionCommandMetadata('find', findFields, { parseableOutput: true }),
   defineFieldCommandMetadata('gesture', interactionCommandDescriptions.gesture, gestureFields, {
-    readInput: readGestureInput,
+    readInput: readGestureCommandInput,
   }),
 ] as const;
 
+/** The input the daemon receives. The client projects the opt-out onto a flag, so it is not here. */
 export function readGestureInput(input: unknown): GestureInput {
   const record = readInputRecord(input);
   return { ...readCommonInput(record), ...readGesturePayload(record) };
+}
+
+/** Only a swipe stabilizes by default, so any other kind has nothing to opt out of and drops it. */
+function readGestureCommandInput(input: unknown): GestureCommandInput {
+  const record = readInputRecord(input);
+  const gesture = readGestureInput(record);
+  return gesture.kind === 'swipe' && optionalBoolean(record, 'noPostGestureStabilization') === true
+    ? { ...gesture, noPostGestureStabilization: true }
+    : gesture;
 }
 
 function defineInteractionCommandMetadata<

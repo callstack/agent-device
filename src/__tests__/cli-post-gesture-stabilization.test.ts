@@ -10,6 +10,7 @@ import { runCliCapture, type CapturedDaemonRequest } from './cli-capture.ts';
 // the daemon receives, and that the default request is the one that existed before the option.
 const SCROLL = ['scroll', 'down'] as const;
 const SWIPE = ['swipe', '10', '10', '10', '200'] as const;
+const GESTURE_SWIPE = ['gesture', 'swipe', 'left'] as const;
 
 function daemonFlag(call: CapturedDaemonRequest | undefined): unknown {
   return call?.flags?.postGestureStabilization;
@@ -22,6 +23,7 @@ function carriesCallerKey(call: CapturedDaemonRequest | undefined): boolean {
 test.each([
   ['scroll', SCROLL],
   ['swipe', SWIPE],
+  ['gesture swipe', GESTURE_SWIPE],
 ] as const)(
   '%s --no-post-gesture-stabilization reaches the daemon as postGestureStabilization: false',
   async (_command, argv) => {
@@ -48,6 +50,14 @@ test('the opt-out from the environment reaches the daemon, and a command that ig
   assert.equal(press.code, null);
   assert.equal(press.calls[0]?.command, 'press');
   assert.equal(Object.hasOwn(press.calls[0]?.flags ?? {}, 'postGestureStabilization'), false);
+
+  // The default reaches every `gesture` kind's reader, and a kind that never stabilizes keeps it out.
+  const pinch = await runCliCapture(['gesture', 'pinch', '2'], { env });
+  assert.equal(pinch.code, null);
+  assert.equal(pinch.calls[0]?.command, 'gesture');
+  assert.equal(Object.hasOwn(pinch.calls[0]?.flags ?? {}, 'postGestureStabilization'), false);
+  const gestureSwipe = await runCliCapture([...GESTURE_SWIPE], { env });
+  assert.equal(daemonFlag(gestureSwipe.calls[0]), false);
 });
 
 test('the opt-out from the user config reaches the daemon', async () => {

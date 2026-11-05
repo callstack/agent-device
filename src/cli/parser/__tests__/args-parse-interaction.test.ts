@@ -52,7 +52,7 @@ test('parseArgs accepts scroll pixel distance and duration flags', () => {
   assert.equal(parsed.flags.durationMs, 50);
 });
 
-test('parseArgs accepts the post-gesture stabilization opt-out on scroll and swipe only', () => {
+test('parseArgs accepts the post-gesture stabilization opt-out on the gestures that stabilize', () => {
   const scroll = parseArgs(['scroll', 'down', '--no-post-gesture-stabilization'], {
     strictFlags: true,
   });
@@ -62,6 +62,11 @@ test('parseArgs accepts the post-gesture stabilization opt-out on scroll and swi
     strictFlags: true,
   });
   assert.equal(swipe.flags.noPostGestureStabilization, true);
+
+  const gestureSwipe = parseArgs(['gesture', 'swipe', 'left', '--no-post-gesture-stabilization'], {
+    strictFlags: true,
+  });
+  assert.equal(gestureSwipe.flags.noPostGestureStabilization, true);
 
   assert.equal(parseArgs(['scroll', 'down']).flags.noPostGestureStabilization, undefined);
   assert.throws(
@@ -447,6 +452,10 @@ test('parseArgs refuses a gesture option the chosen kind never reads', () => {
     [
       ['gesture', 'tap', '80', '300', '200', '450', '--pointer-count', '2'],
       'gesture tap does not read --pointer-count',
+    ],
+    [
+      ['gesture', 'fling', 'up', '200', '420', '--no-post-gesture-stabilization'],
+      'gesture fling does not read --no-post-gesture-stabilization',
     ],
   ];
   for (const [argv, message] of cases) {

@@ -314,8 +314,8 @@ test('command usage shows command flags without global flags', async () => {
   assert.doesNotMatch(help, /--platform ios\|macos\|android\|linux\|web\|apple/);
 });
 
-test('scroll and swipe document the synopsis-hidden stabilization opt-out', async () => {
-  for (const command of ['scroll', 'swipe']) {
+test('the gestures that stabilize document the synopsis-hidden stabilization opt-out', async () => {
+  for (const command of ['scroll', 'swipe', 'gesture']) {
     const help = await usageForCommand(command);
     if (help === null) throw new Error(`Expected ${command} help text`);
     assert.doesNotMatch(help, new RegExp(`agent-device ${command} [^\\n]*--no-post-gesture`));

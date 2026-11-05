@@ -94,7 +94,8 @@ export type SwipeOptions = DeviceCommandBaseOptions &
     pattern?: SwipePattern;
   };
 
-export type GestureOptions = DeviceCommandBaseOptions & GesturePayload;
+export type GestureOptions = DeviceCommandBaseOptions &
+  (GesturePayload | (SwipeGesturePayload & PostGestureStabilizationOptions));
 
 export type PanOptions = DeviceCommandBaseOptions & {
   x: number;
@@ -114,7 +115,9 @@ export type FlingOptions = DeviceCommandBaseOptions & {
   distance?: number;
 };
 
-export type SwipeGestureOptions = DeviceCommandBaseOptions & Omit<SwipeGesturePayload, 'kind'>;
+export type SwipeGestureOptions = DeviceCommandBaseOptions &
+  Omit<SwipeGesturePayload, 'kind'> &
+  PostGestureStabilizationOptions;
 
 export type FocusOptions = DeviceCommandBaseOptions & {
   x: number;

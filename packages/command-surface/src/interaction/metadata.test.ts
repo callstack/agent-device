@@ -63,6 +63,24 @@ test.for(['scroll', 'swipe'] as const)(
   },
 );
 
+test('gesture keeps the stabilization opt-out for a swipe and drops it for any other kind', () => {
+  const gesture = interactionCommandMetadata.find((entry) => entry.name === 'gesture');
+  if (!gesture) throw new Error('expected gesture metadata');
+
+  expect(gesture.inputAudience.noPostGestureStabilization?.kind).toBe('operator');
+  expect(
+    gesture.readInput({ kind: 'swipe', preset: 'left', noPostGestureStabilization: true }),
+  ).toMatchObject({ kind: 'swipe', noPostGestureStabilization: true });
+  expect(
+    gesture.readInput({
+      kind: 'pan',
+      origin: { x: 1, y: 1 },
+      delta: { x: 1, y: 9 },
+      noPostGestureStabilization: true,
+    }),
+  ).not.toHaveProperty('noPostGestureStabilization');
+});
+
 test('type keeps refusing an empty text: appending nothing is not a clear', () => {
   const typeMetadata = interactionCommandMetadata.find((metadata) => metadata.name === 'type');
   if (!typeMetadata) throw new Error('expected type metadata');

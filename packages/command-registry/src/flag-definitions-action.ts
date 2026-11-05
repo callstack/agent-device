@@ -235,7 +235,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     // An opt-out for callers that verify by polling: a synopsis would offer it on every scroll and swipe.
     usageHidden: true,
     usageDescription:
-      'Scroll, swipe: skip the movement check and the stabilization wait that follow a gesture; use it only when your own polling verifies the screen',
+      'Scroll, swipe, gesture swipe: skip the movement check and the stabilization wait that follow a gesture; use it only when your own polling verifies the screen',
     inputDescription:
       'Skip the movement check on a directional scroll and the stabilization wait before the next read. Use it only when your own polling verifies the screen: the next read can return a tree that the gesture is still moving.',
     // A repository must not switch off the check that keeps reads after a gesture from a stale tree.
