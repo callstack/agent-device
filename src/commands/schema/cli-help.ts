@@ -361,6 +361,11 @@ Recommended subset:
   Use cdp memory usage, memory snapshot, memory allocation, and targeted runtime eval.
   Avoid cdp profile cpu, trace, network, and console by default because agent-device already has perf cpu, trace, network, logs, and react-devtools guidance for those areas.
 
+Runtime eval:
+  Read a JS value after cdp target select. This route does not depend on the host shell, the storage layout, or the app being local:
+    agent-device cdp runtime eval --expr '<expression>' --await
+  --expr runs in the selected target's JS global scope. It reaches only values the app exposes there. Module imports, including AsyncStorage, are not globals unless the app exposes them. If the expression cannot reach the value, report that. Do not guess.
+
 Output contract:
   Until cdp has a compact leak report command, synthesize one from memory usage diff, snapshot diff, leak-triplet, and retainers. Report heap deltas, top retained classes/shapes, leak-triplet rows that stayed high after cleanup, and the shortest useful retaining paths. Do not paste raw heap snapshots or large allocation profiles into the response; use exported artifacts only when the user asks for raw data.
 

@@ -67,9 +67,11 @@ CDP memory routing:
 
 Stale state:
   If a wrong or stale value may come from app state or storage, read the value. Do not navigate the UI to infer it.
-  JS state through Metro, after cdp target select (help cdp):
-    agent-device cdp runtime eval --expr '<expression>' --await
-  Stored AsyncStorage on an iOS simulator is under the data container from xcrun simctl get_app_container <udid> <bundle-id> data, in Library/Application Support/<bundle-id>/RCTAsyncLocalStorage_V1. On Android, read databases/RKStorage with adb shell run-as <package>.
+  Read JS state through Metro with help cdp. It owns the runtime eval command shape and which globals the expression can reach.
+  Stored AsyncStorage files are a fallback for debuggable builds on a local simulator or emulator only. They need host shell access, so they do not work on a remote lease. Use help cdp there.
+    iOS simulator, AsyncStorage 1.x/2.x layout: Library/Application Support/<bundle-id>/RCTAsyncLocalStorage_V1 under the data container from xcrun simctl get_app_container <udid> <bundle-id> data.
+    Android, AsyncStorage 1.x/2.x layout: databases/RKStorage through adb shell run-as <package>. run-as needs a debuggable package.
+  If those files are missing, the app may use a newer store (AsyncStorage 3.x uses SQLite). Do not conclude the value is absent; read it through help cdp instead.
 
 Slow-flow investigation:
   Keep one session, open the app first, and snapshot -i before interacting.

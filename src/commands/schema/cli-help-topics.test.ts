@@ -585,6 +585,9 @@ test('usageForCommand resolves cdp help topic', async () => {
   assert.match(help, /Until cdp has a compact leak report command/);
   assert.match(help, /Avoid cdp profile cpu, trace, network, and console by default/);
   assert.match(help, /React Native\/Hermes implements a subset of browser CDP/);
+  assert.match(help, /agent-device cdp runtime eval --expr '<expression>' --await/);
+  assert.match(help, /--expr runs in the selected target's JS global scope/);
+  assert.match(help, /including AsyncStorage, are not globals unless the app exposes them/);
 });
 
 test('usageForCommand resolves react-native help topic', async () => {
@@ -624,8 +627,20 @@ test('usageForCommand resolves react-native help topic', async () => {
   assert.match(help, /agent-device react-native dismiss-overlay/);
   assert.match(help, /verifies the overlay is gone with a fresh post-dismiss snapshot -i/);
   assert.match(help, /Do not use a plain snapshot after dismiss-overlay/);
-  assert.match(help, /agent-device cdp runtime eval --expr '<expression>' --await/);
-  assert.match(help, /RCTAsyncLocalStorage_V1/);
+  assert.doesNotMatch(help, /runtime eval --expr/);
+  assert.match(help, /Read JS state through Metro with help cdp/);
+  assert.match(help, /debuggable builds on a local simulator or emulator only/);
+  assert.match(help, /so they do not work on a remote lease/);
+  assert.match(
+    help,
+    /AsyncStorage 1\.x\/2\.x layout: Library\/Application Support\/<bundle-id>\/RCTAsyncLocalStorage_V1/,
+  );
+  assert.match(
+    help,
+    /AsyncStorage 1\.x\/2\.x layout: databases\/RKStorage through adb shell run-as <package>/,
+  );
+  assert.match(help, /run-as needs a debuggable package/);
+  assert.match(help, /newer store \(AsyncStorage 3\.x uses SQLite\)/);
   assert.match(help, /When overlay evidence is required before continuing/);
   assert.match(help, /overlay is still visible/);
   assert.match(help, /Do not manually press warning\/error text bodies/);
