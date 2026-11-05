@@ -218,17 +218,20 @@ test.each([
  */
 function wedgedCoreSimulator(
   answers: Readonly<Record<string, string>> = {},
+  onSpawn?: (count: number) => void,
 ): AppleToolProvider & { spawns: () => number } {
   let spawns = 0;
   const answered = (key: string): ExecResult | undefined => {
     const stdout = answers[key];
     if (stdout === undefined) return undefined;
     spawns += 1;
+    onSpawn?.(spawns);
     return { stdout, stderr: '', exitCode: 0 } as ExecResult;
   };
   const hang = async (options?: ExecOptions): Promise<ExecResult> =>
     await new Promise((_resolve, reject) => {
       spawns += 1;
+      onSpawn?.(spawns);
       if (options?.signal?.aborted) {
         reject(options.signal.reason);
         return;
@@ -257,14 +260,6 @@ function wedgedCoreSimulator(
   };
 }
 
-/** Real I/O turns until the provider saw `count` spawns; bounded so a lookup that stops early fails here, not at the test timeout. */
-async function untilSpawned(coreSimulator: { spawns: () => number }, count: number): Promise<void> {
-  for (let turn = 0; turn < 1000 && coreSimulator.spawns() < count; turn += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-  expect(coreSimulator.spawns()).toBe(count);
-}
-
 const LISTED_APP = JSON.stringify({
   'com.example.app': {
     ApplicationType: 'User',
@@ -288,7 +283,13 @@ test.each([
     vi.mocked(emitDiagnostic).mockClear();
     try {
       const { interactor, acceptAlert } = confirmationRunner();
-      const coreSimulator = wedgedCoreSimulator(answers);
+      let signalLookupStarted: () => void;
+      const lookupStarted = new Promise<void>((resolve) => {
+        signalLookupStarted = resolve;
+      });
+      const coreSimulator = wedgedCoreSimulator(answers, (count) => {
+        if (count === 2) signalLookupStarted();
+      });
       let answered: unknown = 'pending';
       const answer = withAppleToolProvider(coreSimulator, async () =>
         answerSimulatorLaunchConfirmation(
@@ -300,7 +301,13 @@ test.each([
         ).then((value) => (answered = value)),
       );
 
-      await untilSpawned(coreSimulator, 2);
+      await Promise.race([
+        lookupStarted,
+        answer.then(() => {
+          throw new Error('Owner lookup completed before the second command started');
+        }),
+      ]);
+      expect(coreSimulator.spawns()).toBe(2);
       await vi.advanceTimersByTimeAsync(URL_OWNER_LOOKUP_TIMEOUT_MS + 1);
       expect(answered).toEqual({ outcome: 'unreadable', step: 'url-owner' });
       await answer;
