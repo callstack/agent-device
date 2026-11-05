@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
-import { deviceIdentity, deviceIdentityKey, type DeviceInfo } from '@agent-device/kernel/device';
+import { deviceIdentity, sameDeviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   capitalizeDurableCaptureLabel,
@@ -27,10 +27,19 @@ export function createNextDurableCaptureFence<K extends string, C>(
   });
 }
 
-/** The open records that refuse a start, and the sessions directory they were listed from. */
+/**
+ * The open records that refuse a start, and the sessions directory they were listed from.
+ * `onStartDevice` is false only for a record at the start's own path that another device left.
+ */
 export type DurableCaptureStartConflicts<K extends string> = Readonly<{
   sessionsDir: string;
-  records: readonly Readonly<{ resourcePath: string; envelope: DurableResourceEnvelope<K> }>[];
+  records: readonly DurableCaptureStartConflict<K>[];
+}>;
+
+type DurableCaptureStartConflict<K extends string> = Readonly<{
+  resourcePath: string;
+  envelope: DurableResourceEnvelope<K>;
+  onStartDevice: boolean;
 }>;
 
 /**
@@ -44,9 +53,9 @@ export function listDurableCaptureStartConflicts<K extends string, C>(
   resourcePath: string,
   device: DeviceInfo,
 ): DurableCaptureStartConflicts<K> {
-  const selectedDeviceKey = deviceIdentityKey(deviceIdentity(device));
+  const startDevice = deviceIdentity(device);
   const sessionsDir = path.dirname(path.dirname(resourcePath));
-  const records: { resourcePath: string; envelope: DurableResourceEnvelope<K> }[] = [];
+  const records: DurableCaptureStartConflict<K>[] = [];
   for (const existingPath of definition.store.list(sessionsDir)) {
     const existing = definition.store.read(existingPath);
     if (existing.status === 'unreattachable') {
@@ -60,13 +69,10 @@ export function listDurableCaptureStartConflicts<K extends string, C>(
         },
       );
     }
-    if (
-      existing.status === 'decoded' &&
-      existing.envelope.lifecycle !== 'completed' &&
-      (existingPath === resourcePath ||
-        deviceIdentityKey(existing.envelope.device) === selectedDeviceKey)
-    ) {
-      records.push({ resourcePath: existingPath, envelope: existing.envelope });
+    if (existing.status !== 'decoded' || existing.envelope.lifecycle === 'completed') continue;
+    const onStartDevice = sameDeviceIdentity(existing.envelope.device, startDevice);
+    if (onStartDevice || existingPath === resourcePath) {
+      records.push({ resourcePath: existingPath, envelope: existing.envelope, onStartDevice });
     }
   }
   return { sessionsDir, records };
@@ -80,10 +86,7 @@ function assertNoConflictingManifest<K extends string, C>(
   const [conflict] = listDurableCaptureStartConflicts(definition, resourcePath, device).records;
   if (!conflict) return;
   const session = conflict.envelope.sessionId;
-  const otherDevice =
-    deviceIdentityKey(conflict.envelope.device) === deviceIdentityKey(deviceIdentity(device))
-      ? undefined
-      : conflict.envelope.device.id;
+  const otherDevice = conflict.onStartDevice ? undefined : conflict.envelope.device.id;
   throw new AppError(
     'COMMAND_FAILED',
     `${capitalizeDurableCaptureLabel(articleFor(definition.displayName))} ${definition.displayName} resource for this ${otherDevice ? 'session' : 'device'} has not reached a confirmed terminal state`,

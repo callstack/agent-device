@@ -15,7 +15,7 @@ import {
 } from '../durable-capture/index.ts';
 import type { LiveResourceHandle } from '@agent-device/contracts/durable-resource';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
-import { deviceIdentity, deviceIdentityKey, type DeviceInfo } from '@agent-device/kernel/device';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DurableCaptureAdmissionLedger } from './durable-capture-admission-ledger.ts';
 import {
   createNextDurableCaptureFence,
@@ -121,10 +121,8 @@ export function createDurableCaptureResource<
     ): Promise<void> {
       const { resourcePath, device, holdsSession, ...recovery } = params;
       const conflicts = listDurableCaptureStartConflicts(definition, resourcePath, device);
-      const deviceKey = deviceIdentityKey(deviceIdentity(device));
       for (const record of conflicts.records) {
-        if (holdsSession(record.envelope.sessionId)) continue;
-        if (deviceIdentityKey(record.envelope.device) !== deviceKey) continue;
+        if (!record.onStartDevice || holdsSession(record.envelope.sessionId)) continue;
         try {
           await finishRecoveredDurableCapture(definition, {
             resourcePath: record.resourcePath,
