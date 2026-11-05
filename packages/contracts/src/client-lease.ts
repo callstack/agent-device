@@ -45,6 +45,8 @@ export type LeaseDeviceSpec = {
   imageTag?: string;
   /** iOS simulator mode, `slim` or `full`; the backend validates it. */
   deviceMode?: string;
+  /** Name of a saved, prepared device state the backend restores; the backend validates it. */
+  deviceBaseline?: string;
   /** `true` asks for a physical device instead of a simulator or emulator. */
   physical?: boolean;
 };
@@ -57,6 +59,8 @@ export type LeaseDevice = {
   imageTag?: string;
   /** The iOS simulator mode granted, when the backend reports it. */
   deviceMode?: string;
+  /** The baseline the backend restored, when the lease was allocated with one. */
+  baseline?: { name: string; version: number };
   physical: boolean;
 };
 

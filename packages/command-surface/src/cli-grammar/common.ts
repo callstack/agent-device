@@ -147,7 +147,7 @@ export function repeatedInputFromFlags(flags: CliFlags): Record<string, unknown>
 /** The spec keys the flags name, as `requireLeaseDeviceSpec` decides them; an invalid key throws. */
 export function leaseDeviceSpecInputFromFlags(
   flags: CliFlags,
-): Pick<CliFlags, 'osVersion' | 'imageTag' | 'deviceMode' | 'physical'> {
+): Pick<CliFlags, 'osVersion' | 'imageTag' | 'deviceMode' | 'deviceBaseline' | 'physical'> {
   return requireLeaseDeviceSpec(flags).spec;
 }
 

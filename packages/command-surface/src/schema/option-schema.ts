@@ -34,6 +34,7 @@ const ENV_EXCLUDED_FLAG_KEYS = new Set<FlagKey>([
   'osVersion',
   'imageTag',
   'deviceMode',
+  'deviceBaseline',
   'physical',
 ]);
 
