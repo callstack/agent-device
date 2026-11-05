@@ -109,7 +109,8 @@ for (const attached of [false, true]) {
       await started;
       expect(dispose).toHaveBeenCalledTimes(1);
       expect(clients.disconnect).not.toHaveBeenCalled();
-      expect(clients.deleteInstance).toHaveBeenCalledTimes(attached ? 0 : 1);
+      if (attached) expect(clients.deleteInstance).not.toHaveBeenCalled();
+      else await vi.waitFor(() => expect(clients.deleteInstance).toHaveBeenCalledOnce());
       reportStopped();
       await Promise.all([release, shutdown]);
       expect(dispose).toHaveBeenCalledTimes(1);

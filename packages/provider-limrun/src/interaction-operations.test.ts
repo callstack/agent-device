@@ -60,9 +60,11 @@ test('the Android leg admits back/orientation and gates tv-remote on a real TV t
 });
 
 test('a live session reads and writes the clipboard on both legs', () => {
-  const live = factsFor();
-  expect(live.readClipboard).toEqual({ available: true });
-  expect(live.writeClipboard).toEqual({ available: true });
+  for (const device of [iosDevice, androidMobileDevice]) {
+    const live = factsFor(device);
+    expect(live.readClipboard).toEqual({ available: true });
+    expect(live.writeClipboard).toEqual({ available: true });
+  }
 
   const stale = factsFor(iosDevice, liveSessionUnavailable);
   expect(stale.readClipboard).toEqual(liveSessionUnavailable);
@@ -141,6 +143,7 @@ test('iOS inherits shared settings except unavailable keychain reset', () => {
   expect(runtimeSubjectFact(android.setSetting, 'animations').available).toBe(true);
   const ios = limrunAppleSettingsFacts(testIosRunner.facts);
   for (const setting of [
+    'clear-app-state',
     'appearance',
     'wifi',
     'airplane',
@@ -160,6 +163,11 @@ test('iOS inherits shared settings except unavailable keychain reset', () => {
   expect(limrunAndroidSettingsFacts(liveSessionUnavailable).readSetting).toEqual(
     liveSessionUnavailable,
   );
+});
+
+test('recovery facts cannot be changed after publication', () => {
+  const facts = limrunAppLogRecoveryFacts(limrunOwnerOptions(), iosDevice);
+  expect(Object.isFrozen(facts)).toBe(true);
 });
 
 // R59 split, then #3349 closed the iOS half: the Android leg reuses the local family's

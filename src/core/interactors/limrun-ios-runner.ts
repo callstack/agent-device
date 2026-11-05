@@ -63,10 +63,12 @@ export async function createLimrunIosRunner(
   const prepareProducts = async () => {
     emitDiagnostic({ level: 'info', phase: 'limrun.runner.prepare' });
     staging = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-limrun-runner-'));
-    const bind = await awaitWithSignal(
-      session.client.simctl(['getenv', 'booted', 'USE_IP']).wait(),
-      AbortSignal.any([lifetime.signal, AbortSignal.timeout(15_000)]),
-    );
+    const execution = session.client.simctl(['getenv', 'booted', 'USE_IP']);
+    const signal = AbortSignal.any([lifetime.signal, AbortSignal.timeout(15_000)]);
+    const bind = await awaitWithSignal(execution.wait(), signal, () => {
+      execution.stop();
+      return signal.reason;
+    });
     if (bind.code !== 0) throw new AppError('COMMAND_FAILED', 'Limrun did not expose USE_IP');
     const directory = await prepareLimrunRunnerProducts({
       directory: staging,

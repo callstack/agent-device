@@ -8,6 +8,29 @@ import {
 } from '@agent-device/host-kit/request';
 import { expect, test, vi } from 'vitest';
 import { fixture } from './limrun-ios-runner.fixtures.ts';
+test('stops a stalled remote getenv when product preparation times out', async () => {
+  const deadline = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
+  try {
+    const f = await fixture({ holdGetenv: true });
+    const pending = f.runner.applicationTools.prewarmRunnerSession(
+      f.device,
+      {},
+      new AbortController().signal,
+      true,
+      { healthCheck: false },
+    );
+    const rejected = expect(pending).rejects.toThrow();
+    await vi.waitFor(() =>
+      expect(f.session.client.simctl).toHaveBeenCalledWith(['getenv', 'booted', 'USE_IP']),
+    );
+    deadline.abort(new Error('deadline'));
+    await rejected;
+    expect(f.stopReadiness).toHaveBeenCalledOnce();
+  } finally {
+    timeout.mockRestore();
+  }
+});
 test('stages a token-authenticated runner once and presents forwarded XCTest snapshots', async () => {
   const f = await fixture();
   const snapshot = await f.runner.createInteractor().snapshot({
@@ -396,7 +419,10 @@ test.each(['signal', 'requestId'] as const)(
           ...(via === 'signal' ? { signal: controller.signal } : { requestId }),
         })
         .snapshot();
-      const outcome = expect(pending).rejects.toThrow();
+      const outcome = expect(pending).rejects.toMatchObject({
+        code: 'COMMAND_FAILED',
+        details: { reason: 'request_canceled' },
+      });
       await vi.waitFor(() => expect(f.requests.some((p) => p.endsWith('/xctest/run'))).toBe(true));
       if (via === 'signal') controller.abort(new Error('stop cold launch'));
       else markRequestCanceled(requestId);

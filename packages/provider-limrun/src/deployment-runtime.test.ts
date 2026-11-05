@@ -61,11 +61,14 @@ test.each([
       cleanup: async () => {},
     }));
     const base = unusedLimrunRuntimeHost();
+    const hostMaterializeApple = vi.fn(base.appleDeployment.prepareArtifact);
+    const hostMaterializeAndroid = vi.fn(base.androidDeployment.prepareArtifact);
+    const push = vi.fn(async () => ({}));
     const options = {
       host: {
         ...base,
-        appleDeployment: { ...base.appleDeployment, prepareArtifact: materializeApple },
-        androidDeployment: { ...base.androidDeployment, prepareArtifact: materializeAndroid },
+        appleDeployment: { ...base.appleDeployment, prepareArtifact: hostMaterializeApple },
+        androidDeployment: { ...base.androidDeployment, prepareArtifact: hostMaterializeAndroid },
       },
       ownsDevice: () => true,
       bindDeployment: async () => ({
@@ -73,6 +76,7 @@ test.each([
         deployMaterializedApp,
         materializeAppSource: device.platform === 'apple' ? materializeApple : materializeAndroid,
         uninstallApp: async () => ({ wasInstalled: false as const }),
+        ...(device.platform === 'apple' ? { sendPushNotification: push } : {}),
       }),
     };
     const facts = limrunAppDeploymentFacts(options, device);
@@ -86,6 +90,10 @@ test.each([
       expect(fact).toEqual({ available: true });
     }
     expect(facts.sendPushNotification).toMatchObject({ available: device.platform === 'apple' });
+    if (device.platform === 'apple') {
+      await operations.sendPushNotification!({ appId: 'com.example.app', payload: {} });
+      expect(push).toHaveBeenCalledOnce();
+    }
     await operations.deployApp?.({
       app: 'com.example.app',
       appPath: '/tmp/app',
@@ -99,6 +107,8 @@ test.each([
     expect(deployMaterializedApp).toHaveBeenCalledOnce();
     expect(materializeApple).toHaveBeenCalledTimes(device.platform === 'apple' ? 1 : 0);
     expect(materializeAndroid).toHaveBeenCalledTimes(device.platform === 'android' ? 1 : 0);
+    expect(hostMaterializeApple).not.toHaveBeenCalled();
+    expect(hostMaterializeAndroid).not.toHaveBeenCalled();
   },
 );
 

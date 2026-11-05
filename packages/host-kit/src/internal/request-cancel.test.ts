@@ -1,6 +1,7 @@
 import { test, vi } from 'vitest';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
+import { getEventListeners } from 'node:events';
 import {
   AppError,
   createRequestCanceledError,
@@ -32,6 +33,13 @@ test.each(['before', 'after'] as const)(
     await rejected;
   },
 );
+
+test('a pre-aborted wait does not retain an abort listener on an unsettled operation', async () => {
+  const controller = new AbortController();
+  controller.abort(new Error('canceled'));
+  await assert.rejects(awaitWithSignal(new Promise<never>(() => {}), controller.signal));
+  assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+});
 
 test('an early live request remains cancelable after more than 50,000 registrations', () => {
   const requestId = 'early-live-request';

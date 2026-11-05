@@ -592,6 +592,53 @@ test('two captures of one path each keep their own temporary file', async () => 
   );
 });
 
+test('a screenshot canceled during its local write removes the partial file', async () => {
+  const controller = new AbortController();
+  const { interactor } = await liveInteractor(
+    'android',
+    {
+      respond: {
+        'GET /api/v1/execution/device-proxy/run-1/screenshot': {
+          status: 200,
+          contentType: 'image/png',
+          body: 'PNG',
+        },
+      },
+    },
+    { signal: controller.signal },
+  );
+  const directory = await mkdtempForTest('agent-device-revyl-shot-mid-write-');
+  const outPath = path.join(directory, 'shot.png');
+  let started!: () => void;
+  const writing = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const original = fs.writeFile.bind(fs);
+  const write = vi.spyOn(fs, 'writeFile').mockImplementation(async (file, data, options) => {
+    await original(file, data);
+    const signal = typeof options === 'object' && options !== null ? options.signal : undefined;
+    started();
+    await new Promise<void>((_resolve, reject) => {
+      signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), {
+        once: true,
+      });
+    });
+  });
+  try {
+    const capture = interactor.screenshot(outPath);
+    const outcome = assert.rejects(
+      capture,
+      (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+    );
+    await writing;
+    controller.abort();
+    await outcome;
+    assert.deepEqual(await fs.readdir(directory), []);
+  } finally {
+    write.mockRestore();
+  }
+});
+
 test('a screenshot canceled after its bytes arrive is not published', async () => {
   const controller = new AbortController();
   const { interactor } = await liveInteractor(

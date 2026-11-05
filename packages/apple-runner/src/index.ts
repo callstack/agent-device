@@ -3,9 +3,9 @@
  *
  * The package entry names its whole surface. Host-bound operations evaluate the implementation, so
  * they reach their host capabilities through the `AppleRunnerHost` port, which `platform-apple`
- * binds once through `bindAppleRunnerHost` before any operation runs. The one operation outside
- * this closure, `runApplePressSeries`, and the legacy device-set restore stay behind function-scoped
- * imports so the entry evaluates only what a host-bound operation needs.
+ * binds once through `bindAppleRunnerHost` before any operation runs. `runApplePressSeries`,
+ * `createLaunchedAppleRunnerProvider`, and the legacy device-set restore stay behind
+ * function-scoped imports so the entry evaluates only what a host-bound operation needs.
  */
 
 export { RUNNER_STARTUP_TIMEOUT_MS } from './runner-startup-transport.ts';

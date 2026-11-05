@@ -154,6 +154,7 @@ export function createLimrunSimulatorFiles(
   return {
     simulatorFiles: files,
     readInfoPlist: async (input) => {
+      signalFor(input.signal).throwIfAborted();
       const key = input.bundleId;
       let pending = metadata.get(key);
       if (!pending) {

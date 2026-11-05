@@ -12,6 +12,21 @@ const plist = (scheme: string) =>
     `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Example</string><key>CFBundleURLTypes</key><array><dict><key>CFBundleURLSchemes</key><array><string>${scheme}</string></array></dict></array></dict></plist>`,
   );
 
+test('cached app metadata rejects an already canceled caller', async () => {
+  const f = await fixture({
+    containers: { 'com.example.app': { app: { 'Info.plist': plist('example') } } },
+  });
+  const tools = createLimrunAppleToolProvider(f.session, new AbortController().signal);
+  const input = { device: f.device, bundleId: 'com.example.app', timeoutMs: 1000 };
+  await tools.simulatorApps.readInfoPlist(input);
+  const controller = new AbortController();
+  const reason = new Error('canceled');
+  controller.abort(reason);
+  await expect(
+    tools.simulatorApps.readInfoPlist({ ...input, signal: controller.signal }),
+  ).rejects.toBe(reason);
+});
+
 test('remote app metadata resolves Expo and deep-link ownership and rejects duplicate claims', async () => {
   const f = await fixture({
     containers: {

@@ -201,10 +201,10 @@ export function limrunAppLogRecoveryFacts(
   device: DeviceInfo,
 ): RuntimeFacts<PlatformRuntimeOperations> {
   const facts = limrunUnavailableFacts(options, device);
-  return {
+  return Object.freeze({
     device: facts.device,
     operations: { ...facts.operations, appLogReattach: available, appLogCleanup: available },
-  };
+  });
 }
 
 export function limrunUnavailableFacts(

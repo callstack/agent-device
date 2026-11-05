@@ -257,6 +257,7 @@ export async function awaitWithSignal<T>(
   if (!signal) return await pending;
   return await new Promise<T>((resolve, reject) => {
     const aborted = () => {
+      signal.removeEventListener('abort', aborted);
       try {
         reject(onAbort());
       } catch (error) {

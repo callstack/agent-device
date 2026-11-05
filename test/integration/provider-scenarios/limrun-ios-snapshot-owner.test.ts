@@ -215,12 +215,15 @@ function limrunRuntimeDependencies(): LimrunRuntimeDependencies {
         const runner = await createTestLimrunIosRunner(session.device, (command) =>
           limrunApiState.runnerCommand(command),
         );
-        const tools = createLimrunAppleToolProvider(session, new AbortController().signal);
+        const lifetime = new AbortController().signal;
         return {
           ...runner,
           createInteractor: (context) =>
             withMethodScope(runner.createInteractor(context), (task) =>
-              withAppleToolProvider(tools, task),
+              withAppleToolProvider(
+                createLimrunAppleToolProvider(session, lifetime, context?.signal),
+                task,
+              ),
             ),
         };
       },

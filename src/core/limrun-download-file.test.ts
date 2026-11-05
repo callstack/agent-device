@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { mkdtempForTest } from '@agent-device/test-kit';
 import { downloadLimrunFile } from './limrun-download-file.ts';
@@ -192,9 +192,10 @@ test.each(['default', 'typed', 'deadline'] as const)(
               (error: AppError) =>
                 error instanceof AppError &&
                 error.code === 'COMMAND_FAILED' &&
-                error.details?.reason !== 'request_canceled',
+                error.cause === reason,
             );
     await started;
+    await vi.waitFor(() => expect(fs.existsSync(destinationPath)).toBe(true));
     controller.abort(reason);
     await outcome;
     expect(fs.existsSync(destinationPath)).toBe(false);

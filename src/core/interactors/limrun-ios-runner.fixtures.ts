@@ -45,6 +45,7 @@ export async function fixture(
     holdLaunchErrorBody?: boolean;
     syncStatus?: number;
     holdReadiness?: boolean;
+    holdGetenv?: boolean;
     holdAdmission?: boolean;
     canceledRunConflicts?: number;
     proof?: boolean;
@@ -178,6 +179,7 @@ export async function fixture(
     testRun = response;
     admitted = response;
     response.once('close', () => {
+      if (testRun === response) testRun = undefined;
       if (!response.writableEnded) canceledRunConflicts = options.canceledRunConflicts ?? 0;
     });
     if (options.holdAdmission) return;
@@ -227,6 +229,10 @@ export async function fixture(
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
   const stopReadiness: Mock<() => void> = vi.fn();
+  const heldCommands = new Set([
+    ...(options.holdReadiness ? ['bootstatus'] : []),
+    ...(options.holdGetenv ? ['getenv'] : []),
+  ]);
   const session = {
     apiUrl: `http://127.0.0.1:${address.port}/v1/ios_test/api`,
     token: 'instance-token',
@@ -246,7 +252,7 @@ export async function fixture(
       simctl: vi.fn((args: string[]) =>
         Object.assign(new EventEmitter(), {
           wait: () =>
-            args[0] === 'bootstatus' && options.holdReadiness
+            heldCommands.has(args[0]!)
               ? new Promise(() => {})
               : Promise.resolve(
                   args[0] === 'getenv'
