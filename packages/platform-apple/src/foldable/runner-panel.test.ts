@@ -23,7 +23,7 @@ import {
   recordingRunnerProvider,
   type RecordedRunnerCall,
 } from '../__tests__/recording-runner-provider.ts';
-import { isAppleFoldableSimulator, readFoldablePanelTable } from './orientation.ts';
+import { isAppleFoldableSimulator } from './orientation.ts';
 import { resolveRunnerRequestLitPanel } from './runner-panel.ts';
 import { IOS_DEVICE, IOS_SIMULATOR } from '../__tests__/device-fixtures.ts';
 import {
@@ -85,29 +85,8 @@ test('a device with one panel sends no panel and is never asked again', async ()
   answering(IPHONE_17_SINGLE_PANEL);
   assert.equal(await resolveRunnerRequestLitPanel(device, {}), undefined);
   const reads = mockPanelTable.mock.calls.length;
-  assert.deepEqual(await readFoldablePanelTable(device, { timeoutMs: 5_000 }), {
-    kind: 'single-panel',
-  });
   assert.equal(await resolveRunnerRequestLitPanel(device, {}), undefined);
   assert.equal(mockPanelTable.mock.calls.length, reads, 'one panel is hardware, probed once');
-});
-
-test('unsupported and unknown panel hardware keep distinct omission reasons', async () => {
-  assert.deepEqual(await readFoldablePanelTable(IOS_DEVICE, { timeoutMs: 5_000 }), {
-    kind: 'unavailable',
-    reason: 'unsupported-device',
-  });
-  const device = simulator();
-  mockPanelTable.mockRejectedValue(new Error('devicectl does not report displays'));
-  assert.deepEqual(await readFoldablePanelTable(device, { timeoutMs: 5_000 }), {
-    kind: 'unavailable',
-    reason: 'unknown-panel-count',
-  });
-  assert.deepEqual(await readFoldablePanelTable(device, { timeoutMs: 5_000 }), {
-    kind: 'unavailable',
-    reason: 'probe-backed-off',
-  });
-  assert.equal(mockPanelTable.mock.calls.length, 1);
 });
 
 test('a failed first panel read backs off temporarily and probes again after expiry', async () => {

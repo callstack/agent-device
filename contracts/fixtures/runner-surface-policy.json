@@ -1,158 +1,41 @@
-[
-  {
-    "command": "tap",
-    "policy": "app-windows"
-  },
-  {
-    "command": "mouseClick",
-    "policy": "none"
-  },
-  {
-    "command": "longPress",
-    "policy": "app-windows"
-  },
-  {
-    "command": "drag",
-    "policy": "app-windows"
-  },
-  {
-    "command": "remotePress",
-    "policy": "none"
-  },
-  {
-    "command": "type",
-    "policy": "app-windows"
-  },
-  {
-    "command": "swipe",
-    "policy": "app-windows"
-  },
-  {
-    "command": "scroll",
-    "policy": "app-windows"
-  },
-  {
-    "command": "desktopScroll",
-    "policy": "none"
-  },
-  {
-    "command": "findText",
-    "policy": "app-windows"
-  },
-  {
-    "command": "querySelector",
-    "policy": "app-windows"
-  },
-  {
-    "command": "readText",
-    "policy": "app-windows"
-  },
-  {
-    "command": "snapshot",
-    "policy": "app-windows"
-  },
-  {
-    "command": "snapshotBridge",
-    "policy": "none"
-  },
-  {
-    "command": "screenshot",
-    "policy": "observed-screen"
-  },
-  {
-    "command": "backInApp",
-    "policy": "app-windows"
-  },
-  {
-    "command": "backSystem",
-    "policy": "app-windows"
-  },
-  {
-    "command": "home",
-    "policy": "none"
-  },
-  {
-    "command": "rotate",
-    "policy": "none"
-  },
-  {
-    "command": "gesture",
-    "policy": "app-windows"
-  },
-  {
-    "command": "gestureViewport",
-    "policy": "app-windows"
-  },
-  {
-    "command": "appSwitcher",
-    "policy": "app-windows"
-  },
-  {
-    "command": "actionButton",
-    "policy": "none"
-  },
-  {
-    "command": "volumeUp",
-    "policy": "none"
-  },
-  {
-    "command": "volumeDown",
-    "policy": "none"
-  },
-  {
-    "command": "keyboardDismiss",
-    "policy": "app-windows"
-  },
-  {
-    "command": "keyboardReturn",
-    "policy": "none"
-  },
-  {
-    "command": "alert",
-    "policy": "resolved-modal"
-  },
-  {
-    "command": "sequence",
-    "policy": "app-windows"
-  },
-  {
-    "command": "recordStart",
-    "policy": "observed-screen"
-  },
-  {
-    "command": "recordStop",
-    "policy": "none"
-  },
-  {
-    "command": "status",
-    "policy": "none"
-  },
-  {
-    "command": "uptime",
-    "policy": "none"
-  },
-  {
-    "command": "appState",
-    "policy": "none"
-  },
-  {
-    "command": "pasteboardWrite",
-    "policy": "none"
-  },
-  {
-    "command": "activate",
-    "policy": "none"
-  },
-  {
-    "command": "terminate",
-    "policy": "none"
-  },
-  {
-    "command": "targetReset",
-    "policy": "none"
-  },
-  {
-    "command": "shutdown",
-    "policy": "none"
-  }
-]
+{
+  "tap": "app-windows",
+  "mouseClick": "none",
+  "longPress": "app-windows",
+  "drag": "app-windows",
+  "remotePress": "none",
+  "type": "app-windows",
+  "swipe": "app-windows",
+  "scroll": "app-windows",
+  "desktopScroll": "none",
+  "findText": "app-windows",
+  "querySelector": "app-windows",
+  "readText": "app-windows",
+  "snapshot": "app-windows",
+  "snapshotBridge": "none",
+  "screenshot": "observed-screen",
+  "backInApp": "app-windows",
+  "backSystem": "app-windows",
+  "home": "none",
+  "rotate": "none",
+  "gesture": "app-windows",
+  "gestureViewport": "app-windows",
+  "appSwitcher": "app-windows",
+  "actionButton": "none",
+  "volumeUp": "none",
+  "volumeDown": "none",
+  "keyboardDismiss": "app-windows",
+  "keyboardReturn": "none",
+  "alert": "resolved-modal",
+  "sequence": "app-windows",
+  "recordStart": "observed-screen",
+  "recordStop": "none",
+  "status": "none",
+  "uptime": "none",
+  "appState": "none",
+  "pasteboardWrite": "none",
+  "activate": "none",
+  "terminate": "none",
+  "targetReset": "none",
+  "shutdown": "none"
+}
