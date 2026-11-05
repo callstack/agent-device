@@ -41,7 +41,7 @@ export {
   type RunnerCommand,
   type RunnerSnapshotBridgeRequest,
 } from './runner-contract.ts';
-export { runnerCommandSurfacePolicy, type RunnerSurfacePolicy } from './runner-command-traits.ts';
+export { runnerCommandSurfacePolicy } from './runner-command-traits.ts';
 export { isRunnerMainThreadTimeoutError } from './runner-error-classification.ts';
 export {
   withAppleRunnerProvider,

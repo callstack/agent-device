@@ -39,7 +39,6 @@ extension RunnerTests {
     if command.invalidatesRememberedTextEntryTap {
       clearRememberedTextEntryTap()
     }
-    // A screenshot resolves its own surface, the target app and then the system surface.
     if let refusal = prepareCommandSurface(command: command, app: activeApp) {
       return refusal.response
     }
