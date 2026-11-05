@@ -1,6 +1,6 @@
 import type { PlatformProviderRequestContext } from '@agent-device/contracts/platform-providers';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
+import { resolveRequestTargetDevice } from '../core/request-device-resolution.ts';
 import {
   hasDeviceSelectionInput,
   hasExplicitDeviceSelector,
@@ -12,7 +12,6 @@ import {
 } from '../core/daemon-command-registry.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';
-import { requestWebSession } from '../core/session-tenant-scope.ts';
 
 /**
  * Resolves the daemon-owned part of the request-provider seam.
@@ -83,15 +82,9 @@ async function resolveProviderTargetDevice(
   req: DaemonRequest,
   env: EnvMap,
 ): Promise<SessionState['device']> {
-  const webSession = requestWebSession(req);
   const options =
     req.command === 'open'
-      ? buildOpenTargetDeviceResolutionOptions(
-          req.positionals?.[0],
-          env,
-          req.flags?.surface,
-          webSession,
-        )
-      : { env, androidAvdSelection: resolveCommandAndroidAvdSelection(req.command), webSession };
-  return await resolveTargetDevice(req.flags ?? {}, { ...options, env });
+      ? buildOpenTargetDeviceResolutionOptions(req.positionals?.[0], env, req.flags?.surface)
+      : { env, androidAvdSelection: resolveCommandAndroidAvdSelection(req.command) };
+  return await resolveRequestTargetDevice(req, { ...options, env });
 }

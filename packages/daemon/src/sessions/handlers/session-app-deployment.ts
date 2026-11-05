@@ -40,7 +40,6 @@ import {
   unavailableRuntimeOperationResponse,
 } from '../../core/session-runtime-admission.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
-import { requestWebSession } from '../../core/session-tenant-scope.ts';
 
 type DeployCommand = 'install' | 'reinstall';
 
@@ -86,9 +85,8 @@ export async function handleAppDeploymentCommand(params: {
     }
 
     let device = await resolveCommandDevice({
-      webSession: requestWebSession(req),
       session,
-      flags,
+      req,
       env: sessionStore.host.env,
       androidAvdSelection: resolveCommandAndroidAvdSelection(command),
       platformServices: params.platformServices,
@@ -155,9 +153,8 @@ export async function handlePushNotificationCommand(
         resolvePushPayload(payloadArg, req.meta?.cwd ?? params.host.cwd),
       );
   const device = await resolveCommandDevice({
-    webSession: requestWebSession(req),
     session,
-    flags,
+    req,
     env: sessionStore.host.env,
     platformServices: params.platformServices,
   });
@@ -207,9 +204,8 @@ export async function handleUninstallCommand(
   const app = req.positionals?.[0]?.trim();
   if (!app) return errorResponse('INVALID_ARGS', 'uninstall requires <app>');
   const device = await resolveCommandDevice({
-    webSession: requestWebSession(req),
     session,
-    flags,
+    req,
     env: sessionStore.host.env,
     platformServices: params.platformServices,
   });

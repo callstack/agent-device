@@ -131,6 +131,7 @@ test('shutdown turns off selected Android emulator', async () => {
       command: 'shutdown',
       positionals: [],
       flags: { platform: 'android', device: 'Pixel_9_Pro_XL' },
+      internal: { webSession: { name: 'default' } },
     },
     sessionName: 'default',
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),

@@ -19,7 +19,6 @@ import {
 } from '../../core/runtime-admission.ts';
 import { startupDeadlineAtMs } from '../startup-deadline.ts';
 import type { RuntimeCommandHandlerParams } from '../../core/session-runtime-admission.ts';
-import { requestWebSession } from '../../core/session-tenant-scope.ts';
 import { deviceStatusReportResponse } from './session-device-status-response.ts';
 
 /** `boot --headless` reports an unsupported cell as a request error, not a device capability gap. */
@@ -60,11 +59,10 @@ async function resolveBootTargetSelection(
   try {
     const selection = await resolveBootCommandSelection({
       session,
-      flags,
+      req,
       env: sessionStore.host.env,
       androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),
       platformServices,
-      webSession: requestWebSession(req),
     });
     const { device } = selection;
     if (flags.target && (device.target ?? 'mobile') !== flags.target) {

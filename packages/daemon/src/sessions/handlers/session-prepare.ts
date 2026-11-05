@@ -19,7 +19,6 @@ import {
   resolveCommandDevice,
 } from '../../resources/session-device-resolution.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
-import { requestWebSession } from '../../core/session-tenant-scope.ts';
 
 const PREPARE_IOS_RUNNER_TIMING_NOTE =
   'Top-level prepare timing fields are diagnostic and may overlap; use timing.additiveParts for additive wall-clock phases.';
@@ -68,8 +67,7 @@ export async function handlePrepareCommand(params: {
     () =>
       resolveCommandDevice({
         session,
-        flags,
-        webSession: requestWebSession(req),
+        req,
         env: sessionStore.host.env,
         platformServices: params.platformServices,
       }),

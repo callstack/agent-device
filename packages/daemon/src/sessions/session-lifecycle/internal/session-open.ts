@@ -1,7 +1,7 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
-import { resolveTargetDeviceSelection } from '@agent-device/device-selection/dispatch-resolve';
+import { resolveRequestTargetDeviceSelection } from '../../../core/request-device-resolution.ts';
 import {
   openApplicationRuntimeUse,
   openApplicationWithRuntimeHintApplyAndClearUse,
@@ -365,14 +365,9 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
   });
   if (preResolvedValidation) return { type: 'response', response: preResolvedValidation };
 
-  const selection = await resolveTargetDeviceSelection(
-    req.flags ?? {},
-    buildOpenTargetDeviceResolutionOptions(
-      openTarget,
-      params.host.env,
-      req.flags?.surface,
-      requestWebSession(req),
-    ),
+  const selection = await resolveRequestTargetDeviceSelection(
+    req,
+    buildOpenTargetDeviceResolutionOptions(openTarget, params.host.env, req.flags?.surface),
   );
   const device = selection.device;
   await req.internal?.retainDeviceExecutionLock?.(device.id);

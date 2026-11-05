@@ -26,7 +26,6 @@ import {
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
-import { requestWebSession } from '../../core/session-tenant-scope.ts';
 import { resolveCommandDevice } from '../../resources/session-device-resolution.ts';
 import { resolveRequestExecutionLockPlan } from '../request-binding.ts';
 import { createDaemonHttpServer } from '../http/http-server.ts';
@@ -394,17 +393,20 @@ test('two tenants using one web session name each open their own browser, and on
 test('a sessionless web command locks the implicit default session device it binds, never the host', async () => {
   mockResolveTargetDevice.mockImplementation(webSessionResolution);
   // The RPC boundary names the session `default` for a request that carries none.
-  const req = methodToDaemonRequest(
-    'agent_device.command',
-    {
-      token: 'test-token',
-      command: 'snapshot',
-      positionals: [],
-      flags: { platform: 'web' },
-      meta: { requestId: 'req-snapshot-sessionless' },
-    },
-    {},
-  );
+  const req: DaemonRequest = {
+    ...methodToDaemonRequest(
+      'agent_device.command',
+      {
+        token: 'test-token',
+        command: 'snapshot',
+        positionals: [],
+        flags: { platform: 'web' },
+        meta: { requestId: 'req-snapshot-sessionless' },
+      },
+      {},
+    ),
+    internal: { webSession: { name: 'default' } },
+  };
   const sessionStore = makeSessionStore('agent-device-router-web-sessionless-');
 
   const plan = await resolveRequestExecutionLockPlan({
@@ -414,9 +416,8 @@ test('a sessionless web command locks the implicit default session device it bin
   });
   const bound = await resolveCommandDevice({
     session: undefined,
-    flags: req.flags,
+    req,
     env: process.env,
-    webSession: requestWebSession(req),
     platformServices: daemonPlatformServicesFixture(),
   });
 

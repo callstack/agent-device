@@ -130,6 +130,7 @@ test('open applies stored runtime launchUrl and reports runtime hints', async ()
       command: 'open',
       positionals: ['Demo'],
       flags: { platform: 'android' },
+      internal: { webSession: { name: 'runtime-open' } },
     },
     sessionName: 'runtime-open',
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),

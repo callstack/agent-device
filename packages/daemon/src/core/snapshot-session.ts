@@ -1,11 +1,10 @@
-import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
+import { resolveRequestTargetDevice } from './request-device-resolution.ts';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
 import type { SessionScope } from '@agent-device/contracts/session';
 import { isActiveProviderDevice } from './provider-device-admission.ts';
 import { SessionStore } from './session-store.ts';
-import { requestWebSession } from './session-tenant-scope.ts';
 
 export async function resolveSessionDevice(
   sessionStore: SessionStore,
@@ -23,10 +22,7 @@ export async function resolveSessionDevice(
   }
   const device =
     session?.device ??
-    (await resolveTargetDevice(req.flags ?? {}, {
-      env: sessionStore.host.env,
-      webSession: requestWebSession(req),
-    }));
+    (await resolveRequestTargetDevice(req, { env: sessionStore.host.env }));
   return { ref, session, device };
 }
 

@@ -57,7 +57,6 @@ import type {
 } from '../../../core/request-runtime-binding.ts';
 import { resolveLeaseScope } from '../../../core/lease-context.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import { requestWebSession } from '../../../core/session-tenant-scope.ts';
 
 export type SessionInventoryCommandInput = Readonly<{
   host: HostEnvironment;
@@ -445,9 +444,8 @@ async function resolveInventoryCommandDevice(params: {
 
   return {
     device: await resolveCommandDevice({
-      webSession: requestWebSession(req),
       session,
-      flags,
+      req,
       env: sessionStore.host.env,
       platformServices,
       androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),

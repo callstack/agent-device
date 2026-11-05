@@ -2,7 +2,7 @@ import { restrictRemoteHostInputs } from './remote-host-input-policy.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
-import { resolveTargetDeviceSelection } from '@agent-device/device-selection/dispatch-resolve';
+import { resolveRequestTargetDeviceSelection } from '../core/request-device-resolution.ts';
 import {
   resolveSessionRequestLog,
   resolveSessionRunnerLogPath,
@@ -30,7 +30,7 @@ import {
   resolveCallerScopeRoot,
   resolveEffectiveSessionName,
 } from '../sessions/session-routing.ts';
-import { deriveWebSessionIdentity, requestWebSession } from '../core/session-tenant-scope.ts';
+import { deriveWebSessionIdentity } from '../core/session-tenant-scope.ts';
 import {
   assertRequestLeaseAdmissionPreflight,
   scopeRequestSession,
@@ -126,14 +126,9 @@ async function resolveFreshBoundedOpenDevice(req: DaemonRequest, env: EnvMap): P
   }
   const openReq = foreground.type === 'resolved' ? foreground.req : req;
   return (
-    await resolveTargetDeviceSelection(
-      openReq.flags ?? {},
-      buildOpenTargetDeviceResolutionOptions(
-        openReq.positionals?.[0],
-        env,
-        openReq.flags?.surface,
-        requestWebSession(openReq),
-      ),
+    await resolveRequestTargetDeviceSelection(
+      openReq,
+      buildOpenTargetDeviceResolutionOptions(openReq.positionals?.[0], env, openReq.flags?.surface),
     )
   ).device;
 }
@@ -157,11 +152,10 @@ async function resolveBoundedClaimDevice(
   if (req.command === 'install_source' && session) return session.device;
   const params = {
     session,
-    flags: req.flags,
+    req,
     env,
     platformServices,
     androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),
-    webSession: requestWebSession(req),
   };
   if (req.command === 'boot') return (await resolveBootCommandSelection(params)).device;
   return await resolveCommandDevice(params);

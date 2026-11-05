@@ -102,7 +102,7 @@ export function makeRecordRuntimeHarness(
           command: 'record',
           positionals,
           flags: flags ?? {},
-          ...(internal ? { internal } : {}),
+          internal: { webSession: { name: sessionName }, ...internal },
           ...(meta ? { meta } : {}),
         },
       }),

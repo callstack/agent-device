@@ -1,5 +1,5 @@
 import { resolveCommandAndroidAvdSelection } from '../core/daemon-command-registry.ts';
-import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
+import { resolveRequestTargetDevice } from '../core/request-device-resolution.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   hasDeviceSelectionInput,
@@ -12,7 +12,6 @@ import type { SessionStore } from '../core/session-store.ts';
 import { hostAndDeviceIds, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef } from '../core/session-state.ts';
-import { requestWebSession } from '../core/session-tenant-scope.ts';
 
 export type RequestExecutionLockKey = `session:${string}` | `device:${string}`;
 
@@ -127,11 +126,7 @@ async function resolveFreshSessionDevice(
   try {
     // A fresh web session locks its own device whichever command starts it, never the shared host
     // device: a replay or batch locks only the device it starts on, as for an app device (ADR 0035).
-    return await resolveTargetDevice(resolution.flags, {
-      ...resolution.options,
-      env,
-      webSession: requestWebSession(req),
-    });
+    return await resolveRequestTargetDevice(req, { ...resolution.options, env }, resolution.flags);
   } catch {
     // Unresolvable here means unresolvable for lock selection too, which is already tolerated.
     return undefined;
@@ -143,7 +138,6 @@ function resolveOpenDeviceLock(req: DaemonRequest, env: EnvMap) {
     req.positionals?.[0],
     env,
     req.flags?.surface,
-    requestWebSession(req),
   );
   return options ? { flags: req.flags ?? {}, options } : undefined;
 }

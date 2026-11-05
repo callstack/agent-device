@@ -15,7 +15,6 @@ import {
   resolveCommandDevice,
 } from '../../resources/session-device-resolution.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
-import { requestWebSession } from '../../core/session-tenant-scope.ts';
 
 type PortReverseParseResult =
   | { ok: true; options: ProviderPortReverseOptions }
@@ -45,9 +44,8 @@ export async function handlePortReverseCommand(params: {
   );
   if (selectorError) return selectorError;
   const device = await resolveCommandDevice({
-    webSession: requestWebSession(req),
     session,
-    flags: req.flags,
+    req,
     env: params.env,
     platformServices: params.platformServices,
   });

@@ -1,18 +1,14 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import {
-  hostDeviceIdOf,
-  isIosFamily,
-  type DeviceInfo,
-  type WebSessionIdentity,
-} from '@agent-device/kernel/device';
+import { hostDeviceIdOf, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, sessionOrDeviceSelectorRequiredDetails } from '@agent-device/kernel/errors';
 import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
+import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import {
-  resolveTargetDevice,
-  resolveTargetDeviceSelection,
-} from '@agent-device/device-selection/dispatch-resolve';
+  resolveRequestTargetDevice,
+  resolveRequestTargetDeviceSelection,
+} from '../core/request-device-resolution.ts';
 import {
   resolveExistingSessionDeviceSelection,
   type DeviceSelectionResult,
@@ -56,14 +52,13 @@ export function requireSessionOrExplicitSelector(
 
 export async function resolveCommandDevice(params: {
   session: SessionState | undefined;
-  flags: DaemonRequest['flags'] | undefined;
+  /** Its flags select the device, and a web selection binds the session device it carries. */
+  req: DaemonRequest;
   env: EnvMap;
   androidAvdSelection?: 'running-only' | 'include-stopped';
-  /** A web selection binds this session's device, never the host. */
-  webSession: WebSessionIdentity;
   platformServices: DaemonPlatformServices;
 }): Promise<DeviceInfo> {
-  const shouldUseExplicitIdentity = hasExplicitDeviceSelector(params.flags);
+  const shouldUseExplicitIdentity = hasExplicitDeviceSelector(params.req.flags);
   if (!shouldUseExplicitIdentity && params.session) {
     const selected = await refreshSessionDeviceIfNeeded(
       params.session.device,
@@ -73,10 +68,9 @@ export async function resolveCommandDevice(params: {
     pinSessionDeviceSelection(params.platformServices, params.session.device, selected);
     return selected;
   }
-  const device = await resolveTargetDevice(params.flags ?? {}, {
+  const device = await resolveRequestTargetDevice(params.req, {
     env: params.env,
     androidAvdSelection: params.androidAvdSelection,
-    webSession: params.webSession,
   });
   // A selector that names the host of the session's app device (ADR 0035) stays on that device:
   // the session holds one app, not the host.
@@ -91,14 +85,13 @@ export async function resolveCommandDevice(params: {
 export async function resolveBootCommandSelection(
   params: Parameters<typeof resolveCommandDevice>[0],
 ): Promise<DeviceSelectionResult> {
-  if (params.session && !hasExplicitDeviceSelector(params.flags)) {
+  if (params.session && !hasExplicitDeviceSelector(params.req.flags)) {
     return resolveExistingSessionDeviceSelection(await resolveCommandDevice(params));
   }
-  return await resolveTargetDeviceSelection(params.flags ?? {}, {
+  return await resolveRequestTargetDeviceSelection(params.req, {
     env: params.env,
     androidAvdSelection: params.androidAvdSelection,
-    webSession: params.webSession,
-    boot: { pick: params.flags?.pick },
+    boot: { pick: params.req.flags?.pick },
   });
 }
 

@@ -5,7 +5,7 @@ import type {
   BackendCommandContext,
   BackendSnapshotResult,
 } from '@agent-device/contracts/backend';
-import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
+import { resolveRequestTargetDevice } from '../core/request-device-resolution.ts';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import type { SnapshotState, SnapshotNode } from '@agent-device/kernel/snapshot';
@@ -36,7 +36,6 @@ import { snapshotOptionsToFlags } from '@agent-device/contracts/backend-snapshot
 import type { RequestCaptureProof } from '../core/capture-disclosure.ts';
 import { checkIsArgs } from '@agent-device/selectors';
 import { noActiveSessionError } from '@agent-device/kernel/contracts';
-import { requestWebSession } from '../core/session-tenant-scope.ts';
 
 export type SelectorRuntimeParams = {
   /** Builds the command surface this request's selector runtime executes through. */
@@ -130,10 +129,7 @@ async function resolveSelectorRuntimeDevice(
   if (!session && requireSession) return { ok: false, response: noActiveSessionError() };
   const device =
     session?.device ??
-    (await resolveTargetDevice(params.req.flags ?? {}, {
-      env: params.sessionStore.host.env,
-      webSession: requestWebSession(params.req),
-    }));
+    (await resolveRequestTargetDevice(params.req, { env: params.sessionStore.host.env }));
   return { ok: true, ref, session, device };
 }
 

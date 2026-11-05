@@ -104,7 +104,7 @@ function adScriptTargetOptions(
   if (platform === 'ios') return appTargetResolutionOptions(appTarget, env);
   // A macOS replay names an app device, never a web session.
   if (platform === 'macos')
-    return buildOpenTargetDeviceResolutionOptions(appTarget, env, undefined, undefined);
+    return buildOpenTargetDeviceResolutionOptions(appTarget, env, undefined);
   return undefined;
 }
 

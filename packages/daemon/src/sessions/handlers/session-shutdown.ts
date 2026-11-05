@@ -15,7 +15,6 @@ import {
   type RuntimeCommandHandlerParams,
 } from '../../core/session-runtime-admission.ts';
 import { deviceStatusReportResponse } from './session-device-status-response.ts';
-import { requestWebSession } from '../../core/session-tenant-scope.ts';
 
 function shutdownUnavailableResponse(fact: RuntimeOperationFact) {
   if (fact.available) return null;
@@ -46,8 +45,7 @@ export async function handleShutdownCommand(
   if (guard) return guard;
 
   const device = await resolveCommandDevice({
-    webSession: requestWebSession(params.req),
-    flags,
+    req: params.req,
     session: activeSession,
     env: params.sessionStore.host.env,
     androidAvdSelection: resolveCommandAndroidAvdSelection(params.req.command),
