@@ -191,6 +191,7 @@ test('allocation installs an exact uploaded asset before binding its application
         },
       },
       spec: {
+        inactivityTimeout: '5m',
         initialAssets: [
           {
             kind: 'App',

@@ -483,6 +483,8 @@ export function findMissingProxyLeaseFields(scope: LeaseScope): string[] {
  * yet must assume this one, or it can be planning for a window the daemon would never grant.
  */
 export const MIN_LEASE_WINDOW_MS = 5_000;
+/** The idle window of every remote device lease: proxy, cloud device and cloud WebDriver. */
+export const REMOTE_LEASE_IDLE_TTL_MS = 5 * 60 * 1000;
 
 /**
  * Why a lease stopped being ours: it is gone, spent, or taken back.

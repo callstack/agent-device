@@ -28,10 +28,7 @@ import {
   materializeRemoteConnectionForCommand,
 } from './test-utils/host-bound-commands.ts';
 import { writeGeneratedRemoteConfig } from '../cli/connection/generated-config.ts';
-import {
-  CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS,
-  PROXY_REMOTE_LEASE_TTL_MS,
-} from '../cli/commands/connection-lease-policy.ts';
+import { REMOTE_LEASE_IDLE_TTL_MS } from '@agent-device/contracts/lease-scope';
 import { hasDeferredMetroConfig } from '../cli/commands/connection-metro-runtime.ts';
 import { stopMetroTunnel } from '@agent-device/react-native';
 import { AppError } from '@agent-device/kernel/errors';
@@ -629,7 +626,7 @@ test('proxy open resolves device key before allocating lease', async () => {
   assert.equal(allocate.request?.leaseProvider, 'proxy');
   assert.equal(allocate.request?.clientId, 'client-1');
   assert.equal(allocate.request?.deviceKey, 'ios:mobile:SIM-001');
-  assert.equal(allocate.request?.ttlMs, PROXY_REMOTE_LEASE_TTL_MS);
+  assert.equal(allocate.request?.ttlMs, REMOTE_LEASE_IDLE_TTL_MS);
   assert.equal(allocate.request?.leaseBackend, 'ios-instance');
   assert.equal(materialized.flags.leaseId, 'abc123abc123abc1');
   assert.equal(materialized.flags.udid, 'SIM-001');
@@ -683,7 +680,7 @@ test.each(['install', 'uninstall'])('proxy %s allocates a lease first', async (c
   assert.equal(allocate.request?.leaseProvider, 'proxy');
   assert.equal(allocate.request?.clientId, 'client-1');
   assert.equal(allocate.request?.deviceKey, 'android:mobile:emulator-5554');
-  assert.equal(allocate.request?.ttlMs, PROXY_REMOTE_LEASE_TTL_MS);
+  assert.equal(allocate.request?.ttlMs, REMOTE_LEASE_IDLE_TTL_MS);
   assert.equal(allocate.request?.leaseBackend, 'android-instance');
   assert.equal(materialized.flags.leaseId, 'android-lease-1');
   assert.equal(materialized.flags.serial, 'emulator-5554');
@@ -783,7 +780,7 @@ test('cloud webdriver connection allocates and heartbeats with extended lease TT
   });
 
   assert.equal(allocateRequest?.leaseProvider, 'aws-device-farm');
-  assert.equal(allocateRequest?.ttlMs, CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS);
+  assert.equal(allocateRequest?.ttlMs, REMOTE_LEASE_IDLE_TTL_MS);
   assert.equal(materialized.flags.leaseId, 'cloud-lease-1');
 
   let heartbeatRequest: Parameters<AgentDeviceClient['leases']['heartbeat']>[0] | undefined;
@@ -805,7 +802,7 @@ test('cloud webdriver connection allocates and heartbeats with extended lease TT
   });
 
   assert.equal(heartbeatRequest?.leaseId, 'cloud-lease-1');
-  assert.equal(heartbeatRequest?.ttlMs, CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS);
+  assert.equal(heartbeatRequest?.ttlMs, REMOTE_LEASE_IDLE_TTL_MS);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 

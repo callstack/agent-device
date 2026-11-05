@@ -25,6 +25,7 @@ test('provider policy projects provider identity into semantic capabilities', ()
     supportsDeferredAppSelection: true,
     supportsDirectPortReverse: true,
     usesCloudWebDriverLease: false,
+    holdsCloudDevice: true,
   });
   const browserStack = connectionProviderCapabilities('browserstack');
   assert.equal(browserStack.supportsArtifacts, true);

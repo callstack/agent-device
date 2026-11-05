@@ -48,6 +48,7 @@ function revyl(options: RevylPluginOptions = {}): AgentDevicePlugin {
         supportsDeferredAppSelection: false,
         supportsDirectPortReverse: false,
         usesCloudWebDriverLease: false,
+        holdsCloudDevice: true,
       },
       resolve: (context) =>
         import('./connection.ts').then(({ createRevylConnection }) =>

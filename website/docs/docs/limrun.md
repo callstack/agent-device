@@ -53,6 +53,13 @@ If your shell's account variables, or its instance variables for the platform yo
 
 Limrun ends an instance after its inactivity timeout, which an idle session can reach while a model thinks between steps. Set `LIMRUN_KEEP_ALIVE=1` (or `true`) to ping the instance every 30 seconds while a session is open. Keep-alive is off by default. In the Node.js runtime, pass `keepAlive: true`.
 
+Two timers can end an idle Limrun session.
+
+- The session lease. Each command that uses the lease renews it for five minutes. After five minutes without such a command the lease expires, and the daemon ends the session. The next command that uses the lease allocates a new lease, and the app you opened is not restored.
+- The Limrun instance. An instance that agent-device creates ends after five minutes without activity, the same window as the lease. An instance you attach to keeps the inactivity timeout it was created with. When Limrun ends an instance, every later command fails with `WebSocket is not connected` until the lease expires or you run `disconnect`.
+
+`LIMRUN_KEEP_ALIVE` keeps the instance running past five minutes. It does not renew the lease.
+
 ## Run a session from the CLI
 
 A new Limrun instance does not contain your app. Run `install <package-or-bundle-id> <app-path-or-url>` before `open`. `install` allocates the instance when needed, so you do not need to run `devices` first.
