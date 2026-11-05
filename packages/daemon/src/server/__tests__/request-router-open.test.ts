@@ -75,6 +75,7 @@ import {
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { seedWebSessionIdentity } from '../../__tests__/support/web-session-request-fixture.ts';
 import { inspectDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
 import {
   makeAndroidDevice,
@@ -249,14 +250,16 @@ test('fresh replay reserves its authored app simulator before any replay step', 
   );
 
   const { keys } = await resolveRequestExecutionLockPlan({
-    req: {
+    // The scope seeds this identity for every real request; this call reaches lock planning
+    // directly, so it states the fact the scope would have added.
+    req: seedWebSessionIdentity({
       token: 'test-token',
       session: 'fresh-replay',
       command: 'replay',
       positionals: [replayPath],
       flags: { replayScriptSource: replayScriptSourceBundleFor(replayPath) },
       meta: { cwd: root },
-    },
+    }),
     sessionName: 'fresh-replay',
     sessionStore,
   });
@@ -886,7 +889,11 @@ test('web sessions open side by side on one host, each holding a device of its o
   try {
     // Each fresh web open locks its own session device, never the shared host device.
     const { keys } = await resolveRequestExecutionLockPlan({
-      req: openRequest('web-a', { platform: 'web' }, 'req-plan-web-a', {}, ['about:blank']),
+      // The scope seeds this identity for every real request; this call reaches lock planning
+      // directly, so it states the fact the scope would have added.
+      req: seedWebSessionIdentity(
+        openRequest('web-a', { platform: 'web' }, 'req-plan-web-a', {}, ['about:blank']),
+      ),
       sessionName: 'web-a',
       sessionStore,
     });

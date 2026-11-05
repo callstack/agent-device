@@ -19,6 +19,7 @@ import { fakeCreateCommandSurface } from '../../__tests__/support/command-surfac
 import { replayScriptSourceBundleFor } from '../../__tests__/support/replay-script-source-fixture.ts';
 import { makeSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { seedWebSessionIdentity } from '../../__tests__/support/web-session-request-fixture.ts';
 import {
   createRequestHandler,
   lifecycleDeviceRuntimeGateway,
@@ -83,7 +84,9 @@ test.each(['batch', 'replay'] as const)(
       const names = ['web-a', 'web-b'];
       for (const name of names) {
         const { keys } = await resolveRequestExecutionLockPlan({
-          req: freshWebRequest(command, name, replayPath),
+          // The scope seeds this identity for every real request; this call reaches lock planning
+          // directly, so it states the fact the scope would have added.
+          req: seedWebSessionIdentity(freshWebRequest(command, name, replayPath)),
           sessionName: name,
           sessionStore,
         });
