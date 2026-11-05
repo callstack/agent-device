@@ -726,20 +726,15 @@ Modal commands resolve their prompt through the modal owner instead of booking a
 
 Omitting `litPanel` preserves the historic route.
 This includes single-panel devices, unsupported devices, unknown or backed-off inventory, and multi-panel devices whose power is ambiguous or whose inventory is incomplete.
-A known multi-panel device whose table does not answer still refuses before dispatch.
-The [panel admission owner](../../packages/platform-apple/src/foldable/runner-panel.ts) and [its tests](../../packages/platform-apple/src/foldable/runner-panel.test.ts) own those cases and the request-budget rule.
+A known multi-panel device whose table does not answer refuses before dispatch with `COMMAND_FAILED`, `reason: panel-table-unreadable` and `runnerErrorCode: APP_SCREEN_UNRESOLVED`; a read that spends the request budget refuses with `reason: panel-probe-budget-exhausted` ([owner](../../packages/platform-apple/src/foldable/runner-panel.ts), [tests](../../packages/platform-apple/src/foldable/runner-panel.test.ts)).
 
-Anchor selection and element search answer different questions.
-The anchor walk must be bounded, while search must include later windows such as the keyboard.
-The [window resolver](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerXCTestEventBridge.m), [request booking owner](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerRequestPanel.swift), and [booking tests](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/UnitTests/RunnerRequestPanelTests.swift) own selection, scope, and typed refusals.
-Search refreshes lit windows because an interaction can create another window.
-Request-scoped booking keeps delayed work on its own panel instead of the next command's panel.
+A request that names a lit panel books its window before dispatch and refuses before any gesture or read: `APP_SCREEN_OFF_LIT_PANEL` when every app window is on another display, `APP_SCREEN_WINDOW_UNRESOLVED` when the app has no window, and `APP_SCREEN_UNRESOLVED` when the window list cannot be read or placed ([resolver](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerXCTestEventBridge.m), [resolver tests](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/UnitTests/RunnerTests+XCTestEventBridgeTests.swift), [booking tests](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/UnitTests/RunnerRequestPanelTests.swift)).
+The booking walk is bounded, while element search reads every window on the lit display and refuses with `APP_SCREEN_UNRESOLVED` instead of answering no match when it proves none ([owner](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerRequestPanel.swift), [booking tests](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/UnitTests/RunnerRequestPanelTests.swift)).
+Booking is request-scoped, so delayed work stays on its own command's panel ([owner](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerRequestPanel.swift)).
 
-A snapshot must retain every window proven on the lit display instead of taking only the gesture anchor.
-Only the tree backend proves display identity, so a backend pin must not bypass that proof.
-The [snapshot preparation owner](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+SnapshotExecution.swift), [snapshot owner](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Snapshot.swift) and booking tests own filtering and geometry.
-A capture may ask the system surface only when the app has no window; a resolved window's identity refusal must remain visible.
-The [capture tests](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/UnitTests/RunnerTests+AppScreenCaptureTests.swift) own that distinction.
+A lit-panel snapshot keeps only windows whose snapshot reports the lit display, drops a window that reports none, and refuses with `APP_SCREEN_UNRESOLVED` when no window is proven ([owner](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Snapshot.swift), [booking tests](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/UnitTests/RunnerRequestPanelTests.swift)).
+A pin to any backend other than the tree backend refuses with `UNSUPPORTED_OPERATION`, because only that backend proves display identity ([owner](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+SnapshotExecution.swift), [booking tests](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/UnitTests/RunnerRequestPanelTests.swift)).
+A capture asks the system surface only after `APP_SCREEN_WINDOW_UNRESOLVED`; an app whose windows are all on the dark panel refuses with `APP_SCREEN_OFF_LIT_PANEL` and is never sent to the system surface ([owner](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerAppScreenCapture.swift), [capture tests](../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/UnitTests/RunnerTests+AppScreenCaptureTests.swift)).
 
 Rejected alternatives:
 
