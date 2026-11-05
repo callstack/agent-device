@@ -212,16 +212,30 @@ test('a missing validator executable after compilation returns the typed unavail
 });
 
 test.each([
-  `xcrun: error: unable to find utility "swiftc", not a developer tool or in PATH`,
-  `validator.swift:2:8: error: no such module 'AVFoundation'`,
-])('refuses verification when the validator reports %s', async (stderr) => {
-  const mp4 = writeFixture('unavailable.mp4', Buffer.concat([ftyp, moov]));
-  vi.mocked(runCmd).mockResolvedValueOnce({ exitCode: 1, stderr, stdout: '' });
-  await expect(isPlayableVideo(mp4, createTestHost())).rejects.toMatchObject({
-    code: 'COMMAND_FAILED',
-    details: { reason: 'video_validator_unavailable', retriable: false },
-  });
-});
+  {
+    stderr: `xcrun: error: unable to find utility "swiftc", not a developer tool or in PATH`,
+    stdout: '',
+  },
+  { stderr: `validator.swift:2:8: error: no such module 'AVFoundation'`, stdout: '' },
+  { stderr: '', stdout: `validator.swift:2:8: error: no such module 'AVFoundation'` },
+])(
+  'preserves unavailable validator output and selects its recovery hint: %j',
+  async ({ stderr, stdout }) => {
+    const mp4 = writeFixture('unavailable.mp4', Buffer.concat([ftyp, moov]));
+    vi.mocked(runCmd).mockResolvedValueOnce({ exitCode: 1, stderr, stdout });
+    await expect(isPlayableVideo(mp4, createTestHost())).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: {
+        reason: 'video_validator_unavailable',
+        retriable: false,
+        stderr,
+        stdout,
+        exitCode: 1,
+        hint: expect.stringContaining('AVFoundation'),
+      },
+    });
+  },
+);
 
 test('an ordinary validator refusal is unplayable, not unavailable', async () => {
   const mp4 = writeFixture('refused.mp4', Buffer.concat([ftyp, moov]));

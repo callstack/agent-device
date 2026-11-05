@@ -144,7 +144,13 @@ export async function isPlayableVideo(
       return true;
     }
     if (isSwiftVideoValidatorUnavailable(result.stderr, result.stdout)) {
-      throw unavailableVideoValidator(new AppError('COMMAND_FAILED', result.stderr));
+      throw unavailableVideoValidator(
+        new AppError('COMMAND_FAILED', result.stderr, {
+          stderr: result.stderr,
+          stdout: result.stdout,
+          exitCode: result.exitCode,
+        }),
+      );
     }
     return false;
   } catch (error) {
