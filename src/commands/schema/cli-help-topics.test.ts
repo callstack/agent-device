@@ -624,6 +624,8 @@ test('usageForCommand resolves react-native help topic', async () => {
   assert.match(help, /agent-device react-native dismiss-overlay/);
   assert.match(help, /verifies the overlay is gone with a fresh post-dismiss snapshot -i/);
   assert.match(help, /Do not use a plain snapshot after dismiss-overlay/);
+  assert.match(help, /agent-device cdp runtime eval --expr '<expression>' --await/);
+  assert.match(help, /RCTAsyncLocalStorage_V1/);
   assert.match(help, /When overlay evidence is required before continuing/);
   assert.match(help, /overlay is still visible/);
   assert.match(help, /Do not manually press warning\/error text bodies/);
