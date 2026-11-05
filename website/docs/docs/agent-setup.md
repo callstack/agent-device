@@ -57,6 +57,8 @@ For web automation, MCP tools can target `platform: "web"` once the managed brow
 
 MCP-only clients don't need a separately installed skill. When a client connects (`initialize` and `server/discover`), the server returns short `instructions` with the core workflow: start with `open`, act with `settle: true`, verify, `close`, how to keep refs accurate, and how to recover when the accessibility tree is sparse. An MCP-only `help` tool returns the same guides as `agent-device help <topic|command>`. Agents don't call `help` at startup; they call it for specialized work (gestures, scripting, TV, macOS, web, remote, debugging) or when a command is unclear.
 
+Tool results are compact text. A tool that declares an output schema, such as `press` or `wait`, also returns `structuredContent` that matches it. Other tools, such as `snapshot` and `open`, return text only, because some clients show the model `structuredContent` instead of the text. To get the full JSON result from any tool, pass `mcpOutputFormat: "json"`.
+
 When a tool fails, the server returns an MCP tool result with `isError: true`. Check the tool result, not only whether the JSON-RPC call succeeded.
 
 The server does not run arbitrary shell commands. If the CLI is missing, the agent should ask you before installing or updating packages, reconnect the server after setup, and retry the original app-driving command without adding version or help probes.

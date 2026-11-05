@@ -199,7 +199,9 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
         refPins.mergeCommandResult(name, result, config.client.stateDir, commandInput.session);
         return {
           isError: false,
-          structuredContent: await projectStructuredContent(name, result),
+          ...(returnsStructuredContent(name, config)
+            ? { structuredContent: await projectStructuredContent(name, result) }
+            : {}),
           content: [
             {
               type: 'text',
@@ -277,6 +279,19 @@ async function runCommand(
 ): Promise<CommandExecutionResult> {
   const commandSurface = await import('@agent-device/command-surface');
   return await commandSurface.runCommand(client, name, input);
+}
+
+/**
+ * A typed tool must return its declared `structuredContent`. A tool without an `outputSchema` has
+ * no structured contract, so it returns the compact text alone unless the caller asks for machine
+ * output. Some clients, Claude Code among them, show the model `structuredContent` instead of the
+ * text, so an unrequested raw result would replace the compact text in the model's context.
+ */
+function returnsStructuredContent(name: CommandName, config: McpToolConfig): boolean {
+  if (name in MCP_COMMAND_OUTPUT_SCHEMAS) return true;
+  return (
+    rendersJsonText(config.outputFormat, config.client.responseLevel) || config.client.cost === true
+  );
 }
 
 function readMcpToolConfig(record: Record<string, unknown>): McpToolConfig {
@@ -519,10 +534,7 @@ async function renderToolText(params: {
   // formatter expects `nodes`, which the digest drops) — rendering it through
   // them would print misleading text that contradicts `structuredContent`. Emit
   // the leveled payload verbatim as JSON instead.
-  if (
-    params.outputFormat === 'json' ||
-    (params.responseLevel !== undefined && params.responseLevel !== 'default')
-  ) {
+  if (rendersJsonText(params.outputFormat, params.responseLevel)) {
     return renderJsonText(params.result);
   }
   const cliOutput = await formatCliOutput({
@@ -546,6 +558,10 @@ function toolTextWithWarnings(name: CommandName, cliOutput: CliOutput): string {
   if (responseWarningRoute(findCommandMetadata(name)) !== 'stderr') return text;
   const stderr = cliOutput.stderr?.trimEnd() ?? '';
   return stderr === '' ? text : `${text}${text.endsWith('\n') ? '' : '\n'}${stderr}`;
+}
+
+function rendersJsonText(outputFormat: McpOutputFormat, responseLevel?: ResponseLevel): boolean {
+  return outputFormat === 'json' || (responseLevel !== undefined && responseLevel !== 'default');
 }
 
 function renderJsonText(value: unknown): string {

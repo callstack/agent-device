@@ -64,6 +64,10 @@ function collectObjectShape(
   )) {
     if (entry === undefined) continue;
     if (key === 'ref' && typeof entry === 'string') counters.refs++;
+    // An MCP tool result carries its refs in the text the model reads.
+    if (key === 'text' && path === '$.content[]' && typeof entry === 'string') {
+      counters.refs += new Set(entry.match(REF_TOKEN_PATTERN) ?? []).size;
+    }
     if (key === 'hint' && typeof entry === 'string' && entry.length > 0) counters.hints++;
     paths.push(...collectShape(entry, `${path}.${key}`, counters));
   }
