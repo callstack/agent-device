@@ -1,5 +1,6 @@
 import type Limrun from '@limrun/api';
 import type { DeviceLease, LeaseLifecycleContext } from '@agent-device/contracts/device';
+import { REMOTE_LEASE_IDLE_TTL_MS } from '@agent-device/contracts/lease-scope';
 import { AppError } from '@agent-device/kernel/errors';
 import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/provider-profile-fields';
 import { createLimrunAndroidSession, type LimrunAndroidSession } from './android.ts';
@@ -14,6 +15,9 @@ import {
 } from './app-catalog.ts';
 import { createLimrunDeviceSession } from './device-session.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
+
+/** A created instance outlives its lease's idle window, so Limrun's 3 minute default never ends it first. */
+const LIMRUN_INACTIVITY_TIMEOUT = `${REMOTE_LEASE_IDLE_TTL_MS / 60_000}m`;
 
 type LimrunInstance = {
   metadata: { id: string };
@@ -75,6 +79,7 @@ export async function allocateLimrunIosSession(
       wait: true,
       metadata: params.metadata,
       spec: {
+        inactivityTimeout: LIMRUN_INACTIVITY_TIMEOUT,
         ...(params.region ? { region: params.region } : {}),
         ...(params.app
           ? {
@@ -123,6 +128,7 @@ export async function allocateLimrunAndroidSession(
       wait: true,
       metadata: params.metadata,
       spec: {
+        inactivityTimeout: LIMRUN_INACTIVITY_TIMEOUT,
         ...(params.region ? { region: params.region } : {}),
         ...(params.app
           ? {

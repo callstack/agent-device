@@ -1,10 +1,8 @@
 import { expect, test, vi } from 'vitest';
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
 import type { RemoteConnectionState } from '@agent-device/remote/remote-connection-state';
-import {
-  REMOTE_LEASE_IDLE_TTL_MS,
-  connectionLeasePolicyForState,
-} from './connection-lease-policy.ts';
+import { REMOTE_LEASE_IDLE_TTL_MS } from '@agent-device/contracts/lease-scope';
+import { connectionLeasePolicyForState } from './connection-lease-policy.ts';
 
 const LOCAL_PROVIDER: ConnectionProviderCapabilities = {
   leaseKind: 'direct-device-provider',

@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { REMOTE_LEASE_IDLE_TTL_MS } from '@agent-device/contracts/lease-scope';
 import { AppError } from '@agent-device/kernel/errors';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
@@ -17,9 +18,6 @@ const leaseDeferredCommands = new Set([
   'metro',
   'session',
 ]);
-/** The idle window of every remote device lease: proxy, cloud device and cloud WebDriver. */
-export const REMOTE_LEASE_IDLE_TTL_MS = 5 * 60 * 1000;
-
 function remoteLeaseTtlMs(state: RemoteConnectionState): number | undefined {
   const capabilities = connectionProviderCapabilities(state.leaseProvider);
   return capabilities.leaseKind === 'proxy' ||

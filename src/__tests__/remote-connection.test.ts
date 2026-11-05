@@ -28,7 +28,7 @@ import {
   materializeRemoteConnectionForCommand,
 } from './test-utils/host-bound-commands.ts';
 import { writeGeneratedRemoteConfig } from '../cli/connection/generated-config.ts';
-import { REMOTE_LEASE_IDLE_TTL_MS } from '../cli/commands/connection-lease-policy.ts';
+import { REMOTE_LEASE_IDLE_TTL_MS } from '@agent-device/contracts/lease-scope';
 import { hasDeferredMetroConfig } from '../cli/commands/connection-metro-runtime.ts';
 import { stopMetroTunnel } from '@agent-device/react-native';
 import { AppError } from '@agent-device/kernel/errors';

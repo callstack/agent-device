@@ -56,9 +56,9 @@ Limrun ends an instance after its inactivity timeout, which an idle session can 
 Two timers can end an idle Limrun session.
 
 - The session lease. Each command that uses the lease renews it for five minutes. After five minutes without such a command the lease expires, and the daemon ends the session. The next command that uses the lease allocates a new lease, and the app you opened is not restored.
-- The Limrun instance. Limrun ends an instance after 3 minutes without activity (the inactivity timeout of an instance that agent-device creates). It ends the instance even while the lease is active, and every later command then fails with `WebSocket is not connected` until the lease expires or you run `disconnect`. A pause longer than 3 minutes needs `LIMRUN_KEEP_ALIVE=1`.
+- The Limrun instance. An instance that agent-device creates ends after five minutes without activity, the same window as the lease. An instance you attach to keeps the inactivity timeout it was created with. When Limrun ends an instance, every later command fails with `WebSocket is not connected` until the lease expires or you run `disconnect`.
 
-`LIMRUN_KEEP_ALIVE` keeps the instance running only. It does not renew the lease.
+`LIMRUN_KEEP_ALIVE` keeps the instance running past five minutes. It does not renew the lease.
 
 ## Run a session from the CLI
 
