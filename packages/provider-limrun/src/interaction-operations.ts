@@ -1,3 +1,10 @@
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import {
+  type RuntimeFacts,
+  type RuntimeOperationFact,
+  type RuntimeOperationUnavailability,
+  unavailableFact,
+} from '@agent-device/contracts/platform-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import {
   bindProviderFocusInteractor,
@@ -10,7 +17,6 @@ import {
 import {
   bindProviderGestureInteractor,
   gestureRuntimeOperationFacts,
-  type GestureRuntimeOperationFacts,
 } from '@agent-device/contracts/gesture-runtime';
 import {
   bindProviderScrollInteractor,
@@ -19,7 +25,6 @@ import {
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import type { AndroidSetting } from '@agent-device/platform-android/mechanics';
-import type { LimrunIosSetting } from './ios-settings.ts';
 import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import {
   androidHardwareButtonFacts,
@@ -43,148 +48,88 @@ import {
   touchRuntimeOperationFacts,
 } from '@agent-device/contracts/touch-runtime';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
-import {
-  type RuntimeOperationFact,
-  type RuntimeOperationUnavailability,
-  unavailableFact,
-} from '@agent-device/contracts/platform-runtime';
-import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import { type DeviceInfo } from '@agent-device/kernel/device';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const available = Object.freeze({ available: true } as const);
-/**
- * Limrun's iOS direct session drives text and touch but exposes no portable gesture execution.
- * Stating it as a fact refuses at admission instead of mid-execution (ADR 0019 §6), and it is
- * the only refusal the caller sees: the leg's interactor carries no gesture member at all.
- */
-const iosGestureUnavailable = unavailableFact(
-  'unsupported-provider-mode',
-  'Limrun iOS direct sessions do not expose portable gesture execution yet.',
-);
-/** What an unnamed gesture tier reports on a live Limrun session. */
-const gestureUnsupportedProviderMode = unavailableFact('unsupported-provider-mode');
-/** What an unnamed clipboard half reports on a live Limrun session. */
-const clipboardUnsupportedProviderMode = unavailableFact('unsupported-provider-mode');
-const androidTvMultiTouchUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
-  ANDROID_TV_MULTI_TOUCH_UNSUPPORTED_HINT,
-);
-const androidTvDragUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
-  TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
-);
-
-/**
- * Gesture cells split by the interactor behind the session: an Android emulator session runs the
- * ordinary Android interactor (every tier, minus the TV gates it always carried), while the iOS
- * direct session has no gesture execution at all.
- */
-function limrunGestureFacts(
-  device: DeviceInfo,
-  cell: RuntimeOperationUnavailability | typeof available,
-): GestureRuntimeOperationFacts {
-  if (!cell.available) {
-    return gestureRuntimeOperationFacts({ unsupported: cell });
-  }
-  if (device.platform !== 'android') {
-    return gestureRuntimeOperationFacts({ unsupported: iosGestureUnavailable });
-  }
-  const tv = device.target === 'tv';
-  return gestureRuntimeOperationFacts({
-    unsupported: gestureUnsupportedProviderMode,
-    plan: available,
-    directionalFling: available,
-    multiTouch: tv ? androidTvMultiTouchUnavailable : available,
-    targetAuthoredDrag: tv ? androidTvDragUnavailable : available,
-    viewport: available,
-  });
-}
-const tvRemoteUnavailableIos = unavailableFact(
-  'unsupported-provider-mode',
-  'Limrun iOS direct sessions do not expose tv remote control.',
-);
-const tvRemoteUnavailableAndroid = unavailableFact(
-  'unsupported-device-kind',
-  'tv-remote is supported only on Android TV targets.',
-);
-/**
- * The retired leaf never routed `keyboard` through provider resolution at all — it dispatched
- * directly by device platform, bypassing the interactor/provider seam entirely. The Android leg
- * genuinely carries it (the same `createAndroidInteractor` factory the local family binds); the
- * iOS leg has no such reuse, so it stays honestly unavailable rather than guessing at untested
- * provider behavior.
- */
-const keyboardUnavailableIos = unavailableFact(
-  'unsupported-provider-mode',
-  'Limrun iOS direct sessions do not expose keyboard actions.',
-);
-const settingUnavailableIos = unavailableFact(
-  'unsupported-provider-mode',
-  'Limrun iOS direct sessions support settings appearance, permission, location, and clear-app-state.',
-);
+const unsupported = unavailableFact('unsupported-provider-mode');
 const settingUnavailableAndroid = unavailableFact(
   'unsupported-platform-leaf',
   'Run `agent-device settings --help` for the settings each target serves.',
 );
-const settingsReadUnavailableIos = unavailableFact(
+export const LIMRUN_FOLD_UNAVAILABLE = unavailableFact(
   'unsupported-provider-mode',
-  'Limrun iOS direct sessions cannot read settings back.',
+  'Limrun exposes the commanded hinge angle, but fold requires an independently observed angle to verify the pose.',
 );
-const appSwitcherUnavailableIos = unavailableFact(
+export const LIMRUN_TELEPHONY_UNAVAILABLE = unavailableFact(
   'unsupported-provider-mode',
-  'Limrun iOS direct sessions do not expose app switcher yet.',
+  "telephony sends calls and SMS to an Android emulator's console through local adb; agent-device does not route it through a Limrun session.",
 );
-/** No Limrun session exposes the action button; only `appSwitcher` still splits by leg. */
-const systemButtonUnavailable = unavailableFact(
-  'unsupported-provider-mode',
-  'No Limrun session exposes this system button.',
-);
-// The hardware-button cells use the shared Android admission rule, so a Limrun-managed phone
-// and a local adb phone state the same verdict. On a leased phone or tablet the Android leg's
-// `createAndroidInteractor` carries these presses.
 
-/**
- * The interactor-backed interaction cells a live Limrun session serves: everything here rides
- * one provider interactor, and a live session always has one, so the cells are available
- * together. Extracted from the app-log owner because text/point interaction is not app-log
- * behavior — the owner module composes this, it does not define it.
- */
-export function limrunInteractionOperationFacts(
-  device: DeviceInfo,
-  liveSessionUnavailable?: RuntimeOperationUnavailability,
-) {
-  const cell = liveSessionUnavailable ?? available;
-  const unsupportedTouch = unavailableFact('unsupported-provider-mode');
-  return Object.freeze({
-    ...focusRuntimeOperationFacts({ focus: cell }),
-    ...typeTextRuntimeOperationFacts({ type: cell }),
+export function limrunAndroidInteractionFacts(device: DeviceInfo) {
+  const tv = device.target === 'tv';
+  return {
+    ...focusRuntimeOperationFacts({ focus: available }),
+    ...typeTextRuntimeOperationFacts({ type: available }),
     ...touchRuntimeOperationFacts({
-      unsupported: unsupportedTouch,
-      tap: cell,
-      longPress: cell,
-      // A dead session refuses hover for its own reason; the family builder adds the redirection
-      // to longpress either way.
-      hover: liveSessionUnavailable ?? unsupportedTouch,
-      fill: cell,
-      tapElementSelector: liveSessionUnavailable ?? (isIosFamily(device) ? cell : unsupportedTouch),
+      unsupported,
+      tap: available,
+      longPress: available,
+      fill: available,
     }),
-    ...limrunGestureFacts(device, cell),
-    // `scroll` needs no gesture synthesis: both session kinds expose it directly.
-    ...scrollRuntimeOperationFacts({ scroll: cell }),
-  });
+    ...gestureRuntimeOperationFacts({
+      unsupported,
+      plan: available,
+      directionalFling: available,
+      viewport: available,
+      multiTouch: tv
+        ? unavailableFact('unsupported-platform-leaf', ANDROID_TV_MULTI_TOUCH_UNSUPPORTED_HINT)
+        : available,
+      targetAuthoredDrag: tv
+        ? unavailableFact('unsupported-platform-leaf', TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT)
+        : available,
+    }),
+    ...scrollRuntimeOperationFacts({ scroll: available }),
+    ...backRuntimeOperationFacts({ back: available }),
+    ...orientationRuntimeOperationFacts({ orientation: available, unlock: available }),
+    ...tvRemoteRuntimeOperationFacts({
+      tvRemote: tv
+        ? available
+        : unavailableFact(
+            'unsupported-device-kind',
+            'tv-remote is supported only on Android TV targets.',
+          ),
+    }),
+    ...keyboardRuntimeOperationFacts({
+      unsupported,
+      status: available,
+      dismiss: available,
+      enter: available,
+    }),
+    ...clipboardRuntimeOperationFacts({ unsupported, read: available, write: available }),
+    ...systemButtonRuntimeOperationFacts({
+      unsupported,
+      home: available,
+      appSwitcher: available,
+      ...androidHardwareButtonFacts(device),
+    }),
+    ...alertRuntimeOperationFacts({
+      read: available,
+      wait: available,
+      accept: available,
+      dismiss: available,
+    }),
+    ...appEventRuntimeOperationFacts({ triggerAppEvent: available }),
+  };
 }
 
-/**
- * Binds the interactor-backed operations (snapshot, screenshot, focus, type, gestures, scroll) for
- * one session. Only a live session reaches here, so the gesture tiers are gated by the same device
- * split their facts use rather than by liveness.
- */
 export function bindLimrunInteractionOperations(
   params: Readonly<{
     device: DeviceInfo;
     signal: AbortSignal;
     getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
     presentIosAcquisition: SnapshotRuntimePresenter;
+    facts: RuntimeFacts<PlatformRuntimeOperations>['operations'];
   }>,
 ) {
   const { device, signal } = params;
@@ -202,225 +147,60 @@ export function bindLimrunInteractionOperations(
       device,
       signal,
       resolveInteractor,
-      facts: limrunInteractionOperationFacts(device),
+      facts: params.facts,
       pause: async (milliseconds) => await sleep(milliseconds, undefined, { signal }),
     }),
     ...bindProviderScreenshotInteractor({ device, signal, resolveInteractor }),
     ...bindProviderGestureInteractor({
       device,
       signal,
-      facts: limrunGestureFacts(device, available),
+      facts: params.facts,
       resolveInteractor,
     }),
     ...bindProviderScrollInteractor({ device, signal, resolveInteractor }),
   });
 }
 
-/**
- * `back`/`orientation`/`tvRemote` differ by direct-session platform, unlike focus/type:
- * the Android leg rides `session.dependencies.android.createInteractor` (`android.ts`) — the
- * SAME factory the local Android family binds, so it carries the identical cell table (parity
- * with the local owner, including the `device.target === 'tv'` gate for `tvRemote`). The iOS
- * direct session is a phone/tablet surface with no remote receiver, so its fact refuses
- * `tvRemote` and its interactor carries no such member.
- */
-export function limrunNavigationOperationFacts(
-  device: DeviceInfo,
+export function limrunAndroidSettingsFacts(
   liveSessionUnavailable?: RuntimeOperationUnavailability,
 ) {
-  if (liveSessionUnavailable) {
-    return Object.freeze({
-      ...backRuntimeOperationFacts({ back: liveSessionUnavailable }),
-      ...orientationRuntimeOperationFacts({
-        orientation: liveSessionUnavailable,
-        unlock: liveSessionUnavailable,
-      }),
-      ...tvRemoteRuntimeOperationFacts({ tvRemote: liveSessionUnavailable }),
-    });
-  }
-  if (device.platform === 'android') {
-    return Object.freeze({
-      ...backRuntimeOperationFacts({ back: available }),
-      ...orientationRuntimeOperationFacts({ orientation: available, unlock: available }),
-      ...tvRemoteRuntimeOperationFacts({
-        tvRemote: device.target === 'tv' ? available : tvRemoteUnavailableAndroid,
-      }),
-    });
-  }
-  return Object.freeze({
-    ...backRuntimeOperationFacts({ back: available }),
-    ...orientationRuntimeOperationFacts({ orientation: available }),
-    ...tvRemoteRuntimeOperationFacts({ tvRemote: tvRemoteUnavailableIos }),
+  return settingsRuntimeOperationFacts({
+    target: liveSessionUnavailable ?? available,
+    unsupported: settingUnavailableAndroid,
+    write: {
+      wifi: available,
+      bluetooth: available,
+      airplane: available,
+      'mobile-data': available,
+      location: available,
+      animations: available,
+      appearance: available,
+      'text-size': available,
+      fingerprint: available,
+      'clear-app-state': available,
+      permission: available,
+    } satisfies Record<AndroidSetting, RuntimeOperationFact>,
+    read: { 'text-size': available },
   });
 }
 
-/**
- * The Android leg rides `session.dependencies.android.createInteractor`, the factory the local
- * Android family binds, so `cmd clipboard get/set text` reaches the device as it does locally.
- * The iOS direct session reads and writes the pasteboard through Limrun's `simctl pbpaste` and
- * `pbcopy`.
- */
-export function limrunClipboardOperationFacts(
-  liveSessionUnavailable?: RuntimeOperationUnavailability,
+export function limrunAppleSettingsFacts(
+  facts: Partial<RuntimeFacts<PlatformRuntimeOperations>['operations']>,
 ) {
-  if (liveSessionUnavailable) {
-    return Object.freeze({
-      ...clipboardRuntimeOperationFacts({ unsupported: liveSessionUnavailable }),
-    });
-  }
-  return Object.freeze({
-    ...clipboardRuntimeOperationFacts({
-      unsupported: clipboardUnsupportedProviderMode,
-      read: available,
-      write: available,
-    }),
-  });
-}
-
-/**
- * `alert` splits like every other interaction leaf: the Android leg rides the local family's own
- * interactor factory, which reads the same accessibility dump it always did; the iOS direct
- * session reads system alerts out of the same element-tree capture its snapshot rides and presses
- * their buttons through the same touch seam (issue #3349), so all four legs are available on
- * both legs of a live session.
- */
-export function limrunAlertOperationFacts(
-  _device: DeviceInfo,
-  liveSessionUnavailable?: RuntimeOperationUnavailability,
-) {
-  const cell = liveSessionUnavailable ?? available;
-  return Object.freeze({
-    ...alertRuntimeOperationFacts({ read: cell, wait: cell, accept: cell, dismiss: cell }),
-  });
-}
-
-/**
- * The Android leg rides the local family's own interactor factory for `home`, `appSwitcher` and
- * the hardware-button presses. The iOS direct session presses `home` through Limrun's button
- * actions and refuses `appSwitcher`. No Limrun session exposes the action button.
- */
-export function limrunSystemButtonOperationFacts(
-  device: DeviceInfo,
-  liveSessionUnavailable?: RuntimeOperationUnavailability,
-) {
-  if (liveSessionUnavailable) {
-    return systemButtonRuntimeOperationFacts({ unsupported: liveSessionUnavailable });
-  }
-  if (device.platform === 'android') {
-    return systemButtonRuntimeOperationFacts({
-      unsupported: systemButtonUnavailable,
-      home: available,
-      appSwitcher: available,
-      ...androidHardwareButtonFacts(device),
-    });
-  }
-  return systemButtonRuntimeOperationFacts({
-    unsupported: systemButtonUnavailable,
-    home: available,
-    appSwitcher: appSwitcherUnavailableIos,
-  });
-}
-
-/**
- * `fold` sends a HID hinge event through a helper the daemon host spawns inside one of its own iOS
- * simulators with `simctl spawn`; a Limrun session's device is not a host simulator.
- */
-export const LIMRUN_FOLD_UNAVAILABLE = unavailableFact(
-  'unsupported-provider-mode',
-  'fold runs a HID helper through simctl spawn inside a foldable iPhone simulator on the daemon host; a Limrun session has no such simulator.',
-);
-
-export const LIMRUN_TELEPHONY_UNAVAILABLE = unavailableFact(
-  'unsupported-provider-mode',
-  "telephony sends calls and SMS to an Android emulator's console through local adb; agent-device does not route it through a Limrun session.",
-);
-
-/** The fold refusal both Limrun legs share. */
-export function limrunFoldOperationFacts() {
-  return Object.freeze({ setFoldPose: LIMRUN_FOLD_UNAVAILABLE });
-}
-
-/** The telephony refusal both Limrun legs share. */
-export function limrunTelephonyOperationFacts() {
-  return Object.freeze({ sendTelephonyEvent: LIMRUN_TELEPHONY_UNAVAILABLE });
-}
-
-/**
- * `trigger-app-event` is the one system leaf both direct-session legs genuinely serve: each
- * implements `open`, and a deep link is exactly what that method routes (`openUrl` on iOS, the
- * local Android interactor's `am start` on Android).
- */
-export function limrunAppEventOperationFacts(
-  device: DeviceInfo,
-  liveSessionUnavailable?: RuntimeOperationUnavailability,
-) {
-  void device;
-  return Object.freeze({
-    ...appEventRuntimeOperationFacts({ triggerAppEvent: liveSessionUnavailable ?? available }),
-  });
-}
-
-/** The Android leg runs the local Android interactor; the iOS leg runs the simctl plan. */
-export function limrunSettingsOperationFacts(
-  device: DeviceInfo,
-  liveSessionUnavailable?: RuntimeOperationUnavailability,
-) {
-  const target = liveSessionUnavailable ?? available;
-  return Object.freeze(
-    settingsRuntimeOperationFacts(
-      device.platform === 'android'
-        ? {
-            target,
-            unsupported: settingUnavailableAndroid,
-            write: {
-              wifi: available,
-              bluetooth: available,
-              airplane: available,
-              'mobile-data': available,
-              location: available,
-              animations: available,
-              appearance: available,
-              'text-size': available,
-              fingerprint: available,
-              'clear-app-state': available,
-              permission: available,
-            } satisfies Record<AndroidSetting, RuntimeOperationFact>,
-            read: { 'text-size': available },
-          }
-        : {
-            target,
-            unsupported: settingUnavailableIos,
-            write: {
-              appearance: available,
-              permission: available,
-              location: available,
-              'clear-app-state': available,
-            } satisfies Record<LimrunIosSetting, RuntimeOperationFact>,
-            read: { 'text-size': settingsReadUnavailableIos },
+  const setting = facts.setSetting;
+  return {
+    readSetting: facts.readSetting ?? unsupported,
+    setSetting: setting?.available
+      ? {
+          ...setting,
+          subjects: {
+            ...setting.subjects,
+            'reset-keychain': unavailableFact(
+              'unsupported-provider-mode',
+              'Limrun does not expose keychain reset.',
+            ),
           },
-    ),
-  );
-}
-
-/**
- * `keyboard` (status/dismiss/enter) shares one cell per session: the Android leg rides the same
- * interactor factory `limrunNavigationOperationFacts` above describes; the iOS leg has no tested
- * provider keyboard behavior, so it stays unavailable.
- */
-export function limrunKeyboardOperationFacts(
-  device: DeviceInfo,
-  liveSessionUnavailable?: RuntimeOperationUnavailability,
-) {
-  // One denial covers the iOS leg and any session that is no longer live: neither serves a
-  // keyboard operation.
-  const unsupported = liveSessionUnavailable ?? keyboardUnavailableIos;
-  const androidLegServesKeyboard =
-    liveSessionUnavailable === undefined && device.platform === 'android';
-  return Object.freeze({
-    ...keyboardRuntimeOperationFacts(
-      androidLegServesKeyboard
-        ? { unsupported, status: available, dismiss: available, enter: available }
-        : { unsupported },
-    ),
-  });
+        }
+      : (setting ?? unsupported),
+  };
 }

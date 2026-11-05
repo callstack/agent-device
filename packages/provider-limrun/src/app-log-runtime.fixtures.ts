@@ -1,3 +1,5 @@
+import { setTimeout as sleep } from 'node:timers/promises';
+import { testIosRunner } from './ios-runner.fixtures.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -31,6 +33,7 @@ export function limrunOwnerOptions(
     runtimeInstance: 'default',
     ownsDevice: () => true,
     hasLiveSession: () => true,
+    getIosRunner: (device) => (device.platform === 'apple' ? testIosRunner : undefined),
     getInteractor: () => undefined,
     getDeviceSession: () => undefined,
     openCurrent: async () => undefined,
@@ -43,9 +46,14 @@ export function limrunOwnerOptions(
 }
 
 export function unusedLimrunHost(): PlatformRuntimeHost {
-  // These scenarios exercise validation and app-log ports only; every other host port is
-  // unreachable, so a narrow record beats restating the full platform-runtime host surface.
+  // Lifecycle scenarios use the clock; unrelated host ports remain inert.
   return {
+    clock: {
+      now: () => Date.now(),
+      sleep: async (milliseconds: number, signal?: AbortSignal) => {
+        await sleep(milliseconds, undefined, { signal });
+      },
+    },
     artifacts: {
       resolveSession: (sessionId: string) => ({
         outputPath: `/sessions/${sessionId}/app.log`,

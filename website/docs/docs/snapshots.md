@@ -231,7 +231,7 @@ the tree to work out whether a sheet or alert was up.
   evidence absence needs. Absence is only reachable from a capture that reads UIKit class names, so a
   screen served by a backend that publishes none answers `"unknown"` even when nothing is presented.
   That is the private accessibility backend (`snapshotQuality.backend: "private-ax"`, which `--actions`
-  asks for) and an Appium or Limrun tree. Never treat `"unknown"` as `"absent"`.
+  asks for) and an Appium tree. Limrun iOS uses the Apple XCTest runner. Never treat `"unknown"` as `"absent"`.
 - A physical iOS device has one capture backend, and it publishes no class names, so there the answer
   is `"presented"` or `"unknown"` and never `"absent"`.
 - The field is absent entirely when the platform publishes no reading at all: Android, web, Linux,
@@ -345,8 +345,8 @@ The response-level `keyboard` field tells you what the capture observed:
 
 Appium iOS and Android snapshots include a visibility probe. Each capture, including a `wait` poll
 or the capture before `fill`, adds one sequential probe with a 500 ms timeout. A timeout leaves the
-probe unknown; it does not discard the tree. Appium iOS and limrun iOS can also report a derived docked
-band during capture. Android Appium can derive the band when a tap resolves the tree's viewport.
+probe unknown; it does not discard the tree. Appium iOS can also report a derived docked band during capture. Limrun iOS reports
+the same keyboard observations as local iOS XCTest. Android Appium can derive the band when a tap resolves the tree's viewport.
 
 On iOS XCTest, a successful scan of the complete pre-projection root snapshot with no keyboard
 is the explicit observation that establishes `absent`. A failed or timed-out capture does not
@@ -386,8 +386,8 @@ Android snapshot nodes and `get attrs` (including the digest response) carry the
 them. Explicit `false` and `0` are kept; an absent field means the fact was unavailable, not false.
 `hintShowing` and `placeholder` need Android API 26 or later, `heading` API 28 or later.
 
-On iOS, the Apple runner, Simulator accessibility bridge, Appium, and Limrun publish native
-`checked`, `password`, and `editable` facts when available. macOS runner snapshots publish the
+On iOS, the Apple runner publishes native `checked`, `password`, and `editable` facts when available,
+including on Limrun. The Simulator accessibility bridge and Appium also publish these facts. macOS runner snapshots publish the
 same native facts.
 
 - `selected` is the accessibility selected state an app sets on a control — the active bottom-tab or
@@ -411,8 +411,8 @@ same native facts.
   password flag.
 - `heading` is the accessibility heading flag an app sets on a node, the way React Native's
   `accessibilityRole="header"` does on a plain `View`. The Android helper publishes true for a
-  heading; Appium preserves an explicit true or false when reported. Limrun reports true when
-  the node carries the native heading trait.
+  heading; Appium preserves an explicit true or false when reported. A backend that does not
+  publish this fact leaves it absent.
 - `roleDescription` is the localized role description an app sets beside the native class, verbatim
   (React Native writes `Tab`, `Tab List`, `Radio Group`, `Link`, `Menu`), when the class alone would
   not say what the control is. The `type` stays the class; a consumer maps the description to a role.

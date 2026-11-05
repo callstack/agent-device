@@ -22,7 +22,7 @@ test('keeps an aborted operation owned until its provider source settles', async
     settleSource = resolve;
   });
   const controller = new AbortController();
-  const waiting = drain.wait(source, controller.signal, 'limrun operation aborted');
+  const waiting = drain.wait(source, controller.signal);
   const reason = new Error('release the instance');
 
   controller.abort(reason);

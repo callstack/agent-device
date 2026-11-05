@@ -223,8 +223,7 @@ test('bound Limrun iOS deployment cancels an in-flight installApp call', async (
     await expect(pending).rejects.toBe(abortReason);
     expect(uploadSignal()).toBe(controller.signal);
     expect(state.iosInstallApp).toHaveBeenCalledWith(LIMRUN_DEPLOYMENT_ASSET.signedDownloadUrl, {
-      md5: LIMRUN_DEPLOYMENT_ASSET.md5,
-      launchMode: 'ForegroundIfRunning',
+      launchMode: undefined,
     });
   } finally {
     install.resolve({ bundleId: 'com.example.ios' });

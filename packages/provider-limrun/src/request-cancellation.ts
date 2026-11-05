@@ -6,7 +6,6 @@ import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
 export async function awaitLimrunOperation<Value>(
   source: Promise<Value>,
   signal?: AbortSignal,
-  _abortMessage = 'Limrun provider operation aborted',
   onSettled?: () => void,
 ): Promise<Value> {
   return await awaitWithSignal(source.finally(onSettled), signal);
@@ -18,13 +17,13 @@ export async function awaitLimrunOperation<Value>(
  * accepted operation has settled. This is deliberately not a durable resource or daemon policy.
  */
 export type LimrunRequestOperationDrain = AsyncDisposable & {
-  wait<Value>(source: Promise<Value>, signal?: AbortSignal, abortMessage?: string): Promise<Value>;
+  wait<Value>(source: Promise<Value>, signal?: AbortSignal): Promise<Value>;
 };
 
 export function createLimrunRequestOperationDrain(): LimrunRequestOperationDrain {
   const pending = new Set<Promise<void>>();
   return {
-    wait: async <Value>(source: Promise<Value>, signal?: AbortSignal, abortMessage?: string) => {
+    wait: async <Value>(source: Promise<Value>, signal?: AbortSignal) => {
       let settled!: () => void;
       const completion = new Promise<void>((resolve) => {
         settled = () => {
@@ -33,7 +32,7 @@ export function createLimrunRequestOperationDrain(): LimrunRequestOperationDrain
         };
       });
       pending.add(completion);
-      return await awaitLimrunOperation(source, signal, abortMessage, settled);
+      return await awaitLimrunOperation(source, signal, settled);
     },
     [Symbol.asyncDispose]: async () => {
       while (pending.size > 0) {
@@ -47,9 +46,6 @@ export async function awaitLimrunDeploymentOperation<Value>(
   drain: LimrunRequestOperationDrain | undefined,
   source: Promise<Value>,
   signal?: AbortSignal,
-  abortMessage?: string,
 ): Promise<Value> {
-  return await (drain
-    ? drain.wait(source, signal, abortMessage)
-    : awaitLimrunOperation(source, signal, abortMessage));
+  return await (drain ? drain.wait(source, signal) : awaitLimrunOperation(source, signal));
 }
