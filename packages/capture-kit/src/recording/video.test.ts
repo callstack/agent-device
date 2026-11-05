@@ -9,7 +9,12 @@ import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import { mp4Atom, mp4MovieHeader } from './mp4.fixtures.ts';
 import { Deadline } from '@agent-device/host-kit/retry';
 import { compileSwiftSourceText } from './swift-cache.ts';
-import { hasVideoContainer, isPlayableVideo, waitForPlayableVideo } from './video.ts';
+import {
+  hasVideoContainer,
+  isPlayableVideo,
+  prepareVideoValidator,
+  waitForPlayableVideo,
+} from './video.ts';
 
 vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -104,54 +109,77 @@ test('callers share one validator compile, and each waits for it within its own 
     expect(compileSwiftSourceText).toHaveBeenCalledOnce();
     const [compile] = vi.mocked(compileSwiftSourceText).mock.calls[0]!;
     expect(compile.timeoutMs).toBeUndefined();
-    expect(compile.signal?.aborted).toBe(false);
+    expect(compile.signal).toBeUndefined();
   } finally {
     vi.useRealTimers();
   }
 });
 
-test('the last caller to stop waiting cancels an unfinished compile, and the next caller compiles again', async () => {
-  // Nothing owns swiftc once its requests end: a daemon that exits while it runs leaves it
-  // reparented to launchd, and the compile's own temp output behind.
-  const mp4 = writeFixture('cancel-compile.mp4', Buffer.concat([ftyp, moov]));
-  const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/cancel' }, cwd: directory };
+test('an expired waiter leaves the compile running for the next stop', async () => {
+  const mp4 = writeFixture('pending-compile.mp4', Buffer.concat([ftyp, moov]));
+  const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/pending' }, cwd: directory };
+  let resolveCompile!: (value: string) => void;
+  const pending = new Promise<string>((resolve) => {
+    resolveCompile = resolve;
+  });
+  vi.mocked(compileSwiftSourceText).mockClear().mockReturnValueOnce(pending);
+  void prepareVideoValidator(host);
   await hasVideoContainer(mp4);
-  let compileSignal: AbortSignal | undefined;
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
   try {
-    vi.mocked(compileSwiftSourceText)
-      .mockClear()
-      .mockImplementationOnce(async ({ signal }) => {
-        compileSignal = signal;
-        return await new Promise<string>((_, reject) => {
-          signal?.addEventListener('abort', () => reject(signal.reason));
-        });
-      });
-
     const timedOut = expect(
       isPlayableVideo(mp4, host, Deadline.fromTimeoutMs(5_000)),
-    ).rejects.toMatchObject({ details: { reason: 'video_validator_compile_timeout' } });
+    ).rejects.toMatchObject({
+      details: { reason: 'video_validator_compile_timeout', retriable: true },
+    });
     await vi.advanceTimersByTimeAsync(5_000);
     await timedOut;
-    expect(compileSignal?.aborted).toBe(true);
+    expect(runCmd).not.toHaveBeenCalled();
+    resolveCompile('/bin/true');
+    await expect(isPlayableVideo(mp4, host)).resolves.toBe(true);
+    expect(compileSwiftSourceText).toHaveBeenCalledOnce();
   } finally {
+    resolveCompile('/bin/true');
     vi.useRealTimers();
   }
-
-  await expect(isPlayableVideo(mp4, host)).resolves.toBe(true);
-  expect(compileSwiftSourceText).toHaveBeenCalledTimes(2);
 });
 
-test('a failed compile is dropped, and the next caller compiles again', async () => {
+test('a failed background compile stays unavailable without retrying at stop', async () => {
   const mp4 = writeFixture('failed-compile.mp4', Buffer.concat([ftyp, moov]));
   const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/failed' }, cwd: directory };
   vi.mocked(compileSwiftSourceText)
     .mockClear()
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'xcrun timed out after 120000ms'));
 
-  await expect(isPlayableVideo(mp4, host)).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
-  await expect(isPlayableVideo(mp4, host)).resolves.toBe(true);
-  expect(compileSwiftSourceText).toHaveBeenCalledTimes(2);
+  await expect(prepareVideoValidator(host)).rejects.toMatchObject({
+    details: { reason: 'video_validator_unavailable' },
+  });
+  await expect(isPlayableVideo(mp4, host)).rejects.toMatchObject({
+    details: { reason: 'video_validator_unavailable' },
+  });
+  expect(compileSwiftSourceText).toHaveBeenCalledOnce();
+});
+
+test.each([
+  `xcrun: error: unable to find utility "swiftc", not a developer tool or in PATH`,
+  `validator.swift:2:8: error: no such module 'AVFoundation'`,
+])('refuses verification when the validator reports %s', async (stderr) => {
+  const mp4 = writeFixture('unavailable.mp4', Buffer.concat([ftyp, moov]));
+  vi.mocked(runCmd).mockResolvedValueOnce({ exitCode: 1, stderr, stdout: '' });
+  await expect(isPlayableVideo(mp4, createTestHost())).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'video_validator_unavailable', retriable: false },
+  });
+});
+
+test('an ordinary validator refusal is unplayable, not unavailable', async () => {
+  const mp4 = writeFixture('refused.mp4', Buffer.concat([ftyp, moov]));
+  vi.mocked(runCmd).mockResolvedValueOnce({
+    exitCode: 1,
+    stderr: "no such module 'OtherModule'",
+    stdout: '',
+  });
+  await expect(isPlayableVideo(mp4, createTestHost())).resolves.toBe(false);
 });
 
 test('a budget spent before the validator runs reads as not playable instead of a 1 ms run', async () => {

@@ -28,7 +28,7 @@ const TRACE_COMMAND_NAME = 'trace';
 const RECORDING_ACTION_VALUES = ['start', 'stop'] as const;
 
 const recordCommandDescription =
-  'Start or stop a screen recording for the active app session or, where supported, the selected device, or build a contact-sheet PNG from a recording already exported. Long Android recordings can return multiple video artifacts; HarmonyOS supports whole-screen recording on physical devices.';
+  'Start or stop a screen recording for the active app session or, where supported, the selected device, or build a contact-sheet PNG from a recording already exported. Long Android recordings can return multiple video artifacts; HarmonyOS supports whole-screen recording on physical devices. MP4 verification setup starts in the background at record start without delaying capture. If setup exceeds the stop budget, details.reason is video_validator_compile_timeout (retriable); run record stop again while setup continues. If verification tooling fails, details.reason is video_validator_unavailable; install Swift with AVFoundation on the daemon host, restart the daemon, and retry record stop.';
 const traceCommandDescription =
   'Start or stop trace-log capture and return the resulting artifact when capture ends. Without a path, start writes a timestamped trace log named after the session in the sessions directory of the daemon state; a path on stop moves the finished trace there.';
 

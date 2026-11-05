@@ -40,19 +40,24 @@ exit(exitCode)
 const VALIDATOR_COMPILE_WAIT_MS = 30_000;
 const VALIDATOR_RUN_TIMEOUT_MS = 10_000;
 
-type SharedValidatorCompile = {
-  readonly compiled: Promise<string>;
-  readonly cancel: AbortController;
-  waiters: number;
-  settled: boolean;
-};
+const videoValidatorCompiles = new Map<string, Promise<string>>();
 
-// A compiled helper is valid for the Swift cache it was built into, so each cache root keeps its own.
-// Callers share one compile, and each waits for it only within its own budget. The last caller to
-// stop waiting cancels an unfinished compile: that kills this process's `swiftc`, or stops waiting
-// for another process's compile. Nothing owns `swiftc` once its requests end, so a daemon that
-// exits would leave it running.
-const videoValidatorCompiles = new Map<string, SharedValidatorCompile>();
+/** Starts one cached compile per Swift cache root. Callers may warm it without awaiting it. */
+export function prepareVideoValidator(host: HostEnvironment): Promise<string> {
+  const cacheRoot = getSwiftCacheRoot(host.env);
+  let compiled = videoValidatorCompiles.get(cacheRoot);
+  if (!compiled) {
+    compiled = compileSwiftSourceText({
+      host,
+      source: VIDEO_VALIDATION_SCRIPT,
+      cacheName: 'video-validator',
+    }).catch((error: unknown) => {
+      throw unavailableVideoValidator(error);
+    });
+    videoValidatorCompiles.set(cacheRoot, compiled);
+  }
+  return compiled;
+}
 
 export async function waitForStableFile(
   filePath: string,
@@ -126,48 +131,20 @@ export async function isPlayableVideo(
     if (result.exitCode === 0) {
       return true;
     }
-    return isSwiftVideoValidatorUnavailable(result.stderr, result.stdout);
+    if (isSwiftVideoValidatorUnavailable(result.stderr, result.stdout)) {
+      throw unavailableVideoValidator(new AppError('COMMAND_FAILED', result.stderr));
+    }
+    return false;
   } catch (error) {
     if (isSwiftVideoValidatorError(error)) {
-      return true;
+      throw unavailableVideoValidator(error);
     }
     throw error;
   }
 }
 
-function joinValidatorCompile(host: HostEnvironment, cacheRoot: string): SharedValidatorCompile {
-  const existing = videoValidatorCompiles.get(cacheRoot);
-  if (existing) return existing;
-  const cancel = new AbortController();
-  const shared: SharedValidatorCompile = {
-    compiled: compileSwiftSourceText({
-      host,
-      source: VIDEO_VALIDATION_SCRIPT,
-      cacheName: 'video-validator',
-      signal: cancel.signal,
-    }),
-    cancel,
-    waiters: 0,
-    settled: false,
-  };
-  videoValidatorCompiles.set(cacheRoot, shared);
-  shared.compiled.then(
-    () => {
-      shared.settled = true;
-    },
-    () => {
-      shared.settled = true;
-      if (videoValidatorCompiles.get(cacheRoot) === shared)
-        videoValidatorCompiles.delete(cacheRoot);
-    },
-  );
-  return shared;
-}
-
 async function waitForValidatorCompile(host: HostEnvironment, waitMs: number): Promise<string> {
-  const cacheRoot = getSwiftCacheRoot(host.env);
-  const shared = joinValidatorCompile(host, cacheRoot);
-  shared.waiters += 1;
+  const compiled = prepareVideoValidator(host);
   let timer: NodeJS.Timeout | undefined;
   const expired = new Promise<never>((_, reject) => {
     timer = setTimeout(
@@ -181,9 +158,8 @@ async function waitForValidatorCompile(host: HostEnvironment, waitMs: number): P
               timeoutMs: waitMs,
               retriable: true,
               hint:
-                'Run record stop again: the Swift modules this compile already built stay ' +
-                'cached, so the next compile finishes sooner, and the recording keeps its ' +
-                'evidence either way.',
+                'Run record stop again: the validator compile continues in the background, ' +
+                'and the recording keeps its evidence.',
             },
           ),
         ),
@@ -191,16 +167,23 @@ async function waitForValidatorCompile(host: HostEnvironment, waitMs: number): P
     );
   });
   try {
-    return await Promise.race([shared.compiled, expired]);
+    return await Promise.race([compiled, expired]);
   } finally {
     clearTimeout(timer);
-    shared.waiters -= 1;
-    if (shared.waiters === 0 && !shared.settled) {
-      if (videoValidatorCompiles.get(cacheRoot) === shared)
-        videoValidatorCompiles.delete(cacheRoot);
-      shared.cancel.abort();
-    }
   }
+}
+
+function unavailableVideoValidator(cause: unknown): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    'The video validator is unavailable; MP4 playability could not be verified.',
+    {
+      reason: 'video_validator_unavailable',
+      retriable: false,
+      hint: 'Install the Swift toolchain with AVFoundation on the daemon host, then restart the daemon and retry record stop.',
+    },
+    cause,
+  );
 }
 
 function isSwiftVideoValidatorError(error: unknown): boolean {
@@ -240,7 +223,7 @@ export async function waitForPlayableVideo(
 
 function isSwiftVideoValidatorUnavailable(stderr: string, stdout: string): boolean {
   const combined = `${stderr}\n${stdout}`;
-  return /\b(no such module ['"]AVFoundation['"]|unable to find utility ["']swiftc?["']|xcrun: error: unable to find utility ["']swiftc?["'])\b/i.test(
+  return /\b(no such module ['"]AVFoundation['"]|unable to find utility ["']swiftc?["']|xcrun: error: unable to find utility ["']swiftc?["'])/i.test(
     combined,
   );
 }

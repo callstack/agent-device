@@ -27,6 +27,10 @@ export function createScreenRecordingRuntimeHost(options: {
       const { createScreenRecordingOutputHost } =
         await import('./platform-runtime-screen-recording-output-host.ts');
       await createScreenRecordingOutputHost().prepare(outputPath);
+      if (!outputPath.toLowerCase().endsWith('.webm')) {
+        const { prepareVideoValidator } = await import('@agent-device/capture-kit/recording-video');
+        void prepareVideoValidator(host).catch(() => {});
+      }
     },
     copy: async (input) => {
       const { createScreenRecordingOutputHost } =
