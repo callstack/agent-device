@@ -92,6 +92,7 @@ explicit config:
 - Metro endpoint/token fields (`metro*`, `bundleUrl`)
 - request headers and structured install sources
 - local code and write destinations (`reporter`, `reportJunit`, `saveScript`, `launchConsole`)
+- `noPostGestureStabilization`, which skips the wait that keeps the first read after a scroll or swipe from a tree still in motion; see [Scroll](/docs/commands#scroll)
 
 Project config can also set `snapshotDepth`, `snapshotScope`, `screenshotScale`, `activity`, `relaunch`, `shutdown`, `fps`, and `quality`. Local paths and executable modules, such as `stepsFile` and `reporter`, are allowed only in user or explicit config.
 The `record` config key and `AGENT_DEVICE_RECORD` were removed. `--record` is per-invocation only: pass it on the command, or set `record: true` in an SDK/MCP call, to keep a corrective read in a healed script.
