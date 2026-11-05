@@ -119,13 +119,14 @@ connection: {
     supportsDeferredAppSelection: true,
     supportsDirectPortReverse: false,
     usesCloudWebDriverLease: false,
+    holdsCloudDevice: false,
   },
   resolve: async ({ flags, env, cwd, stateDir, host }) => ({ profile }),
   verify: async ({ flags, env, host }) => verification,
 },
 ```
 
-`resolve` validates provider flags and returns `{ profile, extraFlags? }`; `profile.leaseProvider` must match the plugin's `provider`. The host supplies connection identity, session defaults, Metro settings, and persists the profile. `verify` returns the provider verification result. Both also receive `host`, the same `ProviderPluginHost` that `setup` gets, built from the `env` of that call. Both run without allocating a device or setting up a runtime. `agent-device` loads installed plugins' factories, not their `setup`, to read these capabilities.
+`resolve` validates provider flags and returns `{ profile, extraFlags? }`; `profile.leaseProvider` must match the plugin's `provider`. The host supplies connection identity, session defaults, Metro settings, and persists the profile. `verify` returns the provider verification result. Both also receive `host`, the same `ProviderPluginHost` that `setup` gets, built from the `env` of that call. Both run without allocating a device or setting up a runtime. `agent-device` loads installed plugins' factories, not their `setup`, to read these capabilities. Set the optional `holdsCloudDevice: true` when the provider leases a cloud-hosted device. Each command that uses the lease then requests a five-minute lease window, the same as a proxy or cloud WebDriver lease, not the 60-second daemon default. A daemon whose `AGENT_DEVICE_LEASE_MAX_TTL_MS` is below five minutes refuses that request with `INVALID_ARGS`.
 
 ### Package for installation
 
