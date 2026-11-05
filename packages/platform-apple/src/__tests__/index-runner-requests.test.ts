@@ -9,6 +9,7 @@ import {
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
+import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import type { Interactor, PressPointOptions } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -131,6 +132,16 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
     (i) => i.performGesture!(pinchPlan()),
   ],
   'ios-simulator.interactions-gesture.tap': [IOS_SIMULATOR, (i) => i.performGesture!(tapPlan())],
+  'ios-simulator.interactions-gesture.screen-edge': [
+    IOS_SIMULATOR,
+    (i) =>
+      i.performGesture!(
+        buildGesturePlan(
+          { intent: 'fling', preset: 'right-edge' },
+          { x: 0, y: 0, width: 390, height: 844 },
+        ),
+      ),
+  ],
   'tvos.interactions-scroll.remote-press': [
     TVOS_SIMULATOR,
     (i) => i.scroll('down', { durationMs: 300 }),

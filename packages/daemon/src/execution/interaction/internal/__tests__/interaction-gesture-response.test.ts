@@ -30,3 +30,36 @@ test('gesture response builder preserves the dual-target drag disclosure and tim
     timing: { executionProfile: 'timed-pan', gestureDurationMs: 1_300 },
   });
 });
+
+test('the schedule a backend reports it ran replaces the planned one', () => {
+  const fling = (backendResult: Record<string, unknown>) =>
+    gestureResponseData(
+      {
+        kind: 'fling',
+        durationMs: 100,
+        pointerCount: 1,
+        from: { x: 8, y: 426 },
+        to: { x: 334, y: 426 },
+        backendResult,
+        message: 'Flung',
+      },
+      { executionProfile: 'endpoint-hold' },
+    );
+
+  expect(fling({ executionProfile: 'edge-ease-in' })).toMatchObject({
+    executionProfile: 'edge-ease-in',
+    timing: { executionProfile: 'edge-ease-in', gestureDurationMs: 100 },
+  });
+  expect(fling({})).toMatchObject({
+    executionProfile: 'endpoint-hold',
+    timing: { executionProfile: 'endpoint-hold' },
+  });
+  expect(fling({ executionProfile: 'future-schedule' })).toMatchObject({
+    executionProfile: 'future-schedule',
+    timing: { executionProfile: 'future-schedule' },
+  });
+  expect(fling({ executionProfile: 42 })).toMatchObject({
+    executionProfile: 'endpoint-hold',
+    timing: { executionProfile: 'endpoint-hold' },
+  });
+});
