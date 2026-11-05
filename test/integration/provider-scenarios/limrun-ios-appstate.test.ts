@@ -33,7 +33,7 @@ vi.mock('@limrun/api', () => ({
 
     readonly androidInstances = { create: vi.fn(), list: vi.fn(), delete: vi.fn() };
 
-    readonly assets = { getOrUpload: vi.fn(), list: vi.fn() };
+    readonly assets = { list: vi.fn() };
   },
 }));
 

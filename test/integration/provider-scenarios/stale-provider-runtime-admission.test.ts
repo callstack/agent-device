@@ -48,7 +48,6 @@ vi.mock('@limrun/api', () => ({
       delete: limrunState.androidDelete,
     };
     readonly iosInstances = { create: vi.fn(), list: vi.fn(), delete: vi.fn() };
-    readonly assets = { getOrUpload: vi.fn() };
   },
   NotFoundError: class NotFoundError extends Error {},
 }));

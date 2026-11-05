@@ -11,10 +11,23 @@
   },
   "include": ["src"],
   "references": [
-    { "path": "../capture-kit" },
-    { "path": "../contracts" },
-    { "path": "../kernel" },
-    { "path": "../platform-android" },
-    { "path": "../platform-apple" }
+    {
+      "path": "../capture-kit"
+    },
+    {
+      "path": "../contracts"
+    },
+    {
+      "path": "../kernel"
+    },
+    {
+      "path": "../platform-android"
+    },
+    {
+      "path": "../platform-apple"
+    },
+    {
+      "path": "../test-kit"
+    }
   ]
 }

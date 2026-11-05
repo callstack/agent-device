@@ -61,7 +61,6 @@ vi.mock('@limrun/api', () => ({
     };
 
     readonly assets = {
-      getOrUpload: vi.fn(),
       list: state.assetList,
     };
 
