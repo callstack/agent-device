@@ -223,6 +223,9 @@ importers:
       oxlint:
         specifier: ^1.79.0
         version: 1.79.0
+      plist:
+        specifier: 5.0.0
+        version: 5.0.0
       pngjs:
         specifier: ^7.0.0
         version: 7.0.0
@@ -363,7 +366,7 @@ importers:
         version: link:../test-kit
       vitest:
         specifier: 5.0.4
-        version: 5.0.4(@types/node@22.20.1)(@vitest/coverage-v8@5.0.4)(vite@8.3.5(@types/node@22.20.1)(yaml@2.9.1))
+        version: 5.0.4(@types/node@22.20.1)(@vitest/coverage-v8@5.0.4)(vite@8.3.5(@types/node@26.2.0)(yaml@2.9.1))
 
   packages/command-output:
     dependencies:
@@ -481,7 +484,7 @@ importers:
         version: link:../test-kit
       vitest:
         specifier: 5.0.4
-        version: 5.0.4(@types/node@22.20.1)(@vitest/coverage-v8@5.0.4)(vite@8.3.5(@types/node@22.20.1)(yaml@2.9.1))
+        version: 5.0.4(@types/node@22.20.1)(@vitest/coverage-v8@5.0.4)(vite@8.3.5(@types/node@26.2.0)(yaml@2.9.1))
 
   packages/contracts:
     dependencies:
@@ -757,6 +760,9 @@ importers:
       '@agent-device/test-kit':
         specifier: workspace:*
         version: link:../test-kit
+      plist:
+        specifier: 5.0.0
+        version: 5.0.0
 
   packages/platform-harmonyos:
     dependencies:
@@ -867,6 +873,9 @@ importers:
         specifier: workspace:*
         version: link:../platform-android
     devDependencies:
+      '@agent-device/platform-apple':
+        specifier: workspace:*
+        version: link:../platform-apple
       '@limrun/api':
         specifier: ^0.68.1
         version: 0.68.1(supports-color@7.2.0)
@@ -3198,6 +3207,10 @@ packages:
   '@workflow/serde@4.1.0':
     resolution: {integrity: sha512-pav4F2BoirECWR7Nf1TKt+2eETcBj7jj4cBefQ8VXQCA6NPkaKeLfj/zMgi+3zYV5ZIBT4GuUiphsj0/b9hPQQ==}
 
+  '@xmldom/xmldom@0.9.12':
+    resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
+    engines: {node: '>=14.6'}
+
   '@yuku-codegen/binding-android-arm64@0.8.7':
     resolution: {integrity: sha512-C/0zV5IhgVdYhGJTwrY0v8dknxlhiKwtVJkMUaexu9/QvRmzlV4vfU3hZlUSgqc2BxQHntL1mCVbDq8j0FRFDw==}
     cpu: [arm64]
@@ -4850,6 +4863,10 @@ packages:
     engines: {node: '>=20'}
     hasBin: true
 
+  plist@5.0.0:
+    resolution: {integrity: sha512-20N+g1DvMm/DFRbsvER7tT4wDryq0WunK7VMkDaiJcKNapAnUMkTsAnacFYf8n420F4Hf6/hefgmJRkMb1M0fg==}
+    engines: {node: '>=18'}
+
   pngjs@7.0.0:
     resolution: {integrity: sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow==}
     engines: {node: '>=14.19.0'}
@@ -5600,22 +5617,16 @@ packages:
     resolution: {integrity: sha512-9K2k72s4n7rV9s4bX0MyjbX9iBribvKZbBJKuEmTCZfeWJXs6Yh7bGpY4eoc7UufAjvpheBqwyZCOIPBvxCv0A==}
     peerDependencies:
       '@volar/language-service': ~2.4.0
-      typescript: '*'
     peerDependenciesMeta:
       '@volar/language-service':
-        optional: true
-      typescript:
         optional: true
 
   volar-service-typescript@0.0.71:
     resolution: {integrity: sha512-yTtM/BVT6hoyEYnDtaCyAtNhdNeS/mhTTABlBOdw3NNiRBUin3IznFJpgfjer4c6RYopiPjjQjc9VFhxVl1mLw==}
     peerDependencies:
       '@volar/language-service': ~2.4.0
-      typescript: '*'
     peerDependenciesMeta:
       '@volar/language-service':
-        optional: true
-      typescript:
         optional: true
 
   volar-service-yaml@0.0.71:
@@ -5708,6 +5719,10 @@ packages:
         optional: true
       utf-8-validate:
         optional: true
+
+  xmlbuilder@15.1.1:
+    resolution: {integrity: sha512-yMqGBqtXyeN1e3TGYvgNgDVZ3j84W4cwkOXQswghol6APgZWaff9lnbvN7MHYJOiXsvGPXtjTYJEiC9J2wv9Eg==}
+    engines: {node: '>=8.0'}
 
   xxhash-wasm@1.1.0:
     resolution: {integrity: sha512-147y/6YNh+tlp6nd/2pWq38i9h6mz/EuQ6njIrmW8D1BS5nCqs0P6DG+m6zTGnNz5I+uhZ0SHxBs9BsPrwcKDA==}
@@ -5922,8 +5937,8 @@ snapshots:
       volar-service-emmet: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
       volar-service-html: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
       volar-service-prettier: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(prettier@3.9.10)
-      volar-service-typescript: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(typescript@5.9.3)
-      volar-service-typescript-twoslash-queries: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(typescript@5.9.3)
+      volar-service-typescript: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
+      volar-service-typescript-twoslash-queries: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
       volar-service-yaml: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
       vscode-html-languageservice: 5.6.2
       vscode-uri: 3.2.0
@@ -7433,14 +7448,14 @@ snapshots:
     optionalDependencies:
       vite: 8.3.5(@types/node@22.20.1)(yaml@2.9.0)
 
-  '@vitest/mocker@5.0.4(vite@8.3.5(@types/node@22.20.1)(yaml@2.9.1))':
+  '@vitest/mocker@5.0.4(vite@8.3.5(@types/node@26.2.0)(yaml@2.9.1))':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       '@vitest/spy': 5.0.4
       estree-walker: 3.0.3
       magic-string: 1.4.3
     optionalDependencies:
-      vite: 8.3.5(@types/node@22.20.1)(yaml@2.9.1)
+      vite: 8.3.5(@types/node@26.2.0)(yaml@2.9.1)
 
   '@vitest/spy@5.0.4': {}
 
@@ -7522,6 +7537,8 @@ snapshots:
   '@vscode/l10n@0.0.18': {}
 
   '@workflow/serde@4.1.0': {}
+
+  '@xmldom/xmldom@0.9.12': {}
 
   '@yuku-codegen/binding-android-arm64@0.8.7':
     optional: true
@@ -9327,6 +9344,11 @@ snapshots:
 
   playwright-core@1.64.1: {}
 
+  plist@5.0.0:
+    dependencies:
+      '@xmldom/xmldom': 0.9.12
+      xmlbuilder: 15.1.1
+
   pngjs@7.0.0: {}
 
   postcss-nested@7.0.2(postcss@8.5.23):
@@ -10044,6 +10066,18 @@ snapshots:
       fsevents: 2.3.3
       yaml: 2.9.1
 
+  vite@8.3.5(@types/node@26.2.0)(yaml@2.9.1):
+    dependencies:
+      lightningcss: 1.33.0
+      picomatch: 4.0.7
+      postcss: 8.5.23
+      rolldown: 1.2.15
+      tinyglobby: 0.2.17
+    optionalDependencies:
+      '@types/node': 26.2.0
+      fsevents: 2.3.3
+      yaml: 2.9.1
+
   vitefu@1.1.3(vite@8.3.5(@types/node@22.20.1)(yaml@2.9.1)):
     optionalDependencies:
       vite: 8.3.5(@types/node@22.20.1)(yaml@2.9.1)
@@ -10070,10 +10104,10 @@ snapshots:
     transitivePeerDependencies:
       - msw
 
-  vitest@5.0.4(@types/node@22.20.1)(@vitest/coverage-v8@5.0.4)(vite@8.3.5(@types/node@22.20.1)(yaml@2.9.1)):
+  vitest@5.0.4(@types/node@22.20.1)(@vitest/coverage-v8@5.0.4)(vite@8.3.5(@types/node@26.2.0)(yaml@2.9.1)):
     dependencies:
       '@types/chai': 5.2.3
-      '@vitest/mocker': 5.0.4(vite@8.3.5(@types/node@22.20.1)(yaml@2.9.1))
+      '@vitest/mocker': 5.0.4(vite@8.3.5(@types/node@26.2.0)(yaml@2.9.1))
       chai: 6.3.0
       es-module-lexer: 2.3.2
       expect-type: 1.4.0
@@ -10084,7 +10118,7 @@ snapshots:
       tinybench: 6.2.2
       tinyexec: 1.3.1
       tinyglobby: 0.2.17
-      vite: 8.3.5(@types/node@22.20.1)(yaml@2.9.1)
+      vite: 8.3.5(@types/node@26.2.0)(yaml@2.9.1)
       why-is-node-running: 3.2.1
     optionalDependencies:
       '@types/node': 22.20.1
@@ -10124,14 +10158,13 @@ snapshots:
       '@volar/language-service': 2.4.30(typescript@5.9.3)
       prettier: 3.9.10
 
-  volar-service-typescript-twoslash-queries@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(typescript@5.9.3):
+  volar-service-typescript-twoslash-queries@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3)):
     dependencies:
       vscode-uri: 3.2.0
     optionalDependencies:
       '@volar/language-service': 2.4.30(typescript@5.9.3)
-      typescript: 5.9.3
 
-  volar-service-typescript@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(typescript@5.9.3):
+  volar-service-typescript@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3)):
     dependencies:
       path-browserify: 1.0.1
       semver: 7.8.5
@@ -10141,7 +10174,6 @@ snapshots:
       vscode-uri: 3.2.0
     optionalDependencies:
       '@volar/language-service': 2.4.30(typescript@5.9.3)
-      typescript: 5.9.3
 
   volar-service-yaml@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3)):
     dependencies:
@@ -10225,6 +10257,8 @@ snapshots:
       strip-ansi: 7.2.0
 
   ws@8.21.3: {}
+
+  xmlbuilder@15.1.1: {}
 
   xxhash-wasm@1.1.0: {}
 

@@ -91,6 +91,7 @@
     }
   },
   "devDependencies": {
-    "@agent-device/test-kit": "workspace:*"
+    "@agent-device/test-kit": "workspace:*",
+    "plist": "5.0.0"
   }
 }
