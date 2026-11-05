@@ -144,7 +144,7 @@ test('an expired waiter leaves the compile running for the next stop', async () 
   }
 });
 
-test('a failed background compile stays unavailable without retrying at stop', async () => {
+test('a rejected compile is evicted so the next attempt compiles and verifies', async () => {
   const mp4 = writeFixture('failed-compile.mp4', Buffer.concat([ftyp, moov]));
   const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/failed' }, cwd: directory };
   vi.mocked(compileSwiftSourceText)
@@ -154,10 +154,30 @@ test('a failed background compile stays unavailable without retrying at stop', a
   await expect(prepareVideoValidator(host)).rejects.toMatchObject({
     details: { reason: 'video_validator_unavailable' },
   });
-  await expect(isPlayableVideo(mp4, host)).rejects.toMatchObject({
-    details: { reason: 'video_validator_unavailable' },
+  await expect(isPlayableVideo(mp4, host)).resolves.toBe(true);
+  expect(compileSwiftSourceText).toHaveBeenCalledTimes(2);
+  expect(runCmd).toHaveBeenCalledOnce();
+});
+
+test('retains main container-only completion when the Swift compiler is missing', async () => {
+  const mp4 = writeFixture('missing-compiler.mp4', Buffer.concat([ftyp, moov]));
+  const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/missing-compiler' }, cwd: directory };
+  vi.mocked(compileSwiftSourceText).mockRejectedValueOnce(
+    new AppError('TOOL_MISSING', 'xcrun not found in PATH'),
+  );
+  await expect(isPlayableVideo(mp4, host)).resolves.toBe(true);
+  expect(runCmd).not.toHaveBeenCalled();
+});
+
+test('a missing validator executable after compilation returns the typed unavailable error', async () => {
+  const mp4 = writeFixture('missing-validator.mp4', Buffer.concat([ftyp, moov]));
+  vi.mocked(runCmd).mockRejectedValueOnce(
+    new AppError('TOOL_MISSING', 'validator not found in PATH'),
+  );
+  await expect(isPlayableVideo(mp4, createTestHost())).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'video_validator_unavailable', retriable: false },
   });
-  expect(compileSwiftSourceText).toHaveBeenCalledOnce();
 });
 
 test.each([

@@ -52,6 +52,8 @@ export function prepareVideoValidator(host: HostEnvironment): Promise<string> {
       source: VIDEO_VALIDATION_SCRIPT,
       cacheName: 'video-validator',
     }).catch((error: unknown) => {
+      if (videoValidatorCompiles.get(cacheRoot) === compiled)
+        videoValidatorCompiles.delete(cacheRoot);
       throw unavailableVideoValidator(error);
     });
     videoValidatorCompiles.set(cacheRoot, compiled);
@@ -112,7 +114,17 @@ export async function isPlayableVideo(
     const validatorPath = await waitForValidatorCompile(
       host,
       deadline?.remainingMs() ?? VALIDATOR_COMPILE_WAIT_MS,
-    );
+    ).catch((error: unknown) => {
+      if (
+        error instanceof AppError &&
+        error.cause instanceof AppError &&
+        error.cause.code === 'TOOL_MISSING'
+      )
+        return undefined;
+      throw error;
+    });
+    // Without compiler-launch tooling, MP4 completion relies on the container check.
+    if (!validatorPath) return true;
     const runTimeoutMs = Math.min(
       VALIDATOR_RUN_TIMEOUT_MS,
       deadline?.remainingMs() ?? VALIDATOR_RUN_TIMEOUT_MS,
@@ -180,7 +192,7 @@ function unavailableVideoValidator(cause: unknown): AppError {
     {
       reason: 'video_validator_unavailable',
       retriable: false,
-      hint: 'Install the Swift toolchain with AVFoundation on the daemon host, then restart the daemon and retry record stop.',
+      hint: 'Repair the Swift toolchain or validator executable on the daemon host, then retry record stop.',
     },
     cause,
   );

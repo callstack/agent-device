@@ -106,6 +106,11 @@ test.each(devices)(
       expect(preparation).toHaveBeenCalledOnce();
     });
     const { start } = await harness(device, launched);
+    const removeOutput = vi.spyOn(fs, 'rmSync');
+    preparation.mockImplementation(() => {
+      expect(removeOutput).not.toHaveBeenCalled();
+      return pending;
+    });
     let started = false;
     const starting = start().then((result) => {
       started = true;
@@ -115,6 +120,7 @@ test.each(devices)(
     try {
       await expect.poll(() => started, { timeout: 1_000 }).toBe(true);
       expect(launched).toHaveBeenCalledOnce();
+      expect(removeOutput).toHaveBeenCalled();
     } finally {
       resolvePreparation('/bin/true');
       await starting;
@@ -122,45 +128,53 @@ test.each(devices)(
   },
 );
 
-test('a runCmd compile failure survives capture start and reaches the real stop finalizer', async () => {
-  const { start, input } = await harness(devices[1]!);
-  const failure = new AppError('COMMAND_FAILED', 'xcrun exited with code 72', {
-    stderr: 'xcrun: error: unable to find utility "swiftc", not a developer tool or in PATH',
-  });
-  let rejectCompile!: (error: unknown) => void;
-  const compile = new Promise<never>((_resolve, reject) => {
-    rejectCompile = reject;
-  });
-  void compile.catch(() => {});
-  vi.mocked(runCmd).mockClear().mockReturnValue(compile);
-  const preparation = vi.spyOn(video, 'prepareVideoValidator');
-  let captureStarted = false;
-  const starting = start().then((result) => {
-    captureStarted = true;
-    return result;
-  });
-  try {
-    await expect.poll(() => captureStarted, { timeout: 1_000 }).toBe(true);
-    expect(preparation).toHaveBeenCalledOnce();
-    await expect.poll(() => vi.mocked(runCmd).mock.calls.length).toBe(1);
-  } finally {
-    rejectCompile(failure);
-    await starting;
-  }
-  const started = await starting;
-  await expect(preparation.mock.results[0]!.value).rejects.toMatchObject({
-    details: { reason: 'video_validator_unavailable' },
-  });
-  const handle = started.pendingHandle.transfer();
-  await expect(handle.finish()).rejects.toMatchObject({
-    code: 'COMMAND_FAILED',
-    details: { reason: 'video_validator_unavailable', retriable: false },
-    cause: failure,
-  });
-  expect(runCmd).toHaveBeenCalledExactlyOnceWith(
-    'xcrun',
-    expect.arrayContaining(['swiftc']),
-    expect.any(Object),
-  );
-  expect(fs.existsSync(input.outputPath)).toBe(true);
-});
+test.each(['COMMAND_FAILED', 'TOOL_MISSING'])(
+  'a %s compiler failure preserves capture and main stop semantics',
+  async (code) => {
+    const { start, input } = await harness(devices[1]!);
+    const failure = new AppError(code, 'xcrun exited with code 72', {
+      stderr: 'xcrun: error: unable to find utility "swiftc", not a developer tool or in PATH',
+    });
+    let rejectCompile!: (error: unknown) => void;
+    const compile = new Promise<never>((_resolve, reject) => {
+      rejectCompile = reject;
+    });
+    void compile.catch(() => {});
+    vi.mocked(runCmd).mockClear().mockReturnValue(compile);
+    const preparation = vi.spyOn(video, 'prepareVideoValidator');
+    let captureStarted = false;
+    const starting = start().then((result) => {
+      captureStarted = true;
+      return result;
+    });
+    try {
+      await expect.poll(() => captureStarted, { timeout: 1_000 }).toBe(true);
+      expect(preparation).toHaveBeenCalledOnce();
+      await expect.poll(() => vi.mocked(runCmd).mock.calls.length).toBe(1);
+    } finally {
+      rejectCompile(failure);
+      await starting;
+    }
+    const started = await starting;
+    await expect(preparation.mock.results[0]!.value).rejects.toMatchObject({
+      details: { reason: 'video_validator_unavailable' },
+    });
+    const handle = started.pendingHandle.transfer();
+    if (code === 'TOOL_MISSING') {
+      await expect(handle.finish()).resolves.toMatchObject({ status: 'completed' });
+    } else {
+      await expect(handle.finish()).rejects.toMatchObject({
+        code: 'COMMAND_FAILED',
+        details: { reason: 'video_validator_unavailable', retriable: false },
+        cause: failure,
+      });
+    }
+    expect(runCmd).toHaveBeenCalledTimes(2);
+    expect(runCmd).toHaveBeenCalledWith(
+      'xcrun',
+      expect.arrayContaining(['swiftc']),
+      expect.any(Object),
+    );
+    expect(fs.existsSync(input.outputPath)).toBe(true);
+  },
+);
