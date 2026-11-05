@@ -66,6 +66,7 @@ export function createReplayTestVideoOwner(
 }
 
 function recordRequest(request: ReplayRecordVideoRequest): DaemonRequest {
+  const webSession = request.request.internal?.webSession;
   return {
     token: request.request.token,
     session: request.sessionName,
@@ -73,5 +74,6 @@ function recordRequest(request: ReplayRecordVideoRequest): DaemonRequest {
     positionals: request.phase === 'start' ? ['start', request.outputPath] : ['stop'],
     flags: {},
     meta: request.request.meta,
+    ...(webSession === undefined ? {} : { internal: { webSession } }),
   };
 }
