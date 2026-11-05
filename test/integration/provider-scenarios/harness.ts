@@ -30,8 +30,9 @@ import {
   type PlatformProviderResolvers,
 } from '../../../src/platform-runtime.ts';
 import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
-import { runCmdBackground } from '@agent-device/host-kit/command';
+import { runCmdBackground, withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import { createTestHostEnvironment } from '@agent-device/test-kit';
+import { prepareVideoValidator } from '@agent-device/capture-kit/recording-video';
 import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.fixtures.ts';
 import type {
   DeviceInventoryProvider,
@@ -112,6 +113,7 @@ export async function createProviderScenarioHarness(
     // A scenario that seeds claims for its daemon names the directory through the process.
     AGENT_DEVICE_CLAIMS_DIR: process.env.AGENT_DEVICE_CLAIMS_DIR ?? path.join(testRoot, 'claims'),
     AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '3600000',
+    AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(testRoot, 'swift-cache'),
     ...deps.env,
     // Set last: the harness reads its own state dir and transport back from these.
     AGENT_DEVICE_STATE_DIR: stateDir,
@@ -239,6 +241,24 @@ export async function createProviderScenarioHarness(
 
   return {
     callCommand: async (command, positionals = [], flags = {}, options = {}) => {
+      if (command === 'record') {
+        await withCommandExecutorOverride(
+          (command, args) => {
+            if (
+              command !== 'xcrun' ||
+              args[0] !== 'swiftc' ||
+              !args.some((arg) => path.basename(arg).startsWith('video-validator-'))
+            )
+              return undefined;
+            const output = args[args.indexOf('-o') + 1];
+            if (!args.includes('-o') || !output)
+              throw new Error('Missing validator fixture output');
+            fs.writeFileSync(output, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+            return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+          },
+          async () => await prepareVideoValidator(createTestHostEnvironment({ env })),
+        );
+      }
       const request = await withClientReplayScriptSources(
         commandRequest(runtime.token, command, positionals, flags, options),
       );
