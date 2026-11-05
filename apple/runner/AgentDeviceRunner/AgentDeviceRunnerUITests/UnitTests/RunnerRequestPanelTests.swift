@@ -575,6 +575,16 @@ extension RunnerTests {
     try assertions(response)
   }
 
+  /// Runs `body` with the app's window probed as the only window on lit display 3 at `frame`,
+  /// handing it the count of window-list reads.
+  @MainActor
+  func withLitPanelWindow(frame: CGRect, _ body: (_ windowListReads: () -> Int) throws -> Void) throws {
+    try withLitPanelBookingProbe { _ in
+      LitPanelBookingProbe.windowFrame = frame
+      try body { LitPanelBookingProbe.windowListReads }
+    }
+  }
+
   @MainActor
   private func withLitPanelBookingProbe(composed: Bool = false, _ body: (XCUIElement) throws -> Void) throws {
     app.launch()

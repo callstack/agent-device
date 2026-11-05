@@ -118,15 +118,18 @@ extension RunnerTests {
     return windows
   }
 
-  func elementQueries(app: XCUIApplication, matching type: XCUIElement.ElementType) throws -> [XCUIElementQuery] {
-    try elementQueries(root: app, matching: type, litDisplayID: requestLitPanel?.displayID)
+  /// One walk of the roots for every type, so a multi-type read walks the lit windows once.
+  func elementQueries(app: XCUIApplication, matching types: XCUIElement.ElementType...) throws -> [XCUIElementQuery] {
+    let roots = try elementSearchRoots(root: app, litDisplayID: requestLitPanel?.displayID)
+    return types.flatMap { type in roots.map { $0.descendants(matching: type) } }
   }
 
   func elementQueries(
     root: XCUIElement,
-    matching type: XCUIElement.ElementType,
+    matching types: XCUIElement.ElementType...,
     litDisplayID: UInt?
   ) throws -> [XCUIElementQuery] {
-    try elementSearchRoots(root: root, litDisplayID: litDisplayID).map { $0.descendants(matching: type) }
+    let roots = try elementSearchRoots(root: root, litDisplayID: litDisplayID)
+    return types.flatMap { type in roots.map { $0.descendants(matching: type) } }
   }
 }
