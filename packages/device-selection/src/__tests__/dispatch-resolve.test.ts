@@ -187,7 +187,11 @@ test('a web request names the device of its session, and a request without one k
   assert.deepEqual(await resolveWeb({ name: 'one' }), webSessionDevice(webHost, { name: 'one' }));
   assert.notEqual((await resolveWeb({ name: 'two' })).id, (await resolveWeb({ name: 'one' })).id);
   assert.equal((await resolveWeb(undefined)).id, webHost.id);
-  assert.equal((await resolveWeb({ name: 'one ' })).id, (await resolveWeb({ name: 'one' })).id);
+  await assert.rejects(
+    resolveWeb({ name: 'one ' }),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'web_session_name_invalid',
+  );
   assert.notEqual(
     (await resolveWeb({ name: 'one', tenantId: 'tenant-1' })).id,
     (await resolveWeb({ name: 'one', tenantId: 'tenant-2' })).id,
