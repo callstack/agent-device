@@ -27,6 +27,8 @@ export const INTERACTION_ERROR_REASONS = {
   targetBoundsInvalid: 'target_bounds_invalid',
   /** The target resolved, but another visible element covers it. */
   targetCovered: 'target_covered',
+  /** `find focus` or `find type` resolved to a disabled text field, which `details.ref` names. */
+  targetDisabled: 'target_disabled',
   /**
    * A press or click refused because it could not confirm a resting position for its target: the
    * target's rect was still changing when the transition window after the session's last mutating
