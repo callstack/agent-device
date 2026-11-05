@@ -13,7 +13,7 @@ export async function runBatchCommands(
       ...step,
       internal: {
         ...step.internal,
-        suppliedSession: req.internal?.suppliedSession ?? req.session,
+        webSession: req.internal?.webSession,
         ...(req.internal?.publicNetworkOnly ? { publicNetworkOnly: true } : {}),
         executionPlan: { remainingSteps: context.remainingSteps },
       },

@@ -5,7 +5,7 @@ import type { SessionRef, SessionState } from './session-state.ts';
 import type { SessionScope } from '@agent-device/contracts/session';
 import { isActiveProviderDevice } from './provider-device-admission.ts';
 import { SessionStore } from './session-store.ts';
-import { webSessionIdentity } from './session-tenant-scope.ts';
+import { requestWebSession } from './session-tenant-scope.ts';
 
 export async function resolveSessionDevice(
   sessionStore: SessionStore,
@@ -25,7 +25,7 @@ export async function resolveSessionDevice(
     session?.device ??
     (await resolveTargetDevice(req.flags ?? {}, {
       env: sessionStore.host.env,
-      webSession: webSessionIdentity(req),
+      webSession: requestWebSession(req),
     }));
   return { ref, session, device };
 }

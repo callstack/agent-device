@@ -12,7 +12,7 @@ import type { SessionStore } from '../core/session-store.ts';
 import { hostAndDeviceIds, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef } from '../core/session-state.ts';
-import { webSessionIdentity } from '../core/session-tenant-scope.ts';
+import { requestWebSession } from '../core/session-tenant-scope.ts';
 
 export type RequestExecutionLockKey = `session:${string}` | `device:${string}`;
 
@@ -130,7 +130,7 @@ async function resolveFreshSessionDevice(
     return await resolveTargetDevice(resolution.flags, {
       ...resolution.options,
       env,
-      webSession: webSessionIdentity(req),
+      webSession: requestWebSession(req),
     });
   } catch {
     // Unresolvable here means unresolvable for lock selection too, which is already tolerated.
@@ -143,7 +143,7 @@ function resolveOpenDeviceLock(req: DaemonRequest, env: EnvMap) {
     req.positionals?.[0],
     env,
     req.flags?.surface,
-    webSessionIdentity(req),
+    requestWebSession(req),
   );
   return options ? { flags: req.flags ?? {}, options } : undefined;
 }

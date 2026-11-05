@@ -16,7 +16,7 @@ import type { SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { refreshSessionDeviceIfNeeded } from '../../../resources/session-device-resolution.ts';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
-import { webSessionIdentity } from '../../../core/session-tenant-scope.ts';
+import { requestWebSession } from '../../../core/session-tenant-scope.ts';
 import { isWebSession } from '../../web-session-names.ts';
 import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
 import {
@@ -259,7 +259,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
   if (existingRef) {
     const session = sessionStore.requireCurrent(existingRef);
     // A reopen names its browser by the supplied name too: a blank one is no alias of the default.
-    if (isWebSession(session)) webSessionBackendKey(webSessionIdentity(req));
+    if (isWebSession(session)) webSessionBackendKey(requestWebSession(req));
     const resolved = await resolveExistingOpenRequest({
       req,
       session,
@@ -371,7 +371,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
       openTarget,
       params.host.env,
       req.flags?.surface,
-      webSessionIdentity(req),
+      requestWebSession(req),
     ),
   );
   const device = selection.device;

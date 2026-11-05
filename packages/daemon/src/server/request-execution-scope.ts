@@ -30,7 +30,7 @@ import {
   resolveCallerScopeRoot,
   resolveEffectiveSessionName,
 } from '../sessions/session-routing.ts';
-import { webSessionIdentity } from '../core/session-tenant-scope.ts';
+import { deriveWebSessionIdentity, requestWebSession } from '../core/session-tenant-scope.ts';
 import {
   assertRequestLeaseAdmissionPreflight,
   scopeRequestSession,
@@ -132,7 +132,7 @@ async function resolveFreshBoundedOpenDevice(req: DaemonRequest, env: EnvMap): P
         openReq.positionals?.[0],
         env,
         openReq.flags?.surface,
-        webSessionIdentity(openReq),
+        requestWebSession(openReq),
       ),
     )
   ).device;
@@ -161,7 +161,7 @@ async function resolveBoundedClaimDevice(
     env,
     platformServices,
     androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),
-    webSession: webSessionIdentity(req),
+    webSession: requestWebSession(req),
   };
   if (req.command === 'boot') return (await resolveBootCommandSelection(params)).device;
   return await resolveCommandDevice(params);
@@ -240,9 +240,16 @@ export async function createRequestExecutionScope(params: {
   daemonPolicy?: DaemonPolicy;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
-  let scopedReq = applyRequestCommandDefaults(
-    scopeRequestSession(restrictRemoteHostInputs(params.req)),
-  );
+  const tenantScopedReq = scopeRequestSession(restrictRemoteHostInputs(params.req));
+  // A nested batch or replay step arrives with the identity of the request that spawned it, and its
+  // own name is already the store key.
+  const webSession =
+    params.req.internal?.webSession ??
+    deriveWebSessionIdentity(params.req.session, tenantScopedReq);
+  let scopedReq = applyRequestCommandDefaults({
+    ...tenantScopedReq,
+    internal: { ...tenantScopedReq.internal, webSession },
+  });
 
   const command = scopedReq.command;
   const startedAtMs = Date.now();

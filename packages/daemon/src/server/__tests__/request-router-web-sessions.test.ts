@@ -26,7 +26,7 @@ import {
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
-import { webSessionIdentity } from '../../core/session-tenant-scope.ts';
+import { requestWebSession } from '../../core/session-tenant-scope.ts';
 import { resolveCommandDevice } from '../../resources/session-device-resolution.ts';
 import { resolveRequestExecutionLockPlan } from '../request-binding.ts';
 import { createDaemonHttpServer } from '../http/http-server.ts';
@@ -416,7 +416,7 @@ test('a sessionless web command locks the implicit default session device it bin
     session: undefined,
     flags: req.flags,
     env: process.env,
-    webSession: webSessionIdentity(req),
+    webSession: requestWebSession(req),
     platformServices: daemonPlatformServicesFixture(),
   });
 

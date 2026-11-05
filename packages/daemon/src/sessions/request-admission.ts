@@ -23,23 +23,8 @@ import { assertMacOsAppLeaseAdmitsRequest } from '../resources/macos-app-lease.t
 import { assertDaemonPolicyAdmitsLease } from '../core/daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 
-/**
- * Names the session a request runs in. The scoped request also carries the name the caller
- * supplied, which a nested batch or replay step keeps, so web validation sees a blank name where
- * the store key already says `default`.
- */
+/** Names the session a request runs in. */
 export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
-  const scoped = scopeSessionToTenant(req);
-  return {
-    ...scoped,
-    internal: {
-      ...scoped.internal,
-      suppliedSession: req.internal?.suppliedSession ?? req.session,
-    },
-  };
-}
-
-function scopeSessionToTenant(req: DaemonRequest): DaemonRequest {
   const isolation = resolveSessionIsolationMode(
     req.meta?.sessionIsolation ?? req.flags?.sessionIsolation,
   );

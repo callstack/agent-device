@@ -3,6 +3,7 @@ import type { PreresolvedInteractionTarget } from '@agent-device/contracts/inter
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { ReplayDispatchOptions } from '@agent-device/contracts/replay';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import type { WebSessionIdentity } from '@agent-device/kernel/device';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { RequestDispatchLedger } from './request-dispatch-ledger.ts';
 import type { EndedLeaseLedger } from './request-ended-leases.ts';
@@ -27,11 +28,10 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
    */
   openDeviceWait?: { waitedMs: number };
   /**
-   * The session name the caller supplied, kept by `scopeRequestSession` before tenant scoping
-   * rewrites a blank name to `default`. Web validation reads it so a blank name is refused instead
-   * of driving the tenant's default browser.
+   * The web session this request runs in, derived once by the request scope from the name the
+   * caller supplied. A nested batch or replay step carries it unchanged.
    */
-  suppliedSession?: string;
+  webSession?: WebSessionIdentity;
   publicNetworkOnly?: true;
   /**
    * The steps a batch still has ahead of this one. The open seam derives platform readiness

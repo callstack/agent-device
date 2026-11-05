@@ -15,7 +15,7 @@ import {
   type AppStateSessionRecord,
 } from './session-appstate-apple-session.ts';
 import { queryDeviceRuntimeAppState } from './session-appstate-device-runtime.ts';
-import { webSessionIdentity } from '../../core/session-tenant-scope.ts';
+import { requestWebSession } from '../../core/session-tenant-scope.ts';
 
 type AppStateSessionStoreEntry = ReturnType<RuntimeCommandHandlerParams['sessionStore']['get']>;
 
@@ -93,7 +93,7 @@ export async function handleAppStateCommand(
     return await appleSessionAppStateResponse(params, target.session);
   }
   const device = await resolveCommandDevice({
-    webSession: webSessionIdentity(params.req),
+    webSession: requestWebSession(params.req),
     session: target.session,
     flags: params.req.flags ?? {},
     env: params.sessionStore.host.env,

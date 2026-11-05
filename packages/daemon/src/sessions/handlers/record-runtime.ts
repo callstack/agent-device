@@ -75,7 +75,7 @@ import {
   buildRecordingUnsupportedResponse,
   isDaemonOwnedRecordingOutput,
 } from './record-runtime-response.ts';
-import { webSessionIdentity } from '../../core/session-tenant-scope.ts';
+import { requestWebSession } from '../../core/session-tenant-scope.ts';
 
 /**
  * A stop either finishes the live export or reports one the daemon already finished. Only the
@@ -196,7 +196,7 @@ async function resolveUnheldRecordingDevice(
   if (!namesSessionWithoutTarget(req))
     return await resolveTargetDevice(req.flags ?? {}, {
       env: params.sessionStore.host.env,
-      webSession: webSessionIdentity(req),
+      webSession: requestWebSession(req),
     });
   if (plan.kind === 'stop-recovery') {
     const recorded = screenRecordingManifestDevice({
@@ -236,7 +236,7 @@ async function resolveManifestDevice(
   if (identityFlag) selector[identityFlag] = recorded.id;
   return await resolveTargetDevice(selector, {
     env: params.sessionStore.host.env,
-    webSession: webSessionIdentity(params.req),
+    webSession: requestWebSession(params.req),
   });
 }
 
