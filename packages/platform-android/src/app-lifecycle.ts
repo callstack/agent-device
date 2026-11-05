@@ -711,9 +711,9 @@ async function waitForAndroidPackageStopped(
 ): Promise<AndroidStopFencePhase | undefined> {
   if (!(await waitForAndroidPackageNotForeground(device, packageName))) return 'foreground';
   if (!(await waitForAndroidKilledProcessesExit(device, packageName, killed))) return 'exit';
-  const process = await waitForAndroidPackageProcessGone(device, packageName);
-  if (process === 'running') return 'process';
-  if (process === 'unknown') {
+  const stopState = await waitForAndroidPackageProcessGone(device, packageName);
+  if (stopState === 'running') return 'process';
+  if (stopState === 'unknown') {
     throw new AppError(
       'COMMAND_FAILED',
       `Could not confirm Android app ${packageName} stopped after close`,
@@ -827,10 +827,10 @@ async function waitForAndroidPackageProcessGone(
     const remainingMs = deadline.remainingMs();
     if (remainingMs <= 0) return undefined;
     const startedAt = Date.now();
-    const process = await probeBeforeDeadline(deadline, () =>
+    const stateProbe = await probeBeforeDeadline(deadline, () =>
       readAndroidPackageProcessState(device, packageName, remainingMs),
     );
-    observation.state = process?.value ?? 'unknown';
+    observation.state = stateProbe?.value ?? 'unknown';
     emitDiagnostic({
       phase: 'android.close.process-probe',
       durationMs: Date.now() - startedAt,
@@ -841,12 +841,12 @@ async function waitForAndroidPackageProcessGone(
         remainingMs: deadline.remainingMs(),
       },
     });
-    return process;
+    return stateProbe;
   };
   while (!deadline.isExpired()) {
-    const process = await probeProcess();
-    if (!process) break;
-    if (process.value === 'gone') {
+    const stateProbe = await probeProcess();
+    if (!stateProbe) break;
+    if (stateProbe.value === 'gone') {
       await sleep(Math.min(ANDROID_CLOSE_PROCESS_GONE_STABLE_MS, deadline.remainingMs()));
       if (deadline.isExpired()) break;
       const processStillGone = await probeProcess();
