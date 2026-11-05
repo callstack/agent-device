@@ -18,7 +18,7 @@ extension RunnerTests {
       case .response(let response):
         return .response(response)
       case .context(let context):
-        if let refusal = self.bookRequestLitPanelSurface(app: context.app) {
+        if let refusal = self.prepareCommandSurface(command: command, app: context.app) {
           return .response(refusal.response)
         }
         if self.requestLitPanel != nil, let refusal = Self.litPanelBackendPinRefusal(command) {

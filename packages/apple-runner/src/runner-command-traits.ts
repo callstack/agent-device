@@ -109,55 +109,52 @@ export const RUNNER_COMMAND_TRAITS = {
   shutdown: DEFAULT_TRAITS,
 } as const satisfies Record<RunnerCommand['command'], RunnerCommandTraitsEntry>;
 
-/**
- * Whether the runner resolves a screen for the command: a window to book a gesture on, a viewport,
- * a display to sample, or windows to search for an element. Such a request for a multi-panel device
- * names the lit panel (ADR 0025). This table is the one list of lit-panel-scoped commands.
- */
-const RUNNER_COMMAND_RESOLVES_SURFACE = {
-  tap: true,
-  mouseClick: false,
-  longPress: true,
-  drag: true,
-  remotePress: false,
-  type: true,
-  swipe: true,
-  scroll: true,
-  desktopScroll: false,
-  findText: true,
-  querySelector: true,
-  readText: true,
-  snapshot: true,
-  screenshot: true,
-  backInApp: true,
-  backSystem: true,
-  home: false,
-  rotate: false,
-  gesture: true,
-  gestureViewport: true,
-  appSwitcher: true,
-  actionButton: false,
-  volumeUp: false,
-  volumeDown: false,
-  keyboardDismiss: true,
-  keyboardReturn: false,
-  alert: false,
-  sequence: true,
-  recordStart: true,
-  recordStop: false,
-  status: false,
-  uptime: false,
-  appState: false,
-  snapshotBridge: false,
-  pasteboardWrite: false,
-  activate: false,
-  terminate: false,
-  targetReset: false,
-  shutdown: false,
-} as const satisfies Record<RunnerCommand['command'], boolean>;
+export type RunnerSurfacePolicy = 'none' | 'app-windows' | 'observed-screen' | 'resolved-modal';
 
-export function runnerCommandResolvesSurface(command: RunnerCommand): boolean {
-  return RUNNER_COMMAND_RESOLVES_SURFACE[command.command];
+const RUNNER_COMMAND_SURFACE_POLICY = {
+  tap: 'app-windows',
+  mouseClick: 'none',
+  longPress: 'app-windows',
+  drag: 'app-windows',
+  remotePress: 'none',
+  type: 'app-windows',
+  swipe: 'app-windows',
+  scroll: 'app-windows',
+  desktopScroll: 'none',
+  findText: 'app-windows',
+  querySelector: 'app-windows',
+  readText: 'app-windows',
+  snapshot: 'app-windows',
+  screenshot: 'observed-screen',
+  backInApp: 'app-windows',
+  backSystem: 'app-windows',
+  home: 'none',
+  rotate: 'none',
+  gesture: 'app-windows',
+  gestureViewport: 'app-windows',
+  appSwitcher: 'app-windows',
+  actionButton: 'none',
+  volumeUp: 'none',
+  volumeDown: 'none',
+  keyboardDismiss: 'app-windows',
+  keyboardReturn: 'none',
+  alert: 'resolved-modal',
+  sequence: 'app-windows',
+  recordStart: 'observed-screen',
+  recordStop: 'none',
+  status: 'none',
+  uptime: 'none',
+  appState: 'none',
+  snapshotBridge: 'none',
+  pasteboardWrite: 'none',
+  activate: 'none',
+  terminate: 'none',
+  targetReset: 'none',
+  shutdown: 'none',
+} as const satisfies Record<RunnerCommand['command'], RunnerSurfacePolicy>;
+
+export function runnerCommandSurfacePolicy(command: RunnerCommand): RunnerSurfacePolicy {
+  return RUNNER_COMMAND_SURFACE_POLICY[command.command];
 }
 
 export function isReadOnlyRunnerCommand(command: RunnerCommand): boolean {

@@ -40,7 +40,7 @@ extension RunnerTests {
       clearRememberedTextEntryTap()
     }
     // A screenshot resolves its own surface, the target app and then the system surface.
-    if command.command != .screenshot, let refusal = bookRequestLitPanelSurface(app: activeApp) {
+    if let refusal = prepareCommandSurface(command: command, app: activeApp) {
       return refusal.response
     }
     switch command.command {

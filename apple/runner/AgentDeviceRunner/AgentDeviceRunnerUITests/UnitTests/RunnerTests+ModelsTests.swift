@@ -48,6 +48,18 @@ extension RunnerTests {
     XCTAssertEqual(orphaned, [], "CommandType cases with no production request")
   }
 
+  func testRunnerSurfacePreparationMatchesTheSharedPolicyFixture() throws {
+    let rows = try XCTUnwrap(runnerContractFixture("runner-surface-policy.json") as? [[String: String]])
+    let names = rows.compactMap { $0["command"] }
+    XCTAssertEqual(names.count, Set(names).count)
+    XCTAssertEqual(Set(names), Set(CommandType.allCases.map(\.rawValue)))
+    for row in rows {
+      let name = try XCTUnwrap(row["command"])
+      let command = try XCTUnwrap(CommandType(rawValue: name))
+      XCTAssertEqual(command.surfacePolicy.rawValue, row["policy"], name)
+    }
+  }
+
   func testQueuedReadOnlyTraitsMatchTheDaemonParityFixture() throws {
     let rows = try XCTUnwrap(
       runnerContractFixture("runner-command-read-only.json") as? [[String: Any]]
