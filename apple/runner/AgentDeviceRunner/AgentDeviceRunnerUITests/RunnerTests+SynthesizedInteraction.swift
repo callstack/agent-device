@@ -255,7 +255,16 @@ extension RunnerTests {
   }
 
   func resolvedTouchVisualizationFrame(app: XCUIApplication, x: Double, y: Double) throws -> TouchVisualizationFrame {
+#if os(iOS)
+    let appFrame: CGRect
+    if requestLitPanel == nil {
+      appFrame = try readableAppFrame(app: app)
+    } else {
+      appFrame = app.frame
+    }
+#else
     let appFrame = app.frame
+#endif
     let referenceFrame = try resolvedTouchReferenceFrame(app: app, appFrame: appFrame)
     let originX = appFrame.isEmpty ? referenceFrame.minX : appFrame.minX
     let originY = appFrame.isEmpty ? referenceFrame.minY : appFrame.minY
@@ -318,8 +327,7 @@ extension RunnerTests {
   func gestureViewportFrame(app: XCUIApplication) throws -> CGRect {
 #if os(iOS)
     guard let context = try synthesizedCoordinateContext(app: app) else {
-      guard appFrameIsReadable(app: app) else { throw unreadableTreeRefusal }
-      return frameAvoidingKeyboard(app: app, frame: app.frame)
+      return frameAvoidingKeyboard(app: app, frame: try readableAppFrame(app: app))
     }
     // The sole-screen route means the windows query just failed, so a keyboard probe would too.
     return context.resolvedWindow == nil

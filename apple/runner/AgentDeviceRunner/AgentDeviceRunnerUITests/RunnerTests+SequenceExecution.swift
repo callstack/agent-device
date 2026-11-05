@@ -41,10 +41,37 @@ extension RunnerTests {
     // Touch frame resolves from the first step's coords so recording-gestures works unchanged. A
     // synthesized context already names the frame, so the app tree is not read for it again.
     let firstStep = steps[0]
-    let firstFrame = try (firstStep.x != nil && firstStep.y != nil)
-      ? synthesizedContext.map { touchVisualizationFrame(point: SurfacePoint(CGPoint(x: firstStep.x!, y: firstStep.y!)), context: $0) }
-        ?? resolvedTouchVisualizationFrame(app: activeApp, x: firstStep.x!, y: firstStep.y!)
-      : nil
+    let firstFrame: TouchVisualizationFrame?
+    do {
+      firstFrame = try (firstStep.x != nil && firstStep.y != nil)
+        ? synthesizedContext.map { touchVisualizationFrame(point: SurfacePoint(CGPoint(x: firstStep.x!, y: firstStep.y!)), context: $0) }
+          ?? resolvedTouchVisualizationFrame(app: activeApp, x: firstStep.x!, y: firstStep.y!)
+        : nil
+    } catch let refusal as RunnerCoordinateRefusal {
+      // The frame read is the first tree read of a step with no synthesized context: its refusal is
+      // the first step's outcome, with nothing dispatched.
+      return sequenceResponse(
+        execution: SequenceExecutionResult(
+          results: [
+            SequenceStepResult(
+              ok: false,
+              kind: firstStep.kind,
+              errorCode: "UNSUPPORTED_OPERATION",
+              errorMessage: refusal.message,
+              errorHint: refusal.hint,
+              gestureStartUptimeMs: nil,
+              gestureEndUptimeMs: nil
+            )
+          ],
+          completedSteps: 0,
+          failedStepIndex: 0,
+          gestureStartUptimeMs: nil,
+          gestureEndUptimeMs: nil
+        ),
+        touchFrame: nil,
+        sequenceOrientation: nil
+      )
+    }
 
 #if os(iOS)
     let orientation = command.sequenceOrientation ?? synthesizedContext?.geometry.orientation ?? litPanelState.surface?.geometry.orientation
@@ -96,18 +123,20 @@ extension RunnerTests {
             kind: step.kind,
             errorCode: nil,
             errorMessage: nil,
+            errorHint: nil,
             gestureStartUptimeMs: stepOutcome.gestureStartUptimeMs,
             gestureEndUptimeMs: stepOutcome.gestureEndUptimeMs
           )
         )
         completedSteps += 1
-      case .unsupported(let message, _):
+      case .unsupported(let message, let hint):
         results.append(
           SequenceStepResult(
             ok: false,
             kind: step.kind,
             errorCode: "UNSUPPORTED_OPERATION",
             errorMessage: message,
+            errorHint: hint,
             gestureStartUptimeMs: stepOutcome.gestureStartUptimeMs,
             gestureEndUptimeMs: stepOutcome.gestureEndUptimeMs
           )

@@ -10,9 +10,15 @@ import ObjectiveC.runtime
 private final class RunnerUnserializableTreeStub: NSObject {
   /// Each element frame read costs XCTest's retries on such a tree, about 2 s each.
   static var frameReads = 0
+  /// The running test, which receives the issue XCTest records when it cannot snapshot the app: an
+  /// unheld read fails the test the way it ends the runner in production.
+  static weak var recordingTest: XCTestCase?
   @objc var allElementsBoundByIndex: [XCUIElement] { [] }
   @objc var frame: CGRect {
     Self.frameReads += 1
+    Self.recordingTest?.record(
+      XCTIssue(type: .assertionFailure, compactDescription: "No element snapshot found for Application 'stub'")
+    )
     return .null
   }
 }
@@ -209,7 +215,9 @@ extension RunnerTests {
     RunnerCoordinatePressCounter.presses = 0
     RunnerCoordinateTapCounter.taps = 0
     RunnerUnserializableTreeStub.frameReads = 0
+    RunnerUnserializableTreeStub.recordingTest = self
     return {
+      RunnerUnserializableTreeStub.recordingTest = nil
       for (method, original) in originals.reversed() { method_setImplementation(method, original) }
     }
   }
@@ -310,7 +318,11 @@ extension RunnerTests {
       ("drag", { _ = try self.dragAt(app: self.app, x: 40, y: 40, x2: 80, y2: 80, holdDuration: 0.1) }),
       ("back", { try self.performBackGesture(app: self.app) }),
       ("appSwitcher", { try self.performAppSwitcherGesture(app: self.app) }),
+      ("touchFrame", { _ = try self.resolvedTouchVisualizationFrame(app: self.app, x: 40, y: 40) }),
+      ("windowFrame", { _ = try self.onScreenWindowFrame(app: self.app) }),
     ]
+    let failureCountBefore = currentXCTestFailureCount()
+    defer { XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore)) }
     for (name, gesture) in refusals {
       XCTAssertThrowsError(try gesture(), name) { error in
         XCTAssertTrue(error is RunnerCoordinateRefusal, "\(name): \(error)")
@@ -353,11 +365,13 @@ extension RunnerTests {
     }
     try XCTSkipUnless(soleScreenRouteIsOpen(for: app), "the sole-screen route is closed on this device")
     let sequence = try runnerCommandFixture(
-      #"{"command":"sequence","commandId":"refused-sequence-step","steps":[{"kind":"tap","x":40,"y":40},{"kind":"doubleTap","x":40,"y":40}]}"#
+      #"{"command":"sequence","commandId":"refused-sequence-step","steps":[{"kind":"tap","x":40,"y":40,"synthesized":true},{"kind":"doubleTap","x":40,"y":40}]}"#
     )
+    let failureCountBefore = currentXCTestFailureCount()
 
     let response = try executeOnMainPrepared(command: sequence, activeApp: app)
 
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
     XCTAssertEqual(response.data?.completedSteps, 1)
     XCTAssertEqual(response.data?.failedStepIndex, 1)
     let steps = response.data?.sequenceResults ?? []
@@ -365,6 +379,36 @@ extension RunnerTests {
     XCTAssertEqual(steps.first?.ok, true)
     XCTAssertEqual(steps.last?.ok, false)
     XCTAssertEqual(steps.last?.errorCode, "UNSUPPORTED_OPERATION")
+    XCTAssertNotNil(steps.last?.errorHint)
+    XCTAssertEqual(RunnerCoordinateTapCounter.taps, 0)
+  }
+
+  /// `press x y --double-tap` sends a one-step doubleTap sequence with no synthesized context, so its
+  /// touch frame is the first tree read of the command. That read is held and refused as the first
+  /// step's coded outcome, with nothing dispatched and no XCTest failure recorded.
+  @MainActor
+  func testOneStepDoubleTapSequenceOnAnUnserializableTreeFailsItsFirstStepWithoutAnXCTestFailure() throws {
+    app.launch()
+    mainOwned.app = app
+    let restoreXCTest = try simulateUnserializableAppTree()
+    defer {
+      restoreXCTest()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let sequence = try runnerCommandFixture(
+      #"{"command":"sequence","commandId":"one-step-double-tap","steps":[{"kind":"doubleTap","x":40,"y":40}]}"#
+    )
+    let failureCountBefore = currentXCTestFailureCount()
+
+    let response = try executeOnMainPrepared(command: sequence, activeApp: app)
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertGreaterThan(RunnerUnserializableTreeStub.frameReads, 0)
+    XCTAssertEqual(response.data?.completedSteps, 0)
+    XCTAssertEqual(response.data?.failedStepIndex, 0)
+    XCTAssertEqual(response.data?.sequenceResults?.first?.errorCode, "UNSUPPORTED_OPERATION")
+    XCTAssertNotNil(response.data?.sequenceResults?.first?.errorHint)
     XCTAssertEqual(RunnerCoordinateTapCounter.taps, 0)
   }
 

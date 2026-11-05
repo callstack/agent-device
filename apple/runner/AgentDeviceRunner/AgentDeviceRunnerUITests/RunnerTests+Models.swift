@@ -395,6 +395,7 @@ struct SequenceStepResult: Codable {
   let kind: String
   let errorCode: String?
   let errorMessage: String?
+  var errorHint: String? = nil
   let gestureStartUptimeMs: Double?
   let gestureEndUptimeMs: Double?
 }

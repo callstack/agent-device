@@ -276,7 +276,13 @@ extension RunnerTests {
       let booked = try requireRequestLitPanelSurface(app: app)
       return (booked.window, booked.geometry.windowOnScreen.rect)
     }
-    guard let resolved = resolveRunnerWindowElement(app: app) else { return (nil, app.frame) }
+    guard let resolved = resolveRunnerWindowElement(app: app) else {
+#if os(iOS)
+      return (nil, try readableAppFrame(app: app))
+#else
+      return (nil, app.frame)
+#endif
+    }
     return (resolved.window, resolved.frame)
   }
 
@@ -459,7 +465,7 @@ extension RunnerTests {
   ) throws -> RunnerInteractionOutcome {
     guard let context = try context ?? synthesizedCoordinateContext(app: app) else {
       // No window and no sole screen: the tree is unreadable only when the app's own frame is too.
-      guard appFrameIsReadable(app: app) else { throw unreadableTreeRefusal }
+      _ = try readableAppFrame(app: app)
       return try performCoordinateTap(app: app, x: x, y: y, treeProven: true)
     }
     guard context.treeUnreadable else {
@@ -473,12 +479,16 @@ extension RunnerTests {
     }
   }
 
-  /// Whether the app's own frame reads, held inside an issue scope: on a tree XCTest cannot snapshot
-  /// that read fails after its retries, and an unheld issue ends the runner test.
-  func appFrameIsReadable(app: XCUIApplication) -> Bool {
+  /// The app's own frame, the one iOS owner of that read: held inside an issue scope, because on a tree
+  /// XCTest cannot snapshot the read fails after its retries and an unheld issue ends the runner test.
+  /// It throws the coded refusal when the frame does not read, so every caller decides on the same read.
+  func readableAppFrame(app: XCUIApplication) throws -> CGRect {
     var frame = CGRect.null
     let held = holdingRecordedIssues { frame = app.frame }
-    return held.issues.isEmpty && held.exceptionMessage == nil && SnapshotGeometry.isPositiveFinite(frame)
+    guard held.issues.isEmpty, held.exceptionMessage == nil, SnapshotGeometry.isPositiveFinite(frame) else {
+      throw unreadableTreeRefusal
+    }
+    return frame
   }
 
   var unreadableTreeRefusal: RunnerCoordinateRefusal {
@@ -492,8 +502,8 @@ extension RunnerTests {
   /// where no window answers but the app's own frame does. When neither reads, the tree is
   /// unreadable and the gesture refuses. Every iOS XCUICoordinate that does not come with a proven
   /// tree resolves through here, so no XCUICoordinate gesture builds a coordinate from an
-  /// application XCTest cannot snapshot. The gesture viewport reads its frame through the same
-  /// held `appFrameIsReadable` check.
+  /// application XCTest cannot snapshot. Every iOS read of the app frame goes through
+  /// `readableAppFrame`.
   private func requireReadableTreeAnchor(app: XCUIApplication) throws -> XCUIElement {
     if requestLitPanel != nil {
       return try requireRequestLitPanelSurface(app: app).window
@@ -501,7 +511,7 @@ extension RunnerTests {
     if let resolved = resolveRunnerWindowElement(app: app) {
       return resolved.window
     }
-    guard appFrameIsReadable(app: app) else { throw unreadableTreeRefusal }
+    _ = try readableAppFrame(app: app)
     return app
   }
 #endif
