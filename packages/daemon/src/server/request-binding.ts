@@ -1,5 +1,4 @@
 import { resolveCommandAndroidAvdSelection } from '../core/daemon-command-registry.ts';
-import { resolveRequestTargetDevice } from '../core/request-device-resolution.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   hasDeviceSelectionInput,
@@ -124,6 +123,8 @@ async function resolveFreshSessionDevice(
   );
   if (!resolution) return undefined;
   try {
+    // Deferred to keep the daemon's eager closure within scripts/__tests__/eager-closure-budgets.ts.
+    const { resolveRequestTargetDevice } = await import('../core/request-device-resolution.ts');
     // A fresh web session locks its own device whichever command starts it, never the shared host
     // device: a replay or batch locks only the device it starts on, as for an app device (ADR 0035).
     return await resolveRequestTargetDevice(req, { ...resolution.options, env }, resolution.flags);

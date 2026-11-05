@@ -2,7 +2,6 @@ import { restrictRemoteHostInputs } from './remote-host-input-policy.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
-import { resolveRequestTargetDeviceSelection } from '../core/request-device-resolution.ts';
 import {
   resolveSessionRequestLog,
   resolveSessionRunnerLogPath,
@@ -125,6 +124,8 @@ async function resolveFreshBoundedOpenDevice(req: DaemonRequest, env: EnvMap): P
     throw new AppError('INVALID_ARGS', 'Invalid open target');
   }
   const openReq = foreground.type === 'resolved' ? foreground.req : req;
+  const { resolveRequestTargetDeviceSelection } =
+    await import('../core/request-device-resolution.ts');
   return (
     await resolveRequestTargetDeviceSelection(
       openReq,
