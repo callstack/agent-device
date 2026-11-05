@@ -24,13 +24,14 @@ conflict check, and the host/scoped-device overlap (`devicesOverlap`).
    padding instead.
 3. The backend key is `p_<name>` with the name in lower case, or `t_<first 12 hex of sha256(tenant
    id)>_<name>` under tenant isolation, so two tenants using one name hold two devices and two
-   browsers. The kernel derives it once from the tenant-relative public name and the tenant id,
-   never from the tenant-prefixed store name. The request scope
-   (`createRequestExecutionScope`) is the only place that derives the web identity: it reads the
-   name as the caller supplied it, before tenant scoping, and stores it on the request. A batch or
-   replay step carries that identity unchanged, and device resolution reads it from the request.
-   Every other reader takes the key from the device id and passes it to agent-browser as
-   `--session`.
+   browsers. Two derivations keep these apart. The request scope (`createRequestExecutionScope`)
+   is the only place that derives the web identity, the tenant-relative public name and the
+   tenant id: it reads the name as the caller supplied it, before tenant scoping, and stores it on
+   the request. A batch or replay step carries that identity unchanged. The kernel derives the
+   backend key from that identity, never from the tenant-prefixed store name: device resolution
+   does so when it selects the session device, and the open of an existing web session does so
+   to refuse an invalid name before reusing the session. Every other reader takes the key from
+   the device id and passes it to agent-browser as `--session`.
 4. First opens serialize on the session device itself, not on the host, so web session opens of one
    host run in parallel.
 
