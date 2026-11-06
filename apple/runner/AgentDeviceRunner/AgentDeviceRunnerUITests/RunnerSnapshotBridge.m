@@ -187,7 +187,9 @@ static NSUInteger RunnerSnapshotBridgeReadSequence = 0;
 static NSTimeInterval RunnerSnapshotBridgeAbandonedAt = 0;
 static const NSTimeInterval RunnerSnapshotBridgeWedgeSeconds = 5;
 
-static dispatch_queue_t RunnerSnapshotBridgeReaderQueue(void)
+// The reader queue and RunnerSnapshotBridgeRead have external linkage so the runner unit bundle can
+// drive them through UnitTests/RunnerSnapshotBridge+Internal.h.
+dispatch_queue_t RunnerSnapshotBridgeReaderQueue(void)
 {
   static dispatch_queue_t queue;
   static dispatch_once_t onceToken;
@@ -207,10 +209,10 @@ static dispatch_queue_t RunnerSnapshotBridgeReaderQueue(void)
 
 /// Runs one read on the reader queue and waits for it up to `budgetMs`. A read that outlives the budget
 /// is abandoned, not stopped: its answer is dropped when it returns.
-static NSDictionary *RunnerSnapshotBridgeRead(NSDictionary *request,
-                                              NSUInteger budgetMs,
-                                              NSDictionary * (^read)(void),
-                                              NSTimeInterval (^clock)(void))
+NSDictionary *RunnerSnapshotBridgeRead(NSDictionary *request,
+                                       NSUInteger budgetMs,
+                                       NSDictionary * (^read)(void),
+                                       NSTimeInterval (^clock)(void))
 {
   NSUInteger sequence;
   @synchronized (RunnerSnapshotBridgeAnswer.class) {
@@ -251,18 +253,6 @@ static NSDictionary *RunnerSnapshotBridgeRead(NSDictionary *request,
   }
   return answer.value;
 }
-
-#if defined(AGENT_DEVICE_RUNNER_UNIT_TESTS)
-NSDictionary *RunnerSnapshotBridgeReadForTest(NSDictionary *request, NSUInteger budgetMs,
-                                               NSDictionary *(^read)(void), NSTimeInterval now)
-{
-  return RunnerSnapshotBridgeRead(request, budgetMs, read, ^{ return now; });
-}
-void RunnerSnapshotBridgeDrainForTest(void)
-{
-  dispatch_sync(RunnerSnapshotBridgeReaderQueue(), ^{});
-}
-#endif
 
 uint32_t RunnerSnapshotBridgeMaximumFrameBytes(void)
 {
