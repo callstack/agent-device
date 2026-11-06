@@ -15,8 +15,8 @@ export const MAX_ALERT_WINDOW_MS = 2_147_483_647;
  * The one alert failure the family retries on: the backend looked and there was no alert *yet*.
  * Both Apple backends state it in typed form — the XCTest runner as this `ErrorPayload.code`
  * (surfacing as `details.runnerErrorCode`, like `RUNNER_BUSY`, without changing the wire error
- * code), the macOS helper as details.reason — and so do the tree-based acting legs (Android and
- * Limrun iOS, through the shared driver), as this `details.reason` paired with `dispatched:
+ * code), the macOS helper as details.reason — and so does the tree-based Android acting leg
+ * (through the shared driver), as this `details.reason` paired with `dispatched:
  * 'no'`. Retry and the fallback hint key on these, never on the message text: a transport,
  * runner or helper failure must never read as an absent alert.
  */

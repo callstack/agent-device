@@ -1,7 +1,7 @@
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import { AppError } from '@agent-device/kernel/errors';
 import type { LimrunDeviceSession } from './device-session.ts';
-import { awaitLimrunOperation } from './request-cancellation.ts';
+import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
 
 /**
  * Android reads the foreground app. Limrun exposes no foreground bundle id on iOS, so an iOS read
@@ -34,7 +34,7 @@ async function confirmLimrunIosInstanceAnswers(
   signal: AbortSignal,
 ): Promise<void> {
   try {
-    await awaitLimrunOperation(session.listApps(), signal);
+    await awaitWithSignal(session.listApps(), signal);
   } catch (error) {
     signal.throwIfAborted();
     throw new AppError(
