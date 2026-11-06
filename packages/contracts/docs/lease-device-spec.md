@@ -15,7 +15,7 @@ A value of another type is refused with `INVALID_ARGS`, `details.reason: 'device
 A remote config file first applies the value rules of every config key: a string must be non-empty, and a boolean also accepts a boolean string such as `"true"`.
 The backend that honours the spec strips the keys before it forwards the allocation, and echoes the granted device on the lease as `lease.device` (`model`, `osVersion`, `imageTag?`, `deviceMode?`, `physical`).
 `deviceKey` stays the identity of the lease; `lease.device` is the proof that the spec was understood.
-The CLI proxy applies the returned-device checks in `src/commands/schema/cli-help.ts`.
+The CLI proxy applies the returned-device checks in [`src/cli/commands/proxy-lease-device.ts`](../../../src/cli/commands/proxy-lease-device.ts).
 For a spec request, if a new lease has no `lease.device`, the CLI proxy releases the lease and fails with `UNSUPPORTED_OPERATION` and `details.reason: 'device-spec-unsupported'`.
 If the release returns, the error's `details.released` reports its result.
 If the release fails, `details.leaseRollback` records the failure.

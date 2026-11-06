@@ -62,6 +62,8 @@ Thus, whichever runs second finds the session gone.
 A close after a lease end has no session and ends no lease.
 If a client still stores that lease id, its next heartbeat finds the lease inactive.
 The client then allocates a new lease under a fresh id.
+The proxy is expected to be long-lived and self-serve.
+Recovery from a stale or expired device lease should not require a proxy restart.
 
 ## Admitted request work
 
