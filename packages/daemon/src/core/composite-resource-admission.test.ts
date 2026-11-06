@@ -729,10 +729,9 @@ test('bounded test cleanup closes an attempt with another durable resource and k
     expect(adopted).toHaveLength(1);
     expect(adopted[0]!.finish).toHaveBeenCalled();
     // The failed finish withholds the attempt's device claim, so its session stays closable.
-    expect(world.sessionStore.listRefs().map((ref) => ref.address)).not.toContain(
-      world.ref.address,
-    );
-    expect(world.sessionStore.listRefs()).toHaveLength(1);
+    const kept = world.sessionStore.listRefs();
+    expect(kept).toHaveLength(1);
+    expect(kept[0]!.session.deviceClaim).toBeDefined();
     expect(world.native).not.toHaveBeenCalled();
   } finally {
     await world.daemon.close();
