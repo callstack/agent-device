@@ -9,6 +9,11 @@ import {
 } from './ref-frame-slot.ts';
 import type { SessionState } from './session-state.ts';
 import { retireMovingTargetBaseline } from './deferred-interaction-outcome.ts';
+import {
+  carryRefFrameAdvisoryAcrossPublication,
+  recordRefFrameAdvisoryCompleteSnapshot,
+  recordRefFrameAdvisoryMutation,
+} from './ref-frame-advisory.ts';
 
 const runtimeRevisions = new WeakMap<SessionState, number>();
 const outdatedObservations = new WeakSet<SnapshotState>();
@@ -91,10 +96,15 @@ export function refFrameTree(session: SessionState): SnapshotState | undefined {
  * side effect.
  */
 export function expireRefFrame(session: SessionState): void {
+  const previousFrame = refFrame(session);
   advanceSessionRuntimeRevision(session);
   markSessionSnapshotOutdated(session);
   session.refFrame = expiredRefFrame(refFrame(session));
   session.snapshotScopeSource = undefined;
+  // The snapshot-per-action advisory counts this seam as its one mutation event per
+  // logical command, so its rhythm keeps step with the lifetime contract. The frame
+  // was replaced above, so the counters rekey onto the frame the session holds now.
+  recordRefFrameAdvisoryMutation(previousFrame, refFrame(session));
   // #3471: a side effect no resolved target was aimed through leaves a tree predating an unmeasured
   // change, so it cannot screen a later press.
   retireMovingTargetBaseline(session);
@@ -142,7 +152,12 @@ export function readSessionRuntimeRevision(session: SessionState): number {
  * {@link activateRefFrame}.
  */
 export function activateCompleteRefFrame(session: SessionState): void {
+  const previousFrame = refFrame(session);
   activateRefFrame(session, 'all');
+  // The only complete-namespace publication: the advisory observes it as the other
+  // half of its snapshot-per-action rhythm. The frame was replaced above, so the
+  // counters rekey onto the frame the session holds now.
+  recordRefFrameAdvisoryCompleteSnapshot(previousFrame, refFrame(session));
 }
 
 /**
@@ -155,7 +170,11 @@ export function activateCompleteRefFrame(session: SessionState): void {
  * belongs here, with the complete form, because the two differ only in scope.
  */
 export function activatePartialRefFrame(session: SessionState, scope: ReadonlySet<string>): void {
+  const previousFrame = refFrame(session);
   activateRefFrame(session, scope);
+  // A partial publication between snapshots is neither a complete snapshot nor an
+  // action, so the advisory rhythm carries across the replacement unchanged.
+  carryRefFrameAdvisoryAcrossPublication(previousFrame, refFrame(session));
 }
 
 /**
