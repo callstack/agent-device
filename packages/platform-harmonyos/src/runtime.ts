@@ -163,7 +163,7 @@ function harmonyFocusFact(device: DeviceInfo): RuntimeOperationFact {
 const harmonyPlatformLeafUnavailable = unavailableFact('unsupported-platform-leaf');
 const harmonySettingUnavailable = unavailableFact(
   'unsupported-platform-leaf',
-  'HarmonyOS supports settings clear-app-state only.',
+  'HarmonyOS supports settings clear-app-state and keep-awake only.',
 );
 
 /** Android's live IME status read has no HarmonyOS counterpart (parity with the retired leaf,
@@ -258,7 +258,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         ...settingsRuntimeOperationFacts({
           target: harmonyFocusFact(device),
           unsupported: harmonySettingUnavailable,
-          write: { 'clear-app-state': available },
+          write: { 'clear-app-state': available, 'keep-awake': available },
         }),
         // HarmonyOS exposes no alert automation operation.
         ...alertRuntimeOperationFacts({

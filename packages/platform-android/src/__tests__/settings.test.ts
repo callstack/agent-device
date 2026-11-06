@@ -652,3 +652,33 @@ test('setAndroidSetting mobile-data stops sampling when the request is cancelled
     },
   );
 });
+
+// --- settings keep-awake: svc power stayon ---
+
+test('setAndroidSetting keep-awake maps on and off to the svc power stayon forms', async () => {
+  for (const { state, spelling } of [
+    { state: 'on', spelling: 'true' },
+    { state: 'off', spelling: 'false' },
+  ] as const) {
+    await withFakeAdb(
+      (args) => (args.join(' ') === `shell svc power stayon ${spelling}` ? '' : undefined),
+      async ({ calls, device }) => {
+        await setAndroidSetting(device, 'keep-awake', state);
+        assert.deepEqual(flatCalls(calls), [`shell svc power stayon ${spelling}`]);
+      },
+    );
+  }
+});
+
+test('setAndroidSetting keep-awake runs nothing for a state svc cannot spell', async () => {
+  await withFakeAdb(
+    (args) => ({ stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 }),
+    async ({ calls, device }) => {
+      await assertRejectsAppError(() => setAndroidSetting(device, 'keep-awake', 'forever'), {
+        code: 'INVALID_ARGS',
+        message: /Invalid setting state: forever/,
+      });
+      assert.deepEqual(calls, []);
+    },
+  );
+});
