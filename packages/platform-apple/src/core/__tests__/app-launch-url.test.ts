@@ -48,6 +48,21 @@ test('iOS simulator URL relaunch terminates the app before opening the URL', asy
     ],
     [
       'xcrun',
+      [
+        'simctl',
+        'spawn',
+        'sim-1',
+        'defaults',
+        'write',
+        'com.apple.Accessibility',
+        'ApplicationAccessibilityEnabled',
+        '-bool',
+        'YES',
+      ],
+      { timeoutMs: 2000 },
+    ],
+    [
+      'xcrun',
       ['simctl', 'openurl', 'sim-1', 'myapp://automation'],
       { timeoutMs: IOS_SIMULATOR_OPENURL_TIMEOUT_MS },
     ],
@@ -55,9 +70,11 @@ test('iOS simulator URL relaunch terminates the app before opening the URL', asy
 });
 
 test('a Simulator that never answers openurl fails the open at its own bound', async () => {
-  mockRunCmd.mockRejectedValueOnce(
-    new AppError('COMMAND_FAILED', 'xcrun timed out after 20000ms', { timeoutMs: 20_000 }),
-  );
+  mockRunCmd
+    .mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 })
+    .mockRejectedValueOnce(
+      new AppError('COMMAND_FAILED', 'xcrun timed out after 20000ms', { timeoutMs: 20_000 }),
+    );
 
   const failure = await openIosApp(IOS_TEST_SIMULATOR, 'myapp://automation', {})
     .then(() => undefined)
@@ -75,20 +92,21 @@ test('a Simulator that never answers openurl fails the open at its own bound', a
 
 test('a request canceled while openurl runs stays a canceled request, not a timeout', async () => {
   const open = new AbortController();
-  mockRunCmd.mockImplementation(
-    (_cmd, _args, options) =>
-      new Promise((_resolve, reject) => {
-        options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
-          once: true,
-        });
-      }),
+  mockRunCmd.mockImplementation((_cmd, args, options) =>
+    args.includes('defaults')
+      ? Promise.resolve({ stdout: '', stderr: '', exitCode: 0 })
+      : new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+            once: true,
+          });
+        }),
   );
 
   const pending = openIosApp(IOS_TEST_SIMULATOR, 'myapp://automation', {
     runnerOptions: { signal: open.signal },
   }).catch((error: unknown) => error);
 
-  await vi.waitFor(() => assert.equal(mockRunCmd.mock.calls.length, 1));
+  await vi.waitFor(() => assert.equal(mockRunCmd.mock.calls.length, 2));
   const canceled = new AppError('COMMAND_FAILED', 'request canceled');
   open.abort(canceled);
 

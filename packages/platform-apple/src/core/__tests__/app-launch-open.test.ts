@@ -31,6 +31,18 @@ import {
   MACOS_TEST_DEVICE,
 } from './apple-core-stub-helpers.ts';
 
+const accessibilityWrite = [
+  'simctl',
+  'spawn',
+  'sim-1',
+  'defaults',
+  'write',
+  'com.apple.Accessibility',
+  'ApplicationAccessibilityEnabled',
+  '-bool',
+  'YES',
+];
+
 const mockRunCmd = vi.mocked(runCmd);
 const mockEnsureBootedSimulator = vi.mocked(ensureBootedSimulator);
 
@@ -131,7 +143,10 @@ test('openIosApp captures iOS simulator launch console output when requested', a
         appBundleId: 'com.example.app',
         launchConsole: launchConsolePath,
       });
-      assert.deepEqual(calls, [['simctl', 'launch', '--console-pty', 'sim-1', 'com.example.app']]);
+      assert.deepEqual(calls, [
+        accessibilityWrite,
+        ['simctl', 'launch', '--console-pty', 'sim-1', 'com.example.app'],
+      ]);
       assert.equal(
         await fs.readFile(launchConsolePath, 'utf8'),
         'console stdout\nconsole stderr\n',
@@ -150,7 +165,10 @@ test('openIosApp emits a clean simctl launch when launchArgs is an empty array',
         appBundleId: 'com.example.app',
         launchArgs: [],
       });
-      assert.deepEqual(calls, [['simctl', 'launch', 'sim-1', 'com.example.app']]);
+      assert.deepEqual(calls, [
+        accessibilityWrite,
+        ['simctl', 'launch', 'sim-1', 'com.example.app'],
+      ]);
     },
   );
 });
@@ -218,8 +236,9 @@ test('openIosApp opens custom-scheme iOS simulator URLs directly when launch arg
     url: 'myapp://item/42',
   });
 
-  assert.equal(mockRunCmd.mock.calls.length, 1);
-  assert.deepEqual(mockRunCmd.mock.calls[0], [
+  assert.equal(mockRunCmd.mock.calls.length, 2);
+  assert.deepEqual(mockRunCmd.mock.calls[0]?.[1], accessibilityWrite);
+  assert.deepEqual(mockRunCmd.mock.calls[1], [
     'xcrun',
     ['simctl', 'openurl', 'sim-1', 'myapp://item/42'],
     { timeoutMs: IOS_SIMULATOR_OPENURL_TIMEOUT_MS },
@@ -236,15 +255,17 @@ test('openIosApp launches iOS simulator app before opening custom-scheme URL wit
     launchArgs: ['-FeatureFlag', 'YES'],
   });
 
-  assert.equal(mockRunCmd.mock.calls.length, 2);
-  assert.deepEqual(mockRunCmd.mock.calls[0], [
+  assert.equal(mockRunCmd.mock.calls.length, 4);
+  assert.deepEqual(mockRunCmd.mock.calls[0]?.[1], accessibilityWrite);
+  assert.deepEqual(mockRunCmd.mock.calls[2]?.[1], accessibilityWrite);
+  assert.deepEqual(mockRunCmd.mock.calls[1], [
     'xcrun',
     ['simctl', 'launch', 'sim-1', 'com.example.app', '-FeatureFlag', 'YES'],
     {
       allowFailure: true,
     },
   ]);
-  assert.deepEqual(mockRunCmd.mock.calls[1], [
+  assert.deepEqual(mockRunCmd.mock.calls[3], [
     'xcrun',
     ['simctl', 'openurl', 'sim-1', 'myapp://item/42'],
     { timeoutMs: IOS_SIMULATOR_OPENURL_TIMEOUT_MS },
@@ -261,15 +282,17 @@ test('openIosApp launches iOS simulator app before opening https URL with launch
     launchArgs: ['-FeatureFlag', 'YES'],
   });
 
-  assert.equal(mockRunCmd.mock.calls.length, 2);
-  assert.deepEqual(mockRunCmd.mock.calls[0], [
+  assert.equal(mockRunCmd.mock.calls.length, 4);
+  assert.deepEqual(mockRunCmd.mock.calls[0]?.[1], accessibilityWrite);
+  assert.deepEqual(mockRunCmd.mock.calls[2]?.[1], accessibilityWrite);
+  assert.deepEqual(mockRunCmd.mock.calls[1], [
     'xcrun',
     ['simctl', 'launch', 'sim-1', 'com.example.app', '-FeatureFlag', 'YES'],
     {
       allowFailure: true,
     },
   ]);
-  assert.deepEqual(mockRunCmd.mock.calls[1], [
+  assert.deepEqual(mockRunCmd.mock.calls[3], [
     'xcrun',
     ['simctl', 'openurl', 'sim-1', 'https://example.com/item/42'],
     { timeoutMs: IOS_SIMULATOR_OPENURL_TIMEOUT_MS },

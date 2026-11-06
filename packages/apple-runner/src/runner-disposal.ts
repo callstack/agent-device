@@ -8,11 +8,13 @@ import {
   buildSimctlArgsForDevice,
   runAppleToolCommand,
   runXcrun,
+  prepareIosSimulatorAccessibility,
 } from './host.ts';
+import { normalizeError } from '@agent-device/kernel/errors';
 import type { RunnerLaunchObservation } from './runner-launcher.ts';
 import type { ExecResult, ExecBackgroundResult } from '@agent-device/host-kit/command';
 import { buildRunnerSessionXctestrunPathCleanupPattern } from './runner-artifact-env.ts';
-import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import { isHandheldAppleSimulator, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { cleanupTempFile } from './runner-io.ts';
 import { waitForRunner } from './runner-startup-transport.ts';
 import { withRunnerCommandId, type RunnerCommand } from './runner-contract.ts';
@@ -52,6 +54,8 @@ export const runnerLeaseCleanupAdapter: RunnerLeaseCleanupAdapter = {
   cleanupRunnerProcessTree: killRunnerProcessTree,
   cleanupRunnerXcodebuildProcesses: killRunnerXcodebuildProcesses,
   cleanupTempFile,
+  confirmRunnerTermination,
+  prepareIosSimulatorAccessibility,
 };
 
 export type RunnerDisposalOptions = {
@@ -265,6 +269,25 @@ async function settleOwnedRunnerDeviceState(
     if (runnerLeaseOwnedElsewhere(session)) return;
     try {
       await terminateRunnerSimulatorApps(session.device);
+      if (isHandheldAppleSimulator(session.device)) {
+        try {
+          if (await confirmRunnerTermination(session.child.pid, session)) {
+            await prepareIosSimulatorAccessibility(session.device);
+          } else {
+            emitDiagnostic({
+              level: 'warn',
+              phase: 'ios_runner_accessibility_repair_skipped',
+              data: { deviceId: session.deviceId, reason: 'runner-termination-unconfirmed' },
+            });
+          }
+        } catch (error) {
+          emitDiagnostic({
+            level: 'warn',
+            phase: 'ios_runner_accessibility_repair_failed',
+            data: { deviceId: session.deviceId, error: normalizeError(error) },
+          });
+        }
+      }
     } finally {
       releaseRunnerLease(session.lease);
     }
@@ -392,6 +415,33 @@ async function killRunnerXcodebuildProcesses(target: RunnerXcodebuildCleanupTarg
       });
     }
   }
+}
+
+async function confirmRunnerTermination(
+  pid: number | undefined,
+  target: RunnerXcodebuildCleanupTarget,
+): Promise<boolean> {
+  const artifactPattern = buildRunnerSessionXctestrunPathCleanupPattern(target.xctestrunPath);
+  if (!artifactPattern) return false;
+  const deadline = Date.now() + RUNNER_STALE_XCODEBUILD_KILL_TIMEOUT_MS;
+  do {
+    if (!isRunnerProcessTreeAlive(pid)) {
+      try {
+        const result = await runAppleToolCommand(
+          '/usr/bin/pgrep',
+          ['-f', `xcodebuild.*test-without-building.*${artifactPattern}`],
+          { allowFailure: true, timeoutMs: Math.max(1, deadline - Date.now()) },
+        );
+        if (result.exitCode === 1) return true;
+        if (result.exitCode !== 0) return false;
+      } catch {
+        return false;
+      }
+    }
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  } while (Date.now() < deadline);
+  return false;
 }
 
 export type LocalRunnerLaunchResources = {

@@ -28,6 +28,7 @@ function appleToolingTestAdapters(): Pick<
   AppleRunnerHost,
   | 'runAppleToolCommand'
   | 'runXcrun'
+  | 'prepareIosSimulatorAccessibility'
   | 'readApplePlistJson'
   | 'hasScopedAppleToolProvider'
   | 'buildSimctlArgsForDevice'
@@ -41,6 +42,7 @@ function appleToolingTestAdapters(): Pick<
   return {
     runAppleToolCommand: async () => unavailable('runAppleToolCommand'),
     runXcrun: async () => unavailable('runXcrun'),
+    prepareIosSimulatorAccessibility: async () => unavailable('prepareIosSimulatorAccessibility'),
     // The one genuine tool: xctestrun product resolution reads real plists through `plutil`.
     readApplePlistJson: async (plistPath, signal) => {
       try {

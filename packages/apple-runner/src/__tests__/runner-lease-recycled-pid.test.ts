@@ -72,6 +72,8 @@ function recordingCleanup(): {
   return {
     signalledPids,
     adapter: {
+      confirmRunnerTermination: async () => true,
+      prepareIosSimulatorAccessibility: async () => {},
       cleanupRunnerProcessTree: async (pid) => {
         signalledPids.push(pid);
       },
