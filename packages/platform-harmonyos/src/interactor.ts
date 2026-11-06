@@ -28,7 +28,8 @@ export function createHarmonyInteractor(device: DeviceInfo, _runner?: RunnerCont
     throw new AppError('UNSUPPORTED_OPERATION', `${name} is not supported on HarmonyOS`);
   };
   return {
-    open: (app, options) => openHarmonyApp(device, app, { activity: options?.activity }),
+    open: (app, options) =>
+      openHarmonyApp(device, app, { activity: options?.activity, launchArgs: options?.launchArgs }),
     openDevice: () => homeHarmony(device),
     close: (app) => closeHarmonyApp(device, app),
     tap: (x, y) => pressHarmony(device, x, y),
