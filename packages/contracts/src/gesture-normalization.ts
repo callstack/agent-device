@@ -38,6 +38,7 @@ const GESTURE_FLAG_NAMES: Record<GestureFlagKey, string> = {
   count: '--count',
   pauseMs: '--pause-ms',
   postGestureStabilization: '--no-post-gesture-stabilization',
+  trajectoryTransport: '--trajectory-transport',
 };
 
 /**
