@@ -21,6 +21,15 @@
 # — a navigating tap defers a stability requirement that the next tap settles
 # before resolving its target, so the baseline signature is already captured on a
 # settled screen — and adding one currently FAILS the flow outright (#1326).
+#
+# The modal reaches its final frame before UIKit detaches Settings. For a few
+# hundred milliseconds the hierarchy holds BOTH trees: Settings' 43 nodes plus
+# the inert surface's 7. A capture backend that does not wait for app quiescence
+# (the simulator AX bridge) sees that combined tree hold still across two polls.
+# Settle then latches on it, and the tap's baseline signature comes from it.
+# The post-tap tree is the inert surface alone, so the engine sees "changed" and
+# never re-taps (#4230). Waiting for Settings to leave the hierarchy puts the
+# baseline on the inert surface itself.
 appId: com.callstack.agentdevicelab
 ---
 - launchApp:
@@ -31,6 +40,8 @@ appId: com.callstack.agentdevicelab
     id: open-inert-surface
 - assertVisible:
     id: inert-title
+- assertNotVisible:
+    id: open-inert-surface
 - tapOn:
     id: inert-target
     retryTapIfNoChange: true

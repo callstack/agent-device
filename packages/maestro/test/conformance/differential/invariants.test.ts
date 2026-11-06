@@ -286,6 +286,21 @@ test('the retry flow drives the inert surface, not a live screen', () => {
   assert.match(flow, /id: inert-target/);
 });
 
+// Settings stays in the hierarchy for a moment after the modal looks presented.
+// A tap resolved in that window takes its baseline from Settings plus the inert
+// surface, so the post-tap inert-only tree reads as changed and no retry fires
+// (#4230). The flow must see Settings gone before the retried tap.
+test('the retry flow waits for Settings to leave the hierarchy before the retried tap', () => {
+  const flow = fs.readFileSync(
+    path.join(import.meta.dirname, 'flows/tap-retry-if-no-change.yaml'),
+    'utf8',
+  );
+  const detached = flow.search(/- assertNotVisible:\n\s+id: open-inert-surface\n/);
+  const retriedTap = flow.search(/- tapOn:\n\s+id: inert-target\n\s+retryTapIfNoChange: true\n/);
+  assert.ok(detached >= 0, 'the flow must assert open-inert-surface is no longer visible');
+  assert.ok(retriedTap > detached, 'the wait must come before the retried tap');
+});
+
 // Truncation-vs-rounding is at most 1px and cannot be observed on a device, so
 // no scenario may claim to guard bug class 1; a unit test pins it instead.
 test('no device scenario claims to prove percent truncation (bug class 1)', () => {
