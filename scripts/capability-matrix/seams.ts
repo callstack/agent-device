@@ -78,9 +78,7 @@ export function createStubHost(): PlatformRuntimeHost {
       // daemon's default provider is scoped, and the production resolver reads
       // that scope to choose its mode, so the fact must be collected the same way.
       resolve: async (device: Parameters<typeof resolveWebNetworkTransport>[0]) =>
-        await withWebProvider(await matrixWebProvider(), () =>
-          resolveWebNetworkTransport(device, HOST_ENVIRONMENT),
-        ),
+        await withWebProvider(await matrixWebProvider(), () => resolveWebNetworkTransport(device)),
     },
     screenRecording: {
       apple: {

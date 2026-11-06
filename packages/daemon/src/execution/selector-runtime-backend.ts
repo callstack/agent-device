@@ -5,7 +5,7 @@ import type {
   BackendCommandContext,
   BackendSnapshotResult,
 } from '@agent-device/contracts/backend';
-import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
+import { resolveRequestTargetDevice } from '../core/request-device-resolution.ts';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import type { SnapshotState, SnapshotNode } from '@agent-device/kernel/snapshot';
@@ -129,7 +129,7 @@ async function resolveSelectorRuntimeDevice(
   if (!session && requireSession) return { ok: false, response: noActiveSessionError() };
   const device =
     session?.device ??
-    (await resolveTargetDevice(params.req.flags ?? {}, { env: params.sessionStore.host.env }));
+    (await resolveRequestTargetDevice(params.req, { env: params.sessionStore.host.env }));
   return { ok: true, ref, session, device };
 }
 

@@ -72,7 +72,7 @@ export function createPlatformRuntimeHost(options: {
       if (device.platform !== 'web') return Object.freeze({ mode: 'local' as const });
       const { resolveWebNetworkTransport } =
         await import('./platform-runtime-network-web-transport.ts');
-      return await resolveWebNetworkTransport(device, host);
+      return await resolveWebNetworkTransport(device);
     },
   });
   const appleApplications = createAppleApplicationTools(env);

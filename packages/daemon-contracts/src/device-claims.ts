@@ -5,8 +5,9 @@ import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   deviceIdentity,
   isApplePlatform,
-  canHostAppDevices,
-  hostDeviceIdPrefix,
+  canHostScopedDevices,
+  hostDeviceIdOf,
+  isHostScopedDeviceOf,
   resolveDeviceAppleOs,
   type DeviceIdentity,
   type DeviceInfo,
@@ -128,25 +129,41 @@ async function inspectExactClaimSettlement(
   return await inspectExistingClaimSettlement({ ...acquirer, device, deviceKey, owner });
 }
 
-function inspectOverlappingMacAppClaims(
+function inspectOverlappingHostScopedClaims(
   params: ClaimAcquisitionInspectionParams,
   identity: DeviceIdentity,
   owner: ReturnType<typeof readCurrentOwnerIdentity>,
 ): InspectedClaimSettlement[] {
-  const prefix = canonicalLocalDeviceKey({ ...identity, id: hostDeviceIdPrefix(identity.id) });
   const settlements: InspectedClaimSettlement[] = [];
   for (const entry of inspectDeviceClaims({}, params.env)) {
     if (!entry.claim) {
       settlements.push({ status: 'conflict', conflict: entry });
       continue;
     }
-    if (!entry.claim.deviceKey.startsWith(prefix)) continue;
+    if (!isClaimOfHostScopedDevice(identity, entry.claim)) continue;
     const current = inspectDeviceClaimFile(
       resolveDeviceClaimPath(entry.claim.deviceKey, params.env),
     );
-    if (current) settlements.push(inspectOverlappingAppClaim(current, params.stateDir, owner));
+    if (current) {
+      settlements.push(inspectOverlappingHostScopedClaim(current, params.stateDir, owner));
+    }
   }
   return settlements;
+}
+
+/** The host a host-scoped device (ADR 0035) belongs to, or `undefined` for a host itself. */
+function hostIdOfScopedDevice(device: Pick<DeviceInfo, 'id'>): string | undefined {
+  const hostId = hostDeviceIdOf(device.id);
+  return hostId === device.id ? undefined : hostId;
+}
+
+/** Whether `claim` holds a host-scoped device (an app or a web session) of the host `identity`. */
+export function isClaimOfHostScopedDevice(identity: DeviceIdentity, claim: DeviceClaim): boolean {
+  return (
+    claim.device.family === identity.family &&
+    claim.device.appleOs === identity.appleOs &&
+    isHostScopedDeviceOf(identity.id, claim.device.id)
+  );
 }
 
 /** Inspect every claim an acquisition could settle, without taking its locks or changing a claim. */
@@ -156,12 +173,16 @@ export async function inspectDeviceClaimAcquisition(
   const identity = deviceClaimIdentity(params.device);
   const deviceKey = canonicalLocalDeviceKey(identity);
   const owner = readCurrentOwnerIdentity();
-  if (params.command !== 'open' && !params.device.hostApp && canHostAppDevices(params.device)) {
+  const hostDeviceId = hostIdOfScopedDevice(params.device);
+  if (
+    params.command !== 'open' &&
+    hostDeviceId === undefined &&
+    canHostScopedDevices(params.device)
+  ) {
     const local = inspectTransientExactClaim(params, deviceKey, owner);
     if (local) return [local];
   }
   const settlements: InspectedClaimSettlement[] = [];
-  const hostDeviceId = params.device.hostApp?.hostDeviceId;
   if (hostDeviceId !== undefined) {
     const host: DeviceInfo = { ...params.device, id: hostDeviceId, hostApp: undefined };
     const hostKey = canonicalLocalDeviceKey(deviceClaimIdentity(host));
@@ -172,8 +193,8 @@ export async function inspectDeviceClaimAcquisition(
     } else {
       settlements.push(hostSettlement);
     }
-  } else if (canHostAppDevices(params.device)) {
-    settlements.push(...inspectOverlappingMacAppClaims(params, identity, owner));
+  } else if (canHostScopedDevices(params.device)) {
+    settlements.push(...inspectOverlappingHostScopedClaims(params, identity, owner));
   }
   settlements.push(await inspectExactClaimSettlement(params, params.device, deviceKey, owner));
   return settlements;
@@ -202,9 +223,10 @@ export async function acquireDeviceClaim(params: {
 }
 
 /**
- * Runs an acquisition under its claim lock. An app device acquisition first takes its host key's
- * lock, so a host claim and an app device claim are never written past each other (ADR 0035): a
- * live host claim refuses it, and a host claim it supersedes is removed once its own is written.
+ * Runs an acquisition under its claim lock. A host-scoped device acquisition (an app or a web
+ * session) first takes its host key's lock, so a host claim and a claim of its devices are never
+ * written past each other (ADR 0035): a live host claim refuses it, and a host claim it supersedes
+ * is removed once its own is written.
  */
 async function withAcquisitionLocks<Result extends TransientDeviceClaimResult>(
   params: {
@@ -221,7 +243,7 @@ async function withAcquisitionLocks<Result extends TransientDeviceClaimResult>(
   deviceKey: string,
   acquire: () => Promise<Result>,
 ): Promise<Result | DeviceClaimAcquireResult> {
-  const hostDeviceId = params.device.hostApp?.hostDeviceId;
+  const hostDeviceId = hostIdOfScopedDevice(params.device);
   if (hostDeviceId === undefined) return await withDeviceClaimLock(deviceKey, params.env, acquire);
   const host: DeviceInfo = { ...params.device, id: hostDeviceId, hostApp: undefined };
   const hostKey = canonicalLocalDeviceKey(deviceClaimIdentity(host));
@@ -366,14 +388,11 @@ async function claimHeldDevice(params: {
   const owner = readCurrentOwnerIdentity();
   const claimOwnerKind: DeviceClaimAcquirerKind =
     params.transientCommand === undefined ? 'open-session' : 'transient-command';
-  let supersededAppClaims: string[] = [];
-  if (!params.device.hostApp && canHostAppDevices(params.device)) {
-    const apps = await settleAppDeviceClaims(
-      canonicalLocalDeviceKey({ ...identity, id: hostDeviceIdPrefix(identity.id) }),
-      params,
-    );
-    if (apps.conflict) return { status: 'conflict', conflict: apps.conflict };
-    supersededAppClaims = apps.abandoned;
+  let supersededScopedClaims: string[] = [];
+  if (hostIdOfScopedDevice(params.device) === undefined && canHostScopedDevices(params.device)) {
+    const scoped = await settleHostScopedDeviceClaims(identity, params);
+    if (scoped.conflict) return { status: 'conflict', conflict: scoped.conflict };
+    supersededScopedClaims = scoped.abandoned;
   }
   const existing = await resolveExistingClaim({
     ...params,
@@ -382,7 +401,7 @@ async function claimHeldDevice(params: {
   });
   if (existing.status === 'conflict') return existing;
   if (existing.status === 'held') {
-    await removeSupersededAppClaims(supersededAppClaims, params.env);
+    await removeSupersededScopedClaims(supersededScopedClaims, params.env);
     return { status: 'acquired', ownership: existing.ownership };
   }
   const now = Date.now();
@@ -405,7 +424,7 @@ async function claimHeldDevice(params: {
     ...(params.transientCommand === undefined ? {} : { transientCommand: params.transientCommand }),
   };
   writeDeviceClaim(claim, params.env);
-  await removeSupersededAppClaims(supersededAppClaims, params.env);
+  await removeSupersededScopedClaims(supersededScopedClaims, params.env);
   return {
     status: 'acquired',
     ownership: ownershipFromClaim(claim),
@@ -414,23 +433,23 @@ async function claimHeldDevice(params: {
 }
 
 /**
- * A host acquisition settles the claims of its app devices first: reconciled when their owner is
- * dead or this daemon abandoned them, a conflict otherwise. An unreadable claim file refuses too,
- * because nothing proves it is not one of them.
+ * A host acquisition settles the claims of its host-scoped devices first: reconciled when their
+ * owner is dead or this daemon abandoned them, a conflict otherwise. An unreadable claim file
+ * refuses too, because nothing proves it is not one of them.
  */
-async function settleAppDeviceClaims(
-  appDeviceKeyPrefix: string,
+async function settleHostScopedDeviceClaims(
+  identity: DeviceIdentity,
   params: { stateDir: string; env: EnvMap; reconcileOrphanedDeviceClaim: DeviceClaimReconciler },
 ): Promise<{ abandoned: string[]; conflict?: InspectedDeviceClaim }> {
   const abandoned: string[] = [];
   for (const entry of inspectDeviceClaims({}, params.env)) {
     const scanned = entry.claim;
     if (!scanned) return { conflict: entry, abandoned: [] };
-    if (!scanned.deviceKey.startsWith(appDeviceKeyPrefix)) continue;
+    if (!isClaimOfHostScopedDevice(identity, scanned)) continue;
     const conflict = await withDeviceClaimLock(scanned.deviceKey, params.env, async () => {
       const current = inspectDeviceClaimFile(resolveDeviceClaimPath(scanned.deviceKey, params.env));
       if (!current) return undefined;
-      const settlement = inspectOverlappingAppClaim(
+      const settlement = inspectOverlappingHostScopedClaim(
         current,
         params.stateDir,
         readCurrentOwnerIdentity(),
@@ -452,7 +471,7 @@ async function settleAppDeviceClaims(
   return { abandoned };
 }
 
-function inspectOverlappingAppClaim(
+function inspectOverlappingHostScopedClaim(
   current: InspectedDeviceClaim,
   stateDir: string,
   owner: ReturnType<typeof readCurrentOwnerIdentity>,
@@ -467,7 +486,7 @@ function inspectOverlappingAppClaim(
   return { status: 'reconcile', claim: current.claim, conflict: current };
 }
 
-async function removeSupersededAppClaims(deviceKeys: string[], env: EnvMap): Promise<void> {
+async function removeSupersededScopedClaims(deviceKeys: string[], env: EnvMap): Promise<void> {
   for (const deviceKey of deviceKeys) {
     await withDeviceClaimLock(deviceKey, env, async () =>
       removeSupersededDeviceClaim(deviceKey, env),

@@ -45,7 +45,7 @@ export async function handlePortReverseCommand(params: {
   if (selectorError) return selectorError;
   const device = await resolveCommandDevice({
     session,
-    flags: req.flags,
+    req,
     env: params.env,
     platformServices: params.platformServices,
   });

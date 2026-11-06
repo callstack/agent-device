@@ -1,3 +1,7 @@
+// First: this helper's `vi.mock('@agent-device/device-selection/dispatch-resolve')` installs only
+// when the helper is evaluated, and vitest evaluates imports in source order, so an import of the
+// real device-selection graph above this line leaves the mock out and the real resolver runs.
+import { getResolveTargetDeviceMock } from '../../__tests__/support/request-router-dispatch-mocks.ts';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,7 +21,6 @@ import {
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { unavailableDeviceRuntimeGateway } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
-import { getResolveTargetDeviceMock } from '../../__tests__/support/request-router-dispatch-mocks.ts';
 import { makeIosDevice, openRequest } from './request-router-open-harness.ts';
 import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 

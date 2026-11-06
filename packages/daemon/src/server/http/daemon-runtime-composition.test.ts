@@ -14,6 +14,7 @@ import {
   WEB_DESKTOP_DEVICE,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
+import { webSessionDevice } from '@agent-device/kernel/device';
 import { interactorResolution } from '../../core/interactor-resolution.ts';
 import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
 import { daemonStartupExitCode, startDaemonRuntime } from './daemon-runtime.ts';
@@ -168,11 +169,11 @@ test('the server derives the policy gate and session callbacks and hands them to
     assert.ok(store, 'the server must construct the store the callbacks read');
     store.publish('web-assembly', {
       name: 'web-assembly',
-      device: WEB_DESKTOP_DEVICE,
+      device: webSessionDevice(WEB_DESKTOP_DEVICE, { name: 'web-assembly' }),
       createdAt: Date.now(),
       actions: [],
     });
-    assert.deepEqual([...composed.openWebSessionNames()], ['web-assembly']);
+    assert.deepEqual([...composed.openWebSessionNames()], ['p_web-assembly']);
     assert.equal(
       composed.resolveSessionDir('web-assembly'),
       store.resolveSessionDir('web-assembly'),

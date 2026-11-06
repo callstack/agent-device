@@ -13,7 +13,7 @@ import type { WebProvider } from '@agent-device/platform-web';
 import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
 import type { LinuxToolProvider } from '@agent-device/platform-linux';
 import type { VegaToolProvider } from '@agent-device/platform-vega';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { webBackendKeyOf, type DeviceInfo } from '@agent-device/kernel/device';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { AppleSimulatorScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-transport.ts';
 import type { AppleRunnerScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-runner-transport.ts';
@@ -143,13 +143,19 @@ async function providersForContext(
   defaultWebProvider: DefaultWebProviderOptions | undefined,
   context: PlatformProviderRequestContext,
 ): Promise<PlatformProviderResolvers> {
-  if (providers.webProvider || !context.useDefaultWebProvider || !defaultWebProvider) {
+  const session = webBackendKeyOf(context.device.id);
+  if (
+    providers.webProvider ||
+    !context.useDefaultWebProvider ||
+    !defaultWebProvider ||
+    session === undefined
+  ) {
     return providers;
   }
   const { createAgentBrowserWebProvider } = await import('@agent-device/platform-web');
   const defaultProvider = await createAgentBrowserWebProvider({
     host: defaultWebProvider.host,
-    session: context.session?.name ?? context.requestedSession,
+    session,
     stateDir: defaultWebProvider.stateDir,
     openWebSessionNames: defaultWebProvider.openWebSessionNames,
     ownedProcessRecords: defaultWebProvider.ownedProcessRecords,

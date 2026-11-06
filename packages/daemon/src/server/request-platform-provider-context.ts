@@ -1,6 +1,5 @@
 import type { PlatformProviderRequestContext } from '@agent-device/contracts/platform-providers';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import {
   hasDeviceSelectionInput,
   hasExplicitDeviceSelector,
@@ -86,5 +85,7 @@ async function resolveProviderTargetDevice(
     req.command === 'open'
       ? buildOpenTargetDeviceResolutionOptions(req.positionals?.[0], env, req.flags?.surface)
       : { env, androidAvdSelection: resolveCommandAndroidAvdSelection(req.command) };
-  return await resolveTargetDevice(req.flags ?? {}, { ...options, env });
+  // Deferred to keep the daemon's eager closure within scripts/__tests__/eager-closure-budgets.ts.
+  const { resolveRequestTargetDevice } = await import('../core/request-device-resolution.ts');
+  return await resolveRequestTargetDevice(req, { ...options, env });
 }

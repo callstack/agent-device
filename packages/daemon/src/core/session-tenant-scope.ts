@@ -1,4 +1,7 @@
 import { isTenantOwnedSessionName } from '@agent-device/contracts/daemon-http';
+import { AppError } from '@agent-device/kernel/errors';
+import type { WebSessionIdentity } from '@agent-device/kernel/device';
+import type { DaemonRequest } from './daemon-request.ts';
 
 /**
  * The one rule that says which sessions belong to a tenant: under tenant
@@ -44,6 +47,35 @@ export function tenantScopedSessionName(tenant: string, session: string): string
 /** The tenant-relative name that addresses this session under tenant scoping. */
 export function tenantPublicSessionName(tenant: string, session: string): string {
   return isTenantOwnedSessionName(tenant, session) ? session.slice(tenant.length + 1) : session;
+}
+
+/**
+ * The web session a request runs in: the tenant-relative name as the caller supplied it, and the
+ * tenant under tenant isolation. A web session device is derived from it alone, so a blank name
+ * reaches web validation instead of becoming the default session's browser, and the store key's
+ * `<tenant>:` prefix never enters the backend key. `supplied` is the name before
+ * `scopeRequestSession` rewrites a blank one to `default`; `scoped` carries the attested tenant.
+ * Only the request scope calls this.
+ */
+export function deriveWebSessionIdentity(
+  supplied: string,
+  scoped: Pick<DaemonRequest, 'meta'>,
+): WebSessionIdentity {
+  const tenantId = scoped.meta?.sessionIsolation === 'tenant' ? scoped.meta.tenantId : undefined;
+  return tenantId === undefined
+    ? { name: supplied }
+    : { name: tenantPublicSessionName(tenantId, supplied), tenantId };
+}
+
+/** The web session the request scope derived for this request. */
+export function requestWebSession(req: DaemonRequest): WebSessionIdentity {
+  const webSession = req.internal?.webSession;
+  if (webSession === undefined) {
+    throw new AppError('UNKNOWN', 'A request reached device resolution outside a request scope.', {
+      reason: 'request_web_session_missing',
+    });
+  }
+  return webSession;
 }
 
 /**

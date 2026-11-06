@@ -59,7 +59,7 @@ async function resolveBootTargetSelection(
   try {
     const selection = await resolveBootCommandSelection({
       session,
-      flags,
+      req,
       env: sessionStore.host.env,
       androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),
       platformServices,

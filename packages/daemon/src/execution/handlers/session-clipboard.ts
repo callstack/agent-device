@@ -169,7 +169,7 @@ export async function handleSessionClipboardCommand(params: {
 
   const device = await resolveCommandDevice({
     session,
-    flags,
+    req,
     env: sessionStore.host.env,
     platformServices,
   });

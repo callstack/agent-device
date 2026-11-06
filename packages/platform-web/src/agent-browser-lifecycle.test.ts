@@ -5,8 +5,9 @@ import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { installFakeManagedAgentBrowser, mkdtempForTestSync } from './__tests__/test-utils.ts';
 
-const { runCmdMock } = vi.hoisted(() => ({
+const { runCmdMock, probe } = vi.hoisted(() => ({
   runCmdMock: vi.fn(),
+  probe: { unanswered: false },
 }));
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
@@ -21,6 +22,10 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
     ...actual,
     listHostProcesses: async (options: Parameters<typeof actual.listHostProcesses>[0]) =>
       await actual.listHostProcesses({ ...options, runCommand: runCmdMock }),
+    readHostProcessIdentityObservationsAsync: async (pids: Iterable<number>) =>
+      probe.unanswered
+        ? new Map<number, { state: string; startTime: string }>()
+        : await actual.readHostProcessIdentityObservationsAsync(pids),
     readProcessStartTime: (pid: number) => `start-${pid}`,
     readProcessCommand: (pid: number) => `command-${pid}`,
   };
@@ -34,6 +39,7 @@ import {
   resolveAgentBrowserIdleTimeoutMs,
   summarizeAgentBrowserProcesses,
 } from './agent-browser-lifecycle.ts';
+import { agentBrowserFleetOf } from './agent-browser-fleet.ts';
 import { managedInstallPaths } from './agent-browser-install-paths.ts';
 import { recordManagedAgentBrowserProcesses } from './agent-browser-process-record.ts';
 import { getManagedAgentBrowserStatus } from './agent-browser-tool.ts';
@@ -44,6 +50,7 @@ const mockRunCmd = vi.mocked(runCmdMock);
 
 beforeEach(() => {
   mockRunCmd.mockReset();
+  probe.unanswered = false;
 });
 
 afterEach(() => {
@@ -164,6 +171,129 @@ test('cleanup skips reaping when the daemon reports open web sessions', async ()
     assert.equal(result.skipped?.reason, 'open-web-session');
     assert.deepEqual(result.skipped?.openWebSessionNames, ['default-web']);
     assert.equal(mockRunCmd.mock.calls.length, 0);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+function recordedBrowserStore(stateDir: string, pid = NEVER_A_PID) {
+  return {
+    read: () => [
+      {
+        scope: { kind: 'daemon' as const },
+        path: path.join(stateDir, 'owned-processes.json'),
+        status: 'decoded' as const,
+        records: [
+          {
+            pid,
+            startTime: `start-${pid}`,
+            command: `command-${pid}`,
+            purpose: 'managed-web-browser',
+          },
+        ],
+      },
+    ],
+    replace: vi.fn(),
+    clear: vi.fn(),
+  };
+}
+
+test('cleanup skips reaping while the browser fleet holds an opening session', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
+  const ownedProcessRecords = recordedBrowserStore(stateDir);
+  agentBrowserFleetOf(ownedProcessRecords).openStarted('fleet-web');
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
+    const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
+      env: process.env,
+      ownedProcessRecords,
+    });
+
+    assert.equal(result.skipped?.reason, 'open-web-session');
+    assert.deepEqual(result.skipped?.openWebSessionNames, ['fleet-web']);
+    assert.equal(mockRunCmd.mock.calls.length, 0);
+    expect(ownedProcessRecords.clear).not.toHaveBeenCalled();
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('cleanup reaps when the only fleet session is the one whose open runs it', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
+  const ownedProcessRecords = recordedBrowserStore(stateDir);
+  agentBrowserFleetOf(ownedProcessRecords).openStarted('fleet-web');
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
+    const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
+      env: process.env,
+      ownedProcessRecords,
+      startingSession: 'fleet-web',
+    });
+
+    assert.equal(result.skipped, undefined);
+    assert.deepEqual(result.pids, [NEVER_A_PID]);
+    expect(ownedProcessRecords.clear).toHaveBeenCalledOnce();
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('cleanup evicts a launched session whose recorded browser exited, then reaps', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
+  const ownedProcessRecords = recordedBrowserStore(stateDir);
+  const fleet = agentBrowserFleetOf(ownedProcessRecords);
+  fleet.openStarted('fleet-web');
+  fleet.openSettled('fleet-web', true);
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
+    const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
+      env: process.env,
+      ownedProcessRecords,
+    });
+
+    assert.equal(result.skipped, undefined);
+    assert.deepEqual(result.pids, [NEVER_A_PID]);
+    assert.deepEqual(fleet.sessions(), []);
+    expect(ownedProcessRecords.clear).toHaveBeenCalledOnce();
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('cleanup keeps a launched session when the process probe does not answer', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
+  const ownedProcessRecords = recordedBrowserStore(stateDir, process.pid);
+  const fleet = agentBrowserFleetOf(ownedProcessRecords);
+  fleet.openStarted('fleet-web');
+  fleet.openSettled('fleet-web', true);
+  probe.unanswered = true;
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
+    const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
+      env: process.env,
+      ownedProcessRecords,
+    });
+
+    assert.equal(result.skipped?.reason, 'open-web-session');
+    assert.deepEqual(result.skipped?.openWebSessionNames, ['fleet-web']);
+    assert.deepEqual(fleet.sessions(), ['fleet-web']);
+    expect(ownedProcessRecords.clear).not.toHaveBeenCalled();
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

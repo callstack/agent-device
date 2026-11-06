@@ -5,6 +5,7 @@ import { withTestDeviceInventoryProvider } from '@agent-device/device-selection/
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeIosSession } from '../__tests__/support/session-factories.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
+import { seedWebSessionIdentity } from '../__tests__/support/web-session-request-fixture.ts';
 import { resolvePlatformProviderRequestContext } from './request-platform-provider-context.ts';
 
 const OTHER_IOS_SIMULATOR: DeviceInfo = {
@@ -54,7 +55,7 @@ test('request provider context follows an explicit sessionless web selector', as
     async () => [WEB_DESKTOP_DEVICE],
     async () =>
       await resolvePlatformProviderRequestContext({
-        req: { ...request('snapshot'), flags: { platform: 'web' } },
+        req: seedWebSessionIdentity({ ...request('snapshot'), flags: { platform: 'web' } }),
         existingSession: undefined,
         env: process.env,
       }),

@@ -21,6 +21,7 @@ Decision history: 2026-10-21, a `macos-app` lease session takes its app device's
 - Only host administrators allocate `macos-app` leases. Tenant `lease_release` is refused.
 - Confine each request admitted under a `macos-app` lease to the leased app.
 - A `macos-app` lease session binds its app device and takes that device's claim (ADR 0035).
+- Under tenant isolation a web session's browser key derives from the tenant-relative public name and the tenant id, never from the `<tenant>:` store name (ADR 0037).
 
 ## Context
 
@@ -326,6 +327,14 @@ A daemon policy `leases.require` (ADR 0029) refuses requests that name no lease.
 The proxy token is one credential for every client.
 Thus, a host that serves several clients through one proxy authenticates each client.
 The host sets the tenant, session isolation, and lease of that client on every request that it forwards.
+
+## Web sessions under tenant isolation
+
+Under tenant isolation the session store prefixes every session name with `<tenant>:`, but the public name stays tenant-relative.
+A web session's backend key is derived from that public name and the tenant id (`t_<hash12>_<name>`, ADR 0037), never from the store name.
+Thus two tenants that use one web session name hold two devices and two browsers, and one tenant using one name twice conflicts like any session on one device.
+A web open is admitted under a lease of any backend other than `macos-app`, because admission never compares the request's platform with the lease backend.
+That predates this boundary and is an open question.
 
 ## Device spec
 

@@ -130,6 +130,7 @@ test('open applies stored runtime launchUrl and reports runtime hints', async ()
       command: 'open',
       positionals: ['Demo'],
       flags: { platform: 'android' },
+      internal: { webSession: { name: 'runtime-open' } },
     },
     sessionName: 'runtime-open',
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
@@ -142,7 +143,12 @@ test('open applies stored runtime launchUrl and reports runtime hints', async ()
   expect(mockBindDeviceRuntime).toHaveBeenCalledTimes(1);
   expect(mockResolveTargetDevice).toHaveBeenCalledWith(
     { platform: 'android' },
-    { appleSimulatorAppTarget: 'Demo', appDeviceTarget: 'Demo', env: process.env },
+    {
+      appleSimulatorAppTarget: 'Demo',
+      appDeviceTarget: 'Demo',
+      webSession: { name: 'runtime-open' },
+      env: process.env,
+    },
   );
   expect(callOrder).toEqual(['runtime', 'dispatch:open', 'dispatch:open']);
   expect(runtimeApplyCalls).toEqual([

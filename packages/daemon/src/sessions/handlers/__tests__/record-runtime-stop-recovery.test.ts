@@ -2,6 +2,7 @@ import { expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { webSessionDevice, type WebSessionIdentity } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import {
@@ -35,17 +36,32 @@ const FLAGLESS_RECORDED_DEVICE = {
   kind: 'device',
   target: 'desktop',
 } as const;
-const resolveTargetDeviceMock = vi.fn(async (flags: Record<string, string | undefined> = {}) => {
-  if (flags.serial === RESTART_RECORDED_DEVICE.id || flags.udid === RESTART_RECORDED_DEVICE.id) {
-    return { ...RESTART_RECORDED_DEVICE };
-  }
-  if (flags.udid === APPLE_RECORDED_DEVICE.id) return { ...APPLE_RECORDED_DEVICE };
-  if (flags.platform === 'linux') return { ...FLAGLESS_RECORDED_DEVICE };
-  throw new AppError('AMBIGUOUS_MATCH', 'Multiple attached devices detected');
-});
+const WEB_HOST = {
+  platform: 'web',
+  id: 'agent-browser-chrome',
+  name: 'Agent Browser Chrome',
+  kind: 'device',
+  target: 'desktop',
+} as const;
+const resolveTargetDeviceMock = vi.fn(
+  async (
+    flags: Record<string, string | undefined> = {},
+    options: { webSession?: WebSessionIdentity } = {},
+  ) => {
+    if (flags.serial === RESTART_RECORDED_DEVICE.id || flags.udid === RESTART_RECORDED_DEVICE.id) {
+      return { ...RESTART_RECORDED_DEVICE };
+    }
+    if (flags.udid === APPLE_RECORDED_DEVICE.id) return { ...APPLE_RECORDED_DEVICE };
+    if (flags.platform === 'linux') return { ...FLAGLESS_RECORDED_DEVICE };
+    if (flags.platform === 'web') {
+      return options.webSession ? webSessionDevice(WEB_HOST, options.webSession) : { ...WEB_HOST };
+    }
+    throw new AppError('AMBIGUOUS_MATCH', 'Multiple attached devices detected');
+  },
+);
 vi.mock('@agent-device/device-selection/dispatch-resolve', () => ({
   resolveTargetDevice: (...args: unknown[]) =>
-    resolveTargetDeviceMock(...(args as [Record<string, string> | undefined])),
+    resolveTargetDeviceMock(...(args as Parameters<typeof resolveTargetDeviceMock>)),
 }));
 
 test('record stop after a daemon restart replays the completed export for the named session', async () => {
@@ -537,4 +553,30 @@ test('live record stop writes its action under the captured scoped address after
       .events.filter((event) => event.kind === 'action.recorded'),
   ).toHaveLength(2);
   expect(harness.sessionStore.readEvents('default').events).toEqual([]);
+});
+
+test('a sessionless web record start resolves the session device of its request, never the host', async () => {
+  const harness = makeRecordRuntimeHarness('record-runtime-web-sessionless-', {
+    device: webSessionDevice(WEB_HOST, { name: 'recording' }),
+  });
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected the harness session');
+  harness.sessionStore.retire(ref);
+  resolveTargetDeviceMock.mockClear();
+  const outPath = path.join(mkdtempForTestSync('record-runtime-web-sessionless-out-'), 'web.webm');
+
+  const started = await harness.run(['start', outPath], undefined, {
+    platform: 'web',
+    recordingScope: 'device',
+  });
+
+  expect(started).toMatchObject({ ok: true });
+  expect(resolveTargetDeviceMock).toHaveBeenCalledWith(
+    expect.objectContaining({ platform: 'web' }),
+    expect.objectContaining({ webSession: { name: harness.sessionName } }),
+  );
+  // The mock answers the host unless the request names a web session, so a host-bound start fails.
+  await expect(resolveTargetDeviceMock.mock.results[0]?.value).resolves.toMatchObject({
+    id: webSessionDevice(WEB_HOST, { name: harness.sessionName }).id,
+  });
 });

@@ -489,7 +489,7 @@ async function closeWithoutSession(params: {
     return errorResponse('SESSION_NOT_FOUND', 'No active session');
   const device = await resolveCommandDevice({
     session: undefined,
-    flags: req.flags,
+    req,
     env,
     platformServices,
   });

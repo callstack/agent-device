@@ -3,6 +3,7 @@ import { test, expect, vi } from 'vitest';
 
 import { handleAppStateCommand } from '../session-appstate.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import { seedWebSessionIdentity } from '../../../__tests__/support/web-session-request-fixture.ts';
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import {
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
@@ -48,13 +49,13 @@ test('appstate rejects web before Android app-state backend dispatch', async () 
       await handleAppStateCommand({
         host: createTestHostEnvironment(),
         platformServices: daemonPlatformServicesFixture(),
-        req: {
+        req: seedWebSessionIdentity({
           token: 't',
           session: 'default',
           command: 'appstate',
           positionals: [],
           flags: { platform: 'web' },
-        },
+        }),
         sessionName: 'default',
         sessionStore: makeSessionStore(),
         bindDevice,

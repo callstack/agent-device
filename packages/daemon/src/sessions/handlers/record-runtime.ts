@@ -26,10 +26,7 @@ import {
   type DeviceInfo,
   type Platform,
 } from '@agent-device/kernel/device';
-import {
-  resolveTargetDevice,
-  type ResolveDeviceFlags,
-} from '@agent-device/device-selection/dispatch-resolve';
+import { type ResolveDeviceFlags } from '@agent-device/device-selection/dispatch-resolve';
 import { hasDeviceSelectionInput } from '../../core/device/device-selector-intent.ts';
 import { ensureBoundDeviceReady } from '../../core/request-runtime-binding.ts';
 import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
@@ -76,6 +73,7 @@ import {
   buildRecordingUnsupportedResponse,
   isDaemonOwnedRecordingOutput,
 } from './record-runtime-response.ts';
+import { resolveRequestTargetDevice } from '../../core/request-device-resolution.ts';
 
 /**
  * A stop either finishes the live export or reports one the daemon already finished. Only the
@@ -194,7 +192,7 @@ async function resolveUnheldRecordingDevice(
 ): Promise<DeviceInfo> {
   const { req, sessionName } = params;
   if (!namesSessionWithoutTarget(req))
-    return await resolveTargetDevice(req.flags ?? {}, { env: params.sessionStore.host.env });
+    return await resolveRequestTargetDevice(req, { env: params.sessionStore.host.env });
   if (plan.kind === 'stop-recovery') {
     const recorded = screenRecordingManifestDevice({
       sessionName,
@@ -231,7 +229,11 @@ async function resolveManifestDevice(
   };
   const identityFlag = deviceIdentityFlag(recorded.family);
   if (identityFlag) selector[identityFlag] = recorded.id;
-  return await resolveTargetDevice(selector, { env: params.sessionStore.host.env });
+  return await resolveRequestTargetDevice(
+    params.req,
+    { env: params.sessionStore.host.env },
+    selector,
+  );
 }
 
 async function startRecording(

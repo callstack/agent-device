@@ -76,7 +76,7 @@ async function runSessionOrSelectorDispatch(params: {
 
   const device = await resolveCommandDevice({
     session,
-    flags,
+    req,
     env: sessionStore.host.env,
     platformServices: params.platformServices,
   });

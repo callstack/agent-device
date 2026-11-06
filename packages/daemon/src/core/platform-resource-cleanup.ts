@@ -5,9 +5,10 @@ export type PlatformResourceCleanup = Readonly<{
   stopSnapshotHelper(device: DeviceInfo): Promise<void>;
   closeManagedBrowser(
     params: Readonly<{
+      /** The web session device whose browser closes; its id carries the backend key. */
       device: DeviceInfo;
-      sessionName: string;
       stateDir: string;
+      /** The backend keys of the published web sessions. */
       openSessionNames: () => readonly string[];
     }>,
   ): Promise<void>;
