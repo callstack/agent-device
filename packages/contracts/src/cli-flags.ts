@@ -123,6 +123,13 @@ export type CliFlags = CloudProviderProfileFields &
     maxPasses?: number;
     doubleTap?: boolean;
     verify?: boolean;
+    /**
+     * Press/click opt-in (#1047 sibling): bracket the dispatch with two
+     * lightweight screenshots and compare them, so a tap on a surface the
+     * accessibility tree cannot describe (a PIN keypad) still answers "did the
+     * screen react at all". Advisory; never fails the action.
+     */
+    expectScreenshotDiff?: boolean;
     settle?: boolean;
     settleQuietMs?: number;
     postGestureStabilization?: boolean;

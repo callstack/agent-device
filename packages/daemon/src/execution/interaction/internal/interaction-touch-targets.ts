@@ -162,7 +162,10 @@ export function interactionResultExtra(
   // LongPressCommandResult has no evidence field, so it reads as undefined
   // (and gets dropped by the response layer) for longpress. `settle` (#1101,
   // opt-in via --settle) is additive on all four touch commands.
+  // `screenshotDiff` (--expect-screenshot-diff) is press/click only: fill's
+  // value-level verification and longpress/hover carry no pixel pair.
   const evidence = 'evidence' in result ? result.evidence : undefined;
+  const screenshotDiff = 'screenshotDiff' in result ? result.screenshotDiff : undefined;
   const settle = result.settle;
   if (result.kind === 'ref') {
     return {
@@ -172,6 +175,7 @@ export function interactionResultExtra(
       targetHittable: result.targetHittable,
       hint: result.hint,
       evidence,
+      screenshotDiff,
       settle,
       resolution: result.resolution,
     };
@@ -184,11 +188,12 @@ export function interactionResultExtra(
       targetHittable: result.targetHittable,
       hint: result.hint,
       evidence,
+      screenshotDiff,
       settle,
       resolution: result.resolution,
     };
   }
-  return { evidence, settle };
+  return { evidence, screenshotDiff, settle };
 }
 
 export function formatTouchTargetLabel(
