@@ -308,7 +308,9 @@ describe('runProtectedLeaseWork', () => {
     const rejected = assert.rejects(
       running,
       (error: unknown) =>
-        error instanceof AppError && error.details?.reason === 'provider-instance-ended',
+        error instanceof AppError &&
+        error.code === 'COMMAND_FAILED' &&
+        error.details?.reason === 'provider-instance-ended',
     );
     await vi.advanceTimersByTimeAsync(0);
     await rejected;
