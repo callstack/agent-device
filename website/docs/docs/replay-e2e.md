@@ -23,8 +23,9 @@ command. This can affect `perf`, `audio`, `record`, `trace`, and some `logs` ope
 affects `close` when it would dispose owned resources or release a provider lease, and acquisition
 that would recover another session's durable resources. Opening another app in the same session
 keeps its owned resource handles. An Android test IME alone is restored by authored `close`, even
-when restoration settles after the remaining replay time. A failed restore keeps the session and
-its device claim; inspect the device, then run plain `close` again to retry the cleanup. The name is not a complete command. Inspect the failed
+when restoration settles after the remaining replay time. A failed restore on a session that holds a
+device claim keeps the session and its claim; inspect the device, then run plain `close` again to
+retry the cleanup. A session without a claim is retired. The name is not a complete command. Inspect the failed
 script path and line, then run that original operation separately with its original arguments and
 options, the same `--session` value, and the same private CLI context. If steps remain and the
 report offers `resume.alternateFrom`, use it with `planDigest` after completing the refused step directly.

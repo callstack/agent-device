@@ -120,6 +120,7 @@ function close(
     leaseRegistry?: LeaseRegistryInstance;
     leaseLifecycleProvider?: LeaseLifecycleProvider;
     saveScript?: true;
+    app?: string;
   }> = {},
 ) {
   return handleSessionCommands({
@@ -131,7 +132,7 @@ function close(
       token: 't',
       session: sessionName,
       command: 'close',
-      positionals: [],
+      positionals: options.app ? [options.app] : [],
       flags: options.saveScript ? { saveScript: true } : {},
     },
     sessionName,
@@ -143,6 +144,15 @@ function close(
       : {}),
     invoke: noopInvoke,
   });
+}
+
+function diagnosticPhases(logPath: string): string[] {
+  if (!fs.existsSync(logPath)) return [];
+  return fs
+    .readFileSync(logPath, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line).phase);
 }
 
 const cleanupIncomplete = {
@@ -317,19 +327,52 @@ test.each([
 
     expect(failed).toMatchObject({ ok: false, error: { code: 'COMMAND_FAILED', retriable: true } });
     expect(sessionStore.get(sessionName)).toBeDefined();
-    const phases = fs.existsSync(diagnosticsLogPath)
-      ? fs
-          .readFileSync(diagnosticsLogPath, 'utf8')
-          .trim()
-          .split('\n')
-          .map((line) => JSON.parse(line).phase)
-      : [];
-    expect(phases).not.toContain('session_close_cleanup_failed');
+    expect(diagnosticPhases(diagnosticsLogPath)).not.toContain('session_close_cleanup_failed');
 
     await expect(close(sessionStore, sessionName, loader, options)).resolves.toMatchObject({
       ok: true,
     });
     expect(sessionStore.get(sessionName)).toBeUndefined();
     expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
+  },
+);
+
+// A platform-close failure is the error the caller gets, but it must not hide the cleanup failures
+// that the same close ran into: they are still reported, whether the session is kept or retired.
+test.each([
+  { session: 'a claimed session', claim: undefined, kept: true },
+  { session: 'a claimless session', claim: false as const, kept: false },
+])(
+  'a failed platform close still reports cleanup failures for $session',
+  async ({ claim, kept }) => {
+    const sessionName = 'close-platform-and-cleanup-failure';
+    const sessionStore = await openSession(sessionName, claim === false ? { claim } : {});
+    const platformCloseError = new AppError('DEVICE_UNAVAILABLE', 'platform close failed', {
+      reason: 'device_disconnected',
+    });
+    const { loader, finalizeApplicationClose } = lifecycleOperationsSpy({
+      closeApplication: async () => {
+        throw platformCloseError;
+      },
+    });
+    finalizeApplicationClose.mockRejectedValueOnce(
+      new AppError('COMMAND_FAILED', 'adb timed out after 5000ms'),
+    );
+    const diagnosticsLogPath = path.join(claimsRoot, 'diagnostics.ndjson');
+
+    const thrown = await withDiagnosticsScope(
+      { session: sessionName, command: 'close', logPath: diagnosticsLogPath },
+      async () => {
+        const caught = await close(sessionStore, sessionName, loader, {
+          app: 'com.example.app',
+        }).catch((error: unknown) => error);
+        flushDiagnosticsToSessionFile({ force: true });
+        return caught;
+      },
+    );
+
+    expect(thrown).toBe(platformCloseError);
+    expect(diagnosticPhases(diagnosticsLogPath)).toContain('session_close_cleanup_failed');
+    expect(sessionStore.get(sessionName) !== undefined).toBe(kept);
   },
 );

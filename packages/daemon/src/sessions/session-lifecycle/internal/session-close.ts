@@ -380,11 +380,12 @@ async function runCloseTeardownAndRelease(params: {
       platformResourceCleanup: params.platformResourceCleanup,
     });
   let session = sessionStore.requireCurrent(ref);
-  // Each failure report is built where the session's fate is decided, so its diagnostic and hint
-  // describe what actually happened to the session.
+  // Each cleanup report is built where the session's fate is decided, so its diagnostic and hint
+  // describe what actually happened to the session. It is built even when a platform-close error
+  // takes precedence, so that error never hides the cleanup failures.
   if (session.deviceClaim) {
-    const claimBlockingError =
-      platformCloseError ?? closeCleanupError(sessionName, cleanupFailures, { sessionKept: true });
+    const cleanupError = closeCleanupError(sessionName, cleanupFailures, { sessionKept: true });
+    const claimBlockingError = platformCloseError ?? cleanupError;
     if (claimBlockingError) {
       emitDiagnostic({
         level: 'warn',
@@ -408,8 +409,8 @@ async function runCloseTeardownAndRelease(params: {
   });
   if (leaseRelease.response) return { kind: 'response', response: leaseRelease.response };
   session = sessionStore.resolveCurrent(ref) ?? session;
-  const closeError =
-    platformCloseError ?? closeCleanupError(sessionName, cleanupFailures, { sessionKept: false });
+  const cleanupError = closeCleanupError(sessionName, cleanupFailures, { sessionKept: false });
+  const closeError = platformCloseError ?? cleanupError;
   if (!closeError) await clearDeviceClaim(session.deviceClaim, params.env);
   sessionStore.retire(ref, { retainExecutionHost });
   if (closeError) throw closeError;
