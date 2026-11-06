@@ -63,7 +63,10 @@ function claimDevice(
   });
 }
 
-async function openClaimedSession(sessionName: string, leaseRegistry?: LeaseRegistry) {
+async function openClaimedSession(
+  sessionName: string,
+  leaseRegistry?: InstanceType<typeof LeaseRegistry>,
+) {
   const sessionStore = makeSessionStore();
   const acquired = await claimDevice(sessionStore, sessionName);
   if (acquired.status !== 'acquired') {
@@ -98,7 +101,7 @@ function close(
   sessionStore: ReturnType<typeof makeSessionStore>,
   sessionName: string,
   loader: ReturnType<typeof lifecycleOperationsSpy>['loader'],
-  leaseRegistry?: LeaseRegistry,
+  leaseRegistry?: InstanceType<typeof LeaseRegistry>,
 ) {
   return handleSessionCommands({
     host: createTestHostEnvironment(),
