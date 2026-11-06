@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import { openIosApp } from '../app-launch.ts';
 import { withFakeAppleTool } from '../../__tests__/fake-apple-tool.ts';
-import { IOS_TEST_DEVICE, IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
+import {
+  IOS_TEST_DEVICE,
+  IOS_TEST_SIMULATOR,
+  MACOS_TEST_DEVICE,
+} from './apple-core-stub-helpers.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => ({
@@ -88,6 +92,7 @@ test('preparation failure preserves app launch and emits a diagnostic', async ()
 
 for (const device of [
   IOS_TEST_DEVICE,
+  MACOS_TEST_DEVICE,
   { ...IOS_TEST_SIMULATOR, appleOs: 'tvos' },
   { ...IOS_TEST_SIMULATOR, appleOs: 'visionos' },
 ] as DeviceInfo[]) {

@@ -698,35 +698,24 @@ async function cleanupLeasedRunnerProcesses(
     },
   });
   if (currentRunnerLeaseOwnerToken(lease.deviceId) !== lease.ownerToken) return;
-  const runnerPid = resolveVerifiedLeaseRunnerPid(lease);
-  await cleanup.cleanupRunnerProcessTree(runnerPid, 'SIGTERM');
+  await cleanup.cleanupRunnerProcessTree(resolveVerifiedLeaseRunnerPid(lease), 'SIGTERM');
   await cleanup.cleanupRunnerXcodebuildProcesses({
     deviceId: lease.deviceId,
     xctestrunPath: lease.xctestrunPath,
   });
   await cleanup.cleanupRunnerProcessTree(resolveVerifiedLeaseRunnerPid(lease), 'SIGKILL');
   if (lease.simulatorTarget) {
-    try {
-      const terminated = await cleanup.confirmRunnerTermination(runnerPid, {
-        deviceId: lease.deviceId,
-        xctestrunPath: lease.xctestrunPath,
-      });
-      if (terminated) {
-        await cleanup.prepareIosSimulatorAccessibility(lease.simulatorTarget);
-      } else {
-        emitDiagnostic({
-          level: 'warn',
-          phase: 'ios_runner_accessibility_repair_skipped',
-          data: { deviceId: lease.deviceId, reason: 'runner-termination-unconfirmed' },
-        });
-      }
-    } catch (error) {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'ios_runner_accessibility_repair_failed',
-        data: { deviceId: lease.deviceId, error: normalizeError(error) },
-      });
-    }
+    const simulator = lease.simulatorTarget;
+    await repairSimulatorAccessibilityAfterRunnerExit({
+      deviceId: lease.deviceId,
+      // Resolved again here: the pid read before the signals may belong to another process now.
+      confirmTermination: () =>
+        cleanup.confirmRunnerTermination(resolveVerifiedLeaseRunnerPid(lease), {
+          deviceId: lease.deviceId,
+          xctestrunPath: lease.xctestrunPath,
+        }),
+      prepare: () => cleanup.prepareIosSimulatorAccessibility(simulator),
+    });
   }
   cleanup.cleanupTempFile(lease.xctestrunPath);
   cleanup.cleanupTempFile(lease.jsonPath);
@@ -751,6 +740,34 @@ async function cleanupLeasedRunnerProcesses(
  */
 export function isLeaseRunnerProcessIntact(lease: RunnerLease, runnerPid: number): boolean {
   return isProcessAlive(runnerPid) && verifyLeaseRunnerPidIdentity(lease, runnerPid);
+}
+
+/**
+ * XCTest teardown leaves the simulator with app accessibility off, so apps launched afterwards
+ * expose an empty tree. Turns it back on once the runner is confirmed gone; a failure only warns.
+ */
+export async function repairSimulatorAccessibilityAfterRunnerExit(params: {
+  deviceId: string;
+  confirmTermination: () => Promise<boolean>;
+  prepare: () => Promise<void>;
+}): Promise<void> {
+  try {
+    if (await params.confirmTermination()) {
+      await params.prepare();
+      return;
+    }
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'ios_runner_accessibility_repair_skipped',
+      data: { deviceId: params.deviceId, reason: 'runner-termination-unconfirmed' },
+    });
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'ios_runner_accessibility_repair_failed',
+      data: { deviceId: params.deviceId, error: normalizeError(error) },
+    });
+  }
 }
 
 function resolveVerifiedLeaseRunnerPid(lease: RunnerLease): number | undefined {

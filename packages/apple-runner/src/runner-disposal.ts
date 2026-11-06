@@ -10,7 +10,6 @@ import {
   runXcrun,
   prepareIosSimulatorAccessibility,
 } from './host.ts';
-import { normalizeError } from '@agent-device/kernel/errors';
 import type { RunnerLaunchObservation } from './runner-launcher.ts';
 import type { ExecResult, ExecBackgroundResult } from '@agent-device/host-kit/command';
 import { buildRunnerSessionXctestrunPathCleanupPattern } from './runner-artifact-env.ts';
@@ -22,6 +21,7 @@ import {
   cleanupOwnedRunnerLease,
   currentRunnerLeaseOwnerToken,
   releaseRunnerLease,
+  repairSimulatorAccessibilityAfterRunnerExit,
   withRunnerLeaseLock,
   type RunnerLease,
   type RunnerLeaseCleanupAdapter,
@@ -270,23 +270,11 @@ async function settleOwnedRunnerDeviceState(
     try {
       await terminateRunnerSimulatorApps(session.device);
       if (isHandheldAppleSimulator(session.device)) {
-        try {
-          if (await confirmRunnerTermination(session.child.pid, session)) {
-            await prepareIosSimulatorAccessibility(session.device);
-          } else {
-            emitDiagnostic({
-              level: 'warn',
-              phase: 'ios_runner_accessibility_repair_skipped',
-              data: { deviceId: session.deviceId, reason: 'runner-termination-unconfirmed' },
-            });
-          }
-        } catch (error) {
-          emitDiagnostic({
-            level: 'warn',
-            phase: 'ios_runner_accessibility_repair_failed',
-            data: { deviceId: session.deviceId, error: normalizeError(error) },
-          });
-        }
+        await repairSimulatorAccessibilityAfterRunnerExit({
+          deviceId: session.deviceId,
+          confirmTermination: () => confirmRunnerTermination(session.child.pid, session),
+          prepare: () => prepareIosSimulatorAccessibility(session.device),
+        });
       }
     } finally {
       releaseRunnerLease(session.lease);
