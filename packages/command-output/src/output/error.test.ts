@@ -184,3 +184,46 @@ test('formatHumanErrorLines shows an unavailable screen reason and omitted sugge
   assert.match(output, /Screen: unavailable \(capture-failed\)\. take a snapshot/);
   assert.match(output, /Suggestions: 2 available \(omitted at this response level/);
 });
+
+// The diagnostics footer names where the evidence lives, not why the run failed,
+// and a reader that keeps the tail of a merged stream keeps exactly these
+// lines. The default tier ends the failure block on the error's own facts; the
+// JSON error payload still carries every field.
+test('formatHumanErrorLines omits the diagnostics footer by default', () => {
+  const err = new AppError('COMMAND_FAILED', 'tap failed', {
+    diagnosticId: 'diag-123',
+    logPath: '/tmp/diag.ndjson',
+    logPathUnavailable: 'fetch refused',
+  });
+
+  const output = renderLines(err);
+
+  assert.equal(output.includes('Diagnostic ID:'), false);
+  assert.equal(output.includes('Diagnostics Log:'), false);
+  assert.equal(output.includes('Remote Diagnostics:'), false);
+  assert.match(output, /^Error \(COMMAND_FAILED\): tap failed/);
+});
+
+test('formatHumanErrorLines renders the diagnostics footer when the caller asks for it', () => {
+  const err = new AppError('COMMAND_FAILED', 'tap failed', {
+    diagnosticId: 'diag-123',
+    logPath: '/tmp/diag.ndjson',
+  });
+
+  const output = formatHumanErrorLines(err, { footer: true }).join('\n');
+
+  assert.match(output, /Diagnostic ID: diag-123/);
+  assert.match(output, /Diagnostics Log: \/tmp\/diag\.ndjson/);
+});
+
+test('formatHumanErrorLines reports an unavailable remote record only with the footer', () => {
+  const err = new AppError('COMMAND_FAILED', 'tap failed', {
+    logPathUnavailable: 'fetch refused',
+  });
+
+  assert.equal(renderLines(err).includes('Remote Diagnostics:'), false);
+  assert.match(
+    formatHumanErrorLines(err, { footer: true }).join('\n'),
+    /Remote Diagnostics: unavailable \(fetch refused\)/,
+  );
+});

@@ -150,6 +150,37 @@ test('cli parse failures include diagnostic references in JSON mode', async () =
   }
 });
 
+const failingDaemonResponse = async () => ({
+  ok: false,
+  error: {
+    code: 'COMMAND_FAILED',
+    message: 'boom',
+    hint: 'retry later',
+    diagnosticId: 'diag-123',
+    logPath: '/tmp/diag.ndjson',
+  },
+});
+
+// The failure contract a pipe-driving caller reads: the error line opens the
+// failure block on stderr and stdout stays empty, while the diagnostics footer
+// (diagnostic id, log path) waits for the debug tier. `--json` keeps every
+// diagnostics field in the payload (asserted by the JSON test above).
+test('a failed command leads stderr with the error and holds the footer for --debug', async () => {
+  const result = await runCliCapture(['open', 'settings'], failingDaemonResponse);
+  assert.equal(result.code, 1);
+  assert.equal(result.stdout, '');
+  assert.match(result.stderr, /^Error \(COMMAND_FAILED\): boom\n/);
+  assert.match(result.stderr, /^Hint: retry later\n/m);
+  assert.equal(result.stderr.includes('Diagnostic ID:'), false);
+  assert.equal(result.stderr.includes('Diagnostics Log:'), false);
+
+  const debugRun = await runCliCapture(['open', 'settings', '--debug'], failingDaemonResponse);
+  assert.equal(debugRun.code, 1);
+  assert.match(debugRun.stderr, /Error \(COMMAND_FAILED\): boom\n/);
+  assert.match(debugRun.stderr, /Diagnostic ID: diag-123\n/);
+  assert.match(debugRun.stderr, /Diagnostics Log: \/tmp\/diag\.ndjson\n/);
+});
+
 test('cli forwards save-script and no-record flags for client-backed open', async () => {
   const result = await runCliCapture(
     ['open', 'settings', '--save-script', '--no-record', '--json'],

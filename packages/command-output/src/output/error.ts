@@ -15,7 +15,7 @@ import { collapseWarningText } from '../output-common.ts';
  */
 export function formatHumanErrorLines(
   err: AppError | NormalizedError,
-  options: { showDetails?: boolean } = {},
+  options: { showDetails?: boolean; footer?: boolean } = {},
 ): string[] {
   const normalized = err instanceof AppError ? normalizeError(err) : err;
   const lines = [`Error (${normalized.code}): ${normalized.message}`];
@@ -36,6 +36,31 @@ export function formatHumanErrorLines(
   if (candidateLines.length > 0) {
     lines.push(candidateLines.join('\n'));
   }
+  // The diagnostics footer names where the evidence lives, not why the run
+  // failed, and a reader that keeps the tail of a merged stream keeps exactly
+  // these lines — so they ride the debug tier and leave the default failure
+  // block ending on the error's own facts. The JSON error payload carries every
+  // field at every tier.
+  if (options.footer) {
+    lines.push(...formatDiagnosticsFooterLines(normalized));
+  }
+  // ADR 0012: the divergence compact report always renders; --debug's raw
+  // details dump below remains the full-object view.
+  const divergenceText = formatReplayDivergenceReport(normalized.details);
+  if (divergenceText) {
+    lines.push(divergenceText);
+  }
+  if (options.showDetails && normalized.details) {
+    lines.push(JSON.stringify(normalized.details, null, 2));
+  }
+  return lines;
+}
+
+/**
+ * The diagnostics-location lines of a human error, in order.
+ */
+function formatDiagnosticsFooterLines(normalized: NormalizedError): string[] {
+  const lines: string[] = [];
   if (normalized.diagnosticId) {
     lines.push(`Diagnostic ID: ${normalized.diagnosticId}`);
   }
@@ -47,15 +72,6 @@ export function formatHumanErrorLines(
   }
   if (normalized.logPathUnavailable) {
     lines.push(`Remote Diagnostics: unavailable (${normalized.logPathUnavailable})`);
-  }
-  // ADR 0012: the divergence compact report always renders; --debug's raw
-  // details dump below remains the full-object view.
-  const divergenceText = formatReplayDivergenceReport(normalized.details);
-  if (divergenceText) {
-    lines.push(divergenceText);
-  }
-  if (options.showDetails && normalized.details) {
-    lines.push(JSON.stringify(normalized.details, null, 2));
   }
   return lines;
 }

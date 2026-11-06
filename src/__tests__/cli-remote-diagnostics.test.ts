@@ -64,9 +64,35 @@ test('a remote failure names a record the caller can actually read', async (t) =
   try {
     const localPath = localRecordPath(clientStateDir, daemonLogPath, requestId);
     assert.equal(run.code, 1);
-    assert.match(run.stderr, new RegExp(`Diagnostics Log: ${escapeRegExp(localPath)}`));
+    // The diagnostics footer rides the debug tier; the default failure block
+    // stays the error itself. The record is still fetched to the caller's own
+    // machine either way, so --debug can name it.
+    assert.equal(run.stderr.includes('Diagnostics Log:'), false);
     assert.equal(run.stderr.includes(daemonLogPath), false, 'daemon-host path must not be printed');
     assert.match(fs.readFileSync(localPath, 'utf8'), new RegExp(RECORD_SENTINEL));
+
+    const debugRun = await runAgainstRemoteDaemon([
+      'wait',
+      '5000',
+      '--platform',
+      'macos',
+      '--target',
+      'desktop',
+      '--debug',
+    ]);
+    try {
+      const debugLocalPath = localRecordPath(
+        debugRun.clientStateDir,
+        debugRun.daemonLogPath,
+        debugRun.requestId,
+      );
+      assert.match(
+        debugRun.run.stderr,
+        new RegExp(`Diagnostics Log: ${escapeRegExp(debugLocalPath)}`),
+      );
+    } finally {
+      fs.rmSync(debugRun.clientStateDir, { recursive: true, force: true });
+    }
   } finally {
     fs.rmSync(clientStateDir, { recursive: true, force: true });
   }

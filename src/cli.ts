@@ -71,7 +71,7 @@ type ClientDaemonRequest = Parameters<AgentDeviceDaemonTransport>[0];
 
 const printHumanError = (
   err: AppError | NormalizedError,
-  options: { showDetails?: boolean } = {},
+  options: { debugTier?: boolean } = {},
 ): Promise<void> =>
   import('./commands/output/human-error.ts').then(({ printHumanError: write }) =>
     write(err, options),
@@ -279,7 +279,7 @@ async function parseCliInputOrExit(
     if (options.jsonRequested) {
       await printJson({ success: false, error: normalized });
     } else {
-      await printHumanError(normalized, { showDetails: options.debugEnabled });
+      await printHumanError(normalized, { debugTier: options.debugEnabled });
     }
     return exitAfterFlush(1);
   }
@@ -416,7 +416,7 @@ async function resolveRunContextOrExit(
     if (parsed.flags.json) {
       await printJson({ success: false, error: normalized });
     } else {
-      await printHumanError(normalized, { showDetails: base.debugOutputEnabled });
+      await printHumanError(normalized, { debugTier: base.debugOutputEnabled });
     }
     return exitAfterFlush(1);
   }
@@ -647,7 +647,7 @@ async function handleRunCliFailure(
       error: normalized,
     });
   } else {
-    await printHumanError(normalized, { showDetails: ctx.debugOutputEnabled });
+    await printHumanError(normalized, { debugTier: ctx.debugOutputEnabled });
     if (ctx.debugOutputEnabled) {
       printFailureLogTail(ctx, normalized);
     }
@@ -951,7 +951,7 @@ const isDirectRun = pathToFileURL(process.argv[1] ?? '').href === import.meta.ur
 if (isDirectRun) {
   runCli(process.argv.slice(2)).catch(async (error) => {
     const appErr = asAppError(error);
-    await printHumanError(normalizeError(appErr), { showDetails: true });
+    await printHumanError(normalizeError(appErr), { debugTier: true });
     await exitAfterFlush(1);
   });
 }
