@@ -419,7 +419,7 @@ export function observeLocalRunnerLaunch(
   return {
     local,
     get exited() {
-      return local.child.exitCode !== null;
+      return local.child.exitCode !== null || local.child.signalCode != null;
     },
     finished,
     output: local.output ?? finished,

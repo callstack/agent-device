@@ -96,6 +96,59 @@ test.each(['process exit', 'launch log'] as const)(
   },
 );
 
+test('stops connect retries and reports early exit when child process is terminated by signal (#4265)', async () => {
+  const session = makeRunnerSession({
+    device: iosSimulator,
+    state: 'starting',
+    endpoint: {
+      ...RUNNER_ENDPOINT_FIXTURE,
+      http: { url: 'https://instance.invalid/command' },
+    },
+  });
+  let attempts = 0;
+  vi.stubGlobal('fetch', async () => {
+    attempts++;
+    session.launch.local!.child!.exitCode = null;
+    (session.launch.local!.child as { signalCode?: string | null }).signalCode = 'SIGTERM';
+    return new Response('Bad Gateway', { status: 502 });
+  });
+  await assert.rejects(
+    waitForRunner(iosSimulator, session.endpoint, { command: 'uptime' }, undefined, 1000, session),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.runnerConnectFailureReason, 'xcodebuild_exited_early');
+      return true;
+    },
+  );
+  assert.ok(attempts <= 2, `Expected at most 2 attempts, but made ${attempts}`);
+});
+
+test('stops connect retries and reports early exit when session state transitions to draining or stopped (#4265)', async () => {
+  const session = makeRunnerSession({
+    device: iosSimulator,
+    state: 'starting',
+    endpoint: {
+      ...RUNNER_ENDPOINT_FIXTURE,
+      http: { url: 'https://instance.invalid/command' },
+    },
+  });
+  let attempts = 0;
+  vi.stubGlobal('fetch', async () => {
+    attempts++;
+    session.state = 'draining';
+    return new Response('Bad Gateway', { status: 502 });
+  });
+  await assert.rejects(
+    waitForRunner(iosSimulator, session.endpoint, { command: 'uptime' }, undefined, 1000, session),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.runnerConnectFailureReason, 'xcodebuild_exited_early');
+      return true;
+    },
+  );
+  assert.ok(attempts <= 2, `Expected at most 2 attempts, but made ${attempts}`);
+});
+
 test('waitForRunner propagates request cancellation without fallback', async () => {
   const signal = AbortSignal.abort();
   await assert.rejects(

@@ -48,6 +48,7 @@ export type RunnerSessionRegistration = Readonly<{
 export type RunnerProcessHandle = {
   pid?: number | undefined;
   exitCode: number | null;
+  signalCode?: NodeJS.Signals | string | null;
 };
 
 export type RunnerListenerWatch = {

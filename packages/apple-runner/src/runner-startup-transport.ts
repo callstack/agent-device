@@ -39,7 +39,9 @@ type RunnerProcessConnectionSession = Pick<
 export type RunnerConnectionSession = RunnerProcessConnectionSession;
 
 function runnerProcessExited(session: RunnerConnectionSession | undefined): boolean {
-  return session?.launch.exited === true;
+  return (
+    session?.launch.exited === true || session?.state === 'draining' || session?.state === 'stopped'
+  );
 }
 
 import {
