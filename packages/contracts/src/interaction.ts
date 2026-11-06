@@ -477,6 +477,20 @@ export type HoverCommandResponseData =
   | (TouchResponseSelector & TouchHoverExtras);
 
 /**
+ * What a multi-ref press sequence (`press @e13,@e14,@e15,@e16`) reports about
+ * the plan it executed. Present only when the sequence form ran; a single-ref
+ * press carries no `sequence` field.
+ */
+export type PressSequenceSummary = {
+  /** How many keys of the plan were dispatched. Equals the plan length on success. */
+  pressed: number;
+  /** The planned refs in dispatch order, each with its `@` prefix. */
+  refs: string[];
+  /** Where each dispatched key landed, in plan order. */
+  points: Point[];
+};
+
+/**
  * Internal runtime result for press/click. The daemon response layer turns
  * this into `PressCommandResponseData` via `buildInteractionResponseData`.
  */
@@ -486,6 +500,7 @@ export type PressCommandResult = ResolvedInteractionTarget & {
   warning?: string;
   evidence?: InteractionEvidence;
   settle?: SettleObservation;
+  sequence?: PressSequenceSummary;
 };
 
 /**

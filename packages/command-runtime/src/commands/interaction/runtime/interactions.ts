@@ -21,6 +21,7 @@ import {
 } from './post-action-observation.ts';
 import { resolveInteractionTarget, type InteractionTarget } from './resolution.ts';
 import { admitResolvedTarget } from './pre-dispatch-admission.ts';
+import { isPressSequencePlan, tapRefSequenceCommand } from './press-sequence.ts';
 import { pointObservationOf } from './target-visibility-stages.ts';
 import { dispatchNativeRefInteraction } from './native-ref-interaction.ts';
 import type {
@@ -28,8 +29,10 @@ import type {
   ResolveInteractionTargetParams,
 } from './interaction-resolution-request.ts';
 
-export { hoverCommand, longPressCommand } from './gestures.ts';
+export { focusCommand, hoverCommand, longPressCommand } from './gestures.ts';
 export type {
+  FocusCommandOptions,
+  FocusCommandResult,
   HoverCommandOptions,
   HoverCommandResult,
   LongPressCommandOptions,
@@ -41,6 +44,12 @@ export type PressCommandOptions = CommandContext &
   RepeatedInput & {
     target: InteractionTarget;
     button?: ClickButton;
+    /**
+     * Multi-ref press plan (`press @e13,@e14,...`): the members in dispatch
+     * order, bare ref bodies. `target` stays the first member; see
+     * press-sequence.ts for the admission and per-key re-verification contract.
+     */
+    refs?: readonly string[];
     /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
     expectedResolvedTarget?: ExpectedResolvedTarget;
     /** #1654: a mutating `find`'s already-resolved node; see resolution.ts. */
@@ -139,14 +148,17 @@ async function tapCommand(
   options: PressCommandOptions,
   action: 'click' | 'press',
 ): Promise<PressCommandResult> {
+  if (isPressSequencePlan(options)) {
+    return await tapRefSequenceCommand(runtime, options, action);
+  }
   const observation = planPostActionObservation(options);
   const nativeRefTap = observation.needsPreActionBaseline
     ? null
     : await maybeTapRefTarget(runtime, options, action);
   if (nativeRefTap) return nativeRefTap;
 
-  // One request object for the resolution and for the looks admission may spend, so a second look is
-  // the same question asked again rather than a differently-configured one.
+  // One request object for the resolution and for the re-resolutions #3471's gate may spend, so the
+  // second look is the same question asked again rather than a differently-configured one.
   const resolutionRequest: ResolveInteractionTargetParams = {
     action,
     requireInteractive: true,

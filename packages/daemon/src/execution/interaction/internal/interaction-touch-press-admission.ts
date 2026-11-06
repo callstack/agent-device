@@ -54,6 +54,8 @@ export type AdmittedTargetedTouch = {
   durationMs: number | undefined;
   staleRefsWarning: string | undefined;
   refContext: RefAdmissionContext | undefined;
+  /** Multi-ref press plan members in dispatch order, bare bodies; absent for a single-ref target. */
+  refs: readonly string[] | undefined;
 };
 
 type ParsedTargetedTouch = Extract<ParsedTouchTarget | ParsedLongPressTarget, { ok: true }>;
@@ -107,6 +109,7 @@ async function readTargetedTouchAdmission(
       durationMs: command === 'longpress' ? parsedTarget.durationMs : undefined,
       staleRefsWarning,
       refContext: readRefAdmissionContext(req, parsedTarget, staleRefsWarning),
+      refs: parsedTarget.refs,
     },
   };
 }
@@ -158,6 +161,7 @@ function clickButtonValidationResponse(
  * while the frame is expired. A mutating `find`'s internal dispatch supplies a
  * locator-minted ref (`internal.findResolvedTarget`), so it carries no
  * user-facing staleness — the caller never consumed a `@ref` (ADR 0014).
+ * A multi-ref plan warns per member; distinct warnings join in dispatch order.
  */
 function readTargetedTouchStalenessWarning(
   session: SessionState,
@@ -166,6 +170,18 @@ function readTargetedTouchStalenessWarning(
 ): string | undefined {
   if (parsedTarget.target.kind !== 'ref') return undefined;
   if (req.internal?.findResolvedTarget !== undefined) return undefined;
+  if (parsedTarget.refs) {
+    const warnings = new Set<string>();
+    parsedTarget.refs.forEach((ref, index) => {
+      const warning = resolveRefStalenessWarning({
+        session,
+        ref: `@${ref}`,
+        mintedGeneration: parsedTarget.refGenerations?.[index],
+      });
+      if (warning) warnings.add(warning);
+    });
+    return warnings.size > 0 ? Array.from(warnings).join(' ') : undefined;
+  }
   return resolveRefStalenessWarning({
     session,
     ref: parsedTarget.target.ref,
@@ -201,18 +217,33 @@ function admitTargetedTouchRef(
     req.flags,
   );
   if (invalidRefFlagsResponse) return { response: invalidRefFlagsResponse };
-  const admissionResponse = req.internal?.findResolvedTarget
-    ? null
-    : refMutationAdmissionResponse({
-        ref: parsedTarget.target.ref,
-        mintedGeneration: parsedTarget.refGeneration,
-        staleRefsWarning,
-        frame: readRefMutationFrame({
-          session,
+  if (req.internal?.findResolvedTarget) return {};
+  // ADR 0014: every member of a multi-ref plan is admitted against the active
+  // frame before the first dispatch, so a plan one key cannot authorize
+  // refuses whole and the frame keeps its pre-command state.
+  const members: { ref: string; mintedGeneration: number | undefined }[] = parsedTarget.refs
+    ? parsedTarget.refs.map((ref, index) => ({
+        ref: `@${ref}`,
+        mintedGeneration: parsedTarget.refGenerations?.[index],
+      }))
+    : [
+        {
           ref: parsedTarget.target.ref,
           mintedGeneration: parsedTarget.refGeneration,
-        }),
-      });
-  if (admissionResponse) return { response: admissionResponse };
+        },
+      ];
+  for (const member of members) {
+    const admissionResponse = refMutationAdmissionResponse({
+      ref: member.ref,
+      mintedGeneration: member.mintedGeneration,
+      staleRefsWarning,
+      frame: readRefMutationFrame({
+        session,
+        ref: member.ref,
+        mintedGeneration: member.mintedGeneration,
+      }),
+    });
+    if (admissionResponse) return { response: admissionResponse };
+  }
   return {};
 }
