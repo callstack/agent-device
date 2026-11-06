@@ -75,7 +75,8 @@ Thus, a handler that ignores its cancellation cannot hold a rented device open.
 
 The inactivity TTL that the client asked for determines which leases this preservation reaches.
 The daemon default is one minute.
-A remote device connection profile asks for five minutes.
+For lease-using commands, proxy connections and providers that declare `holdsCloudDevice` or `usesCloudWebDriverLease` request the shared five-minute window.
+Other providers and host-allocated `macos-app` leases use no profile TTL.
 Admission and heartbeats renew the existing window when no window is named.
 
 ## Provider allocation

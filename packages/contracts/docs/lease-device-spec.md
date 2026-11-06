@@ -16,3 +16,13 @@ A remote config file first applies the value rules of every config key: a string
 The backend that honours the spec strips the keys before it forwards the allocation, and echoes the granted device on the lease as `lease.device` (`model`, `osVersion`, `imageTag?`, `deviceMode?`, `physical`).
 `deviceKey` stays the identity of the lease; `lease.device` is the proof that the spec was understood.
 The CLI proxy applies the returned-device checks in `src/commands/schema/cli-help.ts`.
+For a spec request, if a new lease has no `lease.device`, the CLI proxy releases the lease and fails with `UNSUPPORTED_OPERATION` and `details.reason: 'device-spec-unsupported'`.
+If the release returns, the error's `details.released` reports its result.
+If the release fails, `details.leaseRollback` records the failure.
+If the allocation explicitly reports reuse (`created: false`), the CLI proxy returns the same error without a release or `details.released`.
+For a `full` request, a reported `slim` grant has the same result as a missing `lease.device`.
+For a `slim` request, a `full` grant is accepted.
+A lease that reports no mode is accepted, but the mode is not confirmed.
+For a later command on a live lease, every spec key the command names must equal the value used to allocate the lease.
+If a named key differs, the command fails with `CONNECTION_DEVICE_CONFLICT`.
+A key the command omits keeps the lease's value.

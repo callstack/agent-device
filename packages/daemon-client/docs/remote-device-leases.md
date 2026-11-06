@@ -2,7 +2,7 @@
 
 ## Client-side work that precedes admission
 
-The protection of admitted work covers nothing that happens before a request is admitted.
+The [protection of admitted work](../../daemon/docs/remote-device-lease-contracts.md#admitted-request-work) covers nothing that happens before a request is admitted.
 An artifact install uploads the artifact from the caller before the request that will consume it is admitted.
 Thus, an upload slower than the inactivity window of the lease expired the lease that paid for the target device of the bytes (#2946).
 The caller therefore sends lease heartbeats over the ordinary transport for as long as that phase runs.
@@ -45,16 +45,16 @@ A heartbeat is a fresh request each time, never the protected request rewritten.
 The reason is that a timed-out heartbeat is canceled under its request identity, and heartbeats must not inherit each other's cancellation.
 In these cases, a heartbeat ends the phase with that error and cancels the upload:
 
-- The heartbeat finds that the lease is gone.
-- The heartbeat finds that this request can never renew the lease.
-  This is so if the scope is missing or belongs to another lease.
-  This is also so if the daemon rejects the scope and window that the heartbeat itself was built with, which no later heartbeat will ask differently.
+- The heartbeat returns `UNAUTHORIZED` with `LEASE_NOT_FOUND`, `LEASE_EXPIRED`, or `LEASE_REVOKED`.
+- The heartbeat returns `COMMAND_FAILED` with `provider-instance-ended`.
+- The heartbeat returns an `AppError` with `LEASE_SCOPE_REQUIRED` or `LEASE_SCOPE_MISMATCH`.
+- The heartbeat returns an `AppError` with code `INVALID_ARGS`.
+
+When the provider reports `provider-instance-ended`, the daemon ends the lease and its sessions.
+A failed session teardown does not replace that typed reason.
 
 Thus, the upload does not finish bytes against a device that nobody owns or a lease that will stop renewing.
 A heartbeat that fails for any other reason is reported, and the phase continues.
 The reason is that a later heartbeat covers one lost request.
 This includes a request abandoned at its budget instead of answered.
 Thus, that promise holds for a stalled round trip, not only for a round trip that fails fast.
-
-
-A heartbeat that fails with `provider-instance-ended` ends the lease and its sessions. A failed session teardown never replaces that typed reason, and the client stops heartbeats on that reason. Other terminal lease and scope errors also stop the protected phase.

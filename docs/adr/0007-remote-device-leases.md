@@ -29,7 +29,7 @@ Wanted admitted work and human-control holds defer expiry.
 Wanted work renews the existing inactivity window when it finishes. Canceled work neither defers expiry past cancellation nor renews it.
 Before admission, a client phase such as an artifact upload sends lease heartbeats for as long as it runs.
 A heartbeat or request uses the caller's named window, or the lease's existing window when none is named.
-The daemon default is one minute. Remote connection profiles use a shared five-minute window.
+The daemon default is one minute. Eligible proxy and cloud provider connections request a shared five-minute window.
 
 Generated connection profiles strip daemon and Metro bearer tokens.
 A lease owner may request `retainOnClose` to manage its lifetime across sessions.
@@ -39,6 +39,8 @@ Human-control activation fences new mutations and drains admitted mutations befo
 Only host administrators allocate `macos-app` leases; tenants cannot release them.
 Requests under such a lease are confined to the leased app, and its session takes that app device's claim ([ADR 0035](0035-macos-app-devices.md)).
 Under tenant isolation, a web session's browser key derives from the tenant and tenant-relative public session name, not the prefixed store name ([ADR 0037](0037-web-session-devices.md)).
+
+- A daemon refuses unsupported device-spec keys. A live proxy lease refuses a later command whose named spec keys differ, with `CONNECTION_DEVICE_CONFLICT`.
 
 The detailed contracts are in the [daemon](../../packages/daemon/docs/remote-device-lease-contracts.md), [daemon client](../../packages/daemon-client/docs/remote-device-leases.md), [provider lease table](../../packages/provision-kit/docs/remote-device-leases.md), and [device specification](../../packages/contracts/docs/lease-device-spec.md) documentation.
 
