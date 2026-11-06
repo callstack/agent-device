@@ -149,13 +149,19 @@ function semanticPaintRect(node: RawSnapshotNode, childCount: number): Rect | un
   if (!isPositiveFiniteRect(node.rect)) return undefined;
   return node.hittable === true ||
     isScrollableType(node.type) ||
-    (childCount === 0 && hasSemanticContent(node))
+    (childCount === 0 && hasPaintedContent(node))
     ? node.rect
     : undefined;
 }
 
 function semanticShowRect(node: RawSnapshotNode): Rect | undefined {
   return isPositiveFiniteRect(node.rect) && hasSemanticContent(node) ? node.rect : undefined;
+}
+
+// An identifier is a test hook, not something drawn: a childless, non-hittable leaf that only
+// has one carries no evidence that it is opaque or catches touches, so it must not paint.
+function hasPaintedContent(node: RawSnapshotNode): boolean {
+  return Boolean(node.label?.trim() || node.value?.trim());
 }
 
 function hasSemanticContent(node: RawSnapshotNode): boolean {
