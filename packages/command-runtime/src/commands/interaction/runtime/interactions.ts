@@ -14,7 +14,11 @@ import { isFillableType } from '@agent-device/contracts/snapshot';
 import { attachResolvedInteractionTarget } from '@agent-device/host-kit/interaction-outcome';
 import { toBackendContext } from '../../runtime-common.ts';
 import { toBackendResult, type RuntimeCommand } from '../../runtime-types.ts';
-import { capturePairScreenshotFrame, compareScreenshotPair } from './screenshot-diff-evidence.ts';
+import {
+  attachScreenshotPairOutcome,
+  dispatchWithScreenshotPair,
+  type ScreenshotPairOutcome,
+} from './screenshot-diff-evidence.ts';
 import {
   applyPostActionObservation,
   planPostActionObservation,
@@ -184,53 +188,41 @@ async function tapCommand(
   );
   const point = requireResolvedPoint(atRest);
   const pointObservation = pointObservationOf(atRest);
-  // The before-frame is taken after every pre-dispatch guard and immediately
-  // before the dispatch, so the pair brackets the tap and nothing else.
-  const screenshotBaseline =
-    options.expectScreenshotDiff === true
-      ? await capturePairScreenshotFrame(runtime, options, 'before')
-      : undefined;
+  const dispatchTap = runtime.backend.tap;
   let backendResult;
+  let screenshotOutcome: ScreenshotPairOutcome | undefined;
   try {
-    backendResult = await runtime.backend.tap(toBackendContext(runtime, options), point, {
-      button: options.button,
-      count: options.count,
-      intervalMs: options.intervalMs,
-      holdMs: options.holdMs,
-      jitterPx: options.jitterPx,
-      doubleTap: options.doubleTap,
-      ...(pointObservation ? { pointObservation } : {}),
-    });
+    ({ result: backendResult, outcome: screenshotOutcome } = await dispatchWithScreenshotPair(
+      runtime,
+      options,
+      options.expectScreenshotDiff === true,
+      async () =>
+        await dispatchTap(toBackendContext(runtime, options), point, {
+          button: options.button,
+          count: options.count,
+          intervalMs: options.intervalMs,
+          holdMs: options.holdMs,
+          jitterPx: options.jitterPx,
+          doubleTap: options.doubleTap,
+          ...(pointObservation ? { pointObservation } : {}),
+        }),
+    ));
   } catch (error) {
     // Resolution is complete before the backend call. Preserve it out of
     // band so a daemon-level failure corroboration can still record the same
     // target identity if the backend reports an ambiguous tap outcome.
     attachResolvedInteractionTarget(error, atRest);
-    if (screenshotBaseline) await screenshotBaseline.cleanup();
     throw error;
   }
-  const screenshotOutcome = screenshotBaseline
-    ? await compareScreenshotPair(runtime, options, screenshotBaseline)
-    : undefined;
-  const screenshotWarning = screenshotOutcome?.unchangedWarning;
   const formattedBackendResult = toBackendResult(backendResult);
   return await applyPostActionObservation(
     runtime,
     options,
     atRest,
-    {
-      ...atRest,
-      ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
-      ...(screenshotOutcome?.evidence ? { screenshotDiff: screenshotOutcome.evidence } : {}),
-      ...(screenshotWarning
-        ? {
-            warning:
-              'warning' in atRest && atRest.warning
-                ? `${atRest.warning} ${screenshotWarning}`
-                : screenshotWarning,
-          }
-        : {}),
-    },
+    attachScreenshotPairOutcome(
+      { ...atRest, ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}) },
+      screenshotOutcome,
+    ),
     observation,
   );
 }

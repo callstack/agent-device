@@ -37,6 +37,18 @@ const READER_POSITIONALS: Record<string, string[]> = {
   [PUBLIC_COMMANDS.press]: ['10', '20'],
 };
 
+// Targeted readers demand their target positionals, so each out-of-scope
+// command names the positionals its own reader accepts.
+const OUT_OF_SCOPE_READER_POSITIONALS: Record<string, string[]> = {
+  [PUBLIC_COMMANDS.longPress]: ['10', '20'],
+  [PUBLIC_COMMANDS.hover]: ['10', '20'],
+  [PUBLIC_COMMANDS.fill]: ['10', '20', 'hello'],
+  [PUBLIC_COMMANDS.scroll]: ['down'],
+  [PUBLIC_COMMANDS.swipe]: ['30', '40', '50', '60'],
+  [PUBLIC_COMMANDS.type]: ['hi'],
+  [PUBLIC_COMMANDS.back]: [],
+};
+
 const FLAG_SNAPSHOT = { expectScreenshotDiff: true } as CliFlags;
 
 test('expectScreenshotDiff CLI flags are scoped to press and click', () => {
@@ -81,20 +93,7 @@ test('expectScreenshotDiff CLI reader input reaches only the press and click rea
     );
   }
   for (const command of OUT_OF_SCOPE_COMMANDS) {
-    // Targeted readers demand their target positionals; the flag must drop out
-    // of the input regardless of the shape the reader accepts.
-    const positionals =
-      command === PUBLIC_COMMANDS.scroll
-        ? ['down']
-        : command === PUBLIC_COMMANDS.fill
-          ? ['10', '20', 'hello']
-          : command === PUBLIC_COMMANDS.longPress ||
-              command === PUBLIC_COMMANDS.hover ||
-              command === PUBLIC_COMMANDS.swipe
-            ? command === PUBLIC_COMMANDS.swipe
-              ? ['30', '40', '50', '60']
-              : ['10', '20']
-            : [];
+    const positionals = OUT_OF_SCOPE_READER_POSITIONALS[command] ?? [];
     const input = readInputFromCli(command as CommandName, positionals, FLAG_SNAPSHOT);
     assert.equal(
       'expectScreenshotDiff' in input,

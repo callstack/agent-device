@@ -29,6 +29,66 @@ export type ScreenshotPairOutcome = {
 };
 
 /**
+ * Runs the dispatch inside the screenshot bracket. Unrequested, this is the
+ * dispatch alone. Requested, the before-frame lands after every pre-dispatch
+ * guard and immediately before the dispatch, so the pair brackets the tap and
+ * nothing else; a dispatch failure cleans the frame up and rethrows, because a
+ * failed action owes no post-action comparison.
+ */
+export async function dispatchWithScreenshotPair<T>(
+  runtime: AgentDeviceRuntime,
+  options: CommandContext,
+  requested: boolean,
+  dispatch: () => Promise<T>,
+): Promise<{ result: T; outcome?: ScreenshotPairOutcome }> {
+  const before = requested
+    ? await capturePairScreenshotFrame(runtime, options, 'before')
+    : undefined;
+  let result: T;
+  try {
+    result = await dispatch();
+  } catch (error) {
+    if (before) await before.cleanup();
+    throw error;
+  }
+  return {
+    result,
+    ...(before ? { outcome: await compareScreenshotPair(runtime, options, before) } : {}),
+  };
+}
+
+/**
+ * Folds the pair outcome into the runtime result: the evidence rides as
+ * `screenshotDiff`, and the unmet expectation composes its warning after any
+ * resolution warning the target already carries, so neither disclosure clobbers
+ * the other. The warning is read structurally: only the point/ref/selector
+ * variants carry one, and the point variant's is a conditional spread.
+ */
+export function attachScreenshotPairOutcome<T extends object>(
+  result: T,
+  outcome: ScreenshotPairOutcome | undefined,
+): T {
+  if (!outcome) return result;
+  const { evidence, unchangedWarning } = outcome;
+  return {
+    ...result,
+    ...(evidence ? { screenshotDiff: evidence } : {}),
+    ...(unchangedWarning
+      ? { warning: composeWarnings(readResolutionWarning(result), unchangedWarning) }
+      : {}),
+  };
+}
+
+function readResolutionWarning(result: object): string | undefined {
+  const warning = (result as { warning?: unknown }).warning;
+  return typeof warning === 'string' && warning.length > 0 ? warning : undefined;
+}
+
+function composeWarnings(existing: string | undefined, added: string): string {
+  return existing ? `${existing} ${added}` : added;
+}
+
+/**
  * One frame of the pair. A backend without `captureScreenshot` returns no
  * frame, and the whole readback silently does not run — the flag is advisory,
  * so a screenshot-less platform keeps the dispatch untouched.
