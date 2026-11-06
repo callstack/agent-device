@@ -32,10 +32,9 @@ beforeEach(resetSessionCloseShutdownMocks);
 
 // #1478-adjacent (device-claim retention observability): a failed platform close deliberately
 // keeps the enforced device claim (handing an unconfirmed device to the next session would be
-// worse), but the session record is still deleted on the very next line. Before this pair of
-// tests, nothing said so — the claim just quietly named a session `session list` no longer
-// reported. These two tests pin both branches of that decision so a future refactor cannot
-// silently invert either one.
+// worse), and since #4237 it keeps the session too, so a retried close can release the claim.
+// These tests pin both branches of that decision so a future refactor cannot silently invert
+// either one.
 test('a failed platform close retains the device claim and reports it', async () => {
   const claimsRoot = mkdtempForTestSync('agent-device-session-close-claim-retained-');
   const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
@@ -105,11 +104,9 @@ test('a failed platform close retains the device claim and reports it', async ()
     );
 
     expect(thrown).toBe(platformCloseError);
-    // The session is still deleted (deliberate, pre-existing behavior) even though the claim
-    // could not be confirmed released.
-    expect(sessionStore.get(sessionName)).toBeUndefined();
+    expect(sessionStore.get(sessionName)).toBeDefined();
 
-    // The claim itself was NOT cleared: it is still live, still naming the deleted session.
+    // The claim itself was NOT cleared: it is still live, still naming the kept session.
     const claimState = inspectDeviceClaims({ serial: device.id }, process.env)[0];
     expect(claimState?.classification).toBe('live');
     expect(claimState?.claim?.session).toBe(sessionName);
@@ -227,7 +224,7 @@ test('a failing best-effort cleanup also retains the device claim and reports it
         failedSteps: ['perf_capture'],
       }),
     });
-    expect(sessionStore.get(sessionName)).toBeUndefined();
+    expect(sessionStore.get(sessionName)).toBeDefined();
 
     const claimState = inspectDeviceClaims({ serial: device.id }, process.env)[0];
     expect(claimState?.classification).toBe('live');

@@ -336,7 +336,8 @@ type SessionCloseFinalization =
 // Everything between a settled repair decision and a success response:
 // failure-isolated resource teardown, provider lease release, then (only
 // once both are known) the device-claim clear and session delete. A failed
-// lease release keeps the session retryable instead (`{kind:'response'}`).
+// lease release keeps the session retryable instead (`{kind:'response'}`), and so
+// does a failed teardown that withholds the device claim.
 async function runCloseTeardownAndRelease(params: {
   env: HostEnvironment['env'];
   req: DaemonRequest;
@@ -386,22 +387,24 @@ async function runCloseTeardownAndRelease(params: {
   });
   if (leaseRelease.response) return { kind: 'response', response: leaseRelease.response };
   session = sessionStore.resolveCurrent(ref) ?? session;
-  const cleanupAggregate = closeCleanupError(sessionName, cleanupFailures);
+  const cleanupAggregate = closeCleanupError(sessionName, cleanupFailures, {
+    sessionKept: Boolean(session.deviceClaim),
+  });
   const deviceClaimBlockingError = platformCloseError ?? cleanupAggregate;
-  if (deviceClaimBlockingError) {
-    if (session.deviceClaim) {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'device_claim_close_effects_unconfirmed',
-        data: {
-          deviceKey: session.deviceClaim.deviceKey,
-          session: sessionName,
-        },
-      });
-    }
-  } else {
-    await clearDeviceClaim(session.deviceClaim, params.env);
+  if (deviceClaimBlockingError && session.deviceClaim) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'device_claim_close_effects_unconfirmed',
+      data: {
+        deviceKey: session.deviceClaim.deviceKey,
+        session: sessionName,
+      },
+    });
+    // The withheld claim names a live owner, so `--stale` cannot reclaim it. Retiring the session
+    // would leave nothing able to release it; keeping it lets a retried close rerun the teardown.
+    throw deviceClaimBlockingError;
   }
+  if (!deviceClaimBlockingError) await clearDeviceClaim(session.deviceClaim, params.env);
   sessionStore.retire(ref, { retainExecutionHost });
   if (deviceClaimBlockingError) throw deviceClaimBlockingError;
   if (saveScriptError) throw saveScriptError;
