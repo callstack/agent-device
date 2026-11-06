@@ -495,15 +495,20 @@ test('a wedged runner retires the bridge for the session across captures and app
   const { snapshot, fallbacks } = runtimeSnapshots(withHostStates(provider, 'notRunning'));
   await snapshot();
   state.refuseTarget = 'bridge-reader-wedged';
-  await snapshot();
+  const wedged = await snapshot();
   state.process = { pid: 77, processStartTime: '1700000100.000002' };
-  await snapshot();
-  await snapshot();
+  const later = await snapshot();
+  const last = await snapshot();
+  for (const result of [wedged, later, last]) {
+    expect(result.warnings).toEqual([
+      'Simulator AX snapshot unavailable (bridge-reader-wedged); used XCTest for this runner session.',
+    ]);
+  }
   expect(verbs(sent)).toEqual(['target', 'describe', 'target']);
   expect(fallbacks).toHaveLength(4);
 });
 
-test('a never-returning read costs one wedged refusal after the runner bound', async () => {
+test('a wedged refusal retires the session after a held read', async () => {
   const state: {
     process: RunnerProcess;
     holdNextDescribe?: Promise<void>;
@@ -544,4 +549,103 @@ test('a replacement runner retries a generation retired by the previous runner o
   await snapshot();
   expect(verbs(sent)).toEqual(['target', 'describe', 'describe']);
   expect(presented).toHaveLength(2);
+});
+
+test('a late presentation failure cannot retire the replacement session generation', async () => {
+  const state = { process: { pid: 41, processStartTime: '1700000000.000001' } };
+  const { provider, sent } = bridgeRunner(state);
+  const bridge = createRunnerSnapshotBridge({ device: IOS_SIMULATOR, provider });
+  let sessionId = 'first';
+  let release!: () => void;
+  let entered!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const presenting = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  let presentationCount = 0;
+  const route = createSnapshotBridgeRoute(
+    {
+      snapshot: {
+        presentIosAcquisition: async (result) => {
+          if (++presentationCount === 1) {
+            entered();
+            await blocked;
+            throw new Error('old presentation failed');
+          }
+          return { ...runnerResult(), producer: result.acquisition.producer };
+        },
+      },
+      appleApplications: { hasLiveRunnerSession: async () => true },
+    },
+    {
+      source: bridge.source,
+      resolveTarget: bridge.resolveTarget,
+      isDiscoveryPending: () => false,
+      targetFreshness: 'cached',
+      sessionChanged: bridge.resetTargets,
+    },
+    async () => ({ foreground: 'background', sessionId }),
+  );
+  const snapshot = () =>
+    route.capture(
+      IOS_SIMULATOR,
+      { options: { appBundleId: APP, interactiveOnly: true } },
+      new AbortController().signal,
+      async () => runnerResult(),
+    );
+  const old = snapshot();
+  await presenting;
+  sessionId = 'second';
+  expect((await snapshot()).producer).toBe('simulator-ax-bridge');
+  release();
+  expect((await old).warnings).toContain(
+    'Simulator AX snapshot unavailable (presentation-invariant); used XCTest for this app generation.',
+  );
+  expect((await snapshot()).producer).toBe('simulator-ax-bridge');
+  expect(verbs(sent)).toEqual(['target', 'describe', 'target', 'describe', 'describe']);
+});
+
+test('a wedge before the runner id is known does not disable a newly identified session', async () => {
+  const state: { process: RunnerProcess; refuseTarget?: string } = {
+    process: { pid: 41, processStartTime: '1700000000.000001' },
+    refuseTarget: 'bridge-reader-wedged',
+  };
+  const { provider, sent } = bridgeRunner(state);
+  const bridge = createRunnerSnapshotBridge({ device: IOS_SIMULATOR, provider });
+  let sessionId: string | undefined = undefined;
+  const route = createSnapshotBridgeRoute(
+    {
+      snapshot: {
+        presentIosAcquisition: (result) => ({
+          ...runnerResult(),
+          producer: result.acquisition.producer,
+        }),
+      },
+      appleApplications: { hasLiveRunnerSession: async () => true },
+    },
+    {
+      source: bridge.source,
+      resolveTarget: bridge.resolveTarget,
+      isDiscoveryPending: () => false,
+      targetFreshness: 'cached',
+      sessionChanged: bridge.resetTargets,
+    },
+    async () => (sessionId ? { foreground: 'background', sessionId } : 'background'),
+  );
+  const snapshot = () =>
+    route.capture(
+      IOS_SIMULATOR,
+      { options: { appBundleId: APP, interactiveOnly: true } },
+      new AbortController().signal,
+      async () => runnerResult(),
+    );
+  expect((await snapshot()).warnings).toEqual([
+    'Simulator AX snapshot unavailable (bridge-reader-wedged); used XCTest for this runner session.',
+  ]);
+  sessionId = 'new';
+  state.refuseTarget = undefined;
+  expect((await snapshot()).producer).toBe('simulator-ax-bridge');
+  expect(verbs(sent)).toEqual(['target', 'target', 'describe']);
 });

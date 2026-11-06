@@ -40,7 +40,6 @@ import {
 import { SnapshotSourceError } from './snapshot-source/errors.ts';
 import {
   createSystemSurfaceForegroundProbe,
-  type SystemSurfaceForeground,
   type SystemSurfaceForegroundProbe,
 } from './system-surface-foreground.ts';
 import {
@@ -83,7 +82,6 @@ export type SnapshotBridgeRoute = Readonly<{
     fallback: SnapshotFallback,
   ): Promise<SnapshotResult>;
   shutdown(): Promise<void>;
-  resetRunnerSession(): void;
 }>;
 
 /** The app generation a bridge read is planned against. */
@@ -124,6 +122,7 @@ export type SnapshotBridgeChannel<Target extends SnapshotBridgeRouteTarget> = Re
    * trusts one.
    */
   targetFreshness: 'verified' | 'cached';
+  sessionChanged?(): void;
 }>;
 
 /** What the route reads from the platform host: presentation and runner liveness only. */
@@ -163,7 +162,6 @@ export function createAppleSnapshotRoute(
     awaitObservable: observation.awaitObservable,
     capture: route.capture,
     shutdown: route.shutdown,
-    resetRunnerSession: route.resetRunnerSession,
   });
 }
 
@@ -181,7 +179,6 @@ export function createSnapshotBridgeRoute<Target extends SnapshotBridgeRouteTarg
   return Object.freeze({
     capture: route.capture,
     shutdown: route.shutdown,
-    resetRunnerSession: route.resetRunnerSession,
   });
 }
 
@@ -191,19 +188,53 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
   surfaceForeground: SystemSurfaceForegroundProbe,
 ) {
   const { source, resolveTarget } = channel;
-  const disabledGenerations = new Set<string>();
-  const latestGeneration = new Map<string, string>();
-  let runnerSessionDisabled = false;
-  let sessionEpoch = 0;
-  const recordSessionFailure = (epoch: number, failure: SnapshotSourceFailure) => {
-    if (epoch === sessionEpoch && bridgeFailureDisposition(failure).scope === 'runner-session') {
-      runnerSessionDisabled = true;
-    }
+  const freshCircuit = (sessionId?: string) => ({
+    sessionId,
+    disabledGenerations: new Set<string>(),
+    latestGeneration: new Map<string, string>(),
+    sessionDisabled: false,
+  });
+  let currentCircuit = freshCircuit();
+  const isDisabledIn = (circuit: typeof currentCircuit, target: SnapshotBridgeRouteTarget) => {
+    rebaselineGeneration(target, circuit.latestGeneration, circuit.disabledGenerations);
+    return circuit.disabledGenerations.has(generationKey(target));
   };
-  const recordTargetFailure = (epoch: number, error: unknown) => {
-    if (error instanceof SnapshotSourceError) {
-      recordSessionFailure(epoch, { kind: error.failureKind, code: error.failureCode });
+  const circuitForProbe = (
+    startingCircuit: typeof currentCircuit,
+    probeResult: Awaited<ReturnType<SystemSurfaceForegroundProbe>>,
+    device: DeviceInfo,
+  ) => {
+    let circuit = startingCircuit;
+    if (
+      channel.sessionChanged &&
+      typeof probeResult === 'object' &&
+      'sessionId' in probeResult &&
+      currentCircuit !== startingCircuit &&
+      probeResult.sessionId === currentCircuit.sessionId
+    ) {
+      circuit = currentCircuit;
     }
+    if (
+      channel.sessionChanged &&
+      typeof probeResult === 'object' &&
+      'sessionId' in probeResult &&
+      probeResult.sessionId !== startingCircuit.sessionId &&
+      currentCircuit === startingCircuit
+    ) {
+      emitDiagnostic({
+        level: 'debug',
+        phase: 'ios_snapshot_route_runner_session_changed',
+        data: {
+          deviceId: device.id,
+          previousSessionId: currentCircuit.sessionId,
+          sessionId: probeResult.sessionId,
+        },
+      });
+      currentCircuit = freshCircuit(probeResult.sessionId);
+      circuit = currentCircuit;
+      channel.sessionChanged?.();
+    }
+    return circuit;
   };
   /**
    * Records `target` as the newest generation of its app — which clears the circuit an earlier
@@ -211,19 +242,11 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
    * launch-observation probe ask before they spend a bridge round trip, so one generation's
    * failure is paid once rather than once per route (#2198, #2199).
    */
-  const isBridgeDisabled = (target: SnapshotBridgeRouteTarget): boolean => {
-    rebaselineGeneration(target, latestGeneration, disabledGenerations);
-    return disabledGenerations.has(generationKey(target));
-  };
+  const isBridgeDisabled = (target: SnapshotBridgeRouteTarget): boolean =>
+    isDisabledIn(currentCircuit, target);
 
   return {
     isBridgeDisabled,
-    resetRunnerSession: () => {
-      sessionEpoch++;
-      runnerSessionDisabled = false;
-      disabledGenerations.clear();
-      latestGeneration.clear();
-    },
     shutdown: async () => await source.close(),
     capture: async (
       device: DeviceInfo,
@@ -241,29 +264,43 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
       // A ready runner answers first, with the foreground state of every registered host: the
       // predicate it serves a surface by, read in a few milliseconds. When it cannot answer, the
       // bridge itself refuses the capture while a host process runs for this Simulator.
-      const foreground = await readSurfaceForeground(device, input, signal, surfaceForeground);
+      const startingCircuit = currentCircuit;
+      const probeResult = await readSurfaceForeground(device, input, signal, surfaceForeground);
+      const circuit = circuitForProbe(startingCircuit, probeResult, device);
+      const foreground =
+        typeof probeResult === 'object' && 'sessionId' in probeResult
+          ? probeResult.foreground
+          : probeResult;
+      const captureBridgeDisabled = (target: SnapshotBridgeRouteTarget) =>
+        isDisabledIn(circuit, target);
       if (foreground !== 'background' && foreground !== 'unknown') {
         return await runSurfaceFallback(device, input, fallback, foreground.host.bundleId);
       }
-      const epoch = sessionEpoch;
-      if (runnerSessionDisabled) {
+      if (circuit.sessionDisabled) {
+        emitRouteDiagnostic('bridge-reader-wedged', device);
         return await runFallback(
           device.id,
           input,
           fallback,
           appLineage(device.id, input),
           requestFor(input),
-          'circuit-disabled',
+          { scope: 'runner-session', code: 'bridge-reader-wedged' },
           [unknownGenerationResidue()],
         );
       }
       let target: Target;
       try {
-        target = await resolveCaptureTarget(host, channel, device, input, signal, isBridgeDisabled);
+        target = await resolveCaptureTarget(
+          host,
+          channel,
+          device,
+          input,
+          signal,
+          captureBridgeDisabled,
+        );
       } catch (error) {
         rethrowIfResolutionCancelled(signal, error);
-        recordTargetFailure(epoch, error);
-        emitRouteDiagnostic('target-resolution-failed', device, undefined, error);
+        const reason = targetFailureReason(error, device, circuit);
         // The app's current generation is unknown, so the capture names none.
         return await runFallback(
           device.id,
@@ -271,11 +308,11 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
           fallback,
           appLineage(device.id, input),
           requestFor(input),
-          'target-resolution-failed',
+          reason,
           [unknownGenerationResidue()],
         );
       }
-      if (isBridgeDisabled(target)) {
+      if (captureBridgeDisabled(target)) {
         emitRouteDiagnostic('circuit-disabled', device, target.generation);
         return await runFallback(
           device.id,
@@ -296,15 +333,9 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
         ...(foreground === 'unknown' ? { surfaceHostExecutables: SURFACE_HOST_EXECUTABLES } : {}),
       });
       if (outcome.stage === 'failed') {
-        if (outcome.failure.kind === 'cancelled') {
-          signal.throwIfAborted();
-          throw new AppError('COMMAND_FAILED', 'Simulator AX snapshot acquisition was cancelled.', {
-            reason: outcome.failure.code,
-            ...outcome.failure.details,
-          });
-        }
+        rethrowCancelledFailure(outcome.failure, signal);
         const disposition = bridgeFailureDisposition(outcome.failure);
-        recordSessionFailure(epoch, outcome.failure);
+        if (disposition.scope === 'runner-session') circuit.sessionDisabled = true;
         if ('surfaceHost' in disposition) {
           return await fallbackForSurfaceHost(
             device,
@@ -332,7 +363,7 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
           request,
           outcome.failure,
           disposition,
-          epoch === sessionEpoch ? disabledGenerations : new Set(),
+          circuit.disabledGenerations,
         );
       }
       try {
@@ -357,12 +388,43 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
           failure,
           // A tree the presenter cannot publish is app evidence, so it retires the generation.
           { scope: 'generation', code: failure.code },
-          disabledGenerations,
+          circuit.disabledGenerations,
           error,
         );
       }
     },
   };
+}
+
+function rethrowCancelledFailure(failure: SnapshotSourceFailure, signal: AbortSignal): void {
+  if (failure.kind !== 'cancelled') return;
+  signal.throwIfAborted();
+  throw new AppError('COMMAND_FAILED', 'Simulator AX snapshot acquisition was cancelled.', {
+    reason: failure.code,
+    ...failure.details,
+  });
+}
+
+function targetFailureReason(
+  error: unknown,
+  device: DeviceInfo,
+  circuit: { sessionDisabled: boolean },
+): FallbackReason {
+  const disposition =
+    error instanceof SnapshotSourceError
+      ? bridgeFailureDisposition({ kind: error.failureKind, code: error.failureCode })
+      : undefined;
+  emitRouteDiagnostic(
+    disposition?.scope === 'runner-session' ? disposition.code : 'target-resolution-failed',
+    device,
+    undefined,
+    error,
+  );
+  if (disposition?.scope === 'runner-session') {
+    circuit.sessionDisabled = true;
+    return disposition;
+  }
+  return 'target-resolution-failed';
 }
 
 const SURFACE_HOST_EXECUTABLES = IOS_SYSTEM_SURFACE_HOSTS.map((host) => host.processExecutable);
@@ -378,10 +440,15 @@ async function readSurfaceForeground(
   input: CaptureSnapshotInput,
   signal: AbortSignal,
   probe: SystemSurfaceForegroundProbe,
-): Promise<SystemSurfaceForeground> {
+): Promise<Awaited<ReturnType<SystemSurfaceForegroundProbe>>> {
   const requestId = input.execution?.requestId;
   const foreground = await probe(device, { signal, ...(requestId ? { requestId } : {}) });
-  if (foreground === 'background') {
+  if (
+    foreground === 'background' ||
+    (typeof foreground === 'object' &&
+      'sessionId' in foreground &&
+      foreground.foreground === 'background')
+  ) {
     emitDiagnostic({
       level: 'debug',
       phase: 'ios_snapshot_route_surface_host_background',

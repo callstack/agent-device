@@ -209,13 +209,14 @@ static dispatch_queue_t RunnerSnapshotBridgeReaderQueue(void)
 /// is abandoned, not stopped: its answer is dropped when it returns.
 static NSDictionary *RunnerSnapshotBridgeRead(NSDictionary *request,
                                               NSUInteger budgetMs,
-                                              NSDictionary * (^read)(void))
+                                              NSDictionary * (^read)(void),
+                                              NSTimeInterval (^clock)(void))
 {
   NSUInteger sequence;
   @synchronized (RunnerSnapshotBridgeAnswer.class) {
     if (RunnerSnapshotBridgeReadsInFlight) {
       BOOL wedged = RunnerSnapshotBridgeAbandonedAt > 0 &&
-        NSProcessInfo.processInfo.systemUptime - RunnerSnapshotBridgeAbandonedAt >= RunnerSnapshotBridgeWedgeSeconds;
+        clock() - RunnerSnapshotBridgeAbandonedAt >= RunnerSnapshotBridgeWedgeSeconds;
       return RunnerSnapshotBridgeFailure(request, @"application_not_responding",
                                          wedged ? @"bridge-reader-wedged" : @"bridge-read-in-flight",
                                          @"another accessibility read has not returned yet");
@@ -242,7 +243,7 @@ static NSDictionary *RunnerSnapshotBridgeRead(NSDictionary *request,
   if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, (int64_t)budgetMs * NSEC_PER_MSEC)) != 0) {
     @synchronized (RunnerSnapshotBridgeAnswer.class) {
       if (RunnerSnapshotBridgeReadsInFlight && RunnerSnapshotBridgeReadSequence == sequence) {
-        RunnerSnapshotBridgeAbandonedAt = NSProcessInfo.processInfo.systemUptime;
+        RunnerSnapshotBridgeAbandonedAt = clock();
       }
     }
     return RunnerSnapshotBridgeFailure(request, @"application_not_responding", @"bridge-read-abandoned",
@@ -250,6 +251,18 @@ static NSDictionary *RunnerSnapshotBridgeRead(NSDictionary *request,
   }
   return answer.value;
 }
+
+#if defined(AGENT_DEVICE_RUNNER_UNIT_TESTS)
+NSDictionary *RunnerSnapshotBridgeReadForTest(NSDictionary *request, NSUInteger budgetMs,
+                                               NSDictionary *(^read)(void), NSTimeInterval now)
+{
+  return RunnerSnapshotBridgeRead(request, budgetMs, read, ^{ return now; });
+}
+void RunnerSnapshotBridgeDrainForTest(void)
+{
+  dispatch_sync(RunnerSnapshotBridgeReaderQueue(), ^{});
+}
+#endif
 
 uint32_t RunnerSnapshotBridgeMaximumFrameBytes(void)
 {
@@ -266,12 +279,12 @@ NSDictionary *RunnerSnapshotBridgeHandle(NSString *verb, NSString *bundleId, NSD
   if ([verb isEqualToString:@"target"]) {
     return RunnerSnapshotBridgeRead(request, RunnerSnapshotBridgeBudgetMs(request), ^{
       return RunnerSnapshotBridgeTarget(bundleId, request);
-    });
+    }, ^{ return NSProcessInfo.processInfo.systemUptime; });
   }
   if ([verb isEqualToString:@"describe"]) {
     return RunnerSnapshotBridgeRead(request, RunnerSnapshotBridgeBudgetMs(request), ^{
       return RunnerSnapshotBridgeDescribe(bundleId, request);
-    });
+    }, ^{ return NSProcessInfo.processInfo.systemUptime; });
   }
   return RunnerSnapshotBridgeFailure(request, @"bad_request", @"verb-not-supported",
                                      @"the runner snapshot bridge accepts target and describe requests only");

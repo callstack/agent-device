@@ -66,6 +66,24 @@ extension RunnerTests {
     let named = Self.snapshotBridgeReaderRequest(payload, simulatorUdid: "SIM")
     XCTAssertEqual(named["simulatorUdid"] as? String, "SIM")
   }
+  func testAbandonedReadBecomesWedgedUntilItReturns() {
+    let release = DispatchSemaphore(value: 0)
+    let request = ["requestId": "wedge"]
+    let first = RunnerSnapshotBridgeReadForTest(request, 100, {
+      release.wait()
+      return ["ok": true]
+    }, 10)
+    XCTAssertEqual(first["error_code"] as? String, "bridge-read-abandoned")
+    let busy = RunnerSnapshotBridgeReadForTest(request, 100, { ["ok": true] }, 14.999)
+    XCTAssertEqual(busy["error_code"] as? String, "bridge-read-in-flight")
+    let wedged = RunnerSnapshotBridgeReadForTest(request, 100, { ["ok": true] }, 15)
+    XCTAssertEqual(wedged["error_code"] as? String, "bridge-reader-wedged")
+    release.signal()
+    RunnerSnapshotBridgeDrainForTest()
+    let admitted = RunnerSnapshotBridgeReadForTest(request, 1000, { ["ok": true] }, 16)
+    XCTAssertEqual(admitted["ok"] as? Bool, true)
+  }
+
   func testReaderDoesNotRefuseTheBoundsOfAFirstRead() throws {
     var request = Self.snapshotBridgeReaderRequest(try firstReadPayload())
     request["pid"] = 1

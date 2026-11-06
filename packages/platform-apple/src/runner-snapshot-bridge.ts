@@ -60,8 +60,7 @@ export type RunnerSnapshotBridge = Readonly<{
 export function createRunnerSnapshotBridge(
   options: Readonly<{ device: DeviceInfo; provider: AppleRunnerProvider }>,
 ): RunnerSnapshotBridge {
-  const targets = new Map<string, RunnerSnapshotBridgeTarget>();
-  let targetEpoch = 0;
+  let targets = new Map<string, RunnerSnapshotBridgeTarget>();
   // The runner admits one bridge read at a time and refuses an overlapping one at once, so it alone
   // owns that order: a read a cancelled capture left running costs the next capture its bridge read,
   // and the route answers that refusal for that capture only.
@@ -95,7 +94,7 @@ export function createRunnerSnapshotBridge(
     if (cached && refresh !== 'refresh') return cached;
     // Only a resolved target replaces the cached one: a refresh that fails leaves the generation the
     // route planned against.
-    const epoch = targetEpoch;
+    const captureTargets = targets;
     const requestId = randomUUID();
     const envelope = await send(
       appBundleId,
@@ -107,7 +106,7 @@ export function createRunnerSnapshotBridge(
       AbortSignal.any([signal, AbortSignal.timeout(TARGET_READ_TIMEOUT_MS)]),
     );
     const target = readTarget(envelope, { requestId, appBundleId, targetId });
-    if (epoch === targetEpoch) targets.set(targetId, target);
+    captureTargets.set(targetId, target);
     return target;
   };
 
@@ -165,8 +164,7 @@ export function createRunnerSnapshotBridge(
     source,
     resolveTarget,
     resetTargets: () => {
-      targetEpoch++;
-      targets.clear();
+      targets = new Map();
     },
   };
 }

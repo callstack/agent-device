@@ -60,7 +60,6 @@ export function createAppleRunnerRuntime(options: {
   // the foreground read starts a runner that is not up yet, under the capture's own budget, instead
   // of giving up the proof that keeps the capture on the bridge.
   let snapshotRoute: SnapshotBridgeRoute | undefined;
-  let runnerSessionId: string | undefined;
   const readForeground = createSystemSurfaceForegroundProbe(async (device, input) => {
     if (!options.provider.hasLiveSession(device)) {
       try {
@@ -76,11 +75,6 @@ export function createAppleRunnerRuntime(options: {
     }
     const session = readRunnerSessionLiveness(device.id);
     if (session?.liveness !== 'ready') return undefined;
-    if (runnerSessionId !== undefined && runnerSessionId !== session.sessionId) {
-      bridge.resetTargets();
-      snapshotRoute?.resetRunnerSession();
-    }
-    runnerSessionId = session.sessionId;
     return { sessionId: session.sessionId };
   });
   /**
@@ -102,6 +96,7 @@ export function createAppleRunnerRuntime(options: {
         // The runner answers the target read itself; there is no detached discovery to wait on.
         isDiscoveryPending: () => false,
         targetFreshness: 'cached',
+        sessionChanged: bridge.resetTargets,
       },
       async (device, input) =>
         await withAppleRunnerProvider(

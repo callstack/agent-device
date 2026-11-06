@@ -27,7 +27,7 @@ export type SurfaceHostRefusal = IosSystemSurfaceHost | 'unverified';
 
 /**
  * The one classification a bridge failure receives before the route acts on it. `code` travels
- * unchanged for diagnostics; the scope says whether the generation is implicated, and a
+ * unchanged for diagnostics; the scope identifies the capture, generation, or runner session, and a
  * capture-scoped verdict must name what it saw instead. A surface host refusal names the host, and
  * the route serves it from the runner before any fallback warning applies.
  */
@@ -68,15 +68,17 @@ const CAPTURE_SCOPED_REFUSALS: ReadonlyMap<string, CaptureScopedConsequence> = n
   ['snapshot-tree-changed', 'tree-changed'],
 ]);
 
+const RUNNER_SESSION_SCOPED: ReadonlySet<string> = new Set(['bridge-reader-wedged']);
+
 /**
  * Whether a bridge failure is evidence that this app generation cannot be served by the bridge.
- * The preparation and the table's screen refusals speak for this capture only; every other failure
- * retires the generation. That default is conservative on purpose: `code` is an open string from
+ * Preparation and screen refusals speak for this capture; a wedged reader retires its runner
+ * session. Other failures retire the generation. That default is conservative on purpose: `code` is an open string from
  * the guest, and an unknown code must not quietly keep a generation on a path that just refused
  * it. Do not widen the default; classify a new known refusal in the table.
  */
 export function bridgeFailureDisposition(failure: SnapshotSourceFailure): BridgeFailureDisposition {
-  if (failure.code === 'bridge-reader-wedged') {
+  if (RUNNER_SESSION_SCOPED.has(failure.code)) {
     return { scope: 'runner-session', code: failure.code };
   }
   if (failure.kind === 'preparing') {
