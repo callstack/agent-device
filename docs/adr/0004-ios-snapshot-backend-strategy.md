@@ -3,6 +3,9 @@
 ## Status
 
 Accepted.
+[ADR 0038](0038-snapshot-capture-source-routing.md) owns snapshot source routing for every platform.
+Until the router from [#4205](https://github.com/callstack/agent-device/issues/4205) replaces the Apple route, the routing rules here describe the current iOS code.
+The iOS reader, runner capture plan, presentation, geometry, and in-place system-surface contracts remain here.
 This ADR was amended after local iOS Simulator acquisition moved to the host AX bridge, and again for provider iOS Simulators that the runner serves.
 The public surface remains two modes: regular interactive snapshots and raw diagnostic snapshots.
 The host AX bridge is an acquisition route, not a third public mode.
