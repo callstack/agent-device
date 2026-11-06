@@ -1,11 +1,12 @@
-import { bindElementTextRuntime } from '@agent-device/contracts/element-text-runtime';
-import { invalidRuntimeContract } from '@agent-device/contracts/runtime-contract-error';
+import { bindProviderElementTextRuntime } from '@agent-device/contracts/element-text-runtime';
+import { AppError } from '@agent-device/kernel/errors';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import {
   type RuntimeFacts,
   type RuntimeOperationFact,
   type RuntimeOperationUnavailability,
   unavailableFact,
+  whenAdmitted,
 } from '@agent-device/contracts/platform-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import {
@@ -138,20 +139,15 @@ export function bindLimrunInteractionOperations(
   }>,
 ) {
   const { device, signal } = params;
-  const resolveInteractor = (runner: RunnerContext) => params.getInteractor(device, runner);
+  const resolveInteractor = (runner: RunnerContext) => {
+    const interactor = params.getInteractor(device, runner);
+    if (!interactor) throw new AppError('DEVICE_NOT_FOUND', 'Limrun session is unavailable');
+    return interactor;
+  };
   return Object.freeze({
-    ...(device.platform === 'android'
-      ? bindElementTextRuntime({
-          device,
-          signal,
-          resolveInteractor: async (_device, runner) => {
-            const interactor = resolveInteractor(runner);
-            if (!interactor)
-              throw invalidRuntimeContract('Limrun Android interactor is unavailable');
-            return interactor;
-          },
-        })
-      : {}),
+    ...whenAdmitted(params.facts.readTextAtPoint, () =>
+      bindProviderElementTextRuntime({ device, signal, resolveInteractor }),
+    ),
     ...bindProviderSnapshotInteractor({
       device,
       signal,

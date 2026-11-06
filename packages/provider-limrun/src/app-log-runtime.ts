@@ -13,6 +13,7 @@ import {
   type DeviceBinding,
   providerRuntimeOwner,
   sameRuntimeOwner,
+  whenAdmitted,
 } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
@@ -209,9 +210,9 @@ function bindLimrunAppLogs(
     ),
     ...interaction,
     ...runnerOperations,
-    ...(device.platform === 'android'
-      ? createLimrunAndroidPerfOperations(() => options.bindPerformance(device), signal)
-      : {}),
+    ...whenAdmitted(runtimeFacts.operations.perfFrames, () =>
+      createLimrunAndroidPerfOperations(() => options.bindPerformance(device), signal),
+    ),
     appState: async (input) => {
       const state = await runnerOperations?.appState(input);
       // A stopped runner returns no state; still prove the remote instance can answer.
