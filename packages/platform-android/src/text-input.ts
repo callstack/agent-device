@@ -60,12 +60,12 @@ export async function typeAndroid(device: DeviceInfo, text: string, delayMs = 0)
     emitAndroidTextDiagnostic('type', 'provider-native', text);
     return;
   }
+  const channel = await admitAndroidTextChannel(device, 'type', text);
   if (isAndroidBackspaceSequence(text)) {
-    await clearFocusedText(device, text.length);
+    await deleteAndroidCharacters(device, text.length, delayMs);
     emitAndroidTextDiagnostic('type', 'adb-shell', text);
     return;
   }
-  const channel = await admitAndroidTextChannel(device, 'type', text);
   if (channel.backend === 'test-ime') {
     await typeAndroidImeHelper(device, channel.packageName, text, delayMs);
     return;
@@ -247,7 +247,9 @@ async function admitAndroidTextChannel(
   if (isAndroidImeHelperPackage(packageName)) {
     return { backend: 'test-ime', packageName };
   }
-  assertAndroidShellTextSupported(text);
+  if (!isAndroidBackspaceSequence(text)) {
+    assertAndroidShellTextSupported(text);
+  }
   assertAndroidShellInputIsAppOwned(inputState, action);
   return { backend: 'adb-shell' };
 }
@@ -415,6 +417,34 @@ async function typeAndroidShellChunk(device: DeviceInfo, text: string): Promise<
       throw unsupportedAndroidShellTextError(text, error);
     }
     throw error;
+  }
+}
+
+async function deleteAndroidCharacters(
+  device: DeviceInfo,
+  count: number,
+  delayMs = 0,
+): Promise<void> {
+  const deletes = Math.max(0, count);
+  if (deletes === 0) return;
+  let dispatchedSteps = 0;
+  try {
+    if (delayMs > 0) {
+      for (let i = 0; i < deletes; i++) {
+        await runAndroidShell(device, ['input', 'keyevent', 'KEYCODE_DEL']);
+        dispatchedSteps += 1;
+        if (i + 1 < deletes) await sleep(delayMs);
+      }
+      return;
+    }
+    const batchSize = 24;
+    for (let i = 0; i < deletes; i += batchSize) {
+      const size = Math.min(batchSize, deletes - i);
+      await runAndroidShell(device, ['input', 'keyevent', ...Array(size).fill('KEYCODE_DEL')]);
+      dispatchedSteps += 1;
+    }
+  } catch (error) {
+    throw discloseDispatchAfterSteps(error, dispatchedSteps);
   }
 }
 

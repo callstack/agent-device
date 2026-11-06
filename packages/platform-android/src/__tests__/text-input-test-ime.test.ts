@@ -544,9 +544,18 @@ test('typeAndroid sends KEYCODE_DEL keyevents instead of broadcasting backspaces
   );
 
   assert.equal(calls.filter((args) => args[1] === 'am' && args[2] === 'broadcast').length, 0);
-  const delCalls = calls.filter((args) => args.includes('KEYCODE_DEL'));
+  const delCalls = calls.filter(
+    (args) => args[0] === 'shell' && args[1] === 'input' && args[2] === 'keyevent',
+  );
   assert.equal(delCalls.length, 1);
-  assert.equal(delCalls[0]?.filter((arg) => arg === 'KEYCODE_DEL').length, 3);
+  assert.deepEqual(delCalls[0], [
+    'shell',
+    'input',
+    'keyevent',
+    'KEYCODE_DEL',
+    'KEYCODE_DEL',
+    'KEYCODE_DEL',
+  ]);
 });
 
 /** The `android_text_injection` events a run emitted, in order, as `{action, backend}` pairs. */
