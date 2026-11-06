@@ -21,7 +21,6 @@ import {
 } from './post-action-observation.ts';
 import { resolveInteractionTarget, type InteractionTarget } from './resolution.ts';
 import { guardResolvedTargetAgainstMotion } from './moving-target-gate.ts';
-import { isPressSequencePlan, tapRefSequenceCommand } from './press-sequence.ts';
 import { pointObservationOf } from './target-visibility-stages.ts';
 import { dispatchNativeRefInteraction } from './native-ref-interaction.ts';
 import type {
@@ -148,6 +147,8 @@ async function tapCommand(
   options: PressCommandOptions,
   action: 'click' | 'press',
 ): Promise<PressCommandResult> {
+  // Dynamic import: the sequence lane keeps its eager-closure cost off the command-runtime entry.
+  const { isPressSequencePlan, tapRefSequenceCommand } = await import('./press-sequence.ts');
   if (isPressSequencePlan(options)) {
     return await tapRefSequenceCommand(runtime, options, action);
   }
