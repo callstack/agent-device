@@ -736,3 +736,55 @@ test('a later request does not inherit a prior request device pin', async () => 
     );
   });
 });
+
+test('snapshot and press with device selector are refused when another session holds device (#4228)', async () => {
+  const device = { ...makeIosDevice('SIM-HELD-BY-FIRST'), appleOs: 'ios' as const };
+  process.env.AGENT_DEVICE_CLAIMS_DIR = root('issue-4228-claims-');
+  const { handler } = route(device);
+  expect(
+    (
+      await handler(
+        openRequest('first', { platform: 'ios' }, 'first-open', {}, ['com.example.app']),
+      )
+    ).ok,
+  ).toBe(true);
+
+  // 1. Session B open is refused with DEVICE_IN_USE
+  const openB = await handler(
+    openRequest('second', { platform: 'ios', udid: 'SIM-HELD-BY-FIRST' }, 'second-open', {}, [
+      'com.example.app',
+    ]),
+  );
+  expect(openB).toMatchObject({
+    ok: false,
+    error: { code: 'DEVICE_IN_USE', message: 'Device is already in use by session "first".' },
+  });
+
+  // 2. Session B snapshot with selector must also be refused with DEVICE_IN_USE
+  const snapshotB = await handler({
+    token: 'test-token',
+    session: 'second',
+    command: 'snapshot',
+    positionals: [],
+    flags: { platform: 'ios', udid: 'SIM-HELD-BY-FIRST' },
+    meta: { requestId: 'second-snapshot', sessionExplicit: true },
+  });
+  expect(snapshotB).toMatchObject({
+    ok: false,
+    error: { code: 'DEVICE_IN_USE', message: 'Device is already in use by session "first".' },
+  });
+
+  // 3. Session B press with selector must also be refused with DEVICE_IN_USE
+  const pressB = await handler({
+    token: 'test-token',
+    session: 'second',
+    command: 'press',
+    positionals: ['400', '860'],
+    flags: { platform: 'ios', udid: 'SIM-HELD-BY-FIRST' },
+    meta: { requestId: 'second-press', sessionExplicit: true },
+  });
+  expect(pressB).toMatchObject({
+    ok: false,
+    error: { code: 'DEVICE_IN_USE', message: 'Device is already in use by session "first".' },
+  });
+});

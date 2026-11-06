@@ -22,6 +22,15 @@ export async function resolveSessionDevice(
   }
   const device =
     session?.device ?? (await resolveRequestTargetDevice(req, { env: sessionStore.host.env }));
+  if (!session) {
+    const inUse = sessionStore.findByDevice(device.id);
+    if (inUse && inUse.address !== sessionName) {
+      const { buildDeviceInUseBySessionError } = await import('./session-recovery-hints.ts');
+      const refusal = buildDeviceInUseBySessionError(inUse, device);
+      const { AppError } = await import('@agent-device/kernel/errors');
+      throw new AppError(refusal.error.code, refusal.error.message, refusal.error.details);
+    }
+  }
   return { ref, session, device };
 }
 
