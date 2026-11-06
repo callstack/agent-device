@@ -13,6 +13,7 @@ import { expireRefFrame } from '../../../core/ref-frame.ts';
 import type { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import { releaseSessionLease } from '../../lease-lifecycle.ts';
 import { recordEndedLease } from '../../../core/request-ended-leases.ts';
+import { releaseTargetLease } from '../../target-lease-release.ts';
 import {
   hasRepairPlatformCloseReceipt,
   isRepairArmedSession,
@@ -122,15 +123,45 @@ async function prepareRepairClose(params: {
 }
 
 async function releaseProviderLeaseForClose(params: {
+  shutdownPrepared: boolean;
   req: DaemonRequest;
   session: SessionState;
   leaseRegistry: LeaseRegistry;
   leaseLifecycleProvider: LeaseLifecycleProvider | undefined;
-}): Promise<{ providerData?: Record<string, unknown>; response?: DaemonResponse }> {
+  lifecycle: CloseRuntime | CloseRuntimeWithRuntimeHintClear;
+}): Promise<{
+  providerData?: Record<string, unknown>;
+  shutdownResult?: TargetShutdownResult;
+  response?: DaemonResponse;
+}> {
   try {
+    let providerRelease: { providerData?: Record<string, unknown> } | undefined;
+    let shutdownResult: TargetShutdownResult | undefined;
+    if (params.req.flags?.shutdown && params.lifecycle.facts.shutdownTarget?.available) {
+      if (!params.shutdownPrepared) {
+        throw new AppError('COMMAND_FAILED', 'Target shutdown preparation failed. Retry close.');
+      }
+      shutdownResult = await params.lifecycle.operations.shutdownTarget!({
+        releaseLease: async (leaseId) => {
+          const providerData = await releaseTargetLease({
+            ...params,
+            owner: params.lifecycle.owner,
+            leaseId,
+          });
+          providerRelease = { providerData };
+          return {
+            success: true,
+            exitCode: 0,
+            stdout: 'Released provider instance lease.',
+            stderr: '',
+          };
+        },
+      });
+    }
+    if (providerRelease) return { ...providerRelease, shutdownResult };
     const { endedLeaseId, providerData } = await releaseSessionLease(params);
     if (endedLeaseId) recordEndedLease(params.req, endedLeaseId);
-    return { providerData };
+    return { providerData, shutdownResult };
   } catch (error) {
     const normalized = normalizeError(error);
     return {
@@ -138,7 +169,7 @@ async function releaseProviderLeaseForClose(params: {
         ok: false,
         error: {
           ...normalized,
-          hint: 'The provider device could not be released. Retry close after the provider is reachable.',
+          hint: 'The target could not be shut down or released. Retry close after resolving the failure.',
           details: { ...normalized.details, session: params.session.name },
           retriable: true,
         },
@@ -383,7 +414,7 @@ async function runCloseTeardownAndRelease(params: {
   } = params;
   const { address: sessionName } = ref;
   const cleanupFailures: SessionCleanupFailure[] = [];
-  const { platformCloseError, retainExecutionHost, saveScriptError, shutdownResult } =
+  const { platformCloseError, retainExecutionHost, saveScriptError, shutdownPrepared } =
     await runSessionCloseTeardown({
       leaseRegistry,
       req,
@@ -425,6 +456,8 @@ async function runCloseTeardownAndRelease(params: {
     session,
     leaseRegistry,
     leaseLifecycleProvider,
+    lifecycle,
+    shutdownPrepared,
   });
   if (leaseRelease.response) return { kind: 'response', response: leaseRelease.response };
   session = sessionStore.resolveCurrent(ref) ?? session;
@@ -434,7 +467,11 @@ async function runCloseTeardownAndRelease(params: {
   sessionStore.retire(ref, { retainExecutionHost });
   if (closeError) throw closeError;
   if (saveScriptError) throw saveScriptError;
-  return { kind: 'closed', providerData: leaseRelease.providerData, shutdownResult };
+  return {
+    kind: 'closed',
+    providerData: leaseRelease.providerData,
+    shutdownResult: leaseRelease.shutdownResult,
+  };
 }
 
 function buildCloseSuccessResponse(params: {

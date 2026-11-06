@@ -8,13 +8,12 @@ import {
   writeRemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import { isHostAllocatedLease } from '../commands/connection-lease-transaction.ts';
-import { connectionProviderCapabilities } from './provider-policy.ts';
 
 /**
- * Forgets the stored proxy lease once a daemon reply says its request ended that lease, so the next
+ * Forgets the stored connection lease once a daemon reply says its request ended that lease, so the next
  * `open` allocates instead of heartbeating a lease that no longer exists.
  */
-export function forgetEndedProxyLease(
+export function forgetEndedConnectionLease(
   flags: CliFlags,
   response: DaemonResponse,
   host: HostEnvironment,
@@ -29,7 +28,6 @@ export function forgetEndedProxyLease(
   const state = readRemoteConnectionState({ stateDir, session: flags.session ?? 'default' });
   if (!state?.leaseId || !endedLeaseIds.includes(state.leaseId)) return;
   if (isHostAllocatedLease(state)) return;
-  if (connectionProviderCapabilities(state.leaseProvider).leaseKind !== 'proxy') return;
   writeRemoteConnectionState({
     stateDir,
     state: { ...state, leaseId: undefined, updatedAt: new Date().toISOString() },

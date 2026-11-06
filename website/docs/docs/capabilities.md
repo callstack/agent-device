@@ -186,7 +186,7 @@ What a **Yes** does not claim:
 | [Foreground app state](/docs/commands#app-state-and-app-lists) | No | No | No | No | XCTest foreground state; without runner state, checks the instance and returns session identity only | Yes | No | No |
 | [App switcher](/docs/commands#navigation) | Yes | Yes | Yes | Yes | Yes | Yes | No | No |
 | [Get the device ready and boot simulators and emulators](/docs/commands#navigation) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| [Shut down a simulator or emulator](/docs/commands#navigation) | No | No | No | No | No | No | No | No |
+| [Shut down a simulator or emulator](/docs/commands#navigation) | No | No | No | No | Deletes a created instance; detaches from an existing instance | Deletes a created instance; detaches from an existing instance | No | No |
 | [Prepare the Apple runner](/docs/commands#prepare-apple-runner) | No | No | No | No | Yes | No | No | No |
 
 What a **Yes** does not claim:

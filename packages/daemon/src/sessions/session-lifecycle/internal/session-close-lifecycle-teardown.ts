@@ -1,7 +1,5 @@
 import type { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import { inspectSessionLeaseRetainedOnClose } from '../../lease-lifecycle.ts';
-import type { CloseApplicationFinalizationResult } from '@agent-device/contracts/application-lifecycle-runtime';
-import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
@@ -30,7 +28,7 @@ export type SessionCloseTeardownResult = Readonly<{
   platformCloseError: unknown;
   retainExecutionHost: boolean;
   saveScriptError?: Error;
-  shutdownResult?: TargetShutdownResult;
+  shutdownPrepared: boolean;
 }>;
 
 /** Runs owned resources, native close, native hint cleanup, and final lifecycle disposal. */
@@ -112,17 +110,16 @@ export async function runSessionCloseTeardown(params: {
       });
     });
   }
-  const finalization = await attemptCleanup(
-    'application_lifecycle',
-    async (): Promise<CloseApplicationFinalizationResult> =>
-      (await lifecycle.operations.finalizeApplicationClose({
-        appBundleId: session.appBundleId,
-        surface: session.surface ?? 'app',
-        retainRunner: retainExecutionHost,
-        stateDir: sessionStore.resolveDaemonStateDir(),
-        shutdownTarget: req.flags?.shutdown === true,
-      })) ?? {},
-  );
+  const shutdownPrepared = await attemptCleanup('application_lifecycle', async () => {
+    await lifecycle.operations.finalizeApplicationClose({
+      appBundleId: session.appBundleId,
+      surface: session.surface ?? 'app',
+      retainRunner: retainExecutionHost,
+      stateDir: sessionStore.resolveDaemonStateDir(),
+      shutdownTarget: req.flags?.shutdown === true,
+    });
+    return true;
+  });
   const saveScriptError = repairArmed
     ? undefined
     : finalizeOrdinaryCloseScript({ req, ref, sessionStore, platformCloseError });
@@ -133,7 +130,7 @@ export async function runSessionCloseTeardown(params: {
     platformCloseError,
     retainExecutionHost,
     saveScriptError,
-    shutdownResult: finalization?.shutdown,
+    shutdownPrepared: shutdownPrepared === true,
   };
 }
 

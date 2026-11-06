@@ -15,6 +15,9 @@ import {
   type RuntimeCommandHandlerParams,
 } from '../../core/session-runtime-admission.ts';
 import { deviceStatusReportResponse } from './session-device-status-response.ts';
+import type { LeaseRegistry } from '../../resources/lease-registry.ts';
+import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
+import { releaseTargetLease } from '../target-lease-release.ts';
 
 function shutdownUnavailableResponse(fact: RuntimeOperationFact) {
   if (fact.available) return null;
@@ -37,7 +40,10 @@ function shutdownFailureMessage(shutdown: TargetShutdownResult): string {
  * that device is shut down via `close --shutdown` instead.
  */
 export async function handleShutdownCommand(
-  params: RuntimeCommandHandlerParams,
+  params: RuntimeCommandHandlerParams & {
+    leaseRegistry?: LeaseRegistry;
+    leaseLifecycleProvider?: LeaseLifecycleProvider;
+  },
 ): Promise<DaemonResponse> {
   const activeSession = params.sessionStore.get(params.sessionName);
   const flags = params.req.flags ?? {};
@@ -56,17 +62,14 @@ export async function handleShutdownCommand(
   const unsupported = shutdownUnavailableResponse(facts.operations.shutdownTarget);
   if (unsupported) return unsupported;
 
-  if (
-    activeSession &&
-    activeSession.device.platform === device.platform &&
-    activeSession.device.id === device.id
-  ) {
+  const deviceSession = params.sessionStore.findByDevice(device.id)?.session;
+  if (deviceSession) {
     return errorResponse(
       'DEVICE_IN_USE',
       'Cannot shut down an active session device directly. Use close --shutdown to end the session and turn off the simulator/emulator.',
       {
-        hint: `Run agent-device close --shutdown --session ${params.sessionName}`,
-        session: params.sessionName,
+        hint: `Run agent-device close --shutdown --session ${deviceSession.name}`,
+        session: deviceSession.name,
         platform: publicPlatformString(device),
         target: device.target ?? 'mobile',
         device: device.name,
@@ -77,7 +80,25 @@ export async function handleShutdownCommand(
   }
 
   const bindDevice = requireRuntimeBinding(params.bindDevice);
-  const shutdown = await (await bindDevice(device, shutdownTargetUse)).operations.shutdownTarget();
+  const runtime = await bindDevice(device, shutdownTargetUse);
+  let provider: Record<string, unknown> | undefined;
+  const shutdown = await runtime.operations.shutdownTarget({
+    releaseLease: async (leaseId) => {
+      provider = await releaseTargetLease({
+        req: params.req,
+        owner: runtime.owner,
+        leaseId,
+        leaseRegistry: params.leaseRegistry,
+        leaseLifecycleProvider: params.leaseLifecycleProvider,
+      });
+      return {
+        success: true,
+        exitCode: 0,
+        stdout: 'Released provider instance lease.',
+        stderr: '',
+      };
+    },
+  });
   if (!shutdown.success) {
     return errorResponse(
       shutdown.error?.code ?? 'COMMAND_FAILED',
@@ -93,5 +114,6 @@ export async function handleShutdownCommand(
     );
   }
 
-  return deviceStatusReportResponse(device, { shutdown });
+  const response = deviceStatusReportResponse(device, { shutdown });
+  return response.ok && provider ? { ...response, data: { ...response.data, provider } } : response;
 }

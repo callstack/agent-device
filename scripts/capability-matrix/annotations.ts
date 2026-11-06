@@ -286,6 +286,12 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
         id: 'shutdown',
         label: 'Shut down a simulator or emulator',
         commands: ['shutdown'],
+        cells: {
+          'limrun-ios': { text: 'Deletes a created instance; detaches from an existing instance' },
+          'limrun-android': {
+            text: 'Deletes a created instance; detaches from an existing instance',
+          },
+        },
         link: docs('commands', 'navigation'),
       },
       {

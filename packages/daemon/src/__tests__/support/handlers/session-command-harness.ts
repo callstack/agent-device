@@ -200,11 +200,7 @@ async function readinessBinding(
   loadLifecycleOperations: LifecycleOperationsLoader,
 ): Promise<DeviceBinding<PlatformRuntimeOperations>> {
   const facts = readinessFacts(device);
-  const lifecycle = await loadLifecycleOperations(
-    device,
-    new AbortController().signal,
-    async () => await mockShutdownTargetRuntime(),
-  );
+  const lifecycle = await loadLifecycleOperations(device, new AbortController().signal);
   return {
     device,
     owner: localRuntimeOwner(device.platform),

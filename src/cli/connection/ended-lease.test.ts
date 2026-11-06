@@ -9,7 +9,7 @@ import {
   type StoredConnectionSeed,
 } from '../../__tests__/remote-connection.fixtures.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
-import { forgetEndedProxyLease } from './ended-lease.ts';
+import { forgetEndedConnectionLease } from './ended-lease.ts';
 
 bindTestCommandHost();
 
@@ -36,7 +36,7 @@ function storedLeaseIdAfter(
       ...overrides,
     },
   });
-  forgetEndedProxyLease(
+  forgetEndedConnectionLease(
     {
       json: true,
       help: false,
@@ -74,11 +74,12 @@ test('the stored lease stays unless the reply ends that lease at response level'
   for (const reply of replies) assert.equal(storedLeaseIdAfter(reply), LEASE_ID);
 });
 
-test('an ended lease the CLI does not own stays stored: host-allocated or non-proxy', () => {
+test('an ended host-allocated lease stays stored', () => {
   const reply: DaemonResponse = { ok: true, data: { endedLeases: [...ENDED] } };
   assert.equal(
     storedLeaseIdAfter(reply, { leaseBackend: 'macos-app', platform: 'macos' }),
     LEASE_ID,
   );
-  assert.equal(storedLeaseIdAfter(reply, { leaseProvider: undefined }), LEASE_ID);
+  assert.equal(storedLeaseIdAfter(reply, { leaseProvider: 'limrun' }), undefined);
+  assert.equal(storedLeaseIdAfter(reply, { leaseProvider: undefined }), undefined);
 });

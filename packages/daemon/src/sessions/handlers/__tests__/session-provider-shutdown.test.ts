@@ -1,0 +1,220 @@
+import path from 'node:path';
+import { expect, test, vi } from 'vitest';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import {
+  narrowDeviceBinding,
+  providerRuntimeOwner,
+  type DeviceBinding,
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import { AppError } from '@agent-device/kernel/errors';
+import {
+  bindTestCommandHost,
+  createTestHostEnvironment,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
+import { mockResolveTargetDevice } from '../../../__tests__/support/handlers/session-test-harness.ts';
+import { handleSessionCommands } from '../../../__tests__/support/handlers/session-command-harness.ts';
+import { lifecycleRuntimeFacts } from '../../../__tests__/support/application-lifecycle-runtime-harness.ts';
+import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
+import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
+import { LeaseRegistry } from '../../../resources/lease-registry.ts';
+import { SessionStore } from '../../../core/session-store.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
+import { handleShutdownCommand } from '../session-shutdown.ts';
+
+bindTestCommandHost();
+
+function scenario(platform: 'ios' | 'android', activeSession = false) {
+  const host = createTestHostEnvironment();
+  const root = mkdtempForTestSync('agent-device-provider-shutdown-');
+  const sessionStore = new SessionStore(path.join(root, 'sessions'), host);
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    leaseId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    tenantId: 'tenant',
+    runId: 'run',
+    leaseProvider: 'limrun',
+    leaseBackend: platform === 'ios' ? 'ios-instance' : 'android-instance',
+    retainOnClose: true,
+  });
+  const device: DeviceInfo = {
+    platform: platform === 'ios' ? 'apple' : 'android',
+    ...(platform === 'ios' ? { appleOs: 'ios' as const } : {}),
+    id: `limrun:${platform}:${lease.leaseId}`,
+    name: 'Provider device',
+    kind: platform === 'ios' ? 'simulator' : 'emulator',
+    booted: true,
+  };
+  const events: string[] = [];
+  const release = vi.fn(async () => {
+    expect(leaseRegistry.listActiveLeases()).toContainEqual(lease);
+    events.push('release');
+    return { limrunInstanceId: 'instance' };
+  });
+  const base = lifecycleRuntimeFacts(device);
+  const facts = {
+    ...base,
+    device: { ...base.device, providerMode: 'provider-runtime' as const },
+    operations: { ...base.operations, shutdownTarget: { available: true as const } },
+  };
+  const binding: DeviceBinding<PlatformRuntimeOperations> = {
+    device,
+    owner: providerRuntimeOwner('limrun', 'runtime'),
+    facts,
+    operations: {
+      closeApplication: async () => {
+        events.push('close');
+      },
+      finalizeApplicationClose: async () => {
+        events.push('finalize');
+        return {};
+      },
+      shutdownTarget: async ({ releaseLease }) => await releaseLease(lease.leaseId),
+    },
+    [Symbol.asyncDispose]: async () => {},
+  };
+  const req: DaemonRequest = {
+    token: 't',
+    command: activeSession ? 'close' : 'shutdown',
+    session: 'test',
+    positionals: [],
+    flags: { platform, shutdown: activeSession },
+    meta: {
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseId: lease.leaseId,
+      leaseProvider: 'limrun',
+      leaseBackend: lease.backend,
+    },
+    internal: { endedLeases: [] },
+  };
+  if (activeSession) {
+    sessionStore.publish('test', {
+      name: 'test',
+      device,
+      appName: 'Example',
+      appBundleId: 'com.example.app',
+      createdAt: Date.now(),
+      actions: [],
+      lease: {
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        leaseId: lease.leaseId,
+        leaseProvider: 'limrun',
+        leaseBackend: lease.backend,
+      },
+    });
+  }
+  const bindDevice: NonNullable<Parameters<typeof handleShutdownCommand>[0]['bindDevice']> = async (
+    _device,
+    use,
+  ) => narrowDeviceBinding(binding, use);
+  const params = {
+    host,
+    req,
+    sessionName: 'test',
+    sessionStore,
+    leaseRegistry,
+    leaseLifecycleProvider: { release },
+    platformServices: daemonPlatformServicesFixture(),
+    inspectFacts: async () => facts,
+    bindDevice,
+  };
+  const run = async () => {
+    mockResolveTargetDevice.mockResolvedValue(device);
+    return activeSession
+      ? await handleSessionCommands({
+          ...params,
+          logPath: path.join(root, 'daemon.log'),
+          createCommandSurface: fakeCreateCommandSurface,
+          invoke: async () => ({ ok: true, data: {} }),
+        })
+      : await handleShutdownCommand(params);
+  };
+  return { run, req, release, leaseRegistry, sessionStore, events, binding };
+}
+
+for (const platform of ['ios', 'android'] as const) {
+  test(`${platform} shutdown releases a retained provider lease and reports it ended`, async () => {
+    const world = scenario(platform);
+    const response = await world.run();
+    expect(response).toMatchObject({
+      ok: true,
+      data: { shutdown: { success: true }, provider: { limrunInstanceId: 'instance' } },
+    });
+    expect(world.release).toHaveBeenCalledOnce();
+    expect(world.leaseRegistry.listActiveLeases()).toEqual([]);
+    expect(world.req.internal?.endedLeases).toEqual([
+      { leaseId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', outcome: 'released' },
+    ]);
+  });
+
+  test(`${platform} close --shutdown finalizes before releasing a retained lease exactly once`, async () => {
+    const world = scenario(platform, true);
+    expect(await world.run()).toMatchObject({ ok: true, data: { shutdown: { success: true } } });
+    expect(world.events).toEqual(['finalize', 'release']);
+    expect(world.release).toHaveBeenCalledOnce();
+    expect(world.sessionStore.get('test')).toBeUndefined();
+    expect(world.leaseRegistry.listActiveLeases()).toEqual([]);
+  });
+}
+
+test('failed provider deletion keeps the session and lease for close --shutdown retry', async () => {
+  const world = scenario('android', true);
+  world.release.mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'Delete failed'));
+  expect(await world.run()).toMatchObject({ ok: false, error: { retriable: true } });
+  expect(world.sessionStore.get('test')).toBeDefined();
+  expect(world.leaseRegistry.listActiveLeases()).toHaveLength(1);
+  expect(world.req.internal?.endedLeases).toEqual([]);
+  expect(await world.run()).toMatchObject({ ok: true, data: { shutdown: { success: true } } });
+  expect(world.sessionStore.get('test')).toBeUndefined();
+  expect(world.leaseRegistry.listActiveLeases()).toEqual([]);
+});
+
+test('standalone shutdown refuses a target still used by another session', async () => {
+  const world = scenario('android', true);
+  world.req.command = 'shutdown';
+  mockResolveTargetDevice.mockResolvedValue(world.binding.device);
+  const response = await handleShutdownCommand({
+    host: createTestHostEnvironment(),
+    req: world.req,
+    sessionName: 'other',
+    sessionStore: world.sessionStore,
+    platformServices: daemonPlatformServicesFixture(),
+    inspectFacts: async () => world.binding.facts,
+  });
+  expect(response).toMatchObject({ ok: false, error: { code: 'DEVICE_IN_USE' } });
+  expect(world.release).not.toHaveBeenCalled();
+});
+
+test('ordinary close preserves a retained provider lease', async () => {
+  const world = scenario('ios', true);
+  world.req.flags = { platform: 'ios' };
+  expect(await world.run()).toMatchObject({ ok: true });
+  expect(world.release).not.toHaveBeenCalled();
+  expect(world.leaseRegistry.listActiveLeases()).toHaveLength(1);
+});
+
+test('a provider cannot release a target outside the request lease', async () => {
+  const world = scenario('android');
+  world.req.meta = { ...world.req.meta, leaseId: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' };
+  await expect(world.run()).rejects.toMatchObject({
+    code: 'UNAUTHORIZED',
+    details: { reason: 'TARGET_SHUTDOWN_LEASE_MISMATCH' },
+  });
+  expect(world.release).not.toHaveBeenCalled();
+  expect(world.leaseRegistry.listActiveLeases()).toHaveLength(1);
+});
+
+test('failed shutdown preparation keeps the session and retained lease for retry', async () => {
+  const world = scenario('android', true);
+  vi.spyOn(world.binding.operations, 'finalizeApplicationClose').mockRejectedValueOnce(
+    new Error('IME restore failed'),
+  );
+  expect(await world.run()).toMatchObject({ ok: false, error: { retriable: true } });
+  expect(world.release).not.toHaveBeenCalled();
+  expect(world.sessionStore.get('test')).toBeDefined();
+  expect(world.leaseRegistry.listActiveLeases()).toHaveLength(1);
+  expect(await world.run()).toMatchObject({ ok: true, data: { shutdown: { success: true } } });
+});

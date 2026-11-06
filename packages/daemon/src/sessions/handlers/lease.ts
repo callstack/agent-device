@@ -1,3 +1,4 @@
+import { releaseLease, type LeaseReleaseOutcome } from '../../resources/lease-release.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { LeaseEndReason } from '../lease-lifecycle.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
@@ -19,7 +20,6 @@ import {
   leaseReleaseRequestFor,
   normalizeLeaseBackend,
   normalizeLeaseProvider,
-  type ReleaseLeaseRequest,
 } from '../../resources/lease-registry-scope.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import {
@@ -242,26 +242,6 @@ async function pickProxyLeaseDeviceKey(
     target: device.target,
     id: device.id,
   });
-}
-
-type LeaseReleaseOutcome = {
-  /** The daemon's own lease record was released (bookkeeping, not the billed resource). */
-  registryReleased: boolean;
-  /** Provider release data (providerSessionId, warnings, cloudArtifacts…) when a provider held it. */
-  provider?: Record<string, unknown>;
-};
-
-/** THE release path: provider first (it still needs the lease record), then the registry. */
-async function releaseLease(
-  leaseRegistry: LeaseRegistry,
-  leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
-  lease: DeviceLease | undefined,
-  request: ReleaseLeaseRequest,
-  context?: LeaseLifecycleContext,
-): Promise<LeaseReleaseOutcome> {
-  const provider = lease ? await leaseLifecycleProvider?.release?.(lease, context) : undefined;
-  if (lease) recordProviderSession(leaseRegistry, lease, provider);
-  return { registryReleased: leaseRegistry.releaseLease(request).released, provider };
 }
 
 // A run's repeat allocation reuses its live lease; refusing that request must not end the

@@ -407,6 +407,7 @@ export async function createRequestExecutionScope(params: {
                 Boolean(
                   session?.lease &&
                   inspectSessionProviderReleaseOnClose({
+                    shutdownRequested: scopedReq.flags?.shutdown === true,
                     session,
                     leaseRegistry,
                     leaseLifecycleProvider: params.leaseLifecycleProvider,

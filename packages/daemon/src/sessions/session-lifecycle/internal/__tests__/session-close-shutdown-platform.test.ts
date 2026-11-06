@@ -1,10 +1,6 @@
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
-import { beforeEach, expect, test, vi } from 'vitest';
-import {
-  sessionCloseShutdownFixture,
-  type DeviceBinding,
-  type PlatformRuntimeOperations,
-} from './session-close-shutdown.fixtures.ts';
+import { beforeEach, expect, test } from 'vitest';
+import { sessionCloseShutdownFixture } from './session-close-shutdown.fixtures.ts';
 import {
   mkdtempForTestSync,
   bindTestCommandHost,
@@ -17,16 +13,13 @@ bindTestCommandHost();
 
 const {
   handleSessionCommands,
-  lifecycleRuntimeFacts,
   makeSession,
   makeSessionStore,
-  mockBindDeviceRuntime,
-  mockInspectDeviceRuntimeFacts,
   mockShutdownTargetRuntime,
-  narrowDeviceBinding,
+  mockInspectDeviceRuntimeFacts,
+  mockBindDeviceRuntime,
   noopInvoke,
   path,
-  providerRuntimeOwner,
   resetSessionCloseShutdownMocks,
 } = sessionCloseShutdownFixture;
 
@@ -111,64 +104,6 @@ test('close --shutdown calls shutdownSimulator for iOS simulator and includes re
       stderr: '',
     });
   }
-});
-
-test('close --shutdown keeps a selected provider-owned iOS simulator off local simulator shutdown', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'provider-ios-shutdown-session';
-  const device = {
-    platform: 'apple' as const,
-    id: 'limrun:ios:lease-a',
-    name: 'Limrun iOS',
-    kind: 'simulator' as const,
-    booted: true,
-  };
-  sessionStore.publish(sessionName, makeSession(sessionName, device));
-  const providerClose = vi.fn(async () => undefined);
-  const providerFinalize = vi.fn(async () => ({}));
-  mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (candidate) => {
-    const facts = lifecycleRuntimeFacts(candidate);
-    return { ...facts, device: { ...facts.device, providerMode: 'provider-runtime' as const } };
-  });
-  mockBindDeviceRuntime.mockImplementationOnce(async (candidate, use) => {
-    const facts = await mockInspectDeviceRuntimeFacts(candidate);
-    return narrowDeviceBinding(
-      {
-        device: candidate,
-        owner: providerRuntimeOwner('limrun', 'lease-a'),
-        facts,
-        operations: {
-          closeApplication: providerClose,
-          finalizeApplicationClose: providerFinalize,
-        },
-        [Symbol.asyncDispose]: async () => undefined,
-      } satisfies DeviceBinding<PlatformRuntimeOperations>,
-      use,
-    );
-  });
-
-  const response = await handleSessionCommands({
-    host: createTestHostEnvironment(),
-    createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'close',
-      positionals: [],
-      flags: { shutdown: true },
-    },
-    sessionName,
-    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
-  });
-
-  expect(response?.ok).toBe(true);
-  expect(mockShutdownTargetRuntime).not.toHaveBeenCalled();
-  expect(providerClose).not.toHaveBeenCalled();
-  expect(providerFinalize).toHaveBeenCalledWith(expect.objectContaining({ shutdownTarget: true }));
-  if (response?.ok) expect(response.data?.shutdown).toBeUndefined();
 });
 
 test('close --shutdown calls shutdownAndroidEmulator for Android emulator and includes result in response', async () => {

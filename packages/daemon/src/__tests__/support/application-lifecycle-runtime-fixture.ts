@@ -10,7 +10,6 @@ import type {
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { TargetShutdownResult } from '@agent-device/contracts/device';
 
 type LifecycleEffectContext = ApplicationLifecycleExecution &
   Readonly<{
@@ -51,7 +50,6 @@ export const dispatchApplicationLifecycleEffect = vi.fn(
 export type LifecycleOperationsLoader = (
   device: DeviceInfo,
   signal?: AbortSignal,
-  shutdownTarget?: (device: DeviceInfo) => Promise<TargetShutdownResult>,
 ) => Promise<ApplicationLifecycleRuntimeOperations>;
 
 /** The runtime-hint asks as the fixture answers them, at the port, with the bound device. */
@@ -140,12 +138,6 @@ const openApplicationFixture = vi.fn(
 export async function applicationLifecycleRuntimeFixture(
   device: DeviceInfo,
   signal: AbortSignal = new AbortController().signal,
-  shutdownTarget: (device: DeviceInfo) => Promise<TargetShutdownResult> = async () => ({
-    success: true,
-    exitCode: 0,
-    stdout: '',
-    stderr: '',
-  }),
 ): Promise<ApplicationLifecycleRuntimeOperations> {
   const direct = bindDirectApplicationLifecycle({
     owner: 'lifecycle-fixture',
@@ -175,8 +167,7 @@ export async function applicationLifecycleRuntimeFixture(
     clearRuntimeHints: async (input) => {
       await clearRuntimeHintsFixture({ device, ...input });
     },
-    finalizeApplicationClose: async (input) =>
-      input.shutdownTarget ? { shutdown: await shutdownTarget(device) } : {},
+    finalizeApplicationClose: async () => ({}),
     prepareAppleRunner: async () => await prepareAppleRunnerFixture(),
   });
 }

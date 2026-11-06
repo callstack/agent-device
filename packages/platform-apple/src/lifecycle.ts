@@ -68,7 +68,6 @@ type AppleLifecycleServices = Pick<
     signal: AbortSignal,
     options?: AppleReadinessOptions,
   ): Promise<DeviceInfo>;
-  shutdownTarget: PlatformRuntimeHost['deviceShutdown']['apple']['shutdownTarget'];
   resolveDevClientLaunchUrl(
     device: DeviceInfo,
     input: OpenApplicationInput,
@@ -86,7 +85,6 @@ export function bindAppleApplicationLifecycle(
       ...params.host,
       ensureReady: (device, signal, options) =>
         ensureAppleReady(params.host, device, signal, options),
-      shutdownTarget: (...args) => params.host.deviceShutdown.apple.shutdownTarget(...args),
       resolveDevClientLaunchUrl: async (device, input) =>
         await (await loadExpoDevClientLaunch()).resolveExpoDevClientLaunchUrl(device, input),
       runnerFreeObservation: hasSimulatorBridge(params.device),
@@ -139,7 +137,7 @@ export function bindAppleApplicationLifecycleWithServices(
       await closeAppleApplication(params.host, binding, input);
     },
     finalizeApplicationClose: async (input) =>
-      await finalizeAppleApplicationClose(params.host, device, params.signal, input),
+      await finalizeAppleApplicationClose(params.host, device, input),
     prepareAppleRunner: async (input) => {
       const result = await prepareAppleRunner(params.host, device, params.signal, input);
       adoptReadiedDevice(result.readied);
@@ -470,7 +468,6 @@ async function closeAppleApplication(
 async function finalizeAppleApplicationClose(
   host: AppleLifecycleServices,
   device: DeviceInfo,
-  signal: AbortSignal,
   input: CloseApplicationFinalizationInput,
 ) {
   if (input.daemonShutdown) {
@@ -482,11 +479,7 @@ async function finalizeAppleApplicationClose(
     await host.appleApplications.releaseRunnerOnClose(device.id, { retain: input.retainRunner });
     await host.appleApplications.dismissCloseAlerts(device, input).catch(() => {});
   }
-  const shutdown =
-    input.shutdownTarget && isIosSimulator(device)
-      ? await host.shutdownTarget(device, signal)
-      : undefined;
-  return shutdown === undefined ? {} : { shutdown };
+  return {};
 }
 
 async function prepareAppleRunner(

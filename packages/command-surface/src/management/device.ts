@@ -165,6 +165,8 @@ const bootCommandFacet = defineCommandFacet({
   name: 'boot',
   text: {
     summary: 'Boot target device/simulator',
+    cliDetail:
+      'On Limrun, allocate or reuse an instance. Existing-instance credentials attach without creating one.',
   },
   metadata: bootCommandMetadata,
   run: (client, input) => client.devices.boot(input),
@@ -177,6 +179,8 @@ const shutdownCommandFacet = defineCommandFacet({
   name: 'shutdown',
   text: {
     summary: 'Shutdown target simulator/emulator',
+    cliDetail:
+      'On Limrun, delete a created instance or release an attachment. Apps and data on a deleted instance are lost. For an active session, use close --shutdown.',
   },
   metadata: shutdownCommandMetadata,
   run: (client, input) => client.devices.shutdown(input),

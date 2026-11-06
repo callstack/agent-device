@@ -177,12 +177,6 @@ export function createAppleRunnerRuntime(options: {
           clock: request.clock,
           localInteractors: { resolve: request.resolveInteractor },
           ensureReady: request.ensureReady,
-          shutdownTarget: async () => {
-            throw new AppError(
-              'UNSUPPORTED_OPERATION',
-              'The provider owns the simulator lifecycle',
-            );
-          },
           resolveDevClientLaunchUrl: async (device, input) => {
             const { resolveExpoDevClientLaunchUrl } = await import('./expo-dev-client-launch.ts');
             return await resolveExpoDevClientLaunchUrl(device, input);

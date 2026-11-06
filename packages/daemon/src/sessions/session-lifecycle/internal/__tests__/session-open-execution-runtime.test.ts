@@ -888,8 +888,8 @@ async function openReportingObservation(
 ) {
   const sessionStore = makeSessionStore();
   mockResolveTargetDevice.mockResolvedValue(makeAppleSimulator());
-  const loader: LifecycleOperationsLoader = async (device, signal, shutdownTarget) => {
-    const base = await applicationLifecycleRuntimeFixture(device, signal, shutdownTarget);
+  const loader: LifecycleOperationsLoader = async (device, signal) => {
+    const base = await applicationLifecycleRuntimeFixture(device, signal);
     return Object.freeze({
       ...base,
       openApplication: async (input: OpenApplicationInput) => {

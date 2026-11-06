@@ -186,6 +186,11 @@ function bindLimrunAppLogs(
     ...appLogs,
     ensureReady: async () => ({ ...device, booted: true }),
     bootTarget: async () => ({ ...device, booted: true }),
+    shutdownTarget: async (input) => {
+      const parsed = parseLimrunDeviceId(device.id);
+      if (!parsed) throw new AppError('DEVICE_NOT_FOUND', 'Limrun device identity is unavailable');
+      return await input.releaseLease(parsed.leaseId);
+    },
     listApps: async (input) => await options.listApps(input.device, input.filter, signal),
     ...availableApplicationLifecycleOperations(
       bindLimrunApplicationLifecycle(

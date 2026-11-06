@@ -188,10 +188,7 @@ export function limrunAppLogFacts(
       bootTarget: available,
       bootTargetHeadless: headlessUnavailable,
       listApps: available,
-      shutdownTarget: unavailableFact(
-        'unsupported-provider-mode',
-        'Limrun owns the target lifecycle for provider-owned devices.',
-      ),
+      shutdownTarget: available,
     },
   });
 }
