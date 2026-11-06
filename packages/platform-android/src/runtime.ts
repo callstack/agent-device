@@ -390,6 +390,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
             bluetooth: available,
             airplane: available,
             'mobile-data': available,
+            'keep-awake': available,
             location: available,
             animations: available,
             appearance: available,
