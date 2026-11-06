@@ -811,7 +811,11 @@ The runner must not end itself, because it also runs every XCTest command.
 The runner abandons such a read (`bridge-read-abandoned`).
 The runner admits one read at a time.
 Until the admitted read returns, the runner refuses each new read (`bridge-read-in-flight`).
-A read that a cancelled capture left running meets that refusal too.
+After an abandoned read stays in flight for five seconds, the runner refuses with `bridge-reader-wedged`.
+That refusal retires the bridge for the runner session, across app generations.
+The route clears its circuit and cached targets when the runner session changes.
+The runner does not replace the reader queue, because a second concurrent accessibility read is not proven safe.
+A read that a cancelled capture left running meets the in-flight refusal too.
 The refusal says only that another read is running, so it has capture scope.
 The daemon gives the runner its read budget minus a transport margin.
 Thus, the runner abandons a slow read first, and the daemon receives `bridge-read-abandoned`, not a lost reply.

@@ -43,6 +43,7 @@ const RUNNER_TRANSPORT_MARGIN_MS = 1_000;
 
 export type RunnerSnapshotBridge = Readonly<{
   source: SnapshotBridgeSource<RunnerSnapshotBridgeTarget>;
+  resetTargets(): void;
   resolveTarget(
     device: DeviceInfo,
     appBundleId: string,
@@ -60,6 +61,7 @@ export function createRunnerSnapshotBridge(
   options: Readonly<{ device: DeviceInfo; provider: AppleRunnerProvider }>,
 ): RunnerSnapshotBridge {
   const targets = new Map<string, RunnerSnapshotBridgeTarget>();
+  let targetEpoch = 0;
   // The runner admits one bridge read at a time and refuses an overlapping one at once, so it alone
   // owns that order: a read a cancelled capture left running costs the next capture its bridge read,
   // and the route answers that refusal for that capture only.
@@ -93,6 +95,7 @@ export function createRunnerSnapshotBridge(
     if (cached && refresh !== 'refresh') return cached;
     // Only a resolved target replaces the cached one: a refresh that fails leaves the generation the
     // route planned against.
+    const epoch = targetEpoch;
     const requestId = randomUUID();
     const envelope = await send(
       appBundleId,
@@ -104,7 +107,7 @@ export function createRunnerSnapshotBridge(
       AbortSignal.any([signal, AbortSignal.timeout(TARGET_READ_TIMEOUT_MS)]),
     );
     const target = readTarget(envelope, { requestId, appBundleId, targetId });
-    targets.set(targetId, target);
+    if (epoch === targetEpoch) targets.set(targetId, target);
     return target;
   };
 
@@ -158,7 +161,14 @@ export function createRunnerSnapshotBridge(
       close: async () => targets.clear(),
     },
   });
-  return { source, resolveTarget };
+  return {
+    source,
+    resolveTarget,
+    resetTargets: () => {
+      targetEpoch++;
+      targets.clear();
+    },
+  };
 }
 
 function parseRunnerEnvelope(data: Record<string, unknown>): SnapshotBridgeEnvelope {
@@ -192,6 +202,8 @@ function readTarget(
     !processStartTime
   ) {
     const code = typeof envelope.error_code === 'string' ? envelope.error_code : 'target-invalid';
+    if (code === 'bridge-reader-wedged')
+      throw snapshotSourceError('timeout', 'bridge-reader-wedged');
     throw new AppError(
       'COMMAND_FAILED',
       `Unable to resolve the foreground app in the runner (${code}).`,

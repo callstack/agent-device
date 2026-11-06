@@ -485,3 +485,63 @@ test('a runner whose session id cannot be read answers the foreground proof as u
   expect(fallbacks).toHaveLength(1);
   expect(sent.map((command) => command.command)).not.toContain('appState');
 });
+
+test('a wedged runner retires the bridge for the session across captures and app generations', async () => {
+  const state: { process: RunnerProcess; refuseTarget?: string; refuseDescribe?: string } = {
+    process: { pid: 41, processStartTime: '1700000000.000001' },
+    refuseDescribe: 'bridge-read-abandoned',
+  };
+  const { provider, sent } = bridgeRunner(state);
+  const { snapshot, fallbacks } = runtimeSnapshots(withHostStates(provider, 'notRunning'));
+  await snapshot();
+  state.refuseTarget = 'bridge-reader-wedged';
+  await snapshot();
+  state.process = { pid: 77, processStartTime: '1700000100.000002' };
+  await snapshot();
+  await snapshot();
+  expect(verbs(sent)).toEqual(['target', 'describe', 'target']);
+  expect(fallbacks).toHaveLength(4);
+});
+
+test('a never-returning read costs one wedged refusal after the runner bound', async () => {
+  const state: {
+    process: RunnerProcess;
+    holdNextDescribe?: Promise<void>;
+    refuseDescribe?: string;
+  } = {
+    process: { pid: 41, processStartTime: '1700000000.000001' },
+  };
+  const { provider, sent } = bridgeRunner(state);
+  const { snapshot } = bridgeRoute(provider);
+  await snapshot();
+  state.holdNextDescribe = new Promise(() => {});
+  const controller = new AbortController();
+  const pending = snapshot(controller.signal);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  controller.abort();
+  await expect(pending).rejects.toThrow();
+  await snapshot();
+  // The fake runner reaches its abandonment bound with the same read still held.
+  state.refuseDescribe = 'bridge-reader-wedged';
+  await snapshot();
+  await snapshot();
+  await snapshot();
+  expect(verbs(sent)).toEqual(['target', 'describe', 'describe', 'describe', 'describe']);
+});
+
+test('a replacement runner retries a generation retired by the previous runner once', async () => {
+  const state: { process: RunnerProcess; refuseDescribe?: string } = {
+    process: { pid: 41, processStartTime: '1700000000.000001' },
+    refuseDescribe: 'bridge-read-abandoned',
+  };
+  const { provider, sent } = bridgeRunner(state);
+  const { snapshot, presented } = runtimeSnapshots(withHostStates(provider, 'notRunning'));
+  await snapshot();
+  registry.session = { sessionId: 'runner-session-2', liveness: 'ready' };
+  state.refuseDescribe = undefined;
+  sent.length = 0;
+  await snapshot();
+  await snapshot();
+  expect(verbs(sent)).toEqual(['target', 'describe', 'describe']);
+  expect(presented).toHaveLength(2);
+});

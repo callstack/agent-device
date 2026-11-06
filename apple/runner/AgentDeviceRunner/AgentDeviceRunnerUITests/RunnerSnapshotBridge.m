@@ -179,10 +179,13 @@ static NSUInteger RunnerSnapshotBridgeBudgetMs(NSDictionary *request)
   return MIN(budget.unsignedIntegerValue, kMaximumDurationMs);
 }
 
-/// 1 while a read is admitted and has not returned, including a read abandoned past its budget: the
+/// A read stays admitted until it returns, including a read abandoned past its budget: the
 /// accessibility call it waits on cannot be cancelled, so later reads are refused until it returns
 /// rather than queued behind it.
-static atomic_int RunnerSnapshotBridgeReadsInFlight = 0;
+static BOOL RunnerSnapshotBridgeReadsInFlight = NO;
+static NSUInteger RunnerSnapshotBridgeReadSequence = 0;
+static NSTimeInterval RunnerSnapshotBridgeAbandonedAt = 0;
+static const NSTimeInterval RunnerSnapshotBridgeWedgeSeconds = 5;
 
 static dispatch_queue_t RunnerSnapshotBridgeReaderQueue(void)
 {
@@ -208,11 +211,18 @@ static NSDictionary *RunnerSnapshotBridgeRead(NSDictionary *request,
                                               NSUInteger budgetMs,
                                               NSDictionary * (^read)(void))
 {
-  // Admission is one atomic step, because requests arrive on a concurrent queue.
-  int idle = 0;
-  if (!atomic_compare_exchange_strong(&RunnerSnapshotBridgeReadsInFlight, &idle, 1)) {
-    return RunnerSnapshotBridgeFailure(request, @"application_not_responding", @"bridge-read-in-flight",
-                                       @"another accessibility read has not returned yet");
+  NSUInteger sequence;
+  @synchronized (RunnerSnapshotBridgeAnswer.class) {
+    if (RunnerSnapshotBridgeReadsInFlight) {
+      BOOL wedged = RunnerSnapshotBridgeAbandonedAt > 0 &&
+        NSProcessInfo.processInfo.systemUptime - RunnerSnapshotBridgeAbandonedAt >= RunnerSnapshotBridgeWedgeSeconds;
+      return RunnerSnapshotBridgeFailure(request, @"application_not_responding",
+                                         wedged ? @"bridge-reader-wedged" : @"bridge-read-in-flight",
+                                         @"another accessibility read has not returned yet");
+    }
+    RunnerSnapshotBridgeReadsInFlight = YES;
+    RunnerSnapshotBridgeAbandonedAt = 0;
+    sequence = ++RunnerSnapshotBridgeReadSequence;
   }
   RunnerSnapshotBridgeAnswer *answer = [RunnerSnapshotBridgeAnswer new];
   dispatch_semaphore_t done = dispatch_semaphore_create(0);
@@ -223,10 +233,18 @@ static NSDictionary *RunnerSnapshotBridgeRead(NSDictionary *request,
       answer.value = RunnerSnapshotBridgeFailure(request, @"reader_unavailable", @"reader-exception",
                                                  exception.reason ?: @"the snapshot reader raised an exception");
     }
-    atomic_store(&RunnerSnapshotBridgeReadsInFlight, 0);
+    @synchronized (RunnerSnapshotBridgeAnswer.class) {
+      RunnerSnapshotBridgeReadsInFlight = NO;
+      RunnerSnapshotBridgeAbandonedAt = 0;
+    }
     dispatch_semaphore_signal(done);
   });
   if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, (int64_t)budgetMs * NSEC_PER_MSEC)) != 0) {
+    @synchronized (RunnerSnapshotBridgeAnswer.class) {
+      if (RunnerSnapshotBridgeReadsInFlight && RunnerSnapshotBridgeReadSequence == sequence) {
+        RunnerSnapshotBridgeAbandonedAt = NSProcessInfo.processInfo.systemUptime;
+      }
+    }
     return RunnerSnapshotBridgeFailure(request, @"application_not_responding", @"bridge-read-abandoned",
                                        @"the accessibility read outlived its budget and was abandoned");
   }

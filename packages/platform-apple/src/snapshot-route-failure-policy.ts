@@ -39,7 +39,7 @@ export type BridgeFailureDisposition =
       consequence: 'system-surface-host';
       surfaceHost: SurfaceHostRefusal;
     }>
-  | Readonly<{ scope: 'generation'; code: string }>;
+  | Readonly<{ scope: 'generation' | 'runner-session'; code: string }>;
 
 /** Every disposition that reaches the generic fallback: all but a surface host refusal. */
 export type BridgeFallbackDisposition = Exclude<
@@ -76,6 +76,9 @@ const CAPTURE_SCOPED_REFUSALS: ReadonlyMap<string, CaptureScopedConsequence> = n
  * it. Do not widen the default; classify a new known refusal in the table.
  */
 export function bridgeFailureDisposition(failure: SnapshotSourceFailure): BridgeFailureDisposition {
+  if (failure.code === 'bridge-reader-wedged') {
+    return { scope: 'runner-session', code: failure.code };
+  }
   if (failure.kind === 'preparing') {
     return { scope: 'capture', code: failure.code, consequence: 'bridge-preparation' };
   }
