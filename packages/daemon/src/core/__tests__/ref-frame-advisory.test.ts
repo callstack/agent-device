@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { activateCompleteRefFrame, activatePartialRefFrame, expireRefFrame } from '../ref-frame.ts';
-import { applyRefFrameAdvisoryHint } from '../ref-frame-advisory.ts';
+import { applyRefFrameAdvisoryHint } from '../ref-frame.ts';
 import type { DaemonResponseData } from '@agent-device/kernel/contracts';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import type { SessionState } from '../session-state.ts';
