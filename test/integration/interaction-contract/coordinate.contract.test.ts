@@ -6,7 +6,7 @@ import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts
 import { scenarioName } from './coverage-manifest.ts';
 import { COORDINATE_COVERAGE } from './coordinate.coverage.ts';
 import { settledWelcomeSnapshot, viewportOnlySnapshot } from './fixtures.ts';
-import { createContractDevice } from './runtime-harness.ts';
+import { createContractDevice, screenshotFramePlanBackend } from './runtime-harness.ts';
 import { runnerTapEntry, runnerTapErrorEntry, withIosContractDaemon } from './daemon-harness.ts';
 
 // ADR 0011 Layer 3, coordinate path: raw x/y tap, intentionally minimal
@@ -75,6 +75,27 @@ test(scenario('settleObservation'), async () => {
   assert.ok(settle, 'point press --settle must return a settle observation');
   assert.equal(settle.settled, true);
   assert.deepEqual(settle.diff?.summary, { additions: 1, removals: 1, unchanged: 0 });
+});
+
+test(scenario('screenshotDiffEvidence'), async () => {
+  const device = createContractDevice(viewportOnlySnapshot(), {
+    ...screenshotFramePlanBackend([{ color: [0, 0, 0] }, { color: [255, 255, 255] }]),
+    tap: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.press(
+    { kind: 'point', x: 10, y: 20 },
+    {
+      session: 'default',
+      expectScreenshotDiff: true,
+    },
+  );
+
+  // The escape hatch gets the same opt-in readback: pixels answer where the
+  // tree-less point target gives --verify nothing to digest.
+  assert.equal(result.kind, 'point');
+  assert.ok(result.screenshotDiff);
+  assert.equal(result.screenshotDiff?.changedFromBefore, true);
 });
 
 test(scenario('errorTaxonomy'), async () => {

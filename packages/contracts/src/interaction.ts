@@ -253,10 +253,10 @@ export type InteractionEvidence = {
 /**
  * Opt-in (`--expect-screenshot-diff`) out-of-tree post-action readback for
  * press/click: the pixel comparison between the screenshots taken immediately
- * before and after the dispatch. Answers "did the screen react at all" for
- * surfaces the accessibility tree cannot describe — a PIN keypad whose keys
- * never reach the tree leaves `--verify`'s digest flat no matter what the tap
- * did — so the comparison runs on pixels instead of nodes.
+ * before the dispatch and after it settles briefly. Answers "did the screen
+ * react at all" for surfaces the accessibility tree cannot describe — a PIN
+ * keypad whose keys never reach the tree leaves `--verify`'s digest flat no
+ * matter what the tap did — so the comparison runs on pixels instead of nodes.
  *
  * Advisory by contract: the comparison never fails the action. Absent means the
  * pair was not taken (capture failed or the platform cannot screenshot), which

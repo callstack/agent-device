@@ -23,6 +23,8 @@ export const RUNTIME_SELECTOR_COVERAGE = definePathCoverage('runtime-selector', 
     'runtime-selector verifyEvidence: press --verify returns a digest with change detection',
   settleObservation:
     'runtime-selector settleObservation: press --settle returns the settled diff with fresh refs',
+  screenshotDiffEvidence:
+    'runtime-selector screenshotDiffEvidence: press --expect-screenshot-diff returns the pixel comparison',
   errorTaxonomy: [
     'runtime-selector errorTaxonomy: no-match failure carries the shared code and hint',
     'runtime-selector errorTaxonomy: a daemon selector miss discloses dispatched no',

@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import type { TemporaryFile } from '@agent-device/contracts/artifact-adapter';
 import type { ScreenshotDiffEvidence } from '@agent-device/contracts/interaction';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
-import { toBackendContext } from '../../runtime-common.ts';
+import { sleep, toBackendContext } from '../../runtime-common.ts';
 import { createCommandTempFile } from '../../io-policy.ts';
 
 /**
@@ -22,6 +22,17 @@ import { createCommandTempFile } from '../../io-policy.ts';
  * frame (the eager-closure budget).
  */
 
+/**
+ * The after-frame waits this long past the dispatch reply before it is
+ * captured. The reaction the caller asked about (a key highlight, a PIN dot)
+ * can reach the screen several frames after the transport round trip returns —
+ * exactly on the low-end or loaded devices this flag exists for — and a frame
+ * that raced the rendering would read an effective tap as unchanged, which is
+ * the one direction this primitive cannot cheaply retry. Long enough to cover
+ * that render delay; short enough to keep the flag's added latency negligible.
+ */
+const AFTER_FRAME_SETTLE_MS = 150;
+
 export type ScreenshotPairOutcome = {
   evidence?: ScreenshotDiffEvidence;
   /** Present when the caller expected a diff and the frames matched. */
@@ -31,9 +42,10 @@ export type ScreenshotPairOutcome = {
 /**
  * Runs the dispatch inside the screenshot bracket. Unrequested, this is the
  * dispatch alone. Requested, the before-frame lands after every pre-dispatch
- * guard and immediately before the dispatch, so the pair brackets the tap and
- * nothing else; a dispatch failure cleans the frame up and rethrows, because a
- * failed action owes no post-action comparison.
+ * guard and immediately before the dispatch, and the after-frame lands once
+ * the dispatch has settled briefly (AFTER_FRAME_SETTLE_MS), so the pair
+ * brackets the tap and its rendering; a dispatch failure cleans the frame up
+ * and rethrows, because a failed action owes no post-action comparison.
  */
 export async function dispatchWithScreenshotPair<T>(
   runtime: AgentDeviceRuntime,
@@ -122,10 +134,11 @@ async function capturePairScreenshotFrame(
 }
 
 /**
- * Closes the pair: one after-frame, then the pixel comparison. A frame that
- * changed shape (rotation, split-screen) changed the screen by construction —
- * the ratio is omitted because the two frames describe different viewports.
- * Any decode or capture failure drops the evidence rather than guessing.
+ * Closes the pair: one after-frame after a brief settle, then the pixel
+ * comparison. A frame that changed shape (rotation, split-screen) changed the
+ * screen by construction — the ratio is omitted because the two frames
+ * describe different viewports. Any decode or capture failure drops the
+ * evidence rather than guessing.
  */
 async function compareScreenshotPair(
   runtime: AgentDeviceRuntime,
@@ -133,6 +146,7 @@ async function compareScreenshotPair(
   before: TemporaryFile,
 ): Promise<ScreenshotPairOutcome> {
   try {
+    await sleep(runtime, AFTER_FRAME_SETTLE_MS);
     const after = await capturePairScreenshotFrame(runtime, options, 'after');
     if (!after) return {};
     try {

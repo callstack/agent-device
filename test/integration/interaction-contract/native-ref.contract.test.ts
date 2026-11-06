@@ -1,4 +1,4 @@
-import { ref, createContractDevice } from './runtime-harness.ts';
+import { ref, createContractDevice, screenshotFramePlanBackend } from './runtime-harness.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
@@ -160,6 +160,32 @@ test(scenario('settleObservation'), async () => {
   assert.ok(settle, 'click @ref --settle must return a settle observation');
   assert.equal(settle.settled, true);
   assert.deepEqual(settle.diff?.summary, { additions: 1, removals: 1, unchanged: 0 });
+});
+
+test(scenario('screenshotDiffEvidence'), async () => {
+  const calls: string[] = [];
+  const device = createContractDevice(continueButtonSnapshot(), {
+    platform: 'web',
+    ...screenshotFramePlanBackend([{ color: [0, 0, 0] }, { color: [255, 255, 255] }]),
+    captureSnapshot: async () => ({ snapshot: continueButtonSnapshot() }),
+    tap: async () => ({ ok: true }),
+    tapTarget: async (_context, target) => {
+      calls.push(target.ref);
+      return {};
+    },
+  });
+
+  const result = await device.interactions.click(ref('@e1'), {
+    session: 'default',
+    expectScreenshotDiff: true,
+  });
+
+  // --expect-screenshot-diff delegates to the runtime-ref path: the fast path
+  // is skipped so the pixel pair brackets the dispatch it names.
+  assert.deepEqual(calls, []);
+  assert.equal(result.kind, 'ref');
+  assert.ok(result.screenshotDiff);
+  assert.equal(result.screenshotDiff?.changedFromBefore, true);
 });
 
 test(scenario('responseIdentity'), async () => {

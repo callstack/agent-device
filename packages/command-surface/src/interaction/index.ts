@@ -87,14 +87,14 @@ const interactionEvidenceSchema: JsonSchema = objectSchema(
 const screenshotDiffSchema: JsonSchema = objectSchema(
   {
     changedFromBefore: booleanSchema(
-      'Whether any pixel moved between the screenshots taken right before and after the dispatch. false means the frames match, which reads as "the dispatch may have had no visible effect" next to the response warning.',
+      'Whether any pixel moved between the screenshots taken right before the dispatch and after it settles briefly. false means the frames match, which reads as "the dispatch may have had no visible effect" next to the response warning.',
     ),
     changedPixelRatio: numberSchema(
       'Share of pixels whose color moved between the two frames. Absent when the frames could not be compared, for example a shape change.',
     ),
   },
   ['changedFromBefore'],
-  'Pixel comparison between the screenshots taken right before and after the dispatch. Absent when the pair was not taken, which claims nothing about the screen.',
+  'Pixel comparison between the screenshots taken right before the dispatch and after it settles briefly. Absent when the pair was not taken, which claims nothing about the screen.',
 );
 
 const responseCostSchema: JsonSchema = objectSchema(
