@@ -1,5 +1,4 @@
 import { bindProviderElementTextRuntime } from '@agent-device/contracts/element-text-runtime';
-import { AppError } from '@agent-device/kernel/errors';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import {
   type RuntimeFacts,
@@ -133,17 +132,13 @@ export function bindLimrunInteractionOperations(
   params: Readonly<{
     device: DeviceInfo;
     signal: AbortSignal;
-    getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
+    getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor;
     presentIosAcquisition: SnapshotRuntimePresenter;
     facts: RuntimeFacts<PlatformRuntimeOperations>['operations'];
   }>,
 ) {
   const { device, signal } = params;
-  const resolveInteractor = (runner: RunnerContext) => {
-    const interactor = params.getInteractor(device, runner);
-    if (!interactor) throw new AppError('DEVICE_NOT_FOUND', 'Limrun session is unavailable');
-    return interactor;
-  };
+  const resolveInteractor = (runner: RunnerContext) => params.getInteractor(device, runner);
   return Object.freeze({
     ...whenAdmitted(params.facts.readTextAtPoint, () =>
       bindProviderElementTextRuntime({ device, signal, resolveInteractor }),

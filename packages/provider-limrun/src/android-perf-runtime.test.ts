@@ -76,6 +76,9 @@ test('a live Android owner binds reads and rejects a lease lost after binding', 
   await expect(
     binding.operations.readTextAtPoint!({ point: { x: 10, y: 20 } }),
   ).rejects.toMatchObject({ code: 'DEVICE_NOT_FOUND' });
+  await expect(binding.operations.readClipboard!({})).rejects.toMatchObject({
+    code: 'DEVICE_NOT_FOUND',
+  });
   await expect(
     binding.operations.perfMemorySample!({ appId: 'com.example.app' }),
   ).rejects.toMatchObject({ code: 'DEVICE_NOT_FOUND' });

@@ -135,6 +135,7 @@ export function bindProviderElementTextRuntime(
   return bindElementTextRuntime({
     ...params,
     resolveInteractor: async (_device, runner) => {
+      // Keep provider binding dependencies out of local text reads' eager module closure.
       const { providerInteractorSource } = await import('./interactor-operation-binding.ts');
       return await providerInteractorSource({ ...params, operation: 'element-text' })(runner);
     },
