@@ -147,7 +147,7 @@ async function releaseProviderLeaseForClose(params: {
     ) {
       if (!params.shutdownPrepared) {
         throw (
-          closeCleanupError(params.sessionName, params.cleanupFailures) ??
+          closeCleanupError(params.sessionName, params.cleanupFailures, { sessionKept: true }) ??
           new AppError('COMMAND_FAILED', 'Target shutdown preparation failed. Retry close.')
         );
       }

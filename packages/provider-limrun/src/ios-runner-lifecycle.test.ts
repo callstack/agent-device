@@ -171,7 +171,7 @@ test('a failed instance delete keeps only cleanup operations available until shu
         surface: 'app',
         execution: {},
       }),
-    ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
+    ).rejects.toMatchObject({ code: 'DEVICE_NOT_FOUND' });
     const close = narrowDeviceBinding(retry, closeApplicationRuntimeUse);
     await close.operations.finalizeApplicationClose({
       surface: 'app',
