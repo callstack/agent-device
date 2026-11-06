@@ -291,6 +291,8 @@ test('a failed or timed-out termination probe is retried, not read as a live run
   const disposal = disposeRunnerSession(session, { graceful: false, abort: true });
   await vi.advanceTimersByTimeAsync(200);
   await disposal;
+  // The thrown probe and the exit-2 probe are both retried; only the third (exit 1) confirms.
+  expect(probes).toBe(3);
   expect(mockPrepareAccessibility).toHaveBeenCalledOnce();
 });
 
