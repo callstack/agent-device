@@ -93,7 +93,7 @@ function composeWarnings(existing: string | undefined, added: string): string {
  * frame, and the whole readback silently does not run — the flag is advisory,
  * so a screenshot-less platform keeps the dispatch untouched.
  */
-export async function capturePairScreenshotFrame(
+async function capturePairScreenshotFrame(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
   label: 'before' | 'after',
@@ -127,7 +127,7 @@ export async function capturePairScreenshotFrame(
  * the ratio is omitted because the two frames describe different viewports.
  * Any decode or capture failure drops the evidence rather than guessing.
  */
-export async function compareScreenshotPair(
+async function compareScreenshotPair(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
   before: TemporaryFile,
