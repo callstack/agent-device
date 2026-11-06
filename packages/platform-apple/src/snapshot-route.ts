@@ -211,10 +211,7 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
     probeResult: Awaited<ReturnType<SystemSurfaceForegroundProbe>>,
     device: DeviceInfo,
   ): typeof currentCircuit => {
-    const probedSessionId =
-      channel.sessionChanged && typeof probeResult === 'object' && 'sessionId' in probeResult
-        ? probeResult.sessionId
-        : undefined;
+    const probedSessionId = channel.sessionChanged ? probeResult.sessionId : undefined;
     if (probedSessionId === undefined) return startingCircuit;
     if (currentCircuit !== startingCircuit) {
       return probedSessionId === currentCircuit.sessionId ? currentCircuit : startingCircuit;
@@ -264,10 +261,7 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
       const startingCircuit = currentCircuit;
       const probeResult = await readSurfaceForeground(device, input, signal, surfaceForeground);
       const circuit = circuitForProbe(startingCircuit, probeResult, device);
-      const foreground =
-        typeof probeResult === 'object' && 'sessionId' in probeResult
-          ? probeResult.foreground
-          : probeResult;
+      const { foreground } = probeResult;
       const captureBridgeDisabled = (target: SnapshotBridgeRouteTarget) =>
         isDisabledIn(circuit, target);
       if (foreground !== 'background' && foreground !== 'unknown') {
@@ -460,12 +454,7 @@ async function readSurfaceForeground(
 ): Promise<Awaited<ReturnType<SystemSurfaceForegroundProbe>>> {
   const requestId = input.execution?.requestId;
   const foreground = await probe(device, { signal, ...(requestId ? { requestId } : {}) });
-  if (
-    foreground === 'background' ||
-    (typeof foreground === 'object' &&
-      'sessionId' in foreground &&
-      foreground.foreground === 'background')
-  ) {
+  if (foreground.foreground === 'background') {
     emitDiagnostic({
       level: 'debug',
       phase: 'ios_snapshot_route_surface_host_background',

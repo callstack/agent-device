@@ -82,6 +82,25 @@ extension RunnerTests {
     RunnerSnapshotBridgeDrainForTest()
     let admitted = RunnerSnapshotBridgeReadForTest(request, 1000, { ["ok": true] }, 16)
     XCTAssertEqual(admitted["ok"] as? Bool, true)
+
+    let started = DispatchSemaphore(value: 0)
+    let secondRelease = DispatchSemaphore(value: 0)
+    let finished = expectation(description: "second read outlives its budget")
+    DispatchQueue.global().async {
+      let second = RunnerSnapshotBridgeReadForTest(request, 1000, {
+        started.signal()
+        secondRelease.wait()
+        return ["ok": true]
+      }, 100)
+      XCTAssertEqual(second["error_code"] as? String, "bridge-read-abandoned")
+      finished.fulfill()
+    }
+    started.wait()
+    let secondBusy = RunnerSnapshotBridgeReadForTest(request, 100, { ["ok": true] }, 100)
+    XCTAssertEqual(secondBusy["error_code"] as? String, "bridge-read-in-flight")
+    wait(for: [finished], timeout: 5)
+    secondRelease.signal()
+    RunnerSnapshotBridgeDrainForTest()
   }
 
   func testReaderDoesNotRefuseTheBoundsOfAFirstRead() throws {
