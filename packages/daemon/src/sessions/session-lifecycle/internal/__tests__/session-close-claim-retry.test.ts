@@ -1,6 +1,7 @@
 import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import {
   sessionCloseShutdownFixture,
   type SessionState,
@@ -13,6 +14,7 @@ bindTestCommandHost();
 const {
   acquireDeviceClaim,
   AppError,
+  flushDiagnosticsToSessionFile,
   fs,
   handleSessionCommands,
   inspectDeviceClaims,
@@ -23,6 +25,7 @@ const {
   noopInvoke,
   path,
   resetSessionCloseShutdownMocks,
+  withDiagnosticsScope,
 } = sessionCloseShutdownFixture;
 
 // #4237: a close whose cleanup failed withheld the device claim but retired the session, so a
@@ -113,7 +116,11 @@ function close(
   sessionStore: ReturnType<typeof makeSessionStore>,
   sessionName: string,
   loader: ReturnType<typeof lifecycleOperationsSpy>['loader'],
-  options: Readonly<{ leaseRegistry?: LeaseRegistryInstance; saveScript?: true }> = {},
+  options: Readonly<{
+    leaseRegistry?: LeaseRegistryInstance;
+    leaseLifecycleProvider?: LeaseLifecycleProvider;
+    saveScript?: true;
+  }> = {},
 ) {
   return handleSessionCommands({
     host: createTestHostEnvironment(),
@@ -131,6 +138,9 @@ function close(
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     ...(options.leaseRegistry ? { leaseRegistry: options.leaseRegistry } : {}),
+    ...(options.leaseLifecycleProvider
+      ? { leaseLifecycleProvider: options.leaseLifecycleProvider }
+      : {}),
     invoke: noopInvoke,
   });
 }
@@ -268,3 +278,58 @@ test('after a close --save-script publishes and its cleanup fails, a plain close
   await expect(close(sessionStore, sessionName, loader)).resolves.toMatchObject({ ok: true });
   expect(inspectDeviceClaims({ serial: device.id }, process.env)).toEqual([]);
 });
+
+// A failed provider release keeps a claimless session for its own retry. The cleanup failure report,
+// whose hint says the session was retired, is built only once the close does retire the session.
+test.each([
+  { failure: 'only the lease release fails', cleanupFails: false },
+  { failure: 'cleanup and the lease release fail', cleanupFails: true },
+])(
+  'a claimless close where $failure keeps the session without a retired-session report',
+  async ({ cleanupFails }) => {
+    const sessionName = 'close-lease-release-failure';
+    const leaseRegistry = new LeaseRegistry();
+    const sessionStore = await openSession(sessionName, {
+      claim: false,
+      lease: { registry: leaseRegistry },
+    });
+    const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
+    if (cleanupFails) {
+      finalizeApplicationClose.mockRejectedValueOnce(
+        new AppError('COMMAND_FAILED', 'adb timed out after 5000ms'),
+      );
+    }
+    const release = vi
+      .fn<NonNullable<LeaseLifecycleProvider['release']>>()
+      .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'provider unreachable'))
+      .mockResolvedValue(undefined);
+    const options = { leaseRegistry, leaseLifecycleProvider: { release } };
+    const diagnosticsLogPath = path.join(claimsRoot, 'diagnostics.ndjson');
+
+    const failed = await withDiagnosticsScope(
+      { session: sessionName, command: 'close', logPath: diagnosticsLogPath },
+      async () => {
+        const response = await close(sessionStore, sessionName, loader, options);
+        flushDiagnosticsToSessionFile({ force: true });
+        return response;
+      },
+    );
+
+    expect(failed).toMatchObject({ ok: false, error: { code: 'COMMAND_FAILED', retriable: true } });
+    expect(sessionStore.get(sessionName)).toBeDefined();
+    const phases = fs.existsSync(diagnosticsLogPath)
+      ? fs
+          .readFileSync(diagnosticsLogPath, 'utf8')
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line).phase)
+      : [];
+    expect(phases).not.toContain('session_close_cleanup_failed');
+
+    await expect(close(sessionStore, sessionName, loader, options)).resolves.toMatchObject({
+      ok: true,
+    });
+    expect(sessionStore.get(sessionName)).toBeUndefined();
+    expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
+  },
+);

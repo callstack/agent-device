@@ -103,6 +103,7 @@ Open apps and links:
 - Android React Native: `open --relaunch` needs an installed package name. Install or reinstall the APK first; `open <apk|aab> --relaunch` is rejected. For Metro-backed JS changes, run `metro reload` before reaching for `open <app> --relaunch`.
 - Android (adb): an intent target such as `open settings` records the package that opened as `appBundleId`. `open settings --relaunch` stops and restarts that app. If the intent matches more than one activity, `--relaunch` fails.
 - Android (ADB): `close` force-stops the app, then checks for 2 seconds that it has left the foreground, waits up to 10 seconds for the processes it killed to exit, and checks for 2 more that no new process started. If a check window ends first, `close` fails with `details.reason: android-app-close-timeout` and `details.phase` set to `foreground`, `exit`, or `process`; a process that survives the force-stop fails with `exit`, and apps Android restarts at once, such as the launcher, fail with `process`. When `pidof` cannot list the app's processes, `close` fails with `details.reason: android-process-probe-unavailable`; if that happens before the force-stop, the app keeps running.
+- When `close` cannot confirm its cleanup on a session that holds a device claim, it fails and keeps the session and its claim, so the device is not handed on unconfirmed. Run plain `close` again to retry the cleanup and release the device; leave out `--save-script` if the first attempt already published the script.
 
 iOS Simulator launch behavior:
 

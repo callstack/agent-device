@@ -380,23 +380,25 @@ async function runCloseTeardownAndRelease(params: {
       platformResourceCleanup: params.platformResourceCleanup,
     });
   let session = sessionStore.requireCurrent(ref);
-  const cleanupAggregate = closeCleanupError(sessionName, cleanupFailures, {
-    sessionKept: Boolean(session.deviceClaim),
-  });
-  const deviceClaimBlockingError = platformCloseError ?? cleanupAggregate;
-  if (deviceClaimBlockingError && session.deviceClaim) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'device_claim_close_effects_unconfirmed',
-      data: {
-        deviceKey: session.deviceClaim.deviceKey,
-        session: sessionName,
-      },
-    });
-    // The withheld claim names a live owner, so `--stale` cannot reclaim it. Retiring the session
-    // would leave nothing able to release it; keeping it, and its lease, lets a retried close
-    // rerun the teardown.
-    throw deviceClaimBlockingError;
+  // Each failure report is built where the session's fate is decided, so its diagnostic and hint
+  // describe what actually happened to the session.
+  if (session.deviceClaim) {
+    const claimBlockingError =
+      platformCloseError ?? closeCleanupError(sessionName, cleanupFailures, { sessionKept: true });
+    if (claimBlockingError) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'device_claim_close_effects_unconfirmed',
+        data: {
+          deviceKey: session.deviceClaim.deviceKey,
+          session: sessionName,
+        },
+      });
+      // The withheld claim names a live owner, so `--stale` cannot reclaim it. Retiring the
+      // session would leave nothing able to release it; keeping it, and its lease, lets a retried
+      // close rerun the teardown.
+      throw claimBlockingError;
+    }
   }
   const leaseRelease = await releaseProviderLeaseForClose({
     req,
@@ -406,9 +408,11 @@ async function runCloseTeardownAndRelease(params: {
   });
   if (leaseRelease.response) return { kind: 'response', response: leaseRelease.response };
   session = sessionStore.resolveCurrent(ref) ?? session;
-  if (!deviceClaimBlockingError) await clearDeviceClaim(session.deviceClaim, params.env);
+  const closeError =
+    platformCloseError ?? closeCleanupError(sessionName, cleanupFailures, { sessionKept: false });
+  if (!closeError) await clearDeviceClaim(session.deviceClaim, params.env);
   sessionStore.retire(ref, { retainExecutionHost });
-  if (deviceClaimBlockingError) throw deviceClaimBlockingError;
+  if (closeError) throw closeError;
   if (saveScriptError) throw saveScriptError;
   return { kind: 'closed', providerData: leaseRelease.providerData, shutdownResult };
 }
