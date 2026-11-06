@@ -44,6 +44,7 @@ import {
 } from './system-surface-foreground.ts';
 import {
   bridgeFailureDisposition,
+  type BridgeFailureDisposition,
   type BridgeFallbackDisposition,
   type CaptureScopedConsequence,
 } from './snapshot-route-failure-policy.ts';
@@ -330,8 +331,10 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
       });
       if (outcome.stage === 'failed') {
         rethrowCancelledFailure(outcome.failure, signal);
-        const disposition = bridgeFailureDisposition(outcome.failure);
-        if (disposition.scope === 'runner-session') disableRunnerSession(circuit);
+        const disposition = settleRunnerSessionRefusal(
+          circuit,
+          bridgeFailureDisposition(outcome.failure),
+        );
         if ('surfaceHost' in disposition) {
           return await fallbackForSurfaceHost(
             device,
@@ -416,22 +419,29 @@ function targetFailureReason(
     undefined,
     error,
   );
-  if (disposition?.scope === 'runner-session') {
-    disableRunnerSession(circuit);
-    return disposition;
-  }
+  if (disposition?.scope === 'runner-session')
+    return settleRunnerSessionRefusal(circuit, disposition);
   return 'target-resolution-failed';
 }
 
 type RunnerSessionCircuit = { readonly sessionId?: string; sessionDisabled: boolean };
 
 /**
- * Disables the bridge for the circuit's runner session. Only a probe that names a different session
- * replaces a circuit, so a circuit that names no session could never be cleared: there the refusal
- * speaks for this capture only.
+ * Retires the bridge for the circuit's runner session when the circuit names that session; a later
+ * probe that names another session replaces the circuit and clears it. A circuit with no session id
+ * has nothing to tie the retirement to, so there the refusal speaks for this capture only, and its
+ * warning says so.
  */
-function disableRunnerSession(circuit: RunnerSessionCircuit): void {
-  if (circuit.sessionId !== undefined) circuit.sessionDisabled = true;
+function settleRunnerSessionRefusal<Disposition extends BridgeFailureDisposition>(
+  circuit: RunnerSessionCircuit,
+  disposition: Disposition,
+): Disposition | Readonly<{ scope: 'capture'; code: string; consequence: 'bridge-read-busy' }> {
+  if (disposition.scope !== 'runner-session') return disposition;
+  if (circuit.sessionId === undefined) {
+    return { scope: 'capture', code: disposition.code, consequence: 'bridge-read-busy' };
+  }
+  circuit.sessionDisabled = true;
+  return disposition;
 }
 
 const SURFACE_HOST_EXECUTABLES = IOS_SYSTEM_SURFACE_HOSTS.map((host) => host.processExecutable);

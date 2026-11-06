@@ -617,7 +617,7 @@ test('a wedge on a route that never names a runner session speaks for that captu
   const { provider, sent } = bridgeRunner(state);
   const { snapshot, presented } = bridgeRoute(provider);
   expect((await snapshot()).warnings).toEqual([
-    'Simulator AX snapshot unavailable (bridge-reader-wedged); used XCTest for this runner session.',
+    'Simulator AX snapshot unavailable (bridge-reader-wedged); used XCTest for this capture while an earlier bridge read was still running.',
   ]);
   state.refuseTarget = undefined;
   await snapshot();
@@ -660,7 +660,7 @@ test('a wedge before the runner id is known does not disable a newly identified 
       async () => runnerResult(),
     );
   expect((await snapshot()).warnings).toEqual([
-    'Simulator AX snapshot unavailable (bridge-reader-wedged); used XCTest for this runner session.',
+    'Simulator AX snapshot unavailable (bridge-reader-wedged); used XCTest for this capture while an earlier bridge read was still running.',
   ]);
   sessionId = 'new';
   state.refuseTarget = undefined;
