@@ -2,6 +2,8 @@ import type {
   AppDeploymentInput,
   AppDeploymentResult,
   AppDeploymentRuntimeOperations,
+  AppUninstallInput,
+  AppUninstallResult,
 } from '@agent-device/contracts/app-deployment-runtime';
 import type { HostCommandRunner } from '@agent-device/contracts/platform-runtime-host';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
@@ -34,7 +36,7 @@ export function harmonyAppDeploymentFacts(device: DeviceInfo): Readonly<{
     materializeAppSource: unsupportedLeaf,
     deployMaterializedApp: unsupportedLeaf,
     sendPushNotification: unsupportedLeaf,
-    uninstallApp: unsupportedLeaf,
+    uninstallApp: deploy,
   });
 }
 
@@ -48,7 +50,43 @@ export function createHarmonyAppDeploymentOperations(params: {
   return Object.freeze({
     deployApp: async (input: AppDeploymentInput) =>
       await deployHarmonyApp(params.commands, params.device, input, params.signal),
+    uninstallApp: async (input: AppUninstallInput) =>
+      await uninstallHarmonyApp(params.commands, params.device, input, params.signal),
   });
+}
+
+async function uninstallHarmonyApp(
+  commands: HostCommandRunner,
+  device: DeviceInfo,
+  input: AppUninstallInput,
+  signal: AbortSignal,
+): Promise<AppUninstallResult> {
+  const bundleId = input.app.trim();
+  if (!bundleId) {
+    throw new AppError('INVALID_ARGS', 'Uninstall requires a HarmonyOS bundle name', {
+      hint: 'Pass the bundle name reported by bm dump, such as com.example.app.',
+    });
+  }
+  const dump = await runHdcShell(commands, device, ['bm', 'dump', '-n', bundleId], signal, {
+    allowFailure: true,
+  });
+  if (dump.exitCode !== 0 || !parseBundleDump(dump.stdout)) return { wasInstalled: false };
+  await runHdcShell(commands, device, ['bm', 'uninstall', '-n', bundleId], signal);
+  return { wasInstalled: true, packageName: bundleId };
+}
+
+/** A bundle is present when `bm dump -n` exits zero with its JSON record. */
+function parseBundleDump(rawOutput: string): Record<string, unknown> | undefined {
+  const jsonStart = rawOutput.indexOf('{');
+  if (jsonStart === -1) return undefined;
+  try {
+    const dump = JSON.parse(rawOutput.slice(jsonStart)) as unknown;
+    return typeof dump === 'object' && dump !== null
+      ? (dump as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function deployHarmonyApp(
@@ -165,13 +203,14 @@ async function runHdcShell(
   device: DeviceInfo,
   words: readonly ShellWord[],
   signal: AbortSignal,
-  timeoutMs = 15_000,
+  options: Readonly<{ allowFailure?: boolean; timeoutMs?: number }> = {},
 ) {
   return await commands.run(
     {
       executable: 'hdc',
       args: deviceShellArgv('hdc', 'shell', words, ['-t', device.id]),
-      timeoutMs,
+      timeoutMs: options.timeoutMs ?? 15_000,
+      allowFailure: options.allowFailure,
     },
     signal,
   );
