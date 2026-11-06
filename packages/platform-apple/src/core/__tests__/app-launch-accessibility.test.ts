@@ -129,7 +129,10 @@ test('the teardown writer rejects on failure so runner cleanup can report it', a
       throw new Error('defaults unavailable');
     },
     async () => {
-      await assert.rejects(enableIosSimulatorAppAccessibility(IOS_TEST_SIMULATOR));
+      await assert.rejects(
+        enableIosSimulatorAppAccessibility(IOS_TEST_SIMULATOR),
+        /defaults unavailable/,
+      );
     },
   );
 });

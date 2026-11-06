@@ -42,8 +42,9 @@ function appleToolingTestAdapters(): Pick<
   return {
     runAppleToolCommand: async () => unavailable('runAppleToolCommand'),
     runXcrun: async () => unavailable('runXcrun'),
-    enableIosSimulatorAppAccessibility: async () =>
-      unavailable('enableIosSimulatorAppAccessibility'),
+    // Teardown treats this repair as best effort and catches its failure, so a throwing default
+    // would fail silently. It is a no-op; a suite that checks the repair overrides it.
+    enableIosSimulatorAppAccessibility: async () => {},
     // The one genuine tool: xctestrun product resolution reads real plists through `plutil`.
     readApplePlistJson: async (plistPath, signal) => {
       try {
