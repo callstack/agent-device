@@ -87,7 +87,7 @@ These events penalize the XCTest accessibility channel for that bundle for a bou
 
 - A slow XCTest acquisition above the three-second threshold.
 - A timed-out XCTest tier.
-- Abandoned system-modal work.
+- System-modal work that the watchdog abandoned.
 - A regular-plan query-sweep timeout. The plan also refuses the partial capture.
 
 Under a penalty, regular plans derive the next step from backend traits (`effectiveSnapshotCapturePlan`).
