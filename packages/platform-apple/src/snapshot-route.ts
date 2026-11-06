@@ -41,6 +41,7 @@ import { SnapshotSourceError } from './snapshot-source/errors.ts';
 import {
   createSystemSurfaceForegroundProbe,
   type SystemSurfaceForegroundProbe,
+  type SystemSurfaceForegroundReading,
 } from './system-surface-foreground.ts';
 import {
   bridgeFailureDisposition,
@@ -208,7 +209,7 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
    */
   const circuitForProbe = (
     startingCircuit: typeof currentCircuit,
-    probeResult: Awaited<ReturnType<SystemSurfaceForegroundProbe>>,
+    probeResult: SystemSurfaceForegroundReading,
     device: DeviceInfo,
   ): typeof currentCircuit => {
     const probedSessionId = channel.sessionChanged ? probeResult.sessionId : undefined;
@@ -451,7 +452,7 @@ async function readSurfaceForeground(
   input: CaptureSnapshotInput,
   signal: AbortSignal,
   probe: SystemSurfaceForegroundProbe,
-): Promise<Awaited<ReturnType<SystemSurfaceForegroundProbe>>> {
+): Promise<SystemSurfaceForegroundReading> {
   const requestId = input.execution?.requestId;
   const foreground = await probe(device, { signal, ...(requestId ? { requestId } : {}) });
   if (foreground.foreground === 'background') {

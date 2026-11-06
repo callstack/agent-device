@@ -83,9 +83,11 @@ extension RunnerTests {
     let admitted = RunnerSnapshotBridgeReadForTest(request, 1000, { ["ok": true] }, 16)
     XCTAssertEqual(admitted["ok"] as? Bool, true)
 
+    // A read admitted after an abandoned one must not inherit the old abandon stamp (10): checked at
+    // 100, while this read is still inside its budget, a stale stamp would answer bridge-reader-wedged.
     let started = DispatchSemaphore(value: 0)
     let secondRelease = DispatchSemaphore(value: 0)
-    let finished = expectation(description: "second read outlives its budget")
+    let secondAbandoned = expectation(description: "the second read is abandoned at its budget")
     DispatchQueue.global().async {
       let second = RunnerSnapshotBridgeReadForTest(request, 1000, {
         started.signal()
@@ -93,12 +95,12 @@ extension RunnerTests {
         return ["ok": true]
       }, 100)
       XCTAssertEqual(second["error_code"] as? String, "bridge-read-abandoned")
-      finished.fulfill()
+      secondAbandoned.fulfill()
     }
     started.wait()
     let secondBusy = RunnerSnapshotBridgeReadForTest(request, 100, { ["ok": true] }, 100)
     XCTAssertEqual(secondBusy["error_code"] as? String, "bridge-read-in-flight")
-    wait(for: [finished], timeout: 5)
+    wait(for: [secondAbandoned], timeout: 5)
     secondRelease.signal()
     RunnerSnapshotBridgeDrainForTest()
   }

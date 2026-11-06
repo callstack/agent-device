@@ -23,10 +23,16 @@ export type SystemSurfaceForeground =
   | 'background'
   | 'unknown';
 
+/** One foreground read, with the runner session it was read through when that session is known. */
+export type SystemSurfaceForegroundReading = Readonly<{
+  foreground: SystemSurfaceForeground;
+  sessionId?: string;
+}>;
+
 export type SystemSurfaceForegroundProbe = (
   device: DeviceInfo,
   input: Readonly<{ signal: AbortSignal; requestId?: string }>,
-) => Promise<Readonly<{ foreground: SystemSurfaceForeground; sessionId?: string }>>;
+) => Promise<SystemSurfaceForegroundReading>;
 
 /**
  * Bounds each read below the read-only resend window, so a runner busy draining abandoned XCTest
