@@ -156,7 +156,9 @@ The daemon keeps the target until a read refuses it with `target-process-changed
 On a `targetFreshness: 'cached'` channel, the route asks for a fresh target before it trusts an open circuit.
 If that request fails, the channel keeps its cached target, and the capture names no generation.
 
-For the system-surface proof, the runner reads the process table of the Simulator that it runs in.
+For the system-surface proof, the route starts the runner when none is live, and then reads only that runner session.
+If the session id cannot be read, the foreground read answers `unknown`, and the bridge read names the surface hosts.
+The runner then reads the process table of the Simulator that it runs in.
 A sandbox that refuses that table gives `system-surface-host-unverified`, and the capture uses XCTest.
 
 ## Bounded depth recovery
