@@ -52,6 +52,26 @@ export function parseTouchTarget(positionals: string[], commandLabel: string): P
       }
       return parseTouchRefSequence(positionals);
     }
+    const spaceSeparatedRef = positionals[1];
+    if (
+      SEQUENCE_TOUCH_COMMANDS.has(commandLabel) &&
+      spaceSeparatedRef !== undefined &&
+      /^@e\d+(~s\d+)?$/.test(spaceSeparatedRef.trim())
+    ) {
+      // `press @e13 @e14` is a comma-separated plan typed with spaces. On the
+      // single-ref path the extra positional would become a fallback label and
+      // every key after the first would be lost to a silent success — the
+      // exact failure class the sequence form exists to remove.
+      return {
+        ok: false,
+        response: errorResponse(
+          'INVALID_ARGS',
+          `"${spaceSeparatedRef.trim()}" looks like a second key. Separate the keys of a ref sequence with commas: @e13,@e14.`,
+          undefined,
+          { hint: REF_SEQUENCE_HINT },
+        ),
+      };
+    }
     const versioned = parseVersionedRefPositional(first);
     if (!versioned.ok) return { ok: false, response: versioned.response };
     return {
@@ -83,10 +103,28 @@ const TOUCH_SEQUENCE_MAX_REFS = 16;
  * The multi-ref press plan (`press @e13,@e14,@e15,@e16`): every comma-separated
  * token must parse as a versioned snapshot ref and normalize to the `e<digits>`
  * body the frame issues, and the plan names at least two distinct keys. The
- * first member stays the command's `target` so response identity and recording
- * keep today's single-ref shape; the full plan rides beside it.
+ * first member stays the command's `target` so the response's ref identity
+ * keeps the single-ref shape; the full plan rides beside it. The form is not
+ * recordable — the recorder binds one target per step — so daemon admission
+ * refuses it while a script recording is armed, and a replay dispatch that
+ * still carries a target guard for it refuses instead of downgrading to the
+ * first key.
  */
 function parseTouchRefSequence(positionals: string[]): ParsedTouchTarget {
+  if (positionals.length > 1) {
+    // A plan is one positional. A trailing token would otherwise be dropped
+    // silently, while the same command on the single-ref path reads it as a
+    // fallback label — one trailing rule per form, stated instead of guessed.
+    return {
+      ok: false,
+      response: errorResponse(
+        'INVALID_ARGS',
+        `Unexpected argument "${positionals.slice(1).join(' ')}" after the ref sequence — a multi-ref plan takes no trailing label.`,
+        undefined,
+        { hint: REF_SEQUENCE_HINT },
+      ),
+    };
+  }
   const members = positionals[0]!.split(',').map((token) => token.trim());
   if (members.some((token) => token.length === 0)) {
     return {

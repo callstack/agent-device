@@ -1,6 +1,11 @@
-import type { Point } from '@agent-device/kernel/snapshot';
+import type { Point, Rect } from '@agent-device/kernel/snapshot';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
-import { localIdentitiesEqual, readNodeLocalIdentity } from '@agent-device/ad-script';
+import { areCapturedRectsAtSamePosition } from '@agent-device/kernel/rect-center';
+import {
+  localIdentitiesEqual,
+  nodeRectByIdentity,
+  readNodeLocalIdentity,
+} from '@agent-device/ad-script';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import { resolveNodeTouchPoint } from '@agent-device/selectors/node-touch-point';
@@ -13,10 +18,15 @@ import type {
 import { attachResolvedInteractionTarget } from '@agent-device/host-kit/interaction-outcome';
 import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import { normalizeRef } from '@agent-device/kernel/snapshot';
-import { sleep, toBackendContext } from '../../runtime-common.ts';
+import { now, sleep, toBackendContext } from '../../runtime-common.ts';
 import { toBackendResult } from '../../runtime-types.ts';
 import { resolveInteractionTarget } from './resolution.ts';
-import { guardResolvedTargetAgainstMotion } from './moving-target-gate.ts';
+import {
+  guardResolvedTargetAgainstMotion,
+  motionRefusal,
+  movingTargetGateDecision,
+  windowParamForPlatform,
+} from './moving-target-gate.ts';
 import { captureInteractionSnapshot } from './interaction-snapshot-capture.ts';
 import { requireSnapshotSession } from './selector-read-shared.ts';
 import {
@@ -58,11 +68,27 @@ import {
  *   element left the screen, or whose identity now names several nodes, refuses
  *   with `sequence_ref_unmatched` instead of tapping a stale coordinate: the
  *   false-success-on-the-new-screen outcome ADR 0014 exists to prevent.
+ * - Each later key also passes a rest check before it dispatches, so the
+ *   success path keeps the ordinary press's `target_still_moving` parity. The
+ *   session's moving-target baseline was retired by the first key's
+ *   side-effect seam, and the frame a gate re-resolution would spend is
+ *   expired, so the guard anchors on the PREVIOUS key instead: its acting tree
+ *   plays the baseline tree, its dispatch finish time plays the baseline
+ *   timestamp, and a key the window cannot settle is measured with a second
+ *   identity look that must agree on the position. The refusal is the shared
+ *   `target_still_moving` one, raised beside the gate that owns the reason.
+ *
+ * The response's target identity is the FIRST key (`@e13`), the member the
+ * command's target positional named; `sequence.points` carries where every key
+ * landed, in plan order, so the last key's position is not lost.
  *
  * Same-point repetition knobs (`--count`, `--hold-ms`, `--jitter-px`,
  * `--double-tap`, a non-primary button) are refused: they describe one target's
  * repetition schedule, which a multi-key plan does not have. `--interval-ms` is
- * accepted and sleeps between keys.
+ * accepted and sleeps between keys. Script recording refuses the form at daemon
+ * admission — the recorder binds one target per step — and a replay dispatch
+ * that still carries a target guard for it refuses rather than downgrading to
+ * the first key.
  */
 
 /** The sequence form applies to ref plans only; replay and `find` shapes are single-ref. */
@@ -80,6 +106,18 @@ type MintedKey = {
   ref: string;
   resolved: ResolvedInteractionTarget;
   identity: ReturnType<typeof readNodeLocalIdentity>;
+};
+
+/** A re-found key's resolution: always a ref target with a node to judge. */
+type RefoundKey = Extract<ResolvedInteractionTarget, { kind: 'ref' }>;
+
+/**
+ * The baseline one dispatched key leaves for the next key's rest check: when its
+ * dispatch finished, and the capture its dispatched point was measured on.
+ */
+type PreviousKeyDispatch = {
+  finishedAtMs: number;
+  surface: SurfaceScopedNodes | undefined;
 };
 
 /** The same-point repetition options a multi-key plan refuses, by flag name. */
@@ -104,7 +142,7 @@ export async function tapRefSequenceCommand(
       'INVALID_ARGS',
       `A multi-ref press sequence cannot take --${conflicting}: each key is pressed once, in plan order.`,
       {
-        reason: 'sequence_option_conflict',
+        reason: INTERACTION_ERROR_REASONS.sequenceOptionConflict,
         option: conflicting,
         hint: 'Drop the repetition option, or issue one press per key with it.',
       },
@@ -139,6 +177,7 @@ export async function tapRefSequenceCommand(
   );
   const dispatched: Point[] = [requirePoint(atRest, minted[0]!.ref)];
   let lastResolved = atRest;
+  let previousDispatch: PreviousKeyDispatch | undefined;
   let lastBackendResult: Record<string, unknown> | undefined;
   try {
     const firstResult = await runtime.backend.tap(
@@ -151,28 +190,51 @@ export async function tapRefSequenceCommand(
     attachResolvedInteractionTarget(error, atRest);
     throw error;
   }
+  previousDispatch = { finishedAtMs: now(runtime), surface: pointObservationOf(atRest) };
 
   // Later keys re-find on a fresh capture; the capture's presentation follows
   // the frame tree's so the carrier comparison reads the node set the plan
   // minted from (the moving-target gate's presentation-parity rule).
   const interactiveOnly = await readFramePresentation(runtime, options.session ?? 'default');
-  for (const key of minted.slice(1)) {
+  for (const [offset, key] of minted.slice(1).entries()) {
+    const pressed = minted.slice(0, offset + 1).map((done) => `@${done.ref}`);
+    const pending = minted.slice(offset + 2).map((left) => `@${left.ref}`);
     if (options.intervalMs !== undefined) await sleep(runtime, options.intervalMs);
-    const resolved = await refindSequenceKey(runtime, options, key, action, interactiveOnly);
-    const point = requirePoint(resolved, key.ref);
+    const found = await refindSequenceKey(
+      runtime,
+      options,
+      key,
+      action,
+      interactiveOnly,
+      pressed,
+      pending,
+    );
+    const atRestKey = await guardSequenceKeyAtRest(
+      runtime,
+      options,
+      key,
+      action,
+      interactiveOnly,
+      pressed,
+      pending,
+      previousDispatch,
+      found,
+    );
+    const point = requirePoint(atRestKey, key.ref);
     try {
       const backendResult = await runtime.backend.tap(
         toBackendContext(runtime, options),
         point,
-        tapOptions(resolved),
+        tapOptions(atRestKey),
       );
       lastBackendResult = toBackendResult(backendResult);
     } catch (error) {
-      attachResolvedInteractionTarget(error, resolved);
+      attachResolvedInteractionTarget(error, atRestKey);
       throw error;
     }
     dispatched.push(point);
-    lastResolved = resolved;
+    lastResolved = atRestKey;
+    previousDispatch = { finishedAtMs: now(runtime), surface: pointObservationOf(atRestKey) };
   }
 
   const sequence: PressSequenceSummary = {
@@ -180,15 +242,17 @@ export async function tapRefSequenceCommand(
     refs: minted.map((key) => `@${key.ref}`),
     points: dispatched,
   };
-  // `--verify`/`--settle` describe the whole command: the baseline is the
-  // pre-command capture the first mint resolution took, and the reported
-  // target is the last key the plan dispatched.
+  // `--verify`/`--settle` describe the whole command: the observation target is
+  // the last key the plan dispatched — the surface state the sequence left —
+  // while its baseline is the pre-command capture the first mint resolution
+  // took. The response's target identity stays the FIRST key, the member the
+  // command's target positional named.
   return await applyPostActionObservation(
     runtime,
     options,
     withMintBaseline(lastResolved, minted[0]!.resolved),
     {
-      ...lastResolved,
+      ...withMintBaseline(atRest, minted[0]!.resolved),
       ...(lastBackendResult ? { backendResult: lastBackendResult } : {}),
       sequence,
     },
@@ -253,13 +317,17 @@ async function refindSequenceKey(
   key: MintedKey,
   action: 'click' | 'press',
   interactiveOnly: boolean,
-): Promise<ResolvedInteractionTarget> {
+  pressed: readonly string[],
+  pending: readonly string[],
+): Promise<RefoundKey> {
   const { snapshot } = await captureInteractionSnapshot(runtime, options, interactiveOnly);
   const scoped = surfaceScopedNodes(snapshot);
   const carriers = scoped.nodes.filter((candidate) =>
     localIdentitiesEqual(key.identity, readNodeLocalIdentity(candidate)),
   );
-  if (carriers.length !== 1) throw sequenceKeyRefusal(key, carriers.length, scoped);
+  if (carriers.length !== 1) {
+    throw sequenceKeyRefusal(key, carriers.length, scoped, pressed, pending);
+  }
   const { node, tapPoint } = await runInteractionPipelineStages({
     policy: SELECTOR_PIPELINE_POLICIES.promotedTarget,
     nodes: scoped.nodes,
@@ -290,23 +358,97 @@ async function refindSequenceKey(
   };
 }
 
+/**
+ * The rest check one dispatched key owes the next (see the module contract).
+ * A key found within the previous key's motion window at a position its acting
+ * tree does not already show is measured a second time; the dispatch waits for
+ * the two looks to agree and refuses with the shared `target_still_moving`
+ * reason when they do not — the same outcome a standalone press would meet.
+ */
+async function guardSequenceKeyAtRest(
+  runtime: AgentDeviceRuntime,
+  options: PressCommandOptions,
+  key: MintedKey,
+  action: 'click' | 'press',
+  interactiveOnly: boolean,
+  pressed: readonly string[],
+  pending: readonly string[],
+  previous: PreviousKeyDispatch,
+  firstLook: RefoundKey,
+): Promise<RefoundKey> {
+  const decision = movingTargetGateDecision({
+    baselineFinishedAtMs: previous.finishedAtMs,
+    targetShownAtRest: actingSurfaceShowsKeyAtRest(previous.surface, firstLook),
+    nowMs: now(runtime),
+    ...windowParamForPlatform(runtime.backend.platform),
+  });
+  if (decision.kind !== 'recheck') return firstLook;
+  const waitedFrom = now(runtime);
+  await sleep(runtime, decision.waitMs);
+  const secondLook = await refindSequenceKey(
+    runtime,
+    options,
+    key,
+    action,
+    interactiveOnly,
+    pressed,
+    pending,
+  );
+  const firstRect = rectOf(firstLook);
+  const secondRect = rectOf(secondLook);
+  if (
+    firstRect !== undefined &&
+    secondRect !== undefined &&
+    onSameSurface(firstLook, secondLook) &&
+    areCapturedRectsAtSamePosition(firstRect, secondRect)
+  ) {
+    return secondLook;
+  }
+  throw motionRefusal(firstLook, secondRect, now(runtime) - waitedFrom);
+}
+
+/** Whether the previous key's acting tree already shows this key at this rect. */
+function actingSurfaceShowsKeyAtRest(
+  surface: SurfaceScopedNodes | undefined,
+  resolved: RefoundKey,
+): boolean {
+  if (!surface || !resolved.node?.rect) return false;
+  if (surface.surfaceBundleId !== resolved.preAction?.surfaceBundleId) return false;
+  const carried = nodeRectByIdentity(surface.nodes, resolved.node);
+  return carried !== undefined && areCapturedRectsAtSamePosition(carried, resolved.node.rect);
+}
+
+/** Rest is one position on one surface; a different presentation measures nothing (#2438). */
+function onSameSurface(first: RefoundKey, next: RefoundKey): boolean {
+  return first.preAction?.surfaceBundleId === next.preAction?.surfaceBundleId;
+}
+
+function rectOf(resolved: ResolvedInteractionTarget): Rect | undefined {
+  return resolved.kind === 'point' ? undefined : resolved.node?.rect;
+}
+
 /** The typed refusal for a planned key the fresh screen can no longer name exactly once. */
 function sequenceKeyRefusal(
   key: MintedKey,
   carrierCount: number,
   scoped: SurfaceScopedNodes,
+  pressed: readonly string[],
+  pending: readonly string[],
 ): AppError {
+  const pressedList = pressed.length > 0 ? ` Keys already pressed: ${pressed.join(', ')}.` : '';
   return discloseDispatch(
     new AppError(
       'COMMAND_FAILED',
       carrierCount === 0
-        ? `Ref @${key.ref} no longer names a node with its planned identity`
-        : `Ref @${key.ref}'s identity now names ${carrierCount} nodes; the plan cannot tell them apart`,
+        ? `Ref @${key.ref} no longer names a node with its planned identity.${pressedList}`
+        : `Ref @${key.ref}'s identity now names ${carrierCount} nodes; the plan cannot tell them apart.${pressedList}`,
       {
         reason: INTERACTION_ERROR_REASONS.sequenceRefUnmatched,
         ref: `@${key.ref}`,
         identity: key.identity,
         surfaceBundleId: scoped.surfaceBundleId,
+        executed: pressed.length,
+        pending,
         hint: 'Keys already dispatched may have changed the screen; run snapshot -i and rebuild the remaining plan.',
       },
     ),

@@ -413,7 +413,10 @@ export function selectorSnapshotFields() {
 export function repeatedFields() {
   return {
     count: integerField('Number of press/click repetitions.', { min: 1 }),
-    intervalMs: integerField('Delay between repeated press/click actions.', { min: 0 }),
+    intervalMs: integerField(
+      'Delay between repeated press/click actions, or between the keys of a comma-separated ref sequence.',
+      { min: 0 },
+    ),
     holdMs: integerField('Hold duration for each action.', { min: 0 }),
     jitterPx: integerField(
       'Deterministic per-axis coordinate jitter in pixels (each press offsets x and y by up to this amount).',

@@ -8,6 +8,7 @@ import {
 } from '@agent-device/contracts/click-button';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { resolveRefStalenessWarning } from '../../session-snapshot.ts';
+import { isSessionRecording } from '../../../core/session-script-publication-capability.ts';
 import { readRefMutationFrame } from '../../../core/ref-frame.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
@@ -88,6 +89,8 @@ async function readTargetedTouchAdmission(
       ? parseLongPressTarget(positionals)
       : parseTouchTarget(positionals, commandLabel);
   if (!parsedTarget.ok) return { response: parsedTarget.response };
+  const sequenceGuardResponse = sequenceRecordingGuardResponse(session, req, parsedTarget);
+  if (sequenceGuardResponse) return { response: sequenceGuardResponse };
   const staleRefsWarning = readTargetedTouchStalenessWarning(session, req, parsedTarget);
   const refAdmission = admitTargetedTouchRef(
     params,
@@ -187,6 +190,35 @@ function readTargetedTouchStalenessWarning(
     ref: parsedTarget.target.ref,
     mintedGeneration: parsedTarget.refGeneration,
   });
+}
+
+/**
+ * A multi-ref press plan can be neither recorded nor replayed through a target
+ * guard. The recorder binds one target (and its recording-time evidence) to
+ * each recorded step, and a guarded replay dispatch resolves through the
+ * single-ref path — a plan that slipped into either shape would replay its
+ * first key only and report the remaining keys as sent. Refusing at admission
+ * keeps the refusal pre-dispatch: the frame keeps its pre-command state.
+ */
+function sequenceRecordingGuardResponse(
+  session: SessionState,
+  req: InteractionRouteInput['req'],
+  parsedTarget: ParsedTargetedTouch,
+): DaemonResponse | undefined {
+  if (!parsedTarget.refs) return undefined;
+  if (isSessionRecording(session)) {
+    return errorResponse(
+      'INVALID_ARGS',
+      'A multi-ref press sequence cannot be recorded: the recorder binds one target per step, so the recorded step would press only the first key. Record one press per key, or pass --no-record on this step.',
+    );
+  }
+  if (req.internal?.replayTargetGuard !== undefined) {
+    return errorResponse(
+      'INVALID_ARGS',
+      'A multi-ref press sequence cannot carry a replay target guard: the guard binds one target, so the replayed step would press only the first key. Re-record the journey as one press per key.',
+    );
+  }
+  return undefined;
 }
 
 function readRefAdmissionContext(
