@@ -14,11 +14,7 @@ import { isFillableType } from '@agent-device/contracts/snapshot';
 import { attachResolvedInteractionTarget } from '@agent-device/host-kit/interaction-outcome';
 import { toBackendContext } from '../../runtime-common.ts';
 import { toBackendResult, type RuntimeCommand } from '../../runtime-types.ts';
-import {
-  attachScreenshotPairOutcome,
-  dispatchWithScreenshotPair,
-  type ScreenshotPairOutcome,
-} from './screenshot-diff-evidence.ts';
+import type { ScreenshotPairOutcome } from './screenshot-diff-evidence.ts';
 import {
   applyPostActionObservation,
   planPostActionObservation,
@@ -192,6 +188,9 @@ async function tapCommand(
   let backendResult;
   let screenshotOutcome: ScreenshotPairOutcome | undefined;
   try {
+    // Dynamic import: the readback evidence lane stays off the command-runtime entry closure.
+    const { attachScreenshotPairOutcome, dispatchWithScreenshotPair } =
+      await import('./screenshot-diff-evidence.ts');
     ({ result: backendResult, outcome: screenshotOutcome } = await dispatchWithScreenshotPair(
       runtime,
       options,
