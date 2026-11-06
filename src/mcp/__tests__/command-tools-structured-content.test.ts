@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
+import { AppError } from '@agent-device/kernel/errors';
 import { createCommandToolExecutor } from '../command-tools.ts';
 
 test('MCP returns structuredContent for typed tools, and for untyped tools only on request', async () => {
@@ -38,4 +39,32 @@ test('a data host gets structuredContent from untyped tools by default', async (
   const result = await executor.execute('snapshot', {});
 
   assert.deepEqual(result.structuredContent, snapshotResult);
+});
+
+test.each([
+  ['a non-default responseLevel', { responseLevel: 'digest' }],
+  ['includeCost', { includeCost: true }],
+])('an untyped tool returns structuredContent with %s', async (_case, opt) => {
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async () => ({ path: '/tmp/shot.png' }),
+  });
+
+  const result = await executor.execute('screenshot', opt);
+
+  assert.deepEqual(result.structuredContent, { path: '/tmp/shot.png' });
+});
+
+test('a failed untyped tool still returns its error in structuredContent', async () => {
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async () => {
+      throw new AppError('COMMAND_FAILED', 'snapshot failed');
+    },
+  });
+
+  const result = await executor.execute('snapshot', {});
+
+  assert.equal(result.isError, true);
+  assert.equal((result.structuredContent as { code?: string } | undefined)?.code, 'COMMAND_FAILED');
 });
