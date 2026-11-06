@@ -7,6 +7,7 @@ import {
   readRemoteConnectionState,
   writeRemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
+import { connectionProviderCapabilities } from './provider-policy.ts';
 import { isHostAllocatedLease } from '../commands/connection-lease-transaction.ts';
 
 /**
@@ -28,6 +29,11 @@ export function forgetEndedConnectionLease(
   const state = readRemoteConnectionState({ stateDir, session: flags.session ?? 'default' });
   if (!state?.leaseId || !endedLeaseIds.includes(state.leaseId)) return;
   if (isHostAllocatedLease(state)) return;
+  if (
+    connectionProviderCapabilities(state.leaseProvider).leaseKind !== 'proxy' &&
+    state.leaseProvider !== 'limrun'
+  )
+    return;
   writeRemoteConnectionState({
     stateDir,
     state: { ...state, leaseId: undefined, updatedAt: new Date().toISOString() },

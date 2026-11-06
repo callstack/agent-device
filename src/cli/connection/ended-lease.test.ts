@@ -81,5 +81,7 @@ test('an ended host-allocated lease stays stored', () => {
     LEASE_ID,
   );
   assert.equal(storedLeaseIdAfter(reply, { leaseProvider: 'limrun' }), undefined);
-  assert.equal(storedLeaseIdAfter(reply, { leaseProvider: undefined }), undefined);
+  for (const leaseProvider of [undefined, 'revyl', 'browserstack', 'custom-provider']) {
+    assert.equal(storedLeaseIdAfter(reply, { leaseProvider }), LEASE_ID);
+  }
 });

@@ -124,7 +124,7 @@ async function prepareRepairClose(params: {
 
 async function releaseProviderLeaseForClose(params: {
   shutdownPrepared: boolean;
-  cleanupFailures: readonly SessionCleanupFailure[];
+  cleanupFailures: SessionCleanupFailure[];
   sessionName: string;
   req: DaemonRequest;
   session: SessionState;
@@ -141,28 +141,31 @@ async function releaseProviderLeaseForClose(params: {
     let shutdownResult: TargetShutdownResult | undefined;
     const shutdownTarget = params.lifecycle.operations.shutdownTarget;
     if (params.req.flags?.shutdown && shutdownTarget) {
-      if (!params.shutdownPrepared) {
+      const providerShutdown = params.lifecycle.owner.kind === 'provider-runtime';
+      if (!params.shutdownPrepared && providerShutdown) {
         throw (
           closeCleanupError(params.sessionName, params.cleanupFailures) ??
           new AppError('COMMAND_FAILED', 'Target shutdown preparation failed. Retry close.')
         );
       }
-      shutdownResult = await shutdownTarget({
-        releaseLease: async (leaseId) => {
-          const providerData = await releaseTargetLease({
-            ...params,
-            owner: params.lifecycle.owner,
-            leaseId,
+      if (params.shutdownPrepared) {
+        try {
+          shutdownResult = await shutdownTarget({
+            releaseLease: async (leaseId) => {
+              const result = await releaseTargetLease({
+                ...params,
+                owner: params.lifecycle.owner,
+                leaseId,
+              });
+              providerRelease = { providerData: result.provider };
+              return result.shutdown;
+            },
           });
-          providerRelease = { providerData };
-          return {
-            success: true,
-            exitCode: 0,
-            stdout: 'Released provider instance lease.',
-            stderr: '',
-          };
-        },
-      });
+        } catch (error) {
+          if (providerShutdown) throw error;
+          params.cleanupFailures.push({ step: 'application_lifecycle', error });
+        }
+      }
     }
     if (providerRelease) return { ...providerRelease, shutdownResult };
     const { endedLeaseId, providerData } = await releaseSessionLease(params);

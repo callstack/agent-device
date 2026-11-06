@@ -15,6 +15,7 @@ import {
 } from '../../core/session-runtime-admission.ts';
 import { deviceStatusReportResponse } from './session-device-status-response.ts';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { resolveSessionScope, sessionMatchesInventoryScope } from '../session-routing.ts';
 import { releaseTargetLease } from '../target-lease-release.ts';
 
 function shutdownUnavailableResponse(fact: RuntimeOperationFact) {
@@ -62,12 +63,20 @@ export async function handleShutdownCommand(
 
   const deviceSession = params.sessionStore.findByDevice(device.id);
   if (deviceSession) {
+    const visible = sessionMatchesInventoryScope(
+      deviceSession.session,
+      resolveSessionScope(params.req),
+    );
     return errorResponse(
       'DEVICE_IN_USE',
       'Cannot shut down an active session device directly. Use close --shutdown to end the session and turn off the simulator/emulator.',
       {
-        hint: `Run agent-device close --shutdown --session ${deviceSession.address}`,
-        session: deviceSession.address,
+        ...(visible
+          ? {
+              hint: `Run agent-device close --shutdown --session ${deviceSession.address}`,
+              session: deviceSession.address,
+            }
+          : {}),
         platform: publicPlatformString(device),
         target: device.target ?? 'mobile',
         device: device.name,
@@ -82,19 +91,15 @@ export async function handleShutdownCommand(
   let provider: Record<string, unknown> | undefined;
   const shutdown = await runtime.operations.shutdownTarget({
     releaseLease: async (leaseId) => {
-      provider = await releaseTargetLease({
+      const result = await releaseTargetLease({
         req: params.req,
         owner: runtime.owner,
         leaseId,
         leaseRegistry: params.leaseRegistry,
         leaseLifecycleProvider: params.leaseLifecycleProvider,
       });
-      return {
-        success: true,
-        exitCode: 0,
-        stdout: 'Released provider instance lease.',
-        stderr: '',
-      };
+      provider = result.provider;
+      return result.shutdown;
     },
   });
   if (!shutdown.success) {

@@ -1,4 +1,4 @@
-import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
+import type { LeaseLifecycleProvider, TargetShutdownResult } from '@agent-device/contracts/device';
 import { leaseScopeToReleaseRequest } from '@agent-device/contracts/lease-scope';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import { AppError } from '@agent-device/kernel/errors';
@@ -21,7 +21,7 @@ export async function releaseTargetLease(params: {
   leaseId: string;
   leaseRegistry?: LeaseRegistry;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
-}): Promise<Record<string, unknown> | undefined> {
+}): Promise<{ provider?: Record<string, unknown>; shutdown: TargetShutdownResult }> {
   if (isBoundedCompositeRequest(params.req)) {
     refuseBoundedCompositeResourceOperation(params.req, 'provider-lease');
   }
@@ -52,5 +52,13 @@ export async function releaseTargetLease(params: {
     request,
   );
   recordEndedLease(params.req, lease.leaseId);
-  return outcome.provider;
+  return {
+    provider: outcome.provider,
+    shutdown: {
+      success: true,
+      exitCode: 0,
+      stdout: 'Released provider instance lease.',
+      stderr: '',
+    },
+  };
 }

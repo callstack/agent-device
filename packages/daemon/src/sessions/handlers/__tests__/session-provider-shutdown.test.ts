@@ -4,6 +4,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   narrowDeviceBinding,
   providerRuntimeOwner,
+  localRuntimeOwner,
   type DeviceBinding,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
@@ -21,6 +22,7 @@ import { fakeCreateCommandSurface } from '../../../__tests__/support/command-sur
 import { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
+import { resolveSessionScope } from '../../session-routing.ts';
 import { handleShutdownCommand } from '../session-shutdown.ts';
 
 bindTestCommandHost();
@@ -92,6 +94,7 @@ function scenario(platform: 'ios' | 'android', activeSession = false, sessionAdd
   if (activeSession) {
     sessionStore.publish(sessionAddress, {
       name: 'test',
+      sessionScope: resolveSessionScope(req),
       device,
       appName: 'Example',
       appBundleId: 'com.example.app',
@@ -175,6 +178,9 @@ test('failed provider deletion keeps the session and lease for close --shutdown 
 test('standalone shutdown identifies the scoped session using its target', async () => {
   const sessionAddress = 'cwd:abc123:test';
   const world = scenario('android', true, sessionAddress);
+  world.req.session = 'default';
+  world.req.meta = { ...world.req.meta, cwd: '/workspace/current' };
+  world.sessionStore.get(sessionAddress)!.sessionScope = resolveSessionScope(world.req);
   world.req.command = 'shutdown';
   mockResolveTargetDevice.mockResolvedValue(world.binding.device);
   const response = await handleShutdownCommand({
@@ -235,3 +241,80 @@ test('failed shutdown preparation keeps the session and retained lease for retry
   expect(world.leaseRegistry.listActiveLeases()).toHaveLength(1);
   expect(await world.run()).toMatchObject({ ok: true, data: { shutdown: { success: true } } });
 });
+
+for (const platform of ['ios', 'android'] as const) {
+  test(`${platform} unallocated provider shutdown cannot select a booted local device`, async () => {
+    const world = scenario(platform);
+    world.req.meta = { ...world.req.meta, leaseId: undefined };
+    const localDevice: DeviceInfo = { ...world.binding.device, id: 'local-device', booted: true };
+    mockResolveTargetDevice.mockClear();
+    mockResolveTargetDevice.mockResolvedValue(localDevice);
+    const bindDevice = vi.fn();
+    await expect(
+      handleShutdownCommand({
+        host: createTestHostEnvironment(),
+        req: world.req,
+        sessionName: 'test',
+        sessionStore: world.sessionStore,
+        platformServices: daemonPlatformServicesFixture(),
+        inspectFacts: async () => world.binding.facts,
+        bindDevice,
+      }),
+    ).rejects.toMatchObject({
+      code: 'DEVICE_NOT_FOUND',
+      details: { reason: 'provider_instance_unallocated' },
+    });
+    expect(mockResolveTargetDevice).not.toHaveBeenCalled();
+    expect(bindDevice).not.toHaveBeenCalled();
+  });
+}
+
+test.each(['tenant', 'cwd'] as const)(
+  'shutdown hides a holder outside the caller %s scope',
+  async (kind) => {
+    const world = scenario('android', true);
+    world.sessionStore.get('test')!.sessionScope = { kind, id: 'foreign-scope' };
+    world.req.command = 'shutdown';
+    world.req.session = 'default';
+    world.req.meta = {
+      ...world.req.meta,
+      ...(kind === 'tenant'
+        ? { sessionIsolation: 'tenant' as const }
+        : { cwd: '/workspace/current' }),
+    };
+    mockResolveTargetDevice.mockResolvedValue(world.binding.device);
+    const response = await handleShutdownCommand({
+      host: createTestHostEnvironment(),
+      req: world.req,
+      sessionName: 'other',
+      sessionStore: world.sessionStore,
+      platformServices: daemonPlatformServicesFixture(),
+      inspectFacts: async () => world.binding.facts,
+    });
+    expect(response).toMatchObject({ ok: false, error: { code: 'DEVICE_IN_USE' } });
+    if (!response.ok) {
+      expect(response.error.details).not.toHaveProperty('hint');
+      expect(response.error.details).not.toHaveProperty('session');
+    }
+    expect(world.release).not.toHaveBeenCalled();
+  },
+);
+
+test.each(['finalizeApplicationClose', 'shutdownTarget'] as const)(
+  'local %s failure retires the session instead of offering a provider retry',
+  async (operation) => {
+    const world = scenario('android', true);
+    Object.assign(world.binding, { owner: localRuntimeOwner('android') });
+    world.sessionStore.get('test')!.lease = undefined;
+    world.req.meta = {};
+    vi.spyOn(world.binding.operations, operation).mockRejectedValueOnce(
+      new Error('Local cleanup failed'),
+    );
+    await expect(world.run()).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      message: expect.stringContaining('Local cleanup failed'),
+    });
+    expect(world.sessionStore.get('test')).toBeUndefined();
+    expect(world.release).not.toHaveBeenCalled();
+  },
+);
