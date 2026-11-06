@@ -150,7 +150,8 @@ test.each(['batch', 'replay'] as const)(
       expect(helper.currentIme()).toBe(helperIme);
       expect(helper.previousIme()).toBe(originalIme);
       expect(helper.markers()).toEqual([ANDROID_EMULATOR.id]);
-      expect(world.sessionStore.listRefs()).toHaveLength(0);
+      // The withheld claim keeps its session, so a later close can still release it.
+      expect(world.sessionStore.listRefs()).toHaveLength(1);
       const claims = inspectDeviceClaims(
         { serial: ANDROID_EMULATOR.id },
         { AGENT_DEVICE_CLAIMS_DIR: path.join(world.daemon.stateDir, 'claims') },
