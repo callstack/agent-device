@@ -7,7 +7,7 @@ import {
   removeHostHumanControlHold,
   resolveHostHoldAdmin,
   type HostHoldAdminRequester,
-} from '../cli/commands/takeover-hold-admin.ts';
+} from './takeover-hold-admin.ts';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { TAKEOVER_CLI_FLAGS } from './test-utils/client-lease-fixtures.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
