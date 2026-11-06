@@ -8,8 +8,10 @@ import {
 } from '@agent-device/kernel/device';
 import {
   classifyOwnerLivenessFromObservation,
+  type HostProcessIdentityObservation,
   type OwnerLiveness,
   readHostProcessIdentityObservations,
+  readHostProcessIdentityObservationsAsync,
 } from '@agent-device/host-kit/process';
 
 import { isSupersededDaemonOwner } from './daemon-registration.ts';
@@ -46,14 +48,7 @@ export function inspectDeviceClaims(
     .map((entry) => readDeviceClaimFile(path.join(root, entry.name)))
     .filter((entry): entry is InspectedDeviceClaim => entry !== null)
     .filter((entry) => matchesClaimSelectors(entry.claim, selectors));
-  const observations = readHostProcessIdentityObservations(
-    parsed.flatMap((entry) => (entry.claim ? [entry.claim.ownerPid] : [])),
-  );
-  return parsed.map((entry) =>
-    entry.claim
-      ? classifyInspectedClaim(entry, observations.get(entry.claim.ownerPid) ?? null)
-      : entry,
-  );
+  return classifiedClaimEntries(parsed, readHostProcessIdentityObservations(ownerPidsOf(parsed)));
 }
 
 function readClaimEntries(
@@ -62,12 +57,84 @@ function readClaimEntries(
   try {
     return { entries: fs.readdirSync(root, { withFileTypes: true }) };
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT' || code === 'ENOTDIR') return { claims: [] };
-    return {
-      claims: [{ fileName: path.basename(root), classification: 'unknown', error: String(error) }],
-    };
+    return unreadableClaimRoot(root, error);
   }
+}
+
+/**
+ * {@link inspectDeviceClaims} off the event loop, with the same classifications. Daemon request
+ * paths answer through this one: the synchronous probe blocks the loop for the whole process-tool
+ * snapshot, which stalls every other request, timer, and abort handler behind it.
+ */
+export async function inspectDeviceClaimsAsync(
+  selectors: DeviceClaimSelectors,
+  env: EnvMap,
+): Promise<InspectedDeviceClaim[]> {
+  const root = resolveDeviceClaimRoot(env);
+  const listed = await readClaimEntriesAsync(root);
+  if ('claims' in listed) return listed.claims;
+  const parsed = (
+    await Promise.all(
+      listed.entries
+        .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+        .map((entry) => readDeviceClaimFileAsync(path.join(root, entry.name))),
+    )
+  )
+    .filter((entry): entry is InspectedDeviceClaim => entry !== null)
+    .filter((entry) => matchesClaimSelectors(entry.claim, selectors));
+  return classifiedClaimEntries(
+    parsed,
+    await readHostProcessIdentityObservationsAsync(ownerPidsOf(parsed)),
+  );
+}
+
+async function readClaimEntriesAsync(
+  root: string,
+): Promise<{ entries: fs.Dirent[] } | { claims: InspectedDeviceClaim[] }> {
+  try {
+    return { entries: await fs.promises.readdir(root, { withFileTypes: true }) };
+  } catch (error) {
+    return unreadableClaimRoot(root, error);
+  }
+}
+
+async function readDeviceClaimFileAsync(filePath: string): Promise<InspectedDeviceClaim | null> {
+  const fileName = path.basename(filePath);
+  try {
+    return inspectClaimContents(fileName, await fs.promises.readFile(filePath, 'utf8'));
+  } catch (error) {
+    return unreadableClaimFile(fileName, error);
+  }
+}
+
+function ownerPidsOf(parsed: readonly InspectedDeviceClaim[]): number[] {
+  return parsed.flatMap((entry) => (entry.claim ? [entry.claim.ownerPid] : []));
+}
+
+function classifiedClaimEntries(
+  parsed: readonly InspectedDeviceClaim[],
+  observations: ReadonlyMap<number, HostProcessIdentityObservation>,
+): InspectedDeviceClaim[] {
+  return parsed.map((entry) =>
+    entry.claim
+      ? classifyInspectedClaim(entry, observations.get(entry.claim.ownerPid) ?? null)
+      : entry,
+  );
+}
+
+/** An absent claim root holds no claims; anything else is one unknown-evidence entry. */
+function unreadableClaimRoot(root: string, error: unknown): { claims: InspectedDeviceClaim[] } {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === 'ENOENT' || code === 'ENOTDIR') return { claims: [] };
+  return {
+    claims: [{ fileName: path.basename(root), classification: 'unknown', error: String(error) }],
+  };
+}
+
+function unreadableClaimFile(fileName: string, error: unknown): InspectedDeviceClaim | null {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === 'ENOENT' || code === 'ENOTDIR') return null;
+  return { fileName, classification: 'unknown', error: String(error) };
 }
 
 function matchesClaimSelectors(
@@ -110,13 +177,7 @@ function readDeviceClaimFile(filePath: string): InspectedDeviceClaim | null {
   try {
     return inspectClaimContents(fileName, fs.readFileSync(filePath, 'utf8'));
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT' || code === 'ENOTDIR') return null;
-    return {
-      fileName,
-      classification: 'unknown',
-      error: String(error),
-    };
+    return unreadableClaimFile(fileName, error);
   }
 }
 

@@ -52,6 +52,7 @@ export {
   deviceClaimOwnerCannotRelease,
   deviceClaimRequiresStaleInspection,
   inspectDeviceClaims,
+  inspectDeviceClaimsAsync,
 } from './device-claim-inspection.ts';
 export type {
   DeviceClaimClassification,
