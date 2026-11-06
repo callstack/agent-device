@@ -1,7 +1,10 @@
 import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { afterEach, beforeEach, expect, test } from 'vitest';
-import { sessionCloseShutdownFixture } from './session-close-shutdown.fixtures.ts';
+import {
+  sessionCloseShutdownFixture,
+  type SessionState,
+} from './session-close-shutdown.fixtures.ts';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
 import { lifecycleOperationsSpy } from '../../../../__tests__/support/lifecycle-operations-spy.ts';
 
@@ -63,25 +66,34 @@ function claimDevice(
   });
 }
 
-async function openClaimedSession(
+type LeaseRegistryInstance = InstanceType<typeof LeaseRegistry>;
+
+async function openSession(
   sessionName: string,
-  leaseRegistry?: InstanceType<typeof LeaseRegistry>,
+  options: Readonly<{
+    claim?: false;
+    lease?: Readonly<{ registry: LeaseRegistryInstance; retainOnClose?: true }>;
+    scriptPublication?: SessionState['scriptPublication'];
+  }> = {},
 ) {
   const sessionStore = makeSessionStore();
-  const acquired = await claimDevice(sessionStore, sessionName);
-  if (acquired.status !== 'acquired') {
+  const acquired =
+    options.claim === false ? undefined : await claimDevice(sessionStore, sessionName);
+  if (acquired && acquired.status !== 'acquired') {
     throw new Error('expected the test session to acquire a device claim');
   }
-  const lease = leaseRegistry?.allocateLease({
+  const lease = options.lease?.registry.allocateLease({
     tenantId: 'tenant-a',
     runId: 'run-1',
     leaseBackend: 'android-instance',
     deviceKey: 'android:' + device.id,
+    ...(options.lease.retainOnClose ? { retainOnClose: true } : {}),
   });
   sessionStore.publish(sessionName, {
     ...makeSession(sessionName, device),
     appBundleId: 'com.example.app',
-    deviceClaim: acquired.ownership,
+    ...(acquired ? { deviceClaim: acquired.ownership } : {}),
+    ...(options.scriptPublication ? { scriptPublication: options.scriptPublication } : {}),
     ...(lease
       ? {
           lease: {
@@ -101,18 +113,24 @@ function close(
   sessionStore: ReturnType<typeof makeSessionStore>,
   sessionName: string,
   loader: ReturnType<typeof lifecycleOperationsSpy>['loader'],
-  leaseRegistry?: InstanceType<typeof LeaseRegistry>,
+  options: Readonly<{ leaseRegistry?: LeaseRegistryInstance; saveScript?: true }> = {},
 ) {
   return handleSessionCommands({
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     lifecycleOperationsLoader: loader,
-    req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: options.saveScript ? { saveScript: true } : {},
+    },
     sessionName,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
-    ...(leaseRegistry ? { leaseRegistry } : {}),
+    ...(options.leaseRegistry ? { leaseRegistry: options.leaseRegistry } : {}),
     invoke: noopInvoke,
   });
 }
@@ -127,7 +145,7 @@ const cleanupIncomplete = {
 
 test('a retried close reruns the failed cleanup and then releases the device claim', async () => {
   const sessionName = 'close-retry-releases-claim';
-  const sessionStore = await openClaimedSession(sessionName);
+  const sessionStore = await openSession(sessionName);
   const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
   finalizeApplicationClose.mockRejectedValueOnce(
     new AppError('COMMAND_FAILED', 'adb timed out after 5000ms'),
@@ -152,7 +170,7 @@ test('a retried close reruns the failed cleanup and then releases the device cla
 
 test('a close whose cleanup keeps failing keeps the session closable and the device claimed', async () => {
   const sessionName = 'close-retry-still-failing';
-  const sessionStore = await openClaimedSession(sessionName);
+  const sessionStore = await openSession(sessionName);
   const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
   finalizeApplicationClose.mockRejectedValue(
     new AppError('COMMAND_FAILED', 'adb timed out after 5000ms'),
@@ -175,20 +193,78 @@ test('a close whose cleanup keeps failing keeps the session closable and the dev
 test('a leased session keeps its lease until a retried close confirms the cleanup', async () => {
   const sessionName = 'close-retry-keeps-lease';
   const leaseRegistry = new LeaseRegistry();
-  const sessionStore = await openClaimedSession(sessionName, leaseRegistry);
+  const sessionStore = await openSession(sessionName, { lease: { registry: leaseRegistry } });
   const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
   finalizeApplicationClose.mockRejectedValueOnce(
     new AppError('COMMAND_FAILED', 'adb timed out after 5000ms'),
   );
 
-  await expect(close(sessionStore, sessionName, loader, leaseRegistry)).rejects.toMatchObject(
+  await expect(close(sessionStore, sessionName, loader, { leaseRegistry })).rejects.toMatchObject(
     cleanupIncomplete,
   );
   expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
 
-  const retried = await close(sessionStore, sessionName, loader, leaseRegistry);
+  const retried = await close(sessionStore, sessionName, loader, { leaseRegistry });
 
   expect(retried).toMatchObject({ ok: true });
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
+  expect(inspectDeviceClaims({ serial: device.id }, process.env)).toEqual([]);
+});
+
+// Only a withheld claim keeps the session. Without one, a failed close retires the session as it
+// always did, so no kept session is left that the retry hint could not close.
+test.each([
+  { lease: 'released on close', retainOnClose: undefined, activeLeases: 0 },
+  { lease: 'retained on close', retainOnClose: true as const, activeLeases: 1 },
+])(
+  'a failed close retires a leased session without a claim (lease $lease)',
+  async ({ retainOnClose, activeLeases }) => {
+    const sessionName = 'close-failure-claimless-lease';
+    const leaseRegistry = new LeaseRegistry();
+    const sessionStore = await openSession(sessionName, {
+      claim: false,
+      lease: { registry: leaseRegistry, ...(retainOnClose ? { retainOnClose } : {}) },
+    });
+    const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
+    finalizeApplicationClose.mockRejectedValueOnce(
+      new AppError('COMMAND_FAILED', 'adb timed out after 5000ms'),
+    );
+
+    await expect(close(sessionStore, sessionName, loader, { leaseRegistry })).rejects.toMatchObject(
+      cleanupIncomplete,
+    );
+
+    expect(sessionStore.get(sessionName)).toBeUndefined();
+    expect(leaseRegistry.listActiveLeases()).toHaveLength(activeLeases);
+  },
+);
+
+test('after a close --save-script publishes and its cleanup fails, a plain close releases the claim', async () => {
+  const sessionName = 'close-save-script-retry';
+  const scriptPath = path.join(mkdtempForTestSync('agent-device-close-retry-script-'), 'flow.ad');
+  const sessionStore = await openSession(sessionName, {
+    scriptPublication: {
+      kind: 'authoring',
+      status: 'armed',
+      target: { kind: 'explicit', path: scriptPath, force: false },
+    },
+  });
+  const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
+  finalizeApplicationClose.mockRejectedValueOnce(
+    new AppError('COMMAND_FAILED', 'adb timed out after 5000ms'),
+  );
+
+  await expect(
+    close(sessionStore, sessionName, loader, { saveScript: true }),
+  ).rejects.toMatchObject(cleanupIncomplete);
+  expect(fs.existsSync(scriptPath)).toBe(true);
+  await expect(
+    close(sessionStore, sessionName, loader, { saveScript: true }),
+  ).rejects.toMatchObject({
+    code: 'INVALID_ARGS',
+  });
+  expect(sessionStore.get(sessionName)).toBeDefined();
+
+  await expect(close(sessionStore, sessionName, loader)).resolves.toMatchObject({ ok: true });
   expect(inspectDeviceClaims({ serial: device.id }, process.env)).toEqual([]);
 });
