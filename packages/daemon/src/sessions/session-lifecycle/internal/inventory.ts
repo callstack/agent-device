@@ -115,15 +115,47 @@ function sessionListInventoryResponse(
   sessionStore: SessionStore,
 ): DaemonResponse {
   const scope = resolveSessionScope(req);
+  const inScope = sessionStore
+    .listRefs()
+    .filter((ref) => sessionMatchesInventoryScope(ref.session, scope));
   return {
     ok: true,
     data: {
-      sessions: sessionStore
-        .listRefs()
-        .filter((ref) => sessionMatchesInventoryScope(ref.session, scope))
-        .map((ref) => publicSessionInfo(ref, sessionStore)),
+      sessions: inScope.map((ref) => publicSessionInfo(ref, sessionStore)),
+      ...foreignSessionClaimsAdvisory(inScope, sessionStore.host.env),
     },
   };
+}
+
+/** A device a session the answering scope cannot list holds, in the `claimedBy` shape `devices` reports. */
+type ForeignSessionClaim = {
+  device: string;
+  deviceId: string;
+  claimedBy: { session: string; workspace: string };
+};
+
+/**
+ * Scope filtering hides the sessions that hold a device host-wide, so an empty or short `session
+ * list` would give an `open` refusal no witness. Claims whose owner cannot release are left out
+ * the same way `devices` leaves them out: the next open reconciles them.
+ */
+function foreignSessionClaimsAdvisory(
+  inScope: readonly SessionRef[],
+  env: HostEnvironment['env'],
+): { claimedByOtherSessions?: ForeignSessionClaim[] } {
+  const inScopeAddresses = new Set(inScope.map((ref) => ref.address));
+  const foreign = blockingClaims(env)
+    .filter((claim) => !inScopeAddresses.has(claim.session))
+    .map((claim): ForeignSessionClaim => ({
+      device: claim.device.name,
+      deviceId: claim.device.id,
+      claimedBy: { session: claim.session, workspace: claim.workspace },
+    }))
+    .sort(
+      (a, b) =>
+        a.device.localeCompare(b.device) || a.claimedBy.session.localeCompare(b.claimedBy.session),
+    );
+  return foreign.length > 0 ? { claimedByOtherSessions: foreign } : {};
 }
 
 function publicSessionInfo({ address, session }: SessionRef, sessionStore: SessionStore) {

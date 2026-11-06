@@ -1,7 +1,12 @@
-import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
+import {
+  bindTestCommandHost,
+  createTestHostEnvironment,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { afterAll, beforeEach, expect, test, vi } from 'vitest';
+import fs from 'node:fs';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { sessionOrDeviceSelectorRequiredDetails } from '@agent-device/kernel/errors';
@@ -59,6 +64,20 @@ function request(command: DaemonRequest['command']): DaemonRequest {
     flags: {},
   };
 }
+
+// Inventory responses read the host's device-claim root through the session store, whose fixture
+// host carries the live process.env. An empty pinned root keeps the host's live claims out of
+// these route assertions instead of making them depend on what this machine holds.
+const isolatedClaimsDir = mkdtempForTestSync('agent-device-session-route-claims-');
+const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+beforeEach(() => {
+  process.env.AGENT_DEVICE_CLAIMS_DIR = isolatedClaimsDir;
+});
+afterAll(() => {
+  if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+  else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+  fs.rmSync(isolatedClaimsDir, { recursive: true, force: true });
+});
 
 async function run(command: DaemonRequest['command']): Promise<DaemonResponse | null> {
   return await handleSessionCommands({
