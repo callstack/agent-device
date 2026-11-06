@@ -126,9 +126,16 @@ test('close --shutdown keeps a selected provider-owned iOS simulator off local s
   sessionStore.publish(sessionName, makeSession(sessionName, device));
   const providerClose = vi.fn(async () => undefined);
   const providerFinalize = vi.fn(async () => ({}));
-  mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (candidate) => {
+  mockInspectDeviceRuntimeFacts.mockImplementation(async (candidate) => {
     const facts = lifecycleRuntimeFacts(candidate);
-    return { ...facts, device: { ...facts.device, providerMode: 'provider-runtime' as const } };
+    return {
+      ...facts,
+      device: { ...facts.device, providerMode: 'provider-runtime' as const },
+      operations: {
+        ...facts.operations,
+        shutdownTarget: { available: false as const, reason: 'unsupported-provider-mode' as const },
+      },
+    };
   });
   mockBindDeviceRuntime.mockImplementationOnce(async (candidate, use) => {
     const facts = await mockInspectDeviceRuntimeFacts(candidate);

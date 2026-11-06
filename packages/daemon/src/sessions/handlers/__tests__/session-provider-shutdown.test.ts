@@ -249,7 +249,24 @@ for (const platform of ['ios', 'android'] as const) {
     const localDevice: DeviceInfo = { ...world.binding.device, id: 'local-device', booted: true };
     mockResolveTargetDevice.mockClear();
     mockResolveTargetDevice.mockResolvedValue(localDevice);
-    const bindDevice = vi.fn();
+    const shutdownTarget = vi.fn(async () => ({
+      success: true,
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+    }));
+    const bindDevice: NonNullable<Parameters<typeof handleShutdownCommand>[0]['bindDevice']> =
+      vi.fn(async (_device, use) =>
+        narrowDeviceBinding(
+          {
+            ...world.binding,
+            device: localDevice,
+            owner: localRuntimeOwner(localDevice.platform),
+            operations: { shutdownTarget },
+          },
+          use,
+        ),
+      );
     await expect(
       handleShutdownCommand({
         host: createTestHostEnvironment(),
@@ -266,6 +283,7 @@ for (const platform of ['ios', 'android'] as const) {
     });
     expect(mockResolveTargetDevice).not.toHaveBeenCalled();
     expect(bindDevice).not.toHaveBeenCalled();
+    expect(shutdownTarget).not.toHaveBeenCalled();
   });
 }
 
