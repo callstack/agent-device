@@ -109,7 +109,7 @@ test('stops connect retries and reports early exit when child process is termina
   vi.stubGlobal('fetch', async () => {
     attempts++;
     session.launch.local!.child!.exitCode = null;
-    (session.launch.local!.child as { signalCode?: string | null }).signalCode = 'SIGTERM';
+    session.launch.local!.child!.signalCode = 'SIGTERM';
     return new Response('Bad Gateway', { status: 502 });
   });
   await assert.rejects(
@@ -120,34 +120,37 @@ test('stops connect retries and reports early exit when child process is termina
       return true;
     },
   );
-  assert.ok(attempts <= 2, `Expected at most 2 attempts, but made ${attempts}`);
+  assert.equal(attempts, 1, `Expected exactly 1 attempt before retry stopped`);
 });
 
-test('stops connect retries and reports early exit when session state transitions to draining or stopped (#4265)', async () => {
-  const session = makeRunnerSession({
-    device: iosSimulator,
-    state: 'starting',
-    endpoint: {
-      ...RUNNER_ENDPOINT_FIXTURE,
-      http: { url: 'https://instance.invalid/command' },
-    },
-  });
-  let attempts = 0;
-  vi.stubGlobal('fetch', async () => {
-    attempts++;
-    session.state = 'draining';
-    return new Response('Bad Gateway', { status: 502 });
-  });
-  await assert.rejects(
-    waitForRunner(iosSimulator, session.endpoint, { command: 'uptime' }, undefined, 1000, session),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.details?.runnerConnectFailureReason, 'xcodebuild_exited_early');
-      return true;
-    },
-  );
-  assert.ok(attempts <= 2, `Expected at most 2 attempts, but made ${attempts}`);
-});
+test.each(['draining', 'stopped'] as const)(
+  'stops connect retries and reports session terminal error when session state transitions to %s (#4265)',
+  async (terminalState) => {
+    const session = makeRunnerSession({
+      device: iosSimulator,
+      state: 'starting',
+      endpoint: {
+        ...RUNNER_ENDPOINT_FIXTURE,
+        http: { url: 'https://instance.invalid/command' },
+      },
+    });
+    let attempts = 0;
+    vi.stubGlobal('fetch', async () => {
+      attempts++;
+      session.state = terminalState;
+      return new Response('Bad Gateway', { status: 502 });
+    });
+    await assert.rejects(
+      waitForRunner(iosSimulator, session.endpoint, { command: 'uptime' }, undefined, 1000, session),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.runnerConnectFailureReason, `runner_session_${terminalState}`);
+        return true;
+      },
+    );
+    assert.equal(attempts, 1, `Expected exactly 1 attempt before retry stopped`);
+  },
+);
 
 test('waitForRunner propagates request cancellation without fallback', async () => {
   const signal = AbortSignal.abort();

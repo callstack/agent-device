@@ -39,8 +39,22 @@ type RunnerProcessConnectionSession = Pick<
 export type RunnerConnectionSession = RunnerProcessConnectionSession;
 
 function runnerProcessExited(session: RunnerConnectionSession | undefined): boolean {
-  return (
-    session?.launch.exited === true || session?.state === 'draining' || session?.state === 'stopped'
+  return session?.launch.exited === true;
+}
+
+function runnerSessionIsTerminal(session: RunnerConnectionSession | undefined): boolean {
+  return session?.state === 'draining' || session?.state === 'stopped';
+}
+
+function buildRunnerSessionTerminalError(session: RunnerConnectionSession, port: number): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `Runner session became terminal during connect (session ${session.state})`,
+    {
+      runnerConnectFailureReason: `runner_session_${session.state}`,
+      port,
+      state: session.state,
+    },
   );
 }
 
@@ -155,6 +169,12 @@ export async function waitForRunner(
       commandMayHaveBeenWritten,
     );
   }
+  if (session && runnerSessionIsTerminal(session)) {
+    throw withRunnerWriteEvidence(
+      buildRunnerSessionTerminalError(session, port),
+      commandMayHaveBeenWritten,
+    );
+  }
   throw withRunnerWriteEvidence(
     buildRunnerConnectError({
       device,
@@ -244,6 +264,9 @@ async function ensureRunnerAttemptCanStart(params: {
       port: params.endpoint.port,
       logPath: params.logPath,
     });
+  }
+  if (params.session && runnerSessionIsTerminal(params.session)) {
+    throw buildRunnerSessionTerminalError(params.session, params.endpoint.port);
   }
   // A launch whose log already names a cause the classifier calls terminal will never serve a
   // command, and its child may stay alive to the deadline, so without this the request waits out the
