@@ -331,7 +331,7 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
       if (outcome.stage === 'failed') {
         rethrowCancelledFailure(outcome.failure, signal);
         const disposition = bridgeFailureDisposition(outcome.failure);
-        if (disposition.scope === 'runner-session') circuit.sessionDisabled = true;
+        if (disposition.scope === 'runner-session') disableRunnerSession(circuit);
         if ('surfaceHost' in disposition) {
           return await fallbackForSurfaceHost(
             device,
@@ -404,7 +404,7 @@ function rethrowCancelledFailure(failure: SnapshotSourceFailure, signal: AbortSi
 function targetFailureReason(
   error: unknown,
   device: DeviceInfo,
-  circuit: { sessionDisabled: boolean },
+  circuit: RunnerSessionCircuit,
 ): FallbackReason {
   const disposition =
     error instanceof SnapshotSourceError
@@ -417,10 +417,21 @@ function targetFailureReason(
     error,
   );
   if (disposition?.scope === 'runner-session') {
-    circuit.sessionDisabled = true;
+    disableRunnerSession(circuit);
     return disposition;
   }
   return 'target-resolution-failed';
+}
+
+type RunnerSessionCircuit = { readonly sessionId?: string; sessionDisabled: boolean };
+
+/**
+ * Disables the bridge for the circuit's runner session. Only a probe that names a different session
+ * replaces a circuit, so a circuit that names no session could never be cleared: there the refusal
+ * speaks for this capture only.
+ */
+function disableRunnerSession(circuit: RunnerSessionCircuit): void {
+  if (circuit.sessionId !== undefined) circuit.sessionDisabled = true;
 }
 
 const SURFACE_HOST_EXECUTABLES = IOS_SYSTEM_SURFACE_HOSTS.map((host) => host.processExecutable);

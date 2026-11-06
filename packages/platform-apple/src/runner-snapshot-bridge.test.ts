@@ -143,7 +143,7 @@ function verbs(sent: readonly RunnerCommand[]): string[] {
 }
 
 /** The bridge route of a runner whose foreground read proves no system surface covers the app. */
-function bridgeRoute(provider: AppleRunnerProvider) {
+function bridgeRoute(provider: AppleRunnerProvider, runnerSessionId?: string) {
   const bridge = createRunnerSnapshotBridge({ device: IOS_SIMULATOR, provider });
   const presented: SnapshotRuntimeAcquiredResult[] = [];
   const fallbacks: CaptureSnapshotInput[] = [];
@@ -162,8 +162,10 @@ function bridgeRoute(provider: AppleRunnerProvider) {
       resolveTarget: bridge.resolveTarget,
       isDiscoveryPending: () => false,
       targetFreshness: 'cached',
+      ...(runnerSessionId ? { sessionChanged: bridge.resetTargets } : {}),
     },
-    async () => 'background',
+    async () =>
+      runnerSessionId ? { foreground: 'background', sessionId: runnerSessionId } : 'background',
   );
   const snapshot = (signal = new AbortController().signal) =>
     route.capture(
@@ -517,7 +519,7 @@ test('a wedged refusal retires the session after a held read', async () => {
     process: { pid: 41, processStartTime: '1700000000.000001' },
   };
   const { provider, sent } = bridgeRunner(state);
-  const { snapshot } = bridgeRoute(provider);
+  const { snapshot } = bridgeRoute(provider, 'runner-session-1');
   await snapshot();
   state.holdNextDescribe = new Promise(() => {});
   const controller = new AbortController();
@@ -605,6 +607,22 @@ test('a late presentation failure cannot retire the replacement session generati
   );
   expect((await snapshot()).producer).toBe('simulator-ax-bridge');
   expect(verbs(sent)).toEqual(['target', 'describe', 'target', 'describe', 'describe']);
+});
+
+test('a wedge on a route that never names a runner session speaks for that capture only', async () => {
+  const state: { process: RunnerProcess; refuseTarget?: string } = {
+    process: { pid: 41, processStartTime: '1700000000.000001' },
+    refuseTarget: 'bridge-reader-wedged',
+  };
+  const { provider, sent } = bridgeRunner(state);
+  const { snapshot, presented } = bridgeRoute(provider);
+  expect((await snapshot()).warnings).toEqual([
+    'Simulator AX snapshot unavailable (bridge-reader-wedged); used XCTest for this runner session.',
+  ]);
+  state.refuseTarget = undefined;
+  await snapshot();
+  expect(presented).toHaveLength(1);
+  expect(verbs(sent)).toEqual(['target', 'target', 'describe']);
 });
 
 test('a wedge before the runner id is known does not disable a newly identified session', async () => {
