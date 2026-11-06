@@ -33,6 +33,9 @@ export function readDirectIosSelectorTapTarget(params: {
   if (hasNonDefaultClickOptions(flags)) return null;
   if (commandSupportsVerifyEvidence(commandLabel) && flags?.verify === true) return null;
   if (commandSupportsSettleObservation(commandLabel) && flags?.settle === true) return null;
+  // The screenshot pair brackets the runtime dispatch; this fused route never
+  // reaches it, so the flag cannot silently no-op here.
+  if (flags?.expectScreenshotDiff === true) return null;
   return readDirectSelectorWithMaestroFallback(session, target.selector, flags);
 }
 

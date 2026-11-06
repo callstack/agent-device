@@ -14,6 +14,7 @@ import { isFillableType } from '@agent-device/contracts/snapshot';
 import { attachResolvedInteractionTarget } from '@agent-device/host-kit/interaction-outcome';
 import { toBackendContext } from '../../runtime-common.ts';
 import { toBackendResult, type RuntimeCommand } from '../../runtime-types.ts';
+import { capturePairScreenshotFrame, compareScreenshotPair } from './screenshot-diff-evidence.ts';
 import {
   applyPostActionObservation,
   planPostActionObservation,
@@ -41,6 +42,14 @@ export type PressCommandOptions = CommandContext &
   RepeatedInput & {
     target: InteractionTarget;
     button?: ClickButton;
+    /**
+     * Opt-in: bracket the dispatch with two lightweight screenshots and attach
+     * `screenshotDiff` to the result, so a tap on a surface the accessibility
+     * tree cannot describe (a PIN keypad) still answers "did the screen react
+     * at all". Best-effort — a capture failure drops the evidence; a matching
+     * pair adds a warning instead of failing the action.
+     */
+    expectScreenshotDiff?: boolean;
     /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
     expectedResolvedTarget?: ExpectedResolvedTarget;
     /** #1654: a mutating `find`'s already-resolved node; see resolution.ts. */
@@ -140,9 +149,12 @@ async function tapCommand(
   action: 'click' | 'press',
 ): Promise<PressCommandResult> {
   const observation = planPostActionObservation(options);
-  const nativeRefTap = observation.needsPreActionBaseline
-    ? null
-    : await maybeTapRefTarget(runtime, options, action);
+  // --expect-screenshot-diff brackets the dispatch below, which the native ref
+  // fast path never reaches — route through the runtime path like verify/settle.
+  const nativeRefTap =
+    observation.needsPreActionBaseline || options.expectScreenshotDiff === true
+      ? null
+      : await maybeTapRefTarget(runtime, options, action);
   if (nativeRefTap) return nativeRefTap;
 
   // One request object for the resolution and for the looks admission may spend, so a second look is
@@ -162,6 +174,12 @@ async function tapCommand(
   const atRest = await admitResolvedTarget(runtime, options, resolutionRequest, resolved);
   const point = requireResolvedPoint(atRest);
   const pointObservation = pointObservationOf(atRest);
+  // The before-frame is taken after every pre-dispatch guard and immediately
+  // before the dispatch, so the pair brackets the tap and nothing else.
+  const screenshotBaseline =
+    options.expectScreenshotDiff === true
+      ? await capturePairScreenshotFrame(runtime, options, 'before')
+      : undefined;
   let backendResult;
   try {
     backendResult = await runtime.backend.tap(toBackendContext(runtime, options), point, {
@@ -178,8 +196,13 @@ async function tapCommand(
     // band so a daemon-level failure corroboration can still record the same
     // target identity if the backend reports an ambiguous tap outcome.
     attachResolvedInteractionTarget(error, atRest);
+    if (screenshotBaseline) await screenshotBaseline.cleanup();
     throw error;
   }
+  const screenshotOutcome = screenshotBaseline
+    ? await compareScreenshotPair(runtime, options, screenshotBaseline)
+    : undefined;
+  const screenshotWarning = screenshotOutcome?.unchangedWarning;
   const formattedBackendResult = toBackendResult(backendResult);
   return await applyPostActionObservation(
     runtime,
@@ -188,6 +211,15 @@ async function tapCommand(
     {
       ...atRest,
       ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
+      ...(screenshotOutcome?.evidence ? { screenshotDiff: screenshotOutcome.evidence } : {}),
+      ...(screenshotWarning
+        ? {
+            warning:
+              'warning' in atRest && atRest.warning
+                ? `${atRest.warning} ${screenshotWarning}`
+                : screenshotWarning,
+          }
+        : {}),
     },
     observation,
   );

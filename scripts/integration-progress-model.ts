@@ -430,6 +430,15 @@ function summarizeProviderScenarioFlagExclusions() {
       owner: 'daemon screenshot-crop unit and live device verification',
       keys: ['screenshotCropOn'],
     },
+    {
+      // The pair brackets a real dispatch and the comparison reads real screen pixels: a
+      // provider scenario fixture cannot fabricate a before/after frame pair whose changed-pixel
+      // ratio means anything. Covered by the command-runtime unit tests that drive the bracket
+      // through a fake screenshot backend.
+      name: 'press screenshot-diff readback',
+      owner: 'command-runtime press screenshot-pair unit tests',
+      keys: ['expectScreenshotDiff'],
+    },
   ];
 }
 
