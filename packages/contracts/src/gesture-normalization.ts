@@ -24,7 +24,13 @@ export type SwipePayload = {
   pattern?: 'one-way' | 'ping-pong';
 };
 
-type GestureFlagKey = 'pointerCount' | 'holdMs' | 'count' | 'pauseMs' | 'postGestureStabilization';
+type GestureFlagKey =
+  | 'pointerCount'
+  | 'holdMs'
+  | 'count'
+  | 'pauseMs'
+  | 'postGestureStabilization'
+  | 'trajectoryTransport';
 
 const GESTURE_FLAG_NAMES: Record<GestureFlagKey, string> = {
   pointerCount: '--pointer-count',
