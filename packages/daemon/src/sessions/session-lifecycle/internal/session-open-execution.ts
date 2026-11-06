@@ -178,11 +178,12 @@ function launchConfirmationUnansweredWarning(reason: LaunchConfirmationUnanswere
 
 /** What the caller's `open` output says when the launched app never held the foreground. */
 function openNotForegroundWarning(verification: OpenForegroundVerification): string {
-  const holder = verification.foregroundPackage
-    ? `the foreground app is "${verification.foregroundPackage}"`
-    : 'no foreground app is readable';
+  const read =
+    verification.foregroundPackage === undefined
+      ? 'HarmonyOS could not read any foreground app'
+      : `HarmonyOS read that the foreground app stayed "${verification.foregroundPackage}"`;
   return (
-    `The launch dispatch succeeded, but HarmonyOS read ${holder} within 5s of the launch ` +
+    `The launch dispatch succeeded, but ${read} within 5s of the launch ` +
     '(open-not-foreground). A lock screen over the device is a typical cause. Unlock the device, ' +
     'then run the open again.'
   );

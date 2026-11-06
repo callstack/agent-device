@@ -94,7 +94,9 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
     /**
      * Include an initial interactive snapshot in a fresh open response. With no
      * app argument, discover the sole running app on the sole booted iOS
-     * simulator; ambiguous environments fail closed.
+     * simulator; ambiguous environments fail closed. On HarmonyOS with an app
+     * target, the open fails with details.reason open-not-foreground when the
+     * launched app does not hold the foreground within 5s.
      */
     foreground?: boolean;
     saveScript?: boolean | string;

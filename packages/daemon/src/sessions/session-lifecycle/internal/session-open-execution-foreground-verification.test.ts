@@ -145,7 +145,9 @@ test('open names the unreadable foreground instead of a holder package when no m
   );
 
   const warnings = (data.warnings as string[] | undefined) ?? [];
-  expect(warnings.some((warning) => warning.includes('no foreground app is readable'))).toBe(true);
+  expect(warnings.some((warning) => warning.includes('could not read any foreground app'))).toBe(
+    true,
+  );
 });
 
 test('open adds no foreground warning when the lifecycle outcome carries no unconfirmed read', async () => {
