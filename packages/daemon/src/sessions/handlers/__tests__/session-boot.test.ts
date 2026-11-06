@@ -414,7 +414,9 @@ test('boot forwards Android serial admission policy to readiness', async () => {
 
 test('boot --headless requires avd selector when device cannot be resolved', async () => {
   const sessionStore = makeSessionStore();
-  mockResolveTargetDevice.mockRejectedValue(new AppError('DEVICE_NOT_FOUND', 'No device found'));
+  mockResolveTargetDevice.mockRejectedValue(
+    new AppError('DEVICE_NOT_FOUND', 'The provider connection has no allocated instance.'),
+  );
   const response = await handleSessionCommands({
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
@@ -440,6 +442,48 @@ test('boot --headless requires avd selector when device cannot be resolved', asy
     expect(response.error.code).toBe('INVALID_ARGS');
     expect(response.error.message).toMatch(/boot --headless requires --device <avd-name>/);
   }
+});
+
+test('boot --headless preserves an unallocated provider refusal for an active session', async () => {
+  const sessionStore = makeSessionStore();
+  sessionStore.publish(
+    'default',
+    makeSession('default', {
+      platform: 'apple',
+      appleOs: 'ios',
+      id: 'limrun:ios:missing-lease',
+      name: 'Limrun iOS',
+      kind: 'simulator',
+      booted: true,
+    }),
+  );
+  await expect(
+    handleBootCommand({
+      host: createTestHostEnvironment(),
+      platformServices: daemonPlatformServicesFixture(),
+      req: {
+        token: 't',
+        session: 'default',
+        command: 'boot',
+        positionals: [],
+        flags: { headless: true },
+        meta: { leaseProvider: 'limrun' },
+      },
+      sessionName: 'default',
+      sessionStore,
+      inspectFacts: mockInspectDeviceRuntimeFacts,
+      bindDevice: mockBindDeviceRuntime,
+    }),
+  ).rejects.toMatchObject({
+    code: 'DEVICE_NOT_FOUND',
+    details: {
+      reason: 'provider_instance_unallocated',
+      hint: 'Allocate a lease with leases.allocate and pass its leaseId.',
+    },
+  });
+  expect(mockResolveTargetDevice).not.toHaveBeenCalled();
+  expect(mockInspectDeviceRuntimeFacts).not.toHaveBeenCalled();
+  expect(mockBindDeviceRuntime).not.toHaveBeenCalled();
 });
 
 test('boot --headless rejects non-Android selectors', async () => {

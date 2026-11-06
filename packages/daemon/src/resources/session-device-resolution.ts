@@ -63,6 +63,7 @@ export async function resolveCommandDevice(params: {
   if (scope.leaseProvider && !scope.leaseId) {
     throw new AppError('DEVICE_NOT_FOUND', 'The provider connection has no allocated instance.', {
       reason: 'provider_instance_unallocated',
+      hint: 'Allocate a lease with leases.allocate and pass its leaseId.',
       leaseProvider: scope.leaseProvider,
     });
   }
