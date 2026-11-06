@@ -33,8 +33,7 @@ Platform quirks:
     agent-device gesture transform 200 420 80 -40 2 35 700 --platform android
     agent-device wait text "pan changed yes" 3000 --platform android
   tvOS coordinate pan and fling preserve only the dominant direction as a remote swipe; authored endpoints and duration are not preserved.
-  HarmonyOS gesture pan injects a densified sample path through the touch panel's input node when the node, its coordinate range, and a portrait display are readable; the command falls back to the endpoint swipe otherwise. --json names the transport under backend and the fallback reason under trajectoryFallback.
-  Gesture planning prefers the active-app frame; a backend without a gesture viewport resolver falls back to the visible snapshot union, which can be less accurate near edges.
+  Gesture planning prefers the active-app frame; a backend without a gesture viewport resolver falls back to the visible snapshot union, which can be less accurate near edges. HarmonyOS gesture pan injects a densified sample path through the touch panel's input node when the node, its coordinate range, and a portrait display are readable, and falls back to the endpoint swipe otherwise; --json names the transport under backend and the fallback reason under trajectoryFallback.
   Rare iOS accessibility gap: a row shown disabled/hittable:false where press reports success but no UI change, or a collapsed composite control with no child refs -- run snapshot -i --json, compute the target center from rects, press x y, then diff snapshot -i. Coordinates are fallback-only; document why you used them.
   On mobile, after scroll, swipe, or gesture swipe, the next read waits for two captures to agree; web and desktop targets do not wait. A caller whose own polling verifies the screen adds --no-post-gesture-stabilization to skip that wait; a directional scroll then also skips its movement check.
 
