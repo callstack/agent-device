@@ -119,6 +119,23 @@ An installed Expo dev client can open with the same automatic launch URL discove
 
 For a local Metro server, connect with `--provider-network-logs` and include `localhost:8081`, or your Metro port, in `--provider-network-hosts`. While the session is open, the app can reach that port on the machine running agent-device. See [Capture session network traffic](#capture-session-network-traffic) for the network changes this option makes. Otherwise, use a publicly reachable HTTPS Metro endpoint. `port reverse` is Android-only.
 
+## Read Android performance data
+
+On an open Android session, use the same commands as on a local emulator:
+
+```bash
+agent-device perf frames --json
+agent-device perf memory sample --json
+agent-device perf memory snapshot --kind android-hprof --out ./heap.hprof
+```
+
+Frame statistics and memory samples describe the running app. A heap snapshot downloads an
+HPROF file to your machine; the app must permit heap dumps. Reading frame statistics resets
+the app's frame counters, as it does locally. Native Simpleperf and Perfetto captures remain
+unavailable through the Limrun provider.
+
+Android `get text` also uses the shared live text reader when the selected element supports it.
+
 ## Read iOS app logs
 
 After opening your app, use `logs start` to collect its stdout, stderr, and matching simulator logs. Use `open <app> --launch-console <path>` to capture its initial launch output. Runner logs contain the test results Limrun provides, but native XCTest stdout is unavailable.

@@ -1,3 +1,5 @@
+import type { AndroidPerfHost } from '@agent-device/contracts/perf-runtime-host';
+import type { LimrunAndroidPerfOperations } from './android-perf-runtime.ts';
 import type {
   AppDeploymentInstaller,
   AppDeploymentRuntimeOperations,
@@ -20,7 +22,7 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
-import type { RuntimeFacts } from '@agent-device/contracts/platform-runtime';
+import type { RuntimeFacts, RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import type {
   SnapshotRuntimeOperations,
   SnapshotRuntimePresenter,
@@ -95,6 +97,12 @@ export type LimrunDeploymentRequest = {
 };
 
 export type LimrunAndroidRuntimeAdapter = {
+  bindPerformance(
+    device: DeviceInfo,
+    adb: LimrunAdbProvider,
+    host: AndroidPerfHost,
+    owner: RuntimeOwnerRef,
+  ): Promise<LimrunAndroidPerfOperations>;
   bindDeployment(
     device: DeviceInfo,
     adb: LimrunAdbProvider,

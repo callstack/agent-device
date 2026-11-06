@@ -1,9 +1,11 @@
+import { bindProviderElementTextRuntime } from '@agent-device/contracts/element-text-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import {
   type RuntimeFacts,
   type RuntimeOperationFact,
   type RuntimeOperationUnavailability,
   unavailableFact,
+  whenAdmitted,
 } from '@agent-device/contracts/platform-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import {
@@ -130,7 +132,7 @@ export function bindLimrunInteractionOperations(
   params: Readonly<{
     device: DeviceInfo;
     signal: AbortSignal;
-    getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
+    getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor;
     presentIosAcquisition: SnapshotRuntimePresenter;
     facts: RuntimeFacts<PlatformRuntimeOperations>['operations'];
   }>,
@@ -138,6 +140,9 @@ export function bindLimrunInteractionOperations(
   const { device, signal } = params;
   const resolveInteractor = (runner: RunnerContext) => params.getInteractor(device, runner);
   return Object.freeze({
+    ...whenAdmitted(params.facts.readTextAtPoint, () =>
+      bindProviderElementTextRuntime({ device, signal, resolveInteractor }),
+    ),
     ...bindProviderSnapshotInteractor({
       device,
       signal,

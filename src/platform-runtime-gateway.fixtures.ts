@@ -212,6 +212,9 @@ function lifecycleOperations(): ApplicationLifecycleRuntimeOperations {
 export const limrunTestDependencies: LimrunRuntimeDependencies = {
   clientVersion: 'test',
   android: {
+    bindPerformance: async () => {
+      throw new Error('Unexpected performance binding');
+    },
     bindDeployment: async () => {
       throw new Error('Unexpected deployment binding');
     },

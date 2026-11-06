@@ -1,3 +1,5 @@
+import { createLimrunAndroidPerfOperations } from './android-perf-runtime.ts';
+import type { LimrunAndroidPerfOperations } from './android-perf-runtime.ts';
 import type { LimrunIosRunner } from './runtime-dependencies.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppsFilter, ProviderPortReverseOptions } from '@agent-device/contracts/device';
@@ -11,6 +13,7 @@ import {
   type DeviceBinding,
   providerRuntimeOwner,
   sameRuntimeOwner,
+  whenAdmitted,
 } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
@@ -57,6 +60,7 @@ export type LimrunPlatformRuntimeOwnerOptions = Omit<
   'isSessionActive'
 > &
   Readonly<{
+    bindPerformance(device: DeviceInfo): Promise<LimrunAndroidPerfOperations | undefined>;
     host: PlatformRuntimeHost;
     runtimeInstance: string;
     ownsDevice(device: DeviceInfo): boolean;
@@ -161,20 +165,21 @@ function bindLimrunAppLogs(
     reconnect: async (descriptor, reconnectSignal) =>
       await options.reconnect(descriptor, reconnectSignal),
   });
+  const requireLimrunInteractor = (target: DeviceInfo, runner?: RunnerContext): Interactor => {
+    const interactor = options.getInteractor(target, runner);
+    if (!interactor) throw new AppError('DEVICE_NOT_FOUND', 'Limrun session is unavailable');
+    return interactor;
+  };
   const interaction = bindLimrunInteractionOperations({
     device,
     signal,
-    getInteractor: options.getInteractor,
+    getInteractor: requireLimrunInteractor,
     presentIosAcquisition: options.host.snapshot.presentIosAcquisition,
     facts: runtimeFacts.operations,
   });
   const runnerOperations = options.getIosRunner(device)?.bindRunnerOperations({
     signal,
-    resolveInteractor: async (target, context) => {
-      const interactor = options.getInteractor(target, context);
-      if (!interactor) throw new AppError('DEVICE_NOT_FOUND', 'Limrun session is unavailable');
-      return interactor;
-    },
+    resolveInteractor: async (target, context) => requireLimrunInteractor(target, context),
     snapshot: { capture: interaction, present: options.host.snapshot.presentIosAcquisition },
   });
   const operations = {
@@ -187,25 +192,23 @@ function bindLimrunAppLogs(
         {
           device,
           signal,
-          getInteractor: options.getInteractor,
+          getInteractor: requireLimrunInteractor,
           resolveAppReference: (app) => options.resolveAppReference?.(device, app) ?? app,
           configurePortReverse: options.configurePortReverse,
         },
         options.getIosRunner(device)?.bindApplicationLifecycle({
           signal,
           clock: options.host.clock,
-          resolveInteractor: async (target, context) => {
-            const interactor = options.getInteractor(target, context);
-            if (!interactor)
-              throw new AppError('DEVICE_NOT_FOUND', 'Limrun session is unavailable');
-            return interactor;
-          },
+          resolveInteractor: async (target, context) => requireLimrunInteractor(target, context),
         }),
       ),
       runtimeFacts.operations,
     ),
     ...interaction,
     ...runnerOperations,
+    ...whenAdmitted(runtimeFacts.operations.perfFrames, () =>
+      createLimrunAndroidPerfOperations(() => options.bindPerformance(device), signal),
+    ),
     appState: async (input) => {
       const state = await runnerOperations?.appState(input);
       // A stopped runner returns no state; still prove the remote instance can answer.
@@ -216,7 +219,7 @@ function bindLimrunAppLogs(
     ...bindAdmittedProviderInteractorOperations({
       device,
       signal,
-      resolveInteractor: (runner) => options.getInteractor(device, runner),
+      resolveInteractor: (runner) => requireLimrunInteractor(device, runner),
       facts: runtimeFacts.operations,
     }),
     ...createLimrunAppDeploymentOperations(

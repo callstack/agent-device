@@ -1,3 +1,4 @@
+import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import Limrun from '@limrun/api';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type {
@@ -231,6 +232,17 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   getDeviceSession(device: DeviceInfo): LimrunDeviceSession | undefined {
     const session = this.getSessionForDevice(device);
     return session ? createLimrunDeviceSession(session) : undefined;
+  }
+
+  async bindPerformance(host: PlatformRuntimeHost, device: DeviceInfo, owner: RuntimeOwnerRef) {
+    const session = this.getSessionForDevice(device);
+    if (!session || session.platform !== 'android') return undefined;
+    return await this.dependencies.android.bindPerformance(
+      device,
+      session.adbProvider,
+      host.perf.android,
+      owner,
+    );
   }
 
   async bindDeployment(
@@ -891,6 +903,8 @@ async function loadLimrunPlatformRuntime(
       const { readLimrunAppState } = await import('./app-state-read.ts');
       return await readLimrunAppState(runtime.getDeviceSession(device), signal);
     },
+    bindPerformance: (device) =>
+      runtime.bindPerformance(host, device, providerRuntimeOwner(LIMRUN_PROVIDER, runtimeInstance)),
     bindDeployment: (device, signal, operationDrain) =>
       runtime.bindDeployment(host, device, signal, operationDrain),
     configurePortReverse: async (options) => await runtime.configurePortReverse(options),

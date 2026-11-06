@@ -163,7 +163,7 @@ export function limrunAppLogFacts(
               findText: customSnapshotUnavailable,
               querySelector: customSnapshotUnavailable,
             }),
-            ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
+            ...elementTextRuntimeOperationFacts({ readTextAtPoint: available }),
           }
         : {}),
       ...screenshotRuntimeOperationFacts({ capture: available }),
@@ -178,9 +178,9 @@ export function limrunAppLogFacts(
         query: audioProbeUnavailable,
       }),
       ...perfRuntimeOperationFacts({
-        frames: elementTextUnavailable,
-        memorySample: elementTextUnavailable,
-        memorySnapshot: elementTextUnavailable,
+        frames: isAndroid ? available : elementTextUnavailable,
+        memorySample: isAndroid ? available : elementTextUnavailable,
+        memorySnapshot: isAndroid ? available : elementTextUnavailable,
         nativeCapture: elementTextUnavailable,
         profileReport: elementTextUnavailable,
       }),

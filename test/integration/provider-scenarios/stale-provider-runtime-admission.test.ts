@@ -301,6 +301,9 @@ function limrunDependencies(): LimrunRuntimeDependencies {
   return {
     clientVersion: 'test',
     android: {
+      bindPerformance: async () => {
+        throw new Error('Unexpected performance binding');
+      },
       bindDeployment: async () => {
         throw new Error('Unexpected deployment binding');
       },
