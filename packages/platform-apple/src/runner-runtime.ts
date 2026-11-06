@@ -93,9 +93,9 @@ export function createAppleRunnerRuntime(options: {
       {
         source: bridge.source,
         resolveTarget: bridge.resolveTarget,
-        // The runner answers the target read itself; there is no detached discovery to wait on.
-        isDiscoveryPending: () => false,
-        targetFreshness: 'cached',
+        refreshTarget: (device, appBundleId, signal) =>
+          bridge.resolveTarget(device, appBundleId, signal, 'refresh'),
+        observeOnlySupported: false,
         sessionChanged: bridge.resetTargets,
       },
       async (device, input) =>
@@ -116,7 +116,6 @@ export function createAppleRunnerRuntime(options: {
   ): SnapshotRuntimeOperations => {
     const route = routeFor(snapshot.present);
     const captureSnapshot = async (input: CaptureSnapshotInput) => {
-      if (input.options?.observeOnly === true) return await snapshot.capture.captureSnapshot(input);
       return await route.capture(
         options.device,
         input,
