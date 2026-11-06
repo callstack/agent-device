@@ -504,6 +504,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/perf-capture-session-resource',
     '@agent-device/capture-kit/perf-runtime-plan',
     '@agent-device/capture-kit/png',
+    '@agent-device/capture-kit/png-changed-pixel-ratio',
     '@agent-device/capture-kit/png-crop',
     '@agent-device/capture-kit/png-resize',
     '@agent-device/capture-kit/png-rgb-difference',

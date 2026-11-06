@@ -14,10 +14,12 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 
 /**
  * The descriptor gate for `--expect-screenshot-diff` (press/click only), in the
- * style of the `--settle`/`--verify` gate beside this directory: every
+ * style of the `--settle`/`--verify` descriptor gates under src/__tests__: every
  * caller-facing surface is pinned to the press/click scope, so a forgotten or
  * over-broad cell fails here instead of silently no-op'ing the flag — or
- * leaking it onto a command that never reads it.
+ * leaking it onto a command that never reads it. This is a repo-level guard on
+ * command descriptors rather than a module's unit test, so it lives beside the
+ * other guards.
  */
 
 const SCREENSHOT_DIFF_COMMANDS = [PUBLIC_COMMANDS.click, PUBLIC_COMMANDS.press] as const;

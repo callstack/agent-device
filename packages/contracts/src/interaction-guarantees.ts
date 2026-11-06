@@ -63,6 +63,13 @@ export const INTERACTION_GUARANTEES = [
   // settled tree was stored) in the same response. Best-effort: never fails
   // the action.
   'settleObservation',
+  // --expect-screenshot-diff brackets the dispatch with two lightweight
+  // screenshots and compares pixels: the out-of-tree readback for surfaces the
+  // accessibility tree cannot describe (a PIN keypad), where --verify's node
+  // digest stays flat no matter what the tap did. Advisory by the same contract
+  // as settleObservation — the comparison never fails the action, and a
+  // matching pair adds a warning instead.
+  'screenshotDiffEvidence',
   // Failures use the shared codes/messages/hints (no-match diagnostics,
   // ambiguous shape, offscreen reasons). NOTE: expected to split into
   // errorCodes (stable codes / fallback classification) vs errorDiagnostics
@@ -186,7 +193,7 @@ const SHARED_RESPONSE_CONSTRUCTION: GuaranteeEnforcement = {
 const TAP_OUTCOME_NOT_OBSERVED_GAP: GuaranteeEnforcement = {
   kind: 'waived',
   reason:
-    'gap: the response reports the dispatch only; only opt-in --verify/--settle capture post-action evidence into it. The deferred marks set after dispatch (Android snapshot freshness after press/click, post-gesture stabilization when the request sets postGestureStabilization) are judged by the next capture, never in this response. An iOS Simulator open that did not read the launched app (any postOpenObservation other than observable) marks the next capture in that session to wait for a quiet surface (markPostOpenStabilization); that steadies where a target is resolved, not whether the tap landed. The iOS ambiguous-failure corroboration reconsiders only a thrown runner error.',
+    'gap: the response reports the dispatch only; only the opt-in --verify, --settle, and --expect-screenshot-diff features capture post-action evidence into it. The deferred marks set after dispatch (Android snapshot freshness after press/click, post-gesture stabilization when the request sets postGestureStabilization) are judged by the next capture, never in this response. An iOS Simulator open that did not read the launched app (any postOpenObservation other than observable) marks the next capture in that session to wait for a quiet surface (markPostOpenStabilization); that steadies where a target is resolved, not whether the tap landed. The iOS ambiguous-failure corroboration reconsiders only a thrown runner error.',
   trackingIssue: TAP_OUTCOME_NOT_OBSERVED_GAP_ISSUE,
 };
 
@@ -199,7 +206,7 @@ const TAP_OUTCOME_NOT_OBSERVED_GAP: GuaranteeEnforcement = {
 const DIRECT_IOS_OUTCOME_NOT_OBSERVED_GAP: GuaranteeEnforcement = {
   kind: 'waived',
   reason:
-    "gap: this replay-only route observes no outcome beyond the runner's own report; --verify/--settle do not apply here (see the inapplicable cells on this row), and the shared ambiguous-failure corroboration only reconsiders a thrown error, never a successful dispatch.",
+    "gap: this replay-only route observes no outcome beyond the runner's own report; --verify/--settle/--expect-screenshot-diff do not apply here (see the inapplicable cells on this row), and the shared ambiguous-failure corroboration only reconsiders a thrown error, never a successful dispatch.",
   trackingIssue: TAP_OUTCOME_NOT_OBSERVED_GAP_ISSUE,
 };
 
@@ -279,6 +286,11 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   settleObservation: {
     kind: 'runtime',
     via: 'packages/command-runtime/src/commands/interaction/runtime/settle.ts#settleAfterInteraction',
+  },
+  screenshotDiffEvidence: {
+    kind: 'runtime',
+    via: 'packages/command-runtime/src/commands/interaction/runtime/screenshot-diff-evidence.ts#dispatchWithScreenshotPair',
+    appliesTo: ['press', 'click'],
   },
   targetStability: RUNTIME_TREE_TARGET_STABILITY,
 } satisfies Partial<Record<InteractionGuarantee, GuaranteeEnforcement>>;
@@ -379,6 +391,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         reason:
           'Target-authored drag does not expose --settle; callers can wait on the destination state.',
       },
+      screenshotDiffEvidence: {
+        kind: 'inapplicable',
+        reason:
+          'Target-authored drag does not expose --expect-screenshot-diff; the pixel pair brackets a tap dispatch, which this path does not run.',
+      },
       errorTaxonomy: {
         kind: 'runtime',
         via: 'packages/selectors/src/internal/resolve.ts#formatSelectorFailure',
@@ -463,6 +480,12 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         to: 'runtime-ref',
         via: '--settle disables the native ref fast path when the descriptor post-action observation trait supports settle observation — settling needs the tree-based baseline and captures',
       },
+      screenshotDiffEvidence: {
+        kind: 'delegated',
+        to: 'runtime-ref',
+        via: '--expect-screenshot-diff disables the native ref fast path, because the fast path never reaches the screenshot bracket that only the runtime dispatch runs under',
+        appliesTo: ['click'],
+      },
       errorTaxonomy: {
         kind: 'runtime',
         via: 'packages/selectors/src/internal/resolve.ts#STALE_REF_HINT',
@@ -476,7 +499,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       outcomeObservation: {
         kind: 'waived',
         reason:
-          'gap: the fast path observes no post-action outcome by default; --settle/--verify disable it and delegate to runtime-ref instead of running here.',
+          'gap: the fast path observes no post-action outcome by default; --settle/--verify/--expect-screenshot-diff disable it and delegate to runtime-ref instead of running here.',
         trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
       targetStability: {
@@ -532,6 +555,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       settleObservation: {
         kind: 'runtime',
         via: 'packages/command-runtime/src/commands/interaction/runtime/settle.ts#settleAfterInteraction',
+      },
+      screenshotDiffEvidence: {
+        kind: 'runtime',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/screenshot-diff-evidence.ts#dispatchWithScreenshotPair',
+        appliesTo: ['press', 'click'],
       },
       errorTaxonomy: {
         kind: 'runtime',
@@ -615,6 +643,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         reason:
           'find exposes no --settle flag for the same reason; settling is built on the tree-based runtime baseline and the captures the acting leaf owns.',
       },
+      screenshotDiffEvidence: {
+        kind: 'inapplicable',
+        reason:
+          'find exposes no --expect-screenshot-diff flag; the screenshot bracket lives in the acting leaf tap dispatch, which this seam never enters.',
+      },
       // Locator misses and candidate sets use find's shared diagnostics, and a pre-action guard
       // refusal travels as the AppError its owner built (`coveredInteractionDetails`,
       // TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS) through `normalizeError`, so code, hint, and reason
@@ -692,6 +725,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'inapplicable',
         reason: 'The eligibility gate excludes --settle from this replay-only route.',
       },
+      screenshotDiffEvidence: {
+        kind: 'inapplicable',
+        reason:
+          'The eligibility gate excludes --expect-screenshot-diff from this replay-only route: the fused runner request never reaches the screenshot bracket, so the flag routes the dispatch back to the runtime path.',
+      },
       errorTaxonomy: {
         kind: 'waived',
         reason: 'gap: Maestro preserves the runner-native direct-selector error shapes.',
@@ -753,6 +791,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       settleObservation: {
         kind: 'inapplicable',
         reason: 'Replay-only path; --settle is not part of replay semantics.',
+      },
+      screenshotDiffEvidence: {
+        kind: 'inapplicable',
+        reason:
+          'The eligibility gate excludes --expect-screenshot-diff from the replay-only routes, so a flagged dispatch re-routes to the runtime path before this fallback can be selected.',
       },
       errorTaxonomy: {
         kind: 'waived',

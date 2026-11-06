@@ -1,6 +1,8 @@
-import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
+import fs from 'node:fs';
+import type { AgentDeviceBackend, BackendScreenshotOptions } from '@agent-device/contracts/backend';
 import type { CommandClock, CommandSessionRecord } from '@agent-device/contracts/runtime-contract';
-import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import { PNG } from '@agent-device/capture-kit/png';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { createLocalArtifactAdapter } from '../../../src/io.ts';
 import { createCommandSurfaceAgentDevice } from '@agent-device/command-runtime';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
@@ -9,6 +11,7 @@ type ContractBackendOverrides = Partial<
   Pick<
     AgentDeviceBackend,
     | 'captureSnapshot'
+    | 'captureScreenshot'
     | 'tap'
     | 'tapTarget'
     | 'fill'
@@ -46,6 +49,9 @@ export function createContractDevice(
       platform: overrides.platform ?? 'ios',
       captureSnapshot: async (...args) =>
         overrides.captureSnapshot ? await overrides.captureSnapshot(...args) : { snapshot },
+      captureScreenshot: overrides.captureScreenshot
+        ? async (...args) => (await overrides.captureScreenshot?.(...args)) ?? {}
+        : undefined,
       tap: async (...args) => await overrides.tap?.(...args),
       tapTarget: overrides.tapTarget,
       fill: async (...args) => await overrides.fill?.(...args),
@@ -96,4 +102,38 @@ export function selector(
   value: string,
 ): import('@agent-device/contracts/interaction').SelectorTarget {
   return { kind: 'selector', selector: value };
+}
+
+/**
+ * The screenshot-diff evidence scenarios pair frames by capture order (before,
+ * then after): the backend replays one solid-color PNG per planned frame and
+ * repeats the last one if the runtime captures more. The recorded capture
+ * options ride along for the scenario to assert on.
+ */
+export function screenshotFramePlanBackend(
+  frames: ReadonlyArray<{
+    color: readonly [number, number, number];
+    width?: number;
+    height?: number;
+  }>,
+): Pick<AgentDeviceBackend, 'captureScreenshot'> & { captured: BackendScreenshotOptions[] } {
+  let frameIndex = 0;
+  const captured: BackendScreenshotOptions[] = [];
+  return {
+    captured,
+    captureScreenshot: async (_context, outPath, options) => {
+      const frame = frames[Math.min(frameIndex, frames.length - 1)]!;
+      frameIndex += 1;
+      if (options) captured.push(options);
+      const png = new PNG({ width: frame.width ?? 8, height: frame.height ?? 8 });
+      for (let i = 0; i < png.data.length; i += 4) {
+        png.data[i] = frame.color[0];
+        png.data[i + 1] = frame.color[1];
+        png.data[i + 2] = frame.color[2];
+        png.data[i + 3] = 255;
+      }
+      fs.writeFileSync(outPath, PNG.sync.write(png));
+      return { path: outPath };
+    },
+  };
 }

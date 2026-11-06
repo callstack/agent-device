@@ -90,7 +90,7 @@ type InteractionCommandName = keyof typeof interactionCommandDescriptions;
 
 const expectScreenshotDiffField = () =>
   booleanField(
-    'Compare lightweight screenshots taken right before and after the dispatch, and report the comparison as screenshotDiff in the response. Use it when the target lives outside the accessibility tree, such as a PIN keypad, where verify would compare empty trees. A matching pair adds a warning, because the dispatch may have had no visible effect.',
+    'Compare lightweight screenshots taken right before the dispatch and after it settles briefly, and report the comparison as screenshotDiff in the response. Use it when the target lives outside the accessibility tree, such as a PIN keypad, where verify would compare empty trees. A matching pair adds a warning, because the dispatch may have had no visible effect.',
   );
 
 const clickFields = {

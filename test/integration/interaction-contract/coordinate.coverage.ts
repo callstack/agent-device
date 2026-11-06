@@ -8,5 +8,7 @@ export const COORDINATE_COVERAGE = definePathCoverage('coordinate', {
     'coordinate verifyEvidence: point click --verify returns a digest with change detection',
   settleObservation:
     'coordinate settleObservation: point press --settle captures a baseline and returns the settled diff',
+  screenshotDiffEvidence:
+    'coordinate screenshotDiffEvidence: point press --expect-screenshot-diff returns the pixel comparison',
   errorTaxonomy: 'coordinate errorTaxonomy: backend failure surfaces as a normalized daemon error',
 });

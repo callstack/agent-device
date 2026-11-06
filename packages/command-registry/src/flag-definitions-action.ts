@@ -212,7 +212,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--expect-screenshot-diff',
     usageDescription:
-      'Press/click: compare lightweight screenshots taken right before and after the dispatch and report screenshotDiff in the response; use it when the target lives outside the accessibility tree (a PIN keypad) and --verify would compare empty trees. A matching pair adds a warning, because the dispatch may have had no visible effect',
+      'Press/click: compare lightweight screenshots taken right before the dispatch and after it settles briefly, and report screenshotDiff in the response; use it when the target lives outside the accessibility tree (a PIN keypad) and --verify would compare empty trees. A matching pair adds a warning, because the dispatch may have had no visible effect',
     projectConfig: true,
     recorded: false,
   },
