@@ -48,10 +48,7 @@ export async function createMacOsDesktopWorld(
       },
     },
   });
-  // Recording finalization runs the Swift validator; the process's warm cache keeps it from compiling.
-  const swiftCacheDir = process.env.AGENT_DEVICE_SWIFT_CACHE_DIR;
   const daemon = await createProviderScenarioHarness({
-    ...(swiftCacheDir ? { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: swiftCacheDir } } : {}),
     appleRunnerProvider: options.appleRunnerProvider
       ? () => options.appleRunnerProvider
       : undefined,
