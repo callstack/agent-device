@@ -12,6 +12,10 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '@agent-device/host-kit/retry';
 import { runHarmonyShell } from './hdc.ts';
+import {
+  injectHarmonyTrajectoryViaDriver,
+  isHarmonyTrajectoryDriverInstalled,
+} from './trajectory-driver.ts';
 import { invalidateHarmonyGestureViewport, readHarmonyGestureViewport } from './snapshot.ts';
 import {
   type HarmonyPanTransportRefusalReason,
@@ -91,6 +95,45 @@ export async function scrollHarmony(
 }
 
 /** Lowers HDC's public one-pointer primitives from a shared semantic plan. */
+type CarrierPanAttempt =
+  | { state: 'injected'; record: Record<string, unknown> }
+  | {
+      state: 'refused';
+      reason: Extract<
+        HarmonyPanTransportRefusalReason,
+        'carrier-install-missing' | 'carrier-injection-refused'
+      >;
+    };
+
+/**
+ * The test-HAP carrier for builds where the panel node is denied. The opt-in is plan data
+ * (`--trajectory-transport carrier`), so the platform package touches no ambient configuration.
+ * A missing carrier install or a refused injection reports the reason and lets the caller fall
+ * back to the endpoint swipe, matching the panel-transport semantics.
+ */
+async function injectHarmonyPanViaCarrier(
+  device: DeviceInfo,
+  plan: SinglePointerGesturePlan,
+): Promise<CarrierPanAttempt> {
+  if (!(await isHarmonyTrajectoryDriverInstalled(device))) {
+    return { state: 'refused', reason: 'carrier-install-missing' };
+  }
+  const outcome = await injectHarmonyTrajectoryViaDriver(device, plan);
+  if (!outcome.accepted) {
+    return { state: 'refused', reason: 'carrier-injection-refused' };
+  }
+  return {
+    state: 'injected',
+    record: {
+      backend: outcome.backend,
+      sampleCount: outcome.sampleCount,
+      speed: outcome.speed,
+      durationMs: plan.durationMs,
+      viewport: plan.viewport,
+    },
+  };
+}
+
 export async function performHarmonyGesture(
   device: DeviceInfo,
   plan: GesturePlan,
@@ -103,7 +146,10 @@ export async function performHarmonyGesture(
   }
   let panTransportRefusal: HarmonyPanTransportRefusalReason | undefined;
   if (plan.intent === 'pan') {
-    const attempt = await injectHarmonyPanTrajectory(device, plan);
+    let attempt = await injectHarmonyPanTrajectory(device, plan);
+    if (attempt.state === 'refused' && plan.trajectoryTransport === 'carrier') {
+      attempt = await injectHarmonyPanViaCarrier(device, plan);
+    }
     if (attempt.state === 'injected') return attempt.record;
     panTransportRefusal = attempt.reason;
   }

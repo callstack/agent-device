@@ -50,6 +50,7 @@ export type GestureSemanticInput =
       pointerCount?: GesturePointerCount;
       durationMs?: number;
       executionProfile?: GestureExecutionProfile;
+      trajectoryTransport?: HumanTrajectoryTransport;
     }
   | { intent: 'pinch'; origin?: Point; scale: number }
   | { intent: 'rotate'; origin?: Point; degrees: number }
@@ -93,6 +94,8 @@ export type SinglePointerTrajectory = {
  */
 export type GestureContactOrigin = 'screen-edge';
 
+export type HumanTrajectoryTransport = 'carrier';
+
 export type SinglePointerGesturePlan = {
   topology: 'single';
   intent: 'fling' | 'pan';
@@ -100,6 +103,8 @@ export type SinglePointerGesturePlan = {
   contactOrigin?: GestureContactOrigin;
   durationMs: number;
   viewport: Rect;
+  /** Opts a locked-down build into the experimental test-HAP carrier before the uiInput fallback. */
+  trajectoryTransport?: HumanTrajectoryTransport;
   pointers: readonly [SinglePointerTrajectory];
 };
 

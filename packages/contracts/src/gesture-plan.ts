@@ -18,6 +18,7 @@ import {
   GESTURE_TAP_MIN_CONTACTS,
 } from './gesture-plan-types.ts';
 import type {
+  HumanTrajectoryTransport,
   GesturePlan,
   GestureExecutionProfile,
   GestureSemanticInput,
@@ -268,6 +269,7 @@ function buildPanPlan(
       durationMs,
       viewport,
       input.executionProfile ?? 'timed-pan',
+      input.trajectoryTransport,
     );
   }
   if (input.pointerCount !== 2) {
@@ -294,6 +296,7 @@ function buildSinglePointerPlan(
   durationMs: number,
   viewport: Rect,
   executionProfile: GestureExecutionProfile,
+  trajectoryTransport?: HumanTrajectoryTransport,
 ): SinglePointerGesturePlan {
   const start = finitePoint(from, `gesture ${intent} start`);
   const end = finitePoint(to, `gesture ${intent} end`);
@@ -308,6 +311,7 @@ function buildSinglePointerPlan(
     executionProfile,
     durationMs,
     viewport,
+    ...(trajectoryTransport ? { trajectoryTransport } : {}),
     pointers: [{ pointerId: 0, samples }],
   };
 }

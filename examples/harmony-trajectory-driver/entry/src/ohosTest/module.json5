@@ -1,0 +1,28 @@
+{
+  module: {
+    name: 'entry_test',
+    type: 'feature',
+    description: '$string:module_desc',
+    deviceTypes: ['phone'],
+    deliveryWithInstall: true,
+    installationFree: false,
+    abilities: [
+      {
+        name: 'TestAbility',
+        srcEntry: './ets/testability/TestAbility.ets',
+        description: '$string:TestAbility_desc',
+        icon: '$media:icon',
+        label: '$string:TestAbility_label',
+        startWindowIcon: '$media:icon',
+        startWindowBackground: '$color:start_window_background',
+        exported: true,
+        skills: [
+          {
+            entities: ['entity.system.home'],
+            actions: ['action.system.home'],
+          },
+        ],
+      },
+    ],
+  },
+}

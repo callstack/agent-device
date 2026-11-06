@@ -94,7 +94,9 @@ export type HarmonyPanTransportRefusalReason =
   | 'touch-panel-range-absent'
   | 'touch-panel-range-ambiguous'
   | 'render-resolution-unreadable'
-  | 'display-rotation-unsupported';
+  | 'display-rotation-unsupported'
+  | 'carrier-install-missing'
+  | 'carrier-injection-refused';
 
 export type HarmonyTouchScriptOptions = Readonly<{
   /** The touchscreen evdev node the sendevent calls write to. */
