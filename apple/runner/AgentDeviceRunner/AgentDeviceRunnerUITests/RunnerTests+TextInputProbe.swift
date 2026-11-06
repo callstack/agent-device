@@ -179,8 +179,7 @@ extension RunnerTests {
 
   /// Resolved before the probe's issue containment, so a lit-panel refusal is not read as no input.
   private func textInputQueries(app: XCUIApplication) throws -> [XCUIElementQuery] {
-    let inputTypes: [XCUIElement.ElementType] = [.textField, .secureTextField, .searchField, .textView]
-    return try inputTypes.flatMap { try elementQueries(app: app, matching: $0) }
+    try elementQueries(app: app, matching: .textField, .secureTextField, .searchField, .textView)
   }
 
   private func queryTextInputs(

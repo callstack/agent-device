@@ -4,6 +4,20 @@ import AgentDeviceSnapshotPresentation
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
 #if os(iOS)
+  /// Keyboard reads stay application-wide on a lit-panel request, so a failed lit-window walk
+  /// cannot turn `keyboard dismiss` into a refusal.
+  @MainActor
+  func testKeyboardDismissIgnoresAFailedLitPanelWindowWalk() throws {
+    try withLitPanelWindow(frame: CGRect(x: 0, y: 0, width: 669, height: 951)) { _ in
+      litPanelWindowWalkIssueForTesting = true
+      defer { litPanelWindowWalkIssueForTesting = false }
+      let command = try runnerCommandFixture(#"{"command":"keyboardDismiss","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#)
+      setRequestLitPanel(from: command)
+      let response = try executeOnMainPrepared(command: command, activeApp: app)
+      XCTAssertTrue(response.ok, String(describing: response.error))
+    }
+  }
+
   @MainActor
   func testCapturedKeyboardBandIncludesTheInputAssistantOutsideTheKeyboard() {
     let keyboard = ElementAttributesFixture(.keyboard, CGRect(x: 0, y: 600, width: 390, height: 244))
