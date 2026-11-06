@@ -164,6 +164,7 @@ function bridgeRoute(provider: AppleRunnerProvider, runnerSessionId?: string) {
       resolveTarget: bridge.resolveTarget,
       refreshTarget: (device, appBundleId, signal) =>
         bridge.resolveTarget(device, appBundleId, signal, 'refresh'),
+      observeOnlySupported: false,
       ...(runnerSessionId ? { sessionChanged: bridge.resetTargets } : {}),
     },
     async () =>
@@ -592,6 +593,7 @@ test('a late presentation failure cannot retire the replacement session generati
       resolveTarget: bridge.resolveTarget,
       refreshTarget: (device, appBundleId, signal) =>
         bridge.resolveTarget(device, appBundleId, signal, 'refresh'),
+      observeOnlySupported: false,
       sessionChanged: bridge.resetTargets,
     },
     async () => ({ foreground: 'background', sessionId }),
@@ -654,6 +656,7 @@ test('a wedge before the runner id is known does not disable a newly identified 
       resolveTarget: bridge.resolveTarget,
       refreshTarget: (device, appBundleId, signal) =>
         bridge.resolveTarget(device, appBundleId, signal, 'refresh'),
+      observeOnlySupported: false,
       sessionChanged: bridge.resetTargets,
     },
     async () => (sessionId ? { foreground: 'background', sessionId } : { foreground: 'unknown' }),

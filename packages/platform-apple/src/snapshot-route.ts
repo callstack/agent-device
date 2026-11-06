@@ -119,7 +119,8 @@ export type SnapshotBridgeChannel<Target extends SnapshotBridgeRouteTarget> = Re
   /** Whether a resolver failure only says discovery is still running, so a capture may wait on it. */
   isDiscoveryPending?(error: unknown): boolean;
   refreshTarget?(device: DeviceInfo, appBundleId: string, signal: AbortSignal): Promise<Target>;
-  observeOnlySupported?: boolean;
+  /** Whether an observe-only capture may use this source; when not, it goes to the direct fallback. */
+  observeOnlySupported: boolean;
   sessionChanged?(): void;
 }>;
 
@@ -145,6 +146,7 @@ export function createAppleSnapshotRoute(
       source,
       resolveTarget,
       isDiscoveryPending: isSimulatorTargetDiscoveryPending,
+      observeOnlySupported: true,
     },
     options.systemSurfaceForeground ?? createSystemSurfaceForegroundProbe(),
   );
@@ -508,7 +510,7 @@ function routeEligibility<Target extends SnapshotBridgeRouteTarget>(
   input: CaptureSnapshotInput,
   channel: SnapshotBridgeChannel<Target>,
 ): 'bridge' | 'direct' | 'off-route' {
-  if (input.options?.observeOnly && channel.observeOnlySupported === false) return 'direct';
+  if (input.options?.observeOnly && !channel.observeOnlySupported) return 'direct';
   return hasSimulatorBridge(device) &&
     Boolean(input.options?.appBundleId) &&
     input.options?.customActions !== true &&
