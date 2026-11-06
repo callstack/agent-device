@@ -12,7 +12,6 @@ import type {
   ProviderExpiredLeaseRecovery,
   ProviderPortReverseOptions,
 } from '@agent-device/contracts/device';
-import { PROVIDER_INSTANCE_ENDED } from '@agent-device/contracts/lease-scope';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import {
@@ -758,6 +757,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       terminationReason = 'Unknown';
     }
     if (terminationReason === undefined) return undefined;
+    const { PROVIDER_INSTANCE_ENDED } = await import('@agent-device/contracts/lease-scope');
     throw new AppError('COMMAND_FAILED', `The Limrun instance ended (${terminationReason}).`, {
       reason: PROVIDER_INSTANCE_ENDED,
       terminationReason,
