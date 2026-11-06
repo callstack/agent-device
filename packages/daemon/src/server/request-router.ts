@@ -151,7 +151,7 @@ export type RequestRouterDeps = {
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
   /** Ends the sessions opened under a lease the tenant just released, and clears their claims. */
-  endSessionsForLease?: (leaseId: string) => Promise<void>;
+  endSessionsForLease?: (leaseId: string, reason?: 'PROVIDER_INSTANCE_ENDED') => Promise<void>;
   providerAppCatalog?: ProviderAppCatalog;
   androidObservation: AndroidObservationAdapter;
   /** Builds the per-request command surface the device-facing runtimes execute through. */

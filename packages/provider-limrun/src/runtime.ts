@@ -141,6 +141,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
 
   readonly leaseLifecycle: LeaseLifecycleProvider = {
     allocate: async (lease, context) => await this.allocate(lease, context),
+    heartbeat: async (lease, context) => await this.heartbeat(lease, context),
     release: async (lease) => await this.release(lease),
   };
 
@@ -739,6 +740,31 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
         source: LIMRUN_CLIENT_ID,
       },
     };
+  }
+
+  private async heartbeat(
+    lease: DeviceLease,
+    context?: LeaseLifecycleContext,
+  ): Promise<Record<string, unknown> | undefined> {
+    const session = this.liveSessionForLease(lease.leaseId);
+    if (!session) return undefined;
+    let terminationReason: string;
+    if (this.limrun && session.ownership === 'created') {
+      const instance =
+        session.platform === 'ios'
+          ? await this.limrun.iosInstances.get(session.instanceId, { signal: context?.signal })
+          : await this.limrun.androidInstances.get(session.instanceId, { signal: context?.signal });
+      if (instance.status.state !== 'terminated') return undefined;
+      terminationReason = instance.status.terminationReason ?? 'Unknown';
+    } else {
+      if (session.client.getConnectionState() !== 'disconnected') return undefined;
+      terminationReason = 'Unknown';
+    }
+    throw new AppError('COMMAND_FAILED', `The Limrun instance ended (${terminationReason}).`, {
+      reason: 'provider-instance-ended',
+      terminationReason,
+      instanceId: session.instanceId,
+    });
   }
 
   private async release(lease: DeviceLease): Promise<Record<string, unknown> | undefined> {

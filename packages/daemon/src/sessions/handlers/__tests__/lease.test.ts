@@ -22,6 +22,98 @@ import {
   humanControlRequest,
 } from '../../../__tests__/support/human-control-fixtures.ts';
 
+test('a provider-ended instance retires its lease and session before reporting its cause', async () => {
+  const registry = new LeaseRegistry();
+  const lease = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'limrun',
+    leaseBackend: 'ios-instance',
+  });
+  const ended: Array<[string, string | undefined]> = [];
+  const failure = new AppError('COMMAND_FAILED', 'The Limrun instance ended (InactivityTimeout).', {
+    reason: 'provider-instance-ended',
+    terminationReason: 'InactivityTimeout',
+  });
+  const run = () =>
+    handleLeaseCommands({
+      host: createTestHostEnvironment(),
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_heartbeat',
+        positionals: [],
+        meta: {
+          tenantId: lease.tenantId,
+          runId: lease.runId,
+          leaseId: lease.leaseId,
+          leaseBackend: lease.backend,
+          leaseProvider: lease.leaseProvider,
+        },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-ended-provider-'),
+      leaseRegistry: registry,
+      leaseLifecycleProvider: {
+        heartbeat: async () => {
+          throw failure;
+        },
+        release: async () => ({}),
+      },
+      endSessionsForLease: async (id, reason) => {
+        ended.push([id, reason]);
+      },
+    });
+  await assert.rejects(run(), (error) => error === failure);
+  assert.deepEqual(ended, [[lease.leaseId, 'PROVIDER_INSTANCE_ENDED']]);
+  assert.equal(registry.listActiveLeases().length, 0);
+  await assert.rejects(run(), (error: AppError) => error.code === 'UNAUTHORIZED');
+});
+
+test('a heartbeat error with the same message does not end a lease without the typed reason', async () => {
+  const registry = new LeaseRegistry();
+  const lease = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseBackend: 'ios-instance',
+    leaseProvider: 'limrun',
+  });
+  const failure = new AppError('COMMAND_FAILED', 'The Limrun instance ended (InactivityTimeout).');
+  const ended: string[] = [];
+  await assert.rejects(
+    handleLeaseCommands({
+      host: createTestHostEnvironment(),
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_heartbeat',
+        positionals: [],
+        meta: {
+          tenantId: lease.tenantId,
+          runId: lease.runId,
+          leaseId: lease.leaseId,
+          leaseBackend: lease.backend,
+          leaseProvider: lease.leaseProvider,
+        },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-heartbeat-error-'),
+      leaseRegistry: registry,
+      leaseLifecycleProvider: {
+        heartbeat: async () => {
+          throw failure;
+        },
+      },
+      endSessionsForLease: async (id) => {
+        ended.push(id);
+      },
+    }),
+    (error) => error === failure,
+  );
+  assert.deepEqual(ended, []);
+  assert.equal(registry.listActiveLeases().length, 1);
+});
+
 for (const operation of ['allocate', 'release'] as const) {
   test(`host activation drains provider lease ${operation} before reporting active`, async () => {
     const registry = new LeaseRegistry();

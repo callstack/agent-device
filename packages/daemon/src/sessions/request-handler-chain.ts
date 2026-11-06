@@ -44,7 +44,7 @@ type RequestHandlerChainParams = {
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
-  endSessionsForLease?: (leaseId: string) => Promise<void>;
+  endSessionsForLease?: (leaseId: string, reason?: 'PROVIDER_INSTANCE_ENDED') => Promise<void>;
   providerAppCatalog?: ProviderAppCatalog;
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;

@@ -54,7 +54,7 @@ type LeaseHandlerArgs = {
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
-  endSessionsForLease?: (leaseId: string) => Promise<void>;
+  endSessionsForLease?: (leaseId: string, reason?: 'PROVIDER_INSTANCE_ENDED') => Promise<void>;
 };
 
 export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<DaemonResponse | null> {
@@ -151,17 +151,8 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         };
       });
     }
-    case 'lease_heartbeat': {
-      const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
-      const providerData = await leaseLifecycleProvider?.heartbeat?.(
-        lease,
-        leaseLifecycleContext(req, args.host),
-      );
-      return {
-        ok: true,
-        data: { lease, ...(providerData ? { provider: providerData } : {}) },
-      };
-    }
+    case 'lease_heartbeat':
+      return await heartbeatLease(args, leaseScope);
     case 'lease_release': {
       const releaseRequest = leaseScopeToReleaseRequest(leaseScope);
       const lease = leaseRegistry.getLease(releaseRequest);
@@ -311,6 +302,35 @@ async function releaseAllocationForGoneRequester(
     outcome = { registryReleased: leaseRegistry.releaseLease(request).released };
   }
   return canceledAllocationError(lease, outcome, releaseError);
+}
+
+async function heartbeatLease(
+  args: LeaseHandlerArgs,
+  leaseScope: LeaseScope,
+): Promise<DaemonResponse> {
+  const { leaseRegistry, leaseLifecycleProvider, req, endSessionsForLease } = args;
+  const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
+  let providerData: Record<string, unknown> | undefined;
+  let ended: AppError | undefined;
+  try {
+    providerData = await leaseLifecycleProvider?.heartbeat?.(
+      lease,
+      leaseLifecycleContext(req, args.host),
+    );
+  } catch (error) {
+    if (!(error instanceof AppError) || error.details?.reason !== 'provider-instance-ended')
+      throw error;
+    await releaseLease(leaseRegistry, leaseLifecycleProvider, lease, leaseReleaseRequestFor(lease));
+    ended = error;
+  }
+  if (ended) {
+    await endSessionsForLease?.(lease.leaseId, 'PROVIDER_INSTANCE_ENDED');
+    throw ended;
+  }
+  return {
+    ok: true,
+    data: { lease, ...(providerData ? { provider: providerData } : {}) },
+  };
 }
 
 function canceledAllocationError(
