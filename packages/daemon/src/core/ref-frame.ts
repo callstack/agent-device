@@ -344,10 +344,7 @@ function recordRefFrameAdvisoryMutation(previous: RefFrame, current: RefFrame): 
  * other gap resets it. A snapshot that reissues nothing (a `@`-scoped capture that
  * kept the stored tree) never reaches this hook, so it neither extends nor resets.
  */
-function recordRefFrameAdvisoryCompleteSnapshot(
-  previous: RefFrame,
-  current: RefFrame,
-): void {
+function recordRefFrameAdvisoryCompleteSnapshot(previous: RefFrame, current: RefFrame): void {
   const counters = readAdvisory(previous);
   const rounds = counters.mutationsSinceSnapshot === 1 ? counters.rounds + 1 : 0;
   carryAdvisory(previous, current, {
@@ -362,10 +359,7 @@ function recordRefFrameAdvisoryCompleteSnapshot(
  * diff between snapshots is neither a complete snapshot nor an action, so the
  * rhythm carries across the frame replacement unchanged.
  */
-function carryRefFrameAdvisoryAcrossPublication(
-  previous: RefFrame,
-  current: RefFrame,
-): void {
+function carryRefFrameAdvisoryAcrossPublication(previous: RefFrame, current: RefFrame): void {
   if (previous === current) return;
   carryAdvisory(previous, current, readAdvisory(previous));
 }
