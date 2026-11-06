@@ -15,3 +15,7 @@
 #if __has_include("UnitTests/RunnerEdgeContactTesting.h")
 #import "UnitTests/RunnerEdgeContactTesting.h"
 #endif
+
+#if __has_include("UnitTests/RunnerSnapshotBridgeTesting.h")
+#import "UnitTests/RunnerSnapshotBridgeTesting.h"
+#endif

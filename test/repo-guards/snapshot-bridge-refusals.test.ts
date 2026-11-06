@@ -14,6 +14,7 @@ import { REPO_ROOT } from '@agent-device/test-kit';
 type Fixture = {
   captureScoped: { code: string; consequence: string }[];
   generationScoped: string[];
+  runnerSessionScoped: string[];
 };
 
 const fixture = JSON.parse(
@@ -26,6 +27,7 @@ const fixture = JSON.parse(
 const fixtureCodes = [
   ...fixture.captureScoped.map(({ code }) => code),
   ...fixture.generationScoped,
+  ...fixture.runnerSessionScoped,
 ];
 
 function read(relative: string): string {

@@ -59,6 +59,7 @@ export function createAppleRunnerRuntime(options: {
   // Every capture of a remote Simulator reaches the runner, through the bridge or through XCTest. So
   // the foreground read starts a runner that is not up yet, under the capture's own budget, instead
   // of giving up the proof that keeps the capture on the bridge.
+  let snapshotRoute: SnapshotBridgeRoute | undefined;
   const readForeground = createSystemSurfaceForegroundProbe(async (device, input) => {
     if (!options.provider.hasLiveSession(device)) {
       try {
@@ -73,9 +74,9 @@ export function createAppleRunnerRuntime(options: {
       }
     }
     const session = readRunnerSessionLiveness(device.id);
-    return session?.liveness === 'ready' ? { sessionId: session.sessionId } : undefined;
+    if (session?.liveness !== 'ready') return undefined;
+    return { sessionId: session.sessionId };
   });
-  let snapshotRoute: SnapshotBridgeRoute | undefined;
   /**
    * The route outlives every request binding: its circuit, depth hints, and cached target describe
    * the app generations this runner has read. The presenter comes with the first binding and is the
@@ -95,6 +96,7 @@ export function createAppleRunnerRuntime(options: {
         // The runner answers the target read itself; there is no detached discovery to wait on.
         isDiscoveryPending: () => false,
         targetFreshness: 'cached',
+        sessionChanged: bridge.resetTargets,
       },
       async (device, input) =>
         await withAppleRunnerProvider(

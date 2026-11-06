@@ -135,9 +135,19 @@ const fixture = JSON.parse(
     ),
     'utf8',
   ),
-) as { captureScoped: { code: string; consequence: string }[]; generationScoped: string[] };
+) as {
+  captureScoped: { code: string; consequence: string }[];
+  generationScoped: string[];
+  runnerSessionScoped: string[];
+};
 
 test('the policy gives each code of the shared refusal table its scope and consequence', () => {
+  for (const code of fixture.runnerSessionScoped) {
+    expect(bridgeFailureDisposition({ kind: 'timeout', code })).toEqual({
+      scope: 'runner-session',
+      code,
+    });
+  }
   for (const { code, consequence } of fixture.captureScoped) {
     // A preparation still running is classified by its failure kind, not by its code.
     const kind = consequence === 'bridge-preparation' ? 'preparing' : 'unsupported';

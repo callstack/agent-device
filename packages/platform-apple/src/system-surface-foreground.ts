@@ -26,7 +26,9 @@ export type SystemSurfaceForeground =
 export type SystemSurfaceForegroundProbe = (
   device: DeviceInfo,
   input: Readonly<{ signal: AbortSignal; requestId?: string }>,
-) => Promise<SystemSurfaceForeground>;
+) => Promise<
+  SystemSurfaceForeground | Readonly<{ foreground: SystemSurfaceForeground; sessionId: string }>
+>;
 
 /**
  * Bounds each read below the read-only resend window, so a runner busy draining abandoned XCTest
@@ -74,10 +76,12 @@ export function createSystemSurfaceForegroundProbe(
     for (const read of reads) read.catch(() => {});
     for (const [index, host] of IOS_SYSTEM_SURFACE_HOSTS.entries()) {
       const state = await reads[index];
-      if (state === 'runningForeground') return { kind: 'foreground', host };
-      if (state === undefined || !BACKGROUND_STATES.has(state)) return 'unknown';
+      if (state === 'runningForeground')
+        return { foreground: { kind: 'foreground', host }, sessionId: session.sessionId };
+      if (state === undefined || !BACKGROUND_STATES.has(state))
+        return { foreground: 'unknown', sessionId: session.sessionId };
     }
-    return 'background';
+    return { foreground: 'background', sessionId: session.sessionId };
   };
 }
 

@@ -37,13 +37,14 @@ import {
   type SimulatorSnapshotTarget,
   type SimulatorSnapshotTargetResolver,
 } from './snapshot-target.ts';
+import { SnapshotSourceError } from './snapshot-source/errors.ts';
 import {
   createSystemSurfaceForegroundProbe,
-  type SystemSurfaceForeground,
   type SystemSurfaceForegroundProbe,
 } from './system-surface-foreground.ts';
 import {
   bridgeFailureDisposition,
+  type BridgeFailureDisposition,
   type BridgeFallbackDisposition,
   type CaptureScopedConsequence,
 } from './snapshot-route-failure-policy.ts';
@@ -122,6 +123,7 @@ export type SnapshotBridgeChannel<Target extends SnapshotBridgeRouteTarget> = Re
    * trusts one.
    */
   targetFreshness: 'verified' | 'cached';
+  sessionChanged?(): void;
 }>;
 
 /** What the route reads from the platform host: presentation and runner liveness only. */
@@ -175,7 +177,10 @@ export function createSnapshotBridgeRoute<Target extends SnapshotBridgeRouteTarg
   surfaceForeground: SystemSurfaceForegroundProbe,
 ): SnapshotBridgeRoute {
   const route = createSnapshotBridgeRouteCore(host, channel, surfaceForeground);
-  return Object.freeze({ capture: route.capture, shutdown: route.shutdown });
+  return Object.freeze({
+    capture: route.capture,
+    shutdown: route.shutdown,
+  });
 }
 
 function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>(
@@ -184,18 +189,58 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
   surfaceForeground: SystemSurfaceForegroundProbe,
 ) {
   const { source, resolveTarget } = channel;
-  const disabledGenerations = new Set<string>();
-  const latestGeneration = new Map<string, string>();
+  const freshCircuit = (sessionId?: string) => ({
+    sessionId,
+    disabledGenerations: new Set<string>(),
+    latestGeneration: new Map<string, string>(),
+    sessionDisabled: false,
+  });
+  let currentCircuit = freshCircuit();
+  const isDisabledIn = (circuit: typeof currentCircuit, target: SnapshotBridgeRouteTarget) => {
+    rebaselineGeneration(target, circuit.latestGeneration, circuit.disabledGenerations);
+    return circuit.disabledGenerations.has(generationKey(target));
+  };
+  /**
+   * The circuit a capture writes its refusals to. A capture writes through the returned object, so
+   * it must be the circuit object itself, never a copy: when it is `currentCircuit`, the next capture
+   * reads what this one wrote. A capture that read through a session another capture already
+   * replaced keeps its starting circuit, so its late writes land in the discarded object.
+   */
+  const circuitForProbe = (
+    startingCircuit: typeof currentCircuit,
+    probeResult: Awaited<ReturnType<SystemSurfaceForegroundProbe>>,
+    device: DeviceInfo,
+  ): typeof currentCircuit => {
+    const probedSessionId =
+      channel.sessionChanged && typeof probeResult === 'object' && 'sessionId' in probeResult
+        ? probeResult.sessionId
+        : undefined;
+    if (probedSessionId === undefined) return startingCircuit;
+    if (currentCircuit !== startingCircuit) {
+      return probedSessionId === currentCircuit.sessionId ? currentCircuit : startingCircuit;
+    }
+    if (probedSessionId === startingCircuit.sessionId) return startingCircuit;
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'ios_snapshot_route_runner_session_changed',
+      data: {
+        deviceId: device.id,
+        previousSessionId: startingCircuit.sessionId,
+        sessionId: probedSessionId,
+      },
+    });
+    currentCircuit = freshCircuit(probedSessionId);
+    channel.sessionChanged?.();
+    return currentCircuit;
+  };
   /**
    * Records `target` as the newest generation of its app — which clears the circuit an earlier
    * generation opened — and reports whether the bridge is disabled for it. Both a capture and the
    * launch-observation probe ask before they spend a bridge round trip, so one generation's
    * failure is paid once rather than once per route (#2198, #2199).
    */
-  const isBridgeDisabled = (target: SnapshotBridgeRouteTarget): boolean => {
-    rebaselineGeneration(target, latestGeneration, disabledGenerations);
-    return disabledGenerations.has(generationKey(target));
-  };
+  const isBridgeDisabled = (target: SnapshotBridgeRouteTarget): boolean =>
+    isDisabledIn(currentCircuit, target);
 
   return {
     isBridgeDisabled,
@@ -216,16 +261,43 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
       // A ready runner answers first, with the foreground state of every registered host: the
       // predicate it serves a surface by, read in a few milliseconds. When it cannot answer, the
       // bridge itself refuses the capture while a host process runs for this Simulator.
-      const foreground = await readSurfaceForeground(device, input, signal, surfaceForeground);
+      const startingCircuit = currentCircuit;
+      const probeResult = await readSurfaceForeground(device, input, signal, surfaceForeground);
+      const circuit = circuitForProbe(startingCircuit, probeResult, device);
+      const foreground =
+        typeof probeResult === 'object' && 'sessionId' in probeResult
+          ? probeResult.foreground
+          : probeResult;
+      const captureBridgeDisabled = (target: SnapshotBridgeRouteTarget) =>
+        isDisabledIn(circuit, target);
       if (foreground !== 'background' && foreground !== 'unknown') {
         return await runSurfaceFallback(device, input, fallback, foreground.host.bundleId);
       }
+      if (circuit.sessionDisabled) {
+        emitRouteDiagnostic('bridge-reader-wedged', device);
+        return await runFallback(
+          device.id,
+          input,
+          fallback,
+          appLineage(device.id, input),
+          requestFor(input),
+          { scope: 'runner-session', code: 'bridge-reader-wedged' },
+          [unknownGenerationResidue()],
+        );
+      }
       let target: Target;
       try {
-        target = await resolveCaptureTarget(host, channel, device, input, signal, isBridgeDisabled);
+        target = await resolveCaptureTarget(
+          host,
+          channel,
+          device,
+          input,
+          signal,
+          captureBridgeDisabled,
+        );
       } catch (error) {
         rethrowIfResolutionCancelled(signal, error);
-        emitRouteDiagnostic('target-resolution-failed', device, undefined, error);
+        const reason = targetFailureReason(error, device, circuit);
         // The app's current generation is unknown, so the capture names none.
         return await runFallback(
           device.id,
@@ -233,11 +305,11 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
           fallback,
           appLineage(device.id, input),
           requestFor(input),
-          'target-resolution-failed',
+          reason,
           [unknownGenerationResidue()],
         );
       }
-      if (isBridgeDisabled(target)) {
+      if (captureBridgeDisabled(target)) {
         emitRouteDiagnostic('circuit-disabled', device, target.generation);
         return await runFallback(
           device.id,
@@ -258,33 +330,19 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
         ...(foreground === 'unknown' ? { surfaceHostExecutables: SURFACE_HOST_EXECUTABLES } : {}),
       });
       if (outcome.stage === 'failed') {
-        if (outcome.failure.kind === 'cancelled') {
-          signal.throwIfAborted();
-          throw new AppError('COMMAND_FAILED', 'Simulator AX snapshot acquisition was cancelled.', {
-            reason: outcome.failure.code,
-            ...outcome.failure.details,
-          });
-        }
-        const disposition = bridgeFailureDisposition(outcome.failure);
+        rethrowCancelledFailure(outcome.failure, signal);
+        const disposition = settleRunnerSessionRefusal(
+          circuit,
+          bridgeFailureDisposition(outcome.failure),
+        );
         if ('surfaceHost' in disposition) {
-          if (disposition.surfaceHost !== 'unverified') {
-            return await runSurfaceFallback(
-              device,
-              input,
-              fallback,
-              disposition.surfaceHost.bundleId,
-            );
-          }
-          // The bridge could not place a host process. Take the runner rather than a bridge
-          // capture that may hold the occluded app tree, and say so: silently losing the bridge
-          // fast path would be its own defect.
-          return await runFallback(
-            device.id,
+          return await fallbackForSurfaceHost(
+            device,
             input,
             fallback,
             target,
             request,
-            'system-surface-host-unverified',
+            disposition,
           );
         }
         const fallbackIdentity = await resolveFailureFallbackIdentity(
@@ -304,7 +362,7 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
           request,
           outcome.failure,
           disposition,
-          disabledGenerations,
+          circuit.disabledGenerations,
         );
       }
       try {
@@ -329,12 +387,61 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
           failure,
           // A tree the presenter cannot publish is app evidence, so it retires the generation.
           { scope: 'generation', code: failure.code },
-          disabledGenerations,
+          circuit.disabledGenerations,
           error,
         );
       }
     },
   };
+}
+
+function rethrowCancelledFailure(failure: SnapshotSourceFailure, signal: AbortSignal): void {
+  if (failure.kind !== 'cancelled') return;
+  signal.throwIfAborted();
+  throw new AppError('COMMAND_FAILED', 'Simulator AX snapshot acquisition was cancelled.', {
+    reason: failure.code,
+    ...failure.details,
+  });
+}
+
+function targetFailureReason(
+  error: unknown,
+  device: DeviceInfo,
+  circuit: RunnerSessionCircuit,
+): FallbackReason {
+  const disposition =
+    error instanceof SnapshotSourceError
+      ? bridgeFailureDisposition({ kind: error.failureKind, code: error.failureCode })
+      : undefined;
+  emitRouteDiagnostic(
+    disposition?.scope === 'runner-session' ? disposition.code : 'target-resolution-failed',
+    device,
+    undefined,
+    error,
+  );
+  if (disposition?.scope === 'runner-session')
+    return settleRunnerSessionRefusal(circuit, disposition);
+  return 'target-resolution-failed';
+}
+
+type RunnerSessionCircuit = { readonly sessionId?: string; sessionDisabled: boolean };
+
+/**
+ * Retires the bridge for the circuit's runner session when the circuit names that session; a later
+ * probe that names another session replaces the circuit and clears it. A circuit with no session id
+ * has nothing to tie the retirement to, so there the refusal speaks for this capture only, and its
+ * warning says so.
+ */
+function settleRunnerSessionRefusal<Disposition extends BridgeFailureDisposition>(
+  circuit: RunnerSessionCircuit,
+  disposition: Disposition,
+): Disposition | Readonly<{ scope: 'capture'; code: string; consequence: 'bridge-read-busy' }> {
+  if (disposition.scope !== 'runner-session') return disposition;
+  if (circuit.sessionId === undefined) {
+    return { scope: 'capture', code: disposition.code, consequence: 'bridge-read-busy' };
+  }
+  circuit.sessionDisabled = true;
+  return disposition;
 }
 
 const SURFACE_HOST_EXECUTABLES = IOS_SYSTEM_SURFACE_HOSTS.map((host) => host.processExecutable);
@@ -350,10 +457,15 @@ async function readSurfaceForeground(
   input: CaptureSnapshotInput,
   signal: AbortSignal,
   probe: SystemSurfaceForegroundProbe,
-): Promise<SystemSurfaceForeground> {
+): Promise<Awaited<ReturnType<SystemSurfaceForegroundProbe>>> {
   const requestId = input.execution?.requestId;
   const foreground = await probe(device, { signal, ...(requestId ? { requestId } : {}) });
-  if (foreground === 'background') {
+  if (
+    foreground === 'background' ||
+    (typeof foreground === 'object' &&
+      'sessionId' in foreground &&
+      foreground.foreground === 'background')
+  ) {
     emitDiagnostic({
       level: 'debug',
       phase: 'ios_snapshot_route_surface_host_background',
@@ -425,6 +537,30 @@ function isEligible(device: DeviceInfo, input: CaptureSnapshotInput): boolean {
     Boolean(input.options?.appBundleId) &&
     input.options?.customActions !== true &&
     input.options?.preferredBackend === undefined
+  );
+}
+
+async function fallbackForSurfaceHost(
+  device: DeviceInfo,
+  input: CaptureSnapshotInput,
+  fallback: SnapshotFallback,
+  target: SnapshotBridgeRouteTarget,
+  request: ReturnType<typeof createIosSnapshotRequest>,
+  disposition: Extract<
+    ReturnType<typeof bridgeFailureDisposition>,
+    { consequence: 'system-surface-host' }
+  >,
+): Promise<SnapshotResult> {
+  if (disposition.surfaceHost !== 'unverified') {
+    return await runSurfaceFallback(device, input, fallback, disposition.surfaceHost.bundleId);
+  }
+  return await runFallback(
+    device.id,
+    input,
+    fallback,
+    target,
+    request,
+    'system-surface-host-unverified',
   );
 }
 
@@ -604,6 +740,8 @@ function fallbackWarning(
   if (typeof reason !== 'string' && reason.scope === 'capture') {
     return captureScopedFallbackWarning(code, reason.consequence);
   }
+  if (typeof reason !== 'string' && reason.scope === 'runner-session')
+    return `Simulator AX snapshot unavailable (${code}); used XCTest for this runner session.`;
   const generation = lineage.generation ? 'this app generation' : 'an unverified app generation';
   return `Simulator AX snapshot unavailable (${code}); used XCTest for ${generation}.`;
 }
