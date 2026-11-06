@@ -17,14 +17,18 @@ vi.mock('../snapshot.ts', async (importOriginal) => ({
 }));
 
 import {
+  HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS,
   closeHarmonyApp,
   listHarmonyApps,
   parseHarmonyIsSystemApp,
   openHarmonyApp,
   parseHarmonyBundleList,
   parseHarmonyLaunchTarget,
+  pollHarmonyOpenForeground,
   resolveHarmonyArchiveBundleName,
+  verifyHarmonyOpenForeground,
 } from '../app-lifecycle.ts';
+import type { OpenApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
 import { runCmd } from '@agent-device/host-kit/command';
 
 const mockRunCmd = vi.mocked(runCmd);
@@ -356,4 +360,230 @@ test('HarmonyOS launch resolves module metadata and reports missing launch data'
 
   mockRunCmd.mockResolvedValueOnce({ exitCode: 0, stdout: 'not installed', stderr: '' });
   await assert.rejects(() => openHarmonyApp(DEVICE, 'com.example.missing'), /launchable ability/);
+});
+
+function missionDump(packageName: string, state: string): string {
+  return [
+    'User ID #100',
+    'Mission ID #28',
+    `\tstate #${state}`,
+    `\tmission name #[#${packageName}:entry:EntryAbility]`,
+    '',
+  ].join('\n');
+}
+
+test('pollHarmonyOpenForeground confirms the launched bundle on the first foreground read', async () => {
+  mockRunCmd.mockResolvedValueOnce({
+    exitCode: 0,
+    stdout: missionDump('com.example.application', 'FOREGROUND'),
+    stderr: '',
+  });
+
+  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application');
+
+  assert.deepEqual(read, { confirmed: true });
+  assert.deepEqual(mockRunCmd.mock.calls[0]?.[1], ['-t', 'harmony-1', 'shell', 'aa', 'dump', '-l']);
+});
+
+test('pollHarmonyOpenForeground keeps polling until the launched bundle holds the foreground', async () => {
+  mockRunCmd
+    .mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: missionDump('com.ohos.launcher', 'FOREGROUND'),
+      stderr: '',
+    })
+    .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+    .mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: missionDump('com.example.application', 'FOREGROUND'),
+      stderr: '',
+    });
+
+  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+    pollIntervalMs: 1,
+  });
+
+  assert.deepEqual(read, { confirmed: true });
+  assert.equal(mockRunCmd.mock.calls.length, 3);
+});
+
+test('pollHarmonyOpenForeground names the app that kept the foreground when the launch never surfaces', async () => {
+  mockRunCmd.mockResolvedValue({
+    exitCode: 0,
+    stdout: missionDump('com.ohos.launcher', 'FOREGROUND'),
+    stderr: '',
+  });
+
+  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+    pollBudgetMs: 60,
+    pollIntervalMs: 10,
+  });
+
+  assert.deepEqual(read, { confirmed: false, foregroundPackage: 'com.ohos.launcher' });
+});
+
+test('pollHarmonyOpenForeground reports an unreadable foreground when no mission is foreground', async () => {
+  mockRunCmd.mockResolvedValue({
+    exitCode: 0,
+    stdout: missionDump('com.example.application', 'BACKGROUND'),
+    stderr: '',
+  });
+
+  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+    pollBudgetMs: 40,
+    pollIntervalMs: 10,
+  });
+
+  assert.deepEqual(read, { confirmed: false });
+});
+
+test('pollHarmonyOpenForeground treats a failed read as unconfirmed and keeps polling', async () => {
+  mockRunCmd.mockRejectedValueOnce(new Error('hdc died mid-read')).mockResolvedValueOnce({
+    exitCode: 0,
+    stdout: missionDump('com.example.application', 'FOREGROUND'),
+    stderr: '',
+  });
+
+  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+    pollIntervalMs: 1,
+  });
+
+  assert.deepEqual(read, { confirmed: true });
+});
+
+test('pollHarmonyOpenForeground rejects when the request signal aborts mid-poll', async () => {
+  const controller = new AbortController();
+  const abortReason = new Error('request cancelled during the open foreground poll');
+  mockRunCmd.mockImplementation(async (_command, _args, options) => {
+    return await new Promise((_resolve, reject) => {
+      options?.signal?.addEventListener('abort', () => reject(abortReason), { once: true });
+    });
+  });
+
+  const pending = pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+    signal: controller.signal,
+  });
+  controller.abort(abortReason);
+
+  await assert.rejects(pending, (error: unknown) => error === abortReason);
+});
+
+function openInput(overrides: Partial<OpenApplicationInput> = {}): OpenApplicationInput {
+  return {
+    positionals: ['com.example.application'],
+    appBundleId: 'com.example.application',
+    surface: 'app',
+    hasExistingSession: false,
+    relaunch: false,
+    prewarmRunnerBeforeOpen: false,
+    enableTestIme: false,
+    stateDir: '/tmp/agent-device-open-foreground',
+    runtimeHints: {},
+    execution: {},
+    ...overrides,
+  };
+}
+
+test('verifyHarmonyOpenForeground passes a confirmed foreground outcome through unchanged', async () => {
+  mockRunCmd.mockResolvedValueOnce({
+    exitCode: 0,
+    stdout: missionDump('com.example.application', 'FOREGROUND'),
+    stderr: '',
+  });
+  const outcome = { timing: {} };
+
+  const verified = await verifyHarmonyOpenForeground(
+    openInput(),
+    outcome,
+    DEVICE,
+    new AbortController().signal,
+  );
+
+  assert.equal(verified, outcome);
+});
+
+test('verifyHarmonyOpenForeground attaches the foreground read when the launch never surfaces', async () => {
+  vi.useFakeTimers();
+  mockRunCmd.mockResolvedValue({
+    exitCode: 0,
+    stdout: missionDump('com.ohos.launcher', 'FOREGROUND'),
+    stderr: '',
+  });
+  const pending = verifyHarmonyOpenForeground(
+    openInput(),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+  await vi.advanceTimersByTimeAsync(HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS + 1_000);
+
+  const verified = await pending;
+  assert.deepEqual(verified.timing.foregroundVerification, {
+    confirmed: false,
+    foregroundPackage: 'com.ohos.launcher',
+  });
+});
+
+test('verifyHarmonyOpenForeground reports an unreadable foreground when no mission is foreground', async () => {
+  vi.useFakeTimers();
+  mockRunCmd.mockResolvedValue({
+    exitCode: 0,
+    stdout: missionDump('com.example.application', 'BACKGROUND'),
+    stderr: '',
+  });
+  const pending = verifyHarmonyOpenForeground(
+    openInput(),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+  await vi.advanceTimersByTimeAsync(HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS + 1_000);
+
+  const verified = await pending;
+  assert.deepEqual(verified.timing.foregroundVerification, { confirmed: false });
+});
+
+test('verifyHarmonyOpenForeground fails the open when --foreground demands the foreground and the launch never surfaces', async () => {
+  vi.useFakeTimers();
+  mockRunCmd.mockResolvedValue({
+    exitCode: 0,
+    stdout: missionDump('com.ohos.launcher', 'FOREGROUND'),
+    stderr: '',
+  });
+  const pending = verifyHarmonyOpenForeground(
+    openInput({ execution: { foreground: true } }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+  await vi.advanceTimersByTimeAsync(HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS + 1_000);
+
+  await assert.rejects(
+    () => pending,
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.reason, 'open-not-foreground');
+      assert.equal(error.details?.foregroundPackage, 'com.ohos.launcher');
+      assert.match(error.details?.hint ?? '', /unlock the device screen/i);
+      return true;
+    },
+  );
+});
+
+test('verifyHarmonyOpenForeground skips verification without a bundle identity to verify', async () => {
+  await verifyHarmonyOpenForeground(
+    openInput({ appBundleId: undefined }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+  await verifyHarmonyOpenForeground(
+    openInput({ appBundleId: 'https://example.com' }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+
+  assert.equal(mockRunCmd.mock.calls.length, 0);
 });

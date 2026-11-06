@@ -4,6 +4,7 @@ import { expect, test, vi } from 'vitest';
 vi.mock('./hdc.ts', () => ({ runHarmonyShell: vi.fn() }));
 
 import { runHarmonyShell } from './hdc.ts';
+import type { OpenApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceBinding } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
@@ -362,3 +363,137 @@ function gestureHost(): PlatformRuntimeHost {
     localInteractors: { resolve: async () => ({}) },
   } as unknown as PlatformRuntimeHost;
 }
+
+function launchDumpHdc(): void {
+  const hdc = vi.mocked(runHarmonyShell);
+  hdc.mockReset();
+  hdc.mockImplementation(async (_device, args) => {
+    if (args.includes('dump') && args.includes('-n')) {
+      return {
+        exitCode: 0,
+        stderr: '',
+        stdout: JSON.stringify({
+          hapModuleInfos: [{ mainElementName: 'MainAbility', moduleName: 'entry' }],
+        }),
+      };
+    }
+    if (args.includes('start')) {
+      return { exitCode: 0, stderr: '', stdout: 'start ability successfully' };
+    }
+    return { exitCode: 0, stderr: '', stdout: '' };
+  });
+}
+
+function openInputFixture(overrides: Partial<OpenApplicationInput> = {}): OpenApplicationInput {
+  return {
+    positionals: ['com.example.harmony'],
+    appBundleId: 'com.example.harmony',
+    surface: 'app',
+    hasExistingSession: false,
+    relaunch: false,
+    prewarmRunnerBeforeOpen: false,
+    enableTestIme: false,
+    stateDir: '/tmp/agent-device-runtime-foreground',
+    runtimeHints: {},
+    execution: {},
+    ...overrides,
+  };
+}
+
+test('openApplication verifies the launched bundle in the foreground after the direct dispatch', async () => {
+  launchDumpHdc();
+  const hdc = vi.mocked(runHarmonyShell);
+  hdc.mockImplementation(async (_device, args) => {
+    if (args.includes('dump') && args.includes('-n')) {
+      return {
+        exitCode: 0,
+        stderr: '',
+        stdout: JSON.stringify({
+          hapModuleInfos: [{ mainElementName: 'MainAbility', moduleName: 'entry' }],
+        }),
+      };
+    }
+    if (args.includes('start')) {
+      return { exitCode: 0, stderr: '', stdout: 'start ability successfully' };
+    }
+    return {
+      exitCode: 0,
+      stderr: '',
+      stdout:
+        'Mission ID #76\n\tstate #FOREGROUND\n\tmission name #[#com.example.harmony:entry:MainAbility]',
+    };
+  });
+  const interactor = { open: vi.fn(async () => undefined) };
+  const binding = await createHarmonyPlatformRuntime({
+    processTransports: { resolve: async () => ({ mode: 'local' as const }) },
+    localInteractors: { resolve: async () => interactor },
+  } as unknown as PlatformRuntimeHost).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+
+  const openApplication = binding.operations.openApplication;
+  if (!openApplication) throw new Error('openApplication was not admitted for this binding');
+  const outcome = await openApplication(openInputFixture());
+
+  expect(interactor.open).toHaveBeenCalledOnce();
+  // A confirmed foreground reads as an ordinary open: no verification fact rides the outcome.
+  const foregroundReads = hdc.mock.calls.filter(
+    ([, args]) => args.includes('dump') && args.includes('-l'),
+  );
+  expect(foregroundReads.length).toBeGreaterThanOrEqual(1);
+  expect(outcome.timing.foregroundVerification).toBeUndefined();
+});
+
+test('openApplication fails when --foreground demands the foreground and the launch never surfaces', async () => {
+  vi.useFakeTimers();
+  launchDumpHdc();
+  const hdc = vi.mocked(runHarmonyShell);
+  hdc.mockImplementation(async (_device, args) => {
+    if (args.includes('dump') && args.includes('-n')) {
+      return {
+        exitCode: 0,
+        stderr: '',
+        stdout: JSON.stringify({
+          hapModuleInfos: [{ mainElementName: 'MainAbility', moduleName: 'entry' }],
+        }),
+      };
+    }
+    if (args.includes('start')) {
+      return { exitCode: 0, stderr: '', stdout: 'start ability successfully' };
+    }
+    return {
+      exitCode: 0,
+      stderr: '',
+      stdout:
+        'Mission ID #76\n\tstate #FOREGROUND\n\tmission name #[#com.ohos.launcher:entry:EntryAbility]',
+    };
+  });
+  const interactor = { open: vi.fn(async () => undefined) };
+  const binding = await createHarmonyPlatformRuntime({
+    processTransports: { resolve: async () => ({ mode: 'local' as const }) },
+    localInteractors: { resolve: async () => interactor },
+  } as unknown as PlatformRuntimeHost).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+  const openApplication = binding.operations.openApplication;
+  if (!openApplication) throw new Error('openApplication was not admitted for this binding');
+  const pending = openApplication(openInputFixture({ execution: { foreground: true } }));
+  await vi.advanceTimersByTimeAsync(6_000);
+
+  await expect(pending).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'open-not-foreground' },
+  });
+});

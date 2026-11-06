@@ -7,6 +7,7 @@ import type {
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  type ApplicationLifecycleRuntimeOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
@@ -50,7 +51,11 @@ import {
   harmonyScreenRecordingFacts,
 } from './recording/runtime.ts';
 import { readHarmonyAppState } from './app-state.ts';
-import { bindLocalDirectApplicationLifecycle } from '@agent-device/contracts/application-lifecycle-interaction';
+import { verifyHarmonyOpenForeground } from './app-lifecycle.ts';
+import {
+  bindLocalDirectApplicationLifecycle,
+  type LocalApplicationLifecycleInteractorResolver,
+} from '@agent-device/contracts/application-lifecycle-interaction';
 import {
   createHarmonyAppDeploymentOperations,
   harmonyAppDeploymentFacts,
@@ -121,6 +126,36 @@ function harmonyLifecycleFacts(device: DeviceInfo) {
     prepareAppleRunner: prepareUnavailable,
     configureProviderPortReverse: portReverseUnavailable,
   });
+}
+
+/**
+ * The HarmonyOS lifecycle binding: the shared direct dispatch, plus a foreground verification
+ * after each open. `aa start` reports an accepted launch, not a visible app, so the verification
+ * turns a launch that a lock screen kept invisible into a typed fact on the outcome, and into a
+ * hard failure under `open --foreground`.
+ */
+function harmonyOpenVerifiedLifecycle(params: {
+  host: { resolve: LocalApplicationLifecycleInteractorResolver };
+  device: DeviceInfo;
+  signal: AbortSignal;
+}): ApplicationLifecycleRuntimeOperations {
+  const direct = bindLocalDirectApplicationLifecycle({
+    owner: 'HarmonyOS',
+    openTargetIdentity: 'bundle-id',
+    host: params.host,
+    device: params.device,
+    signal: params.signal,
+  });
+  return {
+    ...direct,
+    openApplication: async (input) =>
+      await verifyHarmonyOpenForeground(
+        input,
+        await direct.openApplication(input),
+        params.device,
+        params.signal,
+      ),
+  };
 }
 
 function harmonyOpenTargetFact(device: DeviceInfo) {
@@ -362,9 +397,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
             ).map((app) => ({ id: app.package, name: app.name }));
           },
           ...availableApplicationLifecycleOperations(
-            bindLocalDirectApplicationLifecycle({
-              owner: 'HarmonyOS',
-              openTargetIdentity: 'bundle-id',
+            harmonyOpenVerifiedLifecycle({
               host: host.localInteractors,
               device: request.device,
               signal: request.scope.signal,
