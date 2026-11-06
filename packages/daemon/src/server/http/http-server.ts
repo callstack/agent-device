@@ -73,7 +73,7 @@ const MAX_HTTP_RPC_BODY_BYTES = 1024 * 1024;
 export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;
   leaseRegistry?: LeaseRegistry;
-  endSessionsForLease?: (leaseId: string, reason?: 'PROVIDER_INSTANCE_ENDED') => Promise<void>;
+  endSessionsForLease?: (leaseId: string) => Promise<void>;
   token?: string;
   retainArtifacts?: boolean;
   /** The runtime host's environment: read for the auth hook and handed to the download archive. */

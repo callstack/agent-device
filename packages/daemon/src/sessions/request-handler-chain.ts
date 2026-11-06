@@ -1,3 +1,4 @@
+import type { LeaseEndReason } from './lease-lifecycle.ts';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
@@ -44,7 +45,7 @@ type RequestHandlerChainParams = {
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
-  endSessionsForLease?: (leaseId: string, reason?: 'PROVIDER_INSTANCE_ENDED') => Promise<void>;
+  endSessionsForLease?: (leaseId: string, reason?: LeaseEndReason) => Promise<void>;
   providerAppCatalog?: ProviderAppCatalog;
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;

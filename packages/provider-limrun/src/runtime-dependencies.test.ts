@@ -32,6 +32,9 @@ const state = vi.hoisted(() => ({
       os: 'android',
     },
   ]),
+  instanceGet: vi.fn(async () => ({
+    status: { state: 'terminated', terminationReason: 'InactivityTimeout' },
+  })),
   tunnelClose: vi.fn(),
   disconnect: vi.fn(),
   connectionState: 'connected' as 'connected' | 'reconnecting' | 'disconnected',
@@ -58,9 +61,7 @@ vi.mock('@limrun/api', () => ({
         };
       }),
       list: vi.fn(),
-      get: vi.fn(async () => ({
-        status: { state: 'terminated', terminationReason: 'InactivityTimeout' },
-      })),
+      get: state.instanceGet,
       delete: vi.fn(async () => undefined),
     };
 
@@ -91,6 +92,18 @@ test('heartbeat reports a terminated instance with its typed cause', async () =>
   };
   try {
     await runtime.leaseLifecycle.allocate?.(lease);
+    state.instanceGet.mockClear();
+    assert.equal(await runtime.leaseLifecycle.heartbeat!(lease), undefined);
+    assert.equal(state.instanceGet.mock.calls.length, 0);
+    state.connectionState = 'disconnected';
+    state.instanceGet.mockRejectedValueOnce(new Error('API unavailable'));
+    assert.equal(await runtime.leaseLifecycle.heartbeat!(lease), undefined);
+    vi.useFakeTimers();
+    state.instanceGet.mockReturnValueOnce(new Promise(() => {}));
+    const timedOut = runtime.leaseLifecycle.heartbeat!(lease);
+    await vi.advanceTimersByTimeAsync(2_000);
+    assert.equal(await timedOut, undefined);
+    vi.useRealTimers();
     await assert.rejects(
       runtime.leaseLifecycle.heartbeat!(lease),
       (error: unknown) =>
@@ -99,6 +112,8 @@ test('heartbeat reports a terminated instance with its typed cause', async () =>
         error.details.terminationReason === 'InactivityTimeout',
     );
   } finally {
+    vi.useRealTimers();
+    state.connectionState = 'connected';
     await runtime.shutdown();
   }
 });

@@ -15,7 +15,7 @@ export type LeaseRegistryOptions = {
   maxLeaseTtlMs?: number;
   providerSessionRetentionMs?: number;
   now?: () => number;
-  onLeaseExpired?: (lease: DeviceLease) => void;
+  onLeaseExpired?: (lease: DeviceLease, reason?: 'PROVIDER_INSTANCE_ENDED') => void;
   /**
    * Called with every live provider lease after a provider lease is issued or leaves the registry, so
    * the daemon can journal what a crash would otherwise forget. An expired lease leaves only after

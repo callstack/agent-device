@@ -1,3 +1,14 @@
+export const PROVIDER_INSTANCE_ENDED = 'provider-instance-ended';
+
+export function isProviderInstanceEndedError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === 'COMMAND_FAILED' &&
+    (error as { details?: { reason?: unknown } }).details?.reason === PROVIDER_INSTANCE_ENDED
+  );
+}
+
 export type { TriggerAppEventCommandResult } from '../app-events.ts';
 export { assertResolvedAppsFilter, resolveAppsFilter } from '../app-inventory.ts';
 export type { AppsFilter } from '../app-inventory.ts';

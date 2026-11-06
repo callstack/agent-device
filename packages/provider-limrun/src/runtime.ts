@@ -12,6 +12,7 @@ import type {
   ProviderExpiredLeaseRecovery,
   ProviderPortReverseOptions,
 } from '@agent-device/contracts/device';
+import { PROVIDER_INSTANCE_ENDED } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import {
@@ -66,6 +67,7 @@ import type {
 import type { LimrunCaptureLifecycle } from './capture-lifecycle.ts';
 import type { LimrunDisposalHost } from './lease-release.ts';
 
+const HEARTBEAT_PROBE_BUDGET_MS = 2_000;
 const KEEP_ALIVE_INTERVAL_MS = 30_000;
 
 export type LimrunRuntimeOptions = {
@@ -748,20 +750,28 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   ): Promise<Record<string, unknown> | undefined> {
     const session = this.liveSessionForLease(lease.leaseId);
     if (!session) return undefined;
+    if (session.client.getConnectionState() === 'connected') return undefined;
     let terminationReason: string;
     if (this.limrun && session.ownership === 'created') {
-      const instance =
-        session.platform === 'ios'
-          ? await this.limrun.iosInstances.get(session.instanceId, { signal: context?.signal })
-          : await this.limrun.androidInstances.get(session.instanceId, { signal: context?.signal });
-      if (instance.status.state !== 'terminated') return undefined;
-      terminationReason = instance.status.terminationReason ?? 'Unknown';
+      let answer;
+      try {
+        const { awaitLimrunWithinBudget } = await import('./lifecycle-budget.ts');
+        const request =
+          session.platform === 'ios'
+            ? this.limrun.iosInstances.get(session.instanceId, { signal: context?.signal })
+            : this.limrun.androidInstances.get(session.instanceId, { signal: context?.signal });
+        answer = await awaitLimrunWithinBudget(request, HEARTBEAT_PROBE_BUDGET_MS);
+      } catch {
+        return undefined;
+      }
+      if (!answer.ok || answer.value.status.state !== 'terminated') return undefined;
+      terminationReason = answer.value.status.terminationReason ?? 'Unknown';
     } else {
       if (session.client.getConnectionState() !== 'disconnected') return undefined;
       terminationReason = 'Unknown';
     }
     throw new AppError('COMMAND_FAILED', `The Limrun instance ended (${terminationReason}).`, {
-      reason: 'provider-instance-ended',
+      reason: PROVIDER_INSTANCE_ENDED,
       terminationReason,
       instanceId: session.instanceId,
     });

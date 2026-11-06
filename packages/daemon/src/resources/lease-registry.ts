@@ -62,7 +62,10 @@ export class LeaseRegistry {
   private readonly maxActiveSimulatorLeases: number;
   private readonly resolveLeaseTtlMs: ReturnType<typeof createLeaseTtlResolver>;
   private readonly now: () => number;
-  private readonly onLeaseExpired?: (lease: DeviceLease) => void;
+  private readonly onLeaseExpired?: (
+    lease: DeviceLease,
+    reason?: 'PROVIDER_INSTANCE_ENDED',
+  ) => void;
   private readonly onProviderLeasesChanged?: (leases: readonly DeviceLease[]) => void;
   private readonly providerSessionOwnership: ProviderSessionOwnershipRegistry;
 
@@ -263,6 +266,16 @@ export class LeaseRegistry {
     this.inFlightWork.forget(lease.leaseId);
     this.reportProviderLeases(lease);
     return { released: true, lease };
+  }
+
+  endProviderLease(request: ReleaseLeaseRequest): void {
+    const lease = this.getLease(request);
+    if (!lease) return;
+    this.leases.delete(lease.leaseId);
+    this.unbindLease(lease);
+    this.inFlightWork.forget(lease.leaseId);
+    this.onLeaseExpired?.(lease, 'PROVIDER_INSTANCE_ENDED');
+    this.reportProviderLeases(lease);
   }
 
   /**

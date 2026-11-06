@@ -1,3 +1,5 @@
+import { isProviderInstanceEndedError } from '@agent-device/contracts/device';
+import type { LeaseEndReason } from '../lease-lifecycle.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
@@ -54,7 +56,7 @@ type LeaseHandlerArgs = {
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
-  endSessionsForLease?: (leaseId: string, reason?: 'PROVIDER_INSTANCE_ENDED') => Promise<void>;
+  endSessionsForLease?: (leaseId: string, reason?: LeaseEndReason) => Promise<void>;
 };
 
 export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<DaemonResponse | null> {
@@ -313,14 +315,13 @@ async function heartbeatLease(
   let providerData: Record<string, unknown> | undefined;
   let ended: AppError | undefined;
   try {
-    providerData = await leaseLifecycleProvider?.heartbeat?.(
-      lease,
-      leaseLifecycleContext(req, args.host),
-    );
+    providerData = await leaseLifecycleProvider?.heartbeat?.(lease, {
+      ...leaseLifecycleContext(req, args.host),
+      signal: getRequestSignal(req.meta?.requestId),
+    });
   } catch (error) {
-    if (!(error instanceof AppError) || error.details?.reason !== 'provider-instance-ended')
-      throw error;
-    await releaseLease(leaseRegistry, leaseLifecycleProvider, lease, leaseReleaseRequestFor(lease));
+    if (!(error instanceof AppError) || !isProviderInstanceEndedError(error)) throw error;
+    leaseRegistry.endProviderLease(leaseReleaseRequestFor(lease));
     ended = error;
   }
   if (ended) {
