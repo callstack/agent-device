@@ -126,6 +126,13 @@ async function resolveSelectorRuntimeDevice(
       session,
     });
   }
+  if (!session && requireSession) {
+    const { hasDeviceSelectionInput } =
+      await import('../core/device/device-selector-intent.ts');
+    if (!hasDeviceSelectionInput(params.req.flags)) {
+      return { ok: false, response: noActiveSessionError() };
+    }
+  }
   const device =
     session?.device ??
     (await resolveRequestTargetDevice(params.req, { env: params.sessionStore.host.env }));
