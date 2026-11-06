@@ -408,8 +408,8 @@ export class SessionStore {
   }
 
   /**
-   * #4237: marks a session that `close` kept to withhold its device claim after a failed platform
-   * close or cleanup, so daemon idle reap no longer waits on it. A successful reopen clears the mark;
+   * #4237: marks a session that `close` kept after running its teardown (a failed platform close,
+   * cleanup, or provider lease release), so daemon idle reap no longer waits on it. A successful reopen clears the mark;
    * otherwise it lasts until `retire` removes the session.
    */
   markCloseEffectsUnconfirmed(ref: SessionRef): void {

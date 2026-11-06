@@ -447,3 +447,24 @@ test('a session reopened after a failed close blocks the daemon idle reap again'
   expect(reopened).toMatchObject({ ok: true });
   expect(idleReapFires(sessionStore)).toBe(false);
 });
+
+// Every session a close keeps after running its teardown is marked, whichever step failed: here the
+// teardown is clean and only the provider lease release fails, on a session that holds a claim.
+test('a claimed session kept by a failed lease release lets the daemon idle reap fire', async () => {
+  const sessionName = 'close-lease-release-failure-claimed';
+  const leaseRegistry = new LeaseRegistry();
+  const sessionStore = await openSession(sessionName, { lease: { registry: leaseRegistry } });
+  const { loader } = lifecycleOperationsSpy();
+  const release = vi
+    .fn<NonNullable<LeaseLifecycleProvider['release']>>()
+    .mockRejectedValue(new AppError('COMMAND_FAILED', 'provider unreachable'));
+
+  const failed = await close(sessionStore, sessionName, loader, {
+    leaseRegistry,
+    leaseLifecycleProvider: { release },
+  });
+
+  expect(failed).toMatchObject({ ok: false, error: { retriable: true } });
+  expect(sessionStore.get(sessionName)?.deviceClaim).toBeDefined();
+  expect(idleReapFires(sessionStore)).toBe(true);
+});

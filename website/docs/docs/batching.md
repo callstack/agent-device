@@ -26,7 +26,8 @@ acquisition that would recover another session's durable resources, can also be 
 another app in the same session keeps its owned resource handles. An Android test IME alone is
 restored by ordinary `close`, including a bounded step. Restoration may settle after the remaining
 batch time. If it fails on a session that holds a device claim, the session and its claim stay; inspect
-the device, then run `close` again to retry the cleanup. A session without a claim is retired. Run a refused step separately with its original arguments and options, the same `--session` value, and
+the device, then retry `close` with the same options, leaving out `--save-script` once the script is
+published. A session without a claim is retired. Run a refused step separately with its original arguments and options, the same `--session` value, and
 the same private CLI context. Inspect `details.partialResults` and
 `details.dispatchedSteps` before retrying the batch: earlier steps may already have changed the app.
 The batch still authenticates and renews its own lease while it runs.

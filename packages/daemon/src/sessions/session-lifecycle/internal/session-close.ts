@@ -302,19 +302,21 @@ export async function handleSessionCloseCommands(
     lifecycle: admission.runtime,
   });
   if ('response' in repair) return repair.response;
-  const closed = await runCloseTeardownAndRelease({
-    env: params.host.env,
-    req,
-    ref,
-    logPath,
-    sessionStore,
-    leaseRegistry,
-    leaseLifecycleProvider,
-    lifecycle: admission.runtime,
-    clearRuntimeHints: admission.clearRuntimeHints,
-    repairArmed: repair.repairArmed,
-    platformResourceCleanup,
-  });
+  const closed = await markSessionKeptAfterTeardown(sessionStore, ref, () =>
+    runCloseTeardownAndRelease({
+      env: params.host.env,
+      req,
+      ref,
+      logPath,
+      sessionStore,
+      leaseRegistry,
+      leaseLifecycleProvider,
+      lifecycle: admission.runtime,
+      clearRuntimeHints: admission.clearRuntimeHints,
+      repairArmed: repair.repairArmed,
+      platformResourceCleanup,
+    }),
+  );
   if (closed.kind === 'response') return closed.response;
   return buildCloseSuccessResponse({
     session,
@@ -323,6 +325,23 @@ export async function handleSessionCloseCommands(
     shutdownResult: closed.shutdownResult,
     providerData: closed.providerData,
   });
+}
+
+/**
+ * #4237: the one owner of "a kept session is marked". A close that ran its teardown either retires
+ * the session or keeps it for a retried close, whichever step failed (platform close, cleanup, or
+ * provider lease release). Every kept session is marked, so daemon idle reap never waits on it.
+ */
+async function markSessionKeptAfterTeardown<Result>(
+  sessionStore: SessionStore,
+  ref: SessionRef,
+  finalize: () => Promise<Result>,
+): Promise<Result> {
+  try {
+    return await finalize();
+  } finally {
+    if (sessionStore.resolveCurrent(ref)) sessionStore.markCloseEffectsUnconfirmed(ref);
+  }
 }
 
 type SessionCloseFinalization =
@@ -398,7 +417,6 @@ async function runCloseTeardownAndRelease(params: {
       // The withheld claim names a live owner, so `--stale` cannot reclaim it. Retiring the
       // session would leave nothing able to release it; keeping it, and its lease, lets a retried
       // close rerun the teardown.
-      sessionStore.markCloseEffectsUnconfirmed(ref);
       throw claimBlockingError;
     }
   }

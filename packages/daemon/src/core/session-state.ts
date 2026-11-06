@@ -157,8 +157,8 @@ export type SessionState = {
    */
   lastActivityAtMs?: number;
   /**
-   * #4237: a `close` failed its platform close or cleanup, so it kept this session to withhold its
-   * device claim for a retried `close`. Until a successful reopen, such a session does not hold the
+   * #4237: a `close` ran its teardown but could not finish it (a failed platform close, cleanup, or
+   * provider lease release), so it kept this session for a retried `close`. Until a successful reopen, such a session does not hold the
    * daemon open: idle reap may end the daemon, whose shutdown teardown retries the cleanup and leaves
    * a claim it still cannot confirm stale.
    */
