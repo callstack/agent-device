@@ -322,7 +322,8 @@ test('the gestures that stabilize document the synopsis-hidden stabilization opt
     assert.match(help, /Command flags:[\s\S]*--no-post-gesture-stabilization\s+\S/);
   }
   const press = await usageForCommand('press');
-  assert.doesNotMatch(press ?? '', /--no-post-gesture-stabilization/);
+  if (press === null) throw new Error('Expected press help text');
+  assert.doesNotMatch(press, /--no-post-gesture-stabilization/);
 });
 
 test('back command usage documents explicit mode flags', async () => {
