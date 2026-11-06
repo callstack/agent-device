@@ -35,7 +35,7 @@ Platform quirks:
   tvOS coordinate pan and fling preserve only the dominant direction as a remote swipe; authored endpoints and duration are not preserved.
   Gesture planning prefers the active-app frame; a backend without a gesture viewport resolver falls back to the visible snapshot union, which can be less accurate near edges.
   Rare iOS accessibility gap: a row shown disabled/hittable:false where press reports success but no UI change, or a collapsed composite control with no child refs -- run snapshot -i --json, compute the target center from rects, press x y, then diff snapshot -i. Coordinates are fallback-only; document why you used them.
-  After scroll, swipe, or gesture swipe, the next read waits for two captures to agree. A caller whose own polling verifies the screen adds --no-post-gesture-stabilization to skip that wait; a directional scroll then also skips its movement check.
+  On mobile, after scroll, swipe, or gesture swipe, the next read waits for two captures to agree; web and desktop targets do not wait. A caller whose own polling verifies the screen adds --no-post-gesture-stabilization to skip that wait; a directional scroll then also skips its movement check.
 
 macOS:
   Context menus are secondary clicks, not long presses: agent-device click @e66 --button secondary --platform macos, then snapshot -i.
