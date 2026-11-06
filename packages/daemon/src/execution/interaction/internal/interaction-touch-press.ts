@@ -112,6 +112,7 @@ function buildTargetedRuntimeOptions(
         runtime,
         command,
         target,
+        refs: admitted.refs,
         sessionName,
         requestId: req.meta?.requestId,
         clickButton: admitted.clickButton,
@@ -157,6 +158,7 @@ async function runTargetedTouchInteraction(params: {
   runtime: Awaited<ReturnType<typeof createInteractionRuntimeForRoute>>;
   command: TargetedTouchCommand;
   target: InteractionTarget;
+  refs: readonly string[] | undefined;
   sessionName: string;
   requestId: string | undefined;
   clickButton: ReturnType<typeof resolveClickButton>;
@@ -193,6 +195,7 @@ function pressRuntimeOptions(
   params: {
     clickButton: ReturnType<typeof resolveClickButton>;
     flags: CommandFlags | undefined;
+    refs: readonly string[] | undefined;
     preresolvedTarget?: PreresolvedInteractionTarget;
   },
   shared: {
@@ -212,6 +215,9 @@ function pressRuntimeOptions(
     jitterPx: flags?.jitterPx,
     doubleTap: flags?.doubleTap,
     verify: flags?.verify,
+    // The multi-ref press plan: present only when the request named a
+    // comma-separated ref sequence.
+    ...(params.refs ? { refs: params.refs } : {}),
     // Only click/press take it: `find` dispatches click and fill, never
     // longpress or hover, so declaring it on their options would be an
     // unconsumed claim (#1649 review).

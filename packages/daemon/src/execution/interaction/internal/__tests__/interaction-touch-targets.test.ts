@@ -192,3 +192,69 @@ test('parseFillTarget keeps the established whitespace-only rules', () => {
   // … while a blank selector-fill argument stays a mistake.
   expect(parseFillTarget(['label="Email"', '   ']).ok).toBe(false);
 });
+
+// --- Multi-ref press sequence (`press @e13,@e14,...`) ---
+
+test('parseTouchTarget decodes a comma-separated ref sequence for press', () => {
+  const parsed = parseTouchTarget(['@e13,@e14,@e15,@e16'], 'press');
+
+  expect(parsed).toEqual({
+    ok: true,
+    target: { kind: 'ref', ref: '@e13' },
+    refs: ['e13', 'e14', 'e15', 'e16'],
+    refGenerations: [undefined, undefined, undefined, undefined],
+  });
+});
+
+test('parseTouchTarget decodes pinned members and keeps their generations', () => {
+  const parsed = parseTouchTarget(['@e1~s4,@e2'], 'press');
+
+  expect(parsed.ok).toBe(true);
+  if (!parsed.ok) return;
+  expect(parsed.target).toEqual({ kind: 'ref', ref: '@e1' });
+  expect(parsed.refs).toEqual(['e1', 'e2']);
+  expect(parsed.refGenerations).toEqual([4, undefined]);
+});
+
+test('parseTouchTarget accepts the sequence form for click and rejects it for other commands', () => {
+  expect(parseTouchTarget(['@e1,@e2'], 'click').ok).toBe(true);
+  expect(parseTouchTarget(['@e1,@e2'], 'longpress').ok).toBe(false);
+  expect(parseTouchTarget(['@e1,@e2'], 'hover').ok).toBe(false);
+});
+
+test('parseTouchTarget rejects a sequence with an empty member', () => {
+  for (const positional of ['@e1,,@e2', '@e1,', '@e1,,']) {
+    const parsed = parseTouchTarget([positional], 'press');
+    expect(parsed.ok, positional).toBe(false);
+  }
+  // A single @ref without a comma stays the plain single-ref path.
+  expect(parseTouchTarget(['@e1'], 'press').ok).toBe(true);
+});
+
+test('parseTouchTarget keeps a comma token without a leading @ on the selector path', () => {
+  // A malformed list that never opens with @ is today's selector text, not a sequence.
+  expect(parseTouchTarget([',@e1'], 'press')).toEqual({
+    ok: true,
+    target: { kind: 'selector', selector: ',@e1' },
+  });
+});
+
+test('parseTouchTarget rejects duplicate members and non-ref members', () => {
+  expect(parseTouchTarget(['@e1,@e1'], 'press').ok).toBe(false);
+  expect(parseTouchTarget(['@e1,label'], 'press').ok).toBe(false);
+});
+
+test('parseTouchTarget rejects a sequence above the 16-ref bound', () => {
+  const positional = Array.from({ length: 17 }, (_, index) => `@e${index + 1}`).join(',');
+  expect(parseTouchTarget([positional], 'press').ok).toBe(false);
+  const atBound = Array.from({ length: 16 }, (_, index) => `@e${index + 1}`).join(',');
+  expect(parseTouchTarget([atBound], 'press').ok).toBe(true);
+});
+
+test('parseTouchTarget keeps the fallback label path for a plain ref with trailing text', () => {
+  const parsed = parseTouchTarget(['@e4', 'Email field'], 'press');
+  expect(parsed).toEqual({
+    ok: true,
+    target: { kind: 'ref', ref: '@e4', fallbackLabel: 'Email field' },
+  });
+});

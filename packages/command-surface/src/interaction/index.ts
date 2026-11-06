@@ -221,6 +221,25 @@ const tapInteractionResponseDataSchema = interactionResponseDataSchema({
       'Deterministic per-axis coordinate jitter in pixels (each press offsets x and y by up to this amount).',
     ),
     doubleTap: booleanSchema('Whether the command requested a double-tap action.'),
+    sequence: objectSchema(
+      {
+        pressed: numberSchema('How many keys of the plan were dispatched.'),
+        refs: stringArraySchema('The planned refs in dispatch order, each with its @ prefix.'),
+        points: {
+          type: 'array',
+          description: 'Where each dispatched key landed, in plan order.',
+          items: objectSchema(
+            {
+              x: numberSchema(),
+              y: numberSchema(),
+            },
+            ['x', 'y'],
+          ),
+        },
+      },
+      ['pressed', 'refs', 'points'],
+      'Present when the command ran a multi-ref plan (press @e13,@e14,...): one press per key, in order.',
+    ),
   },
 });
 
@@ -362,7 +381,7 @@ const interactionCliSchemas = {
     allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS, 'record'],
   },
   click: {
-    usageOverride: 'click <x y|@ref|selector>',
+    usageOverride: 'click <x y|@ref|@ref,...|selector>',
     usageFlags: [],
     positionalArgs: ['target'],
     allowsExtraPositionals: true,
@@ -374,7 +393,7 @@ const interactionCliSchemas = {
     ],
   },
   press: {
-    usageOverride: 'press <x y|@ref|selector>',
+    usageOverride: 'press <x y|@ref|@ref,...|selector>',
     usageFlags: [],
     positionalArgs: ['targetOrX', 'y?'],
     allowsExtraPositionals: true,
@@ -470,7 +489,8 @@ const pressCommandFacet = defineCommandFacet({
   name: 'press',
   text: {
     summary: 'Short-press a UI target',
-    cliDetail: 'The hold duration is positional on longpress, not press --hold-ms.',
+    cliDetail:
+      'The hold duration is positional on longpress, not press --hold-ms. Enter a fixed key plan in one command with a comma-separated ref sequence: press @e13,@e14,@e15,@e16 presses each key in order (2 to 16 refs, no repeats). Every key is admitted against the current snapshot before the first press, so a plan one key cannot authorize refuses whole; after each press the next key is re-found by identity on a fresh capture and the command refuses with sequence_ref_unmatched when its element is gone, naming the keys already pressed. --interval-ms sleeps between keys; --count, --hold-ms, --jitter-px, --double-tap, and --button are refused with a sequence.',
   },
   metadata: metadata('press'),
   run: (client, input) => client.interactions.press(toPressOptions(input)),

@@ -41,6 +41,16 @@ export const INTERACTION_ERROR_REASONS = {
    * hint that names that recovery.
    */
   targetStillMoving: 'target_still_moving',
+  /**
+   * A multi-ref press sequence (`press @e13,@e14,...`) refused a remaining key:
+   * the fresh observation named no node, or more than one, carrying the
+   * planned key's identity. `details.ref` names the refused key,
+   * `details.executed` counts the keys already dispatched, and
+   * `details.pending` lists the refs that did not run. The dispatched keys may
+   * already have changed the screen; re-snapshot and rebuild the remaining
+   * plan instead of retrying the same sequence.
+   */
+  sequenceRefUnmatched: 'sequence_ref_unmatched',
 } as const;
 
 /** The part of a covered node a refusal reports. */
