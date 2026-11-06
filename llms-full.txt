@@ -1159,13 +1159,13 @@ What a **Yes** does not claim:
 
 ### Evidence and diagnostics: hosted provider sessions
 
-| Capability and reference                                                                              | BrowserStack Android / TestMu AI Android | BrowserStack iOS / TestMu AI iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android | Revyl iOS | Revyl Android |
-| ----------------------------------------------------------------------------------------------------- | ---------------------------------------- | -------------------------------- | ----------------------- | ------------------- | ---------- | -------------- | --------- | ------------- |
-| [Screen recording](/docs/commands#media-and-logs)                                                     | No                                       | No                               | No                      | No                  | Yes        | Yes            | No        | No            |
-| [App logs](/docs/debugging-profiling#logs)                                                            | No                                       | No                               | No                      | No                  | Yes        | Yes            | No        | No            |
-| [HTTP(S) request inspection](/docs/debugging-profiling#network-inspection)                            | No                                       | No                               | No                      | No                  | Yes        | Yes            | No        | No            |
-| [Performance samples (frames, memory, CPU profiles)](/docs/debugging-profiling#performance-snapshots) | No                                       | No                               | No                      | No                  | No         | No             | No        | No            |
-| [Audio probe](/docs/debugging-profiling#audio-probes)                                                 | No                                       | No                               | No                      | No                  | No         | No             | No        | No            |
+| Capability and reference                                                                              | BrowserStack Android / TestMu AI Android | BrowserStack iOS / TestMu AI iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android                                                                                      | Revyl iOS | Revyl Android |
+| ----------------------------------------------------------------------------------------------------- | ---------------------------------------- | -------------------------------- | ----------------------- | ------------------- | ---------- | --------------------------------------------------------------------------------------------------- | --------- | ------------- |
+| [Screen recording](/docs/commands#media-and-logs)                                                     | No                                       | No                               | No                      | No                  | Yes        | Yes                                                                                                 | No        | No            |
+| [App logs](/docs/debugging-profiling#logs)                                                            | No                                       | No                               | No                      | No                  | Yes        | Yes                                                                                                 | No        | No            |
+| [HTTP(S) request inspection](/docs/debugging-profiling#network-inspection)                            | No                                       | No                               | No                      | No                  | Yes        | Yes                                                                                                 | No        | No            |
+| [Performance samples (frames, memory, CPU profiles)](/docs/debugging-profiling#performance-snapshots) | No                                       | No                               | No                      | No                  | No         | Frame and memory samples and HPROF heap snapshots; native captures and CPU profiles are unavailable | No        | No            |
+| [Audio probe](/docs/debugging-profiling#audio-probes)                                                 | No                                       | No                               | No                      | No                  | No         | No                                                                                                  | No        | No            |
 
 What a **Yes** does not claim:
 
@@ -3981,6 +3981,20 @@ If you use a nightly or unpublished agent-device build, obtain a matching packag
 An installed Expo dev client can open with the same automatic launch URL discovery as a local simulator when its `exp+` scheme has one installed owner and Metro runtime information is available. An explicit launch URL takes precedence. If agent-device cannot verify which app owns a custom URL scheme, it leaves the launch confirmation for you to inspect and answer with the alert commands.
 
 For a local Metro server, connect with `--provider-network-logs` and include `localhost:8081`, or your Metro port, in `--provider-network-hosts`. While the session is open, the app can reach that port on the machine running agent-device. See [Capture session network traffic](#capture-session-network-traffic) for the network changes this option makes. Otherwise, use a publicly reachable HTTPS Metro endpoint. `port reverse` is Android-only.
+
+## Read Android performance data
+
+On an open Android session, use the same commands as on a local emulator:
+
+```bash
+agent-device perf frames --json
+agent-device perf memory sample --json
+agent-device perf memory snapshot --kind android-hprof --out ./heap.hprof
+```
+
+Frame statistics and memory samples describe the running app. A heap snapshot downloads an HPROF file to your machine; the app must permit heap dumps. Reading frame statistics resets the app’s frame counters, as it does locally. Native Simpleperf and Perfetto captures remain unavailable through the Limrun provider.
+
+Android `get text` also uses the shared live text reader when the selected element supports it.
 
 ## Read iOS app logs
 
