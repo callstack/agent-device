@@ -737,7 +737,7 @@ test('a later request does not inherit a prior request device pin', async () => 
   });
 });
 
-test('snapshot and press with device selector are refused when another session holds device (#4228)', async () => {
+test('require-owner commands with device selector are refused when another session holds device (#4228)', async () => {
   const device = { ...makeIosDevice('SIM-HELD-BY-FIRST'), appleOs: 'ios' as const };
   process.env.AGENT_DEVICE_CLAIMS_DIR = root('issue-4228-claims-');
   const { handler, runtime, sessionStore } = route(device);
@@ -779,18 +779,18 @@ test('snapshot and press with device selector are refused when another session h
     error: { code: 'DEVICE_IN_USE', message: 'Device is already in use by session "first".' },
   });
 
-  // 3. Session B press with selector must also be refused with DEVICE_IN_USE
-  const pressB = await handler({
+  // 3. Session B clipboard write with selector (mutating handler family) must also be refused with DEVICE_IN_USE
+  const clipboardB = await handler({
     token: 'test-token',
     session: 'second',
-    command: 'press',
-    positionals: ['400', '860'],
+    command: 'clipboard',
+    positionals: ['write', 'pasted text'],
     flags: { platform: 'ios', udid: 'SIM-HELD-BY-FIRST' },
-    meta: { requestId: 'second-press', sessionExplicit: true },
+    meta: { requestId: 'second-clipboard', sessionExplicit: true },
   });
   expect(sessionStore.get('second')).toBeUndefined();
   expect(runtime.bind).not.toHaveBeenCalled();
-  expect(pressB).toMatchObject({
+  expect(clipboardB).toMatchObject({
     ok: false,
     error: { code: 'DEVICE_IN_USE', message: 'Device is already in use by session "first".' },
   });

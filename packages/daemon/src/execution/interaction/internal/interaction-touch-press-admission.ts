@@ -74,22 +74,7 @@ async function readTargetedTouchAdmission(
 ): Promise<{ response: DaemonResponse } | { admitted: AdmittedTargetedTouch }> {
   const { req, sessionStore, sessionName } = params;
   const session = sessionStore.get(sessionName);
-  if (!session) {
-    const { hasDeviceSelectionInput } =
-      await import('../../../core/device/device-selector-intent.ts');
-    if (hasDeviceSelectionInput(req.flags)) {
-      const { resolveRequestTargetDevice } =
-        await import('../../../core/request-device-resolution.ts');
-      const device = await resolveRequestTargetDevice(req, { env: sessionStore.host.env });
-      const inUse = sessionStore.findByDevice(device.id);
-      if (inUse && inUse.address !== sessionName) {
-        const { buildDeviceInUseBySessionError } =
-          await import('../../../core/session-recovery-hints.ts');
-        return { response: buildDeviceInUseBySessionError(inUse, device) };
-      }
-    }
-    return { response: noActiveSessionError() };
-  }
+  if (!session) return { response: noActiveSessionError() };
 
   const commandLabel = command === 'click' ? 'click' : command;
   const policyResponse = targetedTouchPolicyResponse(session, command, commandLabel, req.flags);

@@ -126,24 +126,10 @@ async function resolveSelectorRuntimeDevice(
       session,
     });
   }
-  if (!session && requireSession) {
-    const { hasDeviceSelectionInput } =
-      await import('../core/device/device-selector-intent.ts');
-    if (!hasDeviceSelectionInput(params.req.flags)) {
-      return { ok: false, response: noActiveSessionError() };
-    }
-  }
+  if (!session && requireSession) return { ok: false, response: noActiveSessionError() };
   const device =
     session?.device ??
     (await resolveRequestTargetDevice(params.req, { env: params.sessionStore.host.env }));
-  if (!session) {
-    const inUse = params.sessionStore.findByDevice(device.id);
-    if (inUse && inUse.address !== params.sessionName) {
-      const { buildDeviceInUseBySessionError } = await import('../core/session-recovery-hints.ts');
-      return { ok: false, response: buildDeviceInUseBySessionError(inUse, device) };
-    }
-  }
-  if (!session && requireSession) return { ok: false, response: noActiveSessionError() };
   return { ok: true, ref, session, device };
 }
 
