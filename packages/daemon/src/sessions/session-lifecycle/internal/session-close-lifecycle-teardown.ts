@@ -148,7 +148,7 @@ export function closeCleanupError(
     failures,
     ...(options.sessionKept
       ? {
-          hint: 'Some session resources failed to release. The session and its device claim were kept; retry plain close (without --save-script) to rerun the failed cleanup and release the device.',
+          hint: 'Some session resources failed to release. The session and its device claim were kept; retry close with the same options, leaving out --save-script once the script is published, to rerun the failed cleanup and release the device.',
         }
       : {}),
   });
