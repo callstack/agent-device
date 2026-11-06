@@ -121,7 +121,6 @@ test('the compiled set classifies every file region the R11 walk visits', () => 
   assert.equal(insideCompiledSources('scripts/layering/check.ts'), false);
   assert.equal(insideCompiledSources('packages/maestro/test/conformance/harness.ts'), false);
   assert.equal(insideCompiledSources('packages/proxy/tsdown.config.ts'), false);
-
   assert.equal(insideCompiledSources('scripts/help-conformance-command-validator.ts'), false);
   assert.equal(insideCompiledSources('scripts/coverage-crap/stamp.ts'), false);
   assert.equal(insideCompiledSources('scripts/coverage-changed/run.ts'), false);

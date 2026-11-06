@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import type { AgentDeviceBackend, BackendScreenshotOptions } from '@agent-device/contracts/backend';
 import type { CommandClock, CommandSessionRecord } from '@agent-device/contracts/runtime-contract';
 import { PNG } from '@agent-device/capture-kit/png';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { createLocalArtifactAdapter } from '../../../src/io.ts';
 import { createCommandSurfaceAgentDevice } from '@agent-device/command-runtime';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
