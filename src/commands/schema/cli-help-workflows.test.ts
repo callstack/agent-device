@@ -26,7 +26,8 @@ test('usageForCommand resolves debugging help topic', async () => {
   assert.match(help, /open_timing event/);
   assert.match(help, /requests\/<request-id>\.ndjson holds daemon request diagnostics/);
   assert.match(help, /error line first on stderr/);
-  assert.match(help, /Diagnostic ids and log paths ride the --debug tier/);
+  assert.match(help, /Diagnostic ids and log paths print only with --debug/);
+  assert.match(help, /record is fetched to <state-dir>\/remote-diagnostics\/ at every tier/);
   assert.match(help, /daemon\.log is global daemon lifecycle evidence/);
   assert.match(help, /agent-device perf memory sample --json/);
   assert.match(help, /agent-device audio probe start 10 1000 --platform web/);

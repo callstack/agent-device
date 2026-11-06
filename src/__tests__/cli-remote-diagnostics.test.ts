@@ -86,6 +86,11 @@ test('a remote failure names a record the caller can actually read', async (t) =
         debugRun.daemonLogPath,
         debugRun.requestId,
       );
+      assert.equal(debugRun.run.code, 1);
+      // The in-process daemon's --debug diag lines precede the CLI's own
+      // failure block in this capture, but the block itself must still open
+      // with the error line, at a line boundary.
+      assert.match(debugRun.run.stderr, /(?:^|\n)Error \(COMMAND_FAILED\): /);
       assert.match(
         debugRun.run.stderr,
         new RegExp(`Diagnostics Log: ${escapeRegExp(debugLocalPath)}`),
