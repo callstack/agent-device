@@ -20,10 +20,10 @@ export const HARMONY_TOUCH_TRANSPORT_MAX_SAMPLES = 32;
  * Bounds one `uinput sendevent` process spawn in the injection timeout budget. Calibrated
  * against device evidence, not assumed; the spawn cost is device-specific.
  */
-export const SEND_EVENT_TIMEOUT_PER_SAMPLE_MS = 120;
+const SEND_EVENT_TIMEOUT_PER_SAMPLE_MS = 120;
 
 /** Wall-clock headroom on top of duration and per-sample spawn budget for the whole script. */
-export const TRAJECTORY_TIMEOUT_MARGIN_MS = 1_500;
+const TRAJECTORY_TIMEOUT_MARGIN_MS = 1_500;
 
 /**
  * The script prints this marker only after every sendevent in the chain exited zero. The HDC
