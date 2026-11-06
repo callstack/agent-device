@@ -5,7 +5,10 @@ import type {
 import { unavailableFact } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { LimrunRequestOperationDrain } from './request-cancellation.ts';
+import {
+  awaitLimrunDeploymentOperation,
+  type LimrunRequestOperationDrain,
+} from './request-cancellation.ts';
 import { isSupportedLimrunRuntimeDevice } from './runtime-device.ts';
 
 const available = Object.freeze({ available: true } as const);
@@ -95,7 +98,8 @@ export function createLimrunAppDeploymentOperations(
           },
         }
       : {}),
-    deployApp: async (input) => (await load()).deployApp(input),
+    deployApp: async (input) =>
+      awaitLimrunDeploymentOperation(operationDrain, (await load()).deployApp(input), signal),
     materializeAppSource: async (input) => (await load()).materializeAppSource(input),
     deployMaterializedApp: async (input) => (await load()).deployMaterializedApp(input),
     uninstallApp: async (input) => (await load()).uninstallApp(input),

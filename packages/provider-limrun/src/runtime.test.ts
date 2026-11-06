@@ -83,7 +83,6 @@ vi.mock('@limrun/api', () => ({
       delete: state.androidDelete,
     };
     readonly assets = {
-      getOrUpload: vi.fn(),
       list: vi.fn(async () => state.uploadedApps),
     };
   },

@@ -160,11 +160,6 @@ export type LimrunHostAdapter = {
     invocation: AndroidAdbInvocation,
     options?: LimrunAdbCommandOptions,
   ): Promise<LimrunAdbCommandResult>;
-  archiveDirectory(options: {
-    sourceDirectory: string;
-    entryName: string;
-    archivePath: string;
-  }): Promise<void>;
   downloadFile(options: LimrunFileDownload): Promise<void>;
 };
 

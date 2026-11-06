@@ -299,17 +299,9 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   ): Promise<ProviderDeviceInstallResult | undefined> {
     const session = this.getSessionForDevice(device);
     if (!session) return undefined;
-    const limrun = this.orgClient('Uploading an app');
     return session.platform === 'ios'
-      ? await installLimrunIosApp(limrun, session, installablePath, options, signal, operationDrain)
-      : await installLimrunAndroidApp(
-          limrun,
-          session,
-          installablePath,
-          options,
-          signal,
-          operationDrain,
-        );
+      ? await installLimrunIosApp(session, installablePath, options, signal, operationDrain)
+      : await installLimrunAndroidApp(session, installablePath, options, signal, operationDrain);
   }
 
   async configurePortReverse(

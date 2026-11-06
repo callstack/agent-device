@@ -1,6 +1,6 @@
 import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
 /**
- * The Limrun WebSocket client does not expose an AbortSignal parameter. Keep the request-bound
+ * The instance-client operations wrapped here do not accept an AbortSignal. Keep the request-bound
  * caller cancellable while retaining a handled continuation for the provider operation it started.
  */
 export async function awaitLimrunOperation<Value>(
@@ -12,7 +12,7 @@ export async function awaitLimrunOperation<Value>(
 }
 
 /**
- * Request-local ownership for an opaque Limrun WebSocket operation. A caller can observe its own
+ * Request-local ownership for an opaque Limrun SDK operation. A caller can observe its own
  * abort immediately, but a bound runtime does not release the provider session until every
  * accepted operation has settled. This is deliberately not a durable resource or daemon policy.
  */

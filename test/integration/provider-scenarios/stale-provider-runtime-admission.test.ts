@@ -48,7 +48,6 @@ vi.mock('@limrun/api', () => ({
       delete: limrunState.androidDelete,
     };
     readonly iosInstances = { create: vi.fn(), list: vi.fn(), delete: vi.fn() };
-    readonly assets = { getOrUpload: vi.fn() };
   },
   NotFoundError: class NotFoundError extends Error {},
 }));
@@ -338,7 +337,6 @@ function limrunDependencies(): LimrunRuntimeDependencies {
     host: {
       runAdb: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
       downloadFile: async () => undefined,
-      archiveDirectory: async () => {},
     },
     ios: limrunTestDependencies.ios,
   };
