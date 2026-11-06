@@ -39,6 +39,7 @@
 | [0035 Host-Scoped Devices](0035-macos-app-devices.md) | native macOS apps as devices of their own, the host/scoped-device overlap and claim rule, concurrent app sessions, and `macos-app` lease claims |
 | [0036 Bounded Composite Resource Admission](0036-bounded-composite-resource-admission.md) | resource operations, nested tests, session disposal, and claim recovery inside bounded batch/replay steps |
 | [0037 Web Session Devices](0037-web-session-devices.md) | web sessions as devices of their own, the session name rule, the `p_`/`t_` backend key and tenant isolation, and first-open locking for web |
+| [0038 Snapshot capture source routing (Proposed)](0038-snapshot-capture-source-routing.md) | platform-neutral source channels, proof, one fallback, generation circuits, refusal scope, and the producer registry |
 
 ADRs record rationale.
 The registries and gates they describe are the current source of truth.
