@@ -32,4 +32,6 @@ export type ConnectionProviderCapabilities = {
    * default.
    */
   holdsCloudDevice?: boolean;
+  /** Clear a released connection lease so the next device command can allocate a replacement. */
+  forgetsEndedConnectionLease?: boolean;
 };

@@ -17,6 +17,7 @@ const leaseDeferredCommands = new Set([
   'disconnect',
   'metro',
   'session',
+  'shutdown',
 ]);
 function remoteLeaseTtlMs(state: RemoteConnectionState): number | undefined {
   const capabilities = connectionProviderCapabilities(state.leaseProvider);

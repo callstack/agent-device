@@ -43,6 +43,7 @@ import {
   limrunAppLogFacts,
   limrunAppLogRecoveryFacts,
   limrunUnavailableFacts,
+  limrunReleaseFacts,
 } from './facts-runtime.ts';
 
 export type LimrunAppLogReader = ProviderAppLogReader &
@@ -70,6 +71,7 @@ export type LimrunPlatformRuntimeOwnerOptions = Omit<
     resolveAppReference?(device: DeviceInfo, app: string): string;
     openCurrent(device: DeviceInfo): Promise<LimrunAppLogReader | undefined>;
     hasLiveSession(device: DeviceInfo): boolean;
+    hasPendingRelease?(device: DeviceInfo): boolean;
     reconnect(
       descriptor: LimrunAppLogDescriptor,
       signal?: AbortSignal,
@@ -96,10 +98,12 @@ export function createLimrunPlatformRuntimeOwner(
   return Object.freeze({
     owner,
     ownsDevice,
-    inspectFacts: async (device) =>
-      hasLiveSession(device)
-        ? limrunAppLogFacts(options, device)
-        : limrunUnavailableFacts(options, device),
+    inspectFacts: async (device) => {
+      if (hasLiveSession(device)) return limrunAppLogFacts(options, device);
+      return ownsDevice(device) && options.hasPendingRelease?.(device)
+        ? limrunReleaseFacts(options, device)
+        : limrunUnavailableFacts(options, device);
+    },
     bind: async (request) => {
       if (request.intent.kind === 'exact-owner' && !sameRuntimeOwner(request.intent.owner, owner)) {
         throw new AppError('UNSUPPORTED_OPERATION', 'Limrun app-log owner identity does not match');
@@ -111,7 +115,8 @@ export function createLimrunPlatformRuntimeOwner(
         );
       }
       const hasMatchingLiveSession = hasLiveSession(request.device);
-      if (request.intent.kind !== 'exact-owner' && !hasMatchingLiveSession) {
+      const pendingRelease = options.hasPendingRelease?.(request.device) === true;
+      if (request.intent.kind !== 'exact-owner' && !hasMatchingLiveSession && !pendingRelease) {
         throw new AppError(
           'UNSUPPORTED_OPERATION',
           'Limrun provider session is no longer live for the selected device',
@@ -123,7 +128,7 @@ export function createLimrunPlatformRuntimeOwner(
         owner,
         request.device,
         request.scope.signal,
-        !hasMatchingLiveSession,
+        pendingRelease ? 'release' : hasMatchingLiveSession ? 'live' : 'recovery',
       );
     },
     shutdown: async () => undefined,
@@ -135,11 +140,14 @@ function bindLimrunAppLogs(
   owner: ReturnType<typeof providerRuntimeOwner>,
   device: DeviceInfo,
   signal: AbortSignal,
-  recoveryOnly: boolean,
+  mode: 'live' | 'recovery' | 'release',
 ): DeviceBinding<PlatformRuntimeOperations> {
-  const runtimeFacts = recoveryOnly
-    ? limrunAppLogRecoveryFacts(options, device)
-    : limrunAppLogFacts(options, device);
+  const runtimeFacts =
+    mode === 'release'
+      ? limrunReleaseFacts(options, device)
+      : mode === 'recovery'
+        ? limrunAppLogRecoveryFacts(options, device)
+        : limrunAppLogFacts(options, device);
   const deploymentOperationDrain = createLimrunRequestOperationDrain();
   const appLogs = createProviderAppLogOperations({
     host: options.host,
@@ -186,6 +194,11 @@ function bindLimrunAppLogs(
     ...appLogs,
     ensureReady: async () => ({ ...device, booted: true }),
     bootTarget: async () => ({ ...device, booted: true }),
+    shutdownTarget: async (input) => {
+      const parsed = parseLimrunDeviceId(device.id);
+      if (!parsed) throw new AppError('DEVICE_NOT_FOUND', 'Limrun device identity is unavailable');
+      return await input.releaseLease(parsed.leaseId);
+    },
     listApps: async (input) => await options.listApps(input.device, input.filter, signal),
     ...availableApplicationLifecycleOperations(
       bindLimrunApplicationLifecycle(
@@ -241,9 +254,21 @@ function bindLimrunAppLogs(
     owner,
     facts: runtimeFacts,
     operations: Object.freeze(
-      recoveryOnly
-        ? { appLogReattach: appLogs.appLogReattach, appLogCleanup: appLogs.appLogCleanup }
-        : operations,
+      mode === 'release'
+        ? {
+            appLogReattach: appLogs.appLogReattach,
+            appLogCleanup: appLogs.appLogCleanup,
+            resolveOpenTarget: operations.resolveOpenTarget,
+            closeApplication: operations.closeApplication,
+            finalizeApplicationClose: async () => ({}),
+            ...whenAdmitted(runtimeFacts.operations.clearRuntimeHints, () => ({
+              clearRuntimeHints: async () => undefined,
+            })),
+            shutdownTarget: operations.shutdownTarget,
+          }
+        : mode === 'recovery'
+          ? { appLogReattach: appLogs.appLogReattach, appLogCleanup: appLogs.appLogCleanup }
+          : operations,
     ),
     [Symbol.asyncDispose]: async () => await deploymentOperationDrain[Symbol.asyncDispose](),
   });

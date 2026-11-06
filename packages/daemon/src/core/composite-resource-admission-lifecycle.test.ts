@@ -144,3 +144,52 @@ test.each([true, false])(
     }
   },
 );
+
+test.each([false, true])(
+  'bounded retained-provider close uses shutdown availability=%s',
+  async (shutdownAvailable) => {
+    const world = await resourceAdmissionWorld('capture', { providerOwned: true });
+    try {
+      const lease = world.leaseRegistry.allocateLease({
+        tenantId: 'tenant-a',
+        runId: 'run-a',
+        leaseProvider: 'fixture',
+        retainOnClose: true,
+      });
+      world.sessionStore.update(world.ref, {
+        lease: {
+          leaseId: lease.leaseId,
+          tenantId: lease.tenantId,
+          runId: lease.runId,
+          leaseBackend: lease.backend,
+          leaseProvider: 'fixture',
+        },
+      });
+      if (shutdownAvailable) {
+        const facts = await world.inspectFacts();
+        world.inspectFacts.mockResolvedValue({
+          ...facts,
+          operations: { ...facts.operations, shutdownTarget: { available: true } },
+        });
+      }
+      const response = await world.call('batch', [], {
+        batchSteps: [{ command: 'close', flags: { shutdown: true } }],
+      });
+      if (shutdownAvailable) {
+        expect(response.json.error?.data?.details).toMatchObject({
+          reason: 'bounded_composite_resource_unsupported',
+          shape: 'session-resource-disposal:provider-lease',
+        });
+        expect(world.bind).not.toHaveBeenCalled();
+        expect(world.sessionStore.resolveCurrent(world.ref)).toBeDefined();
+      } else {
+        assertRpcOk(response);
+        expect(world.sessionStore.resolveCurrent(world.ref)).toBeUndefined();
+      }
+      expect(world.providerRelease).not.toHaveBeenCalled();
+      expect(world.leaseRegistry.inspectLeaseForClose(lease)).toBeDefined();
+    } finally {
+      await world.daemon.close();
+    }
+  },
+);

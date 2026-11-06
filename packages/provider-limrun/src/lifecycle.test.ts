@@ -216,6 +216,7 @@ test('a stale Limrun session publishes unavailable lifecycle facts and admits re
     'closeApplication',
     'finalizeApplicationClose',
     'configureProviderPortReverse',
+    'shutdownTarget',
   ] as const) {
     expect(facts.operations[operation]).toMatchObject({
       available: false,
@@ -337,3 +338,33 @@ function expectLifecycleFactAvailability(
     }
   }
 }
+
+test.each(['ios', 'android'] as const)(
+  '%s shutdown delegates the bound lease to daemon release',
+  async (platform) => {
+    const target: DeviceInfo =
+      platform === 'ios'
+        ? device
+        : {
+            platform: 'android',
+            id: 'limrun:android:lease-a',
+            name: 'Limrun Android',
+            target: 'mobile',
+            kind: 'emulator',
+            booted: true,
+          };
+    const owner = createLimrunPlatformRuntimeOwner(limrunOwnerOptions());
+    expect((await owner.inspectFacts(target)).operations.shutdownTarget).toEqual({
+      available: true,
+    });
+    const binding = await owner.bind({ device: target, intent: { kind: 'ordinary' }, scope });
+    const released = { success: true, exitCode: 0, stdout: 'Released lease', stderr: '' };
+    const releaseLease = vi.fn(async () => released);
+    expect(await binding.operations.shutdownTarget!({ releaseLease })).toEqual(released);
+    expect(releaseLease).toHaveBeenCalledExactlyOnceWith('lease-a');
+    releaseLease.mockRejectedValueOnce(new Error('Delete unconfirmed'));
+    await expect(binding.operations.shutdownTarget!({ releaseLease })).rejects.toThrow(
+      'Delete unconfirmed',
+    );
+  },
+);

@@ -2,6 +2,7 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { hostDeviceIdOf, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, sessionOrDeviceSelectorRequiredDetails } from '@agent-device/kernel/errors';
+import { resolveRequestOrSessionLeaseScope } from '../core/lease-context.ts';
 import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
@@ -58,8 +59,9 @@ export async function resolveCommandDevice(params: {
   androidAvdSelection?: 'running-only' | 'include-stopped';
   platformServices: DaemonPlatformServices;
 }): Promise<DeviceInfo> {
+  const scope = resolveRequestOrSessionLeaseScope(params.req, params.session);
   const shouldUseExplicitIdentity = hasExplicitDeviceSelector(params.req.flags);
-  if (!shouldUseExplicitIdentity && params.session) {
+  if (!shouldUseExplicitIdentity && params.session && (!scope.leaseProvider || scope.leaseId)) {
     const selected = await refreshSessionDeviceIfNeeded(
       params.session.device,
       params.platformServices,
@@ -68,10 +70,11 @@ export async function resolveCommandDevice(params: {
     pinSessionDeviceSelection(params.platformServices, params.session.device, selected);
     return selected;
   }
-  const device = await resolveRequestTargetDevice(params.req, {
-    env: params.env,
-    androidAvdSelection: params.androidAvdSelection,
-  });
+  const device = await resolveRequestTargetDevice(
+    params.req,
+    { env: params.env, androidAvdSelection: params.androidAvdSelection },
+    { ...params.req.flags, ...scope },
+  );
   // A selector that names the host of the session's app device (ADR 0035) stays on that device:
   // the session holds one app, not the host.
   const held = params.session?.device;

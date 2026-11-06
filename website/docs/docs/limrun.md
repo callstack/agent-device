@@ -19,6 +19,20 @@ agent-device connect limrun --platform android
 
 Requests agent-device makes with your API key, including instance creation, start their `User-Agent` with `agent-device-cli/<version>` so Limrun can attribute them to agent-device for revenue sharing.
 
+## Create and delete an instance
+
+Use `boot` to allocate an instance explicitly before installing your app. This step is optional: `install` also allocates an instance when needed. If this connection already has an instance, `boot` reuses it.
+
+```bash
+agent-device boot
+agent-device shutdown
+agent-device boot
+```
+
+`shutdown` deletes an instance that agent-device created, including its apps and data. The next `boot` creates a fresh instance. Limrun has no stopped instance to resume. If a session is open, use `close --shutdown` to end it and delete its instance. `shutdown` on a connection without an instance creates nothing.
+
+For an [existing instance](#drive-an-existing-instance), `boot` attaches and `shutdown` releases the attachment. The instance stays running, and its owner deletes it. `close --shutdown` also releases an attachment or lease allocated with `retainOnClose: true`.
+
 ## Drive an existing instance
 
 An agent in a sandbox can drive an instance that someone else created, such as the instance behind a live preview, without your organization's API key. Create the instance where the API key lives, then give the sandbox that instance's URL and token from its `status`:

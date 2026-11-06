@@ -170,7 +170,8 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
 
   readonly deviceInventoryProvider: DeviceInventoryProvider = async (request) => {
     if (request.leaseProvider !== this.provider || !request.leaseId) return null;
-    const session = this.liveSessionForLease(request.leaseId);
+    const owner = this.leases.get(request.leaseId);
+    const session = owner?.state.phase === 'releasing' ? owner.session : this.liveSession(owner);
     if (!session) return null;
     if (request.platform && request.platform !== session.platform) return [];
     return [session.device];
@@ -214,6 +215,12 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
 
   hasLiveSession(device: DeviceInfo): boolean {
     return this.getSessionForDevice(device) !== undefined;
+  }
+
+  hasPendingRelease(device: DeviceInfo): boolean {
+    const parsed = parseLimrunDeviceId(device.id);
+    const owner = parsed && this.leases.get(parsed.leaseId);
+    return owner?.platform === parsed?.platform && owner?.state.phase === 'releasing';
   }
 
   getIosRunner(device: DeviceInfo) {
@@ -879,6 +886,7 @@ async function loadLimrunPlatformRuntime(
     runtimeInstance,
     ownsDevice: (device) => runtime.ownsDevice(device),
     hasLiveSession: (device) => runtime.hasLiveSession(device),
+    hasPendingRelease: (device) => runtime.hasPendingRelease(device),
     getInteractor: (device, runner) => runtime.getInteractor(device, runner),
     getIosRunner: (device) => runtime.getIosRunner(device),
     getDeviceSession: (device) => runtime.getDeviceSession(device),

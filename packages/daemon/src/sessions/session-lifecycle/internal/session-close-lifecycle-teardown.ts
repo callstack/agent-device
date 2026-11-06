@@ -31,6 +31,7 @@ export type SessionCloseTeardownResult = Readonly<{
   retainExecutionHost: boolean;
   saveScriptError?: Error;
   shutdownResult?: TargetShutdownResult;
+  shutdownPrepared: boolean;
 }>;
 
 /** Runs owned resources, native close, native hint cleanup, and final lifecycle disposal. */
@@ -120,7 +121,7 @@ export async function runSessionCloseTeardown(params: {
         surface: session.surface ?? 'app',
         retainRunner: retainExecutionHost,
         stateDir: sessionStore.resolveDaemonStateDir(),
-        shutdownTarget: req.flags?.shutdown === true,
+        shutdownTarget: req.flags?.shutdown === true && lifecycle.owner.kind === 'local-family',
       })) ?? {},
   );
   const saveScriptError = repairArmed
@@ -134,6 +135,7 @@ export async function runSessionCloseTeardown(params: {
     retainExecutionHost,
     saveScriptError,
     shutdownResult: finalization?.shutdown,
+    shutdownPrepared: finalization !== undefined,
   };
 }
 
@@ -148,7 +150,7 @@ export function closeCleanupError(
     failures,
     ...(options.sessionKept
       ? {
-          hint: 'Some session resources failed to release. The session and its device claim were kept; retry close with the same options, leaving out --save-script once the script is published, to rerun the failed cleanup and release the device.',
+          hint: 'Some session resources failed to release. The session was kept; retry close with the same options, leaving out --save-script once the script is published, to rerun the failed cleanup and release the remaining resources.',
         }
       : {}),
   });

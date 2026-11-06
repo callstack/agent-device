@@ -75,10 +75,12 @@ async function resolveBootTargetSelection(
     }
     return selection;
   } catch (error) {
+    const appError = asAppError(error);
     if (
       headless &&
       !hasAndroidAvdIdentity(flags.device, session?.device) &&
-      asAppError(error).code === 'DEVICE_NOT_FOUND'
+      appError.code === 'DEVICE_NOT_FOUND' &&
+      appError.details?.reason !== 'provider_instance_unallocated'
     ) {
       return {
         refusal: errorResponse(

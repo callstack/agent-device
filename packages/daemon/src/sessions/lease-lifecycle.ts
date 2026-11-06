@@ -14,7 +14,6 @@ import { errorMessage } from '@agent-device/kernel/errors';
 import type { SessionStore } from '../core/session-store.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
-import { providerSessionIdFromData } from '../resources/provider-session-ownership.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 
 export type ExpiredProviderLeaseRecovery = (lease: DeviceLease) => Promise<void>;
@@ -185,8 +184,9 @@ function closeReleaseRequest(session: SessionState) {
 function closeLeaseDecision(
   activeLease: DeviceLease | undefined,
   provider: LeaseLifecycleProvider | undefined,
+  shutdownRequested = false,
 ): 'retained' | 'provider-release' | 'local-release' {
-  if (activeLease?.retainOnClose) return 'retained';
+  if (activeLease?.retainOnClose && !shutdownRequested) return 'retained';
   return activeLease && provider?.release ? 'provider-release' : 'local-release';
 }
 
@@ -207,12 +207,14 @@ export function inspectSessionProviderReleaseOnClose(params: {
   session: SessionState;
   leaseRegistry: LeaseRegistry;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
+  shutdownRequested?: boolean;
 }): boolean {
   if (!params.session.lease) return false;
   return (
     closeLeaseDecision(
       params.leaseRegistry.inspectLeaseForClose(closeReleaseRequest(params.session)),
       params.leaseLifecycleProvider,
+      params.shutdownRequested,
     ) === 'provider-release'
   );
 }
@@ -244,22 +246,21 @@ export async function releaseSessionLease(params: {
     });
     return {};
   }
-  const providerData =
-    decision === 'provider-release'
-      ? await params.leaseLifecycleProvider!.release!(activeLease!)
-      : undefined;
-  const providerSessionId = providerSessionIdFromData(providerData);
-  if (activeLease && providerSessionId) {
-    params.leaseRegistry.recordProviderSession(activeLease, providerSessionId);
-  }
-  const result = params.leaseRegistry.releaseLease(releaseRequest);
+  const { releaseLease } = await import('../resources/lease-release.ts');
+  const result = await releaseLease(
+    params.leaseRegistry,
+    decision === 'provider-release' ? params.leaseLifecycleProvider : undefined,
+    activeLease,
+    releaseRequest,
+  );
+  const providerData = result.provider;
   emitDiagnostic({
     level: 'info',
     phase: 'session_lease_released',
     data: {
       session: params.session.name,
       leaseId: lease.leaseId,
-      released: result.released,
+      released: result.registryReleased,
     },
   });
   return { endedLeaseId: lease.leaseId, ...(providerData ? { providerData } : {}) };

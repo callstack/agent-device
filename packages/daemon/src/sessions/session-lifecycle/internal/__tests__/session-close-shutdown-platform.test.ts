@@ -126,10 +126,18 @@ test('close --shutdown keeps a selected provider-owned iOS simulator off local s
   sessionStore.publish(sessionName, makeSession(sessionName, device));
   const providerClose = vi.fn(async () => undefined);
   const providerFinalize = vi.fn(async () => ({}));
-  mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (candidate) => {
-    const facts = lifecycleRuntimeFacts(candidate);
-    return { ...facts, device: { ...facts.device, providerMode: 'provider-runtime' as const } };
-  });
+  const facts = lifecycleRuntimeFacts(device);
+  const providerFacts = {
+    ...facts,
+    device: { ...facts.device, providerMode: 'provider-runtime' as const },
+    operations: {
+      ...facts.operations,
+      shutdownTarget: { available: false as const, reason: 'unsupported-provider-mode' as const },
+    },
+  };
+  mockInspectDeviceRuntimeFacts
+    .mockResolvedValueOnce(providerFacts)
+    .mockResolvedValueOnce(providerFacts);
   mockBindDeviceRuntime.mockImplementationOnce(async (candidate, use) => {
     const facts = await mockInspectDeviceRuntimeFacts(candidate);
     return narrowDeviceBinding(
@@ -167,7 +175,7 @@ test('close --shutdown keeps a selected provider-owned iOS simulator off local s
   expect(response?.ok).toBe(true);
   expect(mockShutdownTargetRuntime).not.toHaveBeenCalled();
   expect(providerClose).not.toHaveBeenCalled();
-  expect(providerFinalize).toHaveBeenCalledWith(expect.objectContaining({ shutdownTarget: true }));
+  expect(providerFinalize).toHaveBeenCalledWith(expect.objectContaining({ shutdownTarget: false }));
   if (response?.ok) expect(response.data?.shutdown).toBeUndefined();
 });
 

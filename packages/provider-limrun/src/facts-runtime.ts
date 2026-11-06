@@ -188,10 +188,7 @@ export function limrunAppLogFacts(
       bootTarget: available,
       bootTargetHeadless: headlessUnavailable,
       listApps: available,
-      shutdownTarget: unavailableFact(
-        'unsupported-provider-mode',
-        'Limrun owns the target lifecycle for provider-owned devices.',
-      ),
+      shutdownTarget: available,
     },
   });
 }
@@ -204,6 +201,25 @@ export function limrunAppLogRecoveryFacts(
   return {
     device: facts.device,
     operations: { ...facts.operations, appLogReattach: available, appLogCleanup: available },
+  };
+}
+
+/** A taken lease can finish cleanup, but cannot admit new application work. */
+export function limrunReleaseFacts(
+  options: LimrunPlatformRuntimeOwnerOptions,
+  device: DeviceInfo,
+): RuntimeFacts<PlatformRuntimeOperations> {
+  const facts = limrunAppLogRecoveryFacts(options, device);
+  return {
+    ...facts,
+    operations: {
+      ...facts.operations,
+      resolveOpenTarget: available,
+      closeApplication: available,
+      finalizeApplicationClose: available,
+      clearRuntimeHints: isIosFamily(device) ? available : runtimeHintsUnavailable,
+      shutdownTarget: available,
+    },
   };
 }
 
