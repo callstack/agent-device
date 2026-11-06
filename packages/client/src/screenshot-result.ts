@@ -1,4 +1,8 @@
-import type { ScreenshotResultData } from '@agent-device/contracts/capture';
+import {
+  SCREENSHOT_BURST_LIMITS,
+  type ScreenshotBurstFrame,
+  type ScreenshotResultData,
+} from '@agent-device/contracts/capture';
 import type { CaptureScreenshotResult } from '@agent-device/contracts/client';
 import { isDeviceRotation } from '@agent-device/contracts/device';
 import { isRecord, parsePoint, parseRect, readRequiredString } from '@agent-device/kernel/record';
@@ -6,6 +10,7 @@ import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
 
 export function pickScreenshotResultData(value: ScreenshotResultData): ScreenshotResultData {
+  const frames = readScreenshotBurstFrames(value.frames);
   return {
     ...(typeof value.path === 'string' ? { path: value.path } : {}),
     ...(typeof value.width === 'number' ? { width: value.width } : {}),
@@ -14,6 +19,7 @@ export function pickScreenshotResultData(value: ScreenshotResultData): Screensho
     ...(typeof value.logicalHeight === 'number' ? { logicalHeight: value.logicalHeight } : {}),
     ...(typeof value.pixelDensity === 'number' ? { pixelDensity: value.pixelDensity } : {}),
     ...(isDeviceRotation(value.displayRotation) ? { displayRotation: value.displayRotation } : {}),
+    ...(frames ? { frames } : {}),
     ...(value.overlayRefs ? { overlayRefs: value.overlayRefs } : {}),
     ...(value.warnings && value.warnings.length > 0 ? { warnings: value.warnings } : {}),
   };
@@ -33,6 +39,7 @@ export function normalizeScreenshotCaptureResult(
     logicalHeight: screenshot?.logicalHeight,
     pixelDensity: screenshot?.pixelDensity,
     ...(screenshot?.displayRotation ? { displayRotation: screenshot.displayRotation } : {}),
+    ...(screenshot?.frames ? { frames: screenshot.frames } : {}),
     overlayRefs: screenshot?.overlayRefs,
     ...(screenshot?.warnings ? { warnings: screenshot.warnings } : {}),
     identifiers: { session },
@@ -58,9 +65,33 @@ function readScreenshotResultData(value: unknown): ScreenshotResultData | undefi
     logicalHeight: readNumberField(value, 'logicalHeight'),
     pixelDensity: readNumberField(value, 'pixelDensity'),
     displayRotation: isDeviceRotation(value.displayRotation) ? value.displayRotation : undefined,
+    frames: readScreenshotBurstFrames(value.frames),
     overlayRefs: readScreenshotOverlayRefs(value.overlayRefs),
     ...(warnings !== undefined ? { warnings } : {}),
   });
+}
+
+/**
+ * The burst frames a payload may report: one plan admits at most `maxCount` frames, so a longer
+ * array is truncated, and a frame without a path and a wall clock is not evidence of a capture.
+ */
+function readScreenshotBurstFrames(value: unknown): ScreenshotBurstFrame[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const frames = value
+    .slice(0, SCREENSHOT_BURST_LIMITS.maxCount)
+    .flatMap((frame) => readScreenshotBurstFrame(frame) ?? []);
+  return frames.length > 0 ? frames : undefined;
+}
+
+function readScreenshotBurstFrame(frame: unknown): ScreenshotBurstFrame | undefined {
+  if (!isRecord(frame)) return undefined;
+  if (typeof frame.path !== 'string' || frame.path.length === 0) return undefined;
+  if (typeof frame.capturedAtMs !== 'number') return undefined;
+  return {
+    path: frame.path,
+    capturedAtMs: frame.capturedAtMs,
+    ...(isDeviceRotation(frame.displayRotation) ? { displayRotation: frame.displayRotation } : {}),
+  };
 }
 
 function readNumberField(value: Record<string, unknown>, key: string): number | undefined {

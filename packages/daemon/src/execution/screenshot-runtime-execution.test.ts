@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { Interactor, ScreenshotOptions } from '@agent-device/contracts/interactor-types';
 import {
   bindLocalScreenshotInteractor,
@@ -896,4 +897,85 @@ test('a cancelled request stops the burst before the next frame', async () => {
   controller.abort();
   await expect(execution).rejects.toThrow();
   expect(fixture.captureScreenshot.mock.calls.length).toBeLessThan(3);
+});
+
+/** A command surface whose every capture reports the given warnings, so a burst frames them. */
+function burstWarningSurface(warnings: string[]): CreateDaemonCommandSurface {
+  return async (config) => {
+    const forwarded = await testCreateCommandSurface(config);
+    return {
+      ...forwarded,
+      capture: {
+        ...forwarded.capture,
+        screenshot: async (options) => ({
+          ...(await forwarded.capture.screenshot(options)),
+          warnings,
+        }),
+      },
+    };
+  };
+}
+
+test('a burst reports a warning the frames share once', async () => {
+  const fixture = screenshotRuntimeFixture();
+  const session = makeSession('default', { device: ANDROID_EMULATOR });
+  const outDir = mkdtempForTestSync('agent-device-burst-warnings');
+  const req = screenshotRequest({
+    positionals: [path.join(outDir, 'page.png')],
+    flags: { count: 3, intervalMs: 100 },
+  });
+
+  const resolved = await resolveScreenshotGenericExecution({
+    hostCwd: process.cwd(),
+    createCommandSurface: burstWarningSurface(['the status bar was busy; the capture waited']),
+    platformServices: daemonPlatformServicesFixture(),
+    req,
+    session,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+
+  const result = await executeResult(resolved, session, req, req.flags);
+  expect(fixture.captureScreenshot).toHaveBeenCalledTimes(3);
+  expect(result.warnings).toEqual(['the status bar was busy; the capture waited']);
+});
+
+test('a burst keeps the warnings array within one note per frame', async () => {
+  const fixture = screenshotRuntimeFixture();
+  const session = makeSession('default', { device: ANDROID_EMULATOR });
+  const outDir = mkdtempForTestSync('agent-device-burst-warning-bound');
+  const req = screenshotRequest({
+    positionals: [path.join(outDir, 'page.png')],
+    flags: { count: 2, intervalMs: 100 },
+  });
+  let frame = 0;
+  const warningSurface: CreateDaemonCommandSurface = async (config) => {
+    const forwarded = await testCreateCommandSurface(config);
+    return {
+      ...forwarded,
+      capture: {
+        ...forwarded.capture,
+        screenshot: async (options) => {
+          frame += 1;
+          return {
+            ...(await forwarded.capture.screenshot(options)),
+            warnings: [`frame ${frame} note one`, `frame ${frame} note two`],
+          };
+        },
+      },
+    };
+  };
+
+  const resolved = await resolveScreenshotGenericExecution({
+    hostCwd: process.cwd(),
+    createCommandSurface: warningSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req,
+    session,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+
+  const result = await executeResult(resolved, session, req, req.flags);
+  expect(result.warnings).toEqual(['frame 1 note one', 'frame 1 note two']);
 });

@@ -194,4 +194,39 @@ test('a selector-less command inherits the pinned device', () => {
     selector: { platform: 'ios', device: 'iPad Pro' },
     source: { kind: 'project', path: path.join(cwd, 'agent-device.json') },
   });
+// The screenshot burst flags are explicit-only: the same `count` key serves press and swipe series,
+// and a repository `count` tuned for those must not turn a single capture into a burst, nor refuse
+// `--crop-on` beside it. A typed flag still arms the burst, and press keeps the configured count.
+function projectConfigDirWithCount(): string {
+  const cwd = mkdtempForTestSync('agent-device-cli-project-');
+  fs.writeFileSync(path.join(cwd, 'agent-device.json'), JSON.stringify({ count: 3 }));
+  return cwd;
+}
+
+test('a count from the project config never arms a screenshot burst', () => {
+  const parsed = resolveCliOptions(['screenshot'], {
+    cwd: projectConfigDirWithCount(),
+    env: isolatedEnv({}),
+  });
+
+  assert.equal(parsed.flags.count, undefined);
+  assert.equal(parsed.flags.intervalMs, undefined);
+});
+
+test('a typed --count still arms a screenshot burst', () => {
+  const parsed = resolveCliOptions(['screenshot', '--count', '5'], {
+    cwd: projectConfigDirWithCount(),
+    env: isolatedEnv({}),
+  });
+
+  assert.equal(parsed.flags.count, 5);
+});
+
+test('the same project count keeps tuning press, which reads a configured repeat count', () => {
+  const parsed = resolveCliOptions(['press', '@e1'], {
+    cwd: projectConfigDirWithCount(),
+    env: isolatedEnv({}),
+  });
+
+  assert.equal(parsed.flags.count, 3);
 });

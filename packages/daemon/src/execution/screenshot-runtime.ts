@@ -309,7 +309,7 @@ async function executeBurstScreenshot(
       dispatchContext,
       captureScreenshot: params.runtime.captureScreenshot,
     });
-    warnings.push(...(captured.warnings ?? []));
+    appendBurstWarnings(warnings, captured.warnings, burst.count);
     frames.push({
       path: captured.path,
       capturedAtMs: Date.now(),
@@ -330,6 +330,18 @@ async function executeBurstScreenshot(
       scale: params.flags?.screenshotScale,
     })),
   };
+}
+
+/**
+ * The response's warning channel stays bounded: a note the frames share appears once, and the
+ * array holds at most one note per frame. A capture owner that degrades on every frame of the
+ * animation must not multiply its note by the frame count.
+ */
+function appendBurstWarnings(warnings: string[], additions: string[] | undefined, bound: number) {
+  for (const warning of additions ?? []) {
+    if (warnings.length >= bound) return;
+    if (!warnings.includes(warning)) warnings.push(warning);
+  }
 }
 
 /** Present exactly when the admitted plan carries a crop and the snapshot binding to serve it. */

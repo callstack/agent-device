@@ -227,7 +227,7 @@ test('screenshot burst admission bounds the count, the interval, and their pair'
   assert.throws(() => validateScreenshotBurst({ count: 1 }), {
     message: /--count requires an integer from 2 to /,
   });
-  assert.throws(() => validateScreenshotBurst({ count: 201 }), { code: 'INVALID_ARGS' });
+  assert.throws(() => validateScreenshotBurst({ count: 101 }), { code: 'INVALID_ARGS' });
   assert.throws(() => validateScreenshotBurst({ count: 2.5 }), { code: 'INVALID_ARGS' });
   assert.throws(() => validateScreenshotBurst({ count: 2, intervalMs: 50 }), {
     message: /--interval-ms requires an integer from 100 to /,
@@ -237,7 +237,7 @@ test('screenshot burst admission bounds the count, the interval, and their pair'
   });
 });
 
-test('screenshot burst admission refuses crop and overlay combinations and overlong schedules', () => {
+test('screenshot burst admission refuses crop and overlay combinations and request-budget overruns', () => {
   assert.throws(() => validateScreenshotBurst({ count: 3, cropOn: 'role=button label=Save' }), {
     message: /--count cannot be combined with --crop-on or --overlay-refs/,
   });
@@ -245,11 +245,20 @@ test('screenshot burst admission refuses crop and overlay combinations and overl
     message: /--count cannot be combined with --crop-on or --overlay-refs/,
   });
   assert.doesNotThrow(() => validateScreenshotBurst({ count: 3, cropOn: undefined }));
+  // The run budget covers the waits plus one capture allowance per frame, so the admitted burst
+  // stays inside the request envelope even when every frame costs its full allowance.
   assert.throws(
-    () => validateScreenshotBurst({ count: 150, intervalMs: 500 }),
-    /keep the burst within 30000 ms/,
+    () => validateScreenshotBurst({ count: 100, intervalMs: 200 }),
+    /keep the burst within 60000 ms/,
   );
-  assert.doesNotThrow(() => validateScreenshotBurst({ count: 200 }));
+  assert.throws(
+    () => validateScreenshotBurst({ count: 100, intervalMs: 600 }),
+    /keep the burst within 60000 ms/,
+  );
+  assert.doesNotThrow(() => validateScreenshotBurst({ count: 100 }));
+  assert.throws(() => validateScreenshotBurst({ count: 150 }), {
+    message: /--count requires an integer from 2 to 100/,
+  });
 });
 
 test('screenshot burst frame paths number the user sequence in place', () => {
@@ -281,5 +290,12 @@ test('screenshot burst flags round-trip through recorded scripts', () => {
   assert.throws(
     () => readScreenshotScriptFlag({ args: ['--interval-ms', '50'], index: 0, flags: {} }),
     { code: 'INVALID_ARGS' },
+  );
+});
+
+test('the scripted pixel-density flag keeps its released error text', () => {
+  assert.throws(
+    () => readScreenshotScriptFlag({ args: ['--pixel-density', '0'], index: 0, flags: {} }),
+    { code: 'INVALID_ARGS', message: 'screenshot --pixel-density requires a positive integer' },
   );
 });

@@ -102,18 +102,22 @@ export const SCREENSHOT_CAPTURE_BACKENDS = ['runner'] as const;
 export type ScreenshotCaptureBackend = (typeof SCREENSHOT_CAPTURE_BACKENDS)[number];
 
 /**
- * The burst (`--count`) bounds a screenshot request admits. `maxCount` mirrors the shared
- * `--count` flag definition's ceiling, so CLI parse and this admission agree. `maxScheduledWaitMs`
- * bounds `count * intervalMs`, because frames are captured sequentially inside the request's
- * standard daemon budget; a longer run belongs in a batch of single captures.
+ * The burst (`--count`) bounds a screenshot request admits. The shared `--count` flag definition
+ * keeps the press/swipe ceiling, so this admission is the tighter screenshot bound. Frames run
+ * sequentially inside the request's standard daemon budget, so the admission models the whole run,
+ * not just the waits: `count * (intervalMs + perFrameBudgetMs)` stays within `maxRunMs`, which
+ * leaves the request envelope margin for binding, transport, and a capture that exceeds its
+ * allowance. A longer run belongs in a batch of single captures.
  */
 export const SCREENSHOT_BURST_LIMITS = {
   minCount: 2,
-  maxCount: 200,
+  maxCount: 100,
   minIntervalMs: 100,
   maxIntervalMs: 10_000,
   defaultIntervalMs: 100,
-  maxScheduledWaitMs: 30_000,
+  /** The capture cost one frame budgets for; a sequential capture on a healthy target stays below it. */
+  perFrameBudgetMs: 500,
+  maxRunMs: 60_000,
 } as const;
 
 export const SCREENSHOT_COMMAND_FLAG_KEYS = [
@@ -466,11 +470,14 @@ export function validateScreenshotBurst(
       `screenshot --interval-ms requires an integer from ${SCREENSHOT_BURST_LIMITS.minIntervalMs} to ${SCREENSHOT_BURST_LIMITS.maxIntervalMs}`,
     );
   }
-  const scheduledWaitMs = count * (intervalMs ?? SCREENSHOT_BURST_LIMITS.defaultIntervalMs);
-  if (scheduledWaitMs > SCREENSHOT_BURST_LIMITS.maxScheduledWaitMs) {
+  const runMs =
+    count *
+    ((intervalMs ?? SCREENSHOT_BURST_LIMITS.defaultIntervalMs) +
+      SCREENSHOT_BURST_LIMITS.perFrameBudgetMs);
+  if (runMs > SCREENSHOT_BURST_LIMITS.maxRunMs) {
     throw new AppError(
       'INVALID_ARGS',
-      `screenshot --count schedules ${scheduledWaitMs} ms of waits; keep the burst within ${SCREENSHOT_BURST_LIMITS.maxScheduledWaitMs} ms by lowering --count or --interval-ms, or capture in a batch`,
+      `screenshot --count schedules ${runMs} ms of waits and captures; keep the burst within ${SCREENSHOT_BURST_LIMITS.maxRunMs} ms by lowering --count or --interval-ms, or capture in a batch`,
     );
   }
   if (options.cropOn !== undefined || options.overlayRefs === true) {
@@ -583,7 +590,7 @@ function readScreenshotIntScriptFlag(params: {
     throw new AppError(
       'INVALID_ARGS',
       max === Number.MAX_SAFE_INTEGER
-        ? `${definition.label} requires an integer from ${min}`
+        ? `${definition.label} requires a positive integer`
         : `${definition.label} requires an integer from ${min} to ${max}`,
     );
   }
