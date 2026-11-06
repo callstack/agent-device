@@ -66,6 +66,7 @@ import type {
 import type { LimrunCaptureLifecycle } from './capture-lifecycle.ts';
 import type { LimrunDisposalHost } from './lease-release.ts';
 
+const HEARTBEAT_PROBE_BUDGET_MS = 2_000;
 const KEEP_ALIVE_INTERVAL_MS = 30_000;
 
 export type LimrunRuntimeOptions = {
@@ -141,6 +142,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
 
   readonly leaseLifecycle: LeaseLifecycleProvider = {
     allocate: async (lease, context) => await this.allocate(lease, context),
+    heartbeat: async (lease, context) => await this.heartbeat(lease, context),
     release: async (lease) => await this.release(lease),
   };
 
@@ -741,6 +743,28 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     };
   }
 
+  private async heartbeat(
+    lease: DeviceLease,
+    context?: LeaseLifecycleContext,
+  ): Promise<Record<string, unknown> | undefined> {
+    const session = this.liveSessionForLease(lease.leaseId);
+    if (!session) return undefined;
+    if (session.client.getConnectionState() === 'connected') return undefined;
+    let terminationReason: string | undefined;
+    if (this.limrun && session.ownership === 'created') {
+      terminationReason = await readLimrunTerminationReason(this.limrun, session, context?.signal);
+    } else if (session.client.getConnectionState() === 'disconnected') {
+      terminationReason = 'Unknown';
+    }
+    if (terminationReason === undefined) return undefined;
+    const { PROVIDER_INSTANCE_ENDED } = await import('@agent-device/contracts/lease-scope');
+    throw new AppError('COMMAND_FAILED', `The Limrun instance ended (${terminationReason}).`, {
+      reason: PROVIDER_INSTANCE_ENDED,
+      terminationReason,
+      instanceId: session.instanceId,
+    });
+  }
+
   private async release(lease: DeviceLease): Promise<Record<string, unknown> | undefined> {
     // The take happens in this step, before anything is loaded: the release owns the lease from here, and no
     // await in between can let the allocation still waiting on its create answer ahead of it.
@@ -896,4 +920,34 @@ function allocationRefusedAfterShutdown(lease: DeviceLease): never {
       hint: 'Start the daemon again to allocate a Limrun lease.',
     },
   );
+}
+
+/**
+ * The termination reason of a created instance whose connection dropped, or `undefined` when the
+ * instance is not terminated or the probe cannot tell. The budget only stops waiting, so the probe
+ * aborts its own GET when the budget expires.
+ */
+async function readLimrunTerminationReason(
+  limrun: Limrun,
+  session: Pick<LimrunRuntimeSession, 'platform' | 'instanceId'>,
+  requestSignal: AbortSignal | undefined,
+): Promise<string | undefined> {
+  const expiry = new AbortController();
+  const signal = requestSignal ? AbortSignal.any([requestSignal, expiry.signal]) : expiry.signal;
+  try {
+    const { awaitLimrunWithinBudget } = await import('./lifecycle-budget.ts');
+    const request =
+      session.platform === 'ios'
+        ? limrun.iosInstances.get(session.instanceId, { signal })
+        : limrun.androidInstances.get(session.instanceId, { signal });
+    const answer = await awaitLimrunWithinBudget(request, HEARTBEAT_PROBE_BUDGET_MS);
+    if (!answer.ok) {
+      if ('expired' in answer) expiry.abort();
+      return undefined;
+    }
+    if (answer.value.status.state !== 'terminated') return undefined;
+    return answer.value.status.terminationReason ?? 'Unknown';
+  } catch {
+    return undefined;
+  }
 }

@@ -1,3 +1,5 @@
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { LeaseEndReason } from '../lease-lifecycle.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
@@ -26,6 +28,7 @@ import {
   resolveRequestOrSessionLeaseScope,
 } from '../../core/lease-context.ts';
 import {
+  isProviderInstanceEndedError,
   leaseDeviceKey,
   leaseProviderRequiringRuntime,
   leaseScopeToAllocateRequest,
@@ -54,7 +57,7 @@ type LeaseHandlerArgs = {
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
-  endSessionsForLease?: (leaseId: string) => Promise<void>;
+  endSessionsForLease?: (leaseId: string, reason?: LeaseEndReason) => Promise<void>;
 };
 
 export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<DaemonResponse | null> {
@@ -151,17 +154,8 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         };
       });
     }
-    case 'lease_heartbeat': {
-      const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
-      const providerData = await leaseLifecycleProvider?.heartbeat?.(
-        lease,
-        leaseLifecycleContext(req, args.host),
-      );
-      return {
-        ok: true,
-        data: { lease, ...(providerData ? { provider: providerData } : {}) },
-      };
-    }
+    case 'lease_heartbeat':
+      return await heartbeatLease(args, leaseScope);
     case 'lease_release': {
       const releaseRequest = leaseScopeToReleaseRequest(leaseScope);
       const lease = leaseRegistry.getLease(releaseRequest);
@@ -311,6 +305,46 @@ async function releaseAllocationForGoneRequester(
     outcome = { registryReleased: leaseRegistry.releaseLease(request).released };
   }
   return canceledAllocationError(lease, outcome, releaseError);
+}
+
+async function heartbeatLease(
+  args: LeaseHandlerArgs,
+  leaseScope: LeaseScope,
+): Promise<DaemonResponse> {
+  const { leaseRegistry, leaseLifecycleProvider, req, endSessionsForLease } = args;
+  const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
+  let providerData: Record<string, unknown> | undefined;
+  let ended: AppError | undefined;
+  try {
+    providerData = await leaseLifecycleProvider?.heartbeat?.(lease, {
+      ...leaseLifecycleContext(req, args.host),
+      signal: getRequestSignal(req.meta?.requestId),
+    });
+  } catch (error) {
+    if (!(error instanceof AppError) || !isProviderInstanceEndedError(error)) throw error;
+    leaseRegistry.endProviderLease(leaseReleaseRequestFor(lease));
+    ended = error;
+  }
+  if (ended) {
+    // The client stops beating only on the typed reason, so a failed teardown must not replace it.
+    try {
+      await endSessionsForLease?.(lease.leaseId, 'PROVIDER_INSTANCE_ENDED');
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'lease_provider_ended_session_teardown_failed',
+        data: {
+          leaseId: lease.leaseId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+    throw ended;
+  }
+  return {
+    ok: true,
+    data: { lease, ...(providerData ? { provider: providerData } : {}) },
+  };
 }
 
 function canceledAllocationError(

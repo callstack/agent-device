@@ -7,6 +7,7 @@ import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/t
 import {
   MIN_LEASE_WINDOW_MS,
   isInactiveLeaseError,
+  isProviderInstanceEndedError,
   leaseScopeFromRequest,
   leaseScopeToRequestMeta,
   type LeaseScope,
@@ -49,7 +50,7 @@ const UNRENEWABLE_LEASE_BEAT_REASONS: ReadonlySet<unknown> = new Set([
 
 /**
  * Whether a beat failed for a reason every successor will repeat: the lease is gone (the shared
- * taxonomy), the daemon refused a fact baked into the beat itself, or this request can never renew
+ * taxonomy), the provider reported the device instance behind it ended, the daemon refused a fact baked into the beat itself, or this request can never renew
  * it. A beat's scope and ttl never change across the phase, so an `INVALID_ARGS` refusal — an
  * out-of-range ttl, an unusable lease id — is terminal without waiting out a window it can no
  * longer renew.
@@ -60,6 +61,7 @@ const UNRENEWABLE_LEASE_BEAT_REASONS: ReadonlySet<unknown> = new Set([
 function isTerminalLeaseBeatError(error: unknown): boolean {
   return (
     isInactiveLeaseError(error) ||
+    isProviderInstanceEndedError(error) ||
     (error instanceof AppError &&
       (UNRENEWABLE_LEASE_BEAT_REASONS.has(error.details?.reason) || error.code === 'INVALID_ARGS'))
   );

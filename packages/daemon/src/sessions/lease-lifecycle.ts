@@ -21,7 +21,7 @@ export type ExpiredProviderLeaseRecovery = (lease: DeviceLease) => Promise<void>
 
 export type SessionTeardown = (ref: SessionRef) => Promise<void>;
 
-export type LeaseEndReason = 'LEASE_RELEASED' | 'LEASE_EXPIRED';
+export type LeaseEndReason = 'LEASE_RELEASED' | 'LEASE_EXPIRED' | 'PROVIDER_INSTANCE_ENDED';
 
 export async function releaseExpiredProviderLease(
   recoverExpiredLease: ExpiredProviderLeaseRecovery | undefined,

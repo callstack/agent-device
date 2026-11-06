@@ -1,3 +1,4 @@
+import type { LeaseEndReason } from '../sessions/lease-lifecycle.ts';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import {
   createOwnerScopedDeviceClaimReconciler,
@@ -150,8 +151,8 @@ export type RequestRouterDeps = {
   providerCredentials: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
-  /** Ends the sessions opened under a lease the tenant just released, and clears their claims. */
-  endSessionsForLease?: (leaseId: string) => Promise<void>;
+  /** Ends sessions and clears their claims when a lease is released or its provider instance ends. */
+  endSessionsForLease?: (leaseId: string, reason?: LeaseEndReason) => Promise<void>;
   providerAppCatalog?: ProviderAppCatalog;
   androidObservation: AndroidObservationAdapter;
   /** Builds the per-request command surface the device-facing runtimes execute through. */

@@ -512,6 +512,20 @@ export function isInactiveLeaseError(error: unknown): boolean {
   );
 }
 
+/** The reason a provider gives when the device instance behind a lease ended outside the daemon. */
+export const PROVIDER_INSTANCE_ENDED = 'provider-instance-ended';
+
+/** Whether `error` says the provider's device instance ended, which ends its lease. */
+export function isProviderInstanceEndedError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as Readonly<{ code?: unknown }>).code === 'COMMAND_FAILED' &&
+    (error as Readonly<{ details?: Readonly<{ reason?: unknown }> }>).details?.reason ===
+      PROVIDER_INSTANCE_ENDED
+  );
+}
+
 /** The leases a daemon reply says its request ended; a malformed entry is no ended lease. */
 export function readEndedLeases(response: DaemonResponse): EndedLease[] {
   const body = response.ok ? response.data : response.error.details;
