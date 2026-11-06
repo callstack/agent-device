@@ -1,8 +1,16 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ShellWord } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
+import type {
+  OpenApplicationInput,
+  OpenApplicationOutcome,
+} from '@agent-device/contracts/application-lifecycle-runtime';
+import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
+import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { runCmd } from '@agent-device/host-kit/command';
 import { runHarmonyShell } from './hdc.ts';
+import { parseHarmonyForegroundApp } from './app-state.ts';
 import { invalidateHarmonyGestureViewport } from './snapshot.ts';
 
 export function parseHarmonyBundleList(rawOutput: string): string[] {
@@ -245,6 +253,98 @@ export async function openHarmonyApp(
     });
   }
   invalidateHarmonyGestureViewport(device);
+}
+
+/** How long an open may keep re-reading the foreground before it accepts what it last saw. */
+export const HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS = 5_000;
+/** One foreground read per interval until the budget runs out; the first read costs no wait. */
+const HARMONY_OPEN_FOREGROUND_POLL_INTERVAL_MS = 500;
+
+/** What one bounded foreground poll decided about a launched bundle. */
+export type HarmonyOpenForegroundRead = Readonly<{
+  confirmed: boolean;
+  foregroundPackage?: string;
+}>;
+
+/**
+ * Reads which HarmonyOS mission holds the foreground until the launched bundle does, the poll
+ * budget runs out, or the request is aborted. A read that names no FOREGROUND mission (the
+ * lock-screen shape) or fails to run counts as unconfirmed and keeps polling.
+ */
+export async function pollHarmonyOpenForeground(
+  device: DeviceInfo,
+  bundleId: string,
+  options: Readonly<{
+    signal?: AbortSignal;
+    pollBudgetMs?: number;
+    pollIntervalMs?: number;
+  }> = {},
+): Promise<HarmonyOpenForegroundRead> {
+  const pollBudgetMs = options.pollBudgetMs ?? HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS;
+  const pollIntervalMs = options.pollIntervalMs ?? HARMONY_OPEN_FOREGROUND_POLL_INTERVAL_MS;
+  const deadlineAtMs = Date.now() + pollBudgetMs;
+  let foregroundPackage: string | undefined;
+  while (true) {
+    options.signal?.throwIfAborted();
+    const foregroundPackageRead = (await readHarmonyForegroundMission(device, options.signal))
+      ?.package;
+    if (foregroundPackageRead === bundleId) return { confirmed: true };
+    if (foregroundPackageRead !== undefined) foregroundPackage = foregroundPackageRead;
+    if (Date.now() >= deadlineAtMs) {
+      return foregroundPackage === undefined
+        ? { confirmed: false }
+        : { confirmed: false, foregroundPackage };
+    }
+    await sleep(pollIntervalMs, undefined, { signal: options.signal });
+  }
+}
+
+/** One foreground read; a failed or unreadable read answers undefined instead of throwing. */
+async function readHarmonyForegroundMission(
+  device: DeviceInfo,
+  signal: AbortSignal | undefined,
+): Promise<AppStateRuntimeResult | undefined> {
+  try {
+    const result = await runHarmonyShell(device, ['aa', 'dump', '-l'], {
+      signal,
+      timeoutMs: 5_000,
+    });
+    return parseHarmonyForegroundApp(result.stdout);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return undefined;
+  }
+}
+
+/**
+ * The HarmonyOS open post-check: a successful `aa start` dispatch says the launch was accepted,
+ * not that the app is visible. When the launched bundle never holds the foreground, `open
+ * --foreground` fails this open and a plain open carries the read beside its warning.
+ */
+export async function verifyHarmonyOpenForeground(
+  input: OpenApplicationInput,
+  outcome: OpenApplicationOutcome,
+  device: DeviceInfo,
+  signal: AbortSignal,
+): Promise<OpenApplicationOutcome> {
+  const bundleId = outcome.appBundleId ?? input.appBundleId;
+  if (bundleId === undefined || isDeepLinkTarget(bundleId)) return outcome;
+  const read = await pollHarmonyOpenForeground(device, bundleId, { signal });
+  if (read.confirmed) return outcome;
+  if (input.execution.foreground === true) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `The launch dispatch for ${bundleId} succeeded, but HarmonyOS did not show it in the foreground within 5s`,
+      {
+        reason: 'open-not-foreground',
+        hint: 'Unlock the device screen, then run the open again.',
+        ...(read.foregroundPackage === undefined
+          ? {}
+          : { foregroundPackage: read.foregroundPackage }),
+      },
+    );
+  }
+  return { ...outcome, timing: { ...outcome.timing, foregroundVerification: read } };
 }
 
 export async function closeHarmonyApp(device: DeviceInfo, bundleId: string): Promise<void> {

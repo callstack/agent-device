@@ -20,6 +20,7 @@ import type {
   LaunchConfirmationUnansweredReason,
   OpenApplicationOutcome,
   OpenApplicationTiming,
+  OpenForegroundVerification,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
@@ -172,6 +173,18 @@ function launchConfirmationUnansweredWarning(reason: LaunchConfirmationUnanswere
     "of the app's own, such as a permission prompt. Read it with `alert get`. Answer with " +
     '`alert accept` only when it is the launch confirmation; answer any other alert on its own ' +
     'terms.'
+  );
+}
+
+/** What the caller's `open` output says when the launched app never held the foreground. */
+function openNotForegroundWarning(verification: OpenForegroundVerification): string {
+  const holder = verification.foregroundPackage
+    ? `the foreground app is "${verification.foregroundPackage}"`
+    : 'no foreground app is readable';
+  return (
+    `The launch dispatch succeeded, but HarmonyOS read ${holder} within 5s of the launch ` +
+    '(open-not-foreground). A lock screen over the device is a typical cause. Unlock the device, ' +
+    'then run the open again.'
   );
 }
 
@@ -373,6 +386,12 @@ export async function completeOpenCommand(params: {
   }
   if (outcome.launchConfirmation === undefined && outcome.launchConfirmationProbeFailure) {
     appendResponseWarning(openResult, launchConfirmationProbeFailureWarning());
+  }
+  if (outcome.timing.foregroundVerification?.confirmed === false) {
+    appendResponseWarning(
+      openResult,
+      openNotForegroundWarning(outcome.timing.foregroundVerification),
+    );
   }
   const nextRef = publishOpenSession({
     req,

@@ -47,6 +47,11 @@ export type ApplicationLifecycleExecution = Readonly<{
   launchConsole?: string;
   launchArgs?: readonly string[];
   clearAppState?: boolean;
+  /**
+   * `open --foreground` with an app target. A launch-verified owner treats "the launched app never
+   * held the foreground" as this open's failure instead of a success beside a warning.
+   */
+  foreground?: boolean;
   iosXctestrunFile?: string;
   iosXctestDerivedDataPath?: string;
   iosXctestEnvDir?: string;
@@ -134,6 +139,24 @@ export type OpenApplicationTiming = Readonly<{
   postOpenObservation?: PostOpenObservation;
   /** Why the observation could not run; present exactly when it is `probe-failed`. */
   postOpenObservationFailure?: PostOpenObservationFailure;
+  /**
+   * Present when the owner verified after its dispatch which app holds the foreground, and the
+   * launched app never did. An unconfirmed read under `open --foreground` fails the open instead.
+   */
+  foregroundVerification?: OpenForegroundVerification;
+}>;
+
+/**
+ * What an owner learned when it verified after its dispatch which app holds the foreground. A
+ * launch dispatch can report success while a system surface (a lock screen is the typical one)
+ * keeps the launched app behind it, so the verification is a bounded poll of the platform's own
+ * foreground read.
+ */
+export type OpenForegroundVerification = Readonly<{
+  /** True when the launched app held the foreground within the owner's poll budget. */
+  confirmed: boolean;
+  /** The app that held the foreground instead, when the platform could name one. */
+  foregroundPackage?: string;
 }>;
 
 /**

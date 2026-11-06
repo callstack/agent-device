@@ -23,6 +23,7 @@ export function applicationLifecycleExecutionFromRequest(
     launchConsole: req.flags?.launchConsole,
     launchArgs: req.flags?.launchArgs,
     clearAppState: req.flags?.clearAppState,
+    foreground: req.flags?.foreground === true,
     iosXctestrunFile: req.flags?.iosXctestrunFile,
     iosXctestDerivedDataPath: req.flags?.iosXctestDerivedDataPath,
     iosXctestEnvDir: req.flags?.iosXctestEnvDir,
