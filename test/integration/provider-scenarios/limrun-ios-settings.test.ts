@@ -115,3 +115,27 @@ test('a Limrun iOS simctl failure that is not a refusal stays a command failure'
     await dispose();
   }
 });
+
+test('a Limrun iOS permission resolves an app display name through the remote app list', async () => {
+  state.simctl.mockImplementation(() => ({
+    wait: async () => ({ code: 0, stdout: '', stderr: '' }),
+  }));
+  const { binding, dispose } = await bindLimrunDeployment(
+    'ios',
+    new AbortController().signal,
+    createLimrunRuntimeDependencies({ env: {}, cwd: process.cwd() }).ios,
+  );
+  try {
+    await binding.operations.setSetting!({
+      setting: 'permission',
+      state: 'grant',
+      appBundleId: 'Example',
+      options: { permissionTarget: 'camera' },
+    });
+    expect(state.simctl.mock.calls).toEqual([
+      [['privacy', 'booted', 'grant', 'camera', 'com.example.ios']],
+    ]);
+  } finally {
+    await dispose();
+  }
+});
