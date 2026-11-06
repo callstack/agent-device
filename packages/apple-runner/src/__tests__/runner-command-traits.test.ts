@@ -8,11 +8,25 @@ import {
   isReadOnlyRunnerCommand,
   readRunnerCommandTraits,
   RUNNER_COMMAND_TRAITS,
+  runnerCommandSurfacePolicy,
   type RunnerCommandTraits,
 } from '../runner-command-traits.ts';
 import { readSwiftOffQueueCommands } from './runner-swift-settlement-fixtures.ts';
 
 const RUNNER_COMMANDS = Object.keys(RUNNER_COMMAND_TRAITS) as Array<RunnerCommand['command']>;
+
+test('runner surface policies match the cross-language fixture', () => {
+  const fixture = new URL(
+    '../../../../contracts/fixtures/runner-surface-policy.json',
+    import.meta.url,
+  );
+  assert.deepEqual(
+    Object.fromEntries(
+      RUNNER_COMMANDS.map((command) => [command, runnerCommandSurfacePolicy({ command })]),
+    ),
+    JSON.parse(fs.readFileSync(fixture, 'utf8')),
+  );
+});
 
 test('runner command trait table pins lifecycle-sensitive command groups', () => {
   const groups = {
