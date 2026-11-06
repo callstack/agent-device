@@ -46,6 +46,7 @@ const RUNNER_SHUTDOWN_TIMEOUT_MS = 15_000;
 const MACOS_RUNNER_INTERRUPT_WAIT_TIMEOUT_MS = 5_000;
 const MACOS_RUNNER_TERM_WAIT_TIMEOUT_MS = 2_000;
 const RUNNER_STALE_XCODEBUILD_KILL_TIMEOUT_MS = 2_000;
+const RUNNER_TERMINATION_PROBE_TIMEOUT_MS = 1_000;
 // macOS ships pkill here; a PATH lookup can resolve to a pkill whose `-P` matches every process.
 export const MACOS_PKILL_COMMAND = '/usr/bin/pkill';
 const RUNNER_SIMULATOR_TERMINATE_TIMEOUT_MS = 2_000;
@@ -414,16 +415,17 @@ async function confirmRunnerTermination(
   const deadline = Date.now() + RUNNER_STALE_XCODEBUILD_KILL_TIMEOUT_MS;
   do {
     if (!isRunnerProcessTreeAlive(pid)) {
+      // Only pgrep exit 1 (no match) proves the launch is gone. A match, a probe error, or a probe
+      // timeout proves nothing, so polling continues until the deadline.
       try {
         const result = await runAppleToolCommand(
           '/usr/bin/pgrep',
           ['-f', `xcodebuild.*test-without-building.*${artifactPattern}`],
-          { allowFailure: true, timeoutMs: Math.max(1, deadline - Date.now()) },
+          { allowFailure: true, timeoutMs: RUNNER_TERMINATION_PROBE_TIMEOUT_MS },
         );
         if (result.exitCode === 1) return true;
-        if (result.exitCode !== 0) return false;
       } catch {
-        return false;
+        // A failed probe is not evidence either way.
       }
     }
     if (Date.now() >= deadline) return false;

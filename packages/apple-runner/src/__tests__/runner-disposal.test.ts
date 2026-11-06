@@ -271,6 +271,29 @@ test('disposal waits for the matching xcodebuild to disappear before repair', as
   expect(mockPrepareAccessibility).toHaveBeenCalledOnce();
 });
 
+test('a failed or timed-out termination probe is retried, not read as a live runner', async () => {
+  const lease = makeRunnerLease({ deviceId: IOS_SIMULATOR.id, ownerToken: 'owner-probe-retry' });
+  const session = makeRunnerSession(IOS_SIMULATOR, Promise.resolve(execResult()), {
+    lease,
+    xctestrunPath: lease.xctestrunPath,
+  });
+  writeRunnerLease(lease);
+  mockIsProcessAlive.mockReturnValue(false);
+  let probes = 0;
+  mockRunAppleToolCommand.mockImplementation(async (command) => {
+    if (command !== '/usr/bin/pgrep') return execResult();
+    probes += 1;
+    if (probes === 1) throw new Error('probe timed out');
+    return probes === 2
+      ? { exitCode: 2, stdout: '', stderr: 'probe error' }
+      : { exitCode: 1, stdout: '', stderr: '' };
+  });
+  const disposal = disposeRunnerSession(session, { graceful: false, abort: true });
+  await vi.advanceTimersByTimeAsync(200);
+  await disposal;
+  expect(mockPrepareAccessibility).toHaveBeenCalledOnce();
+});
+
 test('disposal still releases its lease when accessibility preparation fails', async () => {
   vi.useRealTimers();
   const lease = makeRunnerLease({ deviceId: IOS_SIMULATOR.id, ownerToken: 'owner-repair-failed' });
