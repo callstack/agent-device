@@ -32,7 +32,7 @@ export type RunnerDeviceClaimAuthorityProbe = (device: DeviceInfo) => boolean;
  * that stops satisfying a member fails there.
  */
 type AppleRunnerToolPort = {
-  prepareIosSimulatorAccessibility: (device: DeviceInfo) => Promise<void>;
+  enableIosSimulatorAppAccessibility: (device: DeviceInfo) => Promise<void>;
   runAppleToolCommand: (
     cmd: string,
     args: string[],
@@ -216,7 +216,7 @@ export const classifyBootFailure = delegate('classifyBootFailure');
 export const bootFailureHint = delegate('bootFailureHint');
 export const runAppleToolCommand = delegate('runAppleToolCommand');
 export const runXcrun = delegate('runXcrun');
-export const prepareIosSimulatorAccessibility = delegate('prepareIosSimulatorAccessibility');
+export const enableIosSimulatorAppAccessibility = delegate('enableIosSimulatorAppAccessibility');
 export const readApplePlistJson = delegate('readApplePlistJson');
 export const hasScopedAppleToolProvider = delegate('hasScopedAppleToolProvider');
 export const buildSimctlArgsForDevice = delegate('buildSimctlArgsForDevice');

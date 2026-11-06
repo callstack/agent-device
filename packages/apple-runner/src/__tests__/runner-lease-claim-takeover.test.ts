@@ -54,7 +54,7 @@ function recordingCleanupAdapter(): RunnerLeaseCleanupAdapter & { calls: string[
   return {
     calls,
     confirmRunnerTermination: async () => true,
-    prepareIosSimulatorAccessibility: async () => {},
+    enableIosSimulatorAppAccessibility: async () => {},
     cleanupRunnerProcessTree: async (_pid, signal) => {
       calls.push(`process-tree:${signal}`);
     },

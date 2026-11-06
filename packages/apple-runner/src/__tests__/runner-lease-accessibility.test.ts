@@ -44,7 +44,7 @@ for (const confirmed of [true, false]) {
         calls.push('confirm');
         return confirmed;
       },
-      prepareIosSimulatorAccessibility: async (device) => {
+      enableIosSimulatorAppAccessibility: async (device) => {
         assert.equal(currentRunnerLeaseOwnerToken(device.id), lease.ownerToken);
         assert.equal(device.appleOs, 'ios');
         assert.equal(device.simulatorSetPath, '/tmp/ax-simlock-set');
@@ -79,7 +79,7 @@ test('failed repair emits a diagnostic and still releases the lease', async () =
       cleanupRunnerProcessTree: async () => {},
       cleanupRunnerXcodebuildProcesses: async () => {},
       confirmRunnerTermination: async () => true,
-      prepareIosSimulatorAccessibility: async () => {
+      enableIosSimulatorAppAccessibility: async () => {
         throw new Error('repair unavailable');
       },
       cleanupTempFile: () => {},
@@ -114,7 +114,7 @@ for (const device of [
         cleanupRunnerProcessTree: async () => {},
         cleanupRunnerXcodebuildProcesses: async () => {},
         confirmRunnerTermination: async () => true,
-        prepareIosSimulatorAccessibility: prepare,
+        enableIosSimulatorAppAccessibility: prepare,
         cleanupTempFile: () => {},
       },
     );
@@ -136,7 +136,7 @@ test('owner cleanup skips a lease replaced while waiting for the ownership fence
         cleanupRunnerProcessTree: terminate,
         cleanupRunnerXcodebuildProcesses: async () => {},
         confirmRunnerTermination: async () => true,
-        prepareIosSimulatorAccessibility: repair,
+        enableIosSimulatorAppAccessibility: repair,
         cleanupTempFile: () => {},
       },
     );
@@ -146,4 +146,46 @@ test('owner cleanup skips a lease replaced while waiting for the ownership fence
   assert.equal(terminate.mock.calls.length, 0);
   assert.equal(repair.mock.calls.length, 0);
   assert.equal(currentRunnerLeaseOwnerToken(lease.deviceId), 'successor-token');
+});
+
+test('owner cleanup still releases other leases when one device lease lock is contended', async () => {
+  const busy = leaseFor(IOS_SIMULATOR);
+  const free = leaseFor({ ...IOS_SIMULATOR, id: 'second-simulator-udid' });
+  writeRunnerLease(busy);
+  writeRunnerLease(free);
+  const diagnostic = vi.fn();
+  appleRunnerTestHost.update({ emitDiagnostic: diagnostic });
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  let releaseBusyLock: () => void = () => {};
+  const heldLock = withRunnerLeaseLock(
+    busy.deviceId,
+    () => new Promise<void>((resolve) => (releaseBusyLock = resolve)),
+  );
+  try {
+    await vi.advanceTimersByTimeAsync(0);
+    const cleanup = cleanupRunnerLeasesForOwner(
+      { pid: busy.ownerPid },
+      {
+        cleanupRunnerProcessTree: async () => {},
+        cleanupRunnerXcodebuildProcesses: async () => {},
+        confirmRunnerTermination: async () => true,
+        enableIosSimulatorAppAccessibility: async () => {},
+        cleanupTempFile: () => {},
+      },
+    );
+    await vi.advanceTimersByTimeAsync(31_000);
+    await cleanup;
+    assert.equal(currentRunnerLeaseOwnerToken(free.deviceId), null);
+    assert.ok(
+      diagnostic.mock.calls.some(
+        ([event]) =>
+          event.phase === 'ios_runner_owner_cleanup_lease_lock_unavailable' &&
+          event.data.deviceId === busy.deviceId,
+      ),
+    );
+  } finally {
+    releaseBusyLock();
+    vi.useRealTimers();
+    await heldLock.catch(() => {});
+  }
 });

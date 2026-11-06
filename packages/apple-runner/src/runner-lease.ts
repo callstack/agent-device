@@ -146,7 +146,7 @@ export type RunnerLeaseCleanupAdapter = {
     pid: number | undefined,
     target: RunnerXcodebuildCleanupTarget,
   ): Promise<boolean>;
-  prepareIosSimulatorAccessibility(device: RunnerLeaseSimulatorTarget): Promise<void>;
+  enableIosSimulatorAppAccessibility(device: RunnerLeaseSimulatorTarget): Promise<void>;
   cleanupRunnerProcessTree(pid: number | undefined, signal: 'SIGTERM' | 'SIGKILL'): Promise<void>;
   cleanupRunnerXcodebuildProcesses(target: RunnerXcodebuildCleanupTarget): Promise<void>;
   cleanupTempFile(filePath: string): void;
@@ -448,9 +448,21 @@ export async function cleanupRunnerLeasesForOwner(
   const leases = listRunnerLeasesForOwner(owner);
   await Promise.all(
     leases.map(async (lease) => {
-      await withRunnerLeaseLock(lease.deviceId, () =>
-        cleanupLeasedRunnerProcesses(lease, 'owned', cleanup),
-      );
+      let lockAcquired = false;
+      try {
+        await withRunnerLeaseLock(lease.deviceId, () => {
+          lockAcquired = true;
+          return cleanupLeasedRunnerProcesses(lease, 'owned', cleanup);
+        });
+      } catch (error) {
+        if (lockAcquired) throw error;
+        // One contended device must not stop the cleanup of the owner's other leases.
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'ios_runner_owner_cleanup_lease_lock_unavailable',
+          data: { deviceId: lease.deviceId, error: normalizeError(error) },
+        });
+      }
     }),
   );
 }
@@ -714,7 +726,7 @@ async function cleanupLeasedRunnerProcesses(
           deviceId: lease.deviceId,
           xctestrunPath: lease.xctestrunPath,
         }),
-      prepare: () => cleanup.prepareIosSimulatorAccessibility(simulator),
+      prepare: () => cleanup.enableIosSimulatorAppAccessibility(simulator),
     });
   }
   cleanup.cleanupTempFile(lease.xctestrunPath);

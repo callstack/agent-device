@@ -51,7 +51,7 @@ beforeEach(() => {
     signalProcessGroupBestEffort: mockSignalProcessGroupBestEffort,
     runAppleToolCommand: mockRunAppleToolCommand,
     runXcrun: mockRunXcrun,
-    prepareIosSimulatorAccessibility: mockPrepareAccessibility,
+    enableIosSimulatorAppAccessibility: mockPrepareAccessibility,
   });
   vi.useFakeTimers();
   mockIsProcessAlive.mockReturnValue(true);

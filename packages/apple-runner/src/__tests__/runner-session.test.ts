@@ -674,7 +674,7 @@ function makeRecordingCleanupAdapter() {
   const xcodebuildCleanups: RunnerXcodebuildCleanupTarget[] = [];
   const adapter: RunnerLeaseCleanupAdapter = {
     confirmRunnerTermination: async () => true,
-    prepareIosSimulatorAccessibility: async () => {},
+    enableIosSimulatorAppAccessibility: async () => {},
     async cleanupRunnerProcessTree(pid, signal) {
       treeKills.push({ pid, signal });
     },
@@ -915,7 +915,7 @@ test('runner lease cleanup reclaims only leases owned by the stopped daemon', as
     { pid: ownerPid, startTime: ownerStartTime },
     {
       confirmRunnerTermination: async () => true,
-      prepareIosSimulatorAccessibility: async () => {},
+      enableIosSimulatorAppAccessibility: async () => {},
       cleanupRunnerProcessTree: async () => {},
       cleanupRunnerXcodebuildProcesses: async () => {},
       cleanupTempFile: mockCleanupTempFile,

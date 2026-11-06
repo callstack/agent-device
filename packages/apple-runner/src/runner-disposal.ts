@@ -8,7 +8,7 @@ import {
   buildSimctlArgsForDevice,
   runAppleToolCommand,
   runXcrun,
-  prepareIosSimulatorAccessibility,
+  enableIosSimulatorAppAccessibility,
 } from './host.ts';
 import type { RunnerLaunchObservation } from './runner-launcher.ts';
 import type { ExecResult, ExecBackgroundResult } from '@agent-device/host-kit/command';
@@ -55,7 +55,7 @@ export const runnerLeaseCleanupAdapter: RunnerLeaseCleanupAdapter = {
   cleanupRunnerXcodebuildProcesses: killRunnerXcodebuildProcesses,
   cleanupTempFile,
   confirmRunnerTermination,
-  prepareIosSimulatorAccessibility,
+  enableIosSimulatorAppAccessibility,
 };
 
 export type RunnerDisposalOptions = {
@@ -273,7 +273,7 @@ async function settleOwnedRunnerDeviceState(
         await repairSimulatorAccessibilityAfterRunnerExit({
           deviceId: session.deviceId,
           confirmTermination: () => confirmRunnerTermination(session.child.pid, session),
-          prepare: () => prepareIosSimulatorAccessibility(session.device),
+          prepare: () => enableIosSimulatorAppAccessibility(session.device),
         });
       }
     } finally {

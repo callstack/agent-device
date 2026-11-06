@@ -121,3 +121,15 @@ test('teardown preparation does not boot a stopped simulator', async () => {
     },
   );
 });
+
+test('the teardown writer rejects on failure so runner cleanup can report it', async () => {
+  const { enableIosSimulatorAppAccessibility } = await import('../ios-simulator-accessibility.ts');
+  await withFakeAppleTool(
+    () => {
+      throw new Error('defaults unavailable');
+    },
+    async () => {
+      await assert.rejects(enableIosSimulatorAppAccessibility(IOS_TEST_SIMULATOR));
+    },
+  );
+});

@@ -242,7 +242,7 @@ test('owner cleanup still stops a readable lease next to an unreadable lease fil
     { pid: 4242, startTime: null },
     {
       confirmRunnerTermination: async () => true,
-      prepareIosSimulatorAccessibility: async () => {},
+      enableIosSimulatorAppAccessibility: async () => {},
       cleanupRunnerProcessTree: async () => {},
       cleanupRunnerXcodebuildProcesses: async () => {},
       cleanupTempFile,
