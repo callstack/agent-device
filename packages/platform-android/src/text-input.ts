@@ -45,11 +45,24 @@ import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
  */
 const ANDROID_INPUT_TEXT_CHUNK_SIZE = 8;
 
+function isAndroidBackspaceSequence(text: string): boolean {
+  if (text.length === 0) return false;
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) !== 0x08) return false;
+  }
+  return true;
+}
+
 export async function typeAndroid(device: DeviceInfo, text: string, delayMs = 0): Promise<void> {
   const providerText = resolveAndroidTextInjector(device);
   if (providerText) {
     await providerText({ action: 'type', text, delayMs });
     emitAndroidTextDiagnostic('type', 'provider-native', text);
+    return;
+  }
+  if (isAndroidBackspaceSequence(text)) {
+    await clearFocusedText(device, text.length);
+    emitAndroidTextDiagnostic('type', 'adb-shell', text);
     return;
   }
   const channel = await admitAndroidTextChannel(device, 'type', text);

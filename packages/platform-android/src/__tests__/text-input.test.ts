@@ -103,6 +103,22 @@ test('typeAndroid leaves safe text unquoted', async () => {
   );
 });
 
+test('typeAndroid sends KEYCODE_DEL keyevents for backspace sequences', async () => {
+  await withFakeAdb(
+    (args) => {
+      if (args.includes('KEYCODE_MOVE_END')) return undefined;
+      if (args.includes('KEYCODE_DEL')) return undefined;
+      return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
+    },
+    async ({ calls, device }) => {
+      await typeAndroid(device, '\b\b\b');
+      const delCalls = calls.filter((args) => args.includes('KEYCODE_DEL'));
+      assert.equal(delCalls.length, 1);
+      assert.equal(delCalls[0]?.filter((arg) => arg === 'KEYCODE_DEL').length, 3);
+    },
+  );
+});
+
 test('fillAndroid uses chunk-safe shell input and retries when verification still fails', async () => {
   // First `input text` writes a wrong partial value, so attempt 1 fails
   // verification and production retries with the smaller chunk size.
