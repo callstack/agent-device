@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import type { DeviceRotation } from './device-rotation.ts';
 
 export const SCREENSHOT_SCREEN_MASKS = ['black'] as const;
 export type ScreenshotScreenMask = (typeof SCREENSHOT_SCREEN_MASKS)[number];
@@ -52,6 +53,13 @@ export function validateNoRetiredScreenshotMaxSize(
   }
 }
 
+/** One frame of a `--count` burst: the written file and the wall clock the capture completed at. */
+export type ScreenshotBurstFrame = Readonly<{
+  path: string;
+  capturedAtMs: number;
+  displayRotation?: DeviceRotation;
+}>;
+
 /**
  * Machine-readable `screenshot --crop-on` outcome taxonomy. Failures carry these
  * values in `error.details.reason`; `partialIntersection` doubles as the
@@ -93,6 +101,21 @@ export const SCREENSHOT_CAPTURE_BACKENDS = ['runner'] as const;
 
 export type ScreenshotCaptureBackend = (typeof SCREENSHOT_CAPTURE_BACKENDS)[number];
 
+/**
+ * The burst (`--count`) bounds a screenshot request admits. `maxCount` mirrors the shared
+ * `--count` flag definition's ceiling, so CLI parse and this admission agree. `maxScheduledWaitMs`
+ * bounds `count * intervalMs`, because frames are captured sequentially inside the request's
+ * standard daemon budget; a longer run belongs in a batch of single captures.
+ */
+export const SCREENSHOT_BURST_LIMITS = {
+  minCount: 2,
+  maxCount: 200,
+  minIntervalMs: 100,
+  maxIntervalMs: 10_000,
+  defaultIntervalMs: 100,
+  maxScheduledWaitMs: 30_000,
+} as const;
+
 export const SCREENSHOT_COMMAND_FLAG_KEYS = [
   'out',
   'overlayRefs',
@@ -104,6 +127,8 @@ export const SCREENSHOT_COMMAND_FLAG_KEYS = [
   'screenshotNoStabilize',
   'screenshotNormalizeStatusBar',
   'screenshotCaptureBackend',
+  'count',
+  'intervalMs',
 ] as const;
 
 export const SCREENSHOT_ACTION_FLAG_KEYS = [
@@ -226,13 +251,33 @@ const SCREENSHOT_SCRIPT_BOOLEAN_FLAGS = [
   { tokens: ['--normalize-status-bar'], key: 'screenshotNormalizeStatusBar' },
 ] as const;
 
-const SCREENSHOT_SCRIPT_INT_FLAGS = [
+const SCREENSHOT_SCRIPT_INT_FLAGS: readonly {
+  token: string;
+  key: 'screenshotPixelDensity' | 'count' | 'intervalMs';
+  label: string;
+  min?: number;
+  max?: number;
+}[] = [
   {
     token: '--pixel-density',
     key: 'screenshotPixelDensity',
     label: 'screenshot --pixel-density',
   },
-] as const;
+  {
+    token: '--count',
+    key: 'count',
+    label: 'screenshot --count',
+    min: SCREENSHOT_BURST_LIMITS.minCount,
+    max: SCREENSHOT_BURST_LIMITS.maxCount,
+  },
+  {
+    token: '--interval-ms',
+    key: 'intervalMs',
+    label: 'screenshot --interval-ms',
+    min: SCREENSHOT_BURST_LIMITS.minIntervalMs,
+    max: SCREENSHOT_BURST_LIMITS.maxIntervalMs,
+  },
+];
 
 const SCREENSHOT_SCRIPT_NUMBER_FLAGS = [
   {
@@ -263,6 +308,8 @@ export type ScreenshotRequestFlags = {
   screenshotNoStabilize?: boolean;
   screenshotNormalizeStatusBar?: boolean;
   screenshotCaptureBackend?: ScreenshotCaptureBackend;
+  count?: number;
+  intervalMs?: number;
 };
 
 export type ScreenshotDispatchFlags = Pick<
@@ -297,6 +344,10 @@ export type ScreenshotPublicOptions = {
   stabilize?: boolean;
   normalizeStatusBar?: boolean;
   captureBackend?: ScreenshotCaptureBackend;
+  /** Capture a burst of this many frames in one request; see `SCREENSHOT_BURST_LIMITS`. */
+  count?: number;
+  /** Wait this many milliseconds between burst frames; requires `count`. */
+  intervalMs?: number;
 };
 
 export type ScreenshotRuntimeOptions = {
@@ -309,6 +360,8 @@ export type ScreenshotRuntimeOptions = {
   stabilize?: boolean;
   normalizeStatusBar?: boolean;
   captureBackend?: ScreenshotCaptureBackend;
+  count?: number;
+  intervalMs?: number;
 };
 
 export function screenshotOptionsFromFlags(
@@ -325,6 +378,8 @@ export function screenshotOptionsFromFlags(
       flags?.screenshotNoStabilize === undefined ? undefined : !flags.screenshotNoStabilize,
     normalizeStatusBar: flags?.screenshotNormalizeStatusBar,
     captureBackend: flags?.screenshotCaptureBackend,
+    count: flags?.count,
+    intervalMs: flags?.intervalMs,
   });
 }
 
@@ -346,6 +401,8 @@ export function screenshotFlagsFromOptions(
     screenshotNormalizeStatusBar:
       options.screenshotNormalizeStatusBar ?? options.normalizeStatusBar,
     screenshotCaptureBackend: options.screenshotCaptureBackend ?? options.captureBackend,
+    count: options.count,
+    intervalMs: options.intervalMs,
   });
 }
 
@@ -373,6 +430,74 @@ export function validateScreenshotScale(options: Pick<ScreenshotPublicOptions, '
   }
 }
 
+/**
+ * One admission for the burst flags, shared by the command surface and the daemon route. A burst
+ * names the frames of one animation, so it stays on the plain capture path: a crop binds one
+ * snapshot and overlay refs annotate one frame, and neither statement holds for N frames.
+ */
+export function validateScreenshotBurst(
+  options: Pick<ScreenshotPublicOptions, 'count' | 'intervalMs' | 'cropOn' | 'overlayRefs'>,
+): void {
+  const { count, intervalMs } = options;
+  if (count === undefined) {
+    if (intervalMs !== undefined) {
+      throw new AppError('INVALID_ARGS', 'screenshot --interval-ms requires --count');
+    }
+    return;
+  }
+  if (
+    !Number.isInteger(count) ||
+    count < SCREENSHOT_BURST_LIMITS.minCount ||
+    count > SCREENSHOT_BURST_LIMITS.maxCount
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `screenshot --count requires an integer from ${SCREENSHOT_BURST_LIMITS.minCount} to ${SCREENSHOT_BURST_LIMITS.maxCount}`,
+    );
+  }
+  if (
+    intervalMs !== undefined &&
+    (!Number.isInteger(intervalMs) ||
+      intervalMs < SCREENSHOT_BURST_LIMITS.minIntervalMs ||
+      intervalMs > SCREENSHOT_BURST_LIMITS.maxIntervalMs)
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `screenshot --interval-ms requires an integer from ${SCREENSHOT_BURST_LIMITS.minIntervalMs} to ${SCREENSHOT_BURST_LIMITS.maxIntervalMs}`,
+    );
+  }
+  const scheduledWaitMs = count * (intervalMs ?? SCREENSHOT_BURST_LIMITS.defaultIntervalMs);
+  if (scheduledWaitMs > SCREENSHOT_BURST_LIMITS.maxScheduledWaitMs) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `screenshot --count schedules ${scheduledWaitMs} ms of waits; keep the burst within ${SCREENSHOT_BURST_LIMITS.maxScheduledWaitMs} ms by lowering --count or --interval-ms, or capture in a batch`,
+    );
+  }
+  if (options.cropOn !== undefined || options.overlayRefs === true) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'screenshot --count cannot be combined with --crop-on or --overlay-refs',
+    );
+  }
+}
+
+/**
+ * The destination of one burst frame: `<base>-0001.<ext>`, `<base>-0002.<ext>`, ... so the user's
+ * `--out` names the whole sequence. A path without an extension keeps none.
+ */
+export function screenshotBurstFramePath(outPath: string, index: number): string {
+  const extension = screenshotPathExtension(outPath);
+  const stem = extension.length > 0 ? outPath.slice(0, outPath.length - extension.length) : outPath;
+  return `${stem}-${String(index).padStart(4, '0')}${extension}`;
+}
+
+function screenshotPathExtension(outPath: string): string {
+  const separatorIndex = Math.max(outPath.lastIndexOf('/'), outPath.lastIndexOf('\\'));
+  const dotIndex = outPath.lastIndexOf('.');
+  if (dotIndex <= separatorIndex + 1) return '';
+  return outPath.slice(dotIndex);
+}
+
 export function appendScreenshotScriptFlags(
   parts: string[],
   flags: Partial<ScreenshotRequestFlags> | undefined,
@@ -390,6 +515,12 @@ export function appendScreenshotScriptFlags(
   if (flags?.screenshotNoStabilize) parts.push('--no-stabilize');
   if (flags?.screenshotNoStabilize === false) parts.push('--no-stabilize=false');
   if (flags?.screenshotNormalizeStatusBar) parts.push('--normalize-status-bar');
+  if (typeof flags?.count === 'number') {
+    parts.push('--count', String(flags.count));
+  }
+  if (typeof flags?.intervalMs === 'number') {
+    parts.push('--interval-ms', String(flags.intervalMs));
+  }
 }
 
 export function readScreenshotScriptFlag(params: {
@@ -446,8 +577,15 @@ function readScreenshotIntScriptFlag(params: {
   const definition = SCREENSHOT_SCRIPT_INT_FLAGS.find((entry) => entry.token === params.token);
   if (!definition) return undefined;
   const parsed = Number(params.args[params.index + 1]);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new AppError('INVALID_ARGS', `${definition.label} requires a positive integer`);
+  const min = definition.min ?? 1;
+  const max = definition.max ?? Number.MAX_SAFE_INTEGER;
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+    throw new AppError(
+      'INVALID_ARGS',
+      max === Number.MAX_SAFE_INTEGER
+        ? `${definition.label} requires an integer from ${min}`
+        : `${definition.label} requires an integer from ${min} to ${max}`,
+    );
   }
   params.flags[definition.key] = parsed;
   return { handled: true, nextIndex: params.index + 1 };

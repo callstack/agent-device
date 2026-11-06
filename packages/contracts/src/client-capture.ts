@@ -121,6 +121,14 @@ export type CaptureScreenshotOptions = AgentDeviceRequestOverrides & {
   /** `runner`: capture an Apple target through the XCTest runner instead of `simctl`. */
   captureBackend?: ScreenshotCaptureBackend;
   surface?: SessionSurface;
+  /**
+   * Capture a burst of this many frames in one request; the daemon writes them as a
+   * `<path>-0001` style sequence and reports each frame in `frames`. Cannot be combined
+   * with `cropOn` or `overlayRefs`. See `SCREENSHOT_BURST_LIMITS` for the bounds.
+   */
+  count?: number;
+  /** Wait this many milliseconds between burst frames; requires `count`. */
+  intervalMs?: number;
 };
 
 export type CaptureScreenshotResult = ScreenshotResultData & {
