@@ -157,9 +157,10 @@ export type SessionState = {
    */
   lastActivityAtMs?: number;
   /**
-   * #4237: a `close` could not confirm its cleanup, so it kept this session to withhold its device
-   * claim for a retried `close`. Such a session no longer holds the daemon open: idle reap may end
-   * the daemon, whose shutdown teardown retries the cleanup and leaves an unconfirmed claim stale.
+   * #4237: a `close` failed its platform close or cleanup, so it kept this session to withhold its
+   * device claim for a retried `close`. Until a successful reopen, such a session does not hold the
+   * daemon open: idle reap may end the daemon, whose shutdown teardown retries the cleanup and leaves
+   * a claim it still cannot confirm stale.
    */
   closeEffectsUnconfirmed?: true;
   /** Enforced host-global local-device claim owned by this session, if acquired. */

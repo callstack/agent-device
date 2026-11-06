@@ -378,34 +378,34 @@ test.each([
   },
 );
 
+/** Whether the daemon idle reap fires after one idle window over this store's sessions. */
+function idleReapFires(sessionStore: ReturnType<typeof makeSessionStore>): boolean {
+  const onIdleReap = vi.fn();
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const reap = createDaemonIdleReap({
+    sessionStore,
+    getInFlightRequestCount: () => 0,
+    hasRetainedLeases: () => false,
+    onIdleReap,
+    env: { AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '1000' },
+  });
+  try {
+    reap.noteActivity();
+    vi.advanceTimersByTime(1_000);
+  } finally {
+    reap.close();
+    vi.useRealTimers();
+  }
+  return onIdleReap.mock.calls.length > 0;
+}
+
 // With session idle expiry off (the default), daemon idle reap is what ends an abandoned daemon, and
 // its shutdown teardown retries the cleanup. A session kept by a failed close must not pin the daemon
 // open, or nothing would ever free its device without a manual close.
 test('a session kept by a failed close lets the daemon idle reap fire, while an open session blocks it', async () => {
   const sessionName = 'close-failure-idle-reap';
   const sessionStore = await openSession(sessionName);
-  const onIdleReap = vi.fn();
-  const reap = () =>
-    createDaemonIdleReap({
-      sessionStore,
-      getInFlightRequestCount: () => 0,
-      hasRetainedLeases: () => false,
-      onIdleReap,
-      env: { AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '1000' },
-    });
-  const idleWindow = async (controller: ReturnType<typeof reap>) => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    try {
-      controller.noteActivity();
-      vi.advanceTimersByTime(1_000);
-    } finally {
-      controller.close();
-      vi.useRealTimers();
-    }
-  };
-
-  await idleWindow(reap());
-  expect(onIdleReap).not.toHaveBeenCalled();
+  expect(idleReapFires(sessionStore)).toBe(false);
 
   const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
   finalizeApplicationClose.mockRejectedValue(
@@ -414,6 +414,36 @@ test('a session kept by a failed close lets the daemon idle reap fire, while an 
   await expect(close(sessionStore, sessionName, loader)).rejects.toMatchObject(cleanupIncomplete);
   expect(sessionStore.get(sessionName)).toBeDefined();
 
-  await idleWindow(reap());
-  expect(onIdleReap).toHaveBeenCalledOnce();
+  expect(idleReapFires(sessionStore)).toBe(true);
+});
+
+test('a session reopened after a failed close blocks the daemon idle reap again', async () => {
+  const sessionName = 'close-failure-reopen';
+  const sessionStore = await openSession(sessionName);
+  const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
+  finalizeApplicationClose.mockRejectedValueOnce(
+    new AppError('COMMAND_FAILED', 'adb timed out after 5000ms'),
+  );
+  await expect(close(sessionStore, sessionName, loader)).rejects.toMatchObject(cleanupIncomplete);
+
+  const reopened = await handleSessionCommands({
+    host: createTestHostEnvironment(),
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    lifecycleOperationsLoader: loader,
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'open',
+      positionals: ['com.example.app'],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(reopened).toMatchObject({ ok: true });
+  expect(idleReapFires(sessionStore)).toBe(false);
 });

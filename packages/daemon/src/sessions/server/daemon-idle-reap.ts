@@ -31,8 +31,10 @@ import { isUncommittedRepairSession } from '../../core/session-replay-transactio
 //   their timer and listener observation cannot survive a handoff. Active eligible runners retain the
 //   graceful-shutdown adoption policy.
 //
-// - `createDaemonLifecycleAdmission` answers `daemon_quiesce` before dispatch, using the same
-//   work census as idle reap. Embedded runtimes refuse it; their host owns close().
+// - `createDaemonLifecycleAdmission` answers `daemon_quiesce` before dispatch. Its census counts
+//   every session, including the reapable ones idle reap skips (an uncommitted repair, or a session
+//   a failed `close` kept), so a replacement still refuses them; idle reap calls close() directly and
+//   does not pass this admission. Embedded runtimes refuse it; their host owns close().
 
 const DAEMON_IDLE_REAP_DEFAULT_MS = 5 * 60_000;
 

@@ -408,11 +408,17 @@ export class SessionStore {
   }
 
   /**
-   * #4237: marks a session that `close` kept to withhold its device claim, so daemon idle reap no
-   * longer waits on it. The mark is never cleared: the session leaves the store only by closing.
+   * #4237: marks a session that `close` kept to withhold its device claim after a failed platform
+   * close or cleanup, so daemon idle reap no longer waits on it. A successful reopen clears the mark;
+   * otherwise it lasts until `retire` removes the session.
    */
   markCloseEffectsUnconfirmed(ref: SessionRef): void {
     this.update(ref, { closeEffectsUnconfirmed: true });
+  }
+
+  /** #4237: a successful reopen makes a session kept by a failed `close` an ordinary session again. */
+  clearCloseEffectsUnconfirmed(ref: SessionRef): void {
+    delete this.requireCurrent(ref).closeEffectsUnconfirmed;
   }
 
   /**
