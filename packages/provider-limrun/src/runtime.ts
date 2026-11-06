@@ -12,7 +12,7 @@ import type {
   ProviderExpiredLeaseRecovery,
   ProviderPortReverseOptions,
 } from '@agent-device/contracts/device';
-import { PROVIDER_INSTANCE_ENDED } from '@agent-device/contracts/device';
+import { PROVIDER_INSTANCE_ENDED } from '@agent-device/contracts/lease-scope';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import {
@@ -751,31 +751,13 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     const session = this.liveSessionForLease(lease.leaseId);
     if (!session) return undefined;
     if (session.client.getConnectionState() === 'connected') return undefined;
-    let terminationReason: string;
+    let terminationReason: string | undefined;
     if (this.limrun && session.ownership === 'created') {
-      let answer;
-      try {
-        const { awaitLimrunWithinBudget } = await import('./lifecycle-budget.ts');
-        // The budget only stops waiting, so the probe aborts its own GET when the budget expires.
-        const expiry = new AbortController();
-        const signal = context?.signal
-          ? AbortSignal.any([context.signal, expiry.signal])
-          : expiry.signal;
-        const request =
-          session.platform === 'ios'
-            ? this.limrun.iosInstances.get(session.instanceId, { signal })
-            : this.limrun.androidInstances.get(session.instanceId, { signal });
-        answer = await awaitLimrunWithinBudget(request, HEARTBEAT_PROBE_BUDGET_MS);
-        if (!answer.ok && 'expired' in answer) expiry.abort();
-      } catch {
-        return undefined;
-      }
-      if (!answer.ok || answer.value.status.state !== 'terminated') return undefined;
-      terminationReason = answer.value.status.terminationReason ?? 'Unknown';
-    } else {
-      if (session.client.getConnectionState() !== 'disconnected') return undefined;
+      terminationReason = await readLimrunTerminationReason(this.limrun, session, context?.signal);
+    } else if (session.client.getConnectionState() === 'disconnected') {
       terminationReason = 'Unknown';
     }
+    if (terminationReason === undefined) return undefined;
     throw new AppError('COMMAND_FAILED', `The Limrun instance ended (${terminationReason}).`, {
       reason: PROVIDER_INSTANCE_ENDED,
       terminationReason,
@@ -938,4 +920,34 @@ function allocationRefusedAfterShutdown(lease: DeviceLease): never {
       hint: 'Start the daemon again to allocate a Limrun lease.',
     },
   );
+}
+
+/**
+ * The termination reason of a created instance whose connection dropped, or `undefined` when the
+ * instance is not terminated or the probe cannot tell. The budget only stops waiting, so the probe
+ * aborts its own GET when the budget expires.
+ */
+async function readLimrunTerminationReason(
+  limrun: Limrun,
+  session: Pick<LimrunRuntimeSession, 'platform' | 'instanceId'>,
+  requestSignal: AbortSignal | undefined,
+): Promise<string | undefined> {
+  const expiry = new AbortController();
+  const signal = requestSignal ? AbortSignal.any([requestSignal, expiry.signal]) : expiry.signal;
+  try {
+    const { awaitLimrunWithinBudget } = await import('./lifecycle-budget.ts');
+    const request =
+      session.platform === 'ios'
+        ? limrun.iosInstances.get(session.instanceId, { signal })
+        : limrun.androidInstances.get(session.instanceId, { signal });
+    const answer = await awaitLimrunWithinBudget(request, HEARTBEAT_PROBE_BUDGET_MS);
+    if (!answer.ok) {
+      if ('expired' in answer) expiry.abort();
+      return undefined;
+    }
+    if (answer.value.status.state !== 'terminated') return undefined;
+    return answer.value.status.terminationReason ?? 'Unknown';
+  } catch {
+    return undefined;
+  }
 }

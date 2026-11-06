@@ -1,4 +1,4 @@
-import { isProviderInstanceEndedError } from '@agent-device/contracts/device';
+import { isProviderInstanceEndedError } from '@agent-device/contracts/lease-scope';
 import type { LeaseEndReason } from '../lease-lifecycle.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';

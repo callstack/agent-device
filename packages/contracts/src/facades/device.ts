@@ -1,4 +1,3 @@
-export { PROVIDER_INSTANCE_ENDED, isProviderInstanceEndedError } from '../lease-scope.ts';
 export type { TriggerAppEventCommandResult } from '../app-events.ts';
 export { assertResolvedAppsFilter, resolveAppsFilter } from '../app-inventory.ts';
 export type { AppsFilter } from '../app-inventory.ts';
