@@ -95,8 +95,8 @@ async function observeAfterInteraction(
  * Post-action side of `--verify` (#1047): one interactive-only capture through
  * the same capture helper the resolution path already uses, digested and then
  * discarded. The node tree itself is never attached to the result, only the
- * cheap summary. A missing baseline still yields `changedFromBefore: false` —
- * no baseline, no claim.
+ * cheap summary. A missing baseline yields no `changedFromBefore` claim —
+ * no baseline, no comparison.
  */
 async function captureVerifyEvidence(
   runtime: AgentDeviceRuntime,
