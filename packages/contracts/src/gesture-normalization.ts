@@ -40,7 +40,7 @@ const GESTURE_FLAG_NAMES: Record<GestureFlagKey, string> = {
  * CLI would reject and have it silently dropped.
  */
 export const GESTURE_FLAGS_BY_KIND = {
-  pan: ['pointerCount'],
+  pan: ['pointerCount', 'trajectoryTransport'],
   tap: ['holdMs', 'count', 'pauseMs'],
   fling: [],
   swipe: ['postGestureStabilization'],
