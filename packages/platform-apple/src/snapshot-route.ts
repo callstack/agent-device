@@ -564,8 +564,22 @@ async function fallbackAfterFailure(
 }
 
 type FallbackPlan =
+  /** An observe-only capture on a source that cannot serve one: the runner result is returned as is. */
   | Readonly<{ kind: 'direct' }>
+  /**
+   * A capture the route cannot plan (a pinned backend or a custom-actions read). The runner serves a
+   * presented system surface on this path too, so a surface capture still gets a surface identity:
+   * without it, legacy presentation matching reads the sheet and the app as one presentation and can
+   * corroborate a tap across the two (#2438). An app capture off the route carries no identity.
+   */
   | Readonly<{ kind: 'off-route' }>
+  /**
+   * A capture taken while the probe saw a surface host. The probe answers about a host process and
+   * stays positive while a dismissed host lingers, but the runner answers about the screen, so this
+   * plan decides only the reason, from what the runner served. The identity comes from the shared
+   * stamp: an app capture in the lingering window must not compare equal to the sheet capture before
+   * the dismissal (#2438). `detectedHost` is evidence for the daemon log, not identity.
+   */
   | Readonly<{ kind: 'surface'; detectedHost: string }>
   | Readonly<{
       kind: 'reason';
