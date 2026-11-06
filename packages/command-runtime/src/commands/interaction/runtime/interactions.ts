@@ -175,12 +175,13 @@ async function tapCommand(
   const point = requireResolvedPoint(atRest);
   const pointObservation = pointObservationOf(atRest);
   const dispatchTap = runtime.backend.tap;
+  // Dynamic import: the readback evidence lane stays off the command-runtime entry closure.
+  const { attachScreenshotPairOutcome, dispatchWithScreenshotPair } = await import(
+    './screenshot-diff-evidence.ts'
+  );
   let backendResult;
   let screenshotOutcome: ScreenshotPairOutcome | undefined;
   try {
-    // Dynamic import: the readback evidence lane stays off the command-runtime entry closure.
-    const { attachScreenshotPairOutcome, dispatchWithScreenshotPair } =
-      await import('./screenshot-diff-evidence.ts');
     ({ result: backendResult, outcome: screenshotOutcome } = await dispatchWithScreenshotPair(
       runtime,
       options,
