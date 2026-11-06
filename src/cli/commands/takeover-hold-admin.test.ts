@@ -9,7 +9,7 @@ import {
   type HostHoldAdminRequester,
 } from './takeover-hold-admin.ts';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
-import { TAKEOVER_CLI_FLAGS } from './test-utils/client-lease-fixtures.ts';
+import { TAKEOVER_CLI_FLAGS } from '../../__tests__/test-utils/client-lease-fixtures.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 
 function flagsWith(flags: Partial<CliFlags>): CliFlags {
