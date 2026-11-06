@@ -236,7 +236,8 @@ extension RunnerTests {
     )
     XCTAssertTrue(try execute(command: nextTap).ok)
     XCTAssertNotNil(textEntryTapWitness)
-    XCTAssertTrue(try execute(command: type).ok)
+    let retype = try runnerCommandFixture(#"{"appBundleId":"com.callstack.agentdevice.runner","command":"type","commandId":"type-after-probe-recovery","text":"must-not-type","textEntryMode":"append"}"#)
+    XCTAssertTrue(try execute(command: retype).ok)
     XCTAssertEqual(field.value as? String, "must-not-type")
   }
 #endif
