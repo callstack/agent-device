@@ -385,6 +385,7 @@ export async function completeOpenCommand(params: {
     appName,
     deviceClaim,
   });
+  sessionStore.clearCloseEffectsUnconfirmed(nextRef);
   const nextSession = sessionStore.requireCurrent(nextRef);
   markPostOpenStabilization(nextSession, timing.postOpenObservation);
   if (req.runtime !== undefined)

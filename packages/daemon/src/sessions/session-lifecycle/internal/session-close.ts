@@ -302,19 +302,21 @@ export async function handleSessionCloseCommands(
     lifecycle: admission.runtime,
   });
   if ('response' in repair) return repair.response;
-  const closed = await runCloseTeardownAndRelease({
-    env: params.host.env,
-    req,
-    ref,
-    logPath,
-    sessionStore,
-    leaseRegistry,
-    leaseLifecycleProvider,
-    lifecycle: admission.runtime,
-    clearRuntimeHints: admission.clearRuntimeHints,
-    repairArmed: repair.repairArmed,
-    platformResourceCleanup,
-  });
+  const closed = await markSessionKeptAfterTeardown(sessionStore, ref, () =>
+    runCloseTeardownAndRelease({
+      env: params.host.env,
+      req,
+      ref,
+      logPath,
+      sessionStore,
+      leaseRegistry,
+      leaseLifecycleProvider,
+      lifecycle: admission.runtime,
+      clearRuntimeHints: admission.clearRuntimeHints,
+      repairArmed: repair.repairArmed,
+      platformResourceCleanup,
+    }),
+  );
   if (closed.kind === 'response') return closed.response;
   return buildCloseSuccessResponse({
     session,
@@ -323,6 +325,23 @@ export async function handleSessionCloseCommands(
     shutdownResult: closed.shutdownResult,
     providerData: closed.providerData,
   });
+}
+
+/**
+ * #4237: the one owner of "a kept session is marked". A close that ran its teardown either retires
+ * the session or keeps it for a retried close, whichever step failed (platform close, cleanup, or
+ * provider lease release). Every kept session is marked, so daemon idle reap never waits on it.
+ */
+async function markSessionKeptAfterTeardown<Result>(
+  sessionStore: SessionStore,
+  ref: SessionRef,
+  finalize: () => Promise<Result>,
+): Promise<Result> {
+  try {
+    return await finalize();
+  } finally {
+    if (sessionStore.resolveCurrent(ref)) sessionStore.markCloseEffectsUnconfirmed(ref);
+  }
 }
 
 type SessionCloseFinalization =
@@ -336,7 +355,9 @@ type SessionCloseFinalization =
 // Everything between a settled repair decision and a success response:
 // failure-isolated resource teardown, provider lease release, then (only
 // once both are known) the device-claim clear and session delete. A failed
-// lease release keeps the session retryable instead (`{kind:'response'}`).
+// teardown that withholds the device claim keeps the session and its lease
+// for a retried close; a failed lease release keeps the session retryable
+// too (`{kind:'response'}`).
 async function runCloseTeardownAndRelease(params: {
   env: HostEnvironment['env'];
   req: DaemonRequest;
@@ -378,18 +399,13 @@ async function runCloseTeardownAndRelease(params: {
       platformResourceCleanup: params.platformResourceCleanup,
     });
   let session = sessionStore.requireCurrent(ref);
-  const leaseRelease = await releaseProviderLeaseForClose({
-    req,
-    session,
-    leaseRegistry,
-    leaseLifecycleProvider,
-  });
-  if (leaseRelease.response) return { kind: 'response', response: leaseRelease.response };
-  session = sessionStore.resolveCurrent(ref) ?? session;
-  const cleanupAggregate = closeCleanupError(sessionName, cleanupFailures);
-  const deviceClaimBlockingError = platformCloseError ?? cleanupAggregate;
-  if (deviceClaimBlockingError) {
-    if (session.deviceClaim) {
+  // Each cleanup report is built where the session's fate is decided, so its diagnostic and hint
+  // describe what actually happened to the session. It is built even when a platform-close error
+  // takes precedence, so that error never hides the cleanup failures.
+  if (session.deviceClaim) {
+    const cleanupError = closeCleanupError(sessionName, cleanupFailures, { sessionKept: true });
+    const claimBlockingError = platformCloseError ?? cleanupError;
+    if (claimBlockingError) {
       emitDiagnostic({
         level: 'warn',
         phase: 'device_claim_close_effects_unconfirmed',
@@ -398,12 +414,25 @@ async function runCloseTeardownAndRelease(params: {
           session: sessionName,
         },
       });
+      // The withheld claim names a live owner, so `--stale` cannot reclaim it. Retiring the
+      // session would leave nothing able to release it; keeping it, and its lease, lets a retried
+      // close rerun the teardown.
+      throw claimBlockingError;
     }
-  } else {
-    await clearDeviceClaim(session.deviceClaim, params.env);
   }
+  const leaseRelease = await releaseProviderLeaseForClose({
+    req,
+    session,
+    leaseRegistry,
+    leaseLifecycleProvider,
+  });
+  if (leaseRelease.response) return { kind: 'response', response: leaseRelease.response };
+  session = sessionStore.resolveCurrent(ref) ?? session;
+  const cleanupError = closeCleanupError(sessionName, cleanupFailures, { sessionKept: false });
+  const closeError = platformCloseError ?? cleanupError;
+  if (!closeError) await clearDeviceClaim(session.deviceClaim, params.env);
   sessionStore.retire(ref, { retainExecutionHost });
-  if (deviceClaimBlockingError) throw deviceClaimBlockingError;
+  if (closeError) throw closeError;
   if (saveScriptError) throw saveScriptError;
   return { kind: 'closed', providerData: leaseRelease.providerData, shutdownResult };
 }

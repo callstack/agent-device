@@ -140,10 +140,16 @@ export async function runSessionCloseTeardown(params: {
 export function closeCleanupError(
   sessionName: string,
   failures: readonly SessionCleanupFailure[],
+  options: { sessionKept: boolean },
 ): Error | undefined {
   return reportSessionCleanupFailures({
     sessionName,
     phase: 'session_close_cleanup_failed',
     failures,
+    ...(options.sessionKept
+      ? {
+          hint: 'Some session resources failed to release. The session and its device claim were kept; retry close with the same options, leaving out --save-script once the script is published, to rerun the failed cleanup and release the device.',
+        }
+      : {}),
   });
 }
