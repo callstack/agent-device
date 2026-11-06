@@ -7,6 +7,7 @@
 import type { FillUnconfirmedVerification } from '@agent-device/contracts/fill-evidence';
 import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { ShellWord } from '@agent-device/kernel/device-shell';
 import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
@@ -247,7 +248,7 @@ async function admitAndroidTextChannel(
   if (isAndroidImeHelperPackage(packageName)) {
     return { backend: 'test-ime', packageName };
   }
-  if (!isAndroidBackspaceSequence(text)) {
+  if (!(action === 'type' && isAndroidBackspaceSequence(text))) {
     assertAndroidShellTextSupported(text);
   }
   assertAndroidShellInputIsAppOwned(inputState, action);
@@ -428,10 +429,17 @@ async function deleteAndroidCharacters(
   const deletes = Math.max(0, count);
   if (deletes === 0) return;
   let dispatchedSteps = 0;
+  const dispatchKeyevent = async (words: readonly ShellWord[]) => {
+    try {
+      await runAndroidShell(device, words);
+    } catch (error) {
+      throw discloseAdbInputDispatch(error);
+    }
+  };
   try {
     if (delayMs > 0) {
       for (let i = 0; i < deletes; i++) {
-        await runAndroidShell(device, ['input', 'keyevent', 'KEYCODE_DEL']);
+        await dispatchKeyevent(['input', 'keyevent', 'KEYCODE_DEL']);
         dispatchedSteps += 1;
         if (i + 1 < deletes) await sleep(delayMs);
       }
@@ -440,7 +448,7 @@ async function deleteAndroidCharacters(
     const batchSize = 24;
     for (let i = 0; i < deletes; i += batchSize) {
       const size = Math.min(batchSize, deletes - i);
-      await runAndroidShell(device, ['input', 'keyevent', ...Array(size).fill('KEYCODE_DEL')]);
+      await dispatchKeyevent(['input', 'keyevent', ...Array(size).fill('KEYCODE_DEL')]);
       dispatchedSteps += 1;
     }
   } catch (error) {

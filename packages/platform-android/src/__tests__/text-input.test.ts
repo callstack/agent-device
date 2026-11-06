@@ -129,13 +129,17 @@ test('typeAndroid sends KEYCODE_DEL keyevents for backspace sequences', async ()
 });
 
 test('typeAndroid respects delayMs when dispatching backspace keyevents', async () => {
+  const timestamps: number[] = [];
   await withFakeAdb(
     (args) => {
-      if (args.includes('KEYCODE_DEL')) return undefined;
+      if (args.includes('KEYCODE_DEL')) {
+        timestamps.push(Date.now());
+        return undefined;
+      }
       return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
     },
     async ({ calls, device }) => {
-      await typeAndroid(device, '\b\b\b', 10);
+      await typeAndroid(device, '\b\b\b', 20);
       assert.equal(calls.some((args) => args.includes('KEYCODE_MOVE_END')), false);
       const delCalls = calls.filter(
         (args) => args[0] === 'shell' && args[1] === 'input' && args[2] === 'keyevent',
@@ -144,6 +148,39 @@ test('typeAndroid respects delayMs when dispatching backspace keyevents', async 
       for (const call of delCalls) {
         assert.deepEqual(call, ['shell', 'input', 'keyevent', 'KEYCODE_DEL']);
       }
+      assert.equal(timestamps.length, 3);
+      assert.ok(
+        timestamps[1]! - timestamps[0]! >= 15,
+        `expected >= 15ms spacing, got ${timestamps[1]! - timestamps[0]!}`,
+      );
+      assert.ok(
+        timestamps[2]! - timestamps[1]! >= 15,
+        `expected >= 15ms spacing, got ${timestamps[2]! - timestamps[1]!}`,
+      );
+    },
+  );
+});
+
+test('fillAndroid rejects backspace-only text without clearing field', async () => {
+  await withFakeAdb(
+    () => undefined,
+    async ({ calls, device }) => {
+      await assert.rejects(
+        async () => await fillAndroid(device, 100, 200, '\b\b'),
+        (error: unknown) => {
+          assert.equal((error as any).code, 'COMMAND_FAILED');
+          return true;
+        },
+      );
+      assert.equal(
+        calls.some(
+          (args) =>
+            args.includes('KEYCODE_DEL') ||
+            args.includes('KEYCODE_MOVE_END') ||
+            (args[1] === 'input' && args[2] === 'text'),
+        ),
+        false,
+      );
     },
   );
 });
