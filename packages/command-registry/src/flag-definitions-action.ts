@@ -22,7 +22,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     max: 200,
     usageLabel: '--count <n>',
     usageDescription:
-      'Repeat count for press, swipe and gesture tap series; screenshot: burst frame count (2-200) captured sequentially into a numbered file sequence',
+      'Repeat count for press, swipe and gesture tap series; screenshot: burst frame count (2-100) captured sequentially into a numbered file sequence',
     projectConfig: true,
     recorded: true,
   },
