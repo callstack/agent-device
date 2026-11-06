@@ -52,7 +52,9 @@ async function splitByRecorderState(
 ): Promise<ChunkGroups> {
   const stoppable: NativeChunk[] = [];
   const retired: NativeChunk[] = [];
-  for (const { chunk, state } of await observeRecordedRecorders(transport, chunks)) {
+  for (const chunk of chunks) {
+    const [observation] = await observeRecordedRecorders(transport, [chunk]).catch(() => []);
+    const state = observation?.state;
     if (state === 'ownership-lost' || state === 'foreign-writer') retired.push(chunk);
     else stoppable.push(chunk);
   }

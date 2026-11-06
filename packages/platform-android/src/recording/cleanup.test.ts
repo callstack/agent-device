@@ -229,3 +229,42 @@ test('stops the live chunk before retaining a two-chunk recording whose reused p
   ).resolves.toMatchObject({ status: 'cleanup-pending', reason: 'transport-failed' });
   expect(calls).toEqual(['stop:42', 'scan']);
 });
+
+test('stops the live sibling and retains evidence when another chunk inspect rejects', async () => {
+  const stopped = new Set<string>();
+  const removed: string[] = [];
+  const transport = await testTransport({
+    inspect: async ({ pid }: { pid: string }) => {
+      if (pid === '41') throw new Error('inspect unavailable');
+      return stopped.has(pid) ? ('missing' as const) : ('owned-alive' as const);
+    },
+    stop: async ({ pid }: { pid: string }) => {
+      stopped.add(pid);
+      return 'stopped' as const;
+    },
+    remove: async (path: string) => {
+      removed.push(path);
+      return true;
+    },
+    removeManifest: async (path: string) => {
+      removed.push(path);
+      return true;
+    },
+  });
+  const outcome = await cleanupVerifiedAndroidEvidence(
+    transport,
+    evidence([
+      { ...recordedChunk, remotePid: '41' },
+      { ...recordedChunk, index: 2 },
+    ]),
+    manifestPath,
+  );
+  expect(stopped.has('42')).toBe(true);
+  expect(stopped.has('41')).toBe(true);
+  expect(outcome).toEqual({
+    status: 'cleanup-pending',
+    reason: 'transport-failed',
+    message: 'inspect unavailable',
+  });
+  expect(removed).toEqual([]);
+});
