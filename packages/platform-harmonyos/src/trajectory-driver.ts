@@ -1,5 +1,4 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
 import { shellQuote } from '@agent-device/kernel/device-shell';
 import type { SinglePointerGesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import { runHarmonyShell, type HarmonyHdcOptions } from './hdc.ts';
@@ -155,16 +154,4 @@ export function parseCarrierDetail(runnerOutput: string): string | undefined {
   const errorLine = /inject failed: ([^\r\n]+)/i.exec(runnerOutput)?.[1];
   if (errorLine) return errorLine.trim();
   return undefined;
-}
-
-/** Refusal for a plan whose carrier is missing: names the install step, not a vague gap. */
-export function trajectoryDriverMissingError(): AppError {
-  return new AppError(
-    'UNSUPPORTED_OPERATION',
-    `HarmonyOS trajectory injection needs the carrier HAP ${HARMONY_TRAJECTORY_DRIVER_BUNDLE}`,
-    {
-      reason: 'trajectory-driver-missing',
-      hint: 'Build and install examples/harmony-trajectory-driver with a debug signature; the endpoint swipe transport stays available without it.',
-    },
-  );
 }
