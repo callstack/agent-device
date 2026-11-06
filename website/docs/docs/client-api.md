@@ -311,6 +311,13 @@ await client.interactions.press({ selector: 'label="Continue"' });
 
 If the wait times out, check the selector and app state with a fresh snapshot. A covered, off-screen, or ambiguous target still fails the interaction.
 
+On mobile, a scroll or swipe makes two checks: a directional `scroll` captures the screen again to report `movement`, and the first capture after `scroll`, `swipe`, or `swipeGesture` waits for two reads to agree. Code that verifies the screen by polling it can skip both with `postGestureStabilization: false`. The next read can then return a tree the gesture is still moving, so poll until the state you expect appears. See [Scroll](/docs/commands#scroll) for what the option changes and where else it can be set.
+
+```ts
+await client.interactions.scroll({ direction: 'down', postGestureStabilization: false });
+await client.command.wait({ text: 'Order total', timeoutMs: 5_000 });
+```
+
 `tvRemote` is TV-only. Android TV accepts the navigation buttons, named volume, power, media, channel, and color keys, and `android-keycode:N`. tvOS and Vega OS accept only `up`, `down`, `left`, `right`, `select`, `menu`, `home`, and `back`; other buttons fail with `UNSUPPORTED_OPERATION`. Phones and WebDriver sessions are unsupported. See [TV targets](/docs/commands#tv-targets) for the full button list and hold behavior.
 
 Vega OS client support is VVD-only and covers device discovery, app open/close, `back`, `home`, and `tvRemote`. Physical Vega OS devices, capture, selector, install, logging, and performance methods report unsupported for Vega targets. Fire TV devices that run Fire OS use the Android client methods as Android TV devices.

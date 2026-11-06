@@ -41,6 +41,16 @@ export type SettleCommandOptions = {
   timeoutMs?: number;
 };
 
+/** For a caller that verifies the screen by polling it: opts out of the checks after a gesture. */
+export type PostGestureStabilizationOptions = {
+  /**
+   * Set false to skip the movement check on a directional scroll and the stabilization wait
+   * before the next read. Set it only when your own polling verifies the screen: the next read can
+   * return a tree that the gesture is still moving.
+   */
+  postGestureStabilization?: boolean;
+};
+
 export type ClickOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &
   InteractionTarget &
@@ -75,15 +85,17 @@ export type HoverOptions = DeviceCommandBaseOptions &
   InteractionTarget &
   SettleCommandOptions;
 
-export type SwipeOptions = DeviceCommandBaseOptions & {
-  from: { x: number; y: number };
-  to: { x: number; y: number };
-  count?: number;
-  pauseMs?: number;
-  pattern?: SwipePattern;
-};
+export type SwipeOptions = DeviceCommandBaseOptions &
+  PostGestureStabilizationOptions & {
+    from: { x: number; y: number };
+    to: { x: number; y: number };
+    count?: number;
+    pauseMs?: number;
+    pattern?: SwipePattern;
+  };
 
-export type GestureOptions = DeviceCommandBaseOptions & GesturePayload;
+export type GestureOptions = DeviceCommandBaseOptions &
+  (GesturePayload | (SwipeGesturePayload & PostGestureStabilizationOptions));
 
 export type PanOptions = DeviceCommandBaseOptions & {
   x: number;
@@ -103,7 +115,9 @@ export type FlingOptions = DeviceCommandBaseOptions & {
   distance?: number;
 };
 
-export type SwipeGestureOptions = DeviceCommandBaseOptions & Omit<SwipeGesturePayload, 'kind'>;
+export type SwipeGestureOptions = DeviceCommandBaseOptions &
+  Omit<SwipeGesturePayload, 'kind'> &
+  PostGestureStabilizationOptions;
 
 export type FocusOptions = DeviceCommandBaseOptions & {
   x: number;
@@ -146,7 +160,8 @@ export type TransformGestureOptions = DeviceCommandBaseOptions & TransformGestur
 export type TapGestureOptions = DeviceCommandBaseOptions & Omit<TapGesturePayload, 'kind'>;
 
 export type ScrollOptions = DeviceCommandBaseOptions &
-  SettleCommandOptions & {
+  SettleCommandOptions &
+  PostGestureStabilizationOptions & {
     direction: ScrollInputDirection;
     amount?: number;
     pixels?: number;

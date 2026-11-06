@@ -76,4 +76,32 @@ describe('gesture command transport', () => {
       udid: 'gesture-device',
     });
   });
+
+  test('a swipe sends the stabilization opt-out as the daemon flag from every entry point', async () => {
+    const setup = createClientTransport(() => ({ ok: true, data: {} }));
+    const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+    await client.interactions.swipeGesture({ preset: 'left', postGestureStabilization: false });
+    await client.interactions.gesture({
+      kind: 'swipe',
+      preset: 'left-edge',
+      postGestureStabilization: false,
+    });
+    await runCommand(client, 'gesture', {
+      ...readInputFromCli('gesture', ['swipe', 'right'], {
+        postGestureStabilization: false,
+      } as CliFlags),
+    });
+    await client.interactions.swipeGesture({ preset: 'left' });
+
+    expect(setup.calls.map((call) => call.flags?.postGestureStabilization)).toEqual([
+      false,
+      false,
+      false,
+      undefined,
+    ]);
+    for (const call of setup.calls) {
+      expect(call.input).not.toHaveProperty('postGestureStabilization');
+    }
+  });
 });

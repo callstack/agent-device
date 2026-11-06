@@ -424,6 +424,19 @@ export function repeatedFields() {
 }
 
 /**
+ * The opt-out of the checks that follow a scroll or swipe. It is the caller's policy for how it
+ * verifies the screen, so no model-facing tool schema advertises or admits it; an operator sets it
+ * through the environment or the user config, which the tool route merges outside the model.
+ */
+export function postGestureStabilizationFields() {
+  return {
+    postGestureStabilization: operatorField(optionField('postGestureStabilization'), {
+      operatorConfig: true,
+    }),
+  };
+}
+
+/**
  * The device spec a proxy lease is allocated by, on the commands that allocate one. The fields
  * reach the daemon request; a daemon refuses them, and the CLI drops them once a proxy backend has
  * leased a device by them.

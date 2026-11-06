@@ -2,6 +2,11 @@ import { expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { interactionCommandMetadata } from './metadata.ts';
 
+const EXAMPLE_INPUT = {
+  scroll: { direction: 'down' },
+  swipe: { from: { x: 1, y: 1 }, to: { x: 1, y: 9 } },
+} as const;
+
 // `fill <target> ""` is the clear-field primitive (#2063): before it existed, emptying an input
 // was not expressible at all — `fill` refused the empty string and `keyboard` had no delete verb.
 // The empty string therefore has to survive input validation, while a MISSING text argument must
@@ -38,6 +43,42 @@ test('fill refuses a non-string text', () => {
   } catch (error) {
     expect((error as AppError).code).toBe('INVALID_ARGS');
   }
+});
+
+// The audience narrows the model-facing tool schemas only: the CLI and the Node client read the
+// same schema, and that is where a caller that polls the screen states the opt-out.
+test.for(['scroll', 'swipe'] as const)(
+  '%s offers the stabilization opt-out to the Node client and declares it operator-owned',
+  (name) => {
+    const metadata = interactionCommandMetadata.find((entry) => entry.name === name);
+    if (!metadata) throw new Error(`expected ${name} metadata`);
+
+    expect(metadata.inputSchema.properties?.postGestureStabilization?.type).toBe('boolean');
+    expect(metadata.inputAudience.postGestureStabilization?.kind).toBe('operator');
+    expect(
+      metadata.readInput({ ...EXAMPLE_INPUT[name], postGestureStabilization: false }),
+    ).toMatchObject({
+      postGestureStabilization: false,
+    });
+  },
+);
+
+test('gesture keeps the stabilization opt-out for a swipe and drops it for any other kind', () => {
+  const gesture = interactionCommandMetadata.find((entry) => entry.name === 'gesture');
+  if (!gesture) throw new Error('expected gesture metadata');
+
+  expect(gesture.inputAudience.postGestureStabilization?.kind).toBe('operator');
+  expect(
+    gesture.readInput({ kind: 'swipe', preset: 'left', postGestureStabilization: false }),
+  ).toMatchObject({ kind: 'swipe', postGestureStabilization: false });
+  expect(
+    gesture.readInput({
+      kind: 'pan',
+      origin: { x: 1, y: 1 },
+      delta: { x: 1, y: 9 },
+      postGestureStabilization: false,
+    }),
+  ).not.toHaveProperty('postGestureStabilization');
 });
 
 test('type keeps refusing an empty text: appending nothing is not a clear', () => {
