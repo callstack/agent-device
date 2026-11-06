@@ -10,9 +10,9 @@ Completed migration history stays in git history.
 
 ## Rules at a glance
 
-- Route every supported capture through capture-kit channels.
+- Route owners with more than one channel through the capture-kit router.
 - Permit one fallback; share refusal scope, circuits, and warnings.
-- Stamp served identity; derive producer facts from contracts.
+- Every producer stamps served identity through capture-kit and declares a contracts registry row.
 
 ## Boundary and channels
 
@@ -78,8 +78,10 @@ Preserve iOS scope:
 | --- | --- |
 | Capture | Preparation, read-in-flight, tree change, foreground ownership, unresolved coordinates, window placement, surface-host presence or uncertainty. |
 | Generation | Remote-content boundary, abandoned read, malformed tree, presentation invariant failure. |
+| Runner session | Wedged runner-side bridge reader; a new runner session id starts a fresh circuit. |
 
-Unknown codes have generation scope if verified.
+Unknown codes have generation scope.
+Without a verified generation, an unknown code disables the channel for the current capture and creates no circuit.
 Intercept cancellation before lookup, including `abort-signal`.
 Unclassified provider errors remain terminal.
 
@@ -91,11 +93,13 @@ Residue distinguishes source-measured and provider-derived facts.
 Derive provenance pairs, iOS subsets, producer warning dispatch, quiet time, and ref behavior here.
 First move provenance-dependent carriers/helpers from `packages/kernel/src/snapshot.ts` to contracts.
 Keep node/geometry primitives in kernel; forbid kernel-to-contracts cycles.
-Keep bridge quiet time at 300 ms, others at 500 ms; preserve agent-browser refs.
+Keep bridge quiet time at 300 ms, others at 500 ms; derive it per capture from the served producer.
+Preserve agent-browser refs.
 
-One-channel owners have no alternate: Android, macOS helper/XCTest, web, WebDriver, Revyl, HarmonyOS, Linux, TV CDP, and composing providers.
-Local and Limrun iOS Simulators offer bridge first, then `apple-runner`.
-Physical iOS, tvOS, and visionOS retain one runner channel.
+Local and Limrun iOS Simulators offer bridge first, then `apple-runner`, and route through the router.
+Every other owner has one channel and does not route through the router: Android, macOS helper/XCTest, web, WebDriver, Revyl, HarmonyOS, Linux, TV CDP, composing providers, and physical iOS, tvOS, and visionOS.
+A one-channel owner calls the capture-kit identity-stamp helper and declares its registry row.
+An owner that gains a second channel moves to the router.
 Unsupported owners such as Vega declare no channel.
 WebDriver keeps `appium-source` on both backend channels.
 Rename Revyl Android to `revyl-android-tree`; sharing a parser does not make it Appium.
@@ -112,26 +116,15 @@ Android `systemSurfaceOnly` stays acquisition metadata, not `SurfaceProof`.
 This and system-bar labels prove no absence: use `proof: 'none'`, preserving disclosure/recovery.
 A future app-only channel needs independent window-ownership evidence tied to its read.
 
-## Migration and enforcement
+## Consequences
 
-After acceptance, each small PR must merge alone:
-
-1. Move provenance carriers to contracts; migrate registry consumers atomically.
-2. Add router/refusal input and layering enforcement; port guest/runner tests with unchanged behavior assertions.
-3. Bind both iOS channels; remove old routing, placeholder ports, duplicate eligibility, and fallback settlers.
-4. Bind single-source owners separately; rename Revyl Android with its emitter/consumers.
-5. Slim ADR 0004 below about 15 KB after relocating unique contracts; retain iOS rules.
-
-Add router layering enforcement with a failing dependency control.
-Producer-emitter/refusal guards in `test/repo-guards/` reject missing reachable production emitters, unlisted codes, and scope disagreement.
-Add an ADR-citation guard for nonexistent cited paths/test names.
-Select guards through affected checks with docs-prose, docs-links, and agent-guidance.
-Require live producer/fallback parity on local iOS Simulator, Limrun iOS, and local Android.
+The migration plan, its guard inventory, and the live parity checks live in [#4205](https://github.com/callstack/agent-device/issues/4205).
+Repo guards enforce the router's layering, the producer emitters, and the refusal table scope.
 
 ## Rationale and alternatives
 
 Readers, decoding, discovery, process checks, native budgets, geometry, and lifecycle stay platform-specific.
 Presentation stays in capture-kit and runner-side Swift.
 
-Rejected: Apple placeholder ports (absent capabilities), provider planners (duplicated policy), and annotations as absence proof (no pre-read evidence).
+Rejected: Apple placeholder ports (absent capabilities), provider planners (duplicated policy), annotations as absence proof (no pre-read evidence), and routing one-channel owners through the router (the planner never chooses for them).
 The cost is provenance migration and explicit channels.
