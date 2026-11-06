@@ -21,7 +21,16 @@ export async function releaseLease(
   context?: LeaseLifecycleContext,
 ): Promise<LeaseReleaseOutcome> {
   const provider = lease ? await leaseLifecycleProvider?.release?.(lease, context) : undefined;
-  const providerSessionId = providerSessionIdFromData(provider);
-  if (lease && providerSessionId) leaseRegistry.recordProviderSession(lease, providerSessionId);
+  if (lease) recordProviderSession(leaseRegistry, lease, provider);
   return { registryReleased: leaseRegistry.releaseLease(request).released, provider };
+}
+
+export function recordProviderSession(
+  leaseRegistry: LeaseRegistry,
+  lease: DeviceLease,
+  providerData: Record<string, unknown> | undefined,
+): void {
+  const providerSessionId = providerSessionIdFromData(providerData);
+  if (!providerSessionId) return;
+  leaseRegistry.recordProviderSession(lease, providerSessionId);
 }

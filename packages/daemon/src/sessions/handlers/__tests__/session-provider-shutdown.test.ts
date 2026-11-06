@@ -25,7 +25,7 @@ import { handleShutdownCommand } from '../session-shutdown.ts';
 
 bindTestCommandHost();
 
-function scenario(platform: 'ios' | 'android', activeSession = false) {
+function scenario(platform: 'ios' | 'android', activeSession = false, sessionAddress = 'test') {
   const host = createTestHostEnvironment();
   const root = mkdtempForTestSync('agent-device-provider-shutdown-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'), host);
@@ -77,7 +77,7 @@ function scenario(platform: 'ios' | 'android', activeSession = false) {
   const req: DaemonRequest = {
     token: 't',
     command: activeSession ? 'close' : 'shutdown',
-    session: 'test',
+    session: sessionAddress,
     positionals: [],
     flags: { platform, shutdown: activeSession },
     meta: {
@@ -90,7 +90,7 @@ function scenario(platform: 'ios' | 'android', activeSession = false) {
     internal: { endedLeases: [] },
   };
   if (activeSession) {
-    sessionStore.publish('test', {
+    sessionStore.publish(sessionAddress, {
       name: 'test',
       device,
       appName: 'Example',
@@ -113,7 +113,7 @@ function scenario(platform: 'ios' | 'android', activeSession = false) {
   const params = {
     host,
     req,
-    sessionName: 'test',
+    sessionName: sessionAddress,
     sessionStore,
     leaseRegistry,
     leaseLifecycleProvider: { release },
@@ -172,8 +172,9 @@ test('failed provider deletion keeps the session and lease for close --shutdown 
   expect(world.leaseRegistry.listActiveLeases()).toEqual([]);
 });
 
-test('standalone shutdown refuses a target still used by another session', async () => {
-  const world = scenario('android', true);
+test('standalone shutdown identifies the scoped session using its target', async () => {
+  const sessionAddress = 'cwd:abc123:test';
+  const world = scenario('android', true, sessionAddress);
   world.req.command = 'shutdown';
   mockResolveTargetDevice.mockResolvedValue(world.binding.device);
   const response = await handleShutdownCommand({
@@ -184,7 +185,16 @@ test('standalone shutdown refuses a target still used by another session', async
     platformServices: daemonPlatformServicesFixture(),
     inspectFacts: async () => world.binding.facts,
   });
-  expect(response).toMatchObject({ ok: false, error: { code: 'DEVICE_IN_USE' } });
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'DEVICE_IN_USE',
+      details: {
+        session: sessionAddress,
+        hint: `Run agent-device close --shutdown --session ${sessionAddress}`,
+      },
+    },
+  });
   expect(world.release).not.toHaveBeenCalled();
 });
 
@@ -212,7 +222,14 @@ test('failed shutdown preparation keeps the session and retained lease for retry
   vi.spyOn(world.binding.operations, 'finalizeApplicationClose').mockRejectedValueOnce(
     new Error('IME restore failed'),
   );
-  expect(await world.run()).toMatchObject({ ok: false, error: { retriable: true } });
+  expect(await world.run()).toMatchObject({
+    ok: false,
+    error: {
+      retriable: true,
+      message: expect.stringContaining('IME restore failed'),
+      details: { reason: 'session_cleanup_incomplete', failedSteps: ['application_lifecycle'] },
+    },
+  });
   expect(world.release).not.toHaveBeenCalled();
   expect(world.sessionStore.get('test')).toBeDefined();
   expect(world.leaseRegistry.listActiveLeases()).toHaveLength(1);

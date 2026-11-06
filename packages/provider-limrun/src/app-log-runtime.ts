@@ -261,7 +261,9 @@ function bindLimrunAppLogs(
             resolveOpenTarget: operations.resolveOpenTarget,
             closeApplication: operations.closeApplication,
             finalizeApplicationClose: async () => ({}),
-            clearRuntimeHints: async () => undefined,
+            ...whenAdmitted(runtimeFacts.operations.clearRuntimeHints, () => ({
+              clearRuntimeHints: async () => undefined,
+            })),
             shutdownTarget: operations.shutdownTarget,
           }
         : mode === 'recovery'

@@ -21,7 +21,7 @@ Requests agent-device makes with your API key, including instance creation, star
 
 ## Create and delete an instance
 
-Run `boot` to create an instance before installing your app. If this connection already has an instance, `boot` reuses it.
+Use `boot` to allocate an instance explicitly before installing your app. This step is optional: `install` also allocates an instance when needed. If this connection already has an instance, `boot` reuses it.
 
 ```bash
 agent-device boot

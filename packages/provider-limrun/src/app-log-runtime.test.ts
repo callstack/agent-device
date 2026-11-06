@@ -644,3 +644,24 @@ test('refuses to start Limrun app logs without an active instance', async () => 
     message: 'Limrun app logs require an active instance',
   });
 });
+
+test.each([device, limrunAndroid])(
+  'pending release preserves runtime-hint support for $platform',
+  async (runtimeDevice) => {
+    const owner = createLimrunPlatformRuntimeOwner(
+      limrunOwnerOptions({ hasLiveSession: () => false, hasPendingRelease: () => true }),
+    );
+    const binding = await owner.bind({
+      device: runtimeDevice,
+      intent: { kind: 'ordinary' },
+      scope,
+    });
+    const available = runtimeDevice.platform === 'apple';
+    expect((await owner.inspectFacts(runtimeDevice)).operations.clearRuntimeHints.available).toBe(
+      available,
+    );
+    expect(binding.facts.operations.clearRuntimeHints.available).toBe(available);
+    expect(binding.operations.clearRuntimeHints).toBeTypeOf(available ? 'function' : 'undefined');
+    await binding[Symbol.asyncDispose]();
+  },
+);

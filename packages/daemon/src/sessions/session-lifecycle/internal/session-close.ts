@@ -124,6 +124,8 @@ async function prepareRepairClose(params: {
 
 async function releaseProviderLeaseForClose(params: {
   shutdownPrepared: boolean;
+  cleanupFailures: readonly SessionCleanupFailure[];
+  sessionName: string;
   req: DaemonRequest;
   session: SessionState;
   leaseRegistry: LeaseRegistry;
@@ -140,7 +142,10 @@ async function releaseProviderLeaseForClose(params: {
     const shutdownTarget = params.lifecycle.operations.shutdownTarget;
     if (params.req.flags?.shutdown && shutdownTarget) {
       if (!params.shutdownPrepared) {
-        throw new AppError('COMMAND_FAILED', 'Target shutdown preparation failed. Retry close.');
+        throw (
+          closeCleanupError(params.sessionName, params.cleanupFailures) ??
+          new AppError('COMMAND_FAILED', 'Target shutdown preparation failed. Retry close.')
+        );
       }
       shutdownResult = await shutdownTarget({
         releaseLease: async (leaseId) => {
@@ -171,7 +176,7 @@ async function releaseProviderLeaseForClose(params: {
         error: {
           ...normalized,
           hint: 'The target could not be shut down or released. Retry close after resolving the failure.',
-          details: { ...normalized.details, session: params.session.name },
+          details: { ...normalized.details, session: params.sessionName },
           retriable: true,
         },
       },
@@ -459,6 +464,8 @@ async function runCloseTeardownAndRelease(params: {
     leaseLifecycleProvider,
     lifecycle,
     shutdownPrepared,
+    cleanupFailures,
+    sessionName,
   });
   if (leaseRelease.response) return { kind: 'response', response: leaseRelease.response };
   session = sessionStore.resolveCurrent(ref) ?? session;

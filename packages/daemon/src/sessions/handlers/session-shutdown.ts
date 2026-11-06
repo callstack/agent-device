@@ -60,14 +60,14 @@ export async function handleShutdownCommand(
   const unsupported = shutdownUnavailableResponse(facts.operations.shutdownTarget);
   if (unsupported) return unsupported;
 
-  const deviceSession = params.sessionStore.findByDevice(device.id)?.session;
+  const deviceSession = params.sessionStore.findByDevice(device.id);
   if (deviceSession) {
     return errorResponse(
       'DEVICE_IN_USE',
       'Cannot shut down an active session device directly. Use close --shutdown to end the session and turn off the simulator/emulator.',
       {
-        hint: `Run agent-device close --shutdown --session ${deviceSession.name}`,
-        session: deviceSession.name,
+        hint: `Run agent-device close --shutdown --session ${deviceSession.address}`,
+        session: deviceSession.address,
         platform: publicPlatformString(device),
         target: device.target ?? 'mobile',
         device: device.name,

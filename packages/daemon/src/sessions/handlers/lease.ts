@@ -1,4 +1,8 @@
-import { releaseLease, type LeaseReleaseOutcome } from '../../resources/lease-release.ts';
+import {
+  recordProviderSession,
+  releaseLease,
+  type LeaseReleaseOutcome,
+} from '../../resources/lease-release.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { LeaseEndReason } from '../lease-lifecycle.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
@@ -42,7 +46,6 @@ import { AppError, createRequestCanceledError, errorMessage } from '@agent-devic
 import { LEASE_ALLOCATION_BUDGET_MS } from '@agent-device/command-registry/timeout-policy';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
 import { listDownloadableArtifacts } from '../../resources/artifact-tracking.ts';
-import { providerSessionIdFromData } from '../../resources/provider-session-ownership.ts';
 import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 
@@ -526,16 +529,6 @@ function readFlagString(
 ): string | undefined {
   const value = flags?.[key];
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
-}
-
-function recordProviderSession(
-  leaseRegistry: LeaseRegistry,
-  lease: DeviceLease,
-  providerData: Record<string, unknown> | undefined,
-): void {
-  const providerSessionId = providerSessionIdFromData(providerData);
-  if (!providerSessionId) return;
-  leaseRegistry.recordProviderSession(lease, providerSessionId);
 }
 
 /** The host that allocated a `macos-app` lease keeps it for the hosted app's lifetime and ends it with DELETE /admin/leases. */

@@ -53,7 +53,7 @@ test('canonical shutdown and close parity share one concrete teardown mechanic',
   expect(shutdownRoute).not.toContain('target-shutdown');
 
   expect(sessionCloseSource).not.toContain('session-close-shutdown');
-  expect(appleLifecycleSource).not.toContain('shutdownTarget(device, signal)');
+  expect(appleLifecycleSource).not.toContain('host.deviceShutdown.apple.shutdownTarget');
   expect(androidLifecycleSource).not.toContain('host.deviceShutdown.android.shutdownTarget');
   expect(sessionCloseSource).toContain('params.lifecycle.operations.shutdownTarget');
 

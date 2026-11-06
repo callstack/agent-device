@@ -217,7 +217,7 @@ export function limrunReleaseFacts(
       resolveOpenTarget: available,
       closeApplication: available,
       finalizeApplicationClose: available,
-      clearRuntimeHints: available,
+      clearRuntimeHints: isIosFamily(device) ? available : runtimeHintsUnavailable,
       shutdownTarget: available,
     },
   };
