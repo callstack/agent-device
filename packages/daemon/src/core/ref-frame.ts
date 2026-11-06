@@ -330,7 +330,7 @@ function carryAdvisory(
  * frame is returned as is by that seam, so repeated effects accumulate on the same
  * frame key.
  */
-export function recordRefFrameAdvisoryMutation(previous: RefFrame, current: RefFrame): void {
+function recordRefFrameAdvisoryMutation(previous: RefFrame, current: RefFrame): void {
   const counters = readAdvisory(previous);
   carryAdvisory(previous, current, {
     ...counters,
@@ -344,7 +344,7 @@ export function recordRefFrameAdvisoryMutation(previous: RefFrame, current: RefF
  * other gap resets it. A snapshot that reissues nothing (a `@`-scoped capture that
  * kept the stored tree) never reaches this hook, so it neither extends nor resets.
  */
-export function recordRefFrameAdvisoryCompleteSnapshot(
+function recordRefFrameAdvisoryCompleteSnapshot(
   previous: RefFrame,
   current: RefFrame,
 ): void {
@@ -362,7 +362,7 @@ export function recordRefFrameAdvisoryCompleteSnapshot(
  * diff between snapshots is neither a complete snapshot nor an action, so the
  * rhythm carries across the frame replacement unchanged.
  */
-export function carryRefFrameAdvisoryAcrossPublication(
+function carryRefFrameAdvisoryAcrossPublication(
   previous: RefFrame,
   current: RefFrame,
 ): void {
