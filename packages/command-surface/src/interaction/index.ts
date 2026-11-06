@@ -75,11 +75,26 @@ const interactionEvidenceSchema: JsonSchema = objectSchema(
     interactiveNodeCount: numberSchema('Subset of nodeCount the platform reports as hittable.'),
     digest: stringSchema('Order-independent digest of the post-action node multiset.'),
     changedFromBefore: booleanSchema(
-      'Whether the post-action digest differs from the pre-action capture digest. false is evidence, not failure. With surfaceChange present, no digest comparison is made: it reports that surface transition.',
+      'Whether the post-action digest differs from the pre-action capture digest. false is evidence, not failure. Absent when no pre-action baseline was captured, so no comparison is claimed. With surfaceChange present, no digest comparison is made: it reports that surface transition.',
     ),
     surfaceChange: postActionSurfaceChangeSchema,
   },
-  ['nodeCount', 'interactiveNodeCount', 'digest', 'changedFromBefore'],
+  ['nodeCount', 'interactiveNodeCount', 'digest'],
+);
+
+// ScreenshotDiffEvidence (packages/contracts/src/interaction.ts) — opt-in
+// `--expect-screenshot-diff` out-of-tree readback: pixels instead of nodes.
+const screenshotDiffSchema: JsonSchema = objectSchema(
+  {
+    changedFromBefore: booleanSchema(
+      'Whether any pixel moved between the screenshots taken right before the dispatch and after it settles briefly. false means the frames match, which reads as "the dispatch may have had no visible effect" next to the response warning.',
+    ),
+    changedPixelRatio: numberSchema(
+      'Share of pixels whose color moved between the two frames. Absent when the frames could not be compared, for example a shape change.',
+    ),
+  },
+  ['changedFromBefore'],
+  'Pixel comparison between the screenshots taken right before the dispatch and after it settles briefly. Absent when the pair was not taken, which claims nothing about the screen.',
 );
 
 const responseCostSchema: JsonSchema = objectSchema(
@@ -213,6 +228,9 @@ function interactionResponseDataSchema(extra: InteractionExtra = {}): JsonSchema
 const tapInteractionResponseDataSchema = interactionResponseDataSchema({
   properties: {
     evidence: interactionEvidenceSchema,
+    // Press/click only: the pixel pair brackets the dispatch, which fill's
+    // value-level verification and the hold/hover results never take.
+    screenshotDiff: screenshotDiffSchema,
     button: enumSchema(['secondary', 'middle']),
     count: numberSchema('Number of press/click repetitions.'),
     intervalMs: numberSchema('Delay between repeated press/click actions.'),
@@ -369,6 +387,7 @@ const interactionCliSchemas = {
     allowedFlags: [
       ...REPEATED_TOUCH_FLAGS,
       'clickButton',
+      'expectScreenshotDiff',
       ...postActionObservationCliFlags('click'),
       ...SELECTOR_SNAPSHOT_FLAGS,
     ],
@@ -380,6 +399,7 @@ const interactionCliSchemas = {
     allowsExtraPositionals: true,
     allowedFlags: [
       ...REPEATED_TOUCH_FLAGS,
+      'expectScreenshotDiff',
       ...postActionObservationCliFlags('press'),
       ...SELECTOR_SNAPSHOT_FLAGS,
     ],
@@ -666,6 +686,7 @@ function toPressOptions(input: PressInput): PressOptions {
     ...toSelectorSnapshotOptions(input),
     ...toRepeatedOptions(input),
     verify: input.verify,
+    expectScreenshotDiff: input.expectScreenshotDiff,
     ...toSettleOptions(input),
   };
 }

@@ -207,6 +207,16 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
+    key: 'expectScreenshotDiff',
+    names: ['--expect-screenshot-diff'],
+    type: 'boolean',
+    usageLabel: '--expect-screenshot-diff',
+    usageDescription:
+      'Press/click: compare lightweight screenshots taken right before the dispatch and after it settles briefly, and report screenshotDiff in the response; use it when the target lives outside the accessibility tree (a PIN keypad) and --verify would compare empty trees. A matching pair adds a warning, because the dispatch may have had no visible effect',
+    projectConfig: true,
+    recorded: false,
+  },
+  {
     key: 'settle',
     names: ['--settle'],
     type: 'boolean',

@@ -42,7 +42,8 @@ export function resolvePostActionSurfaceChange(
  * `--verify` evidence for one post-action capture (#1047). Same surface: the digest comparison
  * against the pre-action baseline, as before. Cross-surface: no digest comparison is made — the
  * surface itself was replaced, which is a change by construction, and `surfaceChange` discloses
- * that this is what `changedFromBefore` reports.
+ * that this is what `changedFromBefore` reports. Missing baseline: no comparison is claimed —
+ * `changedFromBefore` is omitted instead of reading as an unchanged screen.
  */
 export function summarizePostActionEvidence(
   after: SurfaceScopedNodes,
@@ -51,9 +52,11 @@ export function summarizePostActionEvidence(
   const summary = summarizeAxEvidence(after.nodes);
   const surfaceChange = resolvePostActionSurfaceChange(baseline, after);
   if (surfaceChange) return { ...summary, changedFromBefore: true, surfaceChange };
-  const changedFromBefore =
-    baseline !== undefined && summary.digest !== summarizeAxEvidence(baseline.nodes).digest;
-  return { ...summary, changedFromBefore };
+  if (baseline === undefined) return summary;
+  return {
+    ...summary,
+    changedFromBefore: summary.digest !== summarizeAxEvidence(baseline.nodes).digest,
+  };
 }
 
 /**

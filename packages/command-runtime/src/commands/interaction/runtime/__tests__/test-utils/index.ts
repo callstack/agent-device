@@ -343,6 +343,7 @@ export function createInteractionDevice(
     Pick<
       AgentDeviceBackend,
       | 'captureSnapshot'
+      | 'captureScreenshot'
       | 'resolveGestureViewport'
       | 'tap'
       | 'tapTarget'
@@ -366,6 +367,9 @@ export function createInteractionDevice(
       platform: overrides.platform ?? 'ios',
       captureSnapshot: async (...args) =>
         overrides.captureSnapshot ? await overrides.captureSnapshot(...args) : { snapshot },
+      captureScreenshot: overrides.captureScreenshot
+        ? async (...args) => (await overrides.captureScreenshot?.(...args)) ?? {}
+        : undefined,
       resolveGestureViewport: overrides.resolveGestureViewport
         ? async (...args) => await overrides.resolveGestureViewport?.(...args)
         : undefined,

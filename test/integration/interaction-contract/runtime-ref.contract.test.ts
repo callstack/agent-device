@@ -1,4 +1,9 @@
-import { ref, createContractClock, createContractDevice } from './runtime-harness.ts';
+import {
+  ref,
+  createContractClock,
+  createContractDevice,
+  screenshotFramePlanBackend,
+} from './runtime-harness.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
@@ -225,6 +230,23 @@ test(scenario('settleObservation'), async () => {
   // Baseline is the stored pre-action tree the ref was resolved on.
   assert.deepEqual(settle.diff?.summary, { additions: 1, removals: 1, unchanged: 0 });
   assert.equal(settle.diff?.lines.find((line) => line.kind === 'added')?.ref, 'e1');
+});
+
+test(scenario('screenshotDiffEvidence'), async () => {
+  const device = createContractDevice(continueButtonSnapshot(), {
+    ...screenshotFramePlanBackend([{ color: [0, 0, 0] }, { color: [255, 255, 255] }]),
+    tap: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.click(ref('@e1'), {
+    session: 'default',
+    expectScreenshotDiff: true,
+  });
+
+  // The pixel pair brackets the runtime dispatch the ref resolved for.
+  assert.equal(result.kind, 'ref');
+  assert.ok(result.screenshotDiff);
+  assert.equal(result.screenshotDiff?.changedFromBefore, true);
 });
 
 test(scenario('errorTaxonomy'), async () => {

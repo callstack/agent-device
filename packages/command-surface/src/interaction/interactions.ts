@@ -43,6 +43,7 @@ export const interactionCliReaders = {
     target: targetInputFromClientTarget(readInteractionTargetFromPositionals(positionals)),
     button: flags.clickButton,
     verify: flags.verify,
+    expectScreenshotDiff: flags.expectScreenshotDiff,
   }),
   press: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
@@ -50,6 +51,7 @@ export const interactionCliReaders = {
     ...repeatedInputFromFlags(flags),
     target: targetInputFromClientTarget(readInteractionTargetFromPositionals(positionals)),
     verify: flags.verify,
+    expectScreenshotDiff: flags.expectScreenshotDiff,
   }),
   longpress: (positionals, flags) => {
     const decoded = readLongPressTargetFromPositionals(positionals);
