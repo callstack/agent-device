@@ -61,7 +61,7 @@ export async function resolveCommandDevice(params: {
 }): Promise<DeviceInfo> {
   const scope = resolveRequestOrSessionLeaseScope(params.req, params.session);
   const shouldUseExplicitIdentity = hasExplicitDeviceSelector(params.req.flags);
-  if (!shouldUseExplicitIdentity && params.session && !scope.leaseProvider) {
+  if (!shouldUseExplicitIdentity && params.session && (!scope.leaseProvider || scope.leaseId)) {
     const selected = await refreshSessionDeviceIfNeeded(
       params.session.device,
       params.platformServices,

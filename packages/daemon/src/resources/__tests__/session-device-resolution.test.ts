@@ -1,3 +1,4 @@
+import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
@@ -333,4 +334,42 @@ test('a sessionless web selection binds the session device of the request, never
     { platform: 'web' },
     expect.objectContaining({ webSession: { name: 'wsd-one' } }),
   );
+});
+
+test('an allocated proxy session keeps its emulator when multiple local devices are available', async () => {
+  const held: DeviceInfo = {
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel A',
+    kind: 'emulator',
+    booted: true,
+  };
+  const other: DeviceInfo = { ...held, id: 'emulator-5556', name: 'Pixel B' };
+  const actual = await vi.importActual<
+    typeof import('@agent-device/device-selection/dispatch-resolve')
+  >('@agent-device/device-selection/dispatch-resolve');
+  mockResolveTargetDevice.mockImplementation(actual.resolveTargetDevice);
+  const local = vi.fn(async () => [held, other]);
+  const selected = await withTestDeviceInventory({ local }, () =>
+    resolveCommandDevice({
+      session: {
+        name: 'proxy-session',
+        createdAt: Date.now(),
+        actions: [],
+        device: held,
+        lease: {
+          leaseId: 'proxy-lease',
+          leaseProvider: 'proxy',
+          tenantId: 'tenant',
+          runId: 'run',
+          deviceKey: held.id,
+        },
+      },
+      req: requestWith({ platform: 'android' }),
+      env: {},
+      platformServices,
+    }),
+  );
+  expect(selected).toEqual(held);
+  expect(local).not.toHaveBeenCalled();
 });
