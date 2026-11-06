@@ -221,6 +221,8 @@ async function injectHarmonyPanTrajectory(
     allowFailure: true,
   });
   if (!result.stdout.includes(TRAJECTORY_INJECTION_SENTINEL)) {
+    // A reboot can renumber the panel node; drop the memo so the next pan re-probes it.
+    harmonyTouchTransportMemo.delete(device.id);
     throw new AppError('COMMAND_FAILED', 'HarmonyOS touch trajectory injection did not complete', {
       reason: 'touch-trajectory-injection-failed',
       deviceNode: transport.node,

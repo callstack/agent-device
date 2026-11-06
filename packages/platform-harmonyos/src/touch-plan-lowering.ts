@@ -100,9 +100,10 @@ export type HarmonyTouchScriptOptions = Readonly<{
   /** The touchscreen evdev node the sendevent calls write to. */
   deviceNode: string;
   /**
-   * One `uinput sendevent` process spawn costs a few milliseconds on device; the pacing sleep
-   * per sample sheds that estimate so the rendered wall clock stays near the plan's timeline.
-   * Calibrated on hardware (docs/evidence), not assumed.
+   * Each event spawns one `uinput sendevent` process, and one spawn costs a few milliseconds on
+   * device; the pacing sleep per sample sheds the batch's whole spawn estimate so the rendered
+   * wall clock stays near the plan's timeline. Calibrated on hardware (docs/evidence), not
+   * assumed.
    */
   sendEventSpawnOverheadMs?: number;
 }>;
@@ -173,7 +174,9 @@ export function renderHarmonyTouchScript(
   const overheadMs = Math.max(0, Math.round(options.sendEventSpawnOverheadMs ?? 0));
   const chain: string[] = [];
   for (const sample of trajectory.samples) {
-    const sleepSeconds = Math.max(0, sample.delayMs - overheadMs) / 1000;
+    // Every event spawns its own sendevent process, so the batch sheds one overhead per event.
+    const spawnOverheadMs = overheadMs * sample.events.length;
+    const sleepSeconds = Math.max(0, sample.delayMs - spawnOverheadMs) / 1000;
     if (sleepSeconds > 0) {
       chain.push(`sleep ${sleepSeconds.toFixed(3)}`);
     }

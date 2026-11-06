@@ -135,7 +135,7 @@ test('the rendered script joins the chain with &&, ends on the success marker, a
   const trajectory = lowerHarmonyTouchPlan(panPlan(320), TRANSFORM);
   const script = renderHarmonyTouchScript(trajectory, {
     deviceNode: '/dev/input/event5',
-    sendEventSpawnOverheadMs: 10,
+    sendEventSpawnOverheadMs: 2,
   });
 
   const successBranch = script.slice(0, script.indexOf(') || ('));
@@ -143,8 +143,9 @@ test('the rendered script joins the chain with &&, ends on the success marker, a
   assert.ok(script.startsWith('( '));
   assert.ok(successBranch.includes(`echo ${TRAJECTORY_INJECTION_SENTINEL}`));
 
-  // The overhead estimate sheds the per-sample pacing: 16 ms minus 10 ms spawn cost.
-  assert.ok(successBranch.includes('sleep 0.006'));
+  // The overhead estimate sheds per-event spawns: a 16 ms move batch spawns 3 processes,
+  // so the sleep carries 16 ms minus 6 ms.
+  assert.ok(successBranch.includes('sleep 0.010'));
   assert.ok(!successBranch.includes('sleep 0.016'));
 
   // The release branch re-sends the final up frame: final point, tracking id -1, BTN_TOUCH 0.
