@@ -2,6 +2,7 @@ import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/te
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
+import { createDaemonIdleReap } from '../../../server/daemon-idle-reap.ts';
 import {
   sessionCloseShutdownFixture,
   type SessionState,
@@ -376,3 +377,43 @@ test.each([
     expect(sessionStore.get(sessionName) !== undefined).toBe(kept);
   },
 );
+
+// With session idle expiry off (the default), daemon idle reap is what ends an abandoned daemon, and
+// its shutdown teardown retries the cleanup. A session kept by a failed close must not pin the daemon
+// open, or nothing would ever free its device without a manual close.
+test('a session kept by a failed close lets the daemon idle reap fire, while an open session blocks it', async () => {
+  const sessionName = 'close-failure-idle-reap';
+  const sessionStore = await openSession(sessionName);
+  const onIdleReap = vi.fn();
+  const reap = () =>
+    createDaemonIdleReap({
+      sessionStore,
+      getInFlightRequestCount: () => 0,
+      hasRetainedLeases: () => false,
+      onIdleReap,
+      env: { AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '1000' },
+    });
+  const idleWindow = async (controller: ReturnType<typeof reap>) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      controller.noteActivity();
+      vi.advanceTimersByTime(1_000);
+    } finally {
+      controller.close();
+      vi.useRealTimers();
+    }
+  };
+
+  await idleWindow(reap());
+  expect(onIdleReap).not.toHaveBeenCalled();
+
+  const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
+  finalizeApplicationClose.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'adb timed out after 5000ms'),
+  );
+  await expect(close(sessionStore, sessionName, loader)).rejects.toMatchObject(cleanupIncomplete);
+  expect(sessionStore.get(sessionName)).toBeDefined();
+
+  await idleWindow(reap());
+  expect(onIdleReap).toHaveBeenCalledOnce();
+});

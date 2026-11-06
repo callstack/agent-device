@@ -13,6 +13,7 @@ import {
   withAndroidAdbProvider,
 } from '@agent-device/platform-android/mechanics';
 import { resourceAdmissionWorld, assertRpcOk } from './composite-resource-admission.fixtures.ts';
+import { isDaemonIdle } from '../sessions/server/daemon-idle-reap.ts';
 
 const originalIme = 'com.google.android.inputmethod.latin/.LatinIME';
 const helperIme = 'com.callstack.agentdevice.imehelper/.TestInputMethodService';
@@ -150,8 +151,12 @@ test.each(['batch', 'replay'] as const)(
       expect(helper.currentIme()).toBe(helperIme);
       expect(helper.previousIme()).toBe(originalIme);
       expect(helper.markers()).toEqual([ANDROID_EMULATOR.id]);
-      // The withheld claim keeps its session, so a later close can still release it.
+      // The withheld claim keeps its session, so a later close can still release it, and the kept
+      // session does not hold the daemon open against idle reap.
       expect(world.sessionStore.listRefs()).toHaveLength(1);
+      expect(isDaemonIdle({ sessionStore: world.sessionStore, inFlightRequestCount: 0 })).toBe(
+        true,
+      );
       const claims = inspectDeviceClaims(
         { serial: ANDROID_EMULATOR.id },
         { AGENT_DEVICE_CLAIMS_DIR: path.join(world.daemon.stateDir, 'claims') },

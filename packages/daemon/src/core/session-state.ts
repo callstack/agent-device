@@ -156,6 +156,12 @@ export type SessionState = {
    * governed by that lease's own `expiresAt` instead and is never measured from this field.
    */
   lastActivityAtMs?: number;
+  /**
+   * #4237: a `close` could not confirm its cleanup, so it kept this session to withhold its device
+   * claim for a retried `close`. Such a session no longer holds the daemon open: idle reap may end
+   * the daemon, whose shutdown teardown retries the cleanup and leaves an unconfirmed claim stale.
+   */
+  closeEffectsUnconfirmed?: true;
   /** Enforced host-global local-device claim owned by this session, if acquired. */
   deviceClaim?: {
     deviceKey: string;
