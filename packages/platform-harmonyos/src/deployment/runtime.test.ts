@@ -134,21 +134,83 @@ test('uninstall removes an installed HarmonyOS bundle through bm uninstall', asy
   );
 });
 
-test.each([
-  ['a failed dump', { stdout: '[Fail]bundle not installed', stderr: '', exitCode: 1 }],
-  ['a dump without a JSON record', { stdout: '', stderr: '', exitCode: 0 }],
-] as const)('uninstall reports nothing removed for %s', async (_name, dump) => {
-  const run = vi.fn(async () => dump as HostCommandResult);
-  const commands = { which: async () => undefined, run } as HostCommandRunner;
+const emptyAnswer: HostCommandResult = { stdout: '', stderr: '', exitCode: 0 };
+
+/**
+ * Shapes recorded on physical hardware: an absent bundle answers through bm with an
+ * error record, while an unreachable target answers through hdc itself and still
+ * exits zero. The second probe call classifies the two.
+ */
+const absentBundleAnswer: HostCommandResult = {
+  stdout: 'error: failed to get information and the parameters may be wrong.',
+  stderr: '',
+  exitCode: 0,
+};
+const unreachableAnswer: HostCommandResult = {
+  stdout: '[Fail]Not match target founded, check connect-key please',
+  stderr: '',
+  exitCode: 0,
+};
+
+function scriptUninstallCommands(
+  responses: Readonly<{ dump: HostCommandResult; probe?: HostCommandResult }>,
+): HostCommandRunner {
+  const run = vi.fn(async (request: { executable: string; args: readonly string[] }) => {
+    if (request.args.includes('dump')) return responses.dump;
+    if (request.args.includes('true')) return responses.probe ?? emptyAnswer;
+    return emptyAnswer;
+  });
+  return { which: async () => undefined, run } as HostCommandRunner;
+}
+
+test('uninstall reports an absent record as nothing removed once the transport proves alive', async () => {
+  const commands = scriptUninstallCommands({ dump: absentBundleAnswer });
   const signal = new AbortController().signal;
   const operations = createHarmonyAppDeploymentOperations({ commands, device, signal });
 
   await expect(operations.uninstallApp?.({ app: 'com.example.app' })).resolves.toEqual({
     wasInstalled: false,
   });
-  expect(run).toHaveBeenCalledTimes(1);
-  expect(run).toHaveBeenCalledWith(expect.objectContaining({ allowFailure: true }), signal);
+  expect(commands.run).toHaveBeenCalledTimes(2);
+  expect(commands.run).toHaveBeenNthCalledWith(
+    2,
+    expect.objectContaining({ args: ['-t', device.id, 'shell', 'true'] }),
+    signal,
+  );
 });
+
+test.each([
+  [
+    'an unreachable target that hdc answers while exiting zero',
+    { dump: unreachableAnswer, probe: unreachableAnswer },
+    2,
+  ],
+  [
+    'a dump that exits non-zero on a dead transport',
+    {
+      dump: { stdout: '[Fail]Device not connected', stderr: '', exitCode: 1 },
+      probe: { stdout: '[Fail]Device not connected', stderr: '', exitCode: 1 },
+    },
+    2,
+  ],
+  ['a dump killed before an answer', { dump: { stdout: '', stderr: '', exitCode: null } }, 1],
+] as const)(
+  'uninstall refuses to claim removal for %s',
+  async (_name, responses, expectedCalls) => {
+    const commands = scriptUninstallCommands(responses);
+    const signal = new AbortController().signal;
+    const operations = createHarmonyAppDeploymentOperations({ commands, device, signal });
+
+    await expect(operations.uninstallApp?.({ app: 'com.example.app' })).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+    });
+    expect(commands.run).toHaveBeenCalledTimes(expectedCalls);
+    expect(commands.run).not.toHaveBeenCalledWith(
+      expect.objectContaining({ args: expect.arrayContaining(['uninstall']) }),
+      signal,
+    );
+  },
+);
 
 test('uninstall refuses a blank bundle name', async () => {
   const run = vi.fn();
