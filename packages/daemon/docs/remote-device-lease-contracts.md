@@ -2,42 +2,11 @@
 
 These contracts supplement [ADR 0007](../../../docs/adr/0007-remote-device-leases.md).
 
-## Decision
-
-A remote device lease is logical ownership of one selected device by one remote client for a connection provider such as `proxy`, cloud, or `limrun`.
-
-`connect` establishes the connection profile and client identity.
-Lease allocation is lazy.
-It happens when a device, backend, and provider are known.
-
-A runner/process lease is a backend helper guard.
-It is not a user/client ownership boundary.
-It stays below daemon device leases and should not be weakened or replaced by them.
-
-`open` is the natural point to acquire a device lease because target resolution and session creation meet there.
-Commands after `open` must refresh the lease.
-After the default 60 seconds without activity, the device should become available again.
-
-These operations must run under the same daemon request lock:
-
-- Lease admission.
-- Heartbeat.
-- Stored session lease refresh.
-- Request execution.
-
-Scope resolution may happen before the lock.
-Lease ownership mutation must not happen before the lock.
-
-Generated connection profiles are non-secret.
-They may persist routing and lease metadata, but must strip daemon and Metro bearer tokens.
-Tokens are supplied in memory for the current command or through environment/CLI token paths.
-
-The proxy process is expected to be long-lived and self-serve.
-Recovery from a stale or expired device lease should not require a proxy restart.
+## Lease lifecycle
 
 A caller that owns the lifetime of a lease, and allocates and releases it itself, can allocate with `retainOnClose`.
 Session `close` then leaves that lease and its provider device in place.
-Only `leases.release`, expiry, or daemon shutdown ends it.
+Only `leases.release`, expiry, a provider-reported instance end, or daemon shutdown ends it.
 The default is unchanged, so the CLI's proxy sharing still frees devices on `close`.
 The allocated lease reports `retainOnClose: true` only if the daemon honored it.
 Only the lease's own client can turn it on for a lease that the run already holds.
@@ -47,7 +16,7 @@ If the caller stops heartbeats for a retained lease, that lease expires after it
 Idle reap then shuts the daemon down within one more idle window.
 
 A session cannot outlive the lease under which it was opened.
-When the lease is released or expires, the daemon tears the session down under its execution locks and clears its device claim.
+When the lease is released, expires, or its provider reports the instance ended, the daemon tears the session down under its execution locks and clears its device claim.
 Any teardown of a leased session, including `close`, finishes an active recording. A finished export at a remote temp path then belongs to the lease's tenant as a downloadable artifact, like the artifact of any `record stop` (ADR 0024 2.5).
 This applies even when the device no longer answers.
 A release is a tenant `lease_release` or a host `DELETE /admin/leases/<lease-id>`.
@@ -62,7 +31,6 @@ Thus, the daemon journals the live leases of each provider that can recover an e
 A daemon that starts and finds this journal hands each lease in it to the expired-lease recovery of its provider, which ends the rented device.
 It reads both lease records only after it holds the daemon registration for the state directory, because until then they can belong to a daemon that is still running.
 The lease itself is not restored, and its controller connects again.
-Restoring the live lease was rejected: the sessions and device claims of the dead daemon are gone, so a restored lease would name a device that no session can reach.
 A lease that leaves the registry for expiry stays in the journal until its expired-lease record is durable, and a journal write that fails is retried until this daemon shuts down.
 If a journal retry is pending, daemon shutdown makes one final journal write. It does not schedule another journal retry.
 A daemon that has shut down writes lease records only synchronously. It arms no timer for them, because a timer could fire after that daemon released its registration, when the records belong to the next daemon.
@@ -95,20 +63,10 @@ A close after a lease end has no session and ends no lease.
 If a client still stores that lease id, its next heartbeat finds the lease inactive.
 The client then allocates a new lease under a fresh id.
 
-## Consequences
-
-Device contention can fail before platform execution with an explicit device-lease error.
-That error includes the backend, provider, selected device key, and owning lease expiry.
-
-Backend-only leases remain valid for older remote clients.
-Provider-aware clients get device-level contention and clearer recovery.
-
 ## Admitted request work
 
 A lease renews when a request is admitted, and never again while that request runs.
-Thus, an admitted command slower than the inactivity TTL used to expire the lease that paid for its own device.
-The daemon then tore the session down while the client still waited for its result.
-Admitted work therefore preserves its lease in the same way as a human-control hold does.
+Admitted work preserves its lease in the same way as a human-control hold does.
 While the request is still wanted, it defers expiry.
 If the request finishes while it is still wanted, it renews the lease for its existing inactivity TTL from the moment the work ended.
 A request whose client hung up preserves nothing.
@@ -118,100 +76,17 @@ Thus, a handler that ignores its cancellation cannot hold a rented device open.
 The inactivity TTL that the client asked for determines which leases this preservation reaches.
 The daemon default is one minute.
 A remote device connection profile asks for five minutes.
-Thus, a single command that runs longer than its own lease is ordinary on the default.
-On the longer window, such a command is only reachable through a profile.
+Admission and heartbeats renew the existing window when no window is named.
 
 ## Provider allocation
 
 Allocation is admitted work too.
 The registry records a lease before a hosted provider creates the session behind it.
 Creation of that session can take longer than the inactivity TTL of the lease.
-Thus, a lease timed from its record was already expired, or nearly expired, when its client first received it.
-The paid session that the lease pointed at was orphaned.
-The allocation therefore holds a work pass while the provider allocates.
+The allocation holds a work pass while the provider allocates, so its lease does not expire before delivery.
 The lease cannot expire during that allocation.
 If a successful allocation is still wanted by its requester, the inactivity TTL starts from the moment allocation completed.
 A requester that hung up preserves nothing, and its allocation is released as before.
-
-The Revyl provider runtime serves allocation, release, expired-lease recovery, and shutdown from a shared lease table, `@agent-device/provision-kit/provider-lease-table`.
-The provider supplies its start timeout, an optional stop timeout, start, stop, find-by-lease, a key that identifies a rental, and the errors that it reports.
-The table owns the rules that decide whether a billed device is still rented:
-
-- One lease id has at most one start. Overlapping allocations join it, and a ready session is reused.
-- Each caller waits until the earlier of its own deadline and the start timeout. A caller whose budget is already spent sends no start. A caller that gives up stops nothing. The start runs while any caller still waits, for at most the start timeout: no single caller's signal or deadline reaches it, and the table tells the provider to abandon it once no caller waits or the lease starts ending. A ready device goes to the callers still waiting within their budgets, and it is stopped when no caller waits. Each caller's budget is checked when the session is handed over, on reuse as well.
-- A start can publish its rental before it answers. A teardown waits for the answer for at most the start timeout, then stops the published rental and keeps the lease pending until the answer arrives.
-- Release, recovery, a failed start, and shutdown each end a lease through one teardown that all of them join. The teardown fences the lease in the same step: from then on, an allocation of the lease is refused, including an allocation that was already waiting, and the device inventory and interactor no longer serve the lease. Revyl reports a refusal for a lease that a release, a recovery, or a failed start is ending as `provider-lease-releasing`, and a refusal after shutdown began as `runtime-shutting-down`.
-- A teardown forgets a lease only after the provider confirmed the stop of every rental that it knows. It stops them one at a time, in the order they were named, and a rental named while a teardown settles gets a teardown of its own. A failed or late stop keeps the lease for the next teardown, which joins the stop still in flight. Shutdown is a fence: from then on, an allocation, or a recovery of a lease that has no entry, is refused with `runtime-shutting-down`, and a release only joins an entry that already exists, so one drain pass ends every entry. It reports what stays rented with `provider-cleanup-pending`.
-- If a start fails without an answer, or a recovery finds no entry, the teardown asks find-by-lease. If the provider cannot name the rental, the lease stays pending, and the next teardown asks again.
-
-A table in each provider was rejected: each provider derived the same rules again, and most review findings on the second provider (#4092) were about that bookkeeping.
-Contracts was rejected as the home, because the table is lifecycle mechanics and not wire vocabulary. Capture-kit was rejected, because renting a device prepares it for execution, which ADR 0019 gives to provision-kit.
-Open gap: Limrun keeps its own lease ownership until it moves onto the table (#4102).
-
-## Client-side work that precedes admission
-
-The protection of admitted work covers nothing that happens before a request is admitted.
-An artifact install uploads the artifact from the caller before the request that will consume it is admitted.
-Thus, an upload slower than the inactivity window of the lease expired the lease that paid for the target device of the bytes (#2946).
-The caller therefore sends lease heartbeats over the ordinary transport for as long as that phase runs.
-Each heartbeat names the lease scope exactly as the command named it, and carries no payload of its own.
-An install names no window, so its heartbeats renew for the window that the lease already carries.
-A caller that did name a window continues to renew on that window.
-
-A heartbeat used to resolve an absent window to the registry default instead.
-That resolution shortened, without notice, every lease allocated above that default.
-That was the other half of the reason that the upload could not survive.
-Request admission had its own copy of that mistake.
-It named a proxy-specific default for every admitted request.
-Thus, a lease allocated longer than the default lost its window on the next command.
-Admission also renews on the window of the lease.
-The window that a lease carries is the one that its client named when it allocated.
-
-The first heartbeat is sent when the phase starts, not one cadence later.
-The reason is that a heartbeat proves that the lease on which the upload spends time is still alive.
-Otherwise, a lease shorter than any fixed cadence would lapse before anything renewed it.
-A lease that is already gone is caught early, but not before the phase begins.
-Hashing, the preflight, and the start of the stream can all run while the first heartbeat is still outstanding.
-Thus, the first heartbeat makes sure that the loss is learned during the upload instead of after it.
-Each heartbeat answers with the window that it just renewed.
-The loop arms the next heartbeat when the current heartbeat starts, not when it settles.
-Thus, a heartbeat that never answers is abandoned on schedule and does not stop the schedule.
-A phase that settles does not wait for a heartbeat still in flight.
-
-Cadence and budget are deliberately two numbers.
-A heartbeat is armed every third of the window, but it is allowed the whole window to answer.
-If the budget were equal to the cadence, a heartbeat that needs more than a third of a window for its round trip could never answer.
-Examples are a tunneled proxy and an uplink that the upload itself saturates.
-Every heartbeat would then time out again on exactly the slow links that the heartbeat exists to protect.
-The window, not the cadence, is the interval in which liveness still matters.
-Thus, the window is also the longest time that an answer to a heartbeat is worth a wait.
-
-That ceiling is the shorter of the window and the heartbeat's own request policy, currently ninety seconds.
-Thus, a ten-minute lease gives a heartbeat ninety seconds instead of the full window.
-This limit costs nothing that the heartbeat exists to provide.
-The daemon renews the lease when it handles the request, before it answers.
-Thus, a round trip abandoned at the cap has still extended the lease if the request ever arrived.
-If the request never arrived, the transport has stopped carrying traffic.
-A socket held open for the rest of a window measured in minutes does not help that transport.
-The cap refuses exactly that idle hold.
-The cap binds only on windows longer than the policy.
-On those windows, the heartbeat already has the longest answer deadline that any lease gets.
-Shorter windows are bounded by their own window, as above.
-
-A heartbeat is a fresh request each time, never the protected request rewritten.
-The reason is that a timed-out heartbeat is canceled under its request identity, and heartbeats must not inherit each other's cancellation.
-In these cases, a heartbeat ends the phase with that error and cancels the upload:
-
-- The heartbeat finds that the lease is gone.
-- The heartbeat finds that this request can never renew the lease.
-  This is so if the scope is missing or belongs to another lease.
-  This is also so if the daemon rejects the scope and window that the heartbeat itself was built with, which no later heartbeat will ask differently.
-
-Thus, the upload does not finish bytes against a device that nobody owns or a lease that will stop renewing.
-A heartbeat that fails for any other reason is reported, and the phase continues.
-The reason is that a later heartbeat covers one lost request.
-This includes a request abandoned at its budget instead of answered.
-Thus, that promise holds for a stalled round trip, not only for a round trip that fails fast.
 
 ## Human control
 
@@ -305,33 +180,3 @@ A web session's backend key is derived from that public name and the tenant id (
 Thus two tenants that use one web session name hold two devices and two browsers, and one tenant using one name twice conflicts like any session on one device.
 A web open is admitted under a lease of any backend other than `macos-app`, because admission never compares the request's platform with the lease backend.
 That predates this boundary and is an open question.
-
-## Device spec
-
-A proxy lease can name a device spec beside platform, target, and device: `osVersion`, `imageTag`, `deviceMode`, and `physical` on `agent_device.lease.allocate`.
-Only a backend in front of the daemon, such as simlock, can pick a device by these keys.
-A daemon cannot pick by them.
-If a daemon ignored them, a request would run on a device that it did not ask for.
-Thus, a daemon refuses every request that names a non-blank `osVersion`, `imageTag` or `deviceMode`, or `physical: true`, before admission and before a lease is recorded.
-The refusal is `UNSUPPORTED_OPERATION` with `details.reason: 'device-spec-unsupported'` and `details.keys`.
-This applies to a local daemon and to a daemon behind `agent-device proxy`.
-A blank `osVersion`, `imageTag` or `deviceMode` and `physical: false` name nothing, so a daemon accepts them.
-`deviceMode` (`slim` or `full`) chooses how much of an iOS simulator the backend keeps running; the backend validates the value.
-A named value is used as given, without trimming.
-A value of another type is refused with `INVALID_ARGS`, `details.reason: 'device-spec-invalid'`, and `details.keys`.
-`readLeaseDeviceSpec` is the one decision on these rules, for CLI flags, the SDK, MCP, and the daemon.
-A remote config file first applies the value rules of every config key: a string must be non-empty, and a boolean also accepts a boolean string such as `"true"`.
-The backend that honours the spec strips the keys before it forwards the allocation, and echoes the granted device on the lease as `lease.device` (`model`, `osVersion`, `imageTag?`, `deviceMode?`, `physical`).
-`deviceKey` stays the identity of the lease; `lease.device` is the proof that the spec was understood.
-A backend can report the granted mode as `lease.device.deviceMode`.
-The CLI proxy connection treats a new lease that reports `slim` for a `full` request like a lease without `lease.device`.
-Full is a guarantee and slim is best effort, so `full` granted for a `slim` request is served.
-A lease that reports no mode is accepted, so the proof does not confirm `deviceMode`: a backend that ignores the key and reports no mode grants its default without an error.
-A backend older than the spec returns a lease without `lease.device`.
-The CLI proxy connection then releases that lease and fails with `UNSUPPORTED_OPERATION` and `details.reason: 'device-spec-unsupported'`.
-`details.released` reports whether the release succeeded.
-An allocation that explicitly reports reuse (`created: false`) fails with the same reason, without a release and without `details.released`.
-A live lease serves a later command only when every spec key that the command names equals the one the lease was allocated by; otherwise the command fails with `CONNECTION_DEVICE_CONFLICT`.
-The client never picks a device by spec from the daemon inventory.
-`--target` stays the only class selector.
-Rejected: partial honouring of the keys that a daemon understands, because a silent mismatch is worse than a refusal; a separate `--device-class` flag, because `--target` already names the class.

@@ -4,7 +4,7 @@ import type { DeviceLease } from '@agent-device/contracts/device';
  * The lease table one cloud device provider runtime serves its lease lifecycle from.
  *
  * A provider rents a billed device per lease. This table owns the rules that decide whether that device
- * is still rented (ADR 0007); the provider supplies start, stop, find-by-lease, and its own errors.
+ * is still rented (packages/provision-kit/docs/remote-device-leases.md); the provider supplies start, stop, find-by-lease, and its own errors.
  *
  * Keep this module free of value imports: provider runtimes load it on their construction path.
  */

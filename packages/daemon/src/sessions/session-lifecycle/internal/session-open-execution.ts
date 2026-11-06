@@ -116,7 +116,7 @@ function applyOrdinaryScriptRecordingOpenOutcome(params: {
 
 /**
  * What the caller's `open` output says when a claim was taken over because its device rebooted. A
- * `macos-app` lease tenant is not told whose claim it was: that belongs to the host (ADR 0007).
+ * `macos-app` lease tenant is not told whose claim it was: that belongs to the host (packages/daemon/docs/remote-device-lease-contracts.md).
  */
 function deviceClaimTakeoverWarning(tookOver: TakenOverDeviceClaim, req: DaemonRequest): string {
   if (req.internal?.admittedLease?.backend === 'macos-app') {

@@ -19,7 +19,7 @@ import { sendRequest } from './daemon-client-transport.ts';
 // The lease beat: what keeps a remote lease alive across a client-side phase the daemon never sees.
 //
 // A lease renews when a request is admitted, and the daemon protects a lease while admitted work runs
-// on it (#2509, ADR 0007). An artifact upload is the mirror image: it runs on the caller's side,
+// on it (#2509, packages/daemon-client/docs/remote-device-leases.md). An artifact upload is the mirror image: it runs on the caller's side,
 // before the install that consumes it is admitted, so nothing renews the lease while it runs and a
 // large enough artifact expired the lease that was paying for the device it was being uploaded to
 // (#2946). This module owns the answer — a beat with a budget that ends before the window does — and
@@ -71,7 +71,7 @@ function isTerminalLeaseBeatError(error: unknown): boolean {
  * Runs one client-side phase under a lease it does not own the clock of.
  *
  * A lease renews when a request is admitted, and the daemon protects a lease while ADMITTED work
- * runs on it (#2509, ADR 0007). An artifact upload is the mirror image: it happens on the caller's
+ * runs on it (#2509, packages/daemon-client/docs/remote-device-leases.md). An artifact upload is the mirror image: it happens on the caller's
  * side, before the install request that will consume it is admitted, so nothing renews the lease
  * while it runs and a large enough artifact expired the lease that was paying for the device it was
  * being uploaded to (#2946).
