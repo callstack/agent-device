@@ -199,42 +199,38 @@ function createSnapshotBridgeRouteCore<Target extends SnapshotBridgeRouteTarget>
     rebaselineGeneration(target, circuit.latestGeneration, circuit.disabledGenerations);
     return circuit.disabledGenerations.has(generationKey(target));
   };
+  /**
+   * The circuit a capture writes its refusals to. A capture writes through the returned object, so
+   * it must be the circuit object itself, never a copy: when it is `currentCircuit`, the next capture
+   * reads what this one wrote. A capture that read through a session another capture already
+   * replaced keeps its starting circuit, so its late writes land in the discarded object.
+   */
   const circuitForProbe = (
     startingCircuit: typeof currentCircuit,
     probeResult: Awaited<ReturnType<SystemSurfaceForegroundProbe>>,
     device: DeviceInfo,
-  ) => {
-    let circuit = startingCircuit;
-    if (
-      channel.sessionChanged &&
-      typeof probeResult === 'object' &&
-      'sessionId' in probeResult &&
-      currentCircuit !== startingCircuit &&
-      probeResult.sessionId === currentCircuit.sessionId
-    ) {
-      circuit = currentCircuit;
+  ): typeof currentCircuit => {
+    const probedSessionId =
+      channel.sessionChanged && typeof probeResult === 'object' && 'sessionId' in probeResult
+        ? probeResult.sessionId
+        : undefined;
+    if (probedSessionId === undefined) return startingCircuit;
+    if (currentCircuit !== startingCircuit) {
+      return probedSessionId === currentCircuit.sessionId ? currentCircuit : startingCircuit;
     }
-    if (
-      channel.sessionChanged &&
-      typeof probeResult === 'object' &&
-      'sessionId' in probeResult &&
-      probeResult.sessionId !== startingCircuit.sessionId &&
-      currentCircuit === startingCircuit
-    ) {
-      emitDiagnostic({
-        level: 'debug',
-        phase: 'ios_snapshot_route_runner_session_changed',
-        data: {
-          deviceId: device.id,
-          previousSessionId: currentCircuit.sessionId,
-          sessionId: probeResult.sessionId,
-        },
-      });
-      currentCircuit = freshCircuit(probeResult.sessionId);
-      circuit = currentCircuit;
-      channel.sessionChanged?.();
-    }
-    return circuit;
+    if (probedSessionId === startingCircuit.sessionId) return startingCircuit;
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'ios_snapshot_route_runner_session_changed',
+      data: {
+        deviceId: device.id,
+        previousSessionId: startingCircuit.sessionId,
+        sessionId: probedSessionId,
+      },
+    });
+    currentCircuit = freshCircuit(probedSessionId);
+    channel.sessionChanged?.();
+    return currentCircuit;
   };
   /**
    * Records `target` as the newest generation of its app — which clears the circuit an earlier
