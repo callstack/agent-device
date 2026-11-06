@@ -212,12 +212,7 @@ test('the panel transform resolves portrait shapes and refuses rotation and unre
   const resolved = resolveHarmonyPanelTransform(
     RANGE,
     { width: 1080, height: 2406 },
-    {
-      x: 0,
-      y: 0,
-      width: 1080,
-      height: 2406,
-    },
+    { width: 1080, height: 2406 },
   );
   assert.deepEqual(resolved, { kind: 'transform', transform: TRANSFORM });
 
@@ -226,7 +221,7 @@ test('the panel transform resolves portrait shapes and refuses rotation and unre
     resolveHarmonyPanelTransform(
       RANGE,
       { width: 2406, height: 1080 },
-      { x: 0, y: 0, width: 2406, height: 1080 },
+      { width: 2406, height: 1080 },
     ),
     { kind: 'display-rotation-unsupported' },
   );
@@ -235,14 +230,11 @@ test('the panel transform resolves portrait shapes and refuses rotation and unre
     resolveHarmonyPanelTransform(
       RANGE,
       { width: 1080, height: 2406 },
-      { x: 0, y: 0, width: 2406, height: 1080 },
+      { width: 2406, height: 1080 },
     ),
     { kind: 'display-rotation-unsupported' },
   );
-  assert.deepEqual(
-    resolveHarmonyPanelTransform(RANGE, undefined, { x: 0, y: 0, width: 10, height: 20 }),
-    {
-      kind: 'render-resolution-unreadable',
-    },
-  );
+  assert.deepEqual(resolveHarmonyPanelTransform(RANGE, undefined, { width: 10, height: 20 }), {
+    kind: 'render-resolution-unreadable',
+  });
 });
