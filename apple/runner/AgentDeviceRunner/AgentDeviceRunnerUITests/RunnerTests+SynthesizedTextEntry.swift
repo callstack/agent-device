@@ -456,9 +456,9 @@ extension RunnerTests {
   static func shouldUseSynthesizedFirstResponderReplacement(
     hasResolvedElement: Bool,
     hasRefreshPoint: Bool,
-    xCTestChannelPenalized: Bool
+    xCTestUnavailable: Bool
   ) -> Bool {
-    !hasResolvedElement && hasRefreshPoint && xCTestChannelPenalized
+    !hasResolvedElement && hasRefreshPoint && xCTestUnavailable
   }
 
   /// The tap-witness route carries only the bare submit key, the one text the daemon sends without
@@ -573,8 +573,8 @@ extension RunnerTests {
     repairMode: TextTypingRepairMode,
     hasX: Bool,
     hasY: Bool,
-    xCTestChannelPenalized: Bool
+    xCTestUnavailable: Bool
   ) -> Bool {
-    repairMode == .replacement && hasX && hasY && xCTestChannelPenalized
+    repairMode == .replacement && hasX && hasY && xCTestUnavailable
   }
 }

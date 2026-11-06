@@ -39,12 +39,26 @@ extension RunnerTests {
     let synthesizedContext = try synthesizedSequenceCoordinateContext(steps: steps, app: activeApp)
 
     // Touch frame resolves from the first step's coords so recording-gestures works unchanged. A
-    // synthesized context already names the frame, so the app tree is not read for it again.
+    // synthesized context already names the frame, so the app tree is not read for it again. Where
+    // the app frame refuses that read, a first step with no synthesized route would anchor through the
+    // same read, so it refuses before any step runs; a synthesized one needs no app frame and runs
+    // without a touch frame, as a synthesized `tap` command does.
     let firstStep = steps[0]
-    let firstFrame = try (firstStep.x != nil && firstStep.y != nil)
-      ? synthesizedContext.map { touchVisualizationFrame(point: SurfacePoint(CGPoint(x: firstStep.x!, y: firstStep.y!)), context: $0) }
-        ?? resolvedTouchVisualizationFrame(app: activeApp, x: firstStep.x!, y: firstStep.y!)
-      : nil
+    var firstFrame: TouchVisualizationFrame?
+    var firstStepRefusal: RunnerCoordinateRefusal?
+    if let x = firstStep.x, let y = firstStep.y {
+      if let synthesizedContext {
+        firstFrame = touchVisualizationFrame(point: SurfacePoint(CGPoint(x: x, y: y)), context: synthesizedContext)
+      } else {
+        do {
+          firstFrame = try resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
+        } catch let refusal as RunnerCoordinateRefusal {
+          if synthesizedPolicyKind(forSequenceStep: firstStep) == nil {
+            firstStepRefusal = refusal
+          }
+        }
+      }
+    }
 
 #if os(iOS)
     let orientation = command.sequenceOrientation ?? synthesizedContext?.geometry.orientation ?? litPanelState.surface?.geometry.orientation
@@ -52,7 +66,13 @@ extension RunnerTests {
 #else
     let orientation: Int? = nil
 #endif
-    let execution = try assembleSequenceExecution(steps: steps) { _, step in
+    let execution = try assembleSequenceExecution(steps: steps) { index, step in
+      if index == 0, let firstStepRefusal {
+        return finishedSequenceStep(step, timing: measureGesture {}, outcome: .unsupported(
+          message: firstStepRefusal.message,
+          hint: firstStepRefusal.hint
+        ))
+      }
 #if os(iOS)
       if orientation != Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: activeApp)) {
         return finishedSequenceStep(step, timing: measureGesture {}, outcome: .unsupported(
@@ -96,18 +116,20 @@ extension RunnerTests {
             kind: step.kind,
             errorCode: nil,
             errorMessage: nil,
+            errorHint: nil,
             gestureStartUptimeMs: stepOutcome.gestureStartUptimeMs,
             gestureEndUptimeMs: stepOutcome.gestureEndUptimeMs
           )
         )
         completedSteps += 1
-      case .unsupported(let message, _):
+      case .unsupported(let message, let hint):
         results.append(
           SequenceStepResult(
             ok: false,
             kind: step.kind,
             errorCode: "UNSUPPORTED_OPERATION",
             errorMessage: message,
+            errorHint: hint,
             gestureStartUptimeMs: stepOutcome.gestureStartUptimeMs,
             gestureEndUptimeMs: stepOutcome.gestureEndUptimeMs
           )
@@ -187,14 +209,20 @@ extension RunnerTests {
       }
     }
     let (timing, outcome) = try performGesture(activeApp) {
-      switch step.kind {
-      case "doubleTap":
-        // doubleTapAt per step, matching the behavior of the retired tapSeries doubleTap path.
-        return try doubleTapAt(app: activeApp, x: x, y: y)
-      case "longPress":
-        return try longPressAt(app: activeApp, x: x, y: y, duration: longPressDurationMs / 1000.0)
-      default:
-        return try tapAt(app: activeApp, x: x, y: y)
+      // A refused coordinate gesture is this step's outcome: the steps that already ran keep their
+      // results, and the failed step reports the coded refusal instead of aborting the command.
+      do {
+        switch step.kind {
+        case "doubleTap":
+          // doubleTapAt per step, matching the behavior of the retired tapSeries doubleTap path.
+          return try doubleTapAt(app: activeApp, x: x, y: y)
+        case "longPress":
+          return try longPressAt(app: activeApp, x: x, y: y, duration: longPressDurationMs / 1000.0)
+        default:
+          return try tapAt(app: activeApp, x: x, y: y)
+        }
+      } catch let refusal as RunnerCoordinateRefusal {
+        return .unsupported(message: refusal.message, hint: refusal.hint)
       }
     }
     return finishedSequenceStep(step, timing: timing, outcome: outcome)

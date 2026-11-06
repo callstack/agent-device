@@ -595,6 +595,7 @@ export type RunnerSequenceStepResult = {
   kind: string;
   errorCode?: string;
   errorMessage?: string;
+  errorHint?: string;
   gestureStartUptimeMs?: number;
   gestureEndUptimeMs?: number;
 };
@@ -760,7 +761,9 @@ function buildSequenceStepError(
     failedStepKind: kind,
     completedSteps,
     sequenceResults: results,
-    hint: 'Run snapshot -i to inspect the current UI, then continue from the observed state.',
+    hint:
+      failed?.errorHint ??
+      'Run snapshot -i to inspect the current UI, then continue from the observed state.',
   });
 }
 
@@ -773,6 +776,7 @@ function readSequenceResults(value: unknown): RunnerSequenceStepResult[] {
       kind: typeof record.kind === 'string' ? record.kind : 'unknown',
       errorCode: typeof record.errorCode === 'string' ? record.errorCode : undefined,
       errorMessage: typeof record.errorMessage === 'string' ? record.errorMessage : undefined,
+      errorHint: typeof record.errorHint === 'string' ? record.errorHint : undefined,
       gestureStartUptimeMs:
         typeof record.gestureStartUptimeMs === 'number' ? record.gestureStartUptimeMs : undefined,
       gestureEndUptimeMs:
