@@ -54,7 +54,7 @@ test('connection metadata admits local providers and rejects malformed or remote
     return readPluginManifest(directory);
   };
   assert.deepEqual(read(connection).agentDevicePlugin.connection, connection);
-  const cloud = { ...connection, holdsCloudDevice: true };
+  const cloud = { ...connection, holdsCloudDevice: true, forgetsEndedConnectionLease: true };
   assert.deepEqual(read(cloud).agentDevicePlugin.connection, cloud);
   for (const invalid of [
     null,
@@ -64,6 +64,7 @@ test('connection metadata admits local providers and rejects malformed or remote
     { ...connection, supportsArtifacts: 'true' },
     { ...connection, supportsDeferredAppSelection: undefined },
     { ...connection, holdsCloudDevice: 'false' },
+    { ...connection, forgetsEndedConnectionLease: 'false' },
   ]) {
     assert.throws(() => read(invalid), { code: 'INVALID_ARGS' });
   }

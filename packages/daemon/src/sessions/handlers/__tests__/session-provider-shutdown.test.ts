@@ -1,3 +1,4 @@
+import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -248,7 +249,11 @@ for (const platform of ['ios', 'android'] as const) {
     world.req.meta = { ...world.req.meta, leaseId: undefined };
     const localDevice: DeviceInfo = { ...world.binding.device, id: 'local-device', booted: true };
     mockResolveTargetDevice.mockClear();
-    mockResolveTargetDevice.mockResolvedValue(localDevice);
+    const actual = await vi.importActual<
+      typeof import('@agent-device/device-selection/dispatch-resolve')
+    >('@agent-device/device-selection/dispatch-resolve');
+    mockResolveTargetDevice.mockImplementation(actual.resolveTargetDevice);
+    const local = vi.fn(async () => [localDevice]);
     const shutdownTarget = vi.fn(async () => ({
       success: true,
       exitCode: 0,
@@ -269,20 +274,22 @@ for (const platform of ['ios', 'android'] as const) {
       return narrowDeviceBinding(localBinding, use);
     };
     await expect(
-      handleShutdownCommand({
-        host: createTestHostEnvironment(),
-        req: world.req,
-        sessionName: 'test',
-        sessionStore: world.sessionStore,
-        platformServices: daemonPlatformServicesFixture(),
-        inspectFacts: async () => world.binding.facts,
-        bindDevice,
-      }),
+      withTestDeviceInventory({ local }, () =>
+        handleShutdownCommand({
+          host: createTestHostEnvironment(),
+          req: world.req,
+          sessionName: 'test',
+          sessionStore: world.sessionStore,
+          platformServices: daemonPlatformServicesFixture(),
+          inspectFacts: async () => world.binding.facts,
+          bindDevice,
+        }),
+      ),
     ).rejects.toMatchObject({
       code: 'DEVICE_NOT_FOUND',
       details: { reason: 'provider_instance_unallocated' },
     });
-    expect(mockResolveTargetDevice).not.toHaveBeenCalled();
+    expect(local).not.toHaveBeenCalled();
     expect(bound).not.toHaveBeenCalled();
     expect(shutdownTarget).not.toHaveBeenCalled();
   });

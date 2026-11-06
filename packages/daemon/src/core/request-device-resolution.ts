@@ -5,6 +5,7 @@ import {
 } from '@agent-device/device-selection/dispatch-resolve';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from './daemon-request.ts';
+import { resolveLeaseScope } from './lease-context.ts';
 import { requestWebSession } from './session-tenant-scope.ts';
 
 type RequestTargetDeviceOptions = Omit<ResolveTargetDeviceOptions, 'webSession'>;
@@ -24,10 +25,13 @@ export async function resolveRequestTargetDevice(
   options: RequestTargetDeviceOptions,
   flags: RequestTargetDeviceFlags = req.flags ?? {},
 ): ReturnType<typeof resolveTargetDevice> {
-  const device = await resolveTargetDevice(flags, {
-    ...options,
-    webSession: req.internal?.webSession,
-  });
+  const device = await resolveTargetDevice(
+    { ...flags, ...resolveLeaseScope(req) },
+    {
+      ...options,
+      webSession: req.internal?.webSession,
+    },
+  );
   assertWebSelectionHasIdentity(req, device);
   return device;
 }
@@ -37,10 +41,13 @@ export async function resolveRequestTargetDeviceSelection(
   options: RequestTargetDeviceOptions,
   flags: RequestTargetDeviceFlags = req.flags ?? {},
 ): ReturnType<typeof resolveTargetDeviceSelection> {
-  const selection = await resolveTargetDeviceSelection(flags, {
-    ...options,
-    webSession: req.internal?.webSession,
-  });
+  const selection = await resolveTargetDeviceSelection(
+    { ...flags, ...resolveLeaseScope(req) },
+    {
+      ...options,
+      webSession: req.internal?.webSession,
+    },
+  );
   assertWebSelectionHasIdentity(req, selection.device);
   return selection;
 }

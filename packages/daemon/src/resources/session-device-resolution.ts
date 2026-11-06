@@ -60,15 +60,8 @@ export async function resolveCommandDevice(params: {
   platformServices: DaemonPlatformServices;
 }): Promise<DeviceInfo> {
   const scope = resolveRequestOrSessionLeaseScope(params.req, params.session);
-  if (scope.leaseProvider && !scope.leaseId) {
-    throw new AppError('DEVICE_NOT_FOUND', 'The provider connection has no allocated instance.', {
-      reason: 'provider_instance_unallocated',
-      hint: 'Allocate a lease with leases.allocate and pass its leaseId.',
-      leaseProvider: scope.leaseProvider,
-    });
-  }
   const shouldUseExplicitIdentity = hasExplicitDeviceSelector(params.req.flags);
-  if (!shouldUseExplicitIdentity && params.session) {
+  if (!shouldUseExplicitIdentity && params.session && !scope.leaseProvider) {
     const selected = await refreshSessionDeviceIfNeeded(
       params.session.device,
       params.platformServices,
@@ -77,10 +70,11 @@ export async function resolveCommandDevice(params: {
     pinSessionDeviceSelection(params.platformServices, params.session.device, selected);
     return selected;
   }
-  const device = await resolveRequestTargetDevice(params.req, {
-    env: params.env,
-    androidAvdSelection: params.androidAvdSelection,
-  });
+  const device = await resolveRequestTargetDevice(
+    params.req,
+    { env: params.env, androidAvdSelection: params.androidAvdSelection },
+    { ...params.req.flags, ...scope },
+  );
   // A selector that names the host of the session's app device (ADR 0035) stays on that device:
   // the session holds one app, not the host.
   const held = params.session?.device;

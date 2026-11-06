@@ -44,30 +44,37 @@ export function createComposedDeviceInventoryGateways(
 ): ComposedDeviceInventoryGateways {
   const localOnly = createLocalDeviceInventoryGateway(options.registry, options.loadHost);
   const provider = options.provider;
-  const discoverWithSource: ProviderAwareDeviceInventoryGateway['discoverWithSource'] = provider
-    ? async (request, scope) => {
-        scope.signal.throwIfAborted();
-        const provided = await provider.discover(
-          projectProviderDeviceInventoryRequest(request),
-          scope.signal,
-        );
-        scope.signal.throwIfAborted();
-        assertProviderOutcome(provided);
-        if (provided.kind === 'inventory') {
-          return {
-            devices: filterDeviceInventoryProjection(
-              provided.devices.map((device) => ({ ...device })),
-              request,
-            ),
-            source: 'provider',
-          };
-        }
-        return { devices: await localOnly.discover(request, scope), source: 'local' };
-      }
-    : async (request, scope) => ({
-        devices: await localOnly.discover(request, scope),
-        source: 'local',
+  const discoverWithSource: ProviderAwareDeviceInventoryGateway['discoverWithSource'] = async (
+    request,
+    scope,
+  ) => {
+    scope.signal.throwIfAborted();
+    if (request.leaseProvider && !request.leaseId) {
+      throw new AppError('DEVICE_NOT_FOUND', 'The provider connection has no allocated instance.', {
+        reason: 'provider_instance_unallocated',
+        hint: 'Allocate a lease with leases.allocate and pass its leaseId.',
+        leaseProvider: request.leaseProvider,
       });
+    }
+    if (provider) {
+      const provided = await provider.discover(
+        projectProviderDeviceInventoryRequest(request),
+        scope.signal,
+      );
+      scope.signal.throwIfAborted();
+      assertProviderOutcome(provided);
+      if (provided.kind === 'inventory') {
+        return {
+          devices: filterDeviceInventoryProjection(
+            provided.devices.map((device) => ({ ...device })),
+            request,
+          ),
+          source: 'provider',
+        };
+      }
+    }
+    return { devices: await localOnly.discover(request, scope), source: 'local' };
+  };
   const providerFirst: ProviderAwareDeviceInventoryGateway = Object.freeze({
     discover: async (request, scope) => (await discoverWithSource(request, scope)).devices,
     discoverWithSource,

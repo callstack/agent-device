@@ -13,6 +13,7 @@ const LIMRUN_CONNECTION: ConnectionProviderCapabilities = {
   supportsDirectPortReverse: true,
   usesCloudWebDriverLease: false,
   holdsCloudDevice: true,
+  forgetsEndedConnectionLease: true,
 };
 
 /** Every provider id agent-device registers itself; a plugin cannot claim any of them. */

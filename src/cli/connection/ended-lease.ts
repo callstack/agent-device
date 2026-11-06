@@ -29,10 +29,7 @@ export function forgetEndedConnectionLease(
   const state = readRemoteConnectionState({ stateDir, session: flags.session ?? 'default' });
   if (!state?.leaseId || !endedLeaseIds.includes(state.leaseId)) return;
   if (isHostAllocatedLease(state)) return;
-  if (
-    connectionProviderCapabilities(state.leaseProvider).leaseKind !== 'proxy' &&
-    state.leaseProvider !== 'limrun'
-  )
+  if (!connectionProviderCapabilities(state.leaseProvider, host.env).forgetsEndedConnectionLease)
     return;
   writeRemoteConnectionState({
     stateDir,

@@ -1,3 +1,4 @@
+import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { test, expect, vi } from 'vitest';
 import * as path from 'node:path';
@@ -457,23 +458,30 @@ test('boot --headless preserves an unallocated provider refusal for an active se
       booted: true,
     }),
   );
+  const actual = await vi.importActual<
+    typeof import('@agent-device/device-selection/dispatch-resolve')
+  >('@agent-device/device-selection/dispatch-resolve');
+  mockResolveTargetDevice.mockImplementation(actual.resolveTargetDevice);
+  const local = vi.fn(async () => [sessionStore.get('default')!.device]);
   await expect(
-    handleBootCommand({
-      host: createTestHostEnvironment(),
-      platformServices: daemonPlatformServicesFixture(),
-      req: {
-        token: 't',
-        session: 'default',
-        command: 'boot',
-        positionals: [],
-        flags: { headless: true },
-        meta: { leaseProvider: 'limrun' },
-      },
-      sessionName: 'default',
-      sessionStore,
-      inspectFacts: mockInspectDeviceRuntimeFacts,
-      bindDevice: mockBindDeviceRuntime,
-    }),
+    withTestDeviceInventory({ local }, () =>
+      handleBootCommand({
+        host: createTestHostEnvironment(),
+        platformServices: daemonPlatformServicesFixture(),
+        req: {
+          token: 't',
+          session: 'default',
+          command: 'boot',
+          positionals: [],
+          flags: { headless: true },
+          meta: { leaseProvider: 'limrun' },
+        },
+        sessionName: 'default',
+        sessionStore,
+        inspectFacts: mockInspectDeviceRuntimeFacts,
+        bindDevice: mockBindDeviceRuntime,
+      }),
+    ),
   ).rejects.toMatchObject({
     code: 'DEVICE_NOT_FOUND',
     details: {
@@ -481,7 +489,7 @@ test('boot --headless preserves an unallocated provider refusal for an active se
       hint: 'Allocate a lease with leases.allocate and pass its leaseId.',
     },
   });
-  expect(mockResolveTargetDevice).not.toHaveBeenCalled();
+  expect(local).not.toHaveBeenCalled();
   expect(mockInspectDeviceRuntimeFacts).not.toHaveBeenCalled();
   expect(mockBindDeviceRuntime).not.toHaveBeenCalled();
 });
