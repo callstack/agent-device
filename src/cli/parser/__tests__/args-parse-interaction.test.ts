@@ -294,6 +294,10 @@ test('parseArgs recognizes screenshot flags', () => {
       '--normalize-status-bar',
       '--capture-backend',
       'runner',
+      '--count',
+      '5',
+      '--interval-ms',
+      '250',
     ],
     {
       strictFlags: true,
@@ -308,6 +312,8 @@ test('parseArgs recognizes screenshot flags', () => {
   assert.equal(parsed.flags.screenshotScale, 0.3);
   assert.equal(parsed.flags.screenshotNoStabilize, true);
   assert.equal(parsed.flags.screenshotNormalizeStatusBar, true);
+  assert.equal(parsed.flags.count, 5);
+  assert.equal(parsed.flags.intervalMs, 250);
 });
 
 test('parseArgs recognizes viewport command', () => {

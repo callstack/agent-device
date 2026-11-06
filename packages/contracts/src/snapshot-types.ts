@@ -10,6 +10,7 @@ import type {
 } from '@agent-device/kernel/snapshot';
 import type { DeviceRotation } from './device-rotation.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
+import type { ScreenshotBurstFrame } from './screenshot.ts';
 
 export type ScreenshotResultData = {
   path?: string;
@@ -20,6 +21,11 @@ export type ScreenshotResultData = {
   pixelDensity?: number;
   /** Display rotation the capture was rendered in; absent when the target reports none. */
   displayRotation?: DeviceRotation;
+  /**
+   * The frames of a `--count` burst, in capture order; each carries its own path and capture
+   * wall clock. Absent for a single capture, where `path` is the whole result.
+   */
+  frames?: ScreenshotBurstFrame[];
   overlayRefs?: ScreenshotOverlayRef[];
   warnings?: string[];
 };

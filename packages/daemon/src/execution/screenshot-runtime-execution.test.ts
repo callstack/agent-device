@@ -648,3 +648,133 @@ test('a request screen mask reaches the bound simulator capture without changing
     expect(fixture.captureScreenshot.mock.lastCall?.[0].options?.screenMask).toBe(screenMask);
   }
 });
+
+test('a --count burst captures the numbered sequence in one request and reports every frame', async () => {
+  const fixture = screenshotRuntimeFixture();
+  const session = makeSession('default', { device: ANDROID_EMULATOR });
+  const outDir = mkdtempForTestSync('agent-device-burst');
+  const outPath = path.join(outDir, 'page.png');
+  const req = screenshotRequest({ positionals: [outPath], flags: { count: 3, intervalMs: 100 } });
+
+  const resolved = await resolveScreenshotGenericExecution({
+    hostCwd: process.cwd(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req,
+    session,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+  expect(resolved.ok).toBe(true);
+  if (!resolved.ok) return;
+
+  const result = await executeResult(resolved, session, req, req.flags);
+
+  expect(fixture.binds).toHaveLength(1);
+  expect(fixture.captureScreenshot).toHaveBeenCalledTimes(3);
+  const destinations = fixture.captureScreenshot.mock.calls.map((call) => call[0]?.outPath);
+  expect(destinations).toEqual([
+    path.join(outDir, 'page-0001.png'),
+    path.join(outDir, 'page-0002.png'),
+    path.join(outDir, 'page-0003.png'),
+  ]);
+  for (const destination of destinations) {
+    expect(fs.existsSync(destination)).toBe(true);
+  }
+  const frames = result.frames as Array<{ path: string; capturedAtMs: number }>;
+  expect(frames.map((frame) => frame.path)).toEqual(destinations);
+  expect(frames[0]!.capturedAtMs).toBeLessThanOrEqual(frames[1]!.capturedAtMs);
+  expect(frames[1]!.capturedAtMs).toBeLessThanOrEqual(frames[2]!.capturedAtMs);
+  expect(result).toMatchObject({
+    path: path.join(outDir, 'page-0001.png'),
+    width: 100,
+    height: 50,
+    message: `Saved 3 screenshots starting at ${path.join(outDir, 'page-0001.png')}`,
+  });
+});
+
+test('a burst without an explicit path keeps every frame in one temp root', async () => {
+  const fixture = screenshotRuntimeFixture();
+  const session = makeSession('default', { device: ANDROID_EMULATOR });
+  const req = screenshotRequest({ flags: { count: 2 } });
+
+  const resolved = await resolveScreenshotGenericExecution({
+    hostCwd: process.cwd(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req,
+    session,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+  if (!resolved.ok) throw new Error('screenshot admission must succeed');
+
+  const result = await executeResult(resolved, session, req, req.flags);
+  const frames = result.frames as Array<{ path: string }>;
+  expect(frames).toHaveLength(2);
+  expect(path.dirname(frames[0]!.path)).toBe(path.dirname(frames[1]!.path));
+  expect(fs.existsSync(frames[0]!.path)).toBe(true);
+  expect(fs.existsSync(frames[1]!.path)).toBe(true);
+});
+
+test('burst admission refuses crop, overlay, and misbounded flags before any device work', async () => {
+  const fixture = screenshotRuntimeFixture();
+  const session = makeSession('default', { device: ANDROID_EMULATOR });
+  const refusals: Array<{ label: string; flags: Record<string, unknown> }> = [
+    { label: 'interval without count', flags: { intervalMs: 200 } },
+    { label: 'count below two', flags: { count: 1 } },
+    { label: 'overlong schedule', flags: { count: 150, intervalMs: 500 } },
+    { label: 'crop beside burst', flags: { count: 3, screenshotCropOn: 'role=button label=Save' } },
+    { label: 'overlay beside burst', flags: { count: 3, overlayRefs: true } },
+  ];
+  for (const refusal of refusals) {
+    const req = screenshotRequest({ flags: refusal.flags });
+    await expect(
+      resolveScreenshotGenericExecution({
+        hostCwd: process.cwd(),
+        createCommandSurface: testCreateCommandSurface,
+        platformServices: daemonPlatformServicesFixture(),
+        req,
+        session,
+        inspectFacts: fixture.inspectFacts,
+        bindDevice: fixture.bindDevice,
+      }),
+      refusal.label,
+    ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+  }
+  expect(fixture.binds).toHaveLength(0);
+  expect(fixture.captureScreenshot).not.toHaveBeenCalled();
+});
+
+test('a cancelled request stops the burst before the next frame', async () => {
+  const fixture = screenshotRuntimeFixture();
+  const session = makeSession('default', { device: ANDROID_EMULATOR });
+  const outDir = mkdtempForTestSync('agent-device-burst-cancel');
+  const req = screenshotRequest({
+    positionals: [path.join(outDir, 'page.png')],
+    flags: { count: 3, intervalMs: 100 },
+  });
+
+  const resolved = await resolveScreenshotGenericExecution({
+    hostCwd: process.cwd(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req,
+    session,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+  if (!resolved.ok) throw new Error('screenshot admission must succeed');
+
+  const controller = new AbortController();
+  const execution = resolved.execute(
+    executionParams(session, req, {
+      count: req.flags?.count,
+      intervalMs: req.flags?.intervalMs,
+      signal: controller.signal,
+    }),
+  );
+  controller.abort();
+  await expect(execution).rejects.toThrow();
+  expect(fixture.captureScreenshot.mock.calls.length).toBeLessThan(3);
+});

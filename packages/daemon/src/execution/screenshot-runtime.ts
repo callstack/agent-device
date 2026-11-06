@@ -1,15 +1,21 @@
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
+import { sleep } from '@agent-device/host-kit/retry';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   retiredScreenshotMaxSizeFlagError,
+  SCREENSHOT_BURST_LIMITS,
   SCREENSHOT_CAPTURE_BACKENDS,
+  screenshotBurstFramePath,
   screenshotFlagsFromOptions,
   screenshotOptionsFromFlags,
+  validateScreenshotBurst,
+  type ScreenshotBurstFrame,
 } from '@agent-device/contracts/capture';
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { ScreenshotRuntimeExecution } from '@agent-device/contracts/screenshot-runtime';
 import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { successText } from '@agent-device/kernel/success-text';
 import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -66,6 +72,12 @@ export async function resolveScreenshotGenericExecution(
   if (retiredMaxSize) throw new AppError('INVALID_ARGS', retiredMaxSize);
   assertSupportedScreenshotPixelDensity(session.device, req.flags?.screenshotPixelDensity);
   assertSupportedScreenshotCaptureBackend(req.flags);
+  validateScreenshotBurst({
+    count: req.flags?.count,
+    intervalMs: req.flags?.intervalMs,
+    cropOn: req.flags?.screenshotCropOn,
+    overlayRefs: req.flags?.overlayRefs === true ? true : undefined,
+  });
 
   const request = readScreenshotRequest(req, params.hostCwd);
   const cropOn =
@@ -199,6 +211,10 @@ async function executeScreenshot(
   }>,
 ): Promise<Record<string, unknown>> {
   const { session, runtime, flags } = params;
+  const burst = readScreenshotBurstPlan(params.dispatchContext);
+  if (burst) {
+    return await executeBurstScreenshot({ ...params, burst });
+  }
   const crop = buildScreenshotCropBinding({
     cropOn: params.cropOn,
     captureSnapshot: runtime.captureSnapshot,
@@ -231,6 +247,87 @@ async function executeScreenshot(
       path: captured.path,
       requestedPixelDensity: flags?.screenshotPixelDensity,
       scale: flags?.screenshotScale,
+    })),
+  };
+}
+
+/**
+ * The admitted burst: the frame count and the wait between frames. The count rode the request's
+ * shared `count`/`intervalMs` flags through `DispatchContextFlags`; only the interval has a
+ * screenshot default, because those flags serve press and swipe series too.
+ */
+type ScreenshotBurstPlan = Readonly<{ count: number; intervalMs: number }>;
+
+function readScreenshotBurstPlan(
+  dispatchContext: DaemonCommandContext,
+): ScreenshotBurstPlan | undefined {
+  const { count, intervalMs } = dispatchContext;
+  if (count === undefined) return undefined;
+  return { count, intervalMs: intervalMs ?? SCREENSHOT_BURST_LIMITS.defaultIntervalMs };
+}
+
+/**
+ * The `--count` burst: one admitted plan, captured sequentially frame by frame through the same
+ * single-capture path, each frame into its own numbered destination. The result reports every
+ * frame with its capture wall clock; the top-level fields describe the first frame, because every
+ * frame reads the same screen at the same size. Admission refuses a burst beside `--crop-on` and
+ * `--overlay-refs`, so this loop never carries the crop or overlay state.
+ */
+async function executeBurstScreenshot(
+  params: Readonly<{
+    createCommandSurface: CreateDaemonCommandSurface;
+    session: SessionState;
+    sessionName: string;
+    logPath: string;
+    dispatchContext: DaemonCommandContext;
+    flags: CommandFlags | undefined;
+    outPath: string | undefined;
+    runtime: BoundScreenshotRuntime;
+    burst: ScreenshotBurstPlan;
+  }>,
+): Promise<Record<string, unknown>> {
+  const { burst, dispatchContext } = params;
+  const signal = dispatchContext.signal;
+  const tempRoot =
+    params.outPath === undefined
+      ? await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-screenshot-burst-'))
+      : undefined;
+  const frameDestination = (index: number): string =>
+    params.outPath !== undefined
+      ? screenshotBurstFramePath(params.outPath, index)
+      : path.join(tempRoot!, `screenshot-${String(index).padStart(4, '0')}.png`);
+  const frames: ScreenshotBurstFrame[] = [];
+  const warnings: string[] = [];
+  for (let index = 1; index <= burst.count; index += 1) {
+    signal?.throwIfAborted();
+    if (index > 1 && burst.intervalMs > 0) await sleep(burst.intervalMs, signal);
+    const captured = await captureScreenshotArtifact({
+      createCommandSurface: params.createCommandSurface,
+      session: params.session,
+      sessionName: params.sessionName,
+      outPath: frameDestination(index),
+      dispatchContext,
+      captureScreenshot: params.runtime.captureScreenshot,
+    });
+    warnings.push(...(captured.warnings ?? []));
+    frames.push({
+      path: captured.path,
+      capturedAtMs: Date.now(),
+      ...(captured.displayRotation ? { displayRotation: captured.displayRotation } : {}),
+    });
+  }
+  const first = frames[0]!;
+  return {
+    path: first.path,
+    frames,
+    ...(first.displayRotation ? { displayRotation: first.displayRotation } : {}),
+    ...(warnings.length > 0 ? { warnings } : {}),
+    ...successText(`Saved ${burst.count} screenshots starting at ${first.path}`),
+    ...(await readScreenshotResultMetadata({
+      device: params.session.device,
+      path: first.path,
+      requestedPixelDensity: params.flags?.screenshotPixelDensity,
+      scale: params.flags?.screenshotScale,
     })),
   };
 }
