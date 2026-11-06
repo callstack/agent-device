@@ -6,6 +6,8 @@ import { runHarmonyShell } from './hdc.ts';
 /**
  * The screen-off timeout `power-shell timeout -o` accepts at its largest: the 32-bit maximum, in
  * milliseconds. `off` restores the timeout the system setting holds (`power-shell timeout -r`).
+ * `power-shell setmode` spells only the 600-series power modes, so `timeout -o` is the route that
+ * takes this raw millisecond value.
  */
 const HARMONY_KEEP_AWAKE_TIMEOUT_MS = '2147483647';
 
