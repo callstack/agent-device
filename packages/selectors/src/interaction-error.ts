@@ -45,12 +45,22 @@ export const INTERACTION_ERROR_REASONS = {
    * A multi-ref press sequence (`press @e13,@e14,...`) refused a remaining key:
    * the fresh observation named no node, or more than one, carrying the
    * planned key's identity. `details.ref` names the refused key,
-   * `details.executed` counts the keys already dispatched, and
-   * `details.pending` lists the refs that did not run. The dispatched keys may
-   * already have changed the screen; re-snapshot and rebuild the remaining
-   * plan instead of retrying the same sequence.
+   * `details.executed` counts the keys already dispatched, `details.pending`
+   * lists the refs that did not run, and `details.identity` is the planned
+   * local identity the fresh screen could no longer name exactly once. The
+   * dispatched keys may already have changed the screen; re-snapshot and
+   * rebuild the remaining plan (the refs in `details.pending`) instead of
+   * retrying the same sequence.
    */
   sequenceRefUnmatched: 'sequence_ref_unmatched',
+  /**
+   * A multi-ref press sequence (`press @e13,@e14,...`) was handed a
+   * same-point repetition option (`details.option` names the flag:
+   * count, hold-ms, jitter-px, double-tap, or button). The request never
+   * dispatched; the recovery is to drop the option or to issue one press per
+   * key with it.
+   */
+  sequenceOptionConflict: 'sequence_option_conflict',
 } as const;
 
 /** The part of a covered node a refusal reports. */

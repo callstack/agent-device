@@ -258,3 +258,32 @@ test('parseTouchTarget keeps the fallback label path for a plain ref with traili
     target: { kind: 'ref', ref: '@e4', fallbackLabel: 'Email field' },
   });
 });
+
+test('parseTouchTarget refuses a space-separated second ref on press and click', () => {
+  // `press @e13 @e14` is the comma plan typed with spaces; on the single-ref
+  // path the second positional would become a fallback label and only the
+  // first key would ever be pressed.
+  for (const command of ['press', 'click'] as const) {
+    const parsed = parseTouchTarget(['@e13', '@e14'], command);
+    expect(parsed.ok, command).toBe(false);
+    if (parsed.ok || parsed.response.ok) continue;
+    expect(parsed.response.error.code).toBe('INVALID_ARGS');
+    expect(parsed.response.error.message).toContain('Separate the keys');
+    expect(parsed.response.error.hint).toBeTruthy();
+  }
+  // A pinned second ref is the same mistake.
+  expect(parseTouchTarget(['@e13', '@e14~s4'], 'press').ok).toBe(false);
+  // Commands outside the tap family keep today's trailing-text behavior: the
+  // second positional stays a fallback label there.
+  expect(parseTouchTarget(['@e1', '@e2'], 'longpress').ok).toBe(true);
+});
+
+test('parseTouchRefSequence refuses a trailing positional after the plan', () => {
+  // A plan is one positional; a trailing token must not be dropped silently
+  // while the single-ref path reads the same shape as a fallback label.
+  const parsed = parseTouchTarget(['@e13,@e14', 'stray'], 'press');
+  expect(parsed.ok).toBe(false);
+  if (parsed.ok || parsed.response.ok) return;
+  expect(parsed.response.error.code).toBe('INVALID_ARGS');
+  expect(parsed.response.error.message).toContain('takes no trailing label');
+});
