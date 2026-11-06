@@ -335,7 +335,7 @@ async function heartbeatLease(
         phase: 'lease_provider_ended_session_teardown_failed',
         data: {
           leaseId: lease.leaseId,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage(error),
         },
       });
     }

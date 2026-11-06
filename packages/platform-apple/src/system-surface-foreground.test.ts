@@ -96,7 +96,7 @@ test.for([
 ] as const)('%s is unknown and sends no command', async ([, liveness]) => {
   runner.readRunnerSessionLiveness.mockReturnValue(liveness);
 
-  await expect(probe()).resolves.toBe('unknown');
+  await expect(probe()).resolves.toEqual({ foreground: 'unknown' });
   expect(runner.runAppleRunnerCommand).not.toHaveBeenCalled();
 });
 

@@ -132,11 +132,12 @@ test.for([
   async ({ runner, host, acquired, checked, served }) => {
     const source = sourceReturning(host === 'present' ? surfaceHostPresent : bridgeAcquisition());
     const fallback = vi.fn(async () => runnerResult());
-    const systemSurfaceForeground = vi.fn(async () =>
-      runner === 'foreground'
-        ? ({ kind: 'foreground', host: presentSurface.host } as const)
-        : runner,
-    );
+    const systemSurfaceForeground = vi.fn(async () => ({
+      foreground:
+        runner === 'foreground'
+          ? ({ kind: 'foreground', host: presentSurface.host } as const)
+          : runner,
+    }));
     const route = createAppleSnapshotRoute(bridgePresentingHost(), {
       source,
       resolveTarget: vi.fn(async () => target),

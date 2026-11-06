@@ -26,9 +26,7 @@ export type SystemSurfaceForeground =
 export type SystemSurfaceForegroundProbe = (
   device: DeviceInfo,
   input: Readonly<{ signal: AbortSignal; requestId?: string }>,
-) => Promise<
-  SystemSurfaceForeground | Readonly<{ foreground: SystemSurfaceForeground; sessionId: string }>
->;
+) => Promise<Readonly<{ foreground: SystemSurfaceForeground; sessionId?: string }>>;
 
 /**
  * Bounds each read below the read-only resend window, so a runner busy draining abandoned XCTest
@@ -65,7 +63,7 @@ export function createSystemSurfaceForegroundProbe(
 ): SystemSurfaceForegroundProbe {
   return async (device, input) => {
     const session = await readySession(device, input);
-    if (!session) return 'unknown';
+    if (!session) return { foreground: 'unknown' };
     // The reads go out together: each one is a runner round trip, which costs a network hop to a
     // remote Simulator. The answer reads them in registry order, so a decisive state settles it
     // without waiting for the hosts after it.

@@ -39,13 +39,15 @@ type RunnerProcess = { pid: number; processStartTime: string };
  * foreground process, and `describe` reads it unless the host planned another process, or answers
  * the refusal `refuseDescribe` names. A describe given `holdNextDescribe` reads until that promise
  * settles, and, like the runner, it keeps reading after the daemon stops waiting: a describe that
- * arrives meanwhile is refused as `bridge-read-in-flight`. A describe that names surface hosts is
- * refused as `system-surface-host-unverified`, as a sandbox that refuses the process table does.
+ * arrives meanwhile is refused as `bridge-read-in-flight`. With `refuseSurfaceHostCheck`, a describe that
+ * names surface hosts is refused as `system-surface-host-unverified`, as a sandbox that refuses the
+ * process table does.
  */
 function bridgeRunner(state: {
   process: RunnerProcess;
   refuseDescribe?: string;
   refuseTarget?: string;
+  refuseSurfaceHostCheck?: boolean;
   holdNextDescribe?: Promise<void>;
 }) {
   const sent: RunnerCommand[] = [];
@@ -86,7 +88,7 @@ function bridgeRunner(state: {
       ) {
         return refusal('stale_target', 'target-process-changed');
       }
-      if (request.surfaceHostExecutables)
+      if (request.surfaceHostExecutables && state.refuseSurfaceHostCheck)
         return refusal('unsupported', 'system-surface-host-unverified');
       if (state.refuseDescribe) return refusal('application_not_responding', state.refuseDescribe);
       if (reading) return refusal('application_not_responding', 'bridge-read-in-flight');
@@ -142,7 +144,7 @@ function verbs(sent: readonly RunnerCommand[]): string[] {
   return sent.map((command) => command.snapshotBridge?.verb ?? command.command);
 }
 
-/** The bridge route of a runner whose foreground read proves no system surface covers the app. */
+/** The bridge route of a runner with an optional foreground session. */
 function bridgeRoute(provider: AppleRunnerProvider, runnerSessionId?: string) {
   const bridge = createRunnerSnapshotBridge({ device: IOS_SIMULATOR, provider });
   const presented: SnapshotRuntimeAcquiredResult[] = [];
@@ -165,7 +167,9 @@ function bridgeRoute(provider: AppleRunnerProvider, runnerSessionId?: string) {
       ...(runnerSessionId ? { sessionChanged: bridge.resetTargets } : {}),
     },
     async () =>
-      runnerSessionId ? { foreground: 'background', sessionId: runnerSessionId } : 'background',
+      runnerSessionId
+        ? { foreground: 'background', sessionId: runnerSessionId }
+        : { foreground: 'unknown' },
   );
   const snapshot = (signal = new AbortController().signal) =>
     route.capture(
@@ -427,6 +431,7 @@ test('the runner runtime reads a remote Simulator through the bridge once its fo
 
 test('a runner whose foreground read cannot answer asks the bridge read to check the surface hosts', async () => {
   const { provider, sent } = bridgeRunner({
+    refuseSurfaceHostCheck: true,
     process: { pid: 41, processStartTime: '1700000000.000001' },
   });
   const { snapshot, fallbacks } = runtimeSnapshots(withHostStates(provider, undefined));
@@ -478,6 +483,7 @@ test('the foreground proof starts the runner when none is live, then reads only 
 test('a runner whose session id cannot be read answers the foreground proof as unknown', async () => {
   registry.session = undefined;
   const { provider, sent } = bridgeRunner({
+    refuseSurfaceHostCheck: true,
     process: { pid: 41, processStartTime: '1700000000.000001' },
   });
   const { snapshot, fallbacks } = runtimeSnapshots(withHostStates(provider, 'notRunning'));
@@ -650,7 +656,7 @@ test('a wedge before the runner id is known does not disable a newly identified 
       targetFreshness: 'cached',
       sessionChanged: bridge.resetTargets,
     },
-    async () => (sessionId ? { foreground: 'background', sessionId } : 'background'),
+    async () => (sessionId ? { foreground: 'background', sessionId } : { foreground: 'unknown' }),
   );
   const snapshot = () =>
     route.capture(
