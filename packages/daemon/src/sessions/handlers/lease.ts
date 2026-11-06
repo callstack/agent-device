@@ -1,3 +1,4 @@
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { LeaseEndReason } from '../lease-lifecycle.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
@@ -325,7 +326,19 @@ async function heartbeatLease(
     ended = error;
   }
   if (ended) {
-    await endSessionsForLease?.(lease.leaseId, 'PROVIDER_INSTANCE_ENDED');
+    // The client stops beating only on the typed reason, so a failed teardown must not replace it.
+    try {
+      await endSessionsForLease?.(lease.leaseId, 'PROVIDER_INSTANCE_ENDED');
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'lease_provider_ended_session_teardown_failed',
+        data: {
+          leaseId: lease.leaseId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
     throw ended;
   }
   return {

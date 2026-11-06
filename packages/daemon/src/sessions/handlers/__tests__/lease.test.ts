@@ -92,8 +92,10 @@ for (const releaseThrows of [false, true])
         },
         endSessionsForLease: async (id, reason) => {
           ended.push([id, reason]);
+          throw new Error('session teardown failed');
         },
       });
+    // A failed session teardown must not replace the typed reason the client stops beating on.
     await assert.rejects(run(), (error) => error === failure);
     await cleanup;
     assert.deepEqual(releases, [lease.leaseId]);
