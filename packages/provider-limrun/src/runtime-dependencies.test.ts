@@ -32,7 +32,7 @@ const state = vi.hoisted(() => ({
       os: 'android',
     },
   ]),
-  instanceGet: vi.fn(async () => ({
+  instanceGet: vi.fn(async (_id?: string, _options?: { signal?: AbortSignal }) => ({
     status: { state: 'terminated', terminationReason: 'InactivityTimeout' },
   })),
   tunnelClose: vi.fn(),
@@ -99,10 +99,15 @@ test('heartbeat reports a terminated instance with its typed cause', async () =>
     state.instanceGet.mockRejectedValueOnce(new Error('API unavailable'));
     assert.equal(await runtime.leaseLifecycle.heartbeat!(lease), undefined);
     vi.useFakeTimers();
-    state.instanceGet.mockReturnValueOnce(new Promise(() => {}));
+    let probeSignal: AbortSignal | undefined;
+    state.instanceGet.mockImplementationOnce((_id?: string, options?: { signal?: AbortSignal }) => {
+      probeSignal = options?.signal;
+      return new Promise(() => {});
+    });
     const timedOut = runtime.leaseLifecycle.heartbeat!(lease);
     await vi.advanceTimersByTimeAsync(2_000);
     assert.equal(await timedOut, undefined);
+    assert.equal(probeSignal?.aborted, true);
     vi.useRealTimers();
     await assert.rejects(
       runtime.leaseLifecycle.heartbeat!(lease),

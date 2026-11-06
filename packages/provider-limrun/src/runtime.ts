@@ -756,11 +756,17 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       let answer;
       try {
         const { awaitLimrunWithinBudget } = await import('./lifecycle-budget.ts');
+        // The budget only stops waiting, so the probe aborts its own GET when the budget expires.
+        const expiry = new AbortController();
+        const signal = context?.signal
+          ? AbortSignal.any([context.signal, expiry.signal])
+          : expiry.signal;
         const request =
           session.platform === 'ios'
-            ? this.limrun.iosInstances.get(session.instanceId, { signal: context?.signal })
-            : this.limrun.androidInstances.get(session.instanceId, { signal: context?.signal });
+            ? this.limrun.iosInstances.get(session.instanceId, { signal })
+            : this.limrun.androidInstances.get(session.instanceId, { signal });
         answer = await awaitLimrunWithinBudget(request, HEARTBEAT_PROBE_BUDGET_MS);
+        if (!answer.ok && 'expired' in answer) expiry.abort();
       } catch {
         return undefined;
       }
