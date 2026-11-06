@@ -5,6 +5,7 @@ import { provesAndroidScreenRecordPathUnclaimed } from '@agent-device/contracts/
 import { candidateRemotePaths, cleanupChunks } from './chunks.ts';
 import { decodeNativeManifest, type NativeManifest } from './manifest.ts';
 import { removeNativeManifest } from './manifest-store.ts';
+import { observeRecordedRecorders } from './recorder-status.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
 type ManifestCandidate = Readonly<{
@@ -91,12 +92,7 @@ async function proveArtifactsReleased(
   transport: Transport,
   evidence: NativeManifest,
 ): Promise<void> {
-  for (const chunk of evidence.chunks) {
-    const state = await transport.inspect({
-      pid: chunk.remotePid,
-      remotePath: chunk.remotePath,
-      startTime: chunk.remoteStartTime,
-    });
+  for (const { chunk, state } of await observeRecordedRecorders(transport, evidence.chunks)) {
     if (provesAndroidScreenRecordPathUnclaimed(state)) continue;
     if (state === 'uncertain') throw unprovenRecorder(chunk.remotePath);
     throw artifactClaimed(
