@@ -270,7 +270,7 @@ export type GetInput = InferCommandInput<typeof getFields>;
 export type GestureInput = CommonCommandInput & GesturePayload;
 
 /** What `gesture` reads from a caller: the daemon's input, plus the opt-out a swipe may carry. */
-export type GestureCommandInput = GestureInput & { noPostGestureStabilization?: boolean };
+export type GestureCommandInput = GestureInput & { postGestureStabilization?: boolean };
 
 export const interactionCommandMetadata = [
   defineInteractionCommandMetadata('click', clickFields),
@@ -300,8 +300,8 @@ export function readGestureInput(input: unknown): GestureInput {
 function readGestureCommandInput(input: unknown): GestureCommandInput {
   const record = readInputRecord(input);
   const gesture = readGestureInput(record);
-  return gesture.kind === 'swipe' && optionalBoolean(record, 'noPostGestureStabilization') === true
-    ? { ...gesture, noPostGestureStabilization: true }
+  return gesture.kind === 'swipe' && optionalBoolean(record, 'postGestureStabilization') === false
+    ? { ...gesture, postGestureStabilization: false }
     : gesture;
 }
 

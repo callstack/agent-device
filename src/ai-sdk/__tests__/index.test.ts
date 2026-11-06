@@ -124,7 +124,7 @@ test('the stabilization opt-out is caller policy, so no tool schema offers it', 
   for (const name of ['scroll', 'swipe']) {
     assert.ok(name in tools, `${name} is part of the tool set`);
     assert.equal(
-      'noPostGestureStabilization' in rawSchemaOf(tools, name).properties,
+      'postGestureStabilization' in rawSchemaOf(tools, name).properties,
       false,
       `${name} offers the opt-out to the model`,
     );

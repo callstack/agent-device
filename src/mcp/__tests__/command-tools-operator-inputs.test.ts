@@ -267,7 +267,7 @@ test('MCP neither advertises nor admits the CLI-only fill textStdin marker', asy
 test('MCP neither advertises nor admits the stabilization opt-out, and still resolves the operator default', async () => {
   for (const tool of listCommandTools()) {
     const properties = tool.inputSchema.properties ?? {};
-    assert.equal('noPostGestureStabilization' in properties, false, `${tool.name} advertises it`);
+    assert.equal('postGestureStabilization' in properties, false, `${tool.name} advertises it`);
   }
   const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
   const executor = createCommandToolExecutor({
@@ -280,17 +280,17 @@ test('MCP neither advertises nor admits the stabilization opt-out, and still res
 
   const refused = await executor.execute('scroll', {
     direction: 'down',
-    noPostGestureStabilization: true,
+    postGestureStabilization: false,
   });
   assert.equal(refused.isError, true);
   assert.match(
     refused.content[0]?.text ?? '',
-    /noPostGestureStabilization is not accepted as a tool argument/,
+    /postGestureStabilization is not accepted as a tool argument/,
   );
-  assert.match(refused.content[0]?.text ?? '', /AGENT_DEVICE_NO_POST_GESTURE_STABILIZATION/);
+  assert.match(refused.content[0]?.text ?? '', /AGENT_DEVICE_POST_GESTURE_STABILIZATION/);
   assert.equal(calls.length, 0, 'a refused operator input must never reach the command route');
 
-  vi.stubEnv('AGENT_DEVICE_NO_POST_GESTURE_STABILIZATION', '1');
+  vi.stubEnv('AGENT_DEVICE_POST_GESTURE_STABILIZATION', '0');
   for (const [name, input] of [
     ['scroll', { direction: 'down' }],
     ['swipe', { from: { x: 1, y: 1 }, to: { x: 1, y: 9 } }],
@@ -299,8 +299,8 @@ test('MCP neither advertises nor admits the stabilization opt-out, and still res
     assert.equal(admitted.isError, false, name);
   }
   assert.deepEqual(
-    calls.map((call) => call.input.noPostGestureStabilization),
-    [true, true],
+    calls.map((call) => call.input.postGestureStabilization),
+    [false, false],
   );
 });
 

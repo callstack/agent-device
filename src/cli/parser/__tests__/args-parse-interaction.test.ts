@@ -56,19 +56,19 @@ test('parseArgs accepts the post-gesture stabilization opt-out on the gestures t
   const scroll = parseArgs(['scroll', 'down', '--no-post-gesture-stabilization'], {
     strictFlags: true,
   });
-  assert.equal(scroll.flags.noPostGestureStabilization, true);
+  assert.equal(scroll.flags.postGestureStabilization, false);
 
   const swipe = parseArgs(['swipe', '0', '0', '10', '10', '--no-post-gesture-stabilization'], {
     strictFlags: true,
   });
-  assert.equal(swipe.flags.noPostGestureStabilization, true);
+  assert.equal(swipe.flags.postGestureStabilization, false);
 
   const gestureSwipe = parseArgs(['gesture', 'swipe', 'left', '--no-post-gesture-stabilization'], {
     strictFlags: true,
   });
-  assert.equal(gestureSwipe.flags.noPostGestureStabilization, true);
+  assert.equal(gestureSwipe.flags.postGestureStabilization, false);
 
-  assert.equal(parseArgs(['scroll', 'down']).flags.noPostGestureStabilization, undefined);
+  assert.equal(parseArgs(['scroll', 'down']).flags.postGestureStabilization, undefined);
   assert.throws(
     () =>
       parseArgs(['press', '10', '10', '--no-post-gesture-stabilization'], { strictFlags: true }),

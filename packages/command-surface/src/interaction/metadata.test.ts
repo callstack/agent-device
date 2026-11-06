@@ -53,12 +53,12 @@ test.for(['scroll', 'swipe'] as const)(
     const metadata = interactionCommandMetadata.find((entry) => entry.name === name);
     if (!metadata) throw new Error(`expected ${name} metadata`);
 
-    expect(metadata.inputSchema.properties?.noPostGestureStabilization?.type).toBe('boolean');
-    expect(metadata.inputAudience.noPostGestureStabilization?.kind).toBe('operator');
+    expect(metadata.inputSchema.properties?.postGestureStabilization?.type).toBe('boolean');
+    expect(metadata.inputAudience.postGestureStabilization?.kind).toBe('operator');
     expect(
-      metadata.readInput({ ...EXAMPLE_INPUT[name], noPostGestureStabilization: true }),
+      metadata.readInput({ ...EXAMPLE_INPUT[name], postGestureStabilization: false }),
     ).toMatchObject({
-      noPostGestureStabilization: true,
+      postGestureStabilization: false,
     });
   },
 );
@@ -67,18 +67,18 @@ test('gesture keeps the stabilization opt-out for a swipe and drops it for any o
   const gesture = interactionCommandMetadata.find((entry) => entry.name === 'gesture');
   if (!gesture) throw new Error('expected gesture metadata');
 
-  expect(gesture.inputAudience.noPostGestureStabilization?.kind).toBe('operator');
+  expect(gesture.inputAudience.postGestureStabilization?.kind).toBe('operator');
   expect(
-    gesture.readInput({ kind: 'swipe', preset: 'left', noPostGestureStabilization: true }),
-  ).toMatchObject({ kind: 'swipe', noPostGestureStabilization: true });
+    gesture.readInput({ kind: 'swipe', preset: 'left', postGestureStabilization: false }),
+  ).toMatchObject({ kind: 'swipe', postGestureStabilization: false });
   expect(
     gesture.readInput({
       kind: 'pan',
       origin: { x: 1, y: 1 },
       delta: { x: 1, y: 9 },
-      noPostGestureStabilization: true,
+      postGestureStabilization: false,
     }),
-  ).not.toHaveProperty('noPostGestureStabilization');
+  ).not.toHaveProperty('postGestureStabilization');
 });
 
 test('type keeps refusing an empty text: appending nothing is not a clear', () => {

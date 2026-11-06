@@ -192,7 +192,7 @@ test('Provider-backed integration scroll down answers moved on the first post-ge
 // read after the gesture. A scroll that still made its movement check would report `movement` and
 // spend that read, and a next snapshot that still waited for two captures to agree would meet an
 // unscripted runner call, so either regression fails this scenario.
-test('Provider-backed integration scroll with noPostGestureStabilization skips the movement check and the next read waits for nothing', async () => {
+test('Provider-backed integration scroll with postGestureStabilization false skips the movement check and the next read waits for nothing', async () => {
   const runnerTranscript = createProviderTranscript([
     snapshotEntry(screen(0, true)), // pre-scroll baseline
     snapshotEntry(screen(0, true)), // the first capture after open settles: one extra read
@@ -220,7 +220,7 @@ test('Provider-backed integration scroll with noPostGestureStabilization skips t
       const callsBeforeScroll = runnerTranscript.calls.length;
       const scroll = await client.interactions.scroll({
         direction: 'down',
-        noPostGestureStabilization: true,
+        postGestureStabilization: false,
       });
       assert.equal(Object.hasOwn(scroll, 'movement'), false);
       assert.deepEqual(

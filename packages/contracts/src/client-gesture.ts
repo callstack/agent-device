@@ -44,11 +44,11 @@ export type SettleCommandOptions = {
 /** For a caller that verifies the screen by polling it: opts out of the checks after a gesture. */
 export type PostGestureStabilizationOptions = {
   /**
-   * Skip the movement check on a directional scroll and the stabilization wait before the next
-   * read. Use it only when your own polling verifies the screen: the next read can return a tree
-   * that the gesture is still moving.
+   * Set false to skip the movement check on a directional scroll and the stabilization wait
+   * before the next read. Set it only when your own polling verifies the screen: the next read can
+   * return a tree that the gesture is still moving.
    */
-  noPostGestureStabilization?: boolean;
+  postGestureStabilization?: boolean;
 };
 
 export type ClickOptions = DeviceCommandBaseOptions &

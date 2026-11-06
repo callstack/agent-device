@@ -31,7 +31,6 @@ export type CommandFlags = Omit<CliFlags, DaemonExcludedCliFlag> & {
   launchArgs?: string[];
   kind?: string;
   maestro?: MaestroRuntimeFlags;
-  postGestureStabilization?: boolean;
   snapshotIncludeHiddenContentHints?: boolean;
   leaseProvider?: string;
   provider?: string;

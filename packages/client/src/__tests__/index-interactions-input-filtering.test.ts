@@ -41,15 +41,15 @@ test('client commands refuse the retired readinessTimeoutMs before sending anyth
   assert.deepEqual(setup.calls, []);
 });
 
-test('the stabilization opt-out is sent as the daemon flag, and only when the caller asks', async () => {
+test('postGestureStabilization reaches the daemon as the caller set it, and an omitted option sends nothing', async () => {
   const setup = createClientTransport(async () => ({ ok: true, data: {} }));
   const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
   const swipe = { from: { x: 1, y: 1 }, to: { x: 1, y: 9 } };
 
-  await client.interactions.scroll({ direction: 'down', noPostGestureStabilization: true });
-  await client.interactions.swipe({ ...swipe, noPostGestureStabilization: true });
+  await client.interactions.scroll({ direction: 'down', postGestureStabilization: false });
+  await client.interactions.swipe({ ...swipe, postGestureStabilization: false });
   await client.interactions.scroll({ direction: 'down' });
-  await client.interactions.swipe({ ...swipe, noPostGestureStabilization: false });
+  await client.interactions.swipe({ ...swipe, postGestureStabilization: true });
 
   assert.deepEqual(
     setup.calls.map((call) => [call.command, call.flags?.postGestureStabilization]),
@@ -57,12 +57,11 @@ test('the stabilization opt-out is sent as the daemon flag, and only when the ca
       ['scroll', false],
       ['swipe', false],
       ['scroll', undefined],
-      ['swipe', undefined],
+      ['swipe', true],
     ],
   );
   for (const call of setup.calls) {
-    assert.equal(Object.hasOwn(call.flags ?? {}, 'noPostGestureStabilization'), false);
-    assert.equal(Object.hasOwn(call.input ?? {}, 'noPostGestureStabilization'), false);
+    assert.equal(Object.hasOwn(call.input ?? {}, 'postGestureStabilization'), false);
   }
 });
 

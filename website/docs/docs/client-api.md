@@ -311,10 +311,10 @@ await client.interactions.press({ selector: 'label="Continue"' });
 
 If the wait times out, check the selector and app state with a fresh snapshot. A covered, off-screen, or ambiguous target still fails the interaction.
 
-On mobile, a scroll or swipe makes two checks: a directional `scroll` captures the screen again to report `movement`, and the first capture after `scroll`, `swipe`, or `swipeGesture` waits for two reads to agree. Code that verifies the screen by polling it can skip both with `noPostGestureStabilization: true`. The next read can then return a tree the gesture is still moving, so poll until the state you expect appears. See [Scroll](/docs/commands#scroll) for what the option changes and where else it can be set.
+On mobile, a scroll or swipe makes two checks: a directional `scroll` captures the screen again to report `movement`, and the first capture after `scroll`, `swipe`, or `swipeGesture` waits for two reads to agree. Code that verifies the screen by polling it can skip both with `postGestureStabilization: false`. The next read can then return a tree the gesture is still moving, so poll until the state you expect appears. See [Scroll](/docs/commands#scroll) for what the option changes and where else it can be set.
 
 ```ts
-await client.interactions.scroll({ direction: 'down', noPostGestureStabilization: true });
+await client.interactions.scroll({ direction: 'down', postGestureStabilization: false });
 await client.command.wait({ text: 'Order total', timeoutMs: 5_000 });
 ```
 

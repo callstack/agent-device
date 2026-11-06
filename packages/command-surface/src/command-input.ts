@@ -430,7 +430,7 @@ export function repeatedFields() {
  */
 export function postGestureStabilizationFields() {
   return {
-    noPostGestureStabilization: operatorField(optionField('noPostGestureStabilization'), {
+    postGestureStabilization: operatorField(optionField('postGestureStabilization'), {
       operatorConfig: true,
     }),
   };

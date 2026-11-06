@@ -176,9 +176,9 @@ const SDK_DOCUMENTED_OPTIONS = [
     field: 'customActions',
   },
   {
-    key: 'noPostGestureStabilization',
+    key: 'postGestureStabilization',
     file: 'packages/contracts/src/client-gesture.ts',
-    field: 'noPostGestureStabilization',
+    field: 'postGestureStabilization',
   },
 ] as const;
 

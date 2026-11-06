@@ -203,7 +203,7 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['verify', 'descriptor post-action evidence capture'],
     ['settle', 'descriptor post-action settled-diff observation'],
     ['settleQuietMs', 'settle quiet-window tuning'],
-    ['noPostGestureStabilization', 'scroll movement check and stabilization wait opt-out'],
+    ['postGestureStabilization', 'scroll movement check and stabilization wait opt-out'],
   ];
   const sources = files.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
   return flagTargets.map(([key, reason, aliases = []]) => {

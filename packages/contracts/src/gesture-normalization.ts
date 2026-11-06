@@ -20,19 +20,14 @@ export type SwipePayload = {
   pattern?: 'one-way' | 'ping-pong';
 };
 
-type GestureFlagKey =
-  | 'pointerCount'
-  | 'holdMs'
-  | 'count'
-  | 'pauseMs'
-  | 'noPostGestureStabilization';
+type GestureFlagKey = 'pointerCount' | 'holdMs' | 'count' | 'pauseMs' | 'postGestureStabilization';
 
 const GESTURE_FLAG_NAMES: Record<GestureFlagKey, string> = {
   pointerCount: '--pointer-count',
   holdMs: '--hold-ms',
   count: '--count',
   pauseMs: '--pause-ms',
-  noPostGestureStabilization: '--no-post-gesture-stabilization',
+  postGestureStabilization: '--no-post-gesture-stabilization',
 };
 
 /**
@@ -44,7 +39,7 @@ export const GESTURE_FLAGS_BY_KIND = {
   pan: ['pointerCount'],
   tap: ['holdMs', 'count', 'pauseMs'],
   fling: [],
-  swipe: ['noPostGestureStabilization'],
+  swipe: ['postGestureStabilization'],
   pinch: [],
   rotate: [],
   transform: [],

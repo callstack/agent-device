@@ -81,15 +81,15 @@ describe('gesture command transport', () => {
     const setup = createClientTransport(() => ({ ok: true, data: {} }));
     const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
 
-    await client.interactions.swipeGesture({ preset: 'left', noPostGestureStabilization: true });
+    await client.interactions.swipeGesture({ preset: 'left', postGestureStabilization: false });
     await client.interactions.gesture({
       kind: 'swipe',
       preset: 'left-edge',
-      noPostGestureStabilization: true,
+      postGestureStabilization: false,
     });
     await runCommand(client, 'gesture', {
       ...readInputFromCli('gesture', ['swipe', 'right'], {
-        noPostGestureStabilization: true,
+        postGestureStabilization: false,
       } as CliFlags),
     });
     await client.interactions.swipeGesture({ preset: 'left' });
@@ -101,8 +101,7 @@ describe('gesture command transport', () => {
       undefined,
     ]);
     for (const call of setup.calls) {
-      expect(call.flags).not.toHaveProperty('noPostGestureStabilization');
-      expect(call.input).not.toHaveProperty('noPostGestureStabilization');
+      expect(call.input).not.toHaveProperty('postGestureStabilization');
     }
   });
 });

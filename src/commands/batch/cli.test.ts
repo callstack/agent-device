@@ -87,10 +87,10 @@ test('batch steps carry the stabilization opt-out as the daemon flag, only where
     'batch',
     '--steps',
     JSON.stringify([
-      { command: 'scroll', input: { direction: 'down', noPostGestureStabilization: true } },
+      { command: 'scroll', input: { direction: 'down', postGestureStabilization: false } },
       {
         command: 'swipe',
-        input: { from: { x: 10, y: 10 }, to: { x: 10, y: 200 }, noPostGestureStabilization: true },
+        input: { from: { x: 10, y: 10 }, to: { x: 10, y: 200 }, postGestureStabilization: false },
       },
       { command: 'scroll', input: { direction: 'up' } },
     ]),
@@ -103,9 +103,6 @@ test('batch steps carry the stabilization opt-out as the daemon flag, only where
   assert.equal(steps[0]?.flags?.postGestureStabilization, false);
   assert.equal(steps[1]?.flags?.postGestureStabilization, false);
   assert.equal(Object.hasOwn(steps[2]?.flags ?? {}, 'postGestureStabilization'), false);
-  for (const step of steps) {
-    assert.equal(Object.hasOwn(step.flags ?? {}, 'noPostGestureStabilization'), false);
-  }
 });
 
 test('batch rejects invalid structured step input before daemon projection', async () => {

@@ -403,7 +403,7 @@ const interactionCliSchemas = {
     // Arity is enforced by swipePayloadFromPositionals (assertGestureArity), so
     // an extra positional reaches that migration-hint error, not this schema's.
     allowsExtraPositionals: true,
-    allowedFlags: ['count', 'pauseMs', 'pattern', 'noPostGestureStabilization'],
+    allowedFlags: ['count', 'pauseMs', 'pattern', 'postGestureStabilization'],
   },
   gesture: {
     usageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform|tap|drag> ...',
@@ -446,7 +446,7 @@ const interactionCliSchemas = {
       'until',
       'maxPasses',
       ...postActionObservationCliFlags('scroll'),
-      'noPostGestureStabilization',
+      'postGestureStabilization',
     ],
   },
 } as const satisfies Record<string, CommandSchemaOverride>;
@@ -620,7 +620,7 @@ const gestureCommandFacet = defineCommandFacet({
     client.interactions.gesture({
       ...readGesturePayload(input),
       ...commonToClientOptions(input),
-      ...(input.noPostGestureStabilization ? { noPostGestureStabilization: true } : {}),
+      ...(input.postGestureStabilization === false ? { postGestureStabilization: false } : {}),
     }),
   cliSchema: interactionCliSchemas.gesture,
   cliReader: gestureCliReaders.gesture,

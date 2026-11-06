@@ -72,7 +72,7 @@ export const interactionCliReaders = {
       pauseMs: flags.pauseMs,
       pattern: flags.pattern,
     }),
-    noPostGestureStabilization: flags.noPostGestureStabilization,
+    postGestureStabilization: flags.postGestureStabilization,
   }),
   focus: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
@@ -107,7 +107,7 @@ export const interactionCliReaders = {
     durationMs: flags.durationMs,
     until: flags.until,
     maxPasses: flags.maxPasses,
-    noPostGestureStabilization: flags.noPostGestureStabilization,
+    postGestureStabilization: flags.postGestureStabilization,
   }),
   // The one observation-only reader in this file: `get` can be excluded from a
   // repair-armed heal by default, so it also takes the `--record` opt-in

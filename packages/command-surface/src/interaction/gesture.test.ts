@@ -81,10 +81,10 @@ describe('gesture command projection', () => {
   });
 
   test('reads the stabilization opt-out for a swipe only, and keeps it out of the daemon input', () => {
-    const optOut = { ...NO_FLAGS, noPostGestureStabilization: true } as CliFlags;
+    const optOut = { ...NO_FLAGS, postGestureStabilization: false } as CliFlags;
 
     const swipe = gestureCliReaders.gesture(['swipe', 'left-edge'], optOut);
-    expect(swipe).toEqual({ kind: 'swipe', preset: 'left-edge', noPostGestureStabilization: true });
+    expect(swipe).toEqual({ kind: 'swipe', preset: 'left-edge', postGestureStabilization: false });
     expect(gestureCliReaders.gesture(['swipe', 'left-edge'], NO_FLAGS)).toEqual({
       kind: 'swipe',
       preset: 'left-edge',
@@ -94,7 +94,7 @@ describe('gesture command projection', () => {
 
     const request = gestureDaemonWriters.gesture(swipe);
     expect(request.input).toEqual({ kind: 'swipe', preset: 'left-edge' });
-    expect(request.options).toMatchObject({ noPostGestureStabilization: true });
+    expect(request.options).toMatchObject({ postGestureStabilization: false });
   });
 
   test('rejects pointerCount on non-pan gestures', () => {
