@@ -398,7 +398,7 @@ async function runCloseTeardownAndRelease(params: {
       // The withheld claim names a live owner, so `--stale` cannot reclaim it. Retiring the
       // session would leave nothing able to release it; keeping it, and its lease, lets a retried
       // close rerun the teardown.
-      sessionStore.update(ref, { closeEffectsUnconfirmed: true });
+      sessionStore.markCloseEffectsUnconfirmed(ref);
       throw claimBlockingError;
     }
   }

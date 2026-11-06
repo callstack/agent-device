@@ -408,6 +408,14 @@ export class SessionStore {
   }
 
   /**
+   * #4237: marks a session that `close` kept to withhold its device claim, so daemon idle reap no
+   * longer waits on it. The mark is never cleared: the session leaves the store only by closing.
+   */
+  markCloseEffectsUnconfirmed(ref: SessionRef): void {
+    this.update(ref, { closeEffectsUnconfirmed: true });
+  }
+
+  /**
    * #2833: drops the bounded marker an idle-expired session leaves, so the next command on that key
    * learns why its session is gone instead of being told to run `open`. Best effort — the expiry
    * already happened, and a marker that cannot be written must not undo it.
