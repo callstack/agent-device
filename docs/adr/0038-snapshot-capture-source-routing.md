@@ -47,12 +47,13 @@ A source never routes to another source.
 | Runner session | The source stays disabled until the runner has a new session id. |
 
 An unknown refusal code has app-generation scope.
-Without a verified generation, the refusal disables the source for the current capture only and creates no circuit.
+Without a verified app generation, an app-generation refusal disables the source for the current capture only and creates no app-generation circuit.
 The refusal fixture is the one table of codes and scopes.
 The router handles cancellation before it classifies a refusal.
 
-**Surface proof.** Prove surface absence for each capture. Never cache it.
-An unproven state is not a clear state: an app-only read must prove absence or refuse.
+**Surface proof.** When a capture needs surface-absence proof, prove absence for that capture. Never cache it.
+An unproven state is not a clear state.
+When surface absence is unproven, an app-only source must refuse an occluded or unverified read through integrated checks.
 An occluded read selects a source that can read the surface.
 A source that declares no proof asserts no absence.
 Acquisition metadata, such as an Android system-only tree, is not a proof.
@@ -60,9 +61,9 @@ A future app-only source needs window-ownership evidence that is tied to its rea
 
 ## Rationale
 
-- One rule makes fallback, refusals, and warnings the same on every platform. A new provider declares its sources and does not copy policy.
+- The router gives multi-source owners one rule for fallback, refusals, and warnings. A new provider declares its sources and does not copy policy.
 - The router applies only where a choice exists. A planner that never chooses adds migration cost and no value.
-- An unknown refusal fails closed, so a failed source cannot stay eligible.
+- An unknown refusal fails closed for the verified app generation, or for the current capture when the generation is unverified.
 - A surface can appear between captures. A cached absence would publish an occluded read as app content.
 
 ## Rejected alternatives
@@ -76,4 +77,4 @@ A future app-only source needs window-ownership evidence that is tied to its rea
 
 - Provenance types move from kernel to contracts, and both iOS sources bind to the router.
 - Readers, decoding, discovery, process checks, native budgets, geometry, and lifecycle stay platform-specific.
-- Open gaps: the router and the producer registry do not exist yet. The runner-session scope arrives with [#4256](https://github.com/callstack/agent-device/pull/4256). ADR 0004 must shrink below about 15 KB.
+- Open gaps: the router and the producer registry do not exist yet. The runner-session scope is pending [#4256](https://github.com/callstack/agent-device/pull/4256).
