@@ -93,7 +93,8 @@ export async function createAgentDeviceTools(
     session,
     ...(platform ? { lockPlatform: platform } : {}),
   });
-  const executor = createCommandToolExecutor();
+  // `execute` below returns structuredContent, so every tool must produce it.
+  const executor = createCommandToolExecutor({ structuredContent: 'always' });
 
   const hiddenFields = new Set<string>(ALWAYS_HIDDEN_FIELDS);
   if (platform) hiddenFields.add('platform');

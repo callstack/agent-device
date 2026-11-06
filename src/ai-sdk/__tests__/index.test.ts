@@ -6,6 +6,7 @@ import type { ToolResult } from '../../mcp/command-tools.ts';
 
 const createClientCalls: unknown[] = [];
 const executorCalls: Array<{ name: string; input: Record<string, unknown> }> = [];
+const executorDeps: unknown[] = [];
 
 const defaultExecuteResult: ToolResult = {
   isError: false,
@@ -28,12 +29,15 @@ vi.mock('../../mcp/command-tools.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../mcp/command-tools.ts')>();
   return {
     ...actual,
-    createCommandToolExecutor: () => ({
-      execute: async (name: string, input: Record<string, unknown>) => {
-        executorCalls.push({ name, input });
-        return executeResult(name, input);
-      },
-    }),
+    createCommandToolExecutor: (deps: unknown) => {
+      executorDeps.push(deps);
+      return {
+        execute: async (name: string, input: Record<string, unknown>) => {
+          executorCalls.push({ name, input });
+          return executeResult(name, input);
+        },
+      };
+    },
   };
 });
 
@@ -42,6 +46,7 @@ const { createAgentDeviceTools } = await import('../index.ts');
 afterEach(() => {
   createClientCalls.length = 0;
   executorCalls.length = 0;
+  executorDeps.length = 0;
   executeResult = async () => defaultExecuteResult;
 });
 
@@ -176,4 +181,11 @@ test('approval is returned as toolApproval, ready for ToolLoopAgent', async () =
     approval: { close: 'user-approval' },
   });
   assert.deepEqual(toolApproval, { close: 'user-approval' });
+});
+
+test('asks the executor for structuredContent from every tool, because execute returns it', async () => {
+  await createAgentDeviceTools({ session: 'my-session' });
+
+  // Without it, an untyped tool such as snapshot returns {} from execute.
+  assert.deepEqual(executorDeps, [{ structuredContent: 'always' }]);
 });
