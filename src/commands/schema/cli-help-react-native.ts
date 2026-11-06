@@ -66,12 +66,11 @@ CDP memory routing:
   Use perf memory sample or perf memory snapshot for native/process memory; use cdp only for JavaScript heap evidence.
 
 Stale state:
-  If a wrong or stale value may come from app state or storage, read the value. Do not navigate the UI to infer it.
-  Read JS state through Metro with help cdp. It owns the runtime eval command shape and which globals the expression can reach.
-  Stored AsyncStorage files are a fallback for debuggable builds on a local simulator or emulator only. They need host shell access, so they do not work on a remote lease. Use help cdp there.
-    iOS simulator, AsyncStorage 1.x/2.x layout: Library/Application Support/<bundle-id>/RCTAsyncLocalStorage_V1 under the data container from xcrun simctl get_app_container <udid> <bundle-id> data.
-    Android, AsyncStorage 1.x/2.x layout: databases/RKStorage through adb shell run-as <package>. run-as needs a debuggable package.
-  If those files are missing, the app may use a newer store (AsyncStorage 3.x uses SQLite). Do not conclude the value is absent; read it through help cdp instead.
+  If a wrong or stale value may come from app state or storage, read the value. Do not navigate the UI to infer it. Read JS values with help cdp (runtime eval).
+  Fallback for debuggable builds on a local simulator or emulator, not a remote lease: read the AsyncStorage 1.x/2.x files.
+    iOS: Library/Application Support/<bundle-id>/RCTAsyncLocalStorage_V1 in xcrun simctl get_app_container <udid> <bundle-id> data
+    Android: databases/RKStorage through adb shell run-as <package>
+  Missing files can mean a newer store (AsyncStorage 3.x). Do not conclude that the value is absent.
 
 Slow-flow investigation:
   Keep one session, open the app first, and snapshot -i before interacting.
