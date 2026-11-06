@@ -16,7 +16,7 @@ import { maybeBuildAndroidSnapshotTimeoutFailure } from '../execution/android-sn
 import { captureSnapshot } from '../core/snapshot-capture.ts';
 import { createSnapshotSession, withSessionlessRunnerCleanup } from '../core/snapshot-session.ts';
 import { resolveSessionScope } from './session-routing.ts';
-import { activateCompleteRefFrame } from '../core/ref-frame.ts';
+import { activateCompleteRefFrame, applyRefFrameAdvisoryHint } from '../core/ref-frame.ts';
 import {
   applyRecoveredWarningLatch,
   type CapturedSnapshotQuality,
@@ -117,7 +117,17 @@ export async function dispatchSnapshotRuntimeCommand(
       });
       return {
         ok: true,
-        data: copySnapshotClickabilityEvidence(result.data, data),
+        data: copySnapshotClickabilityEvidence(
+          result.data,
+          applyRefFrameAdvisoryHint({
+            session: current,
+            data,
+            // Only a user-facing snapshot command publishes the complete namespace, so
+            // only it can carry or consume the advisory's one-shot hint.
+            completeSnapshotResponse:
+              params.command === 'snapshot' && req.internal?.observationOnly !== true,
+          }),
+        ),
       };
     },
     params.platformResourceCleanup,
