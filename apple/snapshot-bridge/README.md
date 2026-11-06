@@ -64,7 +64,9 @@ this Simulator's `SIMULATOR_UDID` and its executable path ends with the named
 executable, it returns the typed refusal
 `system-surface-host-present` with `surfaceHostExecutable`, without the app
 tree. If it cannot read the process table or place a matching process, it
-returns `system-surface-host-unverified`. The host sends that capture to
+returns `system-surface-host-unverified`. A host process that exited, gone or a zombie,
+is absent: it presents nothing, and an unverified answer would keep every warm
+capture off the bridge for as long as the process lingered. The host sends that capture to
 XCTest and keeps the app generation on the bridge, because both refusals are
 evidence about the screen. The host omits the check when a ready runner already
 reported every host off screen.
@@ -90,7 +92,10 @@ extension's process under a `_UISceneHostingView`. The guest returns the leaf as
 delivered; the host refuses a tree in which such a leaf sits under either host
 and reaches the viewport, or reports no frame (`remote-content-boundary`), and
 routes that app generation to XCTest, which resolves remote elements (#2484). A
-zero-area or off-screen leaf is published: it hosts nothing the capture can miss.
+zero-area or off-screen leaf is published: it hosts nothing the capture can miss. Remote
+elements under any other host are not classified, because no capture has shown one.
+If the node cap or the depth cap removes the host, the capture still discloses it
+as truncation.
 
 ## Coordinate space
 

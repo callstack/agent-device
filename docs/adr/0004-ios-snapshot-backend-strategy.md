@@ -56,6 +56,7 @@ These two refusals have capture scope.
 `@agent-device/contracts/snapshot-presentation` holds the neutral acquisition-to-presented carrier and the clip-fold geometry contract.
 `@agent-device/capture-kit` owns host-side snapshot policy: planning, folding, projection, eligibility, semantic compaction, validation, and publication.
 Daemon assembly owns only the order of capture, compaction, occlusion, and ref publication.
+Android acquisition stays in its platform module and adapts its raw hierarchy to the shared carrier.
 New consumers must use the host-side policy facet in `@agent-device/capture-kit`. Do not add another daemon presentation path.
 The Swift runner keeps its own `SnapshotPresentation`, because it consumes the capture-plan tier before the process boundary.
 The shared engine fixtures prove that the Swift and TypeScript engines agree. They do not share an implementation.
@@ -63,6 +64,7 @@ The macOS desktop surface arrives already presented and skips the iOS presentati
 
 **Presentation.** Acquisition backends serialize facts: every traversed node at raw traversal depth with its reported frame.
 Presentation applies visibility, eligibility, scope, and the regular depth cut.
+Every bridge result crosses the same presentation boundary before publication.
 Only `SnapshotPresentation` constructs `PresentedNode`, and backends read only the `CaptureHint`.
 A hint narrows acquisition only where the backend can prove the narrowing complete.
 A regular `--depth` request is a presentation cut, not an acquisition bound. Raw depth stays acquisition depth.
