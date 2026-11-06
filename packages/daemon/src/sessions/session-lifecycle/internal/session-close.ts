@@ -137,11 +137,12 @@ async function releaseProviderLeaseForClose(params: {
   try {
     let providerRelease: { providerData?: Record<string, unknown> } | undefined;
     let shutdownResult: TargetShutdownResult | undefined;
-    if (params.req.flags?.shutdown && params.lifecycle.facts.shutdownTarget?.available) {
+    const shutdownTarget = params.lifecycle.operations.shutdownTarget;
+    if (params.req.flags?.shutdown && shutdownTarget) {
       if (!params.shutdownPrepared) {
         throw new AppError('COMMAND_FAILED', 'Target shutdown preparation failed. Retry close.');
       }
-      shutdownResult = await params.lifecycle.operations.shutdownTarget!({
+      shutdownResult = await shutdownTarget({
         releaseLease: async (leaseId) => {
           const providerData = await releaseTargetLease({
             ...params,

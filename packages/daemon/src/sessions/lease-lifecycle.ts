@@ -14,7 +14,6 @@ import { errorMessage } from '@agent-device/kernel/errors';
 import type { SessionStore } from '../core/session-store.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
-import { releaseLease } from '../resources/lease-release.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 
 export type ExpiredProviderLeaseRecovery = (lease: DeviceLease) => Promise<void>;
@@ -247,6 +246,7 @@ export async function releaseSessionLease(params: {
     });
     return {};
   }
+  const { releaseLease } = await import('../resources/lease-release.ts');
   const result = await releaseLease(
     params.leaseRegistry,
     decision === 'provider-release' ? params.leaseLifecycleProvider : undefined,

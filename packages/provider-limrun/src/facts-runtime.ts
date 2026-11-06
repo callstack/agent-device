@@ -204,6 +204,25 @@ export function limrunAppLogRecoveryFacts(
   };
 }
 
+/** A taken lease can finish cleanup, but cannot admit new application work. */
+export function limrunReleaseFacts(
+  options: LimrunPlatformRuntimeOwnerOptions,
+  device: DeviceInfo,
+): RuntimeFacts<PlatformRuntimeOperations> {
+  const facts = limrunAppLogRecoveryFacts(options, device);
+  return {
+    ...facts,
+    operations: {
+      ...facts.operations,
+      resolveOpenTarget: available,
+      closeApplication: available,
+      finalizeApplicationClose: available,
+      clearRuntimeHints: available,
+      shutdownTarget: available,
+    },
+  };
+}
+
 export function limrunUnavailableFacts(
   options: LimrunPlatformRuntimeOwnerOptions,
   device: DeviceInfo,

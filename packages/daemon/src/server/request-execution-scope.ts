@@ -403,16 +403,21 @@ export async function createRequestExecutionScope(params: {
                   throw new AppError(code, message, details);
                 }
               },
-              closeWouldReleaseProviderLease: () =>
-                Boolean(
-                  session?.lease &&
-                  inspectSessionProviderReleaseOnClose({
-                    shutdownRequested: scopedReq.flags?.shutdown === true,
-                    session,
-                    leaseRegistry,
-                    leaseLifecycleProvider: params.leaseLifecycleProvider,
-                  }),
-                ),
+              closeWouldReleaseProviderLease: async () => {
+                if (!session?.lease) return false;
+                const facts =
+                  scopedReq.flags?.shutdown === true
+                    ? await scope.inspectFacts(session.device)
+                    : undefined;
+                return inspectSessionProviderReleaseOnClose({
+                  shutdownRequested:
+                    facts?.device.providerMode === 'provider-runtime' &&
+                    facts.operations.shutdownTarget.available,
+                  session,
+                  leaseRegistry,
+                  leaseLifecycleProvider: params.leaseLifecycleProvider,
+                });
+              },
               claimRecovery: {
                 currentSessionExists: Boolean(session),
                 resolveDevice: async () => {

@@ -4,6 +4,9 @@ import { createLimrunRuntime } from './runtime.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 import { stubLimrunRuntimeDependencies } from './runtime-dependencies.fixtures.ts';
 import { testIosRunner } from './ios-runner.fixtures.ts';
+import { unusedLimrunRuntimeHost, limrunRuntimeScope } from './runtime.fixtures.ts';
+import { closeApplicationRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
+import { narrowDeviceBinding } from '@agent-device/contracts/platform-runtime';
 
 const clients = vi.hoisted(() => ({ disconnect: vi.fn(), deleteInstance: vi.fn(async () => {}) }));
 vi.mock('@limrun/api', () => ({
@@ -120,3 +123,70 @@ for (const attached of [false, true]) {
     }
   });
 }
+
+test('a failed instance delete keeps only cleanup operations available until shutdown retries', async () => {
+  clients.disconnect.mockClear();
+  clients.deleteInstance.mockClear();
+  clients.deleteInstance.mockRejectedValueOnce(new Error('Delete refused'));
+  const registration = createLimrunRuntime({ apiKey: 'api-key' }, stubLimrunRuntimeDependencies(), {
+    includePlatformModule: true,
+  });
+  const lease: DeviceLease = {
+    leaseId: 'lease-retry',
+    tenantId: 'test',
+    runId: 'run',
+    backend: 'ios-instance',
+    leaseProvider: 'limrun',
+    createdAt: 1,
+    heartbeatAt: 1,
+    expiresAt: 60001,
+  };
+  const inventoryRequest = { leaseProvider: 'limrun', leaseId: lease.leaseId };
+  try {
+    await registration.runtime.leaseLifecycle.allocate!(lease);
+    const [device] = (await registration.runtime.deviceInventoryProvider(inventoryRequest))!;
+    const owner = await registration.platformModule.loadRuntime(unusedLimrunRuntimeHost());
+    const bind = () =>
+      owner.bind({ device: device!, intent: { kind: 'ordinary' }, scope: limrunRuntimeScope });
+    const releaseLease = async (leaseId: string) => {
+      expect(leaseId).toBe(lease.leaseId);
+      await registration.runtime.leaseLifecycle.release!(lease);
+      return { success: true, exitCode: 0, stdout: '', stderr: '' };
+    };
+    await expect((await bind()).operations.shutdownTarget!({ releaseLease })).rejects.toMatchObject(
+      {
+        details: { reason: 'limrun_instance_delete_unconfirmed' },
+      },
+    );
+    expect(registration.runtime.getInteractor(device!)).toBeUndefined();
+    expect(await registration.runtime.deviceInventoryProvider(inventoryRequest)).toEqual([device]);
+    const retry = await bind();
+    expect(retry.facts.operations.openApplication.available).toBe(false);
+    expect(retry.facts.operations.bootTarget.available).toBe(false);
+    expect(retry.facts.operations.shutdownTarget.available).toBe(true);
+    expect(retry.operations.openApplication).toBeUndefined();
+    await expect(
+      retry.operations.closeApplication!({
+        positionals: ['com.example.app'],
+        surface: 'app',
+        execution: {},
+      }),
+    ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
+    const close = narrowDeviceBinding(retry, closeApplicationRuntimeUse);
+    await close.operations.finalizeApplicationClose({
+      surface: 'app',
+      retainRunner: false,
+      stateDir: '/tmp',
+      shutdownTarget: true,
+    });
+    await expect(close.operations.shutdownTarget!({ releaseLease })).resolves.toMatchObject({
+      success: true,
+    });
+    expect(clients.deleteInstance).toHaveBeenCalledTimes(2);
+    expect(clients.disconnect).toHaveBeenCalledOnce();
+    expect(await registration.runtime.deviceInventoryProvider(inventoryRequest)).toBeNull();
+    expect((await owner.inspectFacts(device!)).operations.shutdownTarget.available).toBe(false);
+  } finally {
+    await registration.runtime.shutdown();
+  }
+});

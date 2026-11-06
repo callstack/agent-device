@@ -1,10 +1,9 @@
 import { resolveCommandAndroidAvdSelection } from '../../core/daemon-command-registry.ts';
-import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
-import type { TargetShutdownResult } from '@agent-device/contracts/device';
+import type { LeaseLifecycleProvider, TargetShutdownResult } from '@agent-device/contracts/device';
 import { shutdownTargetUse } from '@agent-device/contracts/platform-runtime-operations';
 import { publicPlatformString } from '@agent-device/kernel/device';
-import { errorResponse } from '@agent-device/kernel/contracts';
 import {
   requireSessionOrExplicitSelector,
   resolveCommandDevice,
@@ -16,7 +15,6 @@ import {
 } from '../../core/session-runtime-admission.ts';
 import { deviceStatusReportResponse } from './session-device-status-response.ts';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
-import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import { releaseTargetLease } from '../target-lease-release.ts';
 
 function shutdownUnavailableResponse(fact: RuntimeOperationFact) {
