@@ -16,8 +16,7 @@ import { maybeBuildAndroidSnapshotTimeoutFailure } from '../execution/android-sn
 import { captureSnapshot } from '../core/snapshot-capture.ts';
 import { createSnapshotSession, withSessionlessRunnerCleanup } from '../core/snapshot-session.ts';
 import { resolveSessionScope } from './session-routing.ts';
-import { activateCompleteRefFrame } from '../core/ref-frame.ts';
-import { applyRefFrameAdvisoryHint } from '../core/ref-frame.ts';
+import { activateCompleteRefFrame, applyRefFrameAdvisoryHint } from '../core/ref-frame.ts';
 import {
   applyRecoveredWarningLatch,
   type CapturedSnapshotQuality,
