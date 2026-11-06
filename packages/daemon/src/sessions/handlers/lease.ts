@@ -1,4 +1,3 @@
-import { isProviderInstanceEndedError } from '@agent-device/contracts/lease-scope';
 import type { LeaseEndReason } from '../lease-lifecycle.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
@@ -28,6 +27,7 @@ import {
   resolveRequestOrSessionLeaseScope,
 } from '../../core/lease-context.ts';
 import {
+  isProviderInstanceEndedError,
   leaseDeviceKey,
   leaseProviderRequiringRuntime,
   leaseScopeToAllocateRequest,
