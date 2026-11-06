@@ -29,6 +29,7 @@ export function limrunOwnerOptions(
   overrides: Partial<LimrunPlatformRuntimeOwnerOptions> = {},
 ): LimrunPlatformRuntimeOwnerOptions {
   return {
+    bindPerformance: async () => undefined,
     host: unusedLimrunHost(),
     runtimeInstance: 'default',
     ownsDevice: () => true,

@@ -233,7 +233,7 @@ What a **Yes** does not claim:
 | [Screen recording](/docs/commands#media-and-logs) | No | No | No | No | Yes | Yes | No | No |
 | [App logs](/docs/debugging-profiling#logs) | No | No | No | No | Yes | Yes | No | No |
 | [HTTP(S) request inspection](/docs/debugging-profiling#network-inspection) | No | No | No | No | Yes | Yes | No | No |
-| [Performance samples (frames, memory, CPU profiles)](/docs/debugging-profiling#performance-snapshots) | No | No | No | No | No | No | No | No |
+| [Performance samples (frames, memory, CPU profiles)](/docs/debugging-profiling#performance-snapshots) | No | No | No | No | No | Frame and memory samples and HPROF heap snapshots; native captures and CPU profiles are unavailable | No | No |
 | [Audio probe](/docs/debugging-profiling#audio-probes) | No | No | No | No | No | No | No | No |
 
 What a **Yes** does not claim:

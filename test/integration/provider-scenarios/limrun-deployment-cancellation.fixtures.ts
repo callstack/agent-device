@@ -165,6 +165,9 @@ function limrunDependencies(ios: LimrunRuntimeDependencies['ios']): LimrunRuntim
   return {
     clientVersion: 'test',
     android: {
+      bindPerformance: async () => {
+        throw new Error('Unexpected performance binding');
+      },
       bindDeployment: async (device, _adb, request) => {
         const { createAndroidAppDeploymentOperations } =
           await import('@agent-device/platform-android/mechanics');

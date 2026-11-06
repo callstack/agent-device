@@ -26,6 +26,9 @@ export function stubLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
   return {
     clientVersion: 'test-version',
     android: {
+      bindPerformance: async () => {
+        throw new Error('Unexpected performance binding');
+      },
       bindDeployment: async () => {
         throw new Error('Unexpected deployment binding');
       },

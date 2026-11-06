@@ -21,6 +21,16 @@ export function createLimrunRuntimeDependencies(host: HostEnvironment): LimrunRu
   return {
     clientVersion: readVersion(),
     android: {
+      bindPerformance: async (device, adb, runtimeHost, owner) => {
+        const { createAndroidPerfOperations, withAndroidAdbProvider } =
+          await import('@agent-device/platform-android/mechanics');
+        const scopedHost = withMethodScope({ ...runtimeHost }, (task) =>
+          runOnHost(() => withAndroidAdbProvider(adb, { serial: device.id }, task)),
+        );
+        const { perfFrames, perfMemorySample, perfMemorySnapshot } =
+          await createAndroidPerfOperations({ device, owner, resolveHost: () => scopedHost });
+        return { perfFrames, perfMemorySample, perfMemorySnapshot };
+      },
       bindDeployment: async (device, adb, request) => {
         const { createAndroidAppDeploymentOperations, withAndroidAdbProvider } =
           await import('@agent-device/platform-android/mechanics');

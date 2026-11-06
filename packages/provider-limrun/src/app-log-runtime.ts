@@ -1,3 +1,5 @@
+import { createLimrunAndroidPerfOperations } from './android-perf-runtime.ts';
+import type { LimrunAndroidPerfOperations } from './android-perf-runtime.ts';
 import type { LimrunIosRunner } from './runtime-dependencies.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppsFilter, ProviderPortReverseOptions } from '@agent-device/contracts/device';
@@ -57,6 +59,7 @@ export type LimrunPlatformRuntimeOwnerOptions = Omit<
   'isSessionActive'
 > &
   Readonly<{
+    bindPerformance(device: DeviceInfo): Promise<LimrunAndroidPerfOperations | undefined>;
     host: PlatformRuntimeHost;
     runtimeInstance: string;
     ownsDevice(device: DeviceInfo): boolean;
@@ -206,6 +209,9 @@ function bindLimrunAppLogs(
     ),
     ...interaction,
     ...runnerOperations,
+    ...(device.platform === 'android'
+      ? createLimrunAndroidPerfOperations(() => options.bindPerformance(device), signal)
+      : {}),
     appState: async (input) => {
       const state = await runnerOperations?.appState(input);
       // A stopped runner returns no state; still prove the remote instance can answer.

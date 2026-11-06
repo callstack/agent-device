@@ -1,3 +1,5 @@
+import { bindElementTextRuntime } from '@agent-device/contracts/element-text-runtime';
+import { invalidRuntimeContract } from '@agent-device/contracts/runtime-contract-error';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import {
   type RuntimeFacts,
@@ -138,6 +140,18 @@ export function bindLimrunInteractionOperations(
   const { device, signal } = params;
   const resolveInteractor = (runner: RunnerContext) => params.getInteractor(device, runner);
   return Object.freeze({
+    ...(device.platform === 'android'
+      ? bindElementTextRuntime({
+          device,
+          signal,
+          resolveInteractor: async (_device, runner) => {
+            const interactor = resolveInteractor(runner);
+            if (!interactor)
+              throw invalidRuntimeContract('Limrun Android interactor is unavailable');
+            return interactor;
+          },
+        })
+      : {}),
     ...bindProviderSnapshotInteractor({
       device,
       signal,

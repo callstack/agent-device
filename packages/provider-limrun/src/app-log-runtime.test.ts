@@ -322,12 +322,8 @@ test.each([
   expect(binding.operations.focusPoint).toBeTypeOf('function');
   expect(binding.operations.typeText).toBeTypeOf('function');
   expect(binding.operations.captureSnapshot).toBeTypeOf('function');
-  expect(binding.facts.operations.readTextAtPoint.available).toBe(
-    runtimeDevice.platform === 'apple',
-  );
-  expect(binding.operations.readTextAtPoint).toBeTypeOf(
-    runtimeDevice.platform === 'apple' ? 'function' : 'undefined',
-  );
+  expect(binding.facts.operations.readTextAtPoint.available).toBe(true);
+  expect(binding.operations.readTextAtPoint).toBeTypeOf('function');
   expectLimrunNavigationAndKeyboardFacts(binding, runtimeDevice);
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),

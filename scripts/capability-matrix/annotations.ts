@@ -326,6 +326,16 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
         commands: ['perf'],
         link: docs('debugging-profiling', 'performance-snapshots'),
         cells: {
+          'limrun-android': {
+            text: 'Frame and memory samples and HPROF heap snapshots; native captures and CPU profiles are unavailable',
+            admits: ['perfFrames', 'perfMemorySample', 'perfMemorySnapshot'],
+            refuses: [
+              'perfNativeCaptureStart',
+              'perfNativeCaptureReattach',
+              'perfNativeCaptureCleanup',
+              'perfProfileReport',
+            ],
+          },
           'harmonyos-emulator': {
             text: 'Process RSS memory sample only; frames, memory-snapshot artifacts, CPU profiles, and native captures report unavailable',
             admits: ['perfFrames', 'perfMemorySample', 'perfMemorySnapshot'],
