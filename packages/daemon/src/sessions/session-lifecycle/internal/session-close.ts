@@ -140,32 +140,28 @@ async function releaseProviderLeaseForClose(params: {
     let providerRelease: { providerData?: Record<string, unknown> } | undefined;
     let shutdownResult: TargetShutdownResult | undefined;
     const shutdownTarget = params.lifecycle.operations.shutdownTarget;
-    if (params.req.flags?.shutdown && shutdownTarget) {
-      const providerShutdown = params.lifecycle.owner.kind === 'provider-runtime';
-      if (!params.shutdownPrepared && providerShutdown) {
+    if (
+      params.req.flags?.shutdown &&
+      shutdownTarget &&
+      params.lifecycle.owner.kind === 'provider-runtime'
+    ) {
+      if (!params.shutdownPrepared) {
         throw (
           closeCleanupError(params.sessionName, params.cleanupFailures) ??
           new AppError('COMMAND_FAILED', 'Target shutdown preparation failed. Retry close.')
         );
       }
-      if (params.shutdownPrepared) {
-        try {
-          shutdownResult = await shutdownTarget({
-            releaseLease: async (leaseId) => {
-              const result = await releaseTargetLease({
-                ...params,
-                owner: params.lifecycle.owner,
-                leaseId,
-              });
-              providerRelease = { providerData: result.provider };
-              return result.shutdown;
-            },
+      shutdownResult = await shutdownTarget({
+        releaseLease: async (leaseId) => {
+          const result = await releaseTargetLease({
+            ...params,
+            owner: params.lifecycle.owner,
+            leaseId,
           });
-        } catch (error) {
-          if (providerShutdown) throw error;
-          params.cleanupFailures.push({ step: 'application_lifecycle', error });
-        }
-      }
+          providerRelease = { providerData: result.provider };
+          return result.shutdown;
+        },
+      });
     }
     if (providerRelease) return { ...providerRelease, shutdownResult };
     const { endedLeaseId, providerData } = await releaseSessionLease(params);
@@ -423,21 +419,26 @@ async function runCloseTeardownAndRelease(params: {
   } = params;
   const { address: sessionName } = ref;
   const cleanupFailures: SessionCleanupFailure[] = [];
-  const { platformCloseError, retainExecutionHost, saveScriptError, shutdownPrepared } =
-    await runSessionCloseTeardown({
-      leaseRegistry,
-      req,
-      ref,
-      logPath,
-      sessionStore,
-      lifecycle,
-      clearRuntimeHints,
-      cleanupFailures,
-      repairArmed: params.repairArmed,
-      dispatchTargetedPlatformClose,
-      finalizeOrdinaryCloseScript,
-      platformResourceCleanup: params.platformResourceCleanup,
-    });
+  const {
+    platformCloseError,
+    retainExecutionHost,
+    saveScriptError,
+    shutdownPrepared,
+    shutdownResult,
+  } = await runSessionCloseTeardown({
+    leaseRegistry,
+    req,
+    ref,
+    logPath,
+    sessionStore,
+    lifecycle,
+    clearRuntimeHints,
+    cleanupFailures,
+    repairArmed: params.repairArmed,
+    dispatchTargetedPlatformClose,
+    finalizeOrdinaryCloseScript,
+    platformResourceCleanup: params.platformResourceCleanup,
+  });
   let session = sessionStore.requireCurrent(ref);
   // Each cleanup report is built where the session's fate is decided, so its diagnostic and hint
   // describe what actually happened to the session. It is built even when a platform-close error
@@ -481,7 +482,7 @@ async function runCloseTeardownAndRelease(params: {
   return {
     kind: 'closed',
     providerData: leaseRelease.providerData,
-    shutdownResult: leaseRelease.shutdownResult,
+    shutdownResult: leaseRelease.shutdownResult ?? shutdownResult,
   };
 }
 

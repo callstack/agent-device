@@ -409,7 +409,7 @@ test('an Android intent relaunch that resumes no app closes nothing and stays un
   expect(outcome.timing.postOpenObservation).toBe('app-unidentified');
 });
 
-test('close --shutdown waits for keyboard restoration before completing finalization (#3318)', async () => {
+test('close --shutdown restores the keyboard and only then kills the emulator (#3318)', async () => {
   const sequence: string[] = [];
   let finishRestore: () => void = () => {};
   const { lifecycle } = createLifecycle({
@@ -441,8 +441,8 @@ test('close --shutdown waits for keyboard restoration before completing finaliza
   finishRestore();
 
   const result = await finalizing;
-  expect(sequence).toEqual(['restore:true', 'restored']);
-  expect(result).toEqual({});
+  expect(sequence).toEqual(['restore:true', 'restored', 'shutdown']);
+  expect(result.shutdown).toMatchObject({ success: true });
 });
 
 test('close --shutdown is ignored for a physical Android device', async () => {

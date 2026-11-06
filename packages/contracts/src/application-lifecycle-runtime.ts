@@ -5,6 +5,7 @@ import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { ProviderPortReverseOptions } from './provider-device-runtime.ts';
+import type { TargetShutdownResult } from './target-shutdown-contract.ts';
 
 /**
  * A deliberately neutral runtime-hint payload. Daemon policy owns parsing and
@@ -258,11 +259,13 @@ export type CloseApplicationFinalizationInput = Readonly<{
   stateDir: string;
   /** Daemon shutdown defers runner termination to the gateway's single final phase. */
   daemonShutdown?: boolean;
-  /** Finish preparation for shutdown before the daemon invokes the admitted shutdown operation. */
+  /** `close --shutdown` is an admitted close finalization effect, never a daemon fallback. */
   shutdownTarget?: boolean;
 }>;
 
-export type CloseApplicationFinalizationResult = Readonly<Record<string, never>>;
+export type CloseApplicationFinalizationResult = Readonly<{
+  shutdown?: TargetShutdownResult;
+}>;
 
 export type PrepareAppleRunnerInput = Readonly<{
   timeoutMs: number;

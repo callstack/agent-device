@@ -300,21 +300,18 @@ test.each(['tenant', 'cwd'] as const)(
   },
 );
 
-test.each(['finalizeApplicationClose', 'shutdownTarget'] as const)(
-  'local %s failure retires the session instead of offering a provider retry',
-  async (operation) => {
-    const world = scenario('android', true);
-    Object.assign(world.binding, { owner: localRuntimeOwner('android') });
-    world.sessionStore.get('test')!.lease = undefined;
-    world.req.meta = {};
-    vi.spyOn(world.binding.operations, operation).mockRejectedValueOnce(
-      new Error('Local cleanup failed'),
-    );
-    await expect(world.run()).rejects.toMatchObject({
-      code: 'COMMAND_FAILED',
-      message: expect.stringContaining('Local cleanup failed'),
-    });
-    expect(world.sessionStore.get('test')).toBeUndefined();
-    expect(world.release).not.toHaveBeenCalled();
-  },
-);
+test('local finalization failure retires the session instead of offering a provider retry', async () => {
+  const world = scenario('android', true);
+  Object.assign(world.binding, { owner: localRuntimeOwner('android') });
+  world.sessionStore.get('test')!.lease = undefined;
+  world.req.meta = {};
+  vi.spyOn(world.binding.operations, 'finalizeApplicationClose').mockRejectedValueOnce(
+    new Error('Local cleanup failed'),
+  );
+  await expect(world.run()).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: expect.stringContaining('Local cleanup failed'),
+  });
+  expect(world.sessionStore.get('test')).toBeUndefined();
+  expect(world.release).not.toHaveBeenCalled();
+});

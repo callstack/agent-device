@@ -98,12 +98,12 @@ export function createLimrunPlatformRuntimeOwner(
   return Object.freeze({
     owner,
     ownsDevice,
-    inspectFacts: async (device) =>
-      hasLiveSession(device)
-        ? limrunAppLogFacts(options, device)
-        : ownsDevice(device) && options.hasPendingRelease?.(device)
-          ? limrunReleaseFacts(options, device)
-          : limrunUnavailableFacts(options, device),
+    inspectFacts: async (device) => {
+      if (hasLiveSession(device)) return limrunAppLogFacts(options, device);
+      return ownsDevice(device) && options.hasPendingRelease?.(device)
+        ? limrunReleaseFacts(options, device)
+        : limrunUnavailableFacts(options, device);
+    },
     bind: async (request) => {
       if (request.intent.kind === 'exact-owner' && !sameRuntimeOwner(request.intent.owner, owner)) {
         throw new AppError('UNSUPPORTED_OPERATION', 'Limrun app-log owner identity does not match');

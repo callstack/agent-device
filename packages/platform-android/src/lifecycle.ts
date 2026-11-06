@@ -91,7 +91,11 @@ export function bindAndroidApplicationLifecycle(
         shutdownTarget: input.shutdownTarget === true && device.kind === 'emulator',
         signal,
       });
-      return {};
+      const shutdown =
+        input.shutdownTarget && device.kind === 'emulator'
+          ? await host.deviceShutdown.android.shutdownTarget(device, signal)
+          : undefined;
+      return shutdown === undefined ? {} : { shutdown };
     },
     prepareAppleRunner: unavailable,
     configureProviderPortReverse: unavailable,

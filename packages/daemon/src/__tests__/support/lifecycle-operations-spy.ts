@@ -17,9 +17,9 @@ export function lifecycleOperationsSpy(
   const finalizeApplicationClose = vi.fn<
     ApplicationLifecycleRuntimeOperations['finalizeApplicationClose']
   >(async () => ({}));
-  const loader: LifecycleOperationsLoader = async (device, signal) =>
+  const loader: LifecycleOperationsLoader = async (device, signal, shutdownTarget) =>
     Object.freeze({
-      ...(await applicationLifecycleRuntimeFixture(device, signal)),
+      ...(await applicationLifecycleRuntimeFixture(device, signal, shutdownTarget)),
       ...overrides,
       finalizeApplicationClose,
     });
