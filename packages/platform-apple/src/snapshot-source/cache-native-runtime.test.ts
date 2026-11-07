@@ -183,6 +183,7 @@ describe.skipIf(process.platform !== 'darwin')('native listener readiness', () =
       nativeRoot,
       path.join(nativeRoot, 'SnapshotBridgeRuntime.m'),
       path.join(nativeRoot, 'SnapshotBridgeCapture.m'),
+      path.join(nativeRoot, 'SnapshotBridgeRequest.m'),
       path.join(nativeRoot, 'SnapshotBridgeSurfaceHosts.m'),
       path.join(import.meta.dirname, 'fixtures/readiness.m'),
       '-o',

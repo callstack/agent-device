@@ -26,9 +26,16 @@ test('an explicit null fixture start time reaches the manager as an unavailable 
   }
 });
 
-test.each([undefined, 'application_not_responding'])(
-  'an explicit zero fixture response pid reaches identity validation with guest error %s',
-  async (responseErrorKind) => {
+test.each([
+  { responseErrorKind: undefined, failureKind: 'stale-target', failureCode: 'bridge-pid-mismatch' },
+  {
+    responseErrorKind: 'application_not_responding',
+    failureKind: 'timeout',
+    failureCode: 'fixture-error',
+  },
+])(
+  'an explicit zero fixture response pid with guest error $responseErrorKind fails as $failureCode',
+  async ({ responseErrorKind, failureKind, failureCode }) => {
     const fixture = createLifecycleFixture({ responsePid: 0, responseErrorKind });
     const manager = new SnapshotBridgeManager(fixture.host);
     try {
@@ -42,8 +49,8 @@ test.each([undefined, 'application_not_responding'])(
         }),
         (error: unknown) =>
           error instanceof SnapshotSourceError &&
-          error.failureKind === 'stale-target' &&
-          error.failureCode === 'bridge-pid-mismatch',
+          error.failureKind === failureKind &&
+          error.failureCode === failureCode,
       );
     } finally {
       await manager.close();

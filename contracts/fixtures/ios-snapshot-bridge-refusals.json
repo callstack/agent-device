@@ -26,6 +26,10 @@
       "consequence": "bridge-preparation"
     },
     {
+      "code": "bridge-readiness-pending",
+      "consequence": "bridge-preparation"
+    },
+    {
       "code": "snapshot-tree-changed",
       "consequence": "tree-changed"
     },
@@ -60,6 +64,7 @@
     "bridge-process-pid-missing",
     "bridge-read-abandoned",
     "bridge-request-deadline",
+    "bridge-startup-deadline",
     "child-invalid",
     "children-invalid",
     "continuation-budget-exhausted",
