@@ -18,6 +18,7 @@ export {
   type SnapshotProvenance,
   type SnapshotBackend,
   type SnapshotProducer,
+  type SnapshotProducerRegistry,
   type SnapshotStateProvenance,
   type SnapshotCaptureProvenance,
   type SnapshotState,

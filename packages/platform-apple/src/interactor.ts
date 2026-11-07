@@ -26,6 +26,7 @@ import {
 } from '@agent-device/contracts/session';
 import { DEVICE_ROTATIONS, type DeviceRotation } from '@agent-device/contracts/device';
 import { normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
+import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producers';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -326,21 +327,22 @@ async function captureAppleRunnerSnapshot(
   assertReportedRunnerSnapshotNodes(device, options, result);
   const warnings = runnerSnapshotWarnings(result);
   const presentation = presentRunnerSnapshotForDevice(device, options, result);
-  return {
-    nodes: presentation.nodes,
-    truncated: result.truncated ?? false,
-    backend: 'xctest' as const,
-    producer: 'apple-runner' as const,
-    ...(presentation.viewport ? { viewport: presentation.viewport } : {}),
-    ...(result.quality ? { quality: result.quality } : {}),
-    ...(result.qualityNotes ? { qualityNotes: result.qualityNotes } : {}),
-    ...(result.systemSurface ? { systemSurface: result.systemSurface } : {}),
-    ...(result.presentedSurface ? { presentedSurface: result.presentedSurface } : {}),
-    ...(result.keyboard ? { keyboard: result.keyboard } : {}),
-    ...(result.targetActivation ? { targetActivation: result.targetActivation } : {}),
-    ...(result.observation ? { observation: result.observation } : {}),
-    ...(warnings.length > 0 ? { warnings } : {}),
-  };
+  return stampSnapshotIdentity(
+    {
+      nodes: presentation.nodes,
+      truncated: result.truncated ?? false,
+      ...(presentation.viewport ? { viewport: presentation.viewport } : {}),
+      ...(result.quality ? { quality: result.quality } : {}),
+      ...(result.qualityNotes ? { qualityNotes: result.qualityNotes } : {}),
+      ...(result.systemSurface ? { systemSurface: result.systemSurface } : {}),
+      ...(result.presentedSurface ? { presentedSurface: result.presentedSurface } : {}),
+      ...(result.keyboard ? { keyboard: result.keyboard } : {}),
+      ...(result.targetActivation ? { targetActivation: result.targetActivation } : {}),
+      ...(result.observation ? { observation: result.observation } : {}),
+      ...(warnings.length > 0 ? { warnings } : {}),
+    },
+    { backend: 'xctest', producer: 'apple-runner' },
+  );
 }
 
 function runnerSnapshotCommand(options: SnapshotOptions | undefined): RunnerCommand {

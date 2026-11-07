@@ -3,8 +3,9 @@ import type {
   SnapshotPreferredBackend,
   SnapshotQualityVerdict,
 } from '@agent-device/kernel/snapshot';
-import type { SnapshotProducer, SnapshotState } from '@agent-device/contracts/snapshot-model';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
+import { snapshotProducerFacts } from '@agent-device/contracts/snapshot-producers';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
 import { now, sleep } from '../../runtime-common.ts';
@@ -51,32 +52,15 @@ const QUIET_DEADLINE_EPSILON_MS = 2;
 const BROAD_TRANSITION_CONFIRMATION_QUIET_MS = 1_500;
 export const DEFAULT_STABLE_QUIET_MS = 500;
 /**
- * The default quiet window each producer's capture earns. The iOS simulator snapshot bridge answers
- * well inside the general default, so holding the general window on that read spends a whole extra
- * capture on a window its tree had already satisfied. Keyed on the producer, not the channel: the
- * bridge and the Apple runner share the `xctest` channel and read at different costs, and only the
- * bridge carries the measurement. Every producer states its price here, so a new one cannot inherit
- * an unmeasured window by omission. (PR #3522 holds the interleaved before/after medians and the
- * late-diff accuracy check.)
+ * The default quiet window a capture earns, keyed on the producer and not the channel: the bridge
+ * and the Apple runner share the `xctest` channel and read at different costs. A capture that
+ * declares no producer, or one this host does not list, has no measured price and keeps the
+ * general default.
  */
-const DEFAULT_QUIET_MS_BY_PRODUCER = {
-  'apple-runner': DEFAULT_STABLE_QUIET_MS,
-  'simulator-ax-bridge': 300,
-  'appium-source': DEFAULT_STABLE_QUIET_MS,
-  'revyl-ios-tree': DEFAULT_STABLE_QUIET_MS,
-  'android-uiautomator': DEFAULT_STABLE_QUIET_MS,
-  'cdp-dom': DEFAULT_STABLE_QUIET_MS,
-  'harmonyos-uitest': DEFAULT_STABLE_QUIET_MS,
-  'macos-helper': DEFAULT_STABLE_QUIET_MS,
-  'linux-atspi': DEFAULT_STABLE_QUIET_MS,
-  'agent-browser': DEFAULT_STABLE_QUIET_MS,
-} as const satisfies Record<SnapshotProducer, number>;
-
-/** A capture that declares no producer has no measured price and keeps the general default. */
 function defaultQuietMsForCapture(snapshot: SnapshotState): number {
   return snapshot.producer === undefined
     ? DEFAULT_STABLE_QUIET_MS
-    : DEFAULT_QUIET_MS_BY_PRODUCER[snapshot.producer];
+    : (snapshotProducerFacts(snapshot.producer)?.quietMs ?? DEFAULT_STABLE_QUIET_MS);
 }
 export const DEFAULT_STABLE_TIMEOUT_MS = 10_000;
 // Below this node count a settled tree is suspicious: real app surfaces have

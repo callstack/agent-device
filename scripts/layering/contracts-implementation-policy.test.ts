@@ -128,4 +128,34 @@ test('iOS snapshot contracts reject planning implementation and provider imports
     ),
     [],
   );
+  assert.deepEqual(
+    messages(
+      [
+        "import type { SNAPSHOT_PRODUCERS } from './snapshot-producers.ts';",
+        'export type IosProducer = keyof typeof SNAPSHOT_PRODUCERS;',
+      ].join('\n'),
+      contract,
+    ),
+    [],
+  );
+  assert.match(
+    messages(
+      [
+        "import { SNAPSHOT_PRODUCERS } from './snapshot-producers.ts';",
+        'export type IosProducer = keyof typeof SNAPSHOT_PRODUCERS;',
+      ].join('\n'),
+      contract,
+    )[0]!,
+    /typed vocabulary only/,
+  );
+  assert.match(
+    messages(
+      [
+        "import type { SnapshotResult } from './interactor-types.ts';",
+        'export type IosResult = SnapshotResult;',
+      ].join('\n'),
+      contract,
+    )[0]!,
+    /planning algorithms or provider\/lifecycle implementation/,
+  );
 });

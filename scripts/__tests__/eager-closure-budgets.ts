@@ -167,6 +167,13 @@ export const APPROVED_CLOSURE_ADDITIONS: readonly Readonly<{
       'The iOS snapshot presenter attaches the text-input geometry it measured before projection to the nodes it publishes, so the tap probe can skip on fresh evidence. The owner of capture-private evidence is one WeakMap and its accessors, imported through its own subpath.',
     owner: 'thymikee',
   },
+  {
+    module: 'packages/contracts/src/snapshot-producers.ts',
+    issue: '#4309',
+    reason:
+      'The registry and identity stamp are the provenance contract every capture path already evaluates; this is the module boundary only (#4309, #4205). Measured: +1 module and +5 to +9 top-level statements per closure that reaches snapshot-model.',
+    owner: 'thymikee',
+  },
 ]);
 
 /** The category is a function of the path, never a hand-written column. */

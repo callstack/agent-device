@@ -1,3 +1,4 @@
+import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producers';
 import {
   attachSnapshotClickabilityEvidence,
   attachSnapshotOcclusionContextEvidence,
@@ -80,11 +81,10 @@ export function androidSnapshotViewportFromHelperMetadata(
 export function androidSnapshotPublicationInput(
   capture: AndroidSnapshotCapture,
 ): AndroidSnapshotPublicationInput {
-  const publication: AndroidSnapshotPublicationInput = {
-    ...capture,
+  const publication: AndroidSnapshotPublicationInput = stampSnapshotIdentity(capture, {
     backend: 'android',
     producer: 'android-uiautomator',
-  };
+  });
   const evidence = capture[androidCaptureEvidence];
   attachSnapshotClickabilityEvidence(publication, evidence.clickability);
   if (evidence.occlusionContext) {

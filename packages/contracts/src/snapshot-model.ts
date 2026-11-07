@@ -1,4 +1,3 @@
-import type { IosSnapshotProducer } from './ios-snapshot.ts';
 import type {
   IosTargetActivation,
   PresentedSurface,
@@ -10,29 +9,22 @@ import type {
   SnapshotRefMinting,
   SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
+import {
+  isSnapshotBackend,
+  snapshotProducerFacts,
+  type SnapshotBackend,
+  type SnapshotProducer,
+  type SnapshotProducerRegistry,
+  type SnapshotProvenance,
+} from './snapshot-producers.ts';
 
-/**
- * The channel↔producer pairs that can actually occur. `xctest` trees come from the local Apple
- * runner, Appium page-source XML, or a cloud provider's AX element tree (Revyl), and only
- * the runner's output has been through its presentation (clip fold, effective geometry, scope).
- * Logic that assumes those guarantees must key on the producer, never on the channel alone.
- *
- * This table owns both vocabularies: the platform channel (`SnapshotBackend` is its `backend`
- * projection) and the acquisition producer, beside the in-plan `SnapshotCaptureBackend`. Every
- * carrier embeds the pair atomically, so a cross-channel pair does not compile.
- */
-export type SnapshotProvenance =
-  | {
-      backend: 'xctest';
-      producer: IosSnapshotProducer;
-    }
-  | { backend: 'android'; producer: 'android-uiautomator' | 'appium-source' | 'cdp-dom' }
-  | { backend: 'harmonyos-arkui'; producer: 'harmonyos-uitest' }
-  | { backend: 'macos-helper'; producer: 'macos-helper' }
-  | { backend: 'linux-atspi'; producer: 'linux-atspi' }
-  | { backend: 'web'; producer: 'agent-browser' };
-
-export type SnapshotBackend = SnapshotProvenance['backend'];
+export {
+  isSnapshotBackend,
+  type SnapshotBackend,
+  type SnapshotProducer,
+  type SnapshotProducerRegistry,
+  type SnapshotProvenance,
+};
 
 type OptionalProducerProvenance<Pair> = Pair extends {
   backend: infer Backend;
@@ -84,20 +76,6 @@ export function snapshotStateProvenance(
     case 'web':
       return { backend: value.backend, producer: value.producer };
   }
-}
-
-/** Keyed on `SnapshotBackend`, so a backend added to `SnapshotProvenance` must be listed here. */
-const SNAPSHOT_BACKENDS = {
-  xctest: true,
-  android: true,
-  'harmonyos-arkui': true,
-  'macos-helper': true,
-  'linux-atspi': true,
-  web: true,
-} as const satisfies Record<SnapshotBackend, true>;
-
-export function isSnapshotBackend(value: unknown): value is SnapshotBackend {
-  return typeof value === 'string' && Object.hasOwn(SNAPSHOT_BACKENDS, value);
 }
 
 export function usesMobileSnapshotPresentation(backend: SnapshotBackend | undefined): boolean {
@@ -188,16 +166,9 @@ export function inheritPostGestureOutcome<T extends SnapshotState>(
 }
 
 /**
- * The one producer that resolves actions against refs of its own, and so owns the ref namespace of
- * every tree it publishes. A producer that mints nothing belongs nowhere in this list: it keeps
- * dense positional numbering. Adding a second producer that mints its own refs means adding it here.
- */
-const REF_NAMESPACE_OWNERS: readonly SnapshotProducer[] = ['agent-browser'];
-
-/**
- * The ref-minting mode of a capture, from the pair that produced it. This is the one place that
- * knows which producers own their ref namespace, so the projection that publishes a tree and the
- * projection that later re-attaches refs to it cannot disagree.
+ * The ref-minting mode of a capture, from the pair that produced it. The projection that publishes a
+ * tree and the projection that later re-attaches refs to it both read it here, so they cannot
+ * disagree about which producers own their ref namespace.
  *
  * It reads the producer and not the platform channel, per the rule the provenance table states:
  * several producers can feed one channel with different guarantees, and a second web adapter
@@ -209,15 +180,9 @@ const REF_NAMESPACE_OWNERS: readonly SnapshotProducer[] = ['agent-browser'];
 export function snapshotRefMinting(
   provenance: SnapshotCaptureProvenance | undefined,
 ): SnapshotRefMinting {
-  // agent-browser resolves click/fill/hover against refs it minted itself, in tree order and not
-  // densely (#2283). A ref minted beside it would either name a different element or nothing.
   const producer = provenance?.producer;
-  return producer !== undefined && REF_NAMESPACE_OWNERS.includes(producer)
-    ? 'backend-issued'
-    : 'dense';
+  return producer === undefined ? 'dense' : (snapshotProducerFacts(producer)?.refs ?? 'dense');
 }
-
-export type SnapshotProducer = SnapshotProvenance['producer'];
 
 export function buildSnapshotNodeMap<T extends { index: number }>(
   nodes: readonly T[],

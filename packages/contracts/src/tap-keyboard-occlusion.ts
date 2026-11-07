@@ -33,7 +33,7 @@ import { normalizeType } from './snapshot-text.ts';
  *
  * Otherwise the band is derived from the captured tree every acting path already holds, so the guard
  * costs no round trip. This is the path for Android captures that could not list every window and for
- * the producers that never see the app's windows (`appium-source`, `revyl-ios-tree`, the runner's own query-sweep tier).
+ * the producers that never see the app's windows (`appium-source`, `revyl-ios-tree`, `revyl-android-tree`, the runner's own query-sweep tier).
  * Derivation, the rules that decide whether reported geometry may be measured at all, and the verdict
  * on a point are proven against `contracts/fixtures/tap-keyboard-occlusion-policy.json`; change a rule
  * only through that table.
