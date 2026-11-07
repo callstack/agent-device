@@ -73,6 +73,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     positionalArgs: ['status|release'],
     allowedFlags: ['stale'],
     supportedFlags: ['platform', 'device', 'udid', 'serial'],
+    explicitOnlyFlags: ['platform', 'device', 'udid', 'serial'],
   },
   connect: {
     text: {

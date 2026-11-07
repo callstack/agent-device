@@ -243,3 +243,57 @@ test('names a replaced-but-running daemon owner as stale rather than a live hold
     fs.rmSync(claimsDir, { recursive: true, force: true });
   }
 });
+
+// #4298: device status does not let a project agent-device.json udid override explicit --serial
+test('device status matches explicit --serial when project agent-device.json sets a udid', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-cli-claims-');
+  const projectDir = mkdtempForTestSync('agent-device-project-dir-');
+  const owner = readCurrentOwnerIdentity();
+  try {
+    fs.writeFileSync(
+      path.join(projectDir, 'agent-device.json'),
+      JSON.stringify({
+        platform: 'ios',
+        udid: '01234567-89AB-CDEF-0123-456789ABCDEF',
+        session: 'ios-session',
+      }),
+    );
+    fs.writeFileSync(
+      path.join(claimsDir, 'android.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        deviceKey: 'local:android:none:emulator-5560',
+        device: {
+          platform: 'android',
+          id: 'emulator-5560',
+          name: 'Android Emulator',
+          kind: 'emulator',
+        },
+        session: 'android-session',
+        workspace: '/worktrees/android',
+        stateDir: process.cwd(),
+        ownerPid: owner.pid,
+        ownerStartTime: owner.startTime,
+        ownerToken: 'android-token',
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      }),
+    );
+
+    const result = await runCliCapture(
+      ['device', 'status', '--platform', 'android', '--serial', 'emulator-5560', '--json'],
+      {
+        cwd: projectDir,
+        env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+      },
+    );
+    assert.equal(result.code, null);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.success, true);
+    assert.equal(payload.data.claims.length, 1);
+    assert.equal(payload.data.claims[0].device.id, 'emulator-5560');
+  } finally {
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+    fs.rmSync(projectDir, { recursive: true, force: true });
+  }
+});
