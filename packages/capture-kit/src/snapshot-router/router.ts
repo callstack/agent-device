@@ -3,7 +3,7 @@ import type {
   CaptureSnapshotInput,
   SnapshotResult,
   SnapshotRuntimeAcquiredResult,
-  SnapshotRuntimeHost,
+  SnapshotRuntimePresenter,
 } from '@agent-device/contracts/snapshot-runtime';
 import type {
   CaptureHint,
@@ -140,13 +140,9 @@ export type SnapshotSourceChannel<Target extends SnapshotRouteTarget> = Readonly
   sessionChanged?(): void;
 }>;
 
-/** What the router reads from the platform host: presentation only. */
-export type SnapshotRouterHost = Readonly<{
-  snapshot: Pick<SnapshotRuntimeHost, 'presentIosAcquisition'>;
-}>;
-
 export function createSnapshotRouter<Target extends SnapshotRouteTarget>(
-  host: SnapshotRouterHost,
+  /** The platform host's presenter, the only host behavior the router reads. */
+  present: SnapshotRuntimePresenter,
   channel: SnapshotSourceChannel<Target>,
   surfaceForeground: SystemSurfaceForegroundProbe,
 ): SnapshotRouter {
@@ -298,11 +294,7 @@ export function createSnapshotRouter<Target extends SnapshotRouteTarget>(
       try {
         return await withDiagnosticTimer(
           'ios.snapshot-source.present',
-          async () =>
-            await host.snapshot.presentIosAcquisition(
-              outcome as SnapshotRuntimeAcquiredResult,
-              input.options,
-            ),
+          async () => await present(outcome as SnapshotRuntimeAcquiredResult, input.options),
           { producer: 'simulator-ax-bridge' },
         );
       } catch (error) {

@@ -87,7 +87,7 @@ export function createAppleRunnerRuntime(options: {
    */
   const routeFor = (present: SnapshotRuntimePresenter) =>
     (snapshotRoute ??= createSnapshotRouter(
-      { snapshot: { presentIosAcquisition: present } },
+      present,
       bridge,
       async (device, input) =>
         await withAppleRunnerProvider(

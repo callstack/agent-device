@@ -44,7 +44,8 @@ export function createAppleSnapshotRoute(
   const source = options.source ?? createSimulatorSnapshotSource(host.hostEnvironment);
   const targets = options.targets ?? createSimulatorSnapshotTargetResolver();
   const router = createSnapshotRouter<SimulatorSnapshotTarget>(
-    host,
+    async (result, captureOptions) =>
+      await host.snapshot.presentIosAcquisition(result, captureOptions),
     {
       source,
       servesDevice: hasSimulatorBridge,

@@ -150,13 +150,9 @@ function bridgeRoute(provider: AppleRunnerProvider, runnerSessionId?: string) {
   const presented: SnapshotRuntimeAcquiredResult[] = [];
   const fallbacks: CaptureSnapshotInput[] = [];
   const route = createSnapshotRouter(
-    {
-      snapshot: {
-        presentIosAcquisition: (result) => {
-          presented.push(result);
-          return { ...runnerResult(), producer: result.acquisition.producer };
-        },
-      },
+    (result) => {
+      presented.push(result);
+      return { ...runnerResult(), producer: result.acquisition.producer };
     },
     bridge,
     async () =>
@@ -567,17 +563,13 @@ test('a late presentation failure cannot retire the replacement session generati
   });
   let presentationCount = 0;
   const route = createSnapshotRouter(
-    {
-      snapshot: {
-        presentIosAcquisition: async (result) => {
-          if (++presentationCount === 1) {
-            entered();
-            await blocked;
-            throw new Error('old presentation failed');
-          }
-          return { ...runnerResult(), producer: result.acquisition.producer };
-        },
-      },
+    async (result) => {
+      if (++presentationCount === 1) {
+        entered();
+        await blocked;
+        throw new Error('old presentation failed');
+      }
+      return { ...runnerResult(), producer: result.acquisition.producer };
     },
     bridge,
     async () => ({ foreground: 'background', sessionId }),
@@ -626,14 +618,10 @@ test('a wedge before the runner id is known does not disable a newly identified 
   const bridge = createRunnerSnapshotBridge({ device: IOS_SIMULATOR, provider });
   let sessionId: string | undefined = undefined;
   const route = createSnapshotRouter(
-    {
-      snapshot: {
-        presentIosAcquisition: (result) => ({
-          ...runnerResult(),
-          producer: result.acquisition.producer,
-        }),
-      },
-    },
+    (result) => ({
+      ...runnerResult(),
+      producer: result.acquisition.producer,
+    }),
     bridge,
     async () => (sessionId ? { foreground: 'background', sessionId } : { foreground: 'unknown' }),
   );
