@@ -132,7 +132,7 @@ This flow gives you logs, recent network activity, and a quick metrics sample fr
 
 `open` prints `Session state: <path>`. That directory holds the run's request diagnostics, Apple runner output, and app logs; see [Find a session's logs and artifacts](/docs/sessions#find-a-sessions-logs-and-artifacts).
 
-When a command fails, stderr starts and ends with the same summary line, so the error stays visible when you keep only the first or the last line of output:
+When a command fails, stderr starts and ends with the same summary line, so the error stays visible when you keep only the first or the last line of output. Live progress and `--debug` output can print before the first copy, so `tail -1` or `--json` is the reliable way to read the error:
 
 ```text
 Error (COMMAND_FAILED): tap @e12: runner did not answer within 10s. May have reached the device. Next: Run snapshot to check the screen before you retry. Read the diagnostics log for the failing step.
@@ -140,7 +140,7 @@ Log: /Users/me/.agent-device/sessions/<session>/requests/<request-id>.ndjson
 Error (COMMAND_FAILED): tap @e12: runner did not answer within 10s. May have reached the device. Next: Run snapshot to check the screen before you retry. Read the diagnostics log for the failing step.
 ```
 
-The summary says whether the action reached the device. `May have reached the device` means the action can already have run, so check the screen before you retry it. `Not dispatched` means a retry is safe. `Next` is the step to take. The `Log` line names the failing request's diagnostics file.
+The summary says whether the action reached the device. `May have reached the device` means the action can already have run, so check the screen before you retry it. `Not dispatched` means a retry is safe. A summary with neither does not prove that the action did not run. `Next` is the step to take. The `Log` line names the failing request's diagnostics file.
 
 Use `--json` to inspect `error.details.stderr` when it is present. Diagnostic stderr is secret-redacted and retains up to 8,192 characters; longer output keeps its beginning and end with a truncation marker between them. Other diagnostic strings remain limited to 400 characters. Compact retry summaries may retain less output.
 

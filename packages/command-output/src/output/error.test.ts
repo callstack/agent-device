@@ -91,39 +91,51 @@ test('formatHumanError prints no Warning lines without a warnings channel', () =
 
 // --- #1597: AMBIGUOUS_MATCH candidates print unconditionally, capped at 5 ---
 
-test('formatHumanError puts two or three ambiguous candidates on the summary line', () => {
-  const err = new AppError(
-    'AMBIGUOUS_MATCH',
-    'find matched 3 elements for text "Follow". Use a more specific locator or selector.',
-    {
-      locator: 'text',
-      query: 'Follow',
-      matches: 3,
-      refsGeneration: 7,
-      candidates: ['@e2 [button] "Follow"', '@e5 [button] "Follow"', '@e9 [button] "Follow"'],
-    },
-  );
+test('formatHumanError puts two or three distinguishable ambiguous candidates on the summary line', () => {
+  const err = new AppError('AMBIGUOUS_MATCH', 'Selector matched 3 elements: text~="Save"', {
+    matches: 3,
+    refsGeneration: 7,
+    candidates: ['@e2 [button] "Save"', '@e5 [button] "Save draft"', '@e9 [link] "Save as"'],
+  });
 
   const { summary, body } = formatHumanError(err);
 
   // A reader that keeps one line (tail -1, head -1) still gets every ref it can act on.
   assert.match(
     summary,
-    /^Error \(AMBIGUOUS_MATCH\): find matched 3 elements .* Next: Act on one ref .*: @e2~s7 \[button\] "Follow"; @e5~s7 \[button\] "Follow"; @e9~s7 \[button\] "Follow"$/,
+    /Next: Act on one ref .*: @e2~s7 \[button\] "Save"; @e5~s7 \[button\] "Save draft"; @e9~s7 \[link\] "Save as"$/,
   );
   assert.equal(body.join('\n').includes('Candidates:'), false);
+});
+
+// Identical candidates leave nothing to choose by: naming them as the step would invite a guess.
+test('formatHumanError keeps the narrowing hint when ambiguous candidates read the same', () => {
+  const err = new AppError(
+    'AMBIGUOUS_MATCH',
+    'find matched 3 elements for text "Follow". Use a more specific locator or selector.',
+    {
+      matches: 3,
+      candidates: ['@e2 [button] "Follow"', '@e5 [button] "Follow"', '@e9 [button] "Follow"'],
+    },
+  );
+
+  const { summary, body } = formatHumanError(err);
+
+  assert.match(summary, /Next: Multiple candidates matched\. Narrow the query/);
+  assert.equal(summary.includes('Act on one ref'), false);
+  assert.match(body.join('\n'), /Candidates:\n {2}@e2 \[button\] "Follow"/);
 });
 
 test('formatHumanError keeps the summary on one line when a candidate label has a newline', () => {
   const err = new AppError('AMBIGUOUS_MATCH', 'Selector matched 2 elements: text="Pay now"', {
     matches: 2,
-    candidates: ['@e2 [button] "Pay\nnow"', '@e3 [button] "Pay\nnow"'],
+    candidates: ['@e2 [button] "Pay\nnow"', '@e3 [link] "Pay\nnow"'],
   });
 
   const { summary } = formatHumanError(err);
 
   assert.equal(summary.includes('\n'), false);
-  assert.match(summary, /@e2 \[button\] "Pay now"; @e3 \[button\] "Pay now"$/);
+  assert.match(summary, /@e2 \[button\] "Pay now"; @e3 \[link\] "Pay now"$/);
 });
 
 test('formatHumanError lists four or more ambiguous candidates in the body', () => {

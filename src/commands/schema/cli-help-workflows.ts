@@ -132,8 +132,8 @@ Alerts:
   Do not use settings permission to answer a dialog already on screen. Reserve settings permission for setup/resetting permission state before a flow.
 
 Diagnostics and traces:
-  A failed command prints one summary line first and again last on stderr: Error (CODE), the message, whether the action reached the device, and a Next step. Follow the Next step.
-  "May have reached the device" means the action can already have run. Run snapshot to check the screen before you retry it. "Not dispatched" means a retry is safe.
+  A failed command prints one summary line first and again last on stderr: Error (CODE), the message, whether the action reached the device when that is known, and a Next step. Follow the Next step. Live progress and --debug output can print before the first copy; the last line is always the summary.
+  "May have reached the device" means the action can already have run. Run snapshot to check the screen before you retry it. "Not dispatched" means a retry is safe. A summary with neither does not prove the action did not run; check the screen before you retry an action.
   The Log line between the two summary lines names the failing request's diagnostics file. Use --json to read hint, logPath, and details.dispatched.
   Use --debug for the raw error details and the daemon log tail.
   Use AGENT_DEVICE_EXEC_TRACE=1 when you need host-tool spawn timing without full debug streaming; it flushes the full request diagnostics file on successful requests that spawn host tools.

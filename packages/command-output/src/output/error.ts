@@ -151,10 +151,16 @@ function readInlineCandidates(views: ErrorCandidateView[]): string[] | undefined
   if (!view || rest.length > 0 || view.kind !== 'element-match') return undefined;
   if (view.matches < 2 || view.matches > INLINE_CANDIDATE_LIMIT) return undefined;
   if (view.candidates.length !== view.matches) return undefined;
-  return view.candidates.map((candidate) =>
+  const lines = view.candidates.map((candidate) =>
     oneLine(pinCandidateLine(candidate, view.refsGeneration)),
   );
+  // Candidates that read the same without their ref give the reader nothing to choose by, so
+  // naming them as the step would invite a guess; the hint (narrow the query) stays the step.
+  const descriptions = new Set(lines.map((line) => line.replace(CANDIDATE_REF_PREFIX, '')));
+  return descriptions.size === lines.length ? lines : undefined;
 }
+
+const CANDIDATE_REF_PREFIX = /^@e\d+(?:~s\d+)?\s*/;
 
 function oneLine(text: string): string {
   return text.replaceAll(/\s+/g, ' ').trim();

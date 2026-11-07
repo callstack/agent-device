@@ -24,7 +24,7 @@ export async function printHumanError(
   options: HumanErrorPrint = {},
 ): Promise<void> {
   const { printHumanError: write } = await import('../commands/output/human-error.ts');
-  const command = options.command ?? (options.argv ? parsedCommandName(options.argv) : null);
+  const command = options.command ?? (options.argv ? await failedParseCommand(options.argv) : null);
   const synopsis =
     err.code === 'INVALID_ARGS' && command ? await synopsisForNextStep(command) : undefined;
   const trailer = options.logTail ? failureLogTail(options.logTail) : undefined;
@@ -38,15 +38,17 @@ async function synopsisForNextStep(command: string): Promise<string | undefined>
 }
 
 /**
- * The command a failed parse was for. The parse that failed cannot say, so this reads the
- * leading positional the way the CLI grammar places it.
+ * The command a failed parse was for. The parse that failed cannot say, so this takes the first
+ * positional that names a command; a value of a leading global flag (`--platform ios`) names none.
  */
-function parsedCommandName(argv: string[]): string | null {
+async function failedParseCommand(argv: string[]): Promise<string | null> {
   try {
     return parseRawArgs(argv).command ?? null;
   } catch {
-    const [first] = argv;
-    return first && !first.startsWith('-') ? first : null;
+    for (const token of argv) {
+      if (!token.startsWith('-') && (await commandSynopsis(token))) return token;
+    }
+    return null;
   }
 }
 

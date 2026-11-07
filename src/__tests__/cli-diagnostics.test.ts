@@ -207,6 +207,15 @@ test('an argument error names the failing command synopsis as its Next step', as
   assert.match(result.stderr, /^Error \(INVALID_ARGS\): .*Next: .*Usage: agent-device press /);
 });
 
+test('an argument error after leading global flags still names the command synopsis', async () => {
+  const result = await runCliCapture(
+    ['--platform', 'ios', 'press', '--unknown-flag'],
+    async () => ({ ok: true, data: {} }),
+  );
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /^Error \(INVALID_ARGS\): .*Usage: agent-device press /);
+});
+
 test('cli forwards save-script and no-record flags for client-backed open', async () => {
   const result = await runCliCapture(
     ['open', 'settings', '--save-script', '--no-record', '--json'],
