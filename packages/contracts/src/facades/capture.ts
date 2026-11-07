@@ -2,6 +2,7 @@ export type { DiffSnapshotCommandResult, SnapshotDiffLine, SnapshotDiffSummary }
 export {
   RETIRED_SCREENSHOT_MAX_SIZE,
   SCREENSHOT_ACTION_FLAG_KEYS,
+  SCREENSHOT_BURST_LIMITS,
   SCREENSHOT_CAPTURE_BACKENDS,
   SCREENSHOT_COMMAND_FLAG_KEYS,
   SCREENSHOT_CROP_REASONS,
@@ -13,13 +14,16 @@ export {
   appendScreenshotScriptFlags,
   readScreenshotScriptFlag,
   retiredScreenshotMaxSizeFlagError,
+  screenshotBurstFramePath,
   screenshotFlagsFromOptions,
   screenshotFlagsFromPublicOptions,
   screenshotOptionsFromFlags,
   validateNoRetiredScreenshotMaxSize,
+  validateScreenshotBurst,
   validateScreenshotScale,
 } from '../screenshot.ts';
 export type {
+  ScreenshotBurstFrame,
   ScreenshotCaptureBackend,
   ScreenshotCropReason,
   ScreenshotScreenMask,

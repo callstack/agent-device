@@ -21,7 +21,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 1,
     max: 200,
     usageLabel: '--count <n>',
-    usageDescription: 'Repeat count for press, swipe and gesture tap series',
+    usageDescription:
+      'Repeat count for press, swipe and gesture tap series; screenshot: burst frame count (2-100) captured sequentially into a numbered file sequence',
     projectConfig: true,
     recorded: true,
   },
@@ -85,7 +86,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 0,
     max: 10_000,
     usageLabel: '--interval-ms <ms>',
-    usageDescription: 'Delay between press iterations',
+    usageDescription:
+      'Delay between press iterations; screenshot: wait between burst frames (100-10000, default 100)',
     projectConfig: true,
     recorded: true,
   },
