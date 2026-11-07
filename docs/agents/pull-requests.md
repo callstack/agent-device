@@ -34,7 +34,8 @@ Review that SHA range with AGENTS.md and [review guidance](review.md).
 In later rounds, supply the SHA reviewed before, its findings, and their dispositions.
 Review the changes since that SHA and the interactions that they affect.
 After a rebase, compare the branch ranges with `git range-diff <old-base>..<old-head> <new-base>..<new-head>`.
-Fix accepted findings. Rerun affected checks.
+Fix accepted findings with the smallest change. Prefer configuration or deletion to new code.
+Rerun affected checks.
 For rejected findings, record a reason.
 If no independent reviewer is available, read the full diff again cold. Report that limitation.
 At the growth thresholds in [review guidance](review.md), this fallback does not replace the required independent reviewer.
