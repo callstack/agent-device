@@ -35,6 +35,7 @@ vi.mock('../runner-usbmux.ts', async (importOriginal) => {
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { shouldRetryRunnerConnectError } from '../runner-error-classification.ts';
 import { clearDeviceTunnelIpCache } from '../runner-command-route.ts';
 import { readRunnerLogTail } from '../runner-io.ts';
 import { resolveRunnerEarlyExitHint, waitForRunner } from '../runner-startup-transport.ts';
@@ -93,6 +94,113 @@ test.each(['process exit', 'launch log'] as const)(
         return true;
       },
     );
+  },
+);
+
+test('stops connect retries and reports early exit when child process is terminated by signal (#4265)', async () => {
+  const session = makeRunnerSession({
+    device: iosSimulator,
+    state: 'starting',
+    endpoint: {
+      ...RUNNER_ENDPOINT_FIXTURE,
+      http: { url: 'https://instance.invalid/command' },
+    },
+  });
+  let attempts = 0;
+  vi.stubGlobal('fetch', async () => {
+    attempts++;
+    session.launch.local!.child!.exitCode = null;
+    session.launch.local!.child!.signalCode = 'SIGTERM';
+    return new Response('Bad Gateway', { status: 502 });
+  });
+  let rejectedError: unknown;
+  await assert.rejects(
+    waitForRunner(iosSimulator, session.endpoint, { command: 'uptime' }, undefined, 1000, session),
+    (error: unknown) => {
+      rejectedError = error;
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.runnerConnectFailureReason, 'xcodebuild_exited_early');
+      return true;
+    },
+  );
+  assert.equal(attempts, 1, `Expected exactly 1 attempt before retry stopped`);
+  assert.equal(shouldRetryRunnerConnectError(rejectedError), false);
+});
+
+test.each(['draining', 'stopped'] as const)(
+  'stops connect retries and reports session terminal error when session state transitions to %s (#4265)',
+  async (terminalState) => {
+    const session = makeRunnerSession({
+      device: iosSimulator,
+      state: 'starting',
+      endpoint: {
+        ...RUNNER_ENDPOINT_FIXTURE,
+        http: { url: 'https://instance.invalid/command' },
+      },
+    });
+    let attempts = 0;
+    vi.stubGlobal('fetch', async () => {
+      attempts++;
+      session.state = terminalState;
+      return new Response('Bad Gateway', { status: 502 });
+    });
+    let rejectedError: unknown;
+    await assert.rejects(
+      waitForRunner(
+        iosSimulator,
+        session.endpoint,
+        { command: 'uptime' },
+        undefined,
+        1000,
+        session,
+      ),
+      (error: unknown) => {
+        rejectedError = error;
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.runnerConnectFailureReason, `runner_session_${terminalState}`);
+        return true;
+      },
+    );
+    assert.equal(attempts, 1, `Expected exactly 1 attempt before retry stopped`);
+    assert.equal(shouldRetryRunnerConnectError(rejectedError), false);
+  },
+);
+
+test.each(['draining', 'stopped'] as const)(
+  'immediately fails connect without retrying when session is already %s (#4265)',
+  async (terminalState) => {
+    const session = makeRunnerSession({
+      device: iosSimulator,
+      state: terminalState,
+      endpoint: {
+        ...RUNNER_ENDPOINT_FIXTURE,
+        http: { url: 'https://instance.invalid/command' },
+      },
+    });
+    let fetchCalls = 0;
+    vi.stubGlobal('fetch', async () => {
+      fetchCalls++;
+      return new Response('OK', { status: 200 });
+    });
+    let rejectedError: unknown;
+    await assert.rejects(
+      waitForRunner(
+        iosSimulator,
+        session.endpoint,
+        { command: 'uptime' },
+        undefined,
+        1000,
+        session,
+      ),
+      (error: unknown) => {
+        rejectedError = error;
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.runnerConnectFailureReason, `runner_session_${terminalState}`);
+        return true;
+      },
+    );
+    assert.equal(fetchCalls, 0, `Expected 0 fetch calls for already-terminal session`);
+    assert.equal(shouldRetryRunnerConnectError(rejectedError), false);
   },
 );
 
