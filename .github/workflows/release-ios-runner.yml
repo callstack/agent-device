@@ -57,14 +57,15 @@ jobs:
       - name: Select Xcode 27
         run: |
           set -euo pipefail
-          # Pick by the reported version, not the bundle name, so any Xcode 27 install qualifies.
-          XCODE_APP=""
-          while IFS= read -r APP; do
-            VERSION="$("$APP/Contents/Developer/usr/bin/xcodebuild" -version 2>/dev/null | awk 'NR == 1 { print $2 }')" || continue
-            case "$VERSION" in
-              27|27.*) XCODE_APP="$APP" ;;
-            esac
-          done < <(printf '%s\n' /Applications/Xcode*.app | sort -V)
+          # Pick the newest reported 27.x version, whatever the bundle is named.
+          XCODE_APP="$(
+            for APP in /Applications/Xcode*.app; do
+              VERSION="$("$APP/Contents/Developer/usr/bin/xcodebuild" -version 2>/dev/null | awk 'NR == 1 { print $2 }')" || continue
+              case "$VERSION" in
+                (27 | 27.*) printf '%s\t%s\n' "$VERSION" "$APP" ;;
+              esac
+            done | sort -V -k1,1 | tail -n 1 | cut -f2-
+          )"
           if [ -z "$XCODE_APP" ]; then
             echo "::error::No Xcode 27 found in /Applications on this runner image. The Limrun runner must be built with Xcode 27; choose an image that ships it." >&2
             exit 1
