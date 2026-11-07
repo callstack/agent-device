@@ -62,3 +62,14 @@ On Android 16 (API 36), `adb shell cmd clipboard` exits with status **0** but ne
 **Workaround:** verify a copy flow from the app side. Trigger the app's copy action, paste into a focused text field, and read that field back with `snapshot`. This proves the app's own clipboard write, which an adb-side read never could.
 
 On a build that does implement `cmd clipboard`, Android 10+ still restricts clipboard reads to the app with input focus or the current input method service, and adb is neither. An adb-side read can therefore come back blank. `agent-device` reports the empty clipboard it received rather than guessing at a denial. If you hit this on such a build, file an issue with the output of `adb shell cmd clipboard get text; echo rc=$?`.
+
+## HarmonyOS: no clipboard access over HDC
+
+HarmonyOS HDC exposes no public clipboard interface. `agent-device` can therefore neither read nor write the HarmonyOS clipboard:
+
+- `capabilities` does not list `clipboard` on a HarmonyOS device.
+- `clipboard read` and `clipboard write` fail with `UNSUPPORTED_OPERATION`.
+
+A copy-then-paste check on HarmonyOS therefore fails silently. The long-press paste flow still runs: the tap on **Paste** lands, and the field receives whatever the device clipboard already holds. Because `agent-device` cannot set that content, the paste can insert text that an earlier manual copy left on the device. The flow reports success, and you see the mismatch only when you read the field back.
+
+**Workaround:** put the text into the field with `fill` or `type`. Both enter text through ArkUI `uitest` and need no clipboard. To verify the app's own copy or paste UX, operate the device by hand, then read the field back with `snapshot`.
