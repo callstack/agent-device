@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted. R76 enforces the daemon coupling ban. R75 ratchets handler authority.
+Accepted (2026-09-06). R76 enforces the daemon coupling ban. R75 ratchets handler authority.
 
 ## Context
 
@@ -10,17 +10,19 @@ The daemon must not depend on concrete platform code. This boundary alone does n
 
 ## Decision
 
-R76 prohibits every production daemon import of the root platform-runtime family or a root hub that reaches it. The family consists of the root platform-runtime module and root modules whose names start with platform-runtime-. The ban includes static and dynamic imports. Process-root composition is outside the daemon zone. Composition-essential edges assemble neutral implementations there. Daemon-policy-essential edges own request admission, session ownership, conflicts, locking, cancellation, teardown ordering, artifact publication, or response and event semantics. Platform mechanics and state belong behind a deeper interface or adapter.
+R76 prohibits every production daemon import of the root platform-runtime family or a root hub that reaches it. The family is `src/platform-runtime.ts` and the src/platform-runtime-*.ts glob. The ban includes static and dynamic imports. Process-root composition is outside the daemon zone.
 
 Apple session observation uses the neutral `AppleSessionObservation`. It supplies runner liveness, session identity, and sole-foreground-app observation. Recording health, device refresh, and open-hint policy consume it. Root composition supplies request-local inventory and its error classifier. The Apple platform package owns the probes. Selector production and lifecycle participation remain separate.
 
-Platform owners participate through the existing lifecycle phases. Do not introduce a generic hook bag. Open-target plans and results remain separate from platform mechanics. The resolver remains the single construction path for an open plan. Selector reads use the `querySelector` operation on the request-bound runtime owner. Its declaration is conditional on the captured touch and gesture uses. Off-screen rescue uses the command's admitted binding. Do not add a second selector producer.
+The daemon receives only the typed `PlatformOwnerLifecycle`. `src/platform-runtime-daemon-lifecycle.ts` alone composes it and imports the platform owners' cleanup and recovery mechanics. Platform owners participate through the existing lifecycle phases. Do not introduce a generic hook bag. Open-target plans and results remain separate from platform mechanics. The resolver remains the single construction path for an open plan. The live selector read uses the `querySelector` operation on the request-bound runtime owner. Its declaration is conditional on the captured touch and gesture uses. Off-screen rescue uses the command's admitted binding. Do not add a second selector producer.
 
-R75 measures `SessionState` shape and `SessionStore` authority by symbol. It fails when a handler file enters either set and the merge-base set does not contain that file. Handler files may leave either set. R75 does not ratchet reads outside the handler path. R7 and R10 own cross-module reads outside that path.
+R75 `session-authority-overlay` measures `SessionState` shape and `SessionStore` authority by symbol. It fails when a handler file enters either set and the merge-base set does not contain that file. The handler scope is the packages/daemon/src/{sessions,execution}/handlers/** glob. Handler files may leave either set. R75 does not ratchet reads outside the handler path. R7 and R10 own cross-module reads outside that path.
 
-The route trace assigns each hop a role and tests each pass-through or translation hop for deletion. Collapse only pass-through or translation hops that the deletion test proves removable. The audited runtime-types hop is the only endorsed collapse. The earlier ≤14 target is superseded. The request-spine guards are side-calls, not hops. [ADR 0023](0023-end-state-hop-trace.md) owns the trace and deletion tests.
+The route trace assigns each hop a role and tests each pass-through or translation hop for deletion. A route may collapse only pass-through or translation hops that the deletion test proves removable. The `bindRuntimeCommands` closure wrapper on the shared snapshot path is the only proven removable hop and the only endorsed collapse. The earlier ≤14 target is superseded. The request-spine guards are side-calls, not hops: auth comparison, cancellation gate, idle-reap timer reset, and Android freshness guard/clear. [ADR 0023](0023-end-state-hop-trace.md) owns the trace and deletion tests.
 
 ## Rationale and rejected alternatives
+
+The #2278 audit sorted edges into three categories: composition-essential edges assemble neutral implementations at the process root; daemon-policy-essential edges own request admission, session ownership, conflicts, locking, cancellation, teardown ordering, artifact publication, or response and event semantics; platform mechanics and state belong behind a deeper interface or adapter.
 
 Root composition and daemon policy can own neutral interfaces without exposing platform mechanics to the daemon. A generic lifecycle hook bag would bypass the existing phases. A second selector producer would duplicate snapshot-producer policy.
 
