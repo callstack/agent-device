@@ -1,7 +1,11 @@
 import type { Point } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import { readGesturePayload, type GESTURE_KINDS, type GesturePayload } from './gesture-input.ts';
-import type { GestureCommandInput, GestureSemanticInput } from './gesture-plan-types.ts';
+import type {
+  GestureCommandInput,
+  GestureSemanticInput,
+  HumanTrajectoryTransport,
+} from './gesture-plan-types.ts';
 import {
   DEFAULT_DRAG_DESTINATION_HOLD_MS,
   DEFAULT_DRAG_MOVE_MS,
@@ -20,7 +24,13 @@ export type SwipePayload = {
   pattern?: 'one-way' | 'ping-pong';
 };
 
-type GestureFlagKey = 'pointerCount' | 'holdMs' | 'count' | 'pauseMs' | 'postGestureStabilization';
+type GestureFlagKey =
+  | 'pointerCount'
+  | 'holdMs'
+  | 'count'
+  | 'pauseMs'
+  | 'postGestureStabilization'
+  | 'trajectoryTransport';
 
 const GESTURE_FLAG_NAMES: Record<GestureFlagKey, string> = {
   pointerCount: '--pointer-count',
@@ -28,6 +38,7 @@ const GESTURE_FLAG_NAMES: Record<GestureFlagKey, string> = {
   count: '--count',
   pauseMs: '--pause-ms',
   postGestureStabilization: '--no-post-gesture-stabilization',
+  trajectoryTransport: '--trajectory-transport',
 };
 
 /**
@@ -36,7 +47,7 @@ const GESTURE_FLAG_NAMES: Record<GestureFlagKey, string> = {
  * CLI would reject and have it silently dropped.
  */
 export const GESTURE_FLAGS_BY_KIND = {
-  pan: ['pointerCount'],
+  pan: ['pointerCount', 'trajectoryTransport'],
   tap: ['holdMs', 'count', 'pauseMs'],
   fling: [],
   swipe: ['postGestureStabilization'],
@@ -270,6 +281,7 @@ export type GesturePositionalFlags = {
   holdMs?: number;
   count?: number;
   pauseMs?: number;
+  trajectoryTransport?: HumanTrajectoryTransport;
 };
 
 /** The explicit parser for the public CLI and `.ad` gesture syntax. */
@@ -291,6 +303,7 @@ export function gesturePayloadFromPositionals(
         delta,
         pointerCount,
         durationMs: optionalPositionNumber(args[4]),
+        trajectoryTransport: flags.trajectoryTransport,
       });
     }
     case 'fling': {

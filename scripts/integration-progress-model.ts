@@ -416,6 +416,14 @@ function summarizeProviderScenarioFlagExclusions() {
       owner: 'daemon screenshot-crop unit and live device verification',
       keys: ['screenshotCropOn'],
     },
+    {
+      // The sendevent transport is unreachable from CI providers (no HarmonyOS device
+      // surface) and the carrier HAP needs a signed install. Covered instead by the
+      // platform unit tests and the live device verification in the feature's PR evidence.
+      name: 'HarmonyOS trajectory transport opt-ins',
+      owner: 'HarmonyOS platform unit tests and live device verification',
+      keys: ['trajectoryTransport'],
+    },
   ];
 }
 

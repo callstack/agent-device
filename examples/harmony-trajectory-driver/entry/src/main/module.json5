@@ -1,0 +1,29 @@
+{
+  module: {
+    name: 'entry',
+    type: 'entry',
+    description: '$string:module_desc',
+    deviceTypes: ['phone'],
+    deliveryWithInstall: true,
+    installationFree: false,
+    pages: '$profile:main_pages',
+    abilities: [
+      {
+        name: 'EntryAbility',
+        srcEntry: './ets/entryability/EntryAbility.ets',
+        description: '$string:ability_desc',
+        icon: '$media:icon',
+        label: '$string:ability_label',
+        startWindowIcon: '$media:icon',
+        startWindowBackground: '$color:start_window_background',
+        exported: true,
+        skills: [
+          {
+            entities: ['entity.system.home'],
+            actions: ['action.system.home'],
+          },
+        ],
+      },
+    ],
+  },
+}
