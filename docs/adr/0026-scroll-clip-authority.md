@@ -11,6 +11,7 @@ This record refines ADR 0004's fact and interpretation boundary for scroll geome
 A scroll indicator attributed to an enclosing list instead of its smaller text host clipped the list's lower rows (#2214).
 Walking past the indicator's parent had inferred ownership across a frame change.
 A scroll frame can extend under system chrome, so the frame alone cannot express the visible band.
+Removing indicator clipping would expose content under system chrome, so the band is necessary; its owner was the disputed fact.
 
 ## Decision
 
@@ -20,24 +21,28 @@ Ownership also passes through ancestors with their own parent's exact frame, whi
 Traversal stops at the first frame change, regardless of label or type.
 An indicator whose nearest scroll-typed ancestor is reached only across a frame change owns nothing and gets no band or clip.
 The smaller host retains its scrollability.
+Same-frame pass-through must not restore #2214's failure.
 A scroll-typed node with the indicator label describes itself and owns nothing.
 
 Presentation derives the visible band from the owner's frame and indicator track; a producer never reports the band.
 Removal because a scroll band hides a node requires the clip fold's result or a band owned by the indicator's parent.
 Inferred ownership cannot authorize removal.
 Evidence weaker than a parent edge emits only `hiddenContentAbove` or `hiddenContentBelow` directional hints and does not change membership.
-Semantic delegation, such as a collapsed row, duplicate label, or wrapper content, is compaction outside this decision and retains its own authority.
+Semantic delegation (a collapsed row, duplicate label, or wrapper content) and decoration removal (a system indicator) are outside this decision and retain their own authority.
 The decision also covers the clip fold's inclusion decision and the three keyboard-band visibility sites.
 A weak signal can reach only the scroll-band site.
 
 Every source index must end presented with its representatives or removed with a typed disposition.
 This is the open #2754 step 5 contract, not shipped code; it is internal evidence, never wire vocabulary.
-The existing source-to-representatives ledger is the shape to extend, because a second ledger would be a second source of truth.
+The rule makes the ledger complete by construction, without a gate.
+`presentedIndexesBySourceIndex` records representatives without removal reasons; it is the shape to extend, because a second ledger would be a second source of truth.
 
 ## Eligibility and platform scope
 
-On iOS, every scroll host the producer can emit is regular-eligible, so projection re-parents indicators only to that host.
-The TypeScript and Swift eligibility lists must remain synchronized for `Cell`, `CollectionView`, `ScrollView`, `Table`, `TextView`, and `WebView`.
+On iOS, the parent edge survives until presentation at both input stages because every scroll host the producer can emit is regular-eligible.
+Projection therefore re-parents indicators only to that host.
+`REGULAR_ELIGIBLE_TYPES` (TypeScript) and `eligibleInteractiveTypes` (Swift) encode one fact and must remain synchronized.
+Both contain the scroll hosts `Cell`, `CollectionView`, `ScrollView`, `Table`, `TextView`, and `WebView`.
 
 The iOS runner does not emit `scrollarea`; the macOS helper maps `AXScrollArea` to it.
 macOS trees also use these presentation rules.
@@ -51,9 +56,11 @@ That case under-clips instead of incorrectly clipping the enclosing list.
 - A producer ownership field: the parent edge already supplies the fact, and a field adds validation and index-remapping hazards.
 - Producer-computed bands: this moves interpretation across the producer boundary established by ADR 0004.
 - An ancestor walk across frame changes: it caused the original failure; excluding known types alone leaves other smaller hosts exposed to the same error.
-- One universal scroll-container set or an ownership and clip matrix: the sites answer different questions, and only the host-side scroll type predicate accepts macOS `scrollarea`. Characterize each site before reshaping it.
-- A rule graph, effect system, or two-API reshape/eject split: existing rules can change rectangles and eject in one pass, while a replacements-only presentation with a separate suppression pass is also valid. Inventory ejection sites in #2754 first; redesign only what that inventory justifies.
-- A shrinkage guard instead of the differential: a threshold can reject legitimate compaction or permit a collapse. The differential asserts interactive ⊆ regular ⊆ raw, but lacks runner-stage coverage. Extending it to `stage: 'presented'` makes future shrinkage visible.
+- Strict parent-edge ownership without same-frame pass-through: it left a `WKWebView` page without a band and exposed content under the toolbar (#1797, #1784).
+- Ownership for a scroll-typed indicator: a self-band is ineffective because indicator and container share a rectangle, and a parent band would clip a sibling list, which is #2214 in reverse.
+- One universal scroll-container set or an ownership and clip matrix: five sites answer related questions with different contents, and only `isScrollableSnapshotType` accepts macOS `scrollarea`. Parent-edge ownership needs only that existing predicate. Characterize each site before reshaping it.
+- A rule graph, effect system, or two-API reshape/eject split: the existing code does not justify it. The scroll and navigation-bar rules legitimately change rectangles and eject in one pass, which the split would prohibit. A reshape API that still accepts `rect` would permit the original faulty change. `noise-overlay` already shows a valid split. Inventory ejection sites in #2754 first; redesign only what that inventory justifies.
+- A shrinkage guard instead of the differential: a threshold would either reject legitimate compaction or permit a collapse. The differential asserts interactive ⊆ regular ⊆ raw, but lacks runner-stage coverage. Extending it to `stage: 'presented'` makes future shrinkage visible.
 
 ## Consequences and open evidence
 
