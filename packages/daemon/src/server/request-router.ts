@@ -22,7 +22,6 @@ import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import {
   type ResponseCost,
   errorResponse,
-  noActiveSessionError,
   type DaemonResponse,
   type DaemonResponseData,
 } from '@agent-device/kernel/contracts';
@@ -660,7 +659,13 @@ async function dispatchGenericForLockedScope(params: {
   const { lockedScope, logPath, sessionStore, androidObservation, createCommandSurface } = params;
   const ref = sessionStore.lookup(lockedScope.sessionName);
   if (!ref) {
-    return noActiveSessionError();
+    // The generic route is where a session-bound command (screenshot, scroll, …) stops before any
+    // device work, so the refusal names the command and the session address a caller can reopen —
+    // the same answer shape as the file-command session guard — instead of a generic "no session".
+    return errorResponse(
+      'SESSION_NOT_FOUND',
+      `${lockedScope.req.command} requires active session "${lockedScope.sessionName}". Run open first.`,
+    );
   }
   const session = sessionStore.requireCurrent(ref);
 
