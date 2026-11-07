@@ -265,8 +265,9 @@ export function normalizeLeaseAdmissionRequest(
   const leaseId = normalizeLeaseId(request.leaseId);
   if (!leaseId) {
     // A provider runtime's connection that sent no lease has no instance, for example after
-    // `close --shutdown` released it. Name that, as device inventory does. A malformed lease id, or a
-    // logical lease such as `proxy` that boot or open cannot allocate, stays a missing lease id.
+    // `close --shutdown` released it. Name that, as device inventory does. A malformed lease id stays
+    // a missing lease id, and so does a logical lease such as `proxy`, which names a route, not an
+    // instance.
     const runtimeProvider = leaseProviderRequiringRuntime({
       leaseProvider: normalizeLeaseProvider(request.leaseProvider),
     });
