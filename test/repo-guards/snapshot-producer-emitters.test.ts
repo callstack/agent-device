@@ -394,3 +394,18 @@ test('an unlisted producer in a residue is reported even though the residue publ
     `${EXAMPLE_CAPTURE}:1 emits 'unlisted-tree', which SNAPSHOT_PRODUCERS does not list`,
   ]);
 });
+
+test('a computed identifier key is not a producer property, but a computed string key is', () => {
+  const keyed = (key: string) =>
+    withFiles(new Map(), {
+      [EXAMPLE_CAPTURE]: [
+        "const producer = 'label';",
+        `export const capture = (nodes: unknown[]) => ({ ${key}: 'example-tree', nodes });`,
+        '',
+      ],
+    });
+  assert.deepEqual(producerEmitterViolations(['example-tree'], keyed('[producer]')), [
+    "registry producer 'example-tree' has no production emitter",
+  ]);
+  assert.deepEqual(producerEmitterViolations(['example-tree'], keyed("['producer']")), []);
+});
