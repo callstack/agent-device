@@ -172,7 +172,8 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     if (request.leaseProvider !== this.provider || !request.leaseId) return null;
     const owner = this.leases.get(request.leaseId);
     const session = owner?.state.phase === 'releasing' ? owner.session : this.liveSession(owner);
-    if (!session) return null;
+    // The lease is Limrun's, so its answer is authoritative: no live instance serves no device.
+    if (!session) return [];
     if (request.platform && request.platform !== session.platform) return [];
     return [session.device];
   };

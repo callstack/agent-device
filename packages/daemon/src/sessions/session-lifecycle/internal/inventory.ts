@@ -213,7 +213,12 @@ function inventoryDeviceQuery(
   env: HostEnvironment['env'],
 ) {
   const flags = req.flags;
+  // A provider connection lists only what its lease serves; without this scope the provider declines
+  // and the inventory falls back to this host's devices.
+  const { leaseProvider, leaseId } = resolveLeaseScope(req);
   return {
+    leaseProvider,
+    leaseId,
     platform,
     target: flags?.target,
     deviceName: flags?.device,

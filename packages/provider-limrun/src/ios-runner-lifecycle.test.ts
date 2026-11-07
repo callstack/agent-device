@@ -184,7 +184,7 @@ test('a failed instance delete keeps only cleanup operations available until shu
     });
     expect(clients.deleteInstance).toHaveBeenCalledTimes(2);
     expect(clients.disconnect).toHaveBeenCalledOnce();
-    expect(await registration.runtime.deviceInventoryProvider(inventoryRequest)).toBeNull();
+    expect(await registration.runtime.deviceInventoryProvider(inventoryRequest)).toEqual([]);
     expect((await owner.inspectFacts(device!)).operations.shutdownTarget.available).toBe(false);
   } finally {
     await registration.runtime.shutdown();
