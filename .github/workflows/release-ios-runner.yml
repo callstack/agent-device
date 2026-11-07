@@ -25,7 +25,9 @@ permissions:
 jobs:
   publish-ios-simulator-runner:
     name: Publish iOS Simulator Runner
-    runs-on: blacksmith-6vcpu-macos-26
+    # Xcode 27 is this image's default. Limrun hosts load XCTest from their own Xcode 27, and the
+    # packaging step refuses a runner from an older Xcode, which would embed XCTest.
+    runs-on: blacksmith-6vcpu-macos-27
     timeout-minutes: 90
     env:
       AGENT_DEVICE_XCUITEST_PLATFORM: ios
@@ -50,28 +52,6 @@ jobs:
           VERSION="${TAG_NAME#v}"
           echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-        shell: bash
-
-      # Limrun hosts run XCTest with Xcode 27 and load XCTest from that Xcode. A runner built with an
-      # older Xcode embeds its own XCTest, which crashes there, and the packaging step refuses it.
-      - name: Select Xcode 27
-        run: |
-          set -euo pipefail
-          # Pick the newest reported 27.x version, whatever the bundle is named.
-          XCODE_APP="$(
-            for APP in /Applications/Xcode*.app; do
-              VERSION="$("$APP/Contents/Developer/usr/bin/xcodebuild" -version 2>/dev/null | awk 'NR == 1 { print $2 }')" || continue
-              case "$VERSION" in
-                (27 | 27.*) printf '%s\t%s\n' "$VERSION" "$APP" ;;
-              esac
-            done | sort -V -k1,1 | tail -n 1 | cut -f2-
-          )"
-          if [ -z "$XCODE_APP" ]; then
-            echo "::error::No Xcode 27 found in /Applications on this runner image. The Limrun runner must be built with Xcode 27; choose an image that ships it." >&2
-            exit 1
-          fi
-          echo "DEVELOPER_DIR=${XCODE_APP}/Contents/Developer" >> "$GITHUB_ENV"
-          echo "Using ${XCODE_APP}"
         shell: bash
 
       - name: Build iOS simulator runner
