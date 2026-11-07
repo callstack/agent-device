@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-09-06). R76 enforces the daemon coupling ban. R75 ratchets handler authority.
+Accepted (2026-09-06). R76 enforces the daemon coupling ban. R75 ratchets handler authority. Completed process history is in git history.
 
 ## Context
 
@@ -18,11 +18,11 @@ The daemon receives only the typed `PlatformOwnerLifecycle`. `src/platform-runti
 
 R75 `session-authority-overlay` measures `SessionState` shape and `SessionStore` authority by symbol. It fails when a handler file enters either set and the merge-base set does not contain that file. The handler scope is the packages/daemon/src/{sessions,execution}/handlers/** glob. Handler files may leave either set. R75 does not ratchet reads outside the handler path. R7 and R10 own cross-module reads outside that path.
 
-The route trace assigns each hop a role and tests each pass-through or translation hop for deletion. A route may collapse only pass-through or translation hops that the deletion test proves removable. The `bindRuntimeCommands` closure wrapper on the shared snapshot path is the only proven removable hop and the only endorsed collapse. The earlier ≤14 target is superseded. The request-spine guards are side-calls, not hops: auth comparison, cancellation gate, idle-reap timer reset, and Android freshness guard/clear. [ADR 0023](0023-end-state-hop-trace.md) owns the trace and deletion tests.
+The route trace assigns each hop a role and tests each pass-through or translation hop for deletion. A route may collapse only pass-through or translation hops that the deletion test proves removable. The `bindRuntimeCommands` closure wrapper on the shared snapshot path is the only proven removable hop and the only endorsed collapse candidate; this record collapses none. The earlier ≤14 target is superseded. The request-spine guards are side-calls, not hops: auth comparison, cancellation gate, idle-reap timer reset, and Android freshness guard/clear. [ADR 0023](0023-end-state-hop-trace.md) owns the trace and deletion tests.
 
 ## Rationale and rejected alternatives
 
-The #2278 audit sorted edges into three categories: composition-essential edges assemble neutral implementations at the process root; daemon-policy-essential edges own request admission, session ownership, conflicts, locking, cancellation, teardown ordering, artifact publication, or response and event semantics; platform mechanics and state belong behind a deeper interface or adapter.
+Platform-aware edges fall into three categories: composition-essential edges assemble neutral implementations at the process root; daemon-policy-essential edges own request admission, session ownership, conflicts, locking, cancellation, teardown ordering, artifact publication, or response and event semantics; platform mechanics and state belong behind a deeper interface or adapter.
 
 Root composition and daemon policy can own neutral interfaces without exposing platform mechanics to the daemon. A generic lifecycle hook bag would bypass the existing phases. A second selector producer would duplicate snapshot-producer policy.
 
