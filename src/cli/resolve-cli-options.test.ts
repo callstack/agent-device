@@ -109,3 +109,34 @@ test('a typed --text-stdin reaches fill', () => {
 
   assert.equal(parsed.flags.textStdin, true);
 });
+
+// #4298: `device status|release` narrow claims by the selectors the caller typed. A config default
+// udid would otherwise win over a typed --serial in the claim filter and hide the requested claim.
+test('config selectors never narrow device status or release', () => {
+  const dir = mkdtempForTestSync('agent-device-cli-config-');
+  const configPath = `${dir}/agent-device.json`;
+  fs.writeFileSync(
+    configPath,
+    JSON.stringify({
+      platform: 'ios',
+      device: 'Configured',
+      udid: 'cfg-udid',
+      serial: 'cfg-serial',
+    }),
+  );
+
+  for (const action of ['status', 'release']) {
+    const parsed = resolveCliOptions(
+      ['device', action, '--serial', 'typed-serial', '--config', configPath],
+      {
+        cwd: process.cwd(),
+        env: isolatedEnv({}),
+      },
+    );
+
+    assert.equal(parsed.flags.serial, 'typed-serial');
+    assert.equal(parsed.flags.udid, undefined);
+    assert.equal(parsed.flags.device, undefined);
+    assert.equal(parsed.flags.platform, undefined);
+  }
+});

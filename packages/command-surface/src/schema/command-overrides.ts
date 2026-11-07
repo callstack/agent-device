@@ -73,6 +73,8 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     positionalArgs: ['status|release'],
     allowedFlags: ['stale'],
     supportedFlags: ['platform', 'device', 'udid', 'serial'],
+    // Claim selectors narrow what is inspected or released; a config or env default must not.
+    explicitOnlyFlags: ['platform', 'device', 'udid', 'serial'],
   },
   connect: {
     text: {
