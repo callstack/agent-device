@@ -70,6 +70,62 @@ physical devices use a short XCTest probe because no non-XCTest semantic backend
 there. See
 [`../../docs/adr/0004-ios-snapshot-backend-strategy.md`](../../docs/adr/0004-ios-snapshot-backend-strategy.md)
 for the backend boundary and future simulator AX-service direction.
+Presentation and geometry contracts are in
+[`../snapshot-presentation/README.md`](../snapshot-presentation/README.md).
+
+### Capture plans
+
+The raw diagnostic plan derives from `SnapshotBackendKind.supportsRawProjection`, not from a manual list.
+Thus, a backend with no hierarchy to return, such as the query sweep, cannot serve a raw plan.
+The raw plan keeps tree-first error propagation.
+The regular plan carries its umbrella deadline into the query-sweep and private-AX tiers.
+When the budget is spent, later tiers stop.
+
+### XCTest accessibility channel policy
+
+These events penalize the XCTest accessibility channel for that bundle for a bounded window:
+
+- A slow XCTest acquisition above the three-second threshold.
+- A timed-out XCTest tier.
+- System-modal work that the watchdog abandoned.
+- A regular-plan query-sweep timeout. The plan also refuses the partial capture.
+
+Under a penalty, regular plans derive the next step from backend traits (`effectiveSnapshotCapturePlan`).
+If a runnable non-XCTest backend exists, they defer to it.
+If none exists, as on physical iOS devices, they run a short XCTest probe instead of the full tree slice.
+A recovery probe is due thirty seconds after the penalty starts, and thirty seconds after each probe starts.
+A regular plan with a due probe runs the bounded tree before the independent backend, in the same capture.
+A failed recovery probe does not change the penalty deadline, because its short slice gives no new evidence about the channel.
+A completed tree probe clears the penalty early only when its acquisition fits the probe slice and its quality is accepted.
+Physical-device plans probe on every capture.
+Explicit backend pins and the raw plan keep their order.
+The plan deadline and the abandoned-main-thread-work gate apply to every attempt (#1105, #1156, #2621, #3844).
+
+The runner starts no XCTest main-thread work after it answers a command.
+Probe work that outlives its slice belongs to the capture that started it, so that response reports a busy main thread.
+Every bounded main-thread dispatch that outlives its slice counts as occupying the main thread.
+Thus, if a viewport read takes too long, the plan skips the sweep instead of queueing it.
+
+A failure that XCTest records ends `testCommand` when the main-thread block that recorded it returns, whatever `continueAfterFailure` says.
+Mute XCTest's AX-server rejection in both fetch wordings, so XCTest does not record it.
+Then the runner session continues and keeps its per-bundle penalty and depth memory.
+
+### Screen space
+
+`XCUIElement.frame` and the app-anchored `XCUICoordinate` use screen space on a placed iPad window.
+`XCUIElementSnapshot.frame` uses window content space.
+The text-entry probe owns one screen box, `ResolvedTextEntryInput.frameOnScreen`.
+A command reads the vector from the resolved window's box once, when it builds its target.
+The readiness retap reads the vector again on its own branch.
+The vector is `TextEntryContentTranslation` (`known`, `none`, or `unknown` when the read failed), with no default.
+Thus, a failed read never counts as full screen.
+`frameOnScreen` is nil without a snapshot (#3060) or with `unknown`.
+When it is nil, the focus tap dispatches the caller's own point, and the refresh point, the caret tap, and the readiness retap dispatch nothing.
+Probe matching compares `frameOnScreen` when it is present. When it is nil, probe matching compares the live `element.frame`, because a comparison dispatches nothing.
+
+The synthesized-gesture route compares the AXRuntime frame of the primary app with the frame of the system app (`RunnerFullScreenEvidenceFromForeground`).
+When XCTest cannot resolve the window, an iPad app that proves it fills its sole screen may use that screen as its gesture reference frame.
+An app that does not prove it still requires a window.
 
 ## Protocol Notes
 

@@ -1,6 +1,6 @@
 import Foundation
 
-// MARK: - XCTest accessibility channel policy (ADR 0004, #1105/#1156/#3896)
+// MARK: - XCTest accessibility channel policy (apple/runner/README.md, #1105/#1156/#3896)
 
 /// One executed step of an effective plan. The mode decides which evidence the attempt may produce
 /// and travels with it, so evidence cannot reach the recorder detached from its authority (#3896).
