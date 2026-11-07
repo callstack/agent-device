@@ -120,9 +120,7 @@ export default defineConfig({
       ),
       slowTestGateReporter(),
       coverageRunStampReporter(COVERAGE_UNINSTRUMENTED_PROJECTS),
-      // Vitest adds this itself only when no reporters are configured. Without it a failed CI
-      // step shows only `Process completed with exit code 1` on the check, and the failing test
-      // name sits after thousands of dots in the step log (#4247).
+      // Vitest adds this only when no reporters are configured; it puts failing tests on the check.
       ...(process.env.GITHUB_ACTIONS === 'true'
         ? [['github-actions', { jobSummary: { enabled: false } }] satisfies [string, object]]
         : []),
