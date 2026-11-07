@@ -132,12 +132,22 @@ This flow gives you logs, recent network activity, and a quick metrics sample fr
 
 `open` prints `Session state: <path>`. That directory holds the run's request diagnostics, Apple runner output, and app logs; see [Find a session's logs and artifacts](/docs/sessions#find-a-sessions-logs-and-artifacts).
 
-When a command fails, use `--json` to inspect `error.details.stderr` when it is present. Diagnostic stderr is secret-redacted and retains up to 8,192 characters; longer output keeps its beginning and end with a truncation marker between them. Other diagnostic strings remain limited to 400 characters. Compact retry summaries may retain less output.
+When a command fails, stderr starts and ends with the same summary line, so the error stays visible when you keep only the first or the last line of output:
 
-When a command fails against a remote daemon, the `Diagnostics Log:` path is always on your machine:
+```text
+Error (COMMAND_FAILED): tap @e12: runner did not answer within 10s. May have reached the device. Next: Run snapshot to check the screen before you retry. Read the diagnostics log for the failing step.
+Log: /Users/me/.agent-device/sessions/<session>/requests/<request-id>.ndjson
+Error (COMMAND_FAILED): tap @e12: runner did not answer within 10s. May have reached the device. Next: Run snapshot to check the screen before you retry. Read the diagnostics log for the failing step.
+```
+
+The summary says whether the action reached the device. `May have reached the device` means the action can already have run, so check the screen before you retry it. `Not dispatched` means a retry is safe. `Next` is the step to take. The `Log` line names the failing request's diagnostics file.
+
+Use `--json` to inspect `error.details.stderr` when it is present. Diagnostic stderr is secret-redacted and retains up to 8,192 characters; longer output keeps its beginning and end with a truncation marker between them. Other diagnostic strings remain limited to 400 characters. Compact retry summaries may retain less output.
+
+When a command fails against a remote daemon, the `Log:` path is always on your machine:
 agent-device downloads the failing request's record over the same base URL and token into
 `<state-dir>/remote-diagnostics/<session>/requests/<request-id>.ndjson`, so a CI job can keep it as a build
-artifact. If the download fails, the line reads `unavailable` with the remote daemon, the
+artifact. If the download fails, the line reads `Log: unavailable` with the remote daemon, the
 request id, and the reason — never a path on the daemon host.
 
 On iOS simulators, `logs` scope by bundle id and the resolved app executable. For launch-time stdout/stderr, capture the direct app launch console instead of starting raw `simctl` streams:

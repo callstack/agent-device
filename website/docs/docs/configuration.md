@@ -71,7 +71,7 @@ protected, operator-controlled configuration. Do not put either value in `./agen
 Remote daemon URLs that aren't loopback always require authentication. Saved `connect` profiles and
 explicit `--remote-config` files also work; generated profiles do not store tokens.
 
-When a command fails against a remote daemon, its `Diagnostics Log:` path is on your machine; see
+When a command fails against a remote daemon, its `Log:` path is on your machine; see
 [Capture a clean repro window](/docs/debugging-profiling#capture-a-clean-repro-window).
 
 Project-safe keys include command defaults such as `platform`, `target`, `device`, `session`,
