@@ -35,6 +35,8 @@ export async function handleRequestTimeout(
     /** Named together so the recovery hint cannot be assembled from a swapped session and action. */
     session?: string;
     action?: string;
+    /** Whether the request left this process before the window expired. */
+    requestSent: boolean;
   }>,
 ): Promise<AppError> {
   const {
@@ -48,6 +50,7 @@ export async function handleRequestTimeout(
     platform,
     session,
     action,
+    requestSent,
   } = params;
   // The command's declared policy (`timeoutPolicy.onTimeout`, ADR 0008) decides whether a local
   // timed-out request is RESET-ELIGIBLE; the liveness probe decides whether the eligibility runs.
@@ -96,6 +99,7 @@ export async function handleRequestTimeout(
     timeoutMs,
     requestId,
     reason: 'daemon_transport_timeout',
+    daemonRequestSent: requestSent,
     ...(retirement ? { retirement, stateDir: statePaths.baseDir } : {}),
     hint:
       retirement?.status === 'retained'

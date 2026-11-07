@@ -61,7 +61,7 @@
     "packages/daemon-client/src/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:a57e0ba3d6d410f5aa2dfd08872e583227098b2795e35e2a6b5a28f764dd8d38",
     "packages/daemon-client/src/daemon-client-rpc.ts#parseDaemonHttpResponseBody": "sha256:0cbe39dbd09e321ec00854a1626a7d89b6344e59c6faabe2fe02504268b2d886",
     "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:a5cf6fd4a9abea34ec051f03d6e45e5aa248f480371fdf22f93de06622a57b47",
-    "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:9baf45e5d127790eaf4381b6af2ba1a183b9c0eb75b6d4e125e08ac0dec51c44",
+    "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:b38df93a38bba4b350da2a78486f032a7f9344954dd11b7c09035bbc35c13a91",
     "packages/daemon-client/src/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
     "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:3bac36fa97090b273afe1128103e1bf476d05441fd9de41317f1b78775b88304",
     "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:7702598468b4c82b4ffa93064cd6bdfec938c1c527f7e6007c0584f3884a6eea",
@@ -488,17 +488,17 @@
     {
       "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#handleDaemonHttpResponseBody",
       "digest": "sha256:a57e0ba3d6d410f5aa2dfd08872e583227098b2795e35e2a6b5a28f764dd8d38",
-      "rationale": "#4302 client-side only: the two invalid-response rejections gain `details.reason: 'daemon_response_invalid'`, so the client can tell a reply it could not parse from other failures and disclose whether the request reached the device. Nothing is sent to the daemon differently and no response field is read differently; the change is to the error this client raises locally, which no daemon parses."
+      "rationale": "#1801 client-side only: the RPC error branch now runs through `rejectDaemonHttpRpcError`, which reads a superset of the fields it read before and, for a remote daemon, replaces the daemon-host `logPath` with a caller-local copy. Every field a released daemon sends is still accepted; nothing new is required of the daemon. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved. The function now takes the client host as a parameter and resolves a relative local path against its working directory instead of the process's; the client binds the same directory, so nothing a peer parses moves. #4302 (client-side only): the two invalid-response rejections also gain details.reason 'daemon_response_invalid', so the client can disclose whether the request reached the device; nothing is sent or read differently."
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult",
-      "digest": "sha256:9baf45e5d127790eaf4381b6af2ba1a183b9c0eb75b6d4e125e08ac0dec51c44",
-      "rationale": "#4302 client-side only: when materializing a successful response's remote artifacts fails, the error this client raises gains the dispatch verdict from the command registry (`details.dispatched`), because the daemon already ran the request. The request, the daemon's response and the artifact download are unchanged; only the locally raised error carries one more optional field."
+      "digest": "sha256:b38df93a38bba4b350da2a78486f032a7f9344954dd11b7c09035bbc35c13a91",
+      "rationale": "The client names its request as DaemonWireRequest (packages/contracts/src/daemon-wire-request.ts, a narrowing of the listed kernel DaemonRequest) and its response as the kernel DaemonResponse, instead of the daemon package's DaemonRequest/DaemonResponse aliases, so the daemon package is no longer a client import. The declaration's serialized fields, method names and framing are unchanged; only the compile-time type names in its signature moved, so a peer on protocol 2 parses exactly what it did. The function now takes the client host as a parameter and resolves a relative local path against its working directory instead of the process's; the client binds the same directory, so nothing a peer parses moves. #4302 (client-side only): when materializing a successful response's remote artifacts fails, the locally raised error (wrapped as an AppError when it is not one) also carries the command registry's dispatch verdict in details.dispatched, because the daemon already ran the request; the request, the response and the download are unchanged."
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-progress.ts#createInvalidDaemonResponseError",
       "digest": "sha256:8e2501995839b50646d554def6d2973667ce080ed1aaf171514158b6d2e681a8",
-      "rationale": "#4302 client-side only: the invalid-response error gains `details.reason: 'daemon_response_invalid'`, so the client can disclose whether the request reached the device. It is built from a reply this client already failed to parse and is raised locally; no daemon reads it and the request on the wire is unchanged."
+      "rationale": "The client names its request as DaemonWireRequest (packages/contracts/src/daemon-wire-request.ts, a narrowing of the listed kernel DaemonRequest) and its response as the kernel DaemonResponse, instead of the daemon package's DaemonRequest/DaemonResponse aliases, so the daemon package is no longer a client import. The declaration's serialized fields, method names and framing are unchanged; only the compile-time type names in its signature moved, so a peer on protocol 2 parses exactly what it did. #4302 (client-side only): the invalid-response error also gains details.reason 'daemon_response_invalid', so the client can disclose whether the request reached the device; it is raised locally from a reply this client could not parse, and no daemon reads it."
     }
   ]
 }

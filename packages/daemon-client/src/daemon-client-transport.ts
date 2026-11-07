@@ -411,14 +411,15 @@ async function recoverFromTimeout(
     info,
     statePaths,
     retireUnresponsive: options.timeoutRecovery !== 'none',
+    requestSent: error.details.daemonRequestSent !== false,
     ...timeoutRequestContext(req, isRemoteDaemon(info), expiredBudget),
   });
 }
 
 /**
  * One of the transport's own failures, with whether it happened after the request left this
- * process (the daemon may have run it): a timeout, a connection lost after the send, or a reply
- * that could not be read or parsed. A connection lost before the send is not sent.
+ * process (the daemon may have run it). A lost connection or a timeout records
+ * `daemonRequestSent`; a reply that could not be read or parsed was always sent.
  */
 function classifyTransportFailure(
   error: unknown,
@@ -426,8 +427,8 @@ function classifyTransportFailure(
   if (!(error instanceof AppError)) return undefined;
   switch (error.details?.reason) {
     case 'daemon_transport_failure':
-      return { failure: error, sent: error.details.daemonRequestSent !== false };
     case 'daemon_transport_timeout':
+      return { failure: error, sent: error.details.daemonRequestSent !== false };
     case 'daemon_response_read_failure':
     case 'daemon_response_invalid':
       return { failure: error, sent: true };
@@ -519,7 +520,7 @@ function remainingRemoteRequestTimeoutMs(
     (timedOutProbeMs === undefined || timedOutProbeMs > REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS)
   )
     return remainingMs;
-  throw requestTimeoutError(timeoutMs, req.meta?.requestId);
+  throw requestTimeoutError(timeoutMs, req.meta?.requestId, false);
 }
 
 function isRemoteInstanceMismatch(error: unknown): boolean {
@@ -665,7 +666,7 @@ async function sendSocketRequest(
             if (settled) return;
             settled = true;
             detachCallerAbort();
-            reject(requestTimeoutError(timeoutMs, req.meta?.requestId));
+            reject(requestTimeoutError(timeoutMs, req.meta?.requestId, requestWritten));
             socket.destroy();
           }, timeoutMs)
         : undefined;
@@ -723,11 +724,16 @@ async function sendSocketRequest(
   });
 }
 
-function requestTimeoutError(timeoutMs: number, requestId: string | undefined): AppError {
+function requestTimeoutError(
+  timeoutMs: number,
+  requestId: string | undefined,
+  daemonRequestSent: boolean,
+): AppError {
   return new AppError('COMMAND_FAILED', 'Daemon request timed out', {
     reason: 'daemon_transport_timeout',
     timeoutMs,
     requestId,
+    daemonRequestSent,
   });
 }
 
@@ -735,7 +741,7 @@ function requestTimeoutError(timeoutMs: number, requestId: string | undefined): 
 // describe the same request differently.
 type TimeoutRequestFields = Omit<
   Parameters<typeof handleRequestTimeout>[0],
-  'info' | 'statePaths' | 'retireUnresponsive'
+  'info' | 'statePaths' | 'retireUnresponsive' | 'requestSent'
 >;
 
 function timeoutRequestContext(
@@ -795,7 +801,8 @@ async function sendHttpRequest(
 
   return await new Promise((resolve, reject) => {
     let settled = false;
-    let requestEnded = false;
+    // Set when the request was handed to the OS (`finish`), never for a connection that failed first.
+    let requestSent = false;
     const detachCallerAbort = (): void => {
       if (callerSignal) callerSignal.removeEventListener('abort', onCallerAbort);
     };
@@ -881,7 +888,7 @@ async function sendHttpRequest(
     const timeoutHandle =
       typeof timeoutMs === 'number'
         ? setTimeout(() => {
-            rejectOnce(requestTimeoutError(timeoutMs, req.meta?.requestId));
+            rejectOnce(requestTimeoutError(timeoutMs, req.meta?.requestId, requestSent));
             request.destroy();
           }, timeoutMs)
         : undefined;
@@ -895,7 +902,7 @@ async function sendHttpRequest(
       if (settled) return;
       if (timeoutHandle) clearTimeout(timeoutHandle);
       rejectOnce(
-        abortedRequestError(callerSignal!, requestEnded ? 'unknown' : 'no', req.meta?.requestId),
+        abortedRequestError(callerSignal!, requestSent ? 'unknown' : 'no', req.meta?.requestId),
       );
       request.destroy();
     };
@@ -911,13 +918,15 @@ async function sendHttpRequest(
       // arrives before the settle and rejects.
       if (settled) return;
       rejectOnce(
-        handleTransportError(err, req.meta?.requestId, remote, { daemonRequestSent: requestEnded }),
+        handleTransportError(err, req.meta?.requestId, remote, { daemonRequestSent: requestSent }),
       );
     });
 
+    request.on('finish', () => {
+      requestSent = true;
+    });
     request.write(rpcPayload);
     request.end();
-    requestEnded = true;
   });
 }
 

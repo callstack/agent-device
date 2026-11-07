@@ -149,35 +149,82 @@ async function artifactFetchAfterAnswer(): Promise<unknown> {
   }
 }
 
-async function refusedBeforeSend(): Promise<unknown> {
+/** A press sent to a port nothing listens on, so the connection fails before anything is sent. */
+async function refusedBeforeSend(transport: 'socket' | 'http'): Promise<unknown> {
   const server = net.createServer();
   const port = await listenOnLoopback(server);
   await closeLoopbackServer(server);
   return await sendRequest(
-    { ...IDENTITY, port },
+    transport === 'socket' ? { ...IDENTITY, port } : { ...IDENTITY, httpPort: port },
     request(PUBLIC_COMMANDS.press),
-    'socket',
+    transport,
     statePaths(),
     undefined,
     { host: createTestHostEnvironment() },
   );
 }
 
-const DRIVERS: Record<string, () => Promise<unknown>> = {
-  'daemon-client.socket-closed-after-send': () =>
-    overSocket(PUBLIC_COMMANDS.press, (socket) => socket.destroy()),
-  'daemon-client.http-reset-after-send': () =>
-    overHttp((port) => ({ ...IDENTITY, httpPort: port })),
-  'daemon-client.invalid-response-after-send': () =>
-    overSocket(PUBLIC_COMMANDS.press, (socket) => socket.end('not a json-rpc response\n')),
-  'daemon-client.timeout-after-send': () =>
-    overHttp((port) => ({ ...IDENTITY, baseUrl: `http://127.0.0.1:${port}` }), 60),
-  'daemon-client.read-failure-after-send': () =>
-    overSocket(PUBLIC_COMMANDS.snapshot, (socket) => socket.destroy()),
-  'daemon-client.refused-before-send': refusedBeforeSend,
-  'daemon-client.delegated-composite-after-send': () =>
-    overSocket(PUBLIC_COMMANDS.batch, (socket) => socket.destroy()),
-  'daemon-client.artifact-fetch-after-answer': artifactFetchAfterAnswer,
+type Details = Record<string, unknown> | undefined;
+
+type Driver = Readonly<{
+  run: () => Promise<unknown>;
+  /** Whether the failure came from the intended path, read from its typed details. */
+  failedOn: (details: Details) => boolean;
+}>;
+
+const reasonIn =
+  (...reasons: string[]) =>
+  (details: Details): boolean =>
+    reasons.includes(String(details?.reason));
+
+/** A transport failure that records whether the request left the client. */
+const transportFailure =
+  (reason: string, sent: boolean) =>
+  (details: Details): boolean =>
+    details?.reason === reason && details.daemonRequestSent === sent;
+
+// A socket closed without a reply surfaces as either reason, depending on timing.
+const CLOSED_WITHOUT_REPLY = ['daemon_transport_failure', 'daemon_response_invalid'];
+
+const DRIVERS: Record<string, Driver> = {
+  'daemon-client.socket-closed-after-send': {
+    run: () => overSocket(PUBLIC_COMMANDS.press, (socket) => socket.destroy()),
+    failedOn: reasonIn(...CLOSED_WITHOUT_REPLY),
+  },
+  'daemon-client.http-reset-after-send': {
+    run: () => overHttp((port) => ({ ...IDENTITY, httpPort: port })),
+    failedOn: transportFailure('daemon_transport_failure', true),
+  },
+  'daemon-client.invalid-response-after-send': {
+    run: () =>
+      overSocket(PUBLIC_COMMANDS.press, (socket) => socket.end('not a json-rpc response\n')),
+    failedOn: reasonIn('daemon_response_invalid'),
+  },
+  'daemon-client.timeout-after-send': {
+    run: () => overHttp((port) => ({ ...IDENTITY, baseUrl: `http://127.0.0.1:${port}` }), 60),
+    failedOn: transportFailure('daemon_transport_timeout', true),
+  },
+  'daemon-client.read-failure-after-send': {
+    run: () => overSocket(PUBLIC_COMMANDS.snapshot, (socket) => socket.destroy()),
+    failedOn: reasonIn(...CLOSED_WITHOUT_REPLY),
+  },
+  'daemon-client.refused-before-send': {
+    run: () => refusedBeforeSend('socket'),
+    failedOn: transportFailure('daemon_transport_failure', false),
+  },
+  'daemon-client.http-refused-before-send': {
+    run: () => refusedBeforeSend('http'),
+    failedOn: transportFailure('daemon_transport_failure', false),
+  },
+  'daemon-client.delegated-composite-after-send': {
+    run: () => overSocket(PUBLIC_COMMANDS.batch, (socket) => socket.destroy()),
+    failedOn: reasonIn(...CLOSED_WITHOUT_REPLY),
+  },
+  'daemon-client.artifact-fetch-after-answer': {
+    run: artifactFetchAfterAnswer,
+    // The artifact download's own failure, after the daemon's successful answer.
+    failedOn: (details) => details?.artifactId === 'gone' && details.statusCode === 404,
+  },
 };
 
 const ROWS = dispatchDisclosureRowsOwnedBy(
@@ -192,10 +239,14 @@ test('every daemon-client dispatch-disclosure row has exactly one driver', () =>
 for (const row of ROWS) {
   test(`${row.id}: ${row.trigger} → dispatched ${row.dispatched}`, async (t) => {
     if (await skipWhenLoopbackUnavailable(t)) return;
-    const drive = DRIVERS[row.id];
-    assert.ok(drive, `no driver for ${row.id}`);
-    await assert.rejects(drive(), (error: unknown) => {
+    const driver = DRIVERS[row.id];
+    assert.ok(driver, `no driver for ${row.id}`);
+    await assert.rejects(driver.run(), (error: unknown) => {
       assert.ok(error instanceof AppError, `unexpected failure: ${String(error)}`);
+      assert.ok(
+        driver.failedOn(error.details),
+        `${row.id} failed off its intended path: ${error.message}`,
+      );
       assert.equal(error.details?.dispatched, row.dispatched);
       return true;
     });
@@ -210,12 +261,7 @@ test('a sent request for a command without a declared effect gets no dispatch ve
     overSocket(PUBLIC_COMMANDS.devices, (socket) => socket.destroy()),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
-      // A socket closed without a reply surfaces as either post-send reason, depending on timing.
-      assert.ok(
-        ['daemon_transport_failure', 'daemon_response_invalid'].includes(
-          String(error.details?.reason),
-        ),
-      );
+      assert.ok(CLOSED_WITHOUT_REPLY.includes(String(error.details?.reason)));
       assert.equal('dispatched' in (error.details ?? {}), false);
       return true;
     },

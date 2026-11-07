@@ -18,9 +18,9 @@ type CommandDispatchVerdict = ReturnType<typeof resolveCommandDispatchDisclosure
  * failure is `unknown` with the sent count added to `details.dispatchedSteps`, except that a typed
  * composite resource refusal keeps `no` for its current step. Before that, the registry's
  * {@link resolveCommandDispatchDisclosure} decides: a read is `no` over any producer verdict,
- * because a resend repeats no app-visible action; a mutation keeps a producer verdict and is
- * `unknown` when no producer classified the failure; a command without a declared effect passes
- * through.
+ * because a resend repeats no app-visible action; a mutation or a delegating composite (`batch`,
+ * `replay`, `test`) keeps a producer verdict and is `unknown` when no producer classified the
+ * failure; any other command passes through.
  */
 export async function discloseRequestDispatch<Response extends DaemonResponse | null>(
   req: DaemonRequest,

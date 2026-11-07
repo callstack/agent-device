@@ -3,6 +3,7 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   AppError,
+  asAppError,
   readDiagnosticsRecordRef,
   toAppErrorCode,
   type DaemonError,
@@ -165,8 +166,20 @@ async function resolveDaemonHttpResult(
     );
   } catch (error) {
     // The daemon answered, so the request ran; only bringing its artifacts here failed.
+    reject(await discloseAnsweredRequestFailure(error, req));
+  }
+}
+
+/** Never throws, so the request settles even if the disclosure module cannot load. */
+async function discloseAnsweredRequestFailure(
+  error: unknown,
+  req: DaemonWireRequest,
+): Promise<unknown> {
+  try {
     const { discloseRequestFailure } = await import('./daemon-client-dispatch-disclosure.ts');
-    reject(error instanceof AppError ? discloseRequestFailure(error, req, true) : error);
+    return discloseRequestFailure(asAppError(error), req, true);
+  } catch {
+    return error;
   }
 }
 

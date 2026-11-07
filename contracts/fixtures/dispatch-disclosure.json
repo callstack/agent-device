@@ -636,5 +636,11 @@
     "producer": "daemon-client",
     "trigger": "a remote daemon answered a press request with an artifact, then the artifact download failed; the daemon ran the request",
     "dispatched": "unknown"
+  },
+  {
+    "id": "daemon-client.http-refused-before-send",
+    "producer": "daemon-client",
+    "trigger": "the HTTP connection was refused before a press request could be sent; the request never left the client",
+    "dispatched": "no"
   }
 ]
