@@ -119,18 +119,18 @@ export async function prepareLimrunRunnerProducts(input: {
       'INVALID_ARGS',
     );
   }
-  // A remote simulator cannot reach the build machine's Xcode, so the runner must carry XCTest
-  // itself. Xcode 26 embeds it in the runner app; Xcode 27 leaves it out and resolves it from the
-  // build machine, so such a runner never starts on a Limrun simulator.
-  const xctest = await fs
+  // Limrun hosts drive XCTest with Xcode 27, which loads XCTest from its own platform directory
+  // (see TestingEnvironmentVariables below). A runner that embeds XCTest.framework was built with
+  // an older Xcode, and its test host crashes at startup there.
+  const embeddedXctest = await fs
     .stat(path.join(appPath, 'Frameworks', 'XCTest.framework'))
     .catch(() => null);
-  if (!xctest?.isDirectory()) {
+  if (embeddedXctest?.isDirectory()) {
     throw limrunRunnerError(
       'limrun_runner_products_invalid',
-      'The Limrun XCTest runner does not embed XCTest.framework',
+      'The Limrun XCTest runner embeds XCTest.framework from an Xcode older than 27',
       {
-        hint: 'Build and package the simulator runner with Xcode 26, for example with DEVELOPER_DIR set to an Xcode 26 install.',
+        hint: 'Build and package the simulator runner with Xcode 27, for example with DEVELOPER_DIR set to an Xcode 27 install.',
       },
       'INVALID_ARGS',
     );
@@ -160,6 +160,10 @@ ${Object.entries(RUNNER_XCTESTRUN_CAPTURE_OPTIONS)
   .map(([key, value]) => `<key>${key}</key>${string(value)}`)
   .join('')}
 <key>OnlyTestIdentifiers</key><array><string>RunnerTests/testCommand</string></array>
+<key>TestingEnvironmentVariables</key><dict>
+<key>DYLD_FRAMEWORK_PATH</key><string>__PLATFORMS__/iPhoneSimulator.platform/Developer/Library/Frameworks</string>
+<key>DYLD_LIBRARY_PATH</key><string>__PLATFORMS__/iPhoneSimulator.platform/Developer/usr/lib</string>
+</dict>
 <key>EnvironmentVariables</key><dict>${Object.entries(environment)
     .map(([key, value]) => `<key>${key}</key>${string(value)}`)
     .join('')}</dict>

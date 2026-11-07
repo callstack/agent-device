@@ -125,7 +125,7 @@ Open your app before taking a snapshot. Snapshots target the app you opened in t
 
 `install` leaves your app stopped. Use `open` to launch it. To change launch arguments on an app that is already running, use `open --relaunch --launch-args`. Screenshots download as lossless PNG files, and recording downloads the finished MP4 when you stop it. Push notifications use the same command and payload format as local simulators.
 
-If you use a nightly or unpublished agent-device build, obtain a matching packaged iOS runner from the build's maintainer. Set `AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP` to the extracted `.app` path before starting agent-device. The runner must be built with Xcode 26, because Limrun simulators run iOS 26 and an Xcode 27 build does not include the XCTest frameworks it needs there; agent-device refuses such a runner. If the daemon is already running, stop it with `agent-device daemon stop` using the same `--state-dir`, then reconnect.
+If you use a nightly or unpublished agent-device build, obtain a matching packaged iOS runner from the build's maintainer. Set `AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP` to the extracted `.app` path before starting agent-device. The runner must be built with Xcode 27, because Limrun runs XCTest with Xcode 27. agent-device refuses a runner built with an older Xcode. If the daemon is already running, stop it with `agent-device daemon stop` using the same `--state-dir`, then reconnect.
 
 ## Connect an iOS app to Metro
 

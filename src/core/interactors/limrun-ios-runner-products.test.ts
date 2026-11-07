@@ -32,13 +32,14 @@ test('a normal app without a test bundle reports the invalid runner path', async
   expect(fetch).not.toHaveBeenCalled();
 });
 
-test('a runner built without its own XCTest is refused before it reaches Limrun', async () => {
+test('a runner that embeds its own XCTest is refused before it reaches Limrun', async () => {
   const directory = await mkdtempForTest('runner-products-');
   const appPath = path.join(directory, 'AgentDeviceRunnerUITests-Runner.app');
-  // An Xcode 27 build: the test bundle is there, the XCTest frameworks are not.
+  // An Xcode 26 build: the runner app carries XCTest, which crashes under the host's Xcode 27.
   await fs.mkdir(path.join(appPath, 'PlugIns', 'AgentDeviceRunnerUITests.xctest'), {
     recursive: true,
   });
+  await fs.mkdir(path.join(appPath, 'Frameworks', 'XCTest.framework'), { recursive: true });
   const fetch = vi.fn();
   vi.stubGlobal('fetch', fetch);
   await expect(
@@ -52,7 +53,7 @@ test('a runner built without its own XCTest is refused before it reaches Limrun'
     }),
   ).rejects.toMatchObject({
     code: 'INVALID_ARGS',
-    message: 'The Limrun XCTest runner does not embed XCTest.framework',
+    message: 'The Limrun XCTest runner embeds XCTest.framework from an Xcode older than 27',
     details: { reason: 'limrun_runner_products_invalid' },
   });
   expect(fetch).not.toHaveBeenCalled();

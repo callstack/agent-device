@@ -52,12 +52,24 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         shell: bash
 
-      # Limrun simulators run iOS 26 and cannot reach this machine's Xcode. Xcode 26 embeds XCTest in
-      # the runner app; Xcode 27 leaves it out, and the packaging step refuses such a runner.
-      - name: Select Xcode 26
+      # Limrun hosts run XCTest with Xcode 27 and load XCTest from that Xcode. A runner built with an
+      # older Xcode embeds its own XCTest, which crashes there, and the packaging step refuses it.
+      - name: Select Xcode 27
         run: |
           set -euo pipefail
-          XCODE_APP="$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n 1)"
+          # Pick the newest reported 27.x version, whatever the bundle is named.
+          XCODE_APP="$(
+            for APP in /Applications/Xcode*.app; do
+              VERSION="$("$APP/Contents/Developer/usr/bin/xcodebuild" -version 2>/dev/null | awk 'NR == 1 { print $2 }')" || continue
+              case "$VERSION" in
+                (27 | 27.*) printf '%s\t%s\n' "$VERSION" "$APP" ;;
+              esac
+            done | sort -V -k1,1 | tail -n 1 | cut -f2-
+          )"
+          if [ -z "$XCODE_APP" ]; then
+            echo "::error::No Xcode 27 found in /Applications on this runner image. The Limrun runner must be built with Xcode 27; choose an image that ships it." >&2
+            exit 1
+          fi
           echo "DEVELOPER_DIR=${XCODE_APP}/Contents/Developer" >> "$GITHUB_ENV"
           echo "Using ${XCODE_APP}"
         shell: bash
