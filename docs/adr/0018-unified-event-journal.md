@@ -4,7 +4,7 @@
 
 Proposed (2026-07-24; revised the same day after architecture review).
 Nothing in this proposal is implemented.
-The [full proposal at the base commit](https://github.com/callstack/agent-device/blob/e35d0d496fb820d57d95fcad1b6b62dfa9962abb/docs/adr/0018-unified-event-journal.md) keeps the inventory and the per-step plan.
+The [pre-slimming text](https://github.com/callstack/agent-device/blob/e35d0d496fb820d57d95fcad1b6b62dfa9962abb/docs/adr/0018-unified-event-journal.md) is historical context only: its inventory and step order are not current guidance.
 
 ## Context
 
@@ -26,6 +26,7 @@ Neither belongs to the proposed journal.
 ### Catalog and ownership
 
 A single `EVENT_CATALOG` in the contracts package would declare every diagnostic and telemetry kind, its subsystem, default level, and derivation traits.
+`EventKind` would be `keyof typeof EVENT_CATALOG`, and `subsystem` and `level` would be closed unions.
 `emitDiagnostic` would accept `EventKind` rather than `string`, so an uncataloged emit would fail to compile.
 Existing diagnostic phase strings would enter the catalog verbatim.
 Payloads would remain `Record<string, unknown>`; typed per-kind payloads are a possible follow-up.
@@ -129,6 +130,9 @@ A wire name change remains a breaking change for log consumers, even though an i
   A concurrent nested-action regression must run sharded attempts in parallel with nested dispatch that rebinds `session` and `logPath`, and prove shard isolation for replay traces, per-request diagnostics, and each session event log including its retained generation, without cross-writes or drops, including for events emitted after `await` points.
 - Tests must verify sink ordering, error isolation, and parity of the runner-round-trip trait with the current literal list.
 - A redaction fixture must prove that sensitive `data` reaches no journal-owned output.
+- Byte-compatibility fixtures must exist before any sink owns a write.
+- The fork primitive must land with its concurrent-shard regression.
+- The replay redaction change must ship in one change with its fixture update and changelog entry.
 - A type or test gate must prove every `UsageRecord` field is numeric, an enum from its owning registry, or a hash, and reject open-string fields.
 - Production code must not select events by kind-name substrings; a lint-style test would enforce this for the derived-set helpers.
   Layering checks must preserve the contracts and host-kit ownership boundary without back-edges.
@@ -149,13 +153,8 @@ A wire name change remains a breaking change for log consumers, even though an i
 
 The proposed journal would support request tracing by `requestId` and teardown tracing by `session`, while progress remains observable on the wire.
 New observability consumers could use sinks without new vocabularies or emit sites.
-The migration would remove the dead `traceLogPath` option, duplicate redaction pass, and unredacted replay helper.
+The migration would retire the `traceLogPath` option, duplicate redaction pass, and unredacted replay helper.
 Replay redaction would be the declared visible output change.
 The migration would be wide and would add one synchronous sink-dispatch loop per event.
 
-The proposed migration is incremental: catalog and typed kinds first; then the sink seam, debug stream, and agent-cost; then the session event log and teardown scopes; then the replay sink and fork isolation.
-Byte-compatibility fixtures would land with the sink seam, before any sink owns a write.
-The fork primitive would land with its concurrent-shard regression.
-The replay redaction change would ship with the replay sink, in one change with its fixture update and changelog entry.
-Each step would pass all checks when it merges and be independently useful.
 The `events` command would retain its paging contract, including typed cursor-expiry and window-verification errors.
