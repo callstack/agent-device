@@ -4,7 +4,7 @@ import { test } from 'vitest';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 import { createSnapshotSourceDeadline } from './deadline.ts';
-import { SnapshotSourceError } from './errors.ts';
+import { SnapshotSourceError } from '@agent-device/capture-kit/snapshot-source-channel';
 import { createSnapshotSourceHost } from './host.ts';
 import {
   encodeSnapshotBridgeFrame,

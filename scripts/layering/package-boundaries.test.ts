@@ -554,6 +554,8 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/snapshot-quality-backend-capabilities',
     '@agent-device/capture-kit/snapshot-quality-verdict',
     '@agent-device/capture-kit/snapshot-rect-projection',
+    '@agent-device/capture-kit/snapshot-router',
+    '@agent-device/capture-kit/snapshot-source-channel',
     '@agent-device/capture-kit/snapshot-state',
     '@agent-device/capture-kit/snapshot-state-fixtures',
     '@agent-device/capture-kit/snapshot-timeout-policy',

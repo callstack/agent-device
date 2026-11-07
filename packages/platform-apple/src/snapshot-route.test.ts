@@ -9,7 +9,8 @@ import { createLocalAppleToolProvider, withAppleToolProvider } from './core/tool
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
 import { createSimulatorSnapshotTargetResolver } from './snapshot-target.ts';
-import type { SnapshotSourceOutcome } from './snapshot-source-facade.ts';
+import type { SnapshotSourceOutcome } from '@agent-device/capture-kit/snapshot-source-channel';
+import type { SimulatorSnapshotSource } from './snapshot-source-facade.ts';
 import {
   bridgeAcquisition,
   bridgePresentingHost,
@@ -18,12 +19,14 @@ import {
   presentSurface,
   runnerResult,
   signal,
+  simctlReadFor,
   sourceReturning,
   surfaceHostExecutables,
   surfaceHostPresent,
   surfaceHostUnverified,
   surfaceRunnerResult,
   target,
+  targetsResolvedBy,
 } from './snapshot-route.fixtures.ts';
 
 test.for([
@@ -43,7 +46,7 @@ test.for([
       ...platformRuntimeHostFixture(),
       snapshot: { captureSurface: vi.fn(), presentIosAcquisition },
     },
-    { source, resolveTarget: vi.fn(async () => target) },
+    { source, targets: targetsResolvedBy(vi.fn(async () => target)) },
   );
 
   const captured = route.capture(device, input, signal(), async () => runnerResult());
@@ -59,7 +62,7 @@ test.for([surfaceHostPresent, surfaceHostUnverified] as const)(
     const fallback = vi.fn(async () => runnerResult());
     const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
       source,
-      resolveTarget: vi.fn(async () => target),
+      targets: targetsResolvedBy(vi.fn(async () => target)),
     });
 
     await route.capture(ios, input, signal(), fallback);
@@ -84,21 +87,12 @@ test.for([surfaceHostPresent, surfaceHostUnverified] as const)(
 // capture spawns only the cached target's `ps` identity read; the source's own two identity
 // reads are pinned beside it in `snapshot-source/adapter.test.ts`.
 test('a warm bridge capture with no runner spawns one ps and no pgrep before the bridge', async () => {
-  const run = vi.fn(async (args: readonly string[]) => ({
-    stdout:
-      args[0] === 'spawn'
-        ? `42\t0\tUIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]`
-        : JSON.stringify({
-            devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
-          }),
-    stderr: '',
-    exitCode: 0,
-  }));
+  const run = vi.fn(async (args: readonly string[]) => simctlReadFor(args));
   const runCommand = vi.fn(async () => ({ stdout: 'start-a', stderr: '', exitCode: 0 }));
   const source = sourceReturning(bridgeAcquisition());
   const route = createAppleSnapshotRoute(bridgePresentingHost(), {
     source,
-    resolveTarget: createSimulatorSnapshotTargetResolver(),
+    targets: createSimulatorSnapshotTargetResolver(),
   });
 
   const warm = await withAppleToolProvider(
@@ -140,7 +134,7 @@ test.for([
     }));
     const route = createAppleSnapshotRoute(bridgePresentingHost(), {
       source,
-      resolveTarget: vi.fn(async () => target),
+      targets: targetsResolvedBy(vi.fn(async () => target)),
       systemSurfaceForeground,
     });
 
@@ -165,7 +159,7 @@ test.for([
 test('a presented system surface captures under the host lineage, never the app lineage', async () => {
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
     source: sourceReturning(surfaceHostPresent),
-    resolveTarget: vi.fn(async () => target),
+    targets: targetsResolvedBy(vi.fn(async () => target)),
   });
 
   const first = await route.capture(ios, input, signal(), async () => surfaceRunnerResult());
@@ -196,7 +190,7 @@ test('a presented system surface captures under the host lineage, never the app 
 test('a lingering surface host cannot make a sheet capture and an app capture compare equal', async () => {
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
     source: sourceReturning(surfaceHostPresent),
-    resolveTarget: vi.fn(async () => target),
+    targets: targetsResolvedBy(vi.fn(async () => target)),
   });
 
   const sheet = await route.capture(ios, input, signal(), async () => surfaceRunnerResult());
@@ -232,7 +226,7 @@ test('a sheet behind a disabled bridge circuit is identified by the surface, not
       stage: 'failed',
       failure: { kind: 'transport-failure', code: 'bridge-disconnected' },
     }),
-    resolveTarget: vi.fn(async () => target),
+    targets: targetsResolvedBy(vi.fn(async () => target)),
   });
 
   // The first capture disables the circuit for this generation; both later captures take the
@@ -272,7 +266,7 @@ test('a sheet behind a disabled bridge circuit is identified by the surface, not
 test('a surface capture drops the app generation of the arm that reached it', async () => {
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
     source: sourceReturning(surfaceHostUnverified),
-    resolveTarget: vi.fn(async () => target),
+    targets: targetsResolvedBy(vi.fn(async () => target)),
   });
 
   const sheet = await route.capture(ios, input, signal(), async () => surfaceRunnerResult());
@@ -302,7 +296,7 @@ test.each([
   async (_label, bypass) => {
     const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
       source: sourceReturning(bridgeAcquisition()),
-      resolveTarget: vi.fn(async () => target),
+      targets: targetsResolvedBy(vi.fn(async () => target)),
     });
     const bypassInput = { options: { ...input.options, ...bypass } };
 
@@ -327,7 +321,7 @@ test.each([
 test('a bridge that cannot place a host process discloses the skipped bridge', async () => {
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
     source: sourceReturning(surfaceHostUnverified),
-    resolveTarget: vi.fn(async () => target),
+    targets: targetsResolvedBy(vi.fn(async () => target)),
   });
 
   const result = await route.capture(ios, input, signal(), async () => runnerResult());
@@ -350,7 +344,7 @@ test('typed bridge failure falls back once and disables retries for that app gen
   const fallback = vi.fn(async () => runnerResult());
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
     source,
-    resolveTarget: vi.fn(async () => target),
+    targets: targetsResolvedBy(vi.fn(async () => target)),
   });
 
   const logPath = path.join(await mkdtempForTest('ios-route-'), 'request.ndjson');
@@ -400,7 +394,7 @@ test('a bridge still being prepared sends only that capture to the runner', asyn
   const fallback = vi.fn(async () => runnerResult());
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
     source,
-    resolveTarget: vi.fn(async () => target),
+    targets: targetsResolvedBy(vi.fn(async () => target)),
   });
 
   const first = await route.capture(ios, input, signal(), fallback);
@@ -440,7 +434,7 @@ test.for([
   const fallback = vi.fn(async () => runnerResult());
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
     source,
-    resolveTarget: vi.fn(async () => target),
+    targets: targetsResolvedBy(vi.fn(async () => target)),
   });
 
   const first = await route.capture(ios, input, signal(), fallback);
@@ -468,7 +462,7 @@ test('a new app generation re-enables the bridge', async () => {
   const fallback = vi.fn(async () => runnerResult());
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
     source,
-    resolveTarget,
+    targets: targetsResolvedBy(resolveTarget),
   });
 
   await route.capture(ios, input, signal(), fallback);
@@ -484,20 +478,21 @@ test('stale bridge acquisition resolves the current generation before XCTest fal
     stage: 'failed',
     failure: { kind: 'stale-target', code: 'target-generation-changed' },
   });
-  const resolveTarget = vi.fn().mockResolvedValueOnce(target).mockResolvedValueOnce(currentTarget);
+  const resolveTarget = vi.fn().mockResolvedValueOnce(target);
+  const refreshTarget = vi.fn().mockResolvedValueOnce(currentTarget);
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
     source,
-    resolveTarget,
+    targets: targetsResolvedBy(resolveTarget, refreshTarget),
   });
 
   const result = await route.capture(ios, input, signal(), async () => runnerResult());
 
-  expect(resolveTarget).toHaveBeenCalledTimes(2);
-  expect(resolveTarget).toHaveBeenLastCalledWith(
+  expect(resolveTarget).toHaveBeenCalledOnce();
+  expect(refreshTarget).toHaveBeenCalledOnce();
+  expect(refreshTarget).toHaveBeenLastCalledWith(
     ios,
     input.options.appBundleId,
     expect.any(AbortSignal),
-    'refresh',
   );
   expect(result.comparisonIdentity?.lineage).toEqual({
     targetId: currentTarget.targetId,
@@ -505,14 +500,60 @@ test('stale bridge acquisition resolves the current generation before XCTest fal
   });
 });
 
+// The bridge saw a newer generation while the app process kept its pid and start time, so the
+// local resolver's identity check would still accept its cached target. The fallback must force a
+// rediscovery and name what it found, not republish the generation the bridge refused.
+test('a stale-target fallback on the local resolver stamps the rediscovered generation', async () => {
+  let launch = 'launch-a';
+  const run = vi.fn(async (args: readonly string[]) => simctlReadFor(args, launch));
+  const runCommand = vi.fn(async () => ({ stdout: 'start-a', stderr: '', exitCode: 0 }));
+  const source: SimulatorSnapshotSource = {
+    acquire: vi.fn(async () => {
+      launch = 'launch-b';
+      return {
+        stage: 'failed',
+        failure: { kind: 'stale-target', code: 'target-generation-changed' },
+      } as const;
+    }),
+    close: vi.fn(async () => {}),
+  };
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source,
+    targets: createSimulatorSnapshotTargetResolver(),
+  });
+
+  const result = await withAppleToolProvider(
+    createLocalAppleToolProvider({ simctl: { run }, runCommand }),
+    async () => await route.capture(ios, input, signal(), async () => runnerResult()),
+  );
+
+  expect(source.acquire).toHaveBeenCalledWith(
+    expect.objectContaining({
+      target: expect.objectContaining({
+        generation: `42:UIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]:start-a`,
+      }),
+    }),
+  );
+  expect(run.mock.calls.filter(([args]) => args[0] === 'spawn')).toHaveLength(2);
+  expect(result.comparisonIdentity?.lineage).toEqual({
+    targetId: `${ios.id}:${input.options.appBundleId}`,
+    generation: `42:UIKitApplication:${input.options.appBundleId}[launch-b][rb-legacy]:start-a`,
+  });
+  expect(result.warnings).toEqual([
+    'Simulator AX snapshot unavailable (target-generation-changed); used XCTest for this app generation.',
+  ]);
+});
+
 test('target-resolution fallback remains incomparable with a bridge publication', async () => {
   const source = sourceReturning(bridgeAcquisition());
   const fallback = vi.fn(async () => runnerResult());
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
     source,
-    resolveTarget: vi.fn(async () => {
-      throw new Error('launch job unavailable');
-    }),
+    targets: targetsResolvedBy(
+      vi.fn(async () => {
+        throw new Error('launch job unavailable');
+      }),
+    ),
   });
 
   const result = await route.capture(ios, input, signal(), fallback);
@@ -531,9 +572,11 @@ test('target-resolution fallback remains incomparable with a bridge publication'
 test('two target-resolution fallbacks cannot share comparison identity', async () => {
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
     source: sourceReturning(bridgeAcquisition()),
-    resolveTarget: vi.fn(async () => {
-      throw new Error('launch job unavailable');
-    }),
+    targets: targetsResolvedBy(
+      vi.fn(async () => {
+        throw new Error('launch job unavailable');
+      }),
+    ),
   });
 
   const first = await route.capture(ios, input, signal(), async () => runnerResult());
@@ -569,7 +612,7 @@ test('cancelled acquisition does not start a fallback after the request aborts',
   const fallback = vi.fn(async () => runnerResult());
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
     source,
-    resolveTarget: vi.fn(async () => target),
+    targets: targetsResolvedBy(vi.fn(async () => target)),
   });
 
   await expect(route.capture(ios, input, controller.signal, fallback)).rejects.toThrow(
@@ -588,16 +631,7 @@ test('a slow app discovery yields to a live runner within its wait slice, then s
   });
   const run = vi.fn(async (args: readonly string[]) => {
     if (args[0] === 'spawn') await released;
-    return {
-      stdout:
-        args[0] === 'spawn'
-          ? `42\t0\tUIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]`
-          : JSON.stringify({
-              devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
-            }),
-      stderr: '',
-      exitCode: 0,
-    };
+    return simctlReadFor(args);
   });
   const runCommand = vi.fn(async () => ({ stdout: 'start-a', stderr: '', exitCode: 0 }));
   const fallback = vi.fn(async () => runnerResult());
@@ -614,7 +648,7 @@ test('a slow app discovery yields to a live runner within its wait slice, then s
       appleApplications: { ...baseHost.appleApplications, hasLiveRunnerSession: async () => true },
       snapshot: { captureSurface: vi.fn(), presentIosAcquisition },
     },
-    { source, resolveTarget: createSimulatorSnapshotTargetResolver() },
+    { source, targets: createSimulatorSnapshotTargetResolver() },
   );
   vi.useFakeTimers();
   try {
@@ -654,16 +688,7 @@ test('an open waits out a slow app discovery, so the first capture after it star
   });
   const run = vi.fn(async (args: readonly string[]) => {
     if (args[0] === 'spawn') await released;
-    return {
-      stdout:
-        args[0] === 'spawn'
-          ? `42\t0\tUIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]`
-          : JSON.stringify({
-              devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
-            }),
-      stderr: '',
-      exitCode: 0,
-    };
+    return simctlReadFor(args);
   });
   const runCommand = vi.fn(async () => ({ stdout: 'start-a', stderr: '', exitCode: 0 }));
   const fallback = vi.fn(async () => runnerResult());
@@ -680,7 +705,7 @@ test('an open waits out a slow app discovery, so the first capture after it star
       appleApplications: { ...baseHost.appleApplications, hasLiveRunnerSession: async () => true },
       snapshot: { captureSurface: vi.fn(), presentIosAcquisition },
     },
-    { source, resolveTarget: createSimulatorSnapshotTargetResolver() },
+    { source, targets: createSimulatorSnapshotTargetResolver() },
   );
   vi.useFakeTimers();
   try {
@@ -725,7 +750,7 @@ test.each([
   });
   const route = createAppleSnapshotRoute(
     { ...platformRuntimeHostFixture(), clock: steppingClock() },
-    { source, resolveTarget: vi.fn(async () => target) },
+    { source, targets: targetsResolvedBy(vi.fn(async () => target)) },
   );
 
   await route.capture(ios, input, signal(), async () => runnerResult());
@@ -752,7 +777,7 @@ test('a relaunched generation rebaselines the circuit and observes the launch', 
   const resolveTarget = vi.fn().mockResolvedValueOnce(target).mockResolvedValue(relaunched);
   const route = createAppleSnapshotRoute(
     { ...platformRuntimeHostFixture(), clock: steppingClock() },
-    { source, resolveTarget },
+    { source, targets: targetsResolvedBy(resolveTarget) },
   );
 
   await route.capture(ios, input, signal(), async () => runnerResult());
@@ -784,16 +809,7 @@ test('a slow app discovery keeps observation on the bridge while no runner can a
   });
   const run = vi.fn(async (args: readonly string[]) => {
     if (args[0] === 'spawn') await released;
-    return {
-      stdout:
-        args[0] === 'spawn'
-          ? `42\t0\tUIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]`
-          : JSON.stringify({
-              devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
-            }),
-      stderr: '',
-      exitCode: 0,
-    };
+    return simctlReadFor(args);
   });
   const runCommand = vi.fn(async () => ({ stdout: 'start-a', stderr: '', exitCode: 0 }));
   const fallback = vi.fn(async () => runnerResult());
@@ -811,7 +827,7 @@ test('a slow app discovery keeps observation on the bridge while no runner can a
       appleApplications: { ...baseHost.appleApplications, hasLiveRunnerSession },
       snapshot: { captureSurface: vi.fn(), presentIosAcquisition },
     },
-    { source, resolveTarget: createSimulatorSnapshotTargetResolver() },
+    { source, targets: createSimulatorSnapshotTargetResolver() },
   );
   vi.useFakeTimers();
   try {
@@ -842,16 +858,7 @@ test.for(['rejects', 'exits'] as const)(
     // A known target is re-checked with one `ps` per capture; no discovery runs. A deadline that
     // lands there must stay a plain cancellation, or a wait would report readiness exhaustion over
     // evidence its earlier polls already gathered (#2343 review).
-    const run = vi.fn(async (args: readonly string[]) => ({
-      stdout:
-        args[0] === 'spawn'
-          ? `42\t0\tUIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]`
-          : JSON.stringify({
-              devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
-            }),
-      stderr: '',
-      exitCode: 0,
-    }));
+    const run = vi.fn(async (args: readonly string[]) => simctlReadFor(args));
     let recheckStarted!: () => void;
     const recheck = new Promise<void>((resolve) => {
       recheckStarted = resolve;
@@ -895,7 +902,7 @@ test.for(['rejects', 'exits'] as const)(
       },
       {
         source: sourceReturning(bridgeAcquisition()),
-        resolveTarget: createSimulatorSnapshotTargetResolver(),
+        targets: createSimulatorSnapshotTargetResolver(),
       },
     );
     await withAppleToolProvider(
@@ -938,7 +945,7 @@ test('a deadline during a slow app discovery names the discovery as the readines
     },
     {
       source: sourceReturning(bridgeAcquisition()),
-      resolveTarget: createSimulatorSnapshotTargetResolver(),
+      targets: createSimulatorSnapshotTargetResolver(),
     },
   );
   const deadline = new AbortController();

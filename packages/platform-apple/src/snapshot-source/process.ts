@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer';
 import type { ExecResult } from '@agent-device/host-kit/command';
-import { snapshotSourceError, type SnapshotSourceError } from './errors.ts';
+import type { SnapshotSourceError } from '@agent-device/capture-kit/snapshot-source-channel';
+import { snapshotSourceError } from './errors.ts';
 import type { SnapshotSourceHost, SnapshotSourceProcess } from './types.ts';
 
 const MAX_PROCESS_LOG_BYTES = 64 * 1024;

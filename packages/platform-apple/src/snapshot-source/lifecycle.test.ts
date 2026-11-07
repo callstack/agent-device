@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { onTestFinished, test, vi } from 'vitest';
-import { SnapshotSourceError, snapshotSourceError } from './errors.ts';
+import { SnapshotSourceError } from '@agent-device/capture-kit/snapshot-source-channel';
+import { snapshotSourceError } from './errors.ts';
 import { SnapshotBridgeManager } from './lifecycle.ts';
 import { simulatorAddressFor } from '../core/simctl.ts';
-import type { SnapshotSourceTarget } from './types.ts';
 import {
   limits,
   simulatorDevice,
@@ -19,12 +19,6 @@ import {
   exitDiagnostics,
   createLifecycleFixture,
 } from './lifecycle.fixtures.ts';
-
-function compileTimeSnapshotTargetProof(): SnapshotSourceTarget {
-  // @ts-expect-error A target names its simulator through an address minted from its DeviceInfo.
-  return { udid: 'simulator-1', runtime: 'iOS 26.2', pid: 123, generation: 'generation-1' };
-}
-void compileTimeSnapshotTargetProof;
 
 test('the bridge manager reuses a healthy per-device helper and stops it exactly once', async () => {
   const fixture = createLifecycleFixture();

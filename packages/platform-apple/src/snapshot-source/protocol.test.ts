@@ -18,7 +18,7 @@ import {
 } from './protocol.ts';
 import type { SnapshotSourceLimits } from './types.ts';
 import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
-import { SnapshotSourceError } from './errors.ts';
+import { SnapshotSourceError } from '@agent-device/capture-kit/snapshot-source-channel';
 
 const limits: SnapshotSourceLimits = {
   maxRequestBytes: 1024,

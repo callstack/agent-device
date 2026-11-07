@@ -7,7 +7,9 @@ import {
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import type { SnapshotSourceChannel } from '@agent-device/capture-kit/snapshot-router';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
+import { hasSimulatorBridge } from './snapshot-observability.ts';
 import {
   createSnapshotBridgeSource,
   type SnapshotBridgeSource,
@@ -41,16 +43,13 @@ const TARGET_READ_TIMEOUT_MS = 5_000;
  */
 const RUNNER_TRANSPORT_MARGIN_MS = 1_000;
 
-export type RunnerSnapshotBridge = Readonly<{
-  source: SnapshotBridgeSource<RunnerSnapshotBridgeTarget>;
-  resetTargets(): void;
-  resolveTarget(
-    device: DeviceInfo,
-    appBundleId: string,
-    signal: AbortSignal,
-    refresh?: 'refresh',
-  ): Promise<RunnerSnapshotBridgeTarget>;
-}>;
+/**
+ * The runner-served bridge as a snapshot router channel. `resolveTarget` returns the cached target
+ * without asking the runner, so the channel declares that its resolution does not verify identity.
+ * The runner owns observe-only captures, and a new runner session drops every cached target.
+ */
+export type RunnerSnapshotBridge = SnapshotSourceChannel<RunnerSnapshotBridgeTarget> &
+  Readonly<{ source: SnapshotBridgeSource<RunnerSnapshotBridgeTarget> }>;
 
 /**
  * The Simulator AX bridge reader that the XCTest runner serves, for a Simulator whose host cannot
@@ -82,16 +81,13 @@ export function createRunnerSnapshotBridge(
     return parseRunnerEnvelope(data);
   };
 
-  const resolveTarget: RunnerSnapshotBridge['resolveTarget'] = async (
+  const refreshTarget: RunnerSnapshotBridge['refreshTarget'] = async (
     device,
     appBundleId,
     signal,
-    refresh,
   ) => {
     signal.throwIfAborted();
     const targetId = `${device.id}:${appBundleId}`;
-    const cached = targets.get(targetId);
-    if (cached && refresh !== 'refresh') return cached;
     // Only a resolved target replaces the cached one: a refresh that fails leaves the generation the
     // route planned against.
     const captureTargets = targets;
@@ -108,6 +104,17 @@ export function createRunnerSnapshotBridge(
     const target = readTarget(envelope, { requestId, appBundleId, targetId });
     captureTargets.set(targetId, target);
     return target;
+  };
+  const resolveTarget: RunnerSnapshotBridge['resolveTarget'] = async (
+    device,
+    appBundleId,
+    signal,
+  ) => {
+    signal.throwIfAborted();
+    return (
+      targets.get(`${device.id}:${appBundleId}`) ??
+      (await refreshTarget(device, appBundleId, signal))
+    );
   };
 
   const source = createSnapshotBridgeSource<RunnerSnapshotBridgeTarget>({
@@ -160,13 +167,17 @@ export function createRunnerSnapshotBridge(
       close: async () => targets.clear(),
     },
   });
-  return {
+  return Object.freeze({
     source,
+    servesDevice: hasSimulatorBridge,
     resolveTarget,
-    resetTargets: () => {
+    refreshTarget,
+    resolutionVerifiesIdentity: false,
+    observeOnlySupported: false,
+    sessionChanged: () => {
       targets = new Map();
     },
-  };
+  });
 }
 
 function parseRunnerEnvelope(data: Record<string, unknown>): SnapshotBridgeEnvelope {

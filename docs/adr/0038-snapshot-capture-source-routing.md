@@ -5,7 +5,7 @@
 Accepted.
 This record owns snapshot source routing for every platform and provider.
 It amends [ADR 0004](0004-ios-snapshot-backend-strategy.md), which keeps the iOS acquisition, presentation, geometry, and system-surface contracts.
-The router does not exist yet. [#4205](https://github.com/callstack/agent-device/issues/4205) holds the migration plan and its guards.
+The router is in `packages/capture-kit/src/snapshot-router/`. [#4205](https://github.com/callstack/agent-device/issues/4205) holds the remaining migration plan and its guards.
 
 ## Context
 
@@ -77,4 +77,4 @@ A future app-only source needs window-ownership evidence that is tied to its rea
 
 - Provenance types move from kernel to contracts, and both iOS sources bind to the router.
 - Readers, decoding, discovery, process checks, native budgets, geometry, and lifecycle stay platform-specific.
-- Open gaps: the router, the identity-stamp helper, and the producer registry do not exist yet. The runner-session scope is pending [#4256](https://github.com/callstack/agent-device/pull/4256).
+- Open gaps: the identity-stamp helper and the producer registry do not exist yet.

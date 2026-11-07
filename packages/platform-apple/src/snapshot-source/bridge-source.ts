@@ -15,12 +15,12 @@ import { asSnapshotSourceError, snapshotSourceError } from './errors.ts';
 import { resolveSnapshotSourceLimits } from './limits.ts';
 import { readSnapshotBridgeRecovery, type SnapshotBridgeEnvelope } from './protocol.ts';
 import { decodeSnapshotBridgeTree } from './tree.ts';
+import type { SnapshotSourceOutcome } from '@agent-device/capture-kit/snapshot-source-channel';
 import type {
   SnapshotBridgeSourceRequest,
   SnapshotBridgeTarget,
   SnapshotSourceHost,
   SnapshotSourceLimits,
-  SnapshotSourceOutcome,
 } from './types.ts';
 
 /**

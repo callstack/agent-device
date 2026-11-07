@@ -14,7 +14,7 @@ vi.mock('./core/runner-client.ts', async (importOriginal) => ({
 
 import { createAppleRunnerRuntime } from './runner-runtime.ts';
 import { createRunnerSnapshotBridge } from './runner-snapshot-bridge.ts';
-import { createSnapshotBridgeRoute } from './snapshot-route.ts';
+import { createSnapshotRouter } from '@agent-device/capture-kit/snapshot-router';
 import { IOS_SIMULATOR } from './__tests__/device-fixtures.ts';
 import { createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
@@ -149,24 +149,12 @@ function bridgeRoute(provider: AppleRunnerProvider, runnerSessionId?: string) {
   const bridge = createRunnerSnapshotBridge({ device: IOS_SIMULATOR, provider });
   const presented: SnapshotRuntimeAcquiredResult[] = [];
   const fallbacks: CaptureSnapshotInput[] = [];
-  const route = createSnapshotBridgeRoute(
-    {
-      snapshot: {
-        presentIosAcquisition: (result) => {
-          presented.push(result);
-          return { ...runnerResult(), producer: result.acquisition.producer };
-        },
-      },
-      appleApplications: { hasLiveRunnerSession: async () => true },
+  const route = createSnapshotRouter(
+    (result) => {
+      presented.push(result);
+      return { ...runnerResult(), producer: result.acquisition.producer };
     },
-    {
-      source: bridge.source,
-      resolveTarget: bridge.resolveTarget,
-      refreshTarget: (device, appBundleId, signal) =>
-        bridge.resolveTarget(device, appBundleId, signal, 'refresh'),
-      observeOnlySupported: false,
-      ...(runnerSessionId ? { sessionChanged: bridge.resetTargets } : {}),
-    },
+    bridge,
     async () =>
       runnerSessionId
         ? { foreground: 'background', sessionId: runnerSessionId }
@@ -574,28 +562,16 @@ test('a late presentation failure cannot retire the replacement session generati
     entered = resolve;
   });
   let presentationCount = 0;
-  const route = createSnapshotBridgeRoute(
-    {
-      snapshot: {
-        presentIosAcquisition: async (result) => {
-          if (++presentationCount === 1) {
-            entered();
-            await blocked;
-            throw new Error('old presentation failed');
-          }
-          return { ...runnerResult(), producer: result.acquisition.producer };
-        },
-      },
-      appleApplications: { hasLiveRunnerSession: async () => true },
+  const route = createSnapshotRouter(
+    async (result) => {
+      if (++presentationCount === 1) {
+        entered();
+        await blocked;
+        throw new Error('old presentation failed');
+      }
+      return { ...runnerResult(), producer: result.acquisition.producer };
     },
-    {
-      source: bridge.source,
-      resolveTarget: bridge.resolveTarget,
-      refreshTarget: (device, appBundleId, signal) =>
-        bridge.resolveTarget(device, appBundleId, signal, 'refresh'),
-      observeOnlySupported: false,
-      sessionChanged: bridge.resetTargets,
-    },
+    bridge,
     async () => ({ foreground: 'background', sessionId }),
   );
   const snapshot = () =>
@@ -641,24 +617,12 @@ test('a wedge before the runner id is known does not disable a newly identified 
   const { provider, sent } = bridgeRunner(state);
   const bridge = createRunnerSnapshotBridge({ device: IOS_SIMULATOR, provider });
   let sessionId: string | undefined = undefined;
-  const route = createSnapshotBridgeRoute(
-    {
-      snapshot: {
-        presentIosAcquisition: (result) => ({
-          ...runnerResult(),
-          producer: result.acquisition.producer,
-        }),
-      },
-      appleApplications: { hasLiveRunnerSession: async () => true },
-    },
-    {
-      source: bridge.source,
-      resolveTarget: bridge.resolveTarget,
-      refreshTarget: (device, appBundleId, signal) =>
-        bridge.resolveTarget(device, appBundleId, signal, 'refresh'),
-      observeOnlySupported: false,
-      sessionChanged: bridge.resetTargets,
-    },
+  const route = createSnapshotRouter(
+    (result) => ({
+      ...runnerResult(),
+      producer: result.acquisition.producer,
+    }),
+    bridge,
     async () => (sessionId ? { foreground: 'background', sessionId } : { foreground: 'unknown' }),
   );
   const snapshot = () =>

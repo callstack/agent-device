@@ -30,7 +30,10 @@ import {
   type SnapshotRuntimePresenter,
 } from '@agent-device/contracts/snapshot-runtime';
 import { createRunnerSnapshotBridge } from './runner-snapshot-bridge.ts';
-import { createSnapshotBridgeRoute, type SnapshotBridgeRoute } from './snapshot-route.ts';
+import {
+  createSnapshotRouter,
+  type SnapshotRouter,
+} from '@agent-device/capture-kit/snapshot-router';
 import { createSystemSurfaceForegroundProbe } from './system-surface-foreground.ts';
 
 /** Binds a provider-owned runner session to the shared Apple command and runtime implementation. */
@@ -59,7 +62,7 @@ export function createAppleRunnerRuntime(options: {
   // Every capture of a remote Simulator reaches the runner, through the bridge or through XCTest. So
   // the foreground read starts a runner that is not up yet, under the capture's own budget, instead
   // of giving up the proof that keeps the capture on the bridge.
-  let snapshotRoute: SnapshotBridgeRoute | undefined;
+  let snapshotRoute: SnapshotRouter | undefined;
   const readForeground = createSystemSurfaceForegroundProbe(async (device, input) => {
     if (!options.provider.hasLiveSession(device)) {
       try {
@@ -83,21 +86,9 @@ export function createAppleRunnerRuntime(options: {
    * device host's own, so every later binding hands over the same one.
    */
   const routeFor = (present: SnapshotRuntimePresenter) =>
-    (snapshotRoute ??= createSnapshotBridgeRoute(
-      {
-        snapshot: { presentIosAcquisition: present },
-        appleApplications: {
-          hasLiveRunnerSession: async () => options.provider.hasLiveSession(options.device),
-        },
-      },
-      {
-        source: bridge.source,
-        resolveTarget: bridge.resolveTarget,
-        refreshTarget: (device, appBundleId, signal) =>
-          bridge.resolveTarget(device, appBundleId, signal, 'refresh'),
-        observeOnlySupported: false,
-        sessionChanged: bridge.resetTargets,
-      },
+    (snapshotRoute ??= createSnapshotRouter(
+      present,
+      bridge,
       async (device, input) =>
         await withAppleRunnerProvider(
           runCommand,

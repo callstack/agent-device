@@ -1,38 +1,8 @@
-import {
-  IOS_SYSTEM_SURFACE_HOSTS,
-  type IosSystemSurfaceHost,
-} from '@agent-device/contracts/ios-system-surface';
+import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
+import type { SystemSurfaceForegroundProbe } from '@agent-device/capture-kit/snapshot-source-channel';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isAppleApplicationState } from '@agent-device/kernel/snapshot';
 import { readRunnerSessionLiveness, runAppleRunnerCommand } from './core/runner-client.ts';
-
-/**
- * Whether any registered iOS system surface host is on screen, asked of the device's live runner
- * (#2438). The bridge's process check only proves a host process exists, and a host outlives what
- * it presented: password AutoFill at sign-in leaves `SafariViewService` running for the rest of the
- * session, which sent every later capture of the app to XCTest. On a deep tree such as Bluesky's feed
- * that capture costs 3-8s, where the host AX bridge answers in about 200ms.
- *
- * `background` is the only answer that may send a capture to the bridge, and it needs every
- * registered host to report a state other than foreground: one host lingering in the background says
- * nothing about another presenting. A foreground host names itself, and the capture takes the runner
- * route that serves it. `unknown` leaves the decision to the bridge's process check.
- */
-export type SystemSurfaceForeground =
-  | Readonly<{ kind: 'foreground'; host: IosSystemSurfaceHost }>
-  | 'background'
-  | 'unknown';
-
-/** One foreground read, with the runner session it was read through when that session is known. */
-export type SystemSurfaceForegroundReading = Readonly<{
-  foreground: SystemSurfaceForeground;
-  sessionId?: string;
-}>;
-
-export type SystemSurfaceForegroundProbe = (
-  device: DeviceInfo,
-  input: Readonly<{ signal: AbortSignal; requestId?: string }>,
-) => Promise<SystemSurfaceForegroundReading>;
 
 /**
  * Bounds each read below the read-only resend window, so a runner busy draining abandoned XCTest

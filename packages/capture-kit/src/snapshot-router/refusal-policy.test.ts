@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
-import { bridgeFailureDisposition } from './snapshot-route-failure-policy.ts';
+import { bridgeFailureDisposition } from './refusal-policy.ts';
 
 // Each expectation below is written out, never read back from the production table: a test that
 // derived the scope from the same table could not detect the table entry moving.
@@ -131,7 +131,7 @@ const fixture = JSON.parse(
   fs.readFileSync(
     path.resolve(
       import.meta.dirname,
-      '../../../contracts/fixtures/ios-snapshot-bridge-refusals.json',
+      '../../../../contracts/fixtures/ios-snapshot-bridge-refusals.json',
     ),
     'utf8',
   ),

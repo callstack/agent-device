@@ -3,17 +3,15 @@
  * Simulator snapshot; importing this facet keeps the platform package's startup surface inert.
  */
 export type {
-  SnapshotSourceFailure,
-  SnapshotSourceFailureKind,
   SnapshotSourceLimits,
-  SnapshotSourceOutcome,
   SnapshotSourceRequest,
   SnapshotSourceTarget,
 } from './snapshot-source/types.ts';
 
+import type { SnapshotSourceOutcome } from '@agent-device/capture-kit/snapshot-source-channel';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
-import type { SnapshotSourceOutcome, SnapshotSourceRequest } from './snapshot-source/types.ts';
+import type { SnapshotSourceRequest } from './snapshot-source/types.ts';
 
 export type SimulatorSnapshotSource = Readonly<{
   acquire(request: SnapshotSourceRequest): Promise<SnapshotSourceOutcome>;
