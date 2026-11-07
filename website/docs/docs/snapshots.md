@@ -241,6 +241,8 @@ The answer describes the screen, not the view of it you asked for, so `--raw`, `
 `--scope` all report the same value for one screen. Use `-i` or a `--scope` to keep the output small
 and still trust the answer.
 
+With `--scope`, the text output prints every ref pinned to its ref generation, such as `@e12~s42`, under one `Refs generation: 42` line. Paste the ref as printed into the next command. `--json` and `--raw` keep plain refs.
+
 ## iOS capture behavior
 
 Regular iOS snapshots clip overflowing elements to their visible area and omit elements entirely

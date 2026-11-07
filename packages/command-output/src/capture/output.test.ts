@@ -1,6 +1,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import {
+  attachRefs,
+  normalizeRef,
+  splitRefGenerationSuffix,
+  type RawSnapshotNode,
+} from '@agent-device/kernel/snapshot';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 import { dispatchCliOutput } from '../cli-output.ts';
@@ -207,4 +212,34 @@ test('settings renders response warnings after the message', async () => {
     result: response,
   });
   assert.equal(rendered.text, 'Updated setting: permission');
+});
+
+// ADR 0014: the CLI derives `scoped` from a non-blank --scope, and a printed pin must parse back
+// through the production ref grammar to the same node and refs generation.
+test('--scope output prints refs a caller can paste back as the same ref and generation', async () => {
+  const output = await snapshotCliOutput({
+    result: { ...buildResult(REPEATED_CHAIN.slice(0, 1)), refsGeneration: 752890 },
+    scope: '@e1',
+  });
+
+  const pin = /(@e\d+~s\d+) \[/.exec(output.text!)?.[1];
+  assert.equal(pin, '@e1~s752890');
+  assert.deepEqual(splitRefGenerationSuffix(pin!), { base: '@e1', generation: 752890 });
+  assert.equal(normalizeRef(pin!), 'e1');
+  assert.equal((output.jsonData as { nodes: Array<{ ref: string }> }).nodes[0]!.ref, 'e1');
+});
+
+test('output without --scope keeps plain refs even when a refs generation is present', async () => {
+  const withoutScope = await snapshotCliOutput({
+    result: { ...buildResult(REPEATED_CHAIN.slice(0, 1)), refsGeneration: 752890 },
+  });
+  const blankScope = await snapshotCliOutput({
+    result: { ...buildResult(REPEATED_CHAIN.slice(0, 1)), refsGeneration: 752890 },
+    scope: '  ',
+  });
+
+  for (const output of [withoutScope, blankScope]) {
+    assert.match(output.text!, /@e1 \[/);
+    assert.doesNotMatch(output.text!, /~s\d/);
+  }
 });

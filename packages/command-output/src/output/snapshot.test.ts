@@ -867,7 +867,7 @@ test('formatSnapshotText pins scoped tree refs and discloses the refs generation
   assert.match(text, /@e56~s752890 \[button\] "Submit"/);
   assert.match(text, /Refs generation: 752890/);
   // A node without a ref keeps a refless line; nothing is invented.
-  assert.doesNotMatch(text, /~s752890 \[text\] "no ref here"/);
+  assert.match(text, /^\s+\[text\] "no ref here"$/m);
 });
 
 test('formatSnapshotText pins scoped flattened refs', () => {
