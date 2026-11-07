@@ -126,32 +126,30 @@ final class BackgroundInteractionTests: XCTestCase {
   /// A secondary click opens the menu of the nearest element up the hit chain that offers one,
   /// and stops at the window or at an open menu, whose items sit under the element that opened it.
   func testContextMenuOwnerIsTheNearestAncestorWithAMenuInsideTheWindow() {
-    func chain(_ links: (String, String, Bool)...) -> [(element: String, role: String, offersMenu: Bool)] {
-      links.map { (element: $0.0, role: $0.1, offersMenu: $0.2) }
+    // Each element: its role, whether it offers AXShowMenu, and its parent.
+    let tree: [String: (role: String, offersMenu: Bool, parent: String?)] = [
+      "app": ("AXApplication", true, nil),
+      "window": ("AXWindow", true, "app"),
+      "list": ("AXOutline", false, "window"),
+      "row": ("AXCell", true, "list"),
+      "label": ("AXStaticText", false, "row"),
+      "menuButton": ("AXMenuButton", true, "window"),
+      "plainButton": ("AXButton", false, "window"),
+      "menu": ("AXMenu", false, "row"),
+      "rename": ("AXMenuItem", false, "menu"),
+    ]
+    func owner(_ hit: String?) -> ContextMenuOwner<String> {
+      contextMenuOwner(
+        from: hit, role: { tree[$0]!.role }, offersMenu: { tree[$0]!.offersMenu },
+        parent: { tree[$0]!.parent })
     }
-    let rowMenu = chain(
-      ("label", "AXStaticText", false), ("row", "AXCell", true), ("list", "AXOutline", false),
-      ("window", "AXWindow", false))
-    let buttonMenu = chain(("button", "AXMenuButton", true), ("window", "AXWindow", true))
-    let plainButton = chain(
-      ("button", "AXButton", false), ("window", "AXWindow", true), ("app", "AXApplication", true))
-    let openMenuItem = chain(
-      ("rename", "AXMenuItem", false), ("menu", "AXMenu", false), ("row", "AXCell", true))
-    let menuBarItem = chain(
-      ("file", "AXMenuBarItem", false), ("bar", "AXMenuBar", false), ("app", "AXApplication", true))
 
-    XCTAssertEqual(contextMenuOwner(upFrom: rowMenu), .success("row"))
-    XCTAssertEqual(contextMenuOwner(upFrom: buttonMenu), .success("button"))
-    XCTAssertEqual(contextMenuOwner(upFrom: plainButton), .failure(.noContextMenu))
-    XCTAssertEqual(contextMenuOwner(upFrom: openMenuItem), .failure(.noContextMenu))
-    XCTAssertEqual(contextMenuOwner(upFrom: menuBarItem), .failure(.noContextMenu))
-  }
-
-  /// A hit test that found nothing is no target at the point, not a target without a menu.
-  func testNoHitIsNoAccessibleTargetRatherThanNoContextMenu() {
-    XCTAssertEqual(
-      contextMenuOwner(upFrom: [] as [(element: String, role: String, offersMenu: Bool)]),
-      .failure(.noAccessibleTarget))
+    XCTAssertEqual(owner("label"), .owner("row"))
+    XCTAssertEqual(owner("menuButton"), .owner("menuButton"))
+    XCTAssertEqual(owner("plainButton"), .noMenu)
+    XCTAssertEqual(owner("rename"), .noMenu)
+    // A hit test that found nothing is no target at the point, not a target without a menu.
+    XCTAssertEqual(owner(nil), .noTarget)
   }
 
   /// Chromium marks wrapper groups pressable; only a control role may win the press outright.

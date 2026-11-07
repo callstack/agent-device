@@ -83,8 +83,17 @@ private let pressableControlRoles: Set<String> = [
 ]
 private let pressSearchMaxAncestors = 4
 
-func refusal(_ reason: BackgroundRefusal, _ message: String, app: NSRunningApplication) -> HelperError {
-  .commandFailed(message, details: ["reason": reason.rawValue, "bundleId": app.bundleIdentifier ?? ""])
+func refusal(
+  _ reason: BackgroundRefusal,
+  _ message: String,
+  app: NSRunningApplication,
+  details: [String: String] = [:]
+) -> HelperError {
+  .commandFailed(
+    message,
+    details: details.merging(["reason": reason.rawValue, "bundleId": app.bundleIdentifier ?? ""]) {
+      $1
+    })
 }
 
 func requireSessionApplication(bundleId: String?) throws -> NSRunningApplication {
@@ -223,22 +232,22 @@ func showMenuInBackground(
 ) throws -> BackgroundMenuResponse {
   try requireAppWindowPoint(point, app: app)
   cursor?.move(to: point)
-  let hitChain = sequence(state: elementAtPoint(in: app, point: point)) { current in
-    defer { current = current.flatMap { elementAttribute($0, attribute: kAXParentAttribute as String) } }
-    return current
-  }.lazy.map { element in
-    (
-      element: element, role: role(of: element),
-      offersMenu: actionNames(of: element).contains(showMenuAction as String)
-    )
-  }
+  let hit = hitTest(in: app, point: point)
   let owner: AXUIElement
-  switch contextMenuOwner(upFrom: hitChain) {
-  case .success(let element): owner = element
-  case .failure(.noAccessibleTarget):
-    throw refusal(.noAccessibleTarget, "no accessibility element at the point", app: app)
-  case .failure(let reason):
-    throw refusal(reason, "no accessibility element at the point offers a context menu", app: app)
+  switch contextMenuOwner(
+    from: hit.element,
+    role: role(of:),
+    offersMenu: { actionNames(of: $0).contains(showMenuAction as String) },
+    parent: { elementAttribute($0, attribute: kAXParentAttribute as String) }
+  ) {
+  case .owner(let element): owner = element
+  case .noTarget:
+    throw refusal(
+      .noAccessibleTarget, "the app's hit test found no accessibility element at the point",
+      app: app, details: ["axError": String(hit.axError.rawValue)])
+  case .noMenu:
+    throw refusal(
+      .noContextMenu, "no accessibility element at the point offers a context menu", app: app)
   }
   if isInMenuBar(owner) {
     throw refusal(.noAccessibleTarget, "the point is on the app's menu bar", app: app)
@@ -283,26 +292,35 @@ func popUpMenuWindowNumbers(pid: pid_t, windowInfo: [[String: Any]]) -> Set<Int>
 
 private let showMenuAction = "AXShowMenu" as CFString
 
-extension BackgroundRefusal: Error {}
+/// Where a secondary click's context menu comes from: no hit-test element, no element with a
+/// menu, or the element that owns it.
+enum ContextMenuOwner<Element> {
+  case noTarget
+  case noMenu
+  case owner(Element)
+}
+
+extension ContextMenuOwner: Equatable where Element: Equatable {}
 
 /// An open menu's items sit under the element that opened it, so the walk stops at a menu too.
-private let contextMenuOwnerBoundaryRoles: Set<String> = [
-  "AXWindow", "AXApplication", "AXMenu", "AXMenuBar",
-]
+private let contextMenuOwnerBoundaryRoles: Set<String> = ["AXWindow", "AXApplication", "AXMenu"]
 
 /// AppKit offers a secondary click to the hit view and then to each superview in turn, so the
-/// nearest ancestor with a menu owns it. The chain runs from the hit element up; an empty chain
-/// is a hit test that found nothing.
+/// nearest ancestor with a menu owns it.
 func contextMenuOwner<Element>(
-  upFrom hitChain: some Sequence<(element: Element, role: String, offersMenu: Bool)>
-) -> Result<Element, BackgroundRefusal> {
-  var hitAny = false
-  for link in hitChain.prefix(32) {
-    hitAny = true
-    if contextMenuOwnerBoundaryRoles.contains(link.role) { break }
-    if link.offersMenu { return .success(link.element) }
+  from hit: Element?,
+  role: (Element) -> String,
+  offersMenu: (Element) -> Bool,
+  parent: (Element) -> Element?
+) -> ContextMenuOwner<Element> {
+  guard var element = hit else { return .noTarget }
+  for _ in 0..<32 {
+    if contextMenuOwnerBoundaryRoles.contains(role(element)) { return .noMenu }
+    if offersMenu(element) { return .owner(element) }
+    guard let next = parent(element) else { return .noMenu }
+    element = next
   }
-  return .failure(hitAny ? .noContextMenu : .noAccessibleTarget)
+  return .noMenu
 }
 
 /// A window list that never became readable is a refusal, not an unobserved menu.
@@ -478,13 +496,19 @@ private func isInMenuBar(_ element: AXUIElement) -> Bool {
 
 /// The app's own hit test, scoped to the app so windows of other apps above it do not answer.
 private func elementAtPoint(in app: NSRunningApplication, point: CGPoint) -> AXUIElement? {
+  hitTest(in: app, point: point).element
+}
+
+/// The app's hit test with its accessibility result, so a failed hit test stays distinct from
+/// an element that cannot take the action.
+private func hitTest(
+  in app: NSRunningApplication,
+  point: CGPoint
+) -> (element: AXUIElement?, axError: AXError) {
   let appElement = AXUIElementCreateApplication(app.processIdentifier)
   var hit: AXUIElement?
-  guard AXUIElementCopyElementAtPosition(appElement, Float(point.x), Float(point.y), &hit) == .success
-  else {
-    return nil
-  }
-  return hit
+  let axError = AXUIElementCopyElementAtPosition(appElement, Float(point.x), Float(point.y), &hit)
+  return (axError == .success ? hit : nil, axError)
 }
 
 private func pressSearchChain(from hit: AXUIElement) -> [AXUIElement] {
