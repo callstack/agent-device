@@ -220,7 +220,7 @@ export class LeaseRegistry {
   /**
    * Extends a lease's life. A request naming a `ttlMs` asks for that inactivity window; one naming
    * none renews for the window the lease already carries, the way protected work renews for its
-   * existing one (ADR 0007). Resolving an absent `ttlMs` to the registry default instead would
+   * existing one (packages/daemon/docs/remote-device-lease-contracts.md). Resolving an absent `ttlMs` to the registry default instead would
    * shorten a lease every time a caller heartbeats without repeating its allocation TTL — which is
    * what an admitted request does, and what expired the lease paying for a device mid-upload (#2946).
    */
