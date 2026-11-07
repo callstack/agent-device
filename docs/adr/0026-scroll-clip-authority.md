@@ -29,7 +29,9 @@ Removal because a scroll band hides a node requires the clip fold's result or a 
 Inferred ownership cannot authorize removal.
 Evidence weaker than a parent edge emits only `hiddenContentAbove` or `hiddenContentBelow` directional hints and does not change membership.
 Semantic delegation (a collapsed row, duplicate label, or wrapper content) and decoration removal (a system indicator) are outside this decision and retain their own authority.
-The decision also covers the clip fold's inclusion decision and the three keyboard-band visibility sites.
+Visibility ejection requires evidence, and each ejection must be recorded.
+This governs four visibility-driven sites: the scroll-band site and three keyboard-band sites.
+The decision also covers the clip fold's inclusion decision.
 A weak signal can reach only the scroll-band site.
 
 Every source index must end presented with its representatives or removed with a typed disposition.
