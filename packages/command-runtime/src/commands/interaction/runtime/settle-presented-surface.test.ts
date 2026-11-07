@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { PresentedSurface, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { PresentedSurface } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { ref, selector } from './selector-read-utils.ts';
 import { createSettleDevice } from './__tests__/settle-device-fixtures.ts';
 import {

@@ -1,4 +1,5 @@
-import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { MaestroSelector } from './program-ir.ts';
 import { resolveMaestroClickability } from './runtime-clickability.ts';
 import { createMaestroResolver } from './runtime-target-ranking.ts';

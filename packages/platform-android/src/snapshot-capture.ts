@@ -7,12 +7,12 @@ import {
 } from '@agent-device/contracts/capture';
 import type {
   RawSnapshotNode,
-  SnapshotBackend,
   SnapshotKeyboardBandFact,
   SnapshotQualityVerdict,
   SnapshotQualityNote,
   SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
+import type { SnapshotBackend } from '@agent-device/contracts/snapshot-model';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import type { AndroidSnapshotHelperMetadata } from './snapshot-helper-types.ts';
 import type { AndroidSnapshotAnalysis } from './ui-hierarchy.ts';

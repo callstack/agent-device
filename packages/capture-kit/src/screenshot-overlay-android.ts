@@ -1,4 +1,5 @@
-import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { isViewportRootNode, normalizeType } from '@agent-device/contracts/snapshot';
 import { unionRects } from '@agent-device/kernel/rect';
 import { hasPositiveRect, rectArea, rectContains } from './screenshot-overlay-rects.ts';

@@ -1,4 +1,5 @@
-import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import { normalizeType, type SnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { isDescendantOfSnapshotNode } from './snapshot-policy.ts';

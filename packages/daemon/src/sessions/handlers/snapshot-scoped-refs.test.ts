@@ -1,7 +1,8 @@
 import { beforeEach, expect, test } from 'vitest';
 import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { handleSnapshotCommands as handleProductionSnapshotCommands } from './snapshot.ts';
-import type { RawSnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { makeAndroidSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { expireRefFrame } from '../../core/ref-frame.ts';

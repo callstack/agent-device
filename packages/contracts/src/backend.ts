@@ -21,13 +21,8 @@ import type {
   PlatformSelector,
   PublicPlatform,
 } from '@agent-device/kernel/device';
-import type {
-  Point,
-  Rect,
-  SnapshotNode,
-  SnapshotOptions,
-  SnapshotState,
-} from '@agent-device/kernel/snapshot';
+import type { Point, Rect, SnapshotNode, SnapshotOptions } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 
 // The backend's public leaf platform (approach b): backends distinguish iOS from
 // macOS (e.g. snapshot backend routing, the macOS surface guard), so this carries the

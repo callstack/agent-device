@@ -6,7 +6,7 @@ import {
   buildSnapshotNodeMap,
   findNearestAncestor,
   findSnapshotAncestor,
-} from './snapshot-tree.ts';
+} from './snapshot-model.ts';
 
 function node(input: RawSnapshotNode): SnapshotNode {
   return { ...input, ref: `@e${input.index}`, kind: formatRole(input.type ?? 'Element') };

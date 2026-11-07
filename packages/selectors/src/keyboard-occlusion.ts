@@ -4,8 +4,8 @@ import type {
   SnapshotAddressableNode,
   SnapshotKeyboardBandFact,
   SnapshotNode,
-  SnapshotState,
 } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import {

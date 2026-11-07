@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { copySnapshotClickabilityEvidence } from '@agent-device/contracts/capture';
 import {
   MAESTRO_RUNTIME_ADAPTER_POLICY,

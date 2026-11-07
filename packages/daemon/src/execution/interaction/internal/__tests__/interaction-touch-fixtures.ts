@@ -1,5 +1,6 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { attachRefs, type SnapshotCaptureProvenance } from '@agent-device/kernel/snapshot';
+import { attachRefs } from '@agent-device/kernel/snapshot';
+import { type SnapshotCaptureProvenance } from '@agent-device/contracts/snapshot-model';
 import {
   makeAndroidSession as makeBaseAndroidSession,
   makeIosAppSession,

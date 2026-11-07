@@ -8,7 +8,7 @@ import {
 } from '@agent-device/kernel/rect';
 import { isScrollableNodeLike } from './snapshot-scroll.ts';
 import { normalizeType } from './snapshot-text.ts';
-import { buildSnapshotNodeMap, findSnapshotAncestor } from './snapshot-tree.ts';
+import { buildSnapshotNodeMap, findSnapshotAncestor } from './snapshot-model.ts';
 
 type SnapshotVisibilityNode = Pick<
   SnapshotNode,

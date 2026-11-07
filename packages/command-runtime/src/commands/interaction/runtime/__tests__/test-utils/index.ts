@@ -1,7 +1,7 @@
 import type { AgentDeviceBackend, BackendSnapshotResult } from '@agent-device/contracts/backend';
 import { annotateCoveredSnapshotNodes } from '@agent-device/capture-kit/snapshot-occlusion';
 import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { createAgentDevice } from '../../../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';

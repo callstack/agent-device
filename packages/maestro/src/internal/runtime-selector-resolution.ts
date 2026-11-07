@@ -3,7 +3,8 @@ import {
   type SnapshotVisibility,
 } from '@agent-device/contracts/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
-import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { MaestroSelector } from './program-ir.ts';
 import { hasMaestroLeafSelectorFields } from './selector-relations.ts';
 import {

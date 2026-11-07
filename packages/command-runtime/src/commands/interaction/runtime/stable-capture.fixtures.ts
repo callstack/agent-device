@@ -1,4 +1,5 @@
-import type { RawSnapshotNode, Rect, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 
 export function elementSettingsSnapshot(offscreenRowYs: number[]): SnapshotState {

@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
-import type { IosTargetActivation, PostGestureOutcome } from '@agent-device/kernel/snapshot';
+import type { IosTargetActivation } from '@agent-device/kernel/snapshot';
+import type { PostGestureOutcome } from '@agent-device/contracts/snapshot-model';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { markDeferredInteractionOutcome } from '../../core/deferred-interaction-outcome.ts';
 import { makeAndroidSession, makeIosSession } from '../../__tests__/support/session-factories.ts';

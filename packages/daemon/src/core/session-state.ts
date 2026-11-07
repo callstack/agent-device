@@ -14,7 +14,7 @@ import type {
   SessionRuntimeHints as PublicSessionRuntimeHints,
 } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { PostGesturePreActionBaseline } from '@agent-device/capture-kit/post-gesture-stability';
 import type { SnapshotFreshnessWindow } from '@agent-device/capture-kit/snapshot-freshness';
 import type { RefFrame } from './ref-frame-slot.ts';

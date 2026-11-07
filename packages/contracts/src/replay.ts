@@ -1,6 +1,7 @@
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { Rect } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { GestureExecutionProfile } from './gesture-plan-types.ts';
 import type { SessionScope } from './session-scope.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';

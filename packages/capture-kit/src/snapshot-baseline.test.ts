@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { surfaceScopedNodes } from './snapshot-baseline.ts';
 
 const nodes = [{ index: 0, type: 'Application', ref: 'e1' }];

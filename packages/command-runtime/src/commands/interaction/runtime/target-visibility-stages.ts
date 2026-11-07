@@ -4,8 +4,8 @@ import type {
   SnapshotAddressableNode,
   SnapshotKeyboardBandFact,
   SnapshotNode,
-  SnapshotState,
 } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { normalizeRef } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import type {

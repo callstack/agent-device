@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import { toBackendContext } from '../../runtime-common.ts';
 

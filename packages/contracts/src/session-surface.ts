@@ -1,4 +1,4 @@
-import type { SnapshotBackend } from '@agent-device/kernel/snapshot';
+import type { SnapshotBackend } from '@agent-device/contracts/snapshot-model';
 import { defineStringEnum } from './string-enum.ts';
 
 export const SESSION_SURFACES = ['app', 'frontmost-app', 'desktop', 'menubar'] as const;

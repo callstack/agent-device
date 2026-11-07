@@ -1,7 +1,7 @@
 // Per-key matching semantics: what each selector key compares a node against.
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { parseSelectorChain } from './parse.ts';
 import { findSelectorChainMatch, resolveSelectorChain } from './resolve.ts';
 import { loginFormNodes } from './__tests__/login-form-nodes.ts';

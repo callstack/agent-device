@@ -3,7 +3,7 @@ import {
   snapshotStateProvenance,
   type SnapshotProvenance,
   type SnapshotStateProvenance,
-} from './snapshot.ts';
+} from './snapshot-model.ts';
 
 // The negative half of this test is type-level: each @ts-expect-error line fails `pnpm
 // typecheck` the moment the provenance table would accept a cross-channel pair again.

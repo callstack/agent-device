@@ -11,7 +11,7 @@ import { createAgentDevice } from '../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import type { PostGestureOutcome } from '@agent-device/kernel/snapshot';
+import type { PostGestureOutcome } from '@agent-device/contracts/snapshot-model';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import {
   attachSnapshotClickabilityEvidence,

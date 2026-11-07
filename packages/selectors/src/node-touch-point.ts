@@ -1,10 +1,6 @@
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
-import type {
-  Point,
-  SnapshotAddressableNode,
-  SnapshotNode,
-  SnapshotState,
-} from '@agent-device/kernel/snapshot';
+import type { Point, SnapshotAddressableNode, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { normalizeRect } from '@agent-device/kernel/rect-center';
 import { normalizeRef } from '@agent-device/kernel/snapshot';
 import { createSnapshotVisibility, isFillableType } from '@agent-device/contracts/snapshot';

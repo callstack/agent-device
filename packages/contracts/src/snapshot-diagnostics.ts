@@ -1,4 +1,4 @@
-import type { SnapshotBackend, SnapshotProvenance } from '@agent-device/kernel/snapshot';
+import type { SnapshotBackend, SnapshotProvenance } from '@agent-device/contracts/snapshot-model';
 import type { PublicPlatform } from '@agent-device/kernel/device';
 import { isRecord } from './json.ts';
 

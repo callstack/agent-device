@@ -1,7 +1,8 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { buildInPageSwipeGesturePlan } from '@agent-device/contracts/scroll-gesture';
 import { intersectRects, isPositiveFiniteRect, pickLargestRect } from '@agent-device/kernel/rect';
-import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { Rect } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { pointInsideRect } from './shared.ts';
 import {
   findNearestScrollableAncestor,

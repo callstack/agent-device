@@ -8,12 +8,14 @@ import {
   formatSnapshotLine,
 } from '@agent-device/capture-kit/snapshot-lines';
 import {
-  isSnapshotBackend,
-  usesMobileSnapshotPresentation,
   type SnapshotNode,
   type SnapshotUnchanged,
   type SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
+import {
+  isSnapshotBackend,
+  usesMobileSnapshotPresentation,
+} from '@agent-device/contracts/snapshot';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { buildMobileSnapshotPresentation } from '@agent-device/capture-kit/mobile-snapshot-semantics';
 
