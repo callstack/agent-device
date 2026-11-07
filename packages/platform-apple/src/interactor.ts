@@ -1,4 +1,3 @@
-import { stampSnapshotIdentity } from '@agent-device/capture-kit/snapshot-identity';
 import { assertScreenshotCaptureSupport } from '@agent-device/contracts/screenshot-runtime';
 import { appleScreenshotCaptureCapabilities } from './screenshot-support.ts';
 import { hasScopedAppleToolProvider } from './core/tool-provider.ts';
@@ -26,7 +25,7 @@ import {
   type SessionSurface,
 } from '@agent-device/contracts/session';
 import { DEVICE_ROTATIONS, type DeviceRotation } from '@agent-device/contracts/device';
-import { normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
+import { normalizeSnapshotScope, stampSnapshotIdentity } from '@agent-device/contracts/snapshot';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';

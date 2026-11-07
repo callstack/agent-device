@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { parseSync } from 'oxc-parser';
 import { REPO_ROOT } from '@agent-device/test-kit';
-import { SNAPSHOT_PRODUCERS } from '@agent-device/contracts/snapshot-producers';
+import { SNAPSHOT_PRODUCERS } from '@agent-device/contracts/snapshot-model';
 import { visitAst } from '../../scripts/layering/layering-ast.ts';
 import {
   isProductionSourceFile,
@@ -121,7 +121,7 @@ test('the scan fails an emitter that names an unlisted producer', () => {
     [
       file,
       [
-        "import { stampSnapshotIdentity } from '@agent-device/capture-kit/snapshot-identity';",
+        "import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot';",
         'export const capture = (nodes: unknown[]) =>',
         "  stampSnapshotIdentity({ nodes }, { backend: 'android', producer: 'example-tree' });",
         '',

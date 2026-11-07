@@ -1,4 +1,3 @@
-import { stampSnapshotIdentity } from '@agent-device/capture-kit/snapshot-identity';
 import type { DeviceRotation, HardwareButton } from '@agent-device/contracts/device';
 import type { BackMode } from '@agent-device/contracts/back-mode';
 import type {
@@ -303,8 +302,10 @@ class WebDriverInteractor implements Interactor {
       return acquireWebDriverIosSnapshot(source, this.targetId, visibility);
     }
     const { parseWebDriverAndroidSnapshotNodes } = await import('./webdriver-android-source.ts');
-    const { acquireProviderKeyboard } =
-      await import('@agent-device/contracts/tap-keyboard-occlusion');
+    const [{ acquireProviderKeyboard }, { stampSnapshotIdentity }] = await Promise.all([
+      import('@agent-device/contracts/tap-keyboard-occlusion'),
+      import('@agent-device/contracts/snapshot'),
+    ]);
     const nodes = parseWebDriverAndroidSnapshotNodes(source);
     const viewportAfter =
       viewportBefore === undefined ? undefined : await this.readAndroidSnapshotViewport(signal);

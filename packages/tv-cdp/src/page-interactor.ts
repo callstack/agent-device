@@ -1,4 +1,4 @@
-import { stampSnapshotIdentity } from '@agent-device/capture-kit/snapshot-identity';
+import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot';
 import { writeFile } from 'node:fs/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 

@@ -118,7 +118,7 @@ async function captureRevylAndroidSnapshot(
 ): Promise<SnapshotRuntimeResult> {
   const [{ parseWebDriverAndroidSnapshotNodes }, { stampSnapshotIdentity }] = await Promise.all([
     import('@agent-device/provider-webdriver/android-snapshot'),
-    import('@agent-device/capture-kit/snapshot-identity'),
+    import('@agent-device/contracts/snapshot'),
   ]);
   const { nodes, keyboard } = acquireProviderKeyboard({
     nodes: parseWebDriverAndroidSnapshotNodes(xml),

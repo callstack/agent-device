@@ -1,4 +1,4 @@
-import { stampSnapshotIdentity } from '@agent-device/capture-kit/snapshot-identity';
+import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot';
 import {
   attachSnapshotClickabilityEvidence,
   attachSnapshotOcclusionContextEvidence,

@@ -1,9 +1,12 @@
-import { stampSnapshotIdentity } from '../snapshot-identity.ts';
 import {
   attachSnapshotTextInputGeometry,
   type SnapshotTextInputGeometry,
 } from '@agent-device/contracts/snapshot-private-evidence';
-import { isFillableType, normalizeType } from '@agent-device/contracts/snapshot';
+import {
+  isFillableType,
+  normalizeType,
+  stampSnapshotIdentity,
+} from '@agent-device/contracts/snapshot';
 import {
   IosSnapshotEngineError,
   publishIosSnapshot,

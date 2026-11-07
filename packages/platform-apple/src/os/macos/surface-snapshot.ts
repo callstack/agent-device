@@ -1,4 +1,3 @@
-import { stampSnapshotIdentity } from '@agent-device/capture-kit/snapshot-identity';
 import type { CaptureSnapshotInput } from '@agent-device/contracts/snapshot-runtime';
 import type { MacOsHelperSurface } from '@agent-device/contracts/session';
 import type { EnvMap } from '@agent-device/kernel/source-value';
@@ -14,7 +13,10 @@ export async function captureMacOsSurfaceSnapshot(
   env: Readonly<EnvMap>,
 ) {
   const surface = options.surface;
-  const { runMacOsSnapshotAction } = await import('./helper.ts');
+  const [{ runMacOsSnapshotAction }, { stampSnapshotIdentity }] = await Promise.all([
+    import('./helper.ts'),
+    import('@agent-device/contracts/snapshot'),
+  ]);
   const result = await runMacOsSnapshotAction(surface, {
     bundleId: surface === 'menubar' || surface === 'app' ? options.appBundleId : undefined,
     signal,

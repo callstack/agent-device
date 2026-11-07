@@ -1,4 +1,4 @@
-import { stampSnapshotIdentity } from '@agent-device/capture-kit/snapshot-identity';
+import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { createUnsupportedInteractor } from '@agent-device/contracts/unsupported-interactor';
 import { AppError } from '@agent-device/kernel/errors';

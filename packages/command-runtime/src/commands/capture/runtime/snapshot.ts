@@ -8,7 +8,7 @@ import {
   type SnapshotDiagnosticsSummary,
 } from '@agent-device/contracts/capture';
 import { AppError } from '@agent-device/kernel/errors';
-import { normalizeType } from '@agent-device/contracts/snapshot';
+import { normalizeType, snapshotProducerFacts } from '@agent-device/contracts/snapshot';
 import type {
   PresentedSurface,
   SnapshotKeyboardBandFact,
@@ -18,7 +18,6 @@ import type {
   SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
-import { snapshotProducerFacts } from '@agent-device/contracts/snapshot-producers';
 import type { BackendSnapshotResult } from '@agent-device/contracts/backend';
 import type {
   AgentDeviceRuntime,
