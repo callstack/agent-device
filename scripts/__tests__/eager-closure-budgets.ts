@@ -1,6 +1,6 @@
 // Per-entry eager-closure budgets -- the ADR-0019 loading-shape probe (#1739, #1960).
 //
-// ADR-0019's "Implementation-laziness" section requires platform-package façades to stay
+// ADR 0019 §1, implementation laziness, requires platform-package façades to stay
 // implementation-lazy and says a startup-time threshold alone does not preserve the loading
 // shape (`docs/adr/0019-request-bound-platform-runtime.md`). The AST walker in
 // `@agent-device/test-kit` counts the repo modules that importing an

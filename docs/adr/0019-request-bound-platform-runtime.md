@@ -23,6 +23,8 @@ The request-provider resolver and wrapper order belong to its private lazy compo
 The daemon imports neutral contracts, not concrete platform implementations.
 R13 governs concrete package imports and named consumer facets, including static, dynamic, type-only, and re-export edges.
 R65 enforces daemon independence.
+Only root composition and R13-named consumer seams statically import platform package roots; R65 counts the Apple runner package as a concrete platform dependency.
+Gates pin substrate export subpaths, keep mechanics out of contracts, and reject the retired `src/platforms` path.
 Families may import contracts, domain packages, and explicitly injected host capabilities.
 They may not import daemon requests or responses, mutable session state, command catalogs or grammar, root implementations, sibling platforms, or raw process primitives outside the shared host-command port.
 Contracts contain neutral vocabulary, plans, and pure classification, not host mechanics or concrete implementation types.
@@ -59,7 +61,7 @@ A command descriptor declares typed required operations and may separately decla
 Input-selected use comes from a discriminated execution plan that retains literal types.
 The three sets are pairwise disjoint.
 Correctness never requires a preferred operation.
-An advertised conditional operation must exist when the owner's complete path depends on it.
+An owner that advertises a conditional operation must provide it, because its semantically complete path depends on that observation.
 When unavailable, parity evidence must prove a complete required path.
 
 Inventory use is separate: the inventory gateway selects family and provider sources without a synthetic device or a device binding.
@@ -70,6 +72,7 @@ Each owner reports exhaustive facts for the exact leaf, device kind/backend, and
 Facets accept neutral semantic inputs and typed outcomes, not command names, daemon requests or responses, session state, CLI flags, or opaque command payloads.
 Unsupported behavior is a missing facet and typed unavailability fact, not a throwing stub after binding.
 Operation keys identify semantic operations; selecting one exposes no undeclared sibling.
+The facts map is a mapped type over operation names, so a per-shape key cannot satisfy any runtime-use shape.
 An operation modifier is not another operation and has no fact cell.
 The owning leaf mechanic refuses an unsupported shape with a typed reason and hint when requested.
 A missing member for an admitted whole operation is an ownership bug and fails closed.
@@ -78,7 +81,7 @@ A request shape still belongs to the leaf mechanic.
 
 `RequestExecutionScope.bindDevice(device, use)` resolves the exact owner, checks required facts, classifies preferred and conditional facts, creates or reuses the ownership-qualified request binding, and verifies every required and advertised implementation.
 A missing advertised implementation is a runtime-contract error.
-The returned projection exposes required operations as non-optional and declared available preferred and conditional operations as optional.
+The returned projection exposes required operations as non-optional and declared preferred and conditional operations as optional and present only when available.
 Undeclared operations are inaccessible, and the broad cached runtime stays private.
 The descriptor and handler share a non-widened declaration; assertions and optional admission cannot manufacture required proof.
 The runtime-facet-narrowing gate and compile-time contract tests enforce this boundary.
@@ -87,6 +90,7 @@ A preferred path may change optimization or path disclosure, not semantic execut
 Fallback to the complete required path needs a typed reason and explicit descriptor/ADR 0011 path classification, not a generic catch.
 Helper reuse internal to a required operation is not a daemon-visible preferred operation.
 Conditional operations instead require owner-cell parity; an advertised but missing operation fails as a contract error.
+The handler must not silently use a path known to lose the observation.
 
 The registry owns each family exactly once.
 Support coverage is separate and must preserve legacy supported and unsupported cells and hints unless a separate decision changes behavior.
@@ -111,7 +115,7 @@ An unavailable provider returns `unreattachable: owner-unavailable`, never a loc
 
 Gateways and helper managers live for the process lifetime.
 Helpers remain lazy, identity-bound, invalidatable, restartable, and idle-stoppable under ADR 0002.
-A request binding attaches cancellation, diagnostics, progress, and admitted device/session context; disposal releases only request attachments and acquisitions.
+A request binding attaches cancellation, diagnostics, progress, and admitted device/session context inside the active request diagnostics/event context; disposal releases only request attachments and acquisitions.
 The disposable binding stays private to the request scope; handlers receive a non-disposable narrowed projection.
 A bind rolls back partial acquisitions before rejection and publishes only after they all succeed.
 Publication transfers ownership once to a reverse-order scope disposal stack; cached projections do not register it again.
@@ -121,10 +125,11 @@ Source-executed TypeScript does not use `await using` while the supported Node 2
 
 A binding is never adopted beyond the request.
 Only a durable facet handle may transfer to session ownership.
-Its helper attachment survives request disposal, but it detaches the original request's diagnostics, event, progress, and async context.
+It may retain its own helper attachment beyond the request; adoption detaches the original request's diagnostics, event, progress, and async context.
 Finish or forced disposal uses the current request or explicit session-teardown observability scope.
 Helpers stop only through explicit device lifecycle policy, invalidation, idle policy, or platform shutdown after session resources finalize.
-Lifecycle scenarios prove healthy helper reuse after binding disposal, at-most-once shutdown of each still-owned generation, survival of adopted resources, and rollback after each partial acquisition.
+Every helper-backed runtime has a lifecycle scenario proving that binding disposal never terminates or restarts a healthy helper.
+Lifecycle scenarios also prove at-most-once shutdown of each still-owned generation, survival of adopted resources, and rollback after each partial acquisition.
 Evidence must suit the helper; wall-clock behavior alone is insufficient.
 
 ### 5. Durable resources are reattachable by the same owner
@@ -135,23 +140,26 @@ Evidence must suit the helper; wall-clock behavior alone is insufficient.
 > Backend `stop(target, budget)` and `collect` would replace `reattach` and `cleanup`.
 > This kind would remove cleanup-pending and the admission ledger, record recorder observation and native-path disposition beside the committed export, and archive each fence generation until both settle.
 > For each durable kind, failed finish would no longer imply forced cleanup once its failed-finish test states retry requirements.
-> App-log, audio-probe, and perf-capture retain the contract below unchanged.
+> App-log, audio-probe, and perf-capture would retain the contract below unchanged.
 > ADR 0024 owns the rationale, matrix, and tests. This proposal takes effect only when accepted.
 
 Durable work uses a process-local live handle and a bounded, versioned descriptor for recovery by the exact runtime owner.
 Destructive operations hold the ownership lease across fence validation, the native side effect, and the persisted transition, or use a token atomically enforced by the native or provider operation.
 A preflight check alone is insufficient.
 Session state may hold only a neutral facet-specific handle; persisted recovery holds the descriptor and neutral metadata.
-The daemon durable-capture coordinator owns persistence, adoption, compensation, fencing, and exact-owner recovery.
+The capture-kit durable-capture coordinator, which the daemon composes, owns persistence, adoption, compensation, fencing, and exact-owner recovery.
 Events and the proposed journal are observability, not recovery authority.
-The [durable resource recovery contracts](../../packages/daemon/docs/durable-resource-recovery.md) own the lifecycle, cleanup, and recovery details.
+The [durable resource recovery contracts](../../packages/capture-kit/docs/durable-resource-recovery.md) own the lifecycle, cleanup, and recovery details.
 
 ### 6. Command execution has one closed shape
 
 Each descriptor explicitly declares exactly one internal execution shape: `none`, `host`, `inventory`, or `device-runtime`.
 There is no default or legacy shape.
+Public projections exclude it.
 A `none` command has no platform adapter, capability admission, runtime use, or inventory use.
-A `host` command uses a neutral typed domain service and binds no device as its own shape; any device work uses another command's declared use.
+A `host` command uses one neutral typed domain service for host diagnostics, daemon-owner resource cleanup, or managed host tooling.
+These services stay separate and form no generic host service.
+It binds no device as its own shape; any device work uses another command's declared use.
 The ADR 0008 route table owns handlers and request-policy traits.
 R66 prevents capability buckets, legacy admission, and manufactured runtime proof.
 R65 prevents daemon dependencies on concrete platform implementations.
@@ -159,11 +167,13 @@ R65 prevents daemon dependencies on concrete platform implementations.
 Each mutable session resource has one R7 transition owner.
 Session state excludes request bindings, concrete platform/provider types, and raw process or transport mechanics.
 A change to resource state proves partial-start cleanup, transfer, finish, forced disposal, and error precedence.
-Review uses a clean committed tree with production files in HEAD.
+Review runs from a clean committed tree with all production files present in HEAD.
+A passing layering check with untracked production files is not evidence.
 Platform packages get no migration allowlist or root back-import exception.
 For a platform-package change, affected checks select platform contract, provider, and coverage scenarios.
 New structural gates require a planted violation.
-Existing cycle and writer/owner ceilings do not grow and decrease with the corresponding reduction.
+R9 cycle and R10 writer/owner ceilings may not grow.
+A change that shrinks a count lowers its ceiling in the same change, without unused allowance.
 
 ### 7. Adoption checkpoint
 
@@ -181,7 +191,7 @@ These tiers remain review vocabulary, not a migration ledger.
 Facts inspection is side-effect-free and answers admission, capabilities, and doctor without a binding, helper acquisition, or device access.
 A handler binds exactly once with the execution use selected by its plan; it does not bind merely to read facts.
 Changing an already migrated handler to facts inspection is a separate unit with independent review and parity evidence.
-A post-action observation such as `--settle` may admit and bind one additional capture-only plan when the action use has no capture.
+A post-action observation (`--settle`) may admit and bind one additional capture-only plan per request when the action use has no capture.
 It inspects facts before binding.
 If the action already requires capture, observation projects the cached binding.
 A second bind with a mutating operation is the execution use the plan should have selected.
@@ -196,6 +206,8 @@ Speed alone belongs under preferred; universal correctness belongs under require
 
 A cross-cutting facet has one owner and accompanies its first consuming command unit and review.
 A separate facet PR without a consuming command is prohibited.
+A parallel contract for the same concern is a seam violation.
+Daemon startup gains no per-platform entrypoints.
 Startup recovery is triggered only by persisted durable manifests or platform-owned markers; only families with evidence load.
 Daemon shutdown first detaches helper managers for handoff, then stops each still-owned generation at most once after session resources finalize.
 Each domain owns its isolated session-teardown step; there is no generic lifecycle-hook API.
@@ -206,6 +218,7 @@ Test-IME restoration is durable device state with marker recovery; helper stops 
 The required `DaemonPlatformServices` port carries neutral host readiness, observations, and open-target questions across the daemon boundary.
 Root composition supplies it; a daemon without composition cannot start.
 All members are required, with no throwing placeholders.
+Tests pass the same shared fixture instead of a platform-module mock behind the port.
 The port uses neutral contract types and exposes no raw selector, gesture, runner call, or platform type.
 Device execution remains on the request binding and owner facts remain the admission authority.
 The claim-recovery gateway is also supplied by composition; the daemon owns the dead owner's state directory, reconstruction order, and disposal time.
@@ -217,7 +230,7 @@ ADR 0002 keeps persistent protocols, invalidation, and explicitly safe one-shot 
 ADRs 0007 and 0008 keep daemon-owned request policy, lease admission, lock order, and the descriptor registry; binding follows admission.
 ADR 0009 keeps the Apple family and leaf axis; this decision supersedes its shallow plugin.
 ADR 0010 keeps normalized errors and gains operation/cleanup precedence and typed reattachment outcomes.
-ADRs 0011, 0013, and 0014 keep separate interaction paths and normalized gesture plans; daemon authorization expires before a possibly mutating facet call, and observational facets cannot hide mutation.
+ADRs 0011, 0013, and 0014 keep separate interaction paths and normalized gesture plans; daemon authorization expires immediately before any possibly mutating facet call, and observational facets cannot hide mutation.
 Proposed ADR 0018 is not a dependency; its journal and teardown scopes may support observability, never coordination or persisted recovery state.
 
 The daemon retains policy, command semantics, responses, session and lease ownership, selector and ref authority, interaction guarantees, and artifact orchestration.
@@ -233,14 +246,15 @@ The staged migration cost temporary coexistence; closed execution shapes and str
 - Provider/local or old/new fallback: it hides ownership and semantic differences. ADR 0002 still permits explicitly safe internal helper fallbacks.
 - Use events or a journal as the durable store: correctness would depend on observability.
 - Add a separate process-local handle ledger: live session state already owns handles; a parallel store duplicates ownership. The bounded admission ledger contains no handles or descriptors and does not replace the manifest.
+- Root re-export shims, a broad barrel, or ambient filesystem/process access: less movement, but it violates package closure, no-shim, named facets, host injection, and laziness.
 - Rely only on performance thresholds: they can pass despite unrelated implementation loads; structural tests also prove loading shape.
 
 ## End state (proposed 2026-09-02, maintainer decision pending)
 
 These targets are proposed defaults, not accepted commitments or authorization for work.
-The measured baseline was 199 production files; the proposed daemon top-level footprint is at most 60.
-R65 remains a permanent daemon zone.
-The hop trace and measured baseline belong to [ADR 0023](0023-end-state-hop-trace.md).
+The measured baseline was 199 production files at `e624ef9d3f`; the proposed daemon top-level footprint is at most 60.
+`packages/daemon/src/**` remains a permanent R65 zone; the target concerns its contents, not directory retirement.
+**Entry-to-platform hop count.** The hop trace and measured hop counts belong to [ADR 0023](0023-end-state-hop-trace.md).
 Composition and family runtime-loading boundaries count as hops, and package direction and named facets constrain any collapse.
 The earlier target of 14 hops is superseded and is not reachable without a separate decision on cross-cutting request-scope wrappers.
 Neither target has an owning issue, gate, or accepted budget; neither is a ratchet.
