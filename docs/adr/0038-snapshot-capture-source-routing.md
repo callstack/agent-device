@@ -78,4 +78,5 @@ A future app-only source needs window-ownership evidence that is tied to its rea
 - Provenance types move from kernel to contracts, and both iOS sources bind to the router.
 - Readers, decoding, discovery, process checks, native budgets, geometry, and lifecycle stay platform-specific.
 - `@agent-device/contracts/snapshot-producers` owns the producer registry (`SNAPSHOT_PRODUCERS`) and the identity stamp (`stampSnapshotIdentity`).
-  It is the provenance contract that capture-kit and the platforms consume; keeping it off the assembly's facade makes R74 a plain import ban.
+  It is the provenance contract that capture-kit and the platforms consume.
+  The assembly's facade does not re-export it, so R74 is a plain import ban.
