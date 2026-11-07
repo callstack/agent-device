@@ -126,6 +126,6 @@ async function captureRevylAndroidSnapshot(
   });
   return stampSnapshotIdentity(
     { nodes, keyboard, ...(viewport === undefined ? {} : { viewport }) },
-    { backend: 'android', producer: 'appium-source' },
+    { backend: 'android', producer: 'revyl-android-tree' },
   ) satisfies SnapshotRuntimeResult;
 }
