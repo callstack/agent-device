@@ -1,3 +1,4 @@
+import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
@@ -47,7 +48,10 @@ export function createHarmonyInteractor(device: DeviceInfo, _runner?: RunnerCont
         async () => await snapshotHarmony(device, options),
         { backend: 'harmonyos-arkui' },
       );
-      return { ...result, backend: 'harmonyos-arkui', producer: 'harmonyos-uitest' };
+      return stampSnapshotIdentity(result, {
+        backend: 'harmonyos-arkui',
+        producer: 'harmonyos-uitest',
+      });
     },
     back: () => backHarmony(device),
     home: () => homeHarmony(device),

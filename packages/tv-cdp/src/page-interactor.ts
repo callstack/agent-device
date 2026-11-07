@@ -1,3 +1,4 @@
+import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot';
 import { writeFile } from 'node:fs/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -264,17 +265,18 @@ export function createPageInteractor(
     async snapshot(options = {}) {
       const capture = await page().evaluate<SnapshotCapture>(SNAPSHOT_EXPRESSION);
       return shapeDesktopSurfaceSnapshot(
-        {
-          backend: 'android',
-          producer: 'cdp-dom',
-          nodes: annotateSnapshotNodesCoveredByPolicy(
-            capture.nodes,
-            (node) => capture.covers[node.index] ?? false,
-          ),
-          truncated: capture.truncated,
-          appName: capture.title,
-          appBundleId: session.appId,
-        },
+        stampSnapshotIdentity(
+          {
+            nodes: annotateSnapshotNodesCoveredByPolicy(
+              capture.nodes,
+              (node) => capture.covers[node.index] ?? false,
+            ),
+            truncated: capture.truncated,
+            appName: capture.title,
+            appBundleId: session.appId,
+          },
+          { backend: 'android', producer: 'cdp-dom' },
+        ),
         options,
         isInteractiveElement,
       );

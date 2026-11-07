@@ -4,7 +4,7 @@
 //   consumers because the call itself is fully typed and legal Node code.
 // Evidence: 8f98d23f14 (#1750) gave R18 its own number after an id collision; 057ab1c82d (#1746)
 //   fixed double-reporting in this same authority check.
-// Cost: 337 LOC (206 rule + 131 test).
+// Cost: 387 LOC (226 rule + 161 test).
 // Kill criterion: none enforced today; retire only by maintainer decision that contracts owning
 //   vocabulary only no longer matters. package.json cannot replace it: node: built-ins are not
 //   dependencies and timer globals need no import. The A4 spike found `types: []` would break
@@ -28,6 +28,11 @@ const FORBIDDEN_TIMER_CALLS = new Set([
   'setTimeout',
 ]);
 const IOS_SNAPSHOT_CONTRACT = 'packages/contracts/src/ios-snapshot.ts';
+/**
+ * The iOS producer subsets derive from the producer registry in `snapshot-model.ts`. Every statement
+ * in the iOS contract is type-only, so that import brings no behavior.
+ */
+const IOS_SNAPSHOT_VOCABULARY_IMPORTS: ReadonlySet<string> = new Set(['./snapshot-model.ts']);
 
 /** Contracts owns vocabulary. Host/process/timer mechanics belong in capture-kit or an adapter. */
 export function contractsImplementationAuthorityViolations(
@@ -104,13 +109,14 @@ function iosSnapshotContractViolation(
     );
   }
   const disallowedImport = moduleSpecifiers(parsed.module, source).find(
-    ({ spec }) => !spec.startsWith('@agent-device/kernel/'),
+    ({ spec }) =>
+      !spec.startsWith('@agent-device/kernel/') && !IOS_SNAPSHOT_VOCABULARY_IMPORTS.has(spec),
   );
   if (!disallowedImport) return undefined;
   return violation(
     file,
     disallowedImport.line,
-    `iOS snapshot contracts may import only kernel vocabulary; '${disallowedImport.spec}' would bring planning algorithms or provider/lifecycle implementation into contracts`,
+    `iOS snapshot contracts may import only kernel vocabulary and the producer registry; '${disallowedImport.spec}' would bring planning algorithms or provider/lifecycle implementation into contracts`,
   );
 }
 

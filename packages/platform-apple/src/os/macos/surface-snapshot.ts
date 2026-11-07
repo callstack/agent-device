@@ -13,11 +13,17 @@ export async function captureMacOsSurfaceSnapshot(
   env: Readonly<EnvMap>,
 ) {
   const surface = options.surface;
-  const { runMacOsSnapshotAction } = await import('./helper.ts');
+  const [{ runMacOsSnapshotAction }, { stampSnapshotIdentity }] = await Promise.all([
+    import('./helper.ts'),
+    import('@agent-device/contracts/snapshot'),
+  ]);
   const result = await runMacOsSnapshotAction(surface, {
     bundleId: surface === 'menubar' || surface === 'app' ? options.appBundleId : undefined,
     signal,
     env,
   });
-  return shapeDesktopSurfaceSnapshot({ ...result, producer: 'macos-helper' }, options);
+  return shapeDesktopSurfaceSnapshot(
+    stampSnapshotIdentity(result, { backend: 'macos-helper', producer: 'macos-helper' }),
+    options,
+  );
 }

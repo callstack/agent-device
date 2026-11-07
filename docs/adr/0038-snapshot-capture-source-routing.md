@@ -23,7 +23,7 @@ The router depends on no platform or provider code.
 Lease and lock authority stays with [ADR 0007](0007-remote-device-leases.md).
 
 **One-source owners.** An owner with one source does not use the router.
-It stamps identity through the capture-kit helper.
+It stamps identity through the one identity-stamp helper, which is beside the contracts producer registry.
 When an owner gets a second source, it moves to the router.
 
 **Producers.** One contracts registry keys every producer with a platform-neutral name.
@@ -77,4 +77,6 @@ A future app-only source needs window-ownership evidence that is tied to its rea
 
 - Provenance types move from kernel to contracts, and both iOS sources bind to the router.
 - Readers, decoding, discovery, process checks, native budgets, geometry, and lifecycle stay platform-specific.
-- Open gaps: the router, the identity-stamp helper, and the producer registry do not exist yet. The runner-session scope is pending [#4256](https://github.com/callstack/agent-device/pull/4256).
+- The producer registry is `SNAPSHOT_PRODUCERS` in `packages/contracts/src/snapshot-model.ts`.
+- One-source owners stamp identity through `stampSnapshotIdentity`, beside the registry. Its module is in every capture's import closure, so stamping adds no module to that closure.
+- Open gaps: the router does not exist yet. The runner-session scope is pending [#4256](https://github.com/callstack/agent-device/pull/4256).

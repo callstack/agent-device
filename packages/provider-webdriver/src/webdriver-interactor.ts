@@ -302,8 +302,10 @@ class WebDriverInteractor implements Interactor {
       return acquireWebDriverIosSnapshot(source, this.targetId, visibility);
     }
     const { parseWebDriverAndroidSnapshotNodes } = await import('./webdriver-android-source.ts');
-    const { acquireProviderKeyboard } =
-      await import('@agent-device/contracts/tap-keyboard-occlusion');
+    const [{ acquireProviderKeyboard }, { stampSnapshotIdentity }] = await Promise.all([
+      import('@agent-device/contracts/tap-keyboard-occlusion'),
+      import('@agent-device/contracts/snapshot'),
+    ]);
     const nodes = parseWebDriverAndroidSnapshotNodes(source);
     const viewportAfter =
       viewportBefore === undefined ? undefined : await this.readAndroidSnapshotViewport(signal);
@@ -314,12 +316,13 @@ class WebDriverInteractor implements Interactor {
       viewportBefore.height === viewportAfter.height
         ? viewportBefore
         : undefined;
-    return {
-      backend: 'android' as const,
-      producer: 'appium-source' as const,
-      ...acquireProviderKeyboard({ nodes, viewport: null, visibility }),
-      ...(viewport === undefined ? {} : { viewport }),
-    };
+    return stampSnapshotIdentity(
+      {
+        ...acquireProviderKeyboard({ nodes, viewport: null, visibility }),
+        ...(viewport === undefined ? {} : { viewport }),
+      },
+      { backend: 'android', producer: 'appium-source' },
+    );
   }
 
   /**
