@@ -8,7 +8,8 @@ import {
   type SnapshotDiagnosticsSummary,
 } from '@agent-device/contracts/capture';
 import { AppError } from '@agent-device/kernel/errors';
-import { normalizeType, snapshotProducerFacts } from '@agent-device/contracts/snapshot';
+import { normalizeType } from '@agent-device/contracts/snapshot';
+import { snapshotProducerFacts } from '@agent-device/contracts/snapshot-producers';
 import type {
   PresentedSurface,
   SnapshotKeyboardBandFact,

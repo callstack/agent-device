@@ -6,9 +6,7 @@ import type {
   SnapshotQualityNote,
   SnapshotKeyboardBandFact,
 } from '@agent-device/kernel/snapshot';
-import type { SNAPSHOT_PRODUCERS } from './snapshot-model.ts';
-
-type SnapshotProducerRegistry = typeof SNAPSHOT_PRODUCERS;
+import type { SnapshotProducerRegistry } from './snapshot-model.ts';
 
 /** The producers whose trees arrive on the iOS (`xctest`) channel, from the producer registry. */
 export type IosSnapshotProducer = {

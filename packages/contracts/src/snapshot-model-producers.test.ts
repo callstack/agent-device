@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { IosSnapshotProducer } from '@agent-device/contracts/ios-snapshot';
-import { SNAPSHOT_PRODUCERS } from '@agent-device/contracts/snapshot-model';
+import { SNAPSHOT_PRODUCERS } from '@agent-device/contracts/snapshot-producers';
 
 /**
  * The producers that build their own residue declare truncation nowhere else, and the row must keep

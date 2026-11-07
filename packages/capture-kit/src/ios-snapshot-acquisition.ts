@@ -6,7 +6,8 @@ import type {
   IosSnapshotLineage,
   IosViewportEvidence,
 } from '@agent-device/contracts/ios-snapshot';
-import { normalizeType, SNAPSHOT_PRODUCERS } from '@agent-device/contracts/snapshot';
+import { normalizeType } from '@agent-device/contracts/snapshot';
+import { SNAPSHOT_PRODUCERS } from '@agent-device/contracts/snapshot-producers';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import type {
   RawSnapshotNode,
