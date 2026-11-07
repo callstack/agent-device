@@ -136,7 +136,7 @@ const installCommandFacet = defineCommandFacet({
   text: {
     summary: 'Install an app binary from a path',
     cliDetail:
-      'Formats: Android .apk and .aab, iOS .app and .ipa, HarmonyOS .hap. A HarmonyOS .hap installs from its path alone, for example agent-device install ./build/entry-default-signed.hap --platform harmonyos; the bundle name is read from the archive when the app identifier is absent.',
+      'A HarmonyOS .hap installs from its path alone, for example agent-device install ./build/entry-default-signed.hap --platform harmonyos.',
   },
   metadata: installCommandMetadata,
   run: (client, input) => client.apps.install(input),

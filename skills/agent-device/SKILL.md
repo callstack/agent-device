@@ -1,6 +1,6 @@
 ---
 name: agent-device
-description: Automates Apple-platform apps (iOS, tvOS, macOS), Android devices (including Android TV and Fire TV on Fire OS), HarmonyOS devices, and Amazon Vega OS TV apps in Vega Virtual Devices. Use when navigating apps, taking snapshots/screenshots where supported, driving TV remotes, tapping, typing, scrolling, extracting UI info, installing or replacing an app binary, collecting evidence, or planning agent-device CLI commands. Install, replace, or remove an app binary (.apk, .aab, .app, .ipa, .hap) with install, reinstall, or uninstall instead of adb install, hdc install, or bm install.
+description: Automates Apple-platform apps (iOS, tvOS, macOS), Android devices (including Android TV and Fire TV on Fire OS), HarmonyOS devices, and Amazon Vega OS TV apps in Vega Virtual Devices. Use when navigating apps, taking snapshots/screenshots where supported, driving TV remotes, tapping, typing, scrolling, extracting UI info, installing or replacing an app binary, collecting evidence, or planning agent-device CLI commands. Install or reinstall an app binary (Android, Apple, HarmonyOS) and uninstall an app (Android, Apple) with the install, reinstall, and uninstall commands, not adb, hdc, or bm.
 ---
 
 # agent-device
