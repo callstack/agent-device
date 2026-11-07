@@ -3,6 +3,7 @@ import { providerInstanceUnallocatedError, type DeviceLease } from '@agent-devic
 import {
   MIN_LEASE_WINDOW_MS,
   leaseScopeToReleaseRequest,
+  leaseProviderRequiringRuntime,
 } from '@agent-device/contracts/lease-scope';
 import { LEASE_BACKENDS, type LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -263,9 +264,13 @@ export function normalizeLeaseAdmissionRequest(
   if (!runId) throw new AppError('INVALID_ARGS', 'tenant isolation requires run id.');
   const leaseId = normalizeLeaseId(request.leaseId);
   if (!leaseId) {
-    // A provider connection without a lease has no instance, for example after `close --shutdown`
-    // released it. Name that, as device inventory does, rather than the missing lease id.
-    if (request.leaseProvider) throw providerInstanceUnallocatedError(request.leaseProvider);
+    // A provider runtime's connection that sent no lease has no instance, for example after
+    // `close --shutdown` released it. Name that, as device inventory does. A malformed lease id, or a
+    // logical lease such as `proxy` that boot or open cannot allocate, stays a missing lease id.
+    const runtimeProvider = leaseProviderRequiringRuntime({ leaseProvider: request.leaseProvider });
+    if (runtimeProvider && !request.leaseId?.trim()) {
+      throw providerInstanceUnallocatedError(runtimeProvider);
+    }
     throw new AppError('INVALID_ARGS', 'tenant isolation requires lease id.', {
       hint: 'Allocate a lease with leases.allocate and pass its leaseId.',
     });

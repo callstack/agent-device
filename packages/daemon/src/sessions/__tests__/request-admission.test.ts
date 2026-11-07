@@ -152,7 +152,7 @@ test('non-close commands on a tenant-isolated session still require a lease id',
   );
 });
 
-test.each(['bogus', 'proxy', 'browserstack'])(
+test.each(['bogus', 'proxy', 'cloud', 'browserstack'])(
   'sessionless apps for non-catalog provider %s is refused without a lease',
   (leaseProvider) => {
     const registry = new LeaseRegistry();
@@ -169,7 +169,10 @@ test.each(['bogus', 'proxy', 'browserstack'])(
           undefined,
           { env: process.env },
         ),
-      unallocatedProviderError(leaseProvider),
+      // A logical lease cannot be allocated by boot or open, so it keeps the missing-lease refusal.
+      ['proxy', 'cloud'].includes(leaseProvider)
+        ? missingLeaseIdError
+        : unallocatedProviderError(leaseProvider),
     );
   },
 );
@@ -207,6 +210,23 @@ test('a lease-less provider request missing its run id still names the run id', 
         { env: process.env },
       ),
     { code: 'INVALID_ARGS', message: 'tenant isolation requires run id.' },
+  );
+});
+
+test('a provider request with a malformed lease id is still refused as malformed', () => {
+  assert.throws(
+    () =>
+      assertRequestLeaseAdmission(
+        makeRequest({
+          command: 'shutdown',
+          flags: { platform: 'ios', leaseProvider: 'limrun' },
+          meta: { tenantId: 'limrun', runId: 'run-1', sessionIsolation: 'tenant', leaseId: 'x' },
+        }),
+        new LeaseRegistry(),
+        undefined,
+        { env: process.env },
+      ),
+    missingLeaseIdError,
   );
 });
 
