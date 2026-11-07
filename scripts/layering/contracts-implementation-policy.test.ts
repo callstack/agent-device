@@ -131,7 +131,7 @@ test('iOS snapshot contracts reject planning implementation and provider imports
   assert.deepEqual(
     messages(
       [
-        "import type { SNAPSHOT_PRODUCERS } from './snapshot-model.ts';",
+        "import type { SNAPSHOT_PRODUCERS } from './snapshot-producers.ts';",
         'export type IosProducer = keyof typeof SNAPSHOT_PRODUCERS;',
       ].join('\n'),
       contract,
@@ -141,7 +141,7 @@ test('iOS snapshot contracts reject planning implementation and provider imports
   assert.match(
     messages(
       [
-        "import { SNAPSHOT_PRODUCERS } from './snapshot-model.ts';",
+        "import { SNAPSHOT_PRODUCERS } from './snapshot-producers.ts';",
         'export type IosProducer = keyof typeof SNAPSHOT_PRODUCERS;',
       ].join('\n'),
       contract,

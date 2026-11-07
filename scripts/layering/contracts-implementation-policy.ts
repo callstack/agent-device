@@ -29,10 +29,11 @@ const FORBIDDEN_TIMER_CALLS = new Set([
 ]);
 const IOS_SNAPSHOT_CONTRACT = 'packages/contracts/src/ios-snapshot.ts';
 /**
- * The iOS producer subsets derive from the producer registry in `snapshot-model.ts`. Every statement
- * in the iOS contract is type-only, so that import brings no behavior.
+ * The iOS producer subsets derive from the producer registry declared in `snapshot-producers.ts`.
+ * This exemption is safe only because every statement in the iOS contract stays type-only, which
+ * the typed-vocabulary check above enforces, so the import brings no behavior.
  */
-const IOS_SNAPSHOT_VOCABULARY_IMPORTS: ReadonlySet<string> = new Set(['./snapshot-model.ts']);
+const IOS_SNAPSHOT_VOCABULARY_IMPORTS: ReadonlySet<string> = new Set(['./snapshot-producers.ts']);
 
 /** Contracts owns vocabulary. Host/process/timer mechanics belong in capture-kit or an adapter. */
 export function contractsImplementationAuthorityViolations(
