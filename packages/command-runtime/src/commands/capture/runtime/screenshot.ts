@@ -31,6 +31,7 @@ export const screenshotCommand: RuntimeCommand<
 
   let artifact: ArtifactDescriptor | undefined;
   let displayRotation: DeviceRotation | undefined;
+  let sourcePixelDensity: number | undefined;
   try {
     const captured = await runtime.backend.captureScreenshot(
       {
@@ -45,7 +46,7 @@ export const screenshotCommand: RuntimeCommand<
       {
         fullscreen: options.fullscreen,
         overlayRefs: options.overlayRefs,
-        pixelDensity: options.pixelDensity,
+        pixelDensity: options.nativeDensity ? 'native' : options.pixelDensity,
         screenMask: readScreenshotScreenMask(options.screenMask),
         stabilize: options.stabilize,
         normalizeStatusBar: options.normalizeStatusBar,
@@ -53,6 +54,7 @@ export const screenshotCommand: RuntimeCommand<
       },
     );
     displayRotation = captured?.displayRotation;
+    sourcePixelDensity = captured?.pixelDensity;
     if (options.scale !== undefined) {
       await resizePngFileToScale(reserved.path, options.scale);
     }
@@ -66,6 +68,7 @@ export const screenshotCommand: RuntimeCommand<
     path: reserved.path,
     ...(artifact ? { artifacts: [artifact] } : {}),
     ...(displayRotation ? { displayRotation } : {}),
+    ...(sourcePixelDensity !== undefined ? { sourcePixelDensity } : {}),
     ...successText(`Saved screenshot: ${reserved.path}`),
   };
 };
