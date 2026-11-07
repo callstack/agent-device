@@ -35,7 +35,7 @@ import type {
 } from '@agent-device/contracts/client';
 import { tryRunClientBackedCommand } from './cli/commands/router.ts';
 import { runAgentCdpCommand } from './cli/commands/agent-cdp.ts';
-import { readCliBatchStepsJson } from '@agent-device/command-surface';
+import { getCommandSchema, readCliBatchStepsJson } from '@agent-device/command-surface';
 import {
   createRequestId,
   emitDiagnostic,
@@ -365,14 +365,17 @@ async function resolveRunContextOrExit(
       configuredPlatform: parsed.flags.platform,
       configuredSession: parsed.flags.session,
     });
-    const flags = binding.lockPolicy
-      ? { ...parsed.flags }
-      : applyDefaultPlatformBinding(parsed.flags, {
-          env: base.host.env,
-          policyOverrides: parsed.flags,
-          configuredPlatform: parsed.flags.platform,
-          configuredSession: parsed.flags.session,
-        });
+    const skipPlatformDefault =
+      getCommandSchema(base.command)?.explicitOnlyFlags?.includes('platform') === true;
+    const flags =
+      binding.lockPolicy || skipPlatformDefault
+        ? { ...parsed.flags }
+        : applyDefaultPlatformBinding(parsed.flags, {
+            env: base.host.env,
+            policyOverrides: parsed.flags,
+            configuredPlatform: parsed.flags.platform,
+            configuredSession: parsed.flags.session,
+          });
     // A leased remote config, or a connect without one (it always leases through a provider), needs
     // an explicit session before anything is resolved or leased (#3931).
     const leasedConnect = base.command === 'connect' && !flags.remoteConfig;
@@ -785,6 +788,7 @@ function resolveActiveConnectionDefaults(options: {
     options.command === 'connection' ||
     options.command === 'daemon' ||
     options.command === 'plugins' ||
+    options.command === 'device' ||
     options.command === 'proxy'
   ) {
     return null;

@@ -109,3 +109,59 @@ test('a typed --text-stdin reaches fill', () => {
 
   assert.equal(parsed.flags.textStdin, true);
 });
+
+// #4298: device status and device release treat selectors as explicit-only so project config
+// (like an iOS udid) never hides claims or overrides an explicit serial/platform.
+test('device selectors from a project config never reach device status or device release', () => {
+  const projectDir = mkdtempForTestSync('agent-device-project-config-');
+  fs.writeFileSync(
+    `${projectDir}/agent-device.json`,
+    JSON.stringify({
+      platform: 'ios',
+      udid: '01234567-89AB-CDEF-0123-456789ABCDEF',
+      session: 'ios-session',
+    }),
+  );
+
+  const statusWithoutFlags = resolveCliOptions(['device', 'status'], {
+    cwd: projectDir,
+    env: isolatedEnv({}),
+  });
+  assert.equal(statusWithoutFlags.flags.platform, undefined);
+  assert.equal(statusWithoutFlags.flags.udid, undefined);
+
+  const statusWithExplicitSerial = resolveCliOptions(
+    ['device', 'status', '--platform', 'android', '--serial', 'emulator-5560'],
+    {
+      cwd: projectDir,
+      env: isolatedEnv({}),
+    },
+  );
+  assert.equal(statusWithExplicitSerial.flags.platform, 'android');
+  assert.equal(statusWithExplicitSerial.flags.serial, 'emulator-5560');
+  assert.equal(statusWithExplicitSerial.flags.udid, undefined);
+
+  const releaseWithExplicitSerial = resolveCliOptions(
+    ['device', 'release', '--platform', 'android', '--serial', 'emulator-5560', '--stale'],
+    {
+      cwd: projectDir,
+      env: isolatedEnv({}),
+    },
+  );
+  assert.equal(releaseWithExplicitSerial.flags.platform, 'android');
+  assert.equal(releaseWithExplicitSerial.flags.serial, 'emulator-5560');
+  assert.equal(releaseWithExplicitSerial.flags.udid, undefined);
+  assert.equal(releaseWithExplicitSerial.flags.stale, true);
+});
+
+test('typed device selectors still reach device status and device release', () => {
+  const parsed = resolveCliOptions(
+    ['device', 'status', '--platform', 'ios', '--udid', '01234567-89AB-CDEF-0123-456789ABCDEF'],
+    {
+      cwd: process.cwd(),
+      env: isolatedEnv({}),
+    },
+  );
+  assert.equal(parsed.flags.platform, 'ios');
+  assert.equal(parsed.flags.udid, '01234567-89AB-CDEF-0123-456789ABCDEF');
+});
