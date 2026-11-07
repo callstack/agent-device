@@ -150,6 +150,63 @@ test('cli parse failures include diagnostic references in JSON mode', async () =
   }
 });
 
+const possiblyDispatchedFailure = async (): Promise<DaemonResponse> => ({
+  ok: false,
+  error: {
+    code: 'COMMAND_FAILED',
+    message: 'tap timed out',
+    diagnosticId: 'diag-123',
+    logPath: '/tmp/diag.ndjson',
+    details: { dispatched: 'unknown' },
+  },
+});
+
+// Callers merge stderr into stdout and keep only `head -1` or `tail -1`. Both lines must carry
+// the code, the dispatch fact and the Next step; the log path stays printed between them.
+test('a failed command opens and closes stderr with the same summary line', async () => {
+  const result = await runCliCapture(['click', '@e12'], possiblyDispatchedFailure);
+  assert.equal(result.code, 1);
+  assert.equal(result.stdout, '');
+  const lines = result.stderr.trimEnd().split('\n');
+  assert.match(
+    lines[0] ?? '',
+    /^Error \(COMMAND_FAILED\): tap timed out\. May have reached the device\. Next: .*Run snapshot/,
+  );
+  assert.equal(lines.at(-1), lines[0]);
+  assert.ok(lines.includes('Log: /tmp/diag.ndjson'));
+  assert.equal(result.stderr.includes('diag-123'), false);
+});
+
+test('a --debug failure still ends on the summary line after the daemon log tail', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-cli-debug-failure-');
+  const daemonPaths = resolveDaemonPaths(stateDir);
+  fs.mkdirSync(path.dirname(daemonPaths.logPath), { recursive: true });
+  fs.writeFileSync(daemonPaths.logPath, 'DAEMON_TAIL_SENTINEL\n', 'utf8');
+  try {
+    const result = await runCliCapture(
+      ['click', '@e12', '--debug', '--state-dir', stateDir],
+      possiblyDispatchedFailure,
+    );
+    assert.equal(result.code, 1);
+    const lines = result.stderr.trimEnd().split('\n');
+    const summary = lines.find((line) => line.startsWith('Error (COMMAND_FAILED)'));
+    assert.ok(summary);
+    assert.ok(lines.indexOf('DAEMON_TAIL_SENTINEL') > lines.indexOf(summary));
+    assert.equal(lines.at(-1), summary);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('an argument error names the failing command synopsis as its Next step', async () => {
+  const result = await runCliCapture(['press', '--unknown-flag'], async () => ({
+    ok: true,
+    data: {},
+  }));
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /^Error \(INVALID_ARGS\): .*Next: .*Usage: agent-device press /);
+});
+
 test('cli forwards save-script and no-record flags for client-backed open', async () => {
   const result = await runCliCapture(
     ['open', 'settings', '--save-script', '--no-record', '--json'],
