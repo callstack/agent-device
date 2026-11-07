@@ -7,6 +7,8 @@ import { listTargets, type PageTunnel } from '@agent-device/tv-cdp';
 
 export type AresDevice = Readonly<{
   name: string;
+  /** The TV endpoint the entry reaches, the same for every entry that names that TV. */
+  endpoint: string;
   isDefault: boolean;
 }>;
 
@@ -14,6 +16,8 @@ type AresSetupEntry = {
   profile: string;
   name: string;
   default: boolean;
+  // ares lists an SSH entry with its IP and port, and a USB (novacom) entry with neither.
+  deviceinfo: { ip: string; port: string } | { ip?: undefined };
 };
 
 export type HostEnv = Readonly<Record<string, string | undefined>>;
@@ -40,8 +44,8 @@ export function createAres(bin: string | undefined, hostEnv: HostEnv) {
       await ares('ares-launch', ['-d', device, '--close', appId], signal);
     },
 
-    async listApps(): Promise<{ id: string; name: string }[]> {
-      return parseAppList(await ares('ares-install', ['-d', device, '--listfull']));
+    async listApps(signal?: AbortSignal): Promise<{ id: string; name: string }[]> {
+      return parseAppList(await ares('ares-install', ['-d', device, '--listfull'], signal));
     },
 
     // ares-inspect is a long-lived ssh tunnel that prints its local inspector port once it is up.
@@ -68,7 +72,23 @@ export function createAres(bin: string | undefined, hostEnv: HostEnv) {
       });
       child.stdout?.on('data', collect);
       child.stderr?.on('data', collect);
-      const close = () => child.kill();
+      const exited = new Promise<void>((resolve) => {
+        if (child.exitCode !== null || child.signalCode !== null) resolve();
+        else {
+          child.once('exit', () => resolve());
+          child.once('error', () => resolve());
+        }
+      });
+      const close = async () => {
+        child.kill('SIGTERM');
+        const forceKill = setTimeout(() => child.kill('SIGKILL'), 5_000);
+        forceKill.unref();
+        try {
+          await exited;
+        } finally {
+          clearTimeout(forceKill);
+        }
+      };
       const appTarget = async (port: number) => {
         try {
           const targets = await listTargets(port);
@@ -94,15 +114,15 @@ export function createAres(bin: string | undefined, hostEnv: HostEnv) {
           const port = Number(output.match(/localhost:(\d+)/)?.[1]);
           return port ? await appTarget(port) : undefined;
         },
-      }).catch((error: unknown) => {
-        close();
+      }).catch(async (error: unknown) => {
+        await close();
         throw error;
       });
       if (target) {
         collecting = false;
         return { target, close, onClose: (listener) => child.once('exit', listener) };
       }
-      close();
+      await close();
       const lastError = inspectorError
         ? `; the inspector last failed with: ${errorMessage(inspectorError)}`
         : '';
@@ -121,11 +141,17 @@ export function createAres(bin: string | undefined, hostEnv: HostEnv) {
         .filter((device) => device.profile === 'tv')
         .map((device) => ({
           name: device.name,
+          endpoint: aresEndpoint(device),
           isDefault: device.default,
         }));
     },
     forDevice,
   };
+}
+
+// Two entries can name one TV, so the TV is the address the entry reaches, not the entry.
+function aresEndpoint({ name, deviceinfo }: AresSetupEntry) {
+  return deviceinfo.ip ? `${deviceinfo.ip}:${deviceinfo.port}` : name;
 }
 
 function aresError(name: string, error: unknown): AppError {

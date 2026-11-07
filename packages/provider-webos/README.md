@@ -13,7 +13,8 @@ app): `connect`, `open`, `snapshot -i`, `snapshot -s`, `tv-remote` (directions, 
 
 agent-device leases only iOS, Android and HarmonyOS devices, so a webOS TV enters as an
 **Android TV device that this plugin owns** (`platform: android`, `target: tv`, id
-`webos:<ares device>`). Every command on that device goes to this plugin's runtime, never to adb.
+`webos:<TV ip>:<port>`, or `webos:<ares device>` for a USB entry). Every command on
+that device goes to this plugin's runtime, never to adb.
 
 ## Requirements
 

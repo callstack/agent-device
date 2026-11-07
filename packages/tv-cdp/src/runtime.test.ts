@@ -172,35 +172,66 @@ async function fakePage() {
   return page;
 }
 
-async function tvRuntime(onLaunch: () => Promise<unknown> = async () => undefined) {
+type FakeTvOptions = Readonly<{
+  onConnect?: () => Promise<unknown>;
+  onLaunch?: () => Promise<unknown>;
+  removal?: () => Promise<void>;
+  appClose?: () => Promise<void>;
+}>;
+
+// One physical TV that answers to any requested name, as an IP and IP:port reach the same Tizen TV.
+async function tvRuntime(options: FakeTvOptions = {}) {
+  const {
+    onConnect = async () => undefined,
+    onLaunch = async () => undefined,
+    removal = async () => undefined,
+    appClose = async () => undefined,
+  } = options;
   const page = await fakePage();
   const tunnel = { closed: 0, onClose: [] as (() => void)[] };
-  const tv: TvConnection = {
-    name: 'living-room',
+  const signals = {
+    close: [] as (AbortSignal | undefined)[],
+    listApps: [] as (AbortSignal | undefined)[],
+  };
+  const tv = (requested: string | undefined): TvConnection => ({
+    id: 'tv-1',
+    name: requested ?? 'living-room',
     launch: async (appId) => {
       await onLaunch();
       return {
         target: { title: appId, url: `http://tv/${appId}/`, webSocketDebuggerUrl: page.url },
         onClose: (listener) => tunnel.onClose.push(listener),
-        close: () => void tunnel.closed++,
+        close: async () => {
+          tunnel.closed++;
+          await removal();
+        },
       };
     },
-    close: async () => undefined,
-    listApps: async () => [{ id: APP_ID, name: 'Example' }],
-  };
+    close: async (_appId, closeOptions) => {
+      signals.close.push(closeOptions?.signal);
+      await appClose();
+    },
+    listApps: async (listOptions) => {
+      signals.listApps.push(listOptions?.signal);
+      return [{ id: APP_ID, name: 'Example' }];
+    },
+  });
   const { runtime, platformModule } = createTvRuntime(
     {
       provider: 'webos',
       label: 'webOS',
       remoteKeys: NAVIGATION_KEYS,
-      connectTv: async () => tv,
+      connectTv: async (requested) => {
+        await onConnect();
+        return tv(requested);
+      },
     },
     { createError: (code, message, details) => new AppError(code, message, details) },
   );
   cleanups.push(runtime.shutdown);
   const allocated = await runtime.leaseLifecycle.allocate(lease('lease-a'));
   assert.ok(allocated);
-  return { runtime, platformModule, device: allocated.device, page, tunnel };
+  return { runtime, platformModule, device: allocated.device, page, tunnel, signals };
 }
 
 async function openedTv() {
@@ -219,6 +250,128 @@ test('a second lease on a held TV is refused with DEVICE_IN_USE', async () => {
     runtime.leaseLifecycle.allocate(lease('lease-b')),
     (error: unknown) => error instanceof AppError && error.code === 'DEVICE_IN_USE',
   );
+});
+
+test('a lease that names the held TV by another alias is refused with DEVICE_IN_USE', async () => {
+  const { runtime, device } = await tvRuntime();
+
+  const second = runtime.leaseLifecycle.allocate(lease('lease-b'), {
+    flags: { device: '192.0.2.10:26101' },
+  });
+
+  await assert.rejects(second, (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'DEVICE_IN_USE');
+    return true;
+  });
+  assert.equal(device.id, 'webos:tv-1');
+  assert.equal(device.name, 'living-room');
+});
+
+test('the leased device keeps the requested name and resolves to the TV session by its identity', async () => {
+  const { runtime } = await tvRuntime();
+  await runtime.leaseLifecycle.release(lease('lease-a'));
+
+  const allocated = await runtime.leaseLifecycle.allocate(lease('lease-b'), {
+    flags: { device: '192.0.2.10' },
+  });
+
+  assert.equal(allocated?.device.name, '192.0.2.10');
+  assert.equal(allocated?.device.id, 'webos:tv-1');
+  assert.ok(runtime.getInteractor(allocated.device));
+});
+
+test('a tunnel that cannot be removed fails close with the removal error', async () => {
+  const { runtime, device } = await tvRuntime({
+    removal: async () => {
+      throw new AppError('COMMAND_FAILED', 'forward --remove failed');
+    },
+  });
+  await runtime.getInteractor(device)!.open(APP_ID);
+
+  await assert.rejects(runtime.getInteractor(device)!.close!(APP_ID), {
+    message: 'forward --remove failed',
+  });
+});
+
+test('a close that fails with its tunnel removal keeps its own error and names the removal', async () => {
+  const { runtime, device } = await tvRuntime({
+    removal: async () => {
+      throw new AppError('COMMAND_FAILED', 'forward --remove failed');
+    },
+    appClose: async () => {
+      throw new AppError('COMMAND_FAILED', 'was_kill failed');
+    },
+  });
+  await runtime.getInteractor(device)!.open(APP_ID);
+
+  await assert.rejects(runtime.getInteractor(device)!.close!(APP_ID), {
+    message: 'was_kill failed',
+    details: { tunnelRemoval: 'forward --remove failed' },
+  });
+});
+
+test('a cancelled open stops waiting for the previous tunnel removal', async () => {
+  const pending: (() => void)[] = [];
+  const { runtime, device } = await tvRuntime({
+    removal: () => new Promise((resolve) => pending.push(() => resolve())),
+  });
+  await runtime.getInteractor(device)!.open(APP_ID);
+  const cancel = new AbortController();
+  cancel.abort();
+
+  const reopening = runtime.getInteractor(device, cancel.signal)!.open(APP_ID);
+
+  await assert.rejects(reopening, isRequestCanceledError);
+  assert.ok(pending.length > 0);
+  for (const finish of pending) finish();
+});
+
+test('a runtime that is shutting down refuses new leases', async () => {
+  const { runtime } = await tvRuntime();
+
+  await runtime.shutdown();
+
+  await assert.rejects(runtime.leaseLifecycle.allocate(lease('lease-b')), {
+    code: 'COMMAND_FAILED',
+    message: 'The webOS runtime is shutting down',
+  });
+});
+
+test('a lease whose TV connects after shutdown starts is refused and never listed', async () => {
+  let connecting = Promise.resolve();
+  const { runtime } = await tvRuntime({ onConnect: () => connecting });
+  let connected = () => {};
+  connecting = new Promise((resolve) => {
+    connected = resolve;
+  });
+  const allocating = runtime.leaseLifecycle.allocate(lease('lease-b'));
+
+  await runtime.shutdown();
+  connected();
+
+  await assert.rejects(allocating, {
+    code: 'COMMAND_FAILED',
+    message: 'The webOS runtime is shutting down',
+  });
+  assert.equal(
+    await runtime.deviceInventoryProvider({ leaseProvider: 'webos', leaseId: 'lease-b' }),
+    null,
+  );
+});
+
+test('a tunnel lost in the background that cannot be removed fails the lease release', async () => {
+  const { runtime, device, tunnel } = await tvRuntime({
+    removal: async () => {
+      throw new AppError('COMMAND_FAILED', 'forward --remove failed');
+    },
+  });
+  await runtime.getInteractor(device)!.open(APP_ID);
+  for (const listener of tunnel.onClose) listener();
+
+  await assert.rejects(runtime.leaseLifecycle.release(lease('lease-a')), {
+    message: 'forward --remove failed',
+  });
 });
 
 test('a cancelled open closes the tunnel it opened', async () => {
@@ -272,7 +425,7 @@ test('a tunnel that goes down detaches the page', async () => {
 
 test('a lease released while open is in flight leaves no tunnel behind', async () => {
   let releaseLease = async (): Promise<unknown> => undefined;
-  const { runtime, device, tunnel } = await tvRuntime(() => releaseLease());
+  const { runtime, device, tunnel } = await tvRuntime({ onLaunch: () => releaseLease() });
   releaseLease = () => runtime.leaseLifecycle.release(lease('lease-a'));
 
   await assert.rejects(runtime.getInteractor(device)!.open(APP_ID), /lease ended/);
@@ -487,6 +640,16 @@ test('the platform binding lists the TV apps and reports the attached app while 
   assert.deepEqual(await binding.operations.appState?.(), { package: APP_ID });
   page.hide();
   assert.deepEqual(await binding.operations.appState?.(), { package: undefined });
+});
+
+test('close and apps hand the request signal to the TV', async () => {
+  const { binding, device, runtime, signals } = await boundTv();
+
+  await binding.operations.listApps!({ device, filter: 'user-installed' });
+  await runtime.getInteractor(device, scope.signal)!.close!(APP_ID);
+
+  assert.deepEqual(signals.listApps, [scope.signal]);
+  assert.deepEqual(signals.close, [scope.signal]);
 });
 
 test('the platform binding asks for connect once the lease that held the TV is gone', async () => {
