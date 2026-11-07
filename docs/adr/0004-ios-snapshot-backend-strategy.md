@@ -56,7 +56,7 @@ A placed iPad window publishes screen space in points, because its viewport, its
 
 **System surfaces.** `contracts/fixtures/ios-system-surface-hosts.json` is the closed registry of system hosts that present UI out of the app's process.
 Observe and operate a registered host in place. Never activate it. `open` refuses to launch it.
-The runner never adopts the host as the session target, so the next command after the surface goes resolves back to the app.
+The runner never adopts the host as the session target, so after the surface closes, the next command resolves back to the app.
 A presented surface takes precedence over an explicitly requested bundle id.
 Presence is `XCUIApplication.state == .runningForeground`, not tree content.
 A surface capture carries `systemSurface` provenance and the `iosSystemSurfaceDisclosure`, and its lineage is the host.

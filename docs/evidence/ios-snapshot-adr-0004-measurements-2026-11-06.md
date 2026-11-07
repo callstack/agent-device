@@ -29,7 +29,7 @@ React Navigation card-plus-modal example, three routes presented as sheets:
 - Bridge: 567 nodes across three screens in one capture.
 - Runner: 76 nodes, top screen only, for the same app state.
 - Requesting `userInteractionEnabled` on every node increased capture time by about half on a 492-node tree. The targeted dimming-view read did not change capture time.
-- At an undimmed detent, the bridge reports the dimming view as `userInteractionEnabled: false`. It reports `true` for the dimmed form sheet and the card modal. `XC_kAXXCAttributeIsVisible` reads false for both the undimmed sheet and the card modal.
+- At an undimmed detent, the bridge reports the dimming view as `userInteractionEnabled: false`. It reports `true` for the dimming views of the dimmed form sheet and the card modal. `XC_kAXXCAttributeIsVisible` reads false for the undimmed sheet's dimming view and for the card modal's dimming view.
 
 ## Visible-depth frontier removal (#2661)
 

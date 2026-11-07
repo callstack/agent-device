@@ -120,7 +120,7 @@ The vector is `TextEntryContentTranslation` (`known`, `none`, or `unknown` when 
 Thus, a failed read never counts as full screen.
 `frameOnScreen` is nil without a snapshot (#3060) or with `unknown`.
 When it is nil, the focus tap dispatches the caller's own point, and the refresh point, the caret tap, and the readiness retap dispatch nothing.
-Probe matching compares the live `element.frame`, because a comparison dispatches nothing.
+Probe matching compares `frameOnScreen` when it is present. When it is nil, probe matching compares the live `element.frame`, because a comparison dispatches nothing.
 
 The synthesized-gesture route compares the AXRuntime frame of the primary app with the frame of the system app (`RunnerFullScreenEvidenceFromForeground`).
 When XCTest cannot resolve the window, an iPad app that proves it fills its sole screen may use that screen as its gesture reference frame.

@@ -119,17 +119,17 @@ Disabled or degenerate nodes stay `false`.
 A rectangle becomes a `Box` only through the initializer that checks it.
 The Swift guard and the TypeScript guard both refuse `CGRect.infinite` by identity, and finite components whose right or bottom edge overflows.
 The components of `CGRect.infinite` are finite, so no range comparison catches it.
-The runner route reads host evidence from the payload's root nodes (`resolveIosViewportEvidenceFromRoots` in `packages/capture-kit/src/ios-snapshot-acquisition.ts`).
+The host AX-tree route, the runner payload presenter, and the WebDriver source read viewport evidence from the payload's root nodes (`resolveIosViewportEvidenceFromRoots` in `packages/capture-kit/src/ios-snapshot-acquisition.ts`).
 `contracts/fixtures/snapshot-actionability-policy.json` pins the predicate for shapes that the fold fixture cannot reach.
 
 ## Depth
 
 A regular `--depth` request is a presentation cut, not an acquisition bound.
 `CaptureHint` keeps raw traversal depth (`--raw --depth`) separate from regular presented depth.
-The recursive tree walk reads no geometry and no presented depth while it descends.
+The recursive tree walk reads and serializes each node's frame, but it uses no geometry and no presented depth to decide descent.
 A runaway node cap bounds the walk.
 Presentation applies the visibility fold and the presented-depth cut on the normalized array, at `maximumDepth`.
-The walk must not read geometry, because the coordinate-space pass runs after the walk and a turned subtree would get a cut at the wrong depth.
+The walk must not use geometry to decide descent, because the coordinate-space pass runs after the walk and a turned subtree would get a cut at the wrong depth.
 
 Backend capability declarations state how much acquisition work a regular depth request bounds.
 They never state whether a backend may answer the request.

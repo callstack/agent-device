@@ -111,8 +111,9 @@ This refusal is evidence about the screen, so it has capture scope.
 ## Tree changes between reads
 
 The reader reads a node again when the first read withheld its children.
-If the second read returns fewer children than the first read counted, the screen moved between the reads, as a scrolling list does when it recycles its cells.
+If the second read returns fewer children than both the first read's count and the remaining node budget, the screen moved between the reads, as a scrolling list does when it recycles its cells.
 The reader then refuses with `snapshot-tree-changed`.
+If the node budget is the smaller bound, the reader keeps the children that fit and marks the capture truncated.
 This refusal has capture scope, so the next capture of the same app uses the bridge again.
 
 ## Trait typing
@@ -150,7 +151,8 @@ The runner abandons such a read (`bridge-read-abandoned`).
 The runner admits one read at a time.
 Until the admitted read returns, the runner refuses each new read (`bridge-read-in-flight`, capture scope).
 After an abandoned read stays in flight for five seconds, the runner refuses with `bridge-reader-wedged`.
-That refusal retires the bridge for the runner session, across app generations.
+When the route knows the runner session id, that refusal retires the bridge for the runner session, across app generations.
+Without a session id, the route treats it as a capture-scoped `bridge-read-busy` refusal.
 The route clears its circuit and cached targets when the runner session changes.
 The runner does not replace the reader queue, because a second concurrent accessibility read is not proven safe.
 The daemon gives the runner its read budget minus a transport margin, so the runner abandons a slow read before the daemon loses the reply.
