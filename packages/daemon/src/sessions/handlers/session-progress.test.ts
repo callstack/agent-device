@@ -232,7 +232,7 @@ test('Maestro progress carries its title, step payload, and retry attempt identi
   expect(testEvents.filter((event) => event.status === 'fail')[0]).toMatchObject({
     attempt: 1,
     retrying: true,
-    hint: 'Retry with --debug and inspect diagnostics log for details.',
+    hint: 'Read the diagnostics log for the failing step.',
   });
   expect(testEvents.filter((event) => event.status === 'pass')[0]).toMatchObject({ attempt: 2 });
 });
