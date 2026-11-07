@@ -185,6 +185,7 @@ export function limrunAndroidSettingsFacts(
       bluetooth: available,
       airplane: available,
       'mobile-data': available,
+      'keep-awake': available,
       location: available,
       animations: available,
       appearance: available,

@@ -40,6 +40,7 @@ export const ANDROID_SETTINGS = [
   'bluetooth',
   'airplane',
   'mobile-data',
+  'keep-awake',
   'location',
   'animations',
   'appearance',
@@ -113,6 +114,14 @@ export async function setAndroidSetting(
         parseSettingState(state),
         signal,
       );
+    }
+    case 'keep-awake': {
+      // The `svc` argv spells the stay-on battery sources, not enable|disable, so this write
+      // cannot share AndroidGlobalToggle. `stayon true` is the developer setting's
+      // BATTERY_PLUGGED_ANY: the screen stays on while any charger or USB connection is present.
+      const enabled = parseSettingState(state);
+      await runAndroidShell(device, ['svc', 'power', 'stayon', enabled ? 'true' : 'false']);
+      return;
     }
     case 'location': {
       if (state.toLowerCase() === 'set') {

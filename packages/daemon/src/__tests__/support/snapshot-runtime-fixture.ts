@@ -185,6 +185,7 @@ function settingsFacts(device: DeviceInfo) {
           bluetooth: available,
           airplane: available,
           'mobile-data': available,
+          'keep-awake': available,
           location: available,
           animations: available,
           appearance: available,
@@ -199,7 +200,7 @@ function settingsFacts(device: DeviceInfo) {
       return settingsRuntimeOperationFacts({
         target: available,
         unsupported,
-        write: { 'clear-app-state': available },
+        write: { 'clear-app-state': available, 'keep-awake': available },
       });
     case 'apple':
       break;

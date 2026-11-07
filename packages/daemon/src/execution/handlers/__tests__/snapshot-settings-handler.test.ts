@@ -678,7 +678,7 @@ test('settings mobile-data reaches the Android owner as an on/off mutation', asy
   expect(fixtureSettingsMutations.at(-1)).toMatchObject({ setting: 'mobile-data', state: 'off' });
 });
 
-test.each(['mobile-data', 'bluetooth'])(
+test.each(['mobile-data', 'keep-awake', 'bluetooth'])(
   'settings Android %s refuses a named app before reaching the owner',
   async (setting) => {
     const sessionStore = makeSessionStore();
