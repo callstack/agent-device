@@ -83,6 +83,24 @@ const ANDROID_MOVING_TARGET_WINDOW_MS = 1_500;
 const ANDROID_TARGET_QUIET_MS = 100;
 
 /**
+ * The motion window one platform judges a freshly resolved rect against, or
+ * `undefined` for the default window. Shared by the ordinary press gate and the
+ * multi-ref sequence's per-key guard, so a sequence key asks the same question
+ * a standalone press asks after the same previous action.
+ */
+function movingTargetGateWindowMs(platform: string): number | undefined {
+  return platform === 'android' ? ANDROID_MOVING_TARGET_WINDOW_MS : undefined;
+}
+
+/** The platform's window as the `movingTargetGateDecision` parameter, absent for the default. */
+export function windowParamForPlatform(
+  platform: string,
+): { windowMs: number } | Record<string, never> {
+  const windowMs = movingTargetGateWindowMs(platform);
+  return windowMs === undefined ? {} : { windowMs };
+}
+
+/**
  * How far apart the two observations must be for agreeing to mean "at rest". Below one capture
  * round trip, two observations of a still-moving target agree by timing rather than by the target
  * having stopped, and the gate would certify a position it never measured. The gate therefore waits
@@ -144,9 +162,7 @@ async function readMovingTargetGate(
     baselineFinishedAtMs: baseline.finishedAt,
     targetShownAtRest: baselineShowsTargetAtRest(baseline, resolvedNode, resolvedSurface),
     nowMs: now(runtime),
-    ...(runtime.backend.platform === 'android'
-      ? { windowMs: ANDROID_MOVING_TARGET_WINDOW_MS }
-      : {}),
+    ...windowParamForPlatform(runtime.backend.platform),
   });
   return decision.kind === 'recheck' ? decision : undefined;
 }
@@ -385,8 +401,13 @@ function targetStillMovingHint(params: { selector: string | undefined }): string
  * `movedToRect` is the one optional member: a re-observation that measured nothing (the ref kept its
  * authorized frame node) has no position to name, and an absent value is the honest report rather
  * than a stale one.
+ *
+ * Exported because the multi-ref sequence's per-key guard raises the same refusal for a later key:
+ * the sequence cannot re-run this module's recheck (it re-resolves the `@ref` through the frame,
+ * which the sequence's first dispatch already expired), so it re-finds the key by identity and
+ * raises this refusal when its two looks disagree.
  */
-function motionRefusal(
+export function motionRefusal(
   resolved: Exclude<ResolvedInteractionTarget, { kind: 'point' }>,
   movedToRect: Rect | undefined,
   waitedMs: number,

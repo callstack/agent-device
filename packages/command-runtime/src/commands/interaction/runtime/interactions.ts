@@ -43,6 +43,12 @@ export type PressCommandOptions = CommandContext &
   RepeatedInput & {
     target: InteractionTarget;
     button?: ClickButton;
+    /**
+     * Multi-ref press plan (`press @e13,@e14,...`): the members in dispatch
+     * order, bare ref bodies. `target` stays the first member; see
+     * press-sequence.ts for the admission and per-key re-verification contract.
+     */
+    refs?: readonly string[];
     /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
     expectedResolvedTarget?: ExpectedResolvedTarget;
     /** #1654: a mutating `find`'s already-resolved node; see resolution.ts. */
@@ -141,6 +147,11 @@ async function tapCommand(
   options: PressCommandOptions,
   action: 'click' | 'press',
 ): Promise<PressCommandResult> {
+  // Dynamic import: the sequence lane keeps its eager-closure cost off the command-runtime entry.
+  const { isPressSequencePlan, tapRefSequenceCommand } = await import('./press-sequence.ts');
+  if (isPressSequencePlan(options)) {
+    return await tapRefSequenceCommand(runtime, options, action);
+  }
   const observation = planPostActionObservation(options);
   const nativeRefTap = observation.needsPreActionBaseline
     ? null

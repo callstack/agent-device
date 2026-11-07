@@ -2,6 +2,7 @@ import { test, expect, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { activateCompleteRefFrame, refFrameState } from '../../../core/ref-frame.ts';
+import { armAuthoring } from '../../../core/session-script-publication-state.ts';
 import { setSessionSnapshot, STALE_SNAPSHOT_REFS_WARNING } from '../../session-snapshot.ts';
 import {
   installInteractorSnapshotResolution,
@@ -349,5 +350,154 @@ test('after a session reopen, a pin from the previous lifetime rejects (reseeded
       `minted from snapshot s${oldGeneration}`,
     );
   }
+  expect(mockTapPoint).not.toHaveBeenCalled();
+});
+
+// --- Multi-ref press plan: whole-plan admission and the recording guard ---
+
+test('a plan one member cannot authorize refuses whole and leaves the frame untouched', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'plan-member-mismatch';
+  const session = makeStaleRefSession(sessionName);
+  session.snapshotGeneration = 15;
+  sessionStore.publish(sessionName, session);
+  mockTapPoint.mockRejectedValue(new Error('touch should not be called for an unauthorized plan'));
+
+  // Member 2 pins an epoch the active frame never issued: the whole plan
+  // refuses before the first dispatch, and the frame keeps its state.
+  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1,@e2~s12']);
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('COMMAND_FAILED');
+    expect(response.error.details?.reason).toBe('ref_generation_mismatch');
+    expect(response.error.details?.dispatched).toBe('no');
+  }
+  expect(mockTapPoint).not.toHaveBeenCalled();
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('active');
+});
+
+test('an expired frame refuses a plan on its first member, before any dispatch', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'plan-expired-frame';
+  const session = makeStaleRefSession(sessionName);
+  sessionStore.publish(sessionName, session);
+  mockInteractorSnapshot.mockResolvedValue({
+    nodes: makeTwoButtonNodes(),
+    backend: 'xctest',
+    producer: 'apple-runner',
+  });
+
+  // A selector press crosses the side-effect seam and expires the frame.
+  const selectorPress = await runInteraction(sessionStore, sessionName, 'press', [
+    'label=Continue',
+  ]);
+  expect(selectorPress?.ok).toBe(true);
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
+  const touchCallsBefore = mockTapPoint.mock.calls.length;
+
+  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1,@e2']);
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.details?.reason).toBe('ref_frame_expired');
+    expect(response.error.details?.dispatched).toBe('no');
+  }
+  expect(mockTapPoint).toHaveBeenCalledTimes(touchCallsBefore);
+});
+
+test('a plan with distinct stale pins joins its warnings in dispatch order', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'plan-warning-join';
+  const session = makeStaleRefSession(sessionName);
+  session.snapshotGeneration = 15;
+  sessionStore.publish(sessionName, session);
+  mockTapPoint.mockRejectedValue(new Error('touch should not be called for a stale plan'));
+
+  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1~s11,@e2~s12']);
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    // The refusal hint carries both members' warnings, in plan order.
+    expect(String(response.error.details?.hint)).toBe(
+      "Ref @e1 was minted from snapshot s11 but the session's ref frame is now s15 — re-run snapshot -i. " +
+        "Ref @e2 was minted from snapshot s12 but the session's ref frame is now s15 — re-run snapshot -i.",
+    );
+  }
+  expect(mockTapPoint).not.toHaveBeenCalled();
+});
+
+test('a plan on an expired frame warns once, not once per member', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'plan-warning-dedupe';
+  const session = makeStaleRefSession(sessionName);
+  sessionStore.publish(sessionName, session);
+  mockInteractorSnapshot.mockResolvedValue({
+    nodes: makeTwoButtonNodes(),
+    backend: 'xctest',
+    producer: 'apple-runner',
+  });
+  await runInteraction(sessionStore, sessionName, 'press', ['label=Continue']);
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
+  mockTapPoint.mockRejectedValue(new Error('touch should not be called for an expired plan'));
+
+  // Every member's staleness warning is the same expired-frame sentence, so
+  // the join collapses to one instance instead of one per key.
+  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1,@e2']);
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(String(response.error.details?.hint)).toBe(STALE_SNAPSHOT_REFS_WARNING);
+  }
+});
+
+test('script recording refuses a multi-ref press plan, before any dispatch', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'plan-recording-refused';
+  const session = makeStaleRefSession(sessionName);
+  session.scriptPublication = armAuthoring({ path: '/tmp/ad-plan-recording.ad', force: false });
+  sessionStore.publish(sessionName, session);
+  mockTapPoint.mockRejectedValue(new Error('touch should not be called for a recorded plan'));
+
+  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1,@e2']);
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('INVALID_ARGS');
+    expect(response.error.message).toMatch(/cannot be recorded/);
+    expect(response.error.details?.dispatched).toBe('no');
+  }
+  expect(mockTapPoint).not.toHaveBeenCalled();
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('active');
+});
+
+test('a multi-ref press plan refuses a replay target guard instead of downgrading to one key', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'plan-replay-guard-refused';
+  sessionStore.publish(sessionName, makeStaleRefSession(sessionName));
+  mockTapPoint.mockRejectedValue(new Error('touch should not be called for a guarded plan step'));
+
+  const response = await handleInteractionCommands({
+    createCommandSurface: touchCreateCommandSurface,
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'press',
+      positionals: ['@e1,@e2'],
+      flags: {},
+      internal: {
+        replayTargetGuard: {
+          identity: { role: 'Button', label: 'Continue' },
+          structural: { documentOrder: 1, sibling: 0 },
+        },
+      },
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+    ...getRuntimeBindings(),
+  });
+
+  expect(response?.ok).toBe(false);
+  if (response === null || response.ok) {
+    throw new Error(`expected a refusal, got ${JSON.stringify(response)}`);
+  }
+  expect(response.error.code).toBe('INVALID_ARGS');
+  expect(response.error.message).toMatch(/cannot carry a replay target guard/);
   expect(mockTapPoint).not.toHaveBeenCalled();
 });
