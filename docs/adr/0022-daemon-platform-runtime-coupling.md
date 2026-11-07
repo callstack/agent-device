@@ -10,7 +10,7 @@ The daemon must not depend on concrete platform code. This boundary alone does n
 
 ## Decision
 
-R76 prohibits every production daemon import of the root platform-runtime family or a root hub that reaches it. The ban includes static and dynamic imports. Process-root composition is outside the daemon zone. Composition-essential edges assemble neutral implementations there. Daemon-policy-essential edges own request admission, session ownership, conflicts, locking, cancellation, teardown ordering, artifact publication, or response and event semantics. Platform mechanics and state belong behind a deeper interface or adapter.
+R76 prohibits every production daemon import of the root platform-runtime family or a root hub that reaches it. The family consists of the root platform-runtime module and root modules whose names start with platform-runtime-. The ban includes static and dynamic imports. Process-root composition is outside the daemon zone. Composition-essential edges assemble neutral implementations there. Daemon-policy-essential edges own request admission, session ownership, conflicts, locking, cancellation, teardown ordering, artifact publication, or response and event semantics. Platform mechanics and state belong behind a deeper interface or adapter.
 
 Apple session observation uses the neutral `AppleSessionObservation`. It supplies runner liveness, session identity, and sole-foreground-app observation. Recording health, device refresh, and open-hint policy consume it. Root composition supplies request-local inventory and its error classifier. The Apple platform package owns the probes. Selector production and lifecycle participation remain separate.
 
@@ -18,7 +18,7 @@ Platform owners participate through the existing lifecycle phases. Do not introd
 
 R75 measures `SessionState` shape and `SessionStore` authority by symbol. It fails when a handler file enters either set and the merge-base set does not contain that file. Handler files may leave either set. R75 does not ratchet reads outside the handler path. R7 and R10 own cross-module reads outside that path.
 
-The route trace assigns each hop a role and tests each pass-through or translation hop for deletion. Collapse only hops that the deletion test proves removable. The audited runtime-types hop is the only endorsed collapse. The earlier ≤14 target is superseded. The request-spine guards are side-calls, not hops. [ADR 0023](0023-end-state-hop-trace.md) owns the trace and deletion tests.
+The route trace assigns each hop a role and tests each pass-through or translation hop for deletion. Collapse only pass-through or translation hops that the deletion test proves removable. The audited runtime-types hop is the only endorsed collapse. The earlier ≤14 target is superseded. The request-spine guards are side-calls, not hops. [ADR 0023](0023-end-state-hop-trace.md) owns the trace and deletion tests.
 
 ## Rationale and rejected alternatives
 
