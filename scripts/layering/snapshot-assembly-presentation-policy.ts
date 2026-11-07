@@ -15,6 +15,7 @@
 //   ban it for everyone or no one, and no manifest sees a string literal at all.
 
 import { parseSync } from 'oxc-parser';
+import { SNAPSHOT_PRODUCERS } from '@agent-device/contracts/snapshot-producers';
 import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
 import { visitAst } from './layering-ast.ts';
 
@@ -51,10 +52,9 @@ const IOS_PRESENTATION_TARGETS: readonly string[] = [
  */
 const IOS_PROVENANCE_LITERALS: ReadonlySet<string> = new Set([
   'xctest',
-  'apple-runner',
-  'simulator-ax-bridge',
-  'appium-source',
-  'revyl-ios-tree',
+  ...Object.entries(SNAPSHOT_PRODUCERS)
+    .filter(([, facts]) => (facts.channels as readonly string[]).includes('xctest'))
+    .map(([producer]) => producer),
 ]);
 
 /**
