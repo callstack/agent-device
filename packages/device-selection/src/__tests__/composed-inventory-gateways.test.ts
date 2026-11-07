@@ -101,7 +101,7 @@ describe('composed device inventory gateway', () => {
         code: 'DEVICE_NOT_FOUND',
         details: {
           reason: 'provider_instance_unallocated',
-          hint: 'Allocate a lease with leases.allocate and pass its leaseId.',
+          hint: 'Run boot or open to allocate an instance. SDK callers allocate one with leases.allocate and pass its leaseId.',
         },
       });
       expect(local.hostLoads()).toBe(0);

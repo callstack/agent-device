@@ -9,6 +9,7 @@ export {
   filterDeviceInventoryProjection,
   isDeviceClaimConflictReason,
   projectProviderDeviceInventoryRequest,
+  providerInstanceUnallocatedError,
 } from '../device-inventory.ts';
 export type {
   DeviceClaimConflictReason,
