@@ -121,6 +121,32 @@ type ParsedModule = Readonly<{
   stamps: Map<string, number>;
 }>;
 
+type ModuleImports = Pick<ParsedModule, 'imports' | 'stamps'>;
+
+function moduleImports(
+  file: string,
+  program: AstNode,
+  targets: ReadonlyMap<string, string>,
+): ModuleImports {
+  const imports: ParsedModule['imports'] = new Map();
+  const stamps = new Map(Object.entries(STAMP_CALLS));
+  const valueImports = (program.body as AstNode[]).filter(
+    (statement) => statement.type === 'ImportDeclaration' && statement.importKind !== 'type',
+  );
+  for (const statement of valueImports) {
+    const target = targets.get(`${file}\0${String((statement.source as AstNode).value)}`);
+    for (const specifier of statement.specifiers as AstNode[]) {
+      if (specifier.type !== 'ImportSpecifier' || specifier.importKind === 'type') continue;
+      const imported = keyName({ key: specifier.imported });
+      if (imported === undefined) continue;
+      const local = String((specifier.local as AstNode).name);
+      if (STAMP_CALLS[imported] !== undefined) stamps.set(local, STAMP_CALLS[imported]);
+      if (target !== undefined) imports.set(local, { target, name: imported });
+    }
+  }
+  return { imports, stamps };
+}
+
 function parseModules(sources: ReadonlyMap<string, string>): Map<string, ParsedModule> {
   const targets = new Map<string, string>();
   for (const edge of resolveImportEdges(sources, workspaceSpecifierTargets(REPO_ROOT))) {
@@ -129,22 +155,12 @@ function parseModules(sources: ReadonlyMap<string, string>): Map<string, ParsedM
   const modules = new Map<string, ParsedModule>();
   for (const [file, source] of sources) {
     const program = parseSync(file, source).program as unknown as AstNode;
-    const imports = new Map<string, Readonly<{ target: string; name: string }>>();
-    const stamps = new Map(Object.entries(STAMP_CALLS));
-    for (const statement of program.body as AstNode[]) {
-      if (statement.type !== 'ImportDeclaration' || statement.importKind === 'type') continue;
-      const target = targets.get(`${file}\0${String((statement.source as AstNode).value)}`);
-      for (const specifier of statement.specifiers as AstNode[]) {
-        if (specifier.type !== 'ImportSpecifier' || specifier.importKind === 'type') continue;
-        const imported = keyName({ key: specifier.imported });
-        const local = String((specifier.local as AstNode).name);
-        if (imported === undefined) continue;
-        const stampArgument = STAMP_CALLS[imported];
-        if (stampArgument !== undefined) stamps.set(local, stampArgument);
-        if (target !== undefined) imports.set(local, { target, name: imported });
-      }
-    }
-    modules.set(file, { source, program, constants: moduleConstants(program), imports, stamps });
+    modules.set(file, {
+      source,
+      program,
+      constants: moduleConstants(program),
+      ...moduleImports(file, program, targets),
+    });
   }
   return modules;
 }
