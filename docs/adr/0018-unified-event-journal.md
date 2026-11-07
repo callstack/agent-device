@@ -4,6 +4,7 @@
 
 Proposed (2026-07-24; revised the same day after architecture review).
 Nothing in this proposal is implemented.
+The [full proposal at the base commit](https://github.com/callstack/agent-device/blob/e35d0d496fb820d57d95fcad1b6b62dfa9962abb/docs/adr/0018-unified-event-journal.md) keeps the inventory and the per-step plan.
 
 ## Context
 
@@ -43,13 +44,15 @@ The contracts package would own the catalog and host-kit would own the journal r
 The diagnostics scope would become the single journal append point for diagnostics, agent-cost tallies, session lifecycle events, and replay traces.
 On append, the journal would stamp `ts`, `requestId?`, `session?`, and `command?`, redact `data`, buffer the event, and tally `phaseCounts` before offering it to sinks.
 Emitters would state facts without branching on consumers.
-No sink could write a journal-owned event that did not pass through the journal.
+All consumer-conditional logic would live in the sink.
+No sink may write an event that did not pass through the journal.
 
 The existing request scope would remain, including CLI entry, daemon request handling, and fatal catch-all.
 Idle reap and daemon shutdown would open explicit short-lived session-scoped teardown scopes without a `requestId`.
 A teardown-recorded `close` action must continue to produce an `action.recorded` entry when no request is active.
 
 Sinks would be explicitly registered at scope construction, with no dynamic subscription.
+Each entry point would list its sinks in one place, statically enumerable.
 The journal would invoke them synchronously in registration order.
 Each invocation would be best-effort: a sink error would be swallowed and must not affect the buffer, other sinks, or the request.
 A sink may queue its own I/O.
@@ -62,10 +65,10 @@ Only the sink list and concurrency-safe aggregation state would be shared.
 The `phaseCounts` tally would remain request-global so agent-cost spans shards.
 `updateDiagnosticsScope` would mutate only the current scope, and each mid-flight rebind would affect that shard's clone.
 The attempt trace binding would end with the fork; trace events with no bound destination would be dropped.
-This prevents cross-routing between parallel nested dispatches.
+This would prevent cross-routing between parallel nested dispatches.
 
 Each request, teardown, and fork scope would carry a `scopeId` in its event envelope.
-A fork would also carry its parent's `scopeId` as `parentScopeId`.
+A fork would also carry its parent's `scopeId` as `parentScopeId`, so a future exporter could emit parent-child spans from envelope fields alone, without changing the envelope or emit sites.
 Cross-process correlation would remain `requestId`.
 An exporter and a W3C `traceparent`-style request metadata field are deferred to a later ADR.
 
@@ -74,16 +77,16 @@ The proposed sinks would have these responsibilities:
 - The debug stream sink would preserve the existing live writer and `liveWrittenEventCount` flush watermark.
 - The session event log sink would consume `session-lifecycle` kinds, retain the existing presentation builders and serialized write queue, and write `events.ndjson` v1.
   Rotation would remain size-capped to one retained generation.
-  The sidecar records each retained generation's first absolute line index, line count, and first-line digest.
-  The reader verifies these values against the files before answering.
-  The sidecar is not a cache and cannot be regenerated from entries.
+  The retention window's sidecar, on which `events` cursor identity depends, would record each retained generation's first absolute line index, line count, and first-line digest.
+  The reader would verify these values against the files before answering.
+  The sidecar would not be a cache and cannot be regenerated from entries.
   A sink that owns the file also owns this contract.
 - The replay trace sink would consume `replay-trace` kinds, map legacy `type` values, and use the bound per-attempt destination in place of both append helpers.
 - Agent-cost would derive its existing `phaseCounts` projection from the `runner-round-trip` trait.
 
 Session state remains owned by its stores.
 `recordActionEntry` would still push to `session.actions` first, and `action.recorded` would remain a projection of that push.
-The journal is observability, not a source of truth.
+The journal would be observability, not a source of truth.
 Session state, replay provenance, and repair watermarks must not be rebuilt from events.
 
 ### Progress and usage
@@ -92,13 +95,14 @@ Progress streaming would remain unchanged and transport-owned.
 Its typed wire serializer and cancellation behavior would not pass through the generic journal.
 If a future feature needs journal visibility, it can separately opt in to a mirror emit of a cataloged kind; the wire path must not be rerouted.
 
+Anything that would leave the machine must go through the closed `UsageRecord` schema.
 A later opt-in usage sink would project `session-lifecycle` events into a closed `UsageRecord`.
 It would use an allowlist by construction, not redaction of rich data.
 Its fields would be command or action from the CommandDescriptor registry; `ok` or a typed error code; `durationMs`, `runnerRoundTrips`, `nodeCount`, `platform`, and `appleOs`; flag names without values; and a hashed session identity with a per-session sequence number.
 Positionals, selectors, labels, fill text, snapshot content, and error messages would be unrepresentable.
 Sequence and anti-pattern detection would be downstream, never emission-side.
 A local stats read would come first and opt-in export later.
-The sink follows the session lifecycle migration; this proposal fixes its schema discipline only.
+The sink would follow the session lifecycle migration; this proposal fixes its schema discipline only.
 
 ### Compatibility and redaction
 
@@ -122,11 +126,11 @@ A wire name change remains a breaking change for log consumers, even though an i
   Reads must fail with `EVENT_LOG_CURSOR_EXPIRED` or `EVENT_LOG_WINDOW_UNVERIFIED` when they cannot place a cursor.
 - A multi-attempt `test` run must write each attempt trace to its own file with legacy `type` values.
   An unbound trace event must be dropped.
-  A concurrent nested-action regression must run sharded attempts in parallel with nested dispatch that rebinds `session` and `logPath`, and prove shard isolation for replay traces, per-request diagnostics, and each session event log including its retained generation, without cross-writes or drops after `await` points.
+  A concurrent nested-action regression must run sharded attempts in parallel with nested dispatch that rebinds `session` and `logPath`, and prove shard isolation for replay traces, per-request diagnostics, and each session event log including its retained generation, without cross-writes or drops, including for events emitted after `await` points.
 - Tests must verify sink ordering, error isolation, and parity of the runner-round-trip trait with the current literal list.
 - A redaction fixture must prove that sensitive `data` reaches no journal-owned output.
 - A type or test gate must prove every `UsageRecord` field is numeric, an enum from its owning registry, or a hash, and reject open-string fields.
-- A lint-style test must prohibit production derived-set selection by kind-name substrings.
+- Production code must not select events by kind-name substrings; a lint-style test would enforce this for the derived-set helpers.
   Layering checks must preserve the contracts and host-kit ownership boundary without back-edges.
 
 ## Alternatives considered
@@ -138,7 +142,7 @@ A wire name change remains a breaking change for log consumers, even though an i
 - An `EventEmitter` or pub-sub bus: rejected because implicit subscriptions hide listeners and causality.
 - Event sourcing: rejected because correctness would depend on telemetry and existing state owners have their own invariants.
 - A process-global fallback scope: rejected because it makes scope selection environment-dependent and hides missing-scope bugs.
-- Type phases without unifying channels: useful as a first step, but it leaves duplicate envelopes, inconsistent redaction, and three write paths.
+- Type phases without unifying channels: rejected as a stopping point and kept as the first migration step, because alone it leaves duplicate envelopes, inconsistent redaction, and three write paths.
 - Merge upload progress or app events: rejected because the former is a local byte-counter callback and the latter is a deep-link builder, not an event channel.
 
 ## Consequences
@@ -146,9 +150,12 @@ A wire name change remains a breaking change for log consumers, even though an i
 The proposed journal would support request tracing by `requestId` and teardown tracing by `session`, while progress remains observable on the wire.
 New observability consumers could use sinks without new vocabularies or emit sites.
 The migration would remove the dead `traceLogPath` option, duplicate redaction pass, and unredacted replay helper.
-Replay redaction is the declared visible output change.
-The migration is wide and adds one synchronous sink-dispatch loop per event.
+Replay redaction would be the declared visible output change.
+The migration would be wide and would add one synchronous sink-dispatch loop per event.
 
 The proposed migration is incremental: catalog and typed kinds first; then the sink seam, debug stream, and agent-cost; then the session event log and teardown scopes; then the replay sink and fork isolation.
+Byte-compatibility fixtures would land with the sink seam, before any sink owns a write.
+The fork primitive would land with its concurrent-shard regression.
+The replay redaction change would ship with the replay sink, in one change with its fixture update and changelog entry.
 Each step would pass all checks when it merges and be independently useful.
 The `events` command would retain its paging contract, including typed cursor-expiry and window-verification errors.
