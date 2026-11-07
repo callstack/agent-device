@@ -250,7 +250,7 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   // The live read is a SEPARATE runner request (the direct querySelector), so
   // it shares the runner's prepareActiveCommandContext surface policy only with
   // a RUNNER-ROUTED capture: eligible simulator captures go to the host AX
-  // bridge (packages/platform-apple/src/snapshot-route.ts), and a bridge-served
+  // bridge (packages/capture-kit/src/snapshot-router/router.ts), and a bridge-served
   // capture never reaches that seam. #2448 puts the system-surface case (the
   // web sign-in sheet) back on the runner, where both reads do share it. Either
   // way this is not a same-instant guarantee — no captured surface identity
