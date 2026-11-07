@@ -152,9 +152,16 @@ test('non-close commands on a tenant-isolated session still require a lease id',
   );
 });
 
-test.each(['bogus', 'proxy', 'cloud', ' proxy ', 'browserstack'])(
-  'sessionless apps for non-catalog provider %s is refused without a lease',
-  (leaseProvider) => {
+// Runtime providers have no instance without a lease; logical leases keep the missing-lease refusal.
+test.each([
+  ['bogus', 'unallocated'],
+  ['browserstack', 'unallocated'],
+  ['proxy', 'missing-lease'],
+  ['cloud', 'missing-lease'],
+  [' proxy ', 'missing-lease'],
+] as const)(
+  'sessionless apps for non-catalog provider %j without a lease is refused as %s',
+  (leaseProvider, refusal) => {
     const registry = new LeaseRegistry();
 
     assert.throws(
@@ -169,13 +176,27 @@ test.each(['bogus', 'proxy', 'cloud', ' proxy ', 'browserstack'])(
           undefined,
           { env: process.env },
         ),
-      // A logical lease cannot be allocated by boot or open, so it keeps the missing-lease refusal.
-      ['proxy', 'cloud'].includes(leaseProvider.trim())
-        ? missingLeaseIdError
-        : unallocatedProviderError(leaseProvider),
+      refusal === 'unallocated' ? unallocatedProviderError(leaseProvider) : missingLeaseIdError,
     );
   },
 );
+
+test('a padded runtime provider with a blank lease id is refused under its normalized name', () => {
+  assert.throws(
+    () =>
+      assertRequestLeaseAdmission(
+        makeRequest({
+          command: 'shutdown',
+          flags: { platform: 'ios', leaseProvider: ' limrun ' },
+          meta: { tenantId: 'limrun', runId: 'run-1', sessionIsolation: 'tenant', leaseId: '  ' },
+        }),
+        new LeaseRegistry(),
+        undefined,
+        { env: process.env },
+      ),
+    unallocatedProviderError('limrun'),
+  );
+});
 
 // #4303: after `close --shutdown` released the instance, `shutdown` on the same connection has no
 // lease. It must name the missing instance, not the tenant's missing lease id.

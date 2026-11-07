@@ -53,15 +53,19 @@ function appsRequest(leaseProvider: string): DaemonRequest {
   };
 }
 
-test.each(['bogus', 'proxy', 'browserstack'])(
-  'tenant apps rejects non-catalog provider %s before provider or device access',
-  async (leaseProvider) => {
+test.each([
+  ['bogus', 'unallocated'],
+  ['browserstack', 'unallocated'],
+  ['proxy', 'missing-lease'],
+] as const)(
+  'tenant apps rejects non-catalog provider %s as %s before provider or device access',
+  async (leaseProvider, refusal) => {
     const { handler, listProviderApps, inspectFacts, bind } = createAppsAdmissionHarness(undefined);
     const response = await handler(appsRequest(leaseProvider));
 
     expect(response.ok).toBe(false);
     expect(response).toMatchObject(
-      leaseProvider === 'proxy'
+      refusal === 'missing-lease'
         ? {
             ok: false,
             error: { code: 'INVALID_ARGS', message: 'tenant isolation requires lease id.' },
