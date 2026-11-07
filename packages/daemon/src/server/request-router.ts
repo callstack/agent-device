@@ -22,6 +22,7 @@ import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import {
   type ResponseCost,
   errorResponse,
+  namesSessionExplicitly,
   noActiveSessionError,
   type DaemonResponse,
   type DaemonResponseData,
@@ -660,6 +661,10 @@ async function dispatchGenericForLockedScope(params: {
   const { lockedScope, logPath, sessionStore, androidObservation, createCommandSurface } = params;
   const ref = sessionStore.lookup(lockedScope.sessionName);
   if (!ref) {
+    if (namesSessionExplicitly(lockedScope.req)) {
+      const { namedSessionNotFoundError } = await import('../core/explicit-session-resolution.ts');
+      throw namedSessionNotFoundError(lockedScope.sessionName);
+    }
     return noActiveSessionError();
   }
   const session = sessionStore.requireCurrent(ref);
