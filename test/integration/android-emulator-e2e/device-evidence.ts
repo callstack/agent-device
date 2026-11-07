@@ -84,7 +84,7 @@ export async function readAndroidDeviceEvidence(
   return `${sections.join('\n\n')}\n`;
 }
 
-function createAdbRead(): AndroidAdbRead {
+export function createAdbRead(): AndroidAdbRead {
   return async (args) => {
     const { stdout } = await execFileAsync('adb', args, {
       maxBuffer: 64 * 1024 * 1024,
