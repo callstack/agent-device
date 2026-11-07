@@ -76,7 +76,7 @@ function formatSummary(
     ...(dispatched ? [DISPATCH_SENTENCE[dispatched]] : []),
     ...(next ? [`Next: ${next}`] : []),
   ].join(' ');
-  return { summary, truncated: shown !== normalized.message };
+  return { summary, truncated: shown !== message };
 }
 
 /**

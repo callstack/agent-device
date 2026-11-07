@@ -82,14 +82,26 @@ function failureLogTail(options: {
 function logFileTail(label: string, logPath: string): string | undefined {
   try {
     if (!fs.existsSync(logPath)) return undefined;
-    const content = fs.readFileSync(logPath, 'utf8');
-    const lines = content.split('\n');
-    let tail = lines.slice(Math.max(0, lines.length - 200)).join('\n');
-    if (tail.length > DAEMON_LOG_TAIL_MAX_BYTES) {
-      tail = tail.slice(tail.length - DAEMON_LOG_TAIL_MAX_BYTES);
-    }
+    const tail = readTrailingLines(logPath, DAEMON_LOG_TAIL_MAX_BYTES, 200);
     return tail.trim().length > 0 ? `\n[${label}]\n${tail.trimEnd()}` : undefined;
   } catch {
     return undefined;
+  }
+}
+
+/** The last `maxLines` lines within the file's last `maxBytes` bytes; the daemon log grows unbounded. */
+function readTrailingLines(filePath: string, maxBytes: number, maxLines: number): string {
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const size = fs.fstatSync(fd).size;
+    const length = Math.min(size, maxBytes);
+    const buffer = Buffer.alloc(length);
+    fs.readSync(fd, buffer, 0, length, size - length);
+    const lines = buffer.toString('utf8').split('\n');
+    // A read that starts mid-file starts mid-line (or mid-character); drop that partial line.
+    if (length < size) lines.shift();
+    return lines.slice(-maxLines).join('\n');
+  } finally {
+    fs.closeSync(fd);
   }
 }

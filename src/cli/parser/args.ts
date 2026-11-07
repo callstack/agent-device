@@ -466,8 +466,9 @@ export async function commandSynopsis(command: string): Promise<string | null> {
   const { buildCommandSynopsis } = await import('../../commands/schema/cli-help.ts');
   try {
     return buildCommandSynopsis(normalizeCommandAlias(command));
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof AppError) return null;
+    throw error;
   }
 }
 

@@ -27,9 +27,9 @@ test('printHumanError closes a multi-line failure with the summary, after any tr
   });
 
   const lines = stderr.trimEnd().split('\n');
-  assert.match(
-    lines[0] ?? '',
-    /^Error \(COMMAND_FAILED\): boom\. May have reached the device\. Next: /,
+  assert.equal(
+    lines[0],
+    'Error (COMMAND_FAILED): boom. May have reached the device. Next: Run snapshot to check the screen before you retry. Read the diagnostics log for the failing step.',
   );
   assert.equal(lines.at(-1), lines[0]);
   assert.ok(lines.indexOf('last daemon line') < lines.length - 1);

@@ -532,7 +532,7 @@ function stringDetail(
   return typeof value === 'string' ? value : undefined;
 }
 
-/** The producer-proved {@link DispatchDisclosure} in a details bag, or `undefined` when unclassified. */
+/** The recorded {@link DispatchDisclosure} in a details bag, or `undefined` when no layer recorded one. */
 export function readDispatchDisclosure(
   details: Record<string, unknown> | undefined,
 ): DispatchDisclosure | undefined {

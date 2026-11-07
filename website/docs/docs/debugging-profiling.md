@@ -140,7 +140,7 @@ Log: /Users/me/.agent-device/sessions/<session>/requests/<request-id>.ndjson
 Error (COMMAND_FAILED): tap @e12: runner did not answer within 10s. May have reached the device. Next: Run snapshot to check the screen before you retry. Read the diagnostics log for the failing step.
 ```
 
-The summary says whether the action reached the device. `May have reached the device` means the action can already have run, so check the screen before you retry it. `Not dispatched` means a retry is safe. A summary with neither does not prove that the action did not run. `Next` is the step to take. The `Log` line names the failing request's diagnostics file.
+When agent-device knows whether the action reached the device, the summary says so. `May have reached the device` means the action can already have run, so check the screen before you retry it. `Not dispatched` means a retry is safe. A summary with neither does not prove that the action did not run. `Next` is the step to take. The `Log` line names the failing request's diagnostics file.
 
 Use `--json` to inspect `error.details.stderr` when it is present. Diagnostic stderr is secret-redacted and retains up to 8,192 characters; longer output keeps its beginning and end with a truncation marker between them. Other diagnostic strings remain limited to 400 characters. Compact retry summaries may retain less output.
 

@@ -16,6 +16,7 @@
 - If the per-code default hint would mislead, supply a hint. If the default suffices, omit the hint.
 - When you wrap an error, preserve an existing hint and the cause chain.
 - Every consumer surface must carry at least code, message, and hint. Rehydration helpers copy all fields.
+- A failed CLI command prints one summary line (code, message, dispatch fact, Next step) first and, when anything follows it, last. The diagnostic id is not printed.
 - The router's thrown-error finalizer attempts a diagnostics flush. `diagnosticId` requires an active request diagnostics scope, and `logPath` appears only when that flush produces a file. Returned or pre-scope failures may omit both fields. Messages must not embed raw stderr dumps or secrets.
 
 ## Context
@@ -103,10 +104,8 @@ Nothing documented the conventions, so each new site decided them again.
    itself depends on the code only.
    The body between the copies holds the cause, warnings, candidates, the `Log:` path, and the
    `--debug` details and log tail. The diagnostic id is not printed; it stays in `--json`.
-   Reason: agents merge stderr into stdout and keep `head -1` or, most often, `tail -1`. A model
-   eval showed that a footer-last layout hides the code under `tail -1`, that one summary without the
-   repeat recovers poorly under `tail -1`, and that models follow `Next` even when it is wrong unless
-   the dispatch fact on the same line contradicts it.
+   Reason: agents merge stderr into stdout and keep `head -1` or, most often, `tail -1`; a footer-last
+   layout hides the code under `tail -1`. Measurements: `docs/evidence/cli-failure-summary-eval-2026-11-07.md`.
    Consequence: a default hint is printed as an instruction, so `defaultHintForCode` never asks for a
    `--debug` rerun when a log already exists, and any retry a hint implies follows the observe-first
    step whenever the request may have dispatched.
