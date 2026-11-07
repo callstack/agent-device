@@ -617,12 +617,11 @@ test('a capture whose exit status stays unread ends at its own deadline without 
       maxDepth: 10,
       deadline: deadline(undefined, 120),
     })
-    .then(
-      () => undefined,
-      (error: unknown) => error,
-    );
-  while (fixture.connects.length === 0) await new Promise((resolve) => setImmediate(resolve));
-  while (!(helper()?.exitStatusReads >= 1)) await vi.advanceTimersByTimeAsync(1);
+    .catch((error: unknown) => error);
+  let settled = false;
+  void request.then(() => (settled = true));
+  while (!settled && fixture.connects.length === 0) await new Promise((r) => setImmediate(r));
+  while (!settled && !(helper()?.exitStatusReads >= 1)) await vi.advanceTimersByTimeAsync(1);
   await vi.advanceTimersByTimeAsync(120);
   const failure = await request;
 
