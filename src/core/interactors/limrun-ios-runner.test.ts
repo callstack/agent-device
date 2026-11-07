@@ -29,6 +29,11 @@ test('stages a token-authenticated runner once and presents forwarded XCTest sna
   });
   expect(f.environment.BIND_IP).toBe('10.244.1.2');
   expect(f.environment.TOKEN?.length).toBeGreaterThanOrEqual(32);
+  // The host's Xcode 27 resolves the runner's @rpath XCTest from its own simulator platform.
+  expect(f.testingEnvironment).toEqual({
+    DYLD_FRAMEWORK_PATH: '__PLATFORMS__/iPhoneSimulator.platform/Developer/Library/Frameworks',
+    DYLD_LIBRARY_PATH: '__PLATFORMS__/iPhoneSimulator.platform/Developer/usr/lib',
+  });
   expect((f.manifest?.files.find((f) => f.path === 'Runner.app/Runner')?.mode ?? 0) & 0o111).toBe(
     0o111,
   );

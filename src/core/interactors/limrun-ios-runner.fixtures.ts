@@ -35,6 +35,7 @@ type RunnerFixture = {
   requests: string[];
   readonly manifest: Manifest | undefined;
   readonly environment: Record<string, string>;
+  readonly testingEnvironment: Record<string, string>;
   readonly command: Record<string, unknown> | undefined;
   readonly testRun: ServerResponse | undefined;
 };
@@ -64,13 +65,13 @@ export async function fixture(
   const directory = await mkdtempForTest('limrun-runner-');
   const app = path.join(directory, 'AgentDeviceRunnerUITests-Runner.app');
   await fs.mkdir(path.join(app, 'PlugIns', 'AgentDeviceRunnerUITests.xctest'), { recursive: true });
-  await fs.mkdir(path.join(app, 'Frameworks', 'XCTest.framework'), { recursive: true });
   await fs.writeFile(path.join(app, 'Runner'), 'simulator runner', { mode: 0o755 });
   const requests: string[] = [];
   const commands: Record<string, unknown>[] = [];
   let manifest: Manifest | undefined;
   const uploads: Manifest[] = [];
   const environment: Record<string, string> = {};
+  let testingEnvironment: Record<string, string> = {};
   let command: Record<string, unknown> | undefined;
   let testRun: ServerResponse | undefined;
   let admitted: ServerResponse | undefined;
@@ -214,6 +215,12 @@ export async function fixture(
           new RegExp(`<key>AGENT_DEVICE_RUNNER_${key}</key><string>(.*?)</string>`),
         )![1]!;
       }
+      const testing = xml.match(/<key>TestingEnvironmentVariables<\/key><dict>(.*?)<\/dict>/s);
+      testingEnvironment = Object.fromEntries(
+        [...(testing?.[1] ?? '').matchAll(/<key>(.*?)<\/key><string>(.*?)<\/string>/g)].map(
+          ([, key, value]) => [key!, value!],
+        ),
+      );
       response.end(JSON.stringify({ ok: true }));
       return;
     }
@@ -314,6 +321,9 @@ export async function fixture(
     },
     get environment() {
       return environment;
+    },
+    get testingEnvironment() {
+      return testingEnvironment;
     },
     get command() {
       return command;
