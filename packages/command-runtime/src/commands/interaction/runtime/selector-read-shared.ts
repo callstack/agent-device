@@ -16,7 +16,7 @@ import {
   type SnapshotNode,
   type SnapshotPreferredBackend,
 } from '@agent-device/kernel/snapshot';
-import { type SnapshotState } from '@agent-device/contracts/snapshot-model';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import {
   formatSelectorFailure,
   selectorFailureHint,

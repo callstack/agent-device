@@ -86,15 +86,18 @@ export function snapshotStateProvenance(
   }
 }
 
+/** Keyed on `SnapshotBackend`, so a backend added to `SnapshotProvenance` must be listed here. */
+const SNAPSHOT_BACKENDS = {
+  xctest: true,
+  android: true,
+  'harmonyos-arkui': true,
+  'macos-helper': true,
+  'linux-atspi': true,
+  web: true,
+} as const satisfies Record<SnapshotBackend, true>;
+
 export function isSnapshotBackend(value: unknown): value is SnapshotBackend {
-  return (
-    value === 'xctest' ||
-    value === 'android' ||
-    value === 'harmonyos-arkui' ||
-    value === 'macos-helper' ||
-    value === 'linux-atspi' ||
-    value === 'web'
-  );
+  return typeof value === 'string' && Object.hasOwn(SNAPSHOT_BACKENDS, value);
 }
 
 export function usesMobileSnapshotPresentation(backend: SnapshotBackend | undefined): boolean {

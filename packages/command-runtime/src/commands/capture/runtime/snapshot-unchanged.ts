@@ -6,7 +6,7 @@ import {
   type SnapshotPresentation,
   type SnapshotUnchanged,
 } from '@agent-device/kernel/snapshot';
-import { type SnapshotState } from '@agent-device/contracts/snapshot-model';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 
 type SnapshotIdentity = {
   previousAppBundleId?: string;
