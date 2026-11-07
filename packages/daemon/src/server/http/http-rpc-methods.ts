@@ -11,6 +11,7 @@ import type {
 import { commandRpcParamsSchema } from '@agent-device/kernel/contracts';
 import { readLeaseAllocateProviderFlags } from '@agent-device/contracts/lease-scope';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { resolveRequestSessionAtIntake } from '../../core/request-session-intake.ts';
 import { resolveToken } from './http-authorization.ts';
 
 type HttpInstallSource = Exclude<DaemonInstallSource, { kind: 'path' }>;
@@ -45,7 +46,7 @@ const SUPPORTED_RPC_METHODS = new Set([
 function toDaemonRequest(params: CommandRpcParams, headers: IncomingHttpHeaders): DaemonRequest {
   return {
     token: resolveToken(params as Record<string, unknown>, headers),
-    session: params.session ?? 'default',
+    ...resolveRequestSessionAtIntake(params),
     command: params.command ?? '',
     positionals: params.positionals ?? [],
     input: params.input,
@@ -148,7 +149,10 @@ function toLeaseDaemonRequest(
 ): DaemonRequest {
   return {
     token: resolveToken(params, headers),
-    session: readStringParam(params, 'session') ?? 'default',
+    ...resolveRequestSessionAtIntake({
+      session: readStringParam(params, 'session'),
+      meta: { sessionExplicit: readBooleanParam(params, 'sessionExplicit') },
+    }),
     command,
     positionals: [],
     flags: command === 'lease_allocate' ? readLeaseAllocateProviderFlags(params) : undefined,
@@ -226,7 +230,7 @@ function toInstallFromSourceDaemonRequest(
   }
   return {
     token: resolveToken(params, headers),
-    session: readStringParam(params, 'session') ?? 'default',
+    ...resolveRequestSessionAtIntake({ session: readStringParam(params, 'session') }),
     command: 'install_source',
     positionals: [],
     flags: { platform },
@@ -249,7 +253,7 @@ function toReleaseMaterializedPathsDaemonRequest(
   }
   return {
     token: resolveToken(params, headers),
-    session: readStringParam(params, 'session') ?? 'default',
+    ...resolveRequestSessionAtIntake({ session: readStringParam(params, 'session') }),
     command: 'release_materialized_paths',
     positionals: [],
     meta: {

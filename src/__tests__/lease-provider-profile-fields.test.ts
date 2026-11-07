@@ -38,6 +38,7 @@ test('leases.allocate refuses an OS version Limrun cannot honour instead of igno
       daemonBaseUrl: daemon.baseUrl,
       daemonAuthToken: daemon.runtime.token,
       daemonTransport: 'http',
+      session: 'agent-a',
     });
     await assert.rejects(
       client.leases.allocate({

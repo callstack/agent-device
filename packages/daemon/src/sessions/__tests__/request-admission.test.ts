@@ -4,7 +4,11 @@ import { makeIosSession, makeMacOsSession } from '../../__tests__/support/sessio
 import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { AppError } from '@agent-device/kernel/errors';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
-import { assertRequestLeaseAdmission, isConfinedToAppLease } from '../request-admission.ts';
+import {
+  assertProviderLeaseRequestNamesSession,
+  assertRequestLeaseAdmission,
+  isConfinedToAppLease,
+} from '../request-admission.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { ProviderAppCatalog } from '@agent-device/contracts/device';
 
@@ -461,5 +465,45 @@ test('a daemon policy that requires a macos-app lease refuses unleased and other
       { env: process.env, daemonPolicy: policy },
     )?.leaseId,
     lease.leaseId,
+  );
+});
+
+const SESSION_LEASE = { tenantId: 'tenant-a', runId: 'run-1', leaseId: 'a'.repeat(32) };
+
+test('an unnamed request reaching a provider lease through its session is refused', () => {
+  const session = makeIosSession('default', {
+    lease: { ...SESSION_LEASE, leaseProvider: 'proxy' },
+  });
+
+  assert.throws(
+    () =>
+      assertProviderLeaseRequestNamesSession(
+        makeRequest({ command: 'snapshot', internal: { sessionOmitted: true } }),
+        session,
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.equal(error.details?.reason, 'REMOTE_SESSION_REQUIRED');
+      assert.equal(error.details?.leaseProvider, 'proxy');
+      return true;
+    },
+  );
+});
+
+test('a named request on the same provider-leased session is not refused', () => {
+  const session = makeIosSession('default', {
+    lease: { ...SESSION_LEASE, leaseProvider: 'proxy' },
+  });
+
+  assertProviderLeaseRequestNamesSession(makeRequest({ command: 'snapshot' }), session);
+});
+
+test('an unnamed request on a session whose lease has no provider is not refused', () => {
+  const session = makeIosSession('default', { lease: SESSION_LEASE });
+
+  assertProviderLeaseRequestNamesSession(
+    makeRequest({ command: 'snapshot', internal: { sessionOmitted: true } }),
+    session,
   );
 });

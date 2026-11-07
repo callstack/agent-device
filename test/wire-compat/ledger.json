@@ -117,10 +117,10 @@
     "packages/daemon/src/server/http/http-authorization.ts#readHeaderValue": "sha256:0ec16993e5d9b460ba02deb4a43bbc4c248f9697eaed9aa64003eec7d5dce6bf",
     "packages/daemon/src/server/http/http-authorization.ts#resolveToken": "sha256:3abcb019e1325317618045b7138e41845990af10953dd937571997cd6ec35981",
     "packages/daemon/src/server/http/http-rpc-envelope.ts#sendJson": "sha256:a1de00da3f1db8c98e69a85dfe2e11b626a4d2ce472840e3b8f519aa8a207a8f",
-    "packages/daemon/src/server/http/http-rpc-methods.ts#toDaemonRequest": "sha256:f3861d2d4f67f66e83800616926f6bbb0595de4ecbb0072b5b78971ebeb0705b",
-    "packages/daemon/src/server/http/http-rpc-methods.ts#toInstallFromSourceDaemonRequest": "sha256:dff093758b433043816dfc1e2e9658078875e46b887fdc530fb9380158d629f5",
-    "packages/daemon/src/server/http/http-rpc-methods.ts#toLeaseDaemonRequest": "sha256:3018984aeace4054767875f5eb6e6ad5d38bfcb71c15d1a56ccf9b53e0a419ec",
-    "packages/daemon/src/server/http/http-rpc-methods.ts#toReleaseMaterializedPathsDaemonRequest": "sha256:708736ca03d6a3fc449bb408382dbd509e490de1f84ecc8771fd77d4adda0154",
+    "packages/daemon/src/server/http/http-rpc-methods.ts#toDaemonRequest": "sha256:d2dbb0aad178fd1100faaa64a1c2c6c76e860e705e74f04b34220b6e6d5c46dc",
+    "packages/daemon/src/server/http/http-rpc-methods.ts#toInstallFromSourceDaemonRequest": "sha256:bd6fd615ff8bcf6b789a4ae5a7b5d09ace93c39948452fb187dbb3a8ea06be41",
+    "packages/daemon/src/server/http/http-rpc-methods.ts#toLeaseDaemonRequest": "sha256:9bb2ab458ec44da3281be5dab7237d963fbd6f7c209995d6ef81fa28892155db",
+    "packages/daemon/src/server/http/http-rpc-methods.ts#toReleaseMaterializedPathsDaemonRequest": "sha256:a600285c173c95a75093c9eae65ee96df63d9524f7cc96c0479cf9884069f17c",
     "packages/daemon/src/server/http/http-rpc-envelope.ts#writeProgressEnvelope": "sha256:7be778b3902c72d7aa6282c16dc7106fdd64e99c0b5daf9f413ff5dd3fb044f1",
     "packages/daemon/src/server/http/http-rpc-envelope.ts#writeRpcResponseEnvelope": "sha256:7a8155e9fcbb53485489728250a85109b5dab0d96cdd4aa8b7e7eb87a4898ddb",
     "packages/daemon/src/core/session-tenant-scope.ts#TenantSessionNamespace": "sha256:a6613d22933caa053e479f05b7f016664f6be8d0afdbbf81e578ff497fc1b13d",
@@ -190,9 +190,10 @@
     "packages/daemon-client/src/daemon-client-transport.ts#isRemoteInstanceMismatchResponse": "sha256:7670f48fe0fc7344f8a000cd303e49788ec7ea9d1c729bcdc2af73ff02dae04d",
     "packages/daemon-client/src/daemon-client-transport.ts#isRemoteInstanceMismatch": "sha256:6d4cfdd36bd44686d2a48990491faf63ba9117fb760f982fd72922c99be8daee",
     "packages/contracts/src/lease-scope.ts#buildDaemonRpcRequest": "sha256:bead87907afdad0aa685126ef191a70d7e99495ce5d11dd1c0505d07623b9137",
-    "packages/contracts/src/lease-scope.ts#buildLeaseRpcParams": "sha256:365490a0fe1833d7ce8b0d3f5425462608a85119b12c1a2c4f16bb83b5d28e06",
+    "packages/contracts/src/lease-scope.ts#buildLeaseRpcParams": "sha256:25b138457410480048ee3899ce758cdd80bd7a4d11dc6e025f1365e7e8729116",
     "packages/contracts/src/lease-scope.ts#isLeaseRpcCommand": "sha256:955dc1b73462d40593e5728dbcbaeec1307944b08262a22627e84cc5dc507e8f",
-    "packages/contracts/src/lease-scope.ts#leaseRpcMethodForCommand": "sha256:3613555c6002c23ab5bec4b98bc1b4d6947014b52fa100176177f955cf762881"
+    "packages/contracts/src/lease-scope.ts#leaseRpcMethodForCommand": "sha256:3613555c6002c23ab5bec4b98bc1b4d6947014b52fa100176177f955cf762881",
+    "packages/daemon/src/core/request-session-intake.ts#resolveRequestSessionAtIntake": "sha256:d620b6ee56a8c2f74d2c161016fa19974cbc833e3b87fa522411e35b381d9bc9"
   },
   "compatibleChanges": [
     {
@@ -208,7 +209,7 @@
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#DownloadRemoteArtifactParams",
       "digest": "sha256:ba6d2f6ac51e05ccc5e0c940b355d62374e018b1ae6f6f744becf6e1760cbb63",
-      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state \u2014 never serialized, never sent to the daemon \u2014 that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved."
+      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state — never serialized, never sent to the daemon — that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved."
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact",
@@ -226,9 +227,24 @@
       "rationale": "Adds the optional providerCredentialFingerprint parameter to agent_device.lease.allocate, forwarded only when the request meta carries one, which the client sets only for a local daemon. A released protocol-2 daemon ignores unknown JSON-RPC parameters, and a request without a fingerprint keeps the previous payload byte-for-byte. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved. It now composes the envelope through buildDaemonRpcRequest in @agent-device/contracts/lease-scope, which takes the request id from its caller; the client supplies the id it supplied before (the request meta id, else a fresh one), so envelope construction preserves method, params and id. Separately, credential fingerprint lookup now trims the provider name on both client and daemon. A whitespace-spelled provider can therefore add a fingerprint that the released client omitted; this changes fingerprint presence, not the envelope or optional parameter contract."
     },
     {
+      "declaration": "packages/daemon/src/core/request-session-intake.ts#resolveRequestSessionAtIntake",
+      "digest": "sha256:d620b6ee56a8c2f74d2c161016fa19974cbc833e3b87fa522411e35b381d9bc9",
+      "rationale": "#4171 records a request that names no session in daemon-only request state: a missing or blank session, or meta.sessionExplicit false with no named flag. A missing name becomes default, a blank one keeps its literal as released daemons did, and the literal default from a client stays. Lease params gain an optional sessionExplicit, which a released daemon ignores. A released client that names no session on a provider lease through the command method now gets a normal INVALID_ARGS error with reason REMOTE_SESSION_REQUIRED, and no peer misreads a payload."
+    },
+    {
+      "declaration": "packages/daemon/src/server/http/http-rpc-methods.ts#toDaemonRequest",
+      "digest": "sha256:d2dbb0aad178fd1100faaa64a1c2c6c76e860e705e74f04b34220b6e6d5c46dc",
+      "rationale": "#4171 records a request that names no session in daemon-only request state: a missing or blank session, or meta.sessionExplicit false with no named flag. A missing name becomes default, a blank one keeps its literal as released daemons did, and the literal default from a client stays. Lease params gain an optional sessionExplicit, which a released daemon ignores. A released client that names no session on a provider lease through the command method now gets a normal INVALID_ARGS error with reason REMOTE_SESSION_REQUIRED, and no peer misreads a payload."
+    },
+    {
+      "declaration": "packages/daemon/src/server/http/http-rpc-methods.ts#toInstallFromSourceDaemonRequest",
+      "digest": "sha256:bd6fd615ff8bcf6b789a4ae5a7b5d09ace93c39948452fb187dbb3a8ea06be41",
+      "rationale": "#4171 records a request that names no session in daemon-only request state: a missing or blank session, or meta.sessionExplicit false with no named flag. A missing name becomes default, a blank one keeps its literal as released daemons did, and the literal default from a client stays. Lease params gain an optional sessionExplicit, which a released daemon ignores. A released client that names no session on a provider lease through the command method now gets a normal INVALID_ARGS error with reason REMOTE_SESSION_REQUIRED, and no peer misreads a payload."
+    },
+    {
       "declaration": "packages/daemon/src/server/http/http-rpc-methods.ts#toLeaseDaemonRequest",
-      "digest": "sha256:3018984aeace4054767875f5eb6e6ad5d38bfcb71c15d1a56ccf9b53e0a419ec",
-      "rationale": "#2110 read the optional providerApp lease-allocation parameter into the existing flags bag; #2494 reads the full provider-allocation flag set into that same bag through the shared readLeaseAllocateProviderFlags projection, so the reconstructed req.flags handed to prepareSession match what the line transport forwards for free. Released protocol-2 clients omit these and follow the unchanged allocation path; no existing field is required or reinterpreted. The optional retainOnClose boolean parameter is read into meta.leaseRetainOnClose; a released daemon ignores it and keeps releasing on session close. Reads the optional providerCredentialFingerprint lease-allocation parameter into request meta, so a local caller over HTTP gets the same credential check as over the socket. A daemon with an auth hook treats every HTTP caller as remote and strips it, as it does developerDir. Released protocol-2 clients omit it and follow the unchanged allocation path; no existing field is required or reinterpreted."
+      "digest": "sha256:9bb2ab458ec44da3281be5dab7237d963fbd6f7c209995d6ef81fa28892155db",
+      "rationale": "#2110 read the optional providerApp lease-allocation parameter into the existing flags bag; #2494 reads the full provider-allocation flag set into that same bag through the shared readLeaseAllocateProviderFlags projection, so the reconstructed req.flags handed to prepareSession match what the line transport forwards for free. Released protocol-2 clients omit these and follow the unchanged allocation path; no existing field is required or reinterpreted. The optional retainOnClose boolean parameter is read into meta.leaseRetainOnClose; a released daemon ignores it and keeps releasing on session close. Reads the optional providerCredentialFingerprint lease-allocation parameter into request meta, so a local caller over HTTP gets the same credential check as over the socket. A daemon with an auth hook treats every HTTP caller as remote and strips it, as it does developerDir. Released protocol-2 clients omit it and follow the unchanged allocation path; no existing field is required or reinterpreted. #4171 records a request that names no session in daemon-only request state: a missing or blank session, or meta.sessionExplicit false with no named flag. A missing name becomes default, a blank one keeps its literal as released daemons did, and the literal default from a client stays. Lease params gain an optional sessionExplicit, which a released daemon ignores. A released client that names no session on a provider lease through the command method now gets a normal INVALID_ARGS error with reason REMOTE_SESSION_REQUIRED, and no peer misreads a payload."
     },
     {
       "declaration": "packages/kernel/src/errors.ts#DaemonError",
@@ -288,7 +304,7 @@
     {
       "declaration": "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest",
       "digest": "sha256:1c323f97c3cefec8f95633b6abd127342bf75494bfb109d1cc6eadf3ceacaeae",
-      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers \u2014 sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added \u2014 an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
+      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
     },
     {
       "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer",
@@ -472,8 +488,8 @@
     },
     {
       "declaration": "packages/contracts/src/lease-scope.ts#buildLeaseRpcParams",
-      "digest": "sha256:365490a0fe1833d7ce8b0d3f5425462608a85119b12c1a2c4f16bb83b5d28e06",
-      "rationale": "The client names its request as DaemonWireRequest (packages/contracts/src/daemon-wire-request.ts, a narrowing of the listed kernel DaemonRequest) and its response as the kernel DaemonResponse, instead of the daemon package's DaemonRequest/DaemonResponse aliases, so the daemon package is no longer a client import. The declaration's serialized fields, method names and framing are unchanged; only the compile-time type names in its signature moved, so a peer on protocol 2 parses exactly what it did."
+      "digest": "sha256:25b138457410480048ee3899ce758cdd80bd7a4d11dc6e025f1365e7e8729116",
+      "rationale": "The client names its request as DaemonWireRequest (packages/contracts/src/daemon-wire-request.ts, a narrowing of the listed kernel DaemonRequest) and its response as the kernel DaemonResponse, instead of the daemon package's DaemonRequest/DaemonResponse aliases, so the daemon package is no longer a client import. The declaration's serialized fields, method names and framing are unchanged; only the compile-time type names in its signature moved, so a peer on protocol 2 parses exactly what it did. #4171 records a request that names no session in daemon-only request state: a missing or blank session, or meta.sessionExplicit false with no named flag. A missing name becomes default, a blank one keeps its literal as released daemons did, and the literal default from a client stays. Lease params gain an optional sessionExplicit, which a released daemon ignores. A released client that names no session on a provider lease through the command method now gets a normal INVALID_ARGS error with reason REMOTE_SESSION_REQUIRED, and no peer misreads a payload."
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult",
@@ -499,6 +515,11 @@
       "declaration": "packages/daemon/src/server/http-errors.ts#failStreamedHttpResponse",
       "digest": "sha256:3e6b642cb41b88ab1e6f3269ebd14918f912cbecf09f40e9b591fdd28a2ba489",
       "rationale": "Compatible HTTP error repair under ADR 0006. Status: the helper passes the whole normalized error to the details-aware status mapper instead of its code. A gone resource now answers 404 instead of 500: COMMAND_FAILED with details.reason RESOURCE_EXPIRED (an artifact, upload ticket, uploaded artifact or materialized path id the TTL registry no longer holds) maps to 404. The mapper also takes over the DEVICE_IN_USE human_control_active 423 rule, which statusCodeForDaemonError applied only to a failed response a /rpc handler returned. The rule now also reaches the REST routes and thrown /rpc failures, which answered 500: a PUT /admin/leases/<id> refused during a human-control hold, or a non-streamed /rpc call whose handler throws human_control_active, now answers 423. /admin/* is host-only on the loopback port and the proxy never forwards it, and the host already reads 423 for the same refusal on a returned /rpc failure. Body: before headers, the helper no longer writes the plain-text error message. It removes stale content-length and content-disposition headers and sends the existing REST JSON error shape ({ ok: false, error, code, reason?, hint? }) that the other REST routes already use. Previously a diagnostics stream open failure could keep its successful-response length and leave the error body incomplete. After headers, it still destroys the incomplete transfer, and it ignores an already destroyed response. No released client branches on 404 versus 500 or parses this body: downloadRemoteArtifactFromUrl treats any status >= 400 alike and keeps the body only as an opaque details.body string, the diagnostics client rejects non-success statuses before reading records, the upload client fails any non-2xx and decides retries from a typed stream detail rather than the status, the /rpc client parses the JSON-RPC error envelope whatever the status and only special-cases 409, and the proxy passes the status through. Routes, successful responses and authorization are unchanged, so a protocol 2 peer reports the same failure it did before."
+    },
+    {
+      "declaration": "packages/daemon/src/server/http/http-rpc-methods.ts#toReleaseMaterializedPathsDaemonRequest",
+      "digest": "sha256:a600285c173c95a75093c9eae65ee96df63d9524f7cc96c0479cf9884069f17c",
+      "rationale": "#4171 records a request that names no session in daemon-only request state: a missing or blank session, or meta.sessionExplicit false with no named flag. A missing name becomes default, a blank one keeps its literal as released daemons did, and the literal default from a client stays. Lease params gain an optional sessionExplicit, which a released daemon ignores. A released client that names no session on a provider lease through the command method now gets a normal INVALID_ARGS error with reason REMOTE_SESSION_REQUIRED, and no peer misreads a payload."
     }
   ]
 }

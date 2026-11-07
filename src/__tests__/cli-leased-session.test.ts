@@ -146,6 +146,7 @@ async function leaseIdsOnRealDaemon(allocations: CapturedDaemonRequest[]): Promi
       daemonBaseUrl: daemon.baseUrl,
       daemonAuthToken: daemon.runtime.token,
       daemonTransport: 'http',
+      session: 'lease-reader',
     });
     const leaseIds = [];
     for (const allocate of allocations) {
@@ -163,6 +164,40 @@ async function leaseIdsOnRealDaemon(allocations: CapturedDaemonRequest[]): Promi
     await daemon.close();
   }
 }
+
+test('the Node client is refused a provider lease until it names a session', async () => {
+  const daemon = await startPublicDaemonRuntime({ serverMode: 'http' });
+  const connection = {
+    daemonBaseUrl: daemon.baseUrl,
+    daemonAuthToken: daemon.runtime.token,
+    daemonTransport: 'http',
+  } as const;
+  const lease = {
+    tenant: 'acme',
+    runId: 'run-a',
+    leaseBackend: 'android-instance',
+    leaseProvider: 'proxy',
+    clientId: 'client-a',
+  } as const;
+  try {
+    await assert.rejects(
+      createAgentDeviceClient(connection).leases.allocate(lease),
+      (error: { details?: { reason?: string } }) =>
+        error.details?.reason === 'REMOTE_SESSION_REQUIRED',
+    );
+
+    const named = createAgentDeviceClient({ ...connection, session: 'agent-a' });
+    const leaseId = (await named.leases.allocate(lease)).leaseId;
+    assert.ok(leaseId);
+    const namedPerCall = await createAgentDeviceClient(connection).leases.allocate({
+      ...lease,
+      session: 'agent-a',
+    });
+    assert.equal(namedPerCall.leaseId, leaseId);
+  } finally {
+    await daemon.close();
+  }
+});
 
 function allocationOf(result: Awaited<ReturnType<typeof runAgentCommand>>): CapturedDaemonRequest {
   const allocate = result.calls.find((call) => call.command === 'lease_allocate');
@@ -302,6 +337,7 @@ test('a session named by flag, env or config never falls back onto the pointer',
       result.calls.map((call) => call.command),
       ['snapshot'],
     );
+    assert.equal(result.calls[0]?.meta?.sessionExplicit, true);
     assert.equal(scopeOf(result.calls[0]!, 'tenantId'), undefined);
     assert.equal(leaseIdOf(result.calls[0]), undefined);
   }

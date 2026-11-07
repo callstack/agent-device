@@ -4,6 +4,7 @@ import { AsyncResource } from 'node:async_hooks';
 import net from 'node:net';
 import type { Server as HttpServer } from 'node:http';
 import type { DaemonInvokeFn, DaemonRequest } from '../../core/daemon-request.ts';
+import { resolveRequestSessionAtIntake } from '../../core/request-session-intake.ts';
 import { resolveDaemonRequestResultDeadlineMs } from '../../core/daemon-command-registry.ts';
 import {
   clearRequestAbortRegistration,
@@ -133,7 +134,7 @@ function parseSocketDaemonRequest(line: string): DaemonRequest {
   // forge those semantics even though the legacy socket request otherwise
   // preserves its existing raw wire shape.
   const { internal: _internal, ...request } = parsed as Record<string, unknown>;
-  return request as DaemonRequest;
+  return { ...request, ...resolveRequestSessionAtIntake(request) } as DaemonRequest;
 }
 
 export function listenNetServer(server: net.Server): Promise<number> {
