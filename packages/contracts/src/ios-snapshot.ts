@@ -27,7 +27,7 @@ export type IosAcquisitionProducer = Exclude<IosSnapshotProducer, 'apple-runner'
 export type IosProviderAcquisitionProducer = {
   [
     Producer in IosAcquisitionProducer
-  ]: (typeof SNAPSHOT_PRODUCERS)[Producer]['residue'] extends 'provider-derived' ? Producer : never;
+  ]: SnapshotProducerRegistry[Producer]['residue'] extends 'provider-derived' ? Producer : never;
 }[IosAcquisitionProducer];
 export type IosAcquisitionIntent = 'full' | 'surface-observation';
 export type IosSnapshotProjection = 'regular' | 'raw';
