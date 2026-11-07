@@ -174,6 +174,7 @@ export function createRunnerSnapshotBridge(
     refreshTarget,
     resolutionVerifiesIdentity: false,
     observeOnlySupported: false,
+    circuitScope: 'runner-session',
     sessionChanged: () => {
       targets = new Map();
     },

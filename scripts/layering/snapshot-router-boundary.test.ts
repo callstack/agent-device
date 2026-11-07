@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { ARCHITECTURE_OWNERSHIP, matchesDeclaredRoot } from './architecture-ownership.ts';
-import { resolveImportEdges } from './model.ts';
+import { ARCHITECTURE_OWNERSHIP } from './architecture-ownership.ts';
+import { executablePolicyViolations } from './executable-policies.ts';
 import { workspaceSpecifierTargets } from './package-boundaries.ts';
 import { listTrackedPackageManifests, listTrackedTypeScriptFiles } from './tracked-sources.ts';
 
@@ -23,27 +23,16 @@ function routerPolicy() {
   return policy;
 }
 
-function platformImportsFromRouter(
-  sources: ReadonlyMap<string, string>,
-  workspaceTargets?: ReadonlyMap<string, string>,
-): string[] {
-  const policy = routerPolicy();
-  return resolveImportEdges(sources, workspaceTargets)
-    .filter(
-      (edge) =>
-        policy.roots.some((root) => matchesDeclaredRoot(edge.file, root)) &&
-        policy.forbiddenTargetRoots.some((root) => matchesDeclaredRoot(edge.target, root)),
-    )
-    .map((edge) => `${edge.file}:${edge.line} -> ${edge.target}`);
-}
-
 test('the snapshot router imports no platform or provider package', () => {
   const files = listTrackedTypeScriptFiles(repoRoot);
   const sources = new Map(
     files.map((file) => [file, fs.readFileSync(path.join(repoRoot, file), 'utf8')]),
   );
 
-  assert.deepEqual(platformImportsFromRouter(sources, workspaceSpecifierTargets(repoRoot)), []);
+  assert.deepEqual(
+    executablePolicyViolations(sources, workspaceSpecifierTargets(repoRoot))['snapshot-router'],
+    [],
+  );
 });
 
 test('every platform and provider package is a forbidden router target', () => {
@@ -79,7 +68,7 @@ test('the boundary reports a router module that imports a platform or provider p
     ],
   ]);
 
-  assert.deepEqual(platformImportsFromRouter(sources, workspaceTargets), [
+  assert.deepEqual(executablePolicyViolations(sources, workspaceTargets)['snapshot-router'], [
     'packages/capture-kit/src/snapshot-router/router.ts:1 -> packages/platform-apple/src/snapshot-target.ts',
     'packages/capture-kit/src/snapshot-router/router.ts:2 -> packages/provider-limrun/src/index.ts',
   ]);

@@ -134,9 +134,13 @@ export type SnapshotSourceChannel<Target extends SnapshotRouteTarget> = Readonly
   /** Whether an observe-only capture may use this source; when not, it goes to the direct fallback. */
   observeOnlySupported: boolean;
   /**
-   * Declared by a channel whose surface proof names the runner session it read through. A new
-   * session id swaps the circuit, and the router calls this so the channel drops its own state.
+   * How long a circuit lives. `runner-session`: the surface proof names the runner session the
+   * channel reads through, and a new session id swaps the circuit. `route`: the channel reads
+   * through no runner session, so the circuit lives as long as the router and the proof's session
+   * id never swaps it.
    */
+  circuitScope: 'runner-session' | 'route';
+  /** Called after a new runner session swapped the circuit, so the channel drops its own state. */
   sessionChanged?(): void;
 }>;
 
@@ -169,7 +173,8 @@ export function createSnapshotRouter<Target extends SnapshotRouteTarget>(
     probeResult: SystemSurfaceForegroundReading,
     device: DeviceInfo,
   ): typeof currentCircuit => {
-    const probedSessionId = channel.sessionChanged ? probeResult.sessionId : undefined;
+    const probedSessionId =
+      channel.circuitScope === 'runner-session' ? probeResult.sessionId : undefined;
     if (probedSessionId === undefined) return startingCircuit;
     if (currentCircuit !== startingCircuit) {
       return probedSessionId === currentCircuit.sessionId ? currentCircuit : startingCircuit;
