@@ -87,6 +87,18 @@ test('runtime snapshot upgrades an absent truncation flag only for producers tha
   }
 });
 
+test('runtime snapshot leaves truncation unknown for a producer this host does not list', async () => {
+  // A plugin built against another release can name a producer this host has no registry row for.
+  const producer = 'future-ios-tree' as IosSnapshotProducer;
+  const device = createSnapshotOnlyDevice({
+    snapshot: { nodes: [], backend: 'xctest', producer, createdAt: 1 },
+  });
+
+  const result = await device.capture.snapshot({ session: 'default' });
+
+  assert.equal(result.truncated, undefined);
+});
+
 test('runtime snapshot recognizes equivalent bounds and still updates its baseline', async () => {
   let stored: Parameters<CommandSessionStore['set']>[0] | undefined;
   let rect = { x: 10, y: 20, width: 100, height: 40 };

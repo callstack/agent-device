@@ -254,7 +254,8 @@ function snapshotAppFields(capture: SnapshotCapture): {
 function snapshotTruncationForResult(snapshot: SnapshotState): boolean | undefined {
   if (snapshot.truncated !== undefined) return snapshot.truncated;
   if (snapshot.backend !== 'xctest' || snapshot.producer === undefined) return false;
-  return snapshotProducerFacts(snapshot.producer)?.truncation === 'unavailable' ? undefined : false;
+  // A producer this host does not list cannot vouch for truncation, so it stays unknown too.
+  return snapshotProducerFacts(snapshot.producer)?.truncation === 'available' ? false : undefined;
 }
 
 function buildSnapshotWarnings(params: {
