@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test, vi } from 'vitest';
+import { onTestFinished, test, vi } from 'vitest';
 import { SnapshotSourceError, snapshotSourceError } from './errors.ts';
 import { SnapshotBridgeManager } from './lifecycle.ts';
 import { simulatorAddressFor } from '../core/simctl.ts';
@@ -605,7 +605,11 @@ test('a capture whose exit status stays unread ends at its own deadline without 
   const helper = () => fixture.processes[0]!;
   const manager = new SnapshotBridgeManager(fixture.host);
 
-  const failure = await manager
+  // Virtual time stands still through the host's real directory setup, so the 120 ms budget covers only
+  // the connect retry and the exit wait this test is about, however loaded the run is.
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  onTestFinished(() => void vi.useRealTimers());
+  const request = manager
     .request({
       target,
       bridge,
@@ -617,6 +621,10 @@ test('a capture whose exit status stays unread ends at its own deadline without 
       () => undefined,
       (error: unknown) => error,
     );
+  while (fixture.connects.length === 0) await new Promise((resolve) => setImmediate(resolve));
+  while (!(helper()?.exitStatusReads >= 1)) await vi.advanceTimersByTimeAsync(1);
+  await vi.advanceTimersByTimeAsync(120);
+  const failure = await request;
 
   assert.ok(
     failure instanceof SnapshotSourceError &&
@@ -624,7 +632,6 @@ test('a capture whose exit status stays unread ends at its own deadline without 
       failure.failureCode === 'bridge-exit-deadline',
     'the exit wait did not answer the request budget it was given',
   );
-  assert.equal(helper().exitStatusReads >= 1, true);
   assert.equal(exitDiagnostics(fixture).length, 0);
   await manager.close();
 });
