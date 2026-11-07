@@ -529,6 +529,35 @@ test('a third-party active IME keeps ASCII text on the chunked shell path', asyn
   assert.equal(calls.filter((args) => args[1] === 'input' && args[2] === 'text').length, 3);
 });
 
+test('typeAndroid sends KEYCODE_DEL keyevents instead of broadcasting backspaces through the test IME', async () => {
+  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
+  const calls: (readonly string[])[] = [];
+  await withAndroidAdbProvider(
+    async (args) => {
+      calls.push(args);
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      await typeAndroid(ANDROID_EMULATOR, '\b\b\b');
+    },
+  );
+
+  assert.equal(calls.filter((args) => args[1] === 'am' && args[2] === 'broadcast').length, 0);
+  const delCalls = calls.filter(
+    (args) => args[0] === 'shell' && args[1] === 'input' && args[2] === 'keyevent',
+  );
+  assert.equal(delCalls.length, 1);
+  assert.deepEqual(delCalls[0], [
+    'shell',
+    'input',
+    'keyevent',
+    'KEYCODE_DEL',
+    'KEYCODE_DEL',
+    'KEYCODE_DEL',
+  ]);
+});
+
 /** The `android_text_injection` events a run emitted, in order, as `{action, backend}` pairs. */
 async function captureTextInjectionDiagnostics(
   run: () => Promise<void>,
