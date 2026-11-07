@@ -193,6 +193,23 @@ test('shutdown on a tenant provider connection without an instance is refused as
   );
 });
 
+test('a lease-less provider request missing its run id still names the run id', () => {
+  assert.throws(
+    () =>
+      assertRequestLeaseAdmission(
+        makeRequest({
+          command: 'shutdown',
+          flags: { platform: 'ios', leaseProvider: 'limrun' },
+          meta: { tenantId: 'limrun', sessionIsolation: 'tenant' },
+        }),
+        new LeaseRegistry(),
+        undefined,
+        { env: process.env },
+      ),
+    { code: 'INVALID_ARGS', message: 'tenant isolation requires run id.' },
+  );
+});
+
 test('sessionless apps admits a provider declared by the runtime app catalog', () => {
   const registry = new LeaseRegistry();
 

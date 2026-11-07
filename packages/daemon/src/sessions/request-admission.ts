@@ -9,11 +9,7 @@ import {
   isHumanControlMutation,
   resolveSessionlessLeaseAdmissionExemption,
 } from '../core/daemon-command-registry.ts';
-import {
-  providerInstanceUnallocatedError,
-  type DeviceLease,
-  type ProviderAppCatalog,
-} from '@agent-device/contracts/device';
+import type { DeviceLease, ProviderAppCatalog } from '@agent-device/contracts/device';
 import {
   findMissingProxyLeaseFields,
   resolveLeaseScope,
@@ -122,11 +118,6 @@ function admitLease(
 ): DeviceLease {
   assertRequestSessionLeaseMatches(resolveLeaseScope(req), session?.lease);
   const leaseScope = resolveRequestOrSessionLeaseScope(req, session);
-  // A provider connection without a lease has no instance to admit, for example after
-  // `close --shutdown` released it. Refuse it the way device inventory does.
-  if (!leaseScope.leaseId && leaseScope.leaseProvider) {
-    throw providerInstanceUnallocatedError(leaseScope.leaseProvider);
-  }
   leaseRegistry.assertLeaseAdmission(leaseScopeToHeartbeatRequest(leaseScope));
   // Admission renews for the window the lease already carries, or the window this request named.
   // Naming a proxy-specific default here used to shorten every lease allocated above it — a client

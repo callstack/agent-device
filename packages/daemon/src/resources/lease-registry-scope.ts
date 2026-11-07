@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import type { DeviceLease } from '@agent-device/contracts/device';
+import { providerInstanceUnallocatedError, type DeviceLease } from '@agent-device/contracts/device';
 import {
   MIN_LEASE_WINDOW_MS,
   leaseScopeToReleaseRequest,
@@ -263,6 +263,9 @@ export function normalizeLeaseAdmissionRequest(
   if (!runId) throw new AppError('INVALID_ARGS', 'tenant isolation requires run id.');
   const leaseId = normalizeLeaseId(request.leaseId);
   if (!leaseId) {
+    // A provider connection without a lease has no instance, for example after `close --shutdown`
+    // released it. Name that, as device inventory does, rather than the missing lease id.
+    if (request.leaseProvider) throw providerInstanceUnallocatedError(request.leaseProvider);
     throw new AppError('INVALID_ARGS', 'tenant isolation requires lease id.', {
       hint: 'Allocate a lease with leases.allocate and pass its leaseId.',
     });
