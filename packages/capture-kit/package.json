@@ -302,10 +302,6 @@
       "types": "./src/snapshot/snapshot-freshness/index.ts",
       "default": "./src/snapshot/snapshot-freshness/index.ts"
     },
-    "./snapshot-identity": {
-      "types": "./src/snapshot-identity.ts",
-      "default": "./src/snapshot-identity.ts"
-    },
     "./snapshot-label-dedup": {
       "types": "./src/snapshot/snapshot-label-dedup.ts",
       "default": "./src/snapshot/snapshot-label-dedup.ts"

@@ -6,7 +6,7 @@ import type {
   SnapshotQualityNote,
   SnapshotKeyboardBandFact,
 } from '@agent-device/kernel/snapshot';
-import type { SNAPSHOT_PRODUCERS } from './snapshot-producers.ts';
+import type { SNAPSHOT_PRODUCERS } from './snapshot-model.ts';
 
 type SnapshotProducerRegistry = typeof SNAPSHOT_PRODUCERS;
 

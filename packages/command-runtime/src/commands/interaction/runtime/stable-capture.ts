@@ -4,8 +4,7 @@ import type {
   SnapshotQualityVerdict,
 } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
-import { snapshotProducerFacts } from '@agent-device/contracts/snapshot-producers';
-import { isViewportRootNode } from '@agent-device/contracts/snapshot';
+import { isViewportRootNode, snapshotProducerFacts } from '@agent-device/contracts/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
 import { now, sleep } from '../../runtime-common.ts';

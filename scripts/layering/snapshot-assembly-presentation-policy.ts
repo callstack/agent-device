@@ -15,7 +15,7 @@
 //   ban it for everyone or no one, and no manifest sees a string literal at all.
 
 import { parseSync } from 'oxc-parser';
-import { SNAPSHOT_PRODUCERS } from '@agent-device/contracts/snapshot-producers';
+import { SNAPSHOT_PRODUCERS } from '@agent-device/contracts/snapshot-model';
 import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
 import { visitAst } from './layering-ast.ts';
 

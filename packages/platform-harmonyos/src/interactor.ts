@@ -1,4 +1,4 @@
-import { stampSnapshotIdentity } from '@agent-device/capture-kit/snapshot-identity';
+import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';

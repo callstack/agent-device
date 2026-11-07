@@ -508,10 +508,6 @@
       "types": "./src/snapshot-private-evidence.ts",
       "default": "./src/snapshot-private-evidence.ts"
     },
-    "./snapshot-producers": {
-      "types": "./src/snapshot-producers.ts",
-      "default": "./src/snapshot-producers.ts"
-    },
     "./snapshot-runtime": {
       "types": "./src/snapshot-runtime.ts",
       "default": "./src/snapshot-runtime.ts"
