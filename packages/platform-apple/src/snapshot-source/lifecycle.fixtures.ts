@@ -362,7 +362,6 @@ class FakeSocket extends EventEmitter implements SnapshotSourceSocket {
   }
 }
 
-/** The target type refuses a bare udid: a target names its simulator through an address minted from its DeviceInfo. */
 function compileTimeSnapshotTargetProof(): SnapshotSourceTarget {
   // @ts-expect-error A target names its simulator through an address minted from its DeviceInfo.
   return { udid: 'simulator-1', runtime: 'iOS 26.2', pid: 123, generation: 'generation-1' };

@@ -386,6 +386,31 @@ test('typed bridge failure falls back once and disables retries for that app gen
   });
 });
 
+// The local guest channel reads through no runner session, so its circuit lives as long as the
+// route. A runner restart that the surface proof reports must not reopen a retired generation.
+test('a runner session change leaves the local bridge circuit open for the retired generation', async () => {
+  const source = sourceReturning({
+    stage: 'failed',
+    failure: { kind: 'transport-failure', code: 'bridge-disconnected' },
+  });
+  let sessionId = 'runner-session-1';
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source,
+    targets: targetsResolvedBy(vi.fn(async () => target)),
+    systemSurfaceForeground: async () => ({ foreground: 'background', sessionId }),
+  });
+  const fallback = vi.fn(async () => runnerResult());
+
+  await route.capture(ios, input, signal(), fallback);
+  sessionId = 'runner-session-2';
+  const second = await route.capture(ios, input, signal(), fallback);
+
+  expect(source.acquire).toHaveBeenCalledOnce();
+  expect(second.warnings).toEqual([
+    'Simulator AX snapshot unavailable (circuit-disabled); used XCTest for this app generation.',
+  ]);
+});
+
 test('a bridge still being prepared sends only that capture to the runner', async () => {
   const source = sourceReturning({
     stage: 'failed',
