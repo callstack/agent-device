@@ -68,7 +68,7 @@ Six rules make the table operational:
    A collection, validation, or commit failure preserves the material that a retry needs.
    Only session teardown and failed-start rollback invoke forced cleanup.
    Forced cleanup is never inferred from "finish threw".
-   The mechanism is in the shared coordinator (the durable-capture transitions owner).
+   The mechanism is in the shared coordinator (`packages/capture-kit/src/durable-capture/transitions.ts`).
    But each kind must earn its scope.
    Each of app-log, audio-probe, and perf-capture gets its own failed-finish test that proves what its retry needs.
    A kind whose retry needs nothing keeps its current disposal explicitly.
@@ -79,13 +79,17 @@ the reduction of the Android device marker to marker-only content (2.6), and `--
 
 ## 1. Context
 
-A playable export and a stopped recorder are independent facts. The earlier recovery contract could refuse a usable export when ownership was uncertain. A failed export could also destroy the material that a retry needed. Platform backends need different identity and stop procedures, while the coordinator needs one guarded stop-and-export path.
+A playable export and a stopped recorder are independent facts. The ADR 0019 section 5 contract refuses a usable export when ownership is uncertain. Its forced cleanup after a failed finish can destroy the material that a retry needs. On Android, forced cleanup after a failed pull can remove the remote artifact and the marker, so a retry has nothing to pull. Screen recording now preserves retry material after a failed finish. Platform backends need different identity and stop procedures, while the coordinator needs one guarded stop-and-export path.
+
+HarmonyOS and web reattachment return `unreattachable`. Android can report `active` or `completed`; Apple can return an `active` export-restoration handle when a simulator recorder is gone and its export remains recoverable. An active recording holds off the idle reaper, and the startup reaper initially sends `SIGINT` to orphaned owned `simctl recordVideo` processes.
+
+#2551's short clips come from `screenrecord`'s change-driven encoding, not the stop path; disclosure (PR #2566) is the fix.
 
 ## 2. Decision
 
 ### 2.1 Shape
 
-Commands and recovery use one recording coordinator. The coordinator owns the manifest and calls the platform backend and shared finalizer. Native orphan markers cover incomplete starts before a manifest exists.
+Commands and recovery use one recording coordinator. The coordinator owns the manifest and calls the platform backend and shared finalizer. Native orphan markers cover incomplete starts before a manifest exists, and recovery reads them.
 
 The coordinator reuses the existing manifest store, fence, pending-transfer guard, and completed replay (PR #2534).
 There is no new framework.
@@ -176,7 +180,7 @@ Native-path disposition is complete only after fenced retirement succeeds or the
 A path marked retirable still needs its manifest until retirement completes.
 
 **Checkpoints mark durable, valid artifacts; they never mark attempts.**
-`collected` is recorded only after the collected copy passes the playability sniff (`ftyp` + `moov`, the existing video check).
+`collected` is recorded only after the collected copy passes the playability sniff (`ftyp` + `moov`, the existing video check in `packages/capture-kit/src/recording/video.ts`).
 Thus a pull of a not-yet-finalized MP4 leaves no checkpoint.
 `finalized` is recorded after the export is written.
 Step 1 records its observation.
@@ -188,7 +192,7 @@ A retry resumes at the first missing checkpoint, after it re-runs step 1 when it
 The collected copy is preserved until step 4 commits.
 The finalizer reads it and writes the export beside it.
 Thus a retry after a failed commit re-runs nothing that changes the video.
-Today, `exportProcessedVideo` applies the touch overlay **in place** (the overlay owner renames the processed file over its input; PR #2586 removed start trimming).
+Today, `exportProcessedVideo` applies the touch overlay **in place** (`packages/capture-kit/src/recording/overlay.ts` renames the processed file over its input; PR #2586 removed start trimming).
 That is why the copy is required: without it, a retry after a commit failure would burn the overlay twice.
 After commit, the collected copy is removed.
 A failed removal is a diagnostic, never an error.
@@ -221,7 +225,7 @@ settle recorder  (request: recovery only)
 
 1. If the session already holds a live handle, refuse (`recording already in progress`).
 2. If the recording manifest of the device is `open` and **actively owned**, refuse.
-   Actively owned means: the owner named in the manifest is alive by the existing host-kit owner-identity check, and that owner holds the fence.
+   Actively owned means: the owner named in the manifest is alive by the existing owner-identity check in `packages/host-kit/src/internal/owner-identity.ts`, and that owner holds the fence.
    This is the ADR 0019 rule, and it is unchanged.
 3. Otherwise, the manifest is abandoned or completed.
    Hand it to recovery (2.5) under the ownership guard **before** launch.
@@ -307,7 +311,7 @@ Section 5 currently has these requirements:
 
 - Every durable facet exposes `reattach` and `cleanup`.
 - Uncertain cleanup stays `cleanup-pending`.
-- When finish throws, forced cleanup runs in the durable-capture transitions owner.
+- When finish throws, forced cleanup runs in `packages/capture-kit/src/durable-capture/transitions.ts`.
 
 The proposed amendment:
 *Screen recording would be a **stop-and-collect** resource.
@@ -480,10 +484,10 @@ Each backend proves the ordinary stop, the host-silent stop, the post-daemon-los
 
 ## 8. End state
 
-The proposed end state has one stop path and one lifecycle store. Rotation remains below API 34. A later, separate ADR may fold the root host files into per-platform transports once the R16 layering gates are re-cut.
+The proposed end state has one stop path, one lifecycle store, three ownership and outcome enums (from ten), and three runtime operations: start, stop, collect. Rotation remains below API 34. A later, separate ADR may fold the root host files into per-platform transports once the R16 layering gates are re-cut.
 
 Deletion test:
 
 - `screenRecordingReattach`, `screenRecordingCleanup`, `cleanup-pending` for recording, and `ScreenRecordingAdmissionLedger` no longer exist in production.
-- The durable-capture transitions owner has no cleanup-on-failed-finish path.
+- `packages/capture-kit/src/durable-capture/transitions.ts` has no cleanup-on-failed-finish path.
 - Every situation in the rules table has a passing test on every backend where it applies.
