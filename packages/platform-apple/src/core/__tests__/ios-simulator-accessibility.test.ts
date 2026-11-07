@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
-import { build } from 'plist';
+import { build, type PlistValue } from 'plist';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
@@ -12,7 +12,7 @@ vi.mock('../tool-provider.ts', async (importOriginal) => ({
   runXcrun: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
 }));
 
-const { runXcrun } = await import('../tool-provider.ts');
+const { runXcrun, withAppleToolProvider } = await import('../tool-provider.ts');
 const { prepareIosSimulatorAccessibility } = await import('../ios-simulator-accessibility.ts');
 
 let setPath: string;
@@ -24,12 +24,12 @@ beforeEach(async () => {
   vi.mocked(runXcrun).mockClear();
 });
 
-function writePreferences(contents: string | Record<string, unknown>): void {
+function writePreferences(contents: string | Record<string, PlistValue>): void {
   const dir = path.join(setPath, device.id, 'data/Library/Preferences');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     path.join(dir, 'com.apple.Accessibility.plist'),
-    typeof contents === 'string' ? contents : build(contents as Parameters<typeof build>[0]),
+    typeof contents === 'string' ? contents : build(contents),
   );
 }
 
@@ -86,3 +86,11 @@ for (const [value, expectWrite] of [
     assert.equal(wrote(), expectWrite);
   });
 }
+
+test('a scoped (remote) tool provider writes even when this host has an on key', async () => {
+  writePreferences({ ApplicationAccessibilityEnabled: true });
+  await withAppleToolProvider({} as Parameters<typeof withAppleToolProvider>[0], () =>
+    prepareIosSimulatorAccessibility(device),
+  );
+  assert.equal(wrote(), true);
+});

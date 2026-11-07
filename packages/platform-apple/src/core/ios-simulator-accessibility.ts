@@ -1,7 +1,7 @@
+import path from 'node:path';
 import { isHandheldAppleSimulator, type DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import path from 'node:path';
 import { hostHomeDirectory, readHostBinaryFile } from '@agent-device/host-kit/host-file';
 import { parseApplePlist } from './plist.ts';
 import { buildSimctlArgsForDevice, simulatorAddressFor } from './simctl.ts';
@@ -58,15 +58,15 @@ async function readHostAppAccessibility(
   device: DeviceInfo,
 ): Promise<'enabled' | 'disabled' | 'unknown'> {
   if (hasScopedAppleToolProvider()) return 'unknown';
-  const { udid, simulatorSetPath } = simulatorAddressFor(device);
-  const setPath =
-    simulatorSetPath ?? path.join(hostHomeDirectory(), 'Library/Developer/CoreSimulator/Devices');
-  const preferences = path.join(
-    setPath,
-    udid,
-    'data/Library/Preferences/com.apple.Accessibility.plist',
-  );
   try {
+    const { udid, simulatorSetPath } = simulatorAddressFor(device);
+    const setPath =
+      simulatorSetPath ?? path.join(hostHomeDirectory(), 'Library/Developer/CoreSimulator/Devices');
+    const preferences = path.join(
+      setPath,
+      udid,
+      'data/Library/Preferences/com.apple.Accessibility.plist',
+    );
     const parsed = await parseApplePlist(await readHostBinaryFile(preferences));
     if (!parsed) return 'unknown';
     const value = parsed.ApplicationAccessibilityEnabled;
