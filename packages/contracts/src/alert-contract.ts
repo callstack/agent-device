@@ -1,4 +1,11 @@
 export const ALERT_POLL_INTERVAL_MS = 300;
+/**
+ * A runner read starts only with more than this much budget left. Finding a prompt and acting on
+ * it takes longer than one poll interval, and a read cut off by the runner's main-thread watchdog
+ * is reported as `MAIN_THREAD_TIMEOUT` instead of absence. Live simulator reads that saw a late
+ * prompt needed up to about 1.4 s.
+ */
+export const ALERT_MIN_READ_BUDGET_MS = 1_500;
 export const DEFAULT_ALERT_TIMEOUT_MS = 10_000;
 export const ALERT_ACTION_RETRY_MS = 2_000;
 

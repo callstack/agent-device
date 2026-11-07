@@ -5,8 +5,10 @@ vi.mock('../core/runner-client.ts', () => ({ runAppleRunnerCommand: vi.fn() }));
 vi.mock('../os/macos/helper.ts', () => ({ runMacOsAlertAction: vi.fn() }));
 
 import {
+  ALERT_MIN_READ_BUDGET_MS,
   ALERT_NOT_FOUND_REASON,
   ALERT_NOT_FOUND_RUNNER_CODE,
+  ALERT_POLL_INTERVAL_MS,
   ALERT_UNRESOLVED_RUNNER_CODE,
 } from '@agent-device/contracts/alert-contract';
 import { AppError } from '@agent-device/kernel/errors';
@@ -169,7 +171,12 @@ test('an action does not start a retry the remaining budget cannot hold', async 
   await outcome;
   const budgets = mockRunner.mock.calls.map((call) => (call[1] as { timeoutMs: number }).timeoutMs);
   assert.ok(budgets.length >= 2, 'the act loop never retried');
-  for (const budget of budgets.slice(1)) assert.ok(budget > 300, `retry started with ${budget} ms`);
+  // A live late prompt took up to 1.4 s to find and press; a read with less would end in
+  // MAIN_THREAD_TIMEOUT instead of acting.
+  for (const budget of budgets.slice(1)) {
+    assert.ok(budget > 1_400, `retry started with only ${budget} ms`);
+    assert.ok(budget > ALERT_MIN_READ_BUDGET_MS);
+  }
 });
 
 // The whole point of typing absence: a backend that failed for any other reason must not be
@@ -337,13 +344,13 @@ test('a wait that ends on an unreadable prompt reports it, not an absence timeou
   const outcome = awaitAppleAlert(
     IOS_SIMULATOR,
     runnerOptions,
-    { timeoutMs: 900 },
+    { timeoutMs: 3_000 },
     process.env,
   ).then(
     () => undefined,
     (error: unknown) => error,
   );
-  await vi.advanceTimersByTimeAsync(2_000);
+  await vi.advanceTimersByTimeAsync(3_000);
   const error = (await outcome) as AppError;
 
   assert.ok(calls > 1, 'an unreadable prompt is polled until the deadline');
@@ -485,21 +492,22 @@ test('a dispatched wait read propagates its main-thread watchdog after an unreso
   assert.equal(watchdog.details?.dispatched, 'no');
 });
 
-test('a wait admits another read when more than one poll interval remains', async () => {
+test('a wait admits another read when more than the read floor remains', async () => {
   vi.useFakeTimers();
+  const firstReadMs = 5_000 - ALERT_POLL_INTERVAL_MS - ALERT_MIN_READ_BUDGET_MS - 1;
   mockRunner.mockImplementation(async () => {
     if (mockRunner.mock.calls.length === 1) {
-      await new Promise((resolve) => setTimeout(resolve, 4_399));
+      await new Promise((resolve) => setTimeout(resolve, firstReadMs));
       throw runnerUnresolved();
     }
     return { title: 'Ready' };
   });
   const outcome = awaitAppleAlert(IOS_SIMULATOR, runnerOptions, { timeoutMs: 5_000 }, process.env);
-  await vi.advanceTimersByTimeAsync(4_699);
+  await vi.advanceTimersByTimeAsync(firstReadMs + ALERT_POLL_INTERVAL_MS);
   assert.deepEqual(await outcome, { title: 'Ready' });
   assert.equal(
     (mockRunner.mock.calls[1]?.[1] as { timeoutMs: number } | undefined)?.timeoutMs,
-    301,
+    ALERT_MIN_READ_BUDGET_MS + 1,
   );
 });
 

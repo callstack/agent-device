@@ -1,5 +1,6 @@
 import {
   ALERT_ACTION_RETRY_MS,
+  ALERT_MIN_READ_BUDGET_MS,
   ALERT_NOT_FOUND_REASON,
   ALERT_NOT_FOUND_RUNNER_CODE,
   ALERT_POLL_INTERVAL_MS,
@@ -85,7 +86,7 @@ export async function readAppleAlert(
 /**
  * Poll `get` until one answers or the caller's window runs out. The first attempt gets the whole
  * window and later ones only what is left, so a runner that blocks cannot outlive the budget.
- * After a completed observation, another read needs more than one polling interval of budget.
+ * After a completed observation, another read needs more than `ALERT_MIN_READ_BUDGET_MS` of budget.
  * A dispatched read still owns its result, including a watchdog timeout.
  */
 export async function awaitAppleAlert(
@@ -100,7 +101,7 @@ export async function awaitAppleAlert(
   let lastRetriable: AppError | undefined;
   while (Date.now() - start < timeout) {
     const remainingMs = remainingBudgetMs(start, timeout);
-    if (lastRetriable && remainingMs <= ALERT_POLL_INTERVAL_MS) {
+    if (lastRetriable && remainingMs <= ALERT_MIN_READ_BUDGET_MS) {
       await sleep(remainingMs);
       break;
     }
@@ -153,9 +154,7 @@ export async function actOnAppleAlert(
       if (!isAlertRetriableError(error)) break;
     }
     await sleep(ALERT_POLL_INTERVAL_MS);
-    // Same floor as `awaitAppleAlert`: a retry with no more than one poll interval left would be
-    // cut off by the runner's main-thread timeout and misreported as an unreadable prompt.
-    if (remainingBudgetMs(start, ALERT_ACTION_RETRY_MS) <= ALERT_POLL_INTERVAL_MS) break;
+    if (remainingBudgetMs(start, ALERT_ACTION_RETRY_MS) <= ALERT_MIN_READ_BUDGET_MS) break;
   }
   throw withAlertFallbackHint(lastError);
 }
