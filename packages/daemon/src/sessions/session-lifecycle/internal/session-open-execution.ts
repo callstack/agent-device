@@ -66,10 +66,7 @@ import {
 import { appendResponseWarning } from './session-open-warnings.ts';
 import { buildDeviceClaimConflictError } from '../../../resources/device/device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from '../../../resources/device/device-claim-rule.ts';
-import {
-  errorResponse,
-  type DaemonResponse,
-} from '@agent-device/kernel/contracts';
+import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
 
 export type SessionOpenResult =
   | Readonly<{ type: 'opened'; response: DaemonResponse; ref: SessionRef }>
