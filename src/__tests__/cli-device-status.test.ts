@@ -297,3 +297,48 @@ test('device status matches explicit --serial when project agent-device.json set
     fs.rmSync(projectDir, { recursive: true, force: true });
   }
 });
+
+test('device status ignores AGENT_DEVICE_PLATFORM env default when platform is omitted', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-cli-claims-');
+  const owner = readCurrentOwnerIdentity();
+  try {
+    fs.writeFileSync(
+      path.join(claimsDir, 'android.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        deviceKey: 'local:android:none:emulator-5560',
+        device: {
+          platform: 'android',
+          id: 'emulator-5560',
+          name: 'Android Emulator',
+          kind: 'emulator',
+        },
+        session: 'android-session',
+        workspace: '/worktrees/android',
+        stateDir: process.cwd(),
+        ownerPid: owner.pid,
+        ownerStartTime: owner.startTime,
+        ownerToken: 'android-token',
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      }),
+    );
+
+    const result = await runCliCapture(
+      ['device', 'status', '--serial', 'emulator-5560', '--json'],
+      {
+        env: {
+          AGENT_DEVICE_CLAIMS_DIR: claimsDir,
+          AGENT_DEVICE_PLATFORM: 'ios',
+        },
+      },
+    );
+    assert.equal(result.code, null);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.success, true);
+    assert.equal(payload.data.claims.length, 1);
+    assert.equal(payload.data.claims[0].device.id, 'emulator-5560');
+  } finally {
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});
