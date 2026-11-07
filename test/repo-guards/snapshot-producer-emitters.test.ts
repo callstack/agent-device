@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { parseSync } from 'oxc-parser';
 import { REPO_ROOT } from '@agent-device/test-kit';
-import { SNAPSHOT_PRODUCERS } from '@agent-device/contracts/snapshot-model';
+import { SNAPSHOT_PRODUCERS } from '@agent-device/contracts/snapshot-producers';
 import { visitAst } from '../../scripts/layering/layering-ast.ts';
 import {
   isProductionSourceFile,

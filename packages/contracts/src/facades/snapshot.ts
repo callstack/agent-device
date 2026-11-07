@@ -12,18 +12,23 @@ export {
   usesMobileSnapshotPresentation,
   inheritPostGestureOutcome,
   snapshotRefMinting,
+  snapshotProducerFacts,
   buildSnapshotNodeMap,
   findSnapshotAncestor,
   findNearestAncestor,
   type SnapshotProvenance,
   type SnapshotBackend,
-  type SnapshotProducer,
   type SnapshotStateProvenance,
   type SnapshotCaptureProvenance,
   type SnapshotState,
   type PostGestureAction,
   type PostGestureOutcome,
 } from '../snapshot-model.ts';
+export {
+  SNAPSHOT_PRODUCERS,
+  type SnapshotProducer,
+  type SnapshotProducerFacts,
+} from '../snapshot-producers.ts';
 export {
   collectViewportRects,
   createSnapshotVisibility,
