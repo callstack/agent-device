@@ -45,9 +45,9 @@ Route: `snapshot --depth N`, recursive tier, 15 warm captures per cell, against 
 
 Both screens walked their whole raw tree. The platform materializes the `XCUIElementSnapshot` tree in one call, and that call is where acquisition time goes.
 
-## Query-sweep read failures
+## Query-sweep read failures (#2621)
 
-On the observed app class, each `allElementsBoundByIndex` query-sweep read failed with `kAXErrorIllegalArgument` and recorded `Failed to resolve query: ...`.
+On the observed app class, each of the query sweep's 19 `allElementsBoundByIndex` reads failed with `kAXErrorIllegalArgument` and recorded `Failed to resolve query: ...`.
 
 ## Host process probe (#2751)
 

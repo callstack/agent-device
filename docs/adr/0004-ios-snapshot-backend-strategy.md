@@ -36,7 +36,7 @@ The bridge reads one process, so it refuses a tree in which remote web or scene-
 Refs from that tree would target the host views, and XCTest resolves remote elements (#2484).
 
 **Ownership.** The Apple platform runtime owns acquisition routing and the generation-scoped fallback.
-`@agent-device/contracts/snapshot-presentation` holds the neutral acquisition-to-presented carrier and the clip-fold geometry contract. `@agent-device/capture-kit` owns host-side snapshot policy.
+`@agent-device/contracts/ios-snapshot` holds the acquisition carrier. `@agent-device/capture-kit` owns host-side snapshot policy, including the clip fold.
 Daemon assembly owns only the order of capture, compaction, occlusion, and ref publication.
 New consumers must use the capture-kit policy facet. Do not add another daemon presentation path.
 The Swift runner keeps its own `SnapshotPresentation` for the capture-plan tier before the process boundary.
@@ -71,7 +71,7 @@ Decision history: #3801 permits acquisition overflow from system alerts at large
 - The generation circuit costs a hybrid app's web screen one refused round trip for each generation, not one on every `wait` poll.
 - Activation (`XCUIApplication.activate()` or `simctl launch`) cancels an authentication session and makes the surface black. Without activation, a foreground host cannot have a stale tree.
 - A torn-down host can serve a richer tree than a live host, and under a system sheet the app stays the AX `primaryApp`. Thus, tree content cannot prove presence.
-- A published rect is an address, so a mixed-space tree is not half-usable. A rect and its actionability verdict share one oriented frame, so they cannot disagree.
+- A published rect is an address. No pair of rects in a mixed-space tree can answer "how far apart", so that tree is not half-usable. A rect and its actionability verdict share one oriented frame, so they cannot disagree.
 
 ## Rejected alternatives
 

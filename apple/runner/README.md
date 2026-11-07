@@ -107,7 +107,8 @@ Every bounded main-thread dispatch that outlives its slice counts as occupying t
 Thus, if a viewport read takes too long, the plan skips the sweep instead of queueing it.
 
 A failure that XCTest records ends `testCommand` when the main-thread block that recorded it returns, whatever `continueAfterFailure` says.
-Mute XCTest's AX-server rejection in both fetch wordings so a recorded failure does not end the runner session.
+Mute XCTest's AX-server rejection in both fetch wordings, so XCTest does not record it.
+Then the runner session continues and keeps its per-bundle penalty and depth memory.
 
 ### Screen space
 
