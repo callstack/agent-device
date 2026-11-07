@@ -11,6 +11,18 @@ providers can all install and run the same APK as long as they can execute ADB-s
 Released helper APKs use the committed `debug.keystore`; do not rotate it casually, because Android
 requires a stable signing certificate for `adb install -r` upgrades.
 
+## Accessibility services
+
+On Android API 24+, the helper connects to `UiAutomation` with
+`FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES` so enabled accessibility services such as TalkBack
+can remain bound during snapshots and gestures. This applies to both persistent sessions and
+one-shot operations. API 23 uses the no-argument connection because the flagged overload is
+unavailable; other accessibility services can be suppressed while that connection is active.
+
+Reader-specific exploration gestures and speech verification remain a separate feature decision.
+A coordinate press does not establish reader accessibility focus or verify speech completion.
+See [issue #4179](https://github.com/callstack/agent-device/issues/4179).
+
 ## Build
 
 ```sh
