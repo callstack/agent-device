@@ -33,7 +33,7 @@ import {
 import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import {
   deviceClaimOwnerCannotRelease,
-  inspectDeviceClaims,
+  inspectDeviceClaimsAsync,
   canonicalLocalDeviceKey,
   deviceClaimIdentity,
   isClaimOfHostScopedDevice,
@@ -83,7 +83,7 @@ export async function handleSessionInventoryCommands(
   const { req, sessionName, sessionStore } = params;
   switch (req.command) {
     case 'session_list':
-      return sessionListInventoryResponse(req, sessionStore);
+      return await sessionListInventoryResponse(req, sessionStore);
     case 'devices':
       return await devicesInventoryResponse(req, params.host.env);
     case 'capabilities':
@@ -110,20 +110,55 @@ export async function handleSessionInventoryCommands(
   }
 }
 
-function sessionListInventoryResponse(
+async function sessionListInventoryResponse(
   req: DaemonRequest,
   sessionStore: SessionStore,
-): DaemonResponse {
+): Promise<DaemonResponse> {
   const scope = resolveSessionScope(req);
+  const inScope = sessionStore
+    .listRefs()
+    .filter((ref) => sessionMatchesInventoryScope(ref.session, scope));
   return {
     ok: true,
     data: {
-      sessions: sessionStore
-        .listRefs()
-        .filter((ref) => sessionMatchesInventoryScope(ref.session, scope))
-        .map((ref) => publicSessionInfo(ref, sessionStore)),
+      sessions: inScope.map((ref) => publicSessionInfo(ref, sessionStore)),
+      ...(await foreignSessionClaimsAdvisory(inScope, sessionStore.host.env)),
     },
   };
+}
+
+/** A device a session the answering scope cannot list holds, in the `claimedBy` shape `devices` reports. */
+type ForeignSessionClaim = {
+  device: string;
+  deviceId: string;
+  claimedBy: { session: string; workspace: string };
+};
+
+/**
+ * Scope filtering hides the sessions that hold a device host-wide, so an empty or short `session
+ * list` would give an `open` refusal no witness. Claims whose owner cannot release are left out
+ * the same way `devices` leaves them out: the next open reconciles them. The exclusion is
+ * in-scope membership, so a claim naming an address the store no longer lists (the holder's
+ * reference was lost) reads as foreign — evidence stays, only the label can mislead. At most one
+ * claim exists per device, so the array is bounded by the host's device count.
+ */
+async function foreignSessionClaimsAdvisory(
+  inScope: readonly SessionRef[],
+  env: HostEnvironment['env'],
+): Promise<{ claimedByOtherSessions?: ForeignSessionClaim[] }> {
+  const inScopeAddresses = new Set(inScope.map((ref) => ref.address));
+  const foreign = (await blockingClaims(env))
+    .filter((claim) => !inScopeAddresses.has(claim.session))
+    .map((claim): ForeignSessionClaim => ({
+      device: claim.device.name,
+      deviceId: claim.device.id,
+      claimedBy: { session: claim.session, workspace: claim.workspace },
+    }))
+    .sort(
+      (a, b) =>
+        a.device.localeCompare(b.device) || a.claimedBy.session.localeCompare(b.claimedBy.session),
+    );
+  return foreign.length > 0 ? { claimedByOtherSessions: foreign } : {};
 }
 
 function publicSessionInfo({ address, session }: SessionRef, sessionStore: SessionStore) {
@@ -156,7 +191,7 @@ async function devicesInventoryResponse(
   env: HostEnvironment['env'],
 ): Promise<DaemonResponse> {
   try {
-    const claims = blockingClaims(env);
+    const claims = await blockingClaims(env);
     return {
       ok: true,
       data: {
@@ -179,8 +214,14 @@ async function devicesInventoryResponse(
   }
 }
 
-function blockingClaims(env: HostEnvironment['env']): DeviceClaim[] {
-  return inspectDeviceClaims({}, env).flatMap((entry) =>
+/**
+ * Claims a live or uncertain owner still holds. This answers a daemon request path, so the
+ * inspection waits off the event loop: the synchronous probe would stall every other request,
+ * timer, and abort handler behind one process-tool snapshot.
+ */
+async function blockingClaims(env: HostEnvironment['env']): Promise<DeviceClaim[]> {
+  const inspected = await inspectDeviceClaimsAsync({}, env);
+  return inspected.flatMap((entry) =>
     entry.claim && !deviceClaimOwnerCannotRelease(entry.classification) ? [entry.claim] : [],
   );
 }

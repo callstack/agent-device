@@ -1,6 +1,7 @@
 import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
+import { isolatedDeviceClaimStores } from '../../../__tests__/support/device-claim-store.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
@@ -60,7 +61,13 @@ function request(command: DaemonRequest['command']): DaemonRequest {
   };
 }
 
+// Inventory responses read the host's device-claim root through the session store, whose fixture
+// host carries the live process.env. An isolated per-test root keeps the host's live claims out of
+// these route assertions instead of making them depend on what this machine holds.
+const setupClaims = isolatedDeviceClaimStores('agent-device-session-route-claims-');
+
 async function run(command: DaemonRequest['command']): Promise<DaemonResponse | null> {
+  setupClaims();
   return await handleSessionCommands({
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,

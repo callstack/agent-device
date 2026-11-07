@@ -1,12 +1,15 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
+import { isolatedDeviceClaimStores } from '../../../../__tests__/support/device-claim-store.ts';
 import { test, expect } from 'vitest';
+import fs from 'node:fs';
 import path from 'node:path';
 import { handleSessionInventoryCommands } from '../inventory.ts';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
 import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import type { SessionState } from '../../../../core/session-state.ts';
 import { IOS_SIMULATOR, createTestHostEnvironment } from '@agent-device/test-kit';
+import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { resolveImplicitSessionScope } from '../../../session-routing.ts';
 import { tenantScopedSessionName } from '../../../../core/session-tenant-scope.ts';
 
@@ -164,4 +167,186 @@ test('session list resolves a cwd-scoped session directory from its store key', 
   // … while the reported paths point at the directory that actually holds the session.
   expect(path.basename(session.sessionStateDir)).toBe('cwd_8bea844ab16aa9b3_default');
   expect(session.runnerLogPath.startsWith(`${session.sessionStateDir}${path.sep}`)).toBe(true);
+});
+
+type ClaimEntry = {
+  device: string;
+  deviceId: string;
+  claimedBy: { session: string; workspace: string };
+};
+
+function writeLiveDeviceClaim(
+  claimsDir: string,
+  claim: { id: string; session: string; workspace: string },
+): void {
+  const owner = readCurrentOwnerIdentity();
+  fs.mkdirSync(claimsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(claimsDir, `${claim.id}.json`),
+    JSON.stringify({
+      schemaVersion: 1,
+      deviceKey: `local:android:none:${claim.id}`,
+      device: { platform: 'android', id: claim.id, name: claim.id, kind: 'emulator' },
+      session: claim.session,
+      workspace: claim.workspace,
+      stateDir: process.cwd(),
+      ownerPid: owner.pid,
+      ownerStartTime: owner.startTime,
+      ownerToken: `${claim.id}-token`,
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    }),
+  );
+}
+
+// Device claims are host-global, so every advisory assertion answers an isolated claim root.
+const setupClaims = isolatedDeviceClaimStores('agent-device-session-list-claims-');
+
+function scopedSessionListRequest(cwd: string) {
+  const req: DaemonRequest = {
+    token: 't',
+    session: 'default',
+    command: 'session_list',
+    positionals: [],
+    flags: {},
+    meta: { cwd },
+  };
+  const scope = resolveImplicitSessionScope(req)!;
+  return {
+    callerSessionAddress: `cwd:${scope.id}:default`,
+    callerScope: scope,
+    run: (sessionStore: ReturnType<typeof makeSessionStore>) =>
+      handleSessionInventoryCommands({
+        host: createTestHostEnvironment(),
+        platformServices: daemonPlatformServicesFixture(),
+        req,
+        sessionName: `cwd:${scope.id}:default`,
+        sessionStore,
+      }),
+  };
+}
+
+test('session list names the devices sessions outside its scope hold', async () => {
+  const { claimsDir } = setupClaims();
+  const sessionStore = makeSessionStore('agent-device-inventory-foreign-claims-');
+  const list = scopedSessionListRequest('/worktrees/caller');
+  sessionStore.publish(list.callerSessionAddress, {
+    ...scopedSession(),
+    sessionScope: list.callerScope,
+  });
+  // A session another workspace of the same daemon owns, invisible from the caller's scope.
+  sessionStore.publish('cwd:other-hash:default', {
+    ...scopedSession(),
+    sessionScope: { kind: 'cwd', id: 'other-hash' },
+  });
+  writeLiveDeviceClaim(claimsDir, {
+    id: 'emulator-5554',
+    session: 'cwd:other-hash:default',
+    workspace: '/worktrees/other',
+  });
+  // A claim whose owner answers to a state this store does not know.
+  writeLiveDeviceClaim(claimsDir, {
+    id: 'emulator-5556',
+    session: 'cwd:gone-hash:default',
+    workspace: '/worktrees/gone',
+  });
+
+  const response = await list.run(sessionStore);
+
+  expect(response?.ok).toBe(true);
+  if (!response?.ok) return;
+  const foreign = response.data?.claimedByOtherSessions as ClaimEntry[] | undefined;
+  expect(foreign).toEqual([
+    {
+      device: 'emulator-5554',
+      deviceId: 'emulator-5554',
+      claimedBy: { session: 'cwd:other-hash:default', workspace: '/worktrees/other' },
+    },
+    {
+      device: 'emulator-5556',
+      deviceId: 'emulator-5556',
+      claimedBy: { session: 'cwd:gone-hash:default', workspace: '/worktrees/gone' },
+    },
+  ]);
+});
+
+test('session list stays silent about devices its own scope holds', async () => {
+  const { claimsDir } = setupClaims();
+  const sessionStore = makeSessionStore('agent-device-inventory-own-claims-');
+  const list = scopedSessionListRequest('/worktrees/caller');
+  sessionStore.publish(list.callerSessionAddress, {
+    ...scopedSession(),
+    sessionScope: list.callerScope,
+  });
+  writeLiveDeviceClaim(claimsDir, {
+    id: 'emulator-5554',
+    session: list.callerSessionAddress,
+    workspace: '/worktrees/caller',
+  });
+
+  const response = await list.run(sessionStore);
+
+  expect(response?.ok).toBe(true);
+  if (!response?.ok) return;
+  expect(response.data?.claimedByOtherSessions).toBeUndefined();
+});
+
+test('session list stays silent about devices a sibling session of its own scope holds', async () => {
+  const { claimsDir } = setupClaims();
+  const sessionStore = makeSessionStore('agent-device-inventory-sibling-claims-');
+  const list = scopedSessionListRequest('/worktrees/caller');
+  sessionStore.publish(list.callerSessionAddress, {
+    ...scopedSession(),
+    sessionScope: list.callerScope,
+  });
+  // A named-local session answers the caller's cwd scope, so a device it holds is not foreign.
+  sessionStore.publish('qa-cart-integrity', {
+    ...scopedSession(),
+    name: 'qa-cart-integrity',
+    sessionScope: { kind: 'named-local' },
+  });
+  writeLiveDeviceClaim(claimsDir, {
+    id: 'emulator-5554',
+    session: 'qa-cart-integrity',
+    workspace: '/worktrees/caller',
+  });
+
+  const response = await list.run(sessionStore);
+
+  expect(response?.ok).toBe(true);
+  if (!response?.ok) return;
+  expect(response.data?.claimedByOtherSessions).toBeUndefined();
+});
+
+test('session list leaves out foreign claims no live owner can release', async () => {
+  const { claimsDir } = setupClaims();
+  const sessionStore = makeSessionStore('agent-device-inventory-dead-claims-');
+  fs.mkdirSync(claimsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(claimsDir, 'emulator-5554.json'),
+    JSON.stringify({
+      schemaVersion: 1,
+      deviceKey: 'local:android:none:emulator-5554',
+      device: {
+        platform: 'android',
+        id: 'emulator-5554',
+        name: 'emulator-5554',
+        kind: 'emulator',
+      },
+      session: 'cwd:other-hash:default',
+      workspace: '/worktrees/other',
+      stateDir: process.cwd(),
+      ownerPid: 999_999_999,
+      ownerStartTime: 'long-gone',
+      ownerToken: 'emulator-5554-token',
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    }),
+  );
+
+  const response = await scopedSessionListRequest('/worktrees/caller').run(sessionStore);
+
+  expect(response?.ok).toBe(true);
+  if (!response?.ok) return;
+  expect(response.data?.claimedByOtherSessions).toBeUndefined();
 });

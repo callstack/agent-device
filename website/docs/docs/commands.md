@@ -1193,6 +1193,7 @@ agent-device session list --json
 ```
 
 - `session list` shows active daemon sessions for your workspace, or for the named session scope when `--session` or `AGENT_DEVICE_SESSION` is set. Add `--json` for raw session metadata.
+- A session in another scope, such as another workspace, tenant, or daemon state, can hold a device that your scope cannot list. When one does, the `session list` daemon RPC response carries `claimedByOtherSessions`, in the `claimedBy` shape `devices` reports. Gateways and embedding hosts read that field from the raw RPC response; the Node client `sessions.list()` returns the in-scope sessions. An empty session list means "no sessions in this scope", not "the devices are idle".
 
 ## Cloud provider artifacts
 
