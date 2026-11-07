@@ -89,6 +89,7 @@ Pointer actions have no event fallback until an event path verifies its outcome.
 **Secondary click.**
 The helper performs `AXShowMenu` on the nearest element up the hit chain (at most 32 levels) that offers it.
 Unlike a press, the walk crosses containers, which can own a menu, as AppKit consults each superview.
+The walk stops at the window and at an open menu, so a secondary click on an open menu's item does not reopen its owner's menu.
 Parity with a real click outside SwiftUI is unmeasured; an `NSTableView` menu may report no clicked row.
 In the measured SwiftUI app, the app tracks the open menu and does not answer the action (`kAXErrorCannotComplete`).
 So the reply is abandoned after 0.5 s, and a new app-owned `kCGPopUpMenuWindowLevel` window within 1 s decides success.

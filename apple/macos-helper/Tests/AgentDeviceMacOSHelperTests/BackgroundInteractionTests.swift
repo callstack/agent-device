@@ -123,6 +123,37 @@ final class BackgroundInteractionTests: XCTestCase {
     XCTAssertEqual(popUpMenuWindowNumbers(pid: 42, windowInfo: windowInfo), [2])
   }
 
+  /// A secondary click opens the menu of the nearest element up the hit chain that offers one,
+  /// and stops at the window or at an open menu, whose items sit under the element that opened it.
+  func testContextMenuOwnerIsTheNearestAncestorWithAMenuInsideTheWindow() {
+    func chain(_ links: (String, String, Bool)...) -> [(element: String, role: String, offersMenu: Bool)] {
+      links.map { (element: $0.0, role: $0.1, offersMenu: $0.2) }
+    }
+    let rowMenu = chain(
+      ("label", "AXStaticText", false), ("row", "AXCell", true), ("list", "AXOutline", false),
+      ("window", "AXWindow", false))
+    let buttonMenu = chain(("button", "AXMenuButton", true), ("window", "AXWindow", true))
+    let plainButton = chain(
+      ("button", "AXButton", false), ("window", "AXWindow", true), ("app", "AXApplication", true))
+    let openMenuItem = chain(
+      ("rename", "AXMenuItem", false), ("menu", "AXMenu", false), ("row", "AXCell", true))
+    let menuBarItem = chain(
+      ("file", "AXMenuBarItem", false), ("bar", "AXMenuBar", false), ("app", "AXApplication", true))
+
+    XCTAssertEqual(contextMenuOwner(upFrom: rowMenu), .success("row"))
+    XCTAssertEqual(contextMenuOwner(upFrom: buttonMenu), .success("button"))
+    XCTAssertEqual(contextMenuOwner(upFrom: plainButton), .failure(.noContextMenu))
+    XCTAssertEqual(contextMenuOwner(upFrom: openMenuItem), .failure(.noContextMenu))
+    XCTAssertEqual(contextMenuOwner(upFrom: menuBarItem), .failure(.noContextMenu))
+  }
+
+  /// A hit test that found nothing is no target at the point, not a target without a menu.
+  func testNoHitIsNoAccessibleTargetRatherThanNoContextMenu() {
+    XCTAssertEqual(
+      contextMenuOwner(upFrom: [] as [(element: String, role: String, offersMenu: Bool)]),
+      .failure(.noAccessibleTarget))
+  }
+
   /// Chromium marks wrapper groups pressable; only a control role may win the press outright.
   func testWrapperGroupsAreNotPressableControls() {
     XCTAssertTrue(isPressableControlRole("AXButton"))

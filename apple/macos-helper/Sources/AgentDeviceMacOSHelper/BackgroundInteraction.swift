@@ -223,9 +223,22 @@ func showMenuInBackground(
 ) throws -> BackgroundMenuResponse {
   try requireAppWindowPoint(point, app: app)
   cursor?.move(to: point)
-  guard let owner = elementAtPoint(in: app, point: point).flatMap(menuOwner) else {
-    throw refusal(
-      .noContextMenu, "no accessibility element at the point offers a context menu", app: app)
+  let hitChain = sequence(state: elementAtPoint(in: app, point: point)) { current in
+    defer { current = current.flatMap { elementAttribute($0, attribute: kAXParentAttribute as String) } }
+    return current
+  }.lazy.map { element in
+    (
+      element: element, role: role(of: element),
+      offersMenu: actionNames(of: element).contains(showMenuAction as String)
+    )
+  }
+  let owner: AXUIElement
+  switch contextMenuOwner(upFrom: hitChain) {
+  case .success(let element): owner = element
+  case .failure(.noAccessibleTarget):
+    throw refusal(.noAccessibleTarget, "no accessibility element at the point", app: app)
+  case .failure(let reason):
+    throw refusal(reason, "no accessibility element at the point offers a context menu", app: app)
   }
   if isInMenuBar(owner) {
     throw refusal(.noAccessibleTarget, "the point is on the app's menu bar", app: app)
@@ -270,19 +283,26 @@ func popUpMenuWindowNumbers(pid: pid_t, windowInfo: [[String: Any]]) -> Set<Int>
 
 private let showMenuAction = "AXShowMenu" as CFString
 
+extension BackgroundRefusal: Error {}
+
+/// An open menu's items sit under the element that opened it, so the walk stops at a menu too.
+private let contextMenuOwnerBoundaryRoles: Set<String> = [
+  "AXWindow", "AXApplication", "AXMenu", "AXMenuBar",
+]
+
 /// AppKit offers a secondary click to the hit view and then to each superview in turn, so the
-/// nearest ancestor with a menu owns it.
-private func menuOwner(from hit: AXUIElement) -> AXUIElement? {
-  var current: AXUIElement? = hit
-  var depth = 0
-  while let element = current, depth < 32 {
-    let elementRole = role(of: element)
-    if elementRole == "AXWindow" || elementRole == "AXApplication" { return nil }
-    if actionNames(of: element).contains(showMenuAction as String) { return element }
-    current = elementAttribute(element, attribute: kAXParentAttribute as String)
-    depth += 1
+/// nearest ancestor with a menu owns it. The chain runs from the hit element up; an empty chain
+/// is a hit test that found nothing.
+func contextMenuOwner<Element>(
+  upFrom hitChain: some Sequence<(element: Element, role: String, offersMenu: Bool)>
+) -> Result<Element, BackgroundRefusal> {
+  var hitAny = false
+  for link in hitChain.prefix(32) {
+    hitAny = true
+    if contextMenuOwnerBoundaryRoles.contains(link.role) { break }
+    if link.offersMenu { return .success(link.element) }
   }
-  return nil
+  return .failure(hitAny ? .noContextMenu : .noAccessibleTarget)
 }
 
 /// A window list that never became readable is a refusal, not an unobserved menu.
