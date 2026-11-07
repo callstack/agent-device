@@ -197,6 +197,58 @@ test('states that nothing is claimed when every claim is stale', async () => {
   }
 });
 
+test('AGENT_DEVICE_PLATFORM does not narrow device status without --platform', async () => {
+  // #4298: the parser drops an untyped platform, then session binding used to
+  // put AGENT_DEVICE_PLATFORM back before device status read flags.platform.
+  const claimsDir = mkdtempForTestSync('agent-device-cli-claims-');
+  const owner = readCurrentOwnerIdentity();
+  try {
+    fs.writeFileSync(
+      path.join(claimsDir, 'android.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        deviceKey: 'local:android:none:emulator-5560',
+        device: {
+          platform: 'android',
+          id: 'emulator-5560',
+          name: 'Android Emu',
+          kind: 'emulator',
+        },
+        session: 'android-session',
+        workspace: '/worktrees/android',
+        stateDir: process.cwd(),
+        ownerPid: owner.pid,
+        ownerStartTime: owner.startTime,
+        ownerToken: 'android-token',
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      }),
+    );
+    const env = {
+      AGENT_DEVICE_CLAIMS_DIR: claimsDir,
+      AGENT_DEVICE_PLATFORM: 'ios',
+    };
+
+    const untyped = await runCliCapture(
+      ['device', 'status', '--serial', 'emulator-5560', '--json'],
+      { env },
+    );
+    assert.equal(untyped.code, null);
+    const untypedClaims = JSON.parse(untyped.stdout).data.claims;
+    assert.equal(untypedClaims.length, 1);
+    assert.equal(untypedClaims[0].device.name, 'Android Emu');
+
+    const typed = await runCliCapture(
+      ['device', 'status', '--serial', 'emulator-5560', '--platform', 'ios', '--json'],
+      { env },
+    );
+    assert.equal(typed.code, null);
+    assert.equal(JSON.parse(typed.stdout).data.claims.length, 0);
+  } finally {
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});
+
 test('names a replaced-but-running daemon owner as stale rather than a live holder', async () => {
   const claimsDir = mkdtempForTestSync('agent-device-cli-claims-');
   const stateDir = path.join(claimsDir, 'state');

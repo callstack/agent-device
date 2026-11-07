@@ -35,7 +35,7 @@ import type {
 } from '@agent-device/contracts/client';
 import { tryRunClientBackedCommand } from './cli/commands/router.ts';
 import { runAgentCdpCommand } from './cli/commands/agent-cdp.ts';
-import { readCliBatchStepsJson } from '@agent-device/command-surface';
+import { getCommandSchema, readCliBatchStepsJson } from '@agent-device/command-surface';
 import {
   createRequestId,
   emitDiagnostic,
@@ -365,14 +365,17 @@ async function resolveRunContextOrExit(
       configuredPlatform: parsed.flags.platform,
       configuredSession: parsed.flags.session,
     });
-    const flags = binding.lockPolicy
-      ? { ...parsed.flags }
-      : applyDefaultPlatformBinding(parsed.flags, {
-          env: base.host.env,
-          policyOverrides: parsed.flags,
-          configuredPlatform: parsed.flags.platform,
-          configuredSession: parsed.flags.session,
-        });
+    // Parser already dropped an untyped platform for explicitOnlyFlags.
+    // Binding would read AGENT_DEVICE_PLATFORM again and narrow device claims (#4298).
+    const flags =
+      binding.lockPolicy || getCommandSchema(base.command)?.explicitOnlyFlags?.includes('platform')
+        ? { ...parsed.flags }
+        : applyDefaultPlatformBinding(parsed.flags, {
+            env: base.host.env,
+            policyOverrides: parsed.flags,
+            configuredPlatform: parsed.flags.platform,
+            configuredSession: parsed.flags.session,
+          });
     // A leased remote config, or a connect without one (it always leases through a provider), needs
     // an explicit session before anything is resolved or leased (#3931).
     const leasedConnect = base.command === 'connect' && !flags.remoteConfig;
