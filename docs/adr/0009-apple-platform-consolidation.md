@@ -5,8 +5,7 @@
 Accepted.
 This record owns the Apple family and `AppleOS` leaf decision.
 [ADR 0019](0019-request-bound-platform-runtime.md) replaces the original shallow `PlatformPlugin` shape and owns the package and request-bound runtime seam.
-Each command cuts over to the new execution path in one atomic step.
-Shared physical mechanics move only through ADR 0019's legal injected substrate transition or after their last legacy user.
+ADR 0019 owns the cutover and substrate transition rules. Completed migration history is in git history.
 
 ## Context
 
@@ -21,6 +20,7 @@ Model Apple OSes with an `AppleOS` discriminant (`ios | ipados | tvos | watchos 
 Do not use six `Platform` literals.
 Keep the OS-agnostic Apple engine in the Apple platform package's core and genuinely per-OS code in its OS leaves.
 Express per-OS capability differences as data keyed by `AppleOS` in request-bound runtime facts.
+The former capability projection is retired; its predicates moved into those facts.
 This design composes with the daemon facet and descriptor `platformExecution` declaration in ADR 0008.
 
 Keep macOS as a distinct AppKit leaf with its helper binary and menubar and desktop surface model.
