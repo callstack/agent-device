@@ -120,6 +120,10 @@ export default defineConfig({
       ),
       slowTestGateReporter(),
       coverageRunStampReporter(COVERAGE_UNINSTRUMENTED_PROJECTS),
+      // Vitest adds this only when no reporters are configured; it puts failing tests on the check.
+      ...(process.env.GITHUB_ACTIONS === 'true'
+        ? [['github-actions', { jobSummary: { enabled: false } }] satisfies [string, object]]
+        : []),
     ],
     projects: [
       {
