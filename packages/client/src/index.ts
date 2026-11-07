@@ -75,6 +75,7 @@ import { createLeaseClient } from './lease-client.ts';
 import { normalizeScreenshotCaptureResult } from './screenshot-result.ts';
 
 export { pickScreenshotResultData } from './screenshot-result.ts';
+export { normalizeHumanControlHold } from './lease-client.ts';
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},
