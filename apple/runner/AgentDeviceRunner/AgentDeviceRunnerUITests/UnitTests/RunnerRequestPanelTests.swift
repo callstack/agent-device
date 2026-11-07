@@ -82,6 +82,10 @@ private final class LitPanelBookingProbe: NSObject {
       case "screen": return LitPanelBookingScreen(self === Self.darkWindow ? 1 : Self.windowDisplayID)
       case "exists": return true
       case "frame": return NSValue(cgRect: Self.elementFrame(self))
+      // A selector predicate reads `label` through KVC, and KVC caches the accessor it resolved:
+      // once an earlier test evaluated `label` on an XCUIElement, the original lookup calls
+      // XCTest's getter, not the stub, and resolves the fixture's button query.
+      case "label" where isKind(of: XCUIElement.self): return label
       default: break
       }
       return original(self, #selector(NSObject.value(forKey:)), key as NSString)
