@@ -43,6 +43,28 @@ final class AppWindowScreenshotTests: XCTestCase {
     XCTAssertEqual(try frontWindowFrame(pid: 42, windowInfo: windows), front?.bounds)
   }
 
+  func testFrontWindowSkipsASharingIndicatorInFrontOfAnotherWindow() {
+    let indicator = OnScreenWindow(
+      number: 9, bounds: CGRect(x: 10, y: 10, width: 66, height: 20), sharingState: 1)
+    let shared = OnScreenWindow(
+      number: 8, bounds: CGRect(x: 0, y: 0, width: 900, height: 700), sharingState: 1)
+
+    XCTAssertEqual(
+      frontWindow(among: [indicator, shared], isSharingIndicator: { $0.number == 9 })?.number, 8)
+    XCTAssertEqual(frontWindow(among: [indicator, shared], isSharingIndicator: { _ in false })?.number, 9)
+  }
+
+  /// The indicator check reads the app's accessibility tree; a lone window never needs it.
+  func testFrontWindowAsksNothingAboutALoneWindow() {
+    let lone = OnScreenWindow(
+      number: 8, bounds: CGRect(x: 0, y: 0, width: 900, height: 700), sharingState: 1)
+    var asked = false
+    let front = frontWindow(among: [lone], isSharingIndicator: { _ in asked = true; return true })
+
+    XCTAssertEqual(front?.number, 8)
+    XCTAssertFalse(asked)
+  }
+
   func testRefusesWhenOnlyInvisibleOrEmptyWindowsRemain() throws {
     let windows = [
       windowInfo(id: 1, onScreen: false),
