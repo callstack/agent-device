@@ -54,10 +54,22 @@ test('launch arguments and explicit relaunch use the shared simctl launch', asyn
   );
 });
 
-test('normal launch uses the same simctl path as local', async () => {
+test('normal launch prepares app accessibility through the instance-scoped simctl adapter', async () => {
   const { interactor, simctl } = await sessionWithClient();
   await interactor.open('com.example.app');
-  expect(simctl).toHaveBeenCalledWith(['launch', 'booted', 'com.example.app'], undefined);
+  const calls = simctl.mock.calls.map(([args]) => args);
+  const launch = calls.findIndex((args) => args[0] === 'launch');
+  expect(calls[launch - 1]).toEqual([
+    'spawn',
+    'booted',
+    'defaults',
+    'write',
+    'com.apple.Accessibility',
+    'ApplicationAccessibilityEnabled',
+    '-bool',
+    'YES',
+  ]);
+  expect(calls[launch]).toEqual(['launch', 'booted', 'com.example.app']);
 });
 
 test('a url open launches with arguments before opening the url', async () => {
@@ -69,6 +81,16 @@ test('a url open launches with arguments before opening the url', async () => {
   const calls = simctl.mock.calls.map((call) => call[0]);
   expect(calls).toContainEqual(['launch', 'booted', 'com.example.app', '--flag', 'value']);
   expect(calls).toContainEqual(['openurl', 'booted', 'myapp://home']);
+  expect(calls[calls.findIndex((args) => args[0] === 'openurl') - 1]).toEqual([
+    'spawn',
+    'booted',
+    'defaults',
+    'write',
+    'com.apple.Accessibility',
+    'ApplicationAccessibilityEnabled',
+    '-bool',
+    'YES',
+  ]);
   expect(calls.findIndex((args) => args[0] === 'launch')).toBeLessThan(
     calls.findIndex((args) => args[0] === 'openurl'),
   );

@@ -169,6 +169,8 @@ async function openIosSimulatorUrl(
     throw new AppError('INVALID_ARGS', IOS_SIMULATOR_LAUNCH_ARGS_WITH_URL_MESSAGE);
   }
   await ensureBootedSimulator(device);
+  const { prepareIosSimulatorAccessibility } = await import('./ios-simulator-accessibility.ts');
+  await prepareIosSimulatorAccessibility(device);
   const args = buildSimctlArgsForDevice(device, ['openurl', device.id, url]);
   try {
     await runXcrun(args, {
@@ -267,6 +269,8 @@ async function launchIosSimulatorApp(
 ): Promise<void> {
   await assertNotSystemSurfaceHost(bundleId);
   await ensureBootedSimulator(device);
+  const { prepareIosSimulatorAccessibility } = await import('./ios-simulator-accessibility.ts');
+  await prepareIosSimulatorAccessibility(device);
 
   let consecutiveFBSFailures = 0;
   const MAX_CONSECUTIVE_FBS_FAILURES = 3;

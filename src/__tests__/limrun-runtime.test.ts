@@ -256,6 +256,19 @@ test('Limrun iOS uses shared deep-link classification', async () => {
     assert.deepEqual(limrunMockState.iosOpenUrl.mock.calls, []);
     assert.deepEqual(limrunMockState.iosSimctl.mock.calls, [
       [['list', 'devices', '-j'], undefined],
+      [
+        [
+          'spawn',
+          'booted',
+          'defaults',
+          'write',
+          'com.apple.Accessibility',
+          'ApplicationAccessibilityEnabled',
+          '-bool',
+          'YES',
+        ],
+        undefined,
+      ],
       [['openurl', 'booted', 'example://screen'], undefined],
     ]);
   } finally {

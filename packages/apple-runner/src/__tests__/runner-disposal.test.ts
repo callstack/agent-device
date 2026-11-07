@@ -32,6 +32,7 @@ import {
   writeRunnerLease,
 } from '../runner-lease.ts';
 
+const mockPrepareAccessibility = vi.fn();
 const mockIsProcessAlive = vi.fn();
 const mockIsProcessGroupAlive = vi.fn();
 const mockRunAppleToolCommand = vi.fn();
@@ -50,12 +51,14 @@ beforeEach(() => {
     signalProcessGroupBestEffort: mockSignalProcessGroupBestEffort,
     runAppleToolCommand: mockRunAppleToolCommand,
     runXcrun: mockRunXcrun,
+    enableIosSimulatorAppAccessibility: mockPrepareAccessibility,
   });
   vi.useFakeTimers();
   mockIsProcessAlive.mockReturnValue(true);
   mockIsProcessGroupAlive.mockReturnValue(false);
   mockRunAppleToolCommand.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   mockRunXcrun.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+  mockPrepareAccessibility.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -148,19 +151,35 @@ test('simulator disposal terminates runner container apps while it still owns th
   vi.useRealTimers();
   mockIsProcessAlive.mockReturnValue(false);
   const lease = makeRunnerLease({ deviceId: IOS_SIMULATOR.id, ownerToken: 'owner-disposal-own' });
-  const session = makeRunnerSession(IOS_SIMULATOR, Promise.resolve(execResult()), { lease });
+  const session = makeRunnerSession(IOS_SIMULATOR, Promise.resolve(execResult()), {
+    lease,
+    xctestrunPath: lease.xctestrunPath,
+  });
+  mockRunAppleToolCommand.mockResolvedValue({ exitCode: 1, stdout: '', stderr: '' });
+  let tokenDuringRepair: string | null = null;
+  let terminationsDuringRepair = 0;
+  mockPrepareAccessibility.mockImplementation(async () => {
+    tokenDuringRepair = currentRunnerLeaseOwnerToken(IOS_SIMULATOR.id);
+    terminationsDuringRepair = simulatorTerminateCalls().length;
+  });
   writeRunnerLease(lease);
 
   await disposeRunnerSession(session, { graceful: false, waitTimeoutMs: 1 });
 
   expect(simulatorTerminateCalls()).not.toEqual([]);
+  expect(mockPrepareAccessibility).toHaveBeenCalledExactlyOnceWith(IOS_SIMULATOR);
+  expect(tokenDuringRepair).toBe(lease.ownerToken);
+  expect(terminationsDuringRepair).toBeGreaterThan(0);
+  expect(currentRunnerLeaseOwnerToken(IOS_SIMULATOR.id)).toBeNull();
 });
 
 test('simulator disposal skips container-app termination after a foreign takeover replaced the lease', async () => {
   vi.useRealTimers();
   mockIsProcessAlive.mockReturnValue(false);
+  mockRunAppleToolCommand.mockResolvedValue({ exitCode: 1, stdout: '', stderr: '' });
   const session = makeRunnerSession(IOS_SIMULATOR, Promise.resolve(execResult()), {
     lease: makeRunnerLease({ deviceId: IOS_SIMULATOR.id, ownerToken: 'owner-disposal-loser' }),
+    xctestrunPath: makeRunnerLease({ deviceId: IOS_SIMULATOR.id }).xctestrunPath,
   });
   // The successor's runner lives in the same container bundles on the shared
   // simulator; terminating them here would stop the new owner's runner.
@@ -171,18 +190,21 @@ test('simulator disposal skips container-app termination after a foreign takeove
   await disposeRunnerSession(session, { graceful: false, waitTimeoutMs: 1 });
 
   expect(simulatorTerminateCalls()).toEqual([]);
+  expect(mockPrepareAccessibility).not.toHaveBeenCalled();
   expect(mockCleanupTempFile).toHaveBeenCalledWith(session.launch.local!.xctestrunPath);
 });
 
 test('disposal serializes behind a successor reclaim window and never terminates its runner', async () => {
   vi.useRealTimers();
   mockIsProcessAlive.mockReturnValue(false);
+  mockRunAppleToolCommand.mockResolvedValue({ exitCode: 1, stdout: '', stderr: '' });
   const loserLease = makeRunnerLease({
     deviceId: IOS_SIMULATOR.id,
     ownerToken: 'owner-toctou-loser',
   });
   const session = makeRunnerSession(IOS_SIMULATOR, Promise.resolve(execResult()), {
     lease: loserLease,
+    xctestrunPath: loserLease.xctestrunPath,
   });
   writeRunnerLease(loserLease);
 
@@ -198,6 +220,7 @@ test('disposal serializes behind a successor reclaim window and never terminates
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(disposalSettled).toBe(false);
     expect(simulatorTerminateCalls()).toEqual([]);
+    expect(mockPrepareAccessibility).not.toHaveBeenCalled();
     releaseRunnerLease(loserLease);
     writeRunnerLease(
       makeRunnerLease({ deviceId: IOS_SIMULATOR.id, ownerToken: 'owner-toctou-successor' }),
@@ -206,7 +229,87 @@ test('disposal serializes behind a successor reclaim window and never terminates
   await disposal;
 
   expect(simulatorTerminateCalls()).toEqual([]);
+  expect(mockPrepareAccessibility).not.toHaveBeenCalled();
   expect(currentRunnerLeaseOwnerToken(IOS_SIMULATOR.id)).toBe('owner-toctou-successor');
+});
+
+test('disposal skips repair when a runner process group survives termination', async () => {
+  const lease = makeRunnerLease({ deviceId: IOS_SIMULATOR.id, ownerToken: 'owner-still-running' });
+  const session = makeRunnerSession(IOS_SIMULATOR, Promise.resolve(execResult()), {
+    lease,
+    xctestrunPath: lease.xctestrunPath,
+  });
+  writeRunnerLease(lease);
+  mockIsProcessAlive.mockReturnValue(false);
+  mockIsProcessGroupAlive.mockReturnValue(true);
+  const disposal = disposeRunnerSession(session, { graceful: false, abort: true });
+  await vi.advanceTimersByTimeAsync(2_000);
+  await disposal;
+  expect(mockPrepareAccessibility).not.toHaveBeenCalled();
+  expect(currentRunnerLeaseOwnerToken(IOS_SIMULATOR.id)).toBeNull();
+});
+
+test('disposal waits for the matching xcodebuild to disappear before repair', async () => {
+  const lease = makeRunnerLease({ deviceId: IOS_SIMULATOR.id, ownerToken: 'owner-wait-exit' });
+  const session = makeRunnerSession(IOS_SIMULATOR, Promise.resolve(execResult()), {
+    lease,
+    xctestrunPath: lease.xctestrunPath,
+  });
+  writeRunnerLease(lease);
+  mockIsProcessAlive.mockReturnValue(false);
+  let probes = 0;
+  mockRunAppleToolCommand.mockImplementation(async (command) =>
+    command === '/usr/bin/pgrep' && probes++ > 0
+      ? { exitCode: 1, stdout: '', stderr: '' }
+      : execResult(),
+  );
+  const disposal = disposeRunnerSession(session, { graceful: false, abort: true });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(mockPrepareAccessibility).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(50);
+  await disposal;
+  expect(mockPrepareAccessibility).toHaveBeenCalledOnce();
+});
+
+test('a failed or timed-out termination probe is retried, not read as a live runner', async () => {
+  const lease = makeRunnerLease({ deviceId: IOS_SIMULATOR.id, ownerToken: 'owner-probe-retry' });
+  const session = makeRunnerSession(IOS_SIMULATOR, Promise.resolve(execResult()), {
+    lease,
+    xctestrunPath: lease.xctestrunPath,
+  });
+  writeRunnerLease(lease);
+  mockIsProcessAlive.mockReturnValue(false);
+  let probes = 0;
+  mockRunAppleToolCommand.mockImplementation(async (command) => {
+    if (command !== '/usr/bin/pgrep') return execResult();
+    probes += 1;
+    if (probes === 1) throw new Error('probe timed out');
+    return probes === 2
+      ? { exitCode: 2, stdout: '', stderr: 'probe error' }
+      : { exitCode: 1, stdout: '', stderr: '' };
+  });
+  const disposal = disposeRunnerSession(session, { graceful: false, abort: true });
+  await vi.advanceTimersByTimeAsync(200);
+  await disposal;
+  // The thrown probe and the exit-2 probe are both retried; only the third (exit 1) confirms.
+  expect(probes).toBe(3);
+  expect(mockPrepareAccessibility).toHaveBeenCalledOnce();
+});
+
+test('disposal still releases its lease when accessibility preparation fails', async () => {
+  vi.useRealTimers();
+  const lease = makeRunnerLease({ deviceId: IOS_SIMULATOR.id, ownerToken: 'owner-repair-failed' });
+  const session = makeRunnerSession(IOS_SIMULATOR, Promise.resolve(execResult()), {
+    lease,
+    xctestrunPath: lease.xctestrunPath,
+  });
+  writeRunnerLease(lease);
+  mockIsProcessAlive.mockReturnValue(false);
+  mockRunAppleToolCommand.mockResolvedValue({ exitCode: 1, stdout: '', stderr: '' });
+  mockPrepareAccessibility.mockRejectedValue(new Error('unavailable'));
+  await disposeRunnerSession(session, { graceful: false, waitTimeoutMs: 1 });
+  expect(mockPrepareAccessibility).toHaveBeenCalledOnce();
+  expect(currentRunnerLeaseOwnerToken(IOS_SIMULATOR.id)).toBeNull();
 });
 
 test('a leased cleanup selects the launch named by the artifact the lease recorded', async () => {
