@@ -29,9 +29,24 @@ export type SnapshotProducer =
   | 'linux-atspi'
   | 'agent-browser';
 
+/**
+ * The closed backend vocabulary. A registry row may name only these channels, so a typo in a row
+ * fails to compile instead of becoming a new backend.
+ */
+const SNAPSHOT_BACKENDS = {
+  xctest: true,
+  android: true,
+  'harmonyos-arkui': true,
+  'macos-helper': true,
+  'linux-atspi': true,
+  web: true,
+} as const;
+
+export type SnapshotBackend = keyof typeof SNAPSHOT_BACKENDS;
+
 export type SnapshotProducerFacts = Readonly<{
   /** The platform channels this producer's trees arrive on: the `backend` of its provenance pairs. */
-  channels: readonly [string, ...string[]];
+  channels: readonly [SnapshotBackend, ...SnapshotBackend[]];
   /**
    * Whether the producer observes truncation at all. On the iOS channel a capture that reported
    * nothing about truncation is only "not truncated" when its producer would have noticed (#2188
@@ -178,7 +193,13 @@ export function snapshotProducerFacts(
 type ProducerChannel<Producer extends SnapshotProducer> =
   (typeof SNAPSHOT_PRODUCERS)[Producer]['channels'][number];
 
-export type SnapshotBackend = ProducerChannel<SnapshotProducer>;
+/** Every backend in the vocabulary has a producer that arrives on it. */
+const everyBackendHasProducer: [
+  Exclude<SnapshotBackend, ProducerChannel<SnapshotProducer>>,
+] extends [never]
+  ? true
+  : never = true;
+void everyBackendHasProducer;
 
 type ProducerOnChannel<Backend extends SnapshotBackend> = {
   [Producer in SnapshotProducer]: Backend extends ProducerChannel<Producer> ? Producer : never;
@@ -264,12 +285,8 @@ export function snapshotStateProvenance(
   }
 }
 
-const SNAPSHOT_BACKENDS: ReadonlySet<string> = new Set(
-  Object.values(SNAPSHOT_PRODUCERS).flatMap((facts) => facts.channels),
-);
-
 export function isSnapshotBackend(value: unknown): value is SnapshotBackend {
-  return typeof value === 'string' && SNAPSHOT_BACKENDS.has(value);
+  return typeof value === 'string' && Object.hasOwn(SNAPSHOT_BACKENDS, value);
 }
 
 export function usesMobileSnapshotPresentation(backend: SnapshotBackend | undefined): boolean {
