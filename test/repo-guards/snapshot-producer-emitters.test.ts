@@ -123,6 +123,24 @@ type ParsedModule = Readonly<{
 
 type ModuleImports = Pick<ParsedModule, 'imports' | 'stamps'>;
 
+type NamedImport = Readonly<{ spec: string; imported: string; local: string }>;
+
+function namedValueImports(program: AstNode): NamedImport[] {
+  return (program.body as AstNode[])
+    .filter((statement) => statement.type === 'ImportDeclaration')
+    .filter((statement) => statement.importKind !== 'type')
+    .flatMap((statement) =>
+      (statement.specifiers as AstNode[])
+        .filter((specifier) => specifier.type === 'ImportSpecifier')
+        .filter((specifier) => specifier.importKind !== 'type')
+        .map((specifier) => ({
+          spec: String((statement.source as AstNode).value),
+          imported: keyName({ key: specifier.imported }) ?? '',
+          local: String((specifier.local as AstNode).name),
+        })),
+    );
+}
+
 function moduleImports(
   file: string,
   program: AstNode,
@@ -130,19 +148,11 @@ function moduleImports(
 ): ModuleImports {
   const imports: ParsedModule['imports'] = new Map();
   const stamps = new Map(Object.entries(STAMP_CALLS));
-  const valueImports = (program.body as AstNode[]).filter(
-    (statement) => statement.type === 'ImportDeclaration' && statement.importKind !== 'type',
-  );
-  for (const statement of valueImports) {
-    const target = targets.get(`${file}\0${String((statement.source as AstNode).value)}`);
-    for (const specifier of statement.specifiers as AstNode[]) {
-      if (specifier.type !== 'ImportSpecifier' || specifier.importKind === 'type') continue;
-      const imported = keyName({ key: specifier.imported });
-      if (imported === undefined) continue;
-      const local = String((specifier.local as AstNode).name);
-      if (STAMP_CALLS[imported] !== undefined) stamps.set(local, STAMP_CALLS[imported]);
-      if (target !== undefined) imports.set(local, { target, name: imported });
-    }
+  for (const { spec, imported, local } of namedValueImports(program)) {
+    const stamp = STAMP_CALLS[imported];
+    if (stamp !== undefined) stamps.set(local, stamp);
+    const target = targets.get(`${file}\0${spec}`);
+    if (target !== undefined) imports.set(local, { target, name: imported });
   }
   return { imports, stamps };
 }
