@@ -116,17 +116,16 @@ async function captureRevylAndroidSnapshot(
   xml: string,
   viewport: SnapshotViewportSize | undefined,
 ): Promise<SnapshotRuntimeResult> {
-  const { parseWebDriverAndroidSnapshotNodes } =
-    await import('@agent-device/provider-webdriver/android-snapshot');
+  const [{ parseWebDriverAndroidSnapshotNodes }, { stampSnapshotIdentity }] = await Promise.all([
+    import('@agent-device/provider-webdriver/android-snapshot'),
+    import('@agent-device/capture-kit/snapshot-identity'),
+  ]);
   const { nodes, keyboard } = acquireProviderKeyboard({
     nodes: parseWebDriverAndroidSnapshotNodes(xml),
     viewport: viewport === undefined ? null : { x: 0, y: 0, ...viewport },
   });
-  return {
-    backend: 'android',
-    producer: 'appium-source',
-    nodes,
-    keyboard,
-    ...(viewport === undefined ? {} : { viewport }),
-  } satisfies SnapshotRuntimeResult;
+  return stampSnapshotIdentity(
+    { nodes, keyboard, ...(viewport === undefined ? {} : { viewport }) },
+    { backend: 'android', producer: 'appium-source' },
+  ) satisfies SnapshotRuntimeResult;
 }

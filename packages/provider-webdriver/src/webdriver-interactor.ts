@@ -1,3 +1,4 @@
+import { stampSnapshotIdentity } from '@agent-device/capture-kit/snapshot-identity';
 import type { DeviceRotation, HardwareButton } from '@agent-device/contracts/device';
 import type { BackMode } from '@agent-device/contracts/back-mode';
 import type {
@@ -314,12 +315,13 @@ class WebDriverInteractor implements Interactor {
       viewportBefore.height === viewportAfter.height
         ? viewportBefore
         : undefined;
-    return {
-      backend: 'android' as const,
-      producer: 'appium-source' as const,
-      ...acquireProviderKeyboard({ nodes, viewport: null, visibility }),
-      ...(viewport === undefined ? {} : { viewport }),
-    };
+    return stampSnapshotIdentity(
+      {
+        ...acquireProviderKeyboard({ nodes, viewport: null, visibility }),
+        ...(viewport === undefined ? {} : { viewport }),
+      },
+      { backend: 'android', producer: 'appium-source' },
+    );
   }
 
   /**

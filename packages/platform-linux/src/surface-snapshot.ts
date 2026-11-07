@@ -1,3 +1,4 @@
+import { stampSnapshotIdentity } from '@agent-device/capture-kit/snapshot-identity';
 import type { CaptureSnapshotInput } from '@agent-device/contracts/snapshot-runtime';
 import { shapeDesktopSurfaceSnapshot } from '@agent-device/capture-kit/snapshot-desktop-projection';
 
@@ -8,12 +9,10 @@ export async function captureLinuxSurfaceSnapshot(
   const { snapshotLinux } = await import('./snapshot.ts');
   const result = await snapshotLinux(options?.surface, signal);
   return shapeDesktopSurfaceSnapshot(
-    {
-      nodes: result.nodes,
-      truncated: result.truncated,
-      backend: 'linux-atspi',
-      producer: 'linux-atspi',
-    },
+    stampSnapshotIdentity(
+      { nodes: result.nodes, truncated: result.truncated },
+      { backend: 'linux-atspi', producer: 'linux-atspi' },
+    ),
     options ?? {},
   );
 }
