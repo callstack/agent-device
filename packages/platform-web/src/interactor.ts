@@ -1,3 +1,4 @@
+import { stampSnapshotIdentity } from '@agent-device/capture-kit/snapshot-identity';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { createUnsupportedInteractor } from '@agent-device/contracts/unsupported-interactor';
 import { AppError } from '@agent-device/kernel/errors';
@@ -60,12 +61,10 @@ export async function createWebInteractor(
         async () => await resolvedProvider.snapshot(options),
         { backend: 'web' },
       );
-      return {
-        nodes: result.nodes,
-        truncated: result.truncated ?? false,
-        backend: 'web',
-        producer: 'agent-browser',
-      };
+      return stampSnapshotIdentity(
+        { nodes: result.nodes, truncated: result.truncated ?? false },
+        { backend: 'web', producer: 'agent-browser' },
+      );
     },
     setOrientation: async () => {
       throw new AppError('UNSUPPORTED_OPERATION', 'orientation is not supported on web');

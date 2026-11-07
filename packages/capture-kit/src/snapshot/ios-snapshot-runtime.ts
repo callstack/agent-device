@@ -1,3 +1,4 @@
+import { stampSnapshotIdentity } from '../snapshot-identity.ts';
 import {
   attachSnapshotTextInputGeometry,
   type SnapshotTextInputGeometry,
@@ -54,20 +55,23 @@ export function presentIosSnapshotAcquisition(
     const validatedViewport = snapshotViewportSizeFrom(presentation.validatedViewport);
     const nodes = [...presentation.payload.nodes];
     if (textInputGeometry) attachSnapshotTextInputGeometry(nodes, textInputGeometry);
-    return {
-      backend: 'xctest',
-      ...(presentation.qualityNotes ? { qualityNotes: presentation.qualityNotes } : {}),
-      producer: acquired.acquisition.producer,
-      nodes,
-      ...(acquired.acquisition.keyboard ? { keyboard: acquired.acquisition.keyboard } : {}),
-      comparisonIdentity: presentation.comparisonIdentity,
-      ...(acquired.acquisition.truncated === undefined
-        ? {}
-        : { truncated: acquired.acquisition.truncated }),
-      ...(validatedViewport ? { viewport: validatedViewport } : {}),
-      ...(presentation.presentedSurface ? { presentedSurface: presentation.presentedSurface } : {}),
-      ...snapshotWarnings(acquired.acquisition.residue),
-    };
+    return stampSnapshotIdentity(
+      {
+        ...(presentation.qualityNotes ? { qualityNotes: presentation.qualityNotes } : {}),
+        nodes,
+        ...(acquired.acquisition.keyboard ? { keyboard: acquired.acquisition.keyboard } : {}),
+        comparisonIdentity: presentation.comparisonIdentity,
+        ...(acquired.acquisition.truncated === undefined
+          ? {}
+          : { truncated: acquired.acquisition.truncated }),
+        ...(validatedViewport ? { viewport: validatedViewport } : {}),
+        ...(presentation.presentedSurface
+          ? { presentedSurface: presentation.presentedSurface }
+          : {}),
+        ...snapshotWarnings(acquired.acquisition.residue),
+      },
+      { backend: 'xctest', producer: acquired.acquisition.producer },
+    );
   } catch (error) {
     throwIosSnapshotPresentationError(error);
   }

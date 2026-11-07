@@ -545,6 +545,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/snapshot-diff',
     '@agent-device/capture-kit/snapshot-evidence',
     '@agent-device/capture-kit/snapshot-freshness',
+    '@agent-device/capture-kit/snapshot-identity',
     '@agent-device/capture-kit/snapshot-label-dedup',
     '@agent-device/capture-kit/snapshot-lines',
     '@agent-device/capture-kit/snapshot-node-lookup',

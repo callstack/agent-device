@@ -1,3 +1,4 @@
+import { stampSnapshotIdentity } from '@agent-device/capture-kit/snapshot-identity';
 import type { CaptureSnapshotInput } from '@agent-device/contracts/snapshot-runtime';
 import type { MacOsHelperSurface } from '@agent-device/contracts/session';
 import type { EnvMap } from '@agent-device/kernel/source-value';
@@ -19,5 +20,8 @@ export async function captureMacOsSurfaceSnapshot(
     signal,
     env,
   });
-  return shapeDesktopSurfaceSnapshot({ ...result, producer: 'macos-helper' }, options);
+  return shapeDesktopSurfaceSnapshot(
+    stampSnapshotIdentity(result, { backend: 'macos-helper', producer: 'macos-helper' }),
+    options,
+  );
 }
