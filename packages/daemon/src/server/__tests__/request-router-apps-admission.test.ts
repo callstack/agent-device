@@ -60,9 +60,10 @@ test.each(['bogus', 'proxy', 'browserstack'])(
     const response = await handler(appsRequest(leaseProvider));
 
     expect(response.ok).toBe(false);
-    expect(response.ok === false && response.error.message).toMatch(
-      /tenant isolation requires lease id/,
-    );
+    expect(response).toMatchObject({
+      ok: false,
+      error: { code: 'DEVICE_NOT_FOUND', details: { reason: 'provider_instance_unallocated' } },
+    });
     expect(listProviderApps).not.toHaveBeenCalled();
     expect(inspectFacts).not.toHaveBeenCalled();
     expect(bind).not.toHaveBeenCalled();

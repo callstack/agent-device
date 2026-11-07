@@ -2,6 +2,7 @@ import {
   filterDeviceInventoryProjection,
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
   projectProviderDeviceInventoryRequest,
+  providerInstanceUnallocatedError,
   type ProviderDeviceInventorySource,
 } from '@agent-device/contracts/device';
 import type {
@@ -50,11 +51,7 @@ export function createComposedDeviceInventoryGateways(
   ) => {
     scope.signal.throwIfAborted();
     if (request.leaseProvider && !request.leaseId) {
-      throw new AppError('DEVICE_NOT_FOUND', 'The provider connection has no allocated instance.', {
-        reason: 'provider_instance_unallocated',
-        hint: 'Allocate a lease with leases.allocate and pass its leaseId.',
-        leaseProvider: request.leaseProvider,
-      });
+      throw providerInstanceUnallocatedError(request.leaseProvider);
     }
     if (provider) {
       const provided = await provider.discover(

@@ -17,6 +17,16 @@ function missingLeaseIdError(error: unknown): boolean {
   return true;
 }
 
+function unallocatedProviderError(leaseProvider: string) {
+  return (error: unknown): boolean => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'DEVICE_NOT_FOUND');
+    assert.equal(error.details?.reason, 'provider_instance_unallocated');
+    assert.equal(error.details?.leaseProvider, leaseProvider);
+    return true;
+  };
+}
+
 const limrunAppCatalog: ProviderAppCatalog = {
   supports: (provider) => provider === 'limrun',
   list: async () => [],
@@ -143,7 +153,7 @@ test('non-close commands on a tenant-isolated session still require a lease id',
 });
 
 test.each(['bogus', 'proxy', 'browserstack'])(
-  'sessionless apps for non-catalog provider %s still requires a tenant lease',
+  'sessionless apps for non-catalog provider %s is refused without a lease',
   (leaseProvider) => {
     const registry = new LeaseRegistry();
 
@@ -159,10 +169,29 @@ test.each(['bogus', 'proxy', 'browserstack'])(
           undefined,
           { env: process.env },
         ),
-      missingLeaseIdError,
+      unallocatedProviderError(leaseProvider),
     );
   },
 );
+
+// #4303: after `close --shutdown` released the instance, `shutdown` on the same connection has no
+// lease. It must name the missing instance, not the tenant's missing lease id.
+test('shutdown on a tenant provider connection without an instance is refused as unallocated', () => {
+  assert.throws(
+    () =>
+      assertRequestLeaseAdmission(
+        makeRequest({
+          command: 'shutdown',
+          flags: { platform: 'ios', leaseProvider: 'limrun' },
+          meta: { tenantId: 'limrun', runId: 'run-1', sessionIsolation: 'tenant' },
+        }),
+        new LeaseRegistry(),
+        undefined,
+        { env: process.env },
+      ),
+    unallocatedProviderError('limrun'),
+  );
+});
 
 test('sessionless apps admits a provider declared by the runtime app catalog', () => {
   const registry = new LeaseRegistry();
