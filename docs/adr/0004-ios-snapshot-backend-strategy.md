@@ -36,7 +36,7 @@ The bridge reads one process, so it refuses a tree in which remote web or scene-
 Refs from that tree would target the host views, and XCTest resolves remote elements (#2484).
 
 **Ownership.** The Apple platform runtime owns acquisition routing and the generation-scoped fallback.
-`@agent-device/contracts/snapshot-presentation` holds the acquisition-to-presented carrier. `@agent-device/capture-kit` owns host-side snapshot policy.
+`@agent-device/contracts/snapshot-presentation` holds the neutral acquisition-to-presented carrier and the clip-fold geometry contract. `@agent-device/capture-kit` owns host-side snapshot policy.
 Daemon assembly owns only the order of capture, compaction, occlusion, and ref publication.
 New consumers must use the capture-kit policy facet. Do not add another daemon presentation path.
 The Swift runner keeps its own `SnapshotPresentation` for the capture-plan tier before the process boundary.
@@ -67,10 +67,10 @@ Decision history: #3801 permits acquisition overflow from system alerts at large
 
 ## Rationale
 
-- Daemon filters or retries cannot recover nodes that XCTest never returned. They only make the failure slower.
+- Daemon filters, retries, or Maestro heuristics cannot recover nodes that XCTest never returned. They only make the failure slower.
 - The generation circuit costs a hybrid app's web screen one refused round trip for each generation, not one on every `wait` poll.
 - Activation (`XCUIApplication.activate()` or `simctl launch`) cancels an authentication session and makes the surface black. Without activation, a foreground host cannot have a stale tree.
-- A torn-down host can serve a richer tree than a live host, and under a system sheet the app stays the AX `primaryApp`.
+- A torn-down host can serve a richer tree than a live host, and under a system sheet the app stays the AX `primaryApp`. Thus, tree content cannot prove presence.
 - A published rect is an address, so a mixed-space tree is not half-usable. A rect and its actionability verdict share one oriented frame, so they cannot disagree.
 
 ## Rejected alternatives
@@ -79,14 +79,14 @@ Decision history: #3801 permits acquisition overflow from system alerts at large
 - Another producer inside the runner (an AX-service special case, the private-AX backend, or a reader copy), or a guest bridge process on a provider Simulator: it needs its own lifecycle or the XCTest main thread, a copied reader drifts, and no provider supports a guest process.
 - One recovery engine for both AX bridges: their native representations differ. `contracts/fixtures/ios-ax-recovery-conformance.json` is the shared contract.
 - A cached surface verdict, a host `pgrep` probe per capture, or the provider's process table alone: a host can present again, the probe slows warm captures, and a sandbox can refuse the table.
-- Modal containment in presentation rules, eligibility, the occlusion mark, or acquisition: it misses the regular projection, moves a cross-language contract, keeps covered nodes, or changes `--raw`.
-- Host-side window geometry from the window origin, the device-type profile, or `simctl io`: keyboard and alert windows are not measured that way.
+- Modal containment through `IOS_PRESENTATION_RULES`, a wider eligibility table, the occlusion mark, or a cut at acquisition: they miss the regular projection, move a cross-language contract, keep covered nodes published, or change `--raw`.
+- Host-side window geometry: in windowed mode the keyboard window and alerts are not measured from the window origin, and a screen size from the device-type profile or `simctl io` adds a host process and an undocumented format without the window origin.
 
 ## Consequences
 
 - Regular snapshots serve agents and Maestro compatibility. Raw snapshots serve hierarchy. Both can fail explicitly on trees that XCTest cannot serialize.
 - Before maintainers add iOS snapshot behavior, they should first decide which mode owns it.
-- The query sweep and `appium-source` publish reported geometry. The tap-path keyboard guard keeps its width rule for them.
+- Producers that do not normalize space, such as the query sweep and `appium-source`, publish reported geometry. The tap-path keyboard guard keeps its width rule for them.
 - [ADR 0026](0026-scroll-clip-authority.md) refines the fact/interpretation boundary for scroll geometry.
 - Details: [presentation](../../apple/snapshot-presentation/README.md), [reader and surface proof](../../apple/snapshot-bridge/README.md), [capture plans and channel policy](../../apple/runner/README.md), [measurements](../evidence/ios-snapshot-adr-0004-measurements-2026-11-06.md).
 - Open gaps:
