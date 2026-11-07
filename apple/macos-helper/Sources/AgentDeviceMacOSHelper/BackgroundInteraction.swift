@@ -533,10 +533,14 @@ private func actionWindow(app: NSRunningApplication, hit: AXUIElement?) -> AXUIE
   }
   guard let front = try? frontWindowFrame(pid: app.processIdentifier) else { return nil }
   return windows(of: AXUIElementCreateApplication(app.processIdentifier)).first { window in
-    guard let rect = rectAttribute(window) else { return false }
-    return abs(rect.x - front.minX) < 1 && abs(rect.y - front.minY) < 1
-      && abs(rect.width - front.width) < 1 && abs(rect.height - front.height) < 1
+    rectAttribute(window).map { isSameFrame($0, front) } ?? false
   }
+}
+
+/// Whether an accessibility window frame is the frame of a WindowServer window.
+private func isSameFrame(_ rect: RectResponse, _ frame: CGRect) -> Bool {
+  abs(rect.x - frame.minX) < 1 && abs(rect.y - frame.minY) < 1
+    && abs(rect.width - frame.width) < 1 && abs(rect.height - frame.height) < 1
 }
 
 private func windowTitle(of element: AXUIElement) -> String? {
@@ -683,7 +687,21 @@ func appWindowInfo() -> [[String: Any]]? {
 /// none. A window list that cannot be read is a refusal, not an empty list: the caller must not
 /// report "no window" for a WindowServer it could not ask.
 func frontWindow(pid: pid_t, windowInfo: [[String: Any]]? = appWindowInfo()) throws -> OnScreenWindow? {
-  onScreenWindows(pid: pid, windowInfo: try requireWindowInfo(windowInfo)).first
+  let windowInfo = try requireWindowInfo(windowInfo)
+  return frontWindow(
+    among: onScreenWindows(pid: pid, windowInfo: windowInfo),
+    isSharingIndicator: { isWindowSharingIndicator(pid: pid, frame: $0.bounds) }
+  )
+}
+
+/// The frontmost candidate that is not a window-sharing indicator. A lone window is never one: an
+/// indicator only appears in front of the window it belongs to.
+func frontWindow(
+  among candidates: [OnScreenWindow],
+  isSharingIndicator: (OnScreenWindow) -> Bool
+) -> OnScreenWindow? {
+  guard candidates.count > 1 else { return candidates.first }
+  return candidates.first { !isSharingIndicator($0) }
 }
 
 func requireWindowInfo(_ windowInfo: [[String: Any]]? = appWindowInfo()) throws -> [[String: Any]] {
@@ -697,6 +715,45 @@ func requireWindowInfo(_ windowInfo: [[String: Any]]? = appWindowInfo()) throws 
     )
   }
   return windowInfo
+}
+
+/// While a ScreenCaptureKit stream shares one of an app's windows, macOS 27 adds a 66 x 20
+/// normal-layer window titled "Window" in front of it. Its only child is a button titled
+/// `WindowSharingSessionButton`. That window is a system indicator, not the app's front window.
+private let windowSharingIndicatorButtonTitle = "WindowSharingSessionButton"
+
+/// Whether a child of a window, by its accessibility role and title, marks the window as the
+/// indicator. The title is read only for a button.
+func isWindowSharingIndicatorButton(role: String, title: @autoclosure () -> String?) -> Bool {
+  role == "AXButton" && title() == windowSharingIndicatorButtonTitle
+}
+
+/// `AXUIElementSetMessagingTimeout` applies only to the element it is set on, so every element the
+/// probe reads gets it, and the probe stops at its own deadline.
+private let sharingIndicatorReplyTimeoutSeconds: Float = 0.1
+private let sharingIndicatorProbeSeconds = 0.5
+
+/// An accessibility tree that cannot be read in time, from a hung app or without Accessibility
+/// access, reads as no indicator, so the frontmost window stays the choice as before the indicator
+/// check. Refusing instead would fail screenshots, which need no accessibility read today.
+private func isWindowSharingIndicator(pid: pid_t, frame: CGRect) -> Bool {
+  let deadline = Date().addingTimeInterval(sharingIndicatorProbeSeconds)
+  func bounded(_ element: AXUIElement) -> AXUIElement? {
+    guard Date() < deadline else { return nil }
+    AXUIElementSetMessagingTimeout(element, sharingIndicatorReplyTimeoutSeconds)
+    return element
+  }
+  guard let appElement = bounded(AXUIElementCreateApplication(pid)) else { return false }
+  let window = windows(of: appElement).first { window in
+    guard let window = bounded(window), let rect = rectAttribute(window) else { return false }
+    return isSameFrame(rect, frame)
+  }
+  guard let window else { return false }
+  return children(of: window).contains { child in
+    guard let child = bounded(child) else { return false }
+    return isWindowSharingIndicatorButton(
+      role: role(of: child), title: stringAttribute(child, attribute: kAXTitleAttribute as String))
+  }
 }
 
 func frontWindowFrame(pid: pid_t, windowInfo: [[String: Any]]? = appWindowInfo()) throws -> CGRect? {
