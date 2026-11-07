@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { ARCHITECTURE_OWNERSHIP, matchesDeclaredRoot } from './architecture-ownership.ts';
 import { resolveImportEdges } from './model.ts';
 import { workspaceSpecifierTargets } from './package-boundaries.ts';
-import { listTrackedTypeScriptFiles } from './tracked-sources.ts';
+import { listTrackedPackageManifests, listTrackedTypeScriptFiles } from './tracked-sources.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 
@@ -47,9 +47,9 @@ test('the snapshot router imports no platform or provider package', () => {
 });
 
 test('every platform and provider package is a forbidden router target', () => {
-  const packages = fs
-    .readdirSync(path.join(repoRoot, 'packages'))
-    .filter((name) => /^(platform|provider)-/.test(name))
+  const packages = listTrackedPackageManifests(repoRoot)
+    .map((manifest) => path.posix.dirname(manifest).slice('packages/'.length))
+    .filter((name) => /^(?:platform|provider)-|^(?:apple-runner|tv-cdp)$/.test(name))
     .map((name) => `packages/${name}/`);
 
   assert.ok(packages.length > 0, 'expected platform and provider packages');
