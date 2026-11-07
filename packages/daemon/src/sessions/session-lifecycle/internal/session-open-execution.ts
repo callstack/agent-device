@@ -50,12 +50,8 @@ import {
   prepareOpenCommandDetails,
   type ResolvedOpenRuntimeHintPlan,
 } from './session-open-prepare.ts';
-import {
-  buildDeviceInUseBySessionError,
-  buildForeignWorkspaceSessionConflict,
-} from '../../../core/session-recovery-hints.ts';
-import { describeOpenWaitForRefusal } from '../../open-device-contention-wait.ts';
-import { isImplicitSessionScopeConflict, resolvePublicSessionName } from '../../session-routing.ts';
+import { findSessionDeviceConflict } from '../../open-device-contention-wait.ts';
+import { resolvePublicSessionName } from '../../session-routing.ts';
 import { applicationLifecycleExecutionFromRequest } from '../../application-lifecycle-execution.ts';
 import {
   abandonDeviceClaim,
@@ -70,11 +66,7 @@ import {
 import { appendResponseWarning } from './session-open-warnings.ts';
 import { buildDeviceClaimConflictError } from '../../../resources/device/device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from '../../../resources/device/device-claim-rule.ts';
-import {
-  errorResponse,
-  type DaemonFailureResponse,
-  type DaemonResponse,
-} from '@agent-device/kernel/contracts';
+import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
 
 export type SessionOpenResult =
   | Readonly<{ type: 'opened'; response: DaemonResponse; ref: SessionRef }>
@@ -439,28 +431,6 @@ async function prepareOpenDispatchSession(params: {
   return { type: 'session', ref: sessionStore.refresh(ref) };
 }
 
-/**
- * The refusal an open gets when another session already holds the device, or a device that
- * overlaps it. The wait an expired `--wait` budget spent is carried into the recovery text, because
- * a caller that waited is not helped by being told to wait.
- */
-function findNewSessionDeviceConflict(params: {
-  req: DaemonRequest;
-  device: DeviceInfo;
-  sessionStore: SessionStore;
-}): DaemonFailureResponse | undefined {
-  const { req, device, sessionStore } = params;
-  const inUse = sessionStore.findByDevice(device.id);
-  if (!inUse) return undefined;
-  // The wait the caller paid for belongs to `open` alone: an interaction that hits the same busy
-  // device cannot wait for it, and would be sent off with a flag its own command rejects.
-  const attempt = describeOpenWaitForRefusal(req);
-  if (isImplicitSessionScopeConflict(req, inUse.session)) {
-    return buildForeignWorkspaceSessionConflict(inUse, device, attempt);
-  }
-  return buildDeviceInUseBySessionError(inUse, device, attempt);
-}
-
 async function acquireDeviceClaimForOwner(params: {
   host: HostEnvironment;
   req: DaemonRequest;
@@ -530,7 +500,7 @@ export async function openNewSessionWithDeviceClaim(params: {
     platformServices,
   } = params;
   requireOpenSessionAdmission(sessionStore, sessionName, undefined);
-  const conflict = findNewSessionDeviceConflict({ req, device, sessionStore });
+  const conflict = findSessionDeviceConflict({ req, device, sessionStore });
   if (conflict) return { type: 'response', response: conflict };
 
   const ownerClaim = await acquireDeviceClaimForOwner({

@@ -76,6 +76,7 @@ test('every command that deviates from require-owner is a reviewed, diffable set
       'session',
       'session_list',
       'session_save_script',
+      'test',
       'web',
     ],
   });
