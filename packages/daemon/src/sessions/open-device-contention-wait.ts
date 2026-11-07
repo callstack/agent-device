@@ -126,7 +126,7 @@ export function beginOpenDeviceWait(params: {
 
 /** The other session holding `deviceId`, or `undefined` when nothing stands between this open and
  * the device — including when this open's own session is what holds it. */
-export function findSessionHoldingDevice(
+function findSessionHoldingDevice(
   sessionStore: SessionStore,
   deviceId: string,
   sessionName: string,
