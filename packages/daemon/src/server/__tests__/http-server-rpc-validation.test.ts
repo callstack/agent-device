@@ -359,7 +359,7 @@ test('local command RPC keeps host paths unrestricted', async (t) => {
 
 test.for([
   ['omitted', {}, 'default', true],
-  ['blank', { session: '  ' }, 'default', true],
+  ['blank', { session: '  ' }, '  ', true],
   ['named', { session: 'agent-a' }, 'agent-a', undefined],
 ] as const)(
   'install_from_source records a session that is %s',

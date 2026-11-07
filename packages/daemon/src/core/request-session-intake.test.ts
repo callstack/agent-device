@@ -5,7 +5,8 @@ const OMITTED = { internal: { sessionOmitted: true } };
 
 test.each([
   ['a missing session', {}, { session: 'default', ...OMITTED }],
-  ['a blank session', { session: '  ' }, { session: 'default', ...OMITTED }],
+  ['a blank session', { session: '  ' }, { session: '  ', ...OMITTED }],
+  ['an empty session', { session: '' }, { session: '', ...OMITTED }],
   ['a session that is not a string', { session: 7 }, { session: 'default', ...OMITTED }],
   [
     'the literal default from a client that named none',

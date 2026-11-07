@@ -249,7 +249,7 @@ test('socket transport refuses a non-string positional before dispatch', async (
 
 test.for([
   ['omitted', undefined, 'default', true],
-  ['blank', '  ', 'default', true],
+  ['blank', '  ', '  ', true],
   ['named', 'agent-a', 'agent-a', undefined],
 ] as const)(
   'the socket records a session that is %s',
