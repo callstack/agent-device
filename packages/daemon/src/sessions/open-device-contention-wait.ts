@@ -3,9 +3,16 @@ import { readOptionalInteger } from '@agent-device/contracts/command';
 import { emitRequestProgress, throwIfRequestCanceled } from '@agent-device/host-kit/request';
 import { Deadline, sleep } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../core/daemon-request.ts';
+import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
 import type { SessionStore } from '../core/session-store.ts';
 import type { SessionRecoveryOptions } from '../core/session-recovery-hints.ts';
+import { isImplicitSessionScopeConflict } from './session-routing.ts';
+import {
+  buildDeviceInUseBySessionError,
+  buildForeignWorkspaceSessionConflict,
+} from '../core/session-recovery-hints.ts';
 
 /**
  * How often a waiting open re-checks its device. Contention ends when another session closes or
@@ -119,7 +126,7 @@ export function beginOpenDeviceWait(params: {
 
 /** The other session holding `deviceId`, or `undefined` when nothing stands between this open and
  * the device — including when this open's own session is what holds it. */
-function findSessionHoldingDevice(
+export function findSessionHoldingDevice(
   sessionStore: SessionStore,
   deviceId: string,
   sessionName: string,
@@ -127,6 +134,28 @@ function findSessionHoldingDevice(
   const inUse = sessionStore.findByDevice(deviceId);
   if (!inUse || inUse.address === sessionName) return undefined;
   return inUse;
+}
+
+/**
+ * Resolves the device conflict refusal when another session already holds the target device.
+ * Used by both session open and request-execution scope to enforce owner claims consistently.
+ */
+export function findSessionDeviceConflict(params: {
+  req: DaemonRequest;
+  device: DeviceInfo;
+  sessionStore: SessionStore;
+  sessionName?: string;
+}): DaemonFailureResponse | undefined {
+  const { req, device, sessionStore, sessionName } = params;
+  const inUse = sessionName
+    ? findSessionHoldingDevice(sessionStore, device.id, sessionName)
+    : sessionStore.findByDevice(device.id);
+  if (!inUse) return undefined;
+  const attempt = describeOpenWaitForRefusal(req);
+  if (isImplicitSessionScopeConflict(req, inUse.session)) {
+    return buildForeignWorkspaceSessionConflict(inUse, device, attempt);
+  }
+  return buildDeviceInUseBySessionError(inUse, device, attempt);
 }
 
 type LockedAttempt<Outcome> = { ran: true; outcome: Outcome } | { ran: false };

@@ -257,6 +257,43 @@ test('fresh replay retains a dynamically selected device through finalization', 
   expect(externalRequestSettled).toBe(true);
 });
 
+test('test runs a one-case suite whose script leaves a session open, passes, and closes the session', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-test-leak-');
+  const scriptPath = path.join(root, '01-case.ad');
+  fs.writeFileSync(scriptPath, 'context platform=ios\nopen "com.example.app"\n');
+  const sessionStore = makeSessionStore('agent-device-replay-test-leak-');
+
+  const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
+    createCommandSurface: testCreateCommandSurface,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'test',
+    positionals: [root],
+    flags: { platform: 'ios' },
+    meta: { cwd: root, requestId: 'suite-unclosed-session' },
+  });
+
+  expect(response).toMatchObject({
+    ok: true,
+    data: expect.objectContaining({
+      passed: 1,
+      failed: 0,
+    }),
+  });
+  expect(sessionStore.listRefs()).toHaveLength(0);
+});
+
 function requestPlatformProvidersFake(): {
   providers: RequestPlatformProviders;
   contexts: PlatformProviderRequestContext[];

@@ -51,6 +51,7 @@ import {
 } from './request-binding.ts';
 import {
   beginOpenDeviceWait,
+  findSessionDeviceConflict,
   readOpenWaitBudgetMs,
 } from '../sessions/open-device-contention-wait.ts';
 import {
@@ -336,6 +337,7 @@ export async function createRequestExecutionScope(params: {
       platformRequestScope: params.platformRequestScope,
       daemonPolicy: params.daemonPolicy,
       claimRecoveryGateway: params.claimRecoveryGateway,
+      sessionStore,
     });
 
     let bindingCleanup: Promise<void> | undefined;
@@ -573,13 +575,15 @@ function createRequestDeviceAccess(params: {
   platformRequestScope: PlatformRequestScope;
   daemonPolicy: DaemonPolicy | undefined;
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
+  sessionStore: SessionStore;
 }): {
   claimAdmission: DeviceClaimAdmission;
   runtimeBindings: RequestRuntimeBindings;
 } {
   const { deviceRuntimeGateway, platformRequestScope, daemonPolicy } = params;
+  const claimPolicy = resolveCommandDeviceClaimPolicy(params.command);
   const claimAdmission = createDeviceClaimAdmission({
-    policy: resolveCommandDeviceClaimPolicy(params.command),
+    policy: claimPolicy,
     command: params.command,
     session: params.sessionName,
     workspace: params.workspace,
@@ -604,9 +608,29 @@ function createRequestDeviceAccess(params: {
       scope: platformRequestScope,
       dispatchLedger: params.dispatchLedger,
       admitDeviceClaim: claimAdmission.admit,
-      admitDevice: daemonPolicy
-        ? (device) => assertDaemonPolicyAdmitsDevice(daemonPolicy, device)
-        : undefined,
+      admitDevice:
+        daemonPolicy || claimPolicy === 'require-owner'
+          ? (device) => {
+              if (daemonPolicy) {
+                assertDaemonPolicyAdmitsDevice(daemonPolicy, device);
+              }
+              if (claimPolicy === 'require-owner' && !params.sessionStore.get(params.sessionName)) {
+                const refusal = findSessionDeviceConflict({
+                  req: params.req,
+                  device,
+                  sessionStore: params.sessionStore,
+                  sessionName: params.sessionName,
+                });
+                if (refusal) {
+                  throw new AppError(
+                    refusal.error.code,
+                    refusal.error.message,
+                    refusal.error.details,
+                  );
+                }
+              }
+            }
+          : undefined,
     }),
   };
 }

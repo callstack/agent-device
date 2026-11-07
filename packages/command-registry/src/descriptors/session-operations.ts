@@ -183,7 +183,7 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'test',
-    deviceClaimPolicy: 'require-owner',
+    deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled
       ? { ownerFiles: ['packages/command-surface/src/replay/index.ts'] as const }
       : {}),
