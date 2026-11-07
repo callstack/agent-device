@@ -21,6 +21,7 @@ export type SnapshotProducer =
   | 'simulator-ax-bridge'
   | 'appium-source'
   | 'revyl-ios-tree'
+  | 'revyl-android-tree'
   | 'android-uiautomator'
   | 'cdp-dom'
   | 'harmonyos-uitest'
@@ -100,6 +101,14 @@ export const SNAPSHOT_PRODUCERS = {
   },
   'revyl-ios-tree': {
     channels: ['xctest'],
+    truncation: 'unavailable',
+    residue: 'provider-derived',
+    quietMs: GENERAL_QUIET_MS,
+    refs: 'dense',
+    sparseRootWarning: 'none',
+  },
+  'revyl-android-tree': {
+    channels: ['android'],
     truncation: 'unavailable',
     residue: 'provider-derived',
     quietMs: GENERAL_QUIET_MS,

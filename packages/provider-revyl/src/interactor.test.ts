@@ -500,7 +500,7 @@ test('the Android snapshot comes back as nodes parsed from the uiautomator dump'
   const result = await interactor.snapshot({});
   if ('acquisition' in result) throw new Error('Android answers as a plain snapshot result');
   assert.equal(result.backend, 'android');
-  assert.equal(result.producer, 'appium-source');
+  assert.equal(result.producer, 'revyl-android-tree');
   const nodes = 'acquisition' in result ? [] : (result.nodes ?? []);
   const login = nodes.find((node) => node.label === 'Login');
   assert.equal(login?.bundleId, 'com.example');
