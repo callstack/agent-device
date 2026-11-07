@@ -1,7 +1,7 @@
 # iOS snapshot measurements from ADR 0004, 2026-11-06
 
 These measurements moved out of [ADR 0004](../adr/0004-ios-snapshot-backend-strategy.md) on 2026-11-06.
-Each item names the issue or PR that took it. The run details are in that issue.
+Each item names the issue or PR that took it, when one exists. The run details are in that issue.
 
 ## Quarter-turned keyboard window (#2612)
 
@@ -44,6 +44,10 @@ Route: `snapshot --depth N`, recursive tier, 15 warm captures per cell, against 
 - Acquisition p95: within ±7 % of `main`, mixed sign.
 
 Both screens walked their whole raw tree. The platform materializes the `XCUIElementSnapshot` tree in one call, and that call is where acquisition time goes.
+
+## Query-sweep read failures
+
+On the observed app class, each `allElementsBoundByIndex` query-sweep read failed with `kAXErrorIllegalArgument` and recorded `Failed to resolve query: ...`.
 
 ## Host process probe (#2751)
 

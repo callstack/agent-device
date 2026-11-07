@@ -288,7 +288,7 @@ extension RunnerTests {
   /// Stops at the first qualifying window. Reading a window that will be discarded is not free: a
   /// transient candidate that disappears between its `exists` answer and its `frame` fetch makes
   /// XCTest record an issue, and an issue `record(_:)` does not mute ends the runner session
-  /// (ADR 0004, ADR 0005, #2995).
+  /// (`apple/runner/README.md` "XCTest accessibility channel policy", ADR 0005, #2995).
   ///
   /// The read that remains is not atomic: a window vanishing while it is the one being resolved still
   /// records, and the chosen window is read again on its way to a display ID

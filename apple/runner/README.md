@@ -107,9 +107,7 @@ Every bounded main-thread dispatch that outlives its slice counts as occupying t
 Thus, if a viewport read takes too long, the plan skips the sweep instead of queueing it.
 
 A failure that XCTest records ends `testCommand` when the main-thread block that recorded it returns, whatever `continueAfterFailure` says.
-On hostile trees, every `allElementsBoundByIndex` read of the query sweep fails with `kAXErrorIllegalArgument` and records `Failed to resolve query: ...`.
-Thus, the runner mutes AX-server rejections in both XCTest fetch wordings.
-Otherwise, the runner exits during a hostile snapshot and loses its per-bundle penalty and depth memory.
+Mute XCTest's AX-server rejection in both fetch wordings so a recorded failure does not end the runner session.
 
 ### Screen space
 
