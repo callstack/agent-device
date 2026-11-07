@@ -267,7 +267,9 @@ export function normalizeLeaseAdmissionRequest(
     // A provider runtime's connection that sent no lease has no instance, for example after
     // `close --shutdown` released it. Name that, as device inventory does. A malformed lease id, or a
     // logical lease such as `proxy` that boot or open cannot allocate, stays a missing lease id.
-    const runtimeProvider = leaseProviderRequiringRuntime({ leaseProvider: request.leaseProvider });
+    const runtimeProvider = leaseProviderRequiringRuntime({
+      leaseProvider: normalizeLeaseProvider(request.leaseProvider),
+    });
     if (runtimeProvider && !request.leaseId?.trim()) {
       throw providerInstanceUnallocatedError(runtimeProvider);
     }

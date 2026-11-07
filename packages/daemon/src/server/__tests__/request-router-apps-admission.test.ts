@@ -62,7 +62,10 @@ test.each(['bogus', 'proxy', 'browserstack'])(
     expect(response.ok).toBe(false);
     expect(response).toMatchObject(
       leaseProvider === 'proxy'
-        ? { ok: false, error: { message: 'tenant isolation requires lease id.' } }
+        ? {
+            ok: false,
+            error: { code: 'INVALID_ARGS', message: 'tenant isolation requires lease id.' },
+          }
         : {
             ok: false,
             error: {

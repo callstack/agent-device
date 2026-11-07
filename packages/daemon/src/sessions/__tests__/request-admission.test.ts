@@ -152,7 +152,7 @@ test('non-close commands on a tenant-isolated session still require a lease id',
   );
 });
 
-test.each(['bogus', 'proxy', 'cloud', 'browserstack'])(
+test.each(['bogus', 'proxy', 'cloud', ' proxy ', 'browserstack'])(
   'sessionless apps for non-catalog provider %s is refused without a lease',
   (leaseProvider) => {
     const registry = new LeaseRegistry();
@@ -170,7 +170,7 @@ test.each(['bogus', 'proxy', 'cloud', 'browserstack'])(
           { env: process.env },
         ),
       // A logical lease cannot be allocated by boot or open, so it keeps the missing-lease refusal.
-      ['proxy', 'cloud'].includes(leaseProvider)
+      ['proxy', 'cloud'].includes(leaseProvider.trim())
         ? missingLeaseIdError
         : unallocatedProviderError(leaseProvider),
     );
