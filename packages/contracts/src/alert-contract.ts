@@ -1,10 +1,11 @@
 export const ALERT_POLL_INTERVAL_MS = 300;
 /**
- * The floor for a retry read through the XCTest runner: the loops start no later read with this
- * much budget or less left. Finding a prompt and acting on
- * it takes longer than one poll interval, and a read cut off by the runner's main-thread watchdog
- * is reported as `MAIN_THREAD_TIMEOUT` instead of absence. Live simulator reads that saw a late
- * prompt needed up to about 1.4 s.
+ * The floor for a retry read through the XCTest runner. After a read has completed, the alert
+ * loops start no further read with this much budget or less left: a read cut off by the runner's
+ * main-thread watchdog is reported as `MAIN_THREAD_TIMEOUT`, not absence, and live reads that
+ * saw a late prompt needed up to about 1.4 s. It gates retry reads only. The first read starts
+ * whatever the window, including a caller `timeoutMs` below this value, and the macOS helper
+ * keeps the poll interval instead.
  */
 export const ALERT_MIN_READ_BUDGET_MS = 1_500;
 export const DEFAULT_ALERT_TIMEOUT_MS = 10_000;
