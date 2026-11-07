@@ -44,11 +44,17 @@ const RUNNER_TRANSPORT_MARGIN_MS = 1_000;
 export type RunnerSnapshotBridge = Readonly<{
   source: SnapshotBridgeSource<RunnerSnapshotBridgeTarget>;
   resetTargets(): void;
+  /** The cached target of the app, read from the runner only when none is cached. */
   resolveTarget(
     device: DeviceInfo,
     appBundleId: string,
     signal: AbortSignal,
-    refresh?: 'refresh',
+  ): Promise<RunnerSnapshotBridgeTarget>;
+  /** Reads the app's target from the runner, which replaces the cached one only when it resolves. */
+  refreshTarget(
+    device: DeviceInfo,
+    appBundleId: string,
+    signal: AbortSignal,
   ): Promise<RunnerSnapshotBridgeTarget>;
 }>;
 
@@ -82,16 +88,13 @@ export function createRunnerSnapshotBridge(
     return parseRunnerEnvelope(data);
   };
 
-  const resolveTarget: RunnerSnapshotBridge['resolveTarget'] = async (
+  const refreshTarget: RunnerSnapshotBridge['refreshTarget'] = async (
     device,
     appBundleId,
     signal,
-    refresh,
   ) => {
     signal.throwIfAborted();
     const targetId = `${device.id}:${appBundleId}`;
-    const cached = targets.get(targetId);
-    if (cached && refresh !== 'refresh') return cached;
     // Only a resolved target replaces the cached one: a refresh that fails leaves the generation the
     // route planned against.
     const captureTargets = targets;
@@ -108,6 +111,17 @@ export function createRunnerSnapshotBridge(
     const target = readTarget(envelope, { requestId, appBundleId, targetId });
     captureTargets.set(targetId, target);
     return target;
+  };
+  const resolveTarget: RunnerSnapshotBridge['resolveTarget'] = async (
+    device,
+    appBundleId,
+    signal,
+  ) => {
+    signal.throwIfAborted();
+    return (
+      targets.get(`${device.id}:${appBundleId}`) ??
+      (await refreshTarget(device, appBundleId, signal))
+    );
   };
 
   const source = createSnapshotBridgeSource<RunnerSnapshotBridgeTarget>({
@@ -163,6 +177,7 @@ export function createRunnerSnapshotBridge(
   return {
     source,
     resolveTarget,
+    refreshTarget,
     resetTargets: () => {
       targets = new Map();
     },

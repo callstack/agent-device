@@ -338,6 +338,14 @@
       "types": "./src/snapshot-rect-projection.ts",
       "default": "./src/snapshot-rect-projection.ts"
     },
+    "./snapshot-router": {
+      "types": "./src/snapshot-router/router.ts",
+      "default": "./src/snapshot-router/router.ts"
+    },
+    "./snapshot-source-channel": {
+      "types": "./src/snapshot-router/source-channel.ts",
+      "default": "./src/snapshot-router/source-channel.ts"
+    },
     "./snapshot-state": {
       "types": "./src/snapshot-state.ts",
       "default": "./src/snapshot-state.ts"

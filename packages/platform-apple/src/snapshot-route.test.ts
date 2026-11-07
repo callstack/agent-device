@@ -497,7 +497,6 @@ test('stale bridge acquisition resolves the current generation before XCTest fal
     ios,
     input.options.appBundleId,
     expect.any(AbortSignal),
-    'refresh',
   );
   expect(result.comparisonIdentity?.lineage).toEqual({
     targetId: currentTarget.targetId,

@@ -2,7 +2,7 @@ import {
   IOS_SYSTEM_SURFACE_HOSTS,
   type IosSystemSurfaceHost,
 } from '@agent-device/contracts/ios-system-surface';
-import type { SnapshotSourceFailure } from './snapshot-source-facade.ts';
+import type { SnapshotSourceFailure } from './source-channel.ts';
 
 /**
  * What the screen showed when a capture-scoped bridge refusal fired: a preparation still running
