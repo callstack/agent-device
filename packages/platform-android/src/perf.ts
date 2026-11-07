@@ -126,7 +126,7 @@ export async function captureAndroidHeapSnapshot(
         pid,
         path: outPath,
         remotePath,
-        hint: 'Retry with a writable --out path. If the file is still empty, inspect adb pull output with --debug.',
+        hint: 'Retry with a writable --out path. If the file is still empty, check that the device can write the heap dump at remotePath.',
       });
     }
 
@@ -240,7 +240,7 @@ function resolveAndroidHeapDumpHint(stdout: string, stderr: string): string {
   if (text.includes('permission') || text.includes('denied')) {
     return 'The device denied heap dump access. Use a debug/profileable build or a device image that permits app heap dumping.';
   }
-  return 'Reopen the app to refresh the process, then retry perf memory snapshot. If it still fails, rerun it with --json and read the adb am dumpheap output in error.details.stderr.';
+  return 'Reopen the app to refresh the process, then retry perf memory snapshot. If it still fails, read the adb am dumpheap output in error.details.stdout and error.details.stderr (--json).';
 }
 
 function parseAndroidMemInfoTopConsumers(stdout: string): AndroidMemoryConsumer[] | undefined {
