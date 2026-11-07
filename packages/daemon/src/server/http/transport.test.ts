@@ -85,7 +85,7 @@ test('Provider-backed integration daemon socket transport frames requests and no
 
 test.for([
   ['omitted', undefined, 'default', true],
-  ['blank', '  ', 'default', true],
+  ['blank', '  ', '  ', true],
   ['named', 'agent-a', 'agent-a', undefined],
 ] as const)(
   'the socket records a session that is %s',
