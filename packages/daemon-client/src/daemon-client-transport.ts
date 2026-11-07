@@ -715,6 +715,7 @@ function timeoutRequestContext(
     platform: req.flags?.platform,
     session: req.session,
     action: req.positionals?.[0],
+    request: { command: req.command, positionals: req.positionals, flags: req.flags },
   };
 }
 

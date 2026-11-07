@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { withCapturedStderrAsync } from '@agent-device/test-kit';
-import { printHumanError } from './human-error.ts';
+import { writeHumanError } from './human-error.ts';
 
-test('printHumanError writes a body-less failure as its one summary line', async () => {
+test('writeHumanError writes a body-less failure as its one summary line', async () => {
   const stderr = await withCapturedStderrAsync(async () => {
-    printHumanError(
+    writeHumanError(
       new AppError('COMMAND_FAILED', 'Could not reach the app', { hint: 'Open the app first.' }),
     );
   });
@@ -18,9 +18,9 @@ test('printHumanError writes a body-less failure as its one summary line', async
 });
 
 // Callers merge stderr into stdout and keep `tail -1` or `head -1`; both must be the summary.
-test('printHumanError closes a multi-line failure with the summary, after any trailer', async () => {
+test('writeHumanError closes a multi-line failure with the summary, after any trailer', async () => {
   const stderr = await withCapturedStderrAsync(async () => {
-    printHumanError(
+    writeHumanError(
       new AppError('COMMAND_FAILED', 'boom', { logPath: '/tmp/req.ndjson', dispatched: 'unknown' }),
       { trailer: '\n[daemon log]\nlast daemon line' },
     );

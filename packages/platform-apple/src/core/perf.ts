@@ -172,7 +172,7 @@ export async function captureAppleMemorySnapshot(
       appBundleId,
       pid: processInfo.pid,
       path: outPath,
-      hint: 'Retry with a writable --out path. If the file is still empty, run with --debug and inspect leaks output.',
+      hint: 'Retry with a writable --out path. If the file is still empty, rerun it with --json and read the leaks output in error.details.stderr.',
     });
   }
 
@@ -252,7 +252,7 @@ function annotateAppleMemorySnapshotToolError(
       pid: processInfo.pid,
       processName: path.basename(readProcessCommandToken(processInfo.command)),
       path: outPath,
-      hint: 'Retry perf memory snapshot. If it still fails, run with --debug and inspect leaks output.',
+      hint: 'Retry perf memory snapshot. If it still fails, rerun it with --json and read the leaks output in error.details.stderr.',
     },
     error,
   );

@@ -1,8 +1,8 @@
 # CLI failure summary line evaluation, 2026-11-07
 
-Small models recovered correctly from every failure when stderr opened and closed with one summary line that carried the error code, the dispatch fact and a runnable Next step. With the layout before the change, 58% recovered. Without the closing copy of the summary, recovery under `tail -1` fell to 11%. ADR 0010 decision 7 records the resulting rule.
+In one run per cell over synthetic, author-written and author-graded renders, layout D (one summary line first and last, with the dispatch fact and a runnable Next step) recovered in 192 of 192 answers; the layout before the change recovered in 58%. Without the closing copy of the summary, recovery under `tail -1` fell to 11%. ADR 0010 decision 7 records the resulting rule.
 
-These are synthetic renders of real failure scenarios, not live CLI runs. The author wrote the Next text and the answer key, so the 100% result partly measures whether a model follows a correct Next step. The wrong-Next condition below measures that directly.
+Treat these numbers as directional. The renders are synthetic, not live CLI runs. The author wrote the Next text, the answer key and the grader, so the D result partly measures whether a model follows a correct Next step; the wrong-Next condition below measures that directly. Each cell ran once, so differences of a few points are within run noise.
 
 ## How agents trim output
 
@@ -19,7 +19,7 @@ Twelve failure scenarios used codes, messages and hints taken from the codebase:
 | C: summary first and last, hints unchanged | 69% | 6% | 13% | 98% | 95% |
 | D: C with a runnable Next step | 100% | 0% | 0% | 97% | 96% |
 
-Under `tail -1`, the error code was visible in 0% of A and B answers and in 100% of C and D answers. C recovered little better than B because the old generic hint ("Retry with --debug") became an instruction once it was labelled Next; under C, all three models that saw only the summary line reran a selector miss with `--debug`.
+Under `tail -1`, the error code was visible in 0% of A and B answers and in 100% of C and D answers. C recovered slightly less than B (69% against 71%, within run noise). A hypothesis that fits the answers: the old generic hint ("Retry with --debug") became an instruction once it was labelled Next. For the selector miss cut to one line under C, three of the four models reran the command with `--debug`.
 
 ## Isolating the repeat and blind obedience
 

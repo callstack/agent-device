@@ -201,7 +201,7 @@ async function startStandIn(
   return { server, port, connections: () => connections };
 }
 
-async function expectRouteError(run: Promise<unknown>, hintPattern: RegExp): Promise<void> {
+async function expectRouteError(run: Promise<unknown>, hintPattern: RegExp): Promise<AppError> {
   let thrown: unknown;
   try {
     await run;
@@ -225,6 +225,7 @@ async function expectRouteError(run: Promise<unknown>, hintPattern: RegExp): Pro
     [],
     'a timeout must not also diagnose a transport failure',
   );
+  return thrown;
 }
 
 beforeEach(() => {
@@ -249,6 +250,11 @@ type RouteRow = Readonly<{
   connections: 1 | 2;
   /** Whether this row's verdict is the reset branch, which clears the daemon's metadata. */
   resets: boolean;
+  /**
+   * The request was already sent, so a command declared to mutate the app may have run on the
+   * device; only a declared read proves it did not. The CLI prints this as the dispatch fact.
+   */
+  dispatched: 'no' | 'unknown';
 }>;
 
 // The `ios` declarations are deliberate: eligibility never keyed off the declared platform, and
@@ -263,6 +269,7 @@ const ROUTE_ROWS: readonly RouteRow[] = [
     afterFirst: 'answer',
     hintPattern: /The timed-out open request was canceled; the daemon was kept alive/,
     connections: 2,
+    dispatched: 'unknown',
     resets: false,
   },
   {
@@ -273,6 +280,7 @@ const ROUTE_ROWS: readonly RouteRow[] = [
     afterFirst: 'answer',
     hintPattern: /the daemon was kept alive so the session can still be closed or inspected/,
     connections: 2,
+    dispatched: 'unknown',
     resets: false,
   },
   {
@@ -283,6 +291,7 @@ const ROUTE_ROWS: readonly RouteRow[] = [
     afterFirst: 'refuse',
     hintPattern: /The daemon did not answer the liveness probe and was reset after the timeout/,
     connections: 2,
+    dispatched: 'unknown',
     resets: true,
   },
   {
@@ -296,6 +305,7 @@ const ROUTE_ROWS: readonly RouteRow[] = [
     hintPattern:
       /The timed-out snapshot request was canceled; the daemon was kept alive.*prepare ios-runner/s,
     connections: 1,
+    dispatched: 'no',
     resets: false,
   },
   {
@@ -312,6 +322,7 @@ const ROUTE_ROWS: readonly RouteRow[] = [
     hintPattern:
       /^The daemon may still be exporting the recording\. Run agent-device record stop --session default again/,
     connections: 1,
+    dispatched: 'no',
     resets: false,
   },
   {
@@ -321,8 +332,9 @@ const ROUTE_ROWS: readonly RouteRow[] = [
     command: RESET_POLICY_COMMAND,
     platform: 'android',
     afterFirst: 'answer',
-    hintPattern: /verify the remote daemon URL, auth token, and remote host logs/,
+    hintPattern: /Verify the remote daemon URL, auth token, and remote host logs/,
     connections: 1,
+    dispatched: 'unknown',
     resets: false,
   },
 ];
@@ -356,7 +368,7 @@ for (const row of ROUTE_ROWS) {
       : undefined;
     try {
       const info = registered ?? standInInfo(row, daemon.port);
-      await expectRouteError(
+      const error = await expectRouteError(
         sendRequest(
           info,
           buildRequest(row.command, row.platform, row.positionals),
@@ -367,6 +379,10 @@ for (const row of ROUTE_ROWS) {
         ),
         row.hintPattern,
       );
+      assert.equal(error.details?.dispatched, row.dispatched);
+      // The hint is printed as the Next step; a failure that already wrote its log never asks for
+      // a --debug rerun.
+      assert.equal(/--debug/.test(String(error.details?.hint)), false);
       assert.equal(daemon.connections(), row.connections, 'probe-vs-skip is a route decision');
       assert.equal(
         fs.existsSync(statePaths.infoPath),

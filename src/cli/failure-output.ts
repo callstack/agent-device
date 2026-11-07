@@ -23,12 +23,12 @@ export async function printHumanError(
   err: AppError | NormalizedError,
   options: HumanErrorPrint = {},
 ): Promise<void> {
-  const { printHumanError: write } = await import('../commands/output/human-error.ts');
+  const { writeHumanError } = await import('../commands/output/human-error.ts');
   const command = options.command ?? (options.argv ? await failedParseCommand(options.argv) : null);
   const synopsis =
     err.code === 'INVALID_ARGS' && command ? await synopsisForNextStep(command) : undefined;
   const trailer = options.logTail ? failureLogTail(options.logTail) : undefined;
-  write(err, { debugTier: options.debugTier, synopsis, trailer });
+  writeHumanError(err, { debugTier: options.debugTier, synopsis, trailer });
 }
 
 async function synopsisForNextStep(command: string): Promise<string | undefined> {

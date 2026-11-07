@@ -240,7 +240,7 @@ function resolveAndroidHeapDumpHint(stdout: string, stderr: string): string {
   if (text.includes('permission') || text.includes('denied')) {
     return 'The device denied heap dump access. Use a debug/profileable build or a device image that permits app heap dumping.';
   }
-  return 'Reopen the app to refresh the process, then retry perf memory snapshot. If it still fails, run with --debug and inspect adb am dumpheap output.';
+  return 'Reopen the app to refresh the process, then retry perf memory snapshot. If it still fails, rerun it with --json and read the adb am dumpheap output in error.details.stderr.';
 }
 
 function parseAndroidMemInfoTopConsumers(stdout: string): AndroidMemoryConsumer[] | undefined {

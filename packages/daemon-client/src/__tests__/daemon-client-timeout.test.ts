@@ -17,7 +17,7 @@ test('request timeout hint names an Apple runner only on a declared Apple platfo
       command: 'press',
       applePlatformDeclared: true,
     }),
-    'Retry with --debug and check daemon diagnostics logs. The timed-out press request was canceled; the daemon was kept alive so the session can still be closed or inspected.',
+    'The timed-out press request was canceled; the daemon was kept alive so the session can still be closed or inspected. Read the request log for the timed-out step.',
   );
   assert.equal(
     resolveRequestTimeoutHint({
@@ -26,7 +26,7 @@ test('request timeout hint names an Apple runner only on a declared Apple platfo
       command: 'snapshot',
       applePlatformDeclared: true,
     }),
-    'Retry with --debug and check daemon diagnostics logs. The timed-out snapshot request was canceled; the daemon was kept alive so the session can still be closed or inspected. If this was the first Apple-platform snapshot on the device, run agent-device prepare ios-runner with the same --platform before snapshot/test so runner startup is handled explicitly.',
+    'The timed-out snapshot request was canceled; the daemon was kept alive so the session can still be closed or inspected. Read the request log for the timed-out step. If this was the first Apple-platform snapshot on the device, run agent-device prepare ios-runner with the same --platform before snapshot/test so runner startup is handled explicitly.',
   );
 
   // An undeclared or declared non-Apple platform names no Apple runner in any branch, and the
@@ -38,7 +38,7 @@ test('request timeout hint names an Apple runner only on a declared Apple platfo
       command: 'snapshot',
       applePlatformDeclared: false,
     }),
-    'Retry with --debug and check daemon diagnostics logs. The timed-out snapshot request was canceled; the daemon was kept alive so the session can still be closed or inspected.',
+    'The timed-out snapshot request was canceled; the daemon was kept alive so the session can still be closed or inspected. Read the request log for the timed-out step.',
   );
 
   // A reset is now reported as what it was decided from: an unanswered liveness probe. The reset
@@ -52,7 +52,7 @@ test('request timeout hint names an Apple runner only on a declared Apple platfo
         command: 'open',
         applePlatformDeclared,
       }),
-      'Retry with --debug and check daemon diagnostics logs. The daemon did not answer the liveness probe and was reset after the timeout.',
+      'The daemon did not answer the liveness probe and was reset after the timeout. Read the request log for the timed-out step.',
     );
   }
 
@@ -64,7 +64,7 @@ test('request timeout hint names an Apple runner only on a declared Apple platfo
       command: 'press',
       applePlatformDeclared: false,
     }),
-    'Retry with --debug and verify the remote daemon URL, auth token, and remote host logs.',
+    'Verify the remote daemon URL, auth token, and remote host logs.',
   );
 });
 
@@ -115,7 +115,7 @@ test('a timed-out record stop on a surviving daemon names the retry that returns
       action: 'stop',
       session: 'recording',
     }),
-    'Retry with --debug and check daemon diagnostics logs. The daemon did not answer the liveness probe and was reset after the timeout.',
+    'The daemon did not answer the liveness probe and was reset after the timeout. Read the request log for the timed-out step.',
   );
   // `record start` runs no export, so it keeps the generic remote wording.
   assert.equal(
@@ -127,6 +127,6 @@ test('a timed-out record stop on a surviving daemon names the retry that returns
       action: 'start',
       session: 'recording',
     }),
-    'Retry with --debug and verify the remote daemon URL, auth token, and remote host logs.',
+    'Verify the remote daemon URL, auth token, and remote host logs.',
   );
 });

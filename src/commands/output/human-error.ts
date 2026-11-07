@@ -15,7 +15,7 @@ export type PrintHumanErrorOptions = {
  * it, closes it too: callers that merge streams and keep only the first or the last line
  * still read the code, the message, the dispatch fact and the Next step.
  */
-export function printHumanError(
+export function writeHumanError(
   err: AppError | NormalizedError,
   options: PrintHumanErrorOptions = {},
 ): void {

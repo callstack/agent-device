@@ -1,8 +1,12 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type DispatchDisclosure } from '@agent-device/kernel/errors';
+import type { DispatchedCommand } from '@agent-device/contracts/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DaemonRetirementResult } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
+import {
+  resolveCommandRecordingEffect,
+  resolveCommandTimeoutPolicy,
+} from '@agent-device/command-registry/registry';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { PlatformSelector } from '@agent-device/kernel/device';
 import { observedDaemonIdentityOf, type DaemonInfo } from './daemon-client-metadata.ts';
@@ -35,6 +39,8 @@ export async function handleRequestTimeout(
     /** Named together so the recovery hint cannot be assembled from a swapped session and action. */
     session?: string;
     action?: string;
+    /** The timed-out request, read for its declared recording effect. */
+    request: DispatchedCommand;
   }>,
 ): Promise<AppError> {
   const {
@@ -48,7 +54,9 @@ export async function handleRequestTimeout(
     platform,
     session,
     action,
+    request,
   } = params;
+  const dispatched = timedOutRequestDispatch(request);
   // The command's declared policy (`timeoutPolicy.onTimeout`, ADR 0008) decides whether a local
   // timed-out request is RESET-ELIGIBLE; the liveness probe decides whether the eligibility runs.
   // A remote client cannot reach the host's process table or the daemon's state dir, so a remote
@@ -96,10 +104,11 @@ export async function handleRequestTimeout(
     timeoutMs,
     requestId,
     reason: 'daemon_transport_timeout',
+    dispatched,
     ...(retirement ? { retirement, stateDir: statePaths.baseDir } : {}),
     hint:
       retirement?.status === 'retained'
-        ? `The daemon could not be safely retired. State was retained at ${statePaths.baseDir}. ${retirement.error?.hint ?? 'Retry with --debug and inspect daemon diagnostics before retrying.'}`
+        ? `The daemon could not be safely retired. State was retained at ${statePaths.baseDir}. ${retirement.error?.hint ?? 'Read the request log and daemon.log in that directory before you retry.'}`
         : resolveRequestTimeoutHint({
             remote,
             resetDaemon: resetDaemon,
@@ -110,6 +119,14 @@ export async function handleRequestTimeout(
             action,
           }),
   });
+}
+
+/**
+ * The request already left this process, so the daemon may have run it. Only a command the
+ * registry declares a read (`observes-app`) cannot have changed the app.
+ */
+function timedOutRequestDispatch(request: DispatchedCommand): DispatchDisclosure {
+  return resolveCommandRecordingEffect(request) === 'observes-app' ? 'no' : 'unknown';
 }
 
 async function forceRetireDaemon(
@@ -182,15 +199,15 @@ export function resolveRequestTimeoutHint(params: {
     } again to wait for that export and receive the completed recording.`;
   }
   if (remote) {
-    return 'Retry with --debug and verify the remote daemon URL, auth token, and remote host logs.';
+    return 'Verify the remote daemon URL, auth token, and remote host logs.';
   }
   if (resetDaemon) {
     // The reset SIGKILLs the daemon pid only; child processes it owned (Apple runners included)
     // are not proven stopped from here, so the hint claims nothing about them.
-    return 'Retry with --debug and check daemon diagnostics logs. The daemon did not answer the liveness probe and was reset after the timeout.';
+    return 'The daemon did not answer the liveness probe and was reset after the timeout. Read the request log for the timed-out step.';
   }
   if (stopCommand) {
-    return `Retry with --debug and check daemon diagnostics logs. The daemon did not answer the liveness probe, and this request does not retire a daemon it did not start. Stop it with ${stopCommand}, then retry. SDK clients call ensureDaemon() to start a fresh one.`;
+    return `The daemon did not answer the liveness probe, and this request does not retire a daemon it did not start. Stop it with ${stopCommand}, then retry. SDK clients call ensureDaemon() to start a fresh one.`;
   }
   const iosPrepareHint =
     applePlatformDeclared && command === PUBLIC_COMMANDS.snapshot
@@ -199,9 +216,9 @@ export function resolveRequestTimeoutHint(params: {
   // The daemon canceled the request when this client's connection was destroyed, and stayed
   // reachable (the probe answered, or the command's policy forbids the reset), so the session
   // survives and can still be closed or inspected.
-  return `Retry with --debug and check daemon diagnostics logs. The timed-out ${
+  return `The timed-out ${
     command ?? 'request'
-  } request was canceled; the daemon was kept alive so the session can still be closed or inspected.${iosPrepareHint}`;
+  } request was canceled; the daemon was kept alive so the session can still be closed or inspected. Read the request log for the timed-out step.${iosPrepareHint}`;
 }
 
 function daemonWasForceKilled(retirement: DaemonRetirementResult | undefined): boolean {
