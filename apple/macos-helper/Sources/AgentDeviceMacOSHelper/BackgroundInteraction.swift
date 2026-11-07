@@ -14,6 +14,8 @@ enum BackgroundDeliveryMechanism: String, Encodable, CaseIterable {
   case axSelectedText = "ax-selected-text"
   case axConfirm = "ax-confirm"
   case axScrollBar = "ax-scroll-bar"
+  /// `AXShowMenu`, confirmed by the app's new menu window.
+  case axShowMenu = "ax-show-menu"
   /// Keyboard events posted to the app's process, which inactive apps do accept.
   case keyEvents = "key-events"
 }
@@ -25,6 +27,7 @@ enum BackgroundRefusal: String, CaseIterable {
   case noAccessibleTarget = "no-accessible-target"
   case noTextInput = "no-settable-text-input"
   case noScrollBar = "no-scroll-bar"
+  case noContextMenu = "no-context-menu"
 }
 
 struct BackgroundPressResponse: Encodable {
@@ -39,6 +42,15 @@ struct BackgroundPressResponse: Encodable {
 }
 
 struct BackgroundTextResponse: Encodable {
+  let bundleId: String?
+  let mechanism: BackgroundDeliveryMechanism
+  let role: String?
+  let windowTitle: String?
+}
+
+struct BackgroundMenuResponse: Encodable {
+  let x: Double
+  let y: Double
   let bundleId: String?
   let mechanism: BackgroundDeliveryMechanism
   let role: String?
@@ -192,6 +204,102 @@ func fillInBackground(
   return BackgroundTextResponse(
     bundleId: app.bundleIdentifier, mechanism: .axValue, role: role(of: input),
     windowTitle: windowTitle(of: input))
+}
+
+private let popUpMenuWindowLayer = Int(CGWindowLevelForKey(.popUpMenuWindow))
+/// An app that opens a menu tracks it until the menu closes and answers `AXShowMenu` only then,
+/// so the action's reply is abandoned after this long and the menu window decides the outcome.
+private let showMenuReplyTimeoutSeconds: Float = 0.5
+private let menuWindowWaitMs = 1_000
+private let menuWindowPollMs = 50
+
+/// Opens the context menu of the element at a point, the way a secondary click does: the nearest
+/// element up the hit chain that offers `AXShowMenu` opens it. Success is the app's new menu
+/// window, never the action's own reply.
+func showMenuInBackground(
+  point: CGPoint,
+  app: NSRunningApplication,
+  cursor: GhostCursor?
+) throws -> BackgroundMenuResponse {
+  try requireAppWindowPoint(point, app: app)
+  cursor?.move(to: point)
+  guard let owner = elementAtPoint(in: app, point: point).flatMap(menuOwner) else {
+    throw refusal(
+      .noContextMenu, "no accessibility element at the point offers a context menu", app: app)
+  }
+  if isInMenuBar(owner) {
+    throw refusal(.noAccessibleTarget, "the point is on the app's menu bar", app: app)
+  }
+  let pid = app.processIdentifier
+  let menusBefore = popUpMenuWindowNumbers(pid: pid, windowInfo: try requireWindowInfo())
+  AXUIElementSetMessagingTimeout(owner, showMenuReplyTimeoutSeconds)
+  let reply = AXUIElementPerformAction(owner, showMenuAction)
+  guard try waitForNewMenuWindow(pid: pid, excluding: menusBefore) else {
+    throw HelperError.commandFailed(
+      "the element offered a context menu, but no menu opened",
+      details: [
+        "reason": "context-menu-not-observed",
+        "axError": String(reply.rawValue),
+        "bundleId": app.bundleIdentifier ?? "",
+        "hint": "No menu window appeared. Take a snapshot to check the app before you retry.",
+      ]
+    )
+  }
+  cursor?.pulse()
+  return BackgroundMenuResponse(
+    x: point.x,
+    y: point.y,
+    bundleId: app.bundleIdentifier,
+    mechanism: .axShowMenu,
+    role: role(of: owner),
+    windowTitle: windowTitle(of: owner)
+  )
+}
+
+func popUpMenuWindowNumbers(pid: pid_t, windowInfo: [[String: Any]]) -> Set<Int> {
+  Set(
+    windowInfo.compactMap { entry in
+      guard (entry[kCGWindowOwnerPID as String] as? Int32) == pid,
+        (entry[kCGWindowLayer as String] as? Int) == popUpMenuWindowLayer
+      else {
+        return nil
+      }
+      return entry[kCGWindowNumber as String] as? Int
+    })
+}
+
+private let showMenuAction = "AXShowMenu" as CFString
+
+/// AppKit offers a secondary click to the hit view and then to each superview in turn, so the
+/// nearest ancestor with a menu owns it.
+private func menuOwner(from hit: AXUIElement) -> AXUIElement? {
+  var current: AXUIElement? = hit
+  var depth = 0
+  while let element = current, depth < 32 {
+    let elementRole = role(of: element)
+    if elementRole == "AXWindow" || elementRole == "AXApplication" { return nil }
+    if actionNames(of: element).contains(showMenuAction as String) { return element }
+    current = elementAttribute(element, attribute: kAXParentAttribute as String)
+    depth += 1
+  }
+  return nil
+}
+
+/// A window list that never became readable is a refusal, not an unobserved menu.
+private func waitForNewMenuWindow(pid: pid_t, excluding before: Set<Int>) throws -> Bool {
+  let deadline = Date().addingTimeInterval(Double(menuWindowWaitMs) / 1000)
+  var readAny = false
+  repeat {
+    if let info = appWindowInfo() {
+      readAny = true
+      if !popUpMenuWindowNumbers(pid: pid, windowInfo: info).subtracting(before).isEmpty {
+        return true
+      }
+    }
+    Thread.sleep(forTimeInterval: Double(menuWindowPollMs) / 1000)
+  } while Date() < deadline
+  if !readAny { _ = try requireWindowInfo(nil) }
+  return false
 }
 
 /// Scrolls the scroll area at the center of the app's front window.
@@ -531,6 +639,10 @@ func appWindowInfo() -> [[String: Any]]? {
 /// none. A window list that cannot be read is a refusal, not an empty list: the caller must not
 /// report "no window" for a WindowServer it could not ask.
 func frontWindow(pid: pid_t, windowInfo: [[String: Any]]? = appWindowInfo()) throws -> OnScreenWindow? {
+  onScreenWindows(pid: pid, windowInfo: try requireWindowInfo(windowInfo)).first
+}
+
+func requireWindowInfo(_ windowInfo: [[String: Any]]? = appWindowInfo()) throws -> [[String: Any]] {
   guard let windowInfo else {
     throw HelperError.commandFailed(
       "the app's on-screen windows could not be read",
@@ -540,7 +652,7 @@ func frontWindow(pid: pid_t, windowInfo: [[String: Any]]? = appWindowInfo()) thr
       ]
     )
   }
-  return onScreenWindows(pid: pid, windowInfo: windowInfo).first
+  return windowInfo
 }
 
 func frontWindowFrame(pid: pid_t, windowInfo: [[String: Any]]? = appWindowInfo()) throws -> CGRect? {

@@ -4,7 +4,8 @@
     "background-pointer-gesture",
     "no-accessible-target",
     "no-settable-text-input",
-    "no-scroll-bar"
+    "no-scroll-bar",
+    "no-context-menu"
   ],
   "deliveryMechanisms": [
     "ax-press",
@@ -13,6 +14,7 @@
     "ax-selected-text",
     "ax-confirm",
     "ax-scroll-bar",
+    "ax-show-menu",
     "key-events"
   ]
 }
