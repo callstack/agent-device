@@ -54,6 +54,19 @@ final class AppWindowScreenshotTests: XCTestCase {
     XCTAssertEqual(frontWindow(among: [indicator, shared], isSharingIndicator: { _ in false })?.number, 9)
   }
 
+  func testRecognizesTheSharingIndicatorOnlyByItsSessionButton() {
+    XCTAssertTrue(isWindowSharingIndicator(children: [("AXButton", "WindowSharingSessionButton")]))
+
+    // A small ordinary window: title-bar buttons, or the session title on a non-button.
+    XCTAssertFalse(
+      isWindowSharingIndicator(children: [
+        (role: "AXButton", title: nil), (role: "AXButton", title: "Close"),
+        (role: "AXStaticText", title: "Window"),
+      ]))
+    XCTAssertFalse(isWindowSharingIndicator(children: [("AXStaticText", "WindowSharingSessionButton")]))
+    XCTAssertFalse(isWindowSharingIndicator(children: []))
+  }
+
   /// The indicator check reads the app's accessibility tree; a lone window never needs it.
   func testFrontWindowAsksNothingAboutALoneWindow() {
     let lone = OnScreenWindow(

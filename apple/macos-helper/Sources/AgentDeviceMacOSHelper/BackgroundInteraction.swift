@@ -533,10 +533,14 @@ private func actionWindow(app: NSRunningApplication, hit: AXUIElement?) -> AXUIE
   }
   guard let front = try? frontWindowFrame(pid: app.processIdentifier) else { return nil }
   return windows(of: AXUIElementCreateApplication(app.processIdentifier)).first { window in
-    guard let rect = rectAttribute(window) else { return false }
-    return abs(rect.x - front.minX) < 1 && abs(rect.y - front.minY) < 1
-      && abs(rect.width - front.width) < 1 && abs(rect.height - front.height) < 1
+    rectAttribute(window).map { isSameFrame($0, front) } ?? false
   }
+}
+
+/// Whether an accessibility window frame is the frame of a WindowServer window.
+private func isSameFrame(_ rect: RectResponse, _ frame: CGRect) -> Bool {
+  abs(rect.x - frame.minX) < 1 && abs(rect.y - frame.minY) < 1
+    && abs(rect.width - frame.width) < 1 && abs(rect.height - frame.height) < 1
 }
 
 private func windowTitle(of element: AXUIElement) -> String? {
@@ -718,12 +722,19 @@ func requireWindowInfo(_ windowInfo: [[String: Any]]? = appWindowInfo()) throws 
 /// `WindowSharingSessionButton`. That window is a system indicator, not the app's front window.
 private let windowSharingIndicatorButtonTitle = "WindowSharingSessionButton"
 
-/// A hung app reads as no indicator rather than stalling a capture. `AXUIElementSetMessagingTimeout`
-/// applies only to the element it is set on, so every element the probe reads gets it, and the
-/// probe stops at its own deadline.
+/// Whether a window with these accessibility children, as role and title, is the indicator.
+func isWindowSharingIndicator(children: some Sequence<(role: String, title: String?)>) -> Bool {
+  children.contains { $0.role == "AXButton" && $0.title == windowSharingIndicatorButtonTitle }
+}
+
+/// `AXUIElementSetMessagingTimeout` applies only to the element it is set on, so every element the
+/// probe reads gets it, and the probe stops at its own deadline.
 private let sharingIndicatorReplyTimeoutSeconds: Float = 0.1
 private let sharingIndicatorProbeSeconds = 0.5
 
+/// An accessibility tree that cannot be read in time, from a hung app or without Accessibility
+/// access, reads as no indicator, so the frontmost window stays the choice as before the indicator
+/// check. Refusing instead would fail screenshots, which need no accessibility read today.
 private func isWindowSharingIndicator(pid: pid_t, frame: CGRect) -> Bool {
   let deadline = Date().addingTimeInterval(sharingIndicatorProbeSeconds)
   func bounded(_ element: AXUIElement) -> AXUIElement? {
@@ -734,16 +745,13 @@ private func isWindowSharingIndicator(pid: pid_t, frame: CGRect) -> Bool {
   guard let appElement = bounded(AXUIElementCreateApplication(pid)) else { return false }
   let window = windows(of: appElement).first { window in
     guard let window = bounded(window), let rect = rectAttribute(window) else { return false }
-    return abs(rect.x - frame.minX) < 1 && abs(rect.y - frame.minY) < 1
-      && abs(rect.width - frame.width) < 1 && abs(rect.height - frame.height) < 1
+    return isSameFrame(rect, frame)
   }
   guard let window else { return false }
-  return children(of: window).contains { child in
-    guard let child = bounded(child) else { return false }
-    return role(of: child) == "AXButton"
-      && stringAttribute(child, attribute: kAXTitleAttribute as String)
-        == windowSharingIndicatorButtonTitle
-  }
+  return isWindowSharingIndicator(
+    children: children(of: window).lazy.compactMap(bounded).map { child in
+      (role: role(of: child), title: stringAttribute(child, attribute: kAXTitleAttribute as String))
+    })
 }
 
 func frontWindowFrame(pid: pid_t, windowInfo: [[String: Any]]? = appWindowInfo()) throws -> CGRect? {
