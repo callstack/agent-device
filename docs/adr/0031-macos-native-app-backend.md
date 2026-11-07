@@ -94,6 +94,7 @@ Parity with a real click outside SwiftUI is unmeasured; an `NSTableView` menu ma
 In the measured SwiftUI app, the app tracks the open menu and does not answer the action (`kAXErrorCannotComplete`).
 So the reply is abandoned after 0.5 s, and a new app-owned `kCGPopUpMenuWindowLevel` window within 1 s decides success.
 Otherwise the click fails with `context-menu-not-observed`.
+If the window list cannot be read before the action, or no read succeeds during the wait, the click fails with `window-list-unreadable` instead.
 The open menu is in the owner's subtree, so a snapshot shows its items and a press picks one.
 Measurements: `docs/evidence/macos-native-context-menu-2026-10-26.md`.
 
