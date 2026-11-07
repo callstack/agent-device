@@ -23,7 +23,7 @@ Requests agent-device makes with your API key, including instance creation, star
 
 Use `boot` to allocate an instance explicitly before installing your app. This step is optional: `install` also allocates an instance when needed. If this connection already has an instance, `boot` reuses it.
 
-`devices` lists only this connection's instance, not the simulators or devices on your machine. Like `install`, it allocates an instance when the connection has none.
+`devices` lists only this connection's instance, not the simulators or devices on your machine. Like `install`, the CLI allocates an instance first when the connection has none. An SDK call without a lease fails with `DEVICE_NOT_FOUND` and `details.reason: 'provider_instance_unallocated'`.
 
 ```bash
 agent-device boot
