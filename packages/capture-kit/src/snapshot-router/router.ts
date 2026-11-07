@@ -135,13 +135,13 @@ export type SnapshotSourceChannel<Target extends SnapshotRouteTarget> = Readonly
   observeOnlySupported: boolean;
   /**
    * How long a circuit lives. `runner-session`: the surface proof names the runner session the
-   * channel reads through, and a new session id swaps the circuit. `route`: the channel reads
-   * through no runner session, so the circuit lives as long as the router and the proof's session
-   * id never swaps it.
+   * channel reads through, a new session id swaps the circuit, and `sessionChanged` lets the channel
+   * drop its own state. `route`: the channel reads through no runner session, so the circuit lives
+   * as long as the router and the proof's session id never swaps it.
    */
-  circuitScope: 'runner-session' | 'route';
-  /** Called after a new runner session swapped the circuit, so the channel drops its own state. */
-  sessionChanged?(): void;
+  circuit:
+    | Readonly<{ scope: 'route' }>
+    | Readonly<{ scope: 'runner-session'; sessionChanged(): void }>;
 }>;
 
 export function createSnapshotRouter<Target extends SnapshotRouteTarget>(
@@ -173,8 +173,9 @@ export function createSnapshotRouter<Target extends SnapshotRouteTarget>(
     probeResult: SystemSurfaceForegroundReading,
     device: DeviceInfo,
   ): typeof currentCircuit => {
-    const probedSessionId =
-      channel.circuitScope === 'runner-session' ? probeResult.sessionId : undefined;
+    const scope = channel.circuit;
+    if (scope.scope !== 'runner-session') return startingCircuit;
+    const probedSessionId = probeResult.sessionId;
     if (probedSessionId === undefined) return startingCircuit;
     if (currentCircuit !== startingCircuit) {
       return probedSessionId === currentCircuit.sessionId ? currentCircuit : startingCircuit;
@@ -190,7 +191,7 @@ export function createSnapshotRouter<Target extends SnapshotRouteTarget>(
       },
     });
     currentCircuit = freshCircuit(probedSessionId);
-    channel.sessionChanged?.();
+    scope.sessionChanged();
     return currentCircuit;
   };
 
@@ -350,6 +351,11 @@ function targetFailureReason(
   return 'target-resolution-failed';
 }
 
+/**
+ * `sessionDisabled` retires the bridge for the runner session the circuit names. Only a
+ * `runner-session` circuit ever names one; a `route` circuit never does, so a runner-session refusal
+ * on it speaks for that capture only and never sets the flag.
+ */
 type RunnerSessionCircuit = { readonly sessionId?: string; sessionDisabled: boolean };
 
 /**

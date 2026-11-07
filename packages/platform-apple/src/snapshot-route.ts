@@ -56,7 +56,7 @@ export function createAppleSnapshotRoute(
         isSimulatorTargetDiscoveryPending(error) &&
         !(await host.appleApplications.hasLiveRunnerSession(device, execution)),
       observeOnlySupported: true,
-      circuitScope: 'route',
+      circuit: { scope: 'route' },
     },
     options.systemSurfaceForeground ?? createSystemSurfaceForegroundProbe(),
   );
