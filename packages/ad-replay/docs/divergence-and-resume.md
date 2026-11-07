@@ -85,7 +85,7 @@ The report marks every truncation, redaction, and omission.
 
 ## Overflow
 
-If bounded output omits material, the daemon writes the same redacted, per-field-bounded detail to a session-scoped divergence artifact.
+Level caps apply first. Only when the level-capped serialized report still exceeds its byte ceiling does the daemon write the same redacted, per-field-bounded detail to a session-scoped divergence artifact. Material that level caps omit while the report fits creates no artifact.
 It returns the path and `overflow: { omittedBytes, artifactPath }`.
 If the write fails, it returns `artifactUnavailable: true` and preserves the original error.
 The artifact contains no raw snapshot tree or unredacted input.

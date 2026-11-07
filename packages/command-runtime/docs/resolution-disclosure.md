@@ -52,20 +52,22 @@ For non-Maestro dispatches, they delegate to the runtime structural rule.
 
 ## Matrix cells
 
-ADR 0011's matrix has a `resolutionDisclosure` guarantee with six accurate cells:
+ADR 0011's matrix has a `resolutionDisclosure` guarantee for every interaction path, with five enforced and three inapplicable cells:
 
 - `runtime-selector` enforces the complete pre-action diagnostic shape.
 - `runtime-ref` enforces `exact` or `label-fallback` for trailing-label recovery.
+- `target-drag` enforces a disclosure for each endpoint: the source and the destination each carry their own `resolution`.
 - `native-ref` enforces `exact`.
-- `direct-ios-selector` enforces only `{ source: "direct-ios", kind: "not-observed" }`.
+- `maestro-direct-selector` enforces only `{ source: "direct-ios", kind: "not-observed" }`.
 - `coordinate` is inapplicable because no element resolves.
+- `find-focus-dispatch` is inapplicable because it issues no identity (ADR 0014).
 - `maestro-non-hittable-fallback` is inapplicable because Maestro owns matching and the fallback executes coordinates.
 
 The **executed dispatch** determines maestro-cell membership.
 Permission to use a fallback does not determine membership.
 A press that was allowed to fall back but hit its element normally is the direct-iOS path, and it discloses `not-observed`.
 Only an executed coordinate fallback belongs to the inapplicable maestro cell.
-The four enforced cells use the shared response builder.
+The enforced cells use the shared response builder.
 The existing direct path delegates `disambiguation` to `runtime-selector` after its raw-match count.
 Its `responseIdentity` limitation remains explicit.
 
@@ -84,13 +86,15 @@ Layer-3 coverage must claim every enforced/delegated cell:
 - Runtime-ref `label-fallback` recovery
 - Direct-iOS `not-observed` without a snapshot
 
-Matrix and provider contracts cover all six `resolutionDisclosure` cells:
+Matrix and provider contracts cover every `resolutionDisclosure` cell:
 
 - Runtime ambiguity/tiebreak and the five-alternative limit
 - Runtime/native exact-ref provenance
 - Runtime-ref `label-fallback` disclosure
+- Target-drag disclosure for the source and destination endpoints
 - Direct-iOS `not-observed`
 - Coordinate inapplicability
+- Find-focus dispatch inapplicability
 - Maestro inapplicability on both sides of the permission: fallback taken, and allowed-but-not-taken that discloses `not-observed`
 - The retained direct-path waiver list
 

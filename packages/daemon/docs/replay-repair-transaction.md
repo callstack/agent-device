@@ -90,7 +90,7 @@ It must not proceed and later fail `--from` with `SESSION_NOT_FOUND`.
 
 A clean armed replay reaches `COMPLETE` and skips terminal source `close` (issue #1384).
 Its session therefore survives.
-Once client keep-alive uses `ReplayCommandResult.sessionActive` independently of repair state, it also preserves this daemon.
+Client keep-alive uses `ReplayCommandResult.sessionActive` independently of repair state, so it also preserves this daemon while the session remains active.
 Publication remains deferred until explicit `close`/`close --save-script` or ordinary idle-reap tears down the session.
 This preserves R7's post-repair inspection opportunity.
 It changes timing for scripted callers that previously saw the healed sibling immediately after one-shot client exit.

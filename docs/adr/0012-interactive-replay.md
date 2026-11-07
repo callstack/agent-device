@@ -46,7 +46,7 @@ The direct-iOS fast path has no daemon tree, so it must never invent a unique-ma
 Coordinate dispatches and executed Maestro coordinate fallbacks carry no `resolution`.
 The executed dispatch, not permission to fall back, determines that cell.
 ADR 0011's `resolutionDisclosure` guarantee row enforces this decision.
-The [resolution disclosure contract](../../packages/command-runtime/docs/resolution-disclosure.md) owns the shapes and the six matrix cells.
+The [resolution disclosure contract](../../packages/command-runtime/docs/resolution-disclosure.md) owns the shapes and the matrix cells.
 
 ### 3. Versioned `.ad` target-binding evidence
 
