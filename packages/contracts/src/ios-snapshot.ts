@@ -6,22 +6,25 @@ import type {
   SnapshotQualityNote,
   SnapshotKeyboardBandFact,
 } from '@agent-device/kernel/snapshot';
+import type { SNAPSHOT_PRODUCERS, SnapshotProvenance } from './snapshot-model.ts';
 
-export type IosSnapshotProducer =
-  | 'apple-runner'
-  | 'simulator-ax-bridge'
-  | 'appium-source'
-  | 'revyl-ios-tree';
+/** The producers whose trees arrive on the iOS (`xctest`) channel, from the producer registry. */
+export type IosSnapshotProducer = Extract<SnapshotProvenance, { backend: 'xctest' }>['producer'];
 
 export type IosAcquisitionProducer = Exclude<IosSnapshotProducer, 'apple-runner'>;
-export type IosProviderAcquisitionProducer = Extract<
-  IosAcquisitionProducer,
-  'appium-source' | 'revyl-ios-tree'
->;
+
+/**
+ * The iOS producers that hand over a bare tree, so capture-kit derives their residue. `apple-runner`
+ * and `simulator-ax-bridge` build their own residue at the source and are absent by construction:
+ * a declaration for them would have no reader (#2199).
+ */
+export type IosProviderAcquisitionProducer = {
+  [
+    Producer in IosAcquisitionProducer
+  ]: (typeof SNAPSHOT_PRODUCERS)[Producer]['residue'] extends 'provider-derived' ? Producer : never;
+}[IosAcquisitionProducer];
 export type IosAcquisitionIntent = 'full' | 'surface-observation';
 export type IosSnapshotProjection = 'regular' | 'raw';
-export type IosSnapshotEvidenceAvailability = 'available' | 'unavailable';
-
 export type IosSnapshotGeneration = string;
 
 export type IosSnapshotLineage = Readonly<{
@@ -65,15 +68,6 @@ export type CaptureHint = Readonly<{
   acquisitionIntent: IosAcquisitionIntent;
 }>;
 
-export type IosSnapshotDepthSupport =
-  | Readonly<{ kind: 'complete'; maxDepth?: number }>
-  | Readonly<{ kind: 'incomplete' }>;
-
-export type IosSnapshotAcquisitionDepthCapability = Readonly<{
-  rawTraversal: IosSnapshotDepthSupport;
-  regularPresented: IosSnapshotDepthSupport;
-}>;
-
 export type IosSnapshotFact =
   | 'acquisition-depth'
   | 'scope'
@@ -82,30 +76,6 @@ export type IosSnapshotFact =
   | 'hittability'
   | 'generation'
   | 'truncation';
-
-/**
- * What a *provider* acquisition leaves unproven, declared so capture-kit can derive the residue
- * for a producer that hands over a bare tree and nothing else.
- *
- * The producer axis is `IosProviderAcquisitionProducer` — Appium page source and the Revyl
- * element tree — and deliberately not every {@link IosSnapshotProducer}. `apple-runner` and
- * `simulator-ax-bridge` build their own residue at the source, so a capability declared for
- * them here would be a claim nothing consults: exactly the shape that let the table say the
- * Simulator bridge had hittability evidence while the bridge adapter published none and emitted
- * `unavailable-fact: hittability` on every capture (#2199). The bridge now derives geometric
- * `hittable` at the source and drops that residue when its inputs are established, so a table row
- * for it would still have no reader. Narrowing the producer makes that claim unrepresentable
- * rather than merely wrong.
- *
- * Truncation is not a field here: it is the one fact the runner and the bridge also need
- * answered, so it has a single owner over every producer instead
- * (`iosSnapshotTruncationEvidence`).
- */
-export type IosProviderAcquisitionCapabilities = Readonly<{
-  producer: IosProviderAcquisitionProducer;
-  acquisitionDepth: IosSnapshotAcquisitionDepthCapability;
-  hittabilityEvidence: IosSnapshotEvidenceAvailability;
-}>;
 
 export type IosViewportEvidence =
   | Readonly<{ kind: 'reported'; rect: Rect }>

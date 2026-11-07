@@ -2,13 +2,11 @@ import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/inte
 import type {
   IosAcquisitionResidue,
   IosCollapsedTabBarProbeFailure,
-  IosProviderAcquisitionCapabilities,
   IosProviderAcquisitionProducer,
-  IosSnapshotEvidenceAvailability,
   IosSnapshotLineage,
-  IosSnapshotProducer,
   IosViewportEvidence,
 } from '@agent-device/contracts/ios-snapshot';
+import { SNAPSHOT_PRODUCERS } from '@agent-device/contracts/snapshot-model';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import type {
@@ -18,75 +16,22 @@ import type {
 } from '@agent-device/kernel/snapshot';
 
 /**
- * What every provider tree source leaves unproven today: it reports neither traversal depth nor
- * hittability. A producer that can prove more overrides this rather than restating it.
+ * What a provider-derived producer leaves unproven: it hands over a bare tree, so it reports neither
+ * traversal depth nor hittability, and truncation only when its registry row says it observes it.
+ * `apple-runner` and `simulator-ax-bridge` build their own residue at the source (the bridge reader
+ * derives geometric `hittable` and emits `unavailable-fact: hittability` only when the viewport is
+ * missing), which is why {@link IosProviderAcquisitionProducer} admits neither (#2199).
  */
-const TREE_SOURCE_CAPABILITIES = Object.freeze({
-  acquisitionDepth: Object.freeze({
-    rawTraversal: Object.freeze({ kind: 'incomplete' }),
-    regularPresented: Object.freeze({ kind: 'incomplete' }),
-  }),
-  hittabilityEvidence: 'unavailable',
-} as const);
-
-/**
- * The facts a *provider* acquisition leaves unproven, keyed only by the producers whose residue
- * this module derives.
- *
- * `apple-runner` and `simulator-ax-bridge` are absent by construction, not by omission: each
- * builds its own residue at the source (the bridge reader derives geometric `hittable` onto its
- * nodes and emits `unavailable-fact: hittability` only when the viewport is missing; the runner
- * presents and reports its own facts), so a row here would be a declaration with no reader — which
- * is how the table once came to claim the bridge had hittability evidence while every bridge-served
- * `snapshot -i` printed the opposite (#2199). Keying the record on
- * {@link IosProviderAcquisitionProducer} makes that claim not compile.
- */
-const IOS_PROVIDER_ACQUISITION_CAPABILITY_VALUES = {
-  'appium-source': { producer: 'appium-source', ...TREE_SOURCE_CAPABILITIES },
-  'revyl-ios-tree': { producer: 'revyl-ios-tree', ...TREE_SOURCE_CAPABILITIES },
-} as const satisfies Record<IosProviderAcquisitionProducer, IosProviderAcquisitionCapabilities>;
-
-/**
- * Whether a producer observes truncation at all, for every iOS producer.
- *
- * This is the one capability the runner and the bridge genuinely need declared: a capture that
- * reported nothing about truncation is only "not truncated" when its producer would have noticed
- * (#2188 invariant 5), and `snapshotTruncationForResult` has to answer that for every producer. It is a
- * table of its own rather than a column of the provider capabilities so that each producer states
- * this fact exactly once, in the only place that asks.
- *
- * The runner payload carries a required `truncated` boolean, and the bridge adapter rejects an
- * envelope without one and turns a true into a `truncated` residue — so both observe it.
- */
-const IOS_SNAPSHOT_TRUNCATION_EVIDENCE = {
-  'apple-runner': 'available',
-  'simulator-ax-bridge': 'available',
-  'appium-source': 'unavailable',
-  'revyl-ios-tree': 'unavailable',
-} as const satisfies Record<IosSnapshotProducer, IosSnapshotEvidenceAvailability>;
-
-export function iosSnapshotTruncationEvidence(
-  producer: IosSnapshotProducer,
-): IosSnapshotEvidenceAvailability {
-  return IOS_SNAPSHOT_TRUNCATION_EVIDENCE[producer];
-}
-
 function deriveIosSnapshotAcquisitionResidue(
-  producer: IosProviderAcquisitionCapabilities,
+  producer: IosProviderAcquisitionProducer,
   viewport: IosViewportEvidence,
   collapsedTabBarProbeFailure: IosCollapsedTabBarProbeFailure | undefined,
 ): readonly IosAcquisitionResidue[] {
-  const residue: IosAcquisitionResidue[] = [];
-  if (producer.hittabilityEvidence === 'unavailable') {
-    residue.push({ kind: 'unavailable-fact', fact: 'hittability' });
-  }
-  if (
-    producer.acquisitionDepth.rawTraversal.kind === 'incomplete' ||
-    producer.acquisitionDepth.regularPresented.kind === 'incomplete'
-  ) {
-    residue.push({ kind: 'unavailable-fact', fact: 'acquisition-depth' });
-  }
-  if (iosSnapshotTruncationEvidence(producer.producer) === 'unavailable') {
+  const residue: IosAcquisitionResidue[] = [
+    { kind: 'unavailable-fact', fact: 'hittability' },
+    { kind: 'unavailable-fact', fact: 'acquisition-depth' },
+  ];
+  if (SNAPSHOT_PRODUCERS[producer].truncation === 'unavailable') {
     residue.push({ kind: 'unavailable-fact', fact: 'truncation' });
   }
   if (viewport.kind === 'missing') {
@@ -112,7 +57,6 @@ export function createIosSnapshotAcquisition(
     collapsedTabBarProbeFailure?: IosCollapsedTabBarProbeFailure;
   }>,
 ): SnapshotRuntimeAcquiredResult {
-  const producer = IOS_PROVIDER_ACQUISITION_CAPABILITY_VALUES[input.producer];
   return {
     stage: 'acquired',
     acquisition: {
@@ -123,7 +67,7 @@ export function createIosSnapshotAcquisition(
       ...(input.keyboard ? { keyboard: input.keyboard } : {}),
       lineage: input.lineage,
       residue: deriveIosSnapshotAcquisitionResidue(
-        producer,
+        input.producer,
         input.viewport,
         input.collapsedTabBarProbeFailure,
       ),

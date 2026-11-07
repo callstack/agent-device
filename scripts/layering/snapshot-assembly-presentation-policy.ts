@@ -8,7 +8,7 @@
 // Evidence: 7ee1a5ded7 (#2233) carried provider acquisitions through one presentation owner and
 //   left the bridge behind; d26b0786fb (#2329) put the bridge on the engine without retiring the
 //   branch that assumed it was not; #2199 deleted the branch this policy now holds deleted.
-// Cost: 292 LOC (147 rule + 145 test).
+// Cost: 341 LOC (172 rule + 169 test).
 // Kill criterion: none enforced today; retire only by maintainer decision that the assembly
 //   staying presentation-neutral no longer matters. An exports map cannot replace it: the engine
 //   subpath is a legitimate public entrypoint for the engine's own callers, so a manifest can only
@@ -36,9 +36,9 @@ export const SNAPSHOT_PRODUCER_ADAPTER_ROOTS: readonly string[] = [
 
 /**
  * iOS presentation. The engine owns projection, geometry, scope, depth, actionability narrowing
- * and semantic compaction; the acquisition module owns the producer capability table that decides
- * them. Reading either one from the assembly or from a producer adapter is how the deleted
- * backend-name policy grows back.
+ * and semantic compaction; the acquisition module derives the residue that decides them. Reading
+ * either one from the assembly or from a producer adapter is how the deleted backend-name policy
+ * grows back.
  */
 const IOS_PRESENTATION_TARGETS: readonly string[] = [
   'packages/capture-kit/src/ios-snapshot-engine/',
@@ -57,6 +57,15 @@ const IOS_PROVENANCE_LITERALS: ReadonlySet<string> = new Set([
   'revyl-ios-tree',
 ]);
 
+/**
+ * The producer registry and its lookup. The assembly reads producer facts only through
+ * `snapshotRefMinting`; reading a row directly is a presentation or truncation decision by producer.
+ */
+const PRODUCER_REGISTRY_READS: ReadonlySet<string> = new Set([
+  'SNAPSHOT_PRODUCERS',
+  'snapshotProducerFacts',
+]);
+
 export function snapshotAssemblyPresentationViolations(
   sources: ReadonlyMap<string, string>,
   edges: readonly ResolvedImportEdge[],
@@ -65,6 +74,7 @@ export function snapshotAssemblyPresentationViolations(
     ...missingOwnerViolations(sources),
     ...importViolations(edges),
     ...provenanceLiteralViolations(sources),
+    ...producerRegistryReadViolations(sources),
   ];
 }
 
@@ -120,6 +130,25 @@ function provenanceLiteralViolations(sources: ReadonlyMap<string, string>): Laye
         file,
         line: sourceLine(source, node.start as number | undefined),
         message: `the daemon snapshot assembly must not branch on the iOS channel or producer name ('${node.value}'); producer differences enter through typed capabilities, read by the engine`,
+      });
+    });
+  }
+  return violations;
+}
+
+function producerRegistryReadViolations(sources: ReadonlyMap<string, string>): LayeringViolation[] {
+  const violations: LayeringViolation[] = [];
+  for (const file of SNAPSHOT_ASSEMBLY_FILES) {
+    const source = sources.get(file);
+    if (source === undefined) continue;
+    const program = parseSync(file, source).program;
+    visitAst(program, (node) => {
+      if (node.type !== 'Identifier' || !PRODUCER_REGISTRY_READS.has(String(node.name))) return;
+      violations.push({
+        rule: SNAPSHOT_ASSEMBLY_PRESENTATION_RULE,
+        file,
+        line: sourceLine(source, node.start as number | undefined),
+        message: `the daemon snapshot assembly must not read the producer registry (${String(node.name)}); producer facts reach it only through snapshotRefMinting`,
       });
     });
   }

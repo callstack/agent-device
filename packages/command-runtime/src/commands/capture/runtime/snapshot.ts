@@ -17,7 +17,7 @@ import type {
   SnapshotViewportSize,
   SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
-import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import { snapshotProducerFacts, type SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { BackendSnapshotResult } from '@agent-device/contracts/backend';
 import type {
   AgentDeviceRuntime,
@@ -37,7 +37,6 @@ import { buildSnapshotVisibility } from '@agent-device/capture-kit/snapshot-visi
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/android-system-surface-disclosure';
 import { formatReactNativeOverlayWarning } from '@agent-device/capture-kit/react-native-overlay';
 import { now } from '../../runtime-common.ts';
-import { iosSnapshotTruncationEvidence } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import type {
   DiffSnapshotCommandOptions,
   RuntimeCommand,
@@ -254,7 +253,7 @@ function snapshotAppFields(capture: SnapshotCapture): {
 function snapshotTruncationForResult(snapshot: SnapshotState): boolean | undefined {
   if (snapshot.truncated !== undefined) return snapshot.truncated;
   if (snapshot.backend !== 'xctest' || snapshot.producer === undefined) return false;
-  return iosSnapshotTruncationEvidence(snapshot.producer) === 'unavailable' ? undefined : false;
+  return snapshotProducerFacts(snapshot.producer)?.truncation === 'unavailable' ? undefined : false;
 }
 
 function buildSnapshotWarnings(params: {
@@ -318,19 +317,20 @@ function buildSparseIosInteractiveWarnings(params: {
   const root = params.snapshot.nodes[0];
   if (!isApplicationRoot(root)) return [];
 
-  if (params.snapshot.producer === 'appium-source') {
-    return [
-      'Appium page source exposed only the application root. Descendants may be absent from the acquired hierarchy; use snapshot --raw to inspect the source and verify the app accessibility tree.',
-    ];
-  }
-  if (params.snapshot.producer !== undefined && params.snapshot.producer !== 'apple-runner') {
-    return [];
-  }
-
-  return [
-    'iOS interactive snapshot exposed only the application root. XCTest accessibility queries can fail to enumerate some simulator UI trees even when screenshots and direct gestures still work. Use screenshot as visual truth, try a scoped/full snapshot for diagnostics, and prefer direct selectors when known.',
-  ];
+  // A capture without a producer comes from a legacy runner, which reads through XCTest queries.
+  const warning =
+    params.snapshot.producer === undefined
+      ? 'xctest-query'
+      : (snapshotProducerFacts(params.snapshot.producer)?.sparseRootWarning ?? 'none');
+  return warning === 'none' ? [] : [SPARSE_ROOT_WARNINGS[warning]];
 }
+
+const SPARSE_ROOT_WARNINGS = {
+  'xctest-query':
+    'iOS interactive snapshot exposed only the application root. XCTest accessibility queries can fail to enumerate some simulator UI trees even when screenshots and direct gestures still work. Use screenshot as visual truth, try a scoped/full snapshot for diagnostics, and prefer direct selectors when known.',
+  'appium-page-source':
+    'Appium page source exposed only the application root. Descendants may be absent from the acquired hierarchy; use snapshot --raw to inspect the source and verify the app accessibility tree.',
+} as const;
 
 function isApplicationRoot(node: SnapshotNode | undefined): boolean {
   if (!node) return false;
