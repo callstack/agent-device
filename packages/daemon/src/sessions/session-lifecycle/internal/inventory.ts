@@ -64,6 +64,7 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
 import { resolveLeaseScope } from '../../../core/lease-context.ts';
+import { leaseProviderRequiringRuntime } from '@agent-device/contracts/lease-scope';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 
 export type SessionInventoryCommandInput = Readonly<{
@@ -213,12 +214,14 @@ function inventoryDeviceQuery(
   env: HostEnvironment['env'],
 ) {
   const flags = req.flags;
-  // A provider connection lists only what its lease serves; without this scope the provider declines
-  // and the inventory falls back to this host's devices.
-  const { leaseProvider, leaseId } = resolveLeaseScope(req);
+  // A provider runtime's connection lists only what its lease serves; without this scope the provider
+  // declines and the inventory falls back to this host's devices. A logical lease such as `proxy`
+  // lists the devices of the host behind it, so it keeps the unscoped query.
+  const scope = resolveLeaseScope(req);
+  const leaseProvider = leaseProviderRequiringRuntime(scope);
   return {
     leaseProvider,
-    leaseId,
+    leaseId: leaseProvider ? scope.leaseId : undefined,
     platform,
     target: flags?.target,
     deviceName: flags?.device,

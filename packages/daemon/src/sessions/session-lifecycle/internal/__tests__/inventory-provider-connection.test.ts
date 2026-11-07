@@ -58,3 +58,25 @@ test('devices on a provider connection lists the leased device, not the host inv
   expect(response?.ok && response.data?.devices).toHaveLength(1);
   expect(local).not.toHaveBeenCalled();
 });
+
+// A proxy connection defers its lease for `devices` and lists the devices of the host behind it.
+test('devices on a proxy connection without a lease lists the host inventory', async () => {
+  const req: DaemonRequest = {
+    token: 't',
+    session: 'default',
+    command: 'devices',
+    positionals: [],
+    flags: { platform: 'ios', leaseProvider: 'proxy' },
+    meta: { tenantId: 'tenant-a', runId: 'run-1', leaseProvider: 'proxy' },
+  };
+  const response = await withTestDeviceInventory({ local: async () => [localSimulator] }, () =>
+    handleSessionInventoryCommands({
+      host: createTestHostEnvironment(),
+      platformServices: daemonPlatformServicesFixture(),
+      req,
+      sessionName: 'tenant-a:default',
+      sessionStore: makeSessionStore('agent-device-inventory-proxy-'),
+    }),
+  );
+  expect(response).toMatchObject({ ok: true, data: { devices: [{ id: localSimulator.id }] } });
+});
