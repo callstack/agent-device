@@ -17,7 +17,8 @@ import type {
   SnapshotViewportSize,
   SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
-import { snapshotProducerFacts, type SnapshotState } from '@agent-device/contracts/snapshot-model';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import { snapshotProducerFacts } from '@agent-device/contracts/snapshot-producers';
 import type { BackendSnapshotResult } from '@agent-device/contracts/backend';
 import type {
   AgentDeviceRuntime,

@@ -1,7 +1,7 @@
 import type { SnapshotRefMinting } from '@agent-device/kernel/snapshot';
 
-// Vocabulary only: the iOS snapshot contract derives its producer subsets from this table with a
-// type-only import, so this module holds data and types and no behavior.
+// The iOS snapshot contract derives its producer subsets from this table with a type-only import,
+// so this module holds the table, its types, and its row lookup, and nothing else.
 
 /**
  * Every acquisition that can produce a snapshot tree, named for the source and never for the
@@ -157,3 +157,13 @@ export const SNAPSHOT_PRODUCERS = {
     sparseRootWarning: 'none',
   },
 } as const satisfies Record<SnapshotProducer, SnapshotProducerFacts>;
+
+/**
+ * The registry row of a producer read from a capture. A store plugin built against another release
+ * can name a producer this host does not list; that capture gets no producer facts.
+ */
+export function snapshotProducerFacts(
+  producer: SnapshotProducer,
+): SnapshotProducerFacts | undefined {
+  return Object.hasOwn(SNAPSHOT_PRODUCERS, producer) ? SNAPSHOT_PRODUCERS[producer] : undefined;
+}

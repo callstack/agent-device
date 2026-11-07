@@ -1,7 +1,7 @@
 import {
   SNAPSHOT_PRODUCERS,
+  snapshotProducerFacts,
   type SnapshotProducer,
-  type SnapshotProducerFacts,
 } from './snapshot-producers.ts';
 import type {
   IosTargetActivation,
@@ -14,16 +14,6 @@ import type {
   SnapshotRefMinting,
   SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
-
-/**
- * The registry row of a producer read from a capture. A store plugin built against another release
- * can name a producer this host does not list; that capture gets no producer facts.
- */
-export function snapshotProducerFacts(
-  producer: SnapshotProducer,
-): SnapshotProducerFacts | undefined {
-  return Object.hasOwn(SNAPSHOT_PRODUCERS, producer) ? SNAPSHOT_PRODUCERS[producer] : undefined;
-}
 
 type ProducerChannel<Producer extends SnapshotProducer> =
   (typeof SNAPSHOT_PRODUCERS)[Producer]['channels'][number];
