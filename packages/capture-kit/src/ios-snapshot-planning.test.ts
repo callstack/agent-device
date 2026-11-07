@@ -5,9 +5,7 @@ import { test } from 'vitest';
 import type {
   CaptureHint,
   IosSnapshotComparisonIdentity,
-  IosSnapshotEvidenceAvailability,
   IosSnapshotInput,
-  IosSnapshotProducer,
   IosSnapshotRequestInput,
 } from '@agent-device/contracts/ios-snapshot';
 import {
@@ -17,10 +15,7 @@ import {
   createIosSnapshotRequest,
   deriveIosCaptureHint,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
-import {
-  createIosSnapshotAcquisition,
-  iosSnapshotTruncationEvidence,
-} from '@agent-device/capture-kit/ios-snapshot-acquisition';
+import { createIosSnapshotAcquisition } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 
 type CaptureHintFixture = Readonly<{
   name: string;
@@ -88,25 +83,6 @@ test('acquisition derives unavailable provider facts from the registry', () => {
       ],
       producer,
     );
-  }
-});
-
-/**
- * The producers that build their own residue have no row in the provider capability table, so
- * this is the only place they declare a capability at all — and it must keep saying what it said
- * before the table was narrowed, or `snapshotTruncationForResult` would start upgrading an absent
- * `truncated` to `false` (or stop doing so) for a real capture (#2199).
- */
-test('truncation evidence is declared for every iOS producer', () => {
-  const expected = {
-    'apple-runner': 'available',
-    'simulator-ax-bridge': 'available',
-    'appium-source': 'unavailable',
-    'revyl-ios-tree': 'unavailable',
-  } as const satisfies Record<IosSnapshotProducer, IosSnapshotEvidenceAvailability>;
-
-  for (const producer of Object.keys(expected) as IosSnapshotProducer[]) {
-    assert.equal(iosSnapshotTruncationEvidence(producer), expected[producer], producer);
   }
 });
 

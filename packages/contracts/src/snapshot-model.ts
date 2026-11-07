@@ -1,4 +1,3 @@
-import type { IosSnapshotProducer } from './ios-snapshot.ts';
 import type {
   IosTargetActivation,
   PresentedSurface,
@@ -12,27 +11,180 @@ import type {
 } from '@agent-device/kernel/snapshot';
 
 /**
- * The channel↔producer pairs that can actually occur. `xctest` trees come from the local Apple
- * runner, Appium page-source XML, or a cloud provider's AX element tree (Revyl), and only
- * the runner's output has been through its presentation (clip fold, effective geometry, scope).
- * Logic that assumes those guarantees must key on the producer, never on the channel alone.
- *
- * This table owns both vocabularies: the platform channel (`SnapshotBackend` is its `backend`
- * projection) and the acquisition producer, beside the in-plan `SnapshotCaptureBackend`. Every
- * carrier embeds the pair atomically, so a cross-channel pair does not compile.
+ * Every acquisition that can produce a snapshot tree, named for the source and never for the
+ * platform: one platform channel can be fed by several producers with different guarantees, and
+ * one producer can feed more than one channel (`appium-source` answers for WebDriver iOS and
+ * Android). Sharing a parser does not make two sources one producer.
  */
-export type SnapshotProvenance =
-  | {
-      backend: 'xctest';
-      producer: IosSnapshotProducer;
-    }
-  | { backend: 'android'; producer: 'android-uiautomator' | 'appium-source' | 'cdp-dom' }
-  | { backend: 'harmonyos-arkui'; producer: 'harmonyos-uitest' }
-  | { backend: 'macos-helper'; producer: 'macos-helper' }
-  | { backend: 'linux-atspi'; producer: 'linux-atspi' }
-  | { backend: 'web'; producer: 'agent-browser' };
+export type SnapshotProducer =
+  | 'apple-runner'
+  | 'simulator-ax-bridge'
+  | 'appium-source'
+  | 'revyl-ios-tree'
+  | 'android-uiautomator'
+  | 'cdp-dom'
+  | 'harmonyos-uitest'
+  | 'macos-helper'
+  | 'linux-atspi'
+  | 'agent-browser';
 
-export type SnapshotBackend = SnapshotProvenance['backend'];
+type ProducerFacts = Readonly<{
+  /** The platform channels this producer's trees arrive on: the `backend` of its provenance pairs. */
+  channels: readonly [string, ...string[]];
+  /**
+   * Whether the producer observes truncation at all. On the iOS channel a capture that reported
+   * nothing about truncation is only "not truncated" when its producer would have noticed (#2188
+   * invariant 5).
+   */
+  truncation: 'available' | 'unavailable';
+  /**
+   * `source-measured`: the source builds its own residue. `provider-derived`: a provider hands over a
+   * bare tree and nothing else, so capture-kit derives what it leaves unproven. On the iOS channel
+   * only a provider-derived producer may build an acquisition through capture-kit; a source-measured
+   * one there would be a claim nothing consults (#2199).
+   */
+  residue: 'source-measured' | 'provider-derived';
+  /**
+   * The default stable-capture quiet window a capture from this producer earns. The Simulator AX
+   * bridge answers well inside the general default, so holding the general window on that read spends
+   * a whole extra capture on a window its tree had already satisfied (PR #3522 holds the measurement).
+   * Every producer states its price, so a new one cannot inherit an unmeasured window by omission.
+   */
+  quietMs: number;
+  /**
+   * `backend-issued`: the producer resolves actions against refs it minted itself, and so owns the
+   * ref namespace of every tree it publishes (#2283). A producer that mints nothing keeps dense
+   * positional numbering.
+   */
+  refs: SnapshotRefMinting;
+  /**
+   * What an iOS interactive snapshot that exposed only the application root says about this producer:
+   * an XCTest query that failed to enumerate the tree, an Appium page source that lacked the
+   * descendants, or nothing.
+   */
+  sparseRootWarning: 'xctest-query' | 'appium-page-source' | 'none';
+}>;
+
+const GENERAL_QUIET_MS = 500;
+
+/**
+ * The one table of producer facts. Every other producer-keyed fact derives from it: the provenance
+ * pairs, the iOS producer subsets, truncation, residue, quiet time, ref minting, and producer
+ * warning dispatch. A new producer adds a row here and stamps its served identity through
+ * `@agent-device/capture-kit/snapshot-identity`.
+ */
+export const SNAPSHOT_PRODUCERS = {
+  'apple-runner': {
+    channels: ['xctest'],
+    truncation: 'available',
+    residue: 'source-measured',
+    quietMs: GENERAL_QUIET_MS,
+    refs: 'dense',
+    sparseRootWarning: 'xctest-query',
+  },
+  'simulator-ax-bridge': {
+    channels: ['xctest'],
+    truncation: 'available',
+    residue: 'source-measured',
+    quietMs: 300,
+    refs: 'dense',
+    sparseRootWarning: 'none',
+  },
+  'appium-source': {
+    channels: ['xctest', 'android'],
+    truncation: 'unavailable',
+    residue: 'provider-derived',
+    quietMs: GENERAL_QUIET_MS,
+    refs: 'dense',
+    sparseRootWarning: 'appium-page-source',
+  },
+  'revyl-ios-tree': {
+    channels: ['xctest'],
+    truncation: 'unavailable',
+    residue: 'provider-derived',
+    quietMs: GENERAL_QUIET_MS,
+    refs: 'dense',
+    sparseRootWarning: 'none',
+  },
+  'android-uiautomator': {
+    channels: ['android'],
+    truncation: 'available',
+    residue: 'source-measured',
+    quietMs: GENERAL_QUIET_MS,
+    refs: 'dense',
+    sparseRootWarning: 'none',
+  },
+  'cdp-dom': {
+    channels: ['android'],
+    truncation: 'available',
+    residue: 'source-measured',
+    quietMs: GENERAL_QUIET_MS,
+    refs: 'dense',
+    sparseRootWarning: 'none',
+  },
+  'harmonyos-uitest': {
+    channels: ['harmonyos-arkui'],
+    truncation: 'available',
+    residue: 'source-measured',
+    quietMs: GENERAL_QUIET_MS,
+    refs: 'dense',
+    sparseRootWarning: 'none',
+  },
+  'macos-helper': {
+    channels: ['macos-helper'],
+    truncation: 'available',
+    residue: 'source-measured',
+    quietMs: GENERAL_QUIET_MS,
+    refs: 'dense',
+    sparseRootWarning: 'none',
+  },
+  'linux-atspi': {
+    channels: ['linux-atspi'],
+    truncation: 'available',
+    residue: 'source-measured',
+    quietMs: GENERAL_QUIET_MS,
+    refs: 'dense',
+    sparseRootWarning: 'none',
+  },
+  'agent-browser': {
+    channels: ['web'],
+    truncation: 'available',
+    residue: 'source-measured',
+    quietMs: GENERAL_QUIET_MS,
+    refs: 'backend-issued',
+    sparseRootWarning: 'none',
+  },
+} as const satisfies Record<SnapshotProducer, ProducerFacts>;
+
+/**
+ * The registry row of a producer read from a capture. A store plugin built against another release
+ * can name a producer this host does not list; that capture gets no producer facts.
+ */
+export function snapshotProducerFacts(producer: SnapshotProducer): ProducerFacts | undefined {
+  return Object.hasOwn(SNAPSHOT_PRODUCERS, producer) ? SNAPSHOT_PRODUCERS[producer] : undefined;
+}
+
+type ProducerChannel<Producer extends SnapshotProducer> =
+  (typeof SNAPSHOT_PRODUCERS)[Producer]['channels'][number];
+
+export type SnapshotBackend = ProducerChannel<SnapshotProducer>;
+
+type ProducerOnChannel<Backend extends SnapshotBackend> = {
+  [Producer in SnapshotProducer]: Backend extends ProducerChannel<Producer> ? Producer : never;
+}[SnapshotProducer];
+
+/**
+ * The channel↔producer pairs that can actually occur, derived from {@link SNAPSHOT_PRODUCERS}.
+ * `xctest` trees come from the local Apple runner, the Simulator AX bridge, Appium page-source XML,
+ * or a cloud provider's AX element tree (Revyl), and only the runner's output has been through its
+ * presentation (clip fold, effective geometry, scope). Logic that assumes those guarantees must key
+ * on the producer, never on the channel alone.
+ *
+ * Every carrier embeds the pair atomically, so a cross-channel pair does not compile.
+ */
+export type SnapshotProvenance = {
+  [Backend in SnapshotBackend]: { backend: Backend; producer: ProducerOnChannel<Backend> };
+}[SnapshotBackend];
 
 type OptionalProducerProvenance<Pair> = Pair extends {
   backend: infer Backend;
@@ -86,18 +238,12 @@ export function snapshotStateProvenance(
   }
 }
 
-/** Keyed on `SnapshotBackend`, so a backend added to `SnapshotProvenance` must be listed here. */
-const SNAPSHOT_BACKENDS = {
-  xctest: true,
-  android: true,
-  'harmonyos-arkui': true,
-  'macos-helper': true,
-  'linux-atspi': true,
-  web: true,
-} as const satisfies Record<SnapshotBackend, true>;
+const SNAPSHOT_BACKENDS: ReadonlySet<string> = new Set(
+  Object.values(SNAPSHOT_PRODUCERS).flatMap((facts) => facts.channels),
+);
 
 export function isSnapshotBackend(value: unknown): value is SnapshotBackend {
-  return typeof value === 'string' && Object.hasOwn(SNAPSHOT_BACKENDS, value);
+  return typeof value === 'string' && SNAPSHOT_BACKENDS.has(value);
 }
 
 export function usesMobileSnapshotPresentation(backend: SnapshotBackend | undefined): boolean {
@@ -188,16 +334,9 @@ export function inheritPostGestureOutcome<T extends SnapshotState>(
 }
 
 /**
- * The one producer that resolves actions against refs of its own, and so owns the ref namespace of
- * every tree it publishes. A producer that mints nothing belongs nowhere in this list: it keeps
- * dense positional numbering. Adding a second producer that mints its own refs means adding it here.
- */
-const REF_NAMESPACE_OWNERS: readonly SnapshotProducer[] = ['agent-browser'];
-
-/**
- * The ref-minting mode of a capture, from the pair that produced it. This is the one place that
- * knows which producers own their ref namespace, so the projection that publishes a tree and the
- * projection that later re-attaches refs to it cannot disagree.
+ * The ref-minting mode of a capture, from the pair that produced it. The projection that publishes a
+ * tree and the projection that later re-attaches refs to it both read it here, so they cannot
+ * disagree about which producers own their ref namespace.
  *
  * It reads the producer and not the platform channel, per the rule the provenance table states:
  * several producers can feed one channel with different guarantees, and a second web adapter
@@ -209,15 +348,9 @@ const REF_NAMESPACE_OWNERS: readonly SnapshotProducer[] = ['agent-browser'];
 export function snapshotRefMinting(
   provenance: SnapshotCaptureProvenance | undefined,
 ): SnapshotRefMinting {
-  // agent-browser resolves click/fill/hover against refs it minted itself, in tree order and not
-  // densely (#2283). A ref minted beside it would either name a different element or nothing.
   const producer = provenance?.producer;
-  return producer !== undefined && REF_NAMESPACE_OWNERS.includes(producer)
-    ? 'backend-issued'
-    : 'dense';
+  return producer === undefined ? 'dense' : (snapshotProducerFacts(producer)?.refs ?? 'dense');
 }
-
-export type SnapshotProducer = SnapshotProvenance['producer'];
 
 export function buildSnapshotNodeMap<T extends { index: number }>(
   nodes: readonly T[],

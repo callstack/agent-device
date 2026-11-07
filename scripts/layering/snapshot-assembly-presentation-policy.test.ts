@@ -61,11 +61,11 @@ test('R74 rejects the assembly importing the iOS snapshot engine', () => {
   );
 });
 
-test('R74 rejects the assembly reading the producer capability table', () => {
+test('R74 rejects the assembly importing the iOS acquisition module', () => {
   const result = violations(
     appended(
       assemblyFile,
-      `\nimport { iosSnapshotTruncationEvidence } from '@agent-device/capture-kit/ios-snapshot-acquisition';\nvoid iosSnapshotTruncationEvidence;\n`,
+      `\nimport { createIosSnapshotAcquisition } from '@agent-device/capture-kit/ios-snapshot-acquisition';\nvoid createIosSnapshotAcquisition;\n`,
     ),
   );
 
@@ -75,6 +75,25 @@ test('R74 rejects the assembly reading the producer capability table', () => {
         entry.rule === SNAPSHOT_ASSEMBLY_PRESENTATION_RULE &&
         entry.file === assemblyFile &&
         entry.message.includes('ios-snapshot-acquisition'),
+    ),
+    JSON.stringify(result),
+  );
+});
+
+test('R74 rejects the assembly reading the producer registry', () => {
+  const result = violations(
+    appended(
+      assemblyFile,
+      `\nimport { SNAPSHOT_PRODUCERS as registry } from '@agent-device/contracts/snapshot-model';\nvoid registry;\n`,
+    ),
+  );
+
+  assert.ok(
+    result.some(
+      (entry) =>
+        entry.rule === SNAPSHOT_ASSEMBLY_PRESENTATION_RULE &&
+        entry.file === assemblyFile &&
+        entry.message.includes('SNAPSHOT_PRODUCERS'),
     ),
     JSON.stringify(result),
   );
