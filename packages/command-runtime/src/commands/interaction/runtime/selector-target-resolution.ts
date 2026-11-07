@@ -1,6 +1,6 @@
 import type { AppError } from '@agent-device/kernel/errors';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import { inheritPostGestureOutcome } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot';
+import { inheritPostGestureOutcome } from '@agent-device/contracts/snapshot';
 import { resolveSelectorPipeline } from '@agent-device/selectors/selector-pipeline';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';

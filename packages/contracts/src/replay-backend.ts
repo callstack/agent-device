@@ -2,7 +2,8 @@ import type { DaemonError } from '@agent-device/kernel/errors';
 import type { DaemonResponse, SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
-import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { CommandFlags } from './command-flags.ts';
 import type { DaemonWireRequest } from './daemon-wire-request.ts';
 import type {

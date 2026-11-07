@@ -33,8 +33,8 @@ import {
   type Point,
   type SnapshotAddressableNode,
   type SnapshotKeyboardBandFact,
-  type SnapshotState,
 } from '@agent-device/kernel/snapshot';
+import { type SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { expireRefFrame } from '../../../core/ref-frame.ts';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';

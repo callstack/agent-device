@@ -12,7 +12,8 @@ import {
 } from '@agent-device/capture-kit/scroll-edge-state';
 import { containsPoint } from '@agent-device/kernel/rect';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
-import type { Point, Rect, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { Point, Rect } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   observeUntil,

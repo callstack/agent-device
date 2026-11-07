@@ -1,4 +1,5 @@
-import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import type { MaestroSelector } from './program-ir.ts';
 import type { MaestroPlatform } from './runtime-target-policy.ts';

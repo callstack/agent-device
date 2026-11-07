@@ -13,11 +13,11 @@ import type {
   PresentedSurface,
   SnapshotKeyboardBandFact,
   SnapshotNode,
-  SnapshotState,
   SnapshotUnchanged,
   SnapshotViewportSize,
   SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { BackendSnapshotResult } from '@agent-device/contracts/backend';
 import type {
   AgentDeviceRuntime,

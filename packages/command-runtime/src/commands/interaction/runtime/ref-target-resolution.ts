@@ -3,8 +3,8 @@ import type {
   SnapshotAddressableNode,
   SnapshotKeyboardBandFact,
   SnapshotNode,
-  SnapshotState,
 } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { findNodeByRef, hasSnapshotRef, normalizeRef } from '@agent-device/kernel/snapshot';
 import { resolveRectCenter } from '@agent-device/kernel/rect-center';
 import type {

@@ -5,7 +5,8 @@
 // PRE-ACTION in that case instead of tapping a different element.
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { ReplayTargetGuardDenotation } from '@agent-device/contracts/replay';
 import { readNodeLocalIdentity, readNodeStructuralDenotation } from '@agent-device/ad-script';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';

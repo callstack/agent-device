@@ -1,6 +1,6 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { FindLocator } from '@agent-device/selectors';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { elementMatchCandidateDetails } from '@agent-device/capture-kit/snapshot-lines';
 import { errorResponse } from '@agent-device/kernel/contracts';
 

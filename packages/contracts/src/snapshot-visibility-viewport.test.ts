@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { formatRole } from '@agent-device/kernel/snapshot';
 import type { RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
-import { buildSnapshotNodeMap } from './snapshot-tree.ts';
+import { buildSnapshotNodeMap } from './snapshot-model.ts';
 import {
   collectViewportRects,
   createSnapshotVisibility,

@@ -1,10 +1,9 @@
 import { test, expect, vi } from 'vitest';
+import { attachRefs, type IosTargetActivation } from '@agent-device/kernel/snapshot';
 import {
-  attachRefs,
-  type IosTargetActivation,
   type PostGestureOutcome,
   type SnapshotState,
-} from '@agent-device/kernel/snapshot';
+} from '@agent-device/contracts/snapshot-model';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { handleInteractionCommands } from '../index.ts';

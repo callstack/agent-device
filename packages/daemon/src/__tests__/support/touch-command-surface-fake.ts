@@ -30,8 +30,8 @@ import type {
   SnapshotNode,
   SnapshotPreferredBackend,
   SnapshotQualityVerdict,
-  SnapshotState,
 } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { extractReadableText } from '@agent-device/capture-kit/text-surface';
 import { buildSelectorChainForNode } from '@agent-device/selectors';
 import { fakeCreateCommandSurface } from './command-surface-fake.ts';

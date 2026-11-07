@@ -1,4 +1,4 @@
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 
 /**
  * The ADR 0014 ref-frame VALUE, declared below both `session-state.ts` (which gives the session a

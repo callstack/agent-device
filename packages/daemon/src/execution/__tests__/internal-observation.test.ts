@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { bindInternalObservationAuthority } from '../internal-observation.ts';
 import {
   expireRefFrame,

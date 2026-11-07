@@ -5,12 +5,8 @@ import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { SnapshotResult } from '@agent-device/contracts/snapshot-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type {
-  RawSnapshotNode,
-  Rect,
-  SnapshotProvenance,
-  SnapshotQualityVerdict,
-} from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, Rect, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import type { SnapshotProvenance } from '@agent-device/contracts/snapshot-model';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';

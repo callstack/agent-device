@@ -1,9 +1,5 @@
-import type {
-  Rect,
-  SnapshotKeyboardBandFact,
-  SnapshotNode,
-  SnapshotState,
-} from '@agent-device/kernel/snapshot';
+import type { Rect, SnapshotKeyboardBandFact, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { areCapturedRectsAtSamePosition } from '@agent-device/kernel/rect-center';
 import { collectKeyboardChromeRefs } from '@agent-device/capture-kit/snapshot-chrome';
 import type { PostGestureSurfaceReading } from '@agent-device/capture-kit/post-gesture-stability';

@@ -1,6 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { InteractionTarget } from '@agent-device/contracts/interaction';
-import type { SnapshotQualityVerdict, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { asAppError } from '@agent-device/kernel/errors';
 import {
   isSparseSnapshotQualityVerdict,

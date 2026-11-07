@@ -6,7 +6,7 @@ import {
 } from '@agent-device/selectors';
 import { listSelectorPipelineMatches } from '@agent-device/selectors/selector-pipeline';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { isRootInteractionContainer } from '@agent-device/selectors/interaction-targeting';
 import { preferOnscreenMatches } from './find-match-ranking.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';

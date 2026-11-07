@@ -6,7 +6,8 @@ import {
 } from '@agent-device/contracts/scroll-command';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
-import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { sparseCaptureQuality } from '@agent-device/selectors/absence-observation';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { evaluateIsPredicate } from '@agent-device/selectors';

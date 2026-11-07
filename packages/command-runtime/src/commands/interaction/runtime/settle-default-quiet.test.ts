@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { SnapshotProvenance, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotProvenance, SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { ref } from './selector-read-utils.ts';
 import {
   buttonSnapshot,

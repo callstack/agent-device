@@ -3,10 +3,12 @@ import {
   attachRefs,
   hasSnapshotRef,
   snapshotRefBodies,
-  snapshotRefMinting,
   type RawSnapshotNode,
+} from '@agent-device/kernel/snapshot';
+import {
+  snapshotRefMinting,
   type SnapshotProvenance,
-} from './snapshot.ts';
+} from '@agent-device/contracts/snapshot-model';
 
 const node = (index: number, extra: Partial<RawSnapshotNode> = {}): RawSnapshotNode => ({
   index,

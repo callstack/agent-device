@@ -8,7 +8,8 @@ import type {
 import { resolveRequestTargetDevice } from '../core/request-device-resolution.ts';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import { publicPlatformString } from '@agent-device/kernel/device';
-import type { SnapshotState, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from '../core/runtime-session.ts';
 import { contextFromFlags, type BoundContextFromFlags } from '../core/context.ts';

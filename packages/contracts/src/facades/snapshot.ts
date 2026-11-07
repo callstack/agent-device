@@ -7,10 +7,23 @@ export {
   type SnapshotScopeCandidate,
 } from '../snapshot-scope.ts';
 export {
+  snapshotStateProvenance,
+  isSnapshotBackend,
+  usesMobileSnapshotPresentation,
+  inheritPostGestureOutcome,
+  snapshotRefMinting,
   buildSnapshotNodeMap,
-  findNearestAncestor,
   findSnapshotAncestor,
-} from '../snapshot-tree.ts';
+  findNearestAncestor,
+  type SnapshotProvenance,
+  type SnapshotBackend,
+  type SnapshotProducer,
+  type SnapshotStateProvenance,
+  type SnapshotCaptureProvenance,
+  type SnapshotState,
+  type PostGestureAction,
+  type PostGestureOutcome,
+} from '../snapshot-model.ts';
 export {
   collectViewportRects,
   createSnapshotVisibility,

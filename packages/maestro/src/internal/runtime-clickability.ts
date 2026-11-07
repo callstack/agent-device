@@ -1,5 +1,6 @@
 import { readSnapshotClickabilityEvidence } from '@agent-device/contracts/capture';
-import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 
 type MaestroClickabilityPlatform = 'android' | 'ios';
 

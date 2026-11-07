@@ -1,10 +1,9 @@
 import type {
   SnapshotNode,
   SnapshotPreferredBackend,
-  SnapshotProvenance,
   SnapshotQualityVerdict,
-  SnapshotState,
 } from '@agent-device/kernel/snapshot';
+import type { SnapshotProducer, SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
@@ -71,7 +70,7 @@ const DEFAULT_QUIET_MS_BY_PRODUCER = {
   'macos-helper': DEFAULT_STABLE_QUIET_MS,
   'linux-atspi': DEFAULT_STABLE_QUIET_MS,
   'agent-browser': DEFAULT_STABLE_QUIET_MS,
-} as const satisfies Record<SnapshotProvenance['producer'], number>;
+} as const satisfies Record<SnapshotProducer, number>;
 
 /** A capture that declares no producer has no measured price and keeps the general default. */
 function defaultQuietMsForCapture(snapshot: SnapshotState): number {

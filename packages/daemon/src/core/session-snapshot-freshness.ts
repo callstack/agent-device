@@ -1,4 +1,4 @@
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import {
   ANDROID_COMPARISON_BASELINE_MAX_AGE_MS,
   ANDROID_FRESHNESS_RETRY_BUDGET_MS,

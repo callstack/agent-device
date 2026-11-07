@@ -3,7 +3,7 @@ import type { SettleObservation, SurfaceScopedNodes } from '@agent-device/contra
 import type { PostOpenObservation } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { SnapshotCaptureAnnotations } from '@agent-device/contracts/capture';
 import { isApplePlatform, isMobilePlatform } from '@agent-device/kernel/device';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { MovingTargetBaseline } from '@agent-device/contracts/runtime-contract';
 import {
   captureAndroidFreshnessRecoveredAttempt,

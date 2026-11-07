@@ -9,7 +9,7 @@ vi.mock('../../../core/snapshot-interactor-capture.ts', () => ({
 
 import { captureSnapshotWithInteractor } from '../../../core/snapshot-interactor-capture.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { ReplayDivergence } from '@agent-device/contracts/divergence';
 import {
   expireRefFrame,

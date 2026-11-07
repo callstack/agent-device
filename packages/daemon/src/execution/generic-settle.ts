@@ -23,7 +23,7 @@ import { issueSettleRefs } from './session-snapshot.ts';
 import type { SessionStore } from '../core/session-store.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 
 /**
  * `--settle` on the generic daemon route (#1638): `scroll` and `back` change

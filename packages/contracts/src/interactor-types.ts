@@ -27,8 +27,8 @@ import type {
   IosTargetActivation,
   SnapshotKeyboardBandFact,
   SnapshotOptions as BaseSnapshotOptions,
-  SnapshotProvenance,
 } from '@agent-device/kernel/snapshot';
+import type { SnapshotProvenance } from '@agent-device/contracts/snapshot-model';
 
 export type RunnerContext = {
   requestId?: string;
