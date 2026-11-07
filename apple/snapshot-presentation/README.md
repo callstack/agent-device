@@ -17,6 +17,9 @@ Every capture-plan backend returns a `SnapshotAcquisition`, and one `SnapshotPre
 Acquisition backends are fact serializers.
 They emit every traversed node at raw traversal depth with its reported frame.
 `SnapshotAcquisition` carries the viewport.
+Android acquisition stays in its platform module and adapts its raw hierarchy to the same carrier.
+An optional unscoped quality payload is validation evidence, and presentation never publishes it.
+Snapshot comparisons require a matching producer, intent, app generation, presentation key, and residue.
 
 `SnapshotPresentation.captureHint` derives a `CaptureHint` from the request.
 Backends read the hint and never read `PresentationOptions`.

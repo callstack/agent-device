@@ -68,8 +68,9 @@ returns `system-surface-host-unverified`. A host process that exited, gone or a 
 is absent: it presents nothing, and an unverified answer would keep every warm
 capture off the bridge for as long as the process lingered. The host sends that capture to
 XCTest and keeps the app generation on the bridge, because both refusals are
-evidence about the screen. The host omits the check when a ready runner already
-reported every host off screen.
+evidence about the screen. The route asks a ready runner's foreground read
+first, and the request names the surface hosts only when that read cannot
+answer. On a local Simulator, that read never starts or replaces a runner.
 
 ## Window placement
 
