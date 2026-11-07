@@ -1,12 +1,8 @@
-import { AppError, type DispatchDisclosure } from '@agent-device/kernel/errors';
-import type { DispatchedCommand } from '@agent-device/contracts/command';
+import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DaemonRetirementResult } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import {
-  resolveCommandRecordingEffect,
-  resolveCommandTimeoutPolicy,
-} from '@agent-device/command-registry/registry';
+import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { PlatformSelector } from '@agent-device/kernel/device';
 import { observedDaemonIdentityOf, type DaemonInfo } from './daemon-client-metadata.ts';
@@ -39,8 +35,6 @@ export async function handleRequestTimeout(
     /** Named together so the recovery hint cannot be assembled from a swapped session and action. */
     session?: string;
     action?: string;
-    /** The timed-out request, read for its declared recording effect. */
-    request: DispatchedCommand;
   }>,
 ): Promise<AppError> {
   const {
@@ -54,9 +48,7 @@ export async function handleRequestTimeout(
     platform,
     session,
     action,
-    request,
   } = params;
-  const dispatched = timedOutRequestDispatch(request);
   // The command's declared policy (`timeoutPolicy.onTimeout`, ADR 0008) decides whether a local
   // timed-out request is RESET-ELIGIBLE; the liveness probe decides whether the eligibility runs.
   // A remote client cannot reach the host's process table or the daemon's state dir, so a remote
@@ -104,7 +96,6 @@ export async function handleRequestTimeout(
     timeoutMs,
     requestId,
     reason: 'daemon_transport_timeout',
-    dispatched,
     ...(retirement ? { retirement, stateDir: statePaths.baseDir } : {}),
     hint:
       retirement?.status === 'retained'
@@ -119,14 +110,6 @@ export async function handleRequestTimeout(
             action,
           }),
   });
-}
-
-/**
- * The request already left this process, so the daemon may have run it. Only a command the
- * registry declares a read (`observes-app`) cannot have changed the app.
- */
-function timedOutRequestDispatch(request: DispatchedCommand): DispatchDisclosure {
-  return resolveCommandRecordingEffect(request) === 'observes-app' ? 'no' : 'unknown';
 }
 
 async function forceRetireDaemon(

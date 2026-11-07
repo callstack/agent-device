@@ -36,6 +36,7 @@ export function handleDaemonHttpResponseBody(
       reject(
         new AppError('COMMAND_FAILED', 'Invalid daemon RPC response', {
           requestId: req.meta?.requestId,
+          reason: 'daemon_response_invalid',
         }),
       );
       return;
@@ -48,6 +49,7 @@ export function handleDaemonHttpResponseBody(
         'Invalid daemon response',
         {
           requestId: req.meta?.requestId,
+          reason: 'daemon_response_invalid',
           line: body,
         },
         err instanceof Error ? err : undefined,
@@ -162,7 +164,9 @@ async function resolveDaemonHttpResult(
         : result,
     );
   } catch (error) {
-    reject(error);
+    // The daemon answered, so the request ran; only bringing its artifacts here failed.
+    const { discloseRequestFailure } = await import('./daemon-client-dispatch-disclosure.ts');
+    reject(error instanceof AppError ? discloseRequestFailure(error, req, true) : error);
   }
 }
 

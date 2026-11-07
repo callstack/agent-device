@@ -1,6 +1,7 @@
 // The typed-flags request from contracts/, not the daemon's server-side refinement: these
 // descriptors read `command`, `positionals` and `flags` and never touch `internal`.
 import type { CommandFlags, DispatchedCommand } from '@agent-device/contracts/command';
+import type { DispatchDisclosure } from '@agent-device/kernel/errors';
 import type { RuntimeUseStepSelector } from '@agent-device/contracts/command-platform-execution';
 import { checkFindArgs, isReadOnlyFindAction } from '@agent-device/selectors';
 import {
@@ -838,6 +839,22 @@ export function resolveCommandRecordingEffect(req: DispatchedCommand): Recording
   return typeof descriptor.recordingEffect === 'function'
     ? descriptor.recordingEffect(req)
     : descriptor.recordingEffect;
+}
+
+/**
+ * Whether a failed request for this command can have reached the device: a read
+ * (`observes-app`) cannot have changed the app, and a mutation or a delegating composite (`batch`,
+ * `replay`, `test`, whose nested requests act) may have. Any other command gets no verdict. The
+ * daemon's request seam and the client's transport failures both read this, so they cannot disagree.
+ */
+export function resolveCommandDispatchDisclosure(
+  req: DispatchedCommand,
+): DispatchDisclosure | undefined {
+  const effect = resolveCommandRecordingEffect(req);
+  if (effect !== undefined) return effect === 'observes-app' ? 'no' : 'unknown';
+  const refFrame = COMMAND_DESCRIPTOR_BY_NAME.get(req.command)?.daemon?.refFrameEffect;
+  const resolved = typeof refFrame === 'function' ? refFrame(req) : refFrame;
+  return resolved === 'delegated' ? 'unknown' : undefined;
 }
 
 /**
