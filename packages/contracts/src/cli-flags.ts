@@ -66,6 +66,7 @@ export type CliFlags = CloudProviderProfileFields &
     osVersion?: string;
     imageTag?: string;
     deviceMode?: string;
+    deviceBaseline?: string;
     physical?: boolean;
     stale?: boolean;
     iosSimulatorDeviceSet?: string;

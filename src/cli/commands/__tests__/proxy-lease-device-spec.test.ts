@@ -68,9 +68,14 @@ test('proxy open by device spec sends the spec on allocate without listing devic
     osVersion: ' >=26 ',
     imageTag: 'google_apis',
     deviceMode: 'full',
+    deviceBaseline: 'logged-in',
     physical: true,
   };
-  const grantedDevice: LeaseDevice = { ...GRANTED_DEVICE, deviceMode: 'full' };
+  const grantedDevice: LeaseDevice = {
+    ...GRANTED_DEVICE,
+    deviceMode: 'full',
+    baseline: { name: 'logged-in', version: 2 },
+  };
 
   const materialized = await materializeRemoteConnectionForCommand({
     host: createTestHostEnvironment(),
@@ -141,6 +146,46 @@ test('a slim grant for a full request is released and refused', async () => {
   assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId, undefined);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
+
+for (const [label, baseline] of [
+  ['another baseline', { name: 'factory', version: 1 }],
+  ['no baseline', undefined],
+] as const) {
+  test(`a grant reporting ${label} for a baseline request is released and refused`, async () => {
+    const { tempRoot, stateDir, flags } = proxyWorkspace('agent-device-proxy-spec-wrong-baseline-');
+    const releases: LeaseReleaseRequest[] = [];
+    await assert.rejects(
+      materializeRemoteConnectionForCommand({
+        host: createTestHostEnvironment(),
+        command: 'open',
+        flags: { ...flags, deviceBaseline: 'logged-in' },
+        client: createTestClient({
+          listDevices: unexpectedCommandCall,
+          allocate: async (request) =>
+            grantedLease(request, {
+              created: true,
+              deviceKey: REMOTE_DEVICE_KEY,
+              device: { ...GRANTED_DEVICE, ...(baseline ? { baseline } : {}) },
+            }),
+          release: async (request) => {
+            releases.push(request);
+            return { released: true };
+          },
+        }),
+      }),
+      (error: AppError) =>
+        error.code === 'UNSUPPORTED_OPERATION' &&
+        error.details?.reason === 'device-spec-unsupported' &&
+        JSON.stringify(error.details?.keys) === '["deviceBaseline"]',
+    );
+    assert.deepEqual(
+      releases.map((request) => request.leaseId),
+      ['lease-1'],
+    );
+    assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId, undefined);
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  });
+}
 
 test('a full grant serves a slim request, because slim is best effort', async () => {
   const { tempRoot, flags } = proxyWorkspace('agent-device-proxy-spec-slim-full-');
@@ -495,6 +540,51 @@ test('a spec named on a live lease allocated without one is refused with CONNECT
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('a later open naming the baseline a live lease was allocated by is served', async () => {
+  const device: LeaseDevice = { ...GRANTED_DEVICE, baseline: { name: 'logged-in', version: 2 } };
+  const { tempRoot, flags } = proxyWorkspace('agent-device-proxy-device-spec-same-baseline-', {
+    leaseId: 'lease-1',
+    deviceKey: 'ios:mobile:SIM-REMOTE',
+    leaseDeviceSpec: { leaseId: 'lease-1', spec: { deviceBaseline: 'logged-in' }, device },
+  });
+  const heartbeats: string[] = [];
+
+  const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
+    command: 'install',
+    flags: { ...flags, deviceBaseline: 'logged-in' },
+    client: renewingClient(heartbeats),
+  });
+
+  assert.deepEqual(heartbeats, ['lease-1']);
+  assert.equal(materialized.flags.udid, 'SIM-REMOTE');
+  assert.equal(materialized.flags.deviceBaseline, undefined);
+  assert.deepEqual(materialized.leaseDevice, device);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('a later open naming another baseline on a live lease is refused with CONNECTION_DEVICE_CONFLICT', async () => {
+  const { tempRoot, flags } = proxyWorkspace('agent-device-proxy-device-spec-other-baseline-', {
+    leaseId: 'lease-1',
+    deviceKey: 'ios:mobile:SIM-REMOTE',
+    leaseDeviceSpec: { leaseId: 'lease-1', spec: { deviceBaseline: 'logged-in' } },
+  });
+
+  await assert.rejects(
+    materializeRemoteConnectionForCommand({
+      host: createTestHostEnvironment(),
+      command: 'open',
+      flags: { ...flags, deviceBaseline: 'factory' },
+      client: renewingClient([]),
+    }),
+    (error: AppError) =>
+      error.code === 'INVALID_ARGS' &&
+      error.details?.reason === 'CONNECTION_DEVICE_CONFLICT' &&
+      JSON.stringify(error.details?.keys) === '["deviceBaseline"]',
+  );
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('a later open naming another --udid beside the spec on a live spec lease is refused', async () => {
   const { tempRoot, flags } = proxyWorkspace('agent-device-proxy-device-spec-udid-', {
     leaseId: 'lease-1',
@@ -566,6 +656,7 @@ test('a lease re-allocated by its stored device for a non-allocating command doe
       osVersion: '>=26',
       imageTag: 'google_apis',
       deviceMode: 'full',
+      deviceBaseline: 'logged-in',
       physical: true,
     },
     client: createTestClient({
@@ -631,6 +722,7 @@ test('connect proxy stores the device spec as profile defaults like platform and
         osVersion: '34',
         imageTag: 'google_apis_playstore',
         deviceMode: 'full',
+        deviceBaseline: 'logged-in',
         physical: true,
       },
       client: createTestClient(),
@@ -647,6 +739,7 @@ test('connect proxy stores the device spec as profile defaults like platform and
   assert.equal(generated.osVersion, '34');
   assert.equal(generated.imageTag, 'google_apis_playstore');
   assert.equal(generated.deviceMode, 'full');
+  assert.equal(generated.deviceBaseline, 'logged-in');
   assert.equal(generated.physical, true);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
@@ -667,6 +760,7 @@ test('connect proxy stores no default for a spec key that names nothing', async 
         osVersion: '',
         imageTag: ' ',
         deviceMode: '',
+        deviceBaseline: ' ',
         physical: false,
       },
       client: createTestClient(),
