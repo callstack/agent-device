@@ -6,10 +6,16 @@ import type {
   SnapshotQualityNote,
   SnapshotKeyboardBandFact,
 } from '@agent-device/kernel/snapshot';
-import type { SNAPSHOT_PRODUCERS, SnapshotProvenance } from './snapshot-model.ts';
+import type { SNAPSHOT_PRODUCERS } from './snapshot-producers.ts';
+
+type SnapshotProducerRegistry = typeof SNAPSHOT_PRODUCERS;
 
 /** The producers whose trees arrive on the iOS (`xctest`) channel, from the producer registry. */
-export type IosSnapshotProducer = Extract<SnapshotProvenance, { backend: 'xctest' }>['producer'];
+export type IosSnapshotProducer = {
+  [
+    Producer in keyof SnapshotProducerRegistry
+  ]: 'xctest' extends SnapshotProducerRegistry[Producer]['channels'][number] ? Producer : never;
+}[keyof SnapshotProducerRegistry];
 
 export type IosAcquisitionProducer = Exclude<IosSnapshotProducer, 'apple-runner'>;
 

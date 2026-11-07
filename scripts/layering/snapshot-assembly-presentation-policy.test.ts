@@ -84,7 +84,7 @@ test('R74 rejects the assembly reading the producer registry', () => {
   const result = violations(
     appended(
       assemblyFile,
-      `\nimport { SNAPSHOT_PRODUCERS as registry } from '@agent-device/contracts/snapshot-model';\nvoid registry;\n`,
+      `\nimport { SNAPSHOT_PRODUCERS as registry } from '@agent-device/contracts/snapshot-producers';\nvoid registry;\n`,
     ),
   );
 

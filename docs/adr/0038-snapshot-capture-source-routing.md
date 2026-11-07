@@ -77,4 +77,6 @@ A future app-only source needs window-ownership evidence that is tied to its rea
 
 - Provenance types move from kernel to contracts, and both iOS sources bind to the router.
 - Readers, decoding, discovery, process checks, native budgets, geometry, and lifecycle stay platform-specific.
-- Open gaps: the router, the identity-stamp helper, and the producer registry do not exist yet. The runner-session scope is pending [#4256](https://github.com/callstack/agent-device/pull/4256).
+- The producer registry is `SNAPSHOT_PRODUCERS` in `packages/contracts/src/snapshot-model.ts`.
+- One-source owners stamp identity through `packages/capture-kit/src/snapshot-identity.ts`.
+- Open gaps: the router does not exist yet. The runner-session scope is pending [#4256](https://github.com/callstack/agent-device/pull/4256).
