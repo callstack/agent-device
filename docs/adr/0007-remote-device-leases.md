@@ -40,7 +40,7 @@ Only host administrators allocate `macos-app` leases; tenants cannot release the
 Requests under such a lease are confined to the leased app, and its session takes that app device's claim ([ADR 0035](0035-macos-app-devices.md)).
 Under tenant isolation, a web session's browser key derives from the tenant and tenant-relative public session name, not the prefixed store name ([ADR 0037](0037-web-session-devices.md)).
 
-- A daemon refuses unsupported device-spec keys. A live proxy lease refuses a later command whose named spec keys differ, with `CONNECTION_DEVICE_CONFLICT`.
+- A daemon refuses unsupported device-spec keys. The backend echoes the granted device on the lease as `lease.device`. A live proxy lease refuses a later command whose named spec keys differ, with `CONNECTION_DEVICE_CONFLICT`.
 
 The detailed contracts are in the [daemon](../../packages/daemon/docs/remote-device-lease-contracts.md), [daemon client](../../packages/daemon-client/docs/remote-device-leases.md), [provider lease table](../../packages/provision-kit/docs/remote-device-leases.md), and [device specification](../../packages/contracts/docs/lease-device-spec.md) documentation.
 

@@ -1,7 +1,7 @@
 import XCTest
 import AgentDeviceSnapshotPresentation
 
-// MARK: - Snapshot capture plans (ADR 0004)
+// MARK: - Snapshot capture plans (apple/runner/README.md, "Capture plans")
 //
 // Each snapshot strategy declares an ordered chain of capture backends. One runner walks the
 // chain: capture, classify, accept the first payload the quality classifier calls usable, and

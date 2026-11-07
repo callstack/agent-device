@@ -567,10 +567,11 @@ type FallbackPlan =
   /** An observe-only capture on a source that cannot serve one: the runner result is returned as is. */
   | Readonly<{ kind: 'direct' }>
   /**
-   * A capture the route cannot plan (a pinned backend or a custom-actions read). The runner serves a
-   * presented system surface on this path too, so a surface capture still gets a surface identity:
-   * without it, legacy presentation matching reads the sheet and the app as one presentation and can
-   * corroborate a tap across the two (#2438). An app capture off the route carries no identity.
+   * A capture the route has no bridge plan for (for example, a pinned backend or a custom-actions
+   * read). The runner serves a presented system surface on this path too, so a surface capture still
+   * gets a surface identity: without it, legacy presentation matching reads the sheet and the app as
+   * one presentation and can corroborate a tap across the two (#2438). An app capture off the route
+   * carries no identity.
    */
   | Readonly<{ kind: 'off-route' }>
   /**
