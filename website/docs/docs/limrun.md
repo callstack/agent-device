@@ -31,7 +31,7 @@ agent-device shutdown
 agent-device boot
 ```
 
-`shutdown` deletes an instance that agent-device created, including its apps and data. The next `boot` creates a fresh instance. Limrun has no stopped instance to resume. If a session is open, use `close --shutdown` to end it and delete its instance. `shutdown` on a connection without an instance creates nothing.
+`shutdown` deletes an instance that agent-device created, including its apps and data. The next `boot` creates a fresh instance. Limrun has no stopped instance to resume. If a session is open, use `close --shutdown` to end it and delete its instance. `shutdown` on a connection without an instance creates nothing and fails with `DEVICE_NOT_FOUND` and `details.reason: 'provider_instance_unallocated'`.
 
 For an [existing instance](#drive-an-existing-instance), `boot` attaches and `shutdown` releases the attachment. The instance stays running, and its owner deletes it. `close --shutdown` also releases an attachment or lease allocated with `retainOnClose: true`.
 

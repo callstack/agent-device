@@ -1,8 +1,9 @@
 import crypto from 'node:crypto';
-import type { DeviceLease } from '@agent-device/contracts/device';
+import { providerInstanceUnallocatedError, type DeviceLease } from '@agent-device/contracts/device';
 import {
   MIN_LEASE_WINDOW_MS,
   leaseScopeToReleaseRequest,
+  leaseProviderRequiringRuntime,
 } from '@agent-device/contracts/lease-scope';
 import { LEASE_BACKENDS, type LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -263,6 +264,16 @@ export function normalizeLeaseAdmissionRequest(
   if (!runId) throw new AppError('INVALID_ARGS', 'tenant isolation requires run id.');
   const leaseId = normalizeLeaseId(request.leaseId);
   if (!leaseId) {
+    // A provider runtime's connection that sent no lease has no instance, for example after
+    // `close --shutdown` released it. Name that, as device inventory does. A malformed lease id stays
+    // a missing lease id, and so does a logical lease such as `proxy`, which names a route, not an
+    // instance.
+    const runtimeProvider = leaseProviderRequiringRuntime({
+      leaseProvider: normalizeLeaseProvider(request.leaseProvider),
+    });
+    if (runtimeProvider && !request.leaseId?.trim()) {
+      throw providerInstanceUnallocatedError(runtimeProvider);
+    }
     throw new AppError('INVALID_ARGS', 'tenant isolation requires lease id.', {
       hint: 'Allocate a lease with leases.allocate and pass its leaseId.',
     });

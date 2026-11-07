@@ -108,7 +108,7 @@ const bootCommandMetadata = defineFieldCommandMetadata(
 
 const shutdownCommandMetadata = defineFieldCommandMetadata(
   'shutdown',
-  'Shutdown a selected simulator or emulator. On Limrun, delete a created instance or release an attachment. Apps and data on a deleted instance are lost.',
+  'Shutdown a selected simulator or emulator. On Limrun, delete a created instance or release an attachment. Apps and data on a deleted instance are lost. A Limrun connection without an instance fails with DEVICE_NOT_FOUND and details.reason provider_instance_unallocated and creates nothing.',
   {},
 );
 
