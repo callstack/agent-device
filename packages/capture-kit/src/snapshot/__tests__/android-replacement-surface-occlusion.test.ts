@@ -177,6 +177,30 @@ test('maximum-size flat Android captures stay within the linear classifier shape
   );
 });
 
+test('an identifier-only leaf layer does not paint over earlier sibling layers', () => {
+  const nodes: RawSnapshotNode[] = [
+    node(0, undefined, 'android.widget.FrameLayout', [0, 0, 400, 800]),
+    node(1, 0, 'android.view.ViewGroup', [0, 0, 400, 800]),
+    { ...node(2, 1, 'android.widget.Button', [20, 40, 100, 60]), label: 'Header', hittable: true },
+    node(3, 0, 'android.view.ViewGroup', [0, 0, 400, 800]),
+    { ...node(4, 3, 'android.view.ViewGroup', [0, 0, 400, 800]), identifier: 'coach-container' },
+    { ...node(5, 3, 'android.widget.Button', [20, 700, 360, 60]), label: 'Send', hittable: true },
+  ];
+
+  assert.deepEqual(
+    [
+      ...coveredAndroidReplacementNodeIndexes(
+        nodes,
+        siblingOrders([
+          [1, 1],
+          [3, 2],
+        ]),
+      ),
+    ],
+    [],
+  );
+});
+
 function siblingOrders(entries: ReadonlyArray<readonly [number, number]>) {
   return new Map(entries.map(([index, order]) => [index, { group: 0, order }]));
 }

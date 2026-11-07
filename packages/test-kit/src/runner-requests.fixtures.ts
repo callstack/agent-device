@@ -19,12 +19,14 @@ export function readRunnerRequestFixture(): RunnerRequestEntry[] {
   ) as RunnerRequestEntry[];
 }
 
-/** The request as the wire carries it, with the random command ids pinned. */
+/** The request as the wire carries it, with the random command and bridge request ids pinned. */
 function wireRunnerRequest(sent: unknown): Record<string, unknown> {
   const request = JSON.parse(JSON.stringify(sent)) as Record<string, unknown>;
   for (const key of COMMAND_ID_KEYS) {
     if (key in request) request[key] = '<commandId>';
   }
+  const bridge = request.snapshotBridge as Record<string, unknown> | undefined;
+  if (bridge && 'requestId' in bridge) bridge.requestId = '<requestId>';
   return request;
 }
 

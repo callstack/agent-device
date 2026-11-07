@@ -15,8 +15,8 @@ export const MAX_ALERT_WINDOW_MS = 2_147_483_647;
  * The one alert failure the family retries on: the backend looked and there was no alert *yet*.
  * Both Apple backends state it in typed form — the XCTest runner as this `ErrorPayload.code`
  * (surfacing as `details.runnerErrorCode`, like `RUNNER_BUSY`, without changing the wire error
- * code), the macOS helper as details.reason — and so do the tree-based acting legs (Android and
- * Limrun iOS, through the shared driver), as this `details.reason` paired with `dispatched:
+ * code), the macOS helper as details.reason — and so does the tree-based Android acting leg
+ * (through the shared driver), as this `details.reason` paired with `dispatched:
  * 'no'`. Retry and the fallback hint key on these, never on the message text: a transport,
  * runner or helper failure must never read as an absent alert.
  */
@@ -32,9 +32,9 @@ export const ALERT_NOT_FOUND_REASON = 'alert-not-found';
 export const ALERT_BUTTON_NOT_FOUND_RUNNER_CODE = 'ALERT_BUTTON_NOT_FOUND';
 
 /**
- * The Apple XCUITest runner saw a blocking system modal but could not read its remote host, so
- * it has no buttons to report or press. A prompt is on screen: this is never absence, and it
- * travels as its own wire code with `dispatched: no`.
+ * The Apple XCUITest runner could not complete required alert acquisition: a query failed,
+ * the search deadline expired, a system modal's host could not be read, or an app surface has
+ * no actionable controls yet. It travels as its own wire code with `dispatched: no`.
  */
 export const ALERT_UNRESOLVED_RUNNER_CODE = 'ALERT_UNRESOLVED';
 

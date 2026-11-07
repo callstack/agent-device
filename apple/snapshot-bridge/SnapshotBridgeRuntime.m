@@ -18,8 +18,8 @@
 NSString *const kProtocolVersionKey = @"protocolVersion";
 NSString *const kSourceVersionKey = @"sourceVersion";
 NSString *const kRequestIdKey = @"requestId";
-NSString *const kSourceVersion = @"agent-device-simulator-ax-v1.9.0";
-const NSUInteger kProtocolVersion = 1;
+NSString *const kSourceVersion = SNAPSHOT_BRIDGE_SOURCE_VERSION;
+const NSUInteger kProtocolVersion = SNAPSHOT_BRIDGE_PROTOCOL_VERSION;
 const uint32_t kMaximumFrameBytes = 16 * 1024 * 1024;
 const NSUInteger kMaximumDepth = 128;
 const NSUInteger kMaximumNodes = 10000;
@@ -38,6 +38,25 @@ static NSString *const kAttributeChildren = @"XC_kAXXCAttributeChildren";
 static NSString *const kAttributeIsUserInteractionEnabled = @"XC_kAXXCAttributeIsUserInteractionEnabled";
 static NSString *const kPresentationDimmingViewClass = @"UIDimmingView";
 static NSString *const kSnapshotAttributes = @"UIAccessibilitySnapshotKeyAttributes";
+
+/// The wire refusal for a reader error. A tree that changed between two reads and a foreground that
+/// changed during a continuation describe the screen at that moment, so their codes are capture-scoped;
+/// the other reader errors describe what this reader can read.
+static NSDictionary *captureFailureResponse(NSString *requestId, SnapshotCaptureError code, NSString *message) {
+  switch (code) {
+    case SnapshotCaptureErrorBudgetExhausted:
+      return failureResponse(requestId, @"reader_unavailable", @"continuation-budget-exhausted", message);
+    case SnapshotCaptureErrorTreeChanged:
+      return failureResponse(requestId, @"malformed_tree", @"snapshot-tree-changed", message);
+    case SnapshotCaptureErrorForegroundOwnerChanged:
+      return failureResponse(requestId, @"unsupported", @"foreground-owner-changed", message);
+    case SnapshotCaptureErrorMalformedContinuation:
+    case SnapshotCaptureErrorContinuationElementUnavailable:
+    case SnapshotCaptureErrorBoundaryChildCountUnavailable:
+      return failureResponse(requestId, @"malformed_tree", @"snapshot-tree-malformed", message);
+  }
+  return failureResponse(requestId, @"malformed_tree", @"snapshot-tree-malformed", message);
+}
 static NSString *const kSnapshotChildren = @"UIAccessibilitySnapshotKeyChildren";
 static NSString *const kSnapshotElement = @"UIAccessibilitySnapshotKeyElement";
 static NSString *const kXctAutomationSupportPath =
@@ -86,6 +105,14 @@ static NSDictionary *_Nullable rectDictionary(CGRect rect)
   return @{ @"X" : x, @"Y" : y, @"Width" : width, @"Height" : height };
 }
 
+// Nothing can stop an XPC call that the accessibility server never answers. The guest bridge process
+// ends itself when a read outlives its budget, and its host starts a new one. A process that serves the
+// reader for other work, such as the XCTest runner, must not end itself: it defines this macro as 0
+// before it includes this file, and abandons the read instead.
+#ifndef SNAPSHOT_BRIDGE_WATCHDOG_ENDS_PROCESS
+#define SNAPSHOT_BRIDGE_WATCHDOG_ENDS_PROCESS 1
+#endif
+
 @interface SnapshotWatchdogState : NSObject
 @property(atomic) BOOL completed;
 @end
@@ -106,7 +133,9 @@ static dispatch_source_t startRequestWatchdog(NSUInteger durationMs, SnapshotWat
       DISPATCH_TIME_FOREVER,
       0);
   dispatch_source_set_event_handler(watchdog, ^{
+#if SNAPSHOT_BRIDGE_WATCHDOG_ENDS_PROCESS
     if (!state.completed) kill(getpid(), SIGKILL);
+#endif
   });
   dispatch_resume(watchdog);
   return watchdog;
@@ -412,7 +441,7 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
     snapshot = captureSnapshotTree((__bridge id)raw, maxDepth, maxNodes, nativeLevelsHint,
         ^id(id element, NSUInteger depth, NSUInteger nodes, NSError **captureError) {
           if (![self isPrimaryForegroundProcess:pid]) {
-            if (captureError) *captureError = [NSError errorWithDomain:@"agent-device.snapshot" code:5
+            if (captureError) *captureError = [NSError errorWithDomain:SnapshotCaptureErrorDomain code:SnapshotCaptureErrorForegroundOwnerChanged
                 userInfo:@{NSLocalizedDescriptionKey: @"foreground owner changed during continuation"}];
             return nil;
           }
@@ -432,10 +461,8 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
     finishRequestWatchdog(watchdog, watchdogState);
     return nil;
   }
-  if (!snapshot && [runtimeError.domain isEqualToString:@"agent-device.snapshot"]) {
-    BOOL exhausted = runtimeError.code == 1;
-    if (error) *error = failureResponse(requestId, exhausted ? @"reader_unavailable" : @"malformed_tree",
-        exhausted ? @"continuation-budget-exhausted" : @"snapshot-tree-malformed", runtimeError.localizedDescription);
+  if (!snapshot && [runtimeError.domain isEqualToString:SnapshotCaptureErrorDomain]) {
+    if (error) *error = captureFailureResponse(requestId, (SnapshotCaptureError)runtimeError.code, runtimeError.localizedDescription);
     finishRequestWatchdog(watchdog, watchdogState);
     return nil;
   }

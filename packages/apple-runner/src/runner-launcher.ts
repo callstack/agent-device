@@ -1,3 +1,4 @@
+import type { DeadlineClock } from '@agent-device/host-kit/retry';
 import type { AppError } from '@agent-device/kernel/errors';
 import type { IosRunnerDeviceStates } from './runner-error-classification.ts';
 import type { LocalRunnerLaunchResources, RunnerDisposalOptions } from './runner-disposal.ts';
@@ -13,7 +14,11 @@ export type RunnerLaunch = {
 /** Launch mechanisms supply resources; the session owner controls their lifetime. */
 export type RunnerLauncher = {
   endpoint: Omit<RunnerEndpoint, 'token'>;
-  launch(endpoint: RunnerEndpoint, signal: AbortSignal): Promise<RunnerLaunch>;
+  launch(
+    endpoint: RunnerEndpoint,
+    signal: AbortSignal,
+    deadline?: DeadlineClock,
+  ): Promise<RunnerLaunch>;
 };
 
 export type RunnerLaunchObservation = {

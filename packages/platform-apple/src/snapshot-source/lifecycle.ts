@@ -67,6 +67,7 @@ type SnapshotBridgeRequest = Readonly<{
   limits: SnapshotSourceLimits;
   maxDepth: number;
   nativeLevelsHint?: number;
+  surfaceHostExecutables?: readonly string[];
   deadline: SnapshotSourceDeadline;
 }>;
 
@@ -375,6 +376,14 @@ export class SnapshotBridgeManager {
       maxDurationMs: remainingSnapshotSourceMs(deadline, 'bridge-request-deadline'),
       maxResponseBytes: input.limits.maxResponseBytes,
       ...(input.nativeLevelsHint !== undefined ? { nativeLevelsHint: input.nativeLevelsHint } : {}),
+      ...(input.surfaceHostExecutables
+        ? {
+            surfaceHosts: {
+              simulatorUdid: input.target.simulator.udid,
+              executables: input.surfaceHostExecutables,
+            },
+          }
+        : {}),
     });
     const frame = encodeSnapshotBridgeFrame(request, input.limits);
     return await roundTripSnapshotBridge({

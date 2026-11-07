@@ -2,7 +2,7 @@ import {
   readHostToolchainIdentity,
   type HostToolchainIdentity,
 } from '../native-build/toolchain-identity.ts';
-import { SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME } from '@agent-device/apple-runner';
+import { SHARED_SNAPSHOT_BRIDGE_READER_FILENAMES } from '@agent-device/apple-runner';
 import { fromNativeBuildError, snapshotSourceError } from './errors.ts';
 import type { SnapshotSourceDeadline } from './deadline.ts';
 import type { SnapshotSourceHost } from './types.ts';
@@ -12,21 +12,15 @@ export type SnapshotSourceToolchainIdentity = HostToolchainIdentity &
     simulatorRuntime: string;
   }>;
 
+/** The guest bridge: its socket server plus the reader it shares with the runner. */
 export const SNAPSHOT_BRIDGE_SOURCE_FILENAMES = [
   'SnapshotBridge.m',
-  'SnapshotBridgeRuntime.m',
-  'SnapshotBridgeRuntime.h',
-  'SnapshotBridgeCapture.h',
-  'SnapshotBridgeCapture.m',
-  // Not a compile unit: the clang argv lists translation units only, and an included header
-  // belongs in the fingerprint, not argv.
-  SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME,
+  ...SHARED_SNAPSHOT_BRIDGE_READER_FILENAMES,
 ] as const;
-export const SNAPSHOT_BRIDGE_COMPILE_FILENAMES = [
-  'SnapshotBridge.m',
-  'SnapshotBridgeRuntime.m',
-  'SnapshotBridgeCapture.m',
-] as const;
+// Translation units only: an included header belongs in the fingerprint, not argv.
+export const SNAPSHOT_BRIDGE_COMPILE_FILENAMES = SNAPSHOT_BRIDGE_SOURCE_FILENAMES.filter(
+  (filename) => filename.endsWith('.m'),
+);
 
 /**
  * The bridge's toolchain identity: the host's shared native-build toolchain identity

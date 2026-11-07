@@ -60,6 +60,7 @@ const RUNNER_INTERNAL: Readonly<Record<string, boolean>> = {
   status: true,
   uptime: true,
   appState: true,
+  snapshotBridge: true,
   gestureViewport: true,
   sequence: false,
   shutdown: false,

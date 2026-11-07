@@ -33,7 +33,7 @@ import { normalizeType } from './snapshot-text.ts';
  *
  * Otherwise the band is derived from the captured tree every acting path already holds, so the guard
  * costs no round trip. This is the path for Android captures that could not list every window and for
- * the producers that never see the app's windows (`appium-source`, `limrun-ios-tree`, `revyl-ios-tree`, the runner's own query-sweep tier).
+ * the producers that never see the app's windows (`appium-source`, `revyl-ios-tree`, the runner's own query-sweep tier).
  * Derivation, the rules that decide whether reported geometry may be measured at all, and the verdict
  * on a point are proven against `contracts/fixtures/tap-keyboard-occlusion-policy.json`; change a rule
  * only through that table.
@@ -66,6 +66,8 @@ export const TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS = Object.freeze({
 });
 
 const IOS_KEYBOARD_TYPE_NAMES: ReadonlySet<string> = new Set(['keyboard', 'key']);
+/** The system window that hosts the remote keyboard, with or without keys in it. */
+const IOS_KEYBOARD_WINDOW_ROLE = 'UIRemoteKeyboardWindow';
 
 /** The occluding band of the visible keyboard, plus the rects that prove a tap meant the keyboard. */
 export type KeyboardSurface = {
@@ -268,7 +270,7 @@ function measureDockedKeyboardFrame(params: {
   // (ADR 0004). A capture from either of those now answers this question from its own measured band
   // and never reaches here (#2660), so what still does is a capture that declares no space at all:
   // the runner's query-sweep tier, whose flat query has no window ancestry to read one from, and the
-  // `appium-source`, `limrun-ios-tree` and `revyl-ios-tree` producers. Unnormalized landscape geometry measured on
+  // `appium-source` and `revyl-ios-tree` producers. Unnormalized landscape geometry measured on
   // iPhone 17 Pro reports a 162 x 327 key plane and a dock button at y 8 of a 402 pt viewport while
   // the screenshot shows the keyboard full width across the bottom 327 pt. A band from that would
   // refuse app content the keyboard is nowhere near while missing the keyboard itself, which is
@@ -356,9 +358,35 @@ export function acquireProviderKeyboard(params: ProviderKeyboardInput): {
   };
 }
 
+/**
+ * The keyboard fact of a producer that reads the target app's whole in-process tree in one capture,
+ * as the Simulator AX bridge does: the keyboard window is one of the app's own windows there, so a
+ * complete tree with no keyboard window and no keyboard node proves absence the way a full XCTest scan
+ * does. A truncated tree, or a keyboard window that exposes no keys, proves only presence.
+ */
+export function observeCompleteTreeKeyboard(
+  params: Readonly<{ nodes: readonly RawSnapshotNode[]; viewport: Rect | null; complete: boolean }>,
+): SnapshotKeyboardBandFact {
+  const fact = observeProviderKeyboard(params);
+  if (fact.kind !== 'unmeasurable' || !params.complete) return fact;
+  return params.nodes.some(isKeyboardTraceNode) ? fact : { kind: 'absent', treeBound: true };
+}
+
+/** Any node the keyboard leaves in the tree, including its window and the in-app placeholder. */
+function isKeyboardTraceNode(node: RawSnapshotNode): boolean {
+  return (
+    node.role === IOS_KEYBOARD_WINDOW_ROLE ||
+    isKeyboardSurfaceNode(node) ||
+    hasIosKeyboardRole(node, IOS_KEYBOARD_SETTLE_CHROME_ROLES) ||
+    hasIosKeyboardRole(node, IOS_KEYBOARD_SUBTREE_CHROME_ROLES) ||
+    hasIosKeyboardRole(node, IOS_KEYBOARD_CHROME_MARKER_ROLES)
+  );
+}
+
 function observeProviderKeyboard(params: ProviderKeyboardInput): SnapshotKeyboardBandFact {
   const frame = deriveDockedKeyboardFrame(params.nodes, params.viewport);
-  if (frame) return { kind: 'derived', derivation: 'docked-tree', frame };
+  // Derived from the nodes this capture returns, so a stale tree derives the stale tree's band.
+  if (frame) return { kind: 'derived', derivation: 'docked-tree', frame, treeBound: true };
   if (isMeasurableViewport(params.viewport) && params.nodes.some(isKeyboardAnchorNode)) {
     return {
       kind: 'tree-rejected',

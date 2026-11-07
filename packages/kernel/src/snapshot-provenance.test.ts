@@ -12,7 +12,7 @@ test('the provenance table rejects cross-channel pairs at compile time', () => {
   // @ts-expect-error the android channel cannot carry the apple-runner producer
   const crossChannel: SnapshotProvenance = { backend: 'android', producer: 'apple-runner' };
   // @ts-expect-error the web channel has exactly one producer
-  const foreignProducer: SnapshotProvenance = { backend: 'web', producer: 'limrun-ios-tree' };
+  const foreignProducer: SnapshotProvenance = { backend: 'web', producer: 'revyl-ios-tree' };
   // @ts-expect-error a state pair may omit the producer but not carry a foreign one
   const stateMismatch: SnapshotStateProvenance = {
     backend: 'macos-helper',
@@ -26,8 +26,8 @@ test('the provenance table rejects cross-channel pairs at compile time', () => {
 test('snapshotStateProvenance extracts exactly the pair', () => {
   expect(snapshotStateProvenance(undefined)).toEqual({});
   expect(snapshotStateProvenance({})).toEqual({});
-  expect(snapshotStateProvenance({ backend: 'xctest', producer: 'limrun-ios-tree' })).toEqual({
+  expect(snapshotStateProvenance({ backend: 'xctest', producer: 'revyl-ios-tree' })).toEqual({
     backend: 'xctest',
-    producer: 'limrun-ios-tree',
+    producer: 'revyl-ios-tree',
   });
 });

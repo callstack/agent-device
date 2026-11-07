@@ -115,7 +115,8 @@ jobs:
     name: Publish ${{ needs.plan.outputs.version }} to npm
     needs: [plan, build]
     if: contains(fromJSON('["nightly", "stable"]'), needs.plan.outputs.mode)
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # npm provenance requires a GitHub-hosted runner.
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: npm-publish
     permissions:

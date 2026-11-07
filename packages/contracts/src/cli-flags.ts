@@ -65,6 +65,7 @@ export type CliFlags = CloudProviderProfileFields &
     // that names any of them, as `readLeaseDeviceSpec` decides.
     osVersion?: string;
     imageTag?: string;
+    deviceMode?: string;
     physical?: boolean;
     stale?: boolean;
     iosSimulatorDeviceSet?: string;
@@ -124,6 +125,7 @@ export type CliFlags = CloudProviderProfileFields &
     verify?: boolean;
     settle?: boolean;
     settleQuietMs?: number;
+    postGestureStabilization?: boolean;
     clickButton?: ClickButton;
     backMode?: BackMode;
     pauseMs?: number;

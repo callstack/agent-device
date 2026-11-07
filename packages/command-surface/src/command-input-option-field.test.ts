@@ -175,6 +175,11 @@ const SDK_DOCUMENTED_OPTIONS = [
     file: 'packages/contracts/src/client-capture.ts',
     field: 'customActions',
   },
+  {
+    key: 'postGestureStabilization',
+    file: 'packages/contracts/src/client-gesture.ts',
+    field: 'postGestureStabilization',
+  },
 ] as const;
 
 /** The JSDoc block immediately preceding `field?:`, unwrapped onto one line. */

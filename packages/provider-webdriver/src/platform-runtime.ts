@@ -52,6 +52,7 @@ import {
 import {
   bindProviderScreenshotInteractor,
   screenshotRuntimeOperationFacts,
+  defaultCaptureOnly,
 } from '@agent-device/contracts/screenshot-runtime';
 import {
   bindProviderSnapshotInteractor,
@@ -389,7 +390,12 @@ function webDriverInteractionOperations(
   return {
     ...(facts.operations.captureSnapshot.available ? bindProviderSnapshotInteractor(resolver) : {}),
     ...(facts.operations.captureScreenshot.available
-      ? bindProviderScreenshotInteractor(resolver)
+      ? bindProviderScreenshotInteractor({
+          ...resolver,
+          captureCapabilities: defaultCaptureOnly(
+            'a WebDriver session captures through its provider',
+          ),
+        })
       : {}),
     ...(facts.operations.focusPoint.available ? bindProviderFocusInteractor(resolver) : {}),
     ...(facts.operations.typeText.available ? bindProviderTypeTextInteractor(resolver) : {}),

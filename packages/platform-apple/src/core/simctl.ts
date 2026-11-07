@@ -1,8 +1,9 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
-import { type ExecOptions, type ExecResult } from '@agent-device/host-kit/command';
 import { resolveIosSimulatorDeviceSetPath } from '@agent-device/kernel/device-isolation';
-import type { ScopedSimctlArgs } from '@agent-device/contracts/platform-runtime-host';
-import { runXcrun, simctlCommand, type ScopedSimctlCommand } from './tool-provider.ts';
+import type {
+  ScopedSimctlArgs,
+  ScopedSimctlCommand,
+} from '@agent-device/contracts/platform-runtime-host';
 
 declare const simulatorAddress: unique symbol;
 /**
@@ -55,7 +56,10 @@ export function buildSimctlArgsForAddress(
   address: SimulatorAddress,
   args: readonly string[],
 ): ScopedSimctlCommand {
-  return simctlCommand(scopeSimctlArgs(address.simulatorSetPath, args));
+  return Object.freeze([
+    'simctl',
+    ...scopeSimctlArgs(address.simulatorSetPath, args),
+  ]) as ScopedSimctlCommand;
 }
 
 export function buildSimctlArgsForDevice(
@@ -65,17 +69,9 @@ export function buildSimctlArgsForDevice(
   return buildSimctlArgsForAddress(simulatorAddressFor(device), args);
 }
 
-export function runSimctlForDevice(
-  device: DeviceInfo,
-  args: readonly string[],
-  options?: ExecOptions,
-): Promise<ExecResult> {
-  return runXcrun(buildSimctlArgsForDevice(device, args), options);
-}
-
 type SimctlListedDevice = { udid?: string; state?: string };
 
-/** The runtime-keyed device lists of `simctl list devices -j` output; throws unless it is a JSON object. */
+/** Parses runtime-keyed device lists from `simctl list devices -j` output. */
 export function readSimctlDevicesByRuntime(stdout: string): Record<string, SimctlListedDevice[]> {
   const payload = JSON.parse(stdout) as { devices?: Record<string, SimctlListedDevice[]> };
   return payload.devices ?? {};

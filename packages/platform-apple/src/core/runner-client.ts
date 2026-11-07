@@ -1,7 +1,7 @@
 import {
   bindAppleRunnerHost,
   resolveRunnerRequestSignal,
-  runnerCommandResolvesSurface,
+  runnerCommandSurfacePolicy,
   runAppleRunnerCommand as runHostBoundAppleRunnerCommand,
   type AppleRunnerCommandOptions,
   type RunnerCommand,
@@ -29,8 +29,13 @@ export async function runAppleRunnerCommand(
   command: RunnerCommand,
   options: AppleRunnerCommandOptions = {},
 ): Promise<Record<string, unknown>> {
-  if (!runnerCommandResolvesSurface(command)) {
-    return await runHostBoundAppleRunnerCommand(device, command, options);
+  switch (runnerCommandSurfacePolicy(command)) {
+    case 'none':
+    case 'resolved-modal':
+      return await runHostBoundAppleRunnerCommand(device, command, options);
+    case 'app-windows':
+    case 'observed-screen':
+      break;
   }
   const { nameRunnerRequestLitPanel } = await import('../foldable/runner-panel.ts');
   return await runHostBoundAppleRunnerCommand(
@@ -41,6 +46,11 @@ export async function runAppleRunnerCommand(
 }
 
 export {
+  RUNNER_STARTUP_TIMEOUT_MS,
+  createLaunchedAppleRunnerProvider,
+  mintRunnerToken,
+  runnerListenerEnv,
+  RUNNER_XCTESTRUN_CAPTURE_OPTIONS,
   applyXctestRunnerAppIconFromDerivedPath,
   cleanupRunnerLeasesForOwner,
   detachIosRunnerSessionsForShutdown,

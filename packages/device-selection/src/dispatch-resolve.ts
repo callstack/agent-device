@@ -4,8 +4,10 @@ import {
   hasExplicitDeviceIdentitySelector,
   isApplePlatform,
   resolveRequestAppleSimulatorSetPath,
+  webSessionDevice,
   type DeviceInfo,
   type DeviceTarget,
+  type WebSessionIdentity,
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
@@ -69,6 +71,11 @@ export type ResolveTargetDeviceOptions = {
    * (ADR 0035), the selection is that app's device instead of the host.
    */
   appDeviceTarget?: string;
+  /**
+   * The web session the request runs in. A local web selection is then that session's device, so
+   * a web session holds, locks, and claims its own browser, and the host stays an inventory entry.
+   */
+  webSession?: WebSessionIdentity;
   /** Only `boot` sets this; every other command keeps refusing a tie. */
   boot?: BootSelectionIntent;
 };
@@ -129,7 +136,7 @@ export async function resolveTargetDeviceSelection(
       const cached = readResolveTargetDeviceCache(cacheKey);
       if (cached) {
         diagnosticData.cacheHit = true;
-        return await selectAppDevice(cached, options.appDeviceTarget);
+        return await selectScopedDevice(cached, options);
       }
       const inventory = await readDeviceInventory(inventoryRequest);
       const devices = [...inventory.devices];
@@ -144,10 +151,7 @@ export async function resolveTargetDeviceSelection(
             boot: options.boot,
           },
         );
-        return await selectAppDevice(
-          cacheResolvedTargetDevice(cacheKey, selection),
-          options.appDeviceTarget,
-        );
+        return await selectScopedDevice(cacheResolvedTargetDevice(cacheKey, selection), options);
       }
 
       const selection = await resolveInventorySelection({
@@ -156,23 +160,28 @@ export async function resolveTargetDeviceSelection(
         source: inventory.source,
         boot: options.boot,
       });
-      return await selectAppDevice(
-        cacheResolvedTargetDevice(cacheKey, selection),
-        options.appDeviceTarget,
-      );
+      return await selectScopedDevice(cacheResolvedTargetDevice(cacheKey, selection), options);
     },
     diagnosticData,
   );
 }
 
 /**
- * The app device `appTarget` names on the selected host. The request cache keeps the host, so each
- * open in one request (a batch or a replay) derives the app device it names.
+ * The app device or web session device the options name on the selected host. The request cache
+ * keeps the host, so each open in one request (a batch or a replay) derives the device it names.
  */
-async function selectAppDevice(
+async function selectScopedDevice(
   selection: DeviceSelectionResult,
-  appTarget: string | undefined,
+  options: Pick<ResolveTargetDeviceOptions, 'appDeviceTarget' | 'webSession'>,
 ): Promise<DeviceSelectionResult> {
+  if (
+    options.webSession !== undefined &&
+    selection.source === 'local' &&
+    selection.device.platform === 'web'
+  ) {
+    return { ...selection, device: webSessionDevice(selection.device, options.webSession) };
+  }
+  const appTarget = options.appDeviceTarget;
   const resolveAppDevice = appTarget ? readAppDeviceResolver() : undefined;
   if (!appTarget || !resolveAppDevice || selection.source !== 'local') return selection;
   const device = await resolveAppDevice(selection.device, appTarget);
@@ -304,6 +313,7 @@ function buildResolveTargetDeviceCacheKey(
   const {
     appleSimulatorAppTarget: _appleSimulatorAppTarget,
     appDeviceTarget: _appDeviceTarget,
+    webSession: _webSession,
     ...cacheOptions
   } = options;
   return JSON.stringify({ request, options: cacheOptions });

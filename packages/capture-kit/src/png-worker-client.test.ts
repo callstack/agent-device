@@ -11,7 +11,6 @@ import {
   encodePngAsync,
   retainPngWorker,
   terminatePngWorker,
-  transcodeScreenshotToPngAsync,
 } from './png-worker-client.ts';
 import { cropPngBytes } from './png-crop-bytes.ts';
 import { computeScreenshotDiffPixels } from './screenshot-diff-pixels.ts';
@@ -146,39 +145,6 @@ test('decodePngAsync rejects invalid PNG data with the canonical decode AppError
       return true;
     },
   );
-});
-
-test('transcodeScreenshotToPngAsync matches the synchronous transcoder byte for byte', async () => {
-  const { encode } = await import('jpeg-js');
-  const { transcodeScreenshotToPng } = await import('./screenshot-image.ts');
-  const rgba = Buffer.alloc(9 * 7 * 4, 0x66);
-  const jpeg = encode({ width: 9, height: 7, data: rgba }, 90).data;
-
-  const fromWorker = await runOnWorkerThread('jpeg-to-png', () =>
-    transcodeScreenshotToPngAsync(jpeg, 'fixture'),
-  );
-
-  assert.deepEqual(fromWorker, transcodeScreenshotToPng(jpeg, 'fixture'));
-  assert.equal(PNG.sync.read(fromWorker).width, 9);
-});
-
-test('transcodeScreenshotToPngAsync returns a PNG untouched without a worker round trip', async () => {
-  const png = PNG.sync.write(new PNG({ width: 2, height: 2 }));
-
-  assert.equal(await transcodeScreenshotToPngAsync(png, 'fixture'), png);
-});
-
-test('transcodeScreenshotToPngAsync rejects a corrupt JPEG with the canonical decode AppError', async () => {
-  const corrupt = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(16, 0)]);
-
-  await assert.rejects(transcodeScreenshotToPngAsync(corrupt, 'fixture'), (error) => {
-    assert.equal(error instanceof AppError, true);
-    assert.equal((error as AppError).code, 'COMMAND_FAILED');
-    assert.match((error as AppError).message, /Failed to decode fixture as JPEG/);
-    assert.equal((error as AppError).details?.label, 'fixture');
-    assert.ok(String((error as AppError).details?.reason).length > 0);
-    return true;
-  });
 });
 
 test('decodeScreenshotImageAsync answers the synchronous decoder for both containers', async () => {

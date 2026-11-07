@@ -1,4 +1,8 @@
 import {
+  appleRunnerInteractionFacts,
+  applePrepareAppleRunnerFact,
+} from './runner-interaction-facts.ts';
+import {
   type DeviceBinding,
   type RuntimeOperationFact,
   localRuntimeOwner,
@@ -8,6 +12,7 @@ import {
 import type { NetworkDumpInput } from '@agent-device/contracts/network-runtime';
 import type { AppStateRuntimeOperations } from '@agent-device/contracts/app-state-runtime';
 import { bindAppleAppStateRuntime } from './app-state-runtime.ts';
+import { appleScreenshotCaptureCapabilities } from './screenshot-support.ts';
 import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
@@ -17,33 +22,17 @@ import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
-import {
-  bindElementTextRuntime,
-  elementTextRuntimeOperationFacts,
-} from '@agent-device/contracts/element-text-runtime';
-import {
-  bindLocalFocusInteractor,
-  focusRuntimeOperationFacts,
-} from '@agent-device/contracts/focus-runtime';
+import { bindElementTextRuntime } from '@agent-device/contracts/element-text-runtime';
+import { bindLocalFocusInteractor } from '@agent-device/contracts/focus-runtime';
 import { bindLocalGestureInteractor } from '@agent-device/contracts/gesture-runtime';
 import { bindLocalScrollInteractor } from '@agent-device/contracts/scroll-runtime';
 import {
   bindLocalScreenshotInteractor,
   screenshotRuntimeOperationFacts,
 } from '@agent-device/contracts/screenshot-runtime';
-import {
-  selectorObservationRuntimeOperationFacts,
-  type SelectorObservationRuntimeOperations,
-} from '@agent-device/contracts/selector-observation-runtime';
-import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
-import {
-  bindLocalTypeTextInteractor,
-  typeTextRuntimeOperationFacts,
-} from '@agent-device/contracts/type-text-runtime';
-import {
-  bindLocalTouchInteractor,
-  touchRuntimeOperationFacts,
-} from '@agent-device/contracts/touch-runtime';
+import { type SelectorObservationRuntimeOperations } from '@agent-device/contracts/selector-observation-runtime';
+import { bindLocalTypeTextInteractor } from '@agent-device/contracts/type-text-runtime';
+import { bindLocalTouchInteractor } from '@agent-device/contracts/touch-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import {
   isIosFamily,
@@ -56,7 +45,6 @@ import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime'
 import { createHostAudioProbeCaptureOperations } from '@agent-device/capture-kit';
 import { appleAudioProbeCaptureFact } from './audio/runtime.ts';
 import { createApplePerfOperations } from './perf/runtime.ts';
-import { appleGestureAndScrollFacts } from './gesture-facts.ts';
 import { createAppleAppLogRuntime } from './logs/runtime.ts';
 import { dumpAppleNetworkTraffic } from './network/runtime.ts';
 import {
@@ -70,12 +58,12 @@ import {
   appleAppDeploymentFacts,
   createAppleAppDeploymentOperations,
 } from './deployment/runtime.ts';
-import { appleNavigationFacts, createAppleNavigationOperations } from './navigation/runtime.ts';
-import { appleSystemFacts, createAppleSystemOperations } from './system/runtime.ts';
+import { createAppleNavigationOperations } from './navigation/runtime.ts';
+import { createAppleSystemOperations } from './system/runtime.ts';
 import { appleFoldableFacts, createAppleFoldableOperations } from './foldable/runtime.ts';
 import { bindAppleFindTextRuntime, bindAppleSnapshotRuntime } from './runtime-snapshot.ts';
 import { bindAppleQuerySelectorRuntime } from './runtime-selector-query.ts';
-import type { MacOsAppBackend } from '@agent-device/contracts/session';
+import { macOsHelperSurface, type MacOsAppBackend } from '@agent-device/contracts/session';
 import { hostMacOsAppBackend } from './os/macos/app-backend.ts';
 import { macOsNativeBackendFacts } from './os/macos/native-backend-facts.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
@@ -95,52 +83,23 @@ const perfUnavailable = unavailableFact(
   'unsupported-device-backend',
   'perf requires an Apple simulator, macOS device, or CoreDevice-backed physical Apple device.',
 );
-/**
- * Focus drives touch through the Apple interactor, which exists for the simulator and physical
- * device kinds only. Parity with the retired `focus` capability bucket
- * (`{ simulator: true, device: true }`), stated as one fact instead of an admission table.
- */
-const focusKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
-  'focus is supported on Apple simulators and physical devices.',
-);
+
 /** Neither simctl nor CoreDevice injects a call or text message into an Apple target. */
 const telephonyUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'telephony simulates calls and SMS through the Android emulator console; Apple simulators and devices expose no host control that injects a call or text message.',
 );
-const appStateUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
-  "Apple appstate is unavailable here: the runner reads the session app's XCUIApplication state on iOS-family simulators and physical devices only, and the Apple target answers no sessionless foreground probe. The per-command answer is the targetActivation disclosure, which a capture carries when its command had to re-activate the session app (#2682).",
-);
 
-/**
- * A live runner reads the session app's `XCUIApplication.state` on the kinds it drives; the read
- * never starts one (see `bindAppleAppStateRuntime`). That is a fact about the session app, never a
- * guess about the foreground (#2682): after `home` the app reports a background state, and which
- * app took the screen stays nobody's to tell.
- */
-function appleAppStateFact(device: DeviceInfo): RuntimeOperationFact {
-  if (!isIosFamily(device) || device.appleOs === 'watchos') return appStateUnavailable;
-  return device.kind === 'simulator' || device.kind === 'device' ? available : appStateUnavailable;
-}
 const headlessUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'Headless boot is supported only for local Android emulators.',
 );
-const elementTextLeafUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
-  'watchOS has no XCUITest-driveable UI, so element text comes from the captured tree only.',
-);
-const elementTextKindUnavailable = unavailableFact('unsupported-device-kind');
+
 const watchOpenTargetUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'watchOS open is not supported because XCUITest cannot drive watchOS UI.',
 );
-const watchPrepareUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
-  'watchOS runner preparation is not supported because XCUITest cannot drive watchOS UI.',
-);
+
 const watchCloseTargetUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'watchOS close is not supported because XCUITest cannot drive watchOS UI.',
@@ -153,9 +112,7 @@ const runtimeHintsUnavailable = unavailableFact(
 const appleOpenTargetKindUnavailable = unsupportedAppleDeviceKind(
   'open is supported only for Apple simulators and devices.',
 );
-const applePrepareKindUnavailable = unsupportedAppleDeviceKind(
-  'prepare is supported only for Apple simulators and devices.',
-);
+
 const appleCloseTargetKindUnavailable = unsupportedAppleDeviceKind(
   'close is supported only for Apple simulators and devices.',
 );
@@ -167,13 +124,7 @@ const shutdownKindUnavailable = unavailableFact(
   'unsupported-device-kind',
   'shutdown is supported only for Apple simulators and Android emulators.',
 );
-const snapshotKindUnavailable = unsupportedAppleDeviceKind(
-  'snapshot is supported only for Apple simulators and devices.',
-);
-const snapshotCustomActionsUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
-  'Re-run without --actions, or target an iOS simulator.',
-);
+
 const screenshotWatchOsUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'screenshot is not supported on watchOS because XCUITest cannot drive watchOS UI.',
@@ -181,10 +132,7 @@ const screenshotWatchOsUnavailable = unavailableFact(
 const screenshotKindUnavailable = unsupportedAppleDeviceKind(
   'screenshot is supported only for Apple simulators and devices.',
 );
-const snapshotActiveAppRequired = unavailableFact(
-  'owner-capability-missing',
-  'Open the app under test before capturing its snapshot.',
-);
+
 function unsupportedAppleDeviceKind(hint: string) {
   return unavailableFact('unsupported-device-kind', hint);
 }
@@ -219,13 +167,6 @@ function appleOpenTargetFact(device: DeviceInfo) {
     : appleOpenTargetKindUnavailable;
 }
 
-function applePrepareAppleRunnerFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return watchPrepareUnavailable;
-  return device.kind === 'simulator' || device.kind === 'device'
-    ? available
-    : applePrepareKindUnavailable;
-}
-
 function appleCloseTargetFact(device: DeviceInfo) {
   if (resolveDeviceAppleOs(device) === 'watchos') return watchCloseTargetUnavailable;
   return device.kind === 'simulator' || device.kind === 'device'
@@ -252,10 +193,6 @@ function appInventoryFacts(device: DeviceInfo) {
     );
   }
   return available;
-}
-
-function appleFocusFact(device: DeviceInfo): RuntimeOperationFact {
-  return device.kind === 'simulator' || device.kind === 'device' ? available : focusKindUnavailable;
 }
 
 export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
@@ -287,37 +224,15 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
       operations: {
         ...logs.operations,
         ...deployment,
-        appState: appleAppStateFact(device),
         networkDump: available,
         screenRecordingStart: recordingFacts,
         screenRecordingReattach: recordingFacts,
         screenRecordingCleanup: recordingFacts,
-        ...appleSnapshotFacts(device),
+        ...appleRunnerInteractionFacts(device),
         ...screenshotRuntimeOperationFacts({ capture: appleScreenshotFact(device) }),
-        ...selectorObservationRuntimeOperationFacts({
-          findText: appleSnapshotFact(device),
-          // The live selector read rides the runner, so it shares the exact iOS-family kind cell
-          // the fused selector tap declares — not the macOS desktop or watchOS.
-          querySelector: isIosFamily(device) ? appleFocusFact(device) : unavailable,
-        }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
-        ...focusRuntimeOperationFacts({ focus: appleFocusFact(device) }),
-        ...appleGestureAndScrollFacts(device),
-        // Text entry rides the same interactor authority the point focus does, so it shares the
-        // exact kind cell (parity with the retired `type` bucket, `{ simulator, device }`).
-        ...typeTextRuntimeOperationFacts({ type: appleFocusFact(device) }),
-        ...touchRuntimeOperationFacts({
-          unsupported: unavailable,
-          tap: appleFocusFact(device),
-          longPress: appleFocusFact(device),
-          fill: appleFocusFact(device),
-          ...(isIosFamily(device) ? { tapElementSelector: appleFocusFact(device) } : {}),
-        }),
-        ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
-        ...appleNavigationFacts(device),
         ...appleFoldableFacts(device),
         sendTelephonyEvent: telephonyUnavailable,
-        ...appleSystemFacts(device),
         ...audioProbeRuntimeOperationFacts({
           capture: appleAudioProbeCaptureFact(device),
           query: audioQueryUnavailable,
@@ -409,6 +324,14 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             device: request.device,
             signal: request.scope.signal,
             resolveInteractor: host.localInteractors.resolve,
+            captureCapabilities: (options) =>
+              appleScreenshotCaptureCapabilities(
+                request.device,
+                options,
+                isMacOs(request.device)
+                  ? macOsHelperSurface(options.surface, macOsAppBackend(request.device))
+                  : undefined,
+              ),
           }),
         ),
         ...whenAdmitted(facts.operations.focusPoint, () =>
@@ -545,25 +468,6 @@ function applePerfFacts(device: DeviceInfo): Readonly<{
 }
 
 /**
- * The live point read is the XCUITest runner's `readText` for app sessions and the macOS helper
- * for desktop/menubar surfaces. Both need a driveable Apple UI, so watchOS and the non
- * simulator/device kinds have no read at all.
- */
-function appleElementTextFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return elementTextLeafUnavailable;
-  return device.kind === 'simulator' || device.kind === 'device'
-    ? available
-    : elementTextKindUnavailable;
-}
-
-function appleSnapshotFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return snapshotKindUnavailable;
-  return device.kind === 'simulator' || device.kind === 'device'
-    ? available
-    : snapshotKindUnavailable;
-}
-
-/**
  * macOS surface selection (app window vs desktop/menubar) lives inside the Apple interactor's own
  * capture, so the ordinary local interactor binding covers every admitted Apple cell — unlike
  * snapshot, whose desktop surfaces come from a separate host port.
@@ -573,18 +477,6 @@ function appleScreenshotFact(device: DeviceInfo) {
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : screenshotKindUnavailable;
-}
-
-function appleSnapshotFacts(device: DeviceInfo) {
-  const capture = appleSnapshotFact(device);
-  return snapshotRuntimeOperationFacts({
-    capture,
-    customActions:
-      capture.available && isIosFamily(device) && device.kind === 'simulator'
-        ? available
-        : snapshotCustomActionsUnavailable,
-    withoutActiveApp: isIosFamily(device) ? snapshotActiveAppRequired : capture,
-  });
 }
 
 /**

@@ -167,7 +167,7 @@ export async function composeDaemonRuntimeDeps(
       recoverExpiredLease: providerRuntimeProviders.recoverExpiredLease,
       recoverableProviderIds: providerRuntimeProviders.recoverableProviderIds,
       deviceRuntimeGateway,
-      platformResourceCleanup: createPlatformResourceCleanup(host),
+      platformResourceCleanup: createPlatformResourceCleanup(host, ownedProcessRecords),
       claimRecoveryGateway: createClaimRecoveryGatewayFor(host),
       interactorResolution: Object.freeze({
         resolve: async (device: DeviceInfo, runnerContext: RunnerContext) =>

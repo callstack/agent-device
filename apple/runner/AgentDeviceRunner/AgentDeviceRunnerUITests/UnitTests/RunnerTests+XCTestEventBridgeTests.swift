@@ -1,7 +1,7 @@
 import XCTest
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
-private final class DisplayScreenFixture: NSObject {
+final class DisplayScreenFixture: NSObject {
   @objc let displayID: UInt
   init(_ displayID: UInt) { self.displayID = displayID }
 }
@@ -9,7 +9,7 @@ private final class DisplayScreenFixture: NSObject {
 /// A window the runtime answers only once its query has resolved. `frame` is the read that
 /// resolves it: while the query is unresolved `screen` names main, which is what a fresh runner
 /// process that has not queried this app yet reports (#2728).
-private final class DisplayWindowFixture: NSObject {
+final class DisplayWindowFixture: NSObject {
   private let windowFrame: CGRect
   private let resolvedDisplayID: UInt
   private let present: Bool
@@ -28,6 +28,20 @@ private final class DisplayWindowFixture: NSObject {
   // Handed back as one object so a test can prove the resolver captures the screen the window
   // reported rather than a fresh value for the same key. Unresolved, it names main.
   @objc var screen: NSObject { resolved ? windowScreen : DisplayScreenFixture(1) }
+
+  override func value(forKey key: String) -> Any? {
+    switch key {
+    case "exists": return exists
+    case "frame":
+#if os(macOS)
+      return NSValue(rect: frame)
+#else
+      return NSValue(cgRect: frame)
+#endif
+    case "screen": return screen
+    default: return super.value(forKey: key)
+    }
+  }
 }
 
 private final class DisplayWindowsFixture: NSObject {

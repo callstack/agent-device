@@ -17,7 +17,8 @@ import {
   invokeApplicationOpen,
 } from '@agent-device/contracts/application-lifecycle-interaction';
 import { isDeepLinkTarget, isWebUrl } from '@agent-device/contracts/command';
-import { ensureAppleReady } from './readiness/runtime.ts';
+import { hasSimulatorBridge } from './snapshot-observability.ts';
+import { ensureAppleReady, type AppleReadinessOptions } from './readiness/runtime.ts';
 import {
   resolveRunnerPrewarmPolicy,
   settleAppleOpen,
@@ -58,9 +59,44 @@ type AppleLifecycleParams = Readonly<{
   observation?: LaunchObservationPort;
 }>;
 
-/** Apple owns its lifecycle ordering; the root host exposes only lazy runner/tool ports. */
+type AppleLifecycleServices = Pick<
+  PlatformRuntimeHost,
+  'appleApplications' | 'clock' | 'localInteractors'
+> & {
+  ensureReady(
+    device: DeviceInfo,
+    signal: AbortSignal,
+    options?: AppleReadinessOptions,
+  ): Promise<DeviceInfo>;
+  shutdownTarget: PlatformRuntimeHost['deviceShutdown']['apple']['shutdownTarget'];
+  resolveDevClientLaunchUrl(
+    device: DeviceInfo,
+    input: OpenApplicationInput,
+  ): Promise<string | undefined>;
+  runnerFreeObservation: boolean;
+};
+
+/** Local host tools supply the same lifecycle sequencing used by forwarded Apple runners. */
 export function bindAppleApplicationLifecycle(
   params: AppleLifecycleParams,
+): ApplicationLifecycleRuntimeOperations {
+  return bindAppleApplicationLifecycleWithServices({
+    ...params,
+    host: {
+      ...params.host,
+      ensureReady: (device, signal, options) =>
+        ensureAppleReady(params.host, device, signal, options),
+      shutdownTarget: (...args) => params.host.deviceShutdown.apple.shutdownTarget(...args),
+      resolveDevClientLaunchUrl: async (device, input) =>
+        await (await loadExpoDevClientLaunch()).resolveExpoDevClientLaunchUrl(device, input),
+      runnerFreeObservation: hasSimulatorBridge(params.device),
+    },
+  });
+}
+
+/** Apple owns open, prewarm, relaunch and close ordering independently of host access. */
+export function bindAppleApplicationLifecycleWithServices(
+  params: Omit<AppleLifecycleParams, 'host'> & { host: AppleLifecycleServices },
 ): ApplicationLifecycleRuntimeOperations {
   const bindInteractor = (device: DeviceInfo) =>
     bindLocalApplicationLifecycleInteractor({
@@ -78,7 +114,7 @@ export function bindAppleApplicationLifecycle(
     resolveOpenTarget: async (input) =>
       await params.host.appleApplications.resolveOpenTarget(device, input),
     prepareApplicationOpen: async (input) => {
-      const readied = await ensureAppleReady(params.host, device, params.signal, {
+      const readied = await params.host.ensureReady(device, params.signal, {
         deadlineAtMs: input.execution.startupDeadlineAtMs,
         onColdBootStart: input.prewarmRunnerOnColdBoot
           ? () => {
@@ -98,7 +134,7 @@ export function bindAppleApplicationLifecycle(
       await params.host.appleApplications.clearRuntimeHints(device, input),
     closeApplication: async (input) => {
       if (input.ensureReady) {
-        adoptReadiedDevice(await ensureAppleReady(params.host, device, params.signal));
+        adoptReadiedDevice(await params.host.ensureReady(device, params.signal));
       }
       await closeAppleApplication(params.host, binding, input);
     },
@@ -116,7 +152,7 @@ export function bindAppleApplicationLifecycle(
 type BoundAppleInteractor = ReturnType<typeof bindLocalApplicationLifecycleInteractor>;
 
 async function openAppleApplication(
-  host: AppleLifecycleHost,
+  host: AppleLifecycleServices,
   binding: BoundAppleInteractor,
   input: OpenApplicationInput,
   observation: LaunchObservationPort | undefined,
@@ -124,7 +160,7 @@ async function openAppleApplication(
   const timing: MutableOpenTiming = {};
   const localIosSimulator = isIosSimulator(binding.device);
   const runner = createRunnerPrewarm(host, binding, input, timing);
-  const policy = resolveRunnerPrewarmPolicy(binding.device, input, localIosSimulator);
+  const policy = resolveRunnerPrewarmPolicy(binding.device, input, host.runnerFreeObservation);
   if (policy.runnerDemand) timing.runnerDemand = policy.runnerDemand;
   releaseSpeculativeRunner(host, binding, input, policy);
   const { shouldPrewarmRunner } = policy;
@@ -144,6 +180,7 @@ async function openAppleApplication(
       timing,
     );
     const devClientLaunchUrl = await applyAppleOpenRuntimeHints(
+      host,
       binding,
       input,
       localIosSimulator,
@@ -192,7 +229,7 @@ async function openAppleApplication(
 }
 
 async function closeAppleApplicationForRelaunch(
-  host: AppleLifecycleHost,
+  host: AppleLifecycleServices,
   binding: BoundAppleInteractor,
   input: OpenApplicationInput,
   localIosSimulator: boolean,
@@ -214,6 +251,7 @@ async function closeAppleApplicationForRelaunch(
 }
 
 async function applyAppleOpenRuntimeHints(
+  host: AppleLifecycleServices,
   binding: BoundAppleInteractor,
   input: OpenApplicationInput,
   localIosSimulator: boolean,
@@ -222,7 +260,7 @@ async function applyAppleOpenRuntimeHints(
   if (!hasRuntimeTransportHintValues(input.runtimeHints)) return undefined;
   const startedAtMs = Date.now();
   const devClientLaunchUrl = localIosSimulator
-    ? await (await loadExpoDevClientLaunch()).resolveExpoDevClientLaunchUrl(binding.device, input)
+    ? await host.resolveDevClientLaunchUrl(binding.device, input)
     : undefined;
   if (!devClientLaunchUrl) {
     if (!input.applyRuntimeHints) {
@@ -360,7 +398,7 @@ async function finishAppleRunnerPrewarm(
 }
 
 async function notifyAppleRunnerRelaunch(
-  host: AppleLifecycleHost,
+  host: AppleLifecycleServices,
   binding: BoundAppleInteractor,
   input: OpenApplicationInput,
   localIosSimulator: boolean,
@@ -414,7 +452,7 @@ function shouldRetainRunnerForRelaunch(
 }
 
 async function closeAppleApplication(
-  host: AppleLifecycleHost,
+  host: AppleLifecycleServices,
   binding: BoundAppleInteractor,
   input: CloseApplicationInput,
 ): Promise<void> {
@@ -430,7 +468,7 @@ async function closeAppleApplication(
 }
 
 async function finalizeAppleApplicationClose(
-  host: AppleLifecycleHost,
+  host: AppleLifecycleServices,
   device: DeviceInfo,
   signal: AbortSignal,
   input: CloseApplicationFinalizationInput,
@@ -446,13 +484,13 @@ async function finalizeAppleApplicationClose(
   }
   const shutdown =
     input.shutdownTarget && isIosSimulator(device)
-      ? await host.deviceShutdown.apple.shutdownTarget(device, signal)
+      ? await host.shutdownTarget(device, signal)
       : undefined;
   return shutdown === undefined ? {} : { shutdown };
 }
 
 async function prepareAppleRunner(
-  host: AppleLifecycleHost,
+  host: AppleLifecycleServices,
   device: DeviceInfo,
   signal: AbortSignal,
   input: PrepareAppleRunnerInput,
@@ -464,7 +502,7 @@ async function prepareAppleRunner(
   return await withDiagnosticTimer(
     'prepare_apple_runner',
     async () => {
-      const readied = await ensureAppleReady(host, device, signal, { deadlineAtMs });
+      const readied = await host.ensureReady(device, signal, { deadlineAtMs });
       const timeoutMs = Math.max(1, deadlineAtMs - Date.now());
       emitDiagnostic({
         phase: 'prepare_apple_runner',
@@ -496,7 +534,7 @@ type RunnerPrewarm = Readonly<{
 }>;
 
 function createRunnerPrewarm(
-  host: AppleLifecycleHost,
+  host: AppleLifecycleServices,
   binding: BoundAppleInteractor,
   input: OpenApplicationInput,
   timing: MutableOpenTiming,

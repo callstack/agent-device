@@ -156,14 +156,16 @@ static NSUInteger deepestLevel(NSDictionary *node)
 
 static NSString *failureName(NSError *error)
 {
-  if ([error.domain isEqualToString:@"agent-device.snapshot"]) {
-    switch (error.code) {
-      case 1: return @"request-budget-exhausted";
-      case 3: return @"continuation-element-missing";
-      case 5: return @"owner-changed";
-      case 6: return @"boundary-evidence-missing";
-      default: return [NSString stringWithFormat:@"capture-%ld", (long)error.code];
+  if ([error.domain isEqualToString:SnapshotCaptureErrorDomain]) {
+    switch ((SnapshotCaptureError)error.code) {
+      case SnapshotCaptureErrorBudgetExhausted: return @"request-budget-exhausted";
+      case SnapshotCaptureErrorContinuationElementUnavailable: return @"continuation-element-missing";
+      case SnapshotCaptureErrorTreeChanged: return @"tree-changed";
+      case SnapshotCaptureErrorForegroundOwnerChanged: return @"owner-changed";
+      case SnapshotCaptureErrorBoundaryChildCountUnavailable: return @"boundary-evidence-missing";
+      case SnapshotCaptureErrorMalformedContinuation: break;
     }
+    return [NSString stringWithFormat:@"capture-%ld", (long)error.code];
   }
   return @"rejected";
 }
@@ -203,6 +205,7 @@ int main(int argc, const char *argv[])
     NSNumber *ownerChangesAfter = [native[@"ownerChangesAfterRequests"] isKindOfClass:NSNumber.class] ? native[@"ownerChangesAfterRequests"] : nil;
     BOOL unknownAtBoundary = [native[@"frontierEvidence"] isEqual:@"unknown"];
     BOOL vanishAtBoundary = [native[@"vanishAtFrontier"] boolValue];
+    BOOL shrinkOnContinuation = [native[@"shrinkOnContinuation"] boolValue];
     NSUInteger hint = [request[@"hint"][@"host-bridge"] unsignedIntegerValue];
     __block NSUInteger requests = 0;
     __block NSUInteger rejected = 0;
@@ -215,7 +218,7 @@ int main(int argc, const char *argv[])
         ^id(id element, NSUInteger levels, NSUInteger nodes, NSError **readError) {
           requests++;
           if (ownerChangesAfter && requests > ownerChangesAfter.unsignedIntegerValue) {
-            *readError = [NSError errorWithDomain:@"agent-device.snapshot" code:5 userInfo:nil];
+            *readError = [NSError errorWithDomain:SnapshotCaptureErrorDomain code:SnapshotCaptureErrorForegroundOwnerChanged userInfo:nil];
             return nil;
           }
           if (rejectAbove && levels > rejectAbove.unsignedIntegerValue) {
@@ -228,7 +231,15 @@ int main(int argc, const char *argv[])
             *readError = [NSError errorWithDomain:@"fixture" code:0 userInfo:nil];
             return nil;
           }
-          return fragment(node, levels, unknownAtBoundary, vanishAtBoundary);
+          NSDictionary *read = fragment(node, levels, unknownAtBoundary, vanishAtBoundary);
+          // A list that recycles its cells between two reads: the continuation finds fewer children
+          // than the first read counted.
+          if (shrinkOnContinuation && node != root) {
+            NSMutableDictionary *shrunk = [read mutableCopy];
+            shrunk[kChildren] = @[];
+            return shrunk;
+          }
+          return read;
         }, &truncated, &recovery, &error);
 
     // The guest's accounting is what the host learns from and reports, so it must agree with what

@@ -1,5 +1,8 @@
 #import <Foundation/Foundation.h>
 
+#define SNAPSHOT_BRIDGE_PROTOCOL_VERSION 1
+#define SNAPSHOT_BRIDGE_SOURCE_VERSION @"agent-device-simulator-ax-v1.10.0"
+
 NS_ASSUME_NONNULL_BEGIN
 
 extern NSString *const kProtocolVersionKey;

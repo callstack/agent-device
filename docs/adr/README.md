@@ -36,8 +36,10 @@
 | [0032 Layering Graph Engine](0032-layering-graph-engine.md) | replacement evaluation for `scripts/layering/` graph rules with dependency-cruiser or fallow `boundaries`, the reason that graph-based layering checks share one replaceable import model, the measured edge-set and parity gaps, and the revisit triggers |
 | [0033 Collocation decision table](0033-collocation-decision-table.md) | moves or additions for files in umbrella #3276 §5, renewed proposals for a move that the table refused, and a zone's collocation decisions |
 | [0034 Provider plugin registry](0034-provider-plugin-registry.md) | provider plugins, the `agent-device/plugins` contract, plugin sources and order, duplicate provider ids, plugin failure isolation, the daemon plugin inventory and `daemon status` |
-| [0035 macOS App Devices](0035-macos-app-devices.md) | native macOS apps as devices of their own, the host/app-device overlap rule, concurrent app sessions, and `macos-app` lease claims |
+| [0035 Host-Scoped Devices](0035-macos-app-devices.md) | native macOS apps as devices of their own, the host/scoped-device overlap and claim rule, concurrent app sessions, and `macos-app` lease claims |
 | [0036 Bounded Composite Resource Admission](0036-bounded-composite-resource-admission.md) | resource operations, nested tests, session disposal, and claim recovery inside bounded batch/replay steps |
+| [0037 Web Session Devices](0037-web-session-devices.md) | web sessions as devices of their own, the session name rule, the `p_`/`t_` backend key and tenant isolation, and first-open locking for web |
+| [0038 Snapshot capture source routing](0038-snapshot-capture-source-routing.md) | the source router for multi-source owners, one fallback, refusal scopes, surface proof, and the producer registry |
 
 ADRs record rationale.
 The registries and gates they describe are the current source of truth.

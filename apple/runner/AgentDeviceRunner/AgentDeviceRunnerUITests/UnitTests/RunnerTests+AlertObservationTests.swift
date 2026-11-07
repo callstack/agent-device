@@ -3,20 +3,21 @@ import XCTest
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
 import ObjectiveC.runtime
 
-private final class AlertTapDeadlineStub: NSObject {
+final class RunnerTapSynthesisStub: NSObject {
   static var status: RunnerTapSynthesisStatus?
   static var interruptionHandlingDisabled: Bool?
 
-  @objc(synthesizeTapWithApplication:resolvedWindow:x:y:deadline:errorMessage:)
+  @objc(synthesizeTapWithApplication:resolvedWindow:interfaceOrientation:point:deadline:errorMessage:)
   class func synthesizeTap(
     application: XCUIApplication,
     resolvedWindow: Any?,
-    x: Double,
-    y: Double,
+    interfaceOrientation: Int,
+    point: CGPoint,
     deadline: NSDate?,
     errorMessage: AutoreleasingUnsafeMutablePointer<NSString?>?
   ) -> RunnerTapSynthesisStatus {
     interruptionHandlingDisabled = (application.value(forKey: "doesNotHandleUIInterruptions") as? NSNumber)?.boolValue
+    if status == .failed { errorMessage?.pointee = "forced private synthesis failure" }
     return status ?? (deadline == nil ? .succeeded : .deadlineExceeded)
   }
 }
@@ -82,7 +83,7 @@ extension RunnerTests {
   func testAlertActivationAfterDeadlineDoesNotTapTheOriginal() throws {
     defer { tearDownReplacementAlert() }
     let alert = try launchReplacementAlert()
-    let button = try XCTUnwrap(alert.buttons.first { $0.label == "OK" })
+    let button = try XCTUnwrap(alert.actions.first { $0.label == "OK" })
     let frame = button.frame
 
     let outcome = try activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantPast)
@@ -99,11 +100,11 @@ extension RunnerTests {
     let alert = RunnerAlert(
       root: resolved.root,
       ownerApp: resolved.ownerApp,
-      buttons: resolved.buttons,
+      actions: resolved.actions,
       source: resolved.source,
       window: app.windows.matching(identifier: "agent-device-missing-window").firstMatch
     )
-    let button = try XCTUnwrap(alert.buttons.first { $0.label == "OK" })
+    let button = try XCTUnwrap(alert.actions.first { $0.label == "OK" })
 
     let frame = button.frame
     let options = XCTExpectedFailure.Options()
@@ -123,7 +124,7 @@ extension RunnerTests {
   func testAlertDeadlineDuringSynthesisPreparationLeavesTheOriginalUntouched() throws {
     defer { tearDownReplacementAlert() }
     let alert = try launchReplacementAlert()
-    let button = try XCTUnwrap(alert.buttons.first { $0.label == "OK" })
+    let button = try XCTUnwrap(alert.actions.first { $0.label == "OK" })
     let frame = button.frame
     try withAlertTapStub {
       let outcome = try activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantFuture)
@@ -132,7 +133,7 @@ extension RunnerTests {
       XCTAssertTrue(app.alerts.firstMatch.exists)
       XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
 
-      AlertTapDeadlineStub.status = RunnerTapSynthesisStatus(rawValue: 999)
+      RunnerTapSynthesisStub.status = RunnerTapSynthesisStatus(rawValue: 999)
       let unknown = try activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantFuture)
       guard case .unsupported? = unknown else {
         return XCTFail("an unknown native status must report failure rather than deadline expiry")
@@ -190,15 +191,15 @@ extension RunnerTests {
 
   @MainActor
   private func assertAlertActivationDisablesInterruptionHandling(_ alert: RunnerAlert) throws {
-    let button = try XCTUnwrap(alert.buttons.first { $0.label == "OK" })
+    let button = try XCTUnwrap(alert.actions.first { $0.label == "OK" })
     let frame = button.frame
     try withAlertTapStub {
-      AlertTapDeadlineStub.status = .deadlineExceeded
+      RunnerTapSynthesisStub.status = .deadlineExceeded
       let outcome = try activateAlertButton(
         alert, button: button, action: "accept", frame: frame, deadline: .distantFuture
       )
       XCTAssertNil(outcome)
-      XCTAssertEqual(AlertTapDeadlineStub.interruptionHandlingDisabled, true)
+      XCTAssertEqual(RunnerTapSynthesisStub.interruptionHandlingDisabled, true)
     }
   }
 
@@ -218,13 +219,13 @@ extension RunnerTests {
 
   @MainActor
   private func withAlertTapStub(_ body: () throws -> Void) throws {
-    let selector = NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:x:y:deadline:errorMessage:")
+    let selector = NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:interfaceOrientation:point:deadline:errorMessage:")
     let method = try XCTUnwrap(class_getClassMethod(RunnerSynthesizedGesture.self, selector))
-    let stub = try XCTUnwrap(class_getClassMethod(AlertTapDeadlineStub.self, selector))
+    let stub = try XCTUnwrap(class_getClassMethod(RunnerTapSynthesisStub.self, selector))
     let original = method_setImplementation(method, method_getImplementation(stub))
     defer {
-      AlertTapDeadlineStub.status = nil
-      AlertTapDeadlineStub.interruptionHandlingDisabled = nil
+      RunnerTapSynthesisStub.status = nil
+      RunnerTapSynthesisStub.interruptionHandlingDisabled = nil
       method_setImplementation(method, original)
     }
     try body()

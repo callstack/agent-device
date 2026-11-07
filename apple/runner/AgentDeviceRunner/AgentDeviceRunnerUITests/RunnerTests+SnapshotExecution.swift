@@ -18,7 +18,7 @@ extension RunnerTests {
       case .response(let response):
         return .response(response)
       case .context(let context):
-        if let refusal = self.bookRequestLitPanelSurface(app: context.app) {
+        if let refusal = self.prepareCommandSurface(command: command, app: context.app) {
           return .response(refusal.response)
         }
         if self.requestLitPanel != nil, let refusal = Self.litPanelBackendPinRefusal(command) {
@@ -32,6 +32,7 @@ extension RunnerTests {
             processIdentifier: Self.processIdentifier(of: context.app)
           )
         target.litPanelSurface = self.litPanelState.surface
+        target.refusesSystemAlertSubstitution = context.observation != nil
         return .capture(
           target,
           systemSurface: context.systemSurface,
@@ -138,6 +139,10 @@ extension RunnerTests {
       return Response(ok: true, data: payload)
     } catch let refusal as RunnerAppScreenCaptureFailure {
       return refusal.response
+    } catch is SystemAlertSubstitutionRefused {
+      return observeOnlyUnavailableResponse(
+        hint: "A system alert is presented over the session app. Resolve it with alert, or read it with a regular snapshot."
+      )
     } catch let failure as SnapshotCaptureFailure {
       invalidateCachedTargetAfterSnapshotFailure()
       return Response(

@@ -2,6 +2,30 @@ import XCTest
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+  /// One text-input lookup walks the lit windows once, however many input types it queries.
+  @MainActor
+  func testTextInputProbeWalksTheLitWindowsOnce() throws {
+    try withLitPanelWindow(frame: CGRect(x: 0, y: 0, width: 669, height: 951)) { windowListReads in
+      setRequestLitPanel(from: try runnerCommandFixture(
+        #"{"command":"type","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#
+      ))
+      _ = try probeTextInputs(app: app, point: CGPoint(x: 10, y: 10), contentTranslation: .none)
+      XCTAssertEqual(windowListReads(), 1)
+    }
+  }
+
+  /// A content-vector read on a lit-panel request that nothing booked yet books the request's
+  /// window and answers its origin, instead of refusing for want of an earlier booking.
+  @MainActor
+  func testUnbookedLitPanelContentTranslationBooksTheRequestWindow() throws {
+    try withLitPanelWindow(frame: CGRect(x: 0, y: 80, width: 669, height: 871)) { _ in
+      setRequestLitPanel(from: try runnerCommandFixture(#"{"command":"type","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#))
+      guard case .known(let vector) = liveContentTranslation(app: app) else { return XCTFail("no vector") }
+      XCTAssertEqual(vector, CGSize(width: 0, height: 80))
+      XCTAssertNotNil(litPanelState.surface)
+    }
+  }
+
   func testTextInputProbePreservesEnclosingRunnerWait() {
     app.launchArguments = ["--agent-device-text-entry-regression"]
     app.launch()
@@ -236,7 +260,9 @@ extension RunnerTests {
     )
     XCTAssertTrue(try execute(command: nextTap).ok)
     XCTAssertNotNil(textEntryTapWitness)
-    XCTAssertTrue(try execute(command: type).ok)
+    let retype = try runnerCommandFixture(#"{"appBundleId":"com.callstack.agentdevice.runner","command":"type","commandId":"type-after-probe-recovery","text":"must-not-type","textEntryMode":"append"}"#)
+    let retyped = try execute(command: retype)
+    XCTAssertTrue(retyped.ok, String(describing: retyped.error))
     XCTAssertEqual(field.value as? String, "must-not-type")
   }
 #endif

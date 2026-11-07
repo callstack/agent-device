@@ -168,20 +168,11 @@ extension RunnerTests {
   // in RunnerTests.swift), so reverting this entry point to bypass the bounded probe fails the
   // regression test.
   func snapshotFast(target: SnapshotCaptureTarget, options: PresentationOptions) throws -> DataPayload {
-    let deadline = Date().addingTimeInterval(Self.snapshotPlanBudget)
-    if let blocking = boundedBlockingSystemAlertSnapshot(
-      deadline: deadline,
-      penaltyTarget: .prepared(bundleId: target.bundleId),
-      options: options
-    ) {
-      return blocking
-    }
-    return try runSnapshotCapturePlan(
-      Self.regularVisiblePlan,
-      target: target,
-      options: options,
+    try snapshotAfterSystemAlertTier(
+      plan: Self.regularVisiblePlan,
       terminal: .sparseWithFatalOnAXFailure,
-      deadline: deadline
+      target: target,
+      options: options
     )
   }
 
@@ -299,7 +290,7 @@ extension RunnerTests {
   /// A lit-panel snapshot's root, raw or regular, is the booked box (ADR 0025).
   static func publishLitPanelRoot(_ root: inout RawAXNode, surface: LitPanelSurface?) {
     if let surface {
-      root.rect = SnapshotRect(surface.frame)
+      root.rect = SnapshotRect(surface.geometry.windowOnScreen.rect)
     }
   }
 
@@ -336,19 +327,36 @@ extension RunnerTests {
 
   // See `snapshotFast` above: the single production entry point, no unit-test overload.
   func snapshotRaw(target: SnapshotCaptureTarget, options: PresentationOptions) throws -> DataPayload {
+    try snapshotAfterSystemAlertTier(
+      plan: Self.rawDiagnosticPlan,
+      terminal: .throwOnAXFailure,
+      target: target,
+      options: options
+    )
+  }
+
+  private func snapshotAfterSystemAlertTier(
+    plan: [SnapshotBackendKind],
+    terminal: SnapshotCaptureTerminalPolicy,
+    target: SnapshotCaptureTarget,
+    options: PresentationOptions
+  ) throws -> DataPayload {
     let deadline = Date().addingTimeInterval(Self.snapshotPlanBudget)
     if let blocking = boundedBlockingSystemAlertSnapshot(
       deadline: deadline,
       penaltyTarget: .prepared(bundleId: target.bundleId),
       options: options
     ) {
+      if target.refusesSystemAlertSubstitution {
+        throw SystemAlertSubstitutionRefused()
+      }
       return blocking
     }
     return try runSnapshotCapturePlan(
-      Self.rawDiagnosticPlan,
+      plan,
       target: target,
       options: options,
-      terminal: .throwOnAXFailure,
+      terminal: terminal,
       deadline: deadline
     )
   }

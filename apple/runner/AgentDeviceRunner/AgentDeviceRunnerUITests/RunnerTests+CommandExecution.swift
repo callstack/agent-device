@@ -24,6 +24,8 @@ extension RunnerTests {
       )
     } catch let refusal as RunnerAppScreenCaptureFailure {
       return refusal.response
+    } catch let refusal as RunnerCoordinateRefusal {
+      return unsupportedResponse(message: refusal.message, hint: refusal.hint)
     }
   }
 
@@ -39,13 +41,12 @@ extension RunnerTests {
     if command.invalidatesRememberedTextEntryTap {
       clearRememberedTextEntryTap()
     }
-    // A screenshot resolves its own surface, the target app and then the system surface.
-    if command.command != .screenshot, let refusal = bookRequestLitPanelSurface(app: activeApp) {
+    if let refusal = prepareCommandSurface(command: command, app: activeApp) {
       return refusal.response
     }
     switch command.command {
     case .status, .activate, .terminate, .targetReset, .shutdown, .recordStart, .recordStop, .uptime,
-      .appState, .pasteboardWrite, .snapshot:
+      .appState, .pasteboardWrite, .snapshot, .snapshotBridge:
       return Response(
         ok: false,
         error: ErrorPayload(
@@ -247,7 +248,7 @@ extension RunnerTests {
         try synthesizedLongPressAt(app: activeApp, x: x, y: y, durationMs: durationMs, context: context)
       }) {
       case .performed(let timing):
-        let touchFrame = context.map { touchVisualizationFrame(x: x, y: y, context: $0) }
+        let touchFrame = context.map { touchVisualizationFrame(point: SurfacePoint(CGPoint(x: x, y: y)), context: $0) }
         return gestureResponse(message: "long pressed", timing: timing, frame: .touch(touchFrame))
       case .xctestFallback(let message, let hint):
         fallback = GestureFallback(strategy: "xctest-coordinate-long-press", message: message, hint: hint)
@@ -338,7 +339,7 @@ extension RunnerTests {
             y2: gesture.planFrame.minY + gesture.plan.y2,
             durationMs: defaults.durationMs,
             message: "scrolled",
-            context: scrollContext.withReferenceFrame(gesture.coordinateFrame),
+            context: scrollContext,
             releaseBehavior: command.scrollReleaseBehavior
           )
         )
@@ -349,8 +350,8 @@ extension RunnerTests {
       else {
         return invalidScrollDirectionResponse(commandName: "desktopScroll")
       }
-      let appFrame = activeApp.frame
-      let frame = try resolvedTouchReferenceFrame(app: activeApp, appFrame: appFrame)
+      let appFrame = try readableAppFrame(app: activeApp)
+      let frame = try resolvedTouchReferenceFrame(app: activeApp)
       guard frame.width > 0, frame.height > 0 else {
         return Response(
           ok: false,
@@ -645,15 +646,8 @@ extension RunnerTests {
           ok: false,
           error: ErrorPayload(code: "ALERT_NOT_FOUND", message: "alert not found")
         )
-      case .unresolved:
-        return Response(
-          ok: false,
-          error: ErrorPayload(
-            code: RunnerWireErrorCode.alertUnresolved,
-            message: "a system prompt is visible but its buttons could not be read",
-            hint: RunnerTests.alertUnresolvedHint
-          )
-        )
+      case .unresolved, .notActionable:
+        return alertUnresolvedResponse()
       }
     case .gesture:
       guard let plan = command.gesturePlan else {
@@ -668,12 +662,14 @@ extension RunnerTests {
           error: ErrorPayload(code: "INVALID_ARGS", message: validationError)
         )
       }
-      switch plannedGestureExecution(for: plan) {
+      let execution = plannedGestureExecution(for: plan)
+      let response: Response
+      switch execution {
       case .fastSwipe:
         // Validation above guarantees a non-empty, single-pointer path for this execution kind.
         let first = plan.pointers[0].samples.first!.point
         let last = plan.pointers[0].samples.last!.point
-        return canonicalPlannedGestureResponse(
+        response = canonicalPlannedGestureResponse(
           try executeDragGesture(
             activeApp: activeApp,
             x: first.x,
@@ -687,10 +683,18 @@ extension RunnerTests {
         )
       case .sampled:
         let (timing, outcome) = try performGesture(activeApp, idleTimeout: false) {
-          sampledPlannedGesture(app: activeApp, plan: plan)
+          try sampledPlannedGesture(app: activeApp, plan: plan)
         }
-        return plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
+        response = plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
+#if os(iOS) && targetEnvironment(simulator)
+      case .screenEdgeTouch:
+        let (timing, outcome) = try performGesture(activeApp, idleTimeout: false) {
+          try screenEdgePlannedGesture(app: activeApp, plan: plan)
+        }
+        response = plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
+#endif
       }
+      return Self.reportingSchedule(execution.schedule, in: response)
     case .gestureViewport:
       let frame = try gestureViewportFrame(app: activeApp)
       guard !frame.isNull, !frame.isInfinite, !frame.isEmpty else {

@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   buildInteractionSurfaceSignature,
-  classifyBaselineSurfaceEvidence,
+  classifyPostGestureBaselineEvidence,
   type InteractionSurfaceSignature,
 } from '../interaction-surface-signature.ts';
+import type { SnapshotKeyboardBandFact } from '@agent-device/kernel/snapshot';
 import {
   decidePostGestureStabilityVerdict as decideWithHooks,
   type PostGestureBaseline,
@@ -22,14 +23,27 @@ import {
 const decidePostGestureStabilityVerdict = (params: {
   baseline: PostGestureBaseline<InteractionSurfaceSignature> | undefined;
   quietSignature: InteractionSurfaceSignature;
+  quietKeyboard?: SnapshotKeyboardBandFact;
   elapsedMs: number;
   distrustCapMs: number;
-}) => decideWithHooks({ ...params, classifyBaselineEvidence: classifyBaselineSurfaceEvidence });
+}) =>
+  decideWithHooks({
+    baseline: params.baseline,
+    quiet: {
+      signature: params.quietSignature,
+      comparisonKey: 'runner|app',
+      keyboard: params.quietKeyboard,
+    },
+    elapsedMs: params.elapsedMs,
+    distrustCapMs: params.distrustCapMs,
+    classifyBaselineEvidence: classifyPostGestureBaselineEvidence,
+  });
 
 function preActionBaseline(
   signature: InteractionSurfaceSignature,
+  keyboard?: SnapshotKeyboardBandFact,
 ): PostGesturePreActionBaseline<InteractionSurfaceSignature> {
-  return { provenance: 'pre-action', signature, comparisonKey: 'runner|app' };
+  return { provenance: 'pre-action', signature, comparisonKey: 'runner|app', keyboard };
 }
 
 // ---------------------------------------------------------------------------
@@ -225,4 +239,138 @@ test('decidePostGestureStabilityVerdict trusts immediately when the overlap is o
     }),
     { verdict: 'trust' },
   );
+});
+
+// --- A drag that dismisses the keyboard moves no content: the keyboard leaving is the change ---
+
+const KEYBOARD_UP: SnapshotKeyboardBandFact = {
+  kind: 'visible',
+  frame: { x: 0, y: 400, width: 390, height: 444 },
+  treeBound: true,
+};
+const KEYBOARD_DOWN: SnapshotKeyboardBandFact = { kind: 'absent', treeBound: true };
+
+function pickupWithKeyboard(keyboard: boolean): InteractionSurfaceSignature {
+  return buildInteractionSurfaceSignature([
+    applicationRootNode(),
+    {
+      ref: 'e2',
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'shipping-pickup',
+      label: 'Pickup',
+      rect: { x: 20, y: 120, width: 200, height: 44 },
+    },
+    ...(keyboard ? keyboardWindowNodes() : []),
+  ]);
+}
+
+test('decidePostGestureStabilityVerdict trusts a quiet read whose keyboard fact says the keyboard left, though no content moved', () => {
+  assert.deepEqual(
+    decidePostGestureStabilityVerdict({
+      baseline: preActionBaseline(pickupWithKeyboard(true), KEYBOARD_UP),
+      quietSignature: pickupWithKeyboard(false),
+      quietKeyboard: KEYBOARD_DOWN,
+      elapsedMs: 0,
+      distrustCapMs: 3_500,
+    }),
+    { verdict: 'trust' },
+  );
+});
+
+test('decidePostGestureStabilityVerdict trusts a quiet read whose keyboard fact says the keyboard arrived, though no content moved', () => {
+  assert.deepEqual(
+    decidePostGestureStabilityVerdict({
+      baseline: preActionBaseline(pickupWithKeyboard(false), KEYBOARD_DOWN),
+      quietSignature: pickupWithKeyboard(true),
+      quietKeyboard: {
+        kind: 'derived',
+        derivation: 'docked-tree',
+        frame: { x: 0, y: 400, width: 390, height: 444 },
+        treeBound: true,
+      },
+      elapsedMs: 0,
+      distrustCapMs: 3_500,
+    }),
+    { verdict: 'trust' },
+  );
+});
+
+test('decidePostGestureStabilityVerdict still distrusts a read that keeps the keyboard and the content', () => {
+  assert.deepEqual(
+    decidePostGestureStabilityVerdict({
+      baseline: preActionBaseline(pickupWithKeyboard(true), KEYBOARD_UP),
+      quietSignature: pickupWithKeyboard(true),
+      quietKeyboard: KEYBOARD_UP,
+      elapsedMs: 0,
+      distrustCapMs: 3_500,
+    }),
+    { verdict: 'distrust' },
+  );
+});
+
+test('decidePostGestureStabilityVerdict does not read missing keyboard nodes as the keyboard leaving', () => {
+  // A narrower presentation can leave the keyboard's nodes out while the keyboard is still up.
+  for (const quietKeyboard of [
+    undefined,
+    { kind: 'unmeasurable', reason: 'keyboard-not-observed' },
+  ] as const) {
+    assert.deepEqual(
+      decidePostGestureStabilityVerdict({
+        baseline: preActionBaseline(pickupWithKeyboard(true), KEYBOARD_UP),
+        quietSignature: pickupWithKeyboard(false),
+        quietKeyboard,
+        elapsedMs: 0,
+        distrustCapMs: 3_500,
+      }),
+      { verdict: 'distrust' },
+    );
+  }
+});
+
+test('decidePostGestureStabilityVerdict does not read a baseline without a keyboard fact as proof of a change', () => {
+  assert.deepEqual(
+    decidePostGestureStabilityVerdict({
+      baseline: preActionBaseline(pickupWithKeyboard(true)),
+      quietSignature: pickupWithKeyboard(false),
+      quietKeyboard: KEYBOARD_DOWN,
+      elapsedMs: 0,
+      distrustCapMs: 3_500,
+    }),
+    { verdict: 'distrust' },
+  );
+});
+
+test('decidePostGestureStabilityVerdict does not read keyboard facts sampled apart from the tree as proof of a change', () => {
+  // A WebDriver (Appium) capture reads page source, then probes visibility on its own: a stale source
+  // can arrive with a newer visibility.
+  const unbound: Array<[SnapshotKeyboardBandFact, SnapshotKeyboardBandFact]> = [
+    [
+      { kind: 'visibility-only', visible: true },
+      { kind: 'visibility-only', visible: false },
+    ],
+    [
+      { kind: 'tree-rejected', derivation: 'docked-tree', visible: true },
+      { kind: 'tree-rejected', derivation: 'docked-tree', visible: false },
+    ],
+    [{ kind: 'visible', frame: { x: 0, y: 400, width: 390, height: 444 } }, { kind: 'absent' }],
+    [KEYBOARD_UP, { kind: 'visibility-only', visible: false }],
+    // The mirror: a binding on the quiet side alone proves nothing either.
+    [{ kind: 'visibility-only', visible: true }, KEYBOARD_DOWN],
+    [{ kind: 'visible', frame: { x: 0, y: 400, width: 390, height: 444 } }, KEYBOARD_DOWN],
+  ];
+  for (const [baselineKeyboard, quietKeyboard] of unbound) {
+    assert.deepEqual(
+      decidePostGestureStabilityVerdict({
+        baseline: preActionBaseline(pickupWithKeyboard(true), baselineKeyboard),
+        quietSignature: pickupWithKeyboard(true),
+        quietKeyboard,
+        elapsedMs: 0,
+        distrustCapMs: 3_500,
+      }),
+      { verdict: 'distrust' },
+      `${baselineKeyboard.kind} -> ${quietKeyboard.kind}`,
+    );
+  }
 });

@@ -211,7 +211,7 @@ function toXctestrunTarget(
   return target;
 }
 
-const RUNNER_XCTESTRUN_CAPTURE_OPTIONS = {
+export const RUNNER_XCTESTRUN_CAPTURE_OPTIONS = {
   PreferredScreenCaptureFormat: 'screenshots',
   SystemAttachmentLifetime: 'keepNever',
   UserAttachmentLifetime: 'keepNever',

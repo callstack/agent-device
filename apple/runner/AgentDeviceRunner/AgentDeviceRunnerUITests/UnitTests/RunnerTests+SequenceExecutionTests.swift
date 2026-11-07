@@ -204,3 +204,39 @@ extension RunnerTests {
   }
 }
 #endif
+
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+extension RunnerTests {
+  /// The iOS backend sends coordinate taps as synthesized steps. Where neither a window nor the sole
+  /// screen gives that tap a context, its touch frame reads the app frame. On a tree XCTest cannot
+  /// snapshot that read is held, and the tap is synthesized without a touch frame, as the
+  /// synthesized `tap` command is.
+  @MainActor
+  func testSynthesizedTapSequenceWithoutASynthesisContextOnAnUnserializableTreeTapsWithoutARecordedIssue() throws {
+    app.launch()
+    mainOwned.app = app
+    let restoreDisplay = try simulateUnreadableDisplay()
+    let restoreXCTest = try simulateUnserializableAppTree()
+    defer {
+      restoreXCTest()
+      restoreDisplay()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    mainOwned.soleDisplayPortraitSize = nil
+    let sequence = try runnerCommandFixture(
+      #"{"command":"sequence","commandId":"synthesized-tap-sequence","steps":[{"kind":"tap","x":40,"y":40,"synthesized":true}]}"#
+    )
+    let failureCountBefore = currentXCTestFailureCount()
+
+    let response = try executeOnMainPrepared(command: sequence, activeApp: app)
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(response.data?.completedSteps, 1)
+    XCTAssertNil(response.data?.failedStepIndex)
+    XCTAssertEqual(response.data?.sequenceResults?.first?.ok, true)
+    XCTAssertEqual(RunnerCoordinateTapCounter.taps, 0)
+  }
+}
+#endif

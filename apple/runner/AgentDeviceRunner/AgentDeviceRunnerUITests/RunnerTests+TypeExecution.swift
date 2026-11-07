@@ -21,11 +21,23 @@ extension RunnerTests {
 #if os(iOS)
     let xCTestChannelPenalized = isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId)
     var resolvedCoordinateTarget: TextEntryTarget?
+    // The penalty clock lapses while a tree stays unreadable to XCTest, so a coordinate replacement
+    // reads the tree's windows itself, once: the XCTest focus route taps through an XCUICoordinate,
+    // which needs the application snapshot. Every later step of this command reuses that read.
+    let treeContext: SynthesizedCoordinateContext?
+    if textEntryMode == .replacement && command.x != nil && command.y != nil {
+      treeContext = try synthesizedCoordinateContext(app: activeApp)
+    } else {
+      treeContext = nil
+    }
+    // One value per command decides every XCTest-dependent step of the text entry: the route, the
+    // replacement guard, and the typing, so a refusal never follows a dispatched tap.
+    let xCTestUnavailable = xCTestChannelPenalized || treeContext?.treeUnreadable == true
     if Self.shouldUseResolvedCoordinateTextEntryRoute(
       repairMode: textEntryMode,
       hasX: command.x != nil,
       hasY: command.y != nil,
-      xCTestChannelPenalized: xCTestChannelPenalized
+      xCTestUnavailable: xCTestUnavailable
     ), let x = command.x, let y = command.y {
       // Resolved before the tap: the focus it causes can move the field away from this point.
       // A replacement with no input at the point has nothing to bind to: its clear and its typed
@@ -41,7 +53,7 @@ extension RunnerTests {
       case .unavailable:
         return textInputProbeUnavailableResponse()
       }
-      let context = try synthesizedCoordinateContext(app: activeApp)
+      let context = treeContext
       switch try performSynthesizedTapGesture(app: activeApp, x: x, y: y, context: context) {
       case .performed:
         resolvedCoordinateContext = context
@@ -59,13 +71,20 @@ extension RunnerTests {
       }
     }
 #else
-    let xCTestChannelPenalized = false
+    let xCTestUnavailable = false
+    let treeContext: SynthesizedCoordinateContext? = nil
     let resolvedCoordinateTarget: TextEntryTarget? = nil
 #endif
     if let resolvedCoordinateTarget {
       target = resolvedCoordinateTarget
     } else {
-      target = try focusTextInputForTextEntry(app: activeApp, x: command.x, y: command.y)
+      target = try focusTextInputForTextEntry(
+        app: activeApp,
+        x: command.x,
+        y: command.y,
+        reusingFocusedInput: textEntryMode == .replacement,
+        tapContext: treeContext
+      )
     }
     NSLog(
       "AGENT_DEVICE_RUNNER_TEXT_ENTRY_PHASE commandId=%@ phase=focus durationMs=%.1f chars=%d mode=%@",
@@ -79,7 +98,7 @@ extension RunnerTests {
       let canReplaceResolvedFirstResponder = Self.shouldUseSynthesizedFirstResponderReplacement(
         hasResolvedElement: target.element != nil,
         hasRefreshPoint: target.refreshPoint != nil,
-        xCTestChannelPenalized: xCTestChannelPenalized
+        xCTestUnavailable: xCTestUnavailable
       )
 #else
       let canReplaceResolvedFirstResponder = false
@@ -98,7 +117,7 @@ extension RunnerTests {
       text: text,
       delaySeconds: delaySeconds,
       repairMode: textEntryMode,
-      xCTestChannelPenalized: xCTestChannelPenalized,
+      xCTestUnavailable: xCTestUnavailable,
       synthesizer: PrivateXCTestTextEntrySynthesizer(),
       commandId: command.commandId
     )
@@ -123,9 +142,10 @@ extension RunnerTests {
     let point = target.refreshPoint
     let frame: CGRect
     if let resolvedCoordinateContext {
-      frame = resolvedCoordinateContext.referenceFrame
+      frame = resolvedCoordinateContext.geometry.windowOnScreen.rect
     } else if point != nil {
-      frame = activeApp.frame
+      // The text is already typed, so a frame that does not read leaves the reference size out.
+      frame = heldAppFrame(app: activeApp) ?? .zero
     } else {
       // Bare `type` has no coordinate response to normalize. Avoid serializing the
       // application AX tree only to emit unused reference dimensions.

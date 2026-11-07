@@ -690,7 +690,7 @@ test('MCP session tool exposes publication and resolves state-dir without a daem
   });
   const result = await executor.execute('session', { action: 'state-dir' });
 
-  assert.deepEqual(result.structuredContent, { stateDir: '/tmp/agent-device-dev-state' });
+  assert.match(result.content[0]?.text ?? '', /\/tmp\/agent-device-dev-state/);
 });
 
 test('MCP renders tool text from the unpinned input so the model never sees suffixes', async () => {

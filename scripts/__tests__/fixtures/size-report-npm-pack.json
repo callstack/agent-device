@@ -2,6 +2,10 @@
   "unpackedSize": 2319,
   "files": [
     {
+      "path": "dist/src/THIRD_PARTY_NOTICES.txt",
+      "size": 100
+    },
+    {
       "path": "dist/src/index.js",
       "size": 401
     },
@@ -35,6 +39,22 @@
     },
     {
       "path": "apple/snapshot-bridge/SnapshotBridgeCapture.m",
+      "size": 0
+    },
+    {
+      "path": "apple/snapshot-bridge/SnapshotBridgeRequest.h",
+      "size": 0
+    },
+    {
+      "path": "apple/snapshot-bridge/SnapshotBridgeRequest.m",
+      "size": 0
+    },
+    {
+      "path": "apple/snapshot-bridge/SnapshotBridgeSurfaceHosts.h",
+      "size": 0
+    },
+    {
+      "path": "apple/snapshot-bridge/SnapshotBridgeSurfaceHosts.m",
       "size": 0
     },
     {
@@ -82,6 +102,6 @@
       "size": 426
     }
   ],
-  "entryCount": 20,
+  "entryCount": 21,
   "size": 3376
 }

@@ -18,6 +18,7 @@ test('an input method window on screen is the visible keyboard band', () => {
   assert.deepEqual(androidSnapshotKeyboardFromTree(tree(GBOARD_WINDOW, APP_WINDOW), WINDOW_LIST), {
     kind: 'visible',
     frame: { x: 0, y: 1500, width: 1080, height: 900 },
+    treeBound: true,
   });
 });
 
@@ -26,13 +27,14 @@ test('separate input method windows publish one band covering all of them', () =
     '<node window-index="0" window-type="2" window-bounds="[0,1380][1080,1500]" class="android.widget.FrameLayout" package="com.google.android.inputmethod.latin" />';
   assert.deepEqual(
     androidSnapshotKeyboardFromTree(tree(composer, GBOARD_WINDOW, APP_WINDOW), WINDOW_LIST),
-    { kind: 'visible', frame: { x: 0, y: 1380, width: 1080, height: 1020 } },
+    { kind: 'visible', frame: { x: 0, y: 1380, width: 1080, height: 1020 }, treeBound: true },
   );
 });
 
 test('a full window list without an input method window proves the keyboard absent', () => {
   assert.deepEqual(androidSnapshotKeyboardFromTree(tree(APP_WINDOW), WINDOW_LIST), {
     kind: 'absent',
+    treeBound: true,
   });
 });
 
@@ -41,6 +43,7 @@ test('an input method window with empty bounds draws nothing and reads as absent
     '<node window-index="0" window-type="2" window-bounds="[0,2400][1080,2400]" class="android.widget.FrameLayout" />';
   assert.deepEqual(androidSnapshotKeyboardFromTree(tree(empty, APP_WINDOW), WINDOW_LIST), {
     kind: 'absent',
+    treeBound: true,
   });
 });
 
@@ -74,7 +77,7 @@ test('an empty input method window beside a measured one leaves the measured ban
     '<node window-index="0" window-type="2" window-bounds="[0,2400][1080,2400]" class="android.widget.FrameLayout" />';
   assert.deepEqual(
     androidSnapshotKeyboardFromTree(tree(empty, GBOARD_WINDOW, APP_WINDOW), WINDOW_LIST),
-    { kind: 'visible', frame: { x: 0, y: 1500, width: 1080, height: 900 } },
+    { kind: 'visible', frame: { x: 0, y: 1500, width: 1080, height: 900 }, treeBound: true },
   );
 });
 
@@ -124,17 +127,19 @@ test('a skipped window that is not an input method leaves the keyboard answer al
   const skippedApp = { ...WINDOW_LIST, missingRootWindowTypes: [1, 3] };
   assert.deepEqual(androidSnapshotKeyboardFromTree(tree(APP_WINDOW), skippedApp), {
     kind: 'absent',
+    treeBound: true,
   });
   assert.deepEqual(androidSnapshotKeyboardFromTree(tree(GBOARD_WINDOW, APP_WINDOW), skippedApp), {
     kind: 'visible',
     frame: { x: 0, y: 1500, width: 1080, height: 900 },
+    treeBound: true,
   });
   assert.deepEqual(
     androidSnapshotKeyboardFromTree(tree(APP_WINDOW), {
       ...WINDOW_LIST,
       missingRootWindowTypes: [],
     }),
-    { kind: 'absent' },
+    { kind: 'absent', treeBound: true },
   );
 });
 
@@ -167,6 +172,7 @@ test('a docked keyboard whose region is one rect, or was not read, keeps its ban
     assert.deepEqual(androidSnapshotKeyboardFromTree(tree(window, APP_WINDOW), WINDOW_LIST), {
       kind: 'visible',
       frame: { x: 0, y: 1500, width: 1080, height: 900 },
+      treeBound: true,
     });
   }
 });

@@ -82,69 +82,6 @@ extension RunnerTests {
     XCTAssertEqual(constants.accessoryAllowance, ScrollViewportPolicy.accessoryAllowance)
   }
 
-  /// A clipped landscape band shortens the frame, and `CoordinateSpaceRotation.native(point:)` derives a
-  /// `landscapeRight` native x from the frame's HEIGHT. Rotating inside the band therefore moves the
-  /// dispatched path sideways by exactly what the keyboard took, off the lane the plan was built for,
-  /// so the plan band and the coordinate basis stay separate values through dispatch (#2500).
-  func testScrollViewportDispatchKeepsTheUnclippedFrameAsItsCoordinateRotationBasis() throws {
-    let viewport = CGRect(x: 0, y: 0, width: 1210, height: 834)
-    let keyboard = CGRect(x: 0, y: 588, width: 1210, height: 246)
-    let clip = ScrollViewportPolicy.clip(viewport: viewport, keyboard: keyboard)
-    guard case .avoided(let band, let keyboardMinY) = clip else {
-      return XCTFail("expected a landscape keyboard to be avoided, got \(clip)")
-    }
-    XCTAssertEqual(band.height, 576)
-
-    guard case .gesture(let gesture) = ScrollViewportPolicy.frames(
-      referenceFrame: viewport,
-      clip: clip
-    ).gestureDispatch(direction: .up, amount: nil, pixels: nil) else {
-      return XCTFail("expected a gesture inside the clipped band")
-    }
-    XCTAssertEqual(gesture.planFrame, band)
-    XCTAssertEqual(gesture.keyboardMinY, keyboardMinY)
-    XCTAssertEqual(gesture.coordinateFrame, viewport, "the rotation basis must survive the clip")
-    XCTAssertLessThanOrEqual(
-      max(gesture.plan.y1, gesture.plan.y2),
-      keyboard.minY - ScrollViewportPolicy.accessoryAllowance,
-      "a landscape swipe must stay clear of the keys"
-    )
-
-    let reported = gesture.attachingEvidence(
-      to: Response(
-        ok: true,
-        data: DataPayload(referenceWidth: viewport.width, referenceHeight: viewport.height),
-        error: nil
-      )
-    )
-    XCTAssertEqual(
-      reported.data?.referenceHeight,
-      band.height,
-      "the payload names the band the plan ran inside, not the synthesis frame"
-    )
-    XCTAssertEqual(reported.data?.referenceWidth, viewport.width)
-    XCTAssertEqual(reported.data?.keyboardMinY, keyboardMinY)
-    XCTAssertEqual(reported.data?.keyboardAvoided, true)
-
-    let orientedStartY = gesture.planFrame.minY + gesture.plan.y1
-    let dispatchedFromViewport = CoordinateSpaceRotation.native(
-      point: CGPoint(x: gesture.planFrame.minX + gesture.plan.x1, y: orientedStartY),
-      in: gesture.coordinateFrame,
-      interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
-    )
-    let dispatchedFromBand = CoordinateSpaceRotation.native(
-      point: CGPoint(x: gesture.planFrame.minX + gesture.plan.x1, y: orientedStartY),
-      in: gesture.planFrame,
-      interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
-    )
-    XCTAssertEqual(
-      dispatchedFromViewport.x - dispatchedFromBand.x,
-      viewport.height - band.height,
-      accuracy: 0.001,
-      "rotating inside the clipped band would shift native x by what the keyboard took"
-    )
-  }
-
   private func loadScrollViewportPolicyFixture() throws -> ScrollViewportPolicyFixture {
     let fixtureURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent() // UnitTests

@@ -67,9 +67,15 @@ import { resolveRequestExecutionLockPlan } from '../request-binding.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { ensureDeviceReady } from '../../core/device/device-ready.ts';
 import { awaitFixtureReadiness } from '../../__tests__/support/application-lifecycle-runtime-fixture.ts';
-import { hostAppDevice, hostAppDeviceId, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  hostAppDevice,
+  hostAppDeviceId,
+  webSessionDevice,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { seedWebSessionIdentity } from '../../__tests__/support/web-session-request-fixture.ts';
 import { inspectDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
 import {
   makeAndroidDevice,
@@ -77,7 +83,11 @@ import {
   openRequest,
   storedClaimUpdatedAt,
 } from './request-router-open-harness.ts';
-import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  createTestHostEnvironment,
+  WEB_DESKTOP_DEVICE,
+} from '@agent-device/test-kit';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
@@ -177,6 +187,7 @@ test('fresh open uses app-aware device selection for advisory locking and dispat
       {
         appleSimulatorAppTarget: 'com.example.demo',
         appDeviceTarget: 'com.example.demo',
+        webSession: { name: 'session-app-aware' },
         env: process.env,
       },
     ],
@@ -185,6 +196,7 @@ test('fresh open uses app-aware device selection for advisory locking and dispat
       {
         appleSimulatorAppTarget: 'com.example.demo',
         appDeviceTarget: 'com.example.demo',
+        webSession: { name: 'session-app-aware' },
         env: process.env,
       },
     ],
@@ -238,14 +250,16 @@ test('fresh replay reserves its authored app simulator before any replay step', 
   );
 
   const { keys } = await resolveRequestExecutionLockPlan({
-    req: {
+    // The scope seeds this identity for every real request; this call reaches lock planning
+    // directly, so it states the fact the scope would have added.
+    req: seedWebSessionIdentity({
       token: 'test-token',
       session: 'fresh-replay',
       command: 'replay',
       positionals: [replayPath],
       flags: { replayScriptSource: replayScriptSourceBundleFor(replayPath) },
       meta: { cwd: root },
-    },
+    }),
     sessionName: 'fresh-replay',
     sessionStore,
   });
@@ -253,7 +267,11 @@ test('fresh replay reserves its authored app simulator before any replay step', 
   expect(keys).toEqual(['session:fresh-replay', 'device:SIM-WITH-APP']);
   expect(mockResolveTargetDevice).toHaveBeenCalledWith(
     expect.objectContaining({ platform: 'ios' }),
-    { appleSimulatorAppTarget: 'com.example.demo', env: process.env },
+    {
+      appleSimulatorAppTarget: 'com.example.demo',
+      webSession: { name: 'fresh-replay' },
+      env: process.env,
+    },
   );
 });
 
@@ -854,5 +872,63 @@ test('open under a macos-app lease names no host path or device, and an unleased
     expect(unleased.ok && unleased.data?.sessionStateDir).toEqual(expect.any(String));
   } finally {
     vi.unstubAllEnvs();
+  }
+});
+
+test('web sessions open side by side on one host, each holding a device of its own', async () => {
+  // As the production selection does for a fresh open: the session names its browser's device.
+  mockResolveTargetDevice.mockImplementation(async (_flags, options) =>
+    options?.webSession
+      ? webSessionDevice(WEB_DESKTOP_DEVICE, options.webSession)
+      : WEB_DESKTOP_DEVICE,
+  );
+  const claimsDir = mkdtempForTestSync('agent-device-router-open-web-claims-');
+  vi.stubEnv('AGENT_DEVICE_CLAIMS_DIR', claimsDir);
+  const sessionStore = makeSessionStore('agent-device-router-open-web-');
+  const handler = createOpenHandler(sessionStore);
+  try {
+    // Each fresh web open locks its own session device, never the shared host device.
+    const { keys } = await resolveRequestExecutionLockPlan({
+      // The scope seeds this identity for every real request; this call reaches lock planning
+      // directly, so it states the fact the scope would have added.
+      req: seedWebSessionIdentity(
+        openRequest('web-a', { platform: 'web' }, 'req-plan-web-a', {}, ['about:blank']),
+      ),
+      sessionName: 'web-a',
+      sessionStore,
+    });
+    expect(keys).toEqual(['session:web-a', `device:${WEB_DESKTOP_DEVICE.id}:session:p_web-a`]);
+
+    const [first, second] = await Promise.all([
+      handler(openRequest('web-a', { platform: 'web' }, 'req-open-web-a', {}, ['about:blank'])),
+      handler(openRequest('web-b', { platform: 'web' }, 'req-open-web-b', {}, ['about:blank'])),
+    ]);
+
+    expect(first).toMatchObject({
+      ok: true,
+      data: { id: `${WEB_DESKTOP_DEVICE.id}:session:p_web-a` },
+    });
+    expect(second).toMatchObject({
+      ok: true,
+      data: { id: `${WEB_DESKTOP_DEVICE.id}:session:p_web-b` },
+    });
+
+    // Another daemon on the host shares the claims: a session name it holds is refused, and an
+    // unused name opens beside it.
+    const foreignHandler = createOpenHandler(makeSessionStore('agent-device-router-open-web-2-'));
+    const sameName = await foreignHandler(
+      openRequest('web-a', { platform: 'web' }, 'req-open-web-same', {}, ['about:blank']),
+    );
+    expect(sameName).toMatchObject({ ok: false, error: { code: 'DEVICE_IN_USE' } });
+    const otherName = await foreignHandler(
+      openRequest('web-c', { platform: 'web' }, 'req-open-web-c', {}, ['about:blank']),
+    );
+    expect(otherName).toMatchObject({
+      ok: true,
+      data: { id: `${WEB_DESKTOP_DEVICE.id}:session:p_web-c` },
+    });
+  } finally {
+    vi.unstubAllEnvs();
+    fs.rmSync(claimsDir, { recursive: true, force: true });
   }
 });

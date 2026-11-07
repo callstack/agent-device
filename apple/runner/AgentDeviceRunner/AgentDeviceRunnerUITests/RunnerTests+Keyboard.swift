@@ -50,10 +50,11 @@ enum RunnerKeyboardBandFact: Equatable {
           width: Double(frame.size.width),
           height: Double(frame.size.height)
         ),
-        reason: nil
+        reason: nil,
+        treeBound: true
       )
     case .absent:
-      return KeyboardBandFactPayload(kind: "absent", frame: nil, reason: nil)
+      return KeyboardBandFactPayload(kind: "absent", frame: nil, reason: nil, treeBound: true)
     case .unmeasurable(let reason):
       return KeyboardBandFactPayload(kind: "unmeasurable", frame: nil, reason: reason)
     }

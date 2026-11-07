@@ -98,6 +98,33 @@ test('merges snapshot diagnostics without inflating capture count', () => {
   expect(merged?.warning).toBeUndefined();
 });
 
+// Reconstructed samples carry no producer, so the merged counts come from the constituent maps.
+test('merge sums the backend counts of every run, including a single one', () => {
+  const run = (count: number, backends?: Record<string, number>) => ({
+    stats: {
+      count,
+      p50Ms: 40,
+      p95Ms: 60,
+      maxMs: 60,
+      slowThresholdMs: 1_500,
+      platform: 'ios' as const,
+      ...(backends ? { backends } : {}),
+    },
+  });
+
+  expect(
+    mergeSnapshotDiagnostics([run(10, { 'simulator-ax-bridge': 10 })])?.stats.backends,
+  ).toEqual({ 'simulator-ax-bridge': 10 });
+  expect(
+    mergeSnapshotDiagnostics([
+      run(10, { 'simulator-ax-bridge': 9, 'apple-runner': 1 }),
+      run(2),
+      run(3, { 'apple-runner': 3 }),
+    ])?.stats.backends,
+  ).toEqual({ 'simulator-ax-bridge': 9, 'apple-runner': 4 });
+  expect(mergeSnapshotDiagnostics([run(2)])?.stats).not.toHaveProperty('backends');
+});
+
 test('merge carries a warning only when a constituent run judged one', () => {
   const stats = {
     count: 4,

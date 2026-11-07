@@ -4,7 +4,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 import { heldKeyedLockKeys, withKeyedLock } from '@agent-device/kernel/keyed-lock';
 
-import { runSimctlForDevice } from './simctl.ts';
+import { runSimctlForDevice } from './simctl-execution.ts';
 import { extractAppleToolErrorMeta } from './tool-diagnostics.ts';
 
 type RestorableStatusBarOverrides = Partial<
@@ -217,6 +217,7 @@ async function readSimulatorStatusBarOverrides(
     await runSimctlForDevice(device, ['status_bar', device.id, 'list'], {
       allowFailure: true,
       timeoutMs: STATUS_BAR_COMMAND_TIMEOUT_MS,
+      requestCancellation: 'ignore',
     }),
     'Failed to read simulator status bar overrides',
   );
@@ -227,7 +228,10 @@ async function clearSimulatorStatusBarOverride(
   device: DeviceInfo,
   timeoutMs = STATUS_BAR_COMMAND_TIMEOUT_MS,
 ): Promise<void> {
-  await runSimctlForDevice(device, ['status_bar', device.id, 'clear'], { timeoutMs });
+  await runSimctlForDevice(device, ['status_bar', device.id, 'clear'], {
+    timeoutMs,
+    requestCancellation: 'ignore',
+  });
 }
 
 async function applySimulatorStatusBarOverrideArgs(
@@ -236,7 +240,10 @@ async function applySimulatorStatusBarOverrideArgs(
   timeoutMs = STATUS_BAR_COMMAND_TIMEOUT_MS,
 ): Promise<void> {
   if (args.length === 0) return;
-  await runSimctlForDevice(device, ['status_bar', device.id, 'override', ...args], { timeoutMs });
+  await runSimctlForDevice(device, ['status_bar', device.id, 'override', ...args], {
+    timeoutMs,
+    requestCancellation: 'ignore',
+  });
 }
 
 function parseSimulatorStatusBarOverrides(output: string): RestorableStatusBarOverrides | null {

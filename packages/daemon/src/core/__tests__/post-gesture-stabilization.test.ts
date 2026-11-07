@@ -1,4 +1,8 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import {
+  acquireProviderKeyboard,
+  observeCompleteTreeKeyboard,
+} from '@agent-device/contracts/tap-keyboard-occlusion';
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
@@ -486,6 +490,203 @@ test('capturePostGestureStabilizedResult trusts immediately (no cap tax) when th
   assert.equal(settled, 1);
   assert.equal(staleAccepts, 0);
   assert.equal(capture.mock.calls.length, 2);
+});
+
+test('capturePostGestureStabilizedResult settles at the first quiet pair after a drag that only dismissed the keyboard (iOS)', async () => {
+  // The keyboard-dismissing drag moves no content, so every read matches the pre-gesture content.
+  // The capture's keyboard fact saying the keyboard left is what proves the read fresh; without it
+  // the loop polled to the cap.
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  session.snapshot = {
+    ...makeSnapshotState([...pickupSnapshot(500).nodes, ...keyboardWindowNodes()]),
+    keyboard: {
+      kind: 'visible',
+      frame: { x: 0, y: 400, width: 390, height: 444 },
+      treeBound: true,
+    },
+  };
+  markPostGestureStabilization(session, 'swipe');
+
+  const capture = vi.fn(async () => ({
+    ...pickupSnapshot(500),
+    keyboard: { kind: 'absent' as const, treeBound: true as const },
+  }));
+
+  const resultPromise = withDiagnosticsScope({}, async () => {
+    const result = await capturePostGestureStabilizedResult({
+      session,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    });
+    return {
+      result,
+      staleAccepts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stale_accept']),
+      settled: countDiagnosticEventsByPhase(['post_gesture_snapshot_stabilized']),
+    };
+  });
+
+  await vi.advanceTimersByTimeAsync(1_000);
+  const { result, staleAccepts, settled } = await resultPromise;
+
+  assert.equal(settled, 1);
+  assert.equal(staleAccepts, 0);
+  assert.equal(result.postGestureOutcome, undefined);
+  assert.equal(capture.mock.calls.length, 2);
+});
+
+test('capturePostGestureStabilizedResult still distrusts a read that only lost the keyboard nodes, with no keyboard fact (iOS)', async () => {
+  // A narrower presentation can leave the keyboard's nodes out while the keyboard is still up, so
+  // missing nodes do not prove the read fresh.
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  session.snapshot = {
+    ...makeSnapshotState([...pickupSnapshot(500).nodes, ...keyboardWindowNodes()]),
+    keyboard: {
+      kind: 'visible',
+      frame: { x: 0, y: 400, width: 390, height: 444 },
+      treeBound: true,
+    },
+  };
+  markPostGestureStabilization(session, 'swipe');
+
+  const capture = vi.fn(async () => pickupSnapshot(500));
+
+  const resultPromise = withDiagnosticsScope({}, async () => {
+    await capturePostGestureStabilizedResult({
+      session,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    });
+    return {
+      staleAccepts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stale_accept']),
+      settled: countDiagnosticEventsByPhase(['post_gesture_snapshot_stabilized']),
+    };
+  });
+
+  await vi.advanceTimersByTimeAsync(10_000);
+  const { staleAccepts, settled } = await resultPromise;
+
+  assert.equal(staleAccepts, 1);
+  assert.equal(settled, 0);
+});
+
+test('capturePostGestureStabilizedResult still distrusts a stale WebDriver source whose separate visibility probe changed (iOS)', async () => {
+  // Appium reads page source, then probes keyboard visibility on its own. The source here never
+  // changes from the pre-gesture tree, while the probe answers up before the gesture and down after.
+  vi.useFakeTimers();
+  const appiumCapture = (visibility: boolean) => {
+    const source = pickupSnapshot(500);
+    return {
+      ...source,
+      keyboard: acquireProviderKeyboard({ nodes: source.nodes, viewport: null, visibility })
+        .keyboard,
+    };
+  };
+  const session = makeSession('ios');
+  session.snapshot = appiumCapture(true);
+  // Both reads carry a visibility probe that disagrees; only the missing binding keeps them apart.
+  assert.deepEqual(session.snapshot.keyboard, { kind: 'visibility-only', visible: true });
+  assert.deepEqual(appiumCapture(false).keyboard, { kind: 'visibility-only', visible: false });
+  markPostGestureStabilization(session, 'swipe');
+
+  const capture = vi.fn(async () => appiumCapture(false));
+
+  const resultPromise = withDiagnosticsScope({}, async () => {
+    await capturePostGestureStabilizedResult({
+      session,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    });
+    return {
+      staleAccepts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stale_accept']),
+      settled: countDiagnosticEventsByPhase(['post_gesture_snapshot_stabilized']),
+    };
+  });
+
+  await vi.advanceTimersByTimeAsync(10_000);
+  const { staleAccepts, settled } = await resultPromise;
+
+  assert.equal(staleAccepts, 1);
+  assert.equal(settled, 0);
+});
+
+/** A Simulator AX bridge capture: one complete read of the app's tree, keyboard window included. */
+function bridgeCapture(keyboard: boolean) {
+  const source = makeSnapshotState([
+    ...pickupSnapshot(500).nodes,
+    ...(keyboard ? keyboardWindowNodes() : []),
+  ]);
+  return {
+    ...source,
+    keyboard: observeCompleteTreeKeyboard({
+      nodes: source.nodes,
+      viewport: { x: 0, y: 0, width: 390, height: 844 },
+      complete: true,
+    }),
+  };
+}
+
+async function stabilizeBridgeCaptures(params: { before: boolean; after: boolean }) {
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  session.snapshot = bridgeCapture(params.before);
+  markPostGestureStabilization(session, 'swipe');
+  const baselineKeyboard = session.snapshot.keyboard;
+  const capture = vi.fn(async () => bridgeCapture(params.after));
+
+  const resultPromise = withDiagnosticsScope({}, async () => {
+    const result = await capturePostGestureStabilizedResult({
+      session,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    });
+    return {
+      result,
+      staleAccepts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stale_accept']),
+      settled: countDiagnosticEventsByPhase(['post_gesture_snapshot_stabilized']),
+    };
+  });
+
+  await vi.advanceTimersByTimeAsync(10_000);
+  const { result, staleAccepts, settled } = await resultPromise;
+  return {
+    staleAccepts,
+    settled,
+    baselineKeyboard,
+    quietKeyboard: result.value.keyboard,
+    postGestureOutcome: result.postGestureOutcome,
+    captures: capture.mock.calls.length,
+  };
+}
+
+test('capturePostGestureStabilizedResult settles when a complete bridge tree loses the keyboard it derived (iOS)', async () => {
+  const outcome = await stabilizeBridgeCaptures({ before: true, after: false });
+
+  assert.deepEqual(outcome.baselineKeyboard, {
+    kind: 'derived',
+    derivation: 'docked-tree',
+    frame: { x: 0, y: 500, width: 390, height: 344 },
+    treeBound: true,
+  });
+  assert.deepEqual(outcome.quietKeyboard, { kind: 'absent', treeBound: true });
+  assert.equal(outcome.settled, 1);
+  assert.equal(outcome.staleAccepts, 0);
+  assert.equal(outcome.postGestureOutcome, undefined);
+  assert.equal(outcome.captures, 2);
+});
+
+test('capturePostGestureStabilizedResult still distrusts bridge trees whose keyboard fact did not change (iOS)', async () => {
+  // The same fact on both sides proves nothing, so the content comparison decides, and it never moved.
+  for (const keyboard of [false, true]) {
+    const outcome = await stabilizeBridgeCaptures({ before: keyboard, after: keyboard });
+
+    assert.equal(outcome.quietKeyboard?.kind, keyboard ? 'derived' : 'absent');
+    assert.deepEqual(outcome.quietKeyboard, outcome.baselineKeyboard);
+    assert.equal(outcome.staleAccepts, 1, `keyboard ${keyboard}`);
+    assert.equal(outcome.settled, 0, `keyboard ${keyboard}`);
+    vi.useRealTimers();
+  }
 });
 
 // --- #1569: a backend swap mid-poll is not comparable evidence ---

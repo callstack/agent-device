@@ -3,7 +3,12 @@ import type { AppleToolHost, HostCommandRunner } from './platform-runtime-host.t
 import type { TargetShutdownResult } from './target-shutdown-contract.ts';
 
 export type DeviceShutdownRuntimeOperations = Readonly<{
-  shutdownTarget(): Promise<TargetShutdownResult>;
+  shutdownTarget(
+    input: Readonly<{
+      /** The daemon validates this target's lease before releasing its provider and registry record. */
+      releaseLease(leaseId: string): Promise<TargetShutdownResult>;
+    }>,
+  ): Promise<TargetShutdownResult>;
 }>;
 
 /** Complete legacy-close adapter; it shares the family capabilities below without binding a facet. */

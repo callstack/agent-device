@@ -24,9 +24,13 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
   await writeFile(sourceFile, 'native source v1');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.m'), 'native runtime v1');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRequest.h'), 'native runtime v1');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRequest.m'), 'native runtime v1');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header v1');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header v1');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header v1');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeSurfaceHosts.h'), 'surface host source');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeSurfaceHosts.m'), 'surface host source');
   await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule v1');
 
   let builds = 0;
@@ -197,12 +201,9 @@ test('concurrent snapshot bridge preparation publishes one cache entry', async (
   const sourceRoot = path.join(root, 'source');
   const cacheRoot = path.join(root, 'cache');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
-  await writeFile(path.join(sourceRoot, 'SnapshotBridge.m'), 'native source');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.m'), 'native runtime');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
-  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule');
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
+    await writeFile(path.join(sourceRoot, name), 'native source');
+  }
   let builds = 0;
   const host = createFakeBuildHost(async () => {
     builds += 1;
@@ -236,12 +237,9 @@ test('an aborted cache waiter does not cancel an independent preparation', async
   const sourceRoot = path.join(root, 'source');
   const cacheRoot = path.join(root, 'cache');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
-  await writeFile(path.join(sourceRoot, 'SnapshotBridge.m'), 'native source');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.m'), 'native runtime');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
-  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule');
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
+    await writeFile(path.join(sourceRoot, name), 'native source');
+  }
   let builds = 0;
   let buildStarted!: () => void;
   const started = new Promise<void>((resolve) => {
@@ -289,12 +287,9 @@ test('a bridge build that failed is reported over a cache lock that could not be
   const sourceRoot = path.join(root, 'source');
   const cacheRoot = path.join(root, 'cache');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
-  await writeFile(path.join(sourceRoot, 'SnapshotBridge.m'), 'native source');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.m'), 'native runtime');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
-  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule');
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
+    await writeFile(path.join(sourceRoot, name), 'native source');
+  }
   const buildHost = createFakeBuildHost('unused');
   const host: SnapshotSourceHost = {
     ...buildHost,
@@ -342,12 +337,9 @@ test('a compile exec killed at its budget reports the bridge build, not the exec
   const sourceRoot = path.join(root, 'source');
   const cacheRoot = path.join(root, 'cache');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
-  await writeFile(path.join(sourceRoot, 'SnapshotBridge.m'), 'native source');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.m'), 'native runtime');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
-  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule');
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
+    await writeFile(path.join(sourceRoot, name), 'native source');
+  }
   const buildHost = createFakeBuildHost('binary');
   let compileTimeoutMs = 0;
   const host: SnapshotSourceHost = {

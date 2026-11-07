@@ -23,7 +23,7 @@ import { makeSession } from '../../../../__tests__/support/session-factories.ts'
 import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { hostAppDevice, type DeviceInfo } from '@agent-device/kernel/device';
+import { hostAppDevice, webSessionDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { acquireDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import {
@@ -584,6 +584,44 @@ test('devices shows the Mac as claimed while one of its app devices is', async (
       const devices = response.data?.devices as Array<Record<string, unknown>> | undefined;
       expect(devices?.[0]?.claimedBy).toEqual({
         session: 'text-edit',
+        workspace: '/worktrees/agent',
+      });
+    }
+  } finally {
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});
+
+test('devices shows the web host as claimed while one of its web session devices is', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-devices-web-claims-');
+  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
+  const browser: DeviceInfo = {
+    platform: 'web',
+    id: 'agent-browser-chrome',
+    name: 'Agent Browser Chrome',
+    kind: 'device',
+    target: 'desktop',
+    booted: true,
+  };
+  try {
+    const claimed = await acquireDeviceClaim({
+      device: webSessionDevice(browser, { name: 'checkout' }),
+      session: 'checkout',
+      workspace: '/worktrees/agent',
+      stateDir: process.cwd(),
+      env: process.env,
+      reconcileOrphanedDeviceClaim: async () => ({ status: 'retained', reason: 'test' }),
+    });
+    expect(claimed.status).toBe('acquired');
+    const response = await runDevices({ platform: 'web' }, [browser]);
+    expect(response?.ok).toBeTruthy();
+    if (response?.ok) {
+      const devices = response.data?.devices as Array<Record<string, unknown>> | undefined;
+      expect(devices?.[0]?.claimedBy).toEqual({
+        session: 'checkout',
         workspace: '/worktrees/agent',
       });
     }

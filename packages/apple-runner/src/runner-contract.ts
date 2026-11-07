@@ -112,6 +112,8 @@ export type RunnerCommand = {
     // The session app's XCUIApplication.state by name. A lifecycle read: it skips the activation
     // preflight, so it reports the state the app is in rather than the one a repair leaves.
     | 'appState'
+    // Reads the Simulator AX bridge tree in the runner process, off its journal and command queue.
+    | 'snapshotBridge'
     // Sets the device's general pasteboard from the runner's own process: a simulator's
     // `simctl pbcopy` only promises its data from a process that exits before anything reads it.
     | 'pasteboardWrite'
@@ -168,8 +170,36 @@ export type RunnerCommand = {
    * command that resolves a screen (ADR 0025).
    */
   litPanel?: { displayId: number; widthPt: number; heightPt: number };
+  sequenceOrientation?: RunnerSequenceOrientation;
   steps?: RunnerSequenceStep[];
+  snapshotBridge?: RunnerSnapshotBridgeRequest;
 };
+
+/**
+ * One request to the Simulator AX bridge reader that the runner serves. `target` names the foreground
+ * process of `appBundleId`. `describe` reads that process's tree under the guest bridge's own bounds,
+ * and refuses a process other than `expectedPid` and `expectedProcessStartTime` as a stale target, so
+ * it cannot be sent without them.
+ */
+export type RunnerSnapshotBridgeRequest =
+  | { verb: 'target'; requestId: string; maxDurationMs?: number }
+  | {
+      verb: 'describe';
+      requestId: string;
+      generation: string;
+      expectedPid: number;
+      expectedProcessStartTime: string;
+      maxDepth?: number;
+      maxNodes?: number;
+      maxDurationMs?: number;
+      maxResponseBytes?: number;
+      nativeLevelsHint?: number;
+      /**
+       * System surface host executables whose running process on this Simulator refuses the read with
+       * `system-surface-host-present`. The runner names its own Simulator.
+       */
+      surfaceHostExecutables?: readonly string[];
+    };
 
 /**
  * One allowlisted coordinate gesture step inside a fused `sequence` runner command.
@@ -565,6 +595,7 @@ export type RunnerSequenceStepResult = {
   kind: string;
   errorCode?: string;
   errorMessage?: string;
+  errorHint?: string;
   gestureStartUptimeMs?: number;
   gestureEndUptimeMs?: number;
 };
@@ -573,7 +604,10 @@ export type ParsedRunnerSequenceResult = {
   results: RunnerSequenceStepResult[];
   completedSteps: number;
   failedStepIndex?: number;
+  sequenceOrientation?: RunnerSequenceOrientation;
 };
+
+export type RunnerSequenceOrientation = 1 | 2 | 3 | 4;
 
 function isSequenceableKind(kind: unknown): kind is SequenceableRunnerStepKind {
   return (
@@ -703,7 +737,15 @@ export function parseRunnerSequenceResult(
     throw buildSequenceStepError(results, completedSteps, failedStepIndex);
   }
 
-  return { results, completedSteps, failedStepIndex };
+  const orientation = data.sequenceOrientation;
+  return {
+    results,
+    completedSteps,
+    failedStepIndex,
+    ...(orientation === 1 || orientation === 2 || orientation === 3 || orientation === 4
+      ? { sequenceOrientation: orientation }
+      : {}),
+  };
 }
 
 function buildSequenceStepError(
@@ -719,7 +761,9 @@ function buildSequenceStepError(
     failedStepKind: kind,
     completedSteps,
     sequenceResults: results,
-    hint: 'Run snapshot -i to inspect the current UI, then continue from the observed state.',
+    hint:
+      failed?.errorHint ??
+      'Run snapshot -i to inspect the current UI, then continue from the observed state.',
   });
 }
 
@@ -732,6 +776,7 @@ function readSequenceResults(value: unknown): RunnerSequenceStepResult[] {
       kind: typeof record.kind === 'string' ? record.kind : 'unknown',
       errorCode: typeof record.errorCode === 'string' ? record.errorCode : undefined,
       errorMessage: typeof record.errorMessage === 'string' ? record.errorMessage : undefined,
+      errorHint: typeof record.errorHint === 'string' ? record.errorHint : undefined,
       gestureStartUptimeMs:
         typeof record.gestureStartUptimeMs === 'number' ? record.gestureStartUptimeMs : undefined,
       gestureEndUptimeMs:

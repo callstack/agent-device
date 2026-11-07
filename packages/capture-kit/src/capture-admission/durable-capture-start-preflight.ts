@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
-import { deviceIdentity, deviceIdentityKey, type DeviceInfo } from '@agent-device/kernel/device';
+import { deviceIdentity, sameDeviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   capitalizeDurableCaptureLabel,
@@ -26,13 +27,36 @@ export function createNextDurableCaptureFence<K extends string, C>(
   });
 }
 
-function assertNoConflictingManifest<K extends string, C>(
+/**
+ * The open records that refuse a start, and the sessions directory they were listed from.
+ * `onStartDevice` is false only for a record at the start's own path that another device left.
+ */
+export type DurableCaptureStartConflicts<K extends string> = Readonly<{
+  sessionsDir: string;
+  records: readonly DurableCaptureStartConflict<K>[];
+}>;
+
+type DurableCaptureStartConflict<K extends string> = Readonly<{
+  resourcePath: string;
+  envelope: DurableResourceEnvelope<K>;
+  onStartDevice: boolean;
+}>;
+
+/**
+ * The records a start at `resourcePath` on `device` must wait for: every non-completed record
+ * at that path or on that device. The start refusal and the start-time settle both read this
+ * list, so what a start settles is exactly what it would refuse on. An unreattachable record
+ * throws, because no replacement capture is safe beside it.
+ */
+export function listDurableCaptureStartConflicts<K extends string, C>(
   definition: DurableCaptureRecordDefinition<K, C>,
   resourcePath: string,
   device: DeviceInfo,
-): void {
-  const selectedDeviceKey = deviceIdentityKey(deviceIdentity(device));
-  for (const existingPath of definition.store.list(path.dirname(path.dirname(resourcePath)))) {
+): DurableCaptureStartConflicts<K> {
+  const startDevice = deviceIdentity(device);
+  const sessionsDir = path.dirname(path.dirname(resourcePath));
+  const records: DurableCaptureStartConflict<K>[] = [];
+  for (const existingPath of definition.store.list(sessionsDir)) {
     const existing = definition.store.read(existingPath);
     if (existing.status === 'unreattachable') {
       throw new AppError(
@@ -45,22 +69,35 @@ function assertNoConflictingManifest<K extends string, C>(
         },
       );
     }
-    if (
-      existing.status === 'decoded' &&
-      existing.envelope.lifecycle !== 'completed' &&
-      (existingPath === resourcePath ||
-        deviceIdentityKey(existing.envelope.device) === selectedDeviceKey)
-    ) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        `${capitalizeDurableCaptureLabel(articleFor(definition.displayName))} ${definition.displayName} resource for this device has not reached a confirmed terminal state`,
-        {
-          reason: 'cleanup-unconfirmed',
-          hint: `Retry exact-owner cleanup using the existing ${definition.displayName} manifest before starting a replacement.`,
-        },
-      );
+    if (existing.status !== 'decoded' || existing.envelope.lifecycle === 'completed') continue;
+    const onStartDevice = sameDeviceIdentity(existing.envelope.device, startDevice);
+    if (onStartDevice || existingPath === resourcePath) {
+      records.push({ resourcePath: existingPath, envelope: existing.envelope, onStartDevice });
     }
   }
+  return { sessionsDir, records };
+}
+
+function assertNoConflictingManifest<K extends string, C>(
+  definition: DurableCaptureRecordDefinition<K, C>,
+  resourcePath: string,
+  device: DeviceInfo,
+): void {
+  const [conflict] = listDurableCaptureStartConflicts(definition, resourcePath, device).records;
+  if (!conflict) return;
+  const session = conflict.envelope.sessionId;
+  const otherDevice = conflict.onStartDevice ? undefined : conflict.envelope.device.id;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `${capitalizeDurableCaptureLabel(articleFor(definition.displayName))} ${definition.displayName} resource for this ${otherDevice ? 'session' : 'device'} has not reached a confirmed terminal state`,
+    {
+      reason: 'cleanup-unconfirmed',
+      session,
+      hint: otherDevice
+        ? `The open ${definition.displayName} record of session "${session}" is on device "${otherDevice}". Stop it in that session, or start this one under another session name.`
+        : `The open ${definition.displayName} record belongs to session "${session}". Stop or close that session, or retry once its device is reachable; exact-owner cleanup must confirm it before a replacement starts.`,
+    },
+  );
 }
 
 function articleFor(value: string): 'a' | 'an' {

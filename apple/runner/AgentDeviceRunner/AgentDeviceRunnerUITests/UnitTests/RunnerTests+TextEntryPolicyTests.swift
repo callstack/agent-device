@@ -32,19 +32,19 @@ extension RunnerTests {
   }
 #endif
 
-  func testSynthesizedReplacementRequiresPenalizedXCTestAndCoordinates() {
+  func testSynthesizedReplacementRequiresUnavailableXCTestAndCoordinates() {
     let cases = [
-      (hasElement: false, hasPoint: true, penalized: true, expected: true),
-      (hasElement: false, hasPoint: true, penalized: false, expected: false),
-      (hasElement: false, hasPoint: false, penalized: true, expected: false),
-      (hasElement: true, hasPoint: true, penalized: true, expected: false),
+      (hasElement: false, hasPoint: true, unavailable: true, expected: true),
+      (hasElement: false, hasPoint: true, unavailable: false, expected: false),
+      (hasElement: false, hasPoint: false, unavailable: true, expected: false),
+      (hasElement: true, hasPoint: true, unavailable: true, expected: false),
     ]
     for testCase in cases {
       XCTAssertEqual(
         Self.shouldUseSynthesizedFirstResponderReplacement(
           hasResolvedElement: testCase.hasElement,
           hasRefreshPoint: testCase.hasPoint,
-          xCTestChannelPenalized: testCase.penalized
+          xCTestUnavailable: testCase.unavailable
         ),
         testCase.expected
       )
@@ -398,7 +398,7 @@ extension RunnerTests {
   }
 #endif
 
-  func testResolvedCoordinateTextEntryRouteRequiresReplacementCoordinatesAndPenalizedXCTest() {
+  func testResolvedCoordinateTextEntryRouteRequiresReplacementCoordinatesAndUnavailableXCTest() {
     let cases: [(TextTypingRepairMode, Bool, Bool, Bool, Bool)] = [
       (.replacement, true, true, false, false),
       (.replacement, true, true, true, true),
@@ -406,13 +406,13 @@ extension RunnerTests {
       (.replacement, false, true, true, false),
       (.replacement, true, false, true, false),
     ]
-    for (mode, hasX, hasY, penalized, expected) in cases {
+    for (mode, hasX, hasY, unavailable, expected) in cases {
       XCTAssertEqual(
         Self.shouldUseResolvedCoordinateTextEntryRoute(
           repairMode: mode,
           hasX: hasX,
           hasY: hasY,
-          xCTestChannelPenalized: penalized
+          xCTestUnavailable: unavailable
         ),
         expected
       )
@@ -745,7 +745,7 @@ extension RunnerTests {
       text: "abc",
       delaySeconds: 0.001,
       repairMode: .replacement,
-      xCTestChannelPenalized: true,
+      xCTestUnavailable: true,
       synthesizer: synthesizer
     )
 
@@ -792,7 +792,7 @@ extension RunnerTests {
       text: "abc",
       delaySeconds: 0,
       repairMode: .replacement,
-      xCTestChannelPenalized: true,
+      xCTestUnavailable: true,
       synthesizer: synthesizer
     )
 
@@ -816,7 +816,7 @@ extension RunnerTests {
       text: "",
       delaySeconds: 0,
       repairMode: .replacement,
-      xCTestChannelPenalized: false,
+      xCTestUnavailable: false,
       synthesizer: RecordingTextEntrySynthesizer()
     )
 

@@ -60,6 +60,10 @@
       "types": "./src/interaction-touch-point.ts",
       "default": "./src/interaction-touch-point.ts"
     },
+    "./node-touch-point": {
+      "types": "./src/node-touch-point.ts",
+      "default": "./src/node-touch-point.ts"
+    },
     "./keyboard-occlusion": {
       "types": "./src/keyboard-occlusion.ts",
       "default": "./src/keyboard-occlusion.ts"

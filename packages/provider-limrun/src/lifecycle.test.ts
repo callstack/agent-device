@@ -11,7 +11,7 @@ import {
 } from './app-log-runtime.fixtures.ts';
 import { createLimrunPlatformRuntimeOwner } from './app-log-runtime.ts';
 
-type LegacyLifecycleCell = Readonly<{
+type LifecycleCell = Readonly<{
   openTarget: boolean;
   prepareAppleRunner: boolean;
   closeTarget: boolean;
@@ -19,21 +19,21 @@ type LegacyLifecycleCell = Readonly<{
   portReverse: boolean;
 }>;
 
-const LIMRUN_SUPPORTED_IOS_LIFECYCLE_CELL: LegacyLifecycleCell = {
+const LIMRUN_SUPPORTED_IOS_LIFECYCLE_CELL: LifecycleCell = {
   openTarget: true,
-  prepareAppleRunner: false,
+  prepareAppleRunner: true,
   closeTarget: true,
-  runtimeHints: false,
+  runtimeHints: true,
   portReverse: false,
 };
-const LIMRUN_SUPPORTED_ANDROID_LIFECYCLE_CELL: LegacyLifecycleCell = {
+const LIMRUN_SUPPORTED_ANDROID_LIFECYCLE_CELL: LifecycleCell = {
   openTarget: true,
   prepareAppleRunner: false,
   closeTarget: true,
   runtimeHints: false,
   portReverse: true,
 };
-const LIMRUN_UNSUPPORTED_LIFECYCLE_CELL: LegacyLifecycleCell = {
+const LIMRUN_UNSUPPORTED_LIFECYCLE_CELL: LifecycleCell = {
   openTarget: false,
   prepareAppleRunner: false,
   closeTarget: false,
@@ -70,7 +70,7 @@ const LIMRUN_LIFECYCLE_DENOMINATOR = [
       target: 'mobile' as const,
       booted: true,
     },
-    legacy:
+    expected:
       kind === 'emulator'
         ? LIMRUN_SUPPORTED_ANDROID_LIFECYCLE_CELL
         : LIMRUN_UNSUPPORTED_LIFECYCLE_CELL,
@@ -87,7 +87,7 @@ const LIMRUN_LIFECYCLE_DENOMINATOR = [
         target,
         booted: true,
       },
-      legacy:
+      expected:
         appleOs === 'ios' && kind === 'simulator' && target === 'mobile'
           ? LIMRUN_SUPPORTED_IOS_LIFECYCLE_CELL
           : LIMRUN_UNSUPPORTED_LIFECYCLE_CELL,
@@ -104,7 +104,7 @@ const LIMRUN_LIFECYCLE_DENOMINATOR = [
         target,
         booted: true,
       },
-      legacy: LIMRUN_UNSUPPORTED_LIFECYCLE_CELL,
+      expected: LIMRUN_UNSUPPORTED_LIFECYCLE_CELL,
     })),
   ),
   {
@@ -117,7 +117,7 @@ const LIMRUN_LIFECYCLE_DENOMINATOR = [
       target: 'tv' as const,
       booted: true,
     },
-    legacy: LIMRUN_UNSUPPORTED_LIFECYCLE_CELL,
+    expected: LIMRUN_UNSUPPORTED_LIFECYCLE_CELL,
   },
   {
     name: 'iOS simulator TV target',
@@ -126,11 +126,9 @@ const LIMRUN_LIFECYCLE_DENOMINATOR = [
       id: 'limrun:ios:tv',
       target: 'tv' as const,
     },
-    legacy: LIMRUN_UNSUPPORTED_LIFECYCLE_CELL,
+    expected: LIMRUN_UNSUPPORTED_LIFECYCLE_CELL,
   },
-] satisfies ReadonlyArray<
-  Readonly<{ name: string; device: DeviceInfo; legacy: LegacyLifecycleCell }>
->;
+] satisfies ReadonlyArray<Readonly<{ name: string; device: DeviceInfo; expected: LifecycleCell }>>;
 
 test.each([
   {
@@ -175,15 +173,15 @@ test.each([
 
 test.each(LIMRUN_LIFECYCLE_DENOMINATOR)(
   'classifies the direct Limrun $name provider descriptor/dispatch cell',
-  async ({ device: runtimeDevice, legacy }) => {
+  async ({ device: runtimeDevice, expected }) => {
     const owner = createLimrunPlatformRuntimeOwner(
       limrunOwnerOptions({
         getInteractor: () => ({}) as Interactor,
       }),
     );
     const facts = await owner.inspectFacts(runtimeDevice);
-    expectLifecycleFactAvailability(facts, legacy);
-    if (!legacy.openTarget) {
+    expectLifecycleFactAvailability(facts, expected);
+    if (!expected.openTarget) {
       await expect(
         owner.bind({ device: runtimeDevice, intent: { kind: 'ordinary' }, scope }),
       ).rejects.toMatchObject({
@@ -201,7 +199,7 @@ test.each(LIMRUN_LIFECYCLE_DENOMINATOR)(
     expect(binding.facts.operations.ensureReady).toEqual({ available: true });
     expect(binding.facts.operations.bootTarget).toEqual({ available: true });
     expect(binding.facts.operations.bootTargetHeadless).toMatchObject({ available: false });
-    expectLifecycleFacts(binding, legacy);
+    expectLifecycleFacts(binding, expected);
   },
 );
 
@@ -218,6 +216,7 @@ test('a stale Limrun session publishes unavailable lifecycle facts and admits re
     'closeApplication',
     'finalizeApplicationClose',
     'configureProviderPortReverse',
+    'shutdownTarget',
   ] as const) {
     expect(facts.operations[operation]).toMatchObject({
       available: false,
@@ -287,10 +286,10 @@ test('a live Limrun lifecycle binding relaunches with its selected provider inte
     runtimeHints: {},
     execution: {},
   });
-  expect(providerClose).toHaveBeenCalledWith('com.example.app');
+  expect(providerClose).not.toHaveBeenCalled();
   expect(providerOpen).toHaveBeenCalledWith(
     'com.example.app',
-    expect.objectContaining({ appBundleId: 'com.example.app' }),
+    expect.objectContaining({ appBundleId: 'com.example.app', terminateRunningApp: true }),
   );
   await binding.operations.closeApplication?.({
     positionals: ['Example.app.zip'],
@@ -304,11 +303,9 @@ test('a live Limrun lifecycle binding relaunches with its selected provider inte
 
 function expectLifecycleFacts(
   binding: DeviceBinding<PlatformRuntimeOperations>,
-  // Independent legacy Limrun dispatch cell: only its exact iOS-simulator/Android-emulator
-  // sessions had open/close behavior; provider-owned hints and Apple runner setup were absent.
-  legacy: LegacyLifecycleCell = LIMRUN_SUPPORTED_IOS_LIFECYCLE_CELL,
+  expected: LifecycleCell = LIMRUN_SUPPORTED_IOS_LIFECYCLE_CELL,
 ): void {
-  expectLifecycleFactAvailability(binding.facts, legacy);
+  expectLifecycleFactAvailability(binding.facts, expected);
   const operations = [
     ['openTarget', ['resolveOpenTarget', 'prepareApplicationOpen', 'openApplication']],
     ['prepareAppleRunner', ['prepareAppleRunner']],
@@ -318,7 +315,7 @@ function expectLifecycleFacts(
   ] as const;
   for (const [facet, names] of operations) {
     for (const name of names) {
-      if (legacy[facet]) expect(binding.operations[name]).toBeTypeOf('function');
+      if (expected[facet]) expect(binding.operations[name]).toBeTypeOf('function');
       else expect(binding.operations[name]).toBeUndefined();
     }
   }
@@ -326,7 +323,7 @@ function expectLifecycleFacts(
 
 function expectLifecycleFactAvailability(
   facts: RuntimeFacts<PlatformRuntimeOperations>,
-  legacy: LegacyLifecycleCell,
+  expected: LifecycleCell,
 ): void {
   const operations = [
     ['openTarget', ['resolveOpenTarget', 'prepareApplicationOpen', 'openApplication']],
@@ -337,7 +334,37 @@ function expectLifecycleFactAvailability(
   ] as const;
   for (const [facet, names] of operations) {
     for (const name of names) {
-      expect(facts.operations[name].available).toBe(legacy[facet]);
+      expect(facts.operations[name].available).toBe(expected[facet]);
     }
   }
 }
+
+test.each(['ios', 'android'] as const)(
+  '%s shutdown delegates the bound lease to daemon release',
+  async (platform) => {
+    const target: DeviceInfo =
+      platform === 'ios'
+        ? device
+        : {
+            platform: 'android',
+            id: 'limrun:android:lease-a',
+            name: 'Limrun Android',
+            target: 'mobile',
+            kind: 'emulator',
+            booted: true,
+          };
+    const owner = createLimrunPlatformRuntimeOwner(limrunOwnerOptions());
+    expect((await owner.inspectFacts(target)).operations.shutdownTarget).toEqual({
+      available: true,
+    });
+    const binding = await owner.bind({ device: target, intent: { kind: 'ordinary' }, scope });
+    const released = { success: true, exitCode: 0, stdout: 'Released lease', stderr: '' };
+    const releaseLease = vi.fn(async () => released);
+    expect(await binding.operations.shutdownTarget!({ releaseLease })).toEqual(released);
+    expect(releaseLease).toHaveBeenCalledExactlyOnceWith('lease-a');
+    releaseLease.mockRejectedValueOnce(new Error('Delete unconfirmed'));
+    await expect(binding.operations.shutdownTarget!({ releaseLease })).rejects.toThrow(
+      'Delete unconfirmed',
+    );
+  },
+);

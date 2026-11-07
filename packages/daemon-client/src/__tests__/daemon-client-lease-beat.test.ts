@@ -295,6 +295,29 @@ describe('runProtectedLeaseWork', () => {
     });
   }
 
+  test('a beat that finds the provider instance ended ends the phase with that error', async () => {
+    vi.useFakeTimers();
+    const heartbeat = vi.fn(async () => {
+      throw new AppError('COMMAND_FAILED', 'The Limrun instance ended (UserRequested).', {
+        reason: 'provider-instance-ended',
+      });
+    });
+    const upload = deferred<string>();
+    const running = runProtectedLeaseWork({ task: () => upload.promise, heartbeat });
+
+    const rejected = assert.rejects(
+      running,
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'COMMAND_FAILED' &&
+        error.details?.reason === 'provider-instance-ended',
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    await rejected;
+    assert.equal(heartbeat.mock.calls.length, 1, 'an ended instance is not beaten again');
+    upload.resolve('too late');
+  });
+
   for (const reason of ['LEASE_SCOPE_REQUIRED', 'LEASE_SCOPE_MISMATCH']) {
     test(`a beat refused ${reason} ends the phase instead of beating to the lease's death`, async () => {
       vi.useFakeTimers();

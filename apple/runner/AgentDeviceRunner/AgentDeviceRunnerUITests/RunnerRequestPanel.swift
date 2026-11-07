@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 // The lit panel of the command in flight (ADR 0025), main-owned and written behind main work a
 // previous command left queued, so that work still reads its own command's panel.
@@ -11,7 +12,7 @@ struct LitPanelSurface {
   let key: LitPanelBookingKey
   let displayID: UInt
   let window: XCUIElement
-  let frame: CGRect
+  let geometry: SurfaceGeometry
 }
 
 /// The command's lit panel and what it booked on it. Read and written only on the main thread.
@@ -79,7 +80,7 @@ extension RunnerTests {
     guard failure == .none, let element = window as? XCUIElement else {
       return RunnerAppScreenCaptureFailure(failure == .none ? .unresolvedWindow : failure)
     }
-    litPanelState.surface = LitPanelSurface(key: key, displayID: litPanel.displayID, window: element, frame: frame)
+    litPanelState.surface = LitPanelSurface(key: key, displayID: litPanel.displayID, window: element, geometry: surfaceGeometry(windowFrame: frame, app: app))
     return nil
   }
 
@@ -117,15 +118,23 @@ extension RunnerTests {
     return windows
   }
 
-  func elementQueries(app: XCUIApplication, matching type: XCUIElement.ElementType) throws -> [XCUIElementQuery] {
-    try elementQueries(root: app, matching: type, litDisplayID: requestLitPanel?.displayID)
+  /// One walk of the roots for every type, so a multi-type read walks the lit windows once.
+  func elementQueries(app: XCUIApplication, matching types: XCUIElement.ElementType...) throws -> [XCUIElementQuery] {
+    queries(matching: types, in: try elementSearchRoots(root: app, litDisplayID: requestLitPanel?.displayID))
   }
 
   func elementQueries(
     root: XCUIElement,
-    matching type: XCUIElement.ElementType,
+    matching types: XCUIElement.ElementType...,
     litDisplayID: UInt?
   ) throws -> [XCUIElementQuery] {
-    try elementSearchRoots(root: root, litDisplayID: litDisplayID).map { $0.descendants(matching: type) }
+    queries(matching: types, in: try elementSearchRoots(root: root, litDisplayID: litDisplayID))
+  }
+
+  private func queries(
+    matching types: [XCUIElement.ElementType],
+    in roots: [XCUIElement]
+  ) -> [XCUIElementQuery] {
+    types.flatMap { type in roots.map { $0.descendants(matching: type) } }
   }
 }

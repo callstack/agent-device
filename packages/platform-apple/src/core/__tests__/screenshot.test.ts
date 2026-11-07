@@ -49,7 +49,8 @@ import {
   captureSimulatorScreenshotWithFallback,
   captureSimulatorScreenshotWithRetry,
   captureScreenshotViaRunner,
-  resolveSimulatorRunnerScreenshotCandidatePaths,
+  screenshotIos,
+  resolveRunnerScreenshotFilePaths,
   shouldRetryIosSimulatorScreenshot,
 } from '../screenshot.ts';
 import { ensureBootedSimulator, openIosSimulatorApp } from '../simulator.ts';
@@ -63,6 +64,7 @@ import { runCmd } from '@agent-device/host-kit/command';
 import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
+import { resolveAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 
 import { IOS_TEST_SIMULATOR, MACOS_TEST_DEVICE } from './apple-core-stub-helpers.ts';
 
@@ -490,28 +492,18 @@ test('captureSimulatorScreenshotWithFallback uses simulator runner fallback by d
   }
 });
 
-test('resolveSimulatorRunnerScreenshotCandidatePaths includes tmp-based and basename fallbacks', () => {
-  const containerPath = '/tmp/container';
-  const candidates = resolveSimulatorRunnerScreenshotCandidatePaths(
-    containerPath,
-    '/var/mobile/Containers/Data/Application/abc/tmp/screenshot-1.png',
-  );
-  assert.equal(candidates.includes(path.join(containerPath, 'tmp', 'screenshot-1.png')), true);
-  assert.equal(
-    candidates.includes('/var/mobile/Containers/Data/Application/abc/tmp/screenshot-1.png'),
-    true,
-  );
+test('resolveRunnerScreenshotFilePaths preserves the runner path and handles legacy absolute paths', () => {
+  assert.deepEqual(resolveRunnerScreenshotFilePaths('/private/var/mobile/tmp/fallback.png'), [
+    '/private/var/mobile/tmp/fallback.png',
+    'tmp/fallback.png',
+  ]);
+  assert.deepEqual(resolveRunnerScreenshotFilePaths('tmp/current.png'), ['tmp/current.png']);
 });
 
-test('resolveSimulatorRunnerScreenshotCandidatePaths handles empty runner path', () => {
-  assert.deepEqual(resolveSimulatorRunnerScreenshotCandidatePaths('/tmp/container', '   '), []);
+test('resolveRunnerScreenshotFilePaths handles an empty runner path', () => {
+  assert.deepEqual(resolveRunnerScreenshotFilePaths('   '), []);
 });
 
-// Production `simctl` answers an installed app that owns no data container with exit 0 and the
-// literal `(null)` on stdout. The runner container loop reads that as the tool's "no container"
-// answer — the same rule clear-app-state refuses on — and never hands the sentinel to the host
-// filesystem as a path. Without the shared classifier, the thrown wrap below carries a copy ENOENT
-// from a candidate path built on `(null)` instead.
 test('captureScreenshotViaRunner treats a (null) data-container answer as no container', async () => {
   const tmpDir = await mkdtempForTest('agent-device-runner-null-container-');
   const device = { ...IOS_TEST_SIMULATOR, id: 'sim-runner-null-container' };
@@ -856,4 +848,133 @@ test('captureSimulatorScreenshotWithFallback keeps the panel rotation for a runn
     },
   });
   assert.deepEqual(facts, { displayRotation: 'landscape-right' });
+});
+
+test('an explicit screen mask refuses an unmasked runner fallback after simctl exhaustion', async () => {
+  const failure = new AppError('COMMAND_FAILED', 'capture failed', {
+    stderr: 'Timeout waiting for screen surfaces',
+  });
+  mockRetryWithPolicy.mockRejectedValue(failure);
+  await assert.rejects(
+    captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/masked.png', {
+      env: {},
+      screenMask: 'black',
+      skipIosSimulatorBootCheck: true,
+      deps: {
+        resolveCaptureTarget: async () => ({}),
+        captureWithRetry: captureSimulatorScreenshotWithRetry,
+        captureWithRunner: captureScreenshotViaRunner,
+        normalizeDensity: async () => {},
+      },
+    }),
+    (error) => error === failure,
+  );
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
+});
+
+test.each([MACOS_TEST_DEVICE, { ...IOS_TEST_SIMULATOR, kind: 'device' as const }])(
+  'screenshotIos refuses a masked $kind capture outside simctl before native execution',
+  async (device) => {
+    mockRunCmd.mockRejectedValue(new Error('unexpected native capture'));
+    mockRunAppleRunnerCommand.mockRejectedValue(new Error('unexpected runner capture'));
+    await assert.rejects(
+      screenshotIos(device, '/tmp/masked.png', { env: {}, screenMask: 'black' }),
+      {
+        code: 'UNSUPPORTED_OPERATION',
+        details: { reason: 'screenshot-screen-mask-unsupported' },
+      },
+    );
+    assert.equal(mockRunCmd.mock.calls.length, 0);
+    assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
+  },
+);
+
+test.each([
+  ['the default capture', undefined, true],
+  ['an explicit runner capture', undefined, true],
+  ['an explicit runner capture', false, false],
+] as const)(
+  '%s under a runner-backed tool provider asks the runner with fullscreen %s: %s',
+  async (route, fullscreen, expected) => {
+    mockRunAppleRunnerCommand.mockRejectedValue(new Error('stop after the runner request'));
+    const capture = async () =>
+      route === 'the default capture'
+        ? await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/runner.png', {
+            env: {},
+            fullscreen,
+            skipIosSimulatorBootCheck: true,
+            deps: { resolveCaptureTarget: async () => ({}) },
+          })
+        : await captureScreenshotViaRunner(
+            IOS_TEST_SIMULATOR,
+            '/tmp/runner.png',
+            undefined,
+            fullscreen,
+            undefined,
+            {},
+          );
+    await withAppleToolProvider(
+      { ...resolveAppleToolProvider(), simulatorScreenshotBackend: 'runner' },
+      async () => {
+        await assert.rejects(capture(), /stop after the runner request/);
+      },
+    );
+    assert.equal(mockRunAppleRunnerCommand.mock.calls[0]?.[1]?.fullscreen, expected);
+  },
+);
+
+test('a macOS runner capture under a runner-backed tool provider skips the fullscreen default', async () => {
+  mockRunAppleRunnerCommand.mockRejectedValue(new Error('stop after the runner request'));
+  await withAppleToolProvider(
+    { ...resolveAppleToolProvider(), simulatorScreenshotBackend: 'runner' },
+    async () => {
+      await assert.rejects(
+        captureScreenshotViaRunner(
+          { ...MACOS_TEST_DEVICE, kind: 'simulator' },
+          '/tmp/runner.png',
+          undefined,
+          undefined,
+          undefined,
+          {},
+        ),
+        /stop after the runner request/,
+      );
+    },
+  );
+  assert.equal(mockRunAppleRunnerCommand.mock.calls[0]?.[1]?.fullscreen, undefined);
+});
+
+test('an explicit runner capture outside a runner-backed tool provider leaves fullscreen unset', async () => {
+  mockRunAppleRunnerCommand.mockRejectedValue(new Error('stop after the runner request'));
+  await assert.rejects(
+    captureScreenshotViaRunner(
+      IOS_TEST_SIMULATOR,
+      '/tmp/runner.png',
+      undefined,
+      undefined,
+      undefined,
+      {},
+    ),
+    /stop after the runner request/,
+  );
+  assert.equal(mockRunAppleRunnerCommand.mock.calls[0]?.[1]?.fullscreen, undefined);
+});
+
+test('screenshotIos rejects a screen mask before a provider-owned runner capture', async () => {
+  mockRunCmd.mockRejectedValue(new Error('unexpected native capture'));
+  mockRunAppleRunnerCommand.mockRejectedValue(new Error('unexpected runner capture'));
+  await withAppleToolProvider(
+    { ...resolveAppleToolProvider(), simulatorScreenshotBackend: 'runner' },
+    async () => {
+      await assert.rejects(
+        screenshotIos(IOS_TEST_SIMULATOR, '/tmp/masked.png', { env: {}, screenMask: 'black' }),
+        {
+          code: 'UNSUPPORTED_OPERATION',
+          details: { reason: 'screenshot-screen-mask-unsupported' },
+        },
+      );
+    },
+  );
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });

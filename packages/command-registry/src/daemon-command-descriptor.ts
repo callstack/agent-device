@@ -45,7 +45,7 @@ export type DaemonCommandDescriptor<TRequest = DispatchedCommand> = {
    */
   ignoresSessionLease?: boolean;
   /**
-   * ADR 0007: this command may run under a `macos-app` lease, or on a daemon whose policy requires
+   * packages/daemon/docs/remote-device-lease-contracts.md: this command may run under a `macos-app` lease, or on a daemon whose policy requires
    * one. A command without it is refused there, `leaseAdmissionExempt` or not, so a command
    * added later stays out until it opts in.
    */

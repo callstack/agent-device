@@ -406,10 +406,13 @@ const daemonWireCompatOwnership: OwnershipRule = ({ file }) => {
   ];
 };
 
+// The runner compiles the snapshot bridge reader from apple/snapshot-bridge. The directory prefix
+// selects the build for a reader file added there without a second file list in this module; the
+// runner cache key itself hashes only SHARED_SNAPSHOT_BRIDGE_READER_FILENAMES.
 const ownsAppleRunnerBuildSource = (file: string): boolean =>
   file.startsWith('apple/runner/') ||
   file.startsWith('apple/snapshot-presentation/') ||
-  file === 'apple/snapshot-bridge/ForegroundApplicationGeometry.h' ||
+  file.startsWith('apple/snapshot-bridge/') ||
   (file.startsWith('packages/apple-runner/src/') && !file.includes('/__tests__/')) ||
   file.endsWith('.swift');
 

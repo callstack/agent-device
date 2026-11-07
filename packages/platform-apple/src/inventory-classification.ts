@@ -1,4 +1,5 @@
 import type { AppleOS, DeviceInfo, DeviceTarget } from '@agent-device/kernel/device';
+import { isCoreDeviceReachable } from './core/physical-device-constants.ts';
 
 const APPLE_PRODUCT_TYPE_PATTERN = /^(iphone|ipad|ipod|appletv|realitydevice)/i;
 const APPLE_IPAD_PATTERN = /ipad/i;
@@ -128,6 +129,6 @@ export function mapDevicectlAppleDevice(device: DevicectlAppleDevice): DeviceInf
     ...(model ? { model } : {}),
     ...(osVersion ? { osVersion } : {}),
     iosPhysicalDeviceBackend: 'coredevice',
-    booted: true,
+    booted: isCoreDeviceReachable(device.connectionProperties?.tunnelState),
   };
 }

@@ -67,7 +67,7 @@ export async function handlePrepareCommand(params: {
     () =>
       resolveCommandDevice({
         session,
-        flags,
+        req,
         env: sessionStore.host.env,
         platformServices: params.platformServices,
       }),

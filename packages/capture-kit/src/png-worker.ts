@@ -55,13 +55,6 @@ async function runJob(request: PngWorkerRequest): Promise<PngWorkerJobResult> {
     case 'diff-pixels': {
       return { kind: 'diff-pixels', ...computeScreenshotDiffPixels(request) };
     }
-    case 'jpeg-to-png': {
-      const { transcodeScreenshotToPng } = await import('./screenshot-image.ts');
-      return {
-        kind: 'jpeg-to-png',
-        png: transcodeScreenshotToPng(toBuffer(request.image), request.label),
-      };
-    }
   }
 }
 
@@ -102,8 +95,6 @@ function resultBufferViews(result: PngWorkerJobResult): Uint8Array[] {
       return [];
     case 'diff-pixels':
       return [result.diffData, result.diffMask];
-    case 'jpeg-to-png':
-      return [result.png];
   }
 }
 

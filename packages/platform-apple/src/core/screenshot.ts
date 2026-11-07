@@ -1,8 +1,13 @@
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import type { ScreenshotScreenMask } from '@agent-device/contracts/capture';
+import { assertScreenshotCaptureSupport } from '@agent-device/contracts/screenshot-runtime';
+import { appleScreenshotCaptureCapabilities } from '../screenshot-support.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { copyHostFile } from '@agent-device/host-kit/host-file';
+import { copySimulatorFileToHost } from './simulator-files.ts';
+import { resolveAppleToolProvider } from './tool-provider.ts';
 import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -38,7 +43,7 @@ import {
   type AppleDeviceDisplay,
 } from './display-inventory.ts';
 import { ensureBootedSimulator } from './simulator.ts';
-import { readSimctlContainerPath, runSimctlForDevice } from './simctl.ts';
+import { runSimctlForDevice } from './simctl-execution.ts';
 import { appleToolFailureText, extractAppleToolErrorMeta } from './tool-diagnostics.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 
@@ -66,6 +71,7 @@ type SimulatorScreenshotFlowDeps = {
   captureWithRetry: (
     device: DeviceInfo,
     outPath: string,
+    screenMask: ScreenshotScreenMask | undefined,
     display: AppleDeviceDisplay | undefined,
   ) => Promise<void>;
   /**
@@ -98,6 +104,7 @@ type SimulatorScreenshotFlowOptions = {
   appBundleId?: string;
   fullscreen?: boolean;
   pixelDensity?: number;
+  screenMask?: ScreenshotScreenMask;
   normalizeStatusBar?: boolean;
   runnerOptions?: AppleRunnerCommandOptions;
   skipIosSimulatorBootCheck?: boolean;
@@ -116,13 +123,14 @@ const defaultSimulatorScreenshotFlowDeps: SimulatorScreenshotFlowDeps = {
 };
 
 const iosSimulatorMainScreenScaleCache = new Map<string, number>();
-const iosSimulatorRunnerContainerCache = new Map<string, string>();
+const iosSimulatorRunnerBundleCache = new Map<string, string>();
 
 export async function screenshotIos(
   device: DeviceInfo,
   outPath: string,
   options: Omit<SimulatorScreenshotFlowOptions, 'deps'>,
 ): Promise<ScreenshotCaptureFacts> {
+  await assertScreenshotCaptureSupport(options, appleScreenshotCaptureCapabilities(device, {}));
   if (isMacOs(device)) {
     await captureScreenshotViaRunner(
       device,
@@ -152,6 +160,7 @@ export async function captureSimulatorScreenshotWithFallback(
   outPath: string,
   options: SimulatorScreenshotFlowOptions,
 ): Promise<ScreenshotCaptureFacts> {
+  await assertScreenshotCaptureSupport(options, appleScreenshotCaptureCapabilities(device, {}));
   if (device.kind !== 'simulator') {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
@@ -169,31 +178,33 @@ export async function captureSimulatorScreenshotWithFallback(
   const { display, displayRotation } = await deps.resolveCaptureTarget(device);
   const captureFacts: ScreenshotCaptureFacts = displayRotation ? { displayRotation } : {};
   const captureAndNormalize = async () => {
-    await deps.captureWithRetry(device, outPath, display);
+    await deps.captureWithRetry(device, outPath, options.screenMask, display);
     await deps.normalizeDensity(device, outPath, options.pixelDensity, display?.pointScale);
   };
   const captureWithFallback = async (): Promise<ScreenshotCaptureFacts> => {
-    try {
-      await captureAndNormalize();
-      return captureFacts;
-    } catch (error) {
-      let screenshotError = error;
-      if (
-        options.skipIosSimulatorBootCheck &&
-        shouldEnsureBootedAfterSimulatorScreenshotFailure(error)
-      ) {
-        await deps.ensureBooted(device);
-        try {
-          await captureAndNormalize();
-          return captureFacts;
-        } catch (retryError) {
-          screenshotError = retryError;
+    if (resolveAppleToolProvider().simulatorScreenshotBackend !== 'runner') {
+      try {
+        await captureAndNormalize();
+        return captureFacts;
+      } catch (error) {
+        let screenshotError = error;
+        if (
+          options.skipIosSimulatorBootCheck &&
+          shouldEnsureBootedAfterSimulatorScreenshotFailure(error)
+        ) {
+          await deps.ensureBooted(device);
+          try {
+            await captureAndNormalize();
+            return captureFacts;
+          } catch (retryError) {
+            screenshotError = retryError;
+          }
         }
+        if (options.screenMask !== undefined || !deps.shouldFallbackToRunner(screenshotError)) {
+          throw screenshotError;
+        }
+        emitScreenshotFallbackDiagnostic(device, 'simctl_screenshot', screenshotError);
       }
-      if (!deps.shouldFallbackToRunner(screenshotError)) {
-        throw screenshotError;
-      }
-      emitScreenshotFallbackDiagnostic(device, 'simctl_screenshot', screenshotError);
     }
     const captured = await deps.captureWithRunner(
       device,
@@ -219,6 +230,7 @@ export async function captureSimulatorScreenshotWithFallback(
 export async function captureSimulatorScreenshotWithRetry(
   device: DeviceInfo,
   outPath: string,
+  screenMask: ScreenshotScreenMask | undefined,
   display?: AppleDeviceDisplay,
 ): Promise<void> {
   const deadline = Deadline.fromTimeoutMs(IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS);
@@ -226,6 +238,7 @@ export async function captureSimulatorScreenshotWithRetry(
     'io',
     device.id,
     'screenshot',
+    ...(screenMask === 'black' ? ['--mask=black'] : []),
     ...appleSimulatorDisplayArgvFragment(display),
     outPath,
   ];
@@ -273,10 +286,16 @@ export async function captureScreenshotViaRunner(
   device: DeviceInfo,
   outPath: string,
   appBundleId: string | undefined,
-  fullscreen: boolean | undefined,
+  requestedFullscreen: boolean | undefined,
   runnerOptions: AppleRunnerCommandOptions | undefined,
   env: Readonly<EnvMap>,
 ): Promise<RunnerScreenCaptureMetadata | undefined> {
+  const fullscreen =
+    requestedFullscreen ??
+    (capturesThroughSimulatorStatusBar(device) &&
+    resolveAppleToolProvider().simulatorScreenshotBackend === 'runner'
+      ? true
+      : undefined);
   if (!capturesThroughSimulatorStatusBar(device)) {
     return await captureRunnerScreenshot(
       device,
@@ -340,7 +359,13 @@ async function captureRunnerScreenshot(
   }
 
   if (device.kind === 'simulator') {
-    await copyRunnerScreenshotFromSimulator(device, remoteFileName, outPath, env);
+    await copyRunnerScreenshotFromSimulator(
+      device,
+      remoteFileName,
+      outPath,
+      env,
+      runnerOptions?.signal,
+    );
     return metadata;
   }
   throw new AppError('COMMAND_FAILED', 'Unsupported Apple screenshot target');
@@ -351,73 +376,50 @@ async function copyRunnerScreenshotFromSimulator(
   remoteFileName: string,
   outPath: string,
   env: Readonly<EnvMap>,
+  signal?: AbortSignal,
 ): Promise<void> {
   const deadline = Deadline.fromTimeoutMs(IOS_RUNNER_SCREENSHOT_COPY_TIMEOUT_MS);
   let lastError = 'Unable to locate runner container for simulator screenshot';
-  const cachedContainerPath = iosSimulatorRunnerContainerCache.get(device.id);
-  if (cachedContainerPath) {
-    const cachedCopy = await tryCopySimulatorRunnerScreenshot(
-      cachedContainerPath,
-      remoteFileName,
-      outPath,
-    );
-    if (cachedCopy.copied) return;
-    lastError = cachedCopy.error;
-    iosSimulatorRunnerContainerCache.delete(device.id);
-  }
-  for (const bundleId of resolveRunnerContainerBundleIds(env)) {
-    const containerResult = await runSimctlForDevice(
-      device,
-      ['get_app_container', device.id, bundleId, 'data'],
-      {
-        allowFailure: true,
-        timeoutMs: resolveDeadlineTimeoutMs(
-          deadline,
-          IOS_RUNNER_SCREENSHOT_COPY_TIMEOUT_MS,
-          'runner screenshot container lookup',
-        ),
-      },
-    );
-    if (containerResult.exitCode !== 0) {
-      const stderr = containerResult.stderr.trim();
-      if (stderr) {
-        lastError = stderr;
+  const cachedBundleId = iosSimulatorRunnerBundleCache.get(device.id);
+  const bundleIds = resolveRunnerContainerBundleIds(env);
+  if (cachedBundleId) bundleIds.unshift(cachedBundleId);
+  for (const bundleId of new Set(bundleIds)) {
+    for (const sourcePath of resolveRunnerScreenshotFilePaths(remoteFileName)) {
+      try {
+        await copySimulatorFileToHost({
+          device,
+          bundleId,
+          containerType: 'data',
+          signal,
+          sourcePath,
+          destinationPath: outPath,
+          timeoutMs: resolveDeadlineTimeoutMs(
+            deadline,
+            IOS_RUNNER_SCREENSHOT_COPY_TIMEOUT_MS,
+            'runner screenshot copy',
+          ),
+        });
+        iosSimulatorRunnerBundleCache.set(device.id, bundleId);
+        return;
+      } catch (error) {
+        signal?.throwIfAborted();
+        lastError = error instanceof Error ? error.message : String(error);
       }
-      continue;
     }
-    const containerPath = readSimctlContainerPath(containerResult.stdout);
-    if (containerPath === undefined) {
-      lastError = 'simctl get_app_container returned no data container path';
-      continue;
-    }
-    const copy = await tryCopySimulatorRunnerScreenshot(containerPath, remoteFileName, outPath);
-    if (copy.copied) {
-      iosSimulatorRunnerContainerCache.set(device.id, containerPath);
-      return;
-    }
-    lastError = copy.error;
   }
+  iosSimulatorRunnerBundleCache.delete(device.id);
   throw new AppError('COMMAND_FAILED', `Failed to capture iOS screenshot: ${lastError}`);
 }
 
-async function tryCopySimulatorRunnerScreenshot(
-  containerPath: string,
-  remoteFileName: string,
-  outPath: string,
-): Promise<{ copied: true } | { copied: false; error: string }> {
-  let lastError = 'Runner screenshot was not found in the simulator container';
-  for (const sourcePath of resolveSimulatorRunnerScreenshotCandidatePaths(
-    containerPath,
-    remoteFileName,
-  )) {
-    try {
-      await copyHostFile(sourcePath, outPath);
-      return { copied: true };
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
-    }
-  }
-  return { copied: false, error: lastError };
+export function resolveRunnerScreenshotFilePaths(remoteFileName: string): string[] {
+  const rawPath = remoteFileName.trim();
+  if (!rawPath) return [];
+  const paths = new Set([rawPath]);
+  const posixPath = rawPath.replaceAll('\\', '/');
+  const tmpIndex = posixPath.lastIndexOf('/tmp/');
+  if (tmpIndex >= 0) paths.add(posixPath.slice(tmpIndex + 1));
+  paths.add(`tmp/${path.posix.basename(posixPath)}`);
+  return [...paths];
 }
 
 function resolveDeadlineTimeoutMs(deadline: Deadline, timeoutMs: number, step: string): number {
@@ -447,51 +449,6 @@ function emitScreenshotFallbackDiagnostic(
       ...errorMeta,
     },
   });
-}
-
-export function resolveSimulatorRunnerScreenshotCandidatePaths(
-  containerPath: string,
-  remoteFileName: string,
-): string[] {
-  const normalizedContainerPath = path.resolve(containerPath);
-  const rawRemotePath = remoteFileName.trim();
-  if (!rawRemotePath) return [];
-
-  const candidates: string[] = [];
-  const seen = new Set<string>();
-  const pushUnique = (candidate: string) => {
-    const normalized = path.normalize(candidate);
-    if (seen.has(normalized)) return;
-    seen.add(normalized);
-    candidates.push(normalized);
-  };
-
-  const relativeFromRoot = rawRemotePath.replace(/^\/+/, '');
-  const remotePosixPath = relativeFromRoot.replaceAll('\\', '/');
-  if (relativeFromRoot) {
-    pushUnique(path.join(normalizedContainerPath, relativeFromRoot));
-  }
-
-  if (path.isAbsolute(rawRemotePath)) {
-    pushUnique(path.normalize(rawRemotePath));
-  }
-
-  if (remotePosixPath.startsWith('tmp/')) {
-    pushUnique(path.join(normalizedContainerPath, remotePosixPath));
-  } else {
-    const tmpSegmentIndex = remotePosixPath.lastIndexOf('/tmp/');
-    if (tmpSegmentIndex >= 0) {
-      const fromTmp = remotePosixPath.slice(tmpSegmentIndex + 1);
-      pushUnique(path.join(normalizedContainerPath, fromTmp));
-    }
-  }
-
-  const baseName = path.basename(rawRemotePath);
-  if (baseName) {
-    pushUnique(path.join(normalizedContainerPath, 'tmp', baseName));
-  }
-
-  return candidates;
 }
 
 export function shouldRetryIosSimulatorScreenshot(error: unknown): boolean {

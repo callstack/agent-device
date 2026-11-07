@@ -1,3 +1,4 @@
+import AgentDeviceSnapshotPresentation
 import XCTest
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
@@ -52,6 +53,25 @@ extension RunnerTests {
     }
   }
 
+  /// A coordinate tap refuses the XCTest fallback only on the proof of its own windows query,
+  /// whatever health the last snapshot left behind.
+  func testCoordinateTapFallbackIsRefusedOnlyForATreeThisCallFoundUnreadable() {
+    for health: RunnerAccessibilityHealth in [.unknown, .healthy, .unavailable] {
+      XCTAssertTrue(
+        SynthesizedGesturePolicyKind.coordinateTap.allowsXCTestCoordinateFallback(
+          accessibilityHealth: health, treeUnreadable: false
+        ),
+        "axHealth=\(health.rawValue)"
+      )
+      XCTAssertFalse(
+        SynthesizedGesturePolicyKind.coordinateTap.allowsXCTestCoordinateFallback(
+          accessibilityHealth: health, treeUnreadable: true
+        ),
+        "axHealth=\(health.rawValue)"
+      )
+    }
+  }
+
   func testKeyboardProbeIsAllowedAtEveryAccessibilityHealthExceptUnavailable() {
     let cases: [(health: RunnerAccessibilityHealth, allowsProbe: Bool)] = [
       (.unknown, true),
@@ -100,7 +120,7 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testFailedCoordinateTapSynthesisFallsBackToXCTestAtEveryAccessibilityHealth() throws {
+  func testFailedCoordinateTapSynthesisFallsBackToXCTestUnlessThisCallFoundTheTreeUnreadable() throws {
     for health: RunnerAccessibilityHealth in [.unknown, .healthy, .unavailable] {
       mainOwned.accessibilityHealth = health
       for context in [nil, synthesizedGestureTestContext(accessibilityHealth: health)] {
@@ -113,6 +133,13 @@ extension RunnerTests {
         )
         XCTAssertEqual(synthesizedGestureRoute(attempt), "xctestFallback", label)
       }
+      let unreadable = try performSynthesizedGesture(
+        app,
+        kind: .coordinateTap,
+        context: synthesizedGestureTestContext(accessibilityHealth: health, treeUnreadable: true),
+        synthesize: failedSynthesis
+      )
+      XCTAssertEqual(synthesizedGestureRoute(unreadable), "refused", "axHealth=\(health.rawValue) unreadable")
     }
   }
 
@@ -157,12 +184,14 @@ extension RunnerTests {
   }
 
   private func synthesizedGestureTestContext(
-    accessibilityHealth: RunnerAccessibilityHealth
+    accessibilityHealth: RunnerAccessibilityHealth,
+    treeUnreadable: Bool = false
   ) -> SynthesizedCoordinateContext {
     SynthesizedCoordinateContext(
-      referenceFrame: CGRect(x: 0, y: 0, width: 390, height: 844),
+      geometry: SurfaceGeometry(windowOnScreen: SurfaceRect(CGRect(x: 0, y: 0, width: 390, height: 844)), panelNativeSize: nil, orientation: 1),
       resolvedWindow: app.windows.firstMatch,
-      accessibilityHealth: accessibilityHealth
+      accessibilityHealth: accessibilityHealth,
+      treeUnreadable: treeUnreadable
     )
   }
 

@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
-import { beforeEach, test, vi } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 
-const { mockRunSimctl } = vi.hoisted(() => ({ mockRunSimctl: vi.fn() }));
+const { mockRunSimctl, commandShapes } = vi.hoisted(() => ({
+  mockRunSimctl: vi.fn(),
+  commandShapes: vi.fn(),
+}));
 
-vi.mock('../simctl.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../simctl.ts')>()),
-  runSimctlForDevice: mockRunSimctl,
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
+  runCmd: async (cmd: string, args: string[], options: unknown) => {
+    commandShapes(cmd, args);
+    return { exitCode: 0, stderr: '', ...(await mockRunSimctl(args.slice(1), options)) };
+  },
 }));
 
 import {
@@ -24,7 +30,15 @@ const bootedSimulator: DeviceInfo = {
   booted: true,
 };
 
+afterEach(() => {
+  for (const [cmd, args] of commandShapes.mock.calls) {
+    assert.equal(cmd, 'xcrun');
+    assert.equal(args[0], 'simctl');
+  }
+});
+
 beforeEach(() => {
+  commandShapes.mockClear();
   mockRunSimctl.mockReset();
   mockRunSimctl.mockResolvedValue({
     stdout: JSON.stringify({
@@ -127,7 +141,7 @@ test('findIosSimulatorInstalledApp does not probe a stopped simulator', async ()
 });
 
 function mockLaunchctlAndListapps(runningBundleIds: string[]): void {
-  mockRunSimctl.mockImplementation(async (_device: DeviceInfo, args: string[]) => {
+  mockRunSimctl.mockImplementation(async (args: string[]) => {
     if (args[0] === 'spawn') {
       const lines = runningBundleIds.map(
         (bundleId, index) => `${1000 + index}\t0\tUIKitApplication:${bundleId}[abcd][rb-legacy]`,
@@ -173,7 +187,7 @@ test('detectSoleRunningIosSimulatorApp returns undefined when nothing is running
 });
 
 test('detectSoleRunningIosSimulatorApp treats a failed probe as inconclusive', async () => {
-  mockRunSimctl.mockImplementation(async (_device: DeviceInfo, args: string[]) => {
+  mockRunSimctl.mockImplementation(async (args: string[]) => {
     if (args[0] === 'spawn') return { exitCode: 1, stdout: '' };
     return {
       stdout: JSON.stringify({ 'com.apple.Preferences': { CFBundleDisplayName: 'Settings' } }),
@@ -184,7 +198,7 @@ test('detectSoleRunningIosSimulatorApp treats a failed probe as inconclusive', a
 });
 
 test('detectSoleRunningIosSimulatorApp catches a rejecting launchctl probe (timeout/spawn failure)', async () => {
-  mockRunSimctl.mockImplementation(async (_device: DeviceInfo, args: string[]) => {
+  mockRunSimctl.mockImplementation(async (args: string[]) => {
     if (args[0] === 'spawn') throw new Error('xcrun timed out after 3000ms');
     return {
       stdout: JSON.stringify({ 'com.apple.Preferences': { CFBundleDisplayName: 'Settings' } }),
@@ -195,7 +209,7 @@ test('detectSoleRunningIosSimulatorApp catches a rejecting launchctl probe (time
 });
 
 test('detectSoleRunningIosSimulatorApp catches a rejecting listapps probe (timeout/spawn failure)', async () => {
-  mockRunSimctl.mockImplementation(async (_device: DeviceInfo, args: string[]) => {
+  mockRunSimctl.mockImplementation(async (args: string[]) => {
     if (args[0] === 'spawn') {
       return {
         exitCode: 0,
@@ -214,9 +228,9 @@ test('detectSoleRunningIosSimulatorApp bounds the listapps probe with a timeout'
 
   await detectSoleRunningIosSimulatorApp(bootedSimulator);
 
-  const listappsCall = mockRunSimctl.mock.calls.find(([, args]) => args[0] === 'listapps');
-  assert.equal(typeof listappsCall?.[2]?.timeoutMs, 'number');
-  assert.ok((listappsCall?.[2]?.timeoutMs ?? 0) > 0);
+  const listappsCall = mockRunSimctl.mock.calls.find(([args]) => args[0] === 'listapps');
+  assert.equal(typeof listappsCall?.[1]?.timeoutMs, 'number');
+  assert.ok((listappsCall?.[1]?.timeoutMs ?? 0) > 0);
 });
 
 test('detectSoleRunningIosSimulatorApp does not probe a stopped simulator', async () => {

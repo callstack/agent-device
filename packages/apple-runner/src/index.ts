@@ -3,10 +3,20 @@
  *
  * The package entry names its whole surface. Host-bound operations evaluate the implementation, so
  * they reach their host capabilities through the `AppleRunnerHost` port, which `platform-apple`
- * binds once through `bindAppleRunnerHost` before any operation runs. The one operation outside
- * this closure, `runApplePressSeries`, and the legacy device-set restore stay behind function-scoped
- * imports so the entry evaluates only what a host-bound operation needs.
+ * binds once through `bindAppleRunnerHost` before any operation runs. `runApplePressSeries`,
+ * `createLaunchedAppleRunnerProvider`, and the legacy device-set restore stay behind
+ * function-scoped imports so the entry evaluates only what a host-bound operation needs.
  */
+
+export { RUNNER_STARTUP_TIMEOUT_MS } from './runner-startup-transport.ts';
+export async function createLaunchedAppleRunnerProvider(
+  ...args: Parameters<
+    typeof import('./runner-launcher-provider.ts').createLaunchedAppleRunnerProvider
+  >
+) {
+  const { createLaunchedAppleRunnerProvider } = await import('./runner-launcher-provider.ts');
+  return createLaunchedAppleRunnerProvider(...args);
+}
 
 export {
   bindAppleRunnerHost,
@@ -22,14 +32,16 @@ export type {
   IosPhysicalDeviceRunnerControl,
 } from './runner-physical-device.ts';
 export {
+  mintRunnerToken,
   RUNNER_READY_PREFLIGHT_TIMEOUT_MS,
   SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE,
   buildRunnerSequenceCommand,
   parseRunnerSequenceResult,
   resolveRunnerRequestSignal,
   type RunnerCommand,
+  type RunnerSnapshotBridgeRequest,
 } from './runner-contract.ts';
-export { runnerCommandResolvesSurface } from './runner-command-traits.ts';
+export { runnerCommandSurfacePolicy } from './runner-command-traits.ts';
 export { isRunnerMainThreadTimeoutError } from './runner-error-classification.ts';
 export {
   withAppleRunnerProvider,
@@ -48,7 +60,7 @@ export {
   resolveRunnerSigningBuildSettings,
 } from './runner-cache-metadata.ts';
 export {
-  SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME,
+  SHARED_SNAPSHOT_BRIDGE_READER_FILENAMES,
   resolveRunnerDerivedOverride,
 } from './apple-runner-platform.ts';
 export {
@@ -371,3 +383,7 @@ export async function restoreLegacyXctestDeviceSetRedirect(
     await import('./legacy-xctest-device-set.ts');
   await restore(...args);
 }
+
+export { runnerListenerEnv } from './runner-contract.ts';
+
+export { RUNNER_XCTESTRUN_CAPTURE_OPTIONS } from './runner-artifact-env.ts';

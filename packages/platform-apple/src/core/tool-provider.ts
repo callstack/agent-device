@@ -1,3 +1,4 @@
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   coerceExecResult,
   runCmd,
@@ -17,8 +18,15 @@ import type {
   AppleMacOsHostProvider,
   ApplePlistProvider,
   AppleSimctlToolProvider,
+  AppleSimulatorFileCopy,
+  AppleSimulatorContainerRequest,
+  AppleSimulatorContainer,
+  AppleSimulatorAppInfoRequest,
+  SimulatorAppListOptions,
+  SimulatorAppListRead,
   AppleToolAvailabilityChecker,
   AppleToolCommandExecutor,
+  AppleToolExecOptions,
   AppleXcrunToolProvider,
 } from './tool-provider-types.ts';
 
@@ -28,6 +36,7 @@ export type {
   ApplePlistProvider,
   AppleToolAvailabilityChecker,
   AppleToolCommandExecutor,
+  AppleToolExecOptions,
   AppleToolSubcommandExecutor,
   AppleXcrunToolProvider,
 } from './tool-provider-types.ts';
@@ -41,7 +50,7 @@ export function simctlCommand(args: ScopedSimctlArgs): ScopedSimctlCommand {
 async function runSimctlCommand(
   runCommand: AppleToolCommandExecutor,
   args: ScopedSimctlArgs,
-  options?: ExecOptions,
+  options?: AppleToolExecOptions,
 ): Promise<ExecResult> {
   return await runCommand('xcrun', [...simctlCommand(args)], options);
 }
@@ -57,62 +66,80 @@ export type AppleToolProvider = {
   macosHelper?: AppleMacOsHelperProvider;
   macosHost?: AppleMacOsHostProvider;
   plist?: ApplePlistProvider;
+  /** Hosts without a simctl screenshot transport use the runner's file capture. */
+  simulatorScreenshotBackend?: 'runner';
+  simulatorFiles: {
+    copyToHost(request: AppleSimulatorFileCopy): Promise<void>;
+    openContainer(request: AppleSimulatorContainerRequest): Promise<AppleSimulatorContainer | null>;
+    stageFile(path: string, signal?: AbortSignal): Promise<AsyncDisposable & { path: string }>;
+  };
+  simulatorApps: {
+    list(device: DeviceInfo, options?: SimulatorAppListOptions): Promise<SimulatorAppListRead>;
+    readInfoPlist(request: AppleSimulatorAppInfoRequest): Promise<Record<string, unknown> | null>;
+  };
   whichCommand: AppleToolAvailabilityChecker;
 };
 
 export const APPLE_PLIST_TIMEOUT_MS = 15_000;
 
-const localAppleToolProvider: AppleToolProvider = {
-  runCommand: runCmd,
-  simctl: {
-    run: async (args, options) => await runSimctlCommand(runCmd, args, options),
-  },
-  devicectl: {
-    run: async (args, options) => await runCmd('xcrun', ['devicectl', ...args], options),
-  },
-  plist: {
-    readJson: async (plistPath, signal) =>
-      await readPlistJsonWithCommand(runCmd, plistPath, signal),
-  },
-  macosHost: createLocalAppleMacOsHostProvider(
-    runCmd,
-    async (plistPath) => await readPlistJsonWithCommand(runCmd, plistPath),
-  ),
-  whichCommand: async (cmd) => await whichCmd(cmd, commandHostEnvironment().env),
-};
+const localAppleToolProvider = createLocalAppleToolProvider();
 
 const appleToolProviderScope = createScopedProvider<AppleToolProvider>(
   localAppleToolProvider,
-  normalizeAppleToolProvider,
+  createLocalAppleToolProvider,
 );
 
 export function createLocalAppleToolProvider(
   provider: Partial<AppleToolProvider> = {},
 ): AppleToolProvider {
-  const merged = {
-    ...localAppleToolProvider,
-    ...provider,
+  const runCommand = coerceRunCommand(provider.runCommand ?? runCmd);
+  const simctl: AppleSimctlToolProvider = {
+    run: provider.simctl
+      ? coerceRun(provider.simctl.run)
+      : async (args, options) => await runSimctlCommand(runCommand, args, options),
   };
   const plist = provider.plist ?? {
     readJson: async (plistPath: string, signal?: AbortSignal) =>
-      await readPlistJsonWithCommand(merged.runCommand, plistPath, signal),
+      await readPlistJsonWithCommand(runCommand, plistPath, signal),
   };
+  const tools = { simctl, runCommand };
   return {
-    ...merged,
-    simctl: provider.simctl ?? {
-      run: async (args, options) => await runSimctlCommand(merged.runCommand, args, options),
+    ...provider,
+    simctl,
+    runCommand,
+    ...(provider.macosHelper ? { macosHelper: { run: coerceRun(provider.macosHelper.run) } } : {}),
+    simulatorFiles: provider.simulatorFiles ?? {
+      copyToHost: async (request) =>
+        await (await import('./local-simulator-files.ts')).copySimulatorFileToHost(simctl, request),
+      openContainer: async (request) =>
+        await (await import('./local-simulator-files.ts')).openSimulatorContainer(simctl, request),
+      stageFile: async (path, signal) => {
+        signal?.throwIfAborted();
+        return { path, [Symbol.asyncDispose]: async () => {} };
+      },
     },
-    devicectl: provider.devicectl ?? {
-      run: async (args, options) =>
-        await merged.runCommand('xcrun', ['devicectl', ...args], options),
+    simulatorApps: provider.simulatorApps ?? {
+      list: async (device, options) =>
+        await (
+          await import('./local-simulator-apps.ts')
+        ).readSimulatorAppMetadata(tools, device, options),
+      readInfoPlist: async (request) =>
+        await (await import('./local-simulator-apps.ts')).readSimulatorAppInfoPlist(tools, request),
+    },
+    devicectl: {
+      run: provider.devicectl
+        ? coerceRun(provider.devicectl.run)
+        : async (args, options) => await runCommand('xcrun', ['devicectl', ...args], options),
     },
     plist,
     macosHost:
       provider.macosHost ??
       createLocalAppleMacOsHostProvider(
-        merged.runCommand,
+        runCommand,
         async (plistPath) => await plist.readJson(plistPath),
       ),
+    whichCommand:
+      provider.whichCommand ?? (async (cmd) => await whichCmd(cmd, commandHostEnvironment().env)),
   };
 }
 
@@ -144,7 +171,7 @@ type XcrunToolArgs = readonly ['devicectl' | 'xcdevice' | 'xctrace', ...string[]
 
 export async function runXcrun(
   args: ScopedSimctlCommand | XcrunToolArgs,
-  options?: ExecOptions,
+  options?: AppleToolExecOptions,
 ): Promise<ExecResult> {
   const provider = resolveAppleToolProvider();
   if (args[0] === 'simctl') {
@@ -162,16 +189,6 @@ export async function readApplePlistJson(
   signal?: AbortSignal,
 ): Promise<Record<string, unknown> | null> {
   return (await resolveAppleToolProvider().plist?.readJson(plistPath, signal)) ?? null;
-}
-
-function normalizeAppleToolProvider(provider: AppleToolProvider): AppleToolProvider {
-  return createLocalAppleToolProvider({
-    ...provider,
-    runCommand: coerceRunCommand(provider.runCommand),
-    simctl: { run: coerceRun(provider.simctl.run) },
-    devicectl: { run: coerceRun(provider.devicectl.run) },
-    ...(provider.macosHelper ? { macosHelper: { run: coerceRun(provider.macosHelper.run) } } : {}),
-  });
 }
 
 // Scoped providers are SDK-supplied callbacks; coerce their results once at

@@ -1,3 +1,4 @@
+import { createLocalAppleToolProvider } from '@agent-device/platform-apple/tool-provider';
 import type { AppleRunnerScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-runner-transport.ts';
 import type { AppleRunnerProvider, RunnerCommand } from '@agent-device/apple-runner';
 import type {
@@ -107,7 +108,7 @@ export function createRecordingAppleToolProvider(handlers: RecordingAppleToolHan
   };
   return {
     calls,
-    provider: {
+    provider: createLocalAppleToolProvider({
       whichCommand: async () => true,
       runCommand: async (cmd, args) => {
         calls.push([cmd, ...args]);
@@ -149,7 +150,7 @@ export function createRecordingAppleToolProvider(handlers: RecordingAppleToolHan
             },
           }
         : undefined,
-    },
+    }),
   };
 }
 

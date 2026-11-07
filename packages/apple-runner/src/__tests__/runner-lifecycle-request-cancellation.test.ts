@@ -387,7 +387,7 @@ test('a wedged build with no caller left is ended by the default start budget an
         (build.signal?.reason as AppError | undefined)?.details?.reason,
         'runner_start_budget_exhausted',
       );
-      await settleUnderFakeTimers(next);
+      await next;
     });
 
     assert.match(diagnostics, /ios_runner_detached_start_failed/);

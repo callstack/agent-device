@@ -40,6 +40,7 @@ export function makeRecordRuntimeHarness(
     appBundleId?: string;
     recordOnlySession?: boolean;
     platform?: 'android' | 'apple' | 'linux' | 'vega';
+    device?: SessionState['device'];
     runtime?: RuntimeOptions;
   } = {},
 ) {
@@ -48,7 +49,8 @@ export function makeRecordRuntimeHarness(
   const session: SessionState = {
     name: sessionName,
     device:
-      options.platform === 'linux'
+      options.device ??
+      (options.platform === 'linux'
         ? { platform: 'linux', id: 'linux', name: 'Linux', kind: 'device', target: 'desktop' }
         : options.platform === 'vega'
           ? { platform: 'vega', id: 'vega', name: 'Vega', kind: 'device', target: 'tv' }
@@ -61,7 +63,7 @@ export function makeRecordRuntimeHarness(
                 kind: 'simulator',
                 target: 'mobile',
               }
-            : { platform: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
+            : { platform: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' }),
     ...(options.appBundleId ? { appBundleId: options.appBundleId } : {}),
     ...(options.recordOnlySession ? { recordOnlySession: true } : {}),
     createdAt: 1,
@@ -90,17 +92,19 @@ export function makeRecordRuntimeHarness(
       meta?: DaemonRequest['meta'],
       flags?: DaemonRequest['flags'],
       internal?: DaemonRequest['internal'],
+      asSessionName: string = sessionName,
     ) =>
       handleRecordCommand({
         platformServices: daemonPlatformServicesFixture(),
         ...common,
+        sessionName: asSessionName,
         req: {
           token: 'token',
-          session: sessionName,
+          session: asSessionName,
           command: 'record',
           positionals,
           flags: flags ?? {},
-          ...(internal ? { internal } : {}),
+          internal: { webSession: { name: sessionName }, ...internal },
           ...(meta ? { meta } : {}),
         },
       }),

@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import {
   createIosSnapshotRequest,
   deriveIosCaptureHint,
@@ -11,8 +11,12 @@ import {
 import { createSnapshotSourceHost } from './host.ts';
 import { createSimulatorSnapshotSource } from './adapter.ts';
 import { simulatorAddressFor } from '../core/simctl.ts';
+import { createLocalAppleToolProvider, withAppleToolProvider } from '../core/tool-provider.ts';
+import { readSnapshotTargetProcessStartTime } from '../snapshot-process.ts';
 import { DEPTH_HINT_PROBE_BACK_AFTER_USES } from './depth-hints.ts';
+import { SNAPSHOT_BRIDGE_SOURCE_FILENAMES } from './cache-identity.ts';
 import { MAXIMUM_REQUEST_LEVELS } from './limits.ts';
+import { ADAPTER_KEYBOARD_CASES } from './adapter-keyboard.fixtures.ts';
 import {
   encodeSnapshotBridgeFrame,
   SNAPSHOT_SOURCE_PROTOCOL_VERSION,
@@ -32,12 +36,9 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
   const sourceRoot = path.join(root, 'source');
   const cacheRoot = path.join(root, 'cache');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
-  await writeFile(path.join(sourceRoot, 'SnapshotBridge.m'), 'native source');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.m'), 'native runtime');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
-  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule');
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
+    await writeFile(path.join(sourceRoot, name), 'native source');
+  }
   const fixture = createAdapterHost();
   const source = createSimulatorSnapshotSource({
     host: fixture.host,
@@ -134,14 +135,7 @@ test('the Simulator AX source refuses a tree that ends at content another proces
   const root = await mkdtempForTest('agent-device-snapshot-adapter-remote-');
   const sourceRoot = path.join(root, 'source');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
-  for (const name of [
-    'SnapshotBridge.m',
-    'SnapshotBridgeRuntime.m',
-    'SnapshotBridgeRuntime.h',
-    'SnapshotBridgeCapture.h',
-    'SnapshotBridgeCapture.m',
-    'ForegroundApplicationGeometry.h',
-  ]) {
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
     await writeFile(path.join(sourceRoot, name), 'native source');
   }
   const fixture = createAdapterHost();
@@ -181,17 +175,69 @@ test('the Simulator AX source refuses a tree that ends at content another proces
   }
 });
 
+// #2751: the check rides on the bridge request, so an acquisition spawns no surface probe. What it
+// still spawns is the target's two `ps` identity reads around the request, which guard pid reuse.
+test('the Simulator AX source asks the guest for running surface hosts only when told to', async () => {
+  const root = await mkdtempForTest('agent-device-snapshot-adapter-surface-');
+  const sourceRoot = path.join(root, 'source');
+  await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
+    await writeFile(path.join(sourceRoot, name), 'native source');
+  }
+  const fixture = createAdapterHost();
+  fixture.runningSurfaceHost = true;
+  const source = createSimulatorSnapshotSource({
+    // The production identity read, so its host processes reach the tool provider below.
+    host: { ...fixture.host, readTargetProcessStartTime: readSnapshotTargetProcessStartTime },
+    sourceRoot,
+    cacheRoot: path.join(root, 'cache'),
+  });
+  const target = { ...targetForTest(), generation: 'generation-1', targetId: 'target-1' };
+  const hint = deriveIosCaptureHint(createIosSnapshotRequest());
+  const surfaceHostExecutables = ['SafariViewService.app/SafariViewService'];
+  const runCommand = vi.fn(async () => ({ stdout: 'target-start', stderr: '', exitCode: 0 }));
+
+  try {
+    const identityRead = ['ps', ['-p', String(target.pid), '-o', 'lstart='], expect.anything()];
+    const [unchecked, refused] = await withAppleToolProvider(
+      createLocalAppleToolProvider({ runCommand }),
+      async () => {
+        const acquired = await source.acquire({ target, hint });
+        // One read before the request and one after the tree, and no other host process.
+        expect(runCommand.mock.calls).toEqual([identityRead, identityRead]);
+        runCommand.mockClear();
+        const refusal = await source.acquire({ target, hint, surfaceHostExecutables });
+        // A refusal returns no tree, so the read after it never runs.
+        expect(runCommand.mock.calls).toEqual([identityRead]);
+        return [acquired, refusal];
+      },
+    );
+
+    assert.equal(unchecked.stage, 'acquired');
+    assert.equal(refused.stage, 'failed');
+    if (refused.stage === 'failed') {
+      assert.equal(refused.failure.kind, 'unsupported');
+      assert.equal(refused.failure.code, 'system-surface-host-present');
+      assert.equal(refused.failure.details?.surfaceHostExecutable, surfaceHostExecutables[0]);
+    }
+    assert.deepEqual(fixture.surfaceHostChecks, [
+      undefined,
+      { executables: surfaceHostExecutables, simulatorUdid: target.simulator.udid },
+    ]);
+  } finally {
+    await source.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('a capture reports a cold preparation instead of spending its deadline on it', async () => {
   const root = await mkdtempForTest('agent-device-snapshot-adapter-preparing-');
   const sourceRoot = path.join(root, 'source');
   const cacheRoot = path.join(root, 'cache');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
-  await writeFile(path.join(sourceRoot, 'SnapshotBridge.m'), 'native source');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.m'), 'native runtime');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
-  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule');
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
+    await writeFile(path.join(sourceRoot, name), 'native source');
+  }
   const fixture = createAdapterHost(300);
   const source = createSimulatorSnapshotSource({ host: fixture.host, sourceRoot, cacheRoot });
   const hint = deriveIosCaptureHint(createIosSnapshotRequest());
@@ -230,14 +276,7 @@ test('the Simulator AX source learns a hint only from a validated acquisition', 
   const root = await mkdtempForTest('agent-device-snapshot-adapter-hints-');
   const sourceRoot = path.join(root, 'source');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
-  for (const name of [
-    'SnapshotBridge.m',
-    'SnapshotBridgeRuntime.m',
-    'SnapshotBridgeRuntime.h',
-    'SnapshotBridgeCapture.h',
-    'SnapshotBridgeCapture.m',
-    'ForegroundApplicationGeometry.h',
-  ]) {
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
     await writeFile(path.join(sourceRoot, name), 'native source');
   }
   const fixture = createAdapterHost();
@@ -293,14 +332,7 @@ test('the Simulator AX source forgets a hint once a default-depth probe-back is 
   const root = await mkdtempForTest('agent-device-snapshot-adapter-forget-');
   const sourceRoot = path.join(root, 'source');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
-  for (const name of [
-    'SnapshotBridge.m',
-    'SnapshotBridgeRuntime.m',
-    'SnapshotBridgeRuntime.h',
-    'SnapshotBridgeCapture.h',
-    'SnapshotBridgeCapture.m',
-    'ForegroundApplicationGeometry.h',
-  ]) {
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
     await writeFile(path.join(sourceRoot, name), 'native source');
   }
   const fixture = createAdapterHost();
@@ -479,14 +511,7 @@ test('the Simulator AX source follows the shared hint contract', async () => {
   const root = await mkdtempForTest('agent-device-snapshot-adapter-contract-');
   const sourceRoot = path.join(root, 'source');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
-  for (const name of [
-    'SnapshotBridge.m',
-    'SnapshotBridgeRuntime.m',
-    'SnapshotBridgeRuntime.h',
-    'SnapshotBridgeCapture.h',
-    'SnapshotBridgeCapture.m',
-    'ForegroundApplicationGeometry.h',
-  ]) {
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
     await writeFile(path.join(sourceRoot, name), 'native source');
   }
   assert.equal(recoveryFixture.version, 1);
@@ -526,6 +551,12 @@ type AdapterFixture = {
   turnedWindow: boolean;
   /** Whether the fake guest's root omits its frame, leaving the capture without a viewport. */
   omitViewport: boolean;
+  /** Whether the fake guest finds a requested system surface host process running. */
+  runningSurfaceHost: boolean;
+  /** The surface host check each request carried: its executables and Simulator, or undefined. */
+  surfaceHostChecks: Array<Readonly<{ executables: unknown; simulatorUdid: unknown }> | undefined>;
+  /** The windows the fake guest reports under its root when no other tree shape is selected. */
+  windows: readonly Record<string, unknown>[];
   omitRecovery: boolean;
   diagnostics: Record<string, unknown>[];
   startedTargets: Array<Parameters<SnapshotSourceHost['start']>[0]>;
@@ -561,6 +592,9 @@ function createAdapterHost(buildDelayMs = 0): AdapterFixture {
     remoteContent: false,
     turnedWindow: false,
     omitViewport: false,
+    runningSurfaceHost: false,
+    surfaceHostChecks: [],
+    windows: [],
     omitRecovery: false,
     diagnostics: [],
     startedTargets: [],
@@ -650,7 +684,36 @@ class AdapterSocket extends EventEmitter implements SnapshotSourceSocket {
       generation: string;
       maxDepth: number;
       nativeLevelsHint?: number;
+      surfaceHostExecutables?: string[];
+      simulatorUdid?: string;
     };
+    this.fixture.surfaceHostChecks.push(
+      request.surfaceHostExecutables
+        ? { executables: request.surfaceHostExecutables, simulatorUdid: request.simulatorUdid }
+        : undefined,
+    );
+    if (this.fixture.runningSurfaceHost && request.surfaceHostExecutables) {
+      queueMicrotask(() =>
+        this.emit(
+          'data',
+          encodeSnapshotBridgeFrame(
+            {
+              protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
+              sourceVersion: SNAPSHOT_SOURCE_VERSION,
+              requestId: request.requestId,
+              ok: false,
+              pid: this.fixture.responsePid,
+              generation: request.generation,
+              error_kind: 'unsupported',
+              error_code: 'system-surface-host-present',
+              surfaceHostExecutable: request.surfaceHostExecutables![0],
+            },
+            { maxRequestBytes: 64 * 1024 },
+          ),
+        ),
+      );
+      return true;
+    }
     this.fixture.requestedDepths.push(request.maxDepth);
     this.fixture.requestedHints.push(request.nativeLevelsHint);
     // The guest's own recovery: one request reads at most 65 levels, and a rejected depth halves
@@ -754,7 +817,7 @@ class AdapterSocket extends EventEmitter implements SnapshotSourceSocket {
                                 ],
                               },
                             ]
-                          : [],
+                          : this.fixture.windows,
                 },
           },
           {
@@ -777,14 +840,7 @@ test('the Simulator AX source refuses a window whose coordinate space it cannot 
   const root = await mkdtempForTest('agent-device-snapshot-adapter-');
   const sourceRoot = path.join(root, 'source');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
-  for (const name of [
-    'SnapshotBridge.m',
-    'SnapshotBridgeRuntime.m',
-    'SnapshotBridgeRuntime.h',
-    'SnapshotBridgeCapture.h',
-    'SnapshotBridgeCapture.m',
-    'ForegroundApplicationGeometry.h',
-  ]) {
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
     await writeFile(path.join(sourceRoot, name), 'native source');
   }
   const fixture = createAdapterHost();
@@ -816,6 +872,46 @@ test('the Simulator AX source refuses a window whose coordinate space it cannot 
       hint: deriveIosCaptureHint(createIosSnapshotRequest()),
     });
     assert.equal(recovered.stage, 'acquired');
+  } finally {
+    await source.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('the Simulator AX source publishes absence only from a complete tree with no keyboard trace', async () => {
+  const root = await mkdtempForTest('agent-device-snapshot-adapter-keyboard-');
+  const sourceRoot = path.join(root, 'source');
+  await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
+    await writeFile(path.join(sourceRoot, name), 'native source');
+  }
+  const fixture = createAdapterHost();
+  const source = createSimulatorSnapshotSource({
+    host: fixture.host,
+    sourceRoot,
+    cacheRoot: path.join(root, 'cache'),
+  });
+  const target = { ...targetForTest(), generation: 'generation-1', targetId: 'target-1' };
+
+  try {
+    for (const entry of ADAPTER_KEYBOARD_CASES) {
+      fixture.windows = entry.windows;
+      fixture.truncated = entry.truncated;
+      for (const acquisitionIntent of ['full', 'surface-observation'] as const) {
+        const outcome = await source.acquire({
+          target,
+          hint: deriveIosCaptureHint(createIosSnapshotRequest({ acquisitionIntent })),
+        });
+        assert.equal(outcome.stage, 'acquired', `${entry.name} (${acquisitionIntent})`);
+        if (outcome.stage !== 'acquired') continue;
+        assert.equal(outcome.acquisition.truncated, entry.truncated);
+        assert.deepEqual(
+          outcome.acquisition.keyboard,
+          entry.keyboard,
+          `${entry.name} (${acquisitionIntent})`,
+        );
+      }
+    }
   } finally {
     await source.close();
     await rm(root, { recursive: true, force: true });

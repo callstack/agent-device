@@ -381,3 +381,10 @@ export async function createAndroidAppDeploymentOperations(
   const { createAndroidAppDeploymentOperations: bind } = await import('./deployment/runtime.ts');
   return bind(params);
 }
+
+export async function createAndroidPerfOperations(
+  params: Parameters<typeof import('./perf/runtime.ts').createAndroidPerfOperations>[0],
+) {
+  const { createAndroidPerfOperations: bind } = await import('./perf/runtime.ts');
+  return bind(params);
+}

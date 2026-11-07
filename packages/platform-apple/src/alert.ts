@@ -85,6 +85,8 @@ export async function readAppleAlert(
 /**
  * Poll `get` until one answers or the caller's window runs out. The first attempt gets the whole
  * window and later ones only what is left, so a runner that blocks cannot outlive the budget.
+ * After a completed observation, another read needs more than one polling interval of budget.
+ * A dispatched read still owns its result, including a watchdog timeout.
  */
 export async function awaitAppleAlert(
   device: DeviceInfo,
@@ -95,12 +97,15 @@ export async function awaitAppleAlert(
   const runAlert = runAppleAlert(device, runnerOptions, options, env);
   const timeout = options?.timeoutMs ?? DEFAULT_ALERT_TIMEOUT_MS;
   const start = Date.now();
-  let firstAttempt = true;
   let lastRetriable: AppError | undefined;
   while (Date.now() - start < timeout) {
+    const remainingMs = remainingBudgetMs(start, timeout);
+    if (lastRetriable && remainingMs <= ALERT_POLL_INTERVAL_MS) {
+      await sleep(remainingMs);
+      break;
+    }
     try {
-      const budgetMs = firstAttempt ? timeout : remainingBudgetMs(start, timeout);
-      firstAttempt = false;
+      const budgetMs = lastRetriable ? remainingMs : timeout;
       return await runAlert('get', budgetMs);
     } catch (error) {
       // Only a typed absence or an unreadable prompt is worth waiting out. Anything else — a dead
@@ -109,9 +114,12 @@ export async function awaitAppleAlert(
       if (!isAlertRetriableError(error)) throw error;
       lastRetriable = error;
     }
-    await sleep(ALERT_POLL_INTERVAL_MS);
+    const remainingMsAfterRead = timeout - (Date.now() - start);
+    if (remainingMsAfterRead > 0) {
+      await sleep(Math.min(ALERT_POLL_INTERVAL_MS, remainingMsAfterRead));
+    }
   }
-  if (lastRetriable && isAlertUnresolvedError(lastRetriable)) throw lastRetriable;
+  if (isAlertUnresolvedError(lastRetriable)) throw lastRetriable;
   throw new AppError('COMMAND_FAILED', 'alert wait timed out', lastRetriable?.details);
 }
 

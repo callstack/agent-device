@@ -1,7 +1,7 @@
 import { buildEntries } from './scripts/build-entries.ts';
 import fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { defineConfig, type TsdownPluginOption } from 'tsdown';
+import { bundledLicenseNotices } from './scripts/lib/bundled-license-notices.ts';
 
 const typeScriptPackageJsonUrl = import.meta.resolve('typescript/package.json');
 const { default: getTypeScript7ExePath } = await import(
@@ -98,6 +98,8 @@ export default defineConfig({
     alwaysBundle: [/^@agent-device\//],
     onlyBundle: [
       '@limrun/api',
+      '@limrun/xdelta3-wasm',
+      '@xmldom/xmldom',
       'agent-base',
       'b4a',
       'debug',
@@ -112,6 +114,7 @@ export default defineConfig({
       'jpeg-js',
       'ms',
       'pend',
+      'plist',
       'pngjs',
       'proxy-from-env',
       'streamx',
@@ -121,6 +124,7 @@ export default defineConfig({
       'undici',
       'undici-types',
       'ws',
+      'xmlbuilder',
       'yaml',
       'yauzl',
     ],
@@ -144,15 +148,6 @@ export default defineConfig({
       handler(level, log);
     },
   },
-  // Limrun loads `@limrun/xdelta3-wasm` only inside `client.syncApp`, which agent-device never
-  // calls, so 52 kB of base64 wasm would ship for a path nothing reaches. The alias resolves the
-  // specifier to a chunk that names the omission. Add the package to `deps.onlyBundle` and drop
-  // this alias to restore that path.
-  alias: {
-    '@limrun/xdelta3-wasm': fileURLToPath(
-      new URL('./src/vendor/limrun-delta-sync-omitted.ts', import.meta.url),
-    ),
-  },
   format: 'esm',
   platform: 'node',
   target: 'es2022',
@@ -174,7 +169,7 @@ export default defineConfig({
   },
   outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
   minify: true,
-  plugins: [dropAmbientDeclarationImports],
+  plugins: [dropAmbientDeclarationImports, bundledLicenseNotices(import.meta.dirname)],
   dts: {
     tsgo: {
       path: getTypeScript7ExePath(),

@@ -25,6 +25,7 @@ import {
 import {
   canSkipRunnerReadinessPreflightAfterHealthyMutation,
   isReadOnlyRunnerCommand,
+  isQueuedRunnerCommand,
   isRunnerReadinessPreflightExempt,
   isRunnerReadinessProbeCommand,
 } from './runner-command-traits.ts';
@@ -290,11 +291,12 @@ async function sendRunnerCommandAfterPreflight(params: {
 
   throwIfCanceledBeforeSend(signal);
   // From here the runner holds our request, and a shutdown that hands it off would orphan a command
-  // nobody is waiting for any more. A readiness probe is charged no more than the preflight's own
-  // probe is: the runner serves it inline, so its reply says nothing about the queued work a charge
-  // stands for, and charging it would let one probe settle another command's debt (#2965). The trait
-  // that names the probe is pinned to the runner's inline routing by `runner-command-traits-readiness-routing.test.ts`.
-  const charged = !isRunnerReadinessProbeCommand(runnerCommand);
+  // nobody is waiting for any more. A command the runner serves off its queue is charged no more than
+  // the preflight's own probe is: its reply says nothing about the queued work a charge stands for,
+  // and charging it would let one reply settle another command's debt (#2965). The trait that names
+  // those commands is pinned to the runner's off-queue routing by
+  // `runner-command-traits-queue-routing.test.ts`.
+  const charged = isQueuedRunnerCommand(runnerCommand);
   if (charged) session.commandCharges.charge(runnerCommand.commandId);
   try {
     return await withDiagnosticTimer(

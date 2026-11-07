@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { REMOTE_LEASE_IDLE_TTL_MS } from '@agent-device/contracts/lease-scope';
 import { AppError } from '@agent-device/kernel/errors';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
@@ -16,9 +17,16 @@ const leaseDeferredCommands = new Set([
   'disconnect',
   'metro',
   'session',
+  'shutdown',
 ]);
-export const PROXY_REMOTE_LEASE_TTL_MS = 5 * 60 * 1000;
-export const CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS = 10 * 60 * 1000;
+function remoteLeaseTtlMs(state: RemoteConnectionState): number | undefined {
+  const capabilities = connectionProviderCapabilities(state.leaseProvider);
+  return capabilities.leaseKind === 'proxy' ||
+    capabilities.usesCloudWebDriverLease ||
+    capabilities.holdsCloudDevice === true
+    ? REMOTE_LEASE_IDLE_TTL_MS
+    : undefined;
+}
 
 export type ConnectionLeasePolicy = {
   shouldAllocate(command: string): boolean;
@@ -43,28 +51,25 @@ export function connectionLeasePolicyForState(state: RemoteConnectionState): Con
   if (capabilities.supportsDeferredAppSelection) {
     return DEFERRED_APP_SELECTION_CONNECTION_LEASE_POLICY;
   }
-  if (capabilities.usesCloudWebDriverLease) {
-    return CLOUD_WEBDRIVER_CONNECTION_LEASE_POLICY;
-  }
   return DEFAULT_CONNECTION_LEASE_POLICY;
 }
 
 const DEFERRED_APP_SELECTION_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
   shouldAllocate: (command) =>
     command !== PUBLIC_COMMANDS.apps && !leaseDeferredCommands.has(command),
-  ttlMs: () => undefined,
+  ttlMs: remoteLeaseTtlMs,
   resolveLeaseState: async (options) => ({ state: options.state }),
 };
 
 const DEFAULT_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
   shouldAllocate: (command) => !leaseDeferredCommands.has(command),
-  ttlMs: () => undefined,
+  ttlMs: remoteLeaseTtlMs,
   resolveLeaseState: async (options) => ({ state: options.state }),
 };
 
 const PROXY_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
   shouldAllocate: (command) => command !== 'devices' && !leaseDeferredCommands.has(command),
-  ttlMs: () => PROXY_REMOTE_LEASE_TTL_MS,
+  ttlMs: remoteLeaseTtlMs,
   // Known before the daemon allocates, so a host in front of it can name the lease with the same id.
   newLeaseId: () => crypto.randomBytes(16).toString('hex'),
   resolveLeaseState: resolveProxyLeaseState,
@@ -86,10 +91,4 @@ const MACOS_APP_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
     }
     return { state: { ...state, platform: 'macos' } };
   },
-};
-
-const CLOUD_WEBDRIVER_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
-  shouldAllocate: (command) => !leaseDeferredCommands.has(command),
-  ttlMs: () => CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS,
-  resolveLeaseState: async (options) => ({ state: options.state }),
 };

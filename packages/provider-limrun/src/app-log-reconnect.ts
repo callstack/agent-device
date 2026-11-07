@@ -47,7 +47,7 @@ async function reconnectAttached(
 ): Promise<LimrunAppLogReconnectOutcome> {
   if (descriptor.platform === 'ios') {
     return isDescribedInstance(instances.ios, descriptor)
-      ? await openIosReader(instances.ios, descriptor)
+      ? await openIosReader(instances.ios, descriptor, dependencies)
       : { status: 'ownership-lost' };
   }
   return isDescribedInstance(instances.android, descriptor)
@@ -65,6 +65,7 @@ function isDescribedInstance<Access extends LimrunIosInstanceAccess>(
 async function reconnectIos(options: {
   limrun: Limrun;
   descriptor: LimrunAppLogDescriptor;
+  dependencies: LimrunRuntimeDependencies;
   signal?: AbortSignal;
 }): Promise<LimrunAppLogReconnectOutcome> {
   const selected = await selectOwnedActiveInstance(
@@ -80,25 +81,34 @@ async function reconnectIos(options: {
   return await openIosReader(
     { apiUrl: selected.apiUrl, token: selected.token },
     options.descriptor,
+    options.dependencies,
   );
 }
 
 async function openIosReader(
   access: LimrunIosInstanceAccess,
   descriptor: LimrunAppLogDescriptor,
+  dependencies: LimrunRuntimeDependencies,
 ): Promise<LimrunAppLogReconnectOutcome> {
   const client = await createIosInstanceClient({
     apiUrl: access.apiUrl,
     token: access.token,
     logLevel: 'warn',
   });
+  const logs = dependencies.ios.createAppLogReader({ ...access, client });
   const reader: LimrunAppLogReader = {
     platform: 'ios',
     leaseId: descriptor.leaseId,
     instanceId: descriptor.instanceId,
     ownership: descriptor.ownership,
-    readLogs: async (appBundleId, lineLimit) => await client.appLogTail(appBundleId, lineLimit),
-    [Symbol.asyncDispose]: async () => client.disconnect(),
+    readLogs: logs.readLogs,
+    [Symbol.asyncDispose]: async () => {
+      try {
+        await logs[Symbol.asyncDispose]();
+      } finally {
+        client.disconnect();
+      }
+    },
   };
   return { status: 'opened', reader };
 }

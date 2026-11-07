@@ -92,16 +92,25 @@ if [ -n "$EXPECTED_RUNNER_BUNDLE_ID" ] && [ "$RUNNER_BUNDLE_ID" != "$EXPECTED_RU
 fi
 
 ditto "$RUNNER_APP_PATH" "$STAGED_APP_PATH"
-# Remote simulators cannot resolve dependencies from the build machine's Xcode paths.
+# Remote simulators cannot resolve dependencies from the build machine's Xcode paths, so the runner
+# must carry XCTest itself. Xcode 26 embeds it; Xcode 27 leaves it out, and Limrun simulators run iOS 26.
+if [ ! -d "$STAGED_APP_PATH/Frameworks/XCTest.framework" ]; then
+  echo "The runner app does not embed XCTest.framework. Build the simulator runner with Xcode 26 (set DEVELOPER_DIR to an Xcode 26 install): Xcode 27 resolves XCTest from the build machine, which a remote simulator cannot reach." >&2
+  exit 1
+fi
 PLATFORM_PATH="$(xcrun --sdk iphonesimulator --show-sdk-platform-path)"
+# Newer Xcode 26 releases link Testing.framework against this library; Xcode 26.2 ships none.
 INTEROP_LIBRARY="$PLATFORM_PATH/Developer/usr/lib/lib_TestingInterop.dylib"
-mkdir -p "$STAGED_APP_PATH/Frameworks"
 if [ -f "$INTEROP_LIBRARY" ]; then
   cp "$INTEROP_LIBRARY" "$STAGED_APP_PATH/Frameworks/"
-elif [ -d "$STAGED_APP_PATH/Frameworks/Testing.framework" ] &&
-     [ ! -f "$STAGED_APP_PATH/Frameworks/lib_TestingInterop.dylib" ]; then
-  echo "Testing.framework requires lib_TestingInterop.dylib, but it was not found at $INTEROP_LIBRARY" >&2
-  exit 1
+fi
+# Swift Testing loads overlays at runtime; keep them from the same toolchain as its bundled framework.
+if [ -d "$STAGED_APP_PATH/Frameworks/Testing.framework" ]; then
+  for FRAMEWORK in "$PLATFORM_PATH"/Developer/Library/Frameworks/_Testing_*.framework; do
+    if [ -d "$FRAMEWORK" ]; then
+      ditto "$FRAMEWORK" "$STAGED_APP_PATH/Frameworks/$(basename "$FRAMEWORK")"
+    fi
+  done
 fi
 rm -f "$ARCHIVE_PATH"
 (

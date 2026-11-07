@@ -883,8 +883,8 @@ function createCliDaemonTransport(options: CliDaemonTransportSetup): AgentDevice
   if (!options.flags.remoteConfig) return send;
   return async (req, context) => {
     const response = await send(req, context);
-    const { forgetEndedProxyLease } = await import('./cli/connection/ended-lease.ts');
-    forgetEndedProxyLease(options.flags, response, options.host);
+    const { forgetEndedConnectionLease } = await import('./cli/connection/ended-lease.ts');
+    forgetEndedConnectionLease(options.flags, response, options.host);
     return response;
   };
 }

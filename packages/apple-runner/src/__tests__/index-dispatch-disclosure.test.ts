@@ -114,7 +114,10 @@ async function pressSeriesRefusedOnSecondChunk(): Promise<unknown> {
   const firstChunk = Array.from({ length: 20 }, () => ({ ok: true, kind: 'tap' }));
   server = await startFakeRunnerServer({
     sequence: [
-      { kind: 'ok', data: { completedSteps: 20, sequenceResults: firstChunk } },
+      {
+        kind: 'ok',
+        data: { sequenceOrientation: 1, completedSteps: 20, sequenceResults: firstChunk },
+      },
       { kind: 'runnerError', code: 'RUNNER_BUSY', message: 'runner busy' },
     ],
   });

@@ -82,11 +82,13 @@ export const openApplicationRuntimePlanUses = Object.freeze([
 /** The normal lifecycle binding used by close when no native runtime-hint cleanup is pending. */
 export const closeApplicationRuntimeUse = defineUse({
   required: ['closeApplication', 'finalizeApplicationClose'],
+  conditional: ['shutdownTarget'],
 });
 
 /** A close with persisted native transport values requires their explicit cleanup atomically. */
 export const closeApplicationWithRuntimeHintClearUse = defineUse({
   required: ['closeApplication', 'finalizeApplicationClose', 'clearRuntimeHints'],
+  conditional: ['shutdownTarget'],
 });
 
 /**

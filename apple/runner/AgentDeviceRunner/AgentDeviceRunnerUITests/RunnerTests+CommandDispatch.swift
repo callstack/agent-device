@@ -466,6 +466,8 @@ extension RunnerTests {
       return executeUptime()
     case .appState:
       return executeAppState(command: command)
+    case .snapshotBridge:
+      return executeSnapshotBridge(command: command)
     case .pasteboardWrite:
       return executePasteboardWrite(command: command)
     case .activate:
@@ -694,11 +696,13 @@ extension RunnerTests {
     return XCUIApplication(bundleIdentifier: host.bundleId).state
   }
 
-  func observeOnlyUnavailableResponse() -> Response {
+  func observeOnlyUnavailableResponse(
+    hint: String = "XCUIApplication must report runningForeground before and after capture. This state report does not prove screen ownership (#2696)."
+  ) -> Response {
     Response(ok: false, error: ErrorPayload(
       code: "OBSERVATION_UNAVAILABLE",
       message: "The session app cannot be observed without activation.",
-      hint: "XCUIApplication must report runningForeground before and after capture. This state report does not prove screen ownership (#2696)."
+      hint: hint
     ))
   }
 

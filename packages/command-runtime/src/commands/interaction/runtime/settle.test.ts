@@ -1719,7 +1719,7 @@ test("a system dialog's buttons are settle-tail candidates, never chrome (#1198)
 
 test('added lines win diff-budget slots over removals under truncation', async () => {
   // 120 removals precede the additions positionally; the fresh-ref additions
-  // must still survive the 80-line cap.
+  // must still survive the cap; removals keep 8 lines and the summary keeps the true count.
   const bigBefore = makeSnapshotState(
     Array.from({ length: 120 }, (_, index) => ({
       index,
@@ -1757,10 +1757,10 @@ test('added lines win diff-budget slots over removals under truncation', async (
   const diff = result.settle?.diff;
   assert.ok(diff);
   assert.equal(diff.truncated, true);
-  assert.equal(diff.lines.length, 80);
   const added = diff.lines.filter((line) => line.kind === 'added');
   assert.equal(added.length, 10);
   assert.ok(added.every((line) => line.ref !== undefined));
+  assert.deepEqual([diff.lines.length, diff.summary.removals], [18, 120]);
 });
 
 // Unchanged interactive refs tail: benchmarks showed a removals-only settled

@@ -690,7 +690,7 @@ test('resource-free nested test keeps retries for an ordinary failure', async ()
   }
 });
 
-test('bounded test cleanup retires an attempt with another durable resource and keeps the primary refusal', async () => {
+test('bounded test cleanup closes an attempt with another durable resource and keeps the primary refusal', async () => {
   const world = await resourceAdmissionWorld();
   try {
     world.sessionStore.retire(world.ref);
@@ -728,7 +728,10 @@ test('bounded test cleanup retires an attempt with another durable resource and 
     expect(details.divergence.screen.hint).toBe(details.divergence.cause.hint);
     expect(adopted).toHaveLength(1);
     expect(adopted[0]!.finish).toHaveBeenCalled();
-    expect(world.sessionStore.listRefs()).toHaveLength(0);
+    // The failed finish withholds the attempt's device claim, so its session stays closable.
+    const kept = world.sessionStore.listRefs();
+    expect(kept).toHaveLength(1);
+    expect(kept[0]!.session.deviceClaim).toBeDefined();
     expect(world.native).not.toHaveBeenCalled();
   } finally {
     await world.daemon.close();

@@ -52,6 +52,33 @@ test('parseArgs accepts scroll pixel distance and duration flags', () => {
   assert.equal(parsed.flags.durationMs, 50);
 });
 
+test('parseArgs accepts the post-gesture stabilization opt-out on the gestures that stabilize', () => {
+  const scroll = parseArgs(['scroll', 'down', '--no-post-gesture-stabilization'], {
+    strictFlags: true,
+  });
+  assert.equal(scroll.flags.postGestureStabilization, false);
+
+  const swipe = parseArgs(['swipe', '0', '0', '10', '10', '--no-post-gesture-stabilization'], {
+    strictFlags: true,
+  });
+  assert.equal(swipe.flags.postGestureStabilization, false);
+
+  const gestureSwipe = parseArgs(['gesture', 'swipe', 'left', '--no-post-gesture-stabilization'], {
+    strictFlags: true,
+  });
+  assert.equal(gestureSwipe.flags.postGestureStabilization, false);
+
+  assert.equal(parseArgs(['scroll', 'down']).flags.postGestureStabilization, undefined);
+  assert.throws(
+    () =>
+      parseArgs(['press', '10', '10', '--no-post-gesture-stabilization'], { strictFlags: true }),
+    (error) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      /--no-post-gesture-stabilization is not supported for command press/.test(error.message),
+  );
+});
+
 test('parseArgs keeps no-record accepted on recordable commands', () => {
   const press = parseArgs(['press', '10', '10', '--no-record'], { strictFlags: true });
   assert.equal(press.flags.noRecord, true);
@@ -256,6 +283,8 @@ test('parseArgs recognizes screenshot flags', () => {
       'page.png',
       '--pixel-density',
       '2',
+      '--screen-mask',
+      'black',
       '--full',
       '-f',
       '--fullscreen',
@@ -263,6 +292,8 @@ test('parseArgs recognizes screenshot flags', () => {
       '0.3',
       '--no-stabilize',
       '--normalize-status-bar',
+      '--capture-backend',
+      'runner',
     ],
     {
       strictFlags: true,
@@ -271,7 +302,9 @@ test('parseArgs recognizes screenshot flags', () => {
   assert.equal(parsed.command, 'screenshot');
   assert.deepEqual(parsed.positionals, ['page.png']);
   assert.equal(parsed.flags.screenshotPixelDensity, 2);
+  assert.equal(parsed.flags.screenshotScreenMask, 'black');
   assert.equal(parsed.flags.screenshotFullscreen, true);
+  assert.equal(parsed.flags.screenshotCaptureBackend, 'runner');
   assert.equal(parsed.flags.screenshotScale, 0.3);
   assert.equal(parsed.flags.screenshotNoStabilize, true);
   assert.equal(parsed.flags.screenshotNormalizeStatusBar, true);
@@ -423,6 +456,10 @@ test('parseArgs refuses a gesture option the chosen kind never reads', () => {
       ['gesture', 'tap', '80', '300', '200', '450', '--pointer-count', '2'],
       'gesture tap does not read --pointer-count',
     ],
+    [
+      ['gesture', 'fling', 'up', '200', '420', '--no-post-gesture-stabilization'],
+      'gesture fling does not read --no-post-gesture-stabilization',
+    ],
   ];
   for (const [argv, message] of cases) {
     assert.throws(
@@ -444,4 +481,20 @@ test('parseArgs maps scroll until and max passes', () => {
   assert.deepEqual(parsed.positionals, ['down']);
   assert.equal(parsed.flags.until, 'id="row-512"');
   assert.equal(parsed.flags.maxPasses, 90);
+});
+
+test('screen-mask is accepted for live screenshot diffs and refuses unknown values', () => {
+  const parsed = parseArgs(
+    ['diff', 'screenshot', '--baseline', 'base.png', '--screen-mask', 'black'],
+    { strictFlags: true },
+  );
+  assert.equal(parsed.flags.screenshotScreenMask, 'black');
+  assert.throws(() => parseArgs(['screenshot', '--screen-mask', 'alpha'], { strictFlags: true }));
+});
+
+test('screen-mask is refused for diff snapshot', () => {
+  assert.throws(
+    () => parseArgs(['diff', 'snapshot', '--screen-mask', 'black'], { strictFlags: true }),
+    { code: 'INVALID_ARGS' },
+  );
 });

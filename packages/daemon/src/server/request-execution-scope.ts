@@ -2,7 +2,6 @@ import { restrictRemoteHostInputs } from './remote-host-input-policy.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
-import { resolveTargetDeviceSelection } from '@agent-device/device-selection/dispatch-resolve';
 import {
   resolveSessionRequestLog,
   resolveSessionRunnerLogPath,
@@ -30,6 +29,7 @@ import {
   resolveCallerScopeRoot,
   resolveEffectiveSessionName,
 } from '../sessions/session-routing.ts';
+import { deriveWebSessionIdentity } from '../core/session-tenant-scope.ts';
 import {
   assertProviderLeaseRequestNamesSession,
   assertRequestLeaseAdmissionPreflight,
@@ -125,9 +125,11 @@ async function resolveFreshBoundedOpenDevice(req: DaemonRequest, env: EnvMap): P
     throw new AppError('INVALID_ARGS', 'Invalid open target');
   }
   const openReq = foreground.type === 'resolved' ? foreground.req : req;
+  const { resolveRequestTargetDeviceSelection } =
+    await import('../core/request-device-resolution.ts');
   return (
-    await resolveTargetDeviceSelection(
-      openReq.flags ?? {},
+    await resolveRequestTargetDeviceSelection(
+      openReq,
       buildOpenTargetDeviceResolutionOptions(openReq.positionals?.[0], env, openReq.flags?.surface),
     )
   ).device;
@@ -152,7 +154,7 @@ async function resolveBoundedClaimDevice(
   if (req.command === 'install_source' && session) return session.device;
   const params = {
     session,
-    flags: req.flags,
+    req,
     env,
     platformServices,
     androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),
@@ -234,9 +236,16 @@ export async function createRequestExecutionScope(params: {
   daemonPolicy?: DaemonPolicy;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
-  let scopedReq = applyRequestCommandDefaults(
-    scopeRequestSession(restrictRemoteHostInputs(params.req)),
-  );
+  const tenantScopedReq = scopeRequestSession(restrictRemoteHostInputs(params.req));
+  // A nested batch or replay step arrives with the identity of the request that spawned it, and its
+  // own name is already the store key.
+  const webSession =
+    params.req.internal?.webSession ??
+    deriveWebSessionIdentity(params.req.session, tenantScopedReq);
+  let scopedReq = applyRequestCommandDefaults({
+    ...tenantScopedReq,
+    internal: { ...tenantScopedReq.internal, webSession },
+  });
 
   const command = scopedReq.command;
   const startedAtMs = Date.now();
@@ -398,15 +407,21 @@ export async function createRequestExecutionScope(params: {
                   throw new AppError(code, message, details);
                 }
               },
-              closeWouldReleaseProviderLease: () =>
-                Boolean(
-                  session?.lease &&
-                  inspectSessionProviderReleaseOnClose({
-                    session,
-                    leaseRegistry,
-                    leaseLifecycleProvider: params.leaseLifecycleProvider,
-                  }),
-                ),
+              closeWouldReleaseProviderLease: async () => {
+                if (!session?.lease) return false;
+                const facts =
+                  scopedReq.flags?.shutdown === true
+                    ? await scope.inspectFacts(session.device)
+                    : undefined;
+                return inspectSessionProviderReleaseOnClose({
+                  shutdownRequested:
+                    facts?.device.providerMode === 'provider-runtime' &&
+                    facts.operations.shutdownTarget.available,
+                  session,
+                  leaseRegistry,
+                  leaseLifecycleProvider: params.leaseLifecycleProvider,
+                });
+              },
               claimRecovery: {
                 currentSessionExists: Boolean(session),
                 resolveDevice: async () => {

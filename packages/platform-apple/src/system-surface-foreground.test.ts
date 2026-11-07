@@ -44,7 +44,7 @@ function probe() {
 test('every registered host off screen is background, read only from the ready runner session', async () => {
   statesByHost({ [safari!]: 'runningBackgroundSuspended', [passbook!]: 'notRunning' });
 
-  await expect(probe()).resolves.toBe('background');
+  await expect(probe()).resolves.toEqual({ foreground: 'background', sessionId: 'runner-1' });
   expect(
     runner.runAppleRunnerCommand.mock.calls.map(([, command, options]) => [command, options]),
   ).toEqual(
@@ -55,12 +55,38 @@ test('every registered host off screen is background, read only from the ready r
   );
 });
 
+test('a decisive first host answers without waiting for the hosts after it', async () => {
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  runner.runAppleRunnerCommand.mockImplementation(async (_device, command) => {
+    if (command.appBundleId === safari) return { applicationState: 'runningForeground' };
+    await pending;
+    return { applicationState: 'notRunning' };
+  });
+
+  await expect(probe()).resolves.toEqual({
+    foreground: {
+      kind: 'foreground',
+      host: IOS_SYSTEM_SURFACE_HOSTS.find((host) => host.bundleId === safari),
+    },
+    sessionId: 'runner-1',
+  });
+  // Every read still went out together.
+  expect(runner.runAppleRunnerCommand).toHaveBeenCalledTimes(IOS_SYSTEM_SURFACE_HOSTS.length);
+  release();
+});
+
 test('one background host does not hide another one presenting', async () => {
   statesByHost({ [safari!]: 'runningBackground', [passbook!]: 'runningForeground' });
 
   await expect(probe()).resolves.toEqual({
-    kind: 'foreground',
-    host: IOS_SYSTEM_SURFACE_HOSTS.find((host) => host.bundleId === passbook),
+    foreground: {
+      kind: 'foreground',
+      host: IOS_SYSTEM_SURFACE_HOSTS.find((host) => host.bundleId === passbook),
+    },
+    sessionId: 'runner-1',
   });
 });
 
@@ -70,7 +96,7 @@ test.for([
 ] as const)('%s is unknown and sends no command', async ([, liveness]) => {
   runner.readRunnerSessionLiveness.mockReturnValue(liveness);
 
-  await expect(probe()).resolves.toBe('unknown');
+  await expect(probe()).resolves.toEqual({ foreground: 'unknown' });
   expect(runner.runAppleRunnerCommand).not.toHaveBeenCalled();
 });
 
@@ -81,12 +107,12 @@ test.for([
 ] as const)('%s is unknown', async ([, state]) => {
   statesByHost({ [safari!]: state, [passbook!]: 'notRunning' });
 
-  await expect(probe()).resolves.toBe('unknown');
+  await expect(probe()).resolves.toEqual({ foreground: 'unknown', sessionId: 'runner-1' });
 });
 
 test('a failed read is unknown, and a cancelled request still cancels', async () => {
   runner.runAppleRunnerCommand.mockRejectedValue(new Error('runner unreachable'));
-  await expect(probe()).resolves.toBe('unknown');
+  await expect(probe()).resolves.toEqual({ foreground: 'unknown', sessionId: 'runner-1' });
 
   const controller = new AbortController();
   controller.abort(new Error('request cancelled'));

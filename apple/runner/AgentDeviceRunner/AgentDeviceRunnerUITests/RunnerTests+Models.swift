@@ -36,6 +36,8 @@ enum CommandType: String, Codable, CaseIterable {
   case status
   case uptime
   case appState
+  /// Reads the Simulator AX bridge tree on the transport, off the XCTest main thread.
+  case snapshotBridge
   case pasteboardWrite
   case activate
   case terminate
@@ -277,7 +279,9 @@ struct Command: Codable {
   let synthesized: Bool?
   let coordinateTapTextInputEvidence: CoordinateTapTextInputEvidence?
   let litPanel: RunnerLitPanelFact?
+  let sequenceOrientation: Int?
   let steps: [SequenceStep]?
+  let snapshotBridge: SnapshotBridgeCommandPayload?
 }
 
 extension Command {
@@ -306,6 +310,11 @@ extension Command {
     case .status, .appState:
       return .runnerCaptureRead(retainsJournalResponseJson: true)
 
+    // The bridge read answers from AXRuntime, never through the session app, and the transport serves
+    // it before the journal, so no response is ever stored to replay.
+    case .snapshotBridge:
+      return .runnerCaptureRead(retainsJournalResponseJson: false)
+
     case .screenshot:
       return .runnerCaptureRead(retainsJournalResponseJson: false)
 
@@ -332,6 +341,23 @@ extension Command {
   }
 }
 
+/// One request to the Simulator AX bridge reader that the runner serves (`RunnerSnapshotBridge.h`). The
+/// bounds are the guest bridge's own `describe` fields; `expectedPid` and `expectedProcessStartTime` name
+/// the app generation the host planned the read against.
+struct SnapshotBridgeCommandPayload: Codable {
+  let verb: String
+  let requestId: String
+  let generation: String?
+  let expectedPid: Int?
+  let expectedProcessStartTime: String?
+  let maxDepth: Int?
+  let maxNodes: Int?
+  let maxDurationMs: Int?
+  let maxResponseBytes: Int?
+  let nativeLevelsHint: Int?
+  let surfaceHostExecutables: [String]?
+}
+
 enum ScrollReleaseBehavior: String, Codable {
   case controlled
   case inertial
@@ -342,6 +368,8 @@ struct RunnerGesturePlan: Codable {
   let topology: String
   let intent: String
   let executionProfile: String?
+  /// `runnerScreenEdgeContactOrigin` when the contact starts as a screen-edge touch.
+  let contactOrigin: String?
   let durationMs: Double
   let viewport: RunnerGestureViewport
   let pointers: [RunnerGesturePointer]
@@ -394,6 +422,7 @@ struct SequenceStepResult: Codable {
   let kind: String
   let errorCode: String?
   let errorMessage: String?
+  var errorHint: String? = nil
   let gestureStartUptimeMs: Double?
   let gestureEndUptimeMs: Double?
 }
@@ -514,6 +543,8 @@ struct DataPayload: Codable {
   var keyboardAvoided: Bool?
   var keyboardMinY: Double?
   var maestroNonHittableCoordinateFallbackUsed: Bool?
+  /// The one-pointer motion schedule a planned gesture ran.
+  var executionProfile: String?
   var textEntryRoute: String?
   /// A replacement whose field changed but whose value cannot echo the typed text: "unconfirmed",
   /// with the TS `FillUnconfirmedVerification` evidence in `requested`, `before`, `after`, `target`.
@@ -529,7 +560,11 @@ struct DataPayload: Codable {
   /// crawl still grinds, so the healthy response must carry the live occupancy rather than let the
   /// daemon read `ok` as proof the runner drained (#2552).
   var runnerMainThreadBusy: Bool?
+  /// The Simulator AX bridge envelope, serialized as the guest bridge would write it, so the host
+  /// validates one envelope format whichever process read the tree.
+  var snapshotBridgeEnvelope: String?
   var completedSteps: Int?
+  var sequenceOrientation: Int?
   var failedStepIndex: Int?
   var sequenceResults: [SequenceStepResult]?
   var targetActivation: TargetActivationFactPayload?
@@ -560,13 +595,16 @@ struct TextEntryVerificationTargetPayload: Codable, Equatable {
 }
 
 /// `kind` mirrors the TS `SnapshotKeyboardBandFact`: "visible" carries `frame`, "unmeasurable"
-/// carries `reason`, and "absent" carries nothing because there is nothing to say. `frame` is in the
+/// carries `reason`, and "absent" carries nothing else to say. "visible" and "absent" also carry
+/// `treeBound`, because both are read from the capture's own root snapshot. `frame` is in the
 /// app's own orientation space — the same space `SnapshotGeometrySpace` publishes every node rect in
 /// — so the daemon compares it against node rects without transforming either side (#2660).
 struct KeyboardBandFactPayload: Codable, Equatable {
   let kind: String
   let frame: SnapshotRect?
   let reason: String?
+  /// True when the fact was read from the capture's own root snapshot, the tree its nodes come from.
+  var treeBound: Bool? = nil
 }
 
 /// `kind` mirrors the TS `IosSystemSurfaceKind` (e.g. "web-auth").

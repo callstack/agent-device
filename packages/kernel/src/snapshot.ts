@@ -385,15 +385,15 @@ export type HiddenContentHint = {
  * Keyboard evidence in the node coordinate space: `visible` measured; `derived` from the shared
  * docked-tree policy before projection; `visibility-only` boolean; `tree-rejected` rejected geometry
  * against a usable viewport with optional visibility; `unmeasurable` unknown; `absent` explicit absence.
- * On iOS XCTest, visible and absent come from the complete pre-projection root snapshot; a successful
- * full scan with no keyboard proves absence. Missing partial/projected nodes or omitted facts never do.
+ * `treeBound`: read from the capture's own tree (iOS XCTest, Android, docked-tree), not a probe. A full
+ * pre-projection iOS root scan proves absence; projected or partial nodes and omitted facts never do.
  */
 export type SnapshotKeyboardBandFact =
-  | { kind: 'visible'; frame: Rect }
-  | { kind: 'derived'; derivation: 'docked-tree'; frame: Rect }
+  | { kind: 'visible'; frame: Rect; treeBound?: true }
+  | { kind: 'derived'; derivation: 'docked-tree'; frame: Rect; treeBound?: true }
   | { kind: 'visibility-only'; visible: boolean }
   | { kind: 'tree-rejected'; derivation: 'docked-tree'; visible?: boolean }
-  | { kind: 'absent' }
+  | { kind: 'absent'; treeBound?: true }
   | { kind: 'unmeasurable'; reason: string };
 
 /**
@@ -569,7 +569,7 @@ export function formatRole(type: string): string {
 
 /**
  * The channel↔producer pairs that can actually occur. `xctest` trees come from the local Apple
- * runner, Appium page-source XML, or a cloud provider's AX element tree (Limrun, Revyl), and only
+ * runner, Appium page-source XML, or a cloud provider's AX element tree (Revyl), and only
  * the runner's output has been through its presentation (clip fold, effective geometry, scope).
  * Logic that assumes those guarantees must key on the producer, never on the channel alone.
  *
@@ -580,12 +580,7 @@ export function formatRole(type: string): string {
 export type SnapshotProvenance =
   | {
       backend: 'xctest';
-      producer:
-        | 'apple-runner'
-        | 'simulator-ax-bridge'
-        | 'appium-source'
-        | 'limrun-ios-tree'
-        | 'revyl-ios-tree';
+      producer: 'apple-runner' | 'simulator-ax-bridge' | 'appium-source' | 'revyl-ios-tree';
     }
   | { backend: 'android'; producer: 'android-uiautomator' | 'appium-source' | 'cdp-dom' }
   | { backend: 'harmonyos-arkui'; producer: 'harmonyos-uitest' }

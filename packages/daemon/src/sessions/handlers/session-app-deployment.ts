@@ -86,7 +86,7 @@ export async function handleAppDeploymentCommand(params: {
 
     let device = await resolveCommandDevice({
       session,
-      flags,
+      req,
       env: sessionStore.host.env,
       androidAvdSelection: resolveCommandAndroidAvdSelection(command),
       platformServices: params.platformServices,
@@ -154,7 +154,7 @@ export async function handlePushNotificationCommand(
       );
   const device = await resolveCommandDevice({
     session,
-    flags,
+    req,
     env: sessionStore.host.env,
     platformServices: params.platformServices,
   });
@@ -205,7 +205,7 @@ export async function handleUninstallCommand(
   if (!app) return errorResponse('INVALID_ARGS', 'uninstall requires <app>');
   const device = await resolveCommandDevice({
     session,
-    flags,
+    req,
     env: sessionStore.host.env,
     platformServices: params.platformServices,
   });
