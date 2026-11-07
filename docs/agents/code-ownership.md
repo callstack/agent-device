@@ -40,8 +40,8 @@ Shared test support belongs in `@agent-device/test-kit`, a devDependency.
 
 ## CI toolchains
 
-Select a CI toolchain with the runner image in `runs-on`.
-Add selection code only when no image fits the job. Record why.
+Select a preinstalled toolchain, such as Xcode, with the runner image in `runs-on`.
+If no image provides it, add selection code. Record why.
 
 ## Diagnostics
 
