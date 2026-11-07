@@ -153,6 +153,9 @@ export async function actOnAppleAlert(
       if (!isAlertRetriableError(error)) break;
     }
     await sleep(ALERT_POLL_INTERVAL_MS);
+    // Same floor as `awaitAppleAlert`: a retry with no more than one poll interval left would be
+    // cut off by the runner's main-thread timeout and misreported as an unreadable prompt.
+    if (remainingBudgetMs(start, ALERT_ACTION_RETRY_MS) <= ALERT_POLL_INTERVAL_MS) break;
   }
   throw withAlertFallbackHint(lastError);
 }

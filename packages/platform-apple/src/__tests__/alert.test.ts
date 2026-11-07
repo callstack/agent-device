@@ -150,6 +150,28 @@ test('an exhausted accept carries the scoped-snapshot fallback the agent needs n
   assert.match(String(error.details?.hint), /scoped snapshot/i);
 });
 
+test('an action does not start a retry the remaining budget cannot hold', async () => {
+  vi.useFakeTimers();
+  mockRunner.mockRejectedValue(runnerAbsence());
+
+  const outcome = actOnAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    'accept',
+    undefined,
+    process.env,
+  ).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(5_000);
+
+  await outcome;
+  const budgets = mockRunner.mock.calls.map((call) => (call[1] as { timeoutMs: number }).timeoutMs);
+  assert.ok(budgets.length >= 2, 'the act loop never retried');
+  for (const budget of budgets.slice(1)) assert.ok(budget > 300, `retry started with ${budget} ms`);
+});
+
 // The whole point of typing absence: a backend that failed for any other reason must not be
 // retried until the window expires and then reported as a timeout. These three pin that the
 // evidence — not the message text — is what decides.
