@@ -5,8 +5,6 @@ import {
   type SnapshotSourceFailureKind,
 } from '@agent-device/capture-kit/snapshot-source-channel';
 
-export { SnapshotSourceError };
-
 export function snapshotSourceError(
   kind: SnapshotSourceFailureKind,
   code: string,

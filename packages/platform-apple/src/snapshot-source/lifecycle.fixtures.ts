@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { createSnapshotSourceHost } from './host.ts';
-import { SnapshotSourceError, snapshotSourceError } from './errors.ts';
+import { SnapshotSourceError } from '@agent-device/capture-kit/snapshot-source-channel';
+import { snapshotSourceError } from './errors.ts';
 import { createSnapshotSourceDeadline } from './deadline.ts';
 import {
   encodeSnapshotBridgeFrame,

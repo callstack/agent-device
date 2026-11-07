@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { onTestFinished, test, vi } from 'vitest';
-import { SnapshotSourceError, snapshotSourceError } from './errors.ts';
+import { SnapshotSourceError } from '@agent-device/capture-kit/snapshot-source-channel';
+import { snapshotSourceError } from './errors.ts';
 import { SnapshotBridgeManager } from './lifecycle.ts';
 import { simulatorAddressFor } from '../core/simctl.ts';
 import type { SnapshotSourceTarget } from './types.ts';

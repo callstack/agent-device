@@ -4,7 +4,8 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
 import { simulatorAddressFor } from './core/simctl.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
-import type { SimulatorSnapshotSource, SnapshotSourceOutcome } from './snapshot-source-facade.ts';
+import type { SnapshotSourceOutcome } from '@agent-device/capture-kit/snapshot-source-channel';
+import type { SimulatorSnapshotSource } from './snapshot-source-facade.ts';
 import type { SimulatorSnapshotTargetResolver } from './snapshot-target.ts';
 
 export const ios = {
@@ -106,6 +107,20 @@ export function targetsResolvedBy(
   }),
 ): SimulatorSnapshotTargetResolver {
   return { resolveTarget, refreshTarget };
+}
+
+/** What the local resolver's simctl reads return while the app runs as pid 42 under `launch`. */
+export function simctlReadFor(args: readonly string[], launch = 'launch-a') {
+  return {
+    stdout:
+      args[0] === 'spawn'
+        ? `42\t0\tUIKitApplication:${input.options.appBundleId}[${launch}][rb-legacy]`
+        : JSON.stringify({
+            devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
+          }),
+    stderr: '',
+    exitCode: 0,
+  };
 }
 
 export function runnerResult() {

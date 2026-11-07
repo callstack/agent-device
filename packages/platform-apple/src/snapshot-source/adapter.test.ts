@@ -13,7 +13,7 @@ import { readSnapshotTargetProcessStartTime } from '../snapshot-process.ts';
 import { DEPTH_HINT_PROBE_BACK_AFTER_USES } from './depth-hints.ts';
 import { SNAPSHOT_BRIDGE_SOURCE_FILENAMES } from './cache-identity.ts';
 import { ADAPTER_KEYBOARD_CASES } from './adapter-keyboard.fixtures.ts';
-import type { SnapshotSourceOutcome } from './types.ts';
+import type { SnapshotSourceOutcome } from '@agent-device/capture-kit/snapshot-source-channel';
 import { createAdapterHost, targetForTest, type AdapterFixture } from './adapter.fixtures.ts';
 import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
 

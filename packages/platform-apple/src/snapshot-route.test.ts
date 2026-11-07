@@ -9,7 +9,8 @@ import { createLocalAppleToolProvider, withAppleToolProvider } from './core/tool
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
 import { createSimulatorSnapshotTargetResolver } from './snapshot-target.ts';
-import type { SimulatorSnapshotSource, SnapshotSourceOutcome } from './snapshot-source-facade.ts';
+import type { SnapshotSourceOutcome } from '@agent-device/capture-kit/snapshot-source-channel';
+import type { SimulatorSnapshotSource } from './snapshot-source-facade.ts';
 import {
   bridgeAcquisition,
   bridgePresentingHost,
@@ -18,6 +19,7 @@ import {
   presentSurface,
   runnerResult,
   signal,
+  simctlReadFor,
   sourceReturning,
   surfaceHostExecutables,
   surfaceHostPresent,
@@ -85,16 +87,7 @@ test.for([surfaceHostPresent, surfaceHostUnverified] as const)(
 // capture spawns only the cached target's `ps` identity read; the source's own two identity
 // reads are pinned beside it in `snapshot-source/adapter.test.ts`.
 test('a warm bridge capture with no runner spawns one ps and no pgrep before the bridge', async () => {
-  const run = vi.fn(async (args: readonly string[]) => ({
-    stdout:
-      args[0] === 'spawn'
-        ? `42\t0\tUIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]`
-        : JSON.stringify({
-            devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
-          }),
-    stderr: '',
-    exitCode: 0,
-  }));
+  const run = vi.fn(async (args: readonly string[]) => simctlReadFor(args));
   const runCommand = vi.fn(async () => ({ stdout: 'start-a', stderr: '', exitCode: 0 }));
   const source = sourceReturning(bridgeAcquisition());
   const route = createAppleSnapshotRoute(bridgePresentingHost(), {
@@ -512,16 +505,7 @@ test('stale bridge acquisition resolves the current generation before XCTest fal
 // rediscovery and name what it found, not republish the generation the bridge refused.
 test('a stale-target fallback on the local resolver stamps the rediscovered generation', async () => {
   let launch = 'launch-a';
-  const run = vi.fn(async (args: readonly string[]) => ({
-    stdout:
-      args[0] === 'spawn'
-        ? `42\t0\tUIKitApplication:${input.options.appBundleId}[${launch}][rb-legacy]`
-        : JSON.stringify({
-            devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
-          }),
-    stderr: '',
-    exitCode: 0,
-  }));
+  const run = vi.fn(async (args: readonly string[]) => simctlReadFor(args, launch));
   const runCommand = vi.fn(async () => ({ stdout: 'start-a', stderr: '', exitCode: 0 }));
   const source: SimulatorSnapshotSource = {
     acquire: vi.fn(async () => {
@@ -647,16 +631,7 @@ test('a slow app discovery yields to a live runner within its wait slice, then s
   });
   const run = vi.fn(async (args: readonly string[]) => {
     if (args[0] === 'spawn') await released;
-    return {
-      stdout:
-        args[0] === 'spawn'
-          ? `42\t0\tUIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]`
-          : JSON.stringify({
-              devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
-            }),
-      stderr: '',
-      exitCode: 0,
-    };
+    return simctlReadFor(args);
   });
   const runCommand = vi.fn(async () => ({ stdout: 'start-a', stderr: '', exitCode: 0 }));
   const fallback = vi.fn(async () => runnerResult());
@@ -713,16 +688,7 @@ test('an open waits out a slow app discovery, so the first capture after it star
   });
   const run = vi.fn(async (args: readonly string[]) => {
     if (args[0] === 'spawn') await released;
-    return {
-      stdout:
-        args[0] === 'spawn'
-          ? `42\t0\tUIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]`
-          : JSON.stringify({
-              devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
-            }),
-      stderr: '',
-      exitCode: 0,
-    };
+    return simctlReadFor(args);
   });
   const runCommand = vi.fn(async () => ({ stdout: 'start-a', stderr: '', exitCode: 0 }));
   const fallback = vi.fn(async () => runnerResult());
@@ -843,16 +809,7 @@ test('a slow app discovery keeps observation on the bridge while no runner can a
   });
   const run = vi.fn(async (args: readonly string[]) => {
     if (args[0] === 'spawn') await released;
-    return {
-      stdout:
-        args[0] === 'spawn'
-          ? `42\t0\tUIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]`
-          : JSON.stringify({
-              devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
-            }),
-      stderr: '',
-      exitCode: 0,
-    };
+    return simctlReadFor(args);
   });
   const runCommand = vi.fn(async () => ({ stdout: 'start-a', stderr: '', exitCode: 0 }));
   const fallback = vi.fn(async () => runnerResult());
@@ -901,16 +858,7 @@ test.for(['rejects', 'exits'] as const)(
     // A known target is re-checked with one `ps` per capture; no discovery runs. A deadline that
     // lands there must stay a plain cancellation, or a wait would report readiness exhaustion over
     // evidence its earlier polls already gathered (#2343 review).
-    const run = vi.fn(async (args: readonly string[]) => ({
-      stdout:
-        args[0] === 'spawn'
-          ? `42\t0\tUIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]`
-          : JSON.stringify({
-              devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
-            }),
-      stderr: '',
-      exitCode: 0,
-    }));
+    const run = vi.fn(async (args: readonly string[]) => simctlReadFor(args));
     let recheckStarted!: () => void;
     const recheck = new Promise<void>((resolve) => {
       recheckStarted = resolve;

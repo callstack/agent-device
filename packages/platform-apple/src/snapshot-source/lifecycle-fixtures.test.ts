@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { SnapshotSourceError } from './errors.ts';
+import { SnapshotSourceError } from '@agent-device/capture-kit/snapshot-source-channel';
 import { SnapshotBridgeManager } from './lifecycle.ts';
 import { bridge, createLifecycleFixture, deadline, limits, target } from './lifecycle.fixtures.ts';
 

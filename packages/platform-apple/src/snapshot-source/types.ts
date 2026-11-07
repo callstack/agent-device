@@ -42,12 +42,6 @@ export type SnapshotBridgeSourceRequest<Target extends SnapshotBridgeTarget> = R
 
 export type SnapshotSourceRequest = SnapshotBridgeSourceRequest<SnapshotSourceTarget>;
 
-export type {
-  SnapshotSourceFailure,
-  SnapshotSourceFailureKind,
-  SnapshotSourceOutcome,
-} from '@agent-device/capture-kit/snapshot-source-channel';
-
 export type SnapshotSourceProcess = Readonly<{
   pid: number;
   wait: Promise<ExecResult>;

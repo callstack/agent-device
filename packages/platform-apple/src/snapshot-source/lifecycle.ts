@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { asSnapshotSourceError, snapshotSourceError, SnapshotSourceError } from './errors.ts';
+import { SnapshotSourceError } from '@agent-device/capture-kit/snapshot-source-channel';
+import { asSnapshotSourceError, snapshotSourceError } from './errors.ts';
 import {
   createSnapshotSourceDeadline,
   remainingSnapshotSourceMs,
