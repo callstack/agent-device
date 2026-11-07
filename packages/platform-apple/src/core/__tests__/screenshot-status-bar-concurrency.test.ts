@@ -81,7 +81,7 @@ function captureDeps(captureWithRetry: (device: DeviceInfo) => Promise<void>) {
   return {
     resolveCaptureTarget: async () => ({}) as const,
     captureWithRetry,
-    normalizeDensity: async () => {},
+    normalizeDensity: async () => undefined,
     captureWithRunner: async () => undefined,
     shouldFallbackToRunner: () => false,
   };
