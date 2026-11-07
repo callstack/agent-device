@@ -15,7 +15,7 @@ export async function captureMacOsSurfaceSnapshot(
   const surface = options.surface;
   const [{ runMacOsSnapshotAction }, { stampSnapshotIdentity }] = await Promise.all([
     import('./helper.ts'),
-    import('@agent-device/contracts/snapshot'),
+    import('@agent-device/contracts/snapshot-producers'),
   ]);
   const result = await runMacOsSnapshotAction(surface, {
     bundleId: surface === 'menubar' || surface === 'app' ? options.appBundleId : undefined,

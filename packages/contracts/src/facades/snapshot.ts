@@ -12,7 +12,6 @@ export {
   usesMobileSnapshotPresentation,
   inheritPostGestureOutcome,
   snapshotRefMinting,
-  stampSnapshotIdentity,
   buildSnapshotNodeMap,
   findSnapshotAncestor,
   findNearestAncestor,

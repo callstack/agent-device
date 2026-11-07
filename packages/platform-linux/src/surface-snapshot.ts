@@ -1,4 +1,4 @@
-import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot';
+import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producers';
 import type { CaptureSnapshotInput } from '@agent-device/contracts/snapshot-runtime';
 import { shapeDesktopSurfaceSnapshot } from '@agent-device/capture-kit/snapshot-desktop-projection';
 

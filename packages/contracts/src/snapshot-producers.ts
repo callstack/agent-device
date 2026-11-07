@@ -1,8 +1,9 @@
 import type { SnapshotRefMinting } from '@agent-device/kernel/snapshot';
 
 /*
- * The snapshot producer registry. Only producer-keyed consumers import this module; the daemon
- * snapshot assembly reads producer facts only through `snapshotRefMinting` (layering rule R74).
+ * Snapshot provenance: what each producer is, and the stamp that writes a capture's provenance pair.
+ * The daemon snapshot assembly reads producer facts only through `snapshotRefMinting` (layering rule
+ * R74).
  */
 
 /**
@@ -201,3 +202,34 @@ const everyBackendHasProducer: [
   ? true
   : never = true;
 void everyBackendHasProducer;
+
+type ProducerOnChannel<Backend extends SnapshotBackend> = {
+  [Producer in SnapshotProducer]: Backend extends ProducerChannel<Producer> ? Producer : never;
+}[SnapshotProducer];
+
+/**
+ * The channel↔producer pairs that can actually occur, derived from {@link SNAPSHOT_PRODUCERS}.
+ * `xctest` trees come from the local Apple runner, the Simulator AX bridge, Appium page-source XML,
+ * or a cloud provider's AX element tree (Revyl), and only the runner's output has been through its
+ * presentation (clip fold, effective geometry, scope). Logic that assumes those guarantees must key
+ * on the producer, never on the channel alone.
+ *
+ * Every carrier embeds the pair atomically, so a cross-channel pair does not compile.
+ */
+export type SnapshotProvenance = {
+  [Backend in SnapshotBackend]: { backend: Backend; producer: ProducerOnChannel<Backend> };
+}[SnapshotBackend];
+
+/**
+ * Stamps the served identity of a capture onto its result: the producer that read the tree and the
+ * channel it arrived on. Every one-source owner stamps through here (ADR 0038); an owner with more
+ * than one source routes through the snapshot router instead. The identity must be a registry pair:
+ * a producer without a {@link SNAPSHOT_PRODUCERS} row, or a channel its row does not list, does not
+ * compile.
+ */
+export function stampSnapshotIdentity<
+  Result extends object,
+  const Identity extends SnapshotProvenance,
+>(result: Result, identity: Identity): Omit<Result, 'backend' | 'producer'> & Identity {
+  return { ...result, ...identity };
+}

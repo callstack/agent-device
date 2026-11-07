@@ -187,7 +187,7 @@ test('the scan fails an emitter that names an unlisted producer', () => {
   const sources = new Map([
     ...productionSources(),
     ...example([
-      "import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot';",
+      "import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producers';",
       'export const capture = (nodes: unknown[]) =>',
       "  stampSnapshotIdentity({ nodes }, { backend: 'android', producer: 'example-tree' });",
       '',

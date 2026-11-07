@@ -1,4 +1,4 @@
-import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot';
+import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producers';
 import {
   attachSnapshotClickabilityEvidence,
   attachSnapshotOcclusionContextEvidence,

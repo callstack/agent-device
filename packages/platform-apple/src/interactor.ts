@@ -25,7 +25,8 @@ import {
   type SessionSurface,
 } from '@agent-device/contracts/session';
 import { DEVICE_ROTATIONS, type DeviceRotation } from '@agent-device/contracts/device';
-import { normalizeSnapshotScope, stampSnapshotIdentity } from '@agent-device/contracts/snapshot';
+import { normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
+import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producers';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';

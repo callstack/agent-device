@@ -15,6 +15,7 @@ import {
   type SnapshotBackend,
   type SnapshotProducer,
   type SnapshotProducerRegistry,
+  type SnapshotProvenance,
 } from './snapshot-producers.ts';
 
 export {
@@ -22,42 +23,8 @@ export {
   type SnapshotBackend,
   type SnapshotProducer,
   type SnapshotProducerRegistry,
+  type SnapshotProvenance,
 };
-
-type ProducerOnChannel<Backend extends SnapshotBackend> = {
-  [
-    Producer in SnapshotProducer
-  ]: Backend extends SnapshotProducerRegistry[Producer]['channels'][number] ? Producer : never;
-}[SnapshotProducer];
-
-/**
- * The channel↔producer pairs that can actually occur, derived from the producer registry
- * (`SNAPSHOT_PRODUCERS` in `snapshot-producers.ts`).
- * `xctest` trees come from the local Apple runner, the Simulator AX bridge, Appium page-source XML,
- * or a cloud provider's AX element tree (Revyl), and only the runner's output has been through its
- * presentation (clip fold, effective geometry, scope). Logic that assumes those guarantees must key
- * on the producer, never on the channel alone.
- *
- * Every carrier embeds the pair atomically, so a cross-channel pair does not compile.
- */
-export type SnapshotProvenance = {
-  [Backend in SnapshotBackend]: { backend: Backend; producer: ProducerOnChannel<Backend> };
-}[SnapshotBackend];
-
-/**
- * Stamps the served identity of a capture onto its result: the producer that read the tree and the
- * channel it arrived on. Every one-source owner stamps through here (ADR 0038); an owner with more
- * than one source routes through the snapshot router instead. It lives in a module every capture
- * path already evaluates, so stamping adds no module to a capture's import closure. The identity
- * must be a registry pair: a producer without a registry row, or a channel its row does not list,
- * does not compile.
- */
-export function stampSnapshotIdentity<
-  Result extends object,
-  const Identity extends SnapshotProvenance,
->(result: Result, identity: Identity): Omit<Result, 'backend' | 'producer'> & Identity {
-  return { ...result, ...identity };
-}
 
 type OptionalProducerProvenance<Pair> = Pair extends {
   backend: infer Backend;
