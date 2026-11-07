@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted. [ADR 0019](0019-request-bound-platform-runtime.md) supersedes the original platform-plugin shape and owns the package and request-bound runtime seam.
+Accepted.
+This record owns the Apple family and `AppleOS` leaf decision.
+[ADR 0019](0019-request-bound-platform-runtime.md) replaces the original shallow `PlatformPlugin` shape and owns the package and request-bound runtime seam.
 Each command cuts over to the new execution path in one atomic step.
 Shared physical mechanics move only through ADR 0019's legal injected substrate transition or after their last legacy user.
 
@@ -10,6 +12,7 @@ Shared physical mechanics move only through ADR 0019's legal injected substrate 
 
 Apple support shared an engine while presenting asymmetric iOS, tvOS, and macOS models.
 Inferring the OS from the target lost information, and the structure did not model iPadOS, visionOS, or watchOS.
+Distinguishing or adding an Apple OS therefore cost more than its implementation required.
 The XCTest runner builds iOS, macOS, and tvOS from one project.
 
 ## Decision
@@ -30,17 +33,20 @@ Internal family ownership must not leak into that compatibility projection.
 
 ## Rejected alternatives
 
-- One `Platform` literal per Apple OS: `DeviceTarget` already spans platforms, and a tvOS literal conflicts with the form-factor axis and the single Apple capability and selector model.
+- One `Platform` literal per Apple OS: `DeviceTarget` already spans platforms, and Android TV uses `target: 'tv'`, so a `tvos` literal would conflict with the form-factor axis.
+  Every Apple branch site would need to enumerate six literals, and the single-bucket `apple` capability and selector model would break.
 - Keep the existing structure: it retains asymmetric and mislabeled support and lossy OS inference without a path to iPadOS or visionOS.
-- Exclude macOS: it shares the XCUITest project and was already entangled with the Apple engine. A distinct AppKit leaf preserves its differences.
+- Exclude macOS: it shares the XCUITest project, and its code already lived in the shared Apple engine, so exclusion would keep the incorrect label.
+  A distinct AppKit leaf normalizes macOS without making it the same as the other OSes.
 
 ## Consequences and open gaps
 
-Adding an Apple OS needs a leaf module and a runner-profile row.
+Adding a first-class Apple OS is cheap: it needs a leaf module and a runner-profile row.
 Snapshot fidelity is uneven, and the deep-RN AX-server fallback is iOS-simulator-only.
 
 visionOS discovery and simulator deployment are supported.
 App deployment is also admitted for CoreDevice-backed physical devices; XCTest-backed physical deployment is unsupported.
 Push remains simulator-only.
-No public-command coverage is claimed for visionOS or watchOS, and this record does not claim a command-coverage manifest for either leaf.
+As of 2026-08, no public-command coverage is claimed for visionOS or watchOS.
+This record states the boundary without a command-coverage manifest for either leaf.
 Net-new visionOS spatial-input QA remains deferred.
