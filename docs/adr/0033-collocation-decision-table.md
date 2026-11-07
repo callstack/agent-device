@@ -47,7 +47,7 @@ Their ownership rationale follows.
 | host-kit | Keep diagnostics, request cancellation and request contracts as shared seams. Keep session-path grammar below daemon, CLI, and platform consumers. |
 | kernel | Keep device-isolation vocabulary below device-selection, replay-port, and daemon. |
 | platform-android | Keep device boot mechanics in the platform. Root consumers are composition. |
-| platform-apple and apple-runner | Keep the runner-owner seam and simulator boot mechanics in the platform. Keep legacy device-set parsers beside their runner. |
+| platform-apple and apple-runner | Keep the runner-owner seam and simulator boot mechanics in the platform; the kernel device model and xctestrun preparation must remain synchronized with them there. Keep legacy device-set parsers beside their runner. |
 | replay-port | Keep the shard-device enumeration adapter at the daemon port. The replay-test scheduler never enumerates hardware by design; a move toward that zone would break the port. |
 | selectors | Keep recorded-fill mechanics and target-evidence vocabulary below their consumers. |
 | CLI and platform-runtime | Daemonless stale release moved beside the claim-recovery gateway in platform-runtime composition. R78 prohibits CLI access to daemon modules. |
@@ -64,7 +64,7 @@ Logical zone declarations for root modules (#3288) do not count as completed col
 
 ## Daemon package boundary
 
-The daemon package has one entry, `.`, which explicitly exports by name what the daemon process root uses: `startDaemonRuntime` and the types named by root composition and platform-runtime.
+The daemon package has one entry, `.`, which explicitly exports by name what the daemon process root uses, including `startDaemonRuntime` and the types named by root composition and platform-runtime.
 It has no `export *`.
 This package boundary is the only permitted barrel; layer folders contain no barrels.
 The transitional testing entries are gone.
