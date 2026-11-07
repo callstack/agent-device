@@ -84,8 +84,10 @@ private final class LitPanelBookingProbe: NSObject {
       case "frame": return NSValue(cgRect: Self.elementFrame(self))
       // A selector predicate reads `label` through KVC, and KVC caches the accessor it resolved:
       // once an earlier test evaluated `label` on an XCUIElement, the original lookup calls
-      // XCTest's getter, not the stub, and resolves the fixture's button query.
-      case "label" where isKind(of: XCUIElement.self): return label
+      // XCTest's getter even while the composed probe swaps it. Sending `label` reaches the getter
+      // installed now. XCUIElement inherits NSObject's `valueForKey:`, so this IMP serves every
+      // object, and only an element answers `label`.
+      case "label" where isKind(of: XCUIElement.self): return unsafeBitCast(self, to: XCUIElement.self).label
       default: break
       }
       return original(self, #selector(NSObject.value(forKey:)), key as NSString)
@@ -381,6 +383,14 @@ extension RunnerTests {
         XCTAssertTrue(dispatch.window === LitPanelBookingProbe.window)
         XCTAssertEqual((dispatch.window as? XCUIElement)?.frame, CGRect(x: 224, y: 207, width: 386, height: 682))
       }
+    }
+  }
+
+  @MainActor
+  func testUncomposedLitPanelProbeLeavesKVCLabelReadsToXCTest() throws {
+    try withLitPanelBookingProbe { _ in
+      let title = app.staticTexts.firstMatch
+      XCTAssertEqual(title.value(forKey: "label") as? String, "Agent Device Runner")
     }
   }
 
