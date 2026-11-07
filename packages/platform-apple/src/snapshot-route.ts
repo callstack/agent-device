@@ -26,7 +26,7 @@ export type AppleSnapshotRoute = LaunchObservationPort & Omit<SnapshotRouter, 'i
 /**
  * The local iOS Simulator's snapshot channel, bound to the snapshot router: the guest bridge process
  * the host starts. Its resolver verifies a cached target's process identity on every resolution, so
- * the channel declares no `refreshTarget`.
+ * a disabled circuit costs no rediscovery; stale-target evidence still forces one.
  *
  * A target discovery still in flight is not a failure while no runner is live: the XCTest fallback
  * would first wait for a runner start, and #2198 keeps observation off that wait, so the capture
@@ -37,18 +37,20 @@ export function createAppleSnapshotRoute(
   host: PlatformRuntimeHost,
   options: Readonly<{
     source?: SimulatorSnapshotSource;
-    resolveTarget?: SimulatorSnapshotTargetResolver;
+    targets?: SimulatorSnapshotTargetResolver;
     systemSurfaceForeground?: SystemSurfaceForegroundProbe;
   }> = {},
 ): AppleSnapshotRoute {
   const source = options.source ?? createSimulatorSnapshotSource(host.hostEnvironment);
-  const resolveTarget = options.resolveTarget ?? createSimulatorSnapshotTargetResolver();
+  const targets = options.targets ?? createSimulatorSnapshotTargetResolver();
   const router = createSnapshotRouter<SimulatorSnapshotTarget>(
     host,
     {
       source,
       servesDevice: hasSimulatorBridge,
-      resolveTarget,
+      resolveTarget: targets.resolveTarget,
+      refreshTarget: targets.refreshTarget,
+      resolutionVerifiesIdentity: true,
       awaitsDiscovery: async (error, device, execution) =>
         isSimulatorTargetDiscoveryPending(error) &&
         !(await host.appleApplications.hasLiveRunnerSession(device, execution)),
@@ -58,7 +60,7 @@ export function createAppleSnapshotRoute(
   );
   const observation = createLaunchObservationProbe({
     source,
-    resolveTarget,
+    resolveTarget: targets.resolveTarget,
     clock: host.clock,
     isBridgeDisabled: router.isBridgeDisabled,
   });

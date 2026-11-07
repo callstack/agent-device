@@ -7,7 +7,9 @@ import {
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import type { SnapshotSourceChannel } from '@agent-device/capture-kit/snapshot-router';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
+import { hasSimulatorBridge } from './snapshot-observability.ts';
 import {
   createSnapshotBridgeSource,
   type SnapshotBridgeSource,
@@ -41,22 +43,13 @@ const TARGET_READ_TIMEOUT_MS = 5_000;
  */
 const RUNNER_TRANSPORT_MARGIN_MS = 1_000;
 
-export type RunnerSnapshotBridge = Readonly<{
-  source: SnapshotBridgeSource<RunnerSnapshotBridgeTarget>;
-  resetTargets(): void;
-  /** The cached target of the app, read from the runner only when none is cached. */
-  resolveTarget(
-    device: DeviceInfo,
-    appBundleId: string,
-    signal: AbortSignal,
-  ): Promise<RunnerSnapshotBridgeTarget>;
-  /** Reads the app's target from the runner, which replaces the cached one only when it resolves. */
-  refreshTarget(
-    device: DeviceInfo,
-    appBundleId: string,
-    signal: AbortSignal,
-  ): Promise<RunnerSnapshotBridgeTarget>;
-}>;
+/**
+ * The runner-served bridge as a snapshot router channel. `resolveTarget` returns the cached target
+ * without asking the runner, so the channel declares that its resolution does not verify identity.
+ * The runner owns observe-only captures, and a new runner session drops every cached target.
+ */
+export type RunnerSnapshotBridge = SnapshotSourceChannel<RunnerSnapshotBridgeTarget> &
+  Readonly<{ source: SnapshotBridgeSource<RunnerSnapshotBridgeTarget> }>;
 
 /**
  * The Simulator AX bridge reader that the XCTest runner serves, for a Simulator whose host cannot
@@ -174,14 +167,17 @@ export function createRunnerSnapshotBridge(
       close: async () => targets.clear(),
     },
   });
-  return {
+  return Object.freeze({
     source,
+    servesDevice: hasSimulatorBridge,
     resolveTarget,
     refreshTarget,
-    resetTargets: () => {
+    resolutionVerifiesIdentity: false,
+    observeOnlySupported: false,
+    sessionChanged: () => {
       targets = new Map();
     },
-  };
+  });
 }
 
 function parseRunnerEnvelope(data: Record<string, unknown>): SnapshotBridgeEnvelope {

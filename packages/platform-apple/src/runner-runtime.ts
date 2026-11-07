@@ -34,7 +34,6 @@ import {
   createSnapshotRouter,
   type SnapshotRouter,
 } from '@agent-device/capture-kit/snapshot-router';
-import { hasSimulatorBridge } from './snapshot-observability.ts';
 import { createSystemSurfaceForegroundProbe } from './system-surface-foreground.ts';
 
 /** Binds a provider-owned runner session to the shared Apple command and runtime implementation. */
@@ -89,14 +88,7 @@ export function createAppleRunnerRuntime(options: {
   const routeFor = (present: SnapshotRuntimePresenter) =>
     (snapshotRoute ??= createSnapshotRouter(
       { snapshot: { presentIosAcquisition: present } },
-      {
-        source: bridge.source,
-        servesDevice: hasSimulatorBridge,
-        resolveTarget: bridge.resolveTarget,
-        refreshTarget: bridge.refreshTarget,
-        observeOnlySupported: false,
-        sessionChanged: bridge.resetTargets,
-      },
+      bridge,
       async (device, input) =>
         await withAppleRunnerProvider(
           runCommand,

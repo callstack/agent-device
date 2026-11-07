@@ -5,6 +5,7 @@ import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-sur
 import { simulatorAddressFor } from './core/simctl.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
 import type { SimulatorSnapshotSource, SnapshotSourceOutcome } from './snapshot-source-facade.ts';
+import type { SimulatorSnapshotTargetResolver } from './snapshot-target.ts';
 
 export const ios = {
   platform: 'apple',
@@ -92,6 +93,19 @@ export function sourceReturning(
   outcome: Awaited<ReturnType<SimulatorSnapshotSource['acquire']>>,
 ): SimulatorSnapshotSource {
   return { acquire: vi.fn(async () => outcome), close: vi.fn(async () => {}) };
+}
+
+/**
+ * Targets whose ordinary resolution is `resolveTarget`. A rediscovery the test did not plan rejects,
+ * so the capture names no generation and the test sees it.
+ */
+export function targetsResolvedBy(
+  resolveTarget: SimulatorSnapshotTargetResolver['resolveTarget'],
+  refreshTarget: SimulatorSnapshotTargetResolver['refreshTarget'] = vi.fn(async () => {
+    throw new Error('unplanned target rediscovery');
+  }),
+): SimulatorSnapshotTargetResolver {
+  return { resolveTarget, refreshTarget };
 }
 
 export function runnerResult() {

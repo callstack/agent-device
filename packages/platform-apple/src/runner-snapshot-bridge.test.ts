@@ -15,7 +15,6 @@ vi.mock('./core/runner-client.ts', async (importOriginal) => ({
 import { createAppleRunnerRuntime } from './runner-runtime.ts';
 import { createRunnerSnapshotBridge } from './runner-snapshot-bridge.ts';
 import { createSnapshotRouter } from '@agent-device/capture-kit/snapshot-router';
-import { hasSimulatorBridge } from './snapshot-observability.ts';
 import { IOS_SIMULATOR } from './__tests__/device-fixtures.ts';
 import { createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
@@ -159,14 +158,7 @@ function bridgeRoute(provider: AppleRunnerProvider, runnerSessionId?: string) {
         },
       },
     },
-    {
-      source: bridge.source,
-      servesDevice: hasSimulatorBridge,
-      resolveTarget: bridge.resolveTarget,
-      refreshTarget: bridge.refreshTarget,
-      observeOnlySupported: false,
-      ...(runnerSessionId ? { sessionChanged: bridge.resetTargets } : {}),
-    },
+    bridge,
     async () =>
       runnerSessionId
         ? { foreground: 'background', sessionId: runnerSessionId }
@@ -587,14 +579,7 @@ test('a late presentation failure cannot retire the replacement session generati
         },
       },
     },
-    {
-      source: bridge.source,
-      servesDevice: hasSimulatorBridge,
-      resolveTarget: bridge.resolveTarget,
-      refreshTarget: bridge.refreshTarget,
-      observeOnlySupported: false,
-      sessionChanged: bridge.resetTargets,
-    },
+    bridge,
     async () => ({ foreground: 'background', sessionId }),
   );
   const snapshot = () =>
@@ -649,14 +634,7 @@ test('a wedge before the runner id is known does not disable a newly identified 
         }),
       },
     },
-    {
-      source: bridge.source,
-      servesDevice: hasSimulatorBridge,
-      resolveTarget: bridge.resolveTarget,
-      refreshTarget: bridge.refreshTarget,
-      observeOnlySupported: false,
-      sessionChanged: bridge.resetTargets,
-    },
+    bridge,
     async () => (sessionId ? { foreground: 'background', sessionId } : { foreground: 'unknown' }),
   );
   const snapshot = () =>

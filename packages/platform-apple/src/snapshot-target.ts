@@ -35,12 +35,18 @@ export type SimulatorSnapshotTarget = Readonly<{
   processStartTime: string;
 }>;
 
-export type SimulatorSnapshotTargetResolver = (
+type ResolveSimulatorSnapshotTarget = (
   device: DeviceInfo,
   appBundleId: string,
   signal: AbortSignal,
-  refresh?: 'refresh',
 ) => Promise<SimulatorSnapshotTarget>;
+
+export type SimulatorSnapshotTargetResolver = Readonly<{
+  /** The cached target when its process start time still matches, otherwise a fresh discovery. */
+  resolveTarget: ResolveSimulatorSnapshotTarget;
+  /** Drops the cached target and joins or starts a discovery. */
+  refreshTarget: ResolveSimulatorSnapshotTarget;
+}>;
 
 export function createSimulatorSnapshotTargetResolver(): SimulatorSnapshotTargetResolver {
   const targets = new Map<string, SimulatorSnapshotTarget>();
@@ -51,18 +57,9 @@ export function createSimulatorSnapshotTargetResolver(): SimulatorSnapshotTarget
   const discoveries = createDetachedAttempts<SimulatorSnapshotTarget>({
     waitMs: TARGET_DISCOVERY_WAIT_MS,
   });
-  return async (device, appBundleId, signal, refresh) => {
+  const refreshTarget: ResolveSimulatorSnapshotTarget = async (device, appBundleId, signal) => {
     signal.throwIfAborted();
     const key = `${device.id}:${appBundleId}`;
-    const cached = targets.get(key);
-    if (cached && refresh !== 'refresh') {
-      const observed = await readSnapshotTargetProcessStartTime(cached.pid, {
-        signal,
-        timeoutMs: TARGET_IDENTITY_TIMEOUT_MS,
-      });
-      signal.throwIfAborted();
-      if (observed === cached.processStartTime) return cached;
-    }
     targets.delete(key);
     return await discoveries.value(key, {
       start: async () => {
@@ -80,6 +77,20 @@ export function createSimulatorSnapshotTargetResolver(): SimulatorSnapshotTarget
       pending: () => targetError(TARGET_DISCOVERY_PENDING, device, appBundleId),
     });
   };
+  const resolveTarget: ResolveSimulatorSnapshotTarget = async (device, appBundleId, signal) => {
+    signal.throwIfAborted();
+    const cached = targets.get(`${device.id}:${appBundleId}`);
+    if (cached) {
+      const observed = await readSnapshotTargetProcessStartTime(cached.pid, {
+        signal,
+        timeoutMs: TARGET_IDENTITY_TIMEOUT_MS,
+      });
+      signal.throwIfAborted();
+      if (observed === cached.processStartTime) return cached;
+    }
+    return await refreshTarget(device, appBundleId, signal);
+  };
+  return Object.freeze({ resolveTarget, refreshTarget });
 }
 
 /** A caller cancelled while it waited on a running discovery: its time went to readiness work. */

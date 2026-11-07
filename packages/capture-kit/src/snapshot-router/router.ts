@@ -109,14 +109,19 @@ export type SnapshotSourceChannel<Target extends SnapshotRouteTarget> = Readonly
   }>;
   /** Whether the channel can read this device at all; a capture on another device goes off route. */
   servesDevice(device: DeviceInfo): boolean;
-  /** The app's target. A channel whose cache it cannot verify here declares `refreshTarget`. */
+  /** The app's target, which the channel may answer from its cache. */
   resolveTarget(device: DeviceInfo, appBundleId: string, signal: AbortSignal): Promise<Target>;
   /**
-   * The one way to ask for a fresh target. Only a channel whose `resolveTarget` can return a cached
-   * target it did not verify declares it. The router refreshes before it trusts an open circuit, and
-   * after stale-target evidence; without it, both use `resolveTarget`.
+   * Forced rediscovery: reads the app's target again and never answers from a cache. Stale-target
+   * evidence says the read met a newer process, so the fallback after it always calls this.
    */
-  refreshTarget?(device: DeviceInfo, appBundleId: string, signal: AbortSignal): Promise<Target>;
+  refreshTarget(device: DeviceInfo, appBundleId: string, signal: AbortSignal): Promise<Target>;
+  /**
+   * Whether `resolveTarget` verifies a cached target's process identity before it returns it. When
+   * it does not, the router calls `refreshTarget` before it trusts a disabled circuit; otherwise a
+   * relaunched app would stay off the bridge for good.
+   */
+  resolutionVerifiesIdentity: boolean;
   /**
    * Whether a resolution failure only says a detached discovery is still running and no other
    * source answers at once. The capture then resolves again, which joins that discovery.
@@ -419,9 +424,9 @@ async function resolveTargetForObservation<Target extends SnapshotRouteTarget>(
 
 /**
  * The target this capture is planned against. While a generation's circuit is open no read meets a
- * newer process, so a channel that caches targets is asked again before the circuit is trusted:
- * otherwise a relaunched app would stay off the bridge for good. The fresh target rebaselines the
- * circuit. A refresh that fails is a resolution failure: the capture names no generation.
+ * newer process, so a channel whose resolution does not verify a cached target refreshes it before
+ * the circuit is trusted. The fresh target rebaselines the circuit. A refresh that fails is a
+ * resolution failure: the capture names no generation.
  */
 async function resolveCaptureTarget<Target extends SnapshotRouteTarget>(
   channel: SnapshotSourceChannel<Target>,
@@ -431,7 +436,7 @@ async function resolveCaptureTarget<Target extends SnapshotRouteTarget>(
   isBridgeDisabled: (target: SnapshotRouteTarget) => boolean,
 ): Promise<Target> {
   const target = await resolveTargetForObservation(channel, device, input, signal);
-  if (!channel.refreshTarget || !isBridgeDisabled(target)) return target;
+  if (channel.resolutionVerifiesIdentity || !isBridgeDisabled(target)) return target;
   // A refresh that fails leaves the channel's cached target for its circuit, but this capture cannot
   // claim that generation: the app may have relaunched. The failure reaches the caller, which
   // publishes the capture under an unknown generation.
@@ -695,7 +700,7 @@ type FallbackIdentity = Readonly<{
 
 /**
  * The identity a fallback after a failed read publishes. A stale-target failure says the read met
- * a newer process, so the capture asks the channel for a fresh target before it names a generation.
+ * a newer process, so the capture forces the channel's rediscovery before it names a generation.
  */
 async function resolveFailureFallbackIdentity<Target extends SnapshotRouteTarget>(
   failure: SnapshotSourceFailure,
@@ -706,10 +711,9 @@ async function resolveFailureFallbackIdentity<Target extends SnapshotRouteTarget
   channel: SnapshotSourceChannel<Target>,
 ): Promise<FallbackIdentity> {
   if (failure.kind !== 'stale-target') return { lineage: target, residue: [] };
-  const refresh = channel.refreshTarget ?? channel.resolveTarget;
   try {
     return {
-      lineage: await refresh(device, appBundleId, signal),
+      lineage: await channel.refreshTarget(device, appBundleId, signal),
       residue: [],
     };
   } catch (error) {
