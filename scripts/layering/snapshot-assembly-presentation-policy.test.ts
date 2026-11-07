@@ -99,6 +99,94 @@ test('R74 rejects the assembly reading the producer registry', () => {
   );
 });
 
+const producerRows = 'packages/capture-kit/src/producer-rows.ts';
+
+/** Registry reads that do not spell a registry name where the assembly uses it. */
+const REGISTRY_READ_FORMS: readonly (readonly [string, string, string?])[] = [
+  [
+    'a computed string member of a facade namespace',
+    `import * as contracts from '@agent-device/contracts/snapshot';\nvoid contracts['snapshotProducerFacts'];`,
+  ],
+  [
+    'a dotted member of a registry-module namespace',
+    `import * as model from '@agent-device/contracts/snapshot-model';\nvoid model.SNAPSHOT_PRODUCERS;`,
+  ],
+  [
+    'a template-literal member of a namespace',
+    "import * as model from '@agent-device/contracts/snapshot-model';\nvoid model[`SNAPSHOT_PRODUCERS`];",
+  ],
+  [
+    'a member of a default import',
+    `import model from '@agent-device/contracts/snapshot-model';\nvoid model.snapshotProducerFacts;`,
+  ],
+  [
+    'a namespace member read by a computed key',
+    `import * as contracts from '@agent-device/contracts/snapshot';\nconst key = 'SNAPSHOT_PRODUCERS' as const;\nvoid contracts[key];`,
+  ],
+  [
+    'a destructured namespace',
+    `import * as contracts from '@agent-device/contracts/snapshot';\nconst { snapshotProducerFacts: facts } = contracts;\nvoid facts;`,
+  ],
+  [
+    'a namespace passed on whole',
+    `import * as contracts from '@agent-device/contracts/snapshot';\nexport const surface = contracts;`,
+  ],
+  [
+    'an aliased re-export through another module',
+    `import { rows } from './producer-rows.ts';\nvoid rows;`,
+    `export { SNAPSHOT_PRODUCERS as rows } from '@agent-device/contracts/snapshot';\n`,
+  ],
+  [
+    'a namespace re-export through another module',
+    `import { registry } from './producer-rows.ts';\nvoid registry['snapshotProducerFacts'];`,
+    `export * as registry from '@agent-device/contracts/snapshot-model';\n`,
+  ],
+  [
+    'a star re-export through another module',
+    `import { snapshotProducerFacts as lookup } from './producer-rows.ts';\nvoid lookup;`,
+    `export * from '@agent-device/contracts/snapshot-model';\n`,
+  ],
+  [
+    'an import then local re-export through another module',
+    `import { table } from './producer-rows.ts';\nvoid table;`,
+    `import { SNAPSHOT_PRODUCERS } from '@agent-device/contracts/snapshot';\nexport { SNAPSHOT_PRODUCERS as table };\n`,
+  ],
+  [
+    'a re-export from the assembly itself',
+    `export { SNAPSHOT_PRODUCERS } from '@agent-device/contracts/snapshot';`,
+  ],
+  [
+    'a dynamic import of the registry module',
+    `export const rows = async () => (await import('@agent-device/contracts/snapshot-model')).SNAPSHOT_PRODUCERS;`,
+  ],
+];
+
+for (const [form, addition, rowsModule] of REGISTRY_READ_FORMS) {
+  test(`R74 rejects the assembly reading the producer registry through ${form}`, () => {
+    const overrides = new Map(appended(assemblyFile, `\n${addition}\n`));
+    if (rowsModule !== undefined) overrides.set(producerRows, rowsModule);
+    const result = violations(overrides).filter(
+      (entry) =>
+        entry.rule === SNAPSHOT_ASSEMBLY_PRESENTATION_RULE &&
+        entry.file === assemblyFile &&
+        entry.message.includes('must not read the producer registry'),
+    );
+
+    assert.notDeepEqual(result, [], form);
+  });
+}
+
+test('R74 accepts a namespace of the registry module that reads only non-registry members', () => {
+  const result = violations(
+    appended(
+      assemblyFile,
+      `\nimport * as contracts from '@agent-device/contracts/snapshot';\nvoid contracts.snapshotRefMinting;\nvoid contracts['isSnapshotBackend'];\nconst { snapshotStateProvenance: provenance } = contracts;\nvoid provenance;\nexport type Producer = contracts.SnapshotProducer;\n`,
+    ),
+  );
+
+  assert.deepEqual(result, []);
+});
+
 test('R74 rejects a backend-name presentation branch in the assembly', () => {
   const result = violations(
     appended(
