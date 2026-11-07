@@ -86,7 +86,7 @@ export async function readAppleAlert(
 /**
  * Poll `get` until one answers or the caller's window runs out. The first attempt gets the whole
  * window and later ones only what is left, so a runner that blocks cannot outlive the budget.
- * After a completed observation, another read needs more than `ALERT_MIN_READ_BUDGET_MS` of budget.
+ * After a completed observation, another read needs more than the backend's read floor of budget.
  * A dispatched read still owns its result, including a watchdog timeout.
  */
 export async function awaitAppleAlert(
@@ -96,12 +96,13 @@ export async function awaitAppleAlert(
   env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown>> {
   const runAlert = runAppleAlert(device, runnerOptions, options, env);
+  const readFloorMs = minReadBudgetMs(device);
   const timeout = options?.timeoutMs ?? DEFAULT_ALERT_TIMEOUT_MS;
   const start = Date.now();
   let lastRetriable: AppError | undefined;
   while (Date.now() - start < timeout) {
     const remainingMs = remainingBudgetMs(start, timeout);
-    if (lastRetriable && remainingMs <= ALERT_MIN_READ_BUDGET_MS) {
+    if (lastRetriable && remainingMs <= readFloorMs) {
       await sleep(remainingMs);
       break;
     }
@@ -138,6 +139,7 @@ export async function actOnAppleAlert(
   env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown>> {
   const runAlert = runAppleAlert(device, runnerOptions, options, env);
+  const readFloorMs = minReadBudgetMs(device);
   const runnerTimeoutMs = isIosFamily(device) ? DEFAULT_ALERT_TIMEOUT_MS : ALERT_ACTION_RETRY_MS;
   const start = Date.now();
   let lastError: unknown;
@@ -154,9 +156,17 @@ export async function actOnAppleAlert(
       if (!isAlertRetriableError(error)) break;
     }
     await sleep(ALERT_POLL_INTERVAL_MS);
-    if (remainingBudgetMs(start, ALERT_ACTION_RETRY_MS) <= ALERT_MIN_READ_BUDGET_MS) break;
+    if (remainingBudgetMs(start, ALERT_ACTION_RETRY_MS) <= readFloorMs) break;
   }
   throw withAlertFallbackHint(lastError);
+}
+
+/**
+ * The XCTest runner cuts a read off with a main-thread timeout when its budget is short, so its
+ * reads need `ALERT_MIN_READ_BUDGET_MS`. The macOS helper takes no budget and has no such watchdog.
+ */
+function minReadBudgetMs(device: DeviceInfo): number {
+  return isMacOs(device) ? ALERT_POLL_INTERVAL_MS : ALERT_MIN_READ_BUDGET_MS;
 }
 
 function remainingBudgetMs(start: number, timeoutMs: number): number {

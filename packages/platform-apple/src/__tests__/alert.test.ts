@@ -232,6 +232,22 @@ test('an action does not retry a failure that only reads like an absence', async
   assert.equal(error.details?.hint, undefined);
 });
 
+test('a macOS wait keeps reading until a poll interval remains: its helper has no runner watchdog', async () => {
+  vi.useFakeTimers();
+  const firstReadMs = 5_000 - ALERT_POLL_INTERVAL_MS - ALERT_POLL_INTERVAL_MS - 1;
+  mockHelper.mockImplementation(async () => {
+    if (mockHelper.mock.calls.length === 1) {
+      await new Promise((resolve) => setTimeout(resolve, firstReadMs));
+      throw helperAbsence();
+    }
+    return { title: 'Ready' };
+  });
+  const outcome = awaitAppleAlert(MACOS_DEVICE, runnerOptions, { timeoutMs: 5_000 }, process.env);
+  await vi.advanceTimersByTimeAsync(firstReadMs + ALERT_POLL_INTERVAL_MS);
+  assert.deepEqual(await outcome, { title: 'Ready' });
+  assert.equal(mockHelper.mock.calls.length, 2);
+});
+
 test('the macOS helper states absence as a typed reason, and the family retries it', async () => {
   vi.useFakeTimers();
   let calls = 0;

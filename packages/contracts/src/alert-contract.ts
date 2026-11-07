@@ -1,6 +1,7 @@
 export const ALERT_POLL_INTERVAL_MS = 300;
 /**
- * A runner read starts only with more than this much budget left. Finding a prompt and acting on
+ * The floor for a retry read through the XCTest runner: the loops start no later read with this
+ * much budget or less left. Finding a prompt and acting on
  * it takes longer than one poll interval, and a read cut off by the runner's main-thread watchdog
  * is reported as `MAIN_THREAD_TIMEOUT` instead of absence. Live simulator reads that saw a late
  * prompt needed up to about 1.4 s.
