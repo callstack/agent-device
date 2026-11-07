@@ -608,11 +608,15 @@ function requireDaemonTransport(
   throw daemonEndpointUnavailableError(transport);
 }
 
+/**
+ * `daemonRequestSent` is required: the client discloses dispatch from it, and a producer that
+ * could not say would otherwise be read as sent.
+ */
 function handleTransportError(
   err: unknown,
   requestId: string | undefined,
   remote: boolean,
-  details: Record<string, unknown> = {},
+  daemonRequestSent: boolean,
 ): AppError {
   emitDiagnostic({
     level: 'error',
@@ -626,7 +630,7 @@ function handleTransportError(
     'COMMAND_FAILED',
     'Failed to communicate with daemon',
     {
-      ...details,
+      daemonRequestSent,
       reason: 'daemon_transport_failure',
       requestId,
       hint: remote
@@ -715,11 +719,7 @@ async function sendSocketRequest(
       settled = true;
       if (timeoutHandle) clearTimeout(timeoutHandle);
       detachCallerAbort();
-      reject(
-        handleTransportError(err, req.meta?.requestId, false, {
-          daemonRequestSent: requestWritten,
-        }),
-      );
+      reject(handleTransportError(err, req.meta?.requestId, false, requestWritten));
     });
   });
 }
@@ -917,9 +917,7 @@ async function sendHttpRequest(
       // from emitting a `daemon_request_socket_error` diagnostic; a genuine transport error still
       // arrives before the settle and rejects.
       if (settled) return;
-      rejectOnce(
-        handleTransportError(err, req.meta?.requestId, remote, { daemonRequestSent: requestSent }),
-      );
+      rejectOnce(handleTransportError(err, req.meta?.requestId, remote, requestSent));
     });
 
     request.on('finish', () => {
