@@ -282,6 +282,27 @@ export const ARCHITECTURE_OWNERSHIP = {
       roots: ['packages/capture-kit/src/snapshot/'],
       forbiddenTargetRoots: [DAEMON_SOURCE_ROOT],
     },
+    {
+      // ADR 0038: the snapshot source router depends on no platform or provider code.
+      name: 'snapshot-router',
+      kind: 'executable-policy',
+      roots: ['packages/capture-kit/src/snapshot-router/'],
+      forbiddenTargetRoots: [
+        'packages/apple-runner/',
+        'packages/platform-android/',
+        'packages/platform-apple/',
+        'packages/platform-harmonyos/',
+        'packages/platform-linux/',
+        'packages/platform-vega/',
+        'packages/platform-web/',
+        'packages/provider-limrun/',
+        'packages/provider-revyl/',
+        'packages/provider-testmu/',
+        'packages/provider-webdriver/',
+        'packages/provider-webos/',
+        'packages/tv-cdp/',
+      ],
+    },
   ],
 } as const;
 
