@@ -55,16 +55,23 @@ final class AppWindowScreenshotTests: XCTestCase {
   }
 
   func testRecognizesTheSharingIndicatorOnlyByItsSessionButton() {
-    XCTAssertTrue(isWindowSharingIndicator(children: [("AXButton", "WindowSharingSessionButton")]))
+    XCTAssertTrue(isWindowSharingIndicatorButton(role: "AXButton", title: "WindowSharingSessionButton"))
 
     // A small ordinary window: title-bar buttons, or the session title on a non-button.
+    XCTAssertFalse(isWindowSharingIndicatorButton(role: "AXButton", title: nil))
+    XCTAssertFalse(isWindowSharingIndicatorButton(role: "AXButton", title: "Close"))
     XCTAssertFalse(
-      isWindowSharingIndicator(children: [
-        (role: "AXButton", title: nil), (role: "AXButton", title: "Close"),
-        (role: "AXStaticText", title: "Window"),
-      ]))
-    XCTAssertFalse(isWindowSharingIndicator(children: [("AXStaticText", "WindowSharingSessionButton")]))
-    XCTAssertFalse(isWindowSharingIndicator(children: []))
+      isWindowSharingIndicatorButton(role: "AXStaticText", title: "WindowSharingSessionButton"))
+  }
+
+  /// A child's title is read only once its role is a button.
+  func testReadsNoTitleForAChildThatIsNotAButton() {
+    var readTitle = false
+    let isIndicator = isWindowSharingIndicatorButton(
+      role: "AXGroup", title: { readTitle = true; return "WindowSharingSessionButton" }())
+
+    XCTAssertFalse(isIndicator)
+    XCTAssertFalse(readTitle)
   }
 
   /// The indicator check reads the app's accessibility tree; a lone window never needs it.

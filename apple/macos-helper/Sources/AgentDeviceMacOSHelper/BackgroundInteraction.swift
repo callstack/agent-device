@@ -722,9 +722,10 @@ func requireWindowInfo(_ windowInfo: [[String: Any]]? = appWindowInfo()) throws 
 /// `WindowSharingSessionButton`. That window is a system indicator, not the app's front window.
 private let windowSharingIndicatorButtonTitle = "WindowSharingSessionButton"
 
-/// Whether a window with these accessibility children, as role and title, is the indicator.
-func isWindowSharingIndicator(children: some Sequence<(role: String, title: String?)>) -> Bool {
-  children.contains { $0.role == "AXButton" && $0.title == windowSharingIndicatorButtonTitle }
+/// Whether a child of a window, by its accessibility role and title, marks the window as the
+/// indicator. The title is read only for a button.
+func isWindowSharingIndicatorButton(role: String, title: @autoclosure () -> String?) -> Bool {
+  role == "AXButton" && title() == windowSharingIndicatorButtonTitle
 }
 
 /// `AXUIElementSetMessagingTimeout` applies only to the element it is set on, so every element the
@@ -748,10 +749,11 @@ private func isWindowSharingIndicator(pid: pid_t, frame: CGRect) -> Bool {
     return isSameFrame(rect, frame)
   }
   guard let window else { return false }
-  return isWindowSharingIndicator(
-    children: children(of: window).lazy.compactMap(bounded).map { child in
-      (role: role(of: child), title: stringAttribute(child, attribute: kAXTitleAttribute as String))
-    })
+  return children(of: window).contains { child in
+    guard let child = bounded(child) else { return false }
+    return isWindowSharingIndicatorButton(
+      role: role(of: child), title: stringAttribute(child, attribute: kAXTitleAttribute as String))
+  }
 }
 
 func frontWindowFrame(pid: pid_t, windowInfo: [[String: Any]]? = appWindowInfo()) throws -> CGRect? {
