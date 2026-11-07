@@ -216,6 +216,20 @@ test('an argument error after leading global flags still names the command synop
   assert.match(result.stderr, /^Error \(INVALID_ARGS\): .*Usage: agent-device press /);
 });
 
+// The parser knows `--session` takes a value, so `press` here is the session name, not the command.
+test('an argument error never takes a flag value for the command', async () => {
+  const result = await runCliCapture(
+    ['--session', 'press', 'fill', '--unknown-flag'],
+    async () => ({
+      ok: true,
+      data: {},
+    }),
+  );
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /Usage: agent-device fill /);
+  assert.equal(result.stderr.includes('Usage: agent-device press'), false);
+});
+
 test('cli forwards save-script and no-record flags for client-backed open', async () => {
   const result = await runCliCapture(
     ['open', 'settings', '--save-script', '--no-record', '--json'],

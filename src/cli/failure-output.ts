@@ -1,34 +1,52 @@
 import fs from 'node:fs';
+import { formatHumanError } from '@agent-device/command-output';
 import { resolveRemoteRequestDiagnosticsPath } from '@agent-device/daemon-contracts/session-artifact-paths';
-import type { AppError, DiagnosticsRecordRef, NormalizedError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  type DiagnosticsRecordRef,
+  type NormalizedError,
+} from '@agent-device/kernel/errors';
 import { commandSynopsis, parseRawArgs } from './parser/args.ts';
 
-type LogTailSource = Parameters<typeof failureLogTail>[0];
+/** Where the `--debug` log tail printed after a failure comes from. */
+export type FailureLogSource = {
+  daemonBaseUrl: string | undefined;
+  daemonPaths: { logPath: string; baseDir: string };
+  record: DiagnosticsRecordRef | undefined;
+};
 
-type HumanErrorPrint = {
+type PrintHumanErrorOptions = {
+  /** The `--debug`/`--verbose` tier: the raw details dump and the log tail. */
   debugTier?: boolean;
   /** The command that failed; an INVALID_ARGS Next step names its synopsis. */
   command?: string | null;
   /** The raw argv of a failed parse, read for the command when `command` is unknown. */
   argv?: string[];
-  /** Where the `--debug` log tail printed after the error body comes from. */
-  logTail?: LogTailSource;
+  logTail?: FailureLogSource;
 };
 
 const SYNOPSIS_LIMIT = 160;
 const DAEMON_LOG_TAIL_MAX_BYTES = 64_000;
 
-/** Writes a CLI failure to stderr through the summary-line writer. */
+/**
+ * Writes a CLI failure to stderr. The summary line opens the block and, when anything follows it,
+ * closes it too: callers that merge streams and keep only the first or the last line still read
+ * the code, the message, the dispatch fact and the Next step.
+ */
 export async function printHumanError(
   err: AppError | NormalizedError,
-  options: HumanErrorPrint = {},
+  options: PrintHumanErrorOptions = {},
 ): Promise<void> {
-  const { writeHumanError } = await import('../commands/output/human-error.ts');
-  const command = options.command ?? (options.argv ? await failedParseCommand(options.argv) : null);
+  const command = options.command ?? (options.argv ? failedParseCommand(options.argv) : null);
   const synopsis =
     err.code === 'INVALID_ARGS' && command ? await synopsisForNextStep(command) : undefined;
+  const { summary, body } = formatHumanError(err, { showDetails: options.debugTier, synopsis });
   const trailer = options.logTail ? failureLogTail(options.logTail) : undefined;
-  writeHumanError(err, { debugTier: options.debugTier, synopsis, trailer });
+  const lines = [summary, ...body, ...(trailer ? [trailer] : [])];
+  if (lines.length > 1) lines.push(summary);
+  for (const line of lines) {
+    process.stderr.write(`${line}\n`);
+  }
 }
 
 async function synopsisForNextStep(command: string): Promise<string | undefined> {
@@ -38,18 +56,19 @@ async function synopsisForNextStep(command: string): Promise<string | undefined>
 }
 
 /**
- * The command a failed parse was for. The parse that failed cannot say, so this takes the first
- * positional that names a command; a value of a leading global flag (`--platform ios`) names none.
+ * The command a failed parse was for: the command of the longest argv prefix the real parser
+ * accepts, so a flag value (`--session press`) is never taken for a command. `null` when no prefix
+ * names one.
  */
-async function failedParseCommand(argv: string[]): Promise<string | null> {
-  try {
-    return parseRawArgs(argv).command ?? null;
-  } catch {
-    for (const token of argv) {
-      if (!token.startsWith('-') && (await commandSynopsis(token))) return token;
+function failedParseCommand(argv: string[]): string | null {
+  for (let end = argv.length; end > 0; end -= 1) {
+    try {
+      return parseRawArgs(argv.slice(0, end)).command;
+    } catch (error) {
+      if (!(error instanceof AppError)) throw error;
     }
-    return null;
   }
+  return null;
 }
 
 /**
@@ -61,11 +80,7 @@ async function failedParseCommand(argv: string[]): Promise<string | null> {
  * instead — which is what makes a CI job's transcript carry the evidence without
  * a second round trip (#1801).
  */
-function failureLogTail(options: {
-  daemonBaseUrl: string | undefined;
-  daemonPaths: { logPath: string; baseDir: string };
-  record: DiagnosticsRecordRef | undefined;
-}): string | undefined {
+function failureLogTail(options: FailureLogSource): string | undefined {
   if (!options.daemonBaseUrl) {
     return logFileTail('daemon log', options.daemonPaths.logPath);
   }

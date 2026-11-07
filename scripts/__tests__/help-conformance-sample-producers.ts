@@ -28,7 +28,7 @@ import type { RemoteConnectionState } from '@agent-device/remote/remote-connecti
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { renderSnapshotQualityWarnings } from '@agent-device/capture-kit/quality-warnings';
-import { writeHumanError } from '../../src/commands/output/human-error.ts';
+import { printHumanError } from '../../src/cli/failure-output.ts';
 import { captureHelpConformanceErrorRoutes } from '../../test/integration/provider-scenarios/help-conformance-error-routes.ts';
 import {
   createContractClock,
@@ -69,10 +69,10 @@ const formatPress = (result: Record<string, unknown>) => formatCommandText('pres
 
 const formatFill = (result: Record<string, unknown>) => formatCommandText('fill', result);
 
-/** The failure text writeHumanError writes to stderr: the summary line, any body, and the repeat. */
+/** The failure text the CLI writes to stderr: the summary line, any body, and the repeat. */
 async function renderHumanError(error: AppError): Promise<string> {
   const stderr = await withCapturedStderrAsync(async () => {
-    await writeHumanError(normalizeError(error));
+    await printHumanError(normalizeError(error));
   });
   return stderr.trimEnd();
 }
