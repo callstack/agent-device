@@ -70,3 +70,19 @@ test('reads again on every launch, so a later teardown is seen', async () => {
     1,
   );
 });
+
+for (const [value, expectWrite] of [
+  ['true', false],
+  ['false', true],
+] as const) {
+  test(`reads a binary preferences file as the simulator writes it (${value})`, async () => {
+    const dir = path.join(setPath, device.id, 'data/Library/Preferences');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.copyFileSync(
+      new URL(`./fixtures/accessibility-${value}.plist`, import.meta.url),
+      path.join(dir, 'com.apple.Accessibility.plist'),
+    );
+    await prepareIosSimulatorAccessibility(device);
+    assert.equal(wrote(), expectWrite);
+  });
+}
