@@ -16,6 +16,7 @@
 - If the per-code default hint would mislead, supply a hint. If the default suffices, omit the hint.
 - When you wrap an error, preserve an existing hint and the cause chain.
 - Every consumer surface must carry at least code, message, and hint. Rehydration helpers copy all fields.
+- A failed CLI command prints one summary line (code, message, dispatch fact, Next step) first and, when anything follows it, last. The diagnostic id is not printed.
 - The router's thrown-error finalizer attempts a diagnostics flush. `diagnosticId` requires an active request diagnostics scope, and `logPath` appears only when that flush produces a file. Returned or pre-scope failures may omit both fields. Messages must not embed raw stderr dumps or secrets.
 
 ## Context
@@ -91,6 +92,30 @@ Nothing documented the conventions, so each new site decided them again.
    Client-side diagnostics are under `~/.agent-device/logs`.
    Messages must not embed raw stderr dumps or secrets.
    Structured context belongs in `details`, which is redacted at normalize/write time.
+
+7. **CLI human failure output.** stderr opens with one summary line and, when anything follows it,
+   closes with the same line: `Error (CODE): <message>. <dispatch fact> Next: <step>`.
+   The dispatch fact is `Not dispatched.` or `May have reached the device.` from `details.dispatched`;
+   an unclassified failure states none. `Next` is the hint; an ambiguous match with two or three
+   candidates lists them instead, and `INVALID_ARGS` appends the command synopsis. When
+   `details.dispatched` is `unknown`, `Next` starts with an observe-first step. The formatter adds
+   it from the final disclosure when it prints the line, because batch aggregation, the request
+   ledger and replay projection can raise the disclosure after the hint was resolved; the hint
+   itself depends on the code only.
+   The body between the copies holds the cause, warnings, candidates, the `Log:` path, and the
+   `--debug` details and log tail. The diagnostic id is not printed; it stays in `--json`.
+   Reason: agents merge stderr into stdout and keep `head -1` or, most often, `tail -1`; a footer-last
+   layout hides the code under `tail -1`. Measurements: `docs/evidence/cli-failure-summary-eval-2026-11-07.md`.
+   Consequence: a default hint is printed as an instruction, so `defaultHintForCode` never asks for a
+   `--debug` rerun when a log already exists, and any retry a hint implies follows the observe-first
+   step whenever the request may have dispatched.
+   Rejected: footer last (npm style), which loses the error under `tail`; error last only, which breaks
+   `head -1` readers; hiding the log path behind `--debug`, which forces a rerun to find evidence the
+   failure already wrote.
+   Open gap: live output starts before the outcome is known: command progress lines (for example
+   from `doctor`) and the `--debug` daemon log stream. When a command streams either, only the last
+   line is guaranteed to be the summary. Buffering live output was rejected because it hides
+   progress from a reader who waits on a slow command, which is what the stream exists for.
 
 ## Consequences
 

@@ -13,7 +13,7 @@ export {
 } from './output-common.ts';
 export { colorize, supportsColor } from './output/color.ts';
 export type { ColorStream } from './output/color.ts';
-export { formatErrorCandidateViews, formatHumanErrorLines } from './output/error.ts';
+export { formatErrorCandidateViews, formatHumanError } from './output/error.ts';
 export { formatDeliveredArtifactLines, serializeDevice } from './output/result-serialization.ts';
 
 /** Renders a command's result through the family formatters; the formatter tables load on first call. */

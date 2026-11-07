@@ -33,6 +33,7 @@ export function resolveActionSelector(
       {
         selector: outcome.selector,
         ...elementMatchCandidateDetails(outcome.candidates),
+        dispatched: 'no',
       },
     );
   }

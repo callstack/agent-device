@@ -1,7 +1,9 @@
 import {
   AppError,
   normalizeError,
+  readDispatchDisclosure,
   readErrorCandidateViews,
+  type DispatchDisclosure,
   type ErrorCandidateView,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
@@ -10,54 +12,162 @@ import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence
 import { collapseWarningText } from '../output-common.ts';
 
 /**
- * The lines a human error prints to stderr, in order. A segment may itself span several lines
- * (candidate views, the divergence report, the details dump); the writer ends each with a newline.
+ * A failure as the CLI prints it on stderr. `summary` is one line that carries the code, the
+ * message, the typed dispatch fact and the Next step, so it stays complete when a caller keeps
+ * only the first or the last line. The writer prints it first and, when any `body` line or
+ * other output follows, prints it again last.
  */
-export function formatHumanErrorLines(
+export type HumanErrorView = {
+  summary: string;
+  body: string[];
+};
+
+export type HumanErrorOptions = {
+  /** Append the raw details dump (the `--debug` tier). */
+  showDetails?: boolean;
+  /** The failing command's synopsis, such as `agent-device fill <target> <text>`. */
+  synopsis?: string;
+};
+
+const SUMMARY_MESSAGE_LIMIT = 300;
+const INLINE_CANDIDATE_LIMIT = 3;
+
+const DISPATCH_SENTENCE: Record<DispatchDisclosure, string> = {
+  no: 'Not dispatched.',
+  unknown: 'May have reached the device.',
+};
+
+/** Resolved here, from the final disclosure, so no earlier layer's hint can contradict it. */
+const OBSERVE_FIRST_STEP = 'Run snapshot to check the screen before you retry.';
+
+export function formatHumanError(
   err: AppError | NormalizedError,
-  options: { showDetails?: boolean } = {},
-): string[] {
+  options: HumanErrorOptions = {},
+): HumanErrorView {
   const normalized = err instanceof AppError ? normalizeError(err) : err;
-  const lines = [`Error (${normalized.code}): ${normalized.message}`];
+  const candidateViews = readErrorCandidateViews(normalized.details);
+  const inlineCandidates =
+    normalized.code === 'AMBIGUOUS_MATCH' ? readInlineCandidates(candidateViews) : undefined;
+  const { summary, truncated } = formatSummary(normalized, inlineCandidates, options.synopsis);
+  return {
+    summary,
+    body: formatBody(normalized, {
+      fullMessage: truncated,
+      candidateViews: inlineCandidates ? [] : candidateViews,
+      showDetails: options.showDetails,
+    }),
+  };
+}
+
+function formatSummary(
+  normalized: NormalizedError,
+  inlineCandidates: string[] | undefined,
+  synopsis: string | undefined,
+): { summary: string; truncated: boolean } {
+  const dispatched = readDispatchDisclosure(normalized.details);
+  const message = oneLine(normalized.message);
+  const shown =
+    message.length > SUMMARY_MESSAGE_LIMIT
+      ? `${message.slice(0, SUMMARY_MESSAGE_LIMIT)}…`
+      : message;
+  const next = nextStep(normalized, dispatched, inlineCandidates, synopsis);
+  const summary = [
+    `Error (${normalized.code}): ${withFullStop(shown)}`,
+    ...(dispatched ? [DISPATCH_SENTENCE[dispatched]] : []),
+    ...(next ? [`Next: ${next}`] : []),
+  ].join(' ');
+  return { summary, truncated: shown !== message };
+}
+
+/**
+ * The Next step: the hint, sharpened by typed facts. An ambiguous match with two or three
+ * candidates lists them so the step names the ref to act on; an INVALID_ARGS failure adds the
+ * command's synopsis; and a failure that may have reached the device starts with the
+ * observe-first step, whatever hint an earlier layer resolved.
+ */
+function nextStep(
+  normalized: NormalizedError,
+  dispatched: DispatchDisclosure | undefined,
+  inlineCandidates: string[] | undefined,
+  synopsis: string | undefined,
+): string | undefined {
+  const hint = normalized.hint ? oneLine(normalized.hint) : undefined;
+  const parts = [
+    ...(dispatched === 'unknown' ? [OBSERVE_FIRST_STEP] : []),
+    ...(inlineCandidates
+      ? [
+          `Act on one ref with a command that takes refs, such as press: ${inlineCandidates.join('; ')}`,
+        ]
+      : hint
+        ? [hint]
+        : []),
+    ...(synopsis && normalized.code === 'INVALID_ARGS' ? [`Usage: ${synopsis}`] : []),
+  ];
+  return parts.length > 0 ? parts.join(' ') : undefined;
+}
+
+function formatBody(
+  normalized: NormalizedError,
+  options: { fullMessage: boolean; candidateViews: ErrorCandidateView[]; showDetails?: boolean },
+): string[] {
+  const body: string[] = [];
+  if (options.fullMessage) body.push(`Message: ${normalized.message}`);
   if (normalized.cause) {
     const code = normalized.cause.code ? `${normalized.cause.code} ` : '';
-    lines.push(`Cause: ${code}${normalized.cause.message}`);
-  }
-  if (normalized.hint) {
-    lines.push(`Hint: ${normalized.hint}`);
+    body.push(`Cause: ${code}${normalized.cause.message}`);
   }
   // Composable warnings (skipped `optional` steps, capture degradations) describe the run,
   // not this step's cause, so they ride at error level and must reach the reader of a
   // failed run too — a warning-only trace is otherwise invisible outside --json (#2560).
   for (const warning of readResponseWarnings(normalized.details)) {
-    lines.push(`Warning: ${collapseWarningText(warning)}`);
+    body.push(`Warning: ${collapseWarningText(warning)}`);
   }
-  const candidateLines = formatErrorCandidateViews(readErrorCandidateViews(normalized.details));
-  if (candidateLines.length > 0) {
-    lines.push(candidateLines.join('\n'));
-  }
-  if (normalized.diagnosticId) {
-    lines.push(`Diagnostic ID: ${normalized.diagnosticId}`);
-  }
-  // #1801: `logPath` is always a path on THIS machine. A record that stayed on
-  // a remote daemon is reported as unavailable, with the reason, on its own
-  // line — never as a path the reader cannot open.
-  if (normalized.logPath) {
-    lines.push(`Diagnostics Log: ${normalized.logPath}`);
-  }
-  if (normalized.logPathUnavailable) {
-    lines.push(`Remote Diagnostics: unavailable (${normalized.logPathUnavailable})`);
-  }
+  const candidateLines = formatErrorCandidateViews(options.candidateViews);
+  if (candidateLines.length > 0) body.push(candidateLines.join('\n'));
+  const logLine = formatLogLine(normalized);
+  if (logLine) body.push(logLine);
   // ADR 0012: the divergence compact report always renders; --debug's raw
   // details dump below remains the full-object view.
   const divergenceText = formatReplayDivergenceReport(normalized.details);
-  if (divergenceText) {
-    lines.push(divergenceText);
-  }
+  if (divergenceText) body.push(divergenceText);
   if (options.showDetails && normalized.details) {
-    lines.push(JSON.stringify(normalized.details, null, 2));
+    body.push(JSON.stringify(normalized.details, null, 2));
   }
-  return lines;
+  return body;
+}
+
+/**
+ * #1801: `logPath` is always a path on THIS machine. A record that stayed on a remote daemon is
+ * reported as unavailable, with the reason — never as a path the reader cannot open.
+ */
+function formatLogLine(normalized: NormalizedError): string | undefined {
+  if (normalized.logPath) return `Log: ${normalized.logPath}`;
+  if (normalized.logPathUnavailable) return `Log: unavailable (${normalized.logPathUnavailable})`;
+  return undefined;
+}
+
+function readInlineCandidates(views: ErrorCandidateView[]): string[] | undefined {
+  const [view, ...rest] = views;
+  if (!view || rest.length > 0 || view.kind !== 'element-match') return undefined;
+  if (view.matches < 2 || view.matches > INLINE_CANDIDATE_LIMIT) return undefined;
+  if (view.candidates.length !== view.matches) return undefined;
+  const lines = view.candidates.map((candidate) =>
+    oneLine(pinCandidateLine(candidate, view.refsGeneration)),
+  );
+  // Candidates that read the same without their ref give the reader nothing to choose by, so
+  // naming them as the step would invite a guess; the hint (narrow the query) stays the step.
+  const descriptions = new Set(lines.map((line) => line.replace(CANDIDATE_REF_PREFIX, '')));
+  return descriptions.size === lines.length ? lines : undefined;
+}
+
+const CANDIDATE_REF_PREFIX = /^@e\d+(?:~s\d+)?\s*/;
+
+function oneLine(text: string): string {
+  return text.replaceAll(/\s+/g, ' ').trim();
+}
+
+function withFullStop(text: string): string {
+  return /[.!?…]$/.test(text) ? text : `${text}.`;
 }
 
 export function formatErrorCandidateViews(views: ErrorCandidateView[]): string[] {

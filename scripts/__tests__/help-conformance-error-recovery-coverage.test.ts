@@ -46,8 +46,12 @@ type RecoveryCase = {
   recovery: { code: string; sample: CapturedSample };
 };
 
+/**
+ * The distinct codes a sample renders. A multi-line failure prints its summary line first and
+ * again last, so one error contributes one code here, and a second error still shows up.
+ */
 function renderedErrorCodes(text: string): string[] {
-  return [...`\n${text}`.matchAll(RENDERED_ERROR_CODE)].map((match) => match[1]!);
+  return [...new Set([...`\n${text}`.matchAll(RENDERED_ERROR_CODE)].map((match) => match[1]!))];
 }
 
 /** The cases that declare themselves recovery quizzes (see the cases module). */
