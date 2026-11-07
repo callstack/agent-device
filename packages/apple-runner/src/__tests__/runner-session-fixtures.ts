@@ -151,6 +151,8 @@ const RUNNER_CONNECT_FAILURE_MESSAGES: Record<RunnerConnectFailureReason, string
   runner_connect_refused: 'Runner did not accept connection',
   runner_endpoint_probe_exhausted: 'Runner endpoint probe failed',
   xcodebuild_exited_early: 'xcodebuild exited early',
+  runner_session_draining: 'Runner session became terminal during connect (session draining)',
+  runner_session_stopped: 'Runner session became terminal during connect (session stopped)',
 };
 
 /** A failure in the shape the runner connect path throws: its message plus its typed reason. */
