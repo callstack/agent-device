@@ -126,6 +126,8 @@ struct AgentDeviceMacOSHelper {
       return try handleType(arguments: Array(arguments.dropFirst()))
     case "fill":
       return try handleFill(arguments: Array(arguments.dropFirst()))
+    case "show-menu":
+      return try handleShowMenu(arguments: Array(arguments.dropFirst()))
     case "scroll":
       return try handleScroll(arguments: Array(arguments.dropFirst()))
     case "screenshot":
@@ -378,11 +380,7 @@ struct AgentDeviceMacOSHelper {
   }
 
   static func handlePress(arguments: [String]) throws -> any Encodable {
-    guard let rawX = optionValue(arguments: arguments, name: "--x"),
-          let rawY = optionValue(arguments: arguments, name: "--y"),
-          let x = Double(rawX), x.isFinite,
-          let y = Double(rawY), y.isFinite
-    else {
+    guard let (x, y) = finitePointOption(arguments: arguments) else {
       throw HelperError.invalidArgs("press requires --x <number> --y <number>")
     }
 
@@ -459,10 +457,7 @@ struct AgentDeviceMacOSHelper {
   }
 
   static func handleFill(arguments: [String]) throws -> any Encodable {
-    guard let rawX = optionValue(arguments: arguments, name: "--x"),
-          let rawY = optionValue(arguments: arguments, name: "--y"),
-          let x = Double(rawX), x.isFinite,
-          let y = Double(rawY), y.isFinite,
+    guard let (x, y) = finitePointOption(arguments: arguments),
           let text = optionValue(arguments: arguments, name: "--text")
     else {
       throw HelperError.invalidArgs("fill requires --x <number> --y <number> --text <text>")
@@ -474,6 +469,20 @@ struct AgentDeviceMacOSHelper {
       data: try withGhostCursor(arguments) { cursor in
         try fillInBackground(
           point: CGPoint(x: x, y: y), text: text, app: app, cursor: cursor)
+      }
+    )
+  }
+
+  static func handleShowMenu(arguments: [String]) throws -> any Encodable {
+    guard let (x, y) = finitePointOption(arguments: arguments) else {
+      throw HelperError.invalidArgs("show-menu requires --x <number> --y <number>")
+    }
+    let app = try requireSessionApplication(
+      bundleId: try optionValue(arguments: arguments, name: "--bundle-id").map(validatedBundleId)
+    )
+    return SuccessEnvelope(
+      data: try withGhostCursor(arguments) { cursor in
+        try showMenuInBackground(point: CGPoint(x: x, y: y), app: app, cursor: cursor)
       }
     )
   }
@@ -550,6 +559,18 @@ private func optionValue(arguments: [String], name: String) -> String? {
     return nil
   }
   return arguments[index + 1]
+}
+
+/// The point action's `--x` and `--y`, or nil when either is missing or not a finite number.
+private func finitePointOption(arguments: [String]) -> (x: Double, y: Double)? {
+  guard let rawX = optionValue(arguments: arguments, name: "--x"),
+        let rawY = optionValue(arguments: arguments, name: "--y"),
+        let x = Double(rawX), x.isFinite,
+        let y = Double(rawY), y.isFinite
+  else {
+    return nil
+  }
+  return (x, y)
 }
 
 /// Runs a background action under the ghost cursor when the host asked for one.

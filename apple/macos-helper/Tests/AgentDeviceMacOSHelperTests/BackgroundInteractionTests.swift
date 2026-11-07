@@ -105,6 +105,53 @@ final class BackgroundInteractionTests: XCTestCase {
       scrollContentOverflow(area: area, contentFrames: [document, empty], isVertical: true), 1400)
   }
 
+  /// A secondary click succeeds only on a menu window of the session app: another app's open menu
+  /// or one of the app's ordinary windows must not count as the menu it opened.
+  func testOnlyTheAppsOwnMenuWindowsCountAsAnOpenedMenu() {
+    func window(pid: Int32, layer: Int, number: Int) -> [String: Any] {
+      [
+        kCGWindowOwnerPID as String: pid, kCGWindowLayer as String: layer,
+        kCGWindowNumber as String: number,
+      ]
+    }
+    let menuLayer = Int(CGWindowLevelForKey(.popUpMenuWindow))
+    let windowInfo = [
+      window(pid: 42, layer: 0, number: 1),
+      window(pid: 42, layer: menuLayer, number: 2),
+      window(pid: 7, layer: menuLayer, number: 3),
+    ]
+    XCTAssertEqual(popUpMenuWindowNumbers(pid: 42, windowInfo: windowInfo), [2])
+  }
+
+  /// A secondary click opens the menu of the nearest element up the hit chain that offers one,
+  /// and stops at the window or at an open menu, whose items sit under the element that opened it.
+  func testContextMenuOwnerIsTheNearestAncestorWithAMenuInsideTheWindow() {
+    // Each element: its role, whether it offers AXShowMenu, and its parent.
+    let tree: [String: (role: String, offersMenu: Bool, parent: String?)] = [
+      "app": ("AXApplication", true, nil),
+      "window": ("AXWindow", true, "app"),
+      "list": ("AXOutline", false, "window"),
+      "row": ("AXCell", true, "list"),
+      "label": ("AXStaticText", false, "row"),
+      "menuButton": ("AXMenuButton", true, "window"),
+      "plainButton": ("AXButton", false, "window"),
+      "menu": ("AXMenu", false, "row"),
+      "rename": ("AXMenuItem", false, "menu"),
+    ]
+    func owner(_ hit: String?) -> ContextMenuOwner<String> {
+      contextMenuOwner(
+        from: hit, role: { tree[$0]!.role }, offersMenu: { tree[$0]!.offersMenu },
+        parent: { tree[$0]!.parent })
+    }
+
+    XCTAssertEqual(owner("label"), .owner("row"))
+    XCTAssertEqual(owner("menuButton"), .owner("menuButton"))
+    XCTAssertEqual(owner("plainButton"), .noMenu)
+    XCTAssertEqual(owner("rename"), .noMenu)
+    // A hit test that found nothing is no target at the point, not a target without a menu.
+    XCTAssertEqual(owner(nil), .noTarget)
+  }
+
   /// Chromium marks wrapper groups pressable; only a control role may win the press outright.
   func testWrapperGroupsAreNotPressableControls() {
     XCTAssertTrue(isPressableControlRole("AXButton"))
