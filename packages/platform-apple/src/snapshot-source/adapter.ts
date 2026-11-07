@@ -6,6 +6,7 @@ import {
 } from './bridge-source.ts';
 import { SnapshotBridgeManager } from './lifecycle.ts';
 import { resolveSnapshotSourceLimits } from './limits.ts';
+import { createSnapshotSourceDeadline, remainingSnapshotSourceMs } from './deadline.ts';
 import { createSnapshotBridgePreparation } from './preparation.ts';
 import type { SnapshotSourceHost, SnapshotSourceLimits, SnapshotSourceTarget } from './types.ts';
 
@@ -40,18 +41,23 @@ export function createSimulatorSnapshotSource(
       name: 'guest-process',
       validateTarget,
       prepare: async (target, deadline) => {
+        const readinessDeadline = createSnapshotSourceDeadline(
+          Math.min(2000, remainingSnapshotSourceMs(deadline, 'bridge-readiness-deadline')),
+          deadline.signal,
+        );
         const bridge = await preparation.readyBinary(
           target.runtime,
           deadline,
           'bridge-preparation-deadline',
+          readinessDeadline,
         );
-        return async (read) => await manager.request({ ...read, target, bridge });
+        return async (read) =>
+          await manager.request({ ...read, target, bridge, readinessDeadline });
       },
       close: async () => {
         // A bridge build that outlives this source answers to nobody: no request is waiting on it
         // and its cache write would land after the source is gone (#2491).
-        preparation.close();
-        await manager.close();
+        await Promise.all([preparation.close(), manager.close()]);
       },
     },
   });

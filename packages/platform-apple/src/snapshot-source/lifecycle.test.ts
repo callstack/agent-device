@@ -1,55 +1,24 @@
 import assert from 'node:assert/strict';
-import { EventEmitter } from 'node:events';
-import { test } from 'vitest';
-import { createSnapshotSourceHost } from './host.ts';
+import { test, vi } from 'vitest';
 import { SnapshotSourceError, snapshotSourceError } from './errors.ts';
-import { createSnapshotSourceDeadline } from './deadline.ts';
-import {
-  encodeSnapshotBridgeFrame,
-  SNAPSHOT_SOURCE_PROTOCOL_VERSION,
-  SNAPSHOT_SOURCE_VERSION,
-} from './protocol.ts';
 import { SnapshotBridgeManager } from './lifecycle.ts';
 import { simulatorAddressFor } from '../core/simctl.ts';
-import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
-import type {
-  SnapshotSourceHost,
-  SnapshotSourceLimits,
-  SnapshotSourceProcess,
-  SnapshotSourceSocket,
-  SnapshotSourceTarget,
-} from './types.ts';
-
-const limits: SnapshotSourceLimits = {
-  maxRequestBytes: 64 * 1024,
-  maxResponseBytes: 4 * 1024,
-  maxNodes: 20,
-  maxTraversalDepth: 10,
-  maxDurationMs: 100,
-};
-
-const simulatorDevice = {
-  platform: 'apple',
-  id: 'simulator-1',
-  name: 'iPhone 17',
-  kind: 'simulator',
-  target: 'mobile',
-} as const;
-
-const target = {
-  simulator: simulatorAddressFor(simulatorDevice),
-  runtime: 'iOS 26.2',
-  pid: 123,
-  generation: 'generation-1',
-};
-
-const bridge = {
-  path: '/tmp/snapshot-bridge',
-  sourceHash: 'source-hash',
-  cacheKey: 'cache-key',
-  protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
-  sourceVersion: SNAPSHOT_SOURCE_VERSION,
-};
+import type { SnapshotSourceTarget } from './types.ts';
+import {
+  limits,
+  simulatorDevice,
+  target,
+  bridge,
+  deadline,
+  waitForDispatch,
+  settleWithin,
+  waitForFixture,
+  createPause,
+  isClosedSourceFailure,
+  isHelperCrashFailure,
+  exitDiagnostics,
+  createLifecycleFixture,
+} from './lifecycle.fixtures.ts';
 
 function compileTimeSnapshotTargetProof(): SnapshotSourceTarget {
   // @ts-expect-error A target names its simulator through an address minted from its DeviceInfo.
@@ -110,6 +79,76 @@ test('a new target generation reuses the healthy helper and carries generation p
   await manager.close();
   assert.deepEqual(fixture.processes[0]!.signals, ['SIGTERM']);
 });
+
+test.each(['same-generation', 'same-generation-retry', 'new-generation'])(
+  'a late helper crash is consumed once by %s',
+  async (capture) => {
+    vi.useFakeTimers();
+    let connecting = true;
+    const fixture = createLifecycleFixture();
+    const manager = new SnapshotBridgeManager({
+      ...fixture.host,
+      ensureDirectory: async () => {},
+      remove: async () => {},
+      connect: async (...args) => {
+        if (connecting)
+          throw snapshotSourceError('transport-failure', 'bridge-closed-before-connect');
+        return fixture.host.connect(...args);
+      },
+    });
+    try {
+      const first = assert.rejects(
+        manager.request({
+          target,
+          bridge,
+          limits,
+          maxDepth: 10,
+          deadline: deadline(undefined, 5000),
+        }),
+        (error: unknown) =>
+          error instanceof SnapshotSourceError && error.failureKind === 'preparing',
+      );
+      await vi.advanceTimersByTimeAsync(2001);
+      await first;
+      fixture.processes[0]!.crash();
+      await vi.advanceTimersByTimeAsync(20);
+      assert.equal(exitDiagnostics(fixture).length, 1);
+      if (capture !== 'new-generation') {
+        const observed = assert.rejects(
+          manager.request({
+            target,
+            bridge,
+            limits,
+            maxDepth: 10,
+            deadline: deadline(undefined, 5000),
+          }),
+          isHelperCrashFailure,
+        );
+        observed.catch(() => {});
+        await vi.advanceTimersByTimeAsync(2001);
+        await observed;
+        assert.equal(fixture.processes.length, 1);
+      }
+      connecting = false;
+      const generation = capture === 'same-generation-retry' ? target.generation : 'generation-2';
+      const next = { ...target, generation };
+      const retried = manager.request({
+        target: next,
+        bridge,
+        limits,
+        maxDepth: 10,
+        deadline: deadline(undefined, 5000),
+      });
+      await vi.advanceTimersByTimeAsync(10);
+      assert.equal((await retried).generation, next.generation);
+      assert.equal(fixture.processes.length, 2);
+      assert.equal(fixture.sockets[0]?.writes, 1);
+    } finally {
+      await manager.close();
+      vi.useRealTimers();
+    }
+  },
+);
 
 test('cancellation while queued prevents a later dispatch', async () => {
   const fixture = createLifecycleFixture({ responseDelayMs: 200 });
@@ -212,7 +251,8 @@ test('request cancellation after dispatch reaps the exact helper before recovery
     maxDepth: 10,
     deadline: deadline(controller.signal),
   });
-  setTimeout(() => controller.abort(), 10);
+  await waitForDispatch(fixture);
+  controller.abort();
 
   await assert.rejects(
     request,
@@ -687,312 +727,267 @@ test('typed guest failures retain their kind after target validation', async () 
   await manager.close();
 });
 
-type LifecycleFixture = {
-  host: SnapshotSourceHost;
-  processes: FakeProcess[];
-  sockets: FakeSocket[];
-  diagnostics: Array<Parameters<SnapshotSourceHost['emitDiagnostic']>[0]>;
-  socketPaths: string[];
-  startedTargets: Array<Parameters<SnapshotSourceHost['start']>[0]>;
-  /** The directory each bridge session setup asked the host to create, in order. */
-  directorySetups: string[];
-  /** The socket each bridge connect attempt was for, in order, including one that has not returned. */
-  connects: string[];
-};
-
-function deadline(signal?: AbortSignal, timeoutMs = limits.maxDurationMs) {
-  return createSnapshotSourceDeadline(timeoutMs, signal);
-}
-
-async function waitForDispatch(fixture: LifecycleFixture): Promise<void> {
-  await waitForFixture(
-    () => fixture.sockets[0]?.writes === 1,
-    'Fixture request was not dispatched',
-  );
-}
-
-/** Whether `pending` finishes on its own inside `graceMs`, so a test can name a wait it must not need. */
-async function settleWithin(
-  pending: Promise<void>,
-  graceMs: number,
-): Promise<'settled' | 'pending'> {
-  let timer: NodeJS.Timeout | undefined;
+test('slow helper readiness detaches from a capture and later uses the same process', async () => {
+  vi.useFakeTimers();
+  const fixture = createLifecycleFixture({ connectDelayMs: 3000 });
+  fixture.host = { ...fixture.host, ensureDirectory: async () => {}, remove: async () => {} };
+  const manager = new SnapshotBridgeManager(fixture.host);
   try {
-    return await Promise.race([
-      pending.then(() => 'settled' as const),
-      new Promise<'pending'>((resolve) => {
-        timer = setTimeout(() => resolve('pending'), graceMs);
+    const first = manager.request({
+      target,
+      bridge,
+      limits,
+      maxDepth: 10,
+      deadline: deadline(undefined, 5000),
+    });
+    const rejected = assert.rejects(
+      first,
+      (error: unknown) => error instanceof SnapshotSourceError && error.failureKind === 'preparing',
+    );
+    const concurrent = assert.rejects(
+      manager.request({
+        target,
+        bridge,
+        limits,
+        maxDepth: 10,
+        deadline: deadline(undefined, 5000),
       }),
-    ]);
+      (error: unknown) => error instanceof SnapshotSourceError && error.failureKind === 'preparing',
+    );
+    await vi.advanceTimersByTimeAsync(2001);
+    await Promise.all([rejected, concurrent]);
+    assert.equal(fixture.processes.length, 1);
+    assert.equal(fixture.sockets.length, 0);
+    await vi.advanceTimersByTimeAsync(1000);
+    const later = manager.request({
+      target,
+      bridge,
+      limits,
+      maxDepth: 10,
+      deadline: deadline(undefined, 5000),
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    await later;
+    assert.equal(fixture.processes.length, 1);
+    assert.equal(fixture.sockets[0]?.writes, 1);
   } finally {
-    clearTimeout(timer);
+    await manager.close();
+    vi.useRealTimers();
   }
-}
+});
 
-async function waitForFixture(condition: () => boolean, message: string): Promise<void> {
-  const startedAt = Date.now();
-  while (!condition()) {
-    if (Date.now() - startedAt >= 1000) throw new Error(message);
-    await new Promise((resolve) => setTimeout(resolve, 1));
-  }
-}
+test.each(['same-generation', 'same-generation-retry', 'new-generation'])(
+  'owned startup expiry delivers its failure once to %s',
+  async (capture) => {
+    vi.useFakeTimers();
+    const options = { connectDelayMs: 20000 };
+    const fixture = createLifecycleFixture(options);
+    fixture.host = { ...fixture.host, ensureDirectory: async () => {}, remove: async () => {} };
+    const manager = new SnapshotBridgeManager(fixture.host);
+    const caller = new AbortController();
+    try {
+      const first = assert.rejects(
+        manager.request({
+          target,
+          bridge,
+          limits,
+          maxDepth: 10,
+          deadline: deadline(undefined, 5000),
+        }),
+        (error: unknown) =>
+          error instanceof SnapshotSourceError && error.failureKind === 'preparing',
+      );
+      await vi.advanceTimersByTimeAsync(2001);
+      await first;
+      await vi.advanceTimersByTimeAsync(8000);
+      assert.equal(caller.signal.aborted, false);
+      assert.equal(fixture.processes.length, 1);
+      assert.deepEqual(fixture.processes[0]!.signals, ['SIGTERM']);
+      assert.equal(fixture.sockets.length, 0);
+      if (capture !== 'new-generation') {
+        const observed = assert.rejects(
+          manager.request({
+            target,
+            bridge,
+            limits,
+            maxDepth: 10,
+            deadline: deadline(undefined, 5000),
+          }),
+          (error: unknown) =>
+            error instanceof SnapshotSourceError &&
+            error.failureKind === 'timeout' &&
+            error.failureCode === 'bridge-startup-deadline',
+        );
+        observed.catch(() => {});
+        await vi.advanceTimersByTimeAsync(2001);
+        await observed;
+        assert.equal(fixture.processes.length, 1);
+      }
+      options.connectDelayMs = 0;
+      const generation = capture === 'same-generation-retry' ? target.generation : 'generation-2';
+      const next = { ...target, generation };
+      const retried = manager.request({
+        target: next,
+        bridge,
+        limits,
+        maxDepth: 10,
+        deadline: deadline(caller.signal, 5000),
+      });
+      await vi.advanceTimersByTimeAsync(10);
+      assert.equal((await retried).generation, next.generation);
+      assert.equal(caller.signal.aborted, false);
+      assert.equal(fixture.processes.length, 2);
+      assert.equal(fixture.sockets[0]?.writes, 1);
+    } finally {
+      await manager.close();
+      vi.useRealTimers();
+    }
+  },
+);
 
-function createPause(): Readonly<{ wait: () => Promise<void>; release: () => void }> {
+test('close adopts paused startup, awaits cleanup and refuses future requests', async () => {
+  const fixture = createLifecycleFixture();
   let release!: () => void;
-  const resumed = new Promise<void>((resolve) => {
+  let entered!: () => void;
+  const paused = new Promise<void>((resolve) => {
     release = resolve;
   });
-  return {
-    wait: async () => {
-      await resumed;
+  const reached = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const manager = new SnapshotBridgeManager({
+    ...fixture.host,
+    ensureDirectory: async () => {
+      entered();
+      await paused;
     },
-    release,
-  };
-}
-
-function isClosedSourceFailure(error: unknown): boolean {
-  return (
-    error instanceof SnapshotSourceError &&
-    error.failureKind === 'unsupported' &&
-    error.failureCode === 'source-closed'
+  });
+  const pending = manager.request({
+    target,
+    bridge,
+    limits,
+    maxDepth: 10,
+    deadline: deadline(undefined, 5000),
+  });
+  const refused = assert.rejects(
+    pending,
+    (error: unknown) =>
+      error instanceof SnapshotSourceError && error.failureCode === 'source-closed',
   );
-}
-
-function isHelperCrashFailure(error: unknown): boolean {
-  return (
-    error instanceof SnapshotSourceError &&
-    error.failureKind === 'process-crash' &&
-    error.failureCode === 'bridge-exited'
+  await reached;
+  const closing = manager.close();
+  assert.equal(await settleWithin(closing, 20), 'pending');
+  release();
+  await closing;
+  await refused;
+  assert.equal(fixture.processes.length, 0);
+  await assert.rejects(
+    manager.request({ target, bridge, limits, maxDepth: 10, deadline: deadline() }),
+    /source-closed/,
   );
-}
+});
 
-function exitDiagnostics(fixture: LifecycleFixture): LifecycleFixture['diagnostics'] {
-  return fixture.diagnostics.filter(
-    (event) => event.phase === 'ios.snapshot-source.bridge-process-exit',
+test('caller abort cancels only the wait for shared helper readiness', async () => {
+  const fixture = createLifecycleFixture({ connectDelayMs: 80 });
+  const manager = new SnapshotBridgeManager(fixture.host);
+  const controller = new AbortController();
+  const pending = manager.request({
+    target,
+    bridge,
+    limits,
+    maxDepth: 10,
+    deadline: deadline(controller.signal, 1000),
+  });
+  setTimeout(() => controller.abort(), 20);
+  await assert.rejects(
+    pending,
+    (error: unknown) => error instanceof SnapshotSourceError && error.failureKind === 'cancelled',
   );
-}
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  await manager.request({
+    target,
+    bridge,
+    limits,
+    maxDepth: 10,
+    deadline: deadline(undefined, 1000),
+  });
+  assert.equal(fixture.processes.length, 1);
+  assert.deepEqual(fixture.processes[0]?.signals, []);
+  await manager.close();
+});
 
-function createLifecycleFixture(
-  options: {
-    connectDelayMs?: number;
-    responseDelayMs?: number;
-    responsePid?: number;
-    responseGeneration?: string;
-    responseErrorKind?: string;
-    targetStartTimes?: Array<string | null>;
-    /** Holds the bridge's directory setup open so a test can close the manager inside it. */
-    pauseAtDirectorySetup?: () => Promise<void>;
-    /** Holds a bridge connect open so a test can close the manager inside it. */
-    pauseAtConnect?: () => Promise<void>;
-    /**
-     * Takes the helper away without an exit status as the bridge connect is attempted, so the connect
-     * fails and the manager is left reading a status that never arrives.
-     */
-    helperGoneAtConnect?: boolean;
-  } = {},
-): LifecycleFixture {
-  const processes: FakeProcess[] = [];
-  const sockets: FakeSocket[] = [];
-  const diagnostics: LifecycleFixture['diagnostics'] = [];
-  const socketPaths: string[] = [];
-  const startedTargets: LifecycleFixture['startedTargets'] = [];
-  const directorySetups: string[] = [];
-  const connects: string[] = [];
-  const realHost = createSnapshotSourceHost(createLiveTestHostEnvironment());
-  const host: SnapshotSourceHost = {
-    ...realHost,
-    emitDiagnostic: (event) => diagnostics.push(event),
-    ensureDirectory: async (directoryPath) => {
-      directorySetups.push(directoryPath);
-      if (options.pauseAtDirectorySetup) await options.pauseAtDirectorySetup();
-      await realHost.ensureDirectory(directoryPath);
-    },
-    readTargetProcessStartTime: async () => options.targetStartTimes?.shift() ?? 'target-start',
-    start: (startedTarget, _bridgePath, socketPath) => {
-      startedTargets.push(startedTarget);
-      socketPaths.push(socketPath);
-      const process = new FakeProcess(700 + processes.length);
-      processes.push(process);
-      return process;
-    },
-    connect: async (socketPath, connectOptions) => {
-      connects.push(socketPath);
-      if (options.pauseAtConnect) await options.pauseAtConnect();
-      if (options.helperGoneAtConnect) {
-        // The manager already saw the helper start, so this is a launch that died without ever
-        // reporting its status: the socket it would have answered on is gone with it.
-        processes[0]?.exitWithoutStatus();
-        throw snapshotSourceError('transport-failure', 'bridge-closed-before-connect');
-      }
-      if (options.connectDelayMs) {
-        await new Promise<void>((resolve, reject) => {
-          const finish = (error?: SnapshotSourceError) => {
-            clearTimeout(timer);
-            connectOptions.signal?.removeEventListener('abort', onAbort);
-            if (error) reject(error);
-            else resolve();
-          };
-          const timer = setTimeout(() => finish(), options.connectDelayMs);
-          const onAbort = () => {
-            finish(snapshotSourceError('cancelled', 'abort-signal'));
-          };
-          connectOptions.signal?.addEventListener('abort', onAbort, { once: true });
-          if (connectOptions.signal?.aborted) onAbort();
-        });
-      }
-      const socket = new FakeSocket(
-        options.responseDelayMs ?? 0,
-        options.responsePid ?? target.pid,
-        options.responseGeneration,
-        options.responseErrorKind,
-      );
-      sockets.push(socket);
-      return socket;
-    },
-  };
-  return {
-    host,
-    processes,
-    sockets,
-    diagnostics,
-    socketPaths,
-    startedTargets,
-    directorySetups,
-    connects,
-  };
-}
-
-class FakeProcess implements SnapshotSourceProcess {
-  alive = true;
-  signals: NodeJS.Signals[] = [];
-  /** How often the manager asked for the exit status, counting one read still awaiting a result. */
-  exitStatusReads = 0;
-  private readonly processId: number;
-  private readonly exitStatus: Promise<{ stdout: string; stderr: string; exitCode: number }>;
-  private resolveExitStatus!: (result: {
-    stdout: string;
-    stderr: string;
-    exitCode: number;
-  }) => void;
-  private rejectExitStatus!: (error: Error) => void;
-
-  constructor(pid: number) {
-    this.processId = pid;
-    this.exitStatus = new Promise((resolve, reject) => {
-      this.resolveExitStatus = resolve;
-      this.rejectExitStatus = reject;
+test('binary time and helper startup consume one readiness allowance', async () => {
+  vi.useFakeTimers();
+  const fixture = createLifecycleFixture({ connectDelayMs: 1500 });
+  fixture.host = { ...fixture.host, ensureDirectory: async () => {}, remove: async () => {} };
+  const manager = new SnapshotBridgeManager(fixture.host);
+  try {
+    const captureDeadline = deadline(undefined, 5000);
+    const readinessDeadline = deadline(undefined, 2000);
+    await vi.advanceTimersByTimeAsync(1500);
+    const pending = manager.request({
+      target,
+      bridge,
+      limits,
+      maxDepth: 10,
+      deadline: captureDeadline,
+      readinessDeadline,
     });
+    const rejected = assert.rejects(
+      pending,
+      (error: unknown) => error instanceof SnapshotSourceError && error.failureKind === 'preparing',
+    );
+    await vi.advanceTimersByTimeAsync(501);
+    await rejected;
+    assert.equal(fixture.sockets.length, 0);
+    await vi.advanceTimersByTimeAsync(1000);
+    const callers = [1, 2].map(() =>
+      manager.request({
+        target,
+        bridge,
+        limits,
+        maxDepth: 10,
+        deadline: deadline(undefined, 5000),
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(10);
+    await Promise.all(callers);
+    assert.equal(fixture.processes.length, 1);
+    assert.equal(fixture.sockets[0]?.writes, 2);
+  } finally {
+    await manager.close();
+    vi.useRealTimers();
   }
+});
 
-  get pid(): number {
-    return this.processId;
-  }
-
-  get wait(): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    this.exitStatusReads += 1;
-    return this.exitStatus;
-  }
-
-  isAlive(): boolean {
-    return this.alive;
-  }
-
-  signal(signal: NodeJS.Signals): void {
-    this.signals.push(signal);
-    this.alive = false;
-    this.resolveExitStatus({ stdout: '', stderr: '', exitCode: signal === 'SIGKILL' ? 137 : 0 });
-  }
-
-  crash(): void {
-    this.alive = false;
-    this.resolveExitStatus({ stdout: '', stderr: 'crashed', exitCode: 1 });
-  }
-
-  /** Goes away without ever reporting its status, the way a helper with inherited pipes can. */
-  exitWithoutStatus(): void {
-    this.alive = false;
-  }
-
-  /** Goes away with the status read itself failing, the way a launch that never started can. */
-  exitWithFailedStatus(): void {
-    this.alive = false;
-    this.rejectExitStatus(new Error('helper launch failed'));
-  }
-
-  readLog(): string {
-    return 'fixture log';
-  }
-}
-
-class FakeSocket extends EventEmitter implements SnapshotSourceSocket {
-  destroyed = false;
-  writes = 0;
-  private readonly responseDelayMs: number;
-  private readonly responsePid: number;
-  private readonly responseGeneration: string | undefined;
-  private readonly responseErrorKind: string | undefined;
-
-  constructor(
-    responseDelayMs: number,
-    responsePid: number,
-    responseGeneration: string | undefined,
-    responseErrorKind?: string,
-  ) {
-    super();
-    this.responseDelayMs = responseDelayMs;
-    this.responsePid = responsePid;
-    this.responseGeneration = responseGeneration;
-    this.responseErrorKind = responseErrorKind;
-  }
-
-  write(frame: Buffer): boolean {
-    this.writes += 1;
-    const bodyLength = frame.readUInt32BE(0);
-    const request = JSON.parse(frame.subarray(4, bodyLength + 4).toString('utf8')) as {
-      requestId: string;
-      pid: number;
-      generation: string;
-    };
-    setTimeout(() => {
-      if (this.destroyed) return;
-      this.emit(
-        'data',
-        encodeSnapshotBridgeFrame(
-          this.responseErrorKind
-            ? {
-                protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
-                sourceVersion: SNAPSHOT_SOURCE_VERSION,
-                requestId: request.requestId,
-                ok: false,
-                pid: this.responsePid || request.pid,
-                generation: this.responseGeneration ?? request.generation,
-                error_kind: this.responseErrorKind,
-                error_code: 'fixture-error',
-              }
-            : {
-                protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
-                sourceVersion: SNAPSHOT_SOURCE_VERSION,
-                requestId: request.requestId,
-                ok: true,
-                pid: this.responsePid || request.pid,
-                generation: this.responseGeneration ?? request.generation,
-                truncated: false,
-                automationEnabled: true,
-                tree: {
-                  XC_kAXXCAttributeElementType: 'Application',
-                  XC_kAXXCAttributeChildren: [],
-                },
-              },
-          limits,
-        ),
-      );
-    }, this.responseDelayMs);
-    return true;
-  }
-
-  destroy(): void {
-    if (this.destroyed) return;
-    this.destroyed = true;
-    queueMicrotask(() => this.emit('close'));
-  }
-}
+test('close cleans a late connection without publishing it', async () => {
+  const fixture = createLifecycleFixture();
+  let release!: () => void;
+  let entered!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const reached = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const manager = new SnapshotBridgeManager({
+    ...fixture.host,
+    connect: async (...args) => {
+      entered();
+      await gate;
+      return await fixture.host.connect(...args);
+    },
+  });
+  const refused = assert.rejects(
+    manager.request({ target, bridge, limits, maxDepth: 10, deadline: deadline(undefined, 5000) }),
+    (error: unknown) =>
+      error instanceof SnapshotSourceError && error.failureCode === 'source-closed',
+  );
+  await reached;
+  const closing = manager.close();
+  release();
+  await closing;
+  await refused;
+  assert.equal(fixture.sockets[0]?.destroyed, true);
+  assert.deepEqual(fixture.processes[0]?.signals, ['SIGTERM']);
+});
