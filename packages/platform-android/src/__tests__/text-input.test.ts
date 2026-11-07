@@ -111,7 +111,10 @@ test('typeAndroid sends KEYCODE_DEL keyevents for backspace sequences', async ()
     },
     async ({ calls, device }) => {
       await typeAndroid(device, '\b\b\b');
-      assert.equal(calls.some((args) => args.includes('KEYCODE_MOVE_END')), false);
+      assert.equal(
+        calls.some((args) => args.includes('KEYCODE_MOVE_END')),
+        false,
+      );
       const delCalls = calls.filter(
         (args) => args[0] === 'shell' && args[1] === 'input' && args[2] === 'keyevent',
       );
@@ -140,7 +143,10 @@ test('typeAndroid respects delayMs when dispatching backspace keyevents', async 
     },
     async ({ calls, device }) => {
       await typeAndroid(device, '\b\b\b', 20);
-      assert.equal(calls.some((args) => args.includes('KEYCODE_MOVE_END')), false);
+      assert.equal(
+        calls.some((args) => args.includes('KEYCODE_MOVE_END')),
+        false,
+      );
       const delCalls = calls.filter(
         (args) => args[0] === 'shell' && args[1] === 'input' && args[2] === 'keyevent',
       );
