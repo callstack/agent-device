@@ -54,6 +54,8 @@ test('mutating selector rejects element-14-shaped matches in distinct subtrees w
       assert.equal((error as { code?: unknown }).code, 'AMBIGUOUS_MATCH');
       const details = (error as { details?: Record<string, unknown> }).details;
       assert.equal(details?.matches, 4);
+      // The refusal comes before any tap, so a retry with a narrower selector is safe.
+      assert.equal(details?.dispatched, 'no');
       assert.deepEqual(details?.candidates, [
         '@e2 [text] "Team Standup"',
         '@e3 [text-field] "Team Standup"',

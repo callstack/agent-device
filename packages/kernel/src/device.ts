@@ -664,7 +664,11 @@ function assertSelectorFlagMatchesPlatform(selector: DeviceSelector): void {
 
 function resolveAppleDeviceByUdid(candidates: DeviceInfo[], udid: string): DeviceInfo {
   const match = candidates.find((device) => device.id === udid && isApplePlatform(device.platform));
-  if (!match) throw new AppError('DEVICE_NOT_FOUND', `No Apple device with UDID ${udid}`);
+  if (!match) {
+    throw new AppError('DEVICE_NOT_FOUND', `No Apple device with UDID ${udid}`, {
+      dispatched: 'no',
+    });
+  }
   return match;
 }
 
@@ -672,7 +676,11 @@ function resolveDeviceBySerial(candidates: DeviceInfo[], selector: DeviceSelecto
   const match = candidates.find(
     (device) => device.id === selector.serial && isSerialAddressablePlatform(device.platform),
   );
-  if (!match) throw new AppError('DEVICE_NOT_FOUND', serialDeviceNotFoundMessage(selector));
+  if (!match) {
+    throw new AppError('DEVICE_NOT_FOUND', serialDeviceNotFoundMessage(selector), {
+      dispatched: 'no',
+    });
+  }
   return match;
 }
 
@@ -687,7 +695,7 @@ function resolveDeviceByName(
     throw new AppError(
       'DEVICE_NOT_FOUND',
       `No device named ${deviceName}`,
-      hint === undefined ? undefined : { hint },
+      hint === undefined ? { dispatched: 'no' } : { hint, dispatched: 'no' },
     );
   }
   return match;
@@ -922,9 +930,10 @@ function throwNoDevicesFound(selector: DeviceSelector, context: DeviceSelectionC
       simulatorSetPath,
       hint: `The simulator set at "${simulatorSetPath}" appears to be empty. Create a compatible simulator first with xcrun simctl --set "${simulatorSetPath}" create, or remove the scoped simulator set.`,
       selector,
+      dispatched: 'no',
     });
   }
-  throw new AppError('DEVICE_NOT_FOUND', 'No devices found', { selector });
+  throw new AppError('DEVICE_NOT_FOUND', 'No devices found', { selector, dispatched: 'no' });
 }
 
 /**

@@ -85,7 +85,7 @@ Detected an overly complex or slow accessibility tree. Fell back to the private-
 // (packages/daemon/src/core/session-recovery-hints.ts) — the parity test drives that exact producer.
 export const DEVICE_IN_USE_SAMPLE = {
   command: 'agent-device open https://example.test --platform web --session default',
-  output: `Error (DEVICE_IN_USE): Device is already in use by session "checkout". May have reached the device. Next: Run snapshot to check the screen before you retry. Run agent-device session list to inspect active sessions. To reuse this device, rerun the command with --session checkout. To open a new session on this device, first run agent-device close --session checkout. To wait for the device to free up, run the same open with --wait <ms>.`,
+  output: `Error (DEVICE_IN_USE): Device is already in use by session "checkout". Not dispatched. Next: Run agent-device session list to inspect active sessions. To reuse this device, rerun the command with --session checkout. To open a new session on this device, first run agent-device close --session checkout. To wait for the device to free up, run the same open with --wait <ms>.`,
 };
 
 // Enforced cross-daemon device claim conflict from
@@ -93,7 +93,7 @@ export const DEVICE_IN_USE_SAMPLE = {
 // the exact status command is the only safe next step while ownership is live.
 export const DEVICE_CLAIM_IN_USE_SAMPLE = {
   command: 'agent-device open Demo --platform android --serial emulator-5554',
-  output: `Error (DEVICE_IN_USE): android device emulator-5554 is owned by session "checkout" in workspace "/worktrees/checkout". May have reached the device. Next: Run snapshot to check the screen before you retry. Inspect the owner with: agent-device device status --platform android --serial emulator-5554`,
+  output: `Error (DEVICE_IN_USE): android device emulator-5554 is owned by session "checkout" in workspace "/worktrees/checkout". Not dispatched. Next: Inspect the owner with: agent-device device status --platform android --serial emulator-5554`,
 };
 
 // ADR 0014 mutation rejection from
@@ -116,7 +116,12 @@ export const STALE_REF_SAMPLE = {
 // the agent must re-observe or narrow, not guess which @ref is the right row.
 export const AMBIGUOUS_MATCH_SAMPLE = {
   command: 'agent-device find text "Follow"',
-  output: `Error (AMBIGUOUS_MATCH): find matched 3 elements for text "Follow". Use a more specific locator or selector. May have reached the device. Next: Run snapshot to check the screen before you retry. Act on one ref with a command that takes refs, such as press: @e2 [button] "Follow"; @e5 [button] "Follow"; @e9 [button] "Follow"`,
+  output: `Error (AMBIGUOUS_MATCH): find matched 3 elements for text "Follow". Use a more specific locator or selector. Not dispatched. Next: Multiple candidates matched. Narrow the query or pass an exact identifier.
+Candidates:
+  @e2 [button] "Follow"
+  @e5 [button] "Follow"
+  @e9 [button] "Follow"
+Error (AMBIGUOUS_MATCH): find matched 3 elements for text "Follow". Use a more specific locator or selector. Not dispatched. Next: Multiple candidates matched. Narrow the query or pass an exact identifier.`,
 };
 
 // APP_NOT_INSTALLED from buildAppNotInstalledError
