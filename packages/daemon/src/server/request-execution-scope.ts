@@ -26,14 +26,9 @@ import {
 } from '../core/context.ts';
 import { assertSessionSelectorMatches } from '../core/session-selector.ts';
 import {
-  isImplicitSessionScopeConflict,
   resolveCallerScopeRoot,
   resolveEffectiveSessionName,
 } from '../sessions/session-routing.ts';
-import {
-  buildDeviceInUseBySessionError,
-  buildForeignWorkspaceSessionConflict,
-} from '../core/session-recovery-hints.ts';
 import { deriveWebSessionIdentity } from '../core/session-tenant-scope.ts';
 import {
   assertRequestLeaseAdmissionPreflight,
@@ -56,7 +51,7 @@ import {
 } from './request-binding.ts';
 import {
   beginOpenDeviceWait,
-  findSessionHoldingDevice,
+  findSessionDeviceConflict,
   readOpenWaitBudgetMs,
 } from '../sessions/open-device-contention-wait.ts';
 import {
@@ -614,15 +609,13 @@ function createRequestDeviceAccess(params: {
                 assertDaemonPolicyAdmitsDevice(daemonPolicy, device);
               }
               if (claimPolicy === 'require-owner' && !params.sessionStore.get(params.sessionName)) {
-                const inUse = findSessionHoldingDevice(
-                  params.sessionStore,
-                  device.id,
-                  params.sessionName,
-                );
-                if (inUse) {
-                  const refusal = isImplicitSessionScopeConflict(params.req, inUse.session)
-                    ? buildForeignWorkspaceSessionConflict(inUse, device)
-                    : buildDeviceInUseBySessionError(inUse, device);
+                const refusal = findSessionDeviceConflict({
+                  req: params.req,
+                  device,
+                  sessionStore: params.sessionStore,
+                  sessionName: params.sessionName,
+                });
+                if (refusal) {
                   throw new AppError(
                     refusal.error.code,
                     refusal.error.message,
