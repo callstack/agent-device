@@ -158,6 +158,7 @@ Destructive operations hold the ownership lease across fence validation, the nat
 A preflight check alone is insufficient.
 Session state may hold only a neutral facet-specific handle; persisted recovery holds the descriptor and neutral metadata.
 The capture-kit durable-capture coordinator, which the daemon composes, owns persistence, adoption, compensation, fencing, and exact-owner recovery.
+The daemon owns the app-log admission ledger and session-teardown ordering.
 Events and the proposed journal are observability, not recovery authority.
 The [durable resource recovery contracts](../../packages/capture-kit/docs/durable-resource-recovery.md) own the lifecycle, cleanup, and recovery details.
 
@@ -261,6 +262,7 @@ The staged migration cost temporary coexistence; closed execution shapes and str
 
 These targets are proposed defaults, not accepted commitments or authorization for work.
 The proposed daemon top-level footprint is at most 60; its [measured baseline](../evidence/daemon-footprint-baseline-2026-09-02.md) is evidence, not a commitment.
+The baseline counted top-level files of the old root daemon directory; since the daemon moved into layer folders in `@agent-device/daemon`, the target needs a new counting rule before it binds.
 `@agent-device/daemon` remains a permanent R65 zone; the target concerns its contents, not directory retirement.
 **Entry-to-platform hop count.** The hop trace and measured hop counts belong to [ADR 0023](0023-end-state-hop-trace.md).
 Composition and family runtime-loading boundaries count as hops, and package direction and named facets constrain any collapse.
