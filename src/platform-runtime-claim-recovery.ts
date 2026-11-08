@@ -14,7 +14,7 @@ import {
 import { createPlatformRuntimeGateway } from './platform-runtime.ts';
 
 /**
- * Root composition for owner-scoped claim recovery (ADR 0019 section 1): the daemon owns the
+ * Root composition for owner-scoped claim recovery (ADR 0019 section 11): the daemon owns the
  * recovery transaction and its disposal, and asks root composition only to assemble the local
  * runtime gateway the transaction runs on, because building a gateway is the one act that names
  * platform modules. A local-only gateway per transaction keeps provider runtimes out of recovery —

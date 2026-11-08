@@ -726,10 +726,12 @@ export function snapshotRefBodies(refCarriers: readonly { ref?: string }[]): str
 /**
  * Versioned-ref grammar (#1076): a ref argument may carry an optional
  * `~s<generation>` suffix pinning it to the session snapshot generation that
- * minted it, e.g. `@e12~s3`. The suffix is accepted INPUT only — snapshot
- * output stays plain `e12` refs (the tree is the most token-expensive artifact
- * agents consume), and ref-issuing responses carry the generation ONCE as the
- * additive `refsGeneration` field.
+ * minted it, e.g. `@e12~s3`. Snapshot output stays plain `e12` refs (the tree is
+ * the most token-expensive artifact agents consume), except the CLI text of a
+ * `--scope` snapshot, which prints every ref in this pinned form unless `--raw`
+ * is set (ADR 0014).
+ * Ref-issuing responses carry the generation ONCE as the additive
+ * `refsGeneration` field.
  */
 const REF_GENERATION_SUFFIX_RE = /^~s(\d+)$/;
 

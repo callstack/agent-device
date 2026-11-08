@@ -845,3 +845,79 @@ test.each([
     assert.match(line, marker);
   },
 );
+
+// ADR 0014 required evidence #7: a scoped snapshot publishes only its returned
+// namespace, so CLI text renders every reusable ref in the ready-to-copy
+// `@eN~s<refsGeneration>` form and discloses the generation once. A complete
+// tree stays plain to protect the token budget, and --raw stays byte-for-byte.
+test('formatSnapshotText pins scoped tree refs and discloses the refs generation', () => {
+  const text = withNoColor(() =>
+    formatSnapshotText(
+      {
+        nodes: [
+          { ref: 'e56', index: 0, depth: 0, type: 'Button', label: 'Submit' },
+          { index: 1, depth: 1, parentIndex: 0, type: 'StaticText', label: 'no ref here' },
+        ],
+        truncated: false,
+        refsGeneration: 752890,
+      },
+      { scoped: true },
+    ),
+  );
+  assert.match(text, /@e56~s752890 \[button\] "Submit"/);
+  assert.match(text, /Refs generation: 752890/);
+  // A node without a ref keeps a refless line; nothing is invented.
+  assert.match(text, /^\s+\[text\] "no ref here"$/m);
+});
+
+test('formatSnapshotText pins scoped flattened refs', () => {
+  const text = withNoColor(() =>
+    formatSnapshotText(
+      {
+        nodes: [{ ref: 'e3', index: 0, depth: 0, type: 'Button', label: 'Buy' }],
+        truncated: false,
+        refsGeneration: 42,
+      },
+      { scoped: true, flatten: true },
+    ),
+  );
+  assert.match(text, /@e3~s42 \[button\] "Buy"/);
+});
+
+test('formatSnapshotText keeps scoped refs bare when the response carries no generation', () => {
+  const text = withNoColor(() =>
+    formatSnapshotText(
+      {
+        nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Button', label: 'Submit' }],
+        truncated: false,
+      },
+      { scoped: true },
+    ),
+  );
+  assert.match(text, /@e1 \[button\]/);
+  assert.doesNotMatch(text, /Refs generation:/);
+});
+
+test('formatSnapshotText keeps a complete tree plain even when a generation is present', () => {
+  const text = withNoColor(() =>
+    formatSnapshotText({
+      nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Button', label: 'Submit' }],
+      truncated: false,
+      refsGeneration: 752890,
+    }),
+  );
+  assert.match(text, /@e1 \[button\]/);
+  assert.doesNotMatch(text, /~s752890/);
+  assert.doesNotMatch(text, /Refs generation:/);
+});
+
+test('formatSnapshotText keeps scoped raw output byte-for-byte', () => {
+  const node = { ref: 'e1', index: 0, depth: 0, type: 'Button', label: 'Submit' };
+  const text = withNoColor(() =>
+    formatSnapshotText(
+      { nodes: [node], truncated: false, refsGeneration: 752890 },
+      { scoped: true, raw: true },
+    ),
+  );
+  assert.equal(text, `Snapshot: 1 nodes\n${JSON.stringify(node)}\n`);
+});

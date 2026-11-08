@@ -886,6 +886,12 @@ ${helpBody(schema.text)}${flagsSections}
 `;
 }
 
+/** The one-line synopsis of a canonical command name, such as `agent-device fill <target> <text>`. */
+export function buildCommandSynopsis(commandName: string): string | null {
+  const schema = getCommandSchema(commandName);
+  return schema ? `agent-device ${buildCommandUsage(commandName, schema)}` : null;
+}
+
 /** `--help` text for a command name or one of its aliases; `null` when neither has any. */
 export function resolveHelpTargetUsageText(helpTarget: string): string | null {
   return buildCommandUsageText(normalizeCliCommandAlias(helpTarget));

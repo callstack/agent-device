@@ -29,6 +29,7 @@ function createInvalidDaemonResponseError(
     'Invalid daemon response',
     {
       requestId: req.meta?.requestId,
+      reason: 'daemon_response_invalid',
       line,
     },
     cause instanceof Error ? cause : undefined,
@@ -198,7 +199,10 @@ export function readDaemonHttpProgressResponse(
       new AppError(
         'COMMAND_FAILED',
         'Failed to read daemon response',
-        { requestId: req.meta?.requestId },
+        {
+          requestId: req.meta?.requestId,
+          reason: 'daemon_response_read_failure',
+        },
         error instanceof Error ? error : undefined,
       ),
     );

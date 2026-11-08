@@ -64,7 +64,7 @@ test('a remote failure names a record the caller can actually read', async (t) =
   try {
     const localPath = localRecordPath(clientStateDir, daemonLogPath, requestId);
     assert.equal(run.code, 1);
-    assert.match(run.stderr, new RegExp(`Diagnostics Log: ${escapeRegExp(localPath)}`));
+    assert.match(run.stderr, new RegExp(`^Log: ${escapeRegExp(localPath)}$`, 'm'));
     assert.equal(run.stderr.includes(daemonLogPath), false, 'daemon-host path must not be printed');
     assert.match(fs.readFileSync(localPath, 'utf8'), new RegExp(RECORD_SENTINEL));
   } finally {

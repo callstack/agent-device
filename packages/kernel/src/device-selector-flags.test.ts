@@ -56,6 +56,21 @@ test('an unspecified platform keeps the existing device-not-found behavior', asy
   assert.equal(error.code, 'DEVICE_NOT_FOUND');
 });
 
+// Resolution fails before any device is touched, so the refusal proves nothing was dispatched.
+test('a device-not-found refusal discloses that nothing was dispatched', async () => {
+  for (const selector of [
+    { udid: 'emulator-5580' },
+    { deviceName: 'Nope' },
+    { platform: 'android' as const, serial: 'nope' },
+  ]) {
+    const error = await resolveError([ANDROID], selector);
+    assert.equal(error.code, 'DEVICE_NOT_FOUND');
+    assert.equal(error.details?.dispatched, 'no');
+  }
+  const empty = await resolveError([], {});
+  assert.equal(empty.details?.dispatched, 'no');
+});
+
 // `--device` takes a NAME. Passing a UDID there answered "No device named <udid>" with the generic
 // booted/connected hint (#2064) — true, unactionable, and silent about `--udid` existing at all.
 
