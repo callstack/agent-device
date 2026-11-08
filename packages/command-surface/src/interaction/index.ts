@@ -75,11 +75,11 @@ const interactionEvidenceSchema: JsonSchema = objectSchema(
     interactiveNodeCount: numberSchema('Subset of nodeCount the platform reports as hittable.'),
     digest: stringSchema('Order-independent digest of the post-action node multiset.'),
     changedFromBefore: booleanSchema(
-      'Whether the post-action digest differs from the pre-action capture digest. false is evidence, not failure. With surfaceChange present, no digest comparison is made: it reports that surface transition.',
+      'Whether the post-action digest differs from the pre-action capture digest. false is evidence, not failure. Absent when no pre-action baseline was captured, so no comparison is claimed. With surfaceChange present, no digest comparison is made: it reports that surface transition.',
     ),
     surfaceChange: postActionSurfaceChangeSchema,
   },
-  ['nodeCount', 'interactiveNodeCount', 'digest', 'changedFromBefore'],
+  ['nodeCount', 'interactiveNodeCount', 'digest'],
 );
 
 const responseCostSchema: JsonSchema = objectSchema(
