@@ -1,4 +1,4 @@
-# ADR 0018: Unified request event journal
+# ADR 0018: Unified Request Event Journal
 
 ## Status
 
@@ -99,7 +99,7 @@ If a future feature needs journal visibility, it can separately opt in to a mirr
 Anything that would leave the machine must go through the closed `UsageRecord` schema.
 A later opt-in usage sink would project `session-lifecycle` events into a closed `UsageRecord`.
 It would use an allowlist by construction, not redaction of rich data.
-Its fields would be command or action from the CommandDescriptor registry; `ok` or a typed error code; `durationMs`, `runnerRoundTrips`, `nodeCount`, `platform`, and `appleOs`; flag names without values; and a hashed session identity with a per-session sequence number.
+Its fields would be command or action from the CommandDescriptor registry; `ok` or a typed error code from ADR 0010's closed set; `durationMs`, `runnerRoundTrips`, `nodeCount`, `platform`, and `appleOs`; flag names without values; and a hashed session identity with a per-session sequence number.
 Positionals, selectors, labels, fill text, snapshot content, and error messages would be unrepresentable.
 Sequence and anti-pattern detection would be downstream, never emission-side.
 A local stats read would come first and opt-in export later.
@@ -153,7 +153,8 @@ A wire name change remains a breaking change for log consumers, even though an i
 
 The proposed journal would support request tracing by `requestId` and teardown tracing by `session`, while progress remains observable on the wire.
 New observability consumers could use sinks without new vocabularies or emit sites.
-The migration would retire the `traceLogPath` option, duplicate redaction pass, and unredacted replay helper.
+The migration would remove the duplicate redaction pass and the unredacted replay helper.
+The `traceLogPath` option stays until its callers move to the replay trace sink.
 Replay redaction would be the declared visible output change.
 The migration would be wide and would add one synchronous sink-dispatch loop per event.
 
