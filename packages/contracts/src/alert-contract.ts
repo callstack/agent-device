@@ -2,12 +2,13 @@ export const ALERT_POLL_INTERVAL_MS = 300;
 /**
  * The minimum budget for a retry of `alert accept` or `alert dismiss` through the XCTest runner.
  * A read cut off by the runner's main-thread watchdog is reported as `MAIN_THREAD_TIMEOUT`, not
- * absence, and live reads that saw a late prompt needed up to about 1.4 s. `alert wait` and the
- * macOS helper do not use it.
+ * absence. Live late-prompt reads were accepted up to 1492 ms; three were cut off at 1502–1610 ms.
+ * `alert wait` and the macOS helper do not use it.
  */
 export const ALERT_MIN_READ_BUDGET_MS = 1_500;
 export const DEFAULT_ALERT_TIMEOUT_MS = 10_000;
 export const ALERT_ACTION_RETRY_MS = 2_000;
+
 /**
  * The largest alert budget the legs accept. The window signal rides `AbortSignal.timeout`, whose
  * Node ceiling is 2^31-1 ms: larger values are rejected outright there, and its underlying timer
