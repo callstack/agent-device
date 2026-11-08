@@ -104,6 +104,20 @@ test('a hidden wait passes once the InputMethod window record is gone from a win
   expect(result.status).toBe('fulfilled');
 });
 
+test('a hidden wait keeps polling while the InputMethod window is still drawn', async () => {
+  const reads = [
+    () => Promise.resolve(`${IME_DRAWN}\n${APP_WINDOW}`),
+    () => Promise.resolve(`${IME_DRAWN}\n${APP_WINDOW}`),
+    () => Promise.resolve(APP_WINDOW),
+  ];
+  const result = await settle(
+    waitForImeWindow(DEVICE, false, 'still drawn', () => reads.shift()!()),
+  );
+
+  expect(result.status).toBe('fulfilled');
+  expect(reads).toHaveLength(0);
+});
+
 test('a hidden wait never satisfied by unreadable dumps fails with a dump excerpt', async () => {
   const result = await settle(
     waitForImeWindow(DEVICE, false, 'still drawn', () =>
