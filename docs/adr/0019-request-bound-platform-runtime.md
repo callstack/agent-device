@@ -951,7 +951,7 @@ The proposed target is ≤ 60.
 The target concerns its remaining contents, not directory retirement.
 
 **Entry-to-platform hop count.** The measurement was corrected on 2026-09-03 and repeated for #2278 at `27a97ee619`.
-[`0023-end-state-hop-trace.md`](./0023-end-state-hop-trace.md) contains the definition and roles; the [2026-09-03 hop trace evidence](../evidence/entry-to-platform-hop-trace-2026-09-03.md) holds the measured counts and ordered chains.
+[`0023-end-state-hop-trace.md`](./0023-end-state-hop-trace.md) contains the definition and roles; the [2026-09-03 hop trace evidence](../evidence/entry-to-platform-hop-trace-2026-09-03.md) holds the measured counts and links the ordered chains at pinned commit `0e7df74a1a`.
 It supersedes the earlier numbers below.
 A file-by-file re-trace at that HEAD measured 41 hops for `press`/Android and 47/49 for `snapshot`/iOS.
 The snapshot route shares 30 hops, with 17/19 per arm: in-simulator AX bridge primary and XCTest runner fallback.

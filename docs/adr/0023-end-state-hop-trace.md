@@ -3,7 +3,7 @@
 ## Status
 
 Reference audit for the entry-to-platform hop counts in ADR 0019 and the coupling audit in ADR 0022.
-The measured counts and the ordered traces are in [the 2026-09-03 hop trace evidence](../evidence/entry-to-platform-hop-trace-2026-09-03.md).
+The measured counts are in [the 2026-09-03 hop trace evidence](../evidence/entry-to-platform-hop-trace-2026-09-03.md); the ordered chains are at pinned commit `0e7df74a1a`, linked from that file.
 
 ## Decision
 
@@ -17,8 +17,10 @@ Trace the snapshot runner fallback with an existing runner session.
 
 Assign each file exactly one role: policy, orchestration, translation, adapter, or pass-through.
 A pass-through hop delegates to exactly one next call on the path without a branch or transformation.
+A policy hop decides admission, limits, retry, or routes, and can refuse or redirect a request.
+An orchestration hop coordinates multiple calls, binds or runs a runtime, or assembles the object graph that later hops need.
 A translation hop maps values or shapes without issuing the platform call.
-The ordered traces in the evidence define the other roles.
+An adapter hop encapsulates an external system boundary, such as a subprocess, a socket, or a fetch; the terminal adapter issues the platform call.
 
 Apply the deletion test to each pass-through or translation hop.
 A hop is a collapse candidate if its caller, callee, or both can inline its handoff without losing admission, budget, isolation, a boundary declared in an ADR, or a testability seam.
