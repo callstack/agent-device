@@ -66,7 +66,7 @@ An inserted or removed wrapper ancestor changes identity.
 Replay classifies every annotated step before dispatch through six exact verification paths.
 Only a verified result sends the action.
 Anything that the evidence cannot isolate is an `identity-unverifiable` divergence, never a silent pick.
-The recorder must never emit a payload that its parser rejects. If bounded evidence still exceeds the payload limit, the writer downgrades it to `verification: "unverifiable"` instead of writing an invalid script.
+The recorder must never emit a payload that its parser rejects. The writer downgrades oversized evidence to `verification: "unverifiable"` and drops its rect. Escape-heavy values can still exceed the serialized limit; the implementation does not recheck after dropping the rect.
 The format is additive. Old readers ignore the comment, and new readers run unannotated actions without the check.
 An annotation binds only to the next physical action line.
 
@@ -97,7 +97,7 @@ Resume is `replay --from N --plan-digest <sha>`.
 `N` is a 1-based index into the fully expanded executable plan.
 `test` rejects `--from`, because a suite run must remain full and deterministic.
 `planDigest` covers the canonical expanded plan, including identity evidence and the effective target, so an edit cannot silently change ordinal N's target.
-Resume reconstructs no state: preflight rejects a resume that skips an `outputEnv` producer or enters runtime control flow.
+Resume reconstructs no state. Maestro preflight rejects a resume that skips an `outputEnv` producer or enters runtime control flow.
 `resume.allowed` describes plan resumability only. `resume.repairSessionHeld` is the only session-lifetime signal.
 `resume.alternateFrom` offers the recorded-correction ordinal for dual-path hints.
 
@@ -107,7 +107,7 @@ The loop is:
 2. Read the divergence.
 3. Repair the app state.
 4. Replay with the reported plan digest and index.
-   If you completed the failed action manually, use the next index: `from` for `record-and-heal`, or `alternateFrom` for `caution`/`manual`.
+   If you completed the failed action as a recorded action, use the next index: `from` for `record-and-heal`, or `alternateFrom` for `caution`/`manual`.
 
 An edited script requires a fresh full replay and a new digest.
 The [divergence and resume contract](../../packages/ad-replay/docs/divergence-and-resume.md) owns the fields, bounds, redaction, surfaces, ordinals, watermark, and digest.
@@ -201,5 +201,5 @@ The [divergence construction contract](../../packages/replay-port/docs/replay-di
 
 - Deterministic state reconstruction for resume needs a separate specification and tests.
 - The replay benchmark arm of decision 5 is deferred.
-- A `--force`/`--overwrite` override for `--save-script` publication is out of scope (#1258). Automatic versioned healed names are also out of scope.
+- Automatic versioned healed names are out of scope.
 - Read-only coverage stays deferred for `is exists`, `is absent`, `wait absent`, read-only `find`, and `wait` forms without an element target.

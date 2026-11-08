@@ -1,7 +1,8 @@
 # Target annotations
 
 These contracts supplement [ADR 0012](../../../docs/adr/0012-interactive-replay.md) decision 3.
-`@agent-device/ad-script` parses, writes, and classifies `target-v1` and `targets-v1` annotations.
+`@agent-device/ad-script` parses, serializes, and classifies `target-v1` and `targets-v1` annotations.
+`@agent-device/selectors` builds record-time evidence and owns the writer-parser invariant.
 `@agent-device/contracts` holds their shape.
 
 ## Format
@@ -64,10 +65,10 @@ The recorder must never emit a payload that its parser rejects.
 If per-field truncation still leaves more than 4 KiB, the writer removes `ancestry` entries from the root side, one at a time.
 This reduction is deterministic and uses the existing ancestry truncation direction.
 If only `ancestry[0]` remains and the payload still exceeds the limit, the writer sets `verification: "unverifiable"`.
-It must not write an invalid or silently lossy script.
-With the 256-byte field limits, a parent-only payload fits arithmetically.
-Thus, this downgrade is a terminal guarantee, not an expected path.
-The record-time self-check uses the reduced tuple.
+The limit measures serialized UTF-8 bytes, while field limits apply before JSON escaping.
+The writer drops `rect` if the downgraded payload still exceeds the limit, but does not recheck afterward.
+Escape-heavy values can therefore still produce an over-limit annotation that the parser rejects.
+When the reduced tuple fits, the record-time self-check uses that tuple.
 A `verified` claim therefore applies to exactly the written evidence.
 
 Action-mode evidence has another independent cause for the same `"unverifiable"` downgrade (#1398, ADR 0017).
@@ -239,7 +240,7 @@ Every comparison is therefore deterministic and total.
    Otherwise, write `verification: "unverifiable"`.
    Both ordinals derive from the winner over deterministic total orders.
    Thus, the self-check succeeds by construction whenever the capture supplies the required structural data.
-   Record-time `unverifiable` identifies a capture anomaly, such as missing parent linkage.
+   An `unverifiable` result from this self-check identifies a capture anomaly, such as missing parent linkage.
    It is a fail-closed safeguard, not an expected path.
    At replay, it causes `identity-unverifiable` before an action.
 
@@ -288,7 +289,7 @@ Identity verification applies only when `matchCount >= 1`.
      The same child index can recur under different parents.
    - **Region-scoped viewportOrder:** restrict I to the partition whose scroll-region key equals the recorded `scrollRegion`.
      If `scrollRegion` is omitted, use the *none* partition.
-     If the partition is empty, the recorded scroll region no longer exists.
+     If the partition is empty, no identity-set candidate is in the recorded region.
      Then `viewportOrder` is **unavailable**, and it is never compared across regions.
      Otherwise, order centers top-to-bottom, then left-to-right.
      Resolve equal centers by document order.

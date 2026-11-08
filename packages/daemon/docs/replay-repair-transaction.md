@@ -14,7 +14,7 @@ Across a repair session, original steps that verified and dispatched enter `sess
 The corrective interactive actions of the agent enter `session.actions`.
 Corrective actions receive fresh `target-v1` evidence because recording is armed.
 Armed recording also disables the direct-iOS fast path, which permits evidence computation.
-`formatSessionScript` serializes actions from the repair boundary onward (R6).
+`prepareSessionScript` serializes actions from the repair boundary onward (R6).
 
 ## Sub-flows
 
@@ -157,32 +157,17 @@ It cannot double-commit or trigger no-clobber refusal again.
 ## Publication
 
 Commit serializes the healed slice with a final `close` line for self-contained output.
-It creates a temp file **in the final target's directory**.
-An explicit target can be on another mount, and `linkSync` requires the same filesystem.
-One exclusive `linkSync(temp, target)` then publishes with create-if-absent, first-writer-wins semantics.
-Readers never see partial output.
+It creates a temp file in the target directory so publication works across mounts and readers never see partial output.
+Without `--force`/`--overwrite`, publication uses an exclusive `linkSync` and refuses an existing target for both repair and ordinary recording.
+With the flag, publication uses atomic replacement; concurrent forced writers are last-writer-wins.
+Repair arming refuses an existing target unless the flag is set.
+The same publication primitive serves repair and ordinary recording.
+Without force, an existing target returns an `EEXIST` error and leaves its bytes unchanged.
+The opt-in persists across `--from` continuation on the same target.
+Retargeting drops the opt-in unless that request supplies its own flag.
 Aborted repair leaves no partial file.
-
-Publication refuses every pre-existing target.
-This applies to complete/partial files and default/explicit paths.
-`EEXIST` occurs if and only if a file already exists at the target, irrespective of its content.
-The caller must remove it or select another `replay --save-script=<path>`.
-The existing file is never silently replaced.
-There is no lock, lease, ownership transfer, or overwrite.
-`# agent-device:heal-complete` remains a trailing marker of a complete, reviewable artifact.
-It does not affect publication permission.
-Automatic versioned names, such as `.healed.2.ad`, remain out of scope as a separate naming change.
-
-The refusal applies to repair and ordinary recording.
-`publishHealedScriptAtomically` is the one publication primitive used by `SessionScriptWriter.write` for every `--save-script` target.
-It has no repair/ordinary branch.
-Repair sets `saveScriptBoundary`; ordinary `open --save-script`/`close --save-script` recording does not.
-Both use the same exclusive `linkSync`.
-An ordinary recording with an existing target receives the same `AppError` for `EEXIST`.
-The existing bytes remain unchanged.
-The caller must remove the file or select another path.
-Neither path has a `--force`/`--overwrite` override.
-Issue #1258 tracks that future work.
+`# agent-device:heal-complete` remains a trailing marker of a complete, reviewable artifact; it does not authorize publication.
+Automatic versioned names remain out of scope.
 
 ## Tombstone
 
@@ -204,7 +189,7 @@ This supersedes the stage 1 (#1287) guidance to pass `--no-record` by hand on ea
 
 **1. Exclusion depends on provenance.** Both conditions must hold:
 
-- The command is observation-only: `snapshot`, `get`, `is`, or read-only `find` (`exists`, `wait`, `get_text`, `get_attrs`).
+- The command is observation-only: `snapshot`, `get`, `is`, or read-only `find` (`exists`, `wait`, `get_text`, `get_attrs`, `list`).
   Mutating `find … click|fill|focus|type` remains a corrective action like `press`/`fill` and always records.
   The top-level `wait` command is deliberately **not** in this set.
   It is flow timing/synchronization, not observation, so it must keep recording unconditionally.
@@ -263,7 +248,7 @@ Every surface reaches that same daemon function.
 The flags retain their different scopes:
 
 - Common `--no-record` belongs to `COMMON_COMMAND_SUPPORTED_FLAG_KEYS`.
-  Every recordable reader forwards it with `noRecordInputFromFlags`.
+  Every recordable reader forwards it with `commonInputFromFlags`.
 - Scoped `--record` is not common.
   Only `snapshot`/`get`/`is` and dynamically validated `find` permit it.
   Only their readers use `observationRecordInputFromFlags`.
@@ -318,8 +303,9 @@ The guard's message adds `--record` beside `--no-record` because correction can 
   After `COMMITTED`, teardown is idempotent and never republishes.
 - An armed replay skips its terminal source `close` without session deletion.
 - The temp file uses the target directory.
-  One exclusive `linkSync` publishes it with create-if-absent, first-writer-wins semantics.
-- Publication refuses **every** existing target and preserves its bytes.
+  Without force, one exclusive `linkSync` publishes it with create-if-absent, first-writer-wins semantics.
+  With force, atomic replacement permits overwriting.
+- Without force, publication refuses **every** existing target and preserves its bytes.
   This includes complete/partial files, the default healed sibling, and explicit `--save-script=<path>`.
   It also includes ordinary non-repair `open`/`close --save-script` recording.
 - Observation exclusion:

@@ -17,8 +17,9 @@ Successful structural-collapse diagnostics remain **pre-action diagnostics**.
 They issue no refs.
 After mutation, neither `winnerDiagnostic` nor `alternatives` may serve as an `@ref` target.
 An ambiguity rejection performs no mutation.
-Its bounded candidate lines issue a partial ref frame and `refsGeneration`.
-CLI prints pinned candidates. MCP remembers their generation for immediate retry.
+When the consumed capture is the tree stored under the frozen generation, its bounded candidate lines issue a partial ref frame and `refsGeneration`.
+CLI prints pinned candidates, and MCP remembers their generation for immediate retry.
+Otherwise the error returns the match count without candidate refs or an act-on-candidate hint.
 A post-action `--settle` diff remains a separate actionable issuer.
 A target-binding divergence also sends no action.
 It issues its fresh report snapshot under the [divergence contract](../../ad-replay/docs/divergence-and-resume.md).
@@ -30,19 +31,19 @@ A successful lookup of the `@ref` itself returns `{ source: "ref", phase: "pre-a
 The runtime-ref path can recover a stale or unusable `@ref` through its recorded trailing label.
 `tryResolveRefNode` uses `fallbackLabel` for this first-match label lookup.
 This recovery returns `{ source: "ref", phase: "pre-action", kind: "label-fallback" }`.
-Label recovery must never claim exact ref provenance.
+Runtime-ref label recovery discloses its fallback provenance.
 
 The native-ref fast path always discloses `exact`.
 It dispatches the ref handle and forwards the recorded `fallbackLabel` to the backend.
-The daemon cannot observe any backend label recovery.
-Thus, `exact` describes only daemon resolution.
-This path cannot make a more specific claim.
+The daemon preflight can itself recover a node by label, but the response still discloses `exact`.
+Backend label recovery is also not reflected in the response.
+Thus, this disclosure can misstate ref provenance.
 
 ## Direct-iOS selector
 
 The accepted direct-iOS selector fast path has no daemon tree.
 The XCTest response cannot establish a match count, candidate refs, or a runtime tiebreak.
-This path remains enabled for an ordinary simple `press`.
+This path requires a Maestro-compatible `click` with `allowNonHittableCoordinateFallback`; ordinary presses use runtime resolution.
 Its canonical unique-match response contains `resolution: { source: "direct-ios", kind: "not-observed" }`.
 It must never invent a unique-match or identity claim.
 XCTest counts raw exact matches before it applies hittability.

@@ -50,7 +50,8 @@ Meaningful targets have label/id or `hittable`.
 These filters can remove captured nodes.
 The capture itself must never omit content that plain `snapshot` would show.
 
-**2. Ref selection within the cap.** `screen.refs` has a byte bound, not a first-N document-order policy.
+**2. Ref selection within the cap.** `screen.refs` is ranked before its 20-entry capture cap, rather than sliced in document order.
+The byte ceiling applies to the entire serialized divergence.
 Separate-window overlays enumerate after app-window nodes.
 A document-order slice could therefore omit the overlay's dismiss target and falsely imply healthy app state.
 Before the cap applies, ranking promotes foreign-window hittable nodes ahead of app content.
@@ -99,12 +100,22 @@ The mapping covers all four kinds:
 `manual` applies to unverifiable identity because future replays block this step pre-action, so heal-by-doing is a poor fit.
 The mapping is total over kind, evidence presence, and capture availability.
 Anything not proven safe defaults to `manual`.
-Two fail-safes override the container mapping:
+For `selector-miss` and `action-failure`, three fail-safes override the container mapping:
 
 - No recorded `targetEvidence` means no container to test, so the hint is `manual`.
   PR #1223 also wraps unannotated actions.
-  Thus this case is reachable for `action-failure`, and for any kind on a legacy/unannotated script.
+  Thus this case is reachable for an unannotated `action-failure`.
 - Sparse or unavailable capture prevents the test, so the hint is `manual`.
+- Empty ancestry without an identified scroll region provides no usable container signal, so the hint is `manual`.
+
+`identity-mismatch` returns `caution` and `identity-unverifiable` returns `manual` before these checks.
+
+## Required coverage
+
+Tests must prove `--update` never rewrites the source and that suggestions are bounded, ranked, and deduplicated.
+Tests must cover the four divergence kinds and four repair hints, including the container fail-safes and post-response capture for `action-failure`.
+Capture tests must cover full-window scope, overlay ranking before the ref cap, and use of the full tree for suggestions and repair hints.
+Retry tests must cover launch-race content failures, bounded delays, and immediate mechanism-failure rejection.
 
 ## Pre-dispatch capture retry
 

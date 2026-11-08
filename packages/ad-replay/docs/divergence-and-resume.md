@@ -115,7 +115,7 @@ A plain ref returns `plain_ref_requires_complete_frame`.
 `--from N` belongs only to `replay`.
 `test` must reject it with `INVALID_ARGS` because a suite run must remain full and deterministic.
 `N` is a 1-based index into the fully expanded executable plan.
-`N` must be in range.
+`N` must be in the plan range, except for the watermark-authorized empty-tail resume described below.
 It is not a YAML line, fractional source-step number, or repeat iteration label.
 Static includes, platform conditions, and fixed-count repeats expand before indexing.
 Repeated source lines therefore have distinct plan indices.
@@ -124,7 +124,7 @@ Every divergence includes `resume: { allowed, from, reason?, planDigest, alterna
 `repairHint` determines `from` (ADR 0012 decision 6, R2/R3):
 
 - For `record-and-heal`, `from` is the index of the failed step **+ 1** (N + 1).
-  The agent performs that step manually before it resumes.
+  The agent performs that step as a recorded action before it resumes.
   A resume AT that step would diverge again on the exact step that the agent just completed.
 - For `state-repair`, `caution`, and `manual`, `from` remains **N**.
 
@@ -140,11 +140,9 @@ For `caution`/`manual`, there are two legitimate repairs, and the daemon cannot 
 - App-state fix: use `--no-record`, then repeat unchanged step N at `from`.
 - Recorded correction: perform step N's intent as a recorded action, then continue at N + 1.
 
-`alternateFrom` carries N + 1 only if that request passes `evaluateReplayResumePreflight({ from: N + 1, actions }).allowed`.
-Step N must itself be safe to skip.
-A `runScript` `outputEnv` producer or runtime control flow therefore prevents this alternate.
-The alternate preflight examines a strict superset of the primary range.
-Thus, `alternateFrom` implies `allowed: true`.
+`alternateFrom` carries N + 1 for these hints when it is in range, or when a live session can authorize an empty tail.
+The builder does not run a separate plan-safety preflight for the alternate.
+The `ReplayResumeCheck` list validates range, corrective action growth, and digest on the resume request.
 `record-and-heal` omits it because `from` already carries N + 1.
 `state-repair` omits it because it has no recorded-action alternate.
 Text renders the N + 1 command **if and only if `alternateFrom` exists**.
@@ -159,10 +157,10 @@ An armed transaction becomes `COMPLETE`, which permits its later `close` commit.
 Otherwise, `close` would abort the incomplete transaction and discard the correction.
 
 This ordinal requires authorization from the exact session and target that produced it.
-The daemon stamps a per-session watermark (`expectedFrom`, the recorded action count at divergence time) in these cases:
+The daemon stamps a per-session watermark (`expectedFrom`, the authorized resume ordinal, and `actionsCountAtDivergence`, the recorded action count at divergence time) in these cases:
 
 - For `record-and-heal` with `allowed: true`, the reported `from` is already N + 1.
-- For a preflight-safe `caution`/`manual` final-step alternate, the watermark uses `alternateFrom` N + 1.
+- For a `caution`/`manual` final-step alternate, the watermark uses `alternateFrom` N + 1.
   The primary `from` remains N.
 
 Only a live session can receive this watermark.
@@ -215,7 +213,7 @@ Thus a consumer must not read `allowed: true` as "the session is still there."
 ## Preflight
 
 Resume reconstructs no execution state.
-For `N > 1`, preflight must reject with `INVALID_ARGS` under either condition:
+For Maestro plans and `N > 1`, preflight rejects with `INVALID_ARGS` under either condition:
 
 - A skipped action can produce `outputEnv` values.
 - The skipped range or resume target is inside runtime conditional, retry, or dynamic-repeat control flow.
