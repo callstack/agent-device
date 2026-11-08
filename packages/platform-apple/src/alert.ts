@@ -4,7 +4,6 @@ import {
   ALERT_NOT_FOUND_REASON,
   ALERT_NOT_FOUND_RUNNER_CODE,
   ALERT_POLL_INTERVAL_MS,
-  ALERT_RUNNER_ACTION_RETRY_MS,
   ALERT_UNRESOLVED_RUNNER_CODE,
   DEFAULT_ALERT_TIMEOUT_MS,
 } from '@agent-device/contracts/alert-contract';
@@ -131,10 +130,9 @@ export async function awaitAppleAlert(
  * occurrence. A window exhausted on absence carries the scoped-snapshot fallback the agent needs
  * next; one exhausted on an unreadable prompt keeps the runner's own hint.
  *
- * Through the XCTest runner a retry starts only with more than `ALERT_MIN_READ_BUDGET_MS` left,
- * so reads start in the first `ALERT_RUNNER_ACTION_RETRY_MS - ALERT_MIN_READ_BUDGET_MS` (1.5 s) of
- * the window: three retries at the usual 0.4 s from one read to the next. The macOS helper takes no
- * budget and has no watchdog, so it retries for all of `ALERT_ACTION_RETRY_MS`.
+ * Retries start within `ALERT_ACTION_RETRY_MS`. Each XCTest runner retry gets at least
+ * `ALERT_MIN_READ_BUDGET_MS` to avoid cutting alert acquisition short, so an in-flight retry
+ * can finish after the retry window. The macOS helper ignores the read budget.
  */
 export async function actOnAppleAlert(
   device: DeviceInfo,
@@ -144,15 +142,15 @@ export async function actOnAppleAlert(
   env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown>> {
   const runAlert = runAppleAlert(device, runnerOptions, options, env);
-  const usesRunner = isIosFamily(device);
-  const runnerTimeoutMs = usesRunner ? DEFAULT_ALERT_TIMEOUT_MS : ALERT_ACTION_RETRY_MS;
-  const retryWindowMs = usesRunner ? ALERT_RUNNER_ACTION_RETRY_MS : ALERT_ACTION_RETRY_MS;
+  const runnerTimeoutMs = isIosFamily(device) ? DEFAULT_ALERT_TIMEOUT_MS : ALERT_ACTION_RETRY_MS;
   const start = Date.now();
   let lastError: unknown;
   let firstAttempt = true;
-  while (Date.now() - start < retryWindowMs) {
+  while (Date.now() - start < ALERT_ACTION_RETRY_MS) {
     try {
-      const budgetMs = firstAttempt ? runnerTimeoutMs : remainingBudgetMs(start, retryWindowMs);
+      const budgetMs = firstAttempt
+        ? runnerTimeoutMs
+        : Math.max(remainingBudgetMs(start, ALERT_ACTION_RETRY_MS), ALERT_MIN_READ_BUDGET_MS);
       firstAttempt = false;
       return await runAlert(action, budgetMs);
     } catch (error) {
@@ -160,7 +158,6 @@ export async function actOnAppleAlert(
       if (!isAlertRetriableError(error)) break;
     }
     await sleep(ALERT_POLL_INTERVAL_MS);
-    if (usesRunner && remainingBudgetMs(start, retryWindowMs) <= ALERT_MIN_READ_BUDGET_MS) break;
   }
   throw withAlertFallbackHint(lastError);
 }

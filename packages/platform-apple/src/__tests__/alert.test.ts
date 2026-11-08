@@ -152,7 +152,7 @@ test('an exhausted accept carries the scoped-snapshot fallback the agent needs n
   assert.match(String(error.details?.hint), /scoped snapshot/i);
 });
 
-test('an action does not start a retry the remaining budget cannot hold', async () => {
+test('an action gives every retry at least the minimum read budget', async () => {
   vi.useFakeTimers();
   mockRunner.mockRejectedValue(runnerAbsence());
 
@@ -172,7 +172,7 @@ test('an action does not start a retry the remaining budget cannot hold', async 
   const budgets = mockRunner.mock.calls.map((call) => (call[1] as { timeoutMs: number }).timeoutMs);
   assert.ok(budgets.length >= 2, 'the act loop never retried');
   for (const budget of budgets.slice(1)) {
-    assert.ok(budget > ALERT_MIN_READ_BUDGET_MS, `retry started with only ${budget} ms`);
+    assert.ok(budget >= ALERT_MIN_READ_BUDGET_MS, `retry started with only ${budget} ms`);
   }
 });
 
@@ -198,7 +198,37 @@ test('a runner action still reaches a prompt that appears 0.8 s into its window'
 
   assert.deepEqual(await outcome, { accepted: true });
   const lastRead = mockRunner.mock.calls.at(-1)?.[1] as { timeoutMs: number };
-  assert.ok(lastRead.timeoutMs > ALERT_MIN_READ_BUDGET_MS);
+  assert.ok(lastRead.timeoutMs >= ALERT_MIN_READ_BUDGET_MS);
+});
+
+test('a slow first action read still retries within the two-second window', async () => {
+  vi.useFakeTimers();
+  mockRunner.mockImplementation(async () => {
+    if (mockRunner.mock.calls.length === 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1_300));
+      throw runnerAbsence();
+    }
+    return { accepted: true };
+  });
+
+  const outcome = actOnAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    'accept',
+    undefined,
+    process.env,
+  ).then(
+    (value) => value,
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(5_000);
+
+  assert.deepEqual(await outcome, { accepted: true });
+  assert.equal(mockRunner.mock.calls.length, 2);
+  const retryCall = mockRunner.mock.calls[1];
+  assert.ok(retryCall);
+  const retry = retryCall[1] as { timeoutMs: number };
+  assert.equal(retry.timeoutMs, ALERT_MIN_READ_BUDGET_MS);
 });
 
 // The whole point of typing absence: a backend that failed for any other reason must not be
