@@ -48,9 +48,13 @@ test('an InputMethod window still waiting for its first draw reads as not drawn'
   expect(readImeWindowState(`${IME_SHOW_REQUESTED}\n${APP_WINDOW}`)).toBe('not-drawn');
 });
 
-test('a dump without an InputMethod window reads as missing, not as not drawn', () => {
-  expect(readImeWindowState(APP_WINDOW)).toBe('missing');
-  expect(readImeWindowState("Can't find service: window\n")).toBe('missing');
+test('a window dump without an InputMethod window reads as absent', () => {
+  expect(readImeWindowState(APP_WINDOW)).toBe('absent');
+});
+
+test('output without any window record reads as unreadable, not as absent', () => {
+  expect(readImeWindowState("Can't find service: window\n")).toBe('unreadable');
+  expect(readImeWindowState('')).toBe('unreadable');
 });
 
 beforeEach(() => {
@@ -92,16 +96,41 @@ test('a wait whose adb reads keep failing reports the last read error at the dea
   });
 });
 
-test('a hidden wait never satisfied by a dump that has no InputMethod window fails with a dump excerpt', async () => {
+test('a hidden wait passes once the InputMethod window record is gone from a window dump', async () => {
   const result = await settle(
     waitForImeWindow(DEVICE, false, 'still drawn', () => Promise.resolve(APP_WINDOW)),
+  );
+
+  expect(result.status).toBe('fulfilled');
+});
+
+test('a hidden wait never satisfied by unreadable dumps fails with a dump excerpt', async () => {
+  const result = await settle(
+    waitForImeWindow(DEVICE, false, 'still drawn', () =>
+      Promise.resolve("Can't find service: window\n"),
+    ),
   );
 
   expect(result).toMatchObject({
     status: 'rejected',
     reason: {
       message: expect.stringMatching(
-        /still drawn within 10000ms.*no InputMethod window.*Window #7/s,
+        /still drawn within 10000ms.*no window records.*Can't find service/s,
+      ),
+    },
+  });
+});
+
+test('a visible wait never satisfied by a dump without an InputMethod window fails with a dump excerpt', async () => {
+  const result = await settle(
+    waitForImeWindow(DEVICE, true, 'never drew', () => Promise.resolve(APP_WINDOW)),
+  );
+
+  expect(result).toMatchObject({
+    status: 'rejected',
+    reason: {
+      message: expect.stringMatching(
+        /never drew within 10000ms.*no InputMethod window.*Window #7/s,
       ),
     },
   });

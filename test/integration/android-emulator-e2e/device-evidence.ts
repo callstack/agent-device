@@ -89,9 +89,12 @@ export async function readAndroidDeviceEvidence(
 
 export function createAdbRead(): AndroidAdbRead {
   return async (args, options) => {
+    const timeout = options?.timeoutMs ?? DEVICE_PROBE_TIMEOUT_MS;
+    // A zero timeout disables the child-process timeout instead of expiring at once.
+    if (!(timeout > 0)) throw new RangeError(`adb read timeout must be positive, got ${timeout}`);
     const { stdout } = await execFileAsync('adb', args, {
       maxBuffer: 64 * 1024 * 1024,
-      timeout: options?.timeoutMs ?? DEVICE_PROBE_TIMEOUT_MS,
+      timeout,
     });
     return stdout;
   };
