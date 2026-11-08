@@ -1,6 +1,6 @@
-import { expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
-import { isImeWindowDrawn } from './live-ime-window.ts';
+import { readImeWindowState, waitForImeWindow } from './live-ime-window.ts';
 
 const APP_WINDOW = [
   '  Window #7 Window{9a1c2b3 u0 com.callstack.agentdevicelab/com.callstack.agentdevicelab.MainActivity}:',
@@ -30,22 +30,100 @@ const IME_SHOW_REQUESTED = [
   '      Surface: shown=true      mDrawState=COMMIT_DRAW_PENDING       mLastHidden=false',
 ].join('\n');
 
+const DEVICE = { serial: 'emulator-5554' };
+
 test('a drawn InputMethod window reads as drawn', () => {
-  expect(isImeWindowDrawn(`${IME_DRAWN}\n${APP_WINDOW}`)).toBe(true);
+  expect(readImeWindowState(`${IME_DRAWN}\n${APP_WINDOW}`)).toBe('drawn');
 });
 
 test('an InputMethod window that is last in the dump reads as drawn', () => {
-  expect(isImeWindowDrawn(`${APP_WINDOW}\n${IME_DRAWN}`)).toBe(true);
+  expect(readImeWindowState(`${APP_WINDOW}\n${IME_DRAWN}`)).toBe('drawn');
 });
 
 test('a removed InputMethod window reads as not drawn even when the app window below it is drawn', () => {
-  expect(isImeWindowDrawn(`${IME_REMOVED}\n${APP_WINDOW}`)).toBe(false);
+  expect(readImeWindowState(`${IME_REMOVED}\n${APP_WINDOW}`)).toBe('not-drawn');
 });
 
 test('an InputMethod window still waiting for its first draw reads as not drawn', () => {
-  expect(isImeWindowDrawn(`${IME_SHOW_REQUESTED}\n${APP_WINDOW}`)).toBe(false);
+  expect(readImeWindowState(`${IME_SHOW_REQUESTED}\n${APP_WINDOW}`)).toBe('not-drawn');
 });
 
-test('a dump without an InputMethod window reads as not drawn', () => {
-  expect(isImeWindowDrawn(APP_WINDOW)).toBe(false);
+test('a dump without an InputMethod window reads as missing, not as not drawn', () => {
+  expect(readImeWindowState(APP_WINDOW)).toBe('missing');
+  expect(readImeWindowState("Can't find service: window\n")).toBe('missing');
+});
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+async function settle<T>(promise: Promise<T>): Promise<PromiseSettledResult<T>> {
+  const settled = Promise.allSettled([promise]).then(([result]) => result);
+  await vi.runAllTimersAsync();
+  return settled;
+}
+
+test('a failed adb read is retried until the InputMethod window reaches the wanted state', async () => {
+  const reads = [
+    () => Promise.reject(new Error('adb: device offline')),
+    () => Promise.resolve(`${IME_SHOW_REQUESTED}\n${APP_WINDOW}`),
+    () => Promise.resolve(`${IME_DRAWN}\n${APP_WINDOW}`),
+  ];
+  const result = await settle(waitForImeWindow(DEVICE, true, 'never drew', () => reads.shift()!()));
+
+  expect(result.status).toBe('fulfilled');
+  expect(reads).toHaveLength(0);
+});
+
+test('a wait whose adb reads keep failing reports the last read error at the deadline', async () => {
+  const result = await settle(
+    waitForImeWindow(DEVICE, true, 'never drew', () =>
+      Promise.reject(new Error('adb: device offline')),
+    ),
+  );
+
+  expect(result).toMatchObject({
+    status: 'rejected',
+    reason: { message: expect.stringMatching(/never drew within 10000ms.*adb: device offline/s) },
+  });
+});
+
+test('a hidden wait never satisfied by a dump that has no InputMethod window fails with a dump excerpt', async () => {
+  const result = await settle(
+    waitForImeWindow(DEVICE, false, 'still drawn', () => Promise.resolve(APP_WINDOW)),
+  );
+
+  expect(result).toMatchObject({
+    status: 'rejected',
+    reason: {
+      message: expect.stringMatching(
+        /still drawn within 10000ms.*no InputMethod window.*Window #7/s,
+      ),
+    },
+  });
+});
+
+test('no adb read outlives the wait deadline', async () => {
+  const start = Date.now();
+  let failedAt = 0;
+  const result = await settle(
+    waitForImeWindow(DEVICE, true, 'never drew', (_argv, options) => {
+      return new Promise((_resolve, reject) =>
+        setTimeout(() => {
+          failedAt = Date.now();
+          reject(new Error('timed out'));
+        }, options?.timeoutMs ?? 60_000),
+      );
+    }),
+  );
+
+  expect(result).toMatchObject({
+    status: 'rejected',
+    reason: { message: expect.stringMatching(/never drew within 10000ms.*timed out/s) },
+  });
+  expect(failedAt - start).toBeLessThanOrEqual(10_000);
 });

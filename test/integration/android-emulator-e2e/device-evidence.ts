@@ -25,7 +25,10 @@ export type AndroidDeviceEvidenceTarget = {
 };
 
 /** One adb query answered with its stdout. Tests replay a device through this. */
-export type AndroidAdbRead = (args: readonly string[]) => Promise<string>;
+export type AndroidAdbRead = (
+  args: readonly string[],
+  options?: { readonly timeoutMs?: number },
+) => Promise<string>;
 
 /**
  * Rotation (the two settings `orientation` writes, the display's current rotation, and the
@@ -85,10 +88,10 @@ export async function readAndroidDeviceEvidence(
 }
 
 export function createAdbRead(): AndroidAdbRead {
-  return async (args) => {
+  return async (args, options) => {
     const { stdout } = await execFileAsync('adb', args, {
       maxBuffer: 64 * 1024 * 1024,
-      timeout: DEVICE_PROBE_TIMEOUT_MS,
+      timeout: options?.timeoutMs ?? DEVICE_PROBE_TIMEOUT_MS,
     });
     return stdout;
   };

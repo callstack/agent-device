@@ -6,6 +6,8 @@ import type { LiveContext } from './live-harness.ts';
 
 const IME_WINDOW_TIMEOUT_MS = 10_000;
 const IME_WINDOW_POLL_MS = 250;
+const IME_WINDOW_READ_TIMEOUT_MS = 5_000;
+const DUMP_EXCERPT_LENGTH = 400;
 
 const IME_WINDOW_HEADER = /^\s*Window #\d+ Window\{[0-9a-f]+ u\d+ InputMethod\}:/;
 const ANY_WINDOW_HEADER = /^\s*Window #\d+ Window\{/;
@@ -13,19 +15,24 @@ const ANY_WINDOW_HEADER = /^\s*Window #\d+ Window\{/;
 /**
  * Whether the InputMethod window has a drawn surface. `mInputShown` flips when the show request is
  * accepted, before the keyboard is painted, and `keyboard dismiss` reports hidden before the hide
- * animation has removed the surface. A screenshot is only comparable once this settles.
+ * animation has removed the surface. A screenshot is only comparable once this settles. `missing`
+ * means the dump names no InputMethod window, which says nothing about the keyboard.
  */
-export function isImeWindowDrawn(windowDump: string): boolean {
+type ImeWindowState = 'drawn' | 'not-drawn' | 'missing';
+
+export function readImeWindowState(windowDump: string): ImeWindowState {
   const lines = windowDump.split('\n');
   const start = lines.findIndex((line) => IME_WINDOW_HEADER.test(line));
-  if (start === -1) return false;
+  if (start === -1) return 'missing';
   const next = lines.findIndex((line, index) => index > start && ANY_WINDOW_HEADER.test(line));
   const block = lines.slice(start, next === -1 ? undefined : next).join('\n');
-  return /\bisReadyForDisplay\(\)=true\b/.test(block) && /\bmDrawState=HAS_DRAWN\b/.test(block);
+  return /\bisReadyForDisplay\(\)=true\b/.test(block) && /\bmDrawState=HAS_DRAWN\b/.test(block)
+    ? 'drawn'
+    : 'not-drawn';
 }
 
 export async function waitForImeWindow(
-  context: LiveContext,
+  device: Pick<LiveContext, 'serial'>,
   drawn: boolean,
   failure: string,
   read: AndroidAdbRead = createAdbRead(),
@@ -34,12 +41,25 @@ export async function waitForImeWindow(
     'adb',
     'shell',
     ['dumpsys', 'window', 'windows'],
-    ['-s', context.serial],
+    ['-s', device.serial],
   );
+  const wanted: ImeWindowState = drawn ? 'drawn' : 'not-drawn';
   const deadline = Date.now() + IME_WINDOW_TIMEOUT_MS;
-  do {
-    if (isImeWindowDrawn(await read(argv)) === drawn) return;
-    await new Promise((resolve) => setTimeout(resolve, IME_WINDOW_POLL_MS));
-  } while (Date.now() < deadline);
-  assert.fail(`${failure} within ${IME_WINDOW_TIMEOUT_MS}ms`);
+  let lastObservation = 'no adb read finished';
+  for (let remaining = IME_WINDOW_TIMEOUT_MS; remaining > 0; remaining = deadline - Date.now()) {
+    try {
+      const dump = await read(argv, { timeoutMs: Math.min(remaining, IME_WINDOW_READ_TIMEOUT_MS) });
+      const state = readImeWindowState(dump);
+      if (state === wanted) return;
+      lastObservation =
+        state === 'missing'
+          ? `no InputMethod window in the dump: ${dump.trim().slice(0, DUMP_EXCERPT_LENGTH)}`
+          : `InputMethod window was ${state}`;
+    } catch (error) {
+      lastObservation = `last adb read failed: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    const pause = Math.min(IME_WINDOW_POLL_MS, deadline - Date.now());
+    if (pause > 0) await new Promise((resolve) => setTimeout(resolve, pause));
+  }
+  assert.fail(`${failure} within ${IME_WINDOW_TIMEOUT_MS}ms (${lastObservation})`);
 }
