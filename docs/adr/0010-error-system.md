@@ -97,7 +97,7 @@ Nothing documented the conventions, so each new site decided them again.
    closes with the same line: `Error (CODE): <message>. <dispatch fact> Next: <step>`.
    The dispatch fact is `Not dispatched.` or `May have reached the device.` from `details.dispatched`;
    an unclassified failure states none. `Next` is the hint; an ambiguous match with two or three
-   candidates lists them instead, and `INVALID_ARGS` appends the command synopsis. When
+   candidates lists them instead, and an `INVALID_ARGS` failure for a known command appends its synopsis. When
    `details.dispatched` is `unknown`, `Next` starts with an observe-first step. The formatter adds
    it from the final disclosure when it prints the line, because batch aggregation, the request
    ledger and replay projection can raise the disclosure after the hint was resolved; the hint

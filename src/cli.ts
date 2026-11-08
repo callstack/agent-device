@@ -915,7 +915,10 @@ const isDirectRun = pathToFileURL(process.argv[1] ?? '').href === import.meta.ur
 if (isDirectRun) {
   runCli(process.argv.slice(2)).catch(async (error) => {
     const appErr = asAppError(error);
-    await printHumanError(normalizeError(appErr), { debugTier: true });
+    await printHumanError(normalizeError(appErr), {
+      debugTier: true,
+      argv: process.argv.slice(2),
+    });
     await exitAfterFlush(1);
   });
 }
