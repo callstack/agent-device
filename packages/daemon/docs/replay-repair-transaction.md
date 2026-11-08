@@ -162,7 +162,7 @@ Without `--force`/`--overwrite`, publication uses an exclusive `linkSync` and re
 With the flag, publication uses atomic replacement; concurrent forced writers are last-writer-wins.
 Repair arming refuses an existing target unless the flag is set.
 The same publication primitive serves repair and ordinary recording.
-Without force, an existing target returns an `EEXIST` error and leaves its bytes unchanged.
+Without force, an existing target fails with `COMMAND_FAILED` and `reason: "script_target_exists"`, and leaves its bytes unchanged.
 The opt-in persists across `--from` continuation on the same target.
 Retargeting drops the opt-in unless that request supplies its own flag.
 Aborted repair leaves no partial file.
