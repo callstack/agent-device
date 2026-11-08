@@ -176,6 +176,31 @@ test('an action does not start a retry the remaining budget cannot hold', async 
   }
 });
 
+test('a runner action still reaches a prompt that appears 0.8 s into its window', async () => {
+  vi.useFakeTimers();
+  const start = Date.now();
+  mockRunner.mockImplementation(async () => {
+    if (Date.now() - start < 800) throw runnerAbsence();
+    return { accepted: true };
+  });
+
+  const outcome = actOnAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    'accept',
+    undefined,
+    process.env,
+  ).then(
+    (value) => value,
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(5_000);
+
+  assert.deepEqual(await outcome, { accepted: true });
+  const lastRead = mockRunner.mock.calls.at(-1)?.[1] as { timeoutMs: number };
+  assert.ok(lastRead.timeoutMs > ALERT_MIN_READ_BUDGET_MS);
+});
+
 // The whole point of typing absence: a backend that failed for any other reason must not be
 // retried until the window expires and then reported as a timeout. These three pin that the
 // evidence — not the message text — is what decides.
@@ -237,13 +262,13 @@ test('a macOS action retries while more than a poll interval remains: its helper
       await new Promise((resolve) => setTimeout(resolve, firstReadMs));
       throw helperAbsence();
     }
-    return { accepted: true };
+    return { action: 'accept' };
   });
 
   const outcome = actOnAppleAlert(MACOS_DEVICE, runnerOptions, 'accept', undefined, process.env);
   await vi.advanceTimersByTimeAsync(firstReadMs + ALERT_POLL_INTERVAL_MS);
 
-  assert.deepEqual(await outcome, { accepted: true });
+  assert.deepEqual(await outcome, { action: 'accept' });
   assert.equal(mockHelper.mock.calls.length, 2);
 });
 

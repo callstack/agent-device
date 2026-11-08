@@ -8,6 +8,12 @@ export const ALERT_POLL_INTERVAL_MS = 300;
 export const ALERT_MIN_READ_BUDGET_MS = 1_500;
 export const DEFAULT_ALERT_TIMEOUT_MS = 10_000;
 export const ALERT_ACTION_RETRY_MS = 2_000;
+/**
+ * The window in which `alert accept` and `alert dismiss` retry through the XCTest runner. It is
+ * longer than `ALERT_ACTION_RETRY_MS` because the read floor stops retries `ALERT_MIN_READ_BUDGET_MS`
+ * before the end: live, a prompt that appeared 0.8 s in was never read inside a 2 s window.
+ */
+export const ALERT_RUNNER_ACTION_RETRY_MS = 3_000;
 
 /**
  * The largest alert budget the legs accept. The window signal rides `AbortSignal.timeout`, whose

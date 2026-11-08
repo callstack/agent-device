@@ -129,7 +129,7 @@ test('alert dismiss retries a typed absence whatever the message says', async ()
   let calls = 0;
   mockRunnerCommand.mockImplementation(async () => {
     calls += 1;
-    if (calls < 2) throw alertAbsence('no alert present');
+    if (calls < 3) throw alertAbsence('no alert present');
     return { dismissed: true };
   });
 
@@ -137,7 +137,7 @@ test('alert dismiss retries a typed absence whatever the message says', async ()
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
-  expect(calls).toBe(2);
+  expect(calls).toBe(3);
 });
 
 for (const action of ['accept', 'dismiss']) {

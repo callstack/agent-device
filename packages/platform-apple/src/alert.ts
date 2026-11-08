@@ -4,6 +4,7 @@ import {
   ALERT_NOT_FOUND_REASON,
   ALERT_NOT_FOUND_RUNNER_CODE,
   ALERT_POLL_INTERVAL_MS,
+  ALERT_RUNNER_ACTION_RETRY_MS,
   ALERT_UNRESOLVED_RUNNER_CODE,
   DEFAULT_ALERT_TIMEOUT_MS,
 } from '@agent-device/contracts/alert-contract';
@@ -131,9 +132,9 @@ export async function awaitAppleAlert(
  * next; one exhausted on an unreadable prompt keeps the runner's own hint.
  *
  * Through the XCTest runner a retry starts only with more than `ALERT_MIN_READ_BUDGET_MS` left,
- * so the retry horizon is `ALERT_ACTION_RETRY_MS - ALERT_MIN_READ_BUDGET_MS` after the first read:
- * 500 ms, room for one retry when the first absence returns within about 200 ms. The macOS helper
- * takes no budget and has no watchdog, so it retries for the whole window.
+ * so reads start in the first `ALERT_RUNNER_ACTION_RETRY_MS - ALERT_MIN_READ_BUDGET_MS` (1.5 s) of
+ * the window: three retries at the usual 0.4 s from one read to the next. The macOS helper takes no
+ * budget and has no watchdog, so it retries for all of `ALERT_ACTION_RETRY_MS`.
  */
 export async function actOnAppleAlert(
   device: DeviceInfo,
@@ -143,15 +144,15 @@ export async function actOnAppleAlert(
   env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown>> {
   const runAlert = runAppleAlert(device, runnerOptions, options, env);
-  const runnerTimeoutMs = isIosFamily(device) ? DEFAULT_ALERT_TIMEOUT_MS : ALERT_ACTION_RETRY_MS;
+  const usesRunner = isIosFamily(device);
+  const runnerTimeoutMs = usesRunner ? DEFAULT_ALERT_TIMEOUT_MS : ALERT_ACTION_RETRY_MS;
+  const retryWindowMs = usesRunner ? ALERT_RUNNER_ACTION_RETRY_MS : ALERT_ACTION_RETRY_MS;
   const start = Date.now();
   let lastError: unknown;
   let firstAttempt = true;
-  while (Date.now() - start < ALERT_ACTION_RETRY_MS) {
+  while (Date.now() - start < retryWindowMs) {
     try {
-      const budgetMs = firstAttempt
-        ? runnerTimeoutMs
-        : remainingBudgetMs(start, ALERT_ACTION_RETRY_MS);
+      const budgetMs = firstAttempt ? runnerTimeoutMs : remainingBudgetMs(start, retryWindowMs);
       firstAttempt = false;
       return await runAlert(action, budgetMs);
     } catch (error) {
@@ -159,8 +160,7 @@ export async function actOnAppleAlert(
       if (!isAlertRetriableError(error)) break;
     }
     await sleep(ALERT_POLL_INTERVAL_MS);
-    const remainingMs = remainingBudgetMs(start, ALERT_ACTION_RETRY_MS);
-    if (!isMacOs(device) && remainingMs <= ALERT_MIN_READ_BUDGET_MS) break;
+    if (usesRunner && remainingBudgetMs(start, retryWindowMs) <= ALERT_MIN_READ_BUDGET_MS) break;
   }
   throw withAlertFallbackHint(lastError);
 }
