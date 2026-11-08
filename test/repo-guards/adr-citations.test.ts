@@ -7,18 +7,19 @@ import { listTrackedRepoFiles } from '../../scripts/layering/tracked-sources.ts'
 
 /**
  * An ADR states the current truth (docs/adr/FORMAT.md), so every repository file it cites must
- * exist. A citation is a backticked token with a source or config extension:
+ * exist. A citation is a backticked token with a source, config, or Markdown extension:
  *
  * 1. a repository path (it contains `/`) must name a tracked file;
  * 2. a bare test file name (`*.test.ts` and similar) must match a tracked file's name.
  *
  * Absolute and home paths (device or host files), globs, and bare non-test names (runtime state
- * files such as `daemon.json`) are not repository citations.
+ * files such as `daemon.json`) are not repository citations. Markdown links are checked by
+ * `pnpm check:doc-links`, not here.
  */
 
 const ADR_DIR = 'docs/adr';
-const CITED_EXTENSIONS = 'ts|mts|cts|mjs|cjs|js|swift|kt|java|json|sh|yml|yaml|py';
-const CITATION = new RegExp(`\`([A-Za-z0-9_./@{}*-]+\\.(?:${CITED_EXTENSIONS}))\``, 'g');
+const CITED_EXTENSIONS = 'ts|mts|cts|mjs|cjs|js|swift|kt|java|json|sh|yml|yaml|py|md|plist';
+const CITATION = new RegExp(`\`([A-Za-z0-9_./@{}*+-]+\\.(?:${CITED_EXTENSIONS}))\``, 'g');
 const TEST_FILE = /\.test\.[a-z]+$/;
 
 type Citation = Readonly<{ adr: string; token: string }>;
@@ -74,16 +75,29 @@ test('the citation scan rejects missing paths and test names, and skips non-repo
           '`commands/runtime-types.ts`',
           '`kept.test.ts`',
           '`gone.test.ts`',
+          '`apple/Sources/Kept+Ext.swift`',
+          '`apple/Sources/Gone+Ext.swift`',
+          '`docs/evidence/gone.md`',
           '`daemon.json`',
           '`/sdcard/marker.json`',
           '`src/platform-runtime-*.ts`',
         ].join('\n'),
       },
     ],
-    ['packages/a/src/kept.ts', 'packages/a/src/__tests__/kept.test.ts'],
+    [
+      'packages/a/src/kept.ts',
+      'packages/a/src/__tests__/kept.test.ts',
+      'apple/Sources/Kept+Ext.swift',
+    ],
   );
   assert.deepEqual(
     stale.map(({ token }) => token),
-    ['packages/a/src/gone.ts', 'commands/runtime-types.ts', 'gone.test.ts'],
+    [
+      'packages/a/src/gone.ts',
+      'commands/runtime-types.ts',
+      'gone.test.ts',
+      'apple/Sources/Gone+Ext.swift',
+      'docs/evidence/gone.md',
+    ],
   );
 });

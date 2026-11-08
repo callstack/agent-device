@@ -70,7 +70,7 @@ Six rules make the table operational:
    Forced cleanup is never inferred from "finish threw".
    The mechanism is in the shared coordinator (`packages/capture-kit/src/durable-capture/transitions.ts`).
    But each kind must earn its scope.
-   Each of app-log and audio-probe gets its own failed-finish test that proves what its retry needs; perf capture already has one.
+   Each of app-log, audio-probe, and perf-capture gets its own failed-finish test that proves what its retry needs; perf capture already preserves retry material but has no such test yet.
    A kind whose retry needs nothing keeps its current disposal explicitly.
    The Android data loss alone establishes the rule for recording only.
 
