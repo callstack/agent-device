@@ -156,6 +156,30 @@ test('parseRunnerSequenceResult maps failedStepIndex to a deterministic AppError
   );
 });
 
+test('parseRunnerSequenceResult surfaces the failing step hint', () => {
+  assert.throws(
+    () =>
+      parseRunnerSequenceResult({
+        completedSteps: 0,
+        failedStepIndex: 0,
+        sequenceResults: [
+          {
+            ok: false,
+            kind: 'doubleTap',
+            errorCode: 'UNSUPPORTED_OPERATION',
+            errorMessage: 'XCTest cannot anchor a coordinate gesture',
+            errorHint: 'The runner dispatched nothing.',
+          },
+        ],
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.hint, 'The runner dispatched nothing.');
+      return true;
+    },
+  );
+});
+
 test('parseRunnerSequenceResult infers a failure from sequenceResults when failedStepIndex is absent', () => {
   assert.throws(
     () =>

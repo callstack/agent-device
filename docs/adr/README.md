@@ -5,7 +5,7 @@
 | [0001 Provider-First Integration Scenarios](0001-provider-first-integration-scenarios.md) | integration testing strategy, provider transcripts, the scenario harness |
 | [0002 Persistent Platform Helper Sessions](0002-persistent-platform-helper-sessions.md) | helper process lifecycle, keep-alive semantics |
 | [0003 Daemon Command Registry (redirect)](0003-daemon-command-registry.md) | redirects to 0008 for the daemon facet, predicates, and request-policy traits |
-| [0004 iOS Snapshot Backend Strategy](0004-ios-snapshot-backend-strategy.md) | snapshot capture plans, backend fallbacks, quality verdicts, the coordinate space a capture publishes |
+| [0004 iOS Snapshot Backend Strategy](0004-ios-snapshot-backend-strategy.md) | the two public iOS snapshot modes, bridge acquisition and its XCTest fallback, presentation, the coordinate space a capture publishes, in-place system surfaces |
 | [0005 iOS Runner Interaction Lifecycle](0005-ios-runner-interaction-lifecycle.md) | XCTest runner sessions, leases, adoption, idle-stop |
 | [0006 Daemon RPC Protocol Version](0006-daemon-rpc-protocol-version.md) | remote daemon HTTP/JSON-RPC compatibility |
 | [0007 Remote Device Leases](0007-remote-device-leases.md) | leases, tenancy, provider-owned devices |
@@ -23,11 +23,11 @@
 | [0019 Request-Bound Platform Runtime](0019-request-bound-platform-runtime.md) | platform-package boundaries/composition, device discovery, runtime facts/facets, request binding, provider ownership, platform-shaped session resources, durable reattachment, daemon-handler migration |
 | [0020 Composable Recorded Fragments (Proposed)](0020-composable-recorded-fragments.md) | lifecycle-free recorded fragment capture/composition, entry guards, fragment-local addresses/digests, staleness, and native `.ad`/Maestro composition |
 | [0021 Simlock-Leased Devices Through Ordinary Local Runtimes](0021-simlock-leased-devices.md) | operation of a Simlock-leased simulator or emulator, and the reason for no agent-device allocator integration |
-| [0022 Daemon — Platform Runtime Coupling Audit and Ownership Ratchets](0022-daemon-platform-runtime-coupling.md) | daemon imports of root `platform-runtime-*` modules, the coupling ban that replaces R76 edge classification, the R75 session-authority ratchet, entry-to-platform hop routes and roles |
+| [0022 Daemon platform runtime coupling and ownership](0022-daemon-platform-runtime-coupling.md) | daemon imports of root `platform-runtime-*` modules, the coupling ban that replaces R76 edge classification, the R75 session-authority ratchet, the route-depth rule |
 | [0023 End-State Entry-to-Platform Hop Trace](0023-end-state-hop-trace.md) | the definition of hop counts, ordered `press`/Android and dual-arm `snapshot`/iOS chains, per-hop roles, and the deletion test for numbers in ADR 0019 and ADR 0022 |
-| [0024 Screen Recording — One Coordinator, Two Facts (Proposed)](0024-screen-recording-provable-signal.md) | `record start`/`stop` lifecycle, separate export-exists / recorder-stopped facts, backend stop-and-collect contract, coordinator recovery, the ADR 0019 §5 amendment, and the failed-finish cleanup fix |
+| [0024 Screen Recording — One Coordinator, Two Facts (Proposed)](0024-screen-recording-provable-signal.md) | `record start`/`stop` lifecycle, separate export-exists / recorder-stopped facts, backend stop-and-collect contract, coordinator recovery, the amendment to ADR 0019 §5 and the capture-kit recovery contracts, and the failed-finish cleanup fix |
 | [0025 Foldable Apple Panels — Capture the Lit Panel](0025-foldable-apple-panels.md) | iPhone Duo outer/inner panels, the screen authority (CoreDevice display info in the default set, the guest panel read in a scoped set), black-panel capture from `simctl`'s implicit display default, derived (never asserted) pose, `fold` pose control with guest hinge and scoped-set panel readback, and the Android emulator posture amendment |
-| [0026 Scroll Clip Authority — Ownership Is the Parent Edge](0026-scroll-clip-authority.md) | iOS scroll indicators and the visible band, parent-edge ownership instead of ancestor traversal, permitted node removal from interactive snapshots, and ejection dispositions |
+| [0026 Scroll Clip Authority](0026-scroll-clip-authority.md) | iOS scroll indicators and the visible band, parent-edge ownership instead of ancestor traversal, permitted node removal from interactive snapshots, and ejection dispositions |
 | [0027 Descriptor Root Size vs Eager-Closure Budget](0027-descriptor-root-vs-eager-closure-budget.md) | accepted: the eager-closure budget permits only a statement-neutral hub split (containment + added-module novelty + flat top-level-statement weight); `packages/command-registry/src/registry.ts` may be split |
 | [0028 Capability-Family Cell Vocabulary — Retain Compile-Checked Declarations](0028-capability-family-cell-vocabulary.md) | rejected single-source cell table; retained explicit input contract, exhaustive owner facts, optional-cell fallback, and lifecycle authority |
 | [0029 Daemon Policy](0029-daemon-policy.md) | `AGENT_DEVICE_DAEMON_POLICY`, limits on daemon commands, devices, or device shutdown, and where operator rules are enforced for batch/replay steps |
@@ -36,8 +36,10 @@
 | [0032 Layering Graph Engine](0032-layering-graph-engine.md) | replacement evaluation for `scripts/layering/` graph rules with dependency-cruiser or fallow `boundaries`, the reason that graph-based layering checks share one replaceable import model, the measured edge-set and parity gaps, and the revisit triggers |
 | [0033 Collocation decision table](0033-collocation-decision-table.md) | moves or additions for files in umbrella #3276 §5, renewed proposals for a move that the table refused, and a zone's collocation decisions |
 | [0034 Provider plugin registry](0034-provider-plugin-registry.md) | provider plugins, the `agent-device/plugins` contract, plugin sources and order, duplicate provider ids, plugin failure isolation, the daemon plugin inventory and `daemon status` |
-| [0035 macOS App Devices](0035-macos-app-devices.md) | native macOS apps as devices of their own, the host/app-device overlap rule, concurrent app sessions, and `macos-app` lease claims |
+| [0035 Host-Scoped Devices](0035-macos-app-devices.md) | native macOS apps as devices of their own, the host/scoped-device overlap and claim rule, concurrent app sessions, and `macos-app` lease claims |
 | [0036 Bounded Composite Resource Admission](0036-bounded-composite-resource-admission.md) | resource operations, nested tests, session disposal, and claim recovery inside bounded batch/replay steps |
+| [0037 Web Session Devices](0037-web-session-devices.md) | web sessions as devices of their own, the session name rule, the `p_`/`t_` backend key and tenant isolation, and first-open locking for web |
+| [0038 Snapshot capture source routing](0038-snapshot-capture-source-routing.md) | the source router for multi-source owners, one fallback, refusal scopes, surface proof, and the producer registry |
 
 ADRs record rationale.
 The registries and gates they describe are the current source of truth.

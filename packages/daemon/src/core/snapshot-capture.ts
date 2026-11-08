@@ -13,11 +13,13 @@ import {
   snapshotOptionsFromFlags,
   type PresentedSurface,
   type RawSnapshotNode,
-  type SnapshotCaptureProvenance,
   type SnapshotKeyboardBandFact,
-  type SnapshotState,
   type SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
+import {
+  type SnapshotCaptureProvenance,
+  type SnapshotState,
+} from '@agent-device/contracts/snapshot-model';
 import { resolveRefLabel } from '@agent-device/capture-kit/snapshot-node-lookup';
 import { STALE_REF_HINT } from '@agent-device/selectors';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';

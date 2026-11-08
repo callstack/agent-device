@@ -408,6 +408,20 @@ export class SessionStore {
   }
 
   /**
+   * #4237: marks a session that `close` kept after running its teardown (a failed platform close,
+   * cleanup, or provider lease release), so daemon idle reap no longer waits on it. A successful reopen clears the mark;
+   * otherwise it lasts until `retire` removes the session.
+   */
+  markCloseEffectsUnconfirmed(ref: SessionRef): void {
+    this.update(ref, { closeEffectsUnconfirmed: true });
+  }
+
+  /** #4237: a successful reopen makes a session kept by a failed `close` an ordinary session again. */
+  clearCloseEffectsUnconfirmed(ref: SessionRef): void {
+    delete this.requireCurrent(ref).closeEffectsUnconfirmed;
+  }
+
+  /**
    * #2833: drops the bounded marker an idle-expired session leaves, so the next command on that key
    * learns why its session is gone instead of being told to run `open`. Best effort — the expiry
    * already happened, and a marker that cannot be written must not undo it.

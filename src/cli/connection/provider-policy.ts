@@ -21,6 +21,7 @@ function remoteDaemonConnection(
 ): ConnectionProviderCapabilities {
   return {
     leaseKind,
+    forgetsEndedConnectionLease: leaseKind === 'proxy',
     requiresAppAttachment: false,
     requiresRemoteDaemon: true,
     supportsArtifacts: false,

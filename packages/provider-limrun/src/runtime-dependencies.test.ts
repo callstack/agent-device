@@ -1,3 +1,4 @@
+import { testIosRunner } from './ios-runner.fixtures.ts';
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import type { AppsFilter, DeviceLease } from '@agent-device/contracts/device';
@@ -31,8 +32,12 @@ const state = vi.hoisted(() => ({
       os: 'android',
     },
   ]),
+  instanceGet: vi.fn(async (_id?: string, _options?: { signal?: AbortSignal }) => ({
+    status: { state: 'terminated', terminationReason: 'InactivityTimeout' },
+  })),
   tunnelClose: vi.fn(),
   disconnect: vi.fn(),
+  connectionState: 'connected' as 'connected' | 'reconnecting' | 'disconnected',
 }));
 
 vi.mock('@limrun/api', () => ({
@@ -56,11 +61,11 @@ vi.mock('@limrun/api', () => ({
         };
       }),
       list: vi.fn(),
+      get: state.instanceGet,
       delete: vi.fn(async () => undefined),
     };
 
     readonly assets = {
-      getOrUpload: vi.fn(),
       list: state.assetList,
     };
 
@@ -70,9 +75,58 @@ vi.mock('@limrun/api', () => ({
   },
 }));
 
+test('heartbeat reports a terminated instance with its typed cause', async () => {
+  const runtime = createLimrunRuntime(
+    { apiKey: 'lim_test_key' },
+    createContractFixture().dependencies,
+  );
+  const lease: DeviceLease = {
+    leaseId: 'lease-android',
+    tenantId: 'team-a',
+    runId: 'run-a',
+    backend: 'android-instance',
+    leaseProvider: 'limrun',
+    createdAt: 1,
+    heartbeatAt: 1,
+    expiresAt: 60_001,
+  };
+  try {
+    await runtime.leaseLifecycle.allocate?.(lease);
+    state.instanceGet.mockClear();
+    assert.equal(await runtime.leaseLifecycle.heartbeat!(lease), undefined);
+    assert.equal(state.instanceGet.mock.calls.length, 0);
+    state.connectionState = 'disconnected';
+    state.instanceGet.mockRejectedValueOnce(new Error('API unavailable'));
+    assert.equal(await runtime.leaseLifecycle.heartbeat!(lease), undefined);
+    vi.useFakeTimers();
+    let probeSignal: AbortSignal | undefined;
+    state.instanceGet.mockImplementationOnce((_id?: string, options?: { signal?: AbortSignal }) => {
+      probeSignal = options?.signal;
+      return new Promise(() => {});
+    });
+    const timedOut = runtime.leaseLifecycle.heartbeat!(lease);
+    await vi.advanceTimersByTimeAsync(2_000);
+    assert.equal(await timedOut, undefined);
+    assert.equal(probeSignal?.aborted, true);
+    vi.useRealTimers();
+    await assert.rejects(
+      runtime.leaseLifecycle.heartbeat!(lease),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.details?.reason === 'provider-instance-ended' &&
+        error.details.terminationReason === 'InactivityTimeout',
+    );
+  } finally {
+    vi.useRealTimers();
+    state.connectionState = 'connected';
+    await runtime.shutdown();
+  }
+});
+
 vi.mock('@limrun/api/instance-client', () => ({
   createInstanceClient: vi.fn(async () => ({
     disconnect: state.disconnect,
+    getConnectionState: () => state.connectionState,
     tap: vi.fn(async () => {
       state.clientCalls.push('tap');
     }),
@@ -90,6 +144,43 @@ vi.mock('@limrun/api/instance-client', () => ({
     })),
   })),
 }));
+
+test('an attached instance with a closed connection ends only after reconnecting stops', async () => {
+  const runtime = createLimrunRuntime(
+    {
+      instances: {
+        android: { apiUrl: 'https://android.example', token: 'token', adbUrl: 'wss://adb.example' },
+      },
+    },
+    createContractFixture().dependencies,
+  );
+  const lease: DeviceLease = {
+    leaseId: 'lease-android',
+    tenantId: 'team-a',
+    runId: 'run-a',
+    backend: 'android-instance',
+    leaseProvider: 'limrun',
+    createdAt: 1,
+    heartbeatAt: 1,
+    expiresAt: 60_001,
+  };
+  try {
+    await runtime.leaseLifecycle.allocate?.(lease);
+    state.connectionState = 'reconnecting';
+    assert.equal(await runtime.leaseLifecycle.heartbeat!(lease), undefined);
+    state.connectionState = 'disconnected';
+    await assert.rejects(
+      runtime.leaseLifecycle.heartbeat!(lease),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.details?.reason === 'provider-instance-ended' &&
+        error.details.terminationReason === 'Unknown',
+    );
+  } finally {
+    state.connectionState = 'connected';
+    await runtime.shutdown();
+  }
+});
 
 test('factory uses the injected Android and host adapters as its construction seam', async () => {
   const fixture = createContractFixture();
@@ -191,6 +282,7 @@ test('allocation installs an exact uploaded asset before binding its application
         },
       },
       spec: {
+        inactivityTimeout: '5m',
         initialAssets: [
           {
             kind: 'App',
@@ -323,6 +415,12 @@ function createContractFixture() {
   const dependencies = {
     clientVersion: 'test-version',
     android: {
+      bindPerformance: async () => {
+        throw new Error('Unexpected performance binding');
+      },
+      bindDeployment: async () => {
+        throw new Error('Unexpected deployment binding');
+      },
       createInteractor,
       createPortReverse: async (adb: LimrunAdbExecutor) =>
         createInMemoryPortReverse(adb, activeReverseMappings),
@@ -350,12 +448,17 @@ function createContractFixture() {
         adbCalls.push([...serializeAndroidAdbInvocation(invocation)]);
         return { stdout: '', stderr: '', exitCode: 0 };
       },
-      archiveDirectory: async () => undefined,
+
       downloadFile: async () => undefined,
     },
     ios: {
-      applySimctlSetting: vi.fn(async () => undefined),
-      resolveAppAlias: async (app: string) => app,
+      createAppLogReader: () => ({
+        readLogs: async () => 'log line\n',
+        [Symbol.asyncDispose]: async () => {},
+      }),
+      createRunner: async () => {
+        return testIosRunner;
+      },
       readBundleAppName: async () => undefined,
     },
   } satisfies LimrunRuntimeDependencies;

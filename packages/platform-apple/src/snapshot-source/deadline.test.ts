@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import { createSnapshotSourceDeadline, waitForSnapshotSourceDelay } from './deadline.ts';
-import { SnapshotSourceError } from './errors.ts';
+import { SnapshotSourceError } from '@agent-device/capture-kit/snapshot-source-channel';
 
 const WAIT_CODE = 'bridge-preparation-pending';
 

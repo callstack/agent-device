@@ -30,22 +30,6 @@ export function decodeScreenshotImage(bytes: Buffer, label: string, maxPixels?: 
   throw unsupportedContainer(label, bytes);
 }
 
-/**
- * Returns PNG bytes for a screenshot a provider handed back in whatever container it prefers. PNG
- * passes through untouched; JPEG is decoded and re-encoded losslessly from the decoded pixels, so
- * every PNG-only reader downstream (size, crop, overlay) sees the format the path promises. Those
- * readers rewrite the file in place, which is why a JPEG cannot be handed to them undecoded.
- *
- * Synchronous and CPU-bound: daemon request paths reach it through the PNG worker
- * (`transcodeScreenshotToPngAsync` in `png-worker-client.ts`), like every other codec job.
- */
-export function transcodeScreenshotToPng(bytes: Buffer, label: string): Buffer {
-  const format = detectScreenshotImageFormat(bytes);
-  if (format === 'png') return bytes;
-  if (format === 'jpeg') return PNG.sync.write(decodeJpegImage(bytes, label));
-  throw unsupportedContainer(label, bytes);
-}
-
 /** A JPEG signature does not prove a decodable body; a failure keeps the label and the decoder's reason. */
 function decodeJpegImage(bytes: Buffer, label: string, maxPixels?: number): PNG {
   try {

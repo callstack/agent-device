@@ -12,6 +12,18 @@ private struct AlertCommandTraitsFixture: Decodable {
 }
 
 extension RunnerTests {
+#if os(iOS)
+  /// A frame sample resolves the lit panel without booking it, so it never replaces the request's booking.
+  @MainActor
+  func testFrameSamplingResolvesTheLitPanelWithoutBookingIt() throws {
+    try withLitPanelWindow(frame: CGRect(x: 0, y: 0, width: 669, height: 951)) { _ in
+      setRequestLitPanel(from: try runnerCommandFixture(#"{"command":"snapshot","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#))
+      _ = captureRunnerFrame(app: app)
+      XCTAssertNil(litPanelState.surface)
+    }
+  }
+#endif
+
   func testAlertRetryFactMatchesTheSharedGoldenTable() throws {
     let fixtureURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()

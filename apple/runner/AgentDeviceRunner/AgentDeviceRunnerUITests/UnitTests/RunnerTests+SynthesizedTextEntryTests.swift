@@ -238,7 +238,7 @@ extension RunnerTests {
         text: "fresh",
         delaySeconds: 0,
         repairMode: .replacement,
-        xCTestChannelPenalized: true,
+        xCTestUnavailable: true,
         synthesizer: SelectAllDroppingSynthesizer()
       )
 
@@ -269,7 +269,7 @@ extension RunnerTests {
       text: "",
       delaySeconds: 0,
       repairMode: .replacement,
-      xCTestChannelPenalized: true,
+      xCTestUnavailable: true,
       synthesizer: RecordingTextEntrySynthesizer()
     )
   }

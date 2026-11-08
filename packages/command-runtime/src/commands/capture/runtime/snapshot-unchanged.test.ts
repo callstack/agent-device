@@ -6,11 +6,11 @@ import {
   buildUnchangedSnapshotMetadata,
   ensureSnapshotPresentationKey,
 } from './snapshot-unchanged.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type {
-  SnapshotNode,
   SnapshotState,
   SnapshotStateProvenance,
-} from '@agent-device/kernel/snapshot';
+} from '@agent-device/contracts/snapshot-model';
 import {
   distinctRectPairArb,
   PROPERTY_RUNS,

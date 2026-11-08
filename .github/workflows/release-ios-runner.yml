@@ -25,7 +25,9 @@ permissions:
 jobs:
   publish-ios-simulator-runner:
     name: Publish iOS Simulator Runner
-    runs-on: blacksmith-6vcpu-macos-26
+    # Xcode 27 is this image's default. Limrun hosts load XCTest from their own Xcode 27, and the
+    # packaging step refuses a runner from an older Xcode, which would embed XCTest.
+    runs-on: blacksmith-6vcpu-macos-27
     timeout-minutes: 90
     env:
       AGENT_DEVICE_XCUITEST_PLATFORM: ios

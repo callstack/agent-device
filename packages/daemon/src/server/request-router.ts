@@ -1,3 +1,4 @@
+import type { LeaseEndReason } from '../sessions/lease-lifecycle.ts';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import {
   createOwnerScopedDeviceClaimReconciler,
@@ -21,6 +22,7 @@ import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import {
   type ResponseCost,
   errorResponse,
+  namesSessionExplicitly,
   noActiveSessionError,
   type DaemonResponse,
   type DaemonResponseData,
@@ -150,8 +152,8 @@ export type RequestRouterDeps = {
   providerCredentials: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
-  /** Ends the sessions opened under a lease the tenant just released, and clears their claims. */
-  endSessionsForLease?: (leaseId: string) => Promise<void>;
+  /** Ends sessions and clears their claims when a lease is released or its provider instance ends. */
+  endSessionsForLease?: (leaseId: string, reason?: LeaseEndReason) => Promise<void>;
   providerAppCatalog?: ProviderAppCatalog;
   androidObservation: AndroidObservationAdapter;
   /** Builds the per-request command surface the device-facing runtimes execute through. */
@@ -659,6 +661,10 @@ async function dispatchGenericForLockedScope(params: {
   const { lockedScope, logPath, sessionStore, androidObservation, createCommandSurface } = params;
   const ref = sessionStore.lookup(lockedScope.sessionName);
   if (!ref) {
+    if (namesSessionExplicitly(lockedScope.req)) {
+      const { namedSessionNotFoundError } = await import('../core/explicit-session-resolution.ts');
+      throw namedSessionNotFoundError(lockedScope.sessionName);
+    }
     return noActiveSessionError();
   }
   const session = sessionStore.requireCurrent(ref);

@@ -201,7 +201,7 @@ async function startStandIn(
   return { server, port, connections: () => connections };
 }
 
-async function expectRouteError(run: Promise<unknown>, hintPattern: RegExp): Promise<void> {
+async function expectRouteError(run: Promise<unknown>, hintPattern: RegExp): Promise<AppError> {
   let thrown: unknown;
   try {
     await run;
@@ -225,6 +225,7 @@ async function expectRouteError(run: Promise<unknown>, hintPattern: RegExp): Pro
     [],
     'a timeout must not also diagnose a transport failure',
   );
+  return thrown;
 }
 
 beforeEach(() => {
@@ -321,7 +322,7 @@ const ROUTE_ROWS: readonly RouteRow[] = [
     command: RESET_POLICY_COMMAND,
     platform: 'android',
     afterFirst: 'answer',
-    hintPattern: /verify the remote daemon URL, auth token, and remote host logs/,
+    hintPattern: /Verify the remote daemon URL, auth token, and remote host logs/,
     connections: 1,
     resets: false,
   },
@@ -356,7 +357,7 @@ for (const row of ROUTE_ROWS) {
       : undefined;
     try {
       const info = registered ?? standInInfo(row, daemon.port);
-      await expectRouteError(
+      const error = await expectRouteError(
         sendRequest(
           info,
           buildRequest(row.command, row.platform, row.positionals),
@@ -367,6 +368,9 @@ for (const row of ROUTE_ROWS) {
         ),
         row.hintPattern,
       );
+      // The hint is printed as the Next step; a failure that already wrote its log never asks for
+      // a --debug rerun.
+      assert.equal(/--debug/.test(String(error.details?.hint)), false);
       assert.equal(daemon.connections(), row.connections, 'probe-vs-skip is a route decision');
       assert.equal(
         fs.existsSync(statePaths.infoPath),

@@ -203,6 +203,7 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['verify', 'descriptor post-action evidence capture'],
     ['settle', 'descriptor post-action settled-diff observation'],
     ['settleQuietMs', 'settle quiet-window tuning'],
+    ['postGestureStabilization', 'scroll movement check and stabilization wait opt-out'],
   ];
   const sources = files.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
   return flagTargets.map(([key, reason, aliases = []]) => {
@@ -255,7 +256,7 @@ function summarizeProviderScenarioFlagExclusions() {
       // The device spec is honoured by a backend in front of the daemon; the daemon only refuses it.
       name: 'proxy lease device spec',
       owner: 'proxy allocate-by-spec, request-router refusal, and lease-scope tests',
-      keys: ['osVersion', 'imageTag', 'physical'],
+      keys: ['osVersion', 'imageTag', 'deviceMode', 'physical'],
     },
     {
       name: 'cloud artifact provider lookup',
@@ -378,9 +379,15 @@ function summarizeProviderScenarioFlagExclusions() {
       keys: ['waitMs'],
     },
     {
+      // A provider scenario has no XCTest runner capture to select, so these stay on the owner's tests.
       name: 'Apple simulator screenshot rendering options',
       owner: 'iOS platform and screenshot-diff runtime tests',
-      keys: ['screenshotNormalizeStatusBar', 'screenshotPixelDensity', 'screenshotScreenMask'],
+      keys: [
+        'screenshotNormalizeStatusBar',
+        'screenshotPixelDensity',
+        'screenshotScreenMask',
+        'screenshotCaptureBackend',
+      ],
     },
     {
       // Reading accessibility custom actions has no provider-scenario surface:

@@ -34,10 +34,14 @@ Change cross-language rules through `contracts/fixtures/` golden tables.
 
 Name modules for the domain question they answer. Keep claims with the code that enforces them.
 Use barrels only at package boundaries.
-Before you add behavior, split files over 1,000 lines, except generated or fixture data.
 Do not extend legacy interaction or platform index test aggregations.
 Keep tests beside their named module. Put repository artifact guards in `test/repo-guards/`.
 Shared test support belongs in `@agent-device/test-kit`, a devDependency.
+
+## CI toolchains
+
+Select a preinstalled toolchain, such as Xcode, with the runner image in `runs-on`.
+If no image provides it, add selection code. Record why.
 
 ## Diagnostics
 

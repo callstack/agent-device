@@ -255,8 +255,10 @@ extension RunnerTests {
   }
 
   func resolvedTouchVisualizationFrame(app: XCUIApplication, x: Double, y: Double) throws -> TouchVisualizationFrame {
-    let appFrame = app.frame
-    let referenceFrame = try resolvedTouchReferenceFrame(app: app, appFrame: appFrame)
+    let resolved = try resolveCoordinateWindow(app: app)
+    // Without a window the fallback frame is the app's own, so a windowless tree reads it once.
+    let appFrame = resolved.window == nil ? resolved.frame : try readableAppFrame(app: app)
+    let referenceFrame = touchReferenceFrame(app: app, resolved: resolved)
     let originX = appFrame.isEmpty ? referenceFrame.minX : appFrame.minX
     let originY = appFrame.isEmpty ? referenceFrame.minY : appFrame.minY
     return TouchVisualizationFrame(
@@ -300,13 +302,15 @@ extension RunnerTests {
     )
   }
 
-  func resolvedTouchReferenceFrame(app: XCUIApplication, appFrame: CGRect) throws -> CGRect {
-    let resolved = try resolveRunnerWindow(app: app)
-    if resolved.window != nil {
+  /// The resolved window's frame, or the app's own frame where no window answers, clear of the
+  /// keyboard.
+  func resolvedTouchReferenceFrame(app: XCUIApplication) throws -> CGRect {
+    touchReferenceFrame(app: app, resolved: try resolveCoordinateWindow(app: app))
+  }
+
+  private func touchReferenceFrame(app: XCUIApplication, resolved: (window: XCUIElement?, frame: CGRect)) -> CGRect {
+    if resolved.window != nil || !resolved.frame.isEmpty {
       return frameAvoidingKeyboard(app: app, frame: resolved.frame)
-    }
-    if !appFrame.isEmpty {
-      return frameAvoidingKeyboard(app: app, frame: appFrame)
     }
     return CGRect(x: 0, y: 0, width: 0, height: 0)
   }
@@ -318,14 +322,14 @@ extension RunnerTests {
   func gestureViewportFrame(app: XCUIApplication) throws -> CGRect {
 #if os(iOS)
     guard let context = try synthesizedCoordinateContext(app: app) else {
-      return frameAvoidingKeyboard(app: app, frame: app.frame)
+      return frameAvoidingKeyboard(app: app, frame: try readableAppFrame(app: app))
     }
     // The sole-screen route means the windows query just failed, so a keyboard probe would too.
     return context.resolvedWindow == nil
       ? context.geometry.windowOnScreen.rect
       : frameAvoidingKeyboard(app: app, frame: context.geometry.windowOnScreen.rect)
 #else
-    return try resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
+    return try resolvedTouchReferenceFrame(app: app)
 #endif
   }
 
@@ -425,6 +429,7 @@ extension RunnerTests {
     var health = mainOwned.accessibilityHealth
     let window: XCUIElement?
     let referenceFrame: CGRect
+    var treeUnreadable = false
     if requestLitPanel != nil {
       let booked = try requireRequestLitPanelSurface(app: app)
       guard let context = SynthesizedCoordinateContext(
@@ -444,13 +449,15 @@ extension RunnerTests {
       // The windows query just failed on this tree, so this gesture's keyboard probes and XCTest
       // fallbacks would fail on it too, after XCTest's own retries.
       health = .unavailable
+      treeUnreadable = true
     } else {
       return nil
     }
     return SynthesizedCoordinateContext(
       validating: surfaceGeometry(windowFrame: referenceFrame, app: app),
       resolvedWindow: window,
-      accessibilityHealth: health
+      accessibilityHealth: health,
+      treeUnreadable: treeUnreadable
     )
 #else
     return nil
@@ -589,7 +596,7 @@ extension RunnerTests {
   /// Not `UIScreen.main`: the runner process can read that in compatibility mode (#4091). A failed
   /// read is not kept, so the next gesture reads again.
   @MainActor
-  private func soleDisplayPortraitSize() -> CGSize? {
+  func soleDisplayPortraitSize() -> CGSize? {
     if let cached = mainOwned.soleDisplayPortraitSize { return cached }
     let screen = RunnerSoleScreenSize()
     guard screen.width > 0, screen.height > 0 else { return nil }
@@ -625,7 +632,7 @@ extension RunnerTests {
 
   func swipe(app: XCUIApplication, direction: String) throws -> DragVisualizationFrame? {
     if performTvRemoteSwipeIfAvailable(direction: direction) {
-      let frame = try resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
+      let frame = try resolvedTouchReferenceFrame(app: app)
       let midX = frame.midX
       let midY = frame.midY
       return DragVisualizationFrame(
@@ -671,6 +678,14 @@ extension RunnerTests {
       }
     } else if plan.executionProfile != nil {
       return "multi-touch gesture cannot define a single-pointer execution profile"
+    }
+    if let contactOrigin = plan.contactOrigin {
+      guard contactOrigin == runnerScreenEdgeContactOrigin else {
+        return "planned gesture has an unsupported contact origin"
+      }
+      guard plan.topology == "single" else {
+        return "only a single-pointer gesture can start as a screen-edge touch"
+      }
     }
     guard plan.durationMs.isFinite, plan.durationMs >= 16, plan.durationMs <= 10_000 else {
       return "planned gesture durationMs must be between 16 and 10000"
@@ -756,22 +771,40 @@ extension RunnerTests {
   }
 
   func plannedGestureExecution(for plan: RunnerGesturePlan) -> PlannedGestureExecution {
-    plan.topology == "single" && plan.executionProfile == "endpoint-hold"
-      ? .fastSwipe
-      : .sampled
+#if os(iOS) && targetEnvironment(simulator)
+    if plan.contactOrigin == runnerScreenEdgeContactOrigin {
+      return .screenEdgeTouch
+    }
+#endif
+    guard plan.topology == "single" else { return .sampled(schedule: nil) }
+    return plan.executionProfile == "endpoint-hold" ? .fastSwipe : .sampled(schedule: plan.executionProfile)
+  }
+
+#if os(iOS)
+  /// A planned gesture's surface and each pointer's `{ x, y, offsetMs }` samples in native
+  /// (portrait-up) digitizer points.
+  struct NativePlannedGesture {
+    let context: SynthesizedCoordinateContext
+    let orientation: Int
+    let pointerSamples: [[[String: NSNumber]]]
+  }
+
+  enum NativePlannedGestureResolution {
+    case resolved(NativePlannedGesture)
+    case refused(RunnerInteractionOutcome)
   }
 
   @MainActor
-  func sampledPlannedGesture(
+  func nativePlannedGesture(
     app: XCUIApplication,
-    plan: RunnerGesturePlan
-  ) throws -> RunnerInteractionOutcome {
-#if os(iOS)
+    plan: RunnerGesturePlan,
+    gesture: String
+  ) throws -> NativePlannedGestureResolution {
     guard let context = try synthesizedCoordinateContext(app: app) else {
-      return .unsupported(message: "gesture could not resolve a surface", hint: nil)
+      return .refused(.unsupported(message: "\(gesture) could not resolve a surface", hint: nil))
     }
     guard let geometry = digitizerGeometry(app: app, surface: context.geometry) else {
-      return Self.unmeasuredSoleDisplayOutcome(gesture: "gesture")
+      return .refused(Self.unmeasuredSoleDisplayOutcome(gesture: gesture))
     }
     let pointerSamples: [[[String: NSNumber]]] = plan.pointers.map { pointer in
       pointer.samples.map { sample in
@@ -783,11 +816,28 @@ extension RunnerTests {
         ]
       }
     }
+    return .resolved(NativePlannedGesture(
+      context: context, orientation: geometry.orientation, pointerSamples: pointerSamples
+    ))
+  }
+#endif
+
+  @MainActor
+  func sampledPlannedGesture(
+    app: XCUIApplication,
+    plan: RunnerGesturePlan
+  ) throws -> RunnerInteractionOutcome {
+#if os(iOS)
+    let planned: NativePlannedGesture
+    switch try nativePlannedGesture(app: app, plan: plan, gesture: "gesture") {
+    case .resolved(let resolved): planned = resolved
+    case .refused(let outcome): return outcome
+    }
     if let message = RunnerSynthesizedGesture.synthesizeGesture(
       withApplication: app,
-      resolvedWindow: context.resolvedWindow,
-      interfaceOrientation: geometry.orientation,
-      pointerSamples: pointerSamples
+      resolvedWindow: planned.context.resolvedWindow,
+      interfaceOrientation: planned.orientation,
+      pointerSamples: planned.pointerSamples
     ) {
       return .unsupported(
         message: message,

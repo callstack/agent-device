@@ -31,7 +31,7 @@ export async function launchRunnerSession(
   let launch;
   try {
     signal?.throwIfAborted();
-    launch = await launcher.launch(endpoint, abort.signal);
+    launch = await launcher.launch(endpoint, abort.signal, budget.phase.deadline);
   } finally {
     signal?.removeEventListener('abort', cancel);
   }

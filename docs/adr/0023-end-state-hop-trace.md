@@ -179,11 +179,11 @@ Each name below has a `-runtime.ts` suffix under `packages/contracts/src/`:
 
 ## `snapshot` / iOS Simulator: HTTP entry → AX bridge `socket.write` (primary) / runner `fetch` (fallback)
 
-The route branches at `packages/platform-apple/src/snapshot-route.ts` through `route.capture`, `isEligible`, and the per-generation circuit breaker.
+The route branches at `packages/capture-kit/src/snapshot-router/router.ts` through `capture`, `routeEligibility`, and the per-generation circuit breaker.
 The in-simulator AX bridge is primary.
 The XCTest runner is fallback under any of these conditions:
 
-- `isEligible` returns false.
+- `routeEligibility` does not return `bridge`.
 - AX acquisition fails.
 - Single-flight target discovery has not settled within this capture's `TARGET_DISCOVERY_WAIT_MS` wait in `snapshot-target.ts`.
 
@@ -226,7 +226,7 @@ The clear has no effect on iOS.
 | 22 | `packages/platform-apple/src/index.ts` | `loadRuntime` pairs the plugin with the runtime module | pass-through | KEEP — declared ADR §2 `loadRuntime` boundary |
 | 23 | `packages/platform-apple/src/runtime.ts` | `bind` → `bindAppleSnapshotRuntime` | orchestration | KEEP — Apple runtime owner |
 | 24 | `packages/platform-apple/src/runtime-snapshot.ts` | `bindAppleSnapshotRuntime` wires the AX and fallback closures | orchestration | KEEP — AX/runner wiring (tests pin it) |
-| 25 | `packages/platform-apple/src/snapshot-route.ts` | `createAppleSnapshotRoute`; `isEligible` + circuit breaker | policy | KEEP — AX/runner route + breaker (the fork) |
+| 25 | `packages/capture-kit/src/snapshot-router/router.ts` | `createSnapshotRouter`; `routeEligibility` + circuit breaker | policy | KEEP — AX/runner route + breaker (the fork) |
 | 26 | `src/runtime.ts` | `createAgentDevice`: the bound runtime object | orchestration | KEEP — agent device facade |
 | 27 | `src/commands/index.ts` | `bindCommands` binds the command catalog | orchestration | KEEP — command catalog boundary |
 | 28 | `src/commands/runtime-types.ts` | `bindRuntimeCommands` wraps the runtime into closures | pass-through | REMOVABLE — thin closure wrapper; depth lives in the commands |

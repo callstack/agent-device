@@ -109,6 +109,8 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
  */
 export const STORE_OWNED_SESSION_STATE_FIELDS: ReadonlySet<string> = new Set([
   'actions',
+  // #4237: `close` marks a session it keeps through `SessionStore.markCloseEffectsUnconfirmed`.
+  'closeEffectsUnconfirmed',
   'createdAt',
   // #2833: the request path reports session activity through `SessionStore.noteSessionActivity`, so
   // the only writer of this field is the store that owns the record.

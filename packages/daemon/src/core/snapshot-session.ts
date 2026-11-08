@@ -1,4 +1,4 @@
-import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
+import { resolveRequestTargetDevice } from './request-device-resolution.ts';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
@@ -21,7 +21,7 @@ export async function resolveSessionDevice(
     requireNamedSessionHoldsDevice({ req, sessionAddress: sessionName, session });
   }
   const device =
-    session?.device ?? (await resolveTargetDevice(req.flags ?? {}, { env: sessionStore.host.env }));
+    session?.device ?? (await resolveRequestTargetDevice(req, { env: sessionStore.host.env }));
   return { ref, session, device };
 }
 

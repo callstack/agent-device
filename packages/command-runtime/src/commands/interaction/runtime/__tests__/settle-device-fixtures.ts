@@ -6,7 +6,7 @@
 // Budgets are injected (fake clock) — no real waiting.
 
 import type { AgentDeviceBackend, BackendSnapshotResult } from '@agent-device/contracts/backend';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { createAgentDevice } from '../../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';

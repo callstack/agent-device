@@ -1,6 +1,5 @@
 import type {
   SnapshotNode,
-  SnapshotState,
   SnapshotOptions,
   SnapshotQualityVerdict,
   SnapshotQualityNote,
@@ -8,6 +7,7 @@ import type {
   ScreenshotOverlayRef,
   SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { DeviceRotation } from './device-rotation.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 

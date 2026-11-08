@@ -9,9 +9,10 @@ import { stripSwiftComments } from './strip-swift-comments.mjs';
 export const UNIT_TEST_CONDITION = 'AGENT_DEVICE_RUNNER_UNIT_TESTS';
 const SOURCE_DIR = path.join('apple', 'runner');
 const OUTPUT_DIR = path.join('dist', 'apple', 'runner');
-// The UITests target finds the bridge's shared full-screen header through HEADER_SEARCH_PATHS,
-// which resolves `apple/snapshot-bridge` from the runner project in both the checkout and the
-// installed package (the package ships that directory at its root). Nothing is mirrored.
+// The UITests target finds the snapshot bridge reader and its shared full-screen header through
+// HEADER_SEARCH_PATHS, which resolves `apple/snapshot-bridge` from the runner project in both the
+// checkout and the installed package (the package ships that directory at its root). Nothing is
+// mirrored.
 const SNAPSHOT_PRESENTATION_SOURCE_DIR = path.join('apple', 'snapshot-presentation');
 const SNAPSHOT_PRESENTATION_OUTPUT_DIR = path.join('dist', 'apple', 'snapshot-presentation');
 const SNAPSHOT_PRESENTATION_RUNNER_MANIFEST = 'Package.runner.swift';

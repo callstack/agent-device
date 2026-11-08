@@ -10,7 +10,7 @@ extension RunnerTests {
     text: String,
     delaySeconds: Double,
     repairMode: TextTypingRepairMode = .none,
-    xCTestChannelPenalized: Bool = false,
+    xCTestUnavailable: Bool = false,
     synthesizer: any TextEntrySynthesizing,
     commandId: String? = nil
   ) throws -> TextEntryResult {
@@ -55,7 +55,7 @@ extension RunnerTests {
       Self.shouldUseSynthesizedFirstResponderReplacement(
         hasResolvedElement: target.element != nil,
         hasRefreshPoint: target.refreshPoint != nil,
-        xCTestChannelPenalized: xCTestChannelPenalized
+        xCTestUnavailable: xCTestUnavailable
       )
     {
       switch try runSynthesizedReplacementRoute(

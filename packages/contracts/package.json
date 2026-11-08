@@ -500,9 +500,17 @@
       "types": "./src/facades/snapshot.ts",
       "default": "./src/facades/snapshot.ts"
     },
+    "./snapshot-model": {
+      "types": "./src/snapshot-model.ts",
+      "default": "./src/snapshot-model.ts"
+    },
     "./snapshot-private-evidence": {
       "types": "./src/snapshot-private-evidence.ts",
       "default": "./src/snapshot-private-evidence.ts"
+    },
+    "./snapshot-producers": {
+      "types": "./src/snapshot-producers.ts",
+      "default": "./src/snapshot-producers.ts"
     },
     "./snapshot-runtime": {
       "types": "./src/snapshot-runtime.ts",

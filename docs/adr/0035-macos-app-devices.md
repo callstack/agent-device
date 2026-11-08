@@ -1,8 +1,11 @@
-# ADR 0035: macOS App Devices
+# ADR 0035: Host-Scoped Devices: macOS App Devices and Web Session Devices
 
 ## Status
 
-Accepted (2026-10-21). Applies to the native macOS app backend (ADR 0031) only.
+Accepted (2026-10-21). Amended (2026-11-04): scope change. Its per-device rules apply to any
+host-scoped device, of which macOS app devices (native backend, ADR 0031) and web session devices are
+the two kinds. Rules 1 to 3 and 5 to 7 cover macOS app devices and rule 4 covers both. Web session
+devices are defined in [ADR 0037](0037-web-session-devices.md).
 
 ## Rules at a glance
 
@@ -26,12 +29,13 @@ Accepted (2026-10-21). Applies to the native macOS app backend (ADR 0031) only.
    cross a request that does the same in the other order: batches or replays on two apps that each
    close their app and open the other, or one that leaves its app for the whole Mac while a fresh
    open holds the Mac. With the whole Mac as one device, such requests shared one lock.
-4. One rule relates an app device to its host: the Mac and each of its app devices overlap, and two
-   app devices do not (`devicesOverlap`). The session store finds a session on an overlapping device,
-   and a claim selector (`device status --udid`) matches overlapping claims.
-   In the claim store, an app device acquisition holds the host key's lock and refuses a live host
-   claim; a host acquisition settles the claims of its app devices and refuses a live one, including
-   this daemon's own. An unreadable claim file refuses a host acquisition.
+4. One rule relates a host-scoped device to its host: the host and each of its host-scoped devices
+   overlap, and two host-scoped devices do not (`devicesOverlap`). The session store finds a session
+   on an overlapping device, and a claim selector (`device status --udid`) matches overlapping claims.
+   In the claim store, a host-scoped device acquisition holds the host key's lock and refuses a live
+   host claim; a host acquisition settles the claims of its host-scoped devices and refuses a live
+   one, including this daemon's own. An unreadable claim file refuses a host acquisition. The rule
+   reads the host from the device id, never from `DeviceInfo.hostApp`, for macOS and web.
 5. An app device acts on its own app only. It opens in the background (`open -g`), so the frontmost
    app and every other session's app stay where they are. It opens and closes only its own app, and
    a link alone opens in that app. It keeps the `app` surface. The clipboard, host settings, and the
@@ -41,7 +45,6 @@ Accepted (2026-10-21). Applies to the native macOS app backend (ADR 0031) only.
    other session.
 7. Helper screenshots take a host-wide lock (`macos-screen-capture.lock` in the claims directory) for
    one capture: ScreenCaptureKit fails or hangs when two processes capture at once.
-
 ## Context
 
 Many agents run many apps on one Mac, and by default they share one daemon. The native backend acts
@@ -78,5 +81,4 @@ app device. Use a `desktop` session for it.
 
 ## Support boundary
 
-A daemon older than this ADR does not scan app device claims on a whole-Mac acquisition. Run one
-version per claims directory, as ADR 0030 requires for process locks.
+A daemon older than this ADR does not scan app device claims on a whole-Mac acquisition. Run one version per claims directory, as ADR 0030 requires for process locks.

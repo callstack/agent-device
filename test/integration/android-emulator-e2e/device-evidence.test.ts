@@ -1,6 +1,10 @@
 import { expect, test } from 'vitest';
 
-import { readAndroidDeviceEvidence, type AndroidAdbRead } from './device-evidence.ts';
+import {
+  createAdbRead,
+  readAndroidDeviceEvidence,
+  type AndroidAdbRead,
+} from './device-evidence.ts';
 
 const TARGET = { appId: 'com.callstack.agentdevicelab', serial: 'emulator-5554' };
 
@@ -105,4 +109,8 @@ test('the app id reaches the device shell as one word, never as a script', async
     'pidof',
     String.raw`'com.lab'\''; reboot'`,
   ]);
+});
+
+test('an adb read refuses a timeout that would disable the child-process timeout', async () => {
+  await expect(createAdbRead()(['version'], { timeoutMs: 0 })).rejects.toThrow(RangeError);
 });

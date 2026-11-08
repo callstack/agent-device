@@ -1,5 +1,5 @@
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { resolveSelectorPipeline } from './selector-pipeline.ts';
 import { SELECTOR_PIPELINE_POLICIES } from './selector-pipeline-policy.ts';
 import { classifyAbsenceObservation, type AbsenceObservation } from './absence-observation.ts';

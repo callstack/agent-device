@@ -4,11 +4,8 @@ import {
   TARGET_ANNOTATION_MAX_FIELD_BYTES,
   truncateToUtf8Bytes,
 } from '@agent-device/ad-script';
-import type {
-  SnapshotNode,
-  SnapshotQualityVerdict,
-  SnapshotState,
-} from '@agent-device/kernel/snapshot';
+import type { SnapshotNode, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 
 export type AbsenceFirstMatch = {
   id?: string;

@@ -17,6 +17,16 @@ function missingLeaseIdError(error: unknown): boolean {
   return true;
 }
 
+function unallocatedProviderError(leaseProvider: string) {
+  return (error: unknown): boolean => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'DEVICE_NOT_FOUND');
+    assert.equal(error.details?.reason, 'provider_instance_unallocated');
+    assert.equal(error.details?.leaseProvider, leaseProvider);
+    return true;
+  };
+}
+
 const limrunAppCatalog: ProviderAppCatalog = {
   supports: (provider) => provider === 'limrun',
   list: async () => [],
@@ -142,9 +152,16 @@ test('non-close commands on a tenant-isolated session still require a lease id',
   );
 });
 
-test.each(['bogus', 'proxy', 'browserstack'])(
-  'sessionless apps for non-catalog provider %s still requires a tenant lease',
-  (leaseProvider) => {
+// Runtime providers have no instance without a lease; logical leases keep the missing-lease refusal.
+test.each([
+  ['bogus', 'unallocated'],
+  ['browserstack', 'unallocated'],
+  ['proxy', 'missing-lease'],
+  ['cloud', 'missing-lease'],
+  [' proxy ', 'missing-lease'],
+] as const)(
+  'sessionless apps for non-catalog provider %j without a lease is refused as %s',
+  (leaseProvider, refusal) => {
     const registry = new LeaseRegistry();
 
     assert.throws(
@@ -159,10 +176,80 @@ test.each(['bogus', 'proxy', 'browserstack'])(
           undefined,
           { env: process.env },
         ),
-      missingLeaseIdError,
+      refusal === 'unallocated' ? unallocatedProviderError(leaseProvider) : missingLeaseIdError,
     );
   },
 );
+
+test('a padded runtime provider with a blank lease id is refused under its normalized name', () => {
+  assert.throws(
+    () =>
+      assertRequestLeaseAdmission(
+        makeRequest({
+          command: 'shutdown',
+          flags: { platform: 'ios', leaseProvider: ' limrun ' },
+          meta: { tenantId: 'limrun', runId: 'run-1', sessionIsolation: 'tenant', leaseId: '  ' },
+        }),
+        new LeaseRegistry(),
+        undefined,
+        { env: process.env },
+      ),
+    unallocatedProviderError('limrun'),
+  );
+});
+
+// #4303: after `close --shutdown` released the instance, `shutdown` on the same connection has no
+// lease. It must name the missing instance, not the tenant's missing lease id.
+test('shutdown on a tenant provider connection without an instance is refused as unallocated', () => {
+  assert.throws(
+    () =>
+      assertRequestLeaseAdmission(
+        makeRequest({
+          command: 'shutdown',
+          flags: { platform: 'ios', leaseProvider: 'limrun' },
+          meta: { tenantId: 'limrun', runId: 'run-1', sessionIsolation: 'tenant' },
+        }),
+        new LeaseRegistry(),
+        undefined,
+        { env: process.env },
+      ),
+    unallocatedProviderError('limrun'),
+  );
+});
+
+test('a lease-less provider request missing its run id still names the run id', () => {
+  assert.throws(
+    () =>
+      assertRequestLeaseAdmission(
+        makeRequest({
+          command: 'shutdown',
+          flags: { platform: 'ios', leaseProvider: 'limrun' },
+          meta: { tenantId: 'limrun', sessionIsolation: 'tenant' },
+        }),
+        new LeaseRegistry(),
+        undefined,
+        { env: process.env },
+      ),
+    { code: 'INVALID_ARGS', message: 'tenant isolation requires run id.' },
+  );
+});
+
+test('a provider request with a malformed lease id is still refused as malformed', () => {
+  assert.throws(
+    () =>
+      assertRequestLeaseAdmission(
+        makeRequest({
+          command: 'shutdown',
+          flags: { platform: 'ios', leaseProvider: 'limrun' },
+          meta: { tenantId: 'limrun', runId: 'run-1', sessionIsolation: 'tenant', leaseId: 'x' },
+        }),
+        new LeaseRegistry(),
+        undefined,
+        { env: process.env },
+      ),
+    missingLeaseIdError,
+  );
+});
 
 test('sessionless apps admits a provider declared by the runtime app catalog', () => {
   const registry = new LeaseRegistry();
@@ -184,7 +271,7 @@ test('sessionless apps admits a provider declared by the runtime app catalog', (
 // #2946 (the other half): a proxy client that allocated a lease with a window longer than the old
 // synthetic admission default used to lose that window on the next admitted command — admission
 // re-renewed every proxy lease at its own default instead of the window the lease carries. Admission
-// now renews for the lease's window (ADR 0007); only a request that names a window changes it.
+// now renews for the lease's window (packages/daemon/docs/remote-device-lease-contracts.md); only a request that names a window changes it.
 test('admitting a command does not shorten a proxy lease allocated above the old admission default', () => {
   let now = 1_000;
   const registry = new LeaseRegistry({ now: () => now });

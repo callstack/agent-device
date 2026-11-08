@@ -59,7 +59,7 @@ vi.mock('@limrun/api', () => ({
         await answered;
       }),
     };
-    readonly assets = { getOrUpload: vi.fn(), list: vi.fn(async () => []) };
+    readonly assets = { list: vi.fn(async () => []) };
   },
 }));
 

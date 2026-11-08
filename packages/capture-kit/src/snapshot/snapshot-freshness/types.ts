@@ -1,4 +1,4 @@
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 
 /**
  * What a navigation-sensitive action recorded about the tree it was dispatched against, so a

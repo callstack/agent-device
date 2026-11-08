@@ -167,7 +167,7 @@ async function resolveInstallDevice(
   }
   return await resolveCommandDevice({
     session,
-    flags,
+    req,
     env,
     androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),
     platformServices,

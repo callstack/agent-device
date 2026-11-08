@@ -15,13 +15,22 @@ type GestureResponseResult = {
   message?: string;
 };
 
-/** The sole response construction site shared by coordinate and target-authored gestures. */
+/**
+ * The sole response construction site shared by coordinate and target-authored gestures. The
+ * schedule the backend reports it ran wins; the caller's `executionProfile` names the planned
+ * schedule only for a backend that reports none.
+ */
 export function gestureResponseData(
   result: GestureResponseResult,
   extra: Record<string, unknown> = {},
 ): Record<string, unknown> {
+  const reported = result.backendResult?.executionProfile;
   const executionProfile =
-    typeof extra.executionProfile === 'string' ? extra.executionProfile : undefined;
+    typeof reported === 'string' && reported !== ''
+      ? reported
+      : typeof extra.executionProfile === 'string'
+        ? extra.executionProfile
+        : undefined;
   return {
     kind: result.kind,
     durationMs: result.durationMs,
@@ -33,6 +42,7 @@ export function gestureResponseData(
     ...extra,
     ...(executionProfile
       ? {
+          executionProfile,
           timing: {
             executionProfile,
             gestureDurationMs: result.durationMs,

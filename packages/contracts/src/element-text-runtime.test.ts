@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   bindElementTextRuntime,
+  bindProviderElementTextRuntime,
   elementTextRead,
   type ElementTextReadOutcome,
   type ElementTextUnreadableReason,
@@ -42,6 +43,25 @@ test('the outcome union is closed: every value is a read or a classified unreada
       `unreadable outcome carries an unclassified reason: ${outcome.reason}`,
     );
   }
+});
+
+test('provider text reads resolve their owner for every call and reject a lost interactor', async () => {
+  let interactor: Interactor | undefined = {
+    readTextAtPoint: async () => 'live provider value',
+  } as unknown as Interactor;
+  const runtime = bindProviderElementTextRuntime({
+    device: { platform: 'android', id: 'provider-device' } as DeviceInfo,
+    signal: new AbortController().signal,
+    resolveInteractor: () => interactor,
+  });
+  assert.deepEqual(await runtime.readTextAtPoint({ point: { x: 1, y: 2 } }), {
+    status: 'read',
+    text: 'live provider value',
+  });
+  interactor = undefined;
+  await assert.rejects(runtime.readTextAtPoint({ point: { x: 1, y: 2 } }), {
+    details: { reason: 'provider-runtime-interactor-missing', deviceId: 'provider-device' },
+  });
 });
 
 test('a non-blank owner answer is a read that preserves the exact text', () => {

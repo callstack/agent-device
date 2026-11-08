@@ -23,7 +23,8 @@ function panelTableRefusal(device: DeviceInfo, message: string): AppError {
 /**
  * The lit panel a runner request names, read fresh per request because a fold changes it (ADR
  * 0025). The read never outlasts the request's `timeoutMs`. Undefined keeps the historic
- * first-window route, for a device not known to have more than one panel.
+ * first-window route whenever the read cannot name one lit panel. An unreadable table on a
+ * known multi-panel device refuses instead.
  */
 export async function resolveRunnerRequestLitPanel(
   device: DeviceInfo,

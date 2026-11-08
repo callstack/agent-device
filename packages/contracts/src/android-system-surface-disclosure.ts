@@ -1,4 +1,4 @@
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 
 /**
  * The one agent-facing explanation for an Android capture that faithfully shows an occluding

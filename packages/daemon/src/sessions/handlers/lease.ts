@@ -1,3 +1,10 @@
+import {
+  recordProviderSession,
+  releaseLease,
+  type LeaseReleaseOutcome,
+} from '../../resources/lease-release.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { LeaseEndReason } from '../lease-lifecycle.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
@@ -17,7 +24,6 @@ import {
   leaseReleaseRequestFor,
   normalizeLeaseBackend,
   normalizeLeaseProvider,
-  type ReleaseLeaseRequest,
 } from '../../resources/lease-registry-scope.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import {
@@ -26,6 +32,7 @@ import {
   resolveRequestOrSessionLeaseScope,
 } from '../../core/lease-context.ts';
 import {
+  isProviderInstanceEndedError,
   leaseDeviceKey,
   leaseProviderRequiringRuntime,
   leaseScopeToAllocateRequest,
@@ -39,7 +46,6 @@ import { AppError, createRequestCanceledError, errorMessage } from '@agent-devic
 import { LEASE_ALLOCATION_BUDGET_MS } from '@agent-device/command-registry/timeout-policy';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
 import { listDownloadableArtifacts } from '../../resources/artifact-tracking.ts';
-import { providerSessionIdFromData } from '../../resources/provider-session-ownership.ts';
 import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 
@@ -54,7 +60,7 @@ type LeaseHandlerArgs = {
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
-  endSessionsForLease?: (leaseId: string) => Promise<void>;
+  endSessionsForLease?: (leaseId: string, reason?: LeaseEndReason) => Promise<void>;
 };
 
 export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<DaemonResponse | null> {
@@ -151,17 +157,8 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         };
       });
     }
-    case 'lease_heartbeat': {
-      const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
-      const providerData = await leaseLifecycleProvider?.heartbeat?.(
-        lease,
-        leaseLifecycleContext(req, args.host),
-      );
-      return {
-        ok: true,
-        data: { lease, ...(providerData ? { provider: providerData } : {}) },
-      };
-    }
+    case 'lease_heartbeat':
+      return await heartbeatLease(args, leaseScope);
     case 'lease_release': {
       const releaseRequest = leaseScopeToReleaseRequest(leaseScope);
       const lease = leaseRegistry.getLease(releaseRequest);
@@ -250,26 +247,6 @@ async function pickProxyLeaseDeviceKey(
   });
 }
 
-type LeaseReleaseOutcome = {
-  /** The daemon's own lease record was released (bookkeeping, not the billed resource). */
-  registryReleased: boolean;
-  /** Provider release data (providerSessionId, warnings, cloudArtifacts…) when a provider held it. */
-  provider?: Record<string, unknown>;
-};
-
-/** THE release path: provider first (it still needs the lease record), then the registry. */
-async function releaseLease(
-  leaseRegistry: LeaseRegistry,
-  leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
-  lease: DeviceLease | undefined,
-  request: ReleaseLeaseRequest,
-  context?: LeaseLifecycleContext,
-): Promise<LeaseReleaseOutcome> {
-  const provider = lease ? await leaseLifecycleProvider?.release?.(lease, context) : undefined;
-  if (lease) recordProviderSession(leaseRegistry, lease, provider);
-  return { registryReleased: leaseRegistry.releaseLease(request).released, provider };
-}
-
 // A run's repeat allocation reuses its live lease; refusing that request must not end the
 // lease, or the provider session the first allocation created is left without an owner.
 // A requester that hung up owns nothing, so its canceled repeat allocation still releases.
@@ -311,6 +288,46 @@ async function releaseAllocationForGoneRequester(
     outcome = { registryReleased: leaseRegistry.releaseLease(request).released };
   }
   return canceledAllocationError(lease, outcome, releaseError);
+}
+
+async function heartbeatLease(
+  args: LeaseHandlerArgs,
+  leaseScope: LeaseScope,
+): Promise<DaemonResponse> {
+  const { leaseRegistry, leaseLifecycleProvider, req, endSessionsForLease } = args;
+  const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
+  let providerData: Record<string, unknown> | undefined;
+  let ended: AppError | undefined;
+  try {
+    providerData = await leaseLifecycleProvider?.heartbeat?.(lease, {
+      ...leaseLifecycleContext(req, args.host),
+      signal: getRequestSignal(req.meta?.requestId),
+    });
+  } catch (error) {
+    if (!(error instanceof AppError) || !isProviderInstanceEndedError(error)) throw error;
+    leaseRegistry.endProviderLease(leaseReleaseRequestFor(lease));
+    ended = error;
+  }
+  if (ended) {
+    // The client stops beating only on the typed reason, so a failed teardown must not replace it.
+    try {
+      await endSessionsForLease?.(lease.leaseId, 'PROVIDER_INSTANCE_ENDED');
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'lease_provider_ended_session_teardown_failed',
+        data: {
+          leaseId: lease.leaseId,
+          error: errorMessage(error),
+        },
+      });
+    }
+    throw ended;
+  }
+  return {
+    ok: true,
+    data: { lease, ...(providerData ? { provider: providerData } : {}) },
+  };
 }
 
 function canceledAllocationError(
@@ -512,16 +529,6 @@ function readFlagString(
 ): string | undefined {
   const value = flags?.[key];
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
-}
-
-function recordProviderSession(
-  leaseRegistry: LeaseRegistry,
-  lease: DeviceLease,
-  providerData: Record<string, unknown> | undefined,
-): void {
-  const providerSessionId = providerSessionIdFromData(providerData);
-  if (!providerSessionId) return;
-  leaseRegistry.recordProviderSession(lease, providerSessionId);
 }
 
 /** The host that allocated a `macos-app` lease keeps it for the hosted app's lifetime and ends it with DELETE /admin/leases. */

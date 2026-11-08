@@ -29,8 +29,13 @@ import {
   requireTokenEnforcingRunner,
   type RunnerEndpoint,
 } from './runner-contract.ts';
-import type { RunnerSession } from './runner-session-types.ts';
+import { canWorkWithRunnerSession, type RunnerSession } from './runner-session-types.ts';
 import type { LocalRunnerLaunchResources } from './runner-disposal.ts';
+import {
+  runnerLaunchLogClassificationDetails,
+  runnerSimulatorSetFailureDetails,
+} from './runner-device-set.ts';
+import { canFallBackFromUsbmux, postRunnerCommandOverRoute } from './runner-transport.ts';
 
 type RunnerProcessConnectionSession = Pick<
   RunnerSession,
@@ -42,11 +47,19 @@ function runnerProcessExited(session: RunnerConnectionSession | undefined): bool
   return session?.launch.exited === true;
 }
 
-import {
-  runnerLaunchLogClassificationDetails,
-  runnerSimulatorSetFailureDetails,
-} from './runner-device-set.ts';
-import { canFallBackFromUsbmux, postRunnerCommandOverRoute } from './runner-transport.ts';
+function buildRunnerSessionTerminalError(session: RunnerConnectionSession, port: number): AppError {
+  const reason =
+    session.state === 'draining' ? 'runner_session_draining' : 'runner_session_stopped';
+  return new AppError(
+    'COMMAND_FAILED',
+    `Runner session became terminal during connect (session ${session.state})`,
+    {
+      ...runnerConnectFailureDetails(reason),
+      port,
+      state: session.state,
+    },
+  );
+}
 
 export const RUNNER_STARTUP_TIMEOUT_MS = 45_000;
 const RUNNER_CONNECT_ATTEMPT_INTERVAL_MS = 250;
@@ -153,6 +166,12 @@ export async function waitForRunner(
       commandMayHaveBeenWritten,
     );
   }
+  if (session && !canWorkWithRunnerSession(session)) {
+    throw withRunnerWriteEvidence(
+      buildRunnerSessionTerminalError(session, port),
+      commandMayHaveBeenWritten,
+    );
+  }
   throw withRunnerWriteEvidence(
     buildRunnerConnectError({
       device,
@@ -242,6 +261,9 @@ async function ensureRunnerAttemptCanStart(params: {
       port: params.endpoint.port,
       logPath: params.logPath,
     });
+  }
+  if (params.session && !canWorkWithRunnerSession(params.session)) {
+    throw buildRunnerSessionTerminalError(params.session, params.endpoint.port);
   }
   // A launch whose log already names a cause the classifier calls terminal will never serve a
   // command, and its child may stay alive to the deadline, so without this the request waits out the

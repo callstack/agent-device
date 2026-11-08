@@ -357,3 +357,38 @@ test('output overrides write notices beside the bundle without creating the defa
   );
   await assert.rejects(fs.stat(path.join(root, 'dist')), { code: 'ENOENT' });
 });
+
+test.each([
+  { version: '0.2.0', newline: '\n', lineEnding: 'LF' },
+  { version: '0.2.0', newline: '\r\n', lineEnding: 'CRLF' },
+  { version: '0.2.1', newline: '\n', lineEnding: 'LF' },
+])(
+  'bundled xdelta WASM $version requires matching complete notices with $lineEnding line endings',
+  async ({ version, newline }) => {
+    const [sourceNotices, apacheLicense] = await Promise.all([
+      fs.readFile(new URL('../../LICENSES/xdelta3-wasm.txt', import.meta.url), 'utf8'),
+      fs.readFile(new URL('../../LICENSES/Apache-2.0.txt', import.meta.url), 'utf8'),
+    ]);
+    const root = await fixture({
+      'input.ts': "export { value } from '@limrun/xdelta3-wasm';",
+      'node_modules/@limrun/xdelta3-wasm/package.json': JSON.stringify({
+        name: '@limrun/xdelta3-wasm',
+        version,
+        license: 'Apache-2.0',
+        main: 'index.js',
+      }),
+      'node_modules/@limrun/xdelta3-wasm/index.js':
+        'export const value = process.env.FIXTURE_NUMBER;',
+      'LICENSES/xdelta3-wasm.txt': sourceNotices.replaceAll('\r\n', '\n').replaceAll('\n', newline),
+      'LICENSES/Apache-2.0.txt': apacheLicense.replaceAll('\r\n', '\n').replaceAll('\n', newline),
+    });
+    if (version !== '0.2.0') {
+      await assert.rejects(bundle(root), /Refresh LICENSES/);
+      return;
+    }
+    await bundle(root);
+    const notices = await fs.readFile(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt'), 'utf8');
+    assert.ok(notices.includes(sourceNotices.replaceAll('\r\n', '\n').trim()));
+    assert.ok(notices.includes(apacheLicense.replaceAll('\r\n', '\n').trim()));
+  },
+);

@@ -162,6 +162,13 @@ test('connect loop stops for terminal verdicts', () => {
     ),
     false,
   );
+  for (const reason of ['runner_session_draining', 'runner_session_stopped'] as const) {
+    const terminal = runnerConnectFailure(reason);
+    assert.equal(shouldRetryRunnerConnectError(terminal), false, reason);
+    assert.equal(isRetryableRunnerError(terminal), false, reason);
+    assert.equal(shouldRebuildCachedRunnerArtifact(terminal), false, reason);
+    assert.equal(shouldRestartRunnerBeforeCommandSend(terminal, TAP), false, reason);
+  }
   const unattached = new AppError('DEVICE_NOT_FOUND', 'device not attached', {
     usbmuxDeviceAttached: false,
   });

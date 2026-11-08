@@ -1,9 +1,9 @@
 # Simulator AX bridge
 
 This directory contains the small private accessibility reader used by the
-Apple platform acquisition facet. The framed server and request validation
-live in `SnapshotBridge.m`; private runtime binding lives in
-`SnapshotBridgeRuntime.m`. It is compiled for the iOS Simulator on first use
+Apple platform acquisition facet. The framed server lives in
+`SnapshotBridge.m`; request validation lives in `SnapshotBridgeRequest.m`;
+private runtime binding lives in `SnapshotBridgeRuntime.m`. It is compiled for the iOS Simulator on first use
 and is never downloaded, pre-signed, or built by npm installation. It serves
 iPhone and iPad Simulators, which both run the iOS Simulator runtime (#3844).
 
@@ -41,6 +41,14 @@ Objective-C shim for those operations, adding another native boundary. Keeping
 the guest in Objective-C also allows direct lazy compilation with `clang`
 without an Xcode project or Swift module for private headers.
 
+## Startup
+
+The helper initializes its framework runtime before it binds its listener, so a
+connectable socket means the runtime is ready. Readiness does not create a
+target root or change automation settings, and it does not prove that an app's
+accessibility server can answer a capture. The host bounds startup and shares
+one readiness allowance between binary preparation and helper startup.
+
 ## Foreground ownership
 
 The reader checks AXRuntime's primary foreground application before and after
@@ -64,10 +72,13 @@ this Simulator's `SIMULATOR_UDID` and its executable path ends with the named
 executable, it returns the typed refusal
 `system-surface-host-present` with `surfaceHostExecutable`, without the app
 tree. If it cannot read the process table or place a matching process, it
-returns `system-surface-host-unverified`. The host sends that capture to
+returns `system-surface-host-unverified`. A host process that exited, gone or a zombie,
+is absent: it presents nothing, and an unverified answer would keep every warm
+capture off the bridge for as long as the process lingered. The host sends that capture to
 XCTest and keeps the app generation on the bridge, because both refusals are
-evidence about the screen. The host omits the check when a ready runner already
-reported every host off screen.
+evidence about the screen. The route asks a ready runner's foreground read
+first, and the request names the surface hosts only when that read cannot
+answer. On a local Simulator, that read never starts or replaces a runner.
 
 ## Window placement
 
@@ -90,7 +101,81 @@ extension's process under a `_UISceneHostingView`. The guest returns the leaf as
 delivered; the host refuses a tree in which such a leaf sits under either host
 and reaches the viewport, or reports no frame (`remote-content-boundary`), and
 routes that app generation to XCTest, which resolves remote elements (#2484). A
-zero-area or off-screen leaf is published: it hosts nothing the capture can miss.
+zero-area or off-screen leaf is published: it hosts nothing the capture can miss. Remote
+elements under any other host are not classified, because no capture has shown one.
+If the node cap or the depth cap removes the host, the capture still discloses it
+as truncation.
+
+## Coordinate space
+
+The bridge cannot name the app's interface orientation.
+The AX attribute `XC_kAXXCAttributeApplicationOrientation` (id 1503) resolves but reads 0 through the guest's snapshot channel.
+Through XCTest's own reader, the same attribute fails with `kAXErrorServerNotFound`.
+The only cheap service read is device orientation, which differs from the app's orientation on a rotation-locked app (#2659).
+Thus, the host decoder counts window roots that report the app's box turned through a quarter.
+If it finds one, it refuses the capture (`window-coordinate-space-unresolved`, kind `unsupported`), and the route uses the runner, which reads the orientation.
+This refusal is evidence about the screen, so it has capture scope.
+
+## Tree changes between reads
+
+The reader reads a node again when the first read withheld its children.
+If the second read returns fewer children than both the first read's count and the remaining node budget, the screen moved between the reads, as a scrolling list does when it recycles its cells.
+The reader then refuses with `snapshot-tree-changed`.
+If the node budget is the smaller bound, the reader keeps the children that fit and marks the capture truncated.
+This refusal has capture scope, so the next capture of the same app uses the bridge again.
+
+## Trait typing
+
+An iPadOS floating tab bar draws each item as a collection-view cell that holds an item view.
+Neither node carries the button trait, but both carry the private tab-button trait (bit 28).
+XCTest types such an element as `Button`, and the decoder does the same.
+Otherwise, a `role=button` tab selector that matches the runner tree does not match the bridge tree.
+
+A custom-drawn text input, such as a Compose Multiplatform text field, reports the automation type `Other` with the private text-entry trait (bit 18).
+The decoder types such an element as `SecureTextField` with bit 24, else `SearchField` with bit 10, else `TextView` with bit 47, else `TextField`.
+The decoder keeps a declared automation type.
+Otherwise, the bridge tree reports the input as not editable, and a `fill` client refuses it.
+Only the `TextView` case (bits 18, 33, and 47, from a Compose Multiplatform 1.12 `BasicTextField` on iOS 27) is captured live.
+The other three cases and their order follow the trait names.
+
+## Dimming views
+
+Modal containment needs the `userInteractionEnabled` state of UIKit's dimming view.
+The reader reads that attribute for dimming views only, with one follow-up read for each view.
+A request for it on every node increases the capture time by about half on a large tree.
+The presentation rule is in [`../snapshot-presentation/README.md`](../snapshot-presentation/README.md#modal-containment).
+
+## Runner-served reader
+
+A provider iOS Simulator, such as one on Limrun, cannot run the guest process.
+There, the XCTest runner includes the reader sources of this directory and leaves out the socket server.
+The `snapshotBridge` runner command reaches the reader through the runner's forwarded HTTP transport.
+The runner answers that command on its own serial queue, off its journal and off the XCTest main thread.
+The reader's accessibility calls run on a private serial queue.
+
+The guest process ends itself when a read outlives its budget, because nothing can stop an accessibility call that never returns.
+The runner must not end itself, because it also runs every XCTest command.
+The runner abandons such a read (`bridge-read-abandoned`).
+The runner admits one read at a time.
+Until the admitted read returns, the runner refuses each new read (`bridge-read-in-flight`, capture scope).
+After an abandoned read stays in flight for five seconds, the runner refuses with `bridge-reader-wedged`.
+When the route knows the runner session id, that refusal retires the bridge for the runner session, across app generations.
+Without a session id, the route treats it as a capture-scoped `bridge-read-busy` refusal.
+The route clears its circuit and cached targets when the runner session changes.
+The runner does not replace the reader queue, because a second concurrent accessibility read is not proven safe.
+The daemon gives the runner its read budget minus a transport margin, so the runner abandons a slow read before the daemon loses the reply.
+
+The daemon cannot list the provider Simulator's processes, so the runner names the app generation.
+The `target` verb returns the pid and the process start time of the app's foreground process.
+The `describe` verb refuses another process of the same app with `target-process-changed`.
+The daemon keeps the target until a read refuses it with `target-process-changed`.
+On a `targetFreshness: 'cached'` channel, the route asks for a fresh target before it trusts an open circuit.
+If that request fails, the channel keeps its cached target, and the capture names no generation.
+
+For the system-surface proof, the route starts the runner when none is live, and then reads only that runner session.
+If the session id cannot be read, the foreground read answers `unknown`, and the bridge read names the surface hosts.
+The runner then reads the process table of the Simulator that it runs in.
+A sandbox that refuses that table gives `system-surface-host-unverified`, and the capture uses XCTest.
 
 ## Bounded depth recovery
 

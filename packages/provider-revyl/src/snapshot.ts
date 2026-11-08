@@ -47,8 +47,8 @@ export async function captureRevylSnapshot(
 }
 
 /**
- * iOS: the AX node tree goes through the same reader and interpreter as Limrun's iOS tree, and comes
- * back as an acquisition for the host to present. The viewport is the tree's own application root,
+ * iOS: Revyl's hierarchy JSON is parsed here into an AX node tree; the capture kit then flattens and
+ * interprets it, and it comes back as an acquisition for the host to present. The viewport is the tree's own application root,
  * because that is the box its frames were measured in; without a usable root it is `health`'s screen,
  * which Revyl reports in the same points on iOS.
  */
@@ -116,17 +116,16 @@ async function captureRevylAndroidSnapshot(
   xml: string,
   viewport: SnapshotViewportSize | undefined,
 ): Promise<SnapshotRuntimeResult> {
-  const { parseWebDriverAndroidSnapshotNodes } =
-    await import('@agent-device/provider-webdriver/android-snapshot');
+  const [{ parseWebDriverAndroidSnapshotNodes }, { stampSnapshotIdentity }] = await Promise.all([
+    import('@agent-device/provider-webdriver/android-snapshot'),
+    import('@agent-device/contracts/snapshot-producers'),
+  ]);
   const { nodes, keyboard } = acquireProviderKeyboard({
     nodes: parseWebDriverAndroidSnapshotNodes(xml),
     viewport: viewport === undefined ? null : { x: 0, y: 0, ...viewport },
   });
-  return {
-    backend: 'android',
-    producer: 'appium-source',
-    nodes,
-    keyboard,
-    ...(viewport === undefined ? {} : { viewport }),
-  } satisfies SnapshotRuntimeResult;
+  return stampSnapshotIdentity(
+    { nodes, keyboard, ...(viewport === undefined ? {} : { viewport }) },
+    { backend: 'android', producer: 'revyl-android-tree' },
+  ) satisfies SnapshotRuntimeResult;
 }

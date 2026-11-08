@@ -33,11 +33,13 @@ import {
   mapManagedAgentBrowserError,
   runManagedAgentBrowser,
 } from './agent-browser-tool.ts';
+import { agentBrowserFleetOf, type AgentBrowserFleet } from './agent-browser-fleet.ts';
 import { cleanupManagedAgentBrowserOrphansForProviderStartup } from './agent-browser-lifecycle.ts';
 import {
   managedWebBrowserProcessRecordIsLive,
   recordManagedAgentBrowserProcesses,
 } from './agent-browser-process-record.ts';
+import { uniqueStrings } from '@agent-device/kernel/collections';
 import { DEFAULT_SCROLL_AMOUNT } from '@agent-device/contracts/scroll-gesture';
 
 const AGENT_BROWSER = 'agent-browser';
@@ -48,8 +50,10 @@ const AGENT_BROWSER_DOCTOR_HINT =
 type AgentBrowserProviderOptions = {
   /** The composing runtime's host; every backend spawn and status read uses it. */
   host: HostEnvironment;
+  /** The backend session key, read from the session device id; omitted for no session. */
   session?: string;
   stateDir?: string;
+  /** The backend keys of the published web sessions. */
   openWebSessionNames?: () => readonly string[];
   ownedProcessRecords?: OwnedProcessRecordStore;
 };
@@ -61,7 +65,7 @@ type AgentBrowserRunOptions = {
 };
 
 export function createAgentBrowserWebProvider(options: AgentBrowserProviderOptions): WebProvider {
-  const session = options.session?.trim();
+  const { session } = options;
   const runJson = async (args: string[], run?: AgentBrowserRunOptions): Promise<unknown> =>
     await runAgentBrowserJson(args, { session, options, ...run });
 
@@ -507,7 +511,11 @@ async function runAgentBrowserCommand(
   let semanticSuccess = false;
   const status = getManagedAgentBrowserStatus({ host: options.host, stateDir: options.stateDir });
   try {
-    await cleanupProviderStartupOrphans(options);
+    const startingSession = cliArgs[0] === 'open' ? fleetSessionOf(options) : undefined;
+    if (options.ownedProcessRecords && startingSession !== undefined) {
+      agentBrowserFleetOf(options.ownedProcessRecords).openStarted(startingSession);
+    }
+    await cleanupProviderStartupOrphans(options, startingSession);
     const result = await runManagedAgentBrowser(cliArgs, {
       host: options.host,
       stateDir: options.stateDir,
@@ -558,25 +566,50 @@ async function finalizeAgentBrowserProcessRecord(params: {
   status: ReturnType<typeof getManagedAgentBrowserStatus>;
 }): Promise<void> {
   const store = params.options.ownedProcessRecords;
-  if (!store || !params.status.installed) return;
-  try {
-    const remainingSessions = params.options.openWebSessionNames?.() ?? [];
-    const currentSession = params.options.session?.trim();
-    const otherOpenSessions = remainingSessions.filter((name) => name !== currentSession);
-    if (canClearAgentBrowserRecord(params, otherOpenSessions.length)) {
-      store.clear({ kind: 'daemon' });
-      return;
+  if (!store) return;
+  const fleet = agentBrowserFleetOf(store);
+  const currentSession = fleetSessionOf(params.options);
+  await fleet.updateRecord(async () => {
+    settleFleetMembership(fleet, currentSession, params);
+    if (!params.status.installed) return;
+    try {
+      const otherSessions = uniqueStrings([
+        ...(params.options.openWebSessionNames?.() ?? []),
+        ...fleet.sessions(),
+      ]).filter((name) => name !== currentSession);
+      if (canClearAgentBrowserRecord(params, otherSessions.length)) {
+        store.clear({ kind: 'daemon' });
+        return;
+      }
+      if (await shouldRefreshAgentBrowserProcessRecord(params, store)) {
+        await recordManagedAgentBrowserProcesses(params.status, store);
+      }
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'web_agent_browser_process_record_failed',
+        data: { error: error instanceof Error ? error.message : String(error) },
+      });
     }
-    if (await shouldRefreshAgentBrowserProcessRecord(params, store)) {
-      await recordManagedAgentBrowserProcesses(params.status, store);
-    }
-  } catch (error) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'web_agent_browser_process_record_failed',
-      data: { error: error instanceof Error ? error.message : String(error) },
-    });
-  }
+  });
+}
+
+/** The fleet names a provider without a session `''`, which no published session name equals. */
+function fleetSessionOf(options: AgentBrowserProviderOptions): string {
+  return options.session ?? '';
+}
+
+function settleFleetMembership(
+  fleet: AgentBrowserFleet,
+  session: string,
+  params: Pick<
+    Parameters<typeof finalizeAgentBrowserProcessRecord>[0],
+    'cliArgs' | 'commandCompleted' | 'exitCode' | 'semanticSuccess'
+  >,
+): void {
+  const succeeded = params.commandCompleted && params.semanticSuccess && params.exitCode === 0;
+  if (params.cliArgs[0] === 'open') fleet.openSettled(session, succeeded);
+  else if (params.cliArgs[0] === 'close' && params.commandCompleted) fleet.closed(session);
 }
 
 /**
@@ -640,7 +673,10 @@ function canClearAgentBrowserRecord(
   );
 }
 
-async function cleanupProviderStartupOrphans(options: AgentBrowserProviderOptions): Promise<void> {
+async function cleanupProviderStartupOrphans(
+  options: AgentBrowserProviderOptions,
+  startingSession: string | undefined,
+): Promise<void> {
   if (!options.openWebSessionNames) return;
   const status = getManagedAgentBrowserStatus({ host: options.host, stateDir: options.stateDir });
   if (!status.installed) return;
@@ -648,6 +684,7 @@ async function cleanupProviderStartupOrphans(options: AgentBrowserProviderOption
     await cleanupManagedAgentBrowserOrphansForProviderStartup(status, {
       env: options.host.env,
       openWebSessionNames: options.openWebSessionNames(),
+      ...(startingSession === undefined ? {} : { startingSession }),
       ...(options.ownedProcessRecords === undefined
         ? {}
         : { ownedProcessRecords: options.ownedProcessRecords }),

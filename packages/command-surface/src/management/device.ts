@@ -92,7 +92,7 @@ const capabilitiesCommandMetadata = defineFieldCommandMetadata(
 
 const bootCommandMetadata = defineFieldCommandMetadata(
   'boot',
-  'Boot or prepare the selected device or simulator so later commands can target it. The device is chosen through the device-selection inputs, not by naming it here.',
+  'Boot or prepare the selected device or simulator so later commands can target it. The device is chosen through the device-selection inputs, not by naming it here. On Limrun, allocate or reuse an instance. Existing-instance credentials attach without creating one.',
   {
     headless: booleanField('Boot without showing simulator UI when supported.'),
     pick: enumField(
@@ -108,7 +108,7 @@ const bootCommandMetadata = defineFieldCommandMetadata(
 
 const shutdownCommandMetadata = defineFieldCommandMetadata(
   'shutdown',
-  'Shutdown a selected simulator or emulator.',
+  'Shutdown a selected simulator or emulator. On Limrun, delete a created instance or release an attachment. Apps and data on a deleted instance are lost. A Limrun connection without an instance fails with DEVICE_NOT_FOUND and details.reason provider_instance_unallocated and creates nothing.',
   {},
 );
 
@@ -177,6 +177,7 @@ const shutdownCommandFacet = defineCommandFacet({
   name: 'shutdown',
   text: {
     summary: 'Shutdown target simulator/emulator',
+    cliDetail: 'For an active session, use close --shutdown.',
   },
   metadata: shutdownCommandMetadata,
   run: (client, input) => client.devices.shutdown(input),

@@ -107,7 +107,7 @@ test('provider-owned relaunch refuses launch-console without closing the running
         ),
         500,
         'UNSUPPORTED_OPERATION',
-        /local iOS simulator/,
+        /local or Limrun iOS simulator/,
       );
       assert.equal(
         (error.details as Record<string, unknown>).reason,

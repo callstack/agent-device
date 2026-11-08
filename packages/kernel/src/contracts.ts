@@ -254,7 +254,8 @@ export function errorResponse(
   };
 }
 
-export const NO_ACTIVE_SESSION_MESSAGE = 'No active session. Run open first.';
+export const NO_ACTIVE_SESSION_MESSAGE =
+  'No active session. Run agent-device open <app> first, then retry the command.';
 
 /**
  * Whether the caller named the session it wants, traced from what the request carries rather than
@@ -275,7 +276,7 @@ export function namesSessionExplicitly(request: {
 }
 
 /**
- * Shared "No active session. Run open first." failure used by handlers that require
+ * Shared no-active-session failure used by handlers that require
  * an open session before dispatching.
  */
 export function noActiveSessionError(): DaemonFailureResponse {

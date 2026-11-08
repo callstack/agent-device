@@ -43,6 +43,19 @@ beforeEach(() => {
   mockProviderStartupCleanup.mockReset();
 });
 
+test('agent-browser provider keys its browser on its backend key as given', async () => {
+  await withManagedAgentBrowserProvider({ session: 'p_web-session' }, async (provider) => {
+    const calls: AgentBrowserCall[] = [];
+    await withCommandExecutorOverride(recordingExecutor(calls), async () => {
+      await provider.open('https://example.test');
+    });
+    assert.deepEqual(
+      calls.map((call) => call.args),
+      [['open', 'https://example.test', '--json', '--session', 'p_web-session']],
+    );
+  });
+});
+
 test('agent-browser provider maps supported operations to session-scoped JSON commands', async () => {
   await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
     const calls: AgentBrowserCall[] = [];
@@ -133,6 +146,7 @@ test('agent-browser provider runs provider-startup cleanup before the first mana
   assert.deepEqual(mockProviderStartupCleanup.mock.calls[0]?.[1], {
     env: process.env,
     openWebSessionNames: [],
+    startingSession: 'web-session',
   });
 });
 

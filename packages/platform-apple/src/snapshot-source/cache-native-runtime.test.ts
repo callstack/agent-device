@@ -77,6 +77,7 @@ describe.skipIf(process.platform !== 'darwin')('native snapshot capture', () => 
     'depth-negative-count',
     'depth-continuation-count',
     'depth-incomplete',
+    'depth-malformed-continuation',
     'depth-bound',
     'depth-nodes',
     'depth-owner-change',
@@ -161,3 +162,42 @@ describe.skipIf(process.platform !== 'darwin')(
     );
   },
 );
+
+describe.skipIf(process.platform !== 'darwin')('native listener readiness', () => {
+  let binary: string;
+  let root: string;
+  beforeAll(async () => {
+    root = await mkdtempForTest('snapshot-ready-');
+    binary = path.join(root, 'readiness');
+    const nativeRoot = path.resolve(import.meta.dirname, '../../../../apple/snapshot-bridge');
+    await compileSnapshotBridgeFixture([
+      '--sdk',
+      'macosx',
+      'clang',
+      '-fobjc-arc',
+      '-framework',
+      'Foundation',
+      '-framework',
+      'CoreGraphics',
+      '-I',
+      nativeRoot,
+      path.join(nativeRoot, 'SnapshotBridgeRuntime.m'),
+      path.join(nativeRoot, 'SnapshotBridgeCapture.m'),
+      path.join(nativeRoot, 'SnapshotBridgeRequest.m'),
+      path.join(nativeRoot, 'SnapshotBridgeSurfaceHosts.m'),
+      path.join(import.meta.dirname, 'fixtures/readiness.m'),
+      '-o',
+      binary,
+    ]);
+  }, COMPILE_HOOK_TIMEOUT_MS);
+  test.each(['success', 'failure'])(
+    'initialization %s precedes socket readiness',
+    async (scenario) => {
+      const result = await runCmd(binary, [scenario, path.join(root, scenario + '.sock')], {
+        allowFailure: true,
+        timeoutMs: 5000,
+      });
+      assert.equal(result.exitCode, 0, result.stderr);
+    },
+  );
+});

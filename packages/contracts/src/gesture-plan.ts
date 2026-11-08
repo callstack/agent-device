@@ -4,6 +4,7 @@ import type { Point, Rect } from '@agent-device/kernel/snapshot';
 import {
   buildSwipePresetGesturePlan,
   gestureDirectionDelta,
+  isScreenEdgeSwipePreset,
   type SwipePreset,
 } from './scroll-gesture.ts';
 import {
@@ -212,7 +213,7 @@ function buildFlingPlan(
 ): SinglePointerGesturePlan {
   if ('preset' in input) {
     const { from, to } = presetGestureEndpoints(input.preset, viewport);
-    return buildSinglePointerPlan(
+    const plan = buildSinglePointerPlan(
       'fling',
       from,
       to,
@@ -220,6 +221,7 @@ function buildFlingPlan(
       viewport,
       'endpoint-hold',
     );
+    return isScreenEdgeSwipePreset(input.preset) ? { ...plan, contactOrigin: 'screen-edge' } : plan;
   }
   if ('from' in input) {
     return buildSinglePointerPlan(

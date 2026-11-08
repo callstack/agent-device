@@ -87,10 +87,17 @@ export type SinglePointerTrajectory = {
   ];
 };
 
+/**
+ * Where a contact starts. `screen-edge` asks the platform to deliver the contact as a screen-edge
+ * touch, which edge gesture recognizers require.
+ */
+export type GestureContactOrigin = 'screen-edge';
+
 export type SinglePointerGesturePlan = {
   topology: 'single';
   intent: 'fling' | 'pan';
   executionProfile: GestureExecutionProfile;
+  contactOrigin?: GestureContactOrigin;
   durationMs: number;
   viewport: Rect;
   pointers: readonly [SinglePointerTrajectory];

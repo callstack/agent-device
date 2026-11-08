@@ -16,8 +16,12 @@ import {
   shellQuote,
   hostEnvironment,
 } from './host.ts';
-import { AppError } from '@agent-device/kernel/errors';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import {
+  isHandheldAppleSimulator,
+  resolveDeviceAppleOs,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
 import { runnerSimulatorSetPath } from './runner-device-set.ts';
 import type { RunnerEndpoint } from './runner-contract.ts';
@@ -87,6 +91,8 @@ export type RunnerLease = {
    * it as a set mismatch.
    */
   simulatorSetPath?: string;
+  /** Explicit handheld simulator identity. Older leases omit it and skip accessibility repair. */
+  simulatorTarget?: RunnerLeaseSimulatorTarget;
   createdAtMs: number;
   /**
    * The owner arbitrates device ownership through host-global device claims (#1320). Written since
@@ -129,7 +135,18 @@ type RunnerLeaseRequiredFields = Pick<
 /** The one runner xcodebuild launch a cleanup may signal: the launch a lease's artifact names. */
 export type RunnerXcodebuildCleanupTarget = Readonly<{ deviceId: string; xctestrunPath: string }>;
 
+export type RunnerLeaseSimulatorTarget = Pick<DeviceInfo, 'id' | 'name' | 'simulatorSetPath'> & {
+  platform: 'apple';
+  kind: 'simulator';
+  appleOs: 'ios' | 'ipados';
+};
+
 export type RunnerLeaseCleanupAdapter = {
+  confirmRunnerTermination(
+    pid: number | undefined,
+    target: RunnerXcodebuildCleanupTarget,
+  ): Promise<boolean>;
+  enableIosSimulatorAppAccessibility(device: RunnerLeaseSimulatorTarget): Promise<void>;
   cleanupRunnerProcessTree(pid: number | undefined, signal: 'SIGTERM' | 'SIGKILL'): Promise<void>;
   cleanupRunnerXcodebuildProcesses(target: RunnerXcodebuildCleanupTarget): Promise<void>;
   cleanupTempFile(filePath: string): void;
@@ -146,6 +163,18 @@ export function buildRunnerLease(params: {
   runnerLogPath?: string;
 }): RunnerLease {
   const runnerLogPath = readOptionalNonEmptyString(params.runnerLogPath);
+  const simulatorTarget: RunnerLeaseSimulatorTarget | undefined = isHandheldAppleSimulator(
+    params.device,
+  )
+    ? {
+        platform: 'apple',
+        kind: 'simulator',
+        appleOs: resolveDeviceAppleOs(params.device) === 'ipados' ? 'ipados' : 'ios',
+        id: params.device.id,
+        name: params.device.name,
+        ...optionalSimulatorSetPath(runnerSimulatorSetPath(params.device)),
+      }
+    : undefined;
   return {
     schemaVersion: RUNNER_LEASE_SCHEMA_VERSION,
     deviceId: params.device.id,
@@ -163,6 +192,7 @@ export function buildRunnerLease(params: {
     jsonPath: params.jsonPath,
     ...(runnerLogPath ? { runnerLogPath } : {}),
     ...optionalSimulatorSetPath(runnerSimulatorSetPath(params.device)),
+    ...(simulatorTarget ? { simulatorTarget } : {}),
     createdAtMs: Date.now(),
     deviceClaimProtocol: 1,
   };
@@ -418,7 +448,21 @@ export async function cleanupRunnerLeasesForOwner(
   const leases = listRunnerLeasesForOwner(owner);
   await Promise.all(
     leases.map(async (lease) => {
-      await cleanupLeasedRunnerProcesses(lease, 'owned', cleanup);
+      let lockAcquired = false;
+      try {
+        await withRunnerLeaseLock(lease.deviceId, () => {
+          lockAcquired = true;
+          return cleanupLeasedRunnerProcesses(lease, 'owned', cleanup);
+        });
+      } catch (error) {
+        if (lockAcquired) throw error;
+        // One contended device must not stop the cleanup of the owner's other leases.
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'ios_runner_owner_cleanup_lease_lock_unavailable',
+          data: { deviceId: lease.deviceId, error: normalizeError(error) },
+        });
+      }
     }),
   );
 }
@@ -574,7 +618,35 @@ function normalizeRunnerLease(value: unknown, deviceId: string): RunnerLease | n
     runnerToken: readOptionalNonEmptyString(raw.runnerToken),
     cacheKey: readOptionalNonEmptyString(raw.cacheKey),
     ...optionalSimulatorSetPath(raw.simulatorSetPath),
+    simulatorTarget: readSimulatorTarget(raw.simulatorTarget, deviceId),
     ...(raw.deviceClaimProtocol === 1 ? { deviceClaimProtocol: 1 as const } : {}),
+  };
+}
+
+function readSimulatorTarget(
+  value: unknown,
+  deviceId: string,
+): RunnerLeaseSimulatorTarget | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as Partial<RunnerLeaseSimulatorTarget>;
+  const name = readNonEmptyString(raw.name);
+  if (
+    raw.platform !== 'apple' ||
+    raw.kind !== 'simulator' ||
+    (raw.appleOs !== 'ios' && raw.appleOs !== 'ipados') ||
+    raw.id !== deviceId ||
+    !name
+  )
+    return undefined;
+  if (raw.simulatorSetPath !== undefined && !readNonEmptyString(raw.simulatorSetPath))
+    return undefined;
+  return {
+    platform: 'apple',
+    kind: 'simulator',
+    appleOs: raw.appleOs,
+    id: deviceId,
+    name,
+    ...optionalSimulatorSetPath(raw.simulatorSetPath),
   };
 }
 
@@ -637,12 +709,26 @@ async function cleanupLeasedRunnerProcesses(
       reason,
     },
   });
+  if (currentRunnerLeaseOwnerToken(lease.deviceId) !== lease.ownerToken) return;
   await cleanup.cleanupRunnerProcessTree(resolveVerifiedLeaseRunnerPid(lease), 'SIGTERM');
   await cleanup.cleanupRunnerXcodebuildProcesses({
     deviceId: lease.deviceId,
     xctestrunPath: lease.xctestrunPath,
   });
   await cleanup.cleanupRunnerProcessTree(resolveVerifiedLeaseRunnerPid(lease), 'SIGKILL');
+  if (lease.simulatorTarget) {
+    const simulator = lease.simulatorTarget;
+    await repairSimulatorAccessibilityAfterRunnerExit({
+      deviceId: lease.deviceId,
+      // Resolved again here: the pid read before the signals may belong to another process now.
+      confirmTermination: () =>
+        cleanup.confirmRunnerTermination(resolveVerifiedLeaseRunnerPid(lease), {
+          deviceId: lease.deviceId,
+          xctestrunPath: lease.xctestrunPath,
+        }),
+      prepare: () => cleanup.enableIosSimulatorAppAccessibility(simulator),
+    });
+  }
   cleanup.cleanupTempFile(lease.xctestrunPath);
   cleanup.cleanupTempFile(lease.jsonPath);
   releaseRunnerLease(lease);
@@ -666,6 +752,34 @@ async function cleanupLeasedRunnerProcesses(
  */
 export function isLeaseRunnerProcessIntact(lease: RunnerLease, runnerPid: number): boolean {
   return isProcessAlive(runnerPid) && verifyLeaseRunnerPidIdentity(lease, runnerPid);
+}
+
+/**
+ * XCTest teardown leaves the simulator with app accessibility off, so apps launched afterwards
+ * expose an empty tree. Turns it back on once the runner is confirmed gone; a failure only warns.
+ */
+export async function repairSimulatorAccessibilityAfterRunnerExit(params: {
+  deviceId: string;
+  confirmTermination: () => Promise<boolean>;
+  prepare: () => Promise<void>;
+}): Promise<void> {
+  try {
+    if (await params.confirmTermination()) {
+      await params.prepare();
+      return;
+    }
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'ios_runner_accessibility_repair_skipped',
+      data: { deviceId: params.deviceId, reason: 'runner-termination-unconfirmed' },
+    });
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'ios_runner_accessibility_repair_failed',
+      data: { deviceId: params.deviceId, error: normalizeError(error) },
+    });
+  }
 }
 
 function resolveVerifiedLeaseRunnerPid(lease: RunnerLease): number | undefined {

@@ -1,6 +1,6 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { keyboardCoveredTabBarSnapshot } from '@agent-device/test-kit';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import {
   mockFocusPoint,
   resetFindTouchRuntimeFixture,

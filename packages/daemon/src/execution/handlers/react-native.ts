@@ -13,7 +13,8 @@ import { normalizeError } from '@agent-device/kernel/errors';
 import { stripUndefined } from '@agent-device/kernel/record';
 import { successText } from '@agent-device/kernel/success-text';
 
-import type { SnapshotQualityVerdict, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import type { SessionState } from '../../core/session-state.ts';
 import {

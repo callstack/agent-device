@@ -1,8 +1,14 @@
+import { withMethodScope } from '@agent-device/kernel/scoped-provider';
+import { withAppleToolProvider } from '@agent-device/platform-apple/tool-provider';
+import { createLimrunAppleToolProvider } from '../../../src/core/interactors/limrun-ios-tools.ts';
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
-import { limrunTestDependencies } from '../../../src/platform-runtime-gateway.fixtures.ts';
+import {
+  limrunTestDependencies,
+  createTestLimrunIosRunner,
+} from '../../../src/platform-runtime-gateway.fixtures.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness } from './harness.ts';
@@ -11,7 +17,7 @@ const BUNDLE_ID = 'com.apple.Preferences';
 
 const limrunApiState = vi.hoisted(() => ({
   listApps: vi.fn(),
-  launchApp: vi.fn(async () => undefined),
+  simctl: vi.fn(),
 }));
 
 vi.mock('@limrun/api', () => ({
@@ -27,22 +33,37 @@ vi.mock('@limrun/api', () => ({
 
     readonly androidInstances = { create: vi.fn(), list: vi.fn(), delete: vi.fn() };
 
-    readonly assets = { getOrUpload: vi.fn(), list: vi.fn() };
+    readonly assets = { list: vi.fn() };
   },
 }));
 
-vi.mock('@limrun/api/ios-client', () => ({
-  createInstanceClient: vi.fn(async () => ({
-    deviceInfo: { screenWidth: 320, screenHeight: 240 },
-    disconnect: vi.fn(),
-    launchApp: limrunApiState.launchApp,
-    listApps: limrunApiState.listApps,
-  })),
-}));
+vi.mock('@limrun/api/ios-client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@limrun/api/ios-client')>();
+  limrunApiState.simctl.mockImplementation((args: string[]) => {
+    const execution = new actual.SimctlExecution(() => {});
+    vi.spyOn(execution, 'wait').mockResolvedValue({
+      code: 0,
+      stdout:
+        args[0] === 'list'
+          ? JSON.stringify({ devices: { ios: [{ udid: 'remote-udid', state: 'Booted' }] } })
+          : '',
+      stderr: '',
+    });
+    return execution;
+  });
+  return {
+    createInstanceClient: vi.fn(async () => ({
+      deviceInfo: { udid: 'remote-udid', screenWidth: 320, screenHeight: 240 },
+      disconnect: vi.fn(),
+      simctl: limrunApiState.simctl,
+      listApps: limrunApiState.listApps,
+    })),
+  };
+});
 
 beforeEach(() => {
   limrunApiState.listApps.mockReset();
-  limrunApiState.launchApp.mockClear();
+  limrunApiState.simctl.mockClear();
 });
 
 test('Limrun iOS appstate stops answering from the session once the instance is gone', async () => {
@@ -82,7 +103,12 @@ test('Limrun iOS appstate stops answering from the session once the instance is 
       clientId: 'client-a',
     };
     assertRpcOk(await daemon.callCommand('open', [BUNDLE_ID], flags, { meta }));
-    assert.equal(limrunApiState.launchApp.mock.calls.length, 1);
+    assert.equal(
+      limrunApiState.simctl.mock.calls.filter(
+        ([args]) => args[0] === 'launch' && args.includes(BUNDLE_ID),
+      ).length,
+      1,
+    );
 
     const live = assertRpcOk<{ appBundleId?: string; source?: string }>(
       await daemon.callCommand('appstate', [], flags, { meta }),
@@ -127,6 +153,22 @@ function limrunRuntimeDependencies(): LimrunRuntimeDependencies {
     clientVersion: 'test-version',
     android: {} as LimrunRuntimeDependencies['android'],
     host: {} as LimrunRuntimeDependencies['host'],
-    ios: limrunTestDependencies.ios,
+    ios: {
+      ...limrunTestDependencies.ios,
+      createRunner: async (session) => {
+        const runner = await createTestLimrunIosRunner(session.device);
+        const lifetime = new AbortController();
+        return {
+          ...runner,
+          createInteractor: (context) =>
+            withMethodScope(runner.createInteractor(context), (task) =>
+              withAppleToolProvider(
+                createLimrunAppleToolProvider(session, lifetime.signal, context?.signal),
+                task,
+              ),
+            ),
+        };
+      },
+    },
   };
 }

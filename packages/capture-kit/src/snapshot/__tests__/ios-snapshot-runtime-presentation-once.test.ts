@@ -23,7 +23,6 @@ const ROW: Rect = { x: 16, y: 80, width: 288, height: 52 };
 const ACQUISITION_PRODUCERS: readonly IosAcquisitionProducer[] = [
   'simulator-ax-bridge',
   'appium-source',
-  'limrun-ios-tree',
   'revyl-ios-tree',
 ];
 const PRODUCERS: readonly IosSnapshotProducer[] = ['apple-runner', ...ACQUISITION_PRODUCERS];

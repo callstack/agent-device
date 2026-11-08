@@ -67,6 +67,10 @@ export type SettleOutcome = {
 // else. The summary always carries the true counts.
 const MAX_SETTLE_DIFF_LINES = 80;
 
+// Removed-lines bound: removals describe a tree the caller already read, and a screen transition
+// removes all of it. A few lines still show what left the screen; the summary counts the rest.
+const MAX_SETTLE_REMOVED_LINES = 8;
+
 // Unchanged-interactive-tail bound: same token-budget principle as the diff
 // line cap, sized smaller since the tail is a fallback list, not the primary
 // payload.
@@ -414,13 +418,16 @@ export function buildSettleTailEntries(
  * Truncation policy: added lines win. They carry the settled tree's fresh
  * refs — the actionable half of the diff — while removals only describe what
  * left the screen (the summary still counts them). Relative order within each
- * kind is preserved; removals fill whatever budget the additions leave.
+ * kind is preserved; removals fill at most MAX_SETTLE_REMOVED_LINES of the budget the additions
+ * leave.
  */
 function capSettleDiffLines<T extends { kind: string }>(changed: T[]): T[] {
-  if (changed.length <= MAX_SETTLE_DIFF_LINES) return changed;
   const added = changed.filter((line) => line.kind === 'added');
   const keptAdded = new Set(added.slice(0, MAX_SETTLE_DIFF_LINES));
-  let removedBudget = MAX_SETTLE_DIFF_LINES - keptAdded.size;
+  let removedBudget = Math.min(MAX_SETTLE_REMOVED_LINES, MAX_SETTLE_DIFF_LINES - keptAdded.size);
+  if (changed.length - added.length <= removedBudget && added.length === keptAdded.size) {
+    return changed;
+  }
   const kept: T[] = [];
   for (const line of changed) {
     if (keptAdded.has(line)) {

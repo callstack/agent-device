@@ -46,6 +46,9 @@ private final class LitPanelBookingProbe: NSObject {
   static var synthesizedDisplay: UInt? { dispatches.last?.displayID }
   static var application: XCUIApplication?
   static var applicationFrame: CGRect?
+  /// Set, the application's frame read records the issue XCTest records when it cannot snapshot the
+  /// application, on this test, and leaves a null frame.
+  static weak var applicationFrameRecordingTest: XCTestCase?
   static var keyboard: XCUIElement?
   static var keyboardFrame: CGRect?
   static var targetFrame = CGRect(x: 190, y: 140, width: 20, height: 20)
@@ -79,6 +82,12 @@ private final class LitPanelBookingProbe: NSObject {
       case "screen": return LitPanelBookingScreen(self === Self.darkWindow ? 1 : Self.windowDisplayID)
       case "exists": return true
       case "frame": return NSValue(cgRect: Self.elementFrame(self))
+      // A selector predicate reads `label` through KVC, and KVC caches the accessor it resolved:
+      // once an earlier test evaluated `label` on an XCUIElement, the original lookup calls
+      // XCTest's getter even while the composed probe swaps it. Sending `label` reaches the getter
+      // installed now. XCUIElement inherits NSObject's `valueForKey:`, so this IMP serves every
+      // object, and only an element answers `label`.
+      case "label" where isKind(of: XCUIElement.self): return unsafeBitCast(self, to: XCUIElement.self).label
       default: break
       }
       return original(self, #selector(NSObject.value(forKey:)), key as NSString)
@@ -92,6 +101,12 @@ private final class LitPanelBookingProbe: NSObject {
   @objc var frame: CGRect { Self.elementFrame(self) }
   private static func elementFrame(_ element: AnyObject) -> CGRect {
     if element === keyboard { return keyboardFrame ?? .zero }
+    if element === application, let applicationFrameRecordingTest {
+      applicationFrameRecordingTest.record(
+        XCTIssue(type: .assertionFailure, compactDescription: "No element snapshot found for Application 'stub'")
+      )
+      return .null
+    }
     if element === application, let applicationFrame { return applicationFrame }
     return element === target || element === darkTarget ? targetFrame : windowFrame
   }
@@ -372,6 +387,14 @@ extension RunnerTests {
   }
 
   @MainActor
+  func testUncomposedLitPanelProbeLeavesKVCLabelReadsToXCTest() throws {
+    try withLitPanelBookingProbe { _ in
+      let title = app.staticTexts.firstMatch
+      XCTAssertEqual(title.value(forKey: "label") as? String, "Agent Device Runner")
+    }
+  }
+
+  @MainActor
   func testCollapsedTabCandidatesExcludeOverlappingDarkWindowsAndKeepTheCaptureScope() throws {
     try withLitPanelBookingProbe { window in
       let darkWindow = XCUIApplication(bundleIdentifier: "com.apple.springboard").windows.firstMatch
@@ -502,6 +525,27 @@ extension RunnerTests {
     }
   }
 
+  /// A lit-panel touch frame still reads the app frame for its origin, through the held owner: where
+  /// that read fails, the touch frame refuses with the coded refusal and records no issue.
+  @MainActor
+  func testLitPanelTouchFrameOnAnUnreadableAppFrameRefusesWithoutARecordedIssue() throws {
+    try withLitPanelBookingProbe(composed: true) { _ in
+      LitPanelBookingProbe.windowFrame = CGRect(x: 0, y: 0, width: 669, height: 951)
+      setRequestLitPanel(from: try runnerCommandFixture(
+        #"{"command":"tap","x":20,"y":30,"litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#
+      ))
+      XCTAssertNotNil(try resolveRunnerWindow(app: app).window, "the lit panel must book")
+      LitPanelBookingProbe.applicationFrameRecordingTest = self
+      let failureCountBefore = currentXCTestFailureCount()
+
+      XCTAssertThrowsError(try resolvedTouchVisualizationFrame(app: app, x: 20, y: 30)) {
+        XCTAssertTrue($0 is RunnerCoordinateRefusal, "\($0)")
+      }
+
+      XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    }
+  }
+
   @MainActor
   func testFailedLitPanelBookingRefusesEveryReferenceFrameConsumer() throws {
     try withLitPanelBookingProbe { _ in
@@ -516,7 +560,7 @@ extension RunnerTests {
       }
       refuses { try resolveRunnerWindow(app: app) }
       refuses { try onScreenWindowFrame(app: app) }
-      refuses { try resolvedTouchReferenceFrame(app: app, appFrame: CGRect(x: 0, y: 0, width: 466, height: 678)) }
+      refuses { try resolvedTouchReferenceFrame(app: app) }
       refuses { try synthesizedCoordinateContext(app: app) }
       refuses { try gestureViewportFrame(app: app) }
       refuses { try resolvedTouchVisualizationFrame(app: app, x: 20, y: 30) }
@@ -543,6 +587,16 @@ extension RunnerTests {
     let response = try executeOnMainPrepared(command: command, activeApp: app)
     XCTAssertTrue(response.ok, response.error?.message ?? "")
     try assertions(response)
+  }
+
+  /// Runs `body` with the app's window probed as the only window on lit display 3 at `frame`,
+  /// handing it the count of window-list reads.
+  @MainActor
+  func withLitPanelWindow(frame: CGRect, _ body: (_ windowListReads: () -> Int) throws -> Void) throws {
+    try withLitPanelBookingProbe { _ in
+      LitPanelBookingProbe.windowFrame = frame
+      try body { LitPanelBookingProbe.windowListReads }
+    }
   }
 
   @MainActor
@@ -610,6 +664,7 @@ extension RunnerTests {
       LitPanelBookingProbe.beforeElementLookup = nil
       LitPanelBookingProbe.application = nil
       LitPanelBookingProbe.applicationFrame = nil
+      LitPanelBookingProbe.applicationFrameRecordingTest = nil
       LitPanelBookingProbe.keyboard = nil
       LitPanelBookingProbe.keyboardFrame = nil
       LitPanelBookingProbe.targetFrame = CGRect(x: 190, y: 140, width: 20, height: 20)

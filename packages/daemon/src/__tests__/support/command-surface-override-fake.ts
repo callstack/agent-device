@@ -3,7 +3,8 @@ import type {
   DaemonCommandSurface,
 } from '@agent-device/contracts/daemon-command-surface';
 import type { AgentDeviceRuntimeConfig } from '@agent-device/contracts/runtime-contract';
-import type { SnapshotPreferredBackend, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { fakeCreateCommandSurface } from './command-surface-fake.ts';
 
 export type CommandSurfaceMembers = {

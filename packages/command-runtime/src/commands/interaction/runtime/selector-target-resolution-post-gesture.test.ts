@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { PostGestureOutcome } from '@agent-device/kernel/snapshot';
+import type { PostGestureOutcome } from '@agent-device/contracts/snapshot-model';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { selector } from './selector-read-utils.ts';
 import { createInteractionDevice } from './__tests__/test-utils/index.ts';

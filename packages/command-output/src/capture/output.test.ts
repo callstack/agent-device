@@ -1,6 +1,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import {
+  attachRefs,
+  normalizeRef,
+  splitRefGenerationSuffix,
+  type RawSnapshotNode,
+} from '@agent-device/kernel/snapshot';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 import { dispatchCliOutput } from '../cli-output.ts';
@@ -37,6 +42,12 @@ const REPEATED_CHAIN: RawSnapshotNode[] = [
     depth: 3,
     parentIndex: 2,
   },
+];
+
+const SCOPED_SUBTREE: RawSnapshotNode[] = [
+  { index: 0, type: 'Other', label: 'Checkout', depth: 0 },
+  { index: 1, type: 'Button', label: 'Pay now', depth: 1, parentIndex: 0 },
+  { index: 2, type: 'TextField', label: 'Card number', depth: 1, parentIndex: 0 },
 ];
 
 test('default (non-raw) output dedups repeated ancestor labels in both text and json', async () => {
@@ -207,4 +218,42 @@ test('settings renders response warnings after the message', async () => {
     result: response,
   });
   assert.equal(rendered.text, 'Updated setting: permission');
+});
+
+// ADR 0014: the CLI derives `scoped` from a non-blank --scope, and a printed pin must parse back
+// through the production ref grammar to the same node and refs generation.
+test('--scope output prints refs a caller can paste back as the same ref and generation', async () => {
+  const output = await snapshotCliOutput({
+    result: { ...buildResult(SCOPED_SUBTREE), refsGeneration: 752890 },
+    scope: '@e1',
+  });
+
+  const printed = [...output.text!.matchAll(/@e\d+\S*/g)].map((match) => match[0]);
+  const jsonRefs = (output.jsonData as { nodes: Array<{ ref: string }> }).nodes.map(
+    (node) => node.ref,
+  );
+  assert.deepEqual(jsonRefs, ['e1', 'e2', 'e3']);
+  assert.deepEqual(printed, ['@e1~s752890', '@e2~s752890', '@e3~s752890']);
+  for (const [i, pin] of printed.entries()) {
+    assert.deepEqual(splitRefGenerationSuffix(pin), {
+      base: `@${jsonRefs[i]}`,
+      generation: 752890,
+    });
+    assert.equal(normalizeRef(pin), jsonRefs[i]);
+  }
+});
+
+test('output without --scope keeps plain refs even when a refs generation is present', async () => {
+  const withoutScope = await snapshotCliOutput({
+    result: { ...buildResult(REPEATED_CHAIN.slice(0, 1)), refsGeneration: 752890 },
+  });
+  const blankScope = await snapshotCliOutput({
+    result: { ...buildResult(REPEATED_CHAIN.slice(0, 1)), refsGeneration: 752890 },
+    scope: '  ',
+  });
+
+  for (const output of [withoutScope, blankScope]) {
+    assert.match(output.text!, /@e1 \[/);
+    assert.doesNotMatch(output.text!, /~s\d/);
+  }
 });

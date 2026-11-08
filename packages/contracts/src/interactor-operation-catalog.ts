@@ -184,8 +184,7 @@ export type CatalogInteractorOperation = (typeof INTERACTOR_OPERATIONS)[number][
 /**
  * The operation-facts slice every caller already holds: an owner's full `RuntimeFacts.operations`
  * (narrows structurally — extra keys are ignored), or, for an owner whose navigation facts are
- * assembled standalone (see `platform-apple/src/navigation/runtime.ts`, `provider-limrun`'s
- * `limrunNavigationOperationFacts`), that flat map directly — which may cover only the subset of
+ * assembled standalone (see `platform-apple/src/navigation/runtime.ts`), that flat map directly — which may cover only the subset of
  * operations the owner admits at all, so a missing key here is simply never bindable.
  */
 type CatalogOperationFacts = Readonly<

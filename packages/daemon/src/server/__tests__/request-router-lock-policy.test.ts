@@ -161,7 +161,7 @@ test('direct daemon requests cannot bypass reject lock policy for existing sessi
   }
 });
 
-test('fresh named sessions with matching explicit serial bind and serialize on the selected device', async () => {
+test('a fresh named session with a matching explicit serial waits for the holder, then is refused', async () => {
   const sessionStore = makeSessionStore('agent-device-router-lock-');
   const dispatchGate = installGatedDispatch();
 
@@ -218,23 +218,22 @@ test('fresh named sessions with matching explicit serial bind and serialize on t
 
   dispatchGate.releaseNext();
 
-  await vi.waitFor(() => {
-    expect(dispatchGate.order).toEqual([
-      'start-snapshot-emulator-5554',
-      'end-snapshot-emulator-5554',
-      'start-snapshot-emulator-5554',
-    ]);
-  });
-
-  dispatchGate.releaseNext();
-
   const [firstResponse, secondResponse] = await Promise.all([first, second]);
 
   expect(firstResponse.ok).toBe(true);
-  expect(secondResponse.ok).toBe(true);
-  expect(dispatchGate.getMaxActive()).toBe(1);
+  expect(secondResponse).toMatchObject({
+    ok: false,
+    error: {
+      code: 'DEVICE_IN_USE',
+      details: { session: 'qa-android-a', deviceId: 'emulator-5554' },
+    },
+  });
+  expect(dispatchGate.order).toEqual([
+    'start-snapshot-emulator-5554',
+    'end-snapshot-emulator-5554',
+  ]);
   expect(sessionStore.get('qa-android-a')?.device.id).toBe('emulator-5554');
-  expect(sessionStore.get('qa-android-b')?.device.id).toBe('emulator-5554');
+  expect(sessionStore.get('qa-android-b')).toBeUndefined();
 });
 
 test('fresh named sessions with the same name serialize first binding before rejecting another device', async () => {
@@ -316,7 +315,7 @@ test('fresh named sessions with the same name serialize first binding before rej
   expect(sessionStore.get('qa-android')?.device.id).toBe('emulator-5554');
 });
 
-test('fresh named sessions with only lock platform default serialize on the selected device', async () => {
+test('a fresh named session with only a lock platform default waits for the holder, then is refused', async () => {
   const sessionStore = makeSessionStore('agent-device-router-lock-');
   const dispatchGate = installGatedDispatch();
 
@@ -369,23 +368,22 @@ test('fresh named sessions with only lock platform default serialize on the sele
 
   dispatchGate.releaseNext();
 
-  await vi.waitFor(() => {
-    expect(dispatchGate.order).toEqual([
-      'start-snapshot-emulator-5554',
-      'end-snapshot-emulator-5554',
-      'start-snapshot-emulator-5554',
-    ]);
-  });
-
-  dispatchGate.releaseNext();
-
   const [firstResponse, secondResponse] = await Promise.all([first, second]);
 
   expect(firstResponse.ok).toBe(true);
-  expect(secondResponse.ok).toBe(true);
-  expect(dispatchGate.getMaxActive()).toBe(1);
+  expect(secondResponse).toMatchObject({
+    ok: false,
+    error: {
+      code: 'DEVICE_IN_USE',
+      details: { session: 'qa-default-a', deviceId: 'emulator-5554' },
+    },
+  });
+  expect(dispatchGate.order).toEqual([
+    'start-snapshot-emulator-5554',
+    'end-snapshot-emulator-5554',
+  ]);
   expect(sessionStore.get('qa-default-a')?.device.id).toBe('emulator-5554');
-  expect(sessionStore.get('qa-default-b')?.device.id).toBe('emulator-5554');
+  expect(sessionStore.get('qa-default-b')).toBeUndefined();
 });
 
 test('fresh named sessions reject incompatible selector combinations before binding', async () => {

@@ -889,6 +889,77 @@ test.each([MACOS_TEST_DEVICE, { ...IOS_TEST_SIMULATOR, kind: 'device' as const }
   },
 );
 
+test.each([
+  ['the default capture', undefined, true],
+  ['an explicit runner capture', undefined, true],
+  ['an explicit runner capture', false, false],
+] as const)(
+  '%s under a runner-backed tool provider asks the runner with fullscreen %s: %s',
+  async (route, fullscreen, expected) => {
+    mockRunAppleRunnerCommand.mockRejectedValue(new Error('stop after the runner request'));
+    const capture = async () =>
+      route === 'the default capture'
+        ? await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/runner.png', {
+            env: {},
+            fullscreen,
+            skipIosSimulatorBootCheck: true,
+            deps: { resolveCaptureTarget: async () => ({}) },
+          })
+        : await captureScreenshotViaRunner(
+            IOS_TEST_SIMULATOR,
+            '/tmp/runner.png',
+            undefined,
+            fullscreen,
+            undefined,
+            {},
+          );
+    await withAppleToolProvider(
+      { ...resolveAppleToolProvider(), simulatorScreenshotBackend: 'runner' },
+      async () => {
+        await assert.rejects(capture(), /stop after the runner request/);
+      },
+    );
+    assert.equal(mockRunAppleRunnerCommand.mock.calls[0]?.[1]?.fullscreen, expected);
+  },
+);
+
+test('a macOS runner capture under a runner-backed tool provider skips the fullscreen default', async () => {
+  mockRunAppleRunnerCommand.mockRejectedValue(new Error('stop after the runner request'));
+  await withAppleToolProvider(
+    { ...resolveAppleToolProvider(), simulatorScreenshotBackend: 'runner' },
+    async () => {
+      await assert.rejects(
+        captureScreenshotViaRunner(
+          { ...MACOS_TEST_DEVICE, kind: 'simulator' },
+          '/tmp/runner.png',
+          undefined,
+          undefined,
+          undefined,
+          {},
+        ),
+        /stop after the runner request/,
+      );
+    },
+  );
+  assert.equal(mockRunAppleRunnerCommand.mock.calls[0]?.[1]?.fullscreen, undefined);
+});
+
+test('an explicit runner capture outside a runner-backed tool provider leaves fullscreen unset', async () => {
+  mockRunAppleRunnerCommand.mockRejectedValue(new Error('stop after the runner request'));
+  await assert.rejects(
+    captureScreenshotViaRunner(
+      IOS_TEST_SIMULATOR,
+      '/tmp/runner.png',
+      undefined,
+      undefined,
+      undefined,
+      {},
+    ),
+    /stop after the runner request/,
+  );
+  assert.equal(mockRunAppleRunnerCommand.mock.calls[0]?.[1]?.fullscreen, undefined);
+});
+
 test('screenshotIos rejects a screen mask before a provider-owned runner capture', async () => {
   mockRunCmd.mockRejectedValue(new Error('unexpected native capture'));
   mockRunAppleRunnerCommand.mockRejectedValue(new Error('unexpected runner capture'));

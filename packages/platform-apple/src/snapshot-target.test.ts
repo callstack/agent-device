@@ -35,13 +35,15 @@ function targetFixture() {
     }),
   );
   const provider = createLocalAppleToolProvider({ simctl: { run }, runCommand });
-  const resolve = createSimulatorSnapshotTargetResolver();
+  const { resolveTarget: resolve, refreshTarget: refresh } =
+    createSimulatorSnapshotTargetResolver();
   return {
     state,
     run,
     runCommand,
     provider,
     resolve,
+    refresh,
     discoveryCount: () => run.mock.calls.filter(([args]) => args.includes('spawn')).length,
   };
 }
@@ -130,7 +132,7 @@ test('stale acquisition refresh explicitly bypasses an otherwise live cached tar
     await fixture.resolve(ios, app, signal());
     fixture.state.pid = 84;
     fixture.state.launch = 'launch-b';
-    const next = await fixture.resolve(ios, app, signal(), 'refresh');
+    const next = await fixture.refresh(ios, app, signal());
     expect(next.pid).toBe(84);
     expect(fixture.discoveryCount()).toBe(2);
   });
@@ -140,7 +142,7 @@ test('target facts stay within their runtime owner', async () => {
   const fixture = targetFixture();
   await withAppleToolProvider(fixture.provider, async () => {
     await fixture.resolve(ios, app, signal());
-    await createSimulatorSnapshotTargetResolver()(ios, app, signal());
+    await createSimulatorSnapshotTargetResolver().resolveTarget(ios, app, signal());
     expect(fixture.discoveryCount()).toBe(2);
   });
 });

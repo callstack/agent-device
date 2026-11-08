@@ -2,8 +2,13 @@ import { daemonPlatformServicesFixture } from '../__tests__/support/platform-ser
 import fs from 'node:fs';
 
 import path from 'node:path';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
+import type { Interactor, ScreenshotOptions } from '@agent-device/contracts/interactor-types';
+import {
+  bindLocalScreenshotInteractor,
+  defaultCaptureOnly,
+} from '@agent-device/contracts/screenshot-runtime';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   ANDROID_EMULATOR,
@@ -12,6 +17,7 @@ import {
   mkdtempForTestSync,
 } from '@agent-device/test-kit';
 import { makeSession } from '../__tests__/support/session-factories.ts';
+import { contextFromFlags } from '../core/context.ts';
 import type { GenericPlatformExecutionParams } from '../core/generic-leaf-execution.ts';
 import { resolveScreenshotGenericExecution } from './screenshot-runtime.ts';
 import {
@@ -249,6 +255,146 @@ test('rejects --pixel-density outside iOS-family simulators before inspecting ow
     }),
   ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
   expect(fixture.binds).toHaveLength(0);
+});
+
+test('refuses --capture-backend runner with --pixel-density or --normalize-status-bar, and any other backend, before inspecting owner facts', async () => {
+  const refused = async (
+    device: SessionState['device'],
+    // The wire flags are untyped, so a request can name a backend the type does not list.
+    flags: Record<string, unknown>,
+    code: string,
+  ): Promise<void> => {
+    const fixture = screenshotRuntimeFixture();
+    await expect(
+      resolveScreenshotGenericExecution({
+        hostCwd: process.cwd(),
+        createCommandSurface: testCreateCommandSurface,
+        platformServices: daemonPlatformServicesFixture(),
+        req: screenshotRequest({
+          positionals: ['/tmp/runner.png'],
+          flags: flags as DaemonRequest['flags'],
+        }),
+        session: makeSession('default', { device }),
+        inspectFacts: fixture.inspectFacts,
+        bindDevice: fixture.bindDevice,
+      }),
+    ).rejects.toMatchObject({ code });
+    expect(fixture.binds).toHaveLength(0);
+  };
+
+  await refused(
+    IOS_SIMULATOR,
+    { screenshotCaptureBackend: 'runner', screenshotPixelDensity: 3 },
+    'INVALID_ARGS',
+  );
+  await refused(
+    IOS_SIMULATOR,
+    { screenshotCaptureBackend: 'runner', screenshotNormalizeStatusBar: true },
+    'INVALID_ARGS',
+  );
+  await refused(IOS_SIMULATOR, { screenshotCaptureBackend: 'simctl' }, 'INVALID_ARGS');
+});
+
+async function captureThroughRealBinding(
+  params: Readonly<{
+    device: SessionState['device'];
+    flags: DaemonRequest['flags'];
+    captureCapabilities: Parameters<typeof bindLocalScreenshotInteractor>[0]['captureCapabilities'];
+  }>,
+) {
+  const fixture = screenshotRuntimeFixture();
+  const screenshot = vi.fn(async (outPath: string, _options?: ScreenshotOptions) => {
+    writeSolidPng(outPath);
+    return {};
+  });
+  fixture.captureScreenshot.mockImplementation(
+    bindLocalScreenshotInteractor({
+      device: params.device,
+      signal: new AbortController().signal,
+      resolveInteractor: async () => ({ screenshot }) as unknown as Interactor,
+      captureCapabilities: params.captureCapabilities,
+    }).captureScreenshot,
+  );
+  const session = makeSession('capture', { device: params.device });
+  const req = screenshotRequest({
+    positionals: [path.join(mkdtempForTestSync('agent-device-bound-capture'), 'capture.png')],
+    flags: params.flags,
+  });
+  const resolved = await resolveScreenshotGenericExecution({
+    hostCwd: process.cwd(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req,
+    session,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+  return {
+    screenshot,
+    execute: async () =>
+      await executeResult(resolved, session, req, contextFromFlags('/tmp/daemon.log', req.flags)),
+  };
+}
+
+test('a Maestro comparison capture reaches the interactor as a runner capture where the owner declares it', async () => {
+  const { screenshot, execute } = await captureThroughRealBinding({
+    device: IOS_SIMULATOR,
+    flags: { maestro: { screenshotCaptureBackend: 'runner' } },
+    captureCapabilities: () => ({ captureBackends: ['runner'] }),
+  });
+
+  await execute();
+
+  expect(screenshot.mock.calls[0]?.[1]).toMatchObject({ captureBackend: 'runner' });
+  expect(screenshot.mock.calls[0]?.[1]).not.toHaveProperty('preferredCaptureBackend');
+});
+
+test('a Maestro comparison capture keeps the default capture of an owner that declares no runner', async () => {
+  const { screenshot, execute } = await captureThroughRealBinding({
+    device: IOS_SIMULATOR,
+    flags: { maestro: { screenshotCaptureBackend: 'runner' } },
+    captureCapabilities: defaultCaptureOnly('this owner has one capture path'),
+  });
+
+  await execute();
+
+  expect(screenshot.mock.calls[0]?.[1]).not.toHaveProperty('captureBackend');
+});
+
+test('an Android session refuses --capture-backend runner at its capture owner', async () => {
+  const { screenshot, execute } = await captureThroughRealBinding({
+    device: ANDROID_EMULATOR,
+    flags: { screenshotCaptureBackend: 'runner' },
+    captureCapabilities: defaultCaptureOnly('an Android device captures through adb'),
+  });
+
+  await expect(execute()).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    details: { reason: 'screenshot-capture-backend-unsupported' },
+  });
+  expect(screenshot).not.toHaveBeenCalled();
+});
+
+test('a --capture-backend runner request reaches the bound capture', async () => {
+  const fixture = screenshotRuntimeFixture();
+  const session = makeSession('ios', { device: IOS_SIMULATOR });
+  const req = screenshotRequest({
+    positionals: [path.join(mkdtempForTestSync('agent-device-runner-capture'), 'runner.png')],
+    flags: { screenshotCaptureBackend: 'runner' },
+  });
+
+  const resolved = await resolveScreenshotGenericExecution({
+    hostCwd: process.cwd(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req,
+    session,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+
+  await executeResult(resolved, session, req, contextFromFlags('/tmp/daemon.log', req.flags));
+  expect(fixture.captureScreenshot.mock.calls[0]?.[0]?.options?.captureBackend).toBe('runner');
 });
 
 const CROP_TREE_ROOT = {

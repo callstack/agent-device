@@ -2,8 +2,8 @@ import Foundation
 import CoreGraphics
 
 // Rotation between an app's interface space and the device's native (portrait-up) space, shared by
-// synthesized dispatch (forward) and capture (inverse). Rationale and measurements: ADR 0004
-// "the coordinate space of a captured subtree" and contracts/fixtures/window-coordinate-space.json.
+// synthesized dispatch (forward) and capture (inverse). Decision: ADR 0004 "Geometry". Rules:
+// apple/snapshot-presentation/README.md "Coordinate space" and contracts/fixtures/window-coordinate-space.json.
 
 public enum RunnerInterfaceOrientation {
   public static let unknown = 0

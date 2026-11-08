@@ -7,8 +7,8 @@ import type {
 import {
   buildSnapshotPresentationKey,
   type IosTargetActivation,
-  type SnapshotState,
 } from '@agent-device/kernel/snapshot';
+import { type SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { type RequestCaptureProof, withCaptureDisclosures } from '../../core/capture-disclosure.ts';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';

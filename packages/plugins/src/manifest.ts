@@ -43,6 +43,9 @@ export function assertLocalConnectionCapabilities(
       'supportsDirectPortReverse',
       'usesCloudWebDriverLease',
     ].some((key) => typeof policy[key as keyof ConnectionProviderCapabilities] !== 'boolean') ||
+    (policy.holdsCloudDevice !== undefined && typeof policy.holdsCloudDevice !== 'boolean') ||
+    (policy.forgetsEndedConnectionLease !== undefined &&
+      typeof policy.forgetsEndedConnectionLease !== 'boolean') ||
     policy.requiresRemoteDaemon
   ) {
     throw invalidManifest('Plugin connection must declare local provider capabilities');

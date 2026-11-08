@@ -4,7 +4,7 @@ import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
 import { createSnapshotSourceHost } from './host.ts';
 import { readSnapshotSourceToolchain } from './cache-identity.ts';
 import { createSnapshotSourceDeadline } from './deadline.ts';
-import { SnapshotSourceError } from './errors.ts';
+import { SnapshotSourceError } from '@agent-device/capture-kit/snapshot-source-channel';
 import type { SnapshotSourceHost } from './types.ts';
 import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 

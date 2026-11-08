@@ -386,16 +386,54 @@ export async function sendRequest(
   try {
     return await sendRequestWithFallback(info, req, preference, statePaths, timeoutMs, options);
   } catch (error) {
-    if (!(error instanceof AppError) || error.details?.reason !== 'daemon_transport_timeout')
-      throw error;
-    const expiredBudget = error.details.timeoutMs;
-    if (typeof expiredBudget !== 'number') throw error;
-    throw await handleRequestTimeout({
-      info,
-      statePaths,
-      retireUnresponsive: options.timeoutRecovery !== 'none',
-      ...timeoutRequestContext(req, isRemoteDaemon(info), expiredBudget),
-    });
+    const failure = await recoverFromTimeout(error, info, req, statePaths, options);
+    const transport = classifyTransportFailure(failure);
+    if (!transport) throw failure;
+    // Loaded only on this path: the registry lookup costs nothing on a healthy request.
+    const { discloseRequestFailure } = await import('./daemon-client-dispatch-disclosure.ts');
+    throw discloseRequestFailure(transport.failure, req, transport.sent);
+  }
+}
+
+async function recoverFromTimeout(
+  error: unknown,
+  info: DaemonInfo,
+  req: DaemonWireRequest,
+  statePaths: DaemonPaths,
+  options: SendRequestOptions,
+): Promise<unknown> {
+  if (!(error instanceof AppError) || error.details?.reason !== 'daemon_transport_timeout') {
+    return error;
+  }
+  const expiredBudget = error.details.timeoutMs;
+  if (typeof expiredBudget !== 'number') return error;
+  return await handleRequestTimeout({
+    info,
+    statePaths,
+    retireUnresponsive: options.timeoutRecovery !== 'none',
+    requestSent: error.details.daemonRequestSent !== false,
+    ...timeoutRequestContext(req, isRemoteDaemon(info), expiredBudget),
+  });
+}
+
+/**
+ * One of the transport's own failures, with whether it happened after the request left this
+ * process (the daemon may have run it). A lost connection or a timeout records
+ * `daemonRequestSent`; a reply that could not be read or parsed was always sent.
+ */
+function classifyTransportFailure(
+  error: unknown,
+): { failure: AppError; sent: boolean } | undefined {
+  if (!(error instanceof AppError)) return undefined;
+  switch (error.details?.reason) {
+    case 'daemon_transport_failure':
+    case 'daemon_transport_timeout':
+      return { failure: error, sent: error.details.daemonRequestSent !== false };
+    case 'daemon_response_read_failure':
+    case 'daemon_response_invalid':
+      return { failure: error, sent: true };
+    default:
+      return undefined;
   }
 }
 
@@ -482,7 +520,7 @@ function remainingRemoteRequestTimeoutMs(
     (timedOutProbeMs === undefined || timedOutProbeMs > REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS)
   )
     return remainingMs;
-  throw requestTimeoutError(timeoutMs, req.meta?.requestId);
+  throw requestTimeoutError(timeoutMs, req.meta?.requestId, false);
 }
 
 function isRemoteInstanceMismatch(error: unknown): boolean {
@@ -557,9 +595,8 @@ function isSafeAutoTransportFallbackError(
   return (
     attempted === 'socket' &&
     error instanceof AppError &&
-    error.code === 'COMMAND_FAILED' &&
-    error.message === 'Failed to communicate with daemon' &&
-    error.details?.daemonSocketRequestWritten === false
+    error.details?.reason === 'daemon_transport_failure' &&
+    error.details.daemonRequestSent === false
   );
 }
 
@@ -571,11 +608,15 @@ function requireDaemonTransport(
   throw daemonEndpointUnavailableError(transport);
 }
 
+/**
+ * `daemonRequestSent` is required: the client discloses dispatch from it, and a producer that
+ * could not say would otherwise be read as sent.
+ */
 function handleTransportError(
   err: unknown,
   requestId: string | undefined,
   remote: boolean,
-  details: Record<string, unknown> = {},
+  daemonRequestSent: boolean,
 ): AppError {
   emitDiagnostic({
     level: 'error',
@@ -589,7 +630,7 @@ function handleTransportError(
     'COMMAND_FAILED',
     'Failed to communicate with daemon',
     {
-      ...details,
+      daemonRequestSent,
       reason: 'daemon_transport_failure',
       requestId,
       hint: remote
@@ -629,7 +670,7 @@ async function sendSocketRequest(
             if (settled) return;
             settled = true;
             detachCallerAbort();
-            reject(requestTimeoutError(timeoutMs, req.meta?.requestId));
+            reject(requestTimeoutError(timeoutMs, req.meta?.requestId, requestWritten));
             socket.destroy();
           }, timeoutMs)
         : undefined;
@@ -678,20 +719,21 @@ async function sendSocketRequest(
       settled = true;
       if (timeoutHandle) clearTimeout(timeoutHandle);
       detachCallerAbort();
-      reject(
-        handleTransportError(err, req.meta?.requestId, false, {
-          daemonSocketRequestWritten: requestWritten,
-        }),
-      );
+      reject(handleTransportError(err, req.meta?.requestId, false, requestWritten));
     });
   });
 }
 
-function requestTimeoutError(timeoutMs: number, requestId: string | undefined): AppError {
+function requestTimeoutError(
+  timeoutMs: number,
+  requestId: string | undefined,
+  daemonRequestSent: boolean,
+): AppError {
   return new AppError('COMMAND_FAILED', 'Daemon request timed out', {
     reason: 'daemon_transport_timeout',
     timeoutMs,
     requestId,
+    daemonRequestSent,
   });
 }
 
@@ -699,7 +741,7 @@ function requestTimeoutError(timeoutMs: number, requestId: string | undefined): 
 // describe the same request differently.
 type TimeoutRequestFields = Omit<
   Parameters<typeof handleRequestTimeout>[0],
-  'info' | 'statePaths' | 'retireUnresponsive'
+  'info' | 'statePaths' | 'retireUnresponsive' | 'requestSent'
 >;
 
 function timeoutRequestContext(
@@ -759,7 +801,8 @@ async function sendHttpRequest(
 
   return await new Promise((resolve, reject) => {
     let settled = false;
-    let requestEnded = false;
+    // Set when the request was handed to the OS (`finish`), never for a connection that failed first.
+    let requestSent = false;
     const detachCallerAbort = (): void => {
       if (callerSignal) callerSignal.removeEventListener('abort', onCallerAbort);
     };
@@ -822,7 +865,10 @@ async function sendHttpRequest(
           throw new AppError(
             'COMMAND_FAILED',
             'Failed to read daemon response',
-            { requestId: req.meta?.requestId, reason: 'daemon_response_read_failure' },
+            {
+              requestId: req.meta?.requestId,
+              reason: 'daemon_response_read_failure',
+            },
             error instanceof Error ? error : undefined,
           );
         });
@@ -842,7 +888,7 @@ async function sendHttpRequest(
     const timeoutHandle =
       typeof timeoutMs === 'number'
         ? setTimeout(() => {
-            rejectOnce(requestTimeoutError(timeoutMs, req.meta?.requestId));
+            rejectOnce(requestTimeoutError(timeoutMs, req.meta?.requestId, requestSent));
             request.destroy();
           }, timeoutMs)
         : undefined;
@@ -856,7 +902,7 @@ async function sendHttpRequest(
       if (settled) return;
       if (timeoutHandle) clearTimeout(timeoutHandle);
       rejectOnce(
-        abortedRequestError(callerSignal!, requestEnded ? 'unknown' : 'no', req.meta?.requestId),
+        abortedRequestError(callerSignal!, requestSent ? 'unknown' : 'no', req.meta?.requestId),
       );
       request.destroy();
     };
@@ -871,12 +917,14 @@ async function sendHttpRequest(
       // from emitting a `daemon_request_socket_error` diagnostic; a genuine transport error still
       // arrives before the settle and rejects.
       if (settled) return;
-      rejectOnce(handleTransportError(err, req.meta?.requestId, remote));
+      rejectOnce(handleTransportError(err, req.meta?.requestId, remote, requestSent));
     });
 
+    request.on('finish', () => {
+      requestSent = true;
+    });
     request.write(rpcPayload);
     request.end();
-    requestEnded = true;
   });
 }
 

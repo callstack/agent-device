@@ -41,7 +41,8 @@
       "supportsArtifacts": false,
       "supportsDeferredAppSelection": false,
       "supportsDirectPortReverse": false,
-      "usesCloudWebDriverLease": false
+      "usesCloudWebDriverLease": false,
+      "holdsCloudDevice": true
     },
     "credentialVariables": [
       "REVYL_API_KEY",

@@ -1,4 +1,4 @@
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { SelectorChain } from './parse.ts';
 import type { SelectorMatchOptions } from './public-resolution-types.ts';
 import {

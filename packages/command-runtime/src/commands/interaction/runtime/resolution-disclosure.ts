@@ -1,8 +1,5 @@
-import type {
-  SnapshotAddressableNode,
-  SnapshotNode,
-  SnapshotState,
-} from '@agent-device/kernel/snapshot';
+import type { SnapshotAddressableNode, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { AgentDeviceRuntime } from '@agent-device/contracts/runtime-contract';
 import { buildSelectorChainForNode } from '@agent-device/selectors';
 import { resolvePressRecordingTarget } from '@agent-device/selectors/press-retarget';

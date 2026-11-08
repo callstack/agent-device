@@ -1,3 +1,4 @@
+import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producers';
 import {
   attachSnapshotClickabilityEvidence,
   attachSnapshotOcclusionContextEvidence,
@@ -7,12 +8,12 @@ import {
 } from '@agent-device/contracts/capture';
 import type {
   RawSnapshotNode,
-  SnapshotBackend,
   SnapshotKeyboardBandFact,
   SnapshotQualityVerdict,
   SnapshotQualityNote,
   SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
+import type { SnapshotBackend } from '@agent-device/contracts/snapshot-model';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import type { AndroidSnapshotHelperMetadata } from './snapshot-helper-types.ts';
 import type { AndroidSnapshotAnalysis } from './ui-hierarchy.ts';
@@ -80,11 +81,10 @@ export function androidSnapshotViewportFromHelperMetadata(
 export function androidSnapshotPublicationInput(
   capture: AndroidSnapshotCapture,
 ): AndroidSnapshotPublicationInput {
-  const publication: AndroidSnapshotPublicationInput = {
-    ...capture,
+  const publication: AndroidSnapshotPublicationInput = stampSnapshotIdentity(capture, {
     backend: 'android',
     producer: 'android-uiautomator',
-  };
+  });
   const evidence = capture[androidCaptureEvidence];
   attachSnapshotClickabilityEvidence(publication, evidence.clickability);
   if (evidence.occlusionContext) {

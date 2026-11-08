@@ -42,6 +42,14 @@
       "size": 0
     },
     {
+      "path": "apple/snapshot-bridge/SnapshotBridgeRequest.h",
+      "size": 0
+    },
+    {
+      "path": "apple/snapshot-bridge/SnapshotBridgeRequest.m",
+      "size": 0
+    },
+    {
       "path": "apple/snapshot-bridge/SnapshotBridgeSurfaceHosts.h",
       "size": 0
     },

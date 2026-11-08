@@ -5,7 +5,7 @@
 // `resolve-disambiguation.test.ts`.
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { parseSelectorChain } from './parse.ts';
 import { resolveSelectorChain } from './resolve.ts';
 import { formatRole } from '@agent-device/kernel/snapshot';

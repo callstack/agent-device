@@ -1,5 +1,5 @@
 import { formatRole } from '@agent-device/kernel/snapshot';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 
 /**
  * A login form whose two "Continue" buttons make `label="Continue"` ambiguous

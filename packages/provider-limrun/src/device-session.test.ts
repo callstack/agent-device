@@ -1,14 +1,9 @@
+import { stubLimrunRuntimeDependencies } from './runtime-dependencies.fixtures.ts';
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
-import type { AppsFilter, DeviceLease } from '@agent-device/contracts/device';
-import type { Interactor } from '@agent-device/contracts/interactor-types';
+import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
-import {
-  androidAdbHostTarget,
-  androidAdbInvocation,
-  androidAdbSerialTarget,
-} from '@agent-device/platform-android/mechanics';
+import { testIosRunner } from './ios-runner.fixtures.ts';
 import type {
   LimrunAdbExecutor,
   LimrunAdbProvider,
@@ -26,23 +21,13 @@ const IOS_APPS = [
 
 const downloadFile = vi.fn(async (_options: LimrunFileDownload) => undefined);
 
+const baseDependencies = stubLimrunRuntimeDependencies();
 const TEST_DEPENDENCIES = {
-  clientVersion: 'test-version',
+  ...baseDependencies,
   android: {
-    createInteractor: () => ({}) as Interactor,
-    createPortReverse: async () => ({
-      ensure: async () => undefined,
-      remove: async () => undefined,
-      removeAllOwned: async () => undefined,
-    }),
-    inferAppName: async () => 'Example',
-    listApps: async (_adb: LimrunAdbExecutor, _filter: AppsFilter) => [
-      { id: 'com.example.android', name: 'Example' },
-    ],
-    getForegroundApp: async () => ({
-      appId: 'com.example.android',
-      activity: '.MainActivity',
-    }),
+    ...baseDependencies.android,
+    listApps: async () => [{ id: 'com.example.android', name: 'Example' }],
+    getForegroundApp: async () => ({ appId: 'com.example.android', activity: '.MainActivity' }),
     getKeyboardState: async () => ({ visible: false, inputOwner: 'unknown' as const }),
     dismissKeyboard: async () => ({
       visible: false,
@@ -52,22 +37,8 @@ const TEST_DEPENDENCIES = {
       dismissed: false,
     }),
     readLogs: async () => 'log line\n',
-    forceStopApp: async () => {},
-    deviceAdbInvocation: (serial, command) =>
-      androidAdbInvocation(androidAdbSerialTarget(serial), command),
-    hostAdbInvocation: (command) => androidAdbInvocation(androidAdbHostTarget(), command),
-    adbError: async (message) => new AppError('COMMAND_FAILED', message),
   },
-  host: {
-    runAdb: async () => adbResult(''),
-    archiveDirectory: async () => undefined,
-    downloadFile,
-  },
-  ios: {
-    applySimctlSetting: vi.fn(async () => undefined),
-    resolveAppAlias: async (app: string) => app,
-    readBundleAppName: async () => undefined,
-  },
+  host: { ...baseDependencies.host, runAdb: async () => adbResult(''), downloadFile },
 } satisfies LimrunRuntimeDependencies;
 
 test('iOS device session exposes reusable capabilities without its raw client', async () => {
@@ -135,7 +106,7 @@ test('iOS device session exposes reusable capabilities without its raw client', 
   assert.equal('client' in session, false);
 });
 
-test('iOS remote install waits for eventually consistent app inventory', async () => {
+test('iOS remote install bypasses stale digest caching and waits for app inventory', async () => {
   const staleApps = IOS_APPS.slice(0, 1);
   const installedApps = [...staleApps, IOS_APPS[1]];
   const listApps = vi
@@ -163,7 +134,7 @@ test('iOS remote install waits for eventually consistent app inventory', async (
   assert.equal(listApps.mock.calls.length, 3);
   assert.deepEqual(installApp.mock.calls[0], [
     'https://assets.example/example.zip',
-    { md5: 'example-md5', launchMode: 'RelaunchIfRunning' },
+    { launchMode: 'RelaunchIfRunning' },
   ]);
 });
 
@@ -231,6 +202,7 @@ test('Android device session exposes semantic ADB capabilities without its raw c
 function iosSession(client: Record<string, unknown>): LimrunIosSession {
   return {
     platform: 'ios',
+    runner: testIosRunner,
     lease: lease('ios-instance'),
     instanceId: 'ios-instance',
     device: device('ios'),

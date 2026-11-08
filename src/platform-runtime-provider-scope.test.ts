@@ -13,7 +13,7 @@ import {
 import { createLocalAppleToolProvider, runXcrun } from '@agent-device/platform-apple/tool-provider';
 import { buildSimctlArgsForDevice } from '@agent-device/platform-apple/simctl';
 import type { AndroidAdbExecutor } from '@agent-device/platform-android/mechanics';
-import { resolveWebProvider, type WebProvider } from '@agent-device/platform-web';
+import { resolveRequestScopedWebProvider, type WebProvider } from '@agent-device/platform-web';
 import {
   resolveAppleRunnerScreenRecordingTransport,
   type AppleRunnerScreenRecordingTransport,
@@ -170,7 +170,7 @@ test('web provider scope uses the context device', async () => {
         throw new Error('Linux provider should not apply to a web session');
       },
     },
-    async () => await (await resolveWebProvider()).open('https://example.test'),
+    async () => await (await scopedWebProvider()).open('https://example.test'),
   );
 
   assert.deepEqual(calls, ['web-session:agent-browser-chrome', 'open:https://example.test']);
@@ -252,11 +252,17 @@ test('explicit web provider scope uses a sessionless context', async () => {
         throw new Error('Apple provider should not apply to a web request');
       },
     },
-    async () => await (await resolveWebProvider()).snapshot(),
+    async () => await (await scopedWebProvider()).snapshot(),
   );
 
   assert.deepEqual(seenDevices, ['none:agent-browser-chrome']);
 });
+
+async function scopedWebProvider(): Promise<WebProvider> {
+  const provider = await resolveRequestScopedWebProvider();
+  assert.ok(provider);
+  return provider;
+}
 
 function context(
   device: PlatformProviderRequestContext['device'],

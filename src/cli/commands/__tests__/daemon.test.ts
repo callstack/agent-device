@@ -53,6 +53,18 @@ const GRACEFUL_RESULT: DaemonStopResult = {
   warnings: [],
 };
 
+const NOT_RUNNING_RESULT: DaemonStopResult = {
+  stopped: false,
+  mode: 'not-running',
+  cleanupConfidence: 'known',
+  claimsReleased: [],
+  claimsOrphaned: [],
+  claimsSuperseded: [],
+  claimsUnattributable: [],
+  providerReleases: { status: 'completed', released: [], pending: [] },
+  warnings: [],
+};
+
 /** A detached daemon's record, which is the shape a `--clean` cleanup is allowed to follow. */
 function writeDetachedRecord(stateDir: string): void {
   fs.writeFileSync(
@@ -183,6 +195,34 @@ test('reports graceful provider cleanup as unknown when the shutdown report is u
         warnings: [expect.stringContaining('provider cleanup state is unknown')],
       }),
       expect.any(Function),
+    );
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+// An empty stop result reads as "no daemon exists anywhere" unless it names the one state dir it
+// checked, so the text points at the other state dirs and the command that shows live claims.
+test('names the state dir and the claim-inspection route when no daemon runs', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-command-not-running-');
+  mocks.stopDaemon.mockResolvedValue(NOT_RUNNING_RESULT);
+
+  try {
+    await daemonCommand({
+      host: createTestHostEnvironment(),
+      positionals: ['stop'],
+      flags: { help: false, json: false, stateDir, version: false },
+      client: {} as never,
+    });
+
+    const [, data, renderHuman] = mocks.writeCommandOutput.mock.calls.at(-1) ?? [];
+    const rendered = (renderHuman as () => string)();
+    expect(rendered).toContain(`No running daemon for ${stateDir}.`);
+    expect(rendered).toContain('A daemon may run under another --state-dir');
+    expect(rendered).toContain('agent-device device status');
+    // The route hint is a text-only affordance: the JSON result stays the stop result shape.
+    expect(data).toEqual(
+      expect.objectContaining({ stopped: false, mode: 'not-running', clean: false }),
     );
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });

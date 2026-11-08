@@ -110,9 +110,6 @@ export function zoneRank(zone: string): number | null {
 // workspace-aware graphs. The platform packages additionally carry R13's
 // exact-family/composition/laziness policy.
 export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
-  // Stand-ins the bundler resolves in place of a dependency it deliberately omits. Nothing in
-  // the production graph imports them, so ranking them would claim an edge the alias replaces.
-  'vendor',
   'kernel',
   'host-kit',
   'capture-kit',

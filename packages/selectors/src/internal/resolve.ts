@@ -1,6 +1,7 @@
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { DisambiguationTiebreak } from '@agent-device/contracts/interaction';
-import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { matchesSelector } from './match.ts';
 import type { Selector, SelectorChain } from './parse.ts';

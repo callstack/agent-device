@@ -63,7 +63,7 @@ import { createAppleSystemOperations } from './system/runtime.ts';
 import { appleFoldableFacts, createAppleFoldableOperations } from './foldable/runtime.ts';
 import { bindAppleFindTextRuntime, bindAppleSnapshotRuntime } from './runtime-snapshot.ts';
 import { bindAppleQuerySelectorRuntime } from './runtime-selector-query.ts';
-import type { MacOsAppBackend } from '@agent-device/contracts/session';
+import { macOsHelperSurface, type MacOsAppBackend } from '@agent-device/contracts/session';
 import { hostMacOsAppBackend } from './os/macos/app-backend.ts';
 import { macOsNativeBackendFacts } from './os/macos/native-backend-facts.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
@@ -325,7 +325,13 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             signal: request.scope.signal,
             resolveInteractor: host.localInteractors.resolve,
             captureCapabilities: (options) =>
-              appleScreenshotCaptureCapabilities(request.device, options),
+              appleScreenshotCaptureCapabilities(
+                request.device,
+                options,
+                isMacOs(request.device)
+                  ? macOsHelperSurface(options.surface, macOsAppBackend(request.device))
+                  : undefined,
+              ),
           }),
         ),
         ...whenAdmitted(facts.operations.focusPoint, () =>

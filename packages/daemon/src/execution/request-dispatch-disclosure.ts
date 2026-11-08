@@ -7,36 +7,37 @@ import {
   type ErrorWireDetails,
   BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
 } from '@agent-device/kernel/errors';
-import { resolveCommandRecordingEffect } from '@agent-device/command-registry/registry';
+import { resolveCommandDispatchDisclosure } from '@agent-device/command-registry/registry';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { RequestDispatchLedger } from '../core/request-dispatch-ledger.ts';
 
-type RecordingEffect = ReturnType<typeof resolveCommandRecordingEffect>;
+type CommandDispatchVerdict = ReturnType<typeof resolveCommandDispatchDisclosure>;
 
 /**
  * The daemon's verdict around one request. Once the request's ledger holds a returned mutation, its
  * failure is `unknown` with the sent count added to `details.dispatchedSteps`, except that a typed
  * composite resource refusal keeps `no` for its current step. Before that, the registry's
- * `recordingEffect` decides: a read
- * (`observes-app`) is `no` over any producer verdict, because a resend repeats no app-visible
- * action; a mutation keeps a producer verdict and is `unknown` when no producer classified the
- * failure; a command without a declared effect passes through.
+ * {@link resolveCommandDispatchDisclosure} decides: a read is `no` over any producer verdict,
+ * because a resend repeats no app-visible action; a mutation keeps a producer verdict and is
+ * `unknown` when no producer classified the failure; any other command passes through. A
+ * delegating composite (`batch`, `replay`, `test`) passes through too: each nested request
+ * discloses itself, and a sent nested mutation makes the ledger nonzero.
  */
 export async function discloseRequestDispatch<Response extends DaemonResponse | null>(
   req: DaemonRequest,
   ledger: RequestDispatchLedger,
   dispatch: () => Promise<Response>,
 ): Promise<Response> {
-  const effect = resolveCommandRecordingEffect(req);
+  const verdict = resolveCommandDispatchDisclosure(req);
   try {
     const response = await dispatch();
     if (!response || response.ok) return response;
-    const details = disclosedDetails(effect, response.error.details, ledger);
+    const details = disclosedDetails(verdict, response.error.details, ledger);
     if (details === response.error.details) return response;
     return { ...response, error: { ...response.error, details } };
   } catch (error) {
     const failure = asAppError(error);
-    const details = disclosedDetails(effect, failure.details, ledger);
+    const details = disclosedDetails(verdict, failure.details, ledger);
     if (details === failure.details) throw error;
     failure.details = details;
     throw failure;
@@ -44,7 +45,7 @@ export async function discloseRequestDispatch<Response extends DaemonResponse | 
 }
 
 function disclosedDetails(
-  effect: RecordingEffect,
+  verdict: CommandDispatchVerdict,
   details: ErrorWireDetails | undefined,
   ledger: RequestDispatchLedger,
 ): ErrorWireDetails | undefined {
@@ -55,8 +56,8 @@ function disclosedDetails(
       ? { ...disclosed, dispatched: 'no' }
       : disclosed;
   }
-  if (effect === undefined) return details;
-  if (effect === 'observes-app') {
+  if (verdict === undefined) return details;
+  if (verdict === 'no') {
     return details?.dispatched === 'no' ? details : { ...details, dispatched: 'no' };
   }
   return details?.dispatched === undefined ? { ...details, dispatched: 'unknown' } : details;

@@ -1,7 +1,7 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SettleObservation, SurfaceScopedNodes } from '@agent-device/contracts/interaction';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { stripInternalInteractionFlags } from '../../../core/deferred-interaction-outcome.ts';
 import {
   computeTargetEvidence,

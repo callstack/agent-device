@@ -1,5 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { DaemonCommandContext } from '../../../core/context.ts';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { snapshotOptionsToFlags } from '@agent-device/contracts/backend-snapshot-options';

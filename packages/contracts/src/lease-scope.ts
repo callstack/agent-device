@@ -276,6 +276,7 @@ type LeaseAllocateProviderFlagKey = (typeof LEASE_ALLOCATE_PROVIDER_FLAG_KEYS)[n
 export const LEASE_DEVICE_SPEC_KEYS = [
   'osVersion',
   'imageTag',
+  'deviceMode',
   'physical',
 ] as const satisfies readonly (keyof CommandFlags & keyof LeaseDeviceSpec)[];
 
@@ -330,12 +331,14 @@ export type LeaseDeviceSpecReading = {
 
 /**
  * The one decision on what a device spec names, for the CLI, the SDK, MCP and the daemon alike.
- * Each key is named, not named, or invalid: a non-blank `osVersion` or `imageTag` and
+ * Each key is named, not named, or invalid: a non-blank `osVersion`, `imageTag` or `deviceMode` and
  * `physical: true` are named, with the value as given; an absent key, a blank string and
  * `physical: false` name nothing; any other type is invalid.
  */
 export function readLeaseDeviceSpec(
-  source: { osVersion?: unknown; imageTag?: unknown; physical?: unknown } | undefined,
+  source:
+    | { osVersion?: unknown; imageTag?: unknown; deviceMode?: unknown; physical?: unknown }
+    | undefined,
 ): LeaseDeviceSpecReading {
   const spec: Record<string, string | boolean> = {};
   const invalidKeys: LeaseDeviceSpecKey[] = [];
@@ -367,10 +370,12 @@ export function readLeaseDevice(value: unknown): LeaseDevice | undefined {
   const osVersion = nonEmptyString(record.osVersion);
   if (!model || !osVersion || typeof record.physical !== 'boolean') return undefined;
   const imageTag = nonEmptyString(record.imageTag);
+  const deviceMode = nonEmptyString(record.deviceMode);
   return {
     model,
     osVersion,
     ...(imageTag ? { imageTag } : {}),
+    ...(deviceMode ? { deviceMode } : {}),
     physical: record.physical,
   };
 }
@@ -378,14 +383,14 @@ export function readLeaseDevice(value: unknown): LeaseDevice | undefined {
 /** The refusal for a request whose device spec nothing on its path can honour. */
 export function deviceSpecUnsupportedError(
   keys: readonly string[],
-  message = 'This daemon cannot pick a device by OS version, image tag, or physical/virtual class.',
+  message = 'This daemon cannot pick a device by OS version, image tag, device mode, or physical/virtual class.',
   details: Record<string, unknown> = {},
 ): AppError {
   return new AppError('UNSUPPORTED_OPERATION', message, {
     ...details,
     reason: DEVICE_SPEC_UNSUPPORTED_REASON,
     keys: [...keys],
-    hint: 'Drop --os, --image-tag and --physical, or connect through a proxy whose backend picks devices by spec.',
+    hint: 'Drop --os, --image-tag, --device-mode and --physical, or connect through a proxy whose backend picks devices by spec.',
   });
 }
 
@@ -393,7 +398,7 @@ export function deviceSpecUnsupportedError(
 export function deviceSpecInvalidError(keys: readonly string[]): AppError {
   return new AppError(
     'INVALID_ARGS',
-    'osVersion and imageTag take a string, and physical takes a boolean.',
+    'osVersion, imageTag and deviceMode take a string, and physical takes a boolean.',
     { reason: DEVICE_SPEC_INVALID_REASON, keys: [...keys] },
   );
 }
@@ -478,6 +483,8 @@ export function findMissingProxyLeaseFields(scope: LeaseScope): string[] {
  * yet must assume this one, or it can be planning for a window the daemon would never grant.
  */
 export const MIN_LEASE_WINDOW_MS = 5_000;
+/** The idle window of every remote device lease: proxy, cloud device and cloud WebDriver. */
+export const REMOTE_LEASE_IDLE_TTL_MS = 5 * 60 * 1000;
 
 /**
  * Why a lease stopped being ours: it is gone, spent, or taken back.
@@ -502,6 +509,20 @@ export function isInactiveLeaseError(error: unknown): boolean {
     INACTIVE_LEASE_REASONS.has(
       (error as Readonly<{ details?: Readonly<{ reason?: unknown }> }>).details?.reason,
     )
+  );
+}
+
+/** The reason a provider gives when the device instance behind a lease ended outside the daemon. */
+export const PROVIDER_INSTANCE_ENDED = 'provider-instance-ended';
+
+/** Whether `error` says the provider's device instance ended, which ends its lease. */
+export function isProviderInstanceEndedError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as Readonly<{ code?: unknown }>).code === 'COMMAND_FAILED' &&
+    (error as Readonly<{ details?: Readonly<{ reason?: unknown }> }>).details?.reason ===
+      PROVIDER_INSTANCE_ENDED
   );
 }
 

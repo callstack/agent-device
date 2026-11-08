@@ -5,8 +5,8 @@ import type {
   Rect,
   SnapshotAddressableNode,
   SnapshotKeyboardBandFact,
-  SnapshotState,
 } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS } from '@agent-device/contracts/tap-keyboard-occlusion';
 import {
   KEYBOARD_COVERED_BAND_RECT,

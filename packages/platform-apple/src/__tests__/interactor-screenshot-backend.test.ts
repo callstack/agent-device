@@ -10,7 +10,13 @@ vi.mock('../core/screenshot.ts', async (importOriginal) => {
   };
 });
 
+vi.mock('../os/macos/helper.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../os/macos/helper.ts')>()),
+  runMacOsScreenshotAction: vi.fn(),
+}));
+
 import { createAppleInteractor } from '../interactor.ts';
+import { runMacOsScreenshotAction } from '../os/macos/helper.ts';
 import { captureScreenshotViaRunner, screenshotIos } from '../core/screenshot.ts';
 
 const device: DeviceInfo = {
@@ -86,5 +92,24 @@ test.each([
     details: { reason: 'screenshot-screen-mask-unsupported' },
   });
   expect(screenshotIos).not.toHaveBeenCalled();
+  expect(captureScreenshotViaRunner).not.toHaveBeenCalled();
+});
+
+test('an explicit runner capture never succeeds through the macOS helper', async () => {
+  const macOs: DeviceInfo = { ...device, appleOs: 'macos', kind: 'device', target: 'desktop' };
+  const refused = async (surface: 'desktop' | undefined, env: NodeJS.ProcessEnv) => {
+    const interactor = createAppleInteractor(macOs, {}, { env, cwd: process.cwd() });
+    await expect(
+      interactor.screenshot('/tmp/refused.png', { captureBackend: 'runner', surface }),
+    ).rejects.toMatchObject({
+      code: 'UNSUPPORTED_OPERATION',
+      details: { reason: 'screenshot-capture-backend-unsupported' },
+    });
+  };
+
+  await refused('desktop', {});
+  await refused(undefined, { AGENT_DEVICE_MACOS_APP_BACKEND: 'native' });
+
+  expect(runMacOsScreenshotAction).not.toHaveBeenCalled();
   expect(captureScreenshotViaRunner).not.toHaveBeenCalled();
 });

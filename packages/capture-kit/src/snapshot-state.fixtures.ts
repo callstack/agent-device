@@ -1,9 +1,8 @@
+import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import {
-  attachRefs,
-  type RawSnapshotNode,
   type SnapshotState,
   type SnapshotStateProvenance,
-} from '@agent-device/kernel/snapshot';
+} from '@agent-device/contracts/snapshot-model';
 
 export function makeSnapshotState(
   raw: RawSnapshotNode[],

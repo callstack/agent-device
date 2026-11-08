@@ -88,6 +88,11 @@ export const SCREENSHOT_FULLSCREEN_REASONS = {
 export type ScreenshotFullscreenReason =
   (typeof SCREENSHOT_FULLSCREEN_REASONS)[keyof typeof SCREENSHOT_FULLSCREEN_REASONS];
 
+/** The capture paths a screenshot can name instead of the platform default. */
+export const SCREENSHOT_CAPTURE_BACKENDS = ['runner'] as const;
+
+export type ScreenshotCaptureBackend = (typeof SCREENSHOT_CAPTURE_BACKENDS)[number];
+
 export const SCREENSHOT_COMMAND_FLAG_KEYS = [
   'out',
   'overlayRefs',
@@ -98,6 +103,7 @@ export const SCREENSHOT_COMMAND_FLAG_KEYS = [
   'screenshotScale',
   'screenshotNoStabilize',
   'screenshotNormalizeStatusBar',
+  'screenshotCaptureBackend',
 ] as const;
 
 export const SCREENSHOT_ACTION_FLAG_KEYS = [
@@ -108,6 +114,7 @@ export const SCREENSHOT_ACTION_FLAG_KEYS = [
   'screenshotScale',
   'screenshotNoStabilize',
   'screenshotNormalizeStatusBar',
+  'screenshotCaptureBackend',
 ] as const;
 
 type ScreenshotSpecificFlagKey = (typeof SCREENSHOT_ACTION_FLAG_KEYS)[number];
@@ -200,6 +207,17 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     projectConfig: true,
     recorded: true,
   },
+  {
+    key: 'screenshotCaptureBackend',
+    names: ['--capture-backend'],
+    type: 'enum',
+    enumValues: SCREENSHOT_CAPTURE_BACKENDS,
+    usageLabel: '--capture-backend runner',
+    usageDescription:
+      'Screenshot: on Apple targets capture through the XCTest runner (XCUIScreen), which leaves out the simulator-drawn Dynamic Island, instead of simctl; refused on other platforms, provider sessions and macOS surfaces the helper captures, and with --pixel-density, --screen-mask and --normalize-status-bar',
+    projectConfig: true,
+    recorded: false,
+  },
 ];
 
 const SCREENSHOT_SCRIPT_BOOLEAN_FLAGS = [
@@ -244,6 +262,7 @@ export type ScreenshotRequestFlags = {
   screenshotScale?: number;
   screenshotNoStabilize?: boolean;
   screenshotNormalizeStatusBar?: boolean;
+  screenshotCaptureBackend?: ScreenshotCaptureBackend;
 };
 
 export type ScreenshotDispatchFlags = Pick<
@@ -253,6 +272,7 @@ export type ScreenshotDispatchFlags = Pick<
   | 'screenshotFullscreen'
   | 'screenshotNoStabilize'
   | 'screenshotNormalizeStatusBar'
+  | 'screenshotCaptureBackend'
 >;
 
 export type ScreenshotRuntimeFlags = Pick<
@@ -264,6 +284,7 @@ export type ScreenshotRuntimeFlags = Pick<
   | 'screenshotScale'
   | 'screenshotNoStabilize'
   | 'screenshotNormalizeStatusBar'
+  | 'screenshotCaptureBackend'
 >;
 
 export type ScreenshotPublicOptions = {
@@ -275,6 +296,7 @@ export type ScreenshotPublicOptions = {
   scale?: number;
   stabilize?: boolean;
   normalizeStatusBar?: boolean;
+  captureBackend?: ScreenshotCaptureBackend;
 };
 
 export type ScreenshotRuntimeOptions = {
@@ -286,6 +308,7 @@ export type ScreenshotRuntimeOptions = {
   scale?: number;
   stabilize?: boolean;
   normalizeStatusBar?: boolean;
+  captureBackend?: ScreenshotCaptureBackend;
 };
 
 export function screenshotOptionsFromFlags(
@@ -301,6 +324,7 @@ export function screenshotOptionsFromFlags(
     stabilize:
       flags?.screenshotNoStabilize === undefined ? undefined : !flags.screenshotNoStabilize,
     normalizeStatusBar: flags?.screenshotNormalizeStatusBar,
+    captureBackend: flags?.screenshotCaptureBackend,
   });
 }
 
@@ -321,6 +345,7 @@ export function screenshotFlagsFromOptions(
       (options.stabilize === undefined ? undefined : !options.stabilize),
     screenshotNormalizeStatusBar:
       options.screenshotNormalizeStatusBar ?? options.normalizeStatusBar,
+    screenshotCaptureBackend: options.screenshotCaptureBackend ?? options.captureBackend,
   });
 }
 

@@ -188,6 +188,57 @@ test('Provider-backed integration scroll down answers moved on the first post-ge
   );
 });
 
+// The Node client's opt-out for a caller that polls the screen itself. The transcript scripts ONE
+// read after the gesture. A scroll that still made its movement check would report `movement` and
+// spend that read, and a next snapshot that still waited for two captures to agree would meet an
+// unscripted runner call, so either regression fails this scenario.
+test('Provider-backed integration scroll with postGestureStabilization false skips the movement check and the next read waits for nothing', async () => {
+  const runnerTranscript = createProviderTranscript([
+    snapshotEntry(screen(0, true)), // pre-scroll baseline
+    snapshotEntry(screen(0, true)), // the first capture after open settles: one extra read
+    scrollEntry(),
+    snapshotEntry(screen(-100, true)), // the only read after the gesture: the caller's own
+  ]);
+  const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
+    runnerTranscript,
+    'ios.runner',
+  );
+  const appleTool = iosSimulatorTool();
+
+  await withProviderScenarioResource(
+    async () =>
+      await createProviderScenarioHarness({
+        appleRunnerProvider: () => appleRunnerProvider,
+        appleToolProvider: () => appleTool.provider,
+        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
+      }),
+    async (daemon) => {
+      const client = daemon.client();
+      await client.apps.open({ app: APP, platform: 'ios', udid: DEVICE_ID });
+      await client.capture.snapshot();
+
+      const callsBeforeScroll = runnerTranscript.calls.length;
+      const scroll = await client.interactions.scroll({
+        direction: 'down',
+        postGestureStabilization: false,
+      });
+      assert.equal(Object.hasOwn(scroll, 'movement'), false);
+      assert.deepEqual(
+        runnerTranscript.calls.slice(callsBeforeScroll).map((call) => call.command),
+        ['ios.runner.scroll'],
+      );
+
+      const callsBeforeRead = runnerTranscript.calls.length;
+      await client.capture.snapshot();
+      assert.deepEqual(
+        runnerTranscript.calls.slice(callsBeforeRead).map((call) => call.command),
+        ['ios.runner.snapshot'],
+      );
+      runnerTranscript.assertComplete();
+    },
+  );
+});
+
 test('Provider-backed integration scroll down that never moves a hidden-content container refuses with scroll_no_progress', async () => {
   const runnerTranscript = createProviderTranscript([
     snapshotEntry(screen(0, true)), // pre-scroll baseline

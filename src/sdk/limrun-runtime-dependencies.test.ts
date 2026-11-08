@@ -4,9 +4,7 @@ import { expect, test, vi } from 'vitest';
 const moduleLoads = vi.hoisted(() => ({
   androidAppHelpers: 0,
   androidLogcat: 0,
-  appleAppResolution: 0,
   appleInstallArtifact: 0,
-  appleSimctlSettings: 0,
 }));
 
 vi.mock('@limrun/api', () => ({
@@ -28,19 +26,6 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/platform-apple/app-resolution')>()),
-  resolveIosAppAlias: vi.fn((app: string) => {
-    moduleLoads.appleAppResolution += 1;
-    return `resolved:${app}`;
-  }),
-}));
-
-vi.mock('@agent-device/platform-apple/simctl-settings', async (importOriginal) => {
-  moduleLoads.appleSimctlSettings += 1;
-  return await importOriginal<typeof import('@agent-device/platform-apple/simctl-settings')>();
-});
-
 vi.mock('@agent-device/platform-apple/install-artifact', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/platform-apple/install-artifact')>()),
   readIosBundleInfo: vi.fn(async () => {
@@ -56,9 +41,7 @@ test('Limrun construction defers operation and opposite-platform helper modules'
   assert.deepEqual(moduleLoads, {
     androidAppHelpers: 0,
     androidLogcat: 0,
-    appleAppResolution: 0,
     appleInstallArtifact: 0,
-    appleSimctlSettings: 0,
   });
   await runtime.shutdown();
 
@@ -95,16 +78,10 @@ test('Limrun construction defers operation and opposite-platform helper modules'
   ]);
   assert.equal(moduleLoads.androidAppHelpers, 1);
   assert.equal(moduleLoads.androidLogcat, 0);
-  assert.equal(moduleLoads.appleAppResolution, 0);
   assert.equal(moduleLoads.appleInstallArtifact, 0);
 
   assert.equal(await dependencies.android.readLogs(adb, 10), 'log line\n');
   assert.equal(moduleLoads.androidLogcat, 1);
-  assert.equal(moduleLoads.appleAppResolution, 0);
-  assert.equal(moduleLoads.appleInstallArtifact, 0);
-
-  assert.equal(await dependencies.ios.resolveAppAlias('settings'), 'resolved:settings');
-  assert.equal(moduleLoads.appleAppResolution, 1);
   assert.equal(moduleLoads.appleInstallArtifact, 0);
 
   assert.equal(await dependencies.ios.readBundleAppName('/tmp/Example.app'), 'Example');
@@ -245,31 +222,4 @@ test('the adb invocation adapters address through the platform builders', async 
   const host = dependencies.android.hostAdbInvocation(['disconnect', '127.0.0.1:62001']);
   assert.deepEqual(host, androidAdbInvocation(androidAdbHostTarget(), host.command));
   assert.deepEqual(serializeAndroidAdbInvocation(host), ['disconnect', '127.0.0.1:62001']);
-});
-
-test('Limrun iOS settings evaluate the Apple simctl plan module on the first setting', async () => {
-  const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
-  const dependencies = createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
-  const runSimctl = vi.fn(async (_args: string[]) => ({ stdout: '', stderr: '' }));
-  const grantPhotos = {
-    runSimctl,
-    udid: 'booted',
-    deviceId: 'limrun:ios:lease-a',
-    setting: 'permission',
-    state: 'grant',
-    appBundleId: 'com.example.app',
-    resolveApp: async (app: string) => app,
-    options: { permissionTarget: 'photos', permissionMode: 'limited' },
-  } as const;
-
-  assert.equal(moduleLoads.appleSimctlSettings, 0);
-
-  await dependencies.ios.applySimctlSetting(grantPhotos);
-  await dependencies.ios.applySimctlSetting(grantPhotos);
-
-  assert.equal(moduleLoads.appleSimctlSettings, 1);
-  assert.deepEqual(runSimctl.mock.calls, [
-    [['privacy', 'booted', 'grant', 'photos-add', 'com.example.app']],
-    [['privacy', 'booted', 'grant', 'photos-add', 'com.example.app']],
-  ]);
 });

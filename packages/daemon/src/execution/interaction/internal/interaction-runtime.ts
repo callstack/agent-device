@@ -9,7 +9,8 @@ import type {
   BackendSnapshotResult,
 } from '@agent-device/contracts/backend';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { Rect } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { DaemonCommandContext } from '../../../core/context.ts';
 import { createDaemonRuntimePolicy } from '../../runtime-policy.ts';
 import { recordCaptureProof } from '../../../core/capture-disclosure.ts';

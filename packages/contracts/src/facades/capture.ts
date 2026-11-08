@@ -2,6 +2,7 @@ export type { DiffSnapshotCommandResult, SnapshotDiffLine, SnapshotDiffSummary }
 export {
   RETIRED_SCREENSHOT_MAX_SIZE,
   SCREENSHOT_ACTION_FLAG_KEYS,
+  SCREENSHOT_CAPTURE_BACKENDS,
   SCREENSHOT_COMMAND_FLAG_KEYS,
   SCREENSHOT_CROP_REASONS,
   SCREENSHOT_FULLSCREEN_REASONS,
@@ -19,6 +20,7 @@ export {
   validateScreenshotScale,
 } from '../screenshot.ts';
 export type {
+  ScreenshotCaptureBackend,
   ScreenshotCropReason,
   ScreenshotScreenMask,
   ScreenshotDispatchFlags,

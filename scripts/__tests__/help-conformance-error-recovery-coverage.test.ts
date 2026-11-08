@@ -33,7 +33,7 @@ const WAIVED_GENERIC_HINT_CODES: Record<string, string> = {
     'Catch-all wrap of an underlying failure: the specific "what failed" lives in the message, so the generic diagnostics guidance IS its recovery step.',
 };
 
-// Human error rendering (src/commands/output/human-error.ts printHumanError) opens with
+// Human error rendering (src/cli/failure-output.ts printHumanError) opens with
 // `Error (CODE): message`, so any rendered error text names its own code.
 const RENDERED_ERROR_CODE = /(?:^|\n)Error \(([A-Z_]+)\):/g;
 
@@ -46,8 +46,12 @@ type RecoveryCase = {
   recovery: { code: string; sample: CapturedSample };
 };
 
+/**
+ * The distinct codes a sample renders. A multi-line failure prints its summary line first and
+ * again last, so one error contributes one code here, and a second error still shows up.
+ */
 function renderedErrorCodes(text: string): string[] {
-  return [...`\n${text}`.matchAll(RENDERED_ERROR_CODE)].map((match) => match[1]!);
+  return [...new Set([...`\n${text}`.matchAll(RENDERED_ERROR_CODE)].map((match) => match[1]!))];
 }
 
 /** The cases that declare themselves recovery quizzes (see the cases module). */

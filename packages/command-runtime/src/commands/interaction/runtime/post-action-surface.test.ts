@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { summarizeAxEvidence } from '@agent-device/capture-kit/snapshot-evidence';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';

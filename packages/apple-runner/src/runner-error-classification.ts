@@ -39,7 +39,9 @@ type RunnerErrorDetailsMatch = (details: AppErrorDetails) => boolean;
 export type RunnerConnectFailureReason =
   | 'xcodebuild_exited_early'
   | 'runner_connect_refused'
-  | 'runner_endpoint_probe_exhausted';
+  | 'runner_endpoint_probe_exhausted'
+  | 'runner_session_draining'
+  | 'runner_session_stopped';
 
 export function runnerConnectFailureDetails(reason: RunnerConnectFailureReason): {
   runnerConnectFailureReason: RunnerConnectFailureReason;
@@ -57,25 +59,11 @@ export const RUNNER_REPLY_LOST_REASON = 'runner_reply_lost';
 type RunnerErrorMatch = {
   /** Required `AppError.code`; absent = any AppError. */
   code?: AppErrorCode;
-  /**
-   * Every entry must appear in the lowercased message. Only for text a foreign runtime or tool
-   * wrote, which `asAppError` copies into the message verbatim; a failure agent-device produces
-   * publishes a typed detail instead, and its rule keys on that.
-   */
+  /** Every entry must appear in lowercased message (for foreign runtime text copied into message). */
   foreignMessageIncludesAll?: readonly string[];
-  /**
-   * Every entry must appear in the lowercased {@link runnerToolText}: our message plus the tool's
-   * own `stdout`/`stderr`. Nothing else in `details` is read, so the argv we were asked to run and
-   * the verdict this classifier already published can never carry a rule (#2680).
-   */
+  /** Every entry must appear in lowercased runnerToolText (message plus tool stdout/stderr). */
   toolTextIncludesAll?: readonly string[];
-  /**
-   * Every entry must appear in the SAME line of the lowercased {@link runnerToolText} (#2688 review).
-   * {@link RunnerErrorMatch.toolTextIncludesAll} proves only that two phrases exist somewhere in a
-   * captured log, which is a weaker claim than one phrase qualifying the other: a note about the
-   * profile the build used, three lines above an unrelated expired-certificate warning, says nothing
-   * about the profile. A row whose evidence is a noun and its complaint asks for both on one line.
-   */
+  /** Every entry must appear in the SAME line of lowercased runnerToolText (#2688 review). */
   toolTextLineIncludesAll?: readonly string[];
   /** Required details evidence beyond code/message. */
   details?: RunnerErrorDetailsMatch;
@@ -128,24 +116,15 @@ const hasReadinessPreflightFailure: RunnerErrorDetailsMatch = (details) =>
   details.runnerReadinessPreflightFailed === true && !isRequestCanceledDetails(details);
 
 type RunnerErrorVerdicts = {
-  /** A transport failure or structured refusal permits a same-session resend. */
-  retryable?: boolean;
-  /** isRunnerBusyError: the runner refused fast while abandoned main-thread work drains. */
-  drainResend?: boolean;
-  /** shouldRetryRunnerConnectError: connect loop may keep waiting for the runner. */
-  connectRetry?: boolean;
-  /** Session-fatal classification: invalidate the cached runner session with this reason. */
-  sessionFatalReason?: string;
-  /** Connect-shaped failure before the command was sent: restart the session and replay. */
-  restartBeforeSend?: boolean;
-  /** Readiness preflight gave up before the command was written: restart the session and replay. */
-  restartAfterReadinessPreflight?: boolean;
-  /** The runner never accepted a connection, so the restored artifact itself is suspect. */
-  artifactSuspect?: boolean;
-  /** A transport outage leaves the current generation owned for the next command. */
-  retainSession?: boolean;
-  /** Status recovery can reach the runner after a lost response. */
-  postSendRecovery?: boolean;
+  retryable?: boolean; // Transport failure or structured refusal permits same-session resend.
+  drainResend?: boolean; // isRunnerBusyError: runner refused fast while work drains.
+  connectRetry?: boolean; // shouldRetryRunnerConnectError: connect loop may keep waiting.
+  sessionFatalReason?: string; // Invalidate cached runner session with this reason.
+  restartBeforeSend?: boolean; // Restart session and replay before command was sent.
+  restartAfterReadinessPreflight?: boolean; // Readiness preflight gave up before command was written.
+  artifactSuspect?: boolean; // Runner never accepted connection; restored artifact is suspect.
+  retainSession?: boolean; // Transport outage leaves current generation owned for next command.
+  postSendRecovery?: boolean; // Status recovery can reach runner after lost response.
 };
 
 /**
@@ -332,6 +311,23 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
       details: hasRunnerConnectFailureReason('xcodebuild_exited_early'),
     },
     verdicts: { retryable: false, connectRetry: false, artifactSuspect: false },
+  },
+  {
+    // A runner session whose state transitioned to draining or stopped cannot accept commands
+    // and must not be spun on or restarted into.
+    reason: 'runner_session_terminal',
+    match: {
+      code: 'COMMAND_FAILED',
+      details: (d) =>
+        hasRunnerConnectFailureReason('runner_session_draining')(d) ||
+        hasRunnerConnectFailureReason('runner_session_stopped')(d),
+    },
+    verdicts: {
+      retryable: false,
+      connectRetry: false,
+      artifactSuspect: false,
+      restartBeforeSend: false,
+    },
   },
   {
     // The terminal reading of every cause a launch log can name: a simulator service this macOS refuses

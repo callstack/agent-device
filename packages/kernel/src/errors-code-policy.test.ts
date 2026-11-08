@@ -159,28 +159,28 @@ test('retriableForErrorCode returns undefined for a daemon/runner-originated cod
 
 /** Mirrors the switch in `defaultHintForCode` — one entry per `KNOWN_APP_ERROR_CODES` member. */
 const EXPECTED_HINT_BY_CODE: Record<KnownAppErrorCode, string> = {
-  INVALID_ARGS: 'Check command arguments and run --help for usage examples.',
-  DEVICE_NOT_FOUND: 'Verify the target device is booted/connected and selectors match.',
+  INVALID_ARGS: 'Fix the command arguments; run help <command> for usage.',
+  DEVICE_NOT_FOUND: 'Run devices to list available targets, then pass a selector that matches one.',
   DEVICE_IN_USE: 'The device is busy with another agent-device request; retry once it frees up.',
-  TOOL_MISSING: 'Install required platform tooling and ensure it is available in PATH.',
+  TOOL_MISSING: 'Install the missing tool and put it on PATH.',
   APP_NOT_INSTALLED:
     'Run apps to discover the exact installed package or bundle id, or install the app before open.',
   UNSUPPORTED_PLATFORM:
     'This platform is not supported for the requested operation; run devices to inspect available targets.',
   UNSUPPORTED_OPERATION: 'This command is not available for the selected platform/device.',
   NOT_IMPLEMENTED: 'This command is part of the planned API but is not implemented yet.',
-  COMMAND_FAILED: 'Retry with --debug and inspect diagnostics log for details.',
-  SESSION_NOT_FOUND: 'Run open first or pass an explicit device selector.',
+  COMMAND_FAILED: 'Read the diagnostics log for the failing step.',
+  SESSION_NOT_FOUND: 'Run open <app> first, or pass an explicit device selector.',
   UNAUTHORIZED: 'Refresh daemon metadata and retry the command.',
   AMBIGUOUS_MATCH: 'Multiple candidates matched. Narrow the query or pass an exact identifier.',
   REPLAY_DIVERGENCE:
-    'Read details.divergence (screen/suggestions) for repair context, or rerun with --json for the full report.',
+    'Read the divergence report (details.divergence) for the screen and selector suggestions to repair the step.',
   REPAIR_SESSION_EXPIRED:
     'The --save-script repair session was reaped before it was finalized; re-run replay <script> --save-script from the start.',
   REPAIR_COMMIT_FAILED:
     'The repair transaction completed, but committing its healed script failed at teardown (no-clobber refusal or a filesystem error); inspect the target path/permissions, then re-run replay <script> --save-script to retry.',
   UNKNOWN:
-    'Unexpected internal error. Retry with --debug and report the diagnostics log if it persists.',
+    'Unexpected internal error. Read the diagnostics log, and report it if the error persists.',
 };
 
 for (const code of KNOWN_APP_ERROR_CODES) {
@@ -193,11 +193,16 @@ test('EXPECTED_HINT_BY_CODE covers every known code — a registry addition with
   assert.deepEqual(Object.keys(EXPECTED_HINT_BY_CODE).sort(), [...KNOWN_APP_ERROR_CODES].sort());
 });
 
-test('defaultHintForCode falls back to the generic retry hint for a daemon/runner-originated code outside the registry', () => {
-  assert.equal(
-    defaultHintForCode('SOME_DAEMON_ONLY_CODE'),
-    'Retry with --debug and inspect diagnostics log for details.',
-  );
+test('defaultHintForCode gives an unregistered code the unclassified-failure hint', () => {
+  assert.equal(defaultHintForCode('SOME_DAEMON_ONLY_CODE'), EXPECTED_HINT_BY_CODE.COMMAND_FAILED);
+});
+
+// The default hint is printed as the error line's Next step. A failure already flushed its log, so
+// no default may send the agent to rerun anything with --debug.
+test('no default hint asks for a --debug rerun', () => {
+  for (const code of [...KNOWN_APP_ERROR_CODES, 'SOME_DAEMON_ONLY_CODE']) {
+    assert.equal(/--debug/.test(defaultHintForCode(code)), false, code);
+  }
 });
 
 test('normalizeAgentDeviceError delegates to normalizeError, including the context argument', () => {

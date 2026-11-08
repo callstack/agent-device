@@ -109,6 +109,10 @@ export const appleRunnerHost: AppleRunnerHost = {
   bootFailureHint,
   runAppleToolCommand,
   runXcrun,
+  enableIosSimulatorAppAccessibility: async (device) => {
+    const { enableIosSimulatorAppAccessibility } = await import('./ios-simulator-accessibility.ts');
+    await enableIosSimulatorAppAccessibility(device);
+  },
   readApplePlistJson,
   hasScopedAppleToolProvider,
   buildSimctlArgsForDevice,

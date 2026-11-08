@@ -92,6 +92,15 @@ describe('capture command interface', () => {
     });
   });
 
+  test('reads and writes the screenshot capture backend', () => {
+    const input = screenshotCliReader(['page.png'], flags({ screenshotCaptureBackend: 'runner' }));
+    expect(input).toMatchObject({ path: 'page.png', captureBackend: 'runner' });
+    expect(screenshotDaemonWriter(input)).toMatchObject({
+      command: 'screenshot',
+      options: { screenshotCaptureBackend: 'runner' },
+    });
+  });
+
   test('reads diff snapshot input only', () => {
     expect(
       diffCliReader(['snapshot'], flags({ snapshotDepth: 4, out: './diff.json' })),

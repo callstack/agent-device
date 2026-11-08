@@ -1,7 +1,10 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveWebProvider, withWebProvider, type WebProvider } from '../provider.ts';
+import { createTestHostEnvironment } from '@agent-device/test-kit';
+import { resolveRequestScopedWebProvider, resolveWebProviderForHost } from '../resolve-provider.ts';
+import { resolveWebProvider, withWebProvider } from '../provider.ts';
+import { makeWebProvider } from './test-utils.ts';
 
 // The scope's un-composed fallback is the single policy for a request that reaches a web device
 // without a composed provider: it refuses with `web-provider-missing` instead of borrowing a host
@@ -31,21 +34,25 @@ test('an un-scoped web provider resolves to a refusal naming the missing composi
 
 test('a composed request provider answers instead of the fallback refusal', async () => {
   const opened: string[] = [];
-  const provider: WebProvider = {
+  const provider = makeWebProvider({
     open: async (target) => {
       opened.push(target);
     },
-    close: async () => {},
-    snapshot: async () => ({ nodes: [] }),
-    screenshot: async () => {},
-    setViewport: async () => {},
-    click: async () => {},
-    fill: async () => {},
-    typeText: async () => {},
-    scroll: async () => {},
-  };
+  });
   await withWebProvider(provider, async () => {
     await resolveWebProvider().open('https://example.test');
   });
   assert.deepEqual(opened, ['https://example.test']);
+});
+
+test('the request-scoped resolver answers only inside a composed request, and the host resolver falls back', async () => {
+  const provider = makeWebProvider();
+  const host = createTestHostEnvironment();
+  assert.equal(await resolveRequestScopedWebProvider(), undefined);
+  assert.notEqual(await resolveWebProviderForHost(host), provider);
+  await withWebProvider(provider, async () => {
+    assert.equal(await resolveRequestScopedWebProvider(), provider);
+    assert.equal(await resolveWebProviderForHost(host), provider);
+  });
+  assert.equal(await resolveWebProviderForHost(host, provider), provider);
 });

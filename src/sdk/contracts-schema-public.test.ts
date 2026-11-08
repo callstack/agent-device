@@ -174,7 +174,7 @@ test('public contract exports normalize and hint app errors', () => {
   assert.equal(normalized.hint, defaultHintForCode(invalidArgsCode));
   assert.equal(
     defaultHintForCode('UNKNOWN'),
-    'Unexpected internal error. Retry with --debug and report the diagnostics log if it persists.',
+    'Unexpected internal error. Read the diagnostics log, and report it if the error persists.',
   );
 });
 

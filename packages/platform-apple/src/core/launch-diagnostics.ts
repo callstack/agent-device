@@ -92,6 +92,6 @@ export function launchFailureHint(reason: LaunchFailureReason): string {
     case 'PERSISTENT_LAUNCH_FAIL':
       return 'The simulator repeatedly refused to launch the app. Inspect crash logs in Console.app or ~/Library/Logs/DiagnosticReports/ and consider reinstalling the app.';
     default:
-      return 'The simulator failed to launch the app. Retry with --debug and inspect diagnostics log for details.';
+      return 'The simulator failed to launch the app. Read the diagnostics log for the launch output.';
   }
 }

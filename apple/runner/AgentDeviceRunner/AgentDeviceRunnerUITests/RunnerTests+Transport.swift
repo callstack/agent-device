@@ -202,9 +202,20 @@ extension RunnerTests {
 
     do {
       let command = try JSONDecoder().decode(Command.self, from: body)
-      if let response = inlineResponse(for: command) {
+      switch offQueueRoute(for: command) {
+      case .inline(let response):
         completion((jsonResponse(status: 200, response: response), false))
         return
+      case .snapshotBridge:
+        Self.snapshotBridgeQueue.async {
+          let response = self.executeSnapshotBridge(command: command)
+          self.transportQueue.async {
+            completion((self.jsonResponse(status: 200, response: response), false))
+          }
+        }
+        return
+      case nil:
+        break
       }
       // The journal decides here, at the one route an inbound request takes, whether this send may run
       // the command at all, and when the answer is to join an execution it registers this send for that
@@ -288,13 +299,24 @@ extension RunnerTests {
 
   // MARK: - Command Routing
 
-  /// Status and uptime read runner state without entering the journal or the command queue.
-  func inlineResponse(for command: Command) -> Response? {
+  /// How the transport answers a command without the journal or the serial command queue. A reply on
+  /// either route is no evidence about queued work, which is why the daemon charges neither.
+  enum OffQueueRoute {
+    /// Answered on the transport queue: status and uptime read the runner's own state.
+    case inline(Response)
+    /// Answered on the snapshot bridge queue: the AX tree read never waits behind XCTest main-thread
+    /// work, and it changes nothing, so a resend reads the tree again instead of joining a journal entry.
+    case snapshotBridge
+  }
+
+  func offQueueRoute(for command: Command) -> OffQueueRoute? {
     switch command.command {
     case .status:
-      return executeStatus(command: command)
+      return .inline(executeStatus(command: command))
     case .uptime:
-      return executeUptime()
+      return .inline(executeUptime())
+    case .snapshotBridge:
+      return .snapshotBridge
     default:
       return nil
     }

@@ -27,6 +27,8 @@ import {
 import type { DaemonRequest } from '../../index.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { NO_ACTIVE_SESSION_MESSAGE } from '@agent-device/kernel/contracts';
+import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { PNG } from '@agent-device/capture-kit/png';
 import {
@@ -668,4 +670,58 @@ test('screenshot --pixel-density keeps overlay refs aligned to scaled iOS simula
       ],
     });
   }
+});
+
+function sessionlessScreenshotHandler(prefix: string) {
+  return createRequestHandler({
+    host: createTestHostEnvironment(),
+    createCommandSurface: testCreateCommandSurface,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    token: 'test-token',
+    sessionStore: makeSessionStore(prefix),
+    leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    deviceRuntimeGateway: screenshotRuntimeFixture().gateway,
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+}
+
+test('an unnamed sessionless screenshot keeps the generic refusal with the open example', async () => {
+  const handler = sessionlessScreenshotHandler('agent-device-router-screenshot-unnamed-');
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'screenshot',
+    positionals: [],
+    flags: { out: path.join(mkdtempForTestSync('agent-device-screenshot-unnamed-out-'), 's.png') },
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('SESSION_NOT_FOUND');
+  expect(response.error.message).toBe(NO_ACTIVE_SESSION_MESSAGE);
+  expect(response.error.message).toContain('agent-device open <app>');
+  expect(response.error.details?.reason).toBeUndefined();
+});
+
+test('a named sessionless screenshot answers with the typed named-session refusal', async () => {
+  const handler = sessionlessScreenshotHandler('agent-device-router-screenshot-named-');
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'qa run',
+    command: 'screenshot',
+    positionals: [],
+    flags: {},
+    meta: { requestId: 'named-screenshot', sessionExplicit: true },
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('SESSION_NOT_FOUND');
+  expect(response.error.message).toContain("agent-device open <app> --session 'qa run'");
+  expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+  expect(response.error.details?.dispatched).toBe('no');
+  expect(response.error.details?.session).toBe('qa run');
 });

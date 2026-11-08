@@ -29,6 +29,7 @@ const OPERATOR_PROBES: Readonly<Record<string, string>> = {
   iosXctestEnvDir: '/attacker/env',
   config: '/attacker/config.json',
   remoteConfig: '/attacker/remote.json',
+  postGestureStabilization: 'false',
   totallyUnknownKey: 'x',
 };
 

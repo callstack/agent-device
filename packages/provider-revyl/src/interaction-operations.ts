@@ -25,7 +25,10 @@ import {
   bindProviderTouchInteractor,
   touchRuntimeOperationFacts,
 } from '@agent-device/contracts/touch-runtime';
-import { bindProviderScreenshotInteractor } from '@agent-device/contracts/screenshot-runtime';
+import {
+  bindProviderScreenshotInteractor,
+  defaultCaptureOnly,
+} from '@agent-device/contracts/screenshot-runtime';
 import {
   bindProviderSnapshotInteractor,
   type SnapshotRuntimePresenter,
@@ -239,7 +242,12 @@ export function bindRevylInteractionOperations(
       resolveInteractor,
       presentIosAcquisition: params.presentIosAcquisition,
     }),
-    ...bindProviderScreenshotInteractor({ device, signal, resolveInteractor }),
+    ...bindProviderScreenshotInteractor({
+      device,
+      signal,
+      resolveInteractor,
+      captureCapabilities: defaultCaptureOnly('Revyl captures through its provider endpoint'),
+    }),
     ...bindProviderFocusInteractor({ device, signal, resolveInteractor }),
     ...bindProviderTypeTextInteractor({ device, signal, resolveInteractor }),
     ...bindProviderTouchInteractor({

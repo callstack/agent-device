@@ -1,6 +1,7 @@
 // The typed-flags request from contracts/, not the daemon's server-side refinement: these
 // descriptors read `command`, `positionals` and `flags` and never touch `internal`.
 import type { CommandFlags, DispatchedCommand } from '@agent-device/contracts/command';
+import type { DispatchDisclosure } from '@agent-device/kernel/errors';
 import type { RuntimeUseStepSelector } from '@agent-device/contracts/command-platform-execution';
 import { checkFindArgs, isReadOnlyFindAction } from '@agent-device/selectors';
 import {
@@ -838,6 +839,32 @@ export function resolveCommandRecordingEffect(req: DispatchedCommand): Recording
   return typeof descriptor.recordingEffect === 'function'
     ? descriptor.recordingEffect(req)
     : descriptor.recordingEffect;
+}
+
+/**
+ * Whether a failed request for this command can have reached the device, from its declared
+ * recording effect: a read (`observes-app`) cannot have changed the app, a mutation may have, and
+ * any other command gets no verdict. The daemon's request seam and the client's transport failures
+ * both start from this; the client, which has no request ledger, adds one rule for a sent
+ * delegating composite ({@link isDelegatingCompositeCommand}).
+ */
+export function resolveCommandDispatchDisclosure(
+  req: DispatchedCommand,
+): DispatchDisclosure | undefined {
+  const effect = resolveCommandRecordingEffect(req);
+  if (effect === undefined) return undefined;
+  return effect === 'observes-app' ? 'no' : 'unknown';
+}
+
+/**
+ * Whether the command is a delegating composite (`batch`, `replay`, `test`) whose nested requests
+ * act. The daemon needs no verdict for it: its request ledger and each nested request disclose
+ * themselves. A caller with no ledger, such as the client after a send, cannot tell, so it
+ * assumes the nested requests may have acted.
+ */
+export function isDelegatingCompositeCommand(req: DispatchedCommand): boolean {
+  const refFrame = COMMAND_DESCRIPTOR_BY_NAME.get(req.command)?.daemon?.refFrameEffect;
+  return (typeof refFrame === 'function' ? refFrame(req) : refFrame) === 'delegated';
 }
 
 /**

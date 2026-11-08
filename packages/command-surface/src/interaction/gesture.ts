@@ -26,5 +26,9 @@ function gestureInputFromCli(positionals: string[], flags: CliFlags): Record<str
       count: flags.count,
       pauseMs: flags.pauseMs,
     }),
+    // Only a swipe stabilizes by default, so it is the one kind with anything to opt out of.
+    ...(positionals[0] === 'swipe' && flags.postGestureStabilization === false
+      ? { postGestureStabilization: false }
+      : {}),
   };
 }

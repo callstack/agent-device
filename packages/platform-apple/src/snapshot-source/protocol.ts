@@ -264,7 +264,7 @@ export function assertSnapshotBridgeEnvelope(
   }
 }
 
-export function assertSnapshotBridgeTargetIdentity(
+function assertSnapshotBridgeTargetIdentity(
   envelope: SnapshotBridgeEnvelope,
   expected: Readonly<{ pid: number; generation: string }>,
 ): void {
@@ -280,6 +280,25 @@ export function assertSnapshotBridgeTargetIdentity(
       observedGeneration: envelope.generation,
     });
   }
+}
+
+/**
+ * The one acceptance rule for a bridge reply, whichever process read the tree: the envelope must
+ * answer this request about this target, and a refusal becomes its typed failure.
+ */
+export function acceptSnapshotBridgeEnvelope(
+  envelope: SnapshotBridgeEnvelope,
+  expected: Readonly<{ requestId: string; pid: number; generation: string }>,
+): SnapshotBridgeEnvelope {
+  assertSnapshotBridgeEnvelope(envelope, expected.requestId);
+  // A refusal of the request itself, such as bounds-invalid, names no target, so it is typed before
+  // identity can read its missing pid as a stale target.
+  if (envelope.ok !== true) bridgeFailureFromEnvelope(envelope);
+  assertSnapshotBridgeTargetIdentity(envelope, expected);
+  if (typeof envelope.truncated !== 'boolean') {
+    throw snapshotSourceError('malformed-tree', 'truncated-invalid');
+  }
+  return envelope;
 }
 
 export function bridgeFailureFromEnvelope(envelope: SnapshotBridgeEnvelope): never {
@@ -301,6 +320,8 @@ export function bridgeFailureFromEnvelope(envelope: SnapshotBridgeEnvelope): nev
     throw snapshotSourceError('transport-failure', code, details);
   }
   if (kind === 'bad_request') throw snapshotSourceError('malformed-tree', code, details);
+  // Only the runner-served reader resolves its own target, so only it can see a new process.
+  if (kind === 'stale_target') throw snapshotSourceError('stale-target', code, details);
   if (kind === 'response_limit_exceeded') {
     throw snapshotSourceError('transport-failure', code, details);
   }

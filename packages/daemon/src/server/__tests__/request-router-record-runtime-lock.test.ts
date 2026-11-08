@@ -37,7 +37,7 @@ vi.mock('../../core/device/device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
-test('fresh default-device recording starts serialize before durable admission', async () => {
+test('a fresh session record start waits for the holder, then is refused before binding', async () => {
   let releaseFirstStart: () => void = () => {};
   const firstStartBlocked = new Promise<void>((resolve) => {
     releaseFirstStart = resolve;
@@ -68,8 +68,9 @@ test('fresh default-device recording starts serialize before durable admission',
   await expect(first).resolves.toMatchObject({ ok: true, data: { recording: 'started' } });
   await expect(second).resolves.toMatchObject({
     ok: false,
-    error: { code: 'COMMAND_FAILED', details: { reason: 'cleanup-unconfirmed' } },
+    error: { code: 'DEVICE_IN_USE', details: { session: 'session-a', deviceId: DEVICE.id } },
   });
+  expect(runtime.bind).toHaveBeenCalledOnce();
   expect(runtime.start).toHaveBeenCalledOnce();
 });
 

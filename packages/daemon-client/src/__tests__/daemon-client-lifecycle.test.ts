@@ -626,7 +626,7 @@ test('sendToDaemon does not replay over HTTP after the socket request is written
 
     assert.ok(thrown instanceof AppError);
     assert.equal(thrown.message, 'Failed to communicate with daemon');
-    assert.equal(thrown.details?.daemonSocketRequestWritten, true);
+    assert.equal(thrown.details?.daemonRequestSent, true);
     assert.deepEqual(socket.ports, [65_531, 65_531]);
     assert.equal(socket.writes.length, 1);
     assert.deepEqual(daemon.seenPaths, []);

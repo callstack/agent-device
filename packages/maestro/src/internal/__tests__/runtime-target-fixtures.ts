@@ -1,5 +1,6 @@
 import { formatRole } from '@agent-device/kernel/snapshot';
-import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 
 export type SnapshotNodeFixture = Omit<SnapshotNode, 'ref' | 'kind'> & {
   ref?: string;

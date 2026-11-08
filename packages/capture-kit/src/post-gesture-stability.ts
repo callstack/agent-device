@@ -1,9 +1,6 @@
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import type {
-  PostGestureAction,
-  PostGestureOutcome,
-  SnapshotKeyboardBandFact,
-} from '@agent-device/kernel/snapshot';
+import type { SnapshotKeyboardBandFact } from '@agent-device/kernel/snapshot';
+import type { PostGestureAction, PostGestureOutcome } from '@agent-device/contracts/snapshot-model';
 import { observeUntil, type ObservationClock, type ObservationSchedule } from './observe-until.ts';
 
 /**

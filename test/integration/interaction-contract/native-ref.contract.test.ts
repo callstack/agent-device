@@ -2,7 +2,7 @@ import { ref, createContractDevice } from './runtime-harness.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { scenarioName } from './coverage-manifest.ts';
 import { NATIVE_REF_COVERAGE } from './native-ref.coverage.ts';
 import {

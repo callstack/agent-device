@@ -275,7 +275,7 @@ async function startDaemonRuntimeOnHost(
     defaultLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_TTL_MS),
     minLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MIN_TTL_MS),
     maxLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MAX_TTL_MS),
-    onLeaseExpired: (lease) => {
+    onLeaseExpired: (lease, reason) => {
       void expiredProviderLeaseReleaser.release(lease).then(
         (outcome) => {
           // A lease can expire after shutdown closed the releaser, and the sweep runs outside any
@@ -294,7 +294,7 @@ async function startDaemonRuntimeOnHost(
           }).catch(() => undefined);
         },
       );
-      void endSessionsForLease(lease.leaseId, 'LEASE_EXPIRED');
+      if (!reason) void endSessionsForLease(lease.leaseId, 'LEASE_EXPIRED');
     },
     onProviderLeasesChanged: (leases) => expiredProviderLeaseReleaser.recordLiveLeases(leases),
   });
@@ -312,7 +312,8 @@ async function startDaemonRuntimeOnHost(
     token,
     sessionStore,
     leaseRegistry,
-    endSessionsForLease: async (leaseId) => await endSessionsForLease(leaseId, 'LEASE_RELEASED'),
+    endSessionsForLease: async (leaseId, reason) =>
+      await endSessionsForLease(leaseId, reason ?? 'LEASE_RELEASED'),
     appLogAdmissionLedger,
     audioProbeAdmissionLedger,
     perfCaptureAdmissionLedger,

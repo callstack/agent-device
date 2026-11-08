@@ -8,11 +8,12 @@ import {
   buildSimctlArgsForDevice,
   runAppleToolCommand,
   runXcrun,
+  enableIosSimulatorAppAccessibility,
 } from './host.ts';
 import type { RunnerLaunchObservation } from './runner-launcher.ts';
 import type { ExecResult, ExecBackgroundResult } from '@agent-device/host-kit/command';
 import { buildRunnerSessionXctestrunPathCleanupPattern } from './runner-artifact-env.ts';
-import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import { isHandheldAppleSimulator, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { cleanupTempFile } from './runner-io.ts';
 import { waitForRunner } from './runner-startup-transport.ts';
 import { withRunnerCommandId, type RunnerCommand } from './runner-contract.ts';
@@ -20,6 +21,7 @@ import {
   cleanupOwnedRunnerLease,
   currentRunnerLeaseOwnerToken,
   releaseRunnerLease,
+  repairSimulatorAccessibilityAfterRunnerExit,
   withRunnerLeaseLock,
   type RunnerLease,
   type RunnerLeaseCleanupAdapter,
@@ -44,6 +46,7 @@ const RUNNER_SHUTDOWN_TIMEOUT_MS = 15_000;
 const MACOS_RUNNER_INTERRUPT_WAIT_TIMEOUT_MS = 5_000;
 const MACOS_RUNNER_TERM_WAIT_TIMEOUT_MS = 2_000;
 const RUNNER_STALE_XCODEBUILD_KILL_TIMEOUT_MS = 2_000;
+const RUNNER_TERMINATION_PROBE_TIMEOUT_MS = 1_000;
 // macOS ships pkill here; a PATH lookup can resolve to a pkill whose `-P` matches every process.
 export const MACOS_PKILL_COMMAND = '/usr/bin/pkill';
 const RUNNER_SIMULATOR_TERMINATE_TIMEOUT_MS = 2_000;
@@ -52,6 +55,8 @@ export const runnerLeaseCleanupAdapter: RunnerLeaseCleanupAdapter = {
   cleanupRunnerProcessTree: killRunnerProcessTree,
   cleanupRunnerXcodebuildProcesses: killRunnerXcodebuildProcesses,
   cleanupTempFile,
+  confirmRunnerTermination,
+  enableIosSimulatorAppAccessibility,
 };
 
 export type RunnerDisposalOptions = {
@@ -265,6 +270,13 @@ async function settleOwnedRunnerDeviceState(
     if (runnerLeaseOwnedElsewhere(session)) return;
     try {
       await terminateRunnerSimulatorApps(session.device);
+      if (isHandheldAppleSimulator(session.device)) {
+        await repairSimulatorAccessibilityAfterRunnerExit({
+          deviceId: session.deviceId,
+          confirmTermination: () => confirmRunnerTermination(session.child.pid, session),
+          prepare: () => enableIosSimulatorAppAccessibility(session.device),
+        });
+      }
     } finally {
       releaseRunnerLease(session.lease);
     }
@@ -394,6 +406,34 @@ async function killRunnerXcodebuildProcesses(target: RunnerXcodebuildCleanupTarg
   }
 }
 
+async function confirmRunnerTermination(
+  pid: number | undefined,
+  target: RunnerXcodebuildCleanupTarget,
+): Promise<boolean> {
+  const artifactPattern = buildRunnerSessionXctestrunPathCleanupPattern(target.xctestrunPath);
+  if (!artifactPattern) return false;
+  const deadline = Date.now() + RUNNER_STALE_XCODEBUILD_KILL_TIMEOUT_MS;
+  do {
+    if (!isRunnerProcessTreeAlive(pid)) {
+      // Only pgrep exit 1 (no match) proves the launch is gone. A match, a probe error, or a probe
+      // timeout proves nothing, so polling continues until the deadline.
+      try {
+        const result = await runAppleToolCommand(
+          '/usr/bin/pgrep',
+          ['-f', `xcodebuild.*test-without-building.*${artifactPattern}`],
+          { allowFailure: true, timeoutMs: RUNNER_TERMINATION_PROBE_TIMEOUT_MS },
+        );
+        if (result.exitCode === 1) return true;
+      } catch {
+        // A failed probe is not evidence either way.
+      }
+    }
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  } while (Date.now() < deadline);
+  return false;
+}
+
 export type LocalRunnerLaunchResources = {
   device: DeviceInfo;
   deviceId: string;
@@ -419,7 +459,7 @@ export function observeLocalRunnerLaunch(
   return {
     local,
     get exited() {
-      return local.child.exitCode !== null;
+      return local.child.exitCode !== null || local.child.signalCode != null;
     },
     finished,
     output: local.output ?? finished,

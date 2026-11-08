@@ -1,3 +1,4 @@
+import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import Limrun from '@limrun/api';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type {
@@ -66,6 +67,7 @@ import type {
 import type { LimrunCaptureLifecycle } from './capture-lifecycle.ts';
 import type { LimrunDisposalHost } from './lease-release.ts';
 
+const HEARTBEAT_PROBE_BUDGET_MS = 2_000;
 const KEEP_ALIVE_INTERVAL_MS = 30_000;
 
 export type LimrunRuntimeOptions = {
@@ -141,6 +143,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
 
   readonly leaseLifecycle: LeaseLifecycleProvider = {
     allocate: async (lease, context) => await this.allocate(lease, context),
+    heartbeat: async (lease, context) => await this.heartbeat(lease, context),
     release: async (lease) => await this.release(lease),
   };
 
@@ -167,8 +170,10 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
 
   readonly deviceInventoryProvider: DeviceInventoryProvider = async (request) => {
     if (request.leaseProvider !== this.provider || !request.leaseId) return null;
-    const session = this.liveSessionForLease(request.leaseId);
-    if (!session) return null;
+    const owner = this.leases.get(request.leaseId);
+    const session = owner?.state.phase === 'releasing' ? owner.session : this.liveSession(owner);
+    // The lease is Limrun's, so its answer is authoritative: no live instance serves no device.
+    if (!session) return [];
     if (request.platform && request.platform !== session.platform) return [];
     return [session.device];
   };
@@ -213,17 +218,77 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     return this.getSessionForDevice(device) !== undefined;
   }
 
-  getInteractor(device: DeviceInfo, _runner?: RunnerContext): Interactor | undefined {
+  hasPendingRelease(device: DeviceInfo): boolean {
+    const parsed = parseLimrunDeviceId(device.id);
+    const owner = parsed && this.leases.get(parsed.leaseId);
+    return owner?.platform === parsed?.platform && owner?.state.phase === 'releasing';
+  }
+
+  getIosRunner(device: DeviceInfo) {
+    const session = this.getSessionForDevice(device);
+    return session?.platform === 'ios' ? session.runner : undefined;
+  }
+
+  getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined {
     const session = this.getSessionForDevice(device);
     if (!session) return undefined;
     return session.platform === 'ios'
-      ? createLimrunIosInteractor(session)
+      ? createLimrunIosInteractor(session, runner)
       : createLimrunAndroidInteractor(session);
   }
 
   getDeviceSession(device: DeviceInfo): LimrunDeviceSession | undefined {
     const session = this.getSessionForDevice(device);
     return session ? createLimrunDeviceSession(session) : undefined;
+  }
+
+  async bindPerformance(host: PlatformRuntimeHost, device: DeviceInfo, owner: RuntimeOwnerRef) {
+    const session = this.getSessionForDevice(device);
+    if (!session || session.platform !== 'android') return undefined;
+    return await this.dependencies.android.bindPerformance(
+      device,
+      session.adbProvider,
+      host.perf.android,
+      owner,
+    );
+  }
+
+  async bindDeployment(
+    host: PlatformRuntimeHost,
+    device: DeviceInfo,
+    signal: AbortSignal,
+    operationDrain?: LimrunRequestOperationDrain,
+  ) {
+    const session = this.getSessionForDevice(device);
+    if (!session) return {};
+    const request = {
+      host,
+      signal,
+      install: async (
+        artifact: import('@agent-device/contracts/app-deployment-runtime').MaterializedAppSource,
+        installSignal: AbortSignal,
+      ) => {
+        const result = await this.installInstallablePath(
+          device,
+          artifact.installablePath,
+          {
+            appIdentifierHint: artifact.bundleId,
+            packageNameHint: artifact.packageName,
+          },
+          installSignal,
+          operationDrain,
+        );
+        if (!result)
+          throw new AppError(
+            'UNSUPPORTED_OPERATION',
+            'The Limrun provider session is no longer active.',
+          );
+        return result;
+      },
+    };
+    return session.platform === 'ios'
+      ? session.runner.bindDeployment(request)
+      : await this.dependencies.android.bindDeployment(device, session.adbProvider, request);
   }
 
   async installApp(
@@ -256,17 +321,9 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   ): Promise<ProviderDeviceInstallResult | undefined> {
     const session = this.getSessionForDevice(device);
     if (!session) return undefined;
-    const limrun = this.orgClient('Uploading an app');
     return session.platform === 'ios'
-      ? await installLimrunIosApp(limrun, session, installablePath, options, signal, operationDrain)
-      : await installLimrunAndroidApp(
-          limrun,
-          session,
-          installablePath,
-          options,
-          signal,
-          operationDrain,
-        );
+      ? await installLimrunIosApp(session, installablePath, options, signal, operationDrain)
+      : await installLimrunAndroidApp(session, installablePath, options, signal, operationDrain);
   }
 
   async configurePortReverse(
@@ -706,6 +763,28 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     };
   }
 
+  private async heartbeat(
+    lease: DeviceLease,
+    context?: LeaseLifecycleContext,
+  ): Promise<Record<string, unknown> | undefined> {
+    const session = this.liveSessionForLease(lease.leaseId);
+    if (!session) return undefined;
+    if (session.client.getConnectionState() === 'connected') return undefined;
+    let terminationReason: string | undefined;
+    if (this.limrun && session.ownership === 'created') {
+      terminationReason = await readLimrunTerminationReason(this.limrun, session, context?.signal);
+    } else if (session.client.getConnectionState() === 'disconnected') {
+      terminationReason = 'Unknown';
+    }
+    if (terminationReason === undefined) return undefined;
+    const { PROVIDER_INSTANCE_ENDED } = await import('@agent-device/contracts/lease-scope');
+    throw new AppError('COMMAND_FAILED', `The Limrun instance ended (${terminationReason}).`, {
+      reason: PROVIDER_INSTANCE_ENDED,
+      terminationReason,
+      instanceId: session.instanceId,
+    });
+  }
+
   private async release(lease: DeviceLease): Promise<Record<string, unknown> | undefined> {
     // The take happens in this step, before anything is loaded: the release owns the lease from here, and no
     // await in between can let the allocation still waiting on its create answer ahead of it.
@@ -759,16 +838,20 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     const session = this.getSessionForDevice(device);
     if (!session) return undefined;
     const publicSession = createLimrunDeviceSession(session);
+    const logs =
+      session.platform === 'ios' ? this.dependencies.ios.createAppLogReader(session) : undefined;
     return {
       platform: session.platform,
       leaseId: session.lease.leaseId,
       instanceId: session.instanceId,
       ownership: session.ownership,
-      readLogs: async (appBundleId, lineLimit) =>
-        publicSession.platform === 'ios'
-          ? await publicSession.readLogs(appBundleId, lineLimit)
-          : await publicSession.readLogs(lineLimit),
-      [Symbol.asyncDispose]: async () => undefined,
+      readLogs: async (appBundleId, lineLimit, signal) => {
+        if (publicSession.platform === 'android') return await publicSession.readLogs(lineLimit);
+        return await logs!.readLogs(appBundleId, lineLimit, signal);
+      },
+      [Symbol.asyncDispose]: async () => {
+        await logs?.[Symbol.asyncDispose]();
+      },
     };
   }
 
@@ -804,7 +887,9 @@ async function loadLimrunPlatformRuntime(
     runtimeInstance,
     ownsDevice: (device) => runtime.ownsDevice(device),
     hasLiveSession: (device) => runtime.hasLiveSession(device),
+    hasPendingRelease: (device) => runtime.hasPendingRelease(device),
     getInteractor: (device, runner) => runtime.getInteractor(device, runner),
+    getIosRunner: (device) => runtime.getIosRunner(device),
     getDeviceSession: (device) => runtime.getDeviceSession(device),
     resolveAppReference: (device, app) => runtime.resolveAppReference(device, app),
     openCurrent: async (device) => runtime.currentAppLogReader(device),
@@ -827,30 +912,10 @@ async function loadLimrunPlatformRuntime(
       const { readLimrunAppState } = await import('./app-state-read.ts');
       return await readLimrunAppState(runtime.getDeviceSession(device), signal);
     },
-    deployApp: async (device, input, signal, operationDrain) =>
-      await runtime.installApp(
-        device,
-        input.app,
-        input.appPath,
-        {
-          relaunch: input.replaceExisting,
-          appIdentifierHint: input.app,
-          packageNameHint: input.app,
-        },
-        signal,
-        operationDrain,
-      ),
-    deployMaterializedApp: async (device, input, signal, operationDrain) =>
-      await runtime.installInstallablePath(
-        device,
-        input.artifact.installablePath,
-        {
-          appIdentifierHint: input.artifact.bundleId,
-          packageNameHint: input.artifact.packageName,
-        },
-        signal,
-        operationDrain,
-      ),
+    bindPerformance: (device) =>
+      runtime.bindPerformance(host, device, providerRuntimeOwner(LIMRUN_PROVIDER, runtimeInstance)),
+    bindDeployment: (device, signal, operationDrain) =>
+      runtime.bindDeployment(host, device, signal, operationDrain),
     configurePortReverse: async (options) => await runtime.configurePortReverse(options),
   });
 }
@@ -878,4 +943,34 @@ function allocationRefusedAfterShutdown(lease: DeviceLease): never {
       hint: 'Start the daemon again to allocate a Limrun lease.',
     },
   );
+}
+
+/**
+ * The termination reason of a created instance whose connection dropped, or `undefined` when the
+ * instance is not terminated or the probe cannot tell. The budget only stops waiting, so the probe
+ * aborts its own GET when the budget expires.
+ */
+async function readLimrunTerminationReason(
+  limrun: Limrun,
+  session: Pick<LimrunRuntimeSession, 'platform' | 'instanceId'>,
+  requestSignal: AbortSignal | undefined,
+): Promise<string | undefined> {
+  const expiry = new AbortController();
+  const signal = requestSignal ? AbortSignal.any([requestSignal, expiry.signal]) : expiry.signal;
+  try {
+    const { awaitLimrunWithinBudget } = await import('./lifecycle-budget.ts');
+    const request =
+      session.platform === 'ios'
+        ? limrun.iosInstances.get(session.instanceId, { signal })
+        : limrun.androidInstances.get(session.instanceId, { signal });
+    const answer = await awaitLimrunWithinBudget(request, HEARTBEAT_PROBE_BUDGET_MS);
+    if (!answer.ok) {
+      if ('expired' in answer) expiry.abort();
+      return undefined;
+    }
+    if (answer.value.status.state !== 'terminated') return undefined;
+    return answer.value.status.terminationReason ?? 'Unknown';
+  } catch {
+    return undefined;
+  }
 }

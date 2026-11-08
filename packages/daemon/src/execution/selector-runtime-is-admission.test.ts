@@ -11,7 +11,7 @@ import {
 import { makeSessionStore } from '../__tests__/support/store-factory.ts';
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import type { PostGestureOutcome } from '@agent-device/kernel/snapshot';
+import type { PostGestureOutcome } from '@agent-device/contracts/snapshot-model';
 import type { DaemonRequest } from '../index.ts';
 import { selectorCaptureFixture } from '../__tests__/support/selector-capture-fixture.ts';
 import { markDeferredInteractionOutcome } from '../core/deferred-interaction-outcome.ts';

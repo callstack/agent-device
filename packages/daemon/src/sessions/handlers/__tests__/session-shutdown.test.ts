@@ -131,6 +131,7 @@ test('shutdown turns off selected Android emulator', async () => {
       command: 'shutdown',
       positionals: [],
       flags: { platform: 'android', device: 'Pixel_9_Pro_XL' },
+      internal: { webSession: { name: 'default' } },
     },
     sessionName: 'default',
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
@@ -143,7 +144,7 @@ test('shutdown turns off selected Android emulator', async () => {
   expect(mockEnsureDeviceReady).not.toHaveBeenCalled();
   expect(mockResolveTargetDevice).toHaveBeenCalledWith(
     { platform: 'android', device: 'Pixel_9_Pro_XL' },
-    { androidAvdSelection: 'include-stopped', env: process.env },
+    { androidAvdSelection: 'include-stopped', env: process.env, webSession: { name: 'default' } },
   );
   expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledOnce();
   expect(mockBindDeviceRuntime).toHaveBeenCalledOnce();

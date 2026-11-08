@@ -1,4 +1,4 @@
-import type { ScreenshotScreenMask } from './screenshot.ts';
+import type { ScreenshotCaptureBackend, ScreenshotScreenMask } from './screenshot.ts';
 // The public API vocabulary for snapshot, screenshot and diff capture.
 
 import type { SessionSurface } from './session-surface.ts';
@@ -118,6 +118,8 @@ export type CaptureScreenshotOptions = AgentDeviceRequestOverrides & {
   scale?: number;
   stabilize?: boolean;
   normalizeStatusBar?: boolean;
+  /** `runner`: capture an Apple target through the XCTest runner instead of `simctl`. */
+  captureBackend?: ScreenshotCaptureBackend;
   surface?: SessionSurface;
 };
 

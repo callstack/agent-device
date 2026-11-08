@@ -87,6 +87,28 @@ describe('composed device inventory gateway', () => {
     ).rejects.toMatchObject({ details: { reason: 'provider_inventory_contract_violation' } });
   });
 
+  test('a provider connection without a lease never falls back to local inventory', async () => {
+    for (const provider of [undefined, { discover: async () => ({ kind: 'declined' as const }) }]) {
+      const local = inventoryWorld();
+      const gateways = createComposedDeviceInventoryGateways({
+        registry: local.registry,
+        loadHost: local.loadHost,
+        provider,
+      });
+      await expect(
+        gateways.providerFirst.discover({ leaseProvider: 'limrun' }, scope),
+      ).rejects.toMatchObject({
+        code: 'DEVICE_NOT_FOUND',
+        details: {
+          reason: 'provider_instance_unallocated',
+          hint: 'Run boot or open to allocate an instance. SDK callers allocate one with leases.allocate and pass its leaseId.',
+        },
+      });
+      expect(local.hostLoads()).toBe(0);
+      expect(local.sourceLoads()).toEqual([]);
+    }
+  });
+
   test('forwards the request signal into an in-flight provider source', async () => {
     const controller = new AbortController();
     const requestScope = { ...scope, signal: controller.signal };

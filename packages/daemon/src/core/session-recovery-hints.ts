@@ -59,6 +59,7 @@ export function buildDeviceInUseBySessionError(
     deviceName: device.name,
     ...(options.waitedMs === undefined ? {} : { waitedMs: options.waitedMs }),
     hint: buildSessionRecoveryHint(inUse, 'device-in-use', options),
+    dispatched: 'no',
   });
 }
 
@@ -83,6 +84,7 @@ export function buildForeignWorkspaceSessionConflict(
       deviceName: device.name,
       ...(options.waitedMs === undefined ? {} : { waitedMs: options.waitedMs }),
       hint: buildForeignWorkspaceSessionRecoveryHint(inUse.address, options),
+      dispatched: 'no',
     },
   );
 }
