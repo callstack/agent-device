@@ -842,19 +842,28 @@ export function resolveCommandRecordingEffect(req: DispatchedCommand): Recording
 }
 
 /**
- * Whether a failed request for this command can have reached the device: a read
- * (`observes-app`) cannot have changed the app, and a mutation or a delegating composite (`batch`,
- * `replay`, `test`, whose nested requests act) may have. Any other command gets no verdict. The
- * daemon's request seam and the client's transport failures both read this, so they cannot disagree.
+ * Whether a failed request for this command can have reached the device, from its declared
+ * recording effect: a read (`observes-app`) cannot have changed the app, a mutation may have, and
+ * any other command gets no verdict. The daemon's request seam and the client's transport failures
+ * both read this, so they cannot disagree.
  */
 export function resolveCommandDispatchDisclosure(
   req: DispatchedCommand,
 ): DispatchDisclosure | undefined {
   const effect = resolveCommandRecordingEffect(req);
-  if (effect !== undefined) return effect === 'observes-app' ? 'no' : 'unknown';
+  if (effect === undefined) return undefined;
+  return effect === 'observes-app' ? 'no' : 'unknown';
+}
+
+/**
+ * Whether the command is a delegating composite (`batch`, `replay`, `test`) whose nested requests
+ * act. The daemon needs no verdict for it: its request ledger and each nested request disclose
+ * themselves. A caller with no ledger, such as the client after a send, cannot tell, so it
+ * assumes the nested requests may have acted.
+ */
+export function isDelegatingCompositeCommand(req: DispatchedCommand): boolean {
   const refFrame = COMMAND_DESCRIPTOR_BY_NAME.get(req.command)?.daemon?.refFrameEffect;
-  const resolved = typeof refFrame === 'function' ? refFrame(req) : refFrame;
-  return resolved === 'delegated' ? 'unknown' : undefined;
+  return (typeof refFrame === 'function' ? refFrame(req) : refFrame) === 'delegated';
 }
 
 /**
