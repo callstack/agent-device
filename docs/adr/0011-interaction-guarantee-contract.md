@@ -206,9 +206,9 @@ Before the ledger holds a sent mutation, the registry's `recordingEffect` decide
 - A command with no declared effect passes through.
 
 `resolveCommandDispatchDisclosure` in the command registry owns this verdict.
-The client applies the same verdict to its own transport failures, because the router never sees them.
+The client starts from this verdict for its own transport failures, because the router never sees them.
 A failure after the request left the client gets the verdict: a timeout, a connection lost after the send, or a reply it cannot read or parse.
-The client has no ledger, so it also gives a sent delegating composite (`batch`, `replay`, `test`, declared `refFrameEffect: 'delegated'`) `unknown`.
+The client has no ledger, so it adds one rule: a sent delegating composite (`batch`, `replay`, `test`, declared `refFrameEffect: 'delegated'`) is `unknown`.
 The router needs no such rule: each nested request discloses itself, and a sent nested mutation makes the ledger nonzero.
 A failure before the send is `no`.
 
