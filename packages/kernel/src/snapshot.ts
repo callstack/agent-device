@@ -931,7 +931,8 @@ export function snapshotRefMinting(
  * `~s<generation>` suffix pinning it to the session snapshot generation that
  * minted it, e.g. `@e12~s3`. Snapshot output stays plain `e12` refs (the tree is
  * the most token-expensive artifact agents consume), except the CLI text of a
- * `--scope` snapshot, which prints every ref in this pinned form (ADR 0014).
+ * `--scope` snapshot, which prints every ref in this pinned form unless `--raw`
+ * is set (ADR 0014).
  * Ref-issuing responses carry the generation ONCE as the additive
  * `refsGeneration` field.
  */
