@@ -845,7 +845,8 @@ export function resolveCommandRecordingEffect(req: DispatchedCommand): Recording
  * Whether a failed request for this command can have reached the device, from its declared
  * recording effect: a read (`observes-app`) cannot have changed the app, a mutation may have, and
  * any other command gets no verdict. The daemon's request seam and the client's transport failures
- * both read this, so they cannot disagree.
+ * both start from this; the client, which has no request ledger, adds one rule for a sent
+ * delegating composite ({@link isDelegatingCompositeCommand}).
  */
 export function resolveCommandDispatchDisclosure(
   req: DispatchedCommand,
