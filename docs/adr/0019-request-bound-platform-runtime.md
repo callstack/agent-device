@@ -5,6 +5,16 @@
 Accepted. Staged adoption completed on 2026-08-27.
 The screen-recording amendment in ADR 0024 remains proposed.
 
+## Rules at a glance
+
+- Each family owns one private platform package; composition uses cheap metadata and lazy gateways.
+- Package direction is `kernel < contracts < host-kit < capture-kit < provision-kit < platform/provider/daemon`.
+- `RequestExecutionScope.bindDevice(device, use)` checks owner facts and exposes only declared operations.
+- Provider ownership is exact and fail-closed; an owning provider never falls back to local behavior.
+- Request bindings do not own helpers; durable handles may transfer to session ownership and recover through the exact owner.
+- Each descriptor declares one `platformExecution` shape; facts govern device-command admission and handlers bind once.
+- Startup recovery loads families with persisted evidence; composition supplies neutral host services and claim recovery.
+
 ## Context
 
 A shallow platform plugin stopped the spread of platform conditionals, but left the daemon mapping platform tags and predicates to concrete behavior.
@@ -24,14 +34,14 @@ The daemon imports neutral contracts, not concrete platform implementations.
 R13 governs concrete package imports and named consumer facets, including static, dynamic, type-only, and re-export edges.
 R65 enforces daemon independence.
 Only root composition and R13-named consumer seams statically import platform package roots; R65 counts the Apple runner package as a concrete platform dependency.
-Gates pin substrate export subpaths, keep mechanics out of contracts, and reject the retired `src/platforms` path.
+Gates pin substrate export subpaths, keep mechanics out of contracts, and reject the retired root platforms path.
 Families may import contracts, domain packages, and explicitly injected host capabilities.
 They may not import daemon requests or responses, mutable session state, command catalogs or grammar, root implementations, sibling platforms, or raw process primitives outside the shared host-command port.
-Contracts contain neutral vocabulary, plans, and pure classification, not host mechanics or concrete implementation types.
+Contracts contain neutral vocabulary, plans, and pure classification, not process supervision, live handles, recovery helpers, runtime codecs, capture parsers, host mechanics, or concrete implementation types.
 
 The package direction is `kernel < contracts < host-kit < capture-kit < provision-kit < platform/provider/daemon`.
 Host-kit exposes narrow host capability ports, not a generic utilities barrel.
-Kernel owns pure primitives.
+Kernel owns pure primitives, including helpers that touch no process, file, or environment.
 Capture-kit owns shared capture, snapshot, and recording mechanics, not generic platform code.
 Provision-kit owns device and app preparation and may not import platform packages.
 Capture-kit may not import provision-kit.
@@ -128,7 +138,7 @@ Only a durable facet handle may transfer to session ownership.
 It may retain its own helper attachment beyond the request; adoption detaches the original request's diagnostics, event, progress, and async context.
 Finish or forced disposal uses the current request or explicit session-teardown observability scope.
 Helpers stop only through explicit device lifecycle policy, invalidation, idle policy, or platform shutdown after session resources finalize.
-Every helper-backed runtime has a lifecycle scenario proving that binding disposal never terminates or restarts a healthy helper.
+Every helper-backed runtime has a lifecycle scenario proving that binding disposal never terminates or restarts a healthy helper and an immediate later binding reuses that generation.
 Lifecycle scenarios also prove at-most-once shutdown of each still-owned generation, survival of adopted resources, and rollback after each partial acquisition.
 Evidence must suit the helper; wall-clock behavior alone is insufficient.
 
@@ -140,7 +150,7 @@ Evidence must suit the helper; wall-clock behavior alone is insufficient.
 > Backend `stop(target, budget)` and `collect` would replace `reattach` and `cleanup`.
 > This kind would remove cleanup-pending and the admission ledger, record recorder observation and native-path disposition beside the committed export, and archive each fence generation until both settle.
 > For each durable kind, failed finish would no longer imply forced cleanup once its failed-finish test states retry requirements.
-> App-log, audio-probe, and perf-capture would retain the contract below unchanged.
+> App-log, audio-probe, and perf-capture would retain the recovery contracts unchanged.
 > ADR 0024 owns the rationale, matrix, and tests. This proposal takes effect only when accepted.
 
 Durable work uses a process-local live handle and a bounded, versioned descriptor for recovery by the exact runtime owner.
@@ -153,7 +163,7 @@ The [durable resource recovery contracts](../../packages/capture-kit/docs/durabl
 
 ### 6. Command execution has one closed shape
 
-Each descriptor explicitly declares exactly one internal execution shape: `none`, `host`, `inventory`, or `device-runtime`.
+Each descriptor's `platformExecution` facet explicitly declares exactly one internal execution shape: `none`, `host`, `inventory`, or `device-runtime`.
 There is no default or legacy shape.
 Public projections exclude it.
 A `none` command has no platform adapter, capability admission, runtime use, or inventory use.
@@ -167,13 +177,10 @@ R65 prevents daemon dependencies on concrete platform implementations.
 Each mutable session resource has one R7 transition owner.
 Session state excludes request bindings, concrete platform/provider types, and raw process or transport mechanics.
 A change to resource state proves partial-start cleanup, transfer, finish, forced disposal, and error precedence.
-Review runs from a clean committed tree with all production files present in HEAD.
-A passing layering check with untracked production files is not evidence.
 Platform packages get no migration allowlist or root back-import exception.
+Review each package or registry change and each command unit from a clean committed tree with all production files in HEAD; a layering pass with untracked production files is not evidence.
+R9 cycle and R10 writer/owner ceilings may not grow; a change that shrinks a count lowers its ceiling in the same change without unused allowance.
 For a platform-package change, affected checks select platform contract, provider, and coverage scenarios.
-New structural gates require a planted violation.
-R9 cycle and R10 writer/owner ceilings may not grow.
-A change that shrinks a count lowers its ceiling in the same change, without unused allowance.
 
 ### 7. Adoption checkpoint
 
@@ -212,6 +219,7 @@ Startup recovery is triggered only by persisted durable manifests or platform-ow
 Daemon shutdown first detaches helper managers for handoff, then stops each still-owned generation at most once after session resources finalize.
 Each domain owns its isolated session-teardown step; there is no generic lifecycle-hook API.
 Test-IME restoration is durable device state with marker recovery; helper stops follow platform policy; close-time cleanup uses neutral owner services.
+Android test-IME marker and web browser orphan startup recovery still need to move to the evidence-triggered pattern when their owning domains migrate.
 
 ### 11. The platform-services port carries host asks that bind no device
 
@@ -252,8 +260,8 @@ The staged migration cost temporary coexistence; closed execution shapes and str
 ## End state (proposed 2026-09-02, maintainer decision pending)
 
 These targets are proposed defaults, not accepted commitments or authorization for work.
-The measured baseline was 199 production files at `e624ef9d3f`; the proposed daemon top-level footprint is at most 60.
-`packages/daemon/src/**` remains a permanent R65 zone; the target concerns its contents, not directory retirement.
+The proposed daemon top-level footprint is at most 60; its [measured baseline](../evidence/daemon-footprint-baseline-2026-09-02.md) is evidence, not a commitment.
+`@agent-device/daemon` remains a permanent R65 zone; the target concerns its contents, not directory retirement.
 **Entry-to-platform hop count.** The hop trace and measured hop counts belong to [ADR 0023](0023-end-state-hop-trace.md).
 Composition and family runtime-loading boundaries count as hops, and package direction and named facets constrain any collapse.
 The earlier target of 14 hops is superseded and is not reachable without a separate decision on cross-cutting request-scope wrappers.

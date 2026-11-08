@@ -2,7 +2,8 @@
 
 A durable start returns a process-local live handle and a bounded, JSON-safe, versioned descriptor sufficient for deterministic recovery by the exact owner.
 The facet-specific handle provides idempotent `finish()` returning `FinishOutcome`, `forceCleanup()` returning `CleanupOutcome`, and an idempotent `[Symbol.asyncDispose]` adapter that carries no typed result.
-The adapter resolves only for confirmed cleanup or already-missing outcomes; otherwise it rejects with normalized ownership-lost or cleanup-pending error.
+The adapter resolves for confirmed cleanup or already-missing outcomes and converts a cleanup-pending outcome to the facet error.
+A rejected cleanup operation escapes without normalization by the shared adapter.
 
 Each destructive finish or cleanup holds the authoritative ownership lease across fence validation, native side effect, and persisted transition, or uses a token atomically enforced by the native or provider operation.
 A preflight check alone is insufficient.
@@ -10,8 +11,8 @@ A transport without either mechanism cannot claim transferable reattachment; cle
 
 A partial start rolls back internally if it cannot publish a complete pair.
 The request scope guards the start promise and registers the handle for forced cleanup before orchestration receives it.
-It releases the guard only after both the authoritative active record and live session adoption succeed.
-Cancellation or failure before transfer disposes the unadopted handle.
+The coordinator persists the authoritative active record, transfers the pending guard, and then adopts the handle into live session state.
+On failure before transfer, rollback disposes the pending handle; after transfer, it disposes the transferred handle.
 The record becomes terminal only after confirmed cleanup; uncertainty remains cleanup-pending.
 Contract scenarios inject failure and cancellation between partial start, publication, persistence, adoption, and transfer.
 
@@ -26,9 +27,9 @@ It selects no platform, interprets no flags, and is not a generic runtime facet.
 App-log and recording retain distinct handles, descriptors, facts, native finalization, and admission policy; capture-kit owns reusable lower-level codec and live-handle mechanics.
 
 A process-lived admission ledger may hold bounded cleanup uncertainty without an honest durable representation, but no handle or descriptor, and never supersedes the manifest.
-Known canonical device identity keys it; admission revalidates evidence that permits another check so manual recovery can unblock that device without restart.
-Unknown identity remains globally fail-closed.
-In-memory blocks without durable evidence expire only under an explicit bounded policy with diagnostics.
+The daemon app-log admission ledger revalidates retained legacy marker paths for the matching device on admission; after manual recovery removes a marker, the next check can unblock that device without restart.
+A marker without device identity stays on disk as path-local no-overwrite evidence and does not block every device.
+The shared ledger keys undurable cleanup blocks by device, clears them after confirmed cleanup, and expires them under a bounded policy with diagnostics.
 
 Persisted JSON enters as `unknown`.
 Contracts validate the neutral kind/version, session/device identity, exact owner, fence, and lifecycle envelope before the selected facet's total codec decodes its body.
@@ -56,5 +57,5 @@ A new handle stays private until it acquires the persisted fence.
 
 Persistence cannot make external start and descriptor write atomic; a platform retains an orphan marker or equivalent protocol when its native tool cannot close that crash interval.
 Descriptors hold stable reconstruction coordinates, not promises, timers, child handles, buffers, credentials, or live-state dumps.
-Transfer is explicit: persist active evidence before success, transfer the pending guard after session adoption, and preserve the terminal result or stable coordinates before removing active evidence.
+Transfer is explicit: persist active evidence before success, transfer the pending guard before session adoption, dispose it on failed adoption, and preserve the terminal result or stable coordinates before removing active evidence.
 Adopted handles survive request disposal and remain outside the binding's generic disposable transaction; normal session teardown keeps facet-specific order.
