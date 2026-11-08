@@ -153,7 +153,7 @@ Every teardown commits if and only if the state is `COMPLETE`.
 Before `COMPLETE`, teardown publishes nothing, and idle-reap or shutdown leaves a `REPAIR_SESSION_EXPIRED` tombstone.
 An armed replay skips a terminal source `close` and marks the transaction `COMPLETE`.
 Publication writes `<original-stem>.healed.ad` beside the original unless the caller names a path. The original is never overwritten in place.
-One exclusive `linkSync` publishes the file and refuses every pre-existing target, for repair and ordinary `--save-script` recording alike.
+Without `--force`/`--overwrite`, one exclusive `linkSync` publishes the file and refuses a pre-existing target, for repair and ordinary `--save-script` recording alike; with the flag, publication replaces the target atomically.
 
 Inside an armed repair segment, out-of-band observation-only commands are excluded from the healed script by default.
 Plan-step provenance (`internal.replayPlanStep`) keeps authored observations.

@@ -6,7 +6,7 @@ Proposed (2026-09-14).
 This ADR amends ADR 0019 section 5 and the capture-kit recovery contracts for the `screen-recording` resource kind only.
 ADR 0019 receives a short pointer paragraph, which section 2.7 of this ADR describes.
 ADR 0022 and ADR 0023 have the same relationship to ADR 0019.
-App-log, audio-probe, and perf-capture keep the ADR 0019 contract unchanged.
+App-log and audio-probe keep the ADR 0019 contract unchanged; perf capture already preserves retry material after a failed finish.
 The shared mechanism of rule 6 reaches each of these kinds only through the own failed-finish test of that kind.
 
 Completed rollout history is in git history.
@@ -70,7 +70,7 @@ Six rules make the table operational:
    Forced cleanup is never inferred from "finish threw".
    The mechanism is in the shared coordinator (`packages/capture-kit/src/durable-capture/transitions.ts`).
    But each kind must earn its scope.
-   Each of app-log, audio-probe, and perf-capture gets its own failed-finish test that proves what its retry needs.
+   Each of app-log and audio-probe gets its own failed-finish test that proves what its retry needs; perf capture already has one.
    A kind whose retry needs nothing keeps its current disposal explicitly.
    The Android data loss alone establishes the rule for recording only.
 
@@ -322,7 +322,7 @@ This kind would remove the `cleanup-pending` phase and admission ledger.
 It would record the recorder observation and native-path disposition beside the committed export.
 A manifest would remain archived by fence generation until both are settled.
 For each durable kind, failed finish would no longer imply forced cleanup once its failed-finish test states its retry requirements.
-App-log, audio-probe, and perf-capture would retain the ADR 0019 contract unchanged.*
+App-log and audio-probe would retain the ADR 0019 contract unchanged.*
 
 ### 2.8 Android duration (separate decision)
 

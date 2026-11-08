@@ -44,7 +44,7 @@ Do not repeat general repo guidance that `AGENTS.md` already gives.
 
 ## The record stays current
 
-An ADR states the current truth. It is not a log of the discussion around the decision. An optional dated "Decision history" line records a real change of direction. If the direction really changed, you may add one such line with its reason and a link.
+An ADR states the current truth. It is not a log of the discussion around the decision. A repo guard fails when an ADR cites a repository file that does not exist. An optional dated "Decision history" line records a real change of direction. If the direction really changed, you may add one such line with its reason and a link.
 
 ## Before you amend
 

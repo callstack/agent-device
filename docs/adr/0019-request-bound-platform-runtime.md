@@ -220,7 +220,7 @@ Startup recovery is triggered only by persisted durable manifests or platform-ow
 Daemon shutdown first detaches helper managers for handoff, then stops each still-owned generation at most once after session resources finalize.
 Each domain owns its isolated session-teardown step; there is no generic lifecycle-hook API.
 Test-IME restoration is durable device state with marker recovery; helper stops follow platform policy; close-time cleanup uses neutral owner services.
-Android test-IME marker and web browser orphan startup recovery still need to move to the evidence-triggered pattern when their owning domains migrate.
+Android test-IME marker recovery already runs only on recovery evidence; web browser orphan startup cleanup still needs to move to the evidence-triggered pattern when its owning domain migrates.
 
 ### 11. The platform-services port carries host asks that bind no device
 
