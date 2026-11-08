@@ -3,7 +3,7 @@
 ## Status
 
 Proposed (2026-09-14).
-This ADR amends ADR 0019 section 5 for the `screen-recording` resource kind only.
+This ADR amends ADR 0019 section 5 and the capture-kit recovery contracts for the `screen-recording` resource kind only.
 ADR 0019 receives a short pointer paragraph, which section 2.7 of this ADR describes.
 ADR 0022 and ADR 0023 have the same relationship to ADR 0019.
 App-log, audio-probe, and perf-capture keep the ADR 0019 contract unchanged.
@@ -79,7 +79,7 @@ the reduction of the Android device marker to marker-only content (2.6), and `--
 
 ## 1. Context
 
-A playable export and a stopped recorder are independent facts. The ADR 0019 section 5 contract refuses a usable export when ownership is uncertain. Its forced cleanup after a failed finish can destroy the material that a retry needs. On Android, forced cleanup after a failed pull can remove the remote artifact and the marker, so a retry has nothing to pull. Screen recording now preserves retry material after a failed finish. Platform backends need different identity and stop procedures, while the coordinator needs one guarded stop-and-export path.
+A playable export and a stopped recorder are independent facts. The ADR 0019 section 5 contract refuses a usable export when ownership is uncertain. Its forced cleanup after a failed finish can destroy the material that a retry needs. On Android, forced cleanup after a failed pull can remove the remote artifact and the marker, so a retry has nothing to pull. Screen recording and perf capture now preserve retry material after a failed finish; app logs and audio probes still dispose. Platform backends need different identity and stop procedures, while the coordinator needs one guarded stop-and-export path.
 
 HarmonyOS and web reattachment return `unreattachable`. Android can report `active` or `completed`; Apple can return an `active` export-restoration handle when a simulator recorder is gone and its export remains recoverable. An active recording holds off the idle reaper, and the startup reaper initially sends `SIGINT` to orphaned owned `simctl recordVideo` processes.
 
@@ -307,11 +307,12 @@ Its full deletion is deferred until the launch and rotation crash windows are sh
 
 ### 2.7 ADR 0019 amendment
 
-Section 5 currently has these requirements:
+ADR 0019 section 5 and the capture-kit recovery contracts currently have these requirements:
 
 - Every durable facet exposes `reattach` and `cleanup`.
 - Uncertain cleanup stays `cleanup-pending`.
-- When finish throws, forced cleanup runs in `packages/capture-kit/src/durable-capture/transitions.ts`.
+- When finish throws, forced cleanup runs in `packages/capture-kit/src/durable-capture/transitions.ts` for kinds whose failed-finish policy disposes (app logs and audio probes).
+  Screen recording and perf capture preserve retry material.
 
 The proposed amendment:
 *Screen recording would be a **stop-and-collect** resource.
@@ -387,7 +388,7 @@ Every published surface changes additively.
 - Finish fails at collect → no `forceCleanup`.
   The remote artifact and the manifest are intact, and the manifest is `open`.
   The second stop succeeds.
-  (Rule 6; today this deletes the Android artifact.)
+  (Rule 6; shipped for screen recording.)
   There is one such test for each durable kind, and each test states what its retry needs.
   A kind that keeps disposal says so in the test name.
 - Commit fails after finalize (overlay applied) → the manifest is `open` at phase `finalized`, and the collected copy is present.
@@ -459,8 +460,8 @@ These steps remain:
 
 2. Rule 6 in the shared coordinator, gated for each kind:
    a failed finish no longer runs forced cleanup for a kind once the failed-finish test of that kind states what its retry needs.
-   Recording comes first.
-   The other three kinds each come in their own commit.
+   Recording and perf capture have shipped.
+   App logs and audio probes remain, each in its own commit.
    This step is independently shippable.
 3. Consolidate **stop, export, and replay** with existing primitives:
    the coordinator stop of 2.3, `recorder` and `capturedDurationMs` on the response, recovery through the coordinator (2.5), and the admission order of 2.4.
@@ -489,5 +490,5 @@ The proposed end state has one stop path, one lifecycle store, three ownership a
 Deletion test:
 
 - `screenRecordingReattach`, `screenRecordingCleanup`, `cleanup-pending` for recording, and `ScreenRecordingAdmissionLedger` no longer exist in production.
-- `packages/capture-kit/src/durable-capture/transitions.ts` has no cleanup-on-failed-finish path.
+- `packages/capture-kit/src/durable-capture/transitions.ts` has no cleanup-on-failed-finish path for screen recording.
 - Every situation in the rules table has a passing test on every backend where it applies.
