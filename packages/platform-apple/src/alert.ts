@@ -86,7 +86,7 @@ export async function readAppleAlert(
 /**
  * Poll `get` until one answers or the caller's window runs out. The first attempt gets the whole
  * window and later ones only what is left, so a runner that blocks cannot outlive the budget.
- * After a completed observation, another read needs more than the backend's read floor of budget.
+ * After a completed observation, another read needs more than one polling interval of budget.
  * A dispatched read still owns its result, including a watchdog timeout.
  */
 export async function awaitAppleAlert(
@@ -96,13 +96,12 @@ export async function awaitAppleAlert(
   env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown>> {
   const runAlert = runAppleAlert(device, runnerOptions, options, env);
-  const readFloorMs = minReadBudgetMs(device);
   const timeout = options?.timeoutMs ?? DEFAULT_ALERT_TIMEOUT_MS;
   const start = Date.now();
   let lastRetriable: AppError | undefined;
   while (Date.now() - start < timeout) {
     const remainingMs = remainingBudgetMs(start, timeout);
-    if (lastRetriable && remainingMs <= readFloorMs) {
+    if (lastRetriable && remainingMs <= ALERT_POLL_INTERVAL_MS) {
       await sleep(remainingMs);
       break;
     }
@@ -130,6 +129,11 @@ export async function awaitAppleAlert(
  * is still animating in — or an unreadable prompt. Any other failure is reported on its first
  * occurrence. A window exhausted on absence carries the scoped-snapshot fallback the agent needs
  * next; one exhausted on an unreadable prompt keeps the runner's own hint.
+ *
+ * Through the XCTest runner a retry starts only with more than `ALERT_MIN_READ_BUDGET_MS` left,
+ * so the retry horizon is `ALERT_ACTION_RETRY_MS - ALERT_MIN_READ_BUDGET_MS` after the first read:
+ * 500 ms, room for one retry when the first absence returns within about 200 ms. The macOS helper
+ * takes no budget and has no watchdog, so it retries for the whole window.
  */
 export async function actOnAppleAlert(
   device: DeviceInfo,
@@ -139,7 +143,6 @@ export async function actOnAppleAlert(
   env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown>> {
   const runAlert = runAppleAlert(device, runnerOptions, options, env);
-  const readFloorMs = minReadBudgetMs(device);
   const runnerTimeoutMs = isIosFamily(device) ? DEFAULT_ALERT_TIMEOUT_MS : ALERT_ACTION_RETRY_MS;
   const start = Date.now();
   let lastError: unknown;
@@ -156,17 +159,10 @@ export async function actOnAppleAlert(
       if (!isAlertRetriableError(error)) break;
     }
     await sleep(ALERT_POLL_INTERVAL_MS);
-    if (remainingBudgetMs(start, ALERT_ACTION_RETRY_MS) <= readFloorMs) break;
+    const remainingMs = remainingBudgetMs(start, ALERT_ACTION_RETRY_MS);
+    if (!isMacOs(device) && remainingMs <= ALERT_MIN_READ_BUDGET_MS) break;
   }
   throw withAlertFallbackHint(lastError);
-}
-
-/**
- * The XCTest runner cuts a read off with a main-thread timeout when its budget is short, so its
- * reads need `ALERT_MIN_READ_BUDGET_MS`. The macOS helper takes no budget and has no such watchdog.
- */
-function minReadBudgetMs(device: DeviceInfo): number {
-  return isMacOs(device) ? ALERT_POLL_INTERVAL_MS : ALERT_MIN_READ_BUDGET_MS;
 }
 
 function remainingBudgetMs(start: number, timeoutMs: number): number {
