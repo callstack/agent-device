@@ -681,7 +681,9 @@ function sessionlessScreenshotHandler(prefix: string) {
     token: 'test-token',
     sessionStore: makeSessionStore(prefix),
     leaseRegistry: new LeaseRegistry(),
-    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways({
+      local: async () => [ANDROID_EMULATOR],
+    }),
     deviceRuntimeGateway: runtime.gateway,
     trackDownloadableArtifact: () => 'artifact-id',
   });
@@ -703,7 +705,7 @@ test('an unnamed sessionless screenshot keeps the generic refusal with the open 
   });
 
   expect(runtime.captureScreenshot).not.toHaveBeenCalled();
-  expect(fs.existsSync(out)).toBe(false);
+  expect(runtime.binds).toHaveLength(0);
 
   expect(response.ok).toBe(false);
   if (response.ok) return;
@@ -728,6 +730,7 @@ test('a named sessionless screenshot answers with the typed named-session refusa
   });
 
   expect(runtime.captureScreenshot).not.toHaveBeenCalled();
+  expect(runtime.binds).toHaveLength(0);
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(response.error.code).toBe('SESSION_NOT_FOUND');
