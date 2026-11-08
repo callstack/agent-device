@@ -172,7 +172,7 @@ export async function captureAppleMemorySnapshot(
       appBundleId,
       pid: processInfo.pid,
       path: outPath,
-      hint: 'Retry with a writable --out path. If the file is still empty, run with --debug and inspect leaks output.',
+      hint: 'Retry with a writable --out path. If the file is still empty, check free disk space at path.',
     });
   }
 
@@ -252,7 +252,7 @@ function annotateAppleMemorySnapshotToolError(
       pid: processInfo.pid,
       processName: path.basename(readProcessCommandToken(processInfo.command)),
       path: outPath,
-      hint: 'Retry perf memory snapshot. If it still fails, run with --debug and inspect leaks output.',
+      hint: 'Retry perf memory snapshot. If it still fails, the Cause line names the leaks failure.',
     },
     error,
   );
@@ -666,7 +666,7 @@ function resolveAppleMemorySnapshotHint(
       ? 'Grant the agent terminal process permission to inspect this macOS app, then retry.'
       : 'Keep the simulator booted and app running; if inspection is denied, retry with a debug simulator build.';
   }
-  return 'Keep the app process running and retry perf memory snapshot with --debug if the failure persists.';
+  return 'Keep the app process running and retry perf memory snapshot. If it still fails, read the leaks output in error.details.stdout and error.details.stderr (--json).';
 }
 
 function buildAppleMemoryPerfSample(args: {

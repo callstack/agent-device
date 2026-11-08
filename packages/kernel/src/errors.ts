@@ -532,6 +532,14 @@ function stringDetail(
   return typeof value === 'string' ? value : undefined;
 }
 
+/** The recorded {@link DispatchDisclosure} in a details bag, or `undefined` when no layer recorded one. */
+export function readDispatchDisclosure(
+  details: Record<string, unknown> | undefined,
+): DispatchDisclosure | undefined {
+  const value = details?.dispatched;
+  return value === 'no' || value === 'unknown' ? value : undefined;
+}
+
 /**
  * Narrows an untrusted `diagnosticsRecord` — off the wire or out of a details
  * bag — to the locator type, or `undefined`. One reader, so a daemon payload
@@ -606,16 +614,27 @@ export function retriableForErrorCode(code: string): boolean | undefined {
   return isKnownAppErrorCode(code) ? RETRIABILITY_BY_CODE[code] : undefined;
 }
 
-export function defaultHintForCode(code: string): string | undefined {
+/**
+ * The recovery step for a failure whose producer gave no hint. The CLI prints it as the `Next:`
+ * step, so it never asks for a `--debug` rerun (a failure already flushed its diagnostics log) or
+ * for a blind retry. It depends on the code only: the CLI adds the observe-first step from the
+ * final `details.dispatched` when it prints the line, so a layer that raises the disclosure after
+ * this hint was resolved cannot leave a stale retry instruction behind.
+ */
+export function defaultHintForCode(code: string): string {
+  return codeRecoveryHint(code) ?? 'Read the diagnostics log for the failing step.';
+}
+
+function codeRecoveryHint(code: string): string | undefined {
   switch (code) {
     case 'INVALID_ARGS':
-      return 'Check command arguments and run --help for usage examples.';
+      return 'Fix the command arguments; run help <command> for usage.';
     case 'SESSION_NOT_FOUND':
-      return 'Run open first or pass an explicit device selector.';
+      return 'Run open <app> first, or pass an explicit device selector.';
     case 'TOOL_MISSING':
-      return 'Install required platform tooling and ensure it is available in PATH.';
+      return 'Install the missing tool and put it on PATH.';
     case 'DEVICE_NOT_FOUND':
-      return 'Verify the target device is booted/connected and selectors match.';
+      return 'Run devices to list available targets, then pass a selector that matches one.';
     case 'APP_NOT_INSTALLED':
       return 'Run apps to discover the exact installed package or bundle id, or install the app before open.';
     case 'UNSUPPORTED_OPERATION':
@@ -627,21 +646,19 @@ export function defaultHintForCode(code: string): string | undefined {
     case 'DEVICE_IN_USE':
       return 'The device is busy with another agent-device request; retry once it frees up.';
     case 'REPLAY_DIVERGENCE':
-      return 'Read details.divergence (screen/suggestions) for repair context, or rerun with --json for the full report.';
+      return 'Read the divergence report (details.divergence) for the screen and selector suggestions to repair the step.';
     case 'REPAIR_SESSION_EXPIRED':
       return 'The --save-script repair session was reaped before it was finalized; re-run replay <script> --save-script from the start.';
     case 'REPAIR_COMMIT_FAILED':
       return 'The repair transaction completed, but committing its healed script failed at teardown (no-clobber refusal or a filesystem error); inspect the target path/permissions, then re-run replay <script> --save-script to retry.';
     case 'NOT_IMPLEMENTED':
       return 'This command is part of the planned API but is not implemented yet.';
-    case 'COMMAND_FAILED':
-      return 'Retry with --debug and inspect diagnostics log for details.';
     case 'UNAUTHORIZED':
       return 'Refresh daemon metadata and retry the command.';
     case 'UNKNOWN':
-      return 'Unexpected internal error. Retry with --debug and report the diagnostics log if it persists.';
+      return 'Unexpected internal error. Read the diagnostics log, and report it if the error persists.';
     default:
-      return 'Retry with --debug and inspect diagnostics log for details.';
+      return undefined;
   }
 }
 

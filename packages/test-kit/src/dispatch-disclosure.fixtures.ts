@@ -11,6 +11,7 @@ export const DISPATCH_DISCLOSURE_PRODUCERS = [
   'webdriver',
   'web-agent-browser',
   'post-action-guard',
+  'daemon-client',
 ] as const;
 
 export type DispatchDisclosureProducer = (typeof DISPATCH_DISCLOSURE_PRODUCERS)[number];
@@ -58,6 +59,8 @@ export const DISPATCH_DISCLOSURE_DRIVER_OWNERS: Readonly<Record<string, string>>
   'webdriver.orientation.': 'packages/provider-webdriver/src/webdriver-orientation.test.ts',
   'web-agent-browser.':
     'packages/platform-web/src/__tests__/agent-browser-provider-dispatch-disclosure.test.ts',
+  'daemon-client.':
+    'packages/daemon-client/src/__tests__/daemon-client-dispatch-disclosure.test.ts',
   'maestro-direct.':
     'packages/daemon/src/execution/interaction/internal/interaction-touch-direct-ios.test.ts',
 };

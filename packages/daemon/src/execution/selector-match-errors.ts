@@ -23,7 +23,7 @@ export function buildAmbiguousMatchError(
   return errorResponse(
     'AMBIGUOUS_MATCH',
     `find matched ${matches.length} elements for ${locator} "${query}". Use a more specific locator or selector.`,
-    { locator, query, ...elementMatchCandidateDetails(matches) },
+    { locator, query, ...elementMatchCandidateDetails(matches), dispatched: 'no' },
   );
 }
 
@@ -39,6 +39,6 @@ export function buildNestedTextFieldsError(
   return errorResponse(
     'AMBIGUOUS_MATCH',
     `find matched ${ref}, which contains ${fields.length} text fields. Use a more specific locator or selector.`,
-    { ref, ...elementMatchCandidateDetails(fields) },
+    { ref, ...elementMatchCandidateDetails(fields), dispatched: 'no' },
   );
 }

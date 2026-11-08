@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { formatHumanErrorLines } from './error.ts';
+import { formatHumanError, type HumanErrorOptions } from './error.ts';
 
-test('formatHumanErrorLines renders a structured cause unconditionally', () => {
+test('formatHumanError renders a structured cause unconditionally', () => {
   const err = new AppError(
     'COMMAND_FAILED',
     'The daemon failed to fetch the app source',
@@ -18,13 +18,14 @@ test('formatHumanErrorLines renders a structured cause unconditionally', () => {
   assert.match(output, /Cause: ECONNREFUSED connect ECONNREFUSED 10\.0\.0\.1:443/);
 });
 
-function renderLines(err: AppError): string {
-  return formatHumanErrorLines(err).join('\n');
+function renderLines(err: AppError, options?: HumanErrorOptions): string {
+  const { summary, body } = formatHumanError(err, options);
+  return [summary, ...body].join('\n');
 }
 
 // --- ADR 0012 migration step 2: replay divergence compact text report ---
 
-test('formatHumanErrorLines renders a compact divergence report unconditionally (not gated behind --debug)', () => {
+test('formatHumanError renders a compact divergence report unconditionally (not gated behind --debug)', () => {
   const err = new AppError(
     'REPLAY_DIVERGENCE',
     'Replay failed at step 2 (click "Save"): not hittable',
@@ -65,7 +66,7 @@ test('formatHumanErrorLines renders a compact divergence report unconditionally 
 
 // --- #2560: run-level warnings ride the failed response to the human surface ---
 
-test('formatHumanErrorLines renders run-level warnings carried in error details', () => {
+test('formatHumanError renders run-level warnings carried in error details', () => {
   const err = new AppError('REPLAY_DIVERGENCE', 'Replay failed at step 2 (tapOn "Save")', {
     step: 2,
     warnings: ['Optional Maestro assertVisible skipped at line 1: no match', 7],
@@ -80,7 +81,7 @@ test('formatHumanErrorLines renders run-level warnings carried in error details'
   assert.equal(output.includes('Warning: 7'), false);
 });
 
-test('formatHumanErrorLines prints no Warning lines without a warnings channel', () => {
+test('formatHumanError prints no Warning lines without a warnings channel', () => {
   const err = new AppError('COMMAND_FAILED', 'tap failed');
 
   const output = renderLines(err);
@@ -90,36 +91,86 @@ test('formatHumanErrorLines prints no Warning lines without a warnings channel',
 
 // --- #1597: AMBIGUOUS_MATCH candidates print unconditionally, capped at 5 ---
 
-test('formatHumanErrorLines lists AMBIGUOUS_MATCH candidates unconditionally, not gated behind --debug', () => {
+test('formatHumanError puts two or three distinguishable ambiguous candidates on the summary line', () => {
+  const err = new AppError('AMBIGUOUS_MATCH', 'Selector matched 3 elements: text~="Save"', {
+    matches: 3,
+    refsGeneration: 7,
+    candidates: ['@e2 [button] "Save"', '@e5 [button] "Save draft"', '@e9 [link] "Save as"'],
+  });
+
+  const { summary, body } = formatHumanError(err);
+
+  // A reader that keeps one line (tail -1, head -1) still gets every ref it can act on.
+  assert.match(
+    summary,
+    /Next: Act on one ref .*: @e2~s7 \[button\] "Save"; @e5~s7 \[button\] "Save draft"; @e9~s7 \[link\] "Save as"$/,
+  );
+  assert.equal(body.join('\n').includes('Candidates:'), false);
+});
+
+// Identical candidates leave nothing to choose by: naming them as the step would invite a guess.
+test('formatHumanError keeps the narrowing hint when ambiguous candidates read the same', () => {
   const err = new AppError(
     'AMBIGUOUS_MATCH',
     'find matched 3 elements for text "Follow". Use a more specific locator or selector.',
     {
-      locator: 'text',
-      query: 'Follow',
       matches: 3,
       candidates: ['@e2 [button] "Follow"', '@e5 [button] "Follow"', '@e9 [button] "Follow"'],
     },
   );
 
-  // This is the exact old-message shape the bug reported: the human render
-  // used to stop at "Error (...): ...\nHint: ...", so an agent reading it had
-  // no @ref to act on. Asserting the candidate lines appear proves this red
-  // against that shape (it would fail before candidate views were wired into
-  // formatHumanErrorLines).
-  const output = renderLines(err);
+  const { summary, body } = formatHumanError(err);
 
-  assert.match(output, /^Error \(AMBIGUOUS_MATCH\): find matched 3 elements/);
-  assert.match(
-    output,
-    /Candidates:\n {2}@e2 \[button\] "Follow"\n {2}@e5 \[button\] "Follow"\n {2}@e9 \[button\] "Follow"/,
-  );
-  // 3 candidates for 3 matches: nothing was capped, so no "+N more" marker.
-  assert.equal(/\+\d+ more/.test(output), false);
-  // Not gated behind --debug: showDetails defaults to false/undefined here.
+  assert.match(summary, /Next: Multiple candidates matched\. Narrow the query/);
+  assert.equal(summary.includes('Act on one ref'), false);
+  assert.match(body.join('\n'), /Candidates:\n {2}@e2 \[button\] "Follow"/);
 });
 
-test('formatHumanErrorLines appends a "+N more" marker when candidates were capped', () => {
+test('formatHumanError keeps the summary on one line when a candidate label has a newline', () => {
+  const err = new AppError('AMBIGUOUS_MATCH', 'Selector matched 2 elements: text="Pay now"', {
+    matches: 2,
+    candidates: ['@e2 [button] "Pay\nnow"', '@e3 [link] "Pay\nnow"'],
+  });
+
+  const { summary } = formatHumanError(err);
+
+  assert.equal(summary.includes('\n'), false);
+  assert.match(summary, /@e2 \[button\] "Pay now"; @e3 \[link\] "Pay now"$/);
+});
+
+test('formatHumanError lists four or more ambiguous candidates in the body', () => {
+  const candidates = [
+    '@e2 [button] "A"',
+    '@e3 [button] "B"',
+    '@e4 [button] "C"',
+    '@e5 [button] "D"',
+  ];
+  const err = new AppError('AMBIGUOUS_MATCH', 'Selector matched 4 elements: text="x"', {
+    matches: 4,
+    candidates,
+    hint: 'Narrow the selector.',
+  });
+
+  const { summary, body } = formatHumanError(err);
+
+  assert.match(summary, /Next: Narrow the selector\.$/);
+  assert.match(body.join('\n'), /Candidates:\n {2}@e2 \[button\] "A"/);
+});
+
+test('formatHumanError keeps candidates of a non-ambiguity failure in the body', () => {
+  const err = new AppError('COMMAND_FAILED', 'not hittable', {
+    matches: 2,
+    candidates: ['@e2 [button] "A"', '@e3 [button] "B"'],
+    hint: 'Scroll it into view.',
+  });
+
+  const { summary, body } = formatHumanError(err);
+
+  assert.match(summary, /Next: Scroll it into view\.$/);
+  assert.match(body.join('\n'), /Candidates:/);
+});
+
+test('formatHumanError appends a "+N more" marker when candidates were capped', () => {
   const err = new AppError('AMBIGUOUS_MATCH', 'find matched 7 elements for text "Row". ...', {
     matches: 7,
     candidates: [
@@ -140,7 +191,7 @@ test('formatHumanErrorLines appends a "+N more" marker when candidates were capp
 // -device/device-selection/dispatch-resolve) key their candidate list `devices`, so the CLI
 // renders the udids the "pass --udid" hint asks for. The structured candidate
 // view comes from @agent-device/kernel/errors and formatting stays local here.
-test('formatHumanErrorLines lists device candidates for the device-domain resolvers', () => {
+test('formatHumanError lists device candidates for the device-domain resolvers', () => {
   const err = new AppError(
     'AMBIGUOUS_MATCH',
     'Multiple booted iOS simulators have com.example.app installed',
@@ -160,7 +211,7 @@ test('formatHumanErrorLines lists device candidates for the device-domain resolv
   assert.equal(output.includes('[object Object]'), false);
 });
 
-test('formatHumanErrorLines shows an unavailable screen reason and omitted suggestions hint', () => {
+test('formatHumanError shows an unavailable screen reason and omitted suggestions hint', () => {
   const err = new AppError('REPLAY_DIVERGENCE', 'Replay failed at step 1', {
     divergence: {
       version: 1,
@@ -183,4 +234,95 @@ test('formatHumanErrorLines shows an unavailable screen reason and omitted sugge
 
   assert.match(output, /Screen: unavailable \(capture-failed\)\. take a snapshot/);
   assert.match(output, /Suggestions: 2 available \(omitted at this response level/);
+});
+
+// --- the summary line: code, message, typed dispatch fact, Next step ---
+
+test('formatHumanError states a possible dispatch and the observe-first step on one line', () => {
+  const err = new AppError('COMMAND_FAILED', 'tap @e12: runner did not answer within 10s', {
+    dispatched: 'unknown',
+  });
+
+  const { summary } = formatHumanError(err);
+
+  assert.equal(
+    summary,
+    'Error (COMMAND_FAILED): tap @e12: runner did not answer within 10s. May have reached the device. Next: Run snapshot to check the screen before you retry. Read the diagnostics log for the failing step.',
+  );
+});
+
+// Batch aggregation, the request ledger and replay projection can raise `dispatched` after the
+// hint was resolved. The observe-first step comes from the final disclosure, not from the hint.
+test('formatHumanError puts the observe-first step before a hint resolved under an earlier verdict', () => {
+  const err = new AppError('DEVICE_IN_USE', 'Batch failed at step 2 (press): device busy', {
+    hint: 'Retry once the device frees up.',
+    dispatched: 'unknown',
+  });
+
+  assert.match(
+    formatHumanError(err).summary,
+    /May have reached the device\. Next: Run snapshot to check the screen before you retry\. Retry once the device frees up\.$/,
+  );
+});
+
+test('formatHumanError states a proven non-dispatch and says nothing for an unclassified one', () => {
+  const refused = formatHumanError(
+    new AppError('SESSION_NOT_FOUND', 'No active session.', { dispatched: 'no' }),
+  );
+  assert.match(
+    refused.summary,
+    /^Error \(SESSION_NOT_FOUND\): No active session\. Not dispatched\. Next: Run open/,
+  );
+
+  const unclassified = formatHumanError(new AppError('COMMAND_FAILED', 'helper failed'));
+  assert.equal(
+    unclassified.summary,
+    'Error (COMMAND_FAILED): helper failed. Next: Read the diagnostics log for the failing step.',
+  );
+});
+
+test('formatHumanError prints the log path and never the diagnostic id', () => {
+  const err = new AppError('COMMAND_FAILED', 'boom', {
+    diagnosticId: 'diag-123',
+    logPath: '/tmp/diag.ndjson',
+  });
+
+  const output = renderLines(err);
+
+  assert.match(output, /^Log: \/tmp\/diag\.ndjson$/m);
+  assert.equal(output.includes('diag-123'), false);
+});
+
+test('formatHumanError reports a remote record it could not fetch as an unavailable log', () => {
+  const err = new AppError('COMMAND_FAILED', 'boom', { logPathUnavailable: 'fetch refused' });
+
+  assert.match(renderLines(err), /^Log: unavailable \(fetch refused\)$/m);
+});
+
+test('formatHumanError keeps the summary on one bounded line and the full message in the body', () => {
+  const longMessage = `first line\nsecond line ${'x'.repeat(400)}`;
+  const { summary, body } = formatHumanError(new AppError('COMMAND_FAILED', longMessage));
+
+  assert.equal(summary.includes('\n'), false);
+  assert.match(summary, /^Error \(COMMAND_FAILED\): first line second line x+…/);
+  assert.ok(summary.length < 600);
+  assert.equal(body[0], `Message: ${longMessage}`);
+});
+
+test('formatHumanError adds the command synopsis to an INVALID_ARGS Next step', () => {
+  const synopsis = 'agent-device press <x y|@ref|selector>';
+  const generic = formatHumanError(new AppError('INVALID_ARGS', 'Missing target.'), { synopsis });
+  assert.match(
+    generic.summary,
+    /Next: Fix the command arguments; run help <command> for usage\. Usage: agent-device press <x y\|@ref\|selector>$/,
+  );
+
+  const specific = formatHumanError(
+    new AppError('INVALID_ARGS', 'Bad pair.', { hint: 'Use --serial for Android.' }),
+    { synopsis },
+  );
+  assert.match(specific.summary, /Next: Use --serial for Android\. Usage: agent-device press /);
+
+  const notArgs = formatHumanError(new AppError('COMMAND_FAILED', 'boom'), { synopsis });
+  assert.equal(notArgs.summary.includes('Usage:'), false);
 });

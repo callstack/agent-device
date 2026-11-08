@@ -215,7 +215,7 @@ export function resolveDaemonStartupHint(
   const artifacts = [state.hasInfo ? paths.infoPath : null, state.hasLock ? paths.lockPath : null]
     .filter(Boolean)
     .join(' and ');
-  return `Daemon startup did not establish a reachable owner. ${artifacts ? `State was retained at ${artifacts}. ` : ''}Retry with --debug and inspect daemon diagnostics. Before upgrading, stop all older clients and daemons with their original CLI and prevent them from returning to this state directory. Unverified lock state requires confirming every user stopped before manual recovery; deleting metadata alone is not a safe reset.`;
+  return `Daemon startup did not establish a reachable owner. ${artifacts ? `State was retained at ${artifacts}. ` : ''}Read daemon.log in the state directory. Before upgrading, stop all older clients and daemons with their original CLI and prevent them from returning to this state directory. Unverified lock state requires confirming every user stopped before manual recovery; deleting metadata alone is not a safe reset.`;
 }
 
 export function daemonRegistrationUnprovenError(

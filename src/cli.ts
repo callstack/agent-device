@@ -1,4 +1,3 @@
-import { resolveRemoteRequestDiagnosticsPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import { parseRawArgs, usage, usageForCommand } from './cli/parser/args.ts';
 import { suggestCommandFor } from './cli/parser/command-suggestions.ts';
 import {
@@ -69,13 +68,9 @@ type CliDaemonRequest = Parameters<CliDaemonTransport>[0];
 type CliDaemonTransportOptions = Parameters<CliDaemonTransport>[1];
 type ClientDaemonRequest = Parameters<AgentDeviceDaemonTransport>[0];
 
-const printHumanError = (
-  err: AppError | NormalizedError,
-  options: { showDetails?: boolean } = {},
-): Promise<void> =>
-  import('./commands/output/human-error.ts').then(({ printHumanError: write }) =>
-    write(err, options),
-  );
+const printHumanError = async (
+  ...args: Parameters<typeof import('./cli/failure-output.ts').printHumanError>
+): Promise<void> => (await import('./cli/failure-output.ts')).printHumanError(...args);
 
 const printJson = (
   result: { success: true; data?: unknown } | { success: false; error: NormalizedError },
@@ -279,7 +274,7 @@ async function parseCliInputOrExit(
     if (options.jsonRequested) {
       await printJson({ success: false, error: normalized });
     } else {
-      await printHumanError(normalized, { showDetails: options.debugEnabled });
+      await printHumanError(normalized, { debugTier: options.debugEnabled, argv });
     }
     return exitAfterFlush(1);
   }
@@ -419,7 +414,10 @@ async function resolveRunContextOrExit(
     if (parsed.flags.json) {
       await printJson({ success: false, error: normalized });
     } else {
-      await printHumanError(normalized, { showDetails: base.debugOutputEnabled });
+      await printHumanError(normalized, {
+        debugTier: base.debugOutputEnabled,
+        command: parsed.command,
+      });
     }
     return exitAfterFlush(1);
   }
@@ -644,66 +642,32 @@ async function handleRunCliFailure(
     }
     return;
   }
+  // Stop the live --debug tail first so none of its output lands after the error's
+  // closing summary line.
+  if (logTailStopper) logTailStopper();
   if (ctx.effectiveFlags.json) {
     await printJson({
       success: false,
       error: normalized,
     });
   } else {
-    await printHumanError(normalized, { showDetails: ctx.debugOutputEnabled });
-    if (ctx.debugOutputEnabled) {
-      printFailureLogTail(ctx, normalized);
-    }
+    await printHumanError(normalized, {
+      debugTier: ctx.debugOutputEnabled,
+      command: ctx.command,
+      logTail: ctx.debugOutputEnabled
+        ? {
+            daemonBaseUrl: ctx.effectiveFlags.daemonBaseUrl,
+            daemonPaths: ctx.daemonPaths,
+            record: normalized.diagnosticsRecord,
+          }
+        : undefined,
+    });
   }
-  if (logTailStopper) logTailStopper();
   // #1596: a bare `process.exit()` right after these writes can drop them —
   // Node flushes stdout/stderr synchronously only to a file or TTY, and this
   // CLI is commonly piped by whatever is driving it. `exitAfterFlush` waits
   // for the writes above to actually reach the pipe first.
   await exitAfterFlush(1);
-}
-
-const DAEMON_LOG_TAIL_MAX_BYTES = 64_000;
-
-/**
- * The evidence `--debug` puts inline in the caller's own log after a failure.
- *
- * For a LOCAL daemon that is the daemon log this process can read. For a REMOTE
- * one that file belongs to another machine (the same reason
- * `maybeStartDaemonLogTail` does not follow it), so the tail comes from the
- * request record fetched to this host instead — which is what makes a CI job's
- * transcript carry the evidence without a second round trip (#1801).
- */
-function printFailureLogTail(ctx: CliRunContext, normalized: NormalizedError): void {
-  if (!ctx.effectiveFlags.daemonBaseUrl) {
-    printLogFileTail('daemon log', ctx.daemonPaths.logPath);
-    return;
-  }
-  const record = normalized.diagnosticsRecord;
-  if (!record) return;
-  // Recomputed from the locator through the same helper that wrote the copy, so
-  // the tail can only ever come from the fetched record (absent when the fetch
-  // failed, since nothing was written).
-  printLogFileTail(
-    'remote diagnostics',
-    resolveRemoteRequestDiagnosticsPath(ctx.daemonPaths.baseDir, record),
-  );
-}
-
-function printLogFileTail(label: string, logPath: string): void {
-  try {
-    if (fs.existsSync(logPath)) {
-      const content = fs.readFileSync(logPath, 'utf8');
-      const lines = content.split('\n');
-      let tail = lines.slice(Math.max(0, lines.length - 200)).join('\n');
-      if (tail.length > DAEMON_LOG_TAIL_MAX_BYTES) {
-        tail = tail.slice(tail.length - DAEMON_LOG_TAIL_MAX_BYTES);
-      }
-      if (tail.trim().length > 0) {
-        process.stderr.write(`\n[${label}]\n${tail}\n`);
-      }
-    }
-  } catch {}
 }
 
 function isDebugRequested(argv: string[]): boolean {
@@ -955,7 +919,10 @@ const isDirectRun = pathToFileURL(process.argv[1] ?? '').href === import.meta.ur
 if (isDirectRun) {
   runCli(process.argv.slice(2)).catch(async (error) => {
     const appErr = asAppError(error);
-    await printHumanError(normalizeError(appErr), { showDetails: true });
+    await printHumanError(normalizeError(appErr), {
+      debugTier: true,
+      argv: process.argv.slice(2),
+    });
     await exitAfterFlush(1);
   });
 }
