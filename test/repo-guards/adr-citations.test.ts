@@ -34,15 +34,18 @@ function findStaleAdrCitations(
   const trackedNames = new Set(trackedFiles.map((file) => path.posix.basename(file)));
   const stale: Citation[] = [];
   for (const adr of adrs) {
-    for (const [, span = ''] of adr.text.matchAll(CODE_SPAN)) {
-      for (const token of span.split(/\s+/)) {
-        if (!CITATION.test(token) || isNotRepositoryCitation(token)) continue;
-        const exists = token.includes('/') ? tracked.has(token) : trackedNames.has(token);
-        if (!exists) stale.push({ adr: adr.name, token });
-      }
+    for (const token of repositoryCitations(adr.text)) {
+      const exists = token.includes('/') ? tracked.has(token) : trackedNames.has(token);
+      if (!exists) stale.push({ adr: adr.name, token });
     }
   }
   return stale;
+}
+
+function repositoryCitations(text: string): string[] {
+  return [...text.matchAll(CODE_SPAN)]
+    .flatMap(([, span = '']) => span.split(/\s+/))
+    .filter((token) => CITATION.test(token) && !isNotRepositoryCitation(token));
 }
 
 function isNotRepositoryCitation(token: string): boolean {
