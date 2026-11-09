@@ -608,12 +608,17 @@ async function verifyEvidence(
   });
   const nodes = after?.snapshot?.nodes ?? [];
   const before = resolved.kind === 'point' ? undefined : resolved.preAction?.nodes;
-  return {
+  // Mirror production: when no baseline was captured there was no comparison,
+  // so the claim is omitted rather than reported as an unchanged screen.
+  const evidence: InteractionEvidence = {
     nodeCount: nodes.length,
     interactiveNodeCount: nodes.length,
     digest: `fake-digest-${nodes.length}`,
-    changedFromBefore: before === undefined || before.length !== nodes.length,
   };
+  if (before !== undefined) {
+    evidence.changedFromBefore = before.length !== nodes.length;
+  }
+  return evidence;
 }
 
 async function settleObservation(
