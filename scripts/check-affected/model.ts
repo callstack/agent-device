@@ -78,6 +78,7 @@ export const ALL_CHECKS = [
   'fixture-cache',
   'fixture-fallback',
   'command-docs',
+  'adr-citations',
   'capabilities-matrix',
   'docs-links',
   'docs-prose',
@@ -587,6 +588,8 @@ const buildOwnership: OwnershipRule = ({ file }, input) => {
 const COMMAND_DOCS = 'website/docs/docs/commands.md';
 const AGENT_GUIDANCE = new Set(['AGENTS.md', 'CONTEXT.md', 'docs/adr/FORMAT.md']);
 
+const ADR_RECORD = /^docs\/adr\/\d{4}-.*\.md$/;
+
 function isAgentGuidance(file: string): boolean {
   return AGENT_GUIDANCE.has(file) || file.startsWith('docs/agents/');
 }
@@ -625,6 +628,16 @@ const docsOwnership: OwnershipRule = ({ file }) => {
         file,
         'own:command-docs',
         'the command reference is asserted against the CLI in both directions',
+      ),
+    );
+  }
+  if (ADR_RECORD.test(file)) {
+    selections.push(
+      reason(
+        'adr-citations',
+        file,
+        'own:adr-citations',
+        'every repository file an ADR cites must exist',
       ),
     );
   }

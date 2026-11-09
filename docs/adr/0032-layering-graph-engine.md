@@ -65,7 +65,7 @@ Thus, `typeof import('./x').f` and `await import('./x')` retain whichever appear
 
 Fallow agrees with custom on value/type classification for every pair but has no dynamic kind.
 Its boundary check follows `export type *` barrels to the declaring module.
-`src/commands/cli-runner.ts → src/agent-device-client.ts` therefore counts as `commands → client`. This adds one more R6 finding.
+The edge from `src/commands/cli-runner.ts` to the retired src/agent-device-client.ts therefore counts as `commands → client`. This adds one more R6 finding.
 Clean-tree findings are custom 0, depcruise 10, and fallow 11.
 Depcruise's ten are three R6 survivors and seven recorded R78 edges.
 
