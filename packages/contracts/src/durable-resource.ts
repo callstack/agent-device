@@ -94,7 +94,8 @@ export function createRetryableCleanup(
           outcome: {
             status: 'cleanup-pending',
             reason: 'cleanup-unconfirmed',
-            message: error instanceof Error ? error.message : String(error),
+            // Non-Error rejections keep the facet's default message; `cause` keeps the raw value.
+            message: error instanceof Error ? error.message : undefined,
           } as const,
           cause: error,
         }),

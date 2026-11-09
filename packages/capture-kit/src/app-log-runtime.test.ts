@@ -122,6 +122,25 @@ test('app-log async disposal normalizes a rejected cleanup and keeps its cause',
   assert.equal(cleanup.mock.calls.length, 2);
 });
 
+test('app-log async disposal normalizes a rejected cleanup whose value has no string form', async () => {
+  const rejection: unknown = Object.create(null);
+  const handle = createAppLogLiveHandle({
+    inspect: () => ({ backend: 'android', state: 'failed', startedAt: 12 }),
+    finish: async () => ({ status: 'completed', result: completion }),
+    forceCleanup: async () => {
+      throw rejection;
+    },
+  });
+
+  await assert.rejects(
+    async () => await handle[Symbol.asyncDispose](),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'cleanup-unconfirmed' &&
+      error.cause === rejection,
+  );
+});
+
 test('app-log start result retains pending ownership until explicit transfer', async () => {
   let cleanupCount = 0;
   const handle = createAppLogLiveHandle({
