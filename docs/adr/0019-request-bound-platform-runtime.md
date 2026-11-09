@@ -264,7 +264,7 @@ These targets are proposed defaults, not accepted commitments or authorization f
 The proposed daemon top-level footprint is at most 60; its [measured baseline](../evidence/daemon-footprint-baseline-2026-09-02.md) is evidence, not a commitment.
 The baseline counted top-level files of the old root daemon directory; since the daemon moved into layer folders in `@agent-device/daemon`, the target needs a new counting rule before it binds.
 `@agent-device/daemon` remains a permanent R65 zone; the target concerns its contents, not directory retirement.
-**Entry-to-platform hop count.** The hop trace and measured hop counts belong to [ADR 0023](0023-end-state-hop-trace.md).
+**Entry-to-platform hop count.** [ADR 0023](0023-end-state-hop-trace.md) defines the hop count; the [2026-09-03 hop trace evidence](../evidence/entry-to-platform-hop-trace-2026-09-03.md) holds the measured counts and links the ordered chains at pinned commit `0e7df74a1a`.
 Composition and family runtime-loading boundaries count as hops, and package direction and named facets constrain any collapse.
 The earlier target of 14 hops is superseded and is not reachable without a separate decision on cross-cutting request-scope wrappers.
 Neither target has an owning issue, gate, or accepted budget; neither is a ratchet.
