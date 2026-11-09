@@ -4,8 +4,9 @@ import { runHarmonyShell } from './hdc.ts';
 
 /**
  * The system window that hosts the on-screen keyboard. HarmonyOS keeps this SceneBoard panel
- * alive across captures, so presence alone says nothing: a positive rect is the visible band,
- * and a zero rect is the hidden keyboard.
+ * alive across captures, so presence alone says nothing: the z-order column decides visibility
+ * (negative while hidden), and the rect is a band only when the table proves it smaller than
+ * the display — current builds report the full display rect in both states.
  */
 const KEYBOARD_PANEL_WINDOW_PREFIX = 'SCBKeyboardPanel';
 
@@ -42,9 +43,24 @@ function keyboardWindowProbeFailed(): SnapshotKeyboardBandFact {
 }
 
 /**
+ * A rect at or above this share of the display's area is the window manager's full-surface
+ * container, not the key plane. On JUY-AL50 7.0.0.111 the panel row reports the whole display
+ * whether the keyboard shows or hides, and the key plane lives inside the window's own surface
+ * where no public dump reads it — `softKeyboard1` and `SCBKeyboardPanel` both answer
+ * `[0 0 1080 2406]`. A frame this table cannot prove to be a band must not become one: the
+ * tap guard measures a published frame directly, so a display-spanning frame would mark every
+ * on-screen point keyboard-covered.
+ */
+const DISPLAY_SPANNING_RECT_SHARE = 0.9;
+
+/**
  * Reads the keyboard band out of a WindowManagerService window table. The table lists the
  * panel on every device that shows a software keyboard; a device whose table omits it, or
- * whose panel row carries no readable rect, answers `unmeasurable` rather than a guess.
+ * whose panel row carries no readable rect, answers `unmeasurable` rather than a guess. The
+ * z-order column is the visibility signal (negative while hidden); the rect is trusted as a
+ * band only when the table proves it smaller than the display, which current builds do not —
+ * a display-spanning rect publishes `visibility-only` and leaves the band to the guard's
+ * tree derivation.
  */
 export function harmonyKeyboardBandFromWindowDump(raw: string): SnapshotKeyboardBandFact {
   const rows = parseKeyboardPanelRows(raw);
@@ -56,8 +72,33 @@ export function harmonyKeyboardBandFromWindowDump(raw: string): SnapshotKeyboard
     return { kind: 'unmeasurable', reason: 'keyboard-window-rect-unparseable' };
   }
   const visible = measured.find(isVisibleKeyboardPanelRow);
-  if (visible?.rect) return { kind: 'visible', frame: visible.rect };
-  return { kind: 'visibility-only', visible: false };
+  if (!visible?.rect) return { kind: 'visibility-only', visible: false };
+  const display = displayRectFromWindowDump(raw);
+  if (!display || rectAreaShare(visible.rect, display) >= DISPLAY_SPANNING_RECT_SHARE) {
+    return { kind: 'visibility-only', visible: true };
+  }
+  return { kind: 'visible', frame: visible.rect };
+}
+
+/** The largest positive rect in the table, which the display-sized system windows hold. */
+function displayRectFromWindowDump(raw: string): Rect | undefined {
+  let display: Rect | undefined;
+  let largestArea = 0;
+  for (const line of raw.split('\n')) {
+    const rect = rectFromWindowRow(line);
+    if (!rect || rect.width <= 0 || rect.height <= 0) continue;
+    const area = rect.width * rect.height;
+    if (area > largestArea) {
+      display = rect;
+      largestArea = area;
+    }
+  }
+  return display;
+}
+
+function rectAreaShare(rect: Rect, display: Rect): number {
+  if (display.width <= 0 || display.height <= 0) return 0;
+  return (rect.width * rect.height) / (display.width * display.height);
 }
 
 type KeyboardPanelRow = {

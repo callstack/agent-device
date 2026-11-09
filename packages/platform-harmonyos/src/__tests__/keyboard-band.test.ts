@@ -38,9 +38,25 @@ const HIDDEN_KEYBOARD_TABLE = [
   'SCBKeyboardPanel     0         5714    17    2134 1    0    -1   0           [ 0    0    0    0    ] [ 0       0       ] [ 1       1       0       0       ]',
 ].join('\n');
 
-/** The visible panel row follows the same table schema; only the rect and z-order change. */
-const VISIBLE_KEYBOARD_ROW =
-  'SCBKeyboardPanel     0         5714    17    2134 1    0    4400 0           [ 0    1546    1080    860    ] [ 0       0       ] [ 1       1       0.5     0.5     ]';
+/**
+ * The real JUY-AL50 7.0.0.111 rows, captured verbatim from
+ * `hidumper -s WindowManagerService -a -a` with the Settings search field focused and the IME
+ * raised, then after a Back dismissal. The panel and the IME's own `softKeyboard1` window both
+ * hold the full display rect in both states; only the z-order column moves (102/103 up,
+ * both -1 hidden). No column in the public table carries the key plane.
+ */
+const REAL_KEYBOARD_UP_ROWS = [
+  'softKeyboard1        0         6100    16    2105 102  0    103  0           [ 0    0    1080 2406 ] [ 0       0       ] [ 1       1       0.5     0.5     ]',
+  'SCBKeyboardPanel     0         5714    17    2134 1    0    102  0           [ 0    0    1080 2406 ] [ 0       0       ] [ 1       1       0.5     0.5     ]',
+].join('\n');
+const REAL_KEYBOARD_HIDDEN_ROWS = [
+  'softKeyboard1        0         6100    16    2105 102  0    -1   0           [ 0    0    1080 2406 ] [ 0       0       ] [ 1       1       0.5     0.5     ]',
+  'SCBKeyboardPanel     0         5714    17    2134 1    0    -1   0           [ 0    0    1080 2406 ] [ 0       0       ] [ 1       1       0.5     0.5     ]',
+].join('\n');
+
+/** A panel rect materially smaller than the display: the shape a true key-plane report would take. */
+const TRUE_BAND_KEYBOARD_ROW =
+  'SCBKeyboardPanel     0         5714    17    2134 1    0    102  0           [ 0    1546    1080    860    ] [ 0       0       ] [ 1       1       0.5     0.5     ]';
 
 beforeEach(() => {
   runHarmonyHdc.mockReset();
@@ -55,11 +71,50 @@ test('a zero-rect keyboard panel reads as hidden, not as a band', () => {
   });
 });
 
-test('a positive panel rect is the measured band', () => {
-  const dump = `${WINDOW_TABLE_HEADER}\n${VISIBLE_KEYBOARD_ROW}`;
+test('a zero rect on a positively ordered window still reads as hidden', () => {
+  const zeroRectShownRow =
+    'SCBKeyboardPanel     0         5714    17    2134 1    0    4400 0           [ 0    0    0    0    ] [ 0       0       ] [ 1       1       0       0       ]';
+  const dump = `${WINDOW_TABLE_HEADER}\n${zeroRectShownRow}`;
+  assert.deepEqual(harmonyKeyboardBandFromWindowDump(dump), {
+    kind: 'visibility-only',
+    visible: false,
+  });
+});
+
+test('the real display-spanning up-state rows publish visibility-only, not a full-screen band', () => {
+  const dump = `${WINDOW_TABLE_HEADER}\n${REAL_KEYBOARD_UP_ROWS}`;
+  assert.deepEqual(harmonyKeyboardBandFromWindowDump(dump), {
+    kind: 'visibility-only',
+    visible: true,
+  });
+});
+
+test('the real hidden-state rows publish visibility-only false', () => {
+  const dump = `${WINDOW_TABLE_HEADER}\n${REAL_KEYBOARD_HIDDEN_ROWS}`;
+  assert.deepEqual(harmonyKeyboardBandFromWindowDump(dump), {
+    kind: 'visibility-only',
+    visible: false,
+  });
+});
+
+test('a panel rect materially smaller than the display publishes the band frame', () => {
+  const dump = `${WINDOW_TABLE_HEADER}\n${TRUE_BAND_KEYBOARD_ROW}`;
   assert.deepEqual(harmonyKeyboardBandFromWindowDump(dump), {
     kind: 'visible',
     frame: { x: 0, y: 1546, width: 1080, height: 860 },
+  });
+});
+
+test('a keyboard-only table with no display-sized row stays visibility-only', () => {
+  // The panel's own rect is the only positive rect, so the display cannot be derived and a
+  // frame must not be published from it: the band would be an unproven guess.
+  const dump = [
+    'WindowName           DisplayId Pid     WinId Type Mode Flag ZOrd Orientation [ x    y    w    h    ] [ OffsetX OffsetY ] [ ScaleX  ScaleY  PivotX  PivotY  ]',
+    TRUE_BAND_KEYBOARD_ROW,
+  ].join('\n');
+  assert.deepEqual(harmonyKeyboardBandFromWindowDump(dump), {
+    kind: 'visibility-only',
+    visible: true,
   });
 });
 
@@ -122,7 +177,11 @@ test('readHarmonyKeyboardBand dumps the window manager table', async () => {
 test('snapshotHarmony carries the keyboard band beside its tree', async () => {
   runHarmonyShell.mockImplementation(async (_device: unknown, words: string[]) => {
     if (words[0] === 'hidumper') {
-      return { exitCode: 0, stdout: `${WINDOW_TABLE_HEADER}\n${VISIBLE_KEYBOARD_ROW}`, stderr: '' };
+      return {
+        exitCode: 0,
+        stdout: `${WINDOW_TABLE_HEADER}\n${REAL_KEYBOARD_UP_ROWS}`,
+        stderr: '',
+      };
     }
     return { exitCode: 0, stdout: '', stderr: '' };
   });
@@ -143,8 +202,8 @@ test('snapshotHarmony carries the keyboard band beside its tree', async () => {
   const snapshot = await snapshotHarmony(DEVICE);
 
   assert.deepEqual(snapshot.keyboard, {
-    kind: 'visible',
-    frame: { x: 0, y: 1546, width: 1080, height: 860 },
+    kind: 'visibility-only',
+    visible: true,
   });
   assert.deepEqual(
     snapshot.nodes.map((node) => node.value ?? node.type),
