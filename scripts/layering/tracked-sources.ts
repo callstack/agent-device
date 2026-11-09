@@ -57,11 +57,6 @@ export function listTrackedSrcUtilsFiles(repoRoot: string): string[] {
   return listTrackedFilesUnderRoot(repoRoot, 'src/utils');
 }
 
-/** Every tracked path in the repository. */
-export function listTrackedRepoFiles(repoRoot: string): string[] {
-  return listTrackedFiles(repoRoot, []);
-}
-
 function listTrackedFilesUnderRoot(repoRoot: string, root: string): string[] {
   return listTrackedFiles(repoRoot, [root]);
 }

@@ -1,25 +1,27 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { REPO_ROOT } from '@agent-device/test-kit';
-import { listTrackedRepoFiles } from '../../scripts/layering/tracked-sources.ts';
 
 /**
  * An ADR states the current truth (docs/adr/FORMAT.md), so every repository file it cites must
- * exist. A citation is a backticked token with a source, config, or Markdown extension:
+ * exist. A citation is a whitespace-separated token in a backticked span with a source, config,
+ * or Markdown extension:
  *
  * 1. a repository path (it contains `/`) must name a tracked file;
  * 2. a bare test file name (`*.test.ts` and similar) must match a tracked file's name.
  *
  * Absolute and home paths (device or host files), globs, and bare non-test names (runtime state
- * files such as `daemon.json`) are not repository citations. Markdown links are checked by
- * `pnpm check:doc-links`, not here.
+ * files such as `daemon.json`) are not repository citations. Nothing checks relative Markdown
+ * links in ADRs: `pnpm check:doc-links` reads only the built website.
  */
 
 const ADR_DIR = 'docs/adr';
 const CITED_EXTENSIONS = 'ts|mts|cts|mjs|cjs|js|swift|kt|java|json|sh|yml|yaml|py|md|plist';
-const CITATION = new RegExp(`\`([A-Za-z0-9_./@{}*+-]+\\.(?:${CITED_EXTENSIONS}))\``, 'g');
+const CODE_SPAN = /`([^`\n]+)`/g;
+const CITATION = new RegExp(`^[A-Za-z0-9_./@{}*+-]+\\.(?:${CITED_EXTENSIONS})$`);
 const TEST_FILE = /\.test\.[a-z]+$/;
 
 type Citation = Readonly<{ adr: string; token: string }>;
@@ -32,10 +34,12 @@ function findStaleAdrCitations(
   const trackedNames = new Set(trackedFiles.map((file) => path.posix.basename(file)));
   const stale: Citation[] = [];
   for (const adr of adrs) {
-    for (const [, token] of adr.text.matchAll(CITATION)) {
-      if (!token || isNotRepositoryCitation(token)) continue;
-      const exists = token.includes('/') ? tracked.has(token) : trackedNames.has(token);
-      if (!exists) stale.push({ adr: adr.name, token });
+    for (const [, span = ''] of adr.text.matchAll(CODE_SPAN)) {
+      for (const token of span.split(/\s+/)) {
+        if (!CITATION.test(token) || isNotRepositoryCitation(token)) continue;
+        const exists = token.includes('/') ? tracked.has(token) : trackedNames.has(token);
+        if (!exists) stale.push({ adr: adr.name, token });
+      }
     }
   }
   return stale;
@@ -47,6 +51,12 @@ function isNotRepositoryCitation(token: string): boolean {
   return !token.includes('/') && !TEST_FILE.test(token);
 }
 
+function listTrackedFiles(): string[] {
+  return execFileSync('git', ['ls-files', '-z'], { cwd: REPO_ROOT, encoding: 'utf8' })
+    .split('\0')
+    .filter(Boolean);
+}
+
 function readAdrs(): Array<{ name: string; text: string }> {
   const dir = path.join(REPO_ROOT, ADR_DIR);
   return fs
@@ -56,7 +66,7 @@ function readAdrs(): Array<{ name: string; text: string }> {
 }
 
 test('every repository file an ADR cites exists', () => {
-  const stale = findStaleAdrCitations(readAdrs(), listTrackedRepoFiles(REPO_ROOT));
+  const stale = findStaleAdrCitations(readAdrs(), listTrackedFiles());
   assert.deepEqual(
     stale.map(({ adr, token }) => `${adr}: ${token}`),
     [],
@@ -78,6 +88,8 @@ test('the citation scan rejects missing paths and test names, and skips non-repo
           '`apple/Sources/Kept+Ext.swift`',
           '`apple/Sources/Gone+Ext.swift`',
           '`docs/evidence/gone.md`',
+          '`packages/a/src/kept.ts → packages/a/src/gone-in-span.ts`',
+          '`node --flag daemon.json`',
           '`daemon.json`',
           '`/sdcard/marker.json`',
           '`src/platform-runtime-*.ts`',
@@ -98,6 +110,7 @@ test('the citation scan rejects missing paths and test names, and skips non-repo
       'gone.test.ts',
       'apple/Sources/Gone+Ext.swift',
       'docs/evidence/gone.md',
+      'packages/a/src/gone-in-span.ts',
     ],
   );
 });

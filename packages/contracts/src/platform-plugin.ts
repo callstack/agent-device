@@ -4,8 +4,7 @@ import type { PlatformGatedProviderResolverKey } from './platform-providers.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 
 /**
- * The platform-plugin contract. ADR 0009 owns the Apple family decision; ADR 0019 replaced the
- * original shallow `PlatformPlugin` shape with the request-bound runtime seam.
+ * The platform-plugin contract (ADR-0009).
  *
  * One plugin owns one platform FAMILY: a plugin may cover several leaf
  * {@link Platform} literals (the Apple plugin owns both `ios` and `macos`,

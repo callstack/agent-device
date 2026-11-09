@@ -231,7 +231,7 @@ test('public package surface change selects the build and the published-package 
 });
 
 test('docs-only change selects no checks and records the docs paths', () => {
-  const result = plan(['docs/adr/0011.md', 'LICENSE', 'website/page.mdx.md']);
+  const result = plan(['docs/adr/README.md', 'LICENSE', 'website/page.mdx.md']);
   assert.equal(result.failOpen, false);
   assert.deepEqual(result.checks, []);
   assert.equal(result.docsOnlyPaths.length, 3);
@@ -276,6 +276,12 @@ test('agent guidance owns its focused contract instead of disappearing as docs-o
     assert.deepEqual(result.checks, ['agent-guidance']);
     assert.deepEqual(result.docsOnlyPaths, []);
   }
+});
+
+test('an ADR record owns the citation guard instead of disappearing as docs-only', () => {
+  const result = plan(['docs/adr/0011-interactive-replay.md']);
+  assert.deepEqual(result.checks, ['adr-citations']);
+  assert.deepEqual(result.docsOnlyPaths, []);
 });
 
 test('test app source selects root lint and format plus its isolated typecheck', () => {

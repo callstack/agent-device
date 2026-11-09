@@ -44,7 +44,7 @@ Do not repeat general repo guidance that `AGENTS.md` already gives.
 
 ## The record stays current
 
-An ADR states the current truth. It is not a log of the discussion around the decision. A repo guard fails when a backticked repository path or test file name in an ADR does not match a tracked file. An optional dated "Decision history" line records a real change of direction. If the direction really changed, you may add one such line with its reason and a link.
+An ADR states the current truth. It is not a log of the discussion around the decision. A repo guard fails when a backticked repository path or test file name in an ADR does not match a tracked file. To name a retired path, write the path in prose without backticks. An optional dated "Decision history" line records a real change of direction. If the direction really changed, you may add one such line with its reason and a link.
 
 ## Before you amend
 
