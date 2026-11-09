@@ -325,12 +325,13 @@ function cleanupPending(error: unknown): CleanupOutcome {
   };
 }
 
-function assertCleanup(outcome: CleanupOutcome): void {
+function assertCleanup(outcome: CleanupOutcome, cause?: unknown): void {
   if (outcome.status !== 'cleanup-pending') return;
   throw new AppError(
     'COMMAND_FAILED',
     outcome.message ?? 'Perf capture cleanup could not be confirmed',
     { reason: outcome.reason },
+    cause,
   );
 }
 

@@ -98,6 +98,30 @@ test('app-log async disposal rejects when forced cleanup remains unconfirmed', a
   );
 });
 
+test('app-log async disposal normalizes a rejected cleanup and keeps its cause', async () => {
+  const transportError = new Error('transport closed');
+  const cleanup = vi
+    .fn<() => Promise<{ status: 'cleaned' }>>()
+    .mockRejectedValueOnce(transportError)
+    .mockResolvedValueOnce({ status: 'cleaned' });
+  const handle = createAppLogLiveHandle({
+    inspect: () => ({ backend: 'android', state: 'failed', startedAt: 12 }),
+    finish: async () => ({ status: 'completed', result: completion }),
+    forceCleanup: cleanup,
+  });
+
+  await assert.rejects(
+    async () => await handle[Symbol.asyncDispose](),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'cleanup-unconfirmed' &&
+      error.details.retriable === true &&
+      error.cause === transportError,
+  );
+  await handle[Symbol.asyncDispose]();
+  assert.equal(cleanup.mock.calls.length, 2);
+});
+
 test('app-log start result retains pending ownership until explicit transfer', async () => {
   let cleanupCount = 0;
   const handle = createAppLogLiveHandle({
