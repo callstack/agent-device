@@ -1,64 +1,137 @@
-# HarmonyOS keyboard band fact, live, 2026-11-08
+# HarmonyOS keyboard band fact, live, 2026-11-08 (fixed run 2026-11-09)
 
-Evidence for #4285 (report the keyboard band in snapshot responses): the
-producer's window-manager probe tracks the real IME through a raise and a
-dismiss, and the measured band immediately feeds the tap guard — a stale ref
-aimed into the keyboard region got refused mid-run.
+Evidence for #4285 (report the keyboard band in snapshot responses), re-run at the
+rebased head after the review found the published frame wrong. The window-manager
+table on this build never carries the key plane: the panel row reports the whole
+display whether the keyboard shows or hides. The producer therefore publishes
+visibility, and publishes a band frame only when the table proves the rect smaller
+than the display. This run shows that contract live, with the guard regressions
+the old full-screen frame caused now retired. Fix commit: `2878b86e4`.
 
 ## Device
 
-- HUAWEI 畅享 90 Plus, model `JDY-AL50`, HarmonyOS 7.0.0.111 (SP10C00E111R4P3), API 26
+- HUAWEI 畅享 90 Plus, model `JUY-AL50` (`param get const.product.model`;
+  the earlier revision of this file wrote `JDY-AL50`, which is a typo),
+  HarmonyOS 7.0.0.111 (SP10C00E111R4P3), API 26
 - Serial `77TYD26826028730`, USB
-- Surface: system Settings → search bar (tapped at 540,378), no text typed,
-  no data touched.
+- Surface: system Settings → search field on the Settings home page, then the
+  search page. One character typed by the in-band press, gone with the page
+  (search-page state is transient). No user data read or written.
 
-## Hidden → visible → hidden
+## What the window table actually holds
 
-Snapshot before the keyboard (device on the Settings page):
+`hidumper -s WindowManagerService -a -a`, keyboard raised (Settings search field
+focused). Both keyboard windows hold the full display rect; only the z-order
+column moves:
+
+```
+softKeyboard1        0         6100    16    2105 102  0    103  0           [ 0    0    1080 2406 ] [ 0       0       ] [ 1       1       0.5     0.5     ]
+SCBKeyboardPanel     0         5714    17    2134 1    0    102  0           [ 0    0    1080 2406 ] [ 0       0       ] [ 1       1       0.5     0.5     ]
+```
+
+After one Back dismisses the IME, the same rows flip only in z-order:
+
+```
+softKeyboard1        0         6100    16    2105 102  0    -1   0           [ 0    0    1080 2406 ] [ 0       0       ] [ 1       1       0.5     0.5     ]
+SCBKeyboardPanel     0         5714    17    2134 1    0    -1   0           [ 0    0    1080 2406 ] [ 0       0       ] [ 1       1       0.5     0.5     ]
+```
+
+The key plane on this build sits at roughly y 1630–2325 in display pixels (the
+keys-only crop below starts at y 1600); the IME window surface covers the display.
+No public source reports that inner band: the window table carries window-surface
+rects, and `hidumper -s InputMethodService -a '-a'` lists installed IMEs
+(`小艺输入法`) with no geometry. A rect the table cannot prove smaller than the
+display is the container, not a band — publishing it as `visible` made the tap
+guard read every on-screen point as keyboard-covered (the `@e20` refusal in the
+previous revision of this file was that false refusal, presented as a feature).
+
+## The fact through a raise and a dismiss (branch CLI, head `2878b86e4`)
+
+Settings home, keyboard hidden:
 
 ```json
-"/keyboard": {"kind": "visibility-only", "visible": false}
+"keyboard": {"kind": "visibility-only", "visible": false}
 ```
 
-The same window-manager dump the producer reads shows the panel window with a
-zero rect while hidden:
-
-```
-SCBKeyboardPanel ... [ 0    0    0    0    ] [ 0  0  ] [ 1  1  0  0 ]
-```
-
-Tap the search bar; the IME rises. The probe now answers a live container and
-the snapshot fact flips to the measured band:
+`press 540 381` on the search field raises the IME. The fact states visibility
+and publishes no frame:
 
 ```json
-"/keyboard": {"kind": "visible", "frame": {"x": 0, "y": 0, "width": 1080, "height": 2406}}
+"keyboard": {"kind": "visibility-only", "visible": true}
 ```
 
-After two Back keys the fact returns to
-`{"kind": "visibility-only", "visible": false}`.
+Keyboard raised, portrait (keys-only crop; the strip above it holds the app's
+search page and is left out of the repo):
 
-## The guard consumed the band immediately
+![keyboard keys with the IME raised](harmonyos-keyboard-band-keys-2026-11-09.jpg)
 
-Mid-run, a ref captured before the keyboard rose was refused by the tap guard
-instead of tapping into the IME strip:
+One Back hides the IME; the fact returns to `{"kind": "visibility-only",
+"visible": false}`. A second Back then leaves the search page — the dismissal
+choreography is one Back for the keyboard, one for the page, and the previous
+revision's "two Back keys" line described the same two steps as one event.
+
+## The guard at the new head
+
+A ref captured with the keyboard up, pressed above the band, succeeds — this is
+the class the display-spanning frame refused (`Ref @e20 is behind the visible
+keyboard`):
 
 ```
-Error (COMMAND_FAILED): Ref @e20 is behind the visible keyboard and cannot be tapped safely
+$ agent-device press @e2 --platform harmonyos --serial 77TYD26826028730
+Tapped @e2 (291, 192)
 ```
 
-This is the failure class the evidence session itself hit earlier in the audit
-(a coordinate tap landed on the keyboard's suggestion strip and a record was
-created with a stray character in its name). With the band reported, the guard
-refuses the tap instead.
+A bare coordinate press inside the band dispatches (the guard stays fail-open on
+`visibility-only`; the press landed on a key and typed one character into the
+transient search field):
+
+```
+$ agent-device press 540 1700 --platform harmonyos --serial 77TYD26826028730
+Tapped (540, 1700)
+```
+
+## Probe cost
+
+The probe is one `hidumper` round trip, measured 0.129 s alone on this device.
+`snapshot --json` wall clock, three runs per CLI on the same page: with the probe
+(built from #4285) 1.593 / 1.527 / 1.578 s; without it (a build from upstream
+main) 1.976 / 1.437 / 1.495 s. Medians differ by 0.083 s, inside the run-to-run
+spread; the first no-probe run shows the cold-start tail. The probe runs on every
+HarmonyOS capture by design — every capture's keyboard feeds the snapshot state
+later taps read.
+
+## Landscape
+
+Not run. The device exposes no public rotation channel — `uitest` has no rotate
+subcommand, and agent-device's own `setHarmonyOrientation` answers
+UNSUPPORTED_OPERATION on HarmonyOS — so the landscape run needs a physical
+rotation this session cannot perform. The rect-share rule is
+orientation-independent: it compares the panel rect against the largest rect in
+the same table, whatever the display's aspect, and the real-row fixtures pin both
+states.
+
+## Landing order
+
+Proposed order in #4318 stands: #4292, #4290, #4293, #4287, then this PR, then
+#4239. This PR lands fifth, rebased onto main (`b24ecf209`) with the snapshot
+help conflict resolved.
 
 ## Reproduce
 
 ```sh
+# head 2878b86e4, built in the PR worktree
 node bin/agent-device.mjs open com.huawei.hmos.settings --activity com.huawei.hmos.settings.MainAbility \
   --platform harmonyos --serial 77TYD26826028730
-node bin/agent-device.mjs snapshot --json --platform harmonyos --serial 77TYD26826028730   # hidden
-node bin/agent-device.mjs press 540 378 --platform harmonyos --serial 77TYD26826028730      # search bar
-node bin/agent-device.mjs snapshot --json --platform harmonyos --serial 77TYD26826028730   # visible + frame
-node bin/agent-device.mjs back --platform harmonyos --serial 77TYD26826028730              # dismiss
-node bin/agent-device.mjs snapshot --json --platform harmonyos --serial 77TYD26826028730   # hidden again
+node bin/agent-device.mjs snapshot --json --platform harmonyos --serial 77TYD26826028730   # visibility-only false
+node bin/agent-device.mjs press 540 381 --platform harmonyos --serial 77TYD26826028730      # search field
+node bin/agent-device.mjs snapshot --json --platform harmonyos --serial 77TYD26826028730   # visibility-only true, no frame
+node bin/agent-device.mjs snapshot -i --json --platform harmonyos --serial 77TYD26826028730 # refs
+node bin/agent-device.mjs press @e2 --platform harmonyos --serial 77TYD26826028730          # above band: succeeds
+node bin/agent-device.mjs press 540 1700 --platform harmonyos --serial 77TYD26826028730     # in band: dispatches
+node bin/agent-device.mjs back --platform harmonyos --serial 77TYD26826028730               # IME hides
+node bin/agent-device.mjs snapshot --json --platform harmonyos --serial 77TYD26826028730   # visibility-only false
+hidumper -s WindowManagerService -a -a   # on the device: the raw rows quoted above
 ```
+
+CI cannot exercise a HarmonyOS device; this file is the device-side proof of the
+parse, the rect-share rule, and the guard behavior.
