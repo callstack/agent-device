@@ -12,6 +12,59 @@
 }
 @end
 
+@implementation AgentDeviceSecureEntryField {
+  NSUInteger _deletes;
+  NSUInteger _taps;
+}
+- (instancetype)init {
+  self = [super init];
+  if (self) {
+    UITapGestureRecognizer *tapCounter = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(countTap:)];
+    tapCounter.cancelsTouchesInView = NO;
+    tapCounter.delegate = self;
+    [self addGestureRecognizer:tapCounter];
+  }
+  return self;
+}
+
+- (void)countTap:(UITapGestureRecognizer *)recognizer {
+  (void)recognizer;
+  _taps += 1;
+  [self showCounts];
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
+  (void)gestureRecognizer;
+  (void)otherGestureRecognizer;
+  return YES;
+}
+
+- (void)showCounts {
+  self.countLabel.text = [NSString stringWithFormat:@"deletes=%lu taps=%lu", (unsigned long)_deletes, (unsigned long)_taps];
+}
+
+- (BOOL)becomeFirstResponder {
+  if (self.refusesFirstFocus) {
+    self.refusesFirstFocus = NO;
+    return NO;
+  }
+  return [super becomeFirstResponder];
+}
+
+- (void)deleteBackward {
+  _deletes += 1;
+  [self showCounts];
+  [super deleteBackward];
+}
+
+- (NSString *)accessibilityValue {
+  if (self.reportsPlaceholderAsValue && self.text.length == 0) {
+    return self.placeholder;
+  }
+  return [super accessibilityValue];
+}
+@end
+
 static NSUInteger AgentDeviceTextEntryValueReads = 0;
 
 @implementation AgentDeviceValueReadCountingTextField

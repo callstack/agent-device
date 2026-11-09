@@ -580,6 +580,135 @@ extension RunnerTests {
     XCTAssertEqual(togglePresses.label, "presses=0")
   }
 
+  // A masked value cannot aim the clear's caret tap, which lands on a show/hide toggle at the field's
+  // right edge; in React Native the press swaps the input and the fill fails (tester-army/e2e#1631).
+  // The fixture's masked field shows one bullet per two characters, so 8 bullets is the new text alone.
+  @MainActor
+  func testFillReplacesAPrefilledMaskedValueWithoutPressingItsEdgeToggle() throws {
+    try assertFillLeavesTheEdgeToggleUnpressed(
+      launchArguments: ["--agent-device-text-entry-masked-value", "--agent-device-text-entry-prefilled"],
+      field: { $0.textFields },
+      expectedValue: String(repeating: "\u{2022}", count: 8)
+    )
+  }
+
+  @MainActor
+  func testFillReplacesAPrefilledSecureFieldWithoutPressingItsEdgeToggle() throws {
+    try assertFillLeavesTheEdgeToggleUnpressed(
+      launchArguments: ["--agent-device-text-entry-secure-entry", "--agent-device-text-entry-prefilled"],
+      field: { $0.secureTextFields },
+      expectedValue: String(repeating: "\u{2022}", count: 16)
+    )
+  }
+
+  // An empty secure field with no placeholder shows nothing, so nothing is cleared.
+  @MainActor
+  func testFirstFillIntoAnEmptySecureFieldSkipsTheClear() throws {
+    try assertFillLeavesTheEdgeToggleUnpressed(
+      launchArguments: ["--agent-device-text-entry-secure-entry"],
+      field: { $0.secureTextFields },
+      expectedValue: String(repeating: "\u{2022}", count: 16)
+    )
+    XCTAssertEqual(try secureEntryCounts().deletes, 0)
+  }
+
+  // A field that refuses the focus tap reaches the clear without focus, and deletes sent to it record
+  // an XCTest failure. The clear focuses it at its center first.
+  @MainActor
+  func testFillReplacesTextInASecureFieldThatRefusedTheFocusTap() throws {
+    try assertFillLeavesTheEdgeToggleUnpressed(
+      launchArguments: [
+        "--agent-device-text-entry-secure-entry",
+        "--agent-device-text-entry-prefilled",
+        "--agent-device-text-entry-refuses-first-focus",
+      ],
+      field: { $0.secureTextFields },
+      expectedValue: String(repeating: "\u{2022}", count: 16)
+    )
+  }
+
+  // The issue's own case: its placeholder is eight bullets, which React Native reports as the value of
+  // the empty field.
+  @MainActor
+  func testFirstFillIntoASecureFieldShowingABulletPlaceholderDoesNotPressItsEdgeToggle() throws {
+    try assertFillLeavesTheEdgeToggleUnpressed(
+      launchArguments: ["--agent-device-text-entry-secure-entry", "--agent-device-text-entry-bullet-placeholder"],
+      field: { $0.secureTextFields },
+      expectedValue: String(repeating: "\u{2022}", count: 16)
+    )
+  }
+
+  // iOS doesn't clear a field that kept its focus on its next edit, and eight characters read the same
+  // as the eight-bullet placeholder, so the refill must still clear them. It reads the field's focus,
+  // so it adds no tap to the first fill's one.
+  @MainActor
+  func testRefillOfAFocusedSecureFieldClearsTextThatReadsLikeItsBulletPlaceholder() throws {
+    try assertFillLeavesTheEdgeToggleUnpressed(
+      launchArguments: ["--agent-device-text-entry-secure-entry", "--agent-device-text-entry-bullet-placeholder"],
+      field: { $0.secureTextFields },
+      expectedValue: String(repeating: "\u{2022}", count: 16),
+      afterFilling: "stale-pw"
+    )
+    XCTAssertEqual(try secureEntryCounts().taps, 1)
+  }
+
+  /// Fills "not-a-secret-123" the way the daemon sends `fill`, after `earlierText` when given, and checks
+  /// the field holds the new text alone while the toggle over its right edge stays unpressed.
+  @MainActor
+  private func assertFillLeavesTheEdgeToggleUnpressed(
+    launchArguments: [String],
+    field: (XCUIApplication) -> XCUIElementQuery,
+    expectedValue: String,
+    afterFilling earlierText: String? = nil
+  ) throws {
+    app.launchArguments = [
+      "--agent-device-text-entry-regression",
+      "--agent-device-text-entry-soft-keyboard",
+    ] + launchArguments
+    app.launch()
+    addTeardownBlock { [self] in
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let input = field(app)["agent-device-hardware-keyboard-input"]
+    XCTAssertTrue(input.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let togglePresses = app.staticTexts["agent-device-masked-toggle-presses"]
+    XCTAssertTrue(togglePresses.waitForFixtureExistence(timeout: appExistenceTimeout))
+    XCTAssertEqual(togglePresses.label, "presses=0")
+    if let earlierText {
+      let earlier = try executeTypeCommand(
+        activeApp: app,
+        command: try fillCommandFixture(commandId: "fill-earlier-text", text: earlierText, at: input)
+      )
+      XCTAssertTrue(earlier.ok, String(describing: earlier.error))
+      let earlierValue = String(repeating: "\u{2022}", count: earlierText.count)
+      let filled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", earlierValue), object: input)
+      XCTAssertEqual(XCTWaiter.wait(for: [filled], timeout: appExistenceTimeout), .completed, String(describing: input.value))
+    }
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = try executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-masked-input-beside-toggle", text: "not-a-secret-123", at: input)
+    )
+
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    let replaced = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", expectedValue), object: input)
+    XCTAssertEqual(XCTWaiter.wait(for: [replaced], timeout: appExistenceTimeout), .completed, String(describing: input.value))
+    XCTAssertEqual(togglePresses.label, "presses=0")
+  }
+
+  /// The deletes and taps the secure entry fixture's field received.
+  @MainActor
+  private func secureEntryCounts() throws -> (deletes: Int, taps: Int) {
+    let label = app.staticTexts["agent-device-secure-entry-counts"].label
+    let counts = try label.split(separator: " ").map { try XCTUnwrap(Int($0.split(separator: "=").last ?? ""), label) }
+    XCTAssertEqual(counts.count, 2, label)
+    return (counts.first ?? -1, counts.last ?? -1)
+  }
+
   private struct UnavailableTextEntrySynthesizer: TextEntrySynthesizing {
     func enterText(
       app _: XCUIApplication,
