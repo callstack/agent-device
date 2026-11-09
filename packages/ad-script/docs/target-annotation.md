@@ -66,8 +66,8 @@ If per-field truncation still leaves more than 4 KiB, the writer removes `ancest
 This reduction is deterministic and uses the existing ancestry truncation direction.
 If only `ancestry[0]` remains and the payload still exceeds the limit, the writer sets `verification: "unverifiable"`.
 The limit measures serialized UTF-8 bytes, while field limits apply before JSON escaping.
-The writer drops `rect` if the downgraded payload still exceeds the limit, but does not recheck afterward.
-Escape-heavy values can therefore still produce an over-limit annotation that the parser rejects.
+The writer drops `rect` if the downgraded payload still exceeds the limit, then measures again.
+If the payload is still over the limit (escape-heavy values), the writer writes no annotation, and that action replays without a target check (see Parsing and binding).
 When the reduced tuple fits, the record-time self-check uses that tuple.
 A `verified` claim therefore applies to exactly the written evidence.
 

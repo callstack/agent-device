@@ -221,6 +221,27 @@ test('computeTargetEvidence: max-size labels across K=8 ancestors reduce ancestr
   assert.deepEqual(reparsed, evidence);
 });
 
+test('computeTargetEvidence: escape-heavy labels that exceed 4 KiB even after the rect drop yield no annotation instead of an unparseable one', () => {
+  // Each field is capped at 256 raw bytes, but a control character serializes
+  // as a 6-byte `\\u0001` escape, so the parent-only payload is over the ceiling
+  // once JSON-escaped.
+  const heavy = '\u0001'.repeat(TARGET_ANNOTATION_MAX_FIELD_BYTES);
+  const nodes = toSnapshotNodes([
+    { index: 0, type: heavy, identifier: heavy, label: heavy, depth: 0 },
+    {
+      index: 1,
+      type: heavy,
+      identifier: `${heavy}-leaf`,
+      label: `${heavy}!`,
+      rect: { x: 0, y: 0, width: 10, height: 10 },
+      depth: 1,
+      parentIndex: 0,
+    },
+  ]);
+  const evidence = computeTargetEvidence({ node: nodes[1]!, preActionNodes: nodes });
+  assert.equal(evidence, undefined);
+});
+
 test('computeTargetEvidence: a root node with no ancestors has empty ancestry and is still verified', () => {
   const nodes = toSnapshotNodes([
     {
