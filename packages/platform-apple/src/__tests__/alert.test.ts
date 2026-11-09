@@ -5,8 +5,10 @@ vi.mock('../core/runner-client.ts', () => ({ runAppleRunnerCommand: vi.fn() }));
 vi.mock('../os/macos/helper.ts', () => ({ runMacOsAlertAction: vi.fn() }));
 
 import {
+  ALERT_MIN_READ_BUDGET_MS,
   ALERT_NOT_FOUND_REASON,
   ALERT_NOT_FOUND_RUNNER_CODE,
+  ALERT_POLL_INTERVAL_MS,
   ALERT_UNRESOLVED_RUNNER_CODE,
 } from '@agent-device/contracts/alert-contract';
 import { AppError } from '@agent-device/kernel/errors';
@@ -150,6 +152,85 @@ test('an exhausted accept carries the scoped-snapshot fallback the agent needs n
   assert.match(String(error.details?.hint), /scoped snapshot/i);
 });
 
+test('an action gives every retry at least the minimum read budget', async () => {
+  vi.useFakeTimers();
+  mockRunner.mockRejectedValue(runnerAbsence());
+
+  const outcome = actOnAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    'accept',
+    undefined,
+    process.env,
+  ).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(5_000);
+
+  await outcome;
+  const budgets = mockRunner.mock.calls.map((call) => (call[1] as { timeoutMs: number }).timeoutMs);
+  assert.ok(budgets.length >= 2, 'the act loop never retried');
+  for (const budget of budgets.slice(1)) {
+    assert.ok(budget >= ALERT_MIN_READ_BUDGET_MS, `retry started with only ${budget} ms`);
+  }
+});
+
+test('a runner action still reaches a prompt that appears 0.8 s into its window', async () => {
+  vi.useFakeTimers();
+  const start = Date.now();
+  mockRunner.mockImplementation(async () => {
+    if (Date.now() - start < 800) throw runnerAbsence();
+    return { accepted: true };
+  });
+
+  const outcome = actOnAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    'accept',
+    undefined,
+    process.env,
+  ).then(
+    (value) => value,
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(5_000);
+
+  assert.deepEqual(await outcome, { accepted: true });
+  const lastRead = mockRunner.mock.calls.at(-1)?.[1] as { timeoutMs: number };
+  assert.ok(lastRead.timeoutMs >= ALERT_MIN_READ_BUDGET_MS);
+});
+
+test('a slow first action read still retries within the two-second window', async () => {
+  vi.useFakeTimers();
+  mockRunner.mockImplementation(async () => {
+    if (mockRunner.mock.calls.length === 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1_300));
+      throw runnerAbsence();
+    }
+    return { accepted: true };
+  });
+
+  const outcome = actOnAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    'accept',
+    undefined,
+    process.env,
+  ).then(
+    (value) => value,
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(5_000);
+
+  assert.deepEqual(await outcome, { accepted: true });
+  assert.equal(mockRunner.mock.calls.length, 2);
+  const retryCall = mockRunner.mock.calls[1];
+  assert.ok(retryCall);
+  const retry = retryCall[1] as { timeoutMs: number };
+  assert.equal(retry.timeoutMs, ALERT_MIN_READ_BUDGET_MS);
+});
+
 // The whole point of typing absence: a backend that failed for any other reason must not be
 // retried until the window expires and then reported as a timeout. These three pin that the
 // evidence — not the message text — is what decides.
@@ -201,6 +282,24 @@ test('an action does not retry a failure that only reads like an absence', async
   assert.equal(calls, 1);
   // The fallback hint is absence-only advice, so an untyped failure must not carry it either.
   assert.equal(error.details?.hint, undefined);
+});
+
+test('a macOS action retries while more than a poll interval remains: its helper has no runner watchdog', async () => {
+  vi.useFakeTimers();
+  const firstReadMs = 2_000 - ALERT_POLL_INTERVAL_MS - ALERT_POLL_INTERVAL_MS - 1;
+  mockHelper.mockImplementation(async () => {
+    if (mockHelper.mock.calls.length === 1) {
+      await new Promise((resolve) => setTimeout(resolve, firstReadMs));
+      throw helperAbsence();
+    }
+    return { action: 'accept' };
+  });
+
+  const outcome = actOnAppleAlert(MACOS_DEVICE, runnerOptions, 'accept', undefined, process.env);
+  await vi.advanceTimersByTimeAsync(firstReadMs + ALERT_POLL_INTERVAL_MS);
+
+  assert.deepEqual(await outcome, { action: 'accept' });
+  assert.equal(mockHelper.mock.calls.length, 2);
 });
 
 test('the macOS helper states absence as a typed reason, and the family retries it', async () => {

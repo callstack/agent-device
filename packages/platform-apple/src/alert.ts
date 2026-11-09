@@ -1,5 +1,6 @@
 import {
   ALERT_ACTION_RETRY_MS,
+  ALERT_MIN_READ_BUDGET_MS,
   ALERT_NOT_FOUND_REASON,
   ALERT_NOT_FOUND_RUNNER_CODE,
   ALERT_POLL_INTERVAL_MS,
@@ -128,6 +129,10 @@ export async function awaitAppleAlert(
  * is still animating in — or an unreadable prompt. Any other failure is reported on its first
  * occurrence. A window exhausted on absence carries the scoped-snapshot fallback the agent needs
  * next; one exhausted on an unreadable prompt keeps the runner's own hint.
+ *
+ * Retries start within `ALERT_ACTION_RETRY_MS`. Each XCTest runner retry gets at least
+ * `ALERT_MIN_READ_BUDGET_MS` to avoid cutting alert acquisition short, so an in-flight retry
+ * can finish after the retry window. The macOS helper ignores the read budget.
  */
 export async function actOnAppleAlert(
   device: DeviceInfo,
@@ -145,7 +150,7 @@ export async function actOnAppleAlert(
     try {
       const budgetMs = firstAttempt
         ? runnerTimeoutMs
-        : remainingBudgetMs(start, ALERT_ACTION_RETRY_MS);
+        : Math.max(remainingBudgetMs(start, ALERT_ACTION_RETRY_MS), ALERT_MIN_READ_BUDGET_MS);
       firstAttempt = false;
       return await runAlert(action, budgetMs);
     } catch (error) {
