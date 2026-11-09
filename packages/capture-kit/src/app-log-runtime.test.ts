@@ -137,6 +137,7 @@ test('app-log async disposal normalizes a rejected cleanup whose value has no st
     (error: unknown) =>
       error instanceof AppError &&
       error.details?.reason === 'cleanup-unconfirmed' &&
+      error.message === 'Durable resource cleanup could not be confirmed' &&
       error.cause === rejection,
   );
 });
