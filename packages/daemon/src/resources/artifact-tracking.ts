@@ -245,26 +245,25 @@ function cancelArtifactDownload(
 
 export async function listDownloadableArtifacts(
   tenantId: string | undefined,
-  hostEnv: NodeJS.ProcessEnv,
 ): Promise<DaemonArtifactInventoryEntry[]> {
   const artifacts: DaemonArtifactInventoryEntry[] = [];
   for (const [id, entry] of pendingArtifacts()) {
     if (!canReadArtifact(entry, tenantId)) continue;
     let stat: fs.Stats;
     try {
-      stat = fs.statSync(entry.artifactPath);
+      stat = await fs.promises.stat(entry.artifactPath);
     } catch {
       cleanupDownloadableArtifact(id);
       continue;
     }
-    const payload = await prepareArtifactPayloadForInventory(id, entry, stat, hostEnv);
-    if (!payload || entry.cleanupRequested) continue;
+    const listing = describeArtifactForInventory(id, entry, stat);
+    if (!listing || entry.cleanupRequested) continue;
     artifacts.push({
       id,
       ...(entry.artifactType !== undefined ? { artifactType: entry.artifactType } : {}),
-      filename: payload.fileName ?? id,
-      mimeType: payload.mimeType,
-      sizeBytes: payload.sizeBytes,
+      filename: listing.fileName,
+      mimeType: listing.mimeType,
+      ...(listing.sizeBytes !== undefined ? { sizeBytes: listing.sizeBytes } : {}),
       createdAt: new Date(entry.createdAt).toISOString(),
       expiresAt: new Date(entry.createdAt + ARTIFACT_CLEANUP_TIMEOUT_MS).toISOString(),
       ...(entry.displayRotation !== undefined ? { displayRotation: entry.displayRotation } : {}),
@@ -274,18 +273,35 @@ export async function listDownloadableArtifacts(
   return artifacts;
 }
 
-async function prepareArtifactPayloadForInventory(
+/**
+ * What an inventory reports without preparing a payload. A directory is archived only on its first
+ * download, so its size is known only after that archive exists.
+ */
+function describeArtifactForInventory(
   artifactId: string,
   entry: ArtifactEntry,
   stat: fs.Stats,
-  hostEnv: NodeJS.ProcessEnv,
-): Promise<PreparedDownloadableArtifact | null> {
-  try {
-    return await prepareArtifactPayload(artifactId, entry, stat, hostEnv);
-  } catch {
-    // Inventory is best-effort; direct downloads still surface artifact-specific errors.
-    return null;
+): { fileName: string; mimeType: string; sizeBytes?: number } | null {
+  if (stat.isFile()) {
+    return {
+      fileName: safeArtifactFilename(entry.fileName, artifactId),
+      mimeType: DEFAULT_DOWNLOAD_MIME_TYPE,
+      sizeBytes: stat.size,
+    };
   }
+  if (!stat.isDirectory()) return null;
+  const archive = entry.directoryArchive;
+  return {
+    fileName: directoryArchiveFilename(artifactId, entry),
+    mimeType: DIRECTORY_ARCHIVE_MIME_TYPE,
+    ...(archive && fs.existsSync(archive.archivePath) ? { sizeBytes: archive.sizeBytes } : {}),
+  };
+}
+
+function directoryArchiveFilename(artifactId: string, entry: ArtifactEntry): string {
+  return archiveFilename(
+    safeArtifactFilename(entry.fileName, path.basename(entry.artifactPath) || artifactId),
+  );
 }
 
 function readDownloadableArtifactEntry(
@@ -393,11 +409,7 @@ async function createDirectoryArchive(
   try {
     cleanupDirectoryArchive(entry);
 
-    const sourceName = safeArtifactFilename(
-      entry.fileName,
-      path.basename(entry.artifactPath) || artifactId,
-    );
-    const fileName = archiveFilename(sourceName);
+    const fileName = directoryArchiveFilename(artifactId, entry);
     tempDir = fs.mkdtempSync(
       path.join(os.tmpdir(), `agent-device-download-${crypto.randomUUID()}-`),
     );

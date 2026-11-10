@@ -44,7 +44,11 @@ export type DaemonArtifactInventoryEntry = {
   artifactType?: DaemonArtifactType;
   filename: string;
   mimeType: string;
-  sizeBytes: number;
+  /**
+   * Byte size of the download. Absent for a directory artifact that has not been downloaded yet:
+   * the daemon builds its archive on the first download, not to list it.
+   */
+  sizeBytes?: number;
   createdAt: string;
   expiresAt: string;
   /** Display rotation a screenshot was rendered in; absent when the capture reported none. */

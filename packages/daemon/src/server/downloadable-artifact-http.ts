@@ -51,7 +51,7 @@ async function handleDownloadableArtifactHttpRoute(
 ): Promise<void> {
   switch (route.kind) {
     case 'inventory':
-      await handleArtifactInventory(req, res, authorize, options);
+      await handleArtifactInventory(req, res, authorize);
       return;
     case 'download':
       await handleArtifactDownload(route.artifactId, req, res, authorize, options);
@@ -156,7 +156,6 @@ async function handleArtifactInventory(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   authorize: DownloadableArtifactHttpAuthorizer,
-  options: { hostEnv: NodeJS.ProcessEnv },
 ): Promise<void> {
   try {
     const auth = await authorize({
@@ -173,7 +172,7 @@ async function handleArtifactInventory(
     res.setHeader('content-type', 'application/json');
     res.end(
       JSON.stringify({
-        artifacts: await listDownloadableArtifacts(auth.tenantId, options.hostEnv),
+        artifacts: await listDownloadableArtifacts(auth.tenantId),
       }),
     );
   } catch (error) {
