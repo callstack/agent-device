@@ -55,6 +55,12 @@ export const ALERT_UNRESOLVED_RUNNER_CODE = 'ALERT_UNRESOLVED';
  */
 export const ALERT_WINDOW_EXPIRED_REASON = 'alert-window-expired';
 
+/**
+ * `alert wait` saw no actionable alert within its window. Every backend's wait loop throws it, so
+ * a caller tells a timed-out wait from a transport failure by reason, not by message.
+ */
+export const ALERT_WAIT_TIMEOUT_REASON = 'alert-wait-timeout';
+
 /** What an `alert get` capture resolved to, typed so clients switch on states, not messages. */
 export type AlertStatusKind = 'visible' | 'none' | 'undecided';
 
