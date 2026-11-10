@@ -27,14 +27,20 @@ function lease(leaseId: string) {
   };
 }
 
-// Two registered TVs, bedroom the ares default. Every ares call is recorded, and ares-inspect fails
+// Two registered TVs, bedroom the ares default, and lounge a second entry for the living-room TV. Every ares call is recorded, and ares-inspect fails
 // so open stops right after the launch. One script answers for every ares CLI through symlinks,
 // because macOS checks each new executable on its first run.
 const ARES_BIN = mkdtempForTestSync('ares-');
 const CALLS = path.join(ARES_BIN, 'calls.log');
 const TVS = [
-  { profile: 'tv', name: 'living-room', default: false },
-  { profile: 'tv', name: 'bedroom', default: true },
+  {
+    profile: 'tv',
+    name: 'living-room',
+    default: false,
+    deviceinfo: { ip: '192.0.2.10', port: '9922' },
+  },
+  { profile: 'tv', name: 'bedroom', default: true, deviceinfo: { ip: '192.0.2.11', port: '9922' } },
+  { profile: 'tv', name: 'lounge', default: false, deviceinfo: { ip: '192.0.2.10', port: '9922' } },
 ];
 writeFileSync(
   path.join(ARES_BIN, 'ares'),
@@ -75,7 +81,7 @@ test('connect leases the ares default TV when neither the flag nor the options n
 
   const allocated = await runtime.leaseLifecycle.allocate(lease('lease-a'));
 
-  assert.equal(allocated?.device.id, 'webos:bedroom');
+  assert.equal(allocated?.device.id, 'webos:192.0.2.11:9922');
 });
 
 test('connect leases the TV the --device flag names over the plugin default', async () => {
@@ -85,7 +91,20 @@ test('connect leases the TV the --device flag names over the plugin default', as
     flags: { device: 'living-room' },
   });
 
-  assert.equal(allocated?.device.id, 'webos:living-room');
+  assert.equal(allocated?.device.id, 'webos:192.0.2.10:9922');
+  assert.equal(allocated?.device.name, 'living-room');
+});
+
+test('a second ares entry for the held TV is refused with DEVICE_IN_USE', async () => {
+  const runtime = await webosRuntime();
+  await runtime.leaseLifecycle.allocate(lease('lease-a'), { flags: { device: 'living-room' } });
+
+  const second = runtime.leaseLifecycle.allocate(lease('lease-b'), { flags: { device: 'lounge' } });
+
+  await assert.rejects(
+    second,
+    (error: unknown) => error instanceof AppError && error.code === 'DEVICE_IN_USE',
+  );
 });
 
 test('connect to a TV ares does not know fails as DEVICE_NOT_FOUND and lists the known TVs', async () => {
@@ -97,7 +116,8 @@ test('connect to a TV ares does not know fails as DEVICE_NOT_FOUND and lists the
       error instanceof AppError &&
       error.code === 'DEVICE_NOT_FOUND' &&
       error.message === 'No webOS TV named attic in ares-setup-device' &&
-      JSON.stringify(error.details?.available) === JSON.stringify(['living-room', 'bedroom']),
+      JSON.stringify(error.details?.available) ===
+        JSON.stringify(['living-room', 'bedroom', 'lounge']),
   );
 });
 

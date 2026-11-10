@@ -57,7 +57,7 @@ import { AppError } from '@agent-device/kernel/errors';
 
 import { appLogDescriptorCodec } from './app-log-descriptor.ts';
 import { supportedRemoteButtons } from './keys.ts';
-import { createPageInteractor, detachPage } from './page-interactor.ts';
+import { createPageInteractor, detachPage, finishTeardown } from './page-interactor.ts';
 import type { TvPlatform, TvSession } from './tv.ts';
 
 const INSTANCE = 'local';
@@ -69,13 +69,15 @@ export type TvRuntimeHost = Readonly<{
   createError(code: string, message: string, details?: Record<string, unknown>): Error;
 }>;
 
+type LeasedTv = Readonly<{ id: string; name: string }>;
+
 // agent-device has a fixed platform list and leases only ios/android/harmonyos devices, so a TV
 // enters as an Android TV device that its provider owns end to end.
-function tvDevice(platform: TvPlatform, name: string): DeviceInfo {
+function tvDevice(platform: TvPlatform, tv: LeasedTv): DeviceInfo {
   return {
     platform: 'android',
-    id: `${platform.provider}:${name}`,
-    name,
+    id: `${platform.provider}:${tv.id}`,
+    name: tv.name,
     kind: 'device',
     target: 'tv',
     booted: true,
@@ -176,50 +178,63 @@ export function createTvRuntime(platform: TvPlatform, host: TvRuntimeHost) {
   const { provider, label } = platform;
   const devicePrefix = `${provider}:`;
   const sessions = new Map<string, TvSession>();
-  const leases = new Map<string, string>();
+  const leases = new Map<string, LeasedTv>();
   const owner = providerRuntimeOwner(provider, INSTANCE);
 
   const ownsDevice = (device: DeviceInfo) => device.id.startsWith(devicePrefix);
-  const tvName = (device: DeviceInfo) => device.id.slice(devicePrefix.length);
+  const tvId = (device: DeviceInfo) => device.id.slice(devicePrefix.length);
   const sessionFor = (device: DeviceInfo) =>
-    ownsDevice(device) ? sessions.get(tvName(device)) : undefined;
+    ownsDevice(device) ? sessions.get(tvId(device)) : undefined;
   const getInteractor = (device: DeviceInfo, signal?: AbortSignal): Interactor | undefined => {
     const session = sessionFor(device);
     return session && createPageInteractor(session, platform.remoteKeys, signal);
   };
 
+  let shuttingDown = false;
+  const refuseWhileShuttingDown = () => {
+    if (shuttingDown) {
+      throw host.createError('COMMAND_FAILED', `The ${label} runtime is shutting down`);
+    }
+  };
+
   async function allocate(lease: DeviceLease, context?: LeaseLifecycleContext) {
     if (lease.leaseProvider !== provider) return undefined;
+    refuseWhileShuttingDown();
     const leased = leases.get(lease.leaseId);
     if (leased) return { device: tvDevice(platform, leased) };
     const flagDevice = context?.flags?.device;
     const tv = await platform.connectTv(typeof flagDevice === 'string' ? flagDevice : undefined);
-    const holder = [...leases].find(([id, name]) => name === tv.name && id !== lease.leaseId);
+    refuseWhileShuttingDown();
+    const holder = [...leases].find(
+      ([leaseId, held]) => held.id === tv.id && leaseId !== lease.leaseId,
+    );
     if (holder) {
-      throw host.createError('DEVICE_IN_USE', `${label} TV ${tv.name} is held by another lease`, {
+      throw host.createError('DEVICE_IN_USE', `${label} TV ${tv.id} is held by another lease`, {
         hint: 'Disconnect the session that holds the TV, or wait for its lease to expire.',
       });
     }
-    if (!sessions.has(tv.name)) sessions.set(tv.name, { tv, label, logs: new Map() });
-    leases.set(lease.leaseId, tv.name);
-    return { device: tvDevice(platform, tv.name) };
+    if (!sessions.has(tv.id)) sessions.set(tv.id, { tv, label, logs: new Map() });
+    const entry = { id: tv.id, name: tv.name };
+    leases.set(lease.leaseId, entry);
+    return { device: tvDevice(platform, entry) };
   }
 
-  function releaseLease(leaseId: string) {
-    const name = leases.get(leaseId);
-    if (!name) return false;
+  async function releaseLease(leaseId: string) {
+    const leased = leases.get(leaseId);
+    if (!leased) return false;
     leases.delete(leaseId);
-    const session = sessions.get(name);
-    if (session && ![...leases.values()].includes(name)) {
+    const session = sessions.get(leased.id);
+    if (session && ![...leases.values()].some((held) => held.id === leased.id)) {
       session.released = true;
       detachPage(session);
-      sessions.delete(name);
+      sessions.delete(leased.id);
+      await finishTeardown(session);
     }
     return true;
   }
 
   async function release(lease: DeviceLease) {
-    return releaseLease(lease.leaseId) ? {} : undefined;
+    return (await releaseLease(lease.leaseId)) ? {} : undefined;
   }
 
   const runtime = {
@@ -227,13 +242,14 @@ export function createTvRuntime(platform: TvPlatform, host: TvRuntimeHost) {
     leaseLifecycle: { allocate, release },
     deviceInventoryProvider: async (request: { leaseProvider?: string; leaseId?: string }) => {
       if (request.leaseProvider !== provider || !request.leaseId) return null;
-      const name = leases.get(request.leaseId);
-      return name ? [tvDevice(platform, name)] : null;
+      const leased = leases.get(request.leaseId);
+      return leased ? [tvDevice(platform, leased)] : null;
     },
     ownsDevice,
     getInteractor,
     shutdown: async () => {
-      for (const leaseId of leases.keys()) releaseLease(leaseId);
+      shuttingDown = true;
+      await Promise.allSettled([...leases.keys()].map(releaseLease));
     },
   };
 
@@ -241,7 +257,7 @@ export function createTvRuntime(platform: TvPlatform, host: TvRuntimeHost) {
     platform,
     owner,
     ownsDevice,
-    tvName,
+    tvId,
     getInteractor,
     sessionFor,
   };
@@ -258,13 +274,13 @@ type TvRuntimeContext = Readonly<{
   platform: TvPlatform;
   owner: Owner;
   ownsDevice(device: DeviceInfo): boolean;
-  tvName(device: DeviceInfo): string;
+  tvId(device: DeviceInfo): string;
   getInteractor(device: DeviceInfo, signal?: AbortSignal): Interactor | undefined;
   sessionFor(device: DeviceInfo): TvSession | undefined;
 }>;
 
 function createTvPlatformRuntime(
-  { platform, owner, ownsDevice, tvName, getInteractor, sessionFor }: TvRuntimeContext,
+  { platform, owner, ownsDevice, tvId, getInteractor, sessionFor }: TvRuntimeContext,
   host: PlatformRuntimeHost,
 ): PlatformRuntimeOwner {
   const { provider, label } = platform;
@@ -290,7 +306,7 @@ function createTvPlatformRuntime(
         if (!session) {
           throw new AppError(
             'COMMAND_FAILED',
-            `${label} TV ${tvName(device)} has no active session`,
+            `${label} TV ${tvId(device)} has no active session`,
             {
               hint: `Run connect ${provider}, then open <appId>.`,
             },
@@ -319,11 +335,11 @@ function createTvPlatformRuntime(
         },
         describe: (_reader, target) => ({
           transport,
-          tv: tvName(device),
+          tv: tvId(device),
           appBundleId: target.appBundleId,
           outputPath: target.outputPath,
         }),
-        matchesDevice: (descriptor) => descriptor.tv === tvName(device),
+        matchesDevice: (descriptor) => descriptor.tv === tvId(device),
         reconnect: async (descriptor) => {
           const session = sessionFor(device);
           return session?.page && session.appId === descriptor.appBundleId
@@ -337,7 +353,7 @@ function createTvPlatformRuntime(
         binding: bindProviderApplicationLifecycleInteractor({ device, signal, resolveInteractor }),
       });
       const appOperations: Pick<PlatformRuntimeOperations, 'listApps' | 'appState'> = {
-        listApps: async () => await requireSession().tv.listApps(),
+        listApps: async () => await requireSession().tv.listApps({ signal }),
         appState: async () => ({ package: await visibleAttachedApp(requireSession()) }),
       };
       return Object.freeze({

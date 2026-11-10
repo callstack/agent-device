@@ -19,17 +19,31 @@ function fakeAresBin(outputs: Record<string, string>) {
   return bin;
 }
 
-test('listDevices returns only TV profiles with their IP and default flag', async () => {
+test('listDevices returns only TV profiles, each at its ip:port, or at its name for a USB entry', async () => {
   const bin = fakeAresBin({
     'ares-setup-device': JSON.stringify([
-      { profile: 'tv', name: 'living-room', default: true, deviceinfo: { ip: '192.0.2.10' } },
-      { profile: 'ose', name: 'signage', default: false, deviceinfo: { ip: '192.0.2.20' } },
+      {
+        profile: 'tv',
+        name: 'living-room',
+        default: true,
+        deviceinfo: { ip: '192.0.2.10', port: '9922' },
+      },
+      {
+        profile: 'ose',
+        name: 'signage',
+        default: false,
+        deviceinfo: { ip: '192.0.2.20', port: '9922' },
+      },
+      { profile: 'tv', name: 'usb-tv', default: false, deviceinfo: { uid: 'usb-1' } },
     ]),
   });
 
   const devices = await createAres(bin, process.env).listDevices();
 
-  assert.deepEqual(devices, [{ name: 'living-room', isDefault: true }]);
+  assert.deepEqual(devices, [
+    { name: 'living-room', endpoint: '192.0.2.10:9922', isDefault: true },
+    { name: 'usb-tv', endpoint: 'usb-tv', isDefault: false },
+  ]);
 });
 
 test('listApps reads each app id with its title from ares-install --listfull', async () => {
