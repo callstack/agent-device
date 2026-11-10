@@ -80,14 +80,3 @@ export type DaemonRequest = DaemonWireRequest & {
 };
 
 export type DaemonInvokeFn = (req: DaemonRequest) => Promise<DaemonResponse>;
-
-/**
- * The directory a relative path argument of this request resolves against: the caller's cwd,
- * or the daemon's own cwd when the client sent none. One daemon serves several workspaces.
- */
-export function requestCwd(
-  req: Pick<DaemonWireRequest, 'meta'>,
-  host: Readonly<{ cwd: string }>,
-): string {
-  return req.meta?.cwd ?? host.cwd;
-}

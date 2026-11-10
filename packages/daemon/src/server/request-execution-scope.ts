@@ -23,6 +23,7 @@ import { AppError, errorMessage, normalizeError } from '@agent-device/kernel/err
 import {
   type DaemonCommandContext,
   contextFromFlags as contextFromFlagsWithLog,
+  requestCwd,
 } from '../core/context.ts';
 import { assertSessionSelectorMatches } from '../core/session-selector.ts';
 import {
@@ -77,7 +78,7 @@ import {
 } from '@agent-device/session-journal/session-event-log';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import { type SessionStore } from '../core/session-store.ts';
-import { requestCwd, type DaemonRequest } from '../core/daemon-request.ts';
+import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import { teardownSessionResources } from '../sessions/session-teardown.ts';
 import { finalizeBoundSessionApplicationLifecycle } from './application-lifecycle-recovery.ts';

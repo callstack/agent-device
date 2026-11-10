@@ -33,7 +33,8 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
-import { requestCwd, type DaemonRequest } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
+import { requestCwd } from '../../../core/context.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { bindSessionPerfCapture } from '../../../core/session-capture-binding.ts';
 import { withCaptureOutputOwnership } from '../../../core/capture-output-ownership.ts';

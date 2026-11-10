@@ -18,7 +18,8 @@ import type {
   AgentArtifactsResult,
   CloudArtifactProvider,
 } from '@agent-device/contracts/observability';
-import { requestCwd, type DaemonRequest } from '../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { requestCwd } from '../../core/context.ts';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
   leaseReleaseRequestFor,

@@ -23,7 +23,8 @@ import type {
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
-import { requestCwd, type DaemonRequest } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
+import { requestCwd } from '../../../core/context.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import {
   abortAuthoringOnSecondOpen,

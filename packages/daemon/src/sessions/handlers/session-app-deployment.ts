@@ -23,7 +23,8 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../core/request-runtime-binding.ts';
 import type { SessionStore } from '../../core/session-store.ts';
-import { requestCwd, type DaemonRequest } from '../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { requestCwd } from '../../core/context.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import { resolveDeployResultTarget } from '@agent-device/contracts/deploy-result-target';
 import { withSuccessText } from '@agent-device/kernel/success-text';

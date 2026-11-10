@@ -9,7 +9,8 @@ import {
   type TraceCommandResult,
 } from '@agent-device/contracts/recording';
 import type { SessionStore } from '../../core/session-store.ts';
-import { requestCwd, type DaemonRequest } from '../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { requestCwd } from '../../core/context.ts';
 import type { SessionRef } from '../../core/session-state.ts';
 import { recordSessionAction } from '../../core/session-action-recorder.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';

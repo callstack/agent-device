@@ -23,7 +23,7 @@ import {
   readScreenshotResultMetadata,
 } from '@agent-device/capture-kit/screenshot-density';
 import { runtimeExecutionFromContext } from '../core/snapshot-runtime-capture-input.ts';
-import type { DaemonCommandContext } from '../core/context.ts';
+import { requestCwd, type DaemonCommandContext } from '../core/context.ts';
 import { captureSnapshotData } from '../core/snapshot-capture.ts';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import type {
@@ -43,7 +43,7 @@ import {
   type ScreenshotRuntimeBindings,
 } from './screenshot-runtime-binding.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
-import { requestCwd, type DaemonRequest } from '../core/daemon-request.ts';
+import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';
 
 /**
