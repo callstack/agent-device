@@ -177,7 +177,8 @@ test('directory downloads stage beside the destination and finish timeout cleanu
       () => (settledBeforeTimeout = {}),
       (error: unknown) => (settledBeforeTimeout = { error }),
     );
-    while (!settledBeforeTimeout && stagingEntries().length === 0) {
+    // Vitest's own test timeout aborts `t.signal`, which ends the wait without a wall-clock bound.
+    while (!settledBeforeTimeout && !t.signal.aborted && stagingEntries().length === 0) {
       await new Promise((resolve) => setImmediate(resolve));
     }
     assert.equal(
