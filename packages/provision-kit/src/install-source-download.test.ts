@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import dns from 'node:dns/promises';
 import fs from 'node:fs/promises';
-import { Readable } from 'node:stream';
+import { PassThrough, Readable } from 'node:stream';
 import { test, vi } from 'vitest';
 import { mkdtempForTest } from './tmp-dir.fixtures.ts';
 import { downloadInstallSource } from './install-source-download.ts';
@@ -233,6 +233,63 @@ test('download rejects non-identity content encoding and malformed lengths', asy
       /content-length/i,
     );
   } finally {
+    requestMock.mockRestore();
+    lookup.mockRestore();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('download bounds stalls, not the whole transfer', async () => {
+  const tempRoot = await mkdtempForTest('agent-device-download-stall-');
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const lookup = vi
+    .spyOn(dns, 'lookup')
+    .mockImplementation(
+      async () =>
+        [{ address: '93.184.216.34', family: 4 }] as unknown as Awaited<
+          ReturnType<typeof dns.lookup>
+        >,
+    );
+  const slowBody = new PassThrough();
+  const stalledBody = new PassThrough();
+  const requestMock = vi
+    .spyOn(networkTransport, 'requestApprovedUrl')
+    .mockResolvedValueOnce({ statusCode: 200, headers: {}, body: slowBody, close: async () => {} })
+    .mockResolvedValueOnce({
+      statusCode: 200,
+      headers: {},
+      body: stalledBody,
+      close: async () => {},
+    });
+  const download = (url: string) =>
+    downloadInstallSource({
+      tempDir: tempRoot,
+      url,
+      signal: new AbortController().signal,
+      environment: process.env,
+    });
+  const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
+  try {
+    const slow = download('https://example.com/slow.apk');
+    for (const chunk of ['a', 'b', 'c']) {
+      await vi.advanceTimersByTimeAsync(100_000);
+      slowBody.write(chunk);
+      await settle();
+    }
+    slowBody.end();
+    assert.equal(await fs.readFile(await slow, 'utf8'), 'abc');
+
+    const stalled = assert.rejects(download('https://example.com/stalled.apk'), {
+      code: 'COMMAND_FAILED',
+      message: 'App source download made no progress for 120000ms',
+    });
+    await settle();
+    stalledBody.write('a');
+    await settle();
+    await vi.advanceTimersByTimeAsync(120_000);
+    await stalled;
+  } finally {
+    vi.useRealTimers();
     requestMock.mockRestore();
     lookup.mockRestore();
     await fs.rm(tempRoot, { recursive: true, force: true });
