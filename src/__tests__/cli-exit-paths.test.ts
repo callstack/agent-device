@@ -9,8 +9,15 @@ vi.mock('../cli/commands/web.ts', async (importOriginal) => {
   return { ...actual, runWebCommand: vi.fn(async () => 0) };
 });
 
+// Pass-through spy: the flushed exit path is the #1596 contract under test.
+vi.mock('../cli/process-exit.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../cli/process-exit.ts')>();
+  return { ...actual, exitAfterFlush: vi.fn(actual.exitAfterFlush) };
+});
+
 import { runCli } from '../cli.ts';
 import { runWebCommand } from '../cli/commands/web.ts';
+import { exitAfterFlush } from '../cli/process-exit.ts';
 import { installIsolatedCliTestEnv } from './cli-test-env.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonResponse } from '@agent-device/daemon-client';
@@ -228,4 +235,40 @@ test('a failed `is` predicate exits non-zero, whatever answered it', async () =>
   const output = stderr.read();
   assert.ok(output.includes('COMMAND_FAILED'), 'expected the typed failure on stderr');
   assert.ok(!output.includes('Passed'), 'a failed assertion must never render as passed');
+});
+
+test('a failing `test` suite exits 1 through the flushed exit path', async () => {
+  const flow = path.join(mkdtempForTestSync('agent-device-failing-suite-'), 'login.ad');
+  fs.writeFileSync(flow, 'open "Demo"\n');
+  const restoreEnv = installIsolatedCliTestEnv();
+  const exitSpy = installExitSpy();
+  const stdout = beginStdoutCapture();
+  const sendToDaemon = async (): Promise<DaemonResponse> => ({
+    ok: true,
+    data: {
+      total: 1,
+      executed: 1,
+      passed: 0,
+      failed: 1,
+      skipped: 0,
+      notRun: 0,
+      durationMs: 5,
+      failures: [],
+      tests: [],
+    },
+  });
+
+  try {
+    await runCli(['test', flow, '--json'], { sendToDaemon });
+  } finally {
+    stdout.restore();
+    exitSpy.restore();
+    restoreEnv();
+  }
+
+  assert.deepEqual(vi.mocked(exitAfterFlush).mock.calls, [[1]]);
+  assert.deepEqual(exitSpy.calls, [1]);
+  const envelope = JSON.parse(stdout.read());
+  assert.equal(envelope.success, true);
+  assert.equal(envelope.data.failed, 1);
 });
