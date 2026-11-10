@@ -1,5 +1,5 @@
 import type { ScreenshotScreenMask } from './screenshot.ts';
-import type { ScreenshotResultData } from './snapshot-types.ts';
+import type { BackendSnapshotOptions, ScreenshotResultData } from './snapshot-types.ts';
 import type { SnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 import type { JsonObject } from './json.ts';
@@ -21,7 +21,7 @@ import type {
   PlatformSelector,
   PublicPlatform,
 } from '@agent-device/kernel/device';
-import type { Point, Rect, SnapshotNode, SnapshotOptions } from '@agent-device/kernel/snapshot';
+import type { Point, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 
 // The backend's public leaf platform (approach b): backends distinguish iOS from
@@ -45,11 +45,7 @@ export type BackendSnapshotResult = {
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
 } & SnapshotCaptureAnnotations;
 
-export type BackendSnapshotOptions = SnapshotOptions & {
-  includeRects?: boolean;
-  includeHiddenContentHints?: boolean;
-  outPath?: string;
-};
+export type { BackendSnapshotOptions };
 
 export type BackendReadTextResult = {
   text: string;

@@ -56,9 +56,9 @@ export type {
   SnapshotTimingSample,
   SnapshotTimingStats,
 } from '../snapshot-diagnostics.ts';
-export type { BackendSnapshotOptions } from '../backend.ts';
 export type {
   AndroidSnapshotBackendMetadata,
+  BackendSnapshotOptions,
   FindLocator,
   InteractorSnapshotCapture,
   ScreenshotResultData,

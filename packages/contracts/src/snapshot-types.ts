@@ -1,5 +1,6 @@
 import type {
   SnapshotNode,
+  SnapshotOptions,
   SnapshotQualityVerdict,
   SnapshotQualityNote,
   IosSnapshotObservation,
@@ -48,6 +49,11 @@ export type InteractorSnapshotCapture = {
   qualityNotes?: SnapshotQualityNote[];
   warnings?: string[];
   observation?: IosSnapshotObservation;
+};
+export type BackendSnapshotOptions = SnapshotOptions & {
+  includeRects?: boolean;
+  includeHiddenContentHints?: boolean;
+  outPath?: string;
 };
 export type AndroidSnapshotBackendMetadata = {
   backend: 'android-helper';
