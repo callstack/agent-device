@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { buildDaemonHttpAuthHeaders } from '@agent-device/contracts/daemon-http';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -107,6 +107,32 @@ test('aborting the client request aborts the upstream exchange', async () => {
   await upstreamAborted.promise;
   expect((await response).status).toBe(500);
 });
+
+test.each([
+  { upstreamTimeoutMs: undefined, timeouts: [] },
+  { upstreamTimeoutMs: 1234, timeouts: [[1234]] },
+])(
+  'an rpc exchange with upstreamTimeoutMs $upstreamTimeoutMs gets timeouts $timeouts',
+  async ({ upstreamTimeoutMs, timeouts }) => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    try {
+      const proxy = createDaemonProxy({
+        upstreamBaseUrl: 'http://daemon.internal:4310',
+        upstreamToken: 'daemon-secret',
+        clientToken: 'client-secret',
+        upstreamFetch: async () => Response.json({ jsonrpc: '2.0', id: 4, result: {} }),
+        ...(upstreamTimeoutMs === undefined ? {} : { upstreamTimeoutMs }),
+      });
+      const response = await proxy.handle(
+        rpcRequest({ jsonrpc: '2.0', id: 4, method: 'agent-device.command', params: {} }),
+      );
+      expect(response.status).toBe(200);
+      expect(timeout.mock.calls).toEqual(timeouts);
+    } finally {
+      timeout.mockRestore();
+    }
+  },
+);
 
 test('upload tickets point at the origin the client used, not the daemon', async () => {
   const upstream = recordingUpstream(() =>

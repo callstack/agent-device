@@ -55,6 +55,10 @@ export type DaemonProxyOptions = {
   /** Auth token of the upstream daemon. Never leaves the proxy. */
   upstreamToken: string;
   maxRpcBodyBytes?: number;
+  /**
+   * Longest time one daemon request may take, including its body. Unset, an exchange lasts as long
+   * as its client request: the client's command envelope bounds it.
+   */
   upstreamTimeoutMs?: number;
   upstreamFetch?: DaemonProxyUpstreamFetch;
 } & (
@@ -91,7 +95,7 @@ type NormalizedProxyOptions = {
   clientToken: string | undefined;
   authenticate: DaemonProxyAuthenticate | undefined;
   maxRpcBodyBytes: number;
-  upstreamTimeoutMs: number;
+  upstreamTimeoutMs: number | undefined;
   upstreamFetch: DaemonProxyUpstreamFetch;
 };
 
@@ -102,7 +106,6 @@ type ProxyCaller = { tenantId?: string; uploadHeaders: Record<string, string> };
 const DEFAULT_UPLOAD_CREDENTIAL_HEADERS = Object.keys(buildDaemonHttpAuthHeaders('client'));
 
 const DEFAULT_MAX_RPC_BODY_BYTES = 1024 * 1024;
-const DEFAULT_UPSTREAM_TIMEOUT_MS = 5 * 60 * 1000;
 const DAEMON_PROXY_PREFIX = `${DAEMON_HTTP_BASE_PATH}/`;
 const FORWARDED_REQUEST_HEADERS = [
   'content-type',
@@ -365,6 +368,7 @@ async function forwardProxyRequest(params: {
  * turns a dropped upstream request into cancellation of in-flight runner work.
  */
 function upstreamSignal(request: Request, options: NormalizedProxyOptions): AbortSignal {
+  if (options.upstreamTimeoutMs === undefined) return request.signal;
   return AbortSignal.any([request.signal, AbortSignal.timeout(options.upstreamTimeoutMs)]);
 }
 
@@ -484,7 +488,7 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
     clientToken,
     authenticate: options.authenticate,
     maxRpcBodyBytes: options.maxRpcBodyBytes ?? DEFAULT_MAX_RPC_BODY_BYTES,
-    upstreamTimeoutMs: options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS,
+    upstreamTimeoutMs: options.upstreamTimeoutMs,
     upstreamFetch: options.upstreamFetch ?? ((request) => fetch(request)),
   };
 }
