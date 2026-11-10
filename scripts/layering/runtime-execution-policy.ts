@@ -10,7 +10,7 @@
 //   being the sole producer of AdmittedRuntimePlan/BoundDeviceRuntime no longer matters. The
 //   token is a type, so an `as` cast or narrowing to it type-checks from any module.
 
-import { parseSync } from 'oxc-parser';
+import { parseSync, type Program } from 'oxc-parser';
 import { DAEMON_SOURCE_ROOT, isProductionSourceFile } from './tracked-sources.ts';
 import { memberName, propertyName, visitAst } from './layering-ast.ts';
 import type { LayeringViolation } from './model.ts';
@@ -195,7 +195,7 @@ function sharedAdmissionViolations(sources: ReadonlyMap<string, string>): Layeri
   return violations;
 }
 
-function namedFunction(program: unknown, expected: string): AstNode | undefined {
+function namedFunction(program: Program, expected: string): AstNode | undefined {
   let found: AstNode | undefined;
   visitAst(program, (node) => {
     if (node['type'] !== 'FunctionDeclaration') return;

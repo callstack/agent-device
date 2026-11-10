@@ -195,9 +195,9 @@ test('published ESM plugins declare bundled workspace build dependencies without
     'packages/provider-example/src/plugin.ts',
     "import { AppError } from '@agent-device/kernel/errors';",
   );
-  assert.deepEqual(checkPackageInternalSites(plugin, sites, [plugin, kernel], true), []);
+  assert.deepEqual(checkPackageInternalSites(plugin, sites, [plugin, kernel], false), []);
   const undeclared = { ...plugin, workspaceDependencies: new Set<string>() };
-  const violations = checkPackageInternalSites(undeclared, sites, [undeclared, kernel], true);
+  const violations = checkPackageInternalSites(undeclared, sites, [undeclared, kernel], false);
   assert.equal(violations.length, 1);
   assert.equal(violations[0]?.rule, 'R11 package-boundaries');
   assert.match(violations[0]?.message ?? '', /without declaring/);
