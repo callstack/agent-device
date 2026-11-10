@@ -46,16 +46,6 @@ const publicSdkChunkGroups = [
   ],
   ['sdk-finders', /src[\\/]finders\.d\.[cm]?ts$/, /src[\\/]finders\.ts$/],
   [
-    'sdk-android-adb',
-    /src[\\/]platforms[\\/]android[\\/]adb-executor\.d\.[cm]?ts$/,
-    /src[\\/]platforms[\\/]android[\\/]adb-executor\.ts$/,
-  ],
-  [
-    'sdk-app-inventory',
-    /src[\\/]contracts[\\/]app-inventory\.d\.[cm]?ts$/,
-    /src[\\/]contracts[\\/]app-inventory\.ts$/,
-  ],
-  [
     'sdk-remote-config',
     /packages[\\/]remote[\\/]src[\\/]remote-config-schema\.d\.[cm]?ts$/,
     /packages[\\/]remote[\\/]src[\\/]remote-config-schema\.ts$/,
