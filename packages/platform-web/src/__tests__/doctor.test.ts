@@ -1,8 +1,9 @@
+import { installFakeManagedAgentBrowser } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { beforeEach, test, vi } from 'vitest';
 import type { AgentBrowserProcessSummary } from '../agent-browser-lifecycle.ts';
-import { installFakeManagedAgentBrowser, mkdtempForTestSync } from './test-utils.ts';
+import { mkdtempForTestSync } from './test-utils.ts';
 
 vi.mock('../agent-browser-lifecycle.ts', async () => {
   const actual = await vi.importActual<typeof import('../agent-browser-lifecycle.ts')>(

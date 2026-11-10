@@ -1,4 +1,4 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, installFakeManagedAgentBrowser } from '@agent-device/test-kit';
 // The owned-process record gate end to end over one real record file: the provider's gate, a real
 // daemon-scoped record store, and the real same-pid identity probe asking the host about real
 // processes. Only the process-table scan is stood in for, which is what makes what is claimed here
@@ -20,11 +20,7 @@ import { withCommandExecutorOverride, type ExecResult } from '@agent-device/host
 import { MANAGED_WEB_BROWSER_PROCESS_PURPOSE } from '../agent-browser-process-record.ts';
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
 import type { WebProvider } from '../provider.ts';
-import {
-  agentBrowserJsonResult,
-  installFakeManagedAgentBrowser,
-  mkdtempForTestSync,
-} from './test-utils.ts';
+import { agentBrowserJsonResult, mkdtempForTestSync } from './test-utils.ts';
 
 bindTestCommandHost();
 
