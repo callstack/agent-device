@@ -86,6 +86,7 @@ Layer-3 coverage must claim every enforced/delegated cell:
 - Distinct-subtree rejection with candidates
 - Exact-ref provenance for runtime and native refs
 - Runtime-ref `label-fallback` recovery
+- Native-ref preflight `label-fallback` recovery
 - Direct-iOS `not-observed` without a snapshot
 
 Matrix and provider contracts cover every `resolutionDisclosure` cell:

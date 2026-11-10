@@ -105,7 +105,7 @@ export async function preflightNativeRefInteraction(
  * ADR 0011 native-ref dispatch, shared by click/fill/hover @ref: run the
  * preflight guards against the stored node, hand the ref to the backend as
  * its own element handle, and return the ref result envelope. It discloses the
- * preflight's resolution, or `exact` when the preflight observed no tree. Callers
+ * preflight's resolution, or `exact` when the preflight produced none. Callers
  * decide WHEN the path applies (backend capability, no non-default options,
  * no replay guard, no settle baseline); this owns only the dispatch itself so
  * the three commands cannot drift on preflight or disclosure.
