@@ -471,3 +471,46 @@ test('annotateScreenshotWithRefs draws the overlay onto the saved PNG', async ()
     [255, 255, 255, 255],
   );
 });
+
+test('buildScreenshotOverlayRefs returns for a node that names itself as its parent', () => {
+  const snapshot = makeSnapshotState([
+    {
+      index: 0,
+      type: 'XCUIElementTypeButton',
+      label: 'Save',
+      hittable: true,
+      rect: { x: 0, y: 0, width: 40, height: 20 },
+    },
+    {
+      index: 1,
+      parentIndex: 1,
+      type: 'XCUIElementTypeStaticText',
+      label: 'Detached',
+      rect: { x: 2, y: 2, width: 30, height: 12 },
+    },
+  ]);
+
+  assert.deepEqual(
+    buildScreenshotOverlayRefs(snapshot, 200, 100).map((ref) => ref.label),
+    ['Save'],
+  );
+});
+
+test('buildScreenshotOverlayRefs labels a 1,500-deep chain of controls in one walk per node', () => {
+  // Every labelled control is its own target and looks for a better descendant label. A per-target
+  // scan of all nodes with a root walk per pair costs nodes^2 x depth (about 1e9 steps here); one
+  // ancestor walk per labelled node costs nodes x depth.
+  const depth = 1_500;
+  const nodes = Array.from({ length: depth }, (_, index) => ({
+    index,
+    ...(index > 0 ? { parentIndex: index - 1 } : {}),
+    type: 'XCUIElementTypeButton',
+    label: `Control ${index}`,
+    hittable: true,
+    rect: { x: 0, y: 0, width: 200, height: 100 },
+  }));
+  const started = performance.now();
+  const overlayRefs = buildScreenshotOverlayRefs(makeSnapshotState(nodes), 200, 100);
+  assert.ok(overlayRefs.length > 0);
+  assert.ok(performance.now() - started < 2_000, 'overlay labelling must stay near linear');
+});
