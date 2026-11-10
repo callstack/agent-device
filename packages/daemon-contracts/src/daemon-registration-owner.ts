@@ -294,8 +294,8 @@ export function launchDaemonProcess(
     throw new AppError('COMMAND_FAILED', 'Replay daemon startup admission is closed.', {
       reason: 'daemon_startup_admission_closed',
     });
-  fs.mkdirSync(input.paths.baseDir, { recursive: true });
-  const logFd = fs.openSync(input.paths.logPath, 'a');
+  fs.mkdirSync(input.paths.baseDir, { recursive: true, mode: 0o700 });
+  const logFd = fs.openSync(input.paths.logPath, 'a', 0o600);
   try {
     const monitored = runCmdDetachedMonitored(process.execPath, input.args, {
       cwd: input.cwd,
