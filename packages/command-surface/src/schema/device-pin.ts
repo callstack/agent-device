@@ -10,7 +10,7 @@ import type { FlagProvenance, FlagValueSource } from './cli-config.ts';
  * selector that names a different value fails here with a typed reason instead of silently winning.
  * The pin guides selection only; it is not an ownership claim (#1320 device claims are).
  */
-export const DEVICE_PIN_SELECTOR_KEYS = ['platform', 'device', 'udid', 'serial'] as const;
+const DEVICE_PIN_SELECTOR_KEYS = ['platform', 'device', 'udid', 'serial'] as const;
 
 export type DevicePinSelectorKey = (typeof DEVICE_PIN_SELECTOR_KEYS)[number];
 

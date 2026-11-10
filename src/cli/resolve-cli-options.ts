@@ -1,15 +1,24 @@
 import type { CliFlags } from '@agent-device/contracts/command';
 import {
   assertSelectorHonorsDevicePin,
+  type DevicePin,
   mergeDefinedFlags,
   pickExplicitSelector,
   resolveConfigBackedFlagDefaultsWithProvenance,
   resolveDevicePin,
   resolveSelectorOrigins,
+  type SelectorOrigins,
 } from '@agent-device/command-surface';
 import { finalizeParsedArgs, parseRawArgs } from './parser/args.ts';
 import { resolveRemoteConfigDefaults } from './remote-config-flags.ts';
 import { type EnvMap } from '@agent-device/kernel/source-value';
+
+export type ResolvedCliOptions = ReturnType<typeof finalizeParsedArgs> & {
+  providedFlags: ReturnType<typeof parseRawArgs>['providedFlags'];
+  remoteConfigLeaseProvider: ReturnType<typeof resolveRemoteConfigDefaults>['leaseProvider'];
+  devicePin: DevicePin | undefined;
+  selectorOrigins: SelectorOrigins;
+};
 
 export function resolveCliOptions(
   argv: string[],
@@ -18,7 +27,7 @@ export function resolveCliOptions(
     env: EnvMap;
     strictFlags?: boolean;
   },
-) {
+): ResolvedCliOptions {
   const rawParsed = parseRawArgs(argv);
   const { env, cwd } = options;
   const remoteConfig = shouldApplyRemoteConfigDefaults(rawParsed.command)
