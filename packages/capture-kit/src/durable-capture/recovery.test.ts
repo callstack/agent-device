@@ -122,3 +122,41 @@ function commitCommittedRecord(resourcePath: string): void {
     metadata: { ...(record.envelope.metadata ?? {}), phase: 'completed' },
   });
 }
+
+test('a canceled recovery scope acquires no control for the records it has not reached', async () => {
+  const context = makeDurableCaptureContext();
+  testCaptureStore.write(
+    context.resourcePath,
+    createDurableResourceEnvelope({
+      resourceKind: TEST_CAPTURE_KIND,
+      sessionId: context.sessionName,
+      device: { id: 'emulator-5554', family: 'android', kind: 'emulator' },
+      owner: localRuntimeOwner('android'),
+      fence: { token: 'fence', generation: 1 },
+      lifecycle: 'open',
+      descriptor: { version: 1, body: { pid: 123 } },
+    }),
+  );
+  const controller = new AbortController();
+  controller.abort(new Error('daemon shutting down'));
+  const acquireControl = vi.fn();
+
+  await expect(
+    recoverDurableCaptureResourcesAfterDaemonLock({
+      definition: testCaptureDefinition,
+      sessionsDir: context.sessionsDir,
+      resolveSessionDir: context.resolveSessionDir,
+      scope: {
+        signal: controller.signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+      acquireControl,
+    }),
+  ).resolves.toEqual({ scanned: 1, recovered: 0, retained: 0 });
+  expect(acquireControl).not.toHaveBeenCalled();
+  expect(testCaptureStore.read(context.resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'open' },
+  });
+});

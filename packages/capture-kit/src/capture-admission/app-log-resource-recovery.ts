@@ -27,7 +27,7 @@ export function recoverAppLogResourcesAfterDaemonLock(params: {
   sessionsDir: string;
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
-  perRecordDeadlineMs?: number;
+  acquisitionDeadlineMs?: number;
   onDiagnostic?: (diagnostic: ResourceDiagnostic) => void;
 }): Promise<AppLogRecoverySummary> {
   return appLogDurableResource.recoverAll({
@@ -41,7 +41,7 @@ export function recoverAppLogResourceAfterDaemonLock(params: {
   resourcePath: string;
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
-  perRecordDeadlineMs?: number;
+  acquisitionDeadlineMs?: number;
   onDiagnostic?: (diagnostic: ResourceDiagnostic) => void;
 }) {
   return appLogDurableResource.recoverOne(
@@ -53,12 +53,12 @@ export function recoverAppLogResourceAfterDaemonLock(params: {
 function buildAppLogRecoveryParams(params: {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
-  perRecordDeadlineMs?: number;
+  acquisitionDeadlineMs?: number;
   onDiagnostic?: (diagnostic: ResourceDiagnostic) => void;
 }) {
   return {
     scope: params.scope,
-    perRecordDeadlineMs: params.perRecordDeadlineMs,
+    acquisitionDeadlineMs: params.acquisitionDeadlineMs,
     onDiagnostic: params.onDiagnostic,
     acquireControl: async (
       envelope: DurableResourceEnvelope<'app-log'>,

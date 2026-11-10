@@ -23,14 +23,14 @@ export function recoverScreenRecordingResourceAfterDaemonLock(params: {
   resourcePath: string;
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
-  perRecordDeadlineMs?: number;
+  acquisitionDeadlineMs?: number;
   onDiagnostic?: (diagnostic: ResourceDiagnostic) => void;
 }) {
   return screenRecordingDurableResource.recoverOne(
     {
       sessionsDir: params.sessionsDir,
       scope: params.scope,
-      perRecordDeadlineMs: params.perRecordDeadlineMs,
+      acquisitionDeadlineMs: params.acquisitionDeadlineMs,
       onDiagnostic: params.onDiagnostic,
       acquireControl: async (envelope, scope) =>
         await acquireScreenRecordingRecoveryControl(params.gateway, envelope, scope),

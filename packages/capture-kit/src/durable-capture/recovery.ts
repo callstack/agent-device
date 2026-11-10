@@ -22,7 +22,7 @@ import {
   transitionCleanupOutcome,
 } from './transitions.ts';
 
-const DEFAULT_RECOVERY_DEADLINE_MS = 5_000;
+const DEFAULT_ACQUISITION_DEADLINE_MS = 5_000;
 
 export type DurableCaptureRecoverySummary = Readonly<{
   scanned: number;
@@ -45,7 +45,12 @@ export type DurableCaptureRecoveryParams<K extends string, H extends LiveResourc
     envelope: DurableResourceEnvelope<K>,
     scope: PlatformRequestScope,
   ): Promise<DurableCaptureRecoveryControl<K, H, C>>;
-  perRecordDeadlineMs?: number;
+  /**
+   * Bounds one record's reattach acquisition only. The settle phase that follows (the owner's
+   * `forceCleanup`, descriptor cleanup, control disposal) runs under the record fence and has no
+   * bound here, so each owner must bound its own cleanup.
+   */
+  acquisitionDeadlineMs?: number;
   onDiagnostic?: (diagnostic: ResourceDiagnostic) => void;
 };
 
@@ -57,6 +62,8 @@ export async function recoverDurableCaptureResourcesAfterDaemonLock<
   const paths = params.definition.store.list(params.sessionsDir);
   const outcomes: DurableCaptureRecoveryOutcome[] = [];
   for (const resourcePath of paths) {
+    // A canceled scope fails every later acquisition; the remaining records stay for the next scan.
+    if (params.scope.signal.aborted) break;
     outcomes.push(await recoverDurableCaptureResource(params, resourcePath));
   }
   return {
@@ -81,7 +88,7 @@ export async function recoverDurableCaptureResource<
       params,
       resourcePath,
       candidate.envelope,
-      params.perRecordDeadlineMs ?? DEFAULT_RECOVERY_DEADLINE_MS,
+      params.acquisitionDeadlineMs ?? DEFAULT_ACQUISITION_DEADLINE_MS,
     );
     return recovered ? 'recovered' : 'retained';
   } catch (error) {
