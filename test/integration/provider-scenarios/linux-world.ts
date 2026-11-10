@@ -54,6 +54,10 @@ export async function createLinuxDesktopWorld(): Promise<LinuxDesktopWorld> {
       toolCalls.push([cmd, args]);
       return { stdout: '', stderr: '', exitCode: 0 };
     },
+    // The scripted desktop below owns app launches, so the detached launcher is never reached.
+    launchDetached: (cmd) => {
+      throw new Error(`the Linux world launches apps through its desktop: ${cmd}`);
+    },
     desktop: {
       openTarget: async (target) => {
         desktopCalls.push(['open', target]);

@@ -103,19 +103,26 @@ const whichOnPath = async (cmd: string): Promise<boolean> =>
   await whichCmd(cmd, commandHostEnvironment().env);
 
 /** A provider under construction; only the display decision is required up front. */
-type LinuxToolProviderParts = { display: LinuxDisplayConfig } & Partial<LinuxToolProvider>;
+/**
+ * The parts a caller may supply. A caller that injects `runCommand` owns process execution, so it
+ * also supplies `launchDetached`: the host-local detached runner never stands in beside an
+ * injected executor.
+ */
+export type LinuxToolProviderOverrides = Partial<
+  Omit<LinuxToolProvider, 'runCommand' | 'launchDetached'>
+> &
+  (
+    | { runCommand?: undefined; launchDetached?: LinuxToolDetachedLauncher }
+    | { runCommand: LinuxToolCommandExecutor; launchDetached: LinuxToolDetachedLauncher }
+  );
+
+type LinuxToolProviderParts = { display: LinuxDisplayConfig } & LinuxToolProviderOverrides;
 
 /** Adds the local parts a partial provider omits; every part then belongs to this instance. */
 function completeLocalLinuxToolProvider(provider: LinuxToolProviderParts): LinuxToolProvider {
   const runCommand = provider.runCommand ?? runCmd;
   const whichCommand = provider.whichCommand ?? whichOnPath;
-  // A caller that injected its own executor also owns app launches: the host-local detached
-  // runner is the default only beside the host-local `runCmd`.
-  const launchDetached =
-    provider.launchDetached ??
-    (provider.runCommand === undefined
-      ? runCmdDetachedMonitored
-      : launchThroughExecutor(provider.runCommand));
+  const launchDetached = provider.launchDetached ?? runCmdDetachedMonitored;
   const display = provider.display;
   return {
     runCommand,
@@ -138,7 +145,7 @@ function completeLocalLinuxToolProvider(provider: LinuxToolProviderParts): Linux
  * one provider instance per composing runtime, owning its display decision (#3794).
  */
 export function createLocalLinuxToolProvider(
-  options: { host: HostEnvironment } & Partial<LinuxToolProvider>,
+  options: { host: HostEnvironment } & LinuxToolProviderOverrides,
 ): LinuxToolProvider {
   const { host, ...provider } = options;
   return completeLocalLinuxToolProvider({
@@ -186,19 +193,6 @@ export async function runLinuxToolCommand(
   options?: ExecOptions,
 ): Promise<ExecResult> {
   return await resolveLinuxToolProvider().runCommand(cmd, args, options);
-}
-
-/** A launcher over an injected executor, settling `exited` from the command's own result. */
-function launchThroughExecutor(runCommand: LinuxToolCommandExecutor): LinuxToolDetachedLauncher {
-  return (cmd, args) => ({
-    exited: runCommand(cmd, args, { allowFailure: true }).then(
-      (result): ExecDetachedExit => ({ pid: 0, exitCode: result.exitCode }),
-      (error: unknown): ExecDetachedExit => ({
-        pid: 0,
-        error: error instanceof Error ? error.message : String(error),
-      }),
-    ),
-  });
 }
 
 /** What a launched app's exit says went wrong: a start failure, a non-zero exit, or a signal. */

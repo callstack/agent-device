@@ -235,7 +235,10 @@ async function sendTextEntry(send: AgentBrowserRunJson, command: readonly string
     command: commandName,
     reason: 'text-entry-failed',
     // The backend ran and refused this entry, so its install is not the suspect.
-    hint: 'The page refused this text entry: the target may have changed or gone. Run snapshot -i again and retry with the ref it reports.',
+    hint:
+      commandName === 'fill'
+        ? 'The page refused this text entry: the field may have changed or gone. Run snapshot -i again and retry fill with the ref it reports.'
+        : 'The page refused this text entry: the focused field may have changed or gone. Focus the field again (click it) and retry type.',
   });
 }
 
