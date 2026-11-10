@@ -152,7 +152,7 @@ test('assertSafeDerivedCleanup rejects cleaning override path by default', () =>
     assertSafeDerivedCleanup('/tmp/custom', {
       AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: '/tmp/custom',
     });
-  }, /Refusing to clean AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH automatically/);
+  }, /Refusing to clean AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/);
 });
 
 test('assertSafeDerivedCleanup allows cleaning override path under project .tmp', () => {

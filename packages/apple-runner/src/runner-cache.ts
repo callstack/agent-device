@@ -303,14 +303,10 @@ export function assertSafeDerivedCleanup(
   if (isPathInsideProjectTmp(derivedPath, projectRoot())) {
     return;
   }
-  throw new AppError(
-    'COMMAND_FAILED',
-    'Refusing to clean AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH automatically',
-    {
-      derivedPath,
-      hint: `Unset AGENT_DEVICE_IOS_CLEAN_DERIVED, or move AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH under a subdirectory of ${path.join(projectRoot(), '.tmp')}.`,
-    },
-  );
+  throw new AppError('COMMAND_FAILED', 'Refusing to clean AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH', {
+    derivedPath,
+    hint: `Move AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH to a non-symlinked subdirectory of ${path.join(projectRoot(), '.tmp')}. To skip automatic cleanup, unset AGENT_DEVICE_IOS_CLEAN_DERIVED.`,
+  });
 }
 
 function isPathInsideProjectTmp(targetPath: string, projectRoot: string): boolean {
