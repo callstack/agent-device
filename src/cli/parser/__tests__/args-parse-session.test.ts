@@ -448,6 +448,15 @@ test('parseArgs accepts install-from-source url and repeated headers', () => {
   assert.equal(parsed.flags.retentionMs, 60000);
 });
 
+test('parseArgs bounds retention milliseconds', () => {
+  const args = ['install-from-source', './app.apk', '--retention-ms'];
+  assert.equal(
+    parseArgs([...args, '2147483647'], { strictFlags: true }).flags.retentionMs,
+    2147483647,
+  );
+  assert.throws(() => parseArgs([...args, '2147483648'], { strictFlags: true }));
+});
+
 test('parseArgs accepts open --launch-args with plain values', () => {
   const parsed = parseArgs(
     ['open', 'com.example.app', '--launch-args', 'fixtureMode', '--launch-args', 'verbose'],

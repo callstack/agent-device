@@ -184,10 +184,10 @@ function resolveRetention(req: DaemonRequest): Retention {
   const enabled = req.meta?.retainMaterializedPaths === true;
   const ttlMs = req.meta?.materializedPathRetentionMs;
   if (!enabled) return { enabled: false };
-  if (ttlMs !== undefined && ttlMs <= 0) {
+  if (ttlMs !== undefined && (!Number.isInteger(ttlMs) || ttlMs <= 0 || ttlMs > 2_147_483_647)) {
     throw new AppError(
       'INVALID_ARGS',
-      'install_from_source retentionMs must be a positive integer',
+      'install_from_source retentionMs must be an integer from 1 to 2147483647',
     );
   }
   return { enabled: true, ...(ttlMs === undefined ? {} : { ttlMs }) };

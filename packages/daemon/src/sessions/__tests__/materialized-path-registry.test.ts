@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,6 +9,41 @@ import {
   retainMaterializedPaths,
 } from '../materialized-path-registry.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+
+test.each([1.5, Number.NaN, Number.POSITIVE_INFINITY, 0, -1, 2_147_483_648])(
+  'retainMaterializedPaths rejects invalid TTL %s before filesystem work',
+  async (ttlMs) => {
+    const error = await retainMaterializedPaths({ installablePath: '/missing', ttlMs }).then(
+      () => null,
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe('INVALID_ARGS');
+  },
+);
+
+test('maximum TTL schedules the supported delay and reports matching expiry', async () => {
+  vi.useFakeTimers();
+  const now = new Date('2025-01-01T00:00:00.000Z');
+  vi.setSystemTime(now);
+  const tempRoot = mkdtempForTestSync('agent-device-retained-max-ttl-');
+  const appPath = path.join(tempRoot, 'Sample.app');
+  fs.mkdirSync(appPath);
+  try {
+    const retained = await retainMaterializedPaths({
+      installablePath: appPath,
+      ttlMs: 2_147_483_647,
+    });
+    expect(retained.expiresAt).toBe(new Date(now.getTime() + 2_147_483_647).toISOString());
+    await vi.advanceTimersByTimeAsync(2_147_483_646);
+    expect(fs.existsSync(retained.installablePath)).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.waitFor(() => expect(fs.existsSync(retained.installablePath)).toBe(false));
+  } finally {
+    vi.useRealTimers();
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
 
 test('retainMaterializedPaths copies file and directory artifacts into managed storage', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-retained-paths-');

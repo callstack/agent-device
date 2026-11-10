@@ -392,6 +392,20 @@ async function runAndroidSetupAndInstallWorkflow(
   assert.equal(reinstallBundle.appId, 'com.example.demo');
   assert.equal(path.basename(reinstallBundle.appPath), 'Demo.aab');
 
+  for (const retentionMs of [1.5, 2_147_483_648]) {
+    const callsBefore = world.adbCalls.length;
+    await assert.rejects(
+      client.apps.installFromSource({
+        source: { kind: 'path', path: manifestApkPath },
+        retainPaths: true,
+        retentionMs,
+        ...selection,
+      }),
+      (error: { code?: string }) => error.code === 'INVALID_ARGS',
+    );
+    assert.equal(world.adbCalls.length, callsBefore);
+  }
+
   const installFromManifest = await client.apps.installFromSource({
     source: { kind: 'path', path: manifestApkPath },
     retainPaths: true,
