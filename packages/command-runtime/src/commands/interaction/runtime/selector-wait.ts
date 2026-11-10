@@ -68,12 +68,6 @@ export type WaitCommandResult =
       hint?: string;
     };
 
-export type WaitForTextCommandOptions = WaitCommandContext &
-  SelectorSnapshotOptions & {
-    text: string;
-    timeoutMs?: number | null;
-  };
-
 export type SelectorWaitRuntime = {
   backend: {
     platform: PublicPlatform;
@@ -132,10 +126,6 @@ export function createSelectorWaitCommands<Runtime extends SelectorWaitRuntime>(
   operations: SelectorWaitOperations<Runtime>,
 ): {
   waitCommand: (runtime: Runtime, options: WaitCommandOptions) => Promise<WaitCommandResult>;
-  waitForTextCommand: (
-    runtime: Runtime,
-    options: WaitForTextCommandOptions,
-  ) => Promise<Extract<WaitCommandResult, { kind: 'text' }>>;
 } {
   const waitCommand = async (
     runtime: Runtime,
@@ -191,21 +181,7 @@ export function createSelectorWaitCommands<Runtime extends SelectorWaitRuntime>(
     }
   };
 
-  const waitForTextCommand = async (
-    runtime: Runtime,
-    options: WaitForTextCommandOptions,
-  ): Promise<Extract<WaitCommandResult, { kind: 'text' }>> => {
-    const result = await waitCommand(runtime, {
-      ...options,
-      target: { kind: 'text', text: options.text, timeoutMs: options.timeoutMs },
-    });
-    if (result.kind !== 'text') {
-      throw new AppError('COMMAND_FAILED', 'waitForText returned non-text result');
-    }
-    return result;
-  };
-
-  return { waitCommand, waitForTextCommand };
+  return { waitCommand };
 }
 
 async function waitForRef<Runtime extends SelectorWaitRuntime>(

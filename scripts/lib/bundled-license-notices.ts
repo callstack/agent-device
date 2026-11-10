@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { TsdownPlugin } from 'tsdown';
+// tsdown's declarations do not compile under TypeScript 7; vite re-exports the rolldown types tsdown plugins extend.
+import type { Rolldown } from 'vite';
 import { renderLicenseNotices, type NoticeDependency } from '../size-report-package-notices.mjs';
 
 type Manifest = {
@@ -15,7 +16,7 @@ type Manifest = {
  * Enumerates every module rendered into the bundle, attributes each third-party one to its package,
  * and emits the notices beside the bundle. Extra notices are read from root's LICENSES directory.
  */
-export function bundledLicenseNotices(root: string): TsdownPlugin {
+export function bundledLicenseNotices(root: string): Rolldown.Plugin {
   return {
     name: 'bundled-license-notices',
     generateBundle(_options, bundle) {

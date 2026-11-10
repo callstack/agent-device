@@ -86,7 +86,7 @@ function moduleSpecifiers(
   source: string,
 ): ReadonlyArray<{ spec: string; line: number }> {
   const sites: Array<{ spec: string; line: number }> = [];
-  const add = (request: { value?: string; start?: number } | undefined): void => {
+  const add = (request: { value?: string; start?: number } | null | undefined): void => {
     if (request?.value)
       sites.push({ spec: request.value, line: lineAt(source, request.start ?? 0) });
   };

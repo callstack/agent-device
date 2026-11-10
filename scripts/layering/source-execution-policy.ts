@@ -22,7 +22,7 @@ export function sourceExecutionCompatibilityViolations(
 ): LayeringViolation[] {
   const violations: LayeringViolation[] = [];
   for (const [file, source] of sources) {
-    const program = parseSync(file, source).program as Record<string, unknown>;
+    const program = parseSync(file, source).program;
     visitAst(program, (node) => {
       if (
         node['type'] !== 'VariableDeclaration' ||

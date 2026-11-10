@@ -262,8 +262,8 @@ function checkRecordRuntimeOwnership(sources: ReadonlyMap<string, string>): Laye
  * Catches: a value import that runs against the ranked target spine's declared order (a lower
  *   zone importing a higher one) — the runtime-consequential half of what R6 also checks for
  *   type-only edges; neither zone-policy.ts's table nor the cycle check names direction.
- * Evidence: 3d70943550 (#984) introduced the ranked spine and its back-edge check; docs/
- *   dependency-graph-findings.md tracks the count this rule ratchets.
+ * Evidence: 3d70943550 (#984) introduced the ranked spine and its back-edge check. It rejects every
+ *   back-edge outright, so no count is tracked.
  * Cost: not attributed (folded into check.ts's whole-graph pass; no standalone module or
  *   test file to size separately).
  * Kill criterion: none enforced today; retire only by maintainer decision that the ranked spine's

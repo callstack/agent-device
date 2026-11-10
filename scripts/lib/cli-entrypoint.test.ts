@@ -48,6 +48,7 @@ test.each([0, 7])('closed output pipe preserves command exit code %s', async (ex
     ['--experimental-strip-types', '--input-type=module', '--eval', source],
     { stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
   );
+  assert.ok(child.stdout && child.stderr, 'the fixture child pipes stdout and stderr');
   let stderr = '';
   child.stderr.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk));
   const ready = once(child, 'message');
@@ -239,6 +240,7 @@ test.each([
       ['--experimental-strip-types', '--input-type=module', '--eval', source],
       { stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
     );
+    assert.ok(child.stdout && child.stderr, 'the fixture child pipes stdout and stderr');
     let stderr = '';
     child.stderr.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk));
     const stderrEnded = once(child.stderr, 'end');
@@ -288,6 +290,7 @@ test('an early diagnostic behind an unread stderr pipe cannot keep a pending com
     ['--experimental-strip-types', '--input-type=module', '--eval', source],
     { stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
   );
+  assert.ok(child.stdout && child.stderr, 'the fixture child pipes stdout and stderr');
   const exited = once(child, 'exit');
   try {
     const [message] = await once(child, 'message');

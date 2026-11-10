@@ -24,7 +24,7 @@ test('test:unit runs every test of exactly UNIT_TEST_PROJECTS', () => {
     else if (flag.startsWith('--project=')) projects.push(flag.slice('--project='.length));
     else assert.fail(`test:unit must not filter its projects, found "${flag}"`);
   }
-  assert.deepEqual(projects.toSorted(), [...UNIT_TEST_PROJECTS].toSorted());
+  assert.deepEqual(projects.sort(), [...UNIT_TEST_PROJECTS].sort());
 });
 
 test('the unit check runs test:unit', () => {

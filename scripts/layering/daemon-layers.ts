@@ -35,8 +35,8 @@ export const DAEMON_PACKAGE_ENTRY = `${DAEMON_SOURCE_ROOT}index.ts`;
 
 export type DaemonLayer = (typeof DAEMON_LAYER_ORDER)[number];
 
-function isDaemonLayer(segment: string): segment is DaemonLayer {
-  return (DAEMON_LAYER_ORDER as readonly string[]).includes(segment);
+function isDaemonLayer(segment: string | undefined): segment is DaemonLayer {
+  return segment !== undefined && (DAEMON_LAYER_ORDER as readonly string[]).includes(segment);
 }
 
 function daemonLayerRank(layer: DaemonLayer): number {

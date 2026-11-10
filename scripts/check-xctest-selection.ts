@@ -357,9 +357,17 @@ export function buildReport(
   // Identifiers for another target are left alone: this check owns one target's sources
   // and cannot speak for anything else a workflow might select.
   const owned = flagged.filter((entry) => entry.identifier.startsWith(`${target}/`));
-  const reach = Object.fromEntries(
-    LANES.map((entry) => [entry.id, laneReach(entry, declaredTests, flagged, sharedBranches.ids)]),
-  ) as Record<LaneId, ReadonlySet<string>>;
+  const reachOf = (id: LaneId): ReadonlySet<string> => {
+    const lane = LANES.find((entry) => entry.id === id);
+    if (!lane) throw new Error(`No lane is declared for ${id}.`);
+    return laneReach(lane, declaredTests, flagged, sharedBranches.ids);
+  };
+  const reach: Record<LaneId, ReadonlySet<string>> = {
+    host: reachOf('host'),
+    pr: reachOf('pr'),
+    nightly: reachOf('nightly'),
+    'nightly-ipad': reachOf('nightly-ipad'),
+  };
   const entryPoint = `${target}/${ENTRY_POINT_METHOD}`;
   const reachedAnywhere = new Set(LANES.flatMap((entry) => [...reach[entry.id]]));
   const prWorkflow = workflows.find((entry) => entry.workflow === PR_XCTEST_SOURCE_FILE);

@@ -1,9 +1,19 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { isVersionOnlyCommit, planRelease, repositorySetupGaps } from '../release-plan.mjs';
+import {
+  isVersionOnlyCommit,
+  planRelease,
+  type ReleasePlan,
+  repositorySetupGaps,
+} from '../release-plan.mjs';
 
 const MAIN = 'a'.repeat(40);
 const NIGHTLY_COMMIT = 'b'.repeat(40);
+
+function skipReason(plan: ReleasePlan): string {
+  assert.equal(plan.mode, 'skip');
+  return plan.reason;
+}
 
 function run(overrides: Record<string, unknown> = {}) {
   return {
@@ -41,8 +51,8 @@ test('a scheduled nightly publishes main once its CI passed', () => {
 });
 
 test('a scheduled nightly waits for new commits and green CI', () => {
-  assert.match(planRelease(run({ sha: NIGHTLY_COMMIT })).reason, /already ships/);
-  assert.match(planRelease(run({ ciConclusion: 'failure' })).reason, /is failure/);
+  assert.match(skipReason(planRelease(run({ sha: NIGHTLY_COMMIT }))), /already ships/);
+  assert.match(skipReason(planRelease(run({ ciConclusion: 'failure' }))), /is failure/);
 });
 
 test('a dispatched nightly republishes the shipped HEAD but still requires green CI', () => {
@@ -113,6 +123,14 @@ test("the workflow's -dev bump stands on its parent's CI, and nothing else does"
   assert.equal(isVersionOnlyCommit({ ...bump, files: [] }), false);
 });
 
+function protectedRuleset() {
+  return {
+    enforcement: 'active',
+    conditions: { ref_name: { include: ['refs/tags/v*'] } },
+    rules: [{ type: 'creation' }, { type: 'update' }, { type: 'deletion' }],
+  };
+}
+
 function protectedSetup() {
   return {
     npmPublish: { deployment_branch_policy: { custom_branch_policies: true } },
@@ -120,13 +138,7 @@ function protectedSetup() {
       { name: 'main', type: 'branch' },
       { name: 'v*', type: 'tag' },
     ],
-    tagRulesets: [
-      {
-        enforcement: 'active',
-        conditions: { ref_name: { include: ['refs/tags/v*'] } },
-        rules: [{ type: 'creation' }, { type: 'update' }, { type: 'deletion' }],
-      },
-    ],
+    tagRulesets: [protectedRuleset()],
   };
 }
 
@@ -151,7 +163,7 @@ test('each missing protection is named on its own', () => {
   assert.match(repositorySetupGaps(anyBranch).join(), /npm-publish environment/);
   const evaluating = {
     ...setup,
-    tagRulesets: [{ ...setup.tagRulesets[0], enforcement: 'evaluate' }],
+    tagRulesets: [{ ...protectedRuleset(), enforcement: 'evaluate' }],
   };
   assert.match(repositorySetupGaps(evaluating).join(), /tag ruleset/);
   const anyBranchToggle = {
@@ -163,7 +175,7 @@ test('each missing protection is named on its own', () => {
     ...setup,
     tagRulesets: [
       {
-        ...setup.tagRulesets[0],
+        ...protectedRuleset(),
         conditions: { ref_name: { include: ['refs/tags/v*'], exclude: ['refs/tags/v9*'] } },
       },
     ],
@@ -172,20 +184,20 @@ test('each missing protection is named on its own', () => {
   const writerBypass = {
     ...setup,
     tagRulesets: [
-      { ...setup.tagRulesets[0], bypass_actors: [{ actor_type: 'RepositoryRole', actor_id: 4 }] },
+      { ...protectedRuleset(), bypass_actors: [{ actor_type: 'RepositoryRole', actor_id: 4 }] },
     ],
   };
   assert.match(repositorySetupGaps(writerBypass).join(), /tag ruleset/);
   const adminBypass = {
     ...setup,
     tagRulesets: [
-      { ...setup.tagRulesets[0], bypass_actors: [{ actor_type: 'RepositoryRole', actor_id: 5 }] },
+      { ...protectedRuleset(), bypass_actors: [{ actor_type: 'RepositoryRole', actor_id: 5 }] },
     ],
   };
   assert.deepEqual(repositorySetupGaps(adminBypass), []);
   const creatable = {
     ...setup,
-    tagRulesets: [{ ...setup.tagRulesets[0], rules: [{ type: 'deletion' }] }],
+    tagRulesets: [{ ...protectedRuleset(), rules: [{ type: 'deletion' }] }],
   };
   assert.match(repositorySetupGaps(creatable).join(), /tag ruleset/);
 });
