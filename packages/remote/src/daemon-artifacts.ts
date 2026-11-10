@@ -462,20 +462,28 @@ export async function materializeRemoteArtifacts(
 }
 
 /**
- * Commands whose artifact destination this client named in an EARLIER request (`record start`,
- * a perf or trace start with an output path). The daemon echoes that destination, and the paths it
- * derives from it, as `localPath`, because this process kept no record of it.
+ * Whether this request finishes a capture whose destination this client named in an EARLIER
+ * request (`record start`, a perf or trace start with an output path). The daemon echoes that
+ * destination, and the paths it derives from it, as `localPath`, because this process kept no
+ * record of it. The finishing actions mirror the daemon's own (`request-finalization.ts`).
  */
-const COMMANDS_ECHOING_EARLIER_CLIENT_PATHS: ReadonlySet<string> = new Set([
-  'record',
-  'perf',
-  'trace',
-]);
+function finishesEarlierClientCapture(req: DaemonWireRequest): boolean {
+  const [first, second, third] = (req.positionals ?? []).map((value) => value.toLowerCase());
+  switch (req.command) {
+    case 'record':
+    case 'trace':
+      return first === 'stop';
+    case 'perf':
+      return third === 'stop' || third === 'report' || (first === 'trace' && second === 'stop');
+    default:
+      return false;
+  }
+}
 
 /**
  * Where this client writes one downloaded artifact. The client chooses: a path it registered in
- * this request wins, and a response `localPath` is accepted only as the echo of an earlier
- * request's destination. Anything else lands in cwd under the response file name's basename.
+ * this request wins, and a response `localPath` is accepted only on a stop or report that echoes an
+ * earlier request's destination. Anything else lands in cwd under the response file name's basename.
  */
 function resolveMaterializedArtifactPath(
   artifact: DaemonArtifact,
@@ -484,10 +492,7 @@ function resolveMaterializedArtifactPath(
 ): string {
   const requestedPath = req.meta?.clientArtifactPaths?.[artifact.field];
   if (hasNonEmptyString(requestedPath)) return requestedPath;
-  if (
-    hasNonEmptyString(artifact.localPath) &&
-    COMMANDS_ECHOING_EARLIER_CLIENT_PATHS.has(req.command)
-  ) {
+  if (hasNonEmptyString(artifact.localPath) && finishesEarlierClientCapture(req)) {
     return artifact.localPath;
   }
   const responseName = path.basename(artifact.fileName?.trim() ?? '');

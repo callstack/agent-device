@@ -7,6 +7,7 @@ import {
   createTestHostEnvironment,
   listenOnLoopback,
   mkdtempForTestSync,
+  skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import { materializeRemoteArtifacts, prepareRemoteRequestArtifacts } from '../daemon-artifacts.ts';
 
@@ -71,7 +72,17 @@ test('a remote performance observation without an output does not invent a clien
   expect(prepared.clientArtifactPaths).toBeUndefined();
 });
 
-test.each([
+type MaterializationCase = {
+  name: string;
+  command: string;
+  positionals?: string[];
+  registered?: string;
+  localPath: string;
+  fileName: string;
+  expected: string;
+};
+
+test.for<MaterializationCase>([
   {
     name: 'a registered destination wins over a response localPath',
     command: 'screenshot',
@@ -94,7 +105,24 @@ test.each([
     fileName: 'clip.mp4',
     expected: 'client/clip.mp4',
   },
-])('remote artifact materialization: $name', async (c) => {
+  {
+    name: 'a record start refuses a response localPath',
+    command: 'record',
+    positionals: ['start'],
+    localPath: 'outside/clip.mp4',
+    fileName: 'clip.mp4',
+    expected: 'cwd/clip.mp4',
+  },
+  {
+    name: 'a perf cpu profile stop accepts the echo of its start destination',
+    command: 'perf',
+    positionals: ['cpu', 'profile', 'stop'],
+    localPath: 'client/cpu.trace',
+    fileName: 'cpu.trace',
+    expected: 'client/cpu.trace',
+  },
+])('remote artifact materialization: $name', async (c, t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'remote artifact download')) return;
   const root = mkdtempForTestSync('agent-device-remote-artifact-path-');
   const inRoot = (relative: string) => path.join(root, relative);
   const server = http.createServer((_req, res) => res.end('artifact-bytes'));
@@ -106,7 +134,7 @@ test.each([
         token: 'secret',
         command: c.command,
         session: 'capture',
-        positionals: ['stop'],
+        positionals: c.positionals ?? ['stop'],
         meta: {
           cwd: inRoot('cwd'),
           ...(c.registered ? { clientArtifactPaths: { path: inRoot(c.registered) } } : {}),

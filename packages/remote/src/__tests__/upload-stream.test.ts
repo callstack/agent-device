@@ -4,7 +4,12 @@ import http from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { closeLoopbackServer, listenOnLoopback, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  closeLoopbackServer,
+  listenOnLoopback,
+  mkdtempForTestSync,
+  skipWhenLoopbackUnavailable,
+} from '@agent-device/test-kit';
 import { streamFileToHttpRequest } from '../upload-stream.ts';
 
 async function startServer(handler: http.RequestListener): Promise<{
@@ -17,7 +22,8 @@ async function startServer(handler: http.RequestListener): Promise<{
   return { baseUrl: `http://127.0.0.1:${port}`, close: () => closeLoopbackServer(server) };
 }
 
-test('an upload refuses a redirect to another origin and never sends it the token', async () => {
+test('an upload refuses a redirect to another origin and never sends it the token', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'upload redirect coverage')) return;
   const foreignRequests: string[] = [];
   const foreign = await startServer((req, res) => {
     foreignRequests.push(`${req.method} ${req.url} auth=${req.headers.authorization ?? ''}`);

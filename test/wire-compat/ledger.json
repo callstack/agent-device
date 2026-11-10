@@ -149,7 +149,7 @@
     "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:f3ab09ce387577073ecc5bcd2528963e45f91b2c1e4cc57847c3e2732ccbb300",
     "packages/remote/src/daemon-artifacts.ts#isRemoteDaemon": "sha256:0f6a714c5f60ce4e8548d811b516d8b6241eca9f7e5414733732da395b8a00e7",
     "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:fffe8ce578e8bcdea175d6a200bea364ffce0956c2cba65bea48d72c0aaea375",
-    "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:3d3dd755c2dfc633bf66c38ac6b6e71096102e503f8f99befb0b10b01920e65b",
+    "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:660320cd62dfaeb4da80b86d6c072a5bcdbce3399723d43208a22d70b6e4a243",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
     "packages/remote/src/remote-request-diagnostics.ts#buildRemoteRequestDiagnosticsUrl": "sha256:30a1a9bf0df24d3564a616699916a3bb4360c2b4d21c4ad0562fb0c1e738d0a9",
@@ -498,12 +498,12 @@
     {
       "declaration": "packages/remote/src/upload-stream.ts#streamFileToHttpRequestAttempt",
       "digest": "sha256:b49e17dab9a638f3e547af01717aad52264e20334d62489608bf2c7f9a238838",
-      "rationale": "The upload client refuses a redirect to another origin instead of re-sending the daemon token and the artifact there. Same-origin redirects, the 308 resume contract, and the redirect limit are unchanged. A released daemon or proxy answers its upload routes on its own origin, so it parses the same requests; a direct-upload ticket that redirected cross-origin now falls back to the legacy route."
+      "rationale": "The upload client refuses a redirect to another origin, including a 308 that carries a Location, instead of re-sending the daemon token or ticket headers and the artifact there. Same-origin redirects, the Location-less 308 resume contract, and the redirect limit are unchanged. A released daemon or proxy answers its upload routes on its own origin, so it parses the same requests. A direct-upload ticket that redirects cross-origin fails as a non-retryable direct upload, and uploadArtifact then takes the legacy /upload route on the daemon."
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath",
-      "digest": "sha256:3d3dd755c2dfc633bf66c38ac6b6e71096102e503f8f99befb0b10b01920e65b",
-      "rationale": "The client, not the response, chooses the local download path: a destination it registered in this request wins, a response localPath is accepted only for record, perf, and trace, and any other artifact lands in cwd under the basename of its fileName. A released daemon echoes localPath equal to the registered destination for screenshot and test, and echoes earlier destinations only for record, perf, and trace, so its artifacts land where they did before. The wire shape is unchanged."
+      "digest": "sha256:660320cd62dfaeb4da80b86d6c072a5bcdbce3399723d43208a22d70b6e4a243",
+      "rationale": "The client, not the response, chooses the local download path: a destination it registered in this request wins, a response localPath is accepted only on a record or trace stop or a perf stop or report, and any other artifact lands in cwd under the basename of its fileName. A released daemon echoes localPath equal to the registered destination for screenshot and test, and echoes an earlier destination only on those stop and report actions, so its artifacts land where they did before. The wire shape is unchanged."
     }
   ]
 }
