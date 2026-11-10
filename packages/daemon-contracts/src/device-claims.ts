@@ -17,9 +17,11 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { ownerIdentityMatches, readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 
 import {
+  classifyDeviceClaimEntry,
   deviceClaimOwnerCannotRelease,
   inspectDeviceClaimFile,
-  inspectDeviceClaims,
+  inspectDeviceClaimsAsync,
+  readDeviceClaimEntry,
   type DeviceClaimClassification,
   type DeviceClaimSelectors,
   type InspectedDeviceClaim,
@@ -52,6 +54,7 @@ export {
   deviceClaimOwnerCannotRelease,
   deviceClaimRequiresStaleInspection,
   inspectDeviceClaims,
+  inspectDeviceClaimsAsync,
 } from './device-claim-inspection.ts';
 export type {
   DeviceClaimClassification,
@@ -94,12 +97,12 @@ type ClaimAcquisitionInspectionParams = {
   observeDeviceBoot?: DeviceBootObservationService;
 };
 
-function inspectTransientExactClaim(
+async function inspectTransientExactClaim(
   params: ClaimAcquisitionInspectionParams,
   deviceKey: string,
   owner: ReturnType<typeof readCurrentOwnerIdentity>,
-): InspectedClaimSettlement | undefined {
-  const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey, params.env));
+): Promise<InspectedClaimSettlement | undefined> {
+  const existing = await inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey, params.env));
   const local =
     existing &&
     inspectTransientLocalClaim(existing, { ...params, coveredBySession: params.session }, owner);
@@ -117,7 +120,7 @@ async function inspectExactClaimSettlement(
 ): Promise<InspectedClaimSettlement> {
   const transient = params.command !== 'open';
   if (transient && allowTransientCoverage) {
-    const local = inspectTransientExactClaim(params, deviceKey, owner);
+    const local = await inspectTransientExactClaim(params, deviceKey, owner);
     if (local) return local;
   }
   const acquirer = {
@@ -129,19 +132,19 @@ async function inspectExactClaimSettlement(
   return await inspectExistingClaimSettlement({ ...acquirer, device, deviceKey, owner });
 }
 
-function inspectOverlappingHostScopedClaims(
+async function inspectOverlappingHostScopedClaims(
   params: ClaimAcquisitionInspectionParams,
   identity: DeviceIdentity,
   owner: ReturnType<typeof readCurrentOwnerIdentity>,
-): InspectedClaimSettlement[] {
+): Promise<InspectedClaimSettlement[]> {
   const settlements: InspectedClaimSettlement[] = [];
-  for (const entry of inspectDeviceClaims({}, params.env)) {
+  for (const entry of await inspectDeviceClaimsAsync({}, params.env)) {
     if (!entry.claim) {
       settlements.push({ status: 'conflict', conflict: entry });
       continue;
     }
     if (!isClaimOfHostScopedDevice(identity, entry.claim)) continue;
-    const current = inspectDeviceClaimFile(
+    const current = await inspectDeviceClaimFile(
       resolveDeviceClaimPath(entry.claim.deviceKey, params.env),
     );
     if (current) {
@@ -179,7 +182,7 @@ export async function inspectDeviceClaimAcquisition(
     hostDeviceId === undefined &&
     canHostScopedDevices(params.device)
   ) {
-    const local = inspectTransientExactClaim(params, deviceKey, owner);
+    const local = await inspectTransientExactClaim(params, deviceKey, owner);
     if (local) return [local];
   }
   const settlements: InspectedClaimSettlement[] = [];
@@ -188,13 +191,13 @@ export async function inspectDeviceClaimAcquisition(
     const hostKey = canonicalLocalDeviceKey(deviceClaimIdentity(host));
     const hostSettlement = await inspectExactClaimSettlement(params, host, hostKey, owner, false);
     if (hostSettlement.status === 'held') {
-      const held = inspectDeviceClaimFile(resolveDeviceClaimPath(hostKey, params.env));
+      const held = await inspectDeviceClaimFile(resolveDeviceClaimPath(hostKey, params.env));
       if (held) settlements.push({ status: 'conflict', conflict: held });
     } else {
       settlements.push(hostSettlement);
     }
   } else if (canHostScopedDevices(params.device)) {
-    settlements.push(...inspectOverlappingHostScopedClaims(params, identity, owner));
+    settlements.push(...(await inspectOverlappingHostScopedClaims(params, identity, owner)));
   }
   settlements.push(await inspectExactClaimSettlement(params, params.device, deviceKey, owner));
   return settlements;
@@ -256,7 +259,7 @@ async function withAcquisitionLocks<Result extends TransientDeviceClaimResult>(
     });
     if (hostClaim.status === 'conflict') return hostClaim;
     if (hostClaim.status === 'held') {
-      const held = inspectDeviceClaimFile(resolveDeviceClaimPath(hostKey, params.env));
+      const held = await inspectDeviceClaimFile(resolveDeviceClaimPath(hostKey, params.env));
       if (held) return { status: 'conflict', conflict: held };
     }
     const acquired = await withDeviceClaimLock(deviceKey, params.env, acquire);
@@ -326,7 +329,7 @@ export async function acquireTransientDeviceClaim(params: {
     transientCommand: params.command,
   };
   return await withAcquisitionLocks(lockParams, deviceKey, async () => {
-    const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey, params.env));
+    const existing = await inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey, params.env));
     const local =
       existing && inspectTransientLocalClaim(existing, params, readCurrentOwnerIdentity());
     if (local === 'covered') return { status: 'covered-by-owned-claim' };
@@ -442,12 +445,14 @@ async function settleHostScopedDeviceClaims(
   params: { stateDir: string; env: EnvMap; reconcileOrphanedDeviceClaim: DeviceClaimReconciler },
 ): Promise<{ abandoned: string[]; conflict?: InspectedDeviceClaim }> {
   const abandoned: string[] = [];
-  for (const entry of inspectDeviceClaims({}, params.env)) {
+  for (const entry of await inspectDeviceClaimsAsync({}, params.env)) {
     const scanned = entry.claim;
     if (!scanned) return { conflict: entry, abandoned: [] };
     if (!isClaimOfHostScopedDevice(identity, scanned)) continue;
     const conflict = await withDeviceClaimLock(scanned.deviceKey, params.env, async () => {
-      const current = inspectDeviceClaimFile(resolveDeviceClaimPath(scanned.deviceKey, params.env));
+      const current = await inspectDeviceClaimFile(
+        resolveDeviceClaimPath(scanned.deviceKey, params.env),
+      );
       if (!current) return undefined;
       const settlement = inspectOverlappingHostScopedClaim(
         current,
@@ -506,7 +511,8 @@ async function removeSupersededScopedClaims(deviceKeys: string[], env: EnvMap): 
  */
 export function processOwnsActiveDeviceClaim(device: DeviceInfo, env: EnvMap): boolean {
   const deviceKey = canonicalLocalDeviceKey(deviceClaimIdentity(device));
-  const claim = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey, env))?.claim;
+  // Identity equality needs only the recorded owner, never a process-table read.
+  const claim = readDeviceClaimEntry(resolveDeviceClaimPath(deviceKey, env))?.claim;
   return (
     claim !== undefined &&
     claim.deviceKey === deviceKey &&
@@ -557,7 +563,7 @@ export async function releaseProvenStaleDeviceClaims(params: {
   env: EnvMap;
 }): Promise<DeviceClaimStaleReleaseOutcome[]> {
   const outcomes: DeviceClaimStaleReleaseOutcome[] = [];
-  for (const entry of inspectDeviceClaims(params.selectors, params.env)) {
+  for (const entry of await inspectDeviceClaimsAsync(params.selectors, params.env)) {
     outcomes.push(await releaseInspectedStaleClaim(entry, params.reconcile, params.env));
   }
   return outcomes;
@@ -595,7 +601,7 @@ async function releaseInspectedStaleClaim(
   }
   const { deviceKey, ownerToken } = claim;
   return await withDeviceClaimLock(deviceKey, env, async () => {
-    const current = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey, env));
+    const current = await inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey, env));
     if (
       !current?.claim ||
       current.claim.ownerToken !== ownerToken ||
@@ -746,7 +752,8 @@ export async function renewDeviceClaim(
 
 /**
  * Runs one claim write under the claim lock, for the owner that acquired it, and reports the record
- * that took the device when it is no longer the one that ownership took.
+ * that took the device when it is no longer the one that ownership took. Ownership is the recorded
+ * token, pid, and start time, so only a lost claim is worth asking the host about.
  */
 async function writeOwnedDeviceClaim<O, L>(
   ownership: DeviceClaimSessionOwnership,
@@ -756,11 +763,11 @@ async function writeOwnedDeviceClaim<O, L>(
 ): Promise<O | L> {
   return await withDeviceClaimLock(ownership.deviceKey, env, async () => {
     const claimPath = resolveDeviceClaimPath(ownership.deviceKey, env);
-    const inspected = inspectDeviceClaimFile(claimPath);
-    if (!inspected) return lost(undefined);
-    const claim = inspected.claim;
-    if (!claim || !claimMatchesOwnership(claim, ownership)) return lost(inspected);
-    return act(claim, claimPath);
+    const read = readDeviceClaimEntry(claimPath);
+    if (!read) return lost(undefined);
+    const claim = read.claim;
+    if (claim && claimMatchesOwnership(claim, ownership)) return act(claim, claimPath);
+    return lost((await classifyDeviceClaimEntry(read)) ?? undefined);
   });
 }
 
@@ -802,22 +809,15 @@ export async function reconcileOrphanedDeviceClaims(
   env: EnvMap,
 ): Promise<{ examined: number; reconciled: number; retained: number; changed: number }> {
   const root = resolveDeviceClaimRoot(env);
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(root, { withFileTypes: true });
-  } catch {
-    return { examined: 0, reconciled: 0, retained: 0, changed: 0 };
-  }
   let examined = 0;
   let reconciled = 0;
   let retained = 0;
   let changed = 0;
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
-    const filePath = path.join(root, entry.name);
-    const scanned = inspectDeviceClaimFile(filePath);
+  // One snapshot judges every owner; only the claims it names as orphaned are re-read under lock.
+  for (const scanned of await inspectDeviceClaimsAsync({}, env)) {
+    const filePath = path.join(root, scanned.fileName);
     if (
-      !scanned?.claim ||
+      !scanned.claim ||
       !sweepMayReconcile(scanned.classification, scanned.claim.stateDir, daemonStateDir)
     ) {
       continue;
@@ -831,7 +831,7 @@ export async function reconcileOrphanedDeviceClaims(
       continue;
     }
     await withDeviceClaimLock(deviceKey, env, async () => {
-      const current = inspectDeviceClaimFile(filePath);
+      const current = await inspectDeviceClaimFile(filePath);
       if (
         !current?.claim ||
         !sweepMayReconcile(current.classification, current.claim.stateDir, daemonStateDir) ||

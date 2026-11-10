@@ -375,7 +375,7 @@ test.each(['invalid-json', 'unknown'] as const)(
     const file = await seedForeignMacClaim(root, { bundleId: 'com.example.one' });
     if (failure === 'invalid-json') fs.writeFileSync(file, '{');
     else
-      vi.spyOn(claimInspection, 'inspectDeviceClaims').mockReturnValue([
+      vi.spyOn(claimInspection, 'inspectDeviceClaimsAsync').mockResolvedValue([
         { fileName: path.basename(root), classification: 'unknown', error: 'EACCES' },
       ]);
     const before = fs.readFileSync(file, 'utf8');
@@ -637,8 +637,8 @@ test('failed whole-Mac acquisition leaves its abandoned app fenced against forei
   const own = entries.find((entry) => claimedApp(entry.claim) === 'com.example.one')!;
   const foreign = entries.find((entry) => claimedApp(entry.claim) === 'com.example.two')!;
   const orderedScan = vi
-    .spyOn(claimInspection, 'inspectDeviceClaims')
-    .mockReturnValue([own, foreign]);
+    .spyOn(claimInspection, 'inspectDeviceClaimsAsync')
+    .mockResolvedValue([own, foreign]);
   const whole = await acquireDeviceClaim({
     device: mac,
     session: 'whole',

@@ -113,7 +113,9 @@ export async function inspectExistingClaimSettlement(params: {
   observeDeviceBoot?: DeviceBootObservationService;
   env: EnvMap;
 }): Promise<InspectedClaimSettlement> {
-  const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(params.deviceKey, params.env));
+  const existing = await inspectDeviceClaimFile(
+    resolveDeviceClaimPath(params.deviceKey, params.env),
+  );
   if (!existing) return { status: 'available' };
   if (
     existing.claim &&
