@@ -68,65 +68,63 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
       if (!oversizedRequestRefusalPending || inFlightRequests > 0 || socket.destroyed) return;
       refuseOversizedSocketRequest(socket);
     };
+    const answerSocketRequest = async (line: string): Promise<void> => {
+      let response: DaemonResponse;
+      inFlightRequests += 1;
+      let requestIdForCleanup: string | undefined;
+      let requestAbortRegistration: ReturnType<typeof registerRequestAbort>;
+      let streamProgress = false;
+      try {
+        const req = parseSocketDaemonRequest(line);
+        streamProgress = shouldStreamRequestProgress(req);
+        requestIdForCleanup = resolveRequestTrackingId(req.meta?.requestId, 'socket');
+        req.meta = {
+          ...req.meta,
+          requestId: requestIdForCleanup,
+        };
+        requestAbortRegistration = registerRequestAbort(requestIdForCleanup, undefined, {
+          resultDeadlineMs: resolveDaemonRequestResultDeadlineMs(req),
+        });
+        activeRequestIds.add(requestIdForCleanup);
+        if (isRequestCanceled(requestIdForCleanup)) {
+          throw createRequestCanceledError();
+        }
+        response = await withRequestProgressSink(
+          streamProgress
+            ? (event) => {
+                if (!socket.destroyed) {
+                  socket.write(serializeDaemonProgressEnvelope(event));
+                }
+              }
+            : undefined,
+          async () => await handleRequest(req),
+        );
+      } catch (error) {
+        response = { ok: false, error: normalizeError(error) };
+      } finally {
+        inFlightRequests -= 1;
+        if (requestAbortRegistration) {
+          activeRequestIds.delete(requestAbortRegistration.requestId);
+        }
+        clearRequestAbortRegistration(requestAbortRegistration);
+      }
+      if (!socket.destroyed) {
+        socket.write(
+          streamProgress
+            ? serializeDaemonResponseEnvelope(response)
+            : `${JSON.stringify(response)}\n`,
+        );
+      }
+    };
     const onData = AsyncResource.bind(async (chunk: string) => {
       if (oversizedRequestRefusalPending) return;
-      const parsed = consumeTextLines(buffer, chunk);
-      buffer = parsed.buffer;
-      const oversizedLine = parsed.lines.findIndex(exceedsDaemonRequestLimit);
-      const lines = oversizedLine === -1 ? parsed.lines : parsed.lines.slice(0, oversizedLine);
-      if (oversizedLine !== -1 || exceedsDaemonRequestLimit(buffer)) {
+      const framed = frameSocketRequests(buffer, chunk);
+      buffer = framed.buffer;
+      if (framed.oversized) {
         oversizedRequestRefusalPending = true;
-        buffer = '';
         socket.off('data', onData);
       }
-      for (const line of lines) {
-        let response: DaemonResponse;
-        inFlightRequests += 1;
-        let requestIdForCleanup: string | undefined;
-        let requestAbortRegistration: ReturnType<typeof registerRequestAbort>;
-        let streamProgress = false;
-        try {
-          const req = parseSocketDaemonRequest(line);
-          streamProgress = shouldStreamRequestProgress(req);
-          requestIdForCleanup = resolveRequestTrackingId(req.meta?.requestId, 'socket');
-          req.meta = {
-            ...req.meta,
-            requestId: requestIdForCleanup,
-          };
-          requestAbortRegistration = registerRequestAbort(requestIdForCleanup, undefined, {
-            resultDeadlineMs: resolveDaemonRequestResultDeadlineMs(req),
-          });
-          activeRequestIds.add(requestIdForCleanup);
-          if (isRequestCanceled(requestIdForCleanup)) {
-            throw createRequestCanceledError();
-          }
-          response = await withRequestProgressSink(
-            streamProgress
-              ? (event) => {
-                  if (!socket.destroyed) {
-                    socket.write(serializeDaemonProgressEnvelope(event));
-                  }
-                }
-              : undefined,
-            async () => await handleRequest(req),
-          );
-        } catch (error) {
-          response = { ok: false, error: normalizeError(error) };
-        } finally {
-          inFlightRequests -= 1;
-          if (requestAbortRegistration) {
-            activeRequestIds.delete(requestAbortRegistration.requestId);
-          }
-          clearRequestAbortRegistration(requestAbortRegistration);
-        }
-        if (!socket.destroyed) {
-          socket.write(
-            streamProgress
-              ? serializeDaemonResponseEnvelope(response)
-              : `${JSON.stringify(response)}\n`,
-          );
-        }
-      }
+      for (const line of framed.lines) await answerSocketRequest(line);
       refuseOversizedRequestWhenIdle();
     });
     socket.on('data', onData);
@@ -138,6 +136,25 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
     sockets.clear();
   };
   return server;
+}
+
+/**
+ * Splits a chunk into the complete requests to answer. A request past the byte limit, framed or
+ * still unterminated, ends the framing: the requests before it are answered, nothing after it is.
+ */
+function frameSocketRequests(
+  buffer: string,
+  chunk: string,
+): { lines: string[]; buffer: string; oversized: boolean } {
+  const parsed = consumeTextLines(buffer, chunk);
+  const oversizedLine = parsed.lines.findIndex(exceedsDaemonRequestLimit);
+  if (oversizedLine !== -1) {
+    return { lines: parsed.lines.slice(0, oversizedLine), buffer: '', oversized: true };
+  }
+  if (exceedsDaemonRequestLimit(parsed.buffer)) {
+    return { lines: parsed.lines, buffer: '', oversized: true };
+  }
+  return { ...parsed, oversized: false };
 }
 
 function exceedsDaemonRequestLimit(text: string): boolean {
