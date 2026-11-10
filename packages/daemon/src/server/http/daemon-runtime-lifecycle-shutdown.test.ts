@@ -598,3 +598,46 @@ test('daemon shutdown releases a retainOnClose lease that no session holds', asy
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
+
+test('a lease-expiry sweep that throws is recorded instead of rejecting unhandled', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-sweep-failure-');
+  const unhandled = vi.fn();
+  process.on('unhandledRejection', unhandled);
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  try {
+    const runtime = await startDaemonRuntime({
+      composeDeps: daemonRuntimeDepsFixture(),
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        },
+      }),
+      stderr: { write: () => {} },
+      stdout: { write: () => {} },
+    });
+    expect(runtime).not.toBeNull();
+    const [leaseRegistry] = leaseProbe.registries;
+    const sweep = vi.spyOn(leaseRegistry!, 'consumeExpiredLeases').mockImplementation(() => {
+      throw new Error('lease registry corrupted');
+    });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    vi.useRealTimers();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(sweep).toHaveBeenCalled();
+    sweep.mockRestore();
+    await runtime?.close();
+
+    expect(unhandled).not.toHaveBeenCalled();
+    const daemonLog = fs.readFileSync(path.join(stateDir, 'daemon.log'), 'utf8');
+    expect(daemonLog).toMatch(/"phase":"lease_expiry_sweep_failed"/);
+    expect(daemonLog).toMatch(/lease registry corrupted/);
+  } finally {
+    vi.useRealTimers();
+    process.off('unhandledRejection', unhandled);
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});

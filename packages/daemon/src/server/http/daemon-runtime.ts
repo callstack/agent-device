@@ -304,8 +304,16 @@ async function startDaemonRuntimeOnHost(
   const leaseExpirySweep = setInterval(() => {
     // The sweep runs outside any request, so the releases it starts report into a daemon scope.
     void withDaemonDiagnosticsScope({ logPath }, () => {
-      leaseRegistry.consumeExpiredLeases();
-    });
+      try {
+        leaseRegistry.consumeExpiredLeases();
+      } catch (error) {
+        emitDiagnostic({
+          level: 'error',
+          phase: 'lease_expiry_sweep_failed',
+          data: { error: error instanceof Error ? error.message : String(error) },
+        });
+      }
+    }).catch(() => undefined);
     void leaseSessionEnd.retryPending();
   }, LEASE_EXPIRY_SWEEP_INTERVAL_MS);
   leaseExpirySweep.unref();
