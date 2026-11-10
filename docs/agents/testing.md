@@ -7,56 +7,59 @@
    Run `pnpm check:affected --run --head <commit>`.
 3. For a broad refactor or an explicitly requested full gate, run `pnpm check`.
 
-Serialized validation requires macOS or Linux.
 On Windows, use plan mode or focused checks.
 Wait for the owner to finish.
 Do not add lock wrappers.
 A wait ends after two hours.
-Focused tests do not lock. Avoid subprocess-heavy tests beside a broad gate.
+Focused tests do not lock.
+Avoid subprocess-heavy tests beside a broad gate.
 
-The runner prints progress and a receipt path. The receipt contains refs, checkout state, command logs, exits, skips, and Vitest results.
+Stop at failure.
+Its receipt records refs, checkout state, commands, exits, skips, and results.
 
-Execution stops at the first failure.
+For the selected plan, run `pnpm check:affected`.
+For reasons, add `--verbose`.
+For JSON, run `pnpm --silent check:affected --json`.
+With `--run --json`, stdout contains the receipt and stderr contains progress.
+When head is `HEAD`, planning and execution include working-tree changes.
 
-- `pnpm check:affected`: compact plan.
-- `pnpm check:affected --verbose`: plan with selection reasons.
-- `pnpm --silent check:affected --json`: JSON plan.
-- `pnpm --silent check:affected --run --json`: JSON execution receipt on stdout; progress on stderr.
-- `pnpm check:affected --run`: includes staged, unstaged, and untracked changes for local feedback.
+`pnpm check` runs `check:tooling`, `check:fallow`, and `check:unit`.
+It does not run every catalog check.
 
 Only a passed receipt with `exactCommit: true` proves validation at the named commit.
-A dirty-tree pass is local feedback. Detected checkout changes invalidate the run.
-Initial/final checks detect persistent changes. They do not sandbox the checkout.
+A dirty-tree pass is local feedback.
+Checkout checks invalidate persistent changes; they do not sandbox the checkout.
 During validation, stop all edits.
 
 ## Interpret selection
 
-A package manifest or TypeScript config can affect every consumer.
-A full selection for these changes is intentional.
+Package manifest and TypeScript config changes can affect every consumer.
+Do not narrow their full selection.
 `FAIL-OPEN` means the selector could not safely narrow the set.
 Read `failOpenReasons` in plan JSON or `plan.failOpenReasons` in a receipt.
 Do not reduce selection to get a pass.
 
 Read required-check status on the PR.
-The receipt lists skipped checks and owners in `results[].reason`.
 GitHub owns full coverage, native builds, device lanes, provider integration, and compatibility that uses history.
 On a narrowed plan, related tests replace only provider integration.
-A production source change also runs the unit suite (about 3 minutes), because some unit gates read sources as text.
-For docs-only changes, run the selected documentation checks.
+For skipped-check owners, read `results[].reason`.
+Until source-read ownership is complete, keep #4050's full-unit production fallback.
+For docs-only changes, run selected checks.
 Do not add tests that assert prose.
 
 ## A gate failed
 
-Keep failure attribution separate from validation status.
+Separate cause from validation status.
 Never call a failing gate passed.
 
-| Evidence | Next action | Outcome |
-| --- | --- | --- |
-| New failure caused by this change | Fix its owner. After the fix, rerun. | Validation failed until a new run passes. |
-| Suspected host contention or infrastructure fault | Save the log. In an isolated checkout, run the same failing command on unchanged base, without competing tests. | Until compared, the cause is unproven. A solo pass does not prove contention. |
-| Same failure reproduced on unchanged base | Record SHAs, command, logs, and matching failure. Assign the blocker to a named person or linked issue. | Base-blocked. If publication is authorized, publish a draft with the blocker and remaining checks. Do not mark merge-ready. |
-| Base comparison unavailable or inconclusive | Record the missing tool/device/evidence and next action. | Blocked, cause unproven. An authorized draft can record this. |
-| Failure source fixed, environment repaired, or new upstream commit contains the fix | Run the failing check. Then run the affected gate on the current head. | Replace blocked status only with new evidence. |
+| Evidence | Required action |
+| --- | --- |
+| Failure caused by this change | Fix its owner and rerun. Until a run passes, report failed validation. |
+| Suspected host or infrastructure fault | Save the log. Compare the same command on unchanged base in an isolated checkout without competing tests. Until compared, report cause unproven. A solo pass does not prove contention. |
+| Matching failure on unchanged base | Report Base-blocked with SHAs, command, and logs. Name the blocker and owner or issue. For authorized publication, use a draft with remaining checks.
+Do not mark merge-ready. |
+| Unavailable or inconclusive base comparison | Record the missing evidence and next action. Report blocked with cause unproven. |
+| Repaired fault or upstream fix | Rerun the failed check and affected gate at head. Require new evidence to change blocked status. |
 
 Match failures by check, location, diagnostic code, and assertion.
 

@@ -5,7 +5,7 @@ The daemon owns sessions. Registry declarations route commands to platform runti
 
 ## Task routing
 
-Read only your task's row. Follow other links only when they apply.
+Read each applicable row. Follow other links only when they apply.
 
 | When the task involves | Read |
 | --- | --- |

@@ -1,22 +1,21 @@
 # Audit tests
 
-Optimize for confidence, not deletion counts.
+Optimize for detection and feedback time, not deletion counts.
 For test quality, use [test authoring](test-authoring.md).
 For checks, use [validation](testing.md).
 
 ## Retain independent contracts
 
-Do not delete completeness guards for registries, gates, layering, or DI seams.
-Retain these contracts:
+Never delete independent completeness guards for registries, gates, layering, or DI seams.
+Retain golden tables, cross-language checks, `@ts-expect-error` pins, identity checks,
+exact-array duplicate checks, and vocabulary checks independent of the implementation.
 
-- Golden tables.
-- Cross-language inspection.
-- `@ts-expect-error` pins.
-- Identity checks.
-- Exact-array checks that detect duplicates.
-- Vocabulary checks that survive a simultaneous production/fixture update.
-
+If a mutant proves equivalent detection, move the mock's unique assertions into the provider scenario.
+Then delete the weaker mock.
+Source inspection alone does not prove detection.
 Without measured evidence, slow or implementation-like tests are not redundant.
+If only a device exposes the failure, retain an owned E2E scenario.
+Keep focused tests for exhaustive logic and independent contracts.
 
 ## Candidate evidence
 
@@ -28,24 +27,16 @@ Before you edit, record:
 - The actual runner: Vitest project, Node script, XCTest lane, or gate id.
 - What deletion permits and its risk.
 
-Only unreachable tests are never-run findings.
+Before a never-run deletion, prove non-collection or skipping in every automatic and manual lane.
 For mutations, use [isolated experiments](test-experiments.md).
-For a deletion, remove the candidate. Prove the retained test still detects the mutant.
-Report baseline and mutant counts. Source inspection alone does not prove detection.
+For a behavioral deletion, prove retained detection with the candidate removed.
+Report baseline and mutant counts.
+For an obsolete test with no remaining contract, record consumer and runner evidence.
 
 ## Delegated audits
 
 Assign disjoint read scopes to read-only reviewers.
-Do not assign edit ownership to a reviewer.
-Each brief names the reviewed SHA. Each brief requires:
-
-- Inspection of the production owner.
-- Skip/runner verification.
-- Retention criteria.
-- Concrete failure scenarios.
-
-Experiments use separate disposable checkouts.
-When needed, use separate scopes for subsystem review, duplicate-pattern search, and runner inventory.
+Each brief names the reviewed SHA, production owner, runner, skip guards, retention criteria, and failure.
 
 Put one batch for one owner boundary in each PR.
 Remove unused test-only seams with the tests.
