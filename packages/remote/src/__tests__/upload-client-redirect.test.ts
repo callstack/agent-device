@@ -76,3 +76,66 @@ test.for([307, 308])(
     }
   },
 );
+
+test.for([
+  {
+    leg: 'preflight',
+    redirected: '/upload/preflight',
+    routes: ['POST /upload/preflight', 'POST /upload'],
+  },
+  {
+    leg: 'finalize',
+    redirected: '/upload/finalize',
+    routes: [
+      'POST /upload/preflight',
+      'PUT /upload/direct/t',
+      'POST /upload/finalize',
+      'POST /upload',
+    ],
+  },
+])(
+  'a credentialed $leg redirected cross-origin never reaches that origin',
+  async ({ redirected, routes }, t) => {
+    if (await skipWhenLoopbackUnavailable(t, 'upload redirect coverage')) return;
+    const foreignRequests: string[] = [];
+    const foreign = await startServer((req, res) => {
+      foreignRequests.push(`${req.method} ${req.url} token=${req.headers['x-agent-device-token']}`);
+      req.resume();
+      req.on('end', () => res.end('{}'));
+    });
+    const daemonRequests: string[] = [];
+    const daemon = await startServer((req, res) => {
+      daemonRequests.push(`${req.method} ${req.url}`);
+      req.resume();
+      req.on('end', () => {
+        if (req.url === redirected) {
+          res.statusCode = 307;
+          res.setHeader('location', `${foreign.baseUrl.replace('127.0.0.1', 'localhost')}/x`);
+          return res.end();
+        }
+        if (req.url === '/upload/preflight') {
+          const url = `${daemon.baseUrl}/upload/direct/t`;
+          return answerJson(res, { ok: true, uploadId: 't', upload: { url, headers: {} } });
+        }
+        answerJson(res, { ok: true, uploadId: 'legacy-upload' });
+      });
+    });
+    const localPath = path.join(mkdtempForTestSync('agent-device-upload-redirect-'), 'app.apk');
+    fs.writeFileSync(localPath, 'apk-bytes');
+
+    try {
+      const uploadId = await uploadArtifact({
+        localPath,
+        baseUrl: daemon.baseUrl,
+        token: 'daemon-token',
+        env: process.env,
+      });
+      assert.equal(uploadId, 'legacy-upload');
+      assert.deepEqual(daemonRequests, routes);
+      assert.deepEqual(foreignRequests, []);
+    } finally {
+      await daemon.close();
+      await foreign.close();
+    }
+  },
+);

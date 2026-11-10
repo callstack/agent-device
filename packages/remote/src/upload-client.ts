@@ -264,7 +264,7 @@ async function requestUploadPreflight(options: {
     buildDaemonHttpLeaseHeaders(options.leaseId),
   );
 
-  const response = await fetch(preflightUrl, {
+  const response = await credentialedFetch(preflightUrl, {
     method: 'POST',
     headers,
     signal: combineUploadSignals(options.signal, UPLOAD_PREFLIGHT_TIMEOUT_MS),
@@ -289,6 +289,38 @@ async function requestUploadPreflight(options: {
   }
 
   return parseUploadPreflightResult(await response.json().catch(() => undefined));
+}
+
+const MAX_CREDENTIALED_REDIRECTS = 5;
+
+/**
+ * `fetch` for a request that carries daemon credentials. It follows a 307 or 308 only on the origin
+ * the caller chose, and rejects a hop to any other origin: `fetch` drops `authorization` there but
+ * keeps `x-agent-device-token`. Any other redirect comes back as the response, which callers treat
+ * as a failed request.
+ */
+async function credentialedFetch(url: URL, init: RequestInit): Promise<Response> {
+  let current = url;
+  for (let hop = 0; ; hop += 1) {
+    const response = await fetch(current, { ...init, redirect: 'manual' });
+    const location = response.headers.get('location');
+    if ((response.status !== 307 && response.status !== 308) || !location) return response;
+    const next = new URL(location, current);
+    if (next.origin !== url.origin) {
+      throw new AppError('COMMAND_FAILED', 'Upload request refused a cross-origin redirect', {
+        reason: 'cross-origin-redirect',
+        url: current.toString(),
+        redirectOrigin: next.origin,
+      });
+    }
+    if (hop >= MAX_CREDENTIALED_REDIRECTS) {
+      throw new AppError('COMMAND_FAILED', 'Upload request exceeded redirect limit', {
+        maxRedirects: MAX_CREDENTIALED_REDIRECTS,
+        url: url.toString(),
+      });
+    }
+    current = next;
+  }
 }
 
 /**
@@ -397,7 +429,7 @@ async function finalizeDirectUpload(options: {
     buildDaemonHttpLeaseHeaders(options.leaseId),
   );
 
-  const response = await fetch(finalizeUrl, {
+  const response = await credentialedFetch(finalizeUrl, {
     method: 'POST',
     headers,
     signal: combineUploadSignals(options.signal, UPLOAD_PREFLIGHT_TIMEOUT_MS),
@@ -405,7 +437,7 @@ async function finalizeDirectUpload(options: {
   }).catch((error) => {
     // As with preflight: a canceled finalize is not a transport failure to report, it is the caller
     // saying this upload is no longer worth finishing.
-    if (options.signal?.aborted) throw error;
+    if (options.signal?.aborted || error instanceof AppError) throw error;
     throw new AppError('COMMAND_FAILED', 'Failed to finalize direct artifact upload', {}, error);
   });
 
