@@ -13,6 +13,7 @@ import {
   limrunPlatformForLeaseBackend,
   readLimrunCredentials,
 } from '../../provider-limrun-credentials.ts';
+import { buildConnectClientId } from './client-id.ts';
 
 const DEFAULT_LIMRUN_TENANT = 'limrun';
 export function resolveLimrunConnectProfile(options: {
@@ -59,7 +60,7 @@ function buildLimrunRemoteProfile(options: {
     stateDir: daemonPaths.baseDir,
     daemonTransport: 'auto',
     tenant: flags.tenant ?? DEFAULT_LIMRUN_TENANT,
-    runId: flags.runId ?? `cli-${Date.now().toString(36)}`,
+    runId: flags.runId ?? `limrun-${buildConnectClientId('limrun', daemonPaths.baseDir, flags.session)}`,
     sessionIsolation: 'tenant',
     leaseBackend,
     leaseProvider: 'limrun',

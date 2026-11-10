@@ -38,6 +38,7 @@ import {
 } from './connection-lease-transaction.ts';
 import { hasDeferredMetroConfig, stopMetroCleanup } from './connection-metro-runtime.ts';
 import { releasePreviousLease } from './connection-previous-lease.ts';
+import { removeGeneratedRemoteConfigIfUnused } from '../connection/generated-config.ts';
 import { writeCommandOutput } from './shared.ts';
 import { formatDeliveredArtifactLines } from '@agent-device/command-output';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
@@ -367,6 +368,7 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client, h
     }
   }
   removeRemoteConnectionState({ stateDir, session: connectedSession });
+  removeGeneratedRemoteConfigIfUnused({ stateDir, remoteConfigPath: state.remoteConfigPath });
   await writeCommandOutput(
     flags,
     {

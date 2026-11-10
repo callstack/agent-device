@@ -284,6 +284,35 @@ export function removeRemoteConnectionState(options: { stateDir: string; session
   }
 }
 
+/** Whether any stored session record still connects through `remoteConfigPath`. */
+export function isRemoteConfigReferenced(options: {
+  stateDir: string;
+  remoteConfigPath: string;
+}): boolean {
+  const recordsDir = path.join(options.stateDir, 'remote-connections');
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(recordsDir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  return entries.some((entry) => {
+    if (!entry.isFile() || entry.name.startsWith('.') || !entry.name.endsWith('.json')) {
+      return false;
+    }
+    try {
+      const record: unknown = JSON.parse(
+        fs.readFileSync(path.join(recordsDir, entry.name), 'utf8'),
+      );
+      return (
+        isRemoteConnectionState(record) && record.remoteConfigPath === options.remoteConfigPath
+      );
+    } catch {
+      return false;
+    }
+  });
+}
+
 /**
  * The stored connection a command runs on, and the flags it contributes.
  *

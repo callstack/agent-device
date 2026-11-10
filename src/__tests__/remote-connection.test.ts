@@ -2239,6 +2239,34 @@ test('disconnect names a lease whose release failed in text and JSON output', as
   fs.rmSync(second.tempRoot, { recursive: true, force: true });
 });
 
+test('disconnect removes a generated profile once no session record uses it', async () => {
+  const { tempRoot, stateDir } = connectionWorkspace('agent-device-disconnect-generated-');
+  const generatedPath = path.join(stateDir, 'remote-connections', 'generated', 'limrun-shared.json');
+  fs.mkdirSync(path.dirname(generatedPath), { recursive: true });
+  fs.writeFileSync(generatedPath, '{}');
+  for (const session of ['generated-a', 'generated-b']) {
+    seedConnectionState({
+      stateDir,
+      state: { session, remoteConfigPath: generatedPath, tenant: 'acme', runId: 'run-123' },
+    });
+  }
+  const disconnect = async (session: string) =>
+    await withCapturedStdoutAsync(async () => {
+      await disconnectCommand({
+        positionals: [],
+        flags: { json: true, help: false, version: false, stateDir, session },
+        client: createTestClient({}),
+      });
+    });
+
+  await disconnect('generated-a');
+  assert.equal(fs.existsSync(generatedPath), true, 'another session still uses the profile');
+
+  await disconnect('generated-b');
+  assert.equal(fs.existsSync(generatedPath), false);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('disconnect treats an already-inactive lease as released without a failure notice', async () => {
   const { tempRoot, stateDir } = seedReleasableConnection(
     'agent-device-disconnect-release-inactive-',
