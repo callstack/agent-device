@@ -1,3 +1,4 @@
+import { AppError } from '@agent-device/kernel/errors';
 import { ensureAppLogPath } from '@agent-device/capture-kit/app-log-files';
 import type { AppLogOutputSink } from '@agent-device/contracts/app-log-runtime';
 import fs from 'node:fs';
@@ -11,6 +12,7 @@ export async function openAppLogOutput(
   host: HostEnvironment,
 ): Promise<AppLogOutputSink> {
   pathname = requireManagedOutputPath(sessionsDir, pathname);
+  const patterns = redactionPatterns(host.env);
   ensureAppLogPath(pathname, host.env);
   const descriptor = openVerifiedFileForAppend(pathname);
   let stream: fs.WriteStream;
@@ -24,8 +26,6 @@ export async function openAppLogOutput(
   stream.on('error', (error) => {
     streamError ??= error;
   });
-  const { env } = host;
-  const patterns = redactionPatterns(env);
   let pending = '';
   let writes = Promise.resolve();
   let disposal: Promise<void> | undefined;
@@ -92,18 +92,57 @@ function requireManagedOutputPath(sessionsDir: string, pathname: string): string
   });
 }
 
+/**
+ * Splits `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS` on top-level commas only, so commas inside
+ * `{m,n}`, `[...]`, or `(...)` stay in their pattern. Write `\,` for a literal top-level comma.
+ */
 function redactionPatterns(env: NodeJS.ProcessEnv): RegExp[] {
-  return (env.AGENT_DEVICE_APP_LOG_REDACT_PATTERNS ?? '')
-    .split(',')
+  return splitTopLevelPatternList(env.AGENT_DEVICE_APP_LOG_REDACT_PATTERNS ?? '')
     .map((part) => part.trim())
     .filter(Boolean)
-    .flatMap((pattern) => {
+    .map((pattern) => {
       try {
-        return [new RegExp(pattern, 'gi')];
-      } catch {
-        return [];
+        return new RegExp(pattern, 'gi');
+      } catch (error) {
+        throw new AppError(
+          'INVALID_ARGS',
+          `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS contains an invalid regular expression: ${pattern}`,
+          { reason: 'app_log_redact_pattern_invalid', pattern },
+          error,
+        );
       }
     });
+}
+
+function splitTopLevelPatternList(value: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let depth = 0;
+  let inClass = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]!;
+    if (char === '\\') {
+      current += value.slice(index, index + 2);
+      index += 1;
+      continue;
+    }
+    if (inClass) {
+      if (char === ']') inClass = false;
+    } else if (char === '[') {
+      inClass = true;
+    } else if (char === '(' || char === '{') {
+      depth += 1;
+    } else if ((char === ')' || char === '}') && depth > 0) {
+      depth -= 1;
+    } else if (char === ',' && depth === 0) {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  parts.push(current);
+  return parts;
 }
 
 function redact(chunk: string, patterns: readonly RegExp[]): string {

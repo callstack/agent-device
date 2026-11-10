@@ -26,27 +26,31 @@ export function sanitizeErrorCause(cause: unknown): { message: string; code?: st
   });
 }
 
-function redactValue(value: unknown, seen: WeakSet<object>, keyHint?: string): unknown {
+function redactValue(value: unknown, ancestors: WeakSet<object>, keyHint?: string): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value === 'string') return redactString(value, keyHint);
   if (typeof value !== 'object') return value;
 
-  if (seen.has(value as object)) return '[Circular]';
-  seen.add(value as object);
-
-  if (Array.isArray(value)) {
-    return value.map((entry) => redactValue(entry, seen));
-  }
-
-  const output: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (SENSITIVE_KEY_RE.test(key)) {
-      output[key] = '[REDACTED]';
-      continue;
+  // `ancestors` holds only the current path, so a shared non-cyclic reference is copied each time.
+  if (ancestors.has(value as object)) return '[Circular]';
+  ancestors.add(value as object);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((entry) => redactValue(entry, ancestors));
     }
-    output[key] = redactValue(entry, seen, key);
+
+    const output: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (SENSITIVE_KEY_RE.test(key)) {
+        output[key] = '[REDACTED]';
+        continue;
+      }
+      output[key] = redactValue(entry, ancestors, key);
+    }
+    return output;
+  } finally {
+    ancestors.delete(value as object);
   }
-  return output;
 }
 
 function redactString(value: string, keyHint?: string): string {

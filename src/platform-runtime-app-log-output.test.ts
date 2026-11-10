@@ -134,3 +134,39 @@ test('redacts with the patterns of the command host, not the process', async () 
 
   expect(fs.readFileSync(outputPath, 'utf8')).toBe('token [REDACTED] leaked\n');
 });
+
+test('keeps commas inside quantifiers and classes in one redaction pattern', async () => {
+  const root = mkdtempForTestSync('agent-device-app-log-redact-comma-');
+  roots.push(root);
+  const sessionsDir = path.join(root, 'sessions');
+  const outputPath = path.join(sessionsDir, 'one', 'app.log');
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+
+  const sink = await openAppLogOutput(sessionsDir, outputPath, {
+    env: { AGENT_DEVICE_APP_LOG_REDACT_PATTERNS: String.raw`token=\w{8,32}, pin=[0-9,]+,a\,b` },
+    cwd: root,
+  });
+  await sink.write('token=abcdefghij pin=1,2,3 a,b x{8\n');
+  await sink[Symbol.asyncDispose]();
+
+  expect(fs.readFileSync(outputPath, 'utf8')).toBe('[REDACTED] [REDACTED] [REDACTED] x{8\n');
+});
+
+test('refuses an invalid redaction pattern before it opens app.log', async () => {
+  const root = mkdtempForTestSync('agent-device-app-log-redact-invalid-');
+  roots.push(root);
+  const sessionsDir = path.join(root, 'sessions');
+  const outputPath = path.join(sessionsDir, 'one', 'app.log');
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+
+  await expect(
+    openAppLogOutput(sessionsDir, outputPath, {
+      env: { AGENT_DEVICE_APP_LOG_REDACT_PATTERNS: 'secret-\\d+,(' },
+      cwd: root,
+    }),
+  ).rejects.toMatchObject({
+    code: 'INVALID_ARGS',
+    details: { reason: 'app_log_redact_pattern_invalid', pattern: '(' },
+  });
+  expect(fs.existsSync(outputPath)).toBe(false);
+});
