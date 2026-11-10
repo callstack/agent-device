@@ -223,9 +223,20 @@ test('non-dense browser refs survive snapshot storage and routed fill and click'
       host: { env: process.env, cwd: process.cwd() },
     });
     await withCommandExecutorOverride(
-      async (_command, args) => {
-        const [command, ref, text] = args.slice(1);
+      async (_command, args, options) => {
+        const [command, ref] = args.slice(1);
         let data: unknown = {};
+        if (command === 'batch') {
+          // Typed text arrives on stdin as a one-entry batch, never in argv.
+          const entries = JSON.parse(String(options.stdin)) as string[][];
+          const results = entries.map((entry) => {
+            assert.equal(entry[0], 'fill', `Unexpected batch entry: ${entry}`);
+            calls.push(entry);
+            values[entry[1]!] = entry[2]!;
+            return { command: entry, error: null, result: {}, success: true };
+          });
+          return { stdout: JSON.stringify(results), stderr: '', exitCode: 0 };
+        }
         if (command === 'snapshot') {
           data = {
             snapshot: [
@@ -239,9 +250,6 @@ test('non-dense browser refs survive snapshot storage and routed fill and click'
               e4: { role: 'button', name: 'Sign in' },
             },
           };
-        } else if (command === 'fill') {
-          calls.push(['fill', ref!, text!]);
-          values[ref!] = text!;
         } else if (command === 'click') {
           calls.push(['click', ref!]);
           signedIn = ref === '@e4';

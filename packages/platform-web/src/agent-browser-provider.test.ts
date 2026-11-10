@@ -35,6 +35,7 @@ bindTestCommandHost();
 type AgentBrowserCall = {
   cmd: string;
   args: readonly string[];
+  stdin?: string;
 };
 
 const mockProviderStartupCleanup = vi.mocked(providerStartupCleanupMock);
@@ -101,7 +102,7 @@ test('agent-browser provider maps supported operations to session-scoped JSON co
         ['mouse', 'down', '--json', '--session', 'web-session'],
         ['mouse', 'up', '--json', '--session', 'web-session'],
         ['eval', buildSelectFocusedContentEvalScript(11, 22), '--json', '--session', 'web-session'],
-        ['keyboard', 'type', 'Ada', '--json', '--session', 'web-session'],
+        ['batch', '--json', '--session', 'web-session'],
         // The empty fill (#2063) deletes the in-page selection instead of typing zero
         // characters over it, which would leave the old value intact.
         ['mouse', 'move', '11', '22', '--json', '--session', 'web-session'],
@@ -109,8 +110,8 @@ test('agent-browser provider maps supported operations to session-scoped JSON co
         ['mouse', 'up', '--json', '--session', 'web-session'],
         ['eval', buildSelectFocusedContentEvalScript(11, 22), '--json', '--session', 'web-session'],
         ['press', 'Backspace', '--json', '--session', 'web-session'],
-        ['fill', '@e2', 'Grace', '--json', '--session', 'web-session'],
-        ['keyboard', 'type', 'hello', '--json', '--session', 'web-session'],
+        ['batch', '--json', '--session', 'web-session'],
+        ['batch', '--json', '--session', 'web-session'],
         ['scroll', 'down', '400', '--json', '--session', 'web-session'],
         ['scroll', 'up', '34', '--json', '--session', 'web-session'],
         ['scroll', 'up', '33', '--json', '--session', 'web-session'],
@@ -119,6 +120,50 @@ test('agent-browser provider maps supported operations to session-scoped JSON co
         ['close', '--json', '--session', 'web-session'],
       ],
     );
+    // Typed text reaches the backend only on stdin, never in its process-table-visible argv.
+    assert.deepEqual(
+      calls.filter((call) => call.args[0] === 'batch').map((call) => JSON.parse(call.stdin ?? '')),
+      [[['keyboard', 'type', 'Ada']], [['fill', '@e2', 'Grace']], [['keyboard', 'type', 'hello']]],
+    );
+  });
+});
+
+test('agent-browser provider keeps typed text out of argv and error details when a text entry fails', async () => {
+  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
+    const secret = 'hunter2-secret';
+    const calls: AgentBrowserCall[] = [];
+    const executor = async (
+      cmd: string,
+      args: readonly string[],
+      options: { stdin?: string | Buffer },
+    ): Promise<ExecResult> => {
+      const cliArgs = recordAgentBrowserCall(calls, cmd, args, options.stdin);
+      if (cliArgs[0] === 'eval') return agentBrowserJsonResult({ success: true, data: { result: 'selected' } });
+      if (cliArgs[0] !== 'batch') return agentBrowserJsonResult({ success: true, data: {} });
+      const [command] = JSON.parse(String(options.stdin)) as string[][];
+      // The backend prints the entry list and exits 1 when an entry fails.
+      return agentBrowserJsonResult(
+        [{ command, error: 'Unknown ref: e9', result: null, success: false }],
+        1,
+      );
+    };
+    await withCommandExecutorOverride(executor, async () => {
+      for (const attempt of [
+        () => provider.fillRef?.('@e9', secret),
+        () => provider.typeText(secret),
+        () => provider.fill(11, 22, secret),
+      ]) {
+        await assert.rejects(attempt, (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'COMMAND_FAILED');
+          assert.equal(error.message, 'Unknown ref: e9');
+          assert.equal(error.details?.reason, 'text-entry-failed');
+          assert.equal(JSON.stringify(error.details).includes(secret), false);
+          return true;
+        });
+      }
+    });
+    for (const call of calls) assert.equal(call.args.includes(secret), false);
   });
 });
 
@@ -463,8 +508,18 @@ test('agent-browser provider preserves Node version guidance for missing managed
 });
 
 function recordingExecutor(calls: AgentBrowserCall[], selectionResult: string = 'selected') {
-  return async (cmd: string, args: readonly string[]): Promise<ExecResult> => {
-    const cliArgs = recordAgentBrowserCall(calls, cmd, args);
+  return async (
+    cmd: string,
+    args: readonly string[],
+    options: { stdin?: string | Buffer } = {},
+  ): Promise<ExecResult> => {
+    const cliArgs = recordAgentBrowserCall(calls, cmd, args, options.stdin);
+    if (cliArgs[0] === 'batch') {
+      const commands = JSON.parse(String(options.stdin)) as string[][];
+      return agentBrowserJsonResult(
+        commands.map((command) => ({ command, error: null, result: {}, success: true })),
+      );
+    }
     return agentBrowserJsonResult({
       success: true,
       data: cliArgs[0] === 'eval' ? { result: selectionResult } : {},
@@ -476,9 +531,10 @@ function recordAgentBrowserCall(
   calls: AgentBrowserCall[],
   cmd: string,
   args: readonly string[],
+  stdin?: string | Buffer,
 ): string[] {
   const cliArgs = managedAgentBrowserCliArgs(args);
-  calls.push({ cmd, args: cliArgs });
+  calls.push({ cmd, args: cliArgs, ...(typeof stdin === 'string' ? { stdin } : {}) });
   return cliArgs;
 }
 
@@ -737,7 +793,7 @@ test('agent-browser provider fill selects in the page and never presses a select
     assert.deepEqual(presses, ['Backspace']);
     assert.deepEqual(
       sent.map(([command]) => command),
-      ['mouse', 'mouse', 'mouse', 'eval', 'keyboard', 'mouse', 'mouse', 'mouse', 'eval', 'press'],
+      ['mouse', 'mouse', 'mouse', 'eval', 'batch', 'mouse', 'mouse', 'mouse', 'eval', 'press'],
     );
   });
 });

@@ -127,16 +127,16 @@ export function createAgentBrowserWebProvider(options: AgentBrowserProviderOptio
           await sends.send(['press', 'Backspace']);
           return;
         }
-        await sends.send(['keyboard', 'type', text]);
+        await sendTextEntry(sends.send, ['keyboard', 'type', text]);
       } catch (error) {
         throw sends.discloseDispatch(error);
       }
     },
     async fillRef(ref, text) {
-      await runJson(['fill', browserRefSelector(ref), text]);
+      await sendTextEntry(runJson, ['fill', browserRefSelector(ref), text]);
     },
     async typeText(text) {
-      await runJson(['keyboard', 'type', text]);
+      await sendTextEntry(runJson, ['keyboard', 'type', text]);
     },
     async scroll(direction, scrollOptions) {
       await runPacedScroll(runJson, direction, scrollOptions);
@@ -173,21 +173,21 @@ async function runPacedScroll(
 }
 
 /** One backend send for a compound operation, counted by {@link createAgentBrowserSendLedger}. */
-type AgentBrowserSend = (args: string[]) => Promise<unknown>;
+type AgentBrowserSend = AgentBrowserRunJson;
 
 /**
  * Counts the backend sends of one compound web operation that returned, and discloses them on
  * its failure through the shared rule: `no` survives only while nothing was sent, so a counted
  * send makes the failure `unknown` with `details.dispatchedSteps`.
  */
-function createAgentBrowserSendLedger(runJson: (args: string[]) => Promise<unknown>): {
+function createAgentBrowserSendLedger(runJson: AgentBrowserRunJson): {
   send: AgentBrowserSend;
   discloseDispatch(error: unknown): unknown;
 } {
   let dispatchedSteps = 0;
   return {
-    send: async (args) => {
-      const data = await runJson(args);
+    send: async (args, run) => {
+      const data = await runJson(args, run);
       dispatchedSteps += 1;
       return data;
     },
@@ -195,6 +195,40 @@ function createAgentBrowserSendLedger(runJson: (args: string[]) => Promise<unkno
       return discloseDispatchAfterSteps(error, dispatchedSteps);
     },
   };
+}
+
+/**
+ * Sends one command that carries caller text (`fill`, `keyboard type`) as a one-entry `batch` read
+ * from stdin. The text is often a password, so it must stay out of the backend's argv, which every
+ * host user can read from the process table, and out of `details.args` on a failure. The backend
+ * exits non-zero for a failed entry and still prints the entry list, so the entry's own `success`
+ * verdict decides the outcome.
+ */
+async function sendTextEntry(send: AgentBrowserRunJson, command: readonly string[]): Promise<void> {
+  const data = await send(['batch'], { stdin: JSON.stringify([command]) });
+  const entry: unknown = Array.isArray(data) && data.length === 1 ? data[0] : undefined;
+  const commandName = command[0] ?? 'batch';
+  if (!isBatchEntry(entry)) {
+    throw new AppError('COMMAND_FAILED', `agent-browser returned an unusable ${commandName} result`, {
+      cmd: AGENT_BROWSER,
+      args: ['batch'],
+      command: commandName,
+      reason: 'text-entry-result-unusable',
+      hint: AGENT_BROWSER_DOCTOR_HINT,
+    });
+  }
+  if (entry.success === true) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    typeof entry.error === 'string' ? entry.error : `agent-browser ${commandName} failed`,
+    {
+      cmd: AGENT_BROWSER,
+      args: ['batch'],
+      command: commandName,
+      reason: 'text-entry-failed',
+      hint: AGENT_BROWSER_DOCTOR_HINT,
+    },
+  );
 }
 
 type ScrollStep = {
@@ -416,6 +450,7 @@ type AgentBrowserBatchEntry = {
   command?: unknown;
   success?: unknown;
   result?: unknown;
+  error?: unknown;
 };
 
 /**
