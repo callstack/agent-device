@@ -19,7 +19,7 @@ import {
   closeLoopbackServer,
   mkdtempForTestSync,
   startHttpDaemonFixture,
-  supportsLoopbackBind,
+  skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import { isProcessAlive } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -144,7 +144,7 @@ function registrationBooted(paths: DaemonPaths): () => boolean {
 }
 
 test('a daemon slower than the retired 15 s budget starts successfully while it keeps progressing', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '150000');
   const http = await startHttpDaemonFixture({ devices: [] });
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-slow-success-'));

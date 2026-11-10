@@ -48,7 +48,8 @@ export function selectDeviceLane(
 
 function changedPathsFromGit(baseSha: string): string[] | null {
   if (!/^[a-f0-9]{40}$/.test(baseSha)) return null;
-  const result = spawnSync('git', ['diff', '--name-only', '-z', baseSha, 'HEAD'], {
+  // `--no-renames` keeps both sides of a rename, so a file moved out of a lane's root still selects it.
+  const result = spawnSync('git', ['diff', '--name-only', '--no-renames', '-z', baseSha, 'HEAD'], {
     encoding: 'utf8',
   });
   if (result.error || result.status !== 0 || result.stdout === null) return null;

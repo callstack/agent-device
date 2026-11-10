@@ -5,11 +5,21 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { assertCatalogComplete, CHECK_CATALOG, resolveCommand } from './checks.ts';
 import { ALL_CHECKS, selectChecks, type CheckId, type SelectInput } from './model.ts';
+import { packageEntrySources } from '../build-entries.ts';
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const PACKAGE_ENTRY_FILES = packageEntrySources(
+  (
+    JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
+      exports: Record<string, { import?: string }>;
+    }
+  ).exports,
+);
 
 function plan(changedFiles: string[], extra: Partial<SelectInput> = {}) {
   return selectChecks({
     changedFiles,
-    packageEntryFiles: ['src/index.ts', 'packages/selectors/src/index.ts'],
+    packageEntryFiles: PACKAGE_ENTRY_FILES,
     ...extra,
   });
 }
@@ -225,13 +235,20 @@ test('MCP metadata change selects the mcp-metadata check and the site build that
   assert.deepEqual(ids(['server.json']), ['mcp-metadata', 'docs-links']);
 });
 
+test('every package export maps to an existing build entry source', () => {
+  assert.ok(PACKAGE_ENTRY_FILES.includes('src/sdk/index.ts'));
+  for (const file of PACKAGE_ENTRY_FILES) {
+    assert.ok(fs.existsSync(path.join(repoRoot, file)), `${file} does not exist`);
+  }
+});
+
 test('public package surface change selects the build and the published-package gate via exports', () => {
-  const result = ids(['src/index.ts']);
+  const result = ids(['src/sdk/index.ts']);
   assert.ok(result.includes('build'));
   // A public entry is the one surface a consumer resolves by name, so building it is not enough:
   // check:package proves it still imports from an install with no workspace links.
   assert.ok(result.includes('package'));
-  assert.ok(ids(['packages/selectors/src/index.ts']).includes('package'));
+  assert.ok(ids(['src/ai-sdk/index.ts']).includes('package'));
 });
 
 test('docs-only change selects no checks and records the docs paths', () => {
@@ -490,8 +507,6 @@ test('vitest-related delegates changed paths to Vitest instead of modeling proje
     'worker sizing belongs to vitest.config.ts',
   );
 });
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 test('every configured scan root selects native duplication regardless of extension', () => {
   const config: { path: string[] } = JSON.parse(

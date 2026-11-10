@@ -76,6 +76,9 @@
   ],
   "dynamicallyLoaded": [
     "packages/daemon/src/execution/interaction/index.ts",
+    // The interaction-contract Vitest project loads these by path (globalSetup, setupFiles).
+    "test/integration/interaction-contract/coverage-registration.global-setup.ts",
+    "test/integration/interaction-contract/coverage-registration.ts",
     // The site's modules that Astro loads without an import Fallow can read: from an .astro
     // <script> block (hero.ts, dither-host.ts), as a worker URL (dither.worker.ts), by a path
     // in astro.config.mjs (routeData.ts) or by convention (ec.config.mjs, Expressive Code).

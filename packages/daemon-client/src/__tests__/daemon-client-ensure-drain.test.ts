@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
-import { closeLoopbackServer, supportsLoopbackBind } from '@agent-device/test-kit';
+import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   isProcessAlive,
@@ -141,9 +141,7 @@ async function waitForExit(pid: number): Promise<void> {
 }
 
 async function withLoopback(t: { skip: (note: string) => void }): Promise<boolean> {
-  if (await supportsLoopbackBind()) return true;
-  t.skip('loopback listeners are not permitted in this environment');
-  return false;
+  return !(await skipWhenLoopbackUnavailable(t));
 }
 
 test('a drain that outlasts the old kill window is waited out, not signaled', async (t) => {

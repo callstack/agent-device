@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
-import { supportsLoopbackBind } from '@agent-device/test-kit';
+import { skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import {
   launchesFreshHttpDaemon,
   stateDirAndPaths,
@@ -31,7 +31,7 @@ afterEach(async () => {
 });
 
 test('each MCP tool call ensures the daemon, then attaches to it', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const { stateDir, paths } = stateDirAndPaths();
   const daemon = await launchesFreshHttpDaemon(spawn, paths);
   close = daemon.close;

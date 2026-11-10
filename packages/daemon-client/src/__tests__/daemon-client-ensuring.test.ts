@@ -4,7 +4,7 @@ import { afterEach, test, vi } from 'vitest';
 import {
   closeLoopbackServer,
   createTestHostEnvironment,
-  supportsLoopbackBind,
+  skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import { isProcessAlive } from '@agent-device/host-kit/process';
@@ -59,7 +59,7 @@ function request(command: string, flags: Record<string, unknown>) {
 }
 
 test('the first request ensures a missing daemon once and every request attaches to it', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const { stateDir, paths } = stateDirAndPaths();
   const fresh = await startScriptedDaemon(okResult({}));
   launchesFreshDaemonAt(spawn, paths, fresh.port);
@@ -83,7 +83,7 @@ test('the first request ensures a missing daemon once and every request attaches
 });
 
 test('an idle incompatible daemon is replaced, and the replacement is reported', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const { stateDir, paths } = stateDirAndPaths();
   const leaver = createDaemonLeaver();
   const stale = await startScriptedDaemon(draining, { afterRpc: leaver.leave });
@@ -117,7 +117,7 @@ test('an idle incompatible daemon is replaced, and the replacement is reported',
 });
 
 test('a busy incompatible daemon fails the request before it is sent and keeps running', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const { stateDir, paths } = stateDirAndPaths();
   const stale = await startScriptedDaemon(
     busy({ inFlightRequests: 0, sessions: 1, repairSessions: 0, leases: 0 }),
@@ -163,7 +163,7 @@ test('a remote connection passes through without ensuring or choosing a lifecycl
 });
 
 test('a one-shot replay on its own private daemon passes through, an explicit state dir does not', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const { stateDir, paths } = stateDirAndPaths();
   const fresh = await startScriptedDaemon(okResult({}));
   launchesFreshDaemonAt(spawn, paths, fresh.port);
@@ -184,7 +184,7 @@ test('a one-shot replay on its own private daemon passes through, an explicit st
 });
 
 test('a daemon that disappears between requests is ensured again before the next one is sent', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const { stateDir, paths } = stateDirAndPaths();
   const fresh = await startScriptedDaemon(okResult({}));
   launchesFreshDaemonAt(spawn, paths, fresh.port);
@@ -218,7 +218,7 @@ test('a daemon that disappears between requests is ensured again before the next
 });
 
 test('a registered daemon that answers nothing is replaced and reported as unreachable', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const { stateDir, paths } = stateDirAndPaths();
   // Both are bound before the dead one is closed, so the fresh daemon cannot be handed its port.
   const closed = await startScriptedDaemon(okResult({}));
@@ -242,7 +242,7 @@ test('a registered daemon that answers nothing is replaced and reported as unrea
 });
 
 test('a failed ensure is retried by the next request instead of being remembered', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const { stateDir, paths } = stateDirAndPaths();
   const stale = await startScriptedDaemon(
     busy({ inFlightRequests: 1, sessions: 0, repairSessions: 0, leases: 0 }),
@@ -278,7 +278,7 @@ test('a failed ensure is retried by the next request instead of being remembered
 });
 
 test('concurrent first requests share one ensure through the CLI and MCP transport', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const { stateDir, paths } = stateDirAndPaths();
   const fresh = await startScriptedDaemon(okResult({ via: 'fresh' }));
   launchesFreshDaemonAt(spawn, paths, fresh.port);
@@ -314,7 +314,7 @@ test('concurrent first requests share one ensure through the CLI and MCP transpo
 });
 
 test('a request canceled before it starts does not start a daemon', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const { stateDir, paths } = stateDirAndPaths();
   const fresh = await startScriptedDaemon(okResult({}));
   launchesFreshDaemonAt(spawn, paths, fresh.port);

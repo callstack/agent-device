@@ -19,10 +19,6 @@ import {
   androidImeClearTextBroadcast,
   androidImeInputTextBroadcast,
 } from './android-ime-lifecycle-world.ts';
-import {
-  ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
-  ANDROID_TOUCH_CONTRACT_EVIDENCE,
-} from './android-lifecycle.coverage.ts';
 
 type AndroidSettingsWorld = Awaited<ReturnType<typeof createAndroidSettingsWorld>>;
 
@@ -37,19 +33,15 @@ const ANDROID_SYSTEM_SURFACE_XML = `<hierarchy>
   </node>
 </hierarchy>`;
 
-test(
-  ANDROID_LIFECYCLE_CONTRACT_EVIDENCE.testName,
-  async () => {
-    await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
-      const client = world.daemon.client();
-      await runAndroidSetupAndInstallWorkflow(world, client);
-      await runAndroidAppControlAndObservabilityWorkflow(world, client);
-      await runAndroidCaptureInteractionAndReplayWorkflow(world, client);
-      assertAndroidProviderContract(world);
-    });
-  },
-  25_000,
-);
+test('Provider-backed integration Android Settings flow uses scripted ADB provider', async () => {
+  await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
+    const client = world.daemon.client();
+    await runAndroidSetupAndInstallWorkflow(world, client);
+    await runAndroidAppControlAndObservabilityWorkflow(world, client);
+    await runAndroidCaptureInteractionAndReplayWorkflow(world, client);
+    assertAndroidProviderContract(world);
+  });
+}, 25_000);
 
 test('Provider-backed Android reads keep chrome provenance internal across public node payloads', async () => {
   await withProviderScenarioResource(
@@ -130,7 +122,7 @@ test('Provider-backed integration Android text provider handles Unicode without 
   );
 });
 
-test(ANDROID_TOUCH_CONTRACT_EVIDENCE.testName, async () => {
+test('Provider-backed integration Android touch provider handles multi-touch gestures', async () => {
   await withProviderScenarioResource(
     async () => await createAndroidSettingsWorld(),
     async (world) => {

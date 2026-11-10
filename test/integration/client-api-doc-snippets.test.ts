@@ -6,8 +6,8 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { runCmdSync } from '@agent-device/host-kit/command';
 
-// Compiles every fenced ```ts snippet in the Node.js API docs (client-api.md and
-// build-an-integration.md) against
+// Compiles every fenced ```ts snippet in the Node.js API docs and the device-cloud provider
+// pages whose snippets are complete programs against
 // agent-device's real `agent-device/*` subpath sources, so a doc snippet that no
 // longer compiles — wrong property, renamed export, changed signature — fails
 // CI instead of only being caught if an examples/sdk/*.ts file happens to drift
@@ -21,10 +21,18 @@ import { runCmdSync } from '@agent-device/host-kit/command';
 // 2.5s slow-test budget (see docs/agents/testing.md).
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+// Pages left out: ai-sdk.md and eve.md import third-party packages the repo does not install;
+// revyl.md imports the separately published @agent-device/revyl plugin; plugins.md and
+// migrating-gestures.md show fragments, not programs; replay-e2e.md's reporter module leaves its
+// parameters untyped because no public subpath exports the reporter types.
 const API_DOC_PATHS = [
-  path.join(repoRoot, 'website/docs/docs/client-api.md'),
-  path.join(repoRoot, 'website/docs/docs/build-an-integration.md'),
-];
+  'client-api.md',
+  'build-an-integration.md',
+  'aws-device-farm.md',
+  'browserstack.md',
+  'limrun.md',
+  'testmu.md',
+].map((page) => path.join(repoRoot, 'website/docs/docs', page));
 const EXAMPLES_SDK_TSCONFIG = path.join(repoRoot, 'examples/sdk/tsconfig.json');
 const TSC_BIN = path.join(repoRoot, 'node_modules/.bin/tsc');
 
