@@ -28,6 +28,9 @@ beforeAll(async () => {
   server = child;
   const port = await new Promise<string>((resolve, reject) => {
     child.once('error', reject);
+    child.once('exit', (code, signal) =>
+      reject(new Error(`fixture server exited before listening (${signal ?? code})`)),
+    );
     child.stdout?.once('data', (chunk: Buffer) => resolve(chunk.toString().trim()));
   });
   baseUrl = `http://127.0.0.1:${port}`;
@@ -86,10 +89,14 @@ test('reports the typed json() refusals with their recovery details', () => {
     },
   });
   expect(run(`output.x = json(5)`).output).toMatchObject({
-    error: { message: expect.stringContaining('json() expected a string body, received number') },
+    error: {
+      code: 'COMMAND_FAILED',
+      message: expect.stringContaining('json() expected a string body, received number'),
+    },
   });
   expect(run(`output.x = json('{')`).output).toMatchObject({
     error: {
+      code: 'COMMAND_FAILED',
       message: expect.stringContaining('json() could not parse response body'),
       details: { bodyPreview: '{' },
     },
@@ -126,5 +133,7 @@ test('rejects output keys that cannot become replay variables', () => {
 });
 
 test('reports malformed child input as a normalized error', () => {
-  expect(runScriptChildOutput('{')).toMatchObject({ error: { message: expect.any(String) } });
+  expect(runScriptChildOutput('{')).toMatchObject({
+    error: { code: 'UNKNOWN', message: expect.any(String) },
+  });
 });
