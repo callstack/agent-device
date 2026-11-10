@@ -52,7 +52,12 @@ export function createPageLog(now = () => new Date()): PageLog {
 
   const handlers: Readonly<Record<string, (params: Record<string, unknown>) => void>> = {
     'Runtime.consoleAPICalled': (params) => {
-      const args = Array.isArray(params.args) ? (params.args as RemoteObject[]) : [];
+      const args = Array.isArray(params.args)
+        ? params.args.filter(
+            (argument): argument is RemoteObject =>
+              typeof argument === 'object' && argument !== null,
+          )
+        : [];
       push(`console.${String(params.type)} ${args.map(describe).join(' ')}`);
     },
     'Runtime.exceptionThrown': (params) => {

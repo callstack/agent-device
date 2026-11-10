@@ -214,7 +214,8 @@ export class WebDriverTransport {
       return { status, value: readWebDriverValue(text ? parseJsonResponse(text, status) : {}) };
     // A gateway in front of the driver can answer an error with a non-JSON page (a `502 <html>`).
     // Its status still decides retry and dispatch disclosure, so the raw body is only evidence.
-    const payload = text ? (parseJsonOrUndefined(text) ?? truncateBody(text)) : {};
+    const parsed = text ? parseJsonBody(text) : { json: {} };
+    const payload = parsed === undefined ? truncateBody(text) : parsed.json;
     const error = webdriverError(status, payload);
     if (isWebDriverRouteUnsupported(error)) {
       emitWebDriverDiagnostic(WEBDRIVER_ROUTE_UNSUPPORTED_REASON, {
@@ -335,15 +336,17 @@ function parseJsonResponse(text: string, status: number): unknown {
     throw new AppError(
       'COMMAND_FAILED',
       'WebDriver response was not valid JSON.',
-      { status, text: truncateBody(text) },
+      // A 2xx means the driver ran the request; only its answer is unreadable.
+      { status, text: truncateBody(text), ...dispatchDisclosure('unknown') },
       error,
     );
   }
 }
 
-function parseJsonOrUndefined(text: string): unknown {
+/** The parsed body, boxed so a JSON `null` stays distinct from a body that is not JSON. */
+function parseJsonBody(text: string): { json: unknown } | undefined {
   try {
-    return JSON.parse(text) as unknown;
+    return { json: JSON.parse(text) as unknown };
   } catch {
     return undefined;
   }

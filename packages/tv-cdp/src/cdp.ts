@@ -23,7 +23,7 @@ export type CdpSession = Readonly<{
 
 type CdpMessage = {
   id?: number;
-  method?: string;
+  method?: unknown;
   params?: Record<string, unknown>;
   result?: unknown;
   error?: { message: string; code: number };
@@ -36,6 +36,12 @@ function parseCdpMessage(data: unknown): CdpMessage | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** Never throws: a listener can throw a value that `String()` cannot convert. */
+function describeThrown(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return typeof error === 'string' ? error : 'non-error thrown value';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -89,7 +95,10 @@ export async function connectCdp(target: CdpTarget): Promise<CdpSession> {
       });
       return;
     }
-    if (typeof message.method === 'string') {
+    if (message.method !== undefined) {
+      // A frame that names a method is an event; one whose method is not a name is unreadable,
+      // and never a reply, even when it carries an id.
+      if (typeof message.method !== 'string') return;
       const params = isRecord(message.params) ? message.params : {};
       for (const listener of listeners) {
         try {
@@ -98,7 +107,7 @@ export async function connectCdp(target: CdpTarget): Promise<CdpSession> {
           emitDiagnostic({
             level: 'debug',
             phase: 'tv_cdp_event_listener_failed',
-            data: { method: message.method, error: String(error) },
+            data: { method: message.method, error: describeThrown(error) },
           });
         }
       }

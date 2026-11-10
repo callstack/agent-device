@@ -208,7 +208,7 @@ async function sendTextEntry(send: AgentBrowserRunJson, command: readonly string
   const data = await send(['batch'], { stdin: JSON.stringify([command]) });
   const entry: unknown = Array.isArray(data) && data.length === 1 ? data[0] : undefined;
   const commandName = command[0] ?? 'batch';
-  if (!isBatchEntry(entry)) {
+  if (!isBatchEntry(entry) || !sameBatchCommand(entry.command, command)) {
     throw new AppError(
       'COMMAND_FAILED',
       `agent-browser returned an unusable ${commandName} result`,
@@ -222,9 +222,11 @@ async function sendTextEntry(send: AgentBrowserRunJson, command: readonly string
     );
   }
   if (entry.success === true) return;
+  // The backend's own error text is not carried: nothing proves it does not quote the text.
+  const target = commandName === 'fill' ? ` for ${command[1]}` : '';
   throw new AppError(
     'COMMAND_FAILED',
-    typeof entry.error === 'string' ? entry.error : `agent-browser ${commandName} failed`,
+    `agent-browser ${command.slice(0, commandName === 'keyboard' ? 2 : 1).join(' ')} failed${target}`,
     {
       cmd: AGENT_BROWSER,
       args: ['batch'],

@@ -70,7 +70,13 @@ async function pageSending(beforeAnswer: readonly string[]): Promise<string> {
 // A throw inside the WebSocket message handler is an uncaught exception, which ends the
 // daemon rather than one request.
 test('an unreadable frame or a failing event listener leaves the pending request answered', async () => {
-  const url = await pageSending(['not json', 'null', '{"method":"Log.entryAdded","params":7}']);
+  const url = await pageSending([
+    'not json',
+    'null',
+    // A method that is not a name must not answer the pending request it shares an id with.
+    '{"id":1,"method":7,"result":{"ok":false}}',
+    '{"method":"Log.entryAdded","params":7}',
+  ]);
   const session = await connectCdp({
     title: 'page',
     url: 'http://tv/page/',
@@ -79,7 +85,8 @@ test('an unreadable frame or a failing event listener leaves the pending request
   cleanups.push(() => session.close());
   const events: string[] = [];
   session.on(() => {
-    throw new Error('listener failed');
+    // `String()` throws for a value without a primitive conversion.
+    throw Object.create(null);
   });
   session.on((method, params) => events.push(`${method} ${JSON.stringify(params)}`));
 

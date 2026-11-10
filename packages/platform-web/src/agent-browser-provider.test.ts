@@ -142,9 +142,10 @@ test('agent-browser provider keeps typed text out of argv and error details when
         return agentBrowserJsonResult({ success: true, data: { result: 'selected' } });
       if (cliArgs[0] !== 'batch') return agentBrowserJsonResult({ success: true, data: {} });
       const [command] = JSON.parse(String(options.stdin)) as string[][];
-      // The backend prints the entry list and exits 1 when an entry fails.
+      // The backend prints the entry list and exits 1 when an entry fails; its error text is not
+      // carried, because nothing proves it never quotes the text.
       return agentBrowserJsonResult(
-        [{ command, error: 'Unknown ref: e9', result: null, success: false }],
+        [{ command, error: `could not type ${secret}`, result: null, success: false }],
         1,
       );
     };
@@ -157,14 +158,31 @@ test('agent-browser provider keeps typed text out of argv and error details when
         await assert.rejects(attempt, (error: unknown) => {
           assert.ok(error instanceof AppError);
           assert.equal(error.code, 'COMMAND_FAILED');
-          assert.equal(error.message, 'Unknown ref: e9');
+          assert.match(error.message, /^agent-browser (fill|keyboard type) failed/);
           assert.equal(error.details?.reason, 'text-entry-failed');
+          assert.equal(error.message.includes(secret), false);
           assert.equal(JSON.stringify(error.details).includes(secret), false);
           return true;
         });
       }
     });
     for (const call of calls) assert.equal(call.args.includes(secret), false);
+  });
+});
+
+test('agent-browser provider refuses a text entry answer that echoes another command', async () => {
+  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
+    const executor = async (): Promise<ExecResult> =>
+      agentBrowserJsonResult([
+        { command: ['keyboard', 'type', 'other'], error: null, result: {}, success: true },
+      ]);
+    await withCommandExecutorOverride(executor, async () => {
+      await assert.rejects(provider.typeText('hello'), (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.reason, 'text-entry-result-unusable');
+        return true;
+      });
+    });
   });
 });
 

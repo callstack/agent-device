@@ -342,6 +342,7 @@ test('a 2xx with a non-JSON body names its status', async () => {
     assert.ok(error instanceof AppError);
     assert.equal(error.message, 'WebDriver response was not valid JSON.');
     assert.equal(error.details?.status, 200);
+    assert.equal(error.details?.dispatched, 'unknown');
     return true;
   });
 });

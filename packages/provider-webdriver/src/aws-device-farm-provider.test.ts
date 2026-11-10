@@ -69,7 +69,8 @@ test('artifact lookup runs in the region of the session ARN, not the environment
     providerSessionId: 'arn:aws:devicefarm:us-west-2:123:session:project-a/session-a/00000',
   });
 
-  assert.ok(commands.length > 0);
+  // One lookup each for the FILE and LOG artifacts.
+  assert.equal(commands.length, 2);
   for (const command of commands) {
     assert.equal(command[command.indexOf('--region') + 1], 'us-west-2', command.join(' '));
   }

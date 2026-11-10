@@ -86,9 +86,18 @@ test('events missing their payload fields do not throw', () => {
   log.record('Runtime.exceptionThrown', {});
   log.record('Log.entryAdded', {});
   log.record('Runtime.consoleAPICalled', { type: 'log', args: 'not a list' });
+  log.record('Runtime.consoleAPICalled', {
+    type: 'log',
+    args: [null, { type: 'string', value: 'kept' }],
+  });
 
   assert.equal(
     log.tail(10),
-    '2026-10-30T12:00:00.000Z exception unknown\n2026-10-30T12:00:00.000Z console.log \n',
+    [
+      '2026-10-30T12:00:00.000Z exception unknown',
+      '2026-10-30T12:00:00.000Z console.log ',
+      '2026-10-30T12:00:00.000Z console.log kept',
+      '',
+    ].join('\n'),
   );
 });

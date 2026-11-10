@@ -90,7 +90,11 @@ test('iOS home rides mobile pressButton and the app switcher refuses before the 
   });
   await ios.home!();
   await assert.rejects(ios.appSwitcher!(), (error: unknown) => {
-    return error instanceof AppError && error.code === 'UNSUPPORTED_OPERATION';
+    return (
+      error instanceof AppError &&
+      error.code === 'UNSUPPORTED_OPERATION' &&
+      error.details?.operation === 'appSwitcher'
+    );
   });
   assert.deepEqual(transcript, ['mobile: pressButton [{"name":"home"}]']);
 });
