@@ -67,26 +67,31 @@ function createPollerHandle(
   const { backend, host } = options;
   const startedAt = host.clock.now();
   let state: AppLogLiveSnapshot['state'] = 'active';
-  let stopped = false;
+  const stop = new AbortController();
   let previous = existingTail;
   const polling = (async () => {
-    while (!stopped) {
+    while (!stop.signal.aborted) {
       try {
-        const read = await boundedRead(options);
+        const read = await boundedRead(options, stop.signal);
+        if (stop.signal.aborted) return;
+        // A slow provider read is transient like a failed one: retry on the next tick.
         if (read.status === 'timeout') {
-          state = 'failed';
-          return;
+          state = 'recovering';
+        } else {
+          const delta = appendedTail(previous, read.text);
+          if (delta) await output.write(delta.endsWith('\n') ? delta : `${delta}\n`);
+          previous = read.text;
+          state = 'active';
         }
-        if (stopped) return;
-        const delta = appendedTail(previous, read.text);
-        if (delta) await output.write(delta.endsWith('\n') ? delta : `${delta}\n`);
-        previous = read.text;
-        state = 'active';
       } catch {
-        if (stopped) return;
+        if (stop.signal.aborted) return;
         state = 'recovering';
       }
-      await host.clock.sleep(POLL_INTERVAL_MS);
+      try {
+        await host.clock.sleep(POLL_INTERVAL_MS, stop.signal);
+      } catch {
+        if (stop.signal.aborted) return;
+      }
     }
   })();
   const pendingDisposals = new Set<AsyncDisposable>([options.reader, output]);
@@ -95,7 +100,7 @@ function createPollerHandle(
     | undefined;
   const finish = async () =>
     (finishPromise ??= (async () => {
-      stopped = true;
+      stop.abort();
       await polling;
       const failures = await disposeAll(pendingDisposals);
       if (failures.length > 0) {
@@ -119,16 +124,23 @@ function createPollerHandle(
   });
 }
 
+/** Settles at the read, its budget, or `stopSignal`, whichever comes first; it never awaits an abandoned read. */
 async function boundedRead(
   options: ProviderAppLogPollerOptions,
+  stopSignal: AbortSignal,
 ): Promise<Readonly<{ status: 'read'; text: string }> | Readonly<{ status: 'timeout' }>> {
   const controller = new AbortController();
-  const read = options.reader.readLogs(options.appBundleId, READ_LINE_LIMIT, controller.signal);
+  const signal = AbortSignal.any([controller.signal, stopSignal]);
+  const read = options.reader
+    .readLogs(options.appBundleId, READ_LINE_LIMIT, signal)
+    .then((text) => ({ status: 'read' as const, text }));
+  // An abandoned read may still reject after the race settles.
+  read.catch(() => undefined);
   try {
     return await Promise.race([
-      read.then((text) => ({ status: 'read' as const, text })),
+      read,
       options.host.clock
-        .sleep(READ_TIMEOUT_MS, controller.signal)
+        .sleep(READ_TIMEOUT_MS, signal)
         .then(() => ({ status: 'timeout' as const })),
     ]);
   } finally {
