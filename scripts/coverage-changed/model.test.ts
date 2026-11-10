@@ -5,10 +5,9 @@ import {
   CHANGED_LINE_COVERAGE_THRESHOLD,
   computeChangedCoverage,
   ignoredLineSet,
-  isIncludableSource,
-  isTestFile,
   parseLcov,
 } from './model.ts';
+import { isInstrumentedPath, type CoverageConfig } from '../coverage-crap/stamp.ts';
 
 test('parseLcov reads DA hits and BRDA taken, treating "-" as not taken', () => {
   const lcov = [
@@ -34,23 +33,39 @@ test('parseLcov reads DA hits and BRDA taken, treating "-" as not taken', () => 
   assert.equal(index.get('src/b.ts')?.lineHits.get(10), 1);
 });
 
-test('source/test classification matches the coverage include glob', () => {
-  assert.equal(isIncludableSource('src/core/x.ts'), true);
-  assert.equal(isIncludableSource('src/core/x.test.ts'), false);
-  assert.equal(isIncludableSource('src/core/__tests__/x.ts'), false);
-  assert.equal(isIncludableSource('scripts/y.ts'), false);
-  assert.equal(isIncludableSource('src/core/x.tsx'), false);
+// The stamp's include/exclude, mirroring `test.coverage` in `vitest.config.ts`
+// for the paths these tests exercise: both coverage roots, test files and the
+// config's named exclusions out.
+const COVERAGE_CONFIG: CoverageConfig = {
+  include: ['src/**/*.ts', 'packages/*/src/**/*.ts'],
+  exclude: [
+    '**/*.test.ts',
+    '**/__tests__/**',
+    '**/*-types.ts',
+    '**/types.ts',
+    'src/sdk/**',
+    'src/bin.ts',
+  ],
+};
+
+test('source/test classification matches the verified stamp selection', () => {
+  assert.equal(isInstrumentedPath('src/core/x.ts', COVERAGE_CONFIG), true);
+  assert.equal(isInstrumentedPath('src/core/x.test.ts', COVERAGE_CONFIG), false);
+  assert.equal(isInstrumentedPath('src/core/__tests__/x.ts', COVERAGE_CONFIG), false);
+  assert.equal(isInstrumentedPath('scripts/y.ts', COVERAGE_CONFIG), false);
+  assert.equal(isInstrumentedPath('src/core/x.tsx', COVERAGE_CONFIG), false);
   // Workspace packages are the second coverage root.
-  assert.equal(isIncludableSource('packages/contracts/src/x.ts'), true);
-  assert.equal(isIncludableSource('packages/contracts/src/deep/x.ts'), true);
-  assert.equal(isIncludableSource('packages/contracts/src/x.test.ts'), false);
-  assert.equal(isIncludableSource('packages/contracts/src/__tests__/x.ts'), false);
-  assert.equal(isIncludableSource('packages/contracts/src/x.tsx'), false);
-  assert.equal(isIncludableSource('packages/contracts/test/x.ts'), false);
-  assert.equal(isIncludableSource('packages/contracts/x.ts'), false);
-  assert.equal(isTestFile('src/a.test.ts'), true);
-  assert.equal(isTestFile('src/__tests__/a.ts'), true);
-  assert.equal(isTestFile('src/a.ts'), false);
+  assert.equal(isInstrumentedPath('packages/contracts/src/x.ts', COVERAGE_CONFIG), true);
+  assert.equal(isInstrumentedPath('packages/contracts/src/deep/x.ts', COVERAGE_CONFIG), true);
+  assert.equal(isInstrumentedPath('packages/contracts/src/x.test.ts', COVERAGE_CONFIG), false);
+  assert.equal(isInstrumentedPath('packages/contracts/src/__tests__/x.ts', COVERAGE_CONFIG), false);
+  assert.equal(isInstrumentedPath('packages/contracts/src/x.tsx', COVERAGE_CONFIG), false);
+  assert.equal(isInstrumentedPath('packages/contracts/test/x.ts', COVERAGE_CONFIG), false);
+  assert.equal(isInstrumentedPath('packages/contracts/x.ts', COVERAGE_CONFIG), false);
+  // What the stamp excludes is out of scope by declaration, not merely unscored.
+  assert.equal(isInstrumentedPath('src/sdk/thing.ts', COVERAGE_CONFIG), false);
+  assert.equal(isInstrumentedPath('src/core/x-types.ts', COVERAGE_CONFIG), false);
+  assert.equal(isInstrumentedPath('src/bin.ts', COVERAGE_CONFIG), false);
 });
 
 test('ignoredLineSet handles next, next N and start/stop ranges', () => {
@@ -98,6 +113,7 @@ test('gate fails when changed-line coverage is below threshold and lists offende
   const result = computeChangedCoverage({
     diffs: [diff('src/covered.ts', [1, 2, 3])],
     coverage,
+    stamp: COVERAGE_CONFIG,
     fileLines: () => null,
   });
   // lines 1 & 3 covered, line 2 uncovered -> 2/3 = 66.67% < 70.
@@ -118,6 +134,7 @@ test('workspace package source counts toward the gate like root source', () => {
   const result = computeChangedCoverage({
     diffs: [diff('packages/contracts/src/feature.ts', [1, 2])],
     coverage: packageCoverage,
+    stamp: COVERAGE_CONFIG,
     fileLines: () => null,
   });
   // 1/2 = 50% < 70: a package change can now fail the gate on its own.
@@ -132,6 +149,7 @@ test('non-executable added lines (absent from DA) never enter the denominator', 
   const result = computeChangedCoverage({
     diffs: [diff('src/covered.ts', [1, 3, 99])],
     coverage,
+    stamp: COVERAGE_CONFIG,
     fileLines: () => null,
   });
   assert.equal(result.totalLines, 2);
@@ -144,6 +162,7 @@ test('deleted files and docs-only changes are a trivial pass with null pct', () 
   const result = computeChangedCoverage({
     diffs: [diff('src/covered.ts', [1], true), diff('README.md', [1, 2])],
     coverage,
+    stamp: COVERAGE_CONFIG,
     fileLines: () => null,
   });
   assert.equal(result.pct, null);
@@ -155,6 +174,7 @@ test('waiver forces a pass but still reports the numbers', () => {
   const result = computeChangedCoverage({
     diffs: [diff('src/covered.ts', [1, 2, 3])],
     coverage,
+    stamp: COVERAGE_CONFIG,
     waived: true,
     fileLines: () => null,
   });
@@ -163,7 +183,7 @@ test('waiver forces a pass but still reports the numbers', () => {
   assert.equal(result.pct, 66.67);
 });
 
-test('an includable path whose new side is a symlink or gitlink is skipped, not read', () => {
+test('an instrumented path whose new side is a symlink or gitlink is skipped, not read', () => {
   // A committed symlink like `tools/helper-tests/Sources -> ../helper/Sources` shows in the
   // diff as added text (its target), so it reaches this loop by path shape. Its working-tree
   // entry resolves to a directory, so a content read dies on EISDIR; reading the
@@ -176,6 +196,7 @@ test('an includable path whose new side is a symlink or gitlink is skipped, not 
       diff('src/covered.ts', [1, 2, 3]),
     ],
     coverage,
+    stamp: COVERAGE_CONFIG,
     fileLines: (path) => {
       readPaths.push(path);
       return null;
@@ -188,10 +209,11 @@ test('an includable path whose new side is a symlink or gitlink is skipped, not 
   assert.deepEqual(result.excluded.files, []);
 });
 
-test('includable source absent from lcov counts as excluded-path code lines', () => {
+test('instrumented source absent from lcov counts as excluded-path code lines', () => {
   const result = computeChangedCoverage({
-    diffs: [diff('src/sdk/thing.ts', [1, 2, 3])],
+    diffs: [diff('src/missing.ts', [1, 2, 3])],
     coverage,
+    stamp: COVERAGE_CONFIG,
     fileLines: () => ['const kept = 1;', '', '// a comment'],
   });
   assert.equal(result.totalLines, 0);
@@ -200,11 +222,25 @@ test('includable source absent from lcov counts as excluded-path code lines', ()
   assert.deepEqual(result.excluded.files[0]?.lines, [1]);
 });
 
+test('a path the stamp excludes is out of scope, not tallied', () => {
+  const result = computeChangedCoverage({
+    diffs: [diff('src/sdk/thing.ts', [1, 2, 3])],
+    coverage,
+    stamp: COVERAGE_CONFIG,
+    fileLines: () => ['const kept = 1;', '', '// a comment'],
+  });
+  assert.equal(result.totalLines, 0);
+  assert.equal(result.excluded.totalLines, 0);
+  assert.deepEqual(result.excluded.files, []);
+  assert.equal(result.passed, true);
+});
+
 test('changed line suppressed by an ignore directive is tallied, not gated', () => {
   const cov = parseLcov(['SF:src/x.ts', 'DA:1,1', 'end_of_record'].join('\n'));
   const result = computeChangedCoverage({
     diffs: [diff('src/x.ts', [1, 3])],
     coverage: cov,
+    stamp: COVERAGE_CONFIG,
     fileLines: () => ['const a = 1;', '/* v8 ignore next */', 'const suppressed = 3;'],
   });
   // Line 3 is code-like, dropped from DA by the directive on line 2, and inside
@@ -279,6 +315,7 @@ test('rename-only hunks owe no changed-line coverage; edited moves owe their edi
         uncoveredRecord('src/moved-pure.ts', 30),
       ].join('\n'),
     ),
+    stamp: COVERAGE_CONFIG,
     fileLines: () => null,
   });
   // 2 ordinary edits + 3 edited move lines; the 30-line pure move owes nothing.

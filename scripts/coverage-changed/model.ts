@@ -3,15 +3,17 @@
 // LINES ONLY. Only added (new-side) lines count — deleted lines never do — so
 // the gate is deterministic against renames and deletes. run.ts owns all I/O.
 //
-// The coverable universe is the lcov report itself, not a second copy of
-// vitest's exclude globs: coverage runs with `all` on, so every includable file
-// under either coverage root (`src/**/*.ts` and `packages/*/src/**/*.ts`)
-// appears in lcov even when untested. A changed includable file ABSENT from
-// lcov was dropped by an exclude glob — reported (non-gating) so exclusions
-// cannot silently absorb new logic.
+// The coverable universe is the verified stamp's include/exclude, not a second
+// copy of the coverage config: `isInstrumentedPath` against the stamp is what
+// decides whether a changed file owes coverage, the same selection the CRAP
+// gate reads from the same stamp. A changed instrumented file ABSENT from
+// lcov was dropped by the run — reported (non-gating) so the gap cannot
+// silently absorb new logic. A changed file the stamp excludes is out of scope
+// by declaration and owes nothing, not even a tally entry.
 
 import type { ChangedFileDiff } from '../lib/repo-git.ts';
 import { normalizePath } from '../lib/repo-path.ts';
+import { isInstrumentedPath, type CoverageConfig } from '../coverage-crap/stamp.ts';
 
 // Single source of truth for the gate. Changed-line coverage below this
 // percentage fails the Coverage CI job (unless waived).
@@ -71,22 +73,6 @@ export function parseLcov(text: string, rootDir?: string): CoverageIndex {
     if (file) index.set(file.path, file);
   }
   return index;
-}
-
-// Vitest coverage `include` spans two roots: `src/**/*.ts` and
-// `packages/*/src/**/*.ts`. Test files are excluded there and carry no product
-// logic, so they never count toward the gate or the excluded tally (which
-// exists to surface hidden logic, not test code).
-export function isTestFile(path: string): boolean {
-  return /\.test\.ts$/.test(path) || /(^|\/)__tests__\//.test(path);
-}
-
-// Both coverage roots, package-generic so a new workspace needs no edit here.
-// Anything outside them — scripts, package-level `test/`, `.tsx` — stays out.
-const SOURCE_ROOT = /^(?:packages\/[^/]+\/)?src\/.*\.ts$/;
-
-export function isIncludableSource(path: string): boolean {
-  return SOURCE_ROOT.test(path) && !isTestFile(path);
 }
 
 // A changed line looks like product code (not blank, not a comment-only line).
@@ -205,6 +191,10 @@ function ignoredChangedLines(
 export type ComputeInput = {
   readonly diffs: readonly ChangedFileDiff[];
   readonly coverage: CoverageIndex;
+  // The verified stamp's include/exclude: what the coverage run was told to
+  // instrument. run.ts verifies the stamp before calling; a model test passes
+  // the config the case is about.
+  readonly stamp: CoverageConfig;
   // New-side content of a changed file (working tree at HEAD), or null when the
   // path cannot be read. Only consulted for the non-gating excluded tally.
   readonly fileLines: (path: string) => readonly string[] | null;
@@ -226,14 +216,14 @@ export function computeChangedCoverage(input: ComputeInput): ChangedCoverageResu
       diff.deleted ||
       !diff.regularFile ||
       diff.added.length === 0 ||
-      !isIncludableSource(diff.path)
+      !isInstrumentedPath(diff.path, input.stamp)
     )
       continue;
 
     const cov = input.coverage.get(diff.path);
     if (!cov) {
-      // Includable source absent from the all-files lcov report: an exclude glob
-      // dropped it. Count its code-like added lines so the exclusion is visible.
+      // Instrumented source absent from the lcov report: the run recorded no
+      // counters for it. Count its code-like added lines so the gap is visible.
       const lines = input.fileLines(diff.path);
       const excluded = diff.added.filter((n) => isCodeLike(lines?.[n - 1]));
       if (excluded.length > 0) {
