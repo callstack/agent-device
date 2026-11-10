@@ -87,6 +87,14 @@ test('write() escapes recorded literal ${...} text and keeps only recorder-inser
   const root = mkdtempForTestSync('agent-device-script-writer-literal-interpolation-');
   const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const session = makeAuthoringSession('default');
+  const targetEvidence = {
+    role: 'button',
+    label: 'Pay ${amount}',
+    sibling: 0,
+    viewportOrder: 0,
+    ancestry: [{ role: 'form', label: 'Checkout ${step}' }],
+    verification: 'verified' as const,
+  };
   const entries = [
     { command: 'type', positionals: ['cost ${amount} \\${raw}'], flags: {} },
     {
@@ -105,18 +113,16 @@ test('write() escapes recorded literal ${...} text and keeps only recorder-inser
       flags: {},
       result: { text: 'hunter2', selectorChain: ['label="Confirm"'] },
     },
-    {
-      command: 'click',
-      positionals: ['@e3'],
-      flags: {},
-      result: { refLabel: 'Signed in with hunter2' },
-    },
+    { command: 'click', positionals: ['@e3'], flags: {}, result: { refLabel: 'Hi hunter2' } },
+    // Ref labels and annotations are matched literally and never interpolated.
+    { command: 'click', positionals: ['@e4'], flags: {}, result: { refLabel: 'Pay ${amount}' } },
+    { command: 'click', positionals: ['label="Pay ${amount}"'], flags: {}, targetEvidence },
   ];
   for (const entry of entries) recordActionEntry(session, { result: {}, ...entry }, hostCwd);
 
   const { script, parsed } = writeAndParse(writer, session);
   expect(script).not.toContain('hunter2');
-  const scope = { values: { PASSWORD: 'secret', amount: 'WRONG', name: 'WRONG' } };
+  const scope = { values: { PASSWORD: 'secret', amount: 'WRONG', name: 'WRONG', step: 'WRONG' } };
   const resolved = parsed.actions.map((entry, index) =>
     resolveReplayAction(entry, scope, { file: 'test.ad', line: index + 2 }),
   );
@@ -126,39 +132,11 @@ test('write() escapes recorded literal ${...} text and keeps only recorder-inser
   expect(resolved[3]?.positionals).toEqual(['${PASSWORD}']);
   expect(resolved[4]?.positionals).toEqual(['label="Other"', '${PASSWORD}']);
   expect(resolved[5]?.positionals).toEqual(['label="Confirm"', 'secret']);
-  expect(resolved[6]?.flags.snapshotScope).toBe('Signed in with secret');
-});
-
-test('write() keeps ref labels and target annotations verbatim because replay matches them literally', () => {
-  const root = mkdtempForTestSync('agent-device-script-writer-literal-identity-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
-  const targetEvidence = {
-    role: 'button',
-    label: 'Pay ${amount}',
-    ancestry: [{ role: 'form', label: 'Checkout ${step}' }],
-    sibling: 0,
-    viewportOrder: 0,
-    verification: 'verified' as const,
-  };
-  const session = makeAuthoringSession('default', {
-    actions: [
-      action({ command: 'click', positionals: ['@e3'], result: { refLabel: 'Pay ${amount}' } }),
-      action({ command: 'click', positionals: ['label="Pay ${amount}"'], targetEvidence }),
-    ],
-  });
-
-  const scope = { values: { amount: 'WRONG', step: 'WRONG' } };
-  const [snapshot, refClick, selectorClick] = writeAndParse(writer, session).parsed.actions.map(
-    (entry, index) => resolveReplayAction(entry, scope, { file: 'test.ad', line: index + 2 }),
-  );
-  // The label also scopes the recorded snapshot, a flag replay does interpolate.
-  expect(snapshot?.flags.snapshotScope).toBe('Pay ${amount}');
-  expect(refClick?.result?.refLabel).toBe('Pay ${amount}');
-  expect(selectorClick?.positionals).toEqual(['label="Pay ${amount}"']);
-  expect(selectorClick?.targetEvidence).toMatchObject({
-    label: 'Pay ${amount}',
-    ancestry: [{ role: 'form', label: 'Checkout ${step}' }],
-  });
+  expect(resolved[6]?.flags.snapshotScope).toBe('Hi secret');
+  expect(resolved[8]?.flags.snapshotScope).toBe('Pay ${amount}');
+  expect(resolved[9]?.result?.refLabel).toBe('Pay ${amount}');
+  expect(resolved[10]?.positionals).toEqual(['label="Pay ${amount}"']);
+  expect(resolved[10]?.targetEvidence).toEqual(targetEvidence);
 });
 
 // #3197: the recording half of `scroll --until`. A recorded hunt for an

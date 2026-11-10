@@ -171,28 +171,43 @@ function parseInterpolation(
   raw: string,
   start: number,
 ): ParsedInterpolation | FailedInterpolation | null {
-  let i = start + 2;
-  if (i >= raw.length || !isInterpolationNameStart(raw[i]!)) return null;
-  i += 1;
-  while (i < raw.length && isInterpolationNameChar(raw[i]!)) i += 1;
-  const key = raw.slice(start + 2, i);
-  if (raw[i] === '}') return { key, fallback: undefined, end: i + 1 };
-  if (raw[i] !== ':' || raw[i + 1] !== '-') return null;
-  i += 2;
+  const nameEnd = readInterpolationNameEnd(raw, start + 2);
+  if (nameEnd === null) return null;
+  const key = raw.slice(start + 2, nameEnd);
+  if (raw[nameEnd] === '}') return { key, fallback: undefined, end: nameEnd + 1 };
+  if (raw[nameEnd] !== ':' || raw[nameEnd + 1] !== '-') return null;
+  return readInterpolationFallback(raw, key, nameEnd + 2);
+}
+
+/** The index just past a variable name starting at `start`, or `null` when none starts there. */
+function readInterpolationNameEnd(raw: string, start: number): number | null {
+  if (start >= raw.length || !isInterpolationNameStart(raw[start]!)) return null;
+  let end = start + 1;
+  while (end < raw.length && isInterpolationNameChar(raw[end]!)) end += 1;
+  return end;
+}
+
+/** The `:-fallback}` text from `start`, with `\` escapes applied. */
+function readInterpolationFallback(
+  raw: string,
+  key: string,
+  start: number,
+): ParsedInterpolation | FailedInterpolation {
   let fallback = '';
+  let i = start;
   while (i < raw.length) {
     const ch = raw[i]!;
     if (ch === '}') return { key, fallback, end: i + 1 };
-    if (ch === '\\') {
-      const next = raw[i + 1];
-      if (next === undefined) return { abortEnd: raw.length };
-      if (isLineTerminator(next)) return { abortEnd: i + 2 };
-      fallback += next;
-      i += 2;
+    if (ch !== '\\') {
+      fallback += ch;
+      i += 1;
       continue;
     }
-    fallback += ch;
-    i += 1;
+    const next = raw[i + 1];
+    if (next === undefined) return { abortEnd: raw.length };
+    if (isLineTerminator(next)) return { abortEnd: i + 2 };
+    fallback += next;
+    i += 2;
   }
   return { abortEnd: raw.length };
 }
@@ -226,42 +241,39 @@ export function resolveReplayString(
   let out = '';
   let i = 0;
   while (i < raw.length) {
-    const ch = raw[i]!;
-    if (ch === '\\' && raw.startsWith('${', i + 1)) {
-      out += '${';
-      i += 3;
-      continue;
-    }
-    if (ch === '$' && raw[i + 1] === '{') {
-      const parsed = parseInterpolation(raw, i);
-      if (parsed !== null && 'abortEnd' in parsed) {
-        out += raw.slice(i, parsed.abortEnd);
-        i = parsed.abortEnd;
-        continue;
-      }
-      if (parsed !== null) {
-        const { key, fallback } = parsed;
-        if (Object.prototype.hasOwnProperty.call(scope.values, key)) {
-          if (isReservedNamespaceKey(key)) {
-            (scope.expandedBuiltinNames ??= new Set()).add(key);
-          }
-          out += String(scope.values[key]);
-        } else if (fallback !== undefined) {
-          out += fallback;
-        } else {
-          throw new AppError(
-            'INVALID_ARGS',
-            `Unresolved variable \${${key}} at ${loc.file}:${loc.line}.`,
-          );
-        }
-        i = parsed.end;
-        continue;
-      }
-    }
-    out += ch;
-    i += 1;
+    const step = readReplayStringStep(raw, i, scope, loc);
+    out += step.text;
+    i = step.next;
   }
   return out;
+}
+
+/** The resolved text of the token at `i`: an escape, an interpolation, or one literal character. */
+function readReplayStringStep(
+  raw: string,
+  i: number,
+  scope: ReplayVarScope,
+  loc: { file: string; line: number },
+): { text: string; next: number } {
+  if (raw[i] === '\\' && raw.startsWith('${', i + 1)) return { text: '${', next: i + 3 };
+  if (raw[i] !== '$' || raw[i + 1] !== '{') return { text: raw[i]!, next: i + 1 };
+  const parsed = parseInterpolation(raw, i);
+  if (parsed === null) return { text: '$', next: i + 1 };
+  if ('abortEnd' in parsed) return { text: raw.slice(i, parsed.abortEnd), next: parsed.abortEnd };
+  return { text: resolveInterpolationValue(parsed, scope, loc), next: parsed.end };
+}
+
+function resolveInterpolationValue(
+  { key, fallback }: ParsedInterpolation,
+  scope: ReplayVarScope,
+  loc: { file: string; line: number },
+): string {
+  if (Object.prototype.hasOwnProperty.call(scope.values, key)) {
+    if (isReservedNamespaceKey(key)) (scope.expandedBuiltinNames ??= new Set()).add(key);
+    return String(scope.values[key]);
+  }
+  if (fallback !== undefined) return fallback;
+  throw new AppError('INVALID_ARGS', `Unresolved variable \${${key}} at ${loc.file}:${loc.line}.`);
 }
 
 export function resolveReplayAction(

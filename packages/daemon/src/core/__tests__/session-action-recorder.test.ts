@@ -892,3 +892,27 @@ test('a stdin fill with --record-as is recorded as its ${VAR} placeholder', () =
   expect(session.actions[0]?.positionals).toEqual(['id="password"', '${PASSWORD}']);
   expect(JSON.stringify(session.actions)).not.toContain(secret);
 });
+
+test('an action lists only the placeholders echo protection actually wrote as live', () => {
+  const session = makeIosSession('default', { scriptPublication: authoringPublication('armed') });
+  for (const [literal, recordAs] of [
+    ['foo', 'FOO'],
+    ['foobar', 'FOOBAR'],
+  ] as const) {
+    recordAction(session, {
+      command: 'fill',
+      positionals: ['id="field"', literal],
+      flags: { recordAs },
+      result: { text: literal },
+    });
+  }
+  const echo = recordAction(session, {
+    command: 'click',
+    positionals: ['@e3'],
+    flags: {},
+    result: { refLabel: 'Hello foobar ${FOO}' },
+  });
+
+  expect(echo?.result?.refLabel).toBe('Hello ${FOOBAR} ${FOO}');
+  expect(echo?.livePlaceholders).toEqual(['FOOBAR']);
+});

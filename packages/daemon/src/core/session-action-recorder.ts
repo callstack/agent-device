@@ -76,33 +76,15 @@ export function recordActionEntry(
   // very entry that introduced it. The session-wide guarantee is for LATER,
   // distinct actions, exactly as #1398 frames it; this entry keeps only the
   // existing fill-step-scoped exact-match protection below.
-  const parameterizedEntry = parameterizeRecordedFill(entry, fillLiteral);
+  const { entry: recordedEntry, echoedNames } = applySessionEchoProtection(
+    session,
+    parameterizeRecordedFill(entry, fillLiteral),
+  );
   const livePlaceholders = [
-    ...new Set([
-      ...(fillLiteral ? [fillLiteral.variableName] : []),
-      ...readEchoedVariableNames(session, parameterizedEntry),
-    ]),
+    ...new Set([...(fillLiteral ? [fillLiteral.variableName] : []), ...echoedNames]),
   ];
-  const recordedEntry = applySessionEchoProtection(session, parameterizedEntry);
   if (fillLiteral) registerRecordedFillLiteral(session, fillLiteral);
-  const action: SessionAction = {
-    ts: Date.now(),
-    command: recordedEntry.command,
-    positionals: recordedEntry.positionals,
-    runtime: recordedEntry.runtime,
-    flags: sanitizeFlags(recordedEntry.flags),
-    result: recordedEntry.result,
-    ...(OBSERVATION_ONLY_COMMANDS.has(recordedEntry.command)
-      ? recordedEntry.interactiveObservation === false
-        ? { publicationIntent: 'authored' as const }
-        : recordedEntry.flags.record === true
-          ? { publicationIntent: 'explicit-record' as const }
-          : {}
-      : {}),
-    ...(recordedEntry.targetEvidence ? { targetEvidence: recordedEntry.targetEvidence } : {}),
-    ...(recordedEntry.targetEvidences ? { targetEvidences: recordedEntry.targetEvidences } : {}),
-    ...(livePlaceholders.length > 0 ? { livePlaceholders } : {}),
-  };
+  const action = buildRecordedAction(recordedEntry, livePlaceholders);
   session.actions.push(action);
   emitDiagnostic({
     level: 'debug',
@@ -113,6 +95,30 @@ export function recordActionEntry(
     },
   });
   return action;
+}
+
+function buildRecordedAction(entry: RecordActionEntry, livePlaceholders: string[]): SessionAction {
+  const publicationIntent = readPublicationIntent(entry);
+  return {
+    ts: Date.now(),
+    command: entry.command,
+    positionals: entry.positionals,
+    runtime: entry.runtime,
+    flags: sanitizeFlags(entry.flags),
+    result: entry.result,
+    ...(publicationIntent ? { publicationIntent } : {}),
+    ...(entry.targetEvidence ? { targetEvidence: entry.targetEvidence } : {}),
+    ...(entry.targetEvidences ? { targetEvidences: entry.targetEvidences } : {}),
+    ...(livePlaceholders.length > 0 ? { livePlaceholders } : {}),
+  };
+}
+
+function readPublicationIntent(
+  entry: RecordActionEntry,
+): SessionAction['publicationIntent'] | undefined {
+  if (!OBSERVATION_ONLY_COMMANDS.has(entry.command)) return undefined;
+  if (entry.interactiveObservation === false) return 'authored';
+  return entry.flags.record === true ? 'explicit-record' : undefined;
 }
 
 type SessionActionStore = {
@@ -225,9 +231,9 @@ function registerRecordedFillLiteral(session: SessionState, fillLiteral: FillLit
 function applySessionEchoProtection(
   session: SessionState,
   entry: RecordActionEntry,
-): RecordActionEntry {
+): { entry: RecordActionEntry; echoedNames: string[] } {
   const literals = session.recordedFillLiterals;
-  if (!literals || literals.size === 0) return entry;
+  if (!literals || literals.size === 0) return { entry, echoedNames: [] };
 
   const result = parameterizeRecordedResultEcho(entry.result, literals);
   const evidenceMode = entry.targetEvidenceMode ?? 'action';
@@ -242,24 +248,37 @@ function applySessionEchoProtection(
       }
     : entry.targetEvidences;
 
-  return { ...entry, result, targetEvidence, targetEvidences };
+  return {
+    entry: { ...entry, result, targetEvidence, targetEvidences },
+    echoedNames: readSubstitutedNames(entry.result, result, literals),
+  };
 }
 
 /**
- * The variables whose literal `applySessionEchoProtection` replaces with a placeholder in this
- * entry's result, the recorded field the script writer emits. Annotations are never interpolated.
+ * The variables whose placeholders echo protection wrote into the result: the placeholders that
+ * occur more often after it than before. Annotations are never interpolated, so only the result
+ * counts toward the live script placeholders.
  */
-function readEchoedVariableNames(session: SessionState, entry: RecordActionEntry): string[] {
-  const literals = session.recordedFillLiterals;
-  if (!literals || literals.size === 0 || !entry.result) return [];
-  const texts = collectStrings(entry.result);
+function readSubstitutedNames(
+  before: RecordActionEntry['result'],
+  after: RecordActionEntry['result'],
+  literals: ReadonlyMap<string, string>,
+): string[] {
+  const beforeTexts = collectStrings(before);
+  const afterTexts = collectStrings(after);
   const names: string[] = [];
-  for (const [literal, placeholder] of literals) {
-    if (!texts.some((text) => text.includes(literal))) continue;
+  for (const placeholder of new Set(literals.values())) {
+    if (countOccurrences(afterTexts, placeholder) <= countOccurrences(beforeTexts, placeholder)) {
+      continue;
+    }
     const name = readRecordedInputVariableName(placeholder);
     if (name) names.push(name);
   }
   return names;
+}
+
+function countOccurrences(texts: readonly string[], needle: string): number {
+  return texts.reduce((count, text) => count + text.split(needle).length - 1, 0);
 }
 
 function collectStrings(value: unknown): string[] {
