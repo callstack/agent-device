@@ -1,6 +1,5 @@
 import type {
   SnapshotNode,
-  SnapshotOptions,
   SnapshotQualityVerdict,
   SnapshotQualityNote,
   IosSnapshotObservation,
@@ -23,7 +22,8 @@ export type ScreenshotResultData = {
   overlayRefs?: ScreenshotOverlayRef[];
   warnings?: string[];
 };
-export type BackendSnapshotResult = {
+/** What a platform interactor's snapshot capture returns, before the daemon builds `SnapshotState`. */
+export type InteractorSnapshotCapture = {
   nodes?: SnapshotNode[];
   truncated?: boolean;
   backend?: string;
@@ -48,11 +48,6 @@ export type BackendSnapshotResult = {
   qualityNotes?: SnapshotQualityNote[];
   warnings?: string[];
   observation?: IosSnapshotObservation;
-};
-export type BackendSnapshotOptions = SnapshotOptions & {
-  includeRects?: boolean;
-  includeHiddenContentHints?: boolean;
-  outPath?: string;
 };
 export type AndroidSnapshotBackendMetadata = {
   backend: 'android-helper';
