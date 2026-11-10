@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   commands: new Map<number, string>(),
   signaled: [] as Array<{ pids: readonly number[]; signal: NodeJS.Signals }>,
   budgetedProbeCalls: [] as number[],
+  onSignal: undefined as (() => void) | undefined,
   processTable: async () => [
     { pid: 41, command: 'wrapper' },
     { pid: 42, ppid: 41, command: 'recorder child' },
@@ -21,9 +22,6 @@ const state = vi.hoisted(() => ({
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/process')>()),
   isProcessAlive: (pid: number) => state.alive.get(pid) ?? false,
-  isProcessZombie: () => false,
-  readProcessStartTime: (pid: number) => state.starts.get(pid) ?? null,
-  readProcessCommand: (pid: number) => state.commands.get(pid) ?? null,
   readProcessIdentityFacts: async (pid: number, timeoutMs?: number) => {
     if (timeoutMs !== undefined) state.budgetedProbeCalls.push(timeoutMs);
     return {
@@ -32,10 +30,24 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => ({
       zombie: false,
     };
   },
+  readProcessIdentities: async (pids: Iterable<number>, timeoutMs?: number) => {
+    if (timeoutMs !== undefined) state.budgetedProbeCalls.push(timeoutMs);
+    return new Map(
+      [...pids].map((pid) => [
+        pid,
+        {
+          startTime: state.starts.get(pid) ?? null,
+          command: state.commands.get(pid) ?? null,
+          zombie: false,
+        },
+      ]),
+    );
+  },
   listHostProcesses: vi.fn(state.processTable),
   signalPidsBestEffort: (pids: readonly number[], signal: NodeJS.Signals) => {
     state.signaled.push({ pids, signal });
     for (const pid of pids) state.alive.set(pid, false);
+    state.onSignal?.();
     return pids.length;
   },
   waitForProcessExit: async (pid: number) => !(state.alive.get(pid) ?? false),
@@ -47,6 +59,7 @@ beforeEach(() => {
   state.commands.clear();
   state.signaled.length = 0;
   state.budgetedProbeCalls.length = 0;
+  state.onSignal = undefined;
   vi.mocked(listHostProcesses).mockImplementation(state.processTable);
 });
 
@@ -78,13 +91,34 @@ function recorder(
   };
 }
 
-test('rejects PID reuse when start time or full command changes', () => {
+test('rejects PID reuse when start time or full command changes', async () => {
   state.alive.set(41, true);
   state.starts.set(41, 'new-start');
   state.commands.set(41, 'different command');
-  expect(inspectManagedProcess({ pid: 41, startTime: 'old-start', command: 'wrapper' })).toBe(
-    'ownership-lost',
-  );
+  await expect(
+    inspectManagedProcess({ pid: 41, startTime: 'old-start', command: 'wrapper' }),
+  ).resolves.toBe('ownership-lost');
+});
+
+// A pid that left during one rung's grace period and was handed to another process must not take
+// the next rung's signal.
+test('a marker whose pid changes hands mid-ladder is never signaled again', async () => {
+  state.alive.set(41, true);
+  state.starts.set(41, 'root-start');
+  state.commands.set(41, 'wrapper');
+  vi.mocked(listHostProcesses).mockResolvedValue([]);
+  const reuse = vi.fn(() => {
+    state.alive.set(41, true);
+    state.starts.set(41, 'reused-start');
+  });
+  state.onSignal = reuse;
+
+  await expect(
+    terminateManagedProcessSet([{ pid: 41, startTime: 'root-start', command: 'wrapper' }]),
+  ).resolves.toBe('ownership-lost');
+
+  expect(state.signaled.map(({ signal }) => signal)).toEqual(['SIGINT']);
+  expect(reuse).toHaveBeenCalledOnce();
 });
 
 test('terminates the exact captured process tree without path guessing', async () => {

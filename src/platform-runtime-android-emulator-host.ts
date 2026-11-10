@@ -1,9 +1,13 @@
 import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/device-readiness-runtime';
 import { listLocalDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
 import { runCmd, runCmdDetached } from '@agent-device/host-kit/command';
-import { stopPidsWithEscalation } from '@agent-device/host-kit/process';
+import {
+  readProcessIdentityFacts,
+  stopProcessAndConfirmExit,
+} from '@agent-device/host-kit/process';
 
 const LSAPPINFO_PID = /"pid"=(\d+)/;
+const EMULATOR_STOP_BUDGET = { termTimeoutMs: 1_500, killTimeoutMs: 1_500 } as const;
 
 // The macOS emulator has no flag to open its window without activating, so this JXA script waits
 // for the emulator to become frontmost and reactivates the app that was frontmost before it.
@@ -31,6 +35,8 @@ function run(argv) {
 export function createAndroidEmulatorHost(
   hostPlatform: NodeJS.Platform = process.platform,
 ): DeviceReadinessRuntimeHost['androidEmulator'] {
+  // What each launch recorded about its emulator, so terminate signals only that process.
+  const launched = new Map<number, { avdName: string; startTime: Promise<string | null> }>();
   return Object.freeze({
     discover: async (request, signal) => {
       signal.throwIfAborted();
@@ -46,6 +52,10 @@ export function createAndroidEmulatorHost(
           ? await readFrontmostAppPid().catch(() => undefined)
           : undefined;
       const pid = runCmdDetached('emulator', args);
+      launched.set(pid, {
+        avdName,
+        startTime: readProcessIdentityFacts(pid).then((facts) => facts.startTime),
+      });
       if (frontmostPid !== undefined) {
         runCmdDetached('osascript', [
           '-l',
@@ -60,9 +70,28 @@ export function createAndroidEmulatorHost(
       return pid;
     },
     terminate: async (pid) => {
-      await stopPidsWithEscalation({ pids: [pid], termTimeoutMs: 1_500, killTimeoutMs: 1_500 });
+      const record = launched.get(pid);
+      if (!record) return;
+      launched.delete(pid);
+      const startTime = await record.startTime;
+      await stopProcessAndConfirmExit(
+        {
+          pid,
+          identity: {
+            ...(startTime ? { startTime } : {}),
+            matches: (command) => isEmulatorCommandFor(command, record.avdName),
+          },
+        },
+        EMULATOR_STOP_BUDGET,
+      );
     },
   });
+}
+
+function isEmulatorCommandFor(command: string, avdName: string): boolean {
+  const args = command.split(/\s+/);
+  const avdFlag = args.indexOf('-avd');
+  return avdFlag >= 0 && args[avdFlag + 1] === avdName;
 }
 
 async function readFrontmostAppPid(): Promise<number | undefined> {

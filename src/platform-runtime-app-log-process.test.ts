@@ -19,9 +19,25 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/process')>()),
   isProcessAlive: () => processIdentity.alive,
-  readProcessCommand: () => processIdentity.command,
-  readProcessStartTime: () => processIdentity.startTime,
-  waitForProcessExit: async () => true,
+  readProcessIdentityFacts: async () => ({
+    startTime: processIdentity.startTime,
+    command: processIdentity.command,
+    zombie: processIdentity.alive ? false : null,
+  }),
+  // The shared escalation is host-kit's to prove; here it answers from the same fixture identity.
+  stopProcessAndConfirmExit: async (target: {
+    pid: number;
+    identity: { startTime?: string; matches?: (command: string) => boolean };
+  }) => {
+    if (!processIdentity.alive) return { status: 'stopped' };
+    const confirmed =
+      processIdentity.startTime === target.identity.startTime &&
+      processIdentity.command !== null &&
+      target.identity.matches?.(processIdentity.command) === true;
+    if (!confirmed) return { status: 'retained', reason: 'identity-unverified' };
+    process.kill(target.pid, 'SIGTERM');
+    return { status: 'stopped', signal: 'SIGTERM' };
+  },
 }));
 
 import {

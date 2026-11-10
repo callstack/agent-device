@@ -18,7 +18,7 @@ import {
 
 const PID = 4242;
 const BUDGET = { termTimeoutMs: 1_000, killTimeoutMs: 500 };
-type Signal = 'SIGTERM' | 'SIGKILL';
+type Signal = 'SIGTERM' | 'SIGINT' | 'SIGKILL';
 
 const START = 'Mon Oct 12 00:00:00 2026';
 const OTHER_START = 'Tue Oct 13 09:00:00 2026';
@@ -28,7 +28,11 @@ const STOPPED: ConfirmedProcessStop = { status: 'stopped' };
 /** `ps` found the row and told nothing for that column, which is unknown rather than absent. */
 const EMPTY = { stdout: '', stderr: '', exitCode: 0 };
 const PS_REFUSED = { stdout: '', stderr: 'ps: not permitted', exitCode: 1 };
-const psAnswer = (value: string) => ({ stdout: `${value}\n`, stderr: '', exitCode: 0 });
+const psRow = (...columns: string[]) => ({
+  stdout: `${[PID, ...columns].join(' ')}\n`,
+  stderr: '',
+  exitCode: 0,
+});
 const refused = (signal: Signal): ConfirmedProcessStop => ({
   status: 'retained',
   reason: 'signal-failed',
@@ -60,6 +64,10 @@ type HostCase = Readonly<{
   identity?: HostIdentity;
   /** A `ps` the host refuses outright, so identity cannot be read at all. */
   psFails?: boolean;
+  /** The command line the process shows once it has received this signal, as after an `exec`. */
+  commandAfterSignal?: Readonly<{ signal: Signal; command: string }>;
+  /** The opening signal the caller names for its stop. */
+  gracefulSignal?: 'SIGTERM' | 'SIGINT';
   /** The signals the stop must spend, in order, and the verdict each host answer earns. */
   expect: { outcome: ConfirmedProcessStop; signals: Signal[] };
 }>;
@@ -72,8 +80,14 @@ const UNREADABLE = { identity: { startTime: null, command: null } } satisfies Ho
 /** The process has run its course: liveness stops answering for it before anything is signaled. */
 const GONE = { exitsAfterProbes: 0 } satisfies HostModel;
 const ZOMBIE = { ...GONE, afterExit: 'zombie' } satisfies HostModel;
-const STOPPED_BY_TERM: Expect = { outcome: STOPPED, signals: ['SIGTERM'] };
-const STOPPED_BY_KILL: Expect = { outcome: STOPPED, signals: ['SIGTERM', 'SIGKILL'] };
+const STOPPED_BY_TERM: Expect = {
+  outcome: { status: 'stopped', signal: 'SIGTERM' },
+  signals: ['SIGTERM'],
+};
+const STOPPED_BY_KILL: Expect = {
+  outcome: { status: 'stopped', signal: 'SIGKILL' },
+  signals: ['SIGTERM', 'SIGKILL'],
+};
 const NEVER_SIGNALED: Expect = { outcome: STOPPED, signals: [] };
 const REFUSED_ON_TERM: Expect = { outcome: refused('SIGTERM'), signals: ['SIGTERM'] };
 const REFUSED_ON_KILL: Expect = { outcome: refused('SIGKILL'), signals: STOPPED_BY_KILL.signals };
@@ -181,6 +195,26 @@ const STOP_CASES: HostCase[] = [
     expect: UNVERIFIED,
   },
   {
+    // The grace period ends with the pid running another program under the same lifetime, as after
+    // an `exec`: SIGKILL re-proves identity first and spares it.
+    name: 'execs another program while it is given its grace period',
+    commandAfterSignal: { signal: 'SIGTERM', command: '/usr/bin/other --serve' },
+    ...HELD,
+    expect: { outcome: STOPPED_BY_TERM.outcome, signals: ['SIGTERM'] },
+  },
+  {
+    name: 'finalizes on the interrupt its caller opens with',
+    gracefulSignal: 'SIGINT',
+    exitsOnSignal: 'SIGINT',
+    expect: { outcome: { status: 'stopped', signal: 'SIGINT' }, signals: ['SIGINT'] },
+  },
+  {
+    name: 'ignores the interrupt its caller opens with and takes SIGKILL',
+    gracefulSignal: 'SIGINT',
+    exitsOnSignal: 'SIGKILL',
+    expect: { outcome: STOPPED_BY_KILL.outcome, signals: ['SIGINT', 'SIGKILL'] },
+  },
+  {
     name: 'pid the host has handed to another lifetime',
     identity: { startTime: OTHER_START },
     expect: NEVER_SIGNALED,
@@ -211,6 +245,8 @@ function driveHost(model: HostCase): { signals: Signal[] } {
     }
     const name = signal as Signal;
     signals.push(name);
+    if (model.commandAfterSignal?.signal === name)
+      identity.command = model.commandAfterSignal.command;
     const errno = model.answers?.[name];
     if (errno) throw Object.assign(new Error(`kill refused: ${errno}`), { code: errno });
     if (model.exitsOnSignal === name) ended = true;
@@ -219,7 +255,7 @@ function driveHost(model: HostCase): { signals: Signal[] } {
 
   // Absent means the recorded process, `null` means the host withholds the column, and a string is
   // what it says instead.
-  const identity = {
+  const identity: { startTime: string | null; command: string | null } = {
     startTime: model.identity?.startTime === undefined ? START : model.identity.startTime,
     command: model.identity?.command === undefined ? COMMAND : model.identity.command,
   };
@@ -228,11 +264,13 @@ function driveHost(model: HostCase): { signals: Signal[] } {
     // A process the host has fully released, and one that left no row, both answer no fields.
     if (hasEnded() && model.afterExit !== 'zombie') return EMPTY;
     const field = String(args[3]);
-    if (field === 'state=') return psAnswer(hasEnded() && model.afterExit === 'zombie' ? 'Z' : 'S');
+    const state = hasEnded() && model.afterExit === 'zombie' ? 'Z' : 'S';
     // Withheld is its own answer: `ps` finds the row and reports nothing for that column, which is
     // how Windows answers `CommandLine` for another user's process.
-    const column = field === 'lstart=' ? identity.startTime : identity.command;
-    return column === null ? EMPTY : psAnswer(column);
+    if (field === 'pid=,state=,lstart=') {
+      return identity.startTime === null ? psRow(state) : psRow(state, identity.startTime);
+    }
+    return identity.command === null ? EMPTY : psRow(identity.command);
   });
   return { signals };
 }
@@ -262,7 +300,10 @@ test.skipIf(process.platform === 'win32').each(STOP_CASES)(
     const host = driveHost(testCase);
     // Both stage budgets, advanced on a fake clock: a retained outcome must not cost real time.
     vi.useFakeTimers();
-    const stop = stopProcessAndConfirmExit(targetOf(testCase), BUDGET);
+    const budget = testCase.gracefulSignal
+      ? { ...BUDGET, gracefulSignal: testCase.gracefulSignal }
+      : BUDGET;
+    const stop = stopProcessAndConfirmExit(targetOf(testCase), budget);
     await vi.advanceTimersByTimeAsync(BUDGET.termTimeoutMs + BUDGET.killTimeoutMs);
 
     assert.deepEqual(await stop, testCase.expect.outcome);

@@ -9,12 +9,25 @@ const { runCmd, runCmdDetached } = vi.hoisted(() => ({
   runCmdDetached: vi.fn(() => 4242),
 }));
 vi.mock('@agent-device/host-kit/command', () => ({ runCmd, runCmdDetached }));
+const { readProcessIdentityFacts, stopProcessAndConfirmExit } = vi.hoisted(() => ({
+  readProcessIdentityFacts: vi.fn(async () => ({
+    startTime: 'Mon Nov  9 10:00:00 2026',
+    command: 'emulator -avd Pixel_9',
+    zombie: false,
+  })),
+  stopProcessAndConfirmExit: vi.fn(async () => ({ status: 'stopped' as const })),
+}));
+vi.mock('@agent-device/host-kit/process', () => ({
+  readProcessIdentityFacts,
+  stopProcessAndConfirmExit,
+}));
 
 import { createAndroidEmulatorHost } from './platform-runtime-android-emulator-host.ts';
 
 beforeEach(() => {
   runCmd.mockClear();
   runCmdDetached.mockClear();
+  stopProcessAndConfirmExit.mockClear();
 });
 
 test('a windowed macOS launch hands focus back to the app frontmost before launch', async () => {
@@ -77,4 +90,35 @@ test('a launch on another host leaves window focus alone', async () => {
 
   expect(runCmd).not.toHaveBeenCalled();
   expect(runCmdDetached).toHaveBeenCalledOnce();
+});
+
+test('terminate stops only the emulator this host launched, by its recorded identity', async () => {
+  const host = createAndroidEmulatorHost('linux');
+  await host.launch('Pixel_9', true, 90_000);
+
+  await host.terminate(4242);
+
+  expect(stopProcessAndConfirmExit).toHaveBeenCalledOnce();
+  const [target, budget] = stopProcessAndConfirmExit.mock.calls[0] as unknown as [
+    { pid: number; identity: { startTime?: string; matches: (command: string) => boolean } },
+    { termTimeoutMs: number; killTimeoutMs: number },
+  ];
+  expect(target.pid).toBe(4242);
+  expect(target.identity.startTime).toBe('Mon Nov  9 10:00:00 2026');
+  expect(target.identity.matches('/sdk/emulator/qemu-system-aarch64 -avd Pixel_9 -no-window')).toBe(
+    true,
+  );
+  expect(target.identity.matches('/sdk/emulator/emulator -avd Pixel_9_Pro')).toBe(false);
+  expect(budget).toEqual({ termTimeoutMs: 1_500, killTimeoutMs: 1_500 });
+});
+
+test('terminate signals nothing for a pid this host did not launch', async () => {
+  const host = createAndroidEmulatorHost('linux');
+  await host.launch('Pixel_9', true, 90_000);
+  await host.terminate(4242);
+
+  await host.terminate(4242);
+  await host.terminate(5151);
+
+  expect(stopProcessAndConfirmExit).toHaveBeenCalledOnce();
 });

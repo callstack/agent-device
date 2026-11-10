@@ -20,14 +20,14 @@ import { openVerifiedFileForRead } from '@agent-device/host-kit/file';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import {
   isProcessAlive,
-  readProcessCommand,
-  readProcessStartTime,
-  waitForProcessExit,
+  readProcessIdentityFacts,
+  stopProcessAndConfirmExit,
 } from '@agent-device/host-kit/process';
 
 import { requireManagedSessionArtifactPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 
 const APP_LOG_PID_FILENAME = 'app-log.pid';
+const APP_LOG_STOP_BUDGET = { termTimeoutMs: 2_000, killTimeoutMs: 2_000 } as const;
 
 type ManagedAppLogCommandChild = Readonly<{
   pid?: number;
@@ -60,7 +60,7 @@ export function createManagedAppLogProcesses(
       await startAppLogProcess(root, request, launch, signal),
     readMarker: async (markerPath: string) => readMarker(root, markerPath),
     clearMarker: async (markerPath: string) => clearMarker(root, markerPath),
-    inspect: async (marker: AppLogProcessMarker) => inspectOwnedProcess(marker),
+    inspect: async (marker: AppLogProcessMarker) => await inspectOwnedProcess(marker),
     terminate: async (marker: AppLogProcessMarker) => await terminateOwnedProcess(marker),
   });
 }
@@ -290,9 +290,8 @@ function clearPublishedMarker(
   }
 }
 
-function processMarker(pid: number): AppLogProcessMarker | undefined {
-  const startTime = readProcessStartTime(pid);
-  const command = readProcessCommand(pid);
+async function processMarker(pid: number): Promise<AppLogProcessMarker | undefined> {
+  const { startTime, command } = await readProcessIdentityFacts(pid);
   if (!startTime || !command) return undefined;
   return Object.freeze({
     pid,
@@ -303,7 +302,7 @@ function processMarker(pid: number): AppLogProcessMarker | undefined {
 
 async function resolveProcessMarker(pid: number): Promise<AppLogProcessMarker | undefined> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const marker = processMarker(pid);
+    const marker = await processMarker(pid);
     if (marker) return marker;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
@@ -402,37 +401,35 @@ function requireManagedMarkerPath(root: string, markerPath: string): string {
   });
 }
 
-function inspectOwnedProcess(marker: AppLogProcessMarker): AppLogProcessOwnership {
+async function inspectOwnedProcess(marker: AppLogProcessMarker): Promise<AppLogProcessOwnership> {
   if (!isProcessAlive(marker.pid)) return 'missing';
-  return markerMatchesLiveProcess(marker) ? 'owned-alive' : 'ownership-lost';
+  const facts = await readProcessIdentityFacts(marker.pid);
+  if (facts.zombie) return 'missing';
+  const matches =
+    marker.startTime.length > 0 &&
+    marker.command.length > 0 &&
+    facts.startTime === marker.startTime &&
+    facts.command === marker.command;
+  return matches ? 'owned-alive' : 'ownership-lost';
 }
 
+/**
+ * Stops the marked process through the shared TERM-then-KILL escalation, which re-proves the
+ * marker's identity before each signal. A marker the host does not confirm is never signaled.
+ */
 async function terminateOwnedProcess(
   marker: AppLogProcessMarker,
 ): Promise<'terminated' | 'already-missing' | 'ownership-lost'> {
-  if (!isProcessAlive(marker.pid)) return 'already-missing';
-  if (!markerMatchesLiveProcess(marker)) return 'ownership-lost';
-  try {
-    process.kill(marker.pid, 'SIGTERM');
-  } catch {
-    return 'already-missing';
-  }
-  if (!(await waitForProcessExit(marker.pid, 2_000))) {
-    if (!markerMatchesLiveProcess(marker)) return 'ownership-lost';
-    try {
-      process.kill(marker.pid, 'SIGKILL');
-    } catch {
-      return 'already-missing';
-    }
-    await waitForProcessExit(marker.pid, 2_000);
-  }
-  return isProcessAlive(marker.pid) ? 'ownership-lost' : 'terminated';
-}
-
-function markerMatchesLiveProcess(marker: AppLogProcessMarker): boolean {
-  if (!marker.startTime || !marker.command) return false;
-  return (
-    readProcessStartTime(marker.pid) === marker.startTime &&
-    readProcessCommand(marker.pid) === marker.command
+  const ownership = await inspectOwnedProcess(marker);
+  if (ownership === 'missing') return 'already-missing';
+  if (ownership === 'ownership-lost') return 'ownership-lost';
+  const stop = await stopProcessAndConfirmExit(
+    {
+      pid: marker.pid,
+      identity: { startTime: marker.startTime, matches: (command) => command === marker.command },
+    },
+    APP_LOG_STOP_BUDGET,
   );
+  if (stop.status === 'stopped') return stop.signal ? 'terminated' : 'already-missing';
+  return 'ownership-lost';
 }

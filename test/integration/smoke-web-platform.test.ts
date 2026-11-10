@@ -27,7 +27,7 @@ import {
   isProcessAlive,
   listHostProcesses,
   readProcessStartTime,
-  stopPidsWithEscalation,
+  stopProcessAndConfirmExit,
 } from '@agent-device/host-kit/process';
 
 const TEST_NAME = 'live web platform e2e smoke';
@@ -300,14 +300,22 @@ async function forceKillManagedBrowserProcesses(status: AgentBrowserToolStatus):
   const processes = await listHostProcesses({ timeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS });
   const summary = await summarizeAgentBrowserProcesses(processes, status);
   if (summary.count === 0) return;
-  const signalPids = expandProcessTree(summary.pids, processes).map(
-    (processInfo) => processInfo.pid,
+  // The listing named each process, so the stop signals only a pid still running that command.
+  await Promise.all(
+    expandProcessTree(summary.pids, processes).map(
+      async (processInfo) =>
+        await stopProcessAndConfirmExit(
+          {
+            pid: processInfo.pid,
+            identity: { matches: (command) => command === processInfo.command },
+          },
+          {
+            termTimeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS,
+            killTimeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS,
+          },
+        ),
+    ),
   );
-  await stopPidsWithEscalation({
-    pids: signalPids,
-    termTimeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS,
-    killTimeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS,
-  });
 }
 
 function readDaemonPid(stateDir: string): number {

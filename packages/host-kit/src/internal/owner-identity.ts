@@ -3,6 +3,7 @@ import {
   isProcessAlive,
   isProcessZombie,
   readHostProcessIdentityObservations,
+  readHostProcessIdentityObservationsAsync,
   readProcessStartTime,
   type HostProcessIdentityObservation,
 } from './host-process.ts';
@@ -24,8 +25,20 @@ export type OwnerLiveness =
   | 'owner-state-dir-gone'
   | 'unknown';
 
+let currentOwnerIdentity: Readonly<OwnerIdentity> | undefined;
+
+/**
+ * This process's identity. A process's own start time never changes, so the first readable answer
+ * is kept for the life of the process and every later call is free. An unreadable start time is
+ * not kept: the next call asks the host again rather than recording an owner without one.
+ */
 export function readCurrentOwnerIdentity(): OwnerIdentity {
-  return { pid: process.pid, startTime: readProcessStartTime(process.pid) };
+  if (currentOwnerIdentity?.pid !== process.pid) {
+    const identity = { pid: process.pid, startTime: readProcessStartTime(process.pid) };
+    if (identity.startTime === null) return identity;
+    currentOwnerIdentity = Object.freeze(identity);
+  }
+  return { ...currentOwnerIdentity };
 }
 
 export function ownerIdentityMatches(
@@ -79,6 +92,20 @@ export function classifyOwnerLiveness(params: {
   const observation =
     readHostProcessIdentityObservations([params.owner.pid]).get(params.owner.pid) ?? null;
   return classifyLiveOwnerFromObservation(params, observation);
+}
+
+/**
+ * {@link classifyOwnerLiveness} off the event loop, for a caller that is already waiting. A pid
+ * that `kill(pid, 0)` already proves dead is judged without running the process tool at all.
+ */
+export async function classifyOwnerLivenessAsync(params: {
+  owner: Pick<OwnerIdentity, 'pid' | 'startTime'>;
+  stateDir?: string;
+}): Promise<OwnerLiveness> {
+  const guarded = guardOwnerPid(params.owner);
+  if (guarded) return guarded;
+  const observations = await readHostProcessIdentityObservationsAsync([params.owner.pid]);
+  return classifyOwnerLivenessFromObservation(params, observations.get(params.owner.pid) ?? null);
 }
 
 export function classifyOwnerLivenessFromObservation(

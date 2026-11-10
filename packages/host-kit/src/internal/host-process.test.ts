@@ -10,7 +10,6 @@ import {
   readProcessCommand,
   readProcessStartTime,
   signalPidsBestEffort,
-  stopPidsWithEscalation,
   uniquePositivePids,
 } from './host-process.ts';
 
@@ -120,64 +119,6 @@ test('best-effort signaling ignores invalid, current, and failed pids', () => {
     ]);
   } finally {
     killSpy.mockRestore();
-  }
-});
-
-test('pid escalation sends TERM, then KILL only to live pids', async () => {
-  vi.useFakeTimers();
-  const alivePids = new Set([101, 202, 303]);
-  const calls: Array<{ pid: number; signal: string | number | undefined }> = [];
-  const killSpy = vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
-    const numericPid = Number(pid);
-    calls.push({ pid: numericPid, signal });
-    if (signal === 'SIGTERM' && numericPid === 202) alivePids.delete(numericPid);
-    if (signal === 'SIGKILL') alivePids.delete(numericPid);
-    if (signal === 0 && !alivePids.has(numericPid)) {
-      const error = new Error('not found') as NodeJS.ErrnoException;
-      error.code = 'ESRCH';
-      throw error;
-    }
-    return true;
-  });
-
-  try {
-    const stopped = stopPidsWithEscalation({
-      pids: [101, 202, 101, -1, process.pid, 303],
-      termTimeoutMs: 1_500,
-      killTimeoutMs: 1_000,
-    });
-    await vi.advanceTimersByTimeAsync(1_500);
-    await stopped;
-
-    assert.deepEqual(
-      calls.filter((call) => call.signal === 'SIGTERM').map((call) => call.pid),
-      [101, 202, 303],
-    );
-    assert.deepEqual(
-      calls.filter((call) => call.signal === 'SIGKILL').map((call) => call.pid),
-      [101, 303],
-    );
-  } finally {
-    killSpy.mockRestore();
-    vi.useRealTimers();
-  }
-});
-
-test('pid escalation returns immediately for an empty pid set', async () => {
-  vi.useFakeTimers();
-  const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
-
-  try {
-    await stopPidsWithEscalation({
-      pids: [-1, 0, process.pid],
-      termTimeoutMs: 1_500,
-      killTimeoutMs: 1_000,
-    });
-
-    assert.equal(killSpy.mock.calls.length, 0);
-  } finally {
-    killSpy.mockRestore();
-    vi.useRealTimers();
   }
 });
 

@@ -6,6 +6,7 @@ export {
   type ConfirmedProcessStopDetails,
   describeUnconfirmedProcessStop,
   expandProcessTree,
+  type GracefulStopSignal,
   hostNodeExecutablePath,
   hostNodeVersion,
   hostPlatform,
@@ -26,10 +27,10 @@ export {
   readHostProcessIdentityObservations,
   readHostProcessIdentityObservationsAsync,
   readProcessCommand,
+  readProcessIdentities,
   readProcessIdentityFacts,
   readProcessStartTime,
   signalPidsBestEffort,
-  stopPidsWithEscalation,
   stopProcessAndConfirmExit,
   uniquePositivePids,
   waitForProcessExit,
@@ -44,6 +45,7 @@ export {
 } from './internal/owned-process-record.ts';
 export {
   classifyOwnerLiveness,
+  classifyOwnerLivenessAsync,
   classifyOwnerLivenessFromObservation,
   isProcessPid,
   type OwnerIdentity,
