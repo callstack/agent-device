@@ -102,7 +102,7 @@ test('a missing cached directory archive is rebuilt from the live source', async
     const first = await runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
     downloads.push(first);
     expect(gunzipSync(await buffer(first.stream)).includes(expected)).toBe(true);
-    await vi.waitFor(() => expect(first.stream.closed).toBe(true));
+    await closed(first.stream);
     first.release();
     const oldArchive = String(first.stream.path);
     fs.unlinkSync(oldArchive);
@@ -110,7 +110,7 @@ test('a missing cached directory archive is rebuilt from the live source', async
     const second = await runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
     downloads.push(second);
     expect(gunzipSync(await buffer(second.stream)).includes(expected)).toBe(true);
-    await vi.waitFor(() => expect(second.stream.closed).toBe(true));
+    await closed(second.stream);
     second.release();
     expect(String(second.stream.path)).not.toBe(oldArchive);
     expect(fs.existsSync(path.dirname(oldArchive))).toBe(false);
@@ -120,7 +120,7 @@ test('a missing cached directory archive is rebuilt from the live source', async
   } finally {
     for (const download of downloads) {
       download.stream.destroy();
-      await vi.waitFor(() => expect(download.stream.closed).toBe(true));
+      await closed(download.stream);
       download.release();
     }
     runtime.dispose();
@@ -367,7 +367,7 @@ test('disposing every archive waiter aborts the shared build and removes its tem
     openings.push(runtime.run(() => openDownloadableArtifact(id, undefined, process.env)));
     for (const opening of openings) void opening.catch(() => {});
     runtime.dispose();
-    await vi.waitFor(() => expect(archiveSignal?.aborted).toBe(true));
+    await aborted(archiveSignal);
     expect(fs.existsSync(artifactPath)).toBe(true);
     expect(fs.existsSync(archiveDir)).toBe(true);
     continueArchive();
@@ -385,8 +385,40 @@ test('disposing every archive waiter aborts the shared build and removes its tem
   }
 });
 
+async function closed(stream: OpenedDownloadableArtifact['stream']): Promise<void> {
+  if (!stream.closed) await once(stream, 'close');
+}
+
+async function aborted(signal: AbortSignal | undefined): Promise<void> {
+  if (!signal) throw new Error('the archive build never received an abort signal');
+  if (!signal.aborted) await once(signal, 'abort');
+}
+
+/** Spies on `fs.rmSync` and resolves `removal(target)` once that path has been removed. */
+function watchRemovals() {
+  const rmSync = fs.rmSync;
+  const removedPaths = new Set<string>();
+  const waiters: Array<{ target: string; resolve: () => void }> = [];
+  const spy = vi.spyOn(fs, 'rmSync').mockImplementation((target, options) => {
+    try {
+      rmSync(target, options);
+    } finally {
+      removedPaths.add(String(target));
+      for (const waiter of waiters) if (waiter.target === String(target)) waiter.resolve();
+    }
+  });
+  return {
+    spy,
+    removal: (target: string) =>
+      removedPaths.has(target)
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => waiters.push({ target, resolve })),
+  };
+}
+
 function holdArtifactReads() {
   const pending: Array<{ file: string; complete: () => void }> = [];
+  const pendingWaiters: Array<{ count: number; resolve: () => void }> = [];
   const createReadStream = fs.createReadStream;
   let held = true;
   const spy = vi.spyOn(fs, 'createReadStream').mockImplementation((file, options) =>
@@ -398,8 +430,11 @@ function holdArtifactReads() {
         read(fd, buffer, offset, length, position, callback) {
           fs.read(fd, buffer, offset, length, position, (error, bytesRead, readBuffer) => {
             const complete = () => callback(error, bytesRead, readBuffer);
-            if (held) pending.push({ file: String(file), complete });
-            else complete();
+            if (!held) return complete();
+            pending.push({ file: String(file), complete });
+            for (const waiter of pendingWaiters) {
+              if (pending.length >= waiter.count) waiter.resolve();
+            }
           });
         },
       },
@@ -407,6 +442,11 @@ function holdArtifactReads() {
   );
   return {
     pending,
+    /** Resolves once `count` reads are held, without polling the read queue. */
+    untilPending: (count: number) =>
+      pending.length >= count
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => pendingWaiters.push({ count, resolve })),
     release: () => {
       held = false;
       for (const { complete } of pending.splice(0)) complete();
@@ -424,7 +464,7 @@ test.each(['old-first', 'new-first'] as const)(
     fs.writeFileSync(path.join(artifactPath, 'payload'), 'shared source marker');
     const runtime = createRuntimeStateHandle();
     const reads = holdArtifactReads();
-    const removed = vi.spyOn(fs, 'rmSync');
+    const { spy: removed, removal } = watchRemovals();
     const downloads: OpenedDownloadableArtifact[] = [];
     const track = () =>
       runtime.run(() => trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }));
@@ -441,7 +481,8 @@ test.each(['old-first', 'new-first'] as const)(
       );
       runtime.run(() => cleanupDownloadableArtifact(secondId));
       for (const download of downloads) download.stream.resume();
-      await vi.waitFor(() => expect(reads.pending).toHaveLength(2));
+      await reads.untilPending(2);
+      expect(reads.pending).toHaveLength(2);
       runtime.dispose();
       expect(fs.existsSync(artifactPath)).toBe(true);
       for (const download of downloads) expect(download.stream.closed).toBe(false);
@@ -451,13 +492,12 @@ test.each(['old-first', 'new-first'] as const)(
       );
       expect(pendingIndex).toBeGreaterThanOrEqual(0);
       reads.pending.splice(pendingIndex, 1)[0]!.complete();
-      await vi.waitFor(() =>
-        expect(downloads.filter(({ stream }) => stream.closed)).toHaveLength(1),
-      );
-      expect(firstToClose.stream.closed).toBe(true);
+      await closed(firstToClose.stream);
+      expect(downloads.filter(({ stream }) => stream.closed)).toHaveLength(1);
       expect(fs.existsSync(artifactPath)).toBe(true);
       reads.release();
-      await vi.waitFor(() => expect(fs.existsSync(artifactPath)).toBe(false));
+      await removal(artifactPath);
+      expect(fs.existsSync(artifactPath)).toBe(false);
       for (const download of downloads) {
         expect(download.stream.closed).toBe(true);
         const archiveDir = path.dirname(String(download.stream.path));
@@ -488,7 +528,7 @@ test.each(['expiry-first', 'deadline-first'] as const)(
     const reads = holdArtifactReads();
     const timers = vi.spyOn(globalThis, 'setTimeout');
     const clearedTimers = vi.spyOn(globalThis, 'clearTimeout');
-    const removed = vi.spyOn(fs, 'rmSync');
+    const { spy: removed, removal } = watchRemovals();
     let download: OpenedDownloadableArtifact | undefined;
     try {
       const id = runtime.run(() =>
@@ -502,7 +542,8 @@ test.each(['expiry-first', 'deadline-first'] as const)(
       download = await opening;
       const archiveDir = path.dirname(String(download.stream.path));
       download.stream.resume();
-      await vi.waitFor(() => expect(reads.pending).toHaveLength(1));
+      await reads.untilPending(1);
+      expect(reads.pending).toHaveLength(1);
       if (order === 'expiry-first') runtime.run(expire);
       expect(download.stream.destroyed).toBe(false);
       expect(fs.existsSync(artifactPath)).toBe(true);
@@ -513,14 +554,15 @@ test.each(['expiry-first', 'deadline-first'] as const)(
       expect(download.stream.closed).toBe(false);
       expect(fs.existsSync(artifactPath)).toBe(true);
       reads.release();
-      await vi.waitFor(() => expect(download!.stream.closed).toBe(true));
+      await closed(download.stream);
       if (order === 'deadline-first') {
         expect(fs.existsSync(artifactPath)).toBe(true);
         expect(fs.existsSync(archiveDir)).toBe(true);
         expect(clearedTimers.mock.calls.some(([timer]) => timer === expiryTimer)).toBe(false);
         runtime.run(expire);
       }
-      await vi.waitFor(() => expect(fs.existsSync(artifactPath)).toBe(false));
+      await removal(artifactPath);
+      expect(fs.existsSync(artifactPath)).toBe(false);
       expect(download.stream.closed).toBe(true);
       expect(fs.existsSync(archiveDir)).toBe(false);
       for (const target of [artifactPath, archiveDir]) {

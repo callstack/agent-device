@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { afterEach, beforeEach, vi } from 'vitest';
 import { createSnapshotSourceHost } from './host.ts';
 import { SnapshotSourceError } from '@agent-device/capture-kit/snapshot-source-channel';
 import { snapshotSourceError } from './errors.ts';
@@ -61,6 +62,22 @@ export type LifecycleFixture = {
   /** The socket each bridge connect attempt was for, in order, including one that has not returned. */
   connects: string[];
 };
+
+/**
+ * Runs each test in the file on fake timers that jump to the next timer whenever the loop idles.
+ * The fake helper answers through timers, and the manager's budget waits are timers too, so timer
+ * order alone decides each race: a loaded host cannot spend a 100 ms budget before a 0 ms reply.
+ * A test that drives time itself installs fake timers again in manual mode.
+ */
+export function installTimerOrderedTime(): void {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setTimerTickMode('nextTimerAsync');
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+}
 
 export function deadline(signal?: AbortSignal, timeoutMs = limits.maxDurationMs) {
   return createSnapshotSourceDeadline(timeoutMs, signal);
@@ -164,11 +181,13 @@ export function createLifecycleFixture(
   const host: SnapshotSourceHost = {
     ...realHost,
     emitDiagnostic: (event) => diagnostics.push(event),
+    // In memory, like every other fake here: the tests run on fake timers that advance whenever the
+    // loop idles, so a real filesystem call would let a budget timer fire before it returned.
     ensureDirectory: async (directoryPath) => {
       directorySetups.push(directoryPath);
       if (options.pauseAtDirectorySetup) await options.pauseAtDirectorySetup();
-      await realHost.ensureDirectory(directoryPath);
     },
+    remove: async () => {},
     readTargetProcessStartTime: async () => {
       const startTime = options.targetStartTimes?.shift();
       return startTime === undefined ? 'target-start' : startTime;
