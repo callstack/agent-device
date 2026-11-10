@@ -18,7 +18,7 @@ import type {
   AgentArtifactsResult,
   CloudArtifactProvider,
 } from '@agent-device/contracts/observability';
-import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { requestCwd, type DaemonRequest } from '../../core/daemon-request.ts';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
   leaseReleaseRequestFor,
@@ -367,7 +367,7 @@ function leaseLifecycleContext(req: DaemonRequest, host: HostEnvironment): Lease
   return {
     flags: req.flags,
     ...(typeof req.flags?.providerApp === 'string' ? { initialApp: req.flags.providerApp } : {}),
-    cwd: typeof req.meta?.cwd === 'string' ? req.meta.cwd : host.cwd,
+    cwd: requestCwd(req, host),
     ...(req.internal?.publicNetworkOnly ? { publicNetworkOnly: true } : {}),
   };
 }

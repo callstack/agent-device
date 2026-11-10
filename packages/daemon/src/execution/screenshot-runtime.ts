@@ -43,7 +43,7 @@ import {
   type ScreenshotRuntimeBindings,
 } from './screenshot-runtime-binding.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
-import type { DaemonRequest } from '../core/daemon-request.ts';
+import { requestCwd, type DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';
 
 /**
@@ -349,7 +349,7 @@ function readScreenshotRequest(
   const positionals = req.positionals ?? [];
   const flags = req.flags ?? {};
   const expand = (value: string | undefined) =>
-    value === undefined ? undefined : expandSessionPath(value, req.meta?.cwd ?? hostCwd);
+    value === undefined ? undefined : expandSessionPath(value, requestCwd(req, { cwd: hostCwd }));
   const positionalPath = expand(positionals[0]);
   const outFlag = expand(flags.out);
   return {

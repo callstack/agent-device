@@ -77,7 +77,7 @@ import {
 } from '@agent-device/session-journal/session-event-log';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import { type SessionStore } from '../core/session-store.ts';
-import type { DaemonRequest } from '../core/daemon-request.ts';
+import { requestCwd, type DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import { teardownSessionResources } from '../sessions/session-teardown.ts';
 import { finalizeBoundSessionApplicationLifecycle } from './application-lifecycle-recovery.ts';
@@ -330,7 +330,7 @@ export async function createRequestExecutionScope(params: {
       command,
       sessionName,
       dispatchLedger,
-      workspace: scopedReq.meta?.cwd ?? params.host.cwd,
+      workspace: requestCwd(scopedReq, params.host),
       callerCwd: scopedReq.meta?.cwd,
       stateDir: sessionStore.resolveDaemonStateDir(),
       deviceRuntimeGateway: params.deviceRuntimeGateway,
@@ -435,7 +435,7 @@ export async function createRequestExecutionScope(params: {
                 hasInMemorySessionOwner: (device) =>
                   sessionStore.findByDevice(device.id) !== undefined,
                 session: sessionName,
-                workspace: scopedReq.meta?.cwd ?? params.host.cwd,
+                workspace: requestCwd(scopedReq, params.host),
                 stateDir: sessionStore.resolveDaemonStateDir(),
                 env: params.host.env,
                 observeDeviceBoot: scope.platformServices.deviceBootObservation,

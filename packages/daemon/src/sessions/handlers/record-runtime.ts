@@ -48,7 +48,7 @@ import type {
   BindDeviceRuntime,
   BindExactDeviceRuntime,
 } from '../../core/request-runtime-binding.ts';
-import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { requestCwd, type DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import { sessionHasOwnersBeyondRecording } from '../../core/session-state.ts';
 import { withCaptureOutputOwnership } from '../../core/capture-output-ownership.ts';
@@ -373,7 +373,7 @@ function resolveRecordingStartPaths(
     ...resolveRecordingOutputPaths({
       requestedPath,
       platform,
-      cwd: req.meta?.cwd ?? hostCwd,
+      cwd: requestCwd(req, { cwd: hostCwd }),
     }),
     ...(clientOutputPath === undefined ? {} : { clientOutputPath }),
   };
