@@ -14,7 +14,6 @@ For command behavior, prefer provider-backed integration through the real reques
 For native behavior, use the owning E2E lane.
 For pure logic, types, or exhaustive cases, use focused tests.
 If an existing scenario covers the regression, extend it.
-At each boundary, assert the contract that boundary owns.
 Do not add test-only production exports or dependency injection.
 Without the fix, a regression test must fail for the intended reason.
 Use [isolated experiments](test-experiments.md).
@@ -51,7 +50,8 @@ Do not add unit retries to hide failures.
 Use existing clocks or tool seams instead of production-time waits.
 Slow-test pins only shrink.
 For a new pin, give measured justification.
-Split tests only with their source module.
+Split tests by behavior.
+Keep split files beside their source module.
 Import the subject module, not a platform barrel.
 
 ## Run a focused test
