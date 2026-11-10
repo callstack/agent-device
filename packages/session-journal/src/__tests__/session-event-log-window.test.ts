@@ -96,6 +96,16 @@ test('rotation caps events.ndjson while cursors stay absolute across the retaine
     ['event 38'],
   );
   assert.equal(tail.nextCursor, '39');
+  // endCursor is absolute like nextCursor, whichever retained file the scan stopped in.
+  assert.equal(tail.endCursor, '39');
+  assert.equal(
+    readSessionEventLog(eventLogPath, { cursor: String(earliest), limit: 2 }).endCursor,
+    String(earliest + 2),
+  );
+  assert.equal(
+    readSessionEventLog(eventLogPath, { cursor: String(earliest), limit: 500 }).endCursor,
+    '40',
+  );
   assert.deepEqual(summaries(eventLogPath, tail.nextCursor, 1), ['event 39']);
 
   const expired = readError(eventLogPath, '0');

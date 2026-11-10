@@ -274,7 +274,9 @@ type WeightedTimingSample = { durationMs: number; weight: number; platform?: Pub
 
 /**
  * One run's summary as at most three weighted points: its p50 stands for every capture below its
- * p95. The weights sum to `count`, so the merge costs O(runs) whatever each run's capture count.
+ * p95. This is the same multiset the earlier per-sample reconstruction built (count - 2 copies of
+ * p50, then p95 and max), so merged percentiles are unchanged; the weights sum to `count`, so the
+ * merge costs O(runs) whatever each run's capture count.
  */
 function weightedSamplesFromStats(stats: SnapshotTimingStats): WeightedTimingSample[] {
   const { count, platform } = stats;

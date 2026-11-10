@@ -214,3 +214,29 @@ test('merge cost does not grow with a run capture count', () => {
     platform: 'ios',
   });
 });
+
+test('merging summaries whose p95 equals max keeps p50 <= p95 <= max', () => {
+  const slowTail = { count: 4, p50Ms: 200, p95Ms: 1_000, maxMs: 1_000, slowThresholdMs: 1_500 };
+  const merged = mergeSnapshotDiagnostics([{ stats: slowTail }, { stats: VALID_STATS }])?.stats;
+  expect(merged).toMatchObject({ count: 8, p50Ms: 200, p95Ms: 1_000, maxMs: 1_000 });
+  expect(readSnapshotDiagnosticsSummary({ stats: merged })?.stats).toEqual(merged);
+});
+
+test('every merge of valid summaries is itself a valid summary', () => {
+  let seed = 7;
+  const next = () => (seed = (seed * 1_103_515_245 + 12_345) & 0x7fffffff) / 0x7fffffff;
+  for (let round = 0; round < 500; round += 1) {
+    const runs = Array.from({ length: 1 + Math.floor(next() * 4) }, () => {
+      const [p50Ms, p95Ms, maxMs] = [next(), next(), next()]
+        .map((value) => Math.floor(value * 2_000))
+        .sort((left, right) => left - right) as [number, number, number];
+      const count = 1 + Math.floor(next() * 9);
+      return {
+        stats: { count, p50Ms, p95Ms: next() < 0.3 ? maxMs : p95Ms, maxMs, slowThresholdMs: 1_500 },
+      };
+    });
+    const merged = mergeSnapshotDiagnostics(runs)?.stats;
+    expect(merged && merged.p50Ms <= merged.p95Ms && merged.p95Ms <= merged.maxMs).toBe(true);
+    expect(merged?.count).toBe(runs.reduce((sum, run) => sum + run.stats.count, 0));
+  }
+});
