@@ -27,3 +27,4 @@ overrides:
   zod@4: ^4.6.6
 patchedDependencies:
   ast-v8-to-istanbul@1.0.7: patches/ast-v8-to-istanbul@1.0.7.patch
+  mutation-testing-report-schema@3.8.4: patches/mutation-testing-report-schema@3.8.4.patch
