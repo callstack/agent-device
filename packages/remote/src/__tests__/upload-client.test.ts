@@ -12,6 +12,7 @@ import type { UploadProgressEvent } from '../upload-progress.ts';
 import { runCmdSync, withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import { closeLoopbackServer, listenOnLoopback, mkdtempForTestSync } from '@agent-device/test-kit';
 import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
+import { AppError } from '@agent-device/kernel/errors';
 
 const TEST_TOKEN = 'agent-device-upload-test-token';
 const tempDirs: string[] = [];
@@ -312,6 +313,42 @@ test('uploadArtifact fails cleanly on the sixth upload redirect', async () => {
     ]);
   } finally {
     await server.close();
+  }
+});
+
+test('uploadArtifact refuses a legacy upload redirect to another origin', async () => {
+  const foreignRequests: string[] = [];
+  const foreign = await startServer(async (req, res) => {
+    foreignRequests.push(`${req.method} ${req.url} auth=${req.headers.authorization ?? ''}`);
+    await readRequestBody(req);
+    sendJson(res, { ok: true, uploadId: 'foreign-upload' });
+  });
+  const server = await startServer(async (req, res) => {
+    await readRequestBody(req);
+    if (req.url === '/upload/preflight') {
+      res.statusCode = 404;
+      res.end('not found');
+      return;
+    }
+    res.statusCode = 307;
+    res.setHeader('location', `${foreign.baseUrl.replace('127.0.0.1', 'localhost')}/upload`);
+    res.end();
+  });
+
+  try {
+    await assert.rejects(
+      uploadArtifact({
+        localPath: createTempFile('app.apk', 'cross-origin-payload'),
+        baseUrl: server.baseUrl,
+        token: TEST_TOKEN,
+      }),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'cross-origin-redirect',
+    );
+    assert.deepEqual(foreignRequests, []);
+  } finally {
+    await server.close();
+    await foreign.close();
   }
 });
 
