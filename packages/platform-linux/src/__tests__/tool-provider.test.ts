@@ -164,7 +164,7 @@ test('local Linux desktop provider translates semantic lifecycle calls to host t
   ]);
 });
 
-// PROV-6: `open <binary>` used to run the app as a piped child of the daemon, which kept every
+// `open <binary>` used to run the app as a piped child of the daemon, which kept every
 // byte the app printed in daemon memory for the app's whole life.
 test.skipIf(!fs.existsSync('/proc/self/fd'))(
   'local Linux desktop provider launches an app binary detached from daemon pipes',

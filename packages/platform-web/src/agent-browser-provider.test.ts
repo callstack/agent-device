@@ -138,7 +138,8 @@ test('agent-browser provider keeps typed text out of argv and error details when
       options: { stdin?: string | Buffer },
     ): Promise<ExecResult> => {
       const cliArgs = recordAgentBrowserCall(calls, cmd, args, options.stdin);
-      if (cliArgs[0] === 'eval') return agentBrowserJsonResult({ success: true, data: { result: 'selected' } });
+      if (cliArgs[0] === 'eval')
+        return agentBrowserJsonResult({ success: true, data: { result: 'selected' } });
       if (cliArgs[0] !== 'batch') return agentBrowserJsonResult({ success: true, data: {} });
       const [command] = JSON.parse(String(options.stdin)) as string[][];
       // The backend prints the entry list and exits 1 when an entry fails.

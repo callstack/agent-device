@@ -64,7 +64,7 @@ test('iOS volume presses ride mobile pressButton and power refuses before the dr
   });
 });
 
-// PROV2-1: UiAutomator2 registers no `mobile: pressButton`, and XCUITest's pressButton names are
+// UiAutomator2 registers no `mobile: pressButton`, and XCUITest's pressButton names are
 // home, volumeup, and volumedown only.
 test('Android home and app switcher press their keycodes through mobile pressKey', async () => {
   const transcript: string[] = [];

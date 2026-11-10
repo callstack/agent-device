@@ -67,11 +67,15 @@ async function pageSending(beforeAnswer: readonly string[]): Promise<string> {
   return `ws://127.0.0.1:${address.port}/devtools/page/1`;
 }
 
-// PROV-9: a throw inside the WebSocket message handler is an uncaught exception, which ends the
+// A throw inside the WebSocket message handler is an uncaught exception, which ends the
 // daemon rather than one request.
 test('an unreadable frame or a failing event listener leaves the pending request answered', async () => {
   const url = await pageSending(['not json', 'null', '{"method":"Log.entryAdded","params":7}']);
-  const session = await connectCdp({ title: 'page', url: 'http://tv/page/', webSocketDebuggerUrl: url });
+  const session = await connectCdp({
+    title: 'page',
+    url: 'http://tv/page/',
+    webSocketDebuggerUrl: url,
+  });
   cleanups.push(() => session.close());
   const events: string[] = [];
   session.on(() => {

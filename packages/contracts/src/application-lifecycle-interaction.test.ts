@@ -108,7 +108,7 @@ function lifecycleRecordingInteractor(calls: string[]): Interactor {
   } as unknown as Interactor;
 }
 
-// CONTR3-1: the local direct owners (Linux, web, HarmonyOS, Vega) do not replace a running app on
+// The local direct owners (Linux, web, HarmonyOS, Vega) do not replace a running app on
 // open, so a relaunch that reached only `open` left the app running as it was.
 test('a local direct owner closes the running app before a relaunch open', async () => {
   const calls: string[] = [];

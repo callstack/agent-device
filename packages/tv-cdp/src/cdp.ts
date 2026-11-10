@@ -82,7 +82,11 @@ export async function connectCdp(target: CdpTarget): Promise<CdpSession> {
   socket.onmessage = (event) => {
     const message = parseCdpMessage(event.data);
     if (message === undefined) {
-      emitDiagnostic({ level: 'debug', phase: 'tv_cdp_frame_unreadable', data: { target: target.url } });
+      emitDiagnostic({
+        level: 'debug',
+        phase: 'tv_cdp_frame_unreadable',
+        data: { target: target.url },
+      });
       return;
     }
     if (typeof message.method === 'string') {

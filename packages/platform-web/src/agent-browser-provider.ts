@@ -209,13 +209,17 @@ async function sendTextEntry(send: AgentBrowserRunJson, command: readonly string
   const entry: unknown = Array.isArray(data) && data.length === 1 ? data[0] : undefined;
   const commandName = command[0] ?? 'batch';
   if (!isBatchEntry(entry)) {
-    throw new AppError('COMMAND_FAILED', `agent-browser returned an unusable ${commandName} result`, {
-      cmd: AGENT_BROWSER,
-      args: ['batch'],
-      command: commandName,
-      reason: 'text-entry-result-unusable',
-      hint: AGENT_BROWSER_DOCTOR_HINT,
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      `agent-browser returned an unusable ${commandName} result`,
+      {
+        cmd: AGENT_BROWSER,
+        args: ['batch'],
+        command: commandName,
+        reason: 'text-entry-result-unusable',
+        hint: AGENT_BROWSER_DOCTOR_HINT,
+      },
+    );
   }
   if (entry.success === true) return;
   throw new AppError(

@@ -79,7 +79,7 @@ test('the buffer keeps only the most recent lines', () => {
   assert.match(lines[0]!, /line 5$/);
 });
 
-// PROV-9: an old TV Chromium can send an event without the field the handler reads.
+// An old TV Chromium can send an event without the field the handler reads.
 test('events missing their payload fields do not throw', () => {
   const log = createPageLog(fixedClock);
 

@@ -210,7 +210,8 @@ export class WebDriverTransport {
       timeoutMs,
       requestSignal,
     );
-    if (ok) return { status, value: readWebDriverValue(text ? parseJsonResponse(text, status) : {}) };
+    if (ok)
+      return { status, value: readWebDriverValue(text ? parseJsonResponse(text, status) : {}) };
     // A gateway in front of the driver can answer an error with a non-JSON page (a `502 <html>`).
     // Its status still decides retry and dispatch disclosure, so the raw body is only evidence.
     const payload = text ? (parseJsonOrUndefined(text) ?? truncateBody(text)) : {};
