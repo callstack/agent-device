@@ -361,6 +361,18 @@ function optionalStringArray(
   return items.map((item, index) => expectString(item, `${path}.${key}[${String(index)}]`));
 }
 
+/**
+ * Reads `record[key]` as an optional array of strings, the same check `commandRpcParamsSchema`
+ * applies to HTTP positionals. Throws an `Error` naming the offending element, such as
+ * `$.positionals[1]: Expected a string`.
+ */
+export function readOptionalStringArrayField(
+  record: Record<string, unknown>,
+  key: string,
+): string[] | undefined {
+  return optionalStringArray(record, key, '$');
+}
+
 function optionalInteger(
   record: Record<string, unknown>,
   key: string,

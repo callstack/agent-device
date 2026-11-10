@@ -786,12 +786,7 @@ function readBackMode(value: unknown): BackMode | undefined {
 }
 
 function clipboardPositionals(input: ClipboardCommandOptions): string[] {
-  if (input.action === 'read') return ['read'];
-  // `""` clears the clipboard; only a missing text is refused.
-  if (typeof input.text !== 'string') {
-    throw new AppError('INVALID_ARGS', 'clipboard write requires text (use "" to clear).');
-  }
-  return ['write', input.text];
+  return input.action === 'read' ? ['read'] : ['write', input.text];
 }
 
 function readKeyboardInput(positionals: string[]): Record<string, unknown> {

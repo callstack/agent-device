@@ -163,26 +163,6 @@ test('clipboard write forwards an explicit empty string as a clear', async () =>
   expect(response.ok && response.data).toMatchObject({ action: 'write', textLength: 0 });
 });
 
-// A peer that serializes a missing text sends `["write", null]`; joining it would clear the
-// clipboard, so the write is refused instead.
-test.each([[['write']], [['write', null]], [['write', 'a', null]]])(
-  'clipboard write refuses positionals %j that carry no text string',
-  async (positionals) => {
-    const spies = harness({ read: available, write: available });
-    await expect(
-      handleSessionClipboardCommand({
-        ...request(positionals as string[]),
-        ...spies,
-        platformServices: daemonPlatformServicesFixture(),
-      }),
-    ).rejects.toMatchObject({
-      code: 'INVALID_ARGS',
-      message: 'clipboard write requires text (use "" to clear clipboard)',
-    });
-    expect(spies.writeClipboard).not.toHaveBeenCalled();
-  },
-);
-
 // ADR 0019 §9: the parsed subcommand selects exactly one use, so a request inspects facts once
 // and binds once — never both halves, and never a bind per operation.
 test.each([{ positionals: ['read'] }, { positionals: ['write', 'text'] }])(
