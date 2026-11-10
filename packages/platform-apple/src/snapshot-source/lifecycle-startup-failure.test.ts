@@ -17,8 +17,6 @@ test('a helper crash seen by the starting capture is not delivered again', async
   const fixture = createLifecycleFixture();
   const manager = new SnapshotBridgeManager({
     ...fixture.host,
-    ensureDirectory: async () => {},
-    remove: async () => {},
     connect: async (...args) => {
       if (connecting)
         throw snapshotSourceError('transport-failure', 'bridge-closed-before-connect');

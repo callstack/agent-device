@@ -5,6 +5,8 @@ import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { leaseReleaseRequestFor } from '../../resources/lease-registry-scope.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import path from 'node:path';
+import { withDaemonDiagnosticsScope } from '@agent-device/daemon-contracts/daemon-diagnostics-scope';
 
 test('retries an expired live-only provider lease release after a transient failure', async () => {
   vi.useFakeTimers();
@@ -40,6 +42,78 @@ test('retries an expired live-only provider lease release after a transient fail
     await vi.advanceTimersByTimeAsync(10);
     expect(release).toHaveBeenCalledTimes(2);
     expect(release).toHaveBeenLastCalledWith(lease);
+  } finally {
+    releaser.shutdown();
+    vi.useRealTimers();
+  }
+});
+
+test('a timer-driven retry whose diagnostics scope rejects leaves no unhandled rejection', async () => {
+  vi.useFakeTimers();
+  const unhandled = vi.fn();
+  process.on('unhandledRejection', unhandled);
+  const lease = new LeaseRegistry().allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'browserstack',
+  });
+  // A plain function: a `vi.fn` mock observes its own result and would mark the rejection handled.
+  let scopeCalls = 0;
+  const withinDiagnosticsScope = async () => {
+    scopeCalls += 1;
+    throw new Error('daemon log is unwritable');
+  };
+  const releaser = createExpiredProviderLeaseReleaser({
+    leaseLifecycleProvider: { release: vi.fn().mockRejectedValue(new Error('provider outage')) },
+    providerRuntimeIds: ['browserstack'],
+    retryDelayMs: 10,
+    withinDiagnosticsScope,
+  });
+
+  try {
+    await releaser.release(lease);
+    await vi.advanceTimersByTimeAsync(10);
+    vi.useRealTimers();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(scopeCalls).toBeGreaterThan(0);
+    expect(unhandled).not.toHaveBeenCalled();
+  } finally {
+    process.off('unhandledRejection', unhandled);
+    releaser.shutdown();
+    vi.useRealTimers();
+  }
+});
+
+test('a timer-driven release retry records its diagnostics in the daemon scope', async () => {
+  vi.useFakeTimers();
+  const logPath = path.join(mkdtempForTestSync('agent-device-expiry-retry-scope-'), 'daemon.log');
+  const lease = new LeaseRegistry().allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'browserstack',
+  });
+  const release = vi
+    .fn<(lease: DeviceLease) => Promise<Record<string, unknown>>>()
+    .mockRejectedValue(new Error('provider outage'));
+  const releaser = createExpiredProviderLeaseReleaser({
+    leaseLifecycleProvider: { release },
+    providerRuntimeIds: ['browserstack'],
+    retryDelayMs: 10,
+    withinDiagnosticsScope: async (run) => await withDaemonDiagnosticsScope({ logPath }, run),
+  });
+
+  try {
+    // The first attempt runs outside any scope, as an expiry sweep did before it had one.
+    await releaser.release(lease);
+    expect(fs.existsSync(logPath)).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(release).toHaveBeenCalledTimes(2);
+    expect(fs.readFileSync(logPath, 'utf8')).toMatch(
+      /"phase":"provider_lease_expiry_retry_scheduled"/,
+    );
   } finally {
     releaser.shutdown();
     vi.useRealTimers();
@@ -164,6 +238,27 @@ test('shutdown drain reports releases completed before and during its final retr
     expect(drained.pending).toEqual([]);
   } finally {
     releaser.shutdown();
+  }
+});
+
+test('a shutdown drain that settles inside its budget leaves no deadline timer behind', async () => {
+  vi.useFakeTimers();
+  const releaser = createExpiredProviderLeaseReleaser({
+    leaseLifecycleProvider: { release: vi.fn().mockResolvedValue({}) },
+    providerRuntimeIds: ['browserstack'],
+  });
+
+  try {
+    releaser.beginShutdown();
+    await expect(releaser.drain(2_000)).resolves.toEqual({
+      pending: [],
+      unknown: [],
+      released: [],
+    });
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    releaser.shutdown();
+    vi.useRealTimers();
   }
 });
 

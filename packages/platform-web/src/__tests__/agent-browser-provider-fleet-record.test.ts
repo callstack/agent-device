@@ -1,4 +1,4 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, installFakeManagedAgentBrowser } from '@agent-device/test-kit';
 // The owned-process record when sessions of one daemon open and close at overlapping times. The
 // fleet decides whether a close may clear the record, so these cases hold one session's open at an
 // explicit gate and close another session around it.
@@ -11,7 +11,6 @@ import {
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
 import {
   agentBrowserJsonResult,
-  installFakeManagedAgentBrowser,
   managedAgentBrowserCliArgs,
   mkdtempForTestSync,
   ownedProcessRecordStore,

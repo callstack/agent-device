@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { selector } from './selector-read-utils.ts';
 import { createSelectorDevice } from './__tests__/test-utils/index.ts';
 
 // What `is visible` decides about a matched node: it inherits the viewport visibility of an
@@ -30,7 +29,9 @@ test('runtime is visible passes for list text that inherits viewport visibility 
   );
   const device = createSelectorDevice(snapshot);
 
-  const result = await device.selectors.isVisible(selector('label="Trip ideas"'), {
+  const result = await device.selectors.is({
+    predicate: 'visible',
+    selector: 'label="Trip ideas"',
     session: 'default',
   });
 
@@ -57,7 +58,12 @@ test('runtime is visible fails for nodes outside the current viewport', async ()
   const device = createSelectorDevice(snapshot);
 
   await assert.rejects(
-    () => device.selectors.isVisible(selector('label="Far item"'), { session: 'default' }),
+    () =>
+      device.selectors.is({
+        predicate: 'visible',
+        selector: 'label="Far item"',
+        session: 'default',
+      }),
     (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');

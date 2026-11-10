@@ -28,10 +28,8 @@ import type {
   ResolveInteractionTargetParams,
 } from './interaction-resolution-request.ts';
 
-export { focusCommand, hoverCommand, longPressCommand } from './gestures.ts';
+export { hoverCommand, longPressCommand } from './gestures.ts';
 export type {
-  FocusCommandOptions,
-  FocusCommandResult,
   HoverCommandOptions,
   HoverCommandResult,
   LongPressCommandOptions,

@@ -39,9 +39,6 @@ const fakeCommandSurface: DaemonCommandSurface = {
     wait: vi.fn(async () => {
       throw new Error('fake command surface: `wait` must not run in daemon-policy tests');
     }),
-    waitForText: vi.fn(async () => {
-      throw new Error('fake command surface: `waitForText` must not run in daemon-policy tests');
-    }),
   },
   interactions: {
     click: vi.fn(async () => undefined as never),

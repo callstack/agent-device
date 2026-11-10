@@ -10,7 +10,7 @@
 //   being the sole producer of AdmittedRuntimePlan/BoundDeviceRuntime no longer matters. The
 //   token is a type, so an `as` cast or narrowing to it type-checks from any module.
 
-import { parseSync } from 'oxc-parser';
+import { parseSync, type Program } from 'oxc-parser';
 import { DAEMON_SOURCE_ROOT, isProductionSourceFile } from './tracked-sources.ts';
 import { memberName, propertyName, visitAst } from './layering-ast.ts';
 import type { LayeringViolation } from './model.ts';
@@ -29,7 +29,7 @@ export function runtimeExecutionIntegrityViolations(
 ): LayeringViolation[] {
   const violations: LayeringViolation[] = [];
   for (const [file, source] of sources) {
-    const program = parseSync(file, source).program as AstNode;
+    const program = parseSync(file, source).program;
     visitAst(program, (node) => {
       if (isCommandDescriptorSource(file) && isCapabilityDeclaration(node)) {
         violations.push(
@@ -153,7 +153,7 @@ function sharedAdmissionViolations(sources: ReadonlyMap<string, string>): Layeri
   if (source === undefined) {
     return [violation(RUNTIME_ADMISSION_MODULE, 1, 'shared runtime admission module is missing')];
   }
-  const program = parseSync(RUNTIME_ADMISSION_MODULE, source).program as AstNode;
+  const program = parseSync(RUNTIME_ADMISSION_MODULE, source).program;
   const admit = namedFunction(program, 'admitRuntimeOperations');
   if (admit === undefined) {
     return [
@@ -195,7 +195,7 @@ function sharedAdmissionViolations(sources: ReadonlyMap<string, string>): Layeri
   return violations;
 }
 
-function namedFunction(program: AstNode, expected: string): AstNode | undefined {
+function namedFunction(program: Program, expected: string): AstNode | undefined {
   let found: AstNode | undefined;
   visitAst(program, (node) => {
     if (node['type'] !== 'FunctionDeclaration') return;

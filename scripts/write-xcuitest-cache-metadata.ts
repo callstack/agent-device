@@ -5,7 +5,6 @@ import { withCommandHost } from '@agent-device/host-kit/command';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import { normalizeError } from '@agent-device/kernel/errors';
-import type { RunnerXctestrunCacheMetadata } from '@agent-device/platform-apple/runner/operations';
 import {
   findRunnerXctestrun,
   isRunnerXcuitestScriptPlatform,
@@ -52,7 +51,7 @@ function parseWriterInvocation(args: readonly string[]): WriterInvocation {
 async function writeXcuitestCacheMetadata(
   args: readonly string[],
   cwd: string,
-): Promise<RunnerXctestrunCacheMetadata> {
+): Promise<ReturnType<typeof resolveExpectedRunnerCacheMetadata>> {
   const { device, derivedPath, buildLogPath } = parseWriterInvocation(args);
   const metadata = resolveExpectedRunnerCacheMetadata(device, cwd);
   requireRunnerBuildSettingsMatchBuildLog(metadata, buildLogPath);

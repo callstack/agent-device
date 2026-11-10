@@ -12,10 +12,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { runEntrypoint } from '../lib/cli-entrypoint.ts';
-import { CHECK_CATALOG, resolveCommand } from '../check-affected/checks.ts';
+import { CHECK_CATALOG, type CheckSpec, resolveCommand } from '../check-affected/checks.ts';
 import { executeGate } from './host-locked.ts';
 
 const USAGE = 'Usage: pnpm gate <check-id> [args…]\n';
+
+function findGate(id: string): CheckSpec {
+  const spec = CHECK_CATALOG.find((entry) => entry.id === id);
+  if (!spec) {
+    const known = CHECK_CATALOG.map((entry) => entry.id).join(', ');
+    throw new Error(`Unknown gate "${id}".\nRegistered gates: ${known}`);
+  }
+  return spec;
+}
 
 export function resolveGate(
   id: string,
@@ -24,11 +33,7 @@ export function resolveGate(
 ): string[] {
   // `pnpm gate x -- --flag` and `pnpm gate x --flag` both forward `--flag`.
   const extra = args[0] === '--' ? args.slice(1) : args;
-  const spec = CHECK_CATALOG.find((entry) => entry.id === id);
-  if (!spec) {
-    const known = CHECK_CATALOG.map((entry) => entry.id).join(', ');
-    throw new Error(`Unknown gate "${id}".\nRegistered gates: ${known}`);
-  }
+  const spec = findGate(id);
   const command = resolveCommand(spec, scripts, 'origin/main');
   // `fallow` carries a default --base; a lane that supplies its own replaces it
   // rather than passing the flag twice.
@@ -50,7 +55,7 @@ async function main(argv: readonly string[]): Promise<number> {
   };
   const command = resolveGate(id, pkg.scripts, rest);
   process.stdout.write(`[gate] ${id}: ${command.join(' ')}\n`);
-  return executeGate({ id, command, cwd: repoRoot, env: process.env });
+  return executeGate({ id: findGate(id).id, command, cwd: repoRoot, env: process.env });
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
