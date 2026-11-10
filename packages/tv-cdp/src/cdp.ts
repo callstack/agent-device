@@ -1,4 +1,3 @@
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 
 import { createReplyWaiters } from './replies.ts';
@@ -36,6 +35,16 @@ function parseCdpMessage(data: unknown): CdpMessage | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Records a debug event in the request diagnostics. The emitter loads on demand because these
+ * events are rare and this module sits in the package's eager import closure.
+ */
+function emitCdpDiagnostic(phase: string, data: Record<string, unknown>): void {
+  void import('@agent-device/host-kit/diagnostics')
+    .then(({ emitDiagnostic }) => emitDiagnostic({ level: 'debug', phase, data }))
+    .catch(() => undefined);
 }
 
 /** Never throws: a listener can throw a value that `String()` cannot convert. */
@@ -88,11 +97,7 @@ export async function connectCdp(target: CdpTarget): Promise<CdpSession> {
   socket.onmessage = (event) => {
     const message = parseCdpMessage(event.data);
     if (message === undefined) {
-      emitDiagnostic({
-        level: 'debug',
-        phase: 'tv_cdp_frame_unreadable',
-        data: { target: target.url },
-      });
+      emitCdpDiagnostic('tv_cdp_frame_unreadable', { target: target.url });
       return;
     }
     if (message.method !== undefined) {
@@ -104,10 +109,9 @@ export async function connectCdp(target: CdpTarget): Promise<CdpSession> {
         try {
           listener(message.method, params);
         } catch (error) {
-          emitDiagnostic({
-            level: 'debug',
-            phase: 'tv_cdp_event_listener_failed',
-            data: { method: message.method, error: describeThrown(error) },
+          emitCdpDiagnostic('tv_cdp_event_listener_failed', {
+            method: message.method,
+            error: describeThrown(error),
           });
         }
       }
