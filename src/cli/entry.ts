@@ -68,8 +68,9 @@ function isVersionRequest(argv: string[]): boolean {
   return argv.length === 1 && (argv[0] === '--version' || argv[0] === '-V');
 }
 
+/** Only a bare `mcp` starts the server; the full CLI rejects any flag or argument beside it. */
 function isMcpServerRequest(argv: string[]): boolean {
-  return argv[0] === 'mcp' && !argv.some(isHelpFlag);
+  return argv.length === 1 && argv[0] === 'mcp';
 }
 
 /** `null` = general usage, a string = one command's help, `undefined` = not a help request. */

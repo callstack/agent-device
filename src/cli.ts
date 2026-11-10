@@ -260,23 +260,7 @@ async function parseCliInputOrExit(
   try {
     parsed = resolveCliOptions(argv, { cwd: options.host.cwd, env: options.host.env });
   } catch (error) {
-    emitDiagnostic({
-      level: 'error',
-      phase: 'cli_parse_failed',
-      data: {
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
-    const normalized = normalizeError(error, {
-      diagnosticId: getDiagnosticsMeta().diagnosticId,
-      logPath: flushDiagnosticsToSessionFile({ force: true })?.path,
-    });
-    if (options.jsonRequested) {
-      await printJson({ success: false, error: normalized });
-    } else {
-      await printHumanError(normalized, { debugTier: options.debugEnabled, argv });
-    }
-    return exitAfterFlush(1);
+    return await exitOnParseFailure(error, argv, options);
   }
 
   for (const warning of parsed.warnings) {
@@ -315,7 +299,43 @@ async function parseCliInputOrExit(
     return exitAfterFlush(1);
   }
 
+  // The process entry starts the MCP server only for a bare `mcp`; anything that reaches here
+  // carried flags the server would silently ignore.
+  if (parsed.command === 'mcp') {
+    return await exitOnParseFailure(
+      new AppError('INVALID_ARGS', 'mcp accepts no flags or arguments.', {
+        hint: 'Run agent-device mcp alone. Configure the server with AGENT_DEVICE_* environment variables or AGENT_DEVICE_CONFIG.',
+      }),
+      argv,
+      options,
+    );
+  }
+
   return { parsed, command: parsed.command, positionals: parsed.positionals };
+}
+
+async function exitOnParseFailure(
+  error: unknown,
+  argv: string[],
+  options: { jsonRequested: boolean; debugEnabled: boolean },
+): Promise<never> {
+  emitDiagnostic({
+    level: 'error',
+    phase: 'cli_parse_failed',
+    data: {
+      error: error instanceof Error ? error.message : String(error),
+    },
+  });
+  const normalized = normalizeError(error, {
+    diagnosticId: getDiagnosticsMeta().diagnosticId,
+    logPath: flushDiagnosticsToSessionFile({ force: true })?.path,
+  });
+  if (options.jsonRequested) {
+    await printJson({ success: false, error: normalized });
+  } else {
+    await printHumanError(normalized, { debugTier: options.debugEnabled, argv });
+  }
+  return await exitAfterFlush(1);
 }
 
 type CliRunContext = {

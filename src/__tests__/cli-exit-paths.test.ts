@@ -272,3 +272,26 @@ test('a failing `test` suite exits 1 through the flushed exit path', async () =>
   assert.equal(envelope.success, true);
   assert.equal(envelope.data.failed, 1);
 });
+
+test('mcp with any flag fails with INVALID_ARGS instead of starting a server that ignores it', async () => {
+  const restoreEnv = installIsolatedCliTestEnv();
+  const exitSpy = installTerminatingExitSpy();
+  const stdout = beginStdoutCapture();
+  const sendToDaemon = async (): Promise<DaemonResponse> => {
+    throw new Error('sendToDaemon should not be called for mcp');
+  };
+
+  let exitCode: number;
+  try {
+    exitCode = await runCliExpectingExit(['mcp', '--json'], { sendToDaemon });
+  } finally {
+    stdout.restore();
+    exitSpy.restore();
+    restoreEnv();
+  }
+
+  assert.equal(exitCode, 1);
+  const error = JSON.parse(stdout.read()).error;
+  assert.equal(error.code, 'INVALID_ARGS');
+  assert.equal(error.message, 'mcp accepts no flags or arguments.');
+});
