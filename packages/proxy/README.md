@@ -142,6 +142,10 @@ authenticate: async (request) => {
 | `maxRpcBodyBytes` | 64 MiB, the daemon's own request limit | Larger `/rpc` bodies get a 400 response. |
 | `upstreamTimeoutMs` | none | Longest time one daemon request may take, including its body. Without it, a request lasts as long as the client waits, and the client's command timeout bounds it. |
 
+The proxy reads the whole `/rpc` body before it authenticates the client, so `maxRpcBodyBytes` is
+also the most memory one unauthenticated request can hold. For a proxy that faces the internet,
+set `maxRpcBodyBytes` lower than the 64 MiB default, to the largest request your clients send.
+
 ## Health and restarts
 
 `GET /health` (also served as `/agent-device/health`) needs no token. It reports the proxy's version and `instanceId`, and

@@ -264,8 +264,11 @@ async function requestUploadPreflight(options: {
     buildDaemonHttpLeaseHeaders(options.leaseId),
   );
 
-  const response = await credentialedFetch(preflightUrl, {
+  const response = await fetch(preflightUrl, {
     method: 'POST',
+    // The daemon never redirects this route. A redirect would carry x-agent-device-token, which
+    // fetch keeps on a cross-origin hop, so any redirect fails the preflight instead.
+    redirect: 'error',
     headers,
     signal: combineUploadSignals(options.signal, UPLOAD_PREFLIGHT_TIMEOUT_MS),
     body: JSON.stringify({
@@ -289,56 +292,6 @@ async function requestUploadPreflight(options: {
   }
 
   return parseUploadPreflightResult(await response.json().catch(() => undefined));
-}
-
-const MAX_CREDENTIALED_REDIRECTS = 5;
-const REDIRECT_STATUSES: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]);
-
-/**
- * `fetch` for a request that carries daemon credentials. It follows a redirect only on the origin
- * the caller chose, and rejects a hop to any other origin: `fetch` drops `authorization` there but
- * keeps `x-agent-device-token`. Each hop keeps fetch's method rules: 303, and 301 or 302 after a
- * POST, continue as a GET without a body.
- */
-async function credentialedFetch(url: URL, init: RequestInit): Promise<Response> {
-  let current = url;
-  let hopInit = init;
-  for (let hop = 0; ; hop += 1) {
-    const response = await fetch(current, { ...hopInit, redirect: 'manual' });
-    const location = response.headers.get('location');
-    if (!REDIRECT_STATUSES.has(response.status) || !location) return response;
-    await response.body?.cancel();
-    const next = new URL(location, current);
-    if (next.origin !== url.origin) {
-      throw new AppError('COMMAND_FAILED', 'Upload request refused a cross-origin redirect', {
-        reason: 'cross-origin-redirect',
-        url: current.toString(),
-        redirectOrigin: next.origin,
-      });
-    }
-    if (hop >= MAX_CREDENTIALED_REDIRECTS) {
-      throw new AppError('COMMAND_FAILED', 'Upload request exceeded redirect limit', {
-        maxRedirects: MAX_CREDENTIALED_REDIRECTS,
-        url: url.toString(),
-      });
-    }
-    hopInit = redirectedRequestInit(hopInit, response.status);
-    current = next;
-  }
-}
-
-/** The request a redirect continues with, by the fetch standard's method rules. */
-function redirectedRequestInit(init: RequestInit, status: number): RequestInit {
-  const method = (init.method ?? 'GET').toUpperCase();
-  const becomesGet =
-    (status === 303 && method !== 'GET' && method !== 'HEAD') ||
-    ((status === 301 || status === 302) && method === 'POST');
-  if (!becomesGet) return init;
-  const headers = new Headers(init.headers);
-  headers.delete('content-type');
-  headers.delete('content-length');
-  const { body: _body, ...rest } = init;
-  return { ...rest, method: 'GET', headers };
 }
 
 /**
@@ -447,15 +400,17 @@ async function finalizeDirectUpload(options: {
     buildDaemonHttpLeaseHeaders(options.leaseId),
   );
 
-  const response = await credentialedFetch(finalizeUrl, {
+  const response = await fetch(finalizeUrl, {
     method: 'POST',
+    // As with preflight: the route never redirects, and a redirect must not carry the token.
+    redirect: 'error',
     headers,
     signal: combineUploadSignals(options.signal, UPLOAD_PREFLIGHT_TIMEOUT_MS),
     body: JSON.stringify({ uploadId: options.uploadId }),
   }).catch((error) => {
     // As with preflight: a canceled finalize is not a transport failure to report, it is the caller
     // saying this upload is no longer worth finishing.
-    if (options.signal?.aborted || error instanceof AppError) throw error;
+    if (options.signal?.aborted) throw error;
     throw new AppError('COMMAND_FAILED', 'Failed to finalize direct artifact upload', {}, error);
   });
 

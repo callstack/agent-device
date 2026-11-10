@@ -77,33 +77,16 @@ test.for([307, 308])(
   },
 );
 
+const CROSS_ORIGIN = 'cross-origin';
+
 test.for([
-  {
-    leg: 'preflight',
-    status: 307,
-    redirected: '/upload/preflight',
-    routes: ['POST /upload/preflight', 'POST /upload'],
-  },
-  {
-    leg: 'preflight',
-    status: 302,
-    redirected: '/upload/preflight',
-    routes: ['POST /upload/preflight', 'POST /upload'],
-  },
-  {
-    leg: 'finalize',
-    status: 307,
-    redirected: '/upload/finalize',
-    routes: [
-      'POST /upload/preflight',
-      'PUT /upload/direct/t',
-      'POST /upload/finalize',
-      'POST /upload',
-    ],
-  },
+  { leg: 'preflight', status: 307, target: '/moved' },
+  { leg: 'preflight', status: 302, target: CROSS_ORIGIN },
+  { leg: 'finalize', status: 302, target: '/moved' },
+  { leg: 'finalize', status: 308, target: CROSS_ORIGIN },
 ])(
-  'a credentialed $leg redirected cross-origin with $status never reaches that origin',
-  async ({ status, redirected, routes }, t) => {
+  'a $leg answered with a $status redirect to $target is not followed, and the upload goes legacy',
+  async ({ leg, status, target }, t) => {
     if (await skipWhenLoopbackUnavailable(t, 'upload redirect coverage')) return;
     const foreignRequests: string[] = [];
     const foreign = await startServer((req, res) => {
@@ -116,9 +99,10 @@ test.for([
       daemonRequests.push(`${req.method} ${req.url}`);
       req.resume();
       req.on('end', () => {
-        if (req.url === redirected) {
+        if (req.url === `/upload/${leg}`) {
           res.statusCode = status;
-          res.setHeader('location', `${foreign.baseUrl.replace('127.0.0.1', 'localhost')}/x`);
+          const foreignUrl = `${foreign.baseUrl.replace('127.0.0.1', 'localhost')}/x`;
+          res.setHeader('location', target === CROSS_ORIGIN ? foreignUrl : target);
           return res.end();
         }
         if (req.url === '/upload/preflight') {
@@ -139,7 +123,17 @@ test.for([
         env: process.env,
       });
       assert.equal(uploadId, 'legacy-upload');
-      assert.deepEqual(daemonRequests, routes);
+      assert.deepEqual(
+        daemonRequests,
+        leg === 'preflight'
+          ? ['POST /upload/preflight', 'POST /upload']
+          : [
+              'POST /upload/preflight',
+              'PUT /upload/direct/t',
+              'POST /upload/finalize',
+              'POST /upload',
+            ],
+      );
       assert.deepEqual(foreignRequests, []);
     } finally {
       await daemon.close();
@@ -147,38 +141,3 @@ test.for([
     }
   },
 );
-
-test('a credentialed preflight follows a same-origin 302 as a GET that keeps its credentials', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t, 'upload redirect coverage')) return;
-  const daemonRequests: string[] = [];
-  const daemon = await startServer((req, res) => {
-    daemonRequests.push(`${req.method} ${req.url} token=${req.headers['x-agent-device-token']}`);
-    req.resume();
-    req.on('end', () => {
-      if (req.url === '/upload/preflight') {
-        res.statusCode = 302;
-        res.setHeader('location', '/upload/preflight-moved');
-        return res.end('moved');
-      }
-      answerJson(res, { ok: true, uploadId: 'cached-upload', cacheHit: true });
-    });
-  });
-  const localPath = path.join(mkdtempForTestSync('agent-device-upload-redirect-'), 'app.apk');
-  fs.writeFileSync(localPath, 'apk-bytes');
-
-  try {
-    const uploadId = await uploadArtifact({
-      localPath,
-      baseUrl: daemon.baseUrl,
-      token: 'daemon-token',
-      env: process.env,
-    });
-    assert.equal(uploadId, 'cached-upload');
-    assert.deepEqual(daemonRequests, [
-      'POST /upload/preflight token=daemon-token',
-      'GET /upload/preflight-moved token=daemon-token',
-    ]);
-  } finally {
-    await daemon.close();
-  }
-});

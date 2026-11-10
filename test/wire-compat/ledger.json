@@ -161,10 +161,10 @@
     "packages/remote/src/upload-client.ts#UploadPreflightResponse": "sha256:196a1d9ef41a1aec192589fa7ccb30cf71d971a005349d5d73eed42e6ab21327",
     "packages/remote/src/upload-client.ts#UploadPreflightResult": "sha256:bd8fc6d617c0630325455fd64d0fe319daaced198ee6745e4673a8ace3df460d",
     "packages/remote/src/upload-client.ts#UploadResponse": "sha256:499e01466b5e0e03413f8d3f1986f5af6bc120704c50a3747d84de422b3f0314",
-    "packages/remote/src/upload-client.ts#finalizeDirectUpload": "sha256:d25ad008a8f1f9ba4046f657a902e510ba12c0f851669a24839f143ba2ded5b5",
+    "packages/remote/src/upload-client.ts#finalizeDirectUpload": "sha256:8cd172a169aa5e54695d9185fa259d93c71b82938455398b83e7e4e214578df2",
     "packages/remote/src/upload-client.ts#isStringRecord": "sha256:b6d6b571b90baf0976d9c347c4a45a4363a4df5ad184ea1087cb3b9febd4b624",
     "packages/remote/src/upload-client.ts#parseUploadPreflightResult": "sha256:7ce3f43b45c03df8b7f2690432beedc7a537c1bba540961716862f8a632d5623",
-    "packages/remote/src/upload-client.ts#requestUploadPreflight": "sha256:b97cae79c43a27e8cae8a198387227a14f5f8ffd4378280f6ec8785e9c504d12",
+    "packages/remote/src/upload-client.ts#requestUploadPreflight": "sha256:ed644d7e59c4703e3b7a05dda769b3f0554dc481598ba01906a131c543d68ffc",
     "packages/remote/src/upload-client.ts#shouldRetryDirectUpload": "sha256:29059f076ff7f2b9540ad15408be48792b2d63a601ef2b9fb2d54f5576d49bbd",
     "packages/remote/src/upload-client.ts#tryDirectUploadWithResume": "sha256:db1042b6b8f6969add9480f30a8649d83eecf60af38e80f00a4e789fcf925f97",
     "packages/remote/src/upload-client.ts#uploadDirectArtifact": "sha256:3edb622eabee720085a544a4d4e6fdd74c19ec25d3e14e7f9f06ea10d550c1c7",
@@ -492,19 +492,19 @@
       "rationale": "The client, not the response, chooses the local download path: a destination it registered in this request wins, a response localPath is accepted only on a record or trace stop or a perf stop or report, and any other artifact lands in cwd under the basename of its fileName. A released daemon echoes localPath equal to the registered destination for screenshot and test, and echoes an earlier destination only on those stop and report actions, so its artifacts land where they did before. The wire shape is unchanged."
     },
     {
-      "declaration": "packages/remote/src/upload-client.ts#requestUploadPreflight",
-      "digest": "sha256:b97cae79c43a27e8cae8a198387227a14f5f8ffd4378280f6ec8785e9c504d12",
-      "rationale": "The request goes through credentialedFetch: a 307 or 308 is followed only on the daemon's own origin, and a hop to another origin rejects instead of carrying x-agent-device-token there. The request body, headers, and route are unchanged. A released daemon or proxy never redirects this route, so it parses the same requests. A refused preflight falls back to the legacy /upload route, as any failed preflight does."
-    },
-    {
-      "declaration": "packages/remote/src/upload-client.ts#finalizeDirectUpload",
-      "digest": "sha256:d25ad008a8f1f9ba4046f657a902e510ba12c0f851669a24839f143ba2ded5b5",
-      "rationale": "The request goes through credentialedFetch: a 307 or 308 is followed only on the daemon's own origin, and a hop to another origin rejects instead of carrying x-agent-device-token there. The request body, headers, and route are unchanged. A released daemon or proxy never redirects this route, so it parses the same requests. A refused finalize fails the direct upload, and uploadArtifact then takes the legacy /upload route."
-    },
-    {
       "declaration": "packages/daemon/src/server/http/http-server.ts#MAX_HTTP_RPC_BODY_BYTES",
       "digest": "sha256:eed6cb154db2b67ffe5f058ef0570fec247a5d2a43af2d42952dee0b08870a87",
       "rationale": "The /rpc body limit is now DAEMON_REQUEST_MAX_BYTES (64 MiB), the one request limit the socket transport, the proxy default, and client writers share, raised from 1 MiB. A larger limit refuses nothing a released client sends; a new client refuses a request over 64 MiB before sending it, and a released daemon still answers anything between 1 MiB and 64 MiB with its own -32700 refusal, as before."
+    },
+    {
+      "declaration": "packages/remote/src/upload-client.ts#requestUploadPreflight",
+      "digest": "sha256:ed644d7e59c4703e3b7a05dda769b3f0554dc481598ba01906a131c543d68ffc",
+      "rationale": "The request now uses fetch with redirect: 'error', so no redirect is followed: fetch keeps x-agent-device-token on a cross-origin hop. The request body, headers, and route are unchanged. A released daemon or proxy never redirects this route, so it parses the same requests. A redirected preflight falls back to the legacy /upload route, as any failed preflight does."
+    },
+    {
+      "declaration": "packages/remote/src/upload-client.ts#finalizeDirectUpload",
+      "digest": "sha256:8cd172a169aa5e54695d9185fa259d93c71b82938455398b83e7e4e214578df2",
+      "rationale": "The request now uses fetch with redirect: 'error', so no redirect is followed: fetch keeps x-agent-device-token on a cross-origin hop. The request body, headers, and route are unchanged. A released daemon or proxy never redirects this route, so it parses the same requests. A redirected finalize fails with COMMAND_FAILED, and uploadArtifact then takes the legacy /upload route."
     }
   ]
 }
