@@ -2,6 +2,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { findProjectRoot } from '@agent-device/host-kit/version';
+import { assertSafeDerivedCleanup } from '../packages/apple-runner/src/runner-cache.ts';
 import {
   resolveRunnerDerivedOverride,
   resolveRunnerScriptDefaultDerivedPath,
@@ -47,6 +49,7 @@ for (const platform of requested) {
   }
   const targetPath = resolveDerivedPath(platform);
   try {
+    assertSafeDerivedCleanup(targetPath, process.env, findProjectRoot);
     const result = cleanDerivedPath(platform, targetPath);
     console.log(formatCleanupResult(platform, targetPath, result));
   } catch (error) {

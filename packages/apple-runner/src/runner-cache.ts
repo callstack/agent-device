@@ -295,11 +295,12 @@ function shouldCleanDerived(): boolean {
 export function assertSafeDerivedCleanup(
   derivedPath: string,
   env: NodeJS.ProcessEnv = hostEnvironment().env,
+  projectRoot: () => string = findProjectRoot,
 ): void {
   if (!resolveRunnerDerivedOverride(env)) {
     return;
   }
-  if (isPathInsideProjectTmp(derivedPath)) {
+  if (isPathInsideProjectTmp(derivedPath, projectRoot())) {
     return;
   }
   throw new AppError(
@@ -307,13 +308,13 @@ export function assertSafeDerivedCleanup(
     'Refusing to clean AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH automatically',
     {
       derivedPath,
-      hint: `Unset AGENT_DEVICE_IOS_CLEAN_DERIVED, or move AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH under a subdirectory of ${path.join(findProjectRoot(), '.tmp')}.`,
+      hint: `Unset AGENT_DEVICE_IOS_CLEAN_DERIVED, or move AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH under a subdirectory of ${path.join(projectRoot(), '.tmp')}.`,
     },
   );
 }
 
-function isPathInsideProjectTmp(targetPath: string): boolean {
-  const projectTmpRoot = path.resolve(findProjectRoot(), '.tmp');
+function isPathInsideProjectTmp(targetPath: string, projectRoot: string): boolean {
+  const projectTmpRoot = path.resolve(projectRoot, '.tmp');
   const relativePath = path.relative(projectTmpRoot, path.resolve(targetPath));
   return relativePath !== '' && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
 }
