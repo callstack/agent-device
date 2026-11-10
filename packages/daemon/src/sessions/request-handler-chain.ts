@@ -6,7 +6,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonCommandRoute } from '@agent-device/command-registry/daemon-command-descriptor';
-import { getDaemonCommandRoute } from '../core/daemon-command-registry.ts';
+import { getDaemonCommandRoute, getSessionCommandKind } from '../core/daemon-command-registry.ts';
 import * as genericRequestHandlerModule from '../execution/request-generic-dispatch.ts';
 import type { DaemonCommandContext } from '../core/context.ts';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
@@ -126,9 +126,30 @@ const DAEMON_ROUTE_HANDLERS = {
 
 export type { DaemonCommandRoute };
 
+/**
+ * `batch` and `replay` re-enter this chain per step, so an `open` step can clear a closed web
+ * session. Inventory commands do not drive the browser.
+ */
+function closedWebSessionAllows(command: string): boolean {
+  return (
+    command === 'open' ||
+    command === 'close' ||
+    command === 'batch' ||
+    command === 'replay' ||
+    getSessionCommandKind(command) === 'inventory'
+  );
+}
+
 export async function runRequestHandlerChain(
   params: RequestHandlerChainParams,
 ): Promise<DaemonResponse | null> {
+  if (
+    !closedWebSessionAllows(params.req.command) &&
+    params.sessionStore.isWebSessionClosed(params.sessionName)
+  ) {
+    const { namedSessionNotFoundError } = await import('../core/explicit-session-resolution.ts');
+    throw namedSessionNotFoundError(params.sessionName);
+  }
   const route = getDaemonCommandRoute(params.req.command);
   return await DAEMON_ROUTE_HANDLERS[route].run(params);
 }

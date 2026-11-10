@@ -21,10 +21,8 @@ export type AgentBrowserFleet = Readonly<{
   openStarted(session: string): void;
   /** The `open` for `session` ended; `launched` is whether the browser is up. */
   openSettled(session: string, launched: boolean): void;
-  /** A close for `session` completed, with or without a successful backend result. */
-  closed(session: string, succeeded: boolean): void;
-  /** A successful close revoked this browser until its next successful open. */
-  wasClosed(session: string): boolean;
+  /** The browser of `session` was closed. */
+  closed(session: string): void;
   /** Every launched browser exited without a close: drop them. Launching ones stay. */
   evictLaunched(): void;
   /** The sessions whose browser is launching or up, whether or not the daemon published them. */
@@ -45,7 +43,6 @@ function createAgentBrowserFleet(): AgentBrowserFleet {
   const recordLocks = new Map<string, Promise<unknown>>();
   const opening = new Map<string, number>();
   const launched = new Set<string>();
-  const closed = new Set<string>();
   return Object.freeze({
     updateRecord: async (task) => await withKeyedLock(recordLocks, RECORD_LOCK_KEY, task),
     openStarted(session) {
@@ -55,16 +52,11 @@ function createAgentBrowserFleet(): AgentBrowserFleet {
       const remaining = (opening.get(session) ?? 1) - 1;
       if (remaining > 0) opening.set(session, remaining);
       else opening.delete(session);
-      if (browserUp) {
-        launched.add(session);
-        closed.delete(session);
-      }
+      if (browserUp) launched.add(session);
     },
-    closed(session, succeeded) {
+    closed(session) {
       launched.delete(session);
-      if (succeeded) closed.add(session);
     },
-    wasClosed: (session) => closed.has(session),
     evictLaunched() {
       launched.clear();
     },

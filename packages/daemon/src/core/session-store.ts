@@ -57,6 +57,12 @@ export type RetainedExecutionHost = Readonly<{
 
 export class SessionStore {
   private readonly sessions = new Map<string, SessionEntry>();
+  /**
+   * Addresses whose web browser close succeeded. The set lives on this store, so it ends when the
+   * daemon's store does: a restart starts without it. A failed close never enters it, and a
+   * successful open leaves it.
+   */
+  private readonly closedWebSessions = new Set<string>();
   private readonly retainedExecutionHosts = new Map<string, RetainedExecutionHost>();
   private acceptingSessions = true;
   private readonly runtimeHints = new Map<string, SessionRuntimeHints>();
@@ -164,6 +170,20 @@ export class SessionStore {
     }
     this.runtimeHints.delete(ref.address);
     return this.sessions.delete(ref.address);
+  }
+
+  /** The web browser for `address` closed successfully. Later non-open commands refuse it. */
+  markWebSessionClosed(address: string): void {
+    this.closedWebSessions.add(address);
+  }
+
+  /** A successful open of `address` may use the browser again. */
+  clearClosedWebSession(address: string): void {
+    this.closedWebSessions.delete(address);
+  }
+
+  isWebSessionClosed(address: string): boolean {
+    return this.closedWebSessions.has(address);
   }
 
   listRetainedExecutionHosts(leaseId: string): RetainedExecutionHost[] {
