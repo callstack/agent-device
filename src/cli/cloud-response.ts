@@ -22,9 +22,13 @@ export async function readCloudJsonResponse<T>(
     }
   }
   if (!response.ok) {
-    throw new AppError('UNAUTHORIZED', options.rejectedMessage, {
-      status: response.status,
-      response: parsed,
+    const status = response.status;
+    const code = status === 401 || status === 403 ? 'UNAUTHORIZED' : 'COMMAND_FAILED';
+    throw new AppError(code, options.rejectedMessage, {
+      status,
+      ...(status === 429 || status >= 500
+        ? { retriable: true, hint: 'Retry the request later. Do not sign in again.' }
+        : {}),
     });
   }
   return parsed as T;
