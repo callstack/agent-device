@@ -239,7 +239,7 @@ test('a failed `is` predicate exits non-zero, whatever answered it', async () =>
   assert.ok(!output.includes('Passed'), 'a failed assertion must never render as passed');
 });
 
-test('a failing `test` suite exits 1 through the flushed exit path', async () => {
+test('#1596: a failing `test` suite exits 1 through the flushed exit path', async () => {
   const flow = path.join(mkdtempForTestSync('agent-device-failing-suite-'), 'login.ad');
   fs.writeFileSync(flow, 'open "Demo"\n');
   const restoreEnv = installIsolatedCliTestEnv();
