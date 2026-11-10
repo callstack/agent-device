@@ -119,7 +119,13 @@ test('a file moved out of a device-owned root still selects that lane', () => {
       {
         cwd: root,
         encoding: 'utf8',
-        env: { ...process.env, BASE_SHA: base, GITHUB_EVENT_NAME: 'pull_request' },
+        env: {
+          ...process.env,
+          BASE_SHA: base,
+          GITHUB_EVENT_NAME: 'pull_request',
+          GITHUB_OUTPUT: '',
+          GITHUB_STEP_SUMMARY: '',
+        },
       },
     );
     expect(output).toContain(`run; replay-android input changed: ${source}`);

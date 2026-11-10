@@ -2,11 +2,19 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { ContractCoverageEntry } from './coverage-manifest.ts';
 
-type CollectedTask = { type: string; name: string; tasks?: readonly CollectedTask[] };
+type CollectedTask = {
+  type: string;
+  name: string;
+  mode: string;
+  tasks?: readonly CollectedTask[];
+};
+
+// A skipped or todo test proves nothing, so only tests that execute count as registered.
+const EXECUTING_MODES: ReadonlySet<string> = new Set(['run', 'only']);
 
 function registeredTestNames(tasks: readonly CollectedTask[], names: Set<string> = new Set()) {
   for (const task of tasks) {
-    if (task.type === 'test') names.add(task.name);
+    if (task.type === 'test' && EXECUTING_MODES.has(task.mode)) names.add(task.name);
     if (task.tasks) registeredTestNames(task.tasks, names);
   }
   return names;

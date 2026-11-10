@@ -34,7 +34,10 @@ export function packageEntrySources(
     .filter((target): target is string => typeof target === 'string')
     .map((target) => {
       const key = /^\.\/dist\/src\/(.+)\.js$/.exec(target)?.[1];
-      const source = key ? (buildEntries as Readonly<Record<string, string>>)[key] : undefined;
+      const source =
+        key && Object.hasOwn(buildEntries, key)
+          ? (buildEntries as Readonly<Record<string, string>>)[key]
+          : undefined;
       if (!source) throw new Error(`package export ${target} names no build entry`);
       return source;
     });

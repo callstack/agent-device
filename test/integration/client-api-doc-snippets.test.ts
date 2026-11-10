@@ -21,9 +21,10 @@ import { runCmdSync } from '@agent-device/host-kit/command';
 // 2.5s slow-test budget (see docs/agents/testing.md).
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-// Pages left out: ai-sdk.md and eve.md import third-party packages the repo does not install,
-// revyl.md imports the separately published @agent-device/revyl plugin;
-// plugins.md, replay-e2e.md and migrating-gestures.md show fragments, not programs.
+// Pages left out: ai-sdk.md and eve.md import third-party packages the repo does not install;
+// revyl.md imports the separately published @agent-device/revyl plugin; plugins.md and
+// migrating-gestures.md show fragments, not programs; replay-e2e.md's reporter module leaves its
+// parameters untyped because no public subpath exports the reporter types.
 const API_DOC_PATHS = [
   'client-api.md',
   'build-an-integration.md',
