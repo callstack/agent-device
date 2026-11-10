@@ -98,7 +98,8 @@ export async function downloadRemoteArtifactFromUrl(
           let body = '';
           res.setEncoding('utf8');
           res.on('data', (chunk) => {
-            body = (body + chunk).slice(0, 65536);
+            const remainingChars = 65536 - body.length;
+            if (remainingChars > 0) body += chunk.slice(0, remainingChars);
           });
           const fail = () => {
             settle(
