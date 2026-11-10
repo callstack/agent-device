@@ -53,7 +53,11 @@ export function createAndroidEmulatorHost(
           ? await readFrontmostAppPid().catch(() => undefined)
           : undefined;
       const pid = runCmdDetached('emulator', args);
-      const startTime = readProcessIdentityFacts(pid).then((facts) => facts.startTime);
+      // Recorded before any later step can throw, so a failed launch can still be stopped.
+      launched.set(pid, {
+        avdName,
+        startTime: readProcessIdentityFacts(pid).then((facts) => facts.startTime),
+      });
       if (frontmostPid !== undefined) {
         runCmdDetached('osascript', [
           '-l',
@@ -65,8 +69,6 @@ export function createAndroidEmulatorHost(
           String(bootBudgetMs),
         ]);
       }
-      // Recorded only once the launch succeeds, so a failed launch leaves nothing behind.
-      launched.set(pid, { avdName, startTime });
       return pid;
     },
     terminate: async (pid) => {

@@ -199,15 +199,12 @@ const STOP_CASES: HostCase[] = [
     expect: UNVERIFIED,
   },
   {
-    // The grace period ends with the pid running another program under the same lifetime, as after
-    // an `exec`: SIGKILL re-proves identity first and spares it.
+    // The grace period ends with the same lifetime running another program, as after an `exec`:
+    // that is neither proof it is gone nor permission for SIGKILL, so it is retained.
     name: 'execs another program while it is given its grace period',
     commandAfterSignal: { signal: 'SIGTERM', command: '/usr/bin/other --serve' },
     ...HELD,
-    expect: {
-      outcome: { status: 'stopped', signal: 'SIGTERM', reassigned: true },
-      signals: ['SIGTERM'],
-    },
+    expect: { outcome: UNVERIFIED.outcome, signals: ['SIGTERM'] },
   },
   {
     name: 'finalizes on the interrupt its caller opens with',
@@ -227,7 +224,15 @@ const STOP_CASES: HostCase[] = [
     expect: REASSIGNED,
   },
   {
-    name: 'pid whose command line names a different program',
+    // A confirmed start time with another command line is the same lifetime, as after an argv
+    // rewrite: never signaled, and never reported gone.
+    name: 'pid whose command line names a different program under its recorded lifetime',
+    identity: { command: '/usr/bin/other --serve' },
+    expect: UNVERIFIED,
+  },
+  {
+    name: 'pid whose command line names a different program, with only a command recorded',
+    claims: 'matches',
     identity: { command: '/usr/bin/other --serve' },
     expect: REASSIGNED,
   },

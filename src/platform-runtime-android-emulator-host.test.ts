@@ -139,7 +139,7 @@ test('a terminate that could not prove the exit keeps the launch for a retry', a
   expect(stopProcessAndConfirmExit).toHaveBeenCalledTimes(2);
 });
 
-test('a launch that fails after spawning leaves nothing for terminate to signal', async () => {
+test('a launch that fails after spawning can still be stopped by terminate', async () => {
   runCmdDetached
     .mockImplementationOnce(() => 4242)
     .mockImplementationOnce(() => {
@@ -150,5 +150,9 @@ test('a launch that fails after spawning leaves nothing for terminate to signal'
   await expect(host.launch('Pixel_9', false, 90_000)).rejects.toThrow('osascript missing');
   await host.terminate(4242);
 
-  expect(stopProcessAndConfirmExit).not.toHaveBeenCalled();
+  expect(stopProcessAndConfirmExit).toHaveBeenCalledOnce();
+  expect(stopProcessAndConfirmExit).toHaveBeenCalledWith(
+    expect.objectContaining({ pid: 4242 }),
+    expect.anything(),
+  );
 });

@@ -15,6 +15,8 @@ const processState = vi.hoisted(() => ({
   exitsOnSignal: true,
   /** The command a signaled process shows afterwards, as after an `exec`. */
   commandAfterSignal: undefined as string | undefined,
+  /** The start time a signaled pid shows afterwards, as when the pid is handed to a new process. */
+  startAfterSignal: undefined as string | undefined,
   signals: [] as Array<string | number | undefined>,
   mockRunCmd: vi.fn(),
 }));
@@ -33,6 +35,7 @@ function driveHost(): void {
     processState.signals.push(signal);
     if (processState.commandAfterSignal)
       processState.commands.set(pid, processState.commandAfterSignal);
+    if (processState.startAfterSignal) processState.starts.set(pid, processState.startAfterSignal);
     if (processState.exitsOnSignal) processState.alive.delete(pid);
     return true;
   }) as typeof process.kill);
@@ -58,6 +61,7 @@ beforeEach(() => {
   processState.zombiePids.clear();
   processState.exitsOnSignal = true;
   processState.commandAfterSignal = undefined;
+  processState.startAfterSignal = undefined;
   processState.signals = [];
   processState.mockRunCmd.mockReset();
   driveHost();
@@ -255,7 +259,7 @@ test('startup keeps a confirmed process that outlives SIGKILL as survived, not a
   }
 });
 
-test('startup does not force-kill a live process after its identity changes', async () => {
+test('startup does not force-kill or forget a live process whose command changes after SIGTERM', async () => {
   const { store, cleanup } = reapFixture('replaced');
   hostRuns(BROWSER);
   processState.exitsOnSignal = false;
@@ -268,7 +272,46 @@ test('startup does not force-kill a live process after its identity changes', as
       killTimeoutMs: 1,
     });
 
-    assert.deepEqual(summary.terminatedPids, [BROWSER.pid]);
+    assert.deepEqual(summary.unconfirmedPids, [BROWSER.pid]);
+    assert.deepEqual(processState.signals, ['SIGTERM']);
+    assert.equal(store.read().length, 1);
+  } finally {
+    cleanup();
+  }
+});
+
+test('startup keeps a record whose recorded lifetime now shows another command, without signaling it', async () => {
+  // A browser that rewrites its argv keeps its start time: that is not proof it is gone.
+  const { store, cleanup } = reapFixture('argv-rewrite');
+  hostRuns({ ...BROWSER, command: '/opt/chrome --type=browser' });
+  try {
+    store.replace({ kind: 'daemon' }, [BROWSER]);
+
+    const summary = await reapOwnedProcessRecordsAtStartup(store);
+
+    assert.deepEqual(summary.unconfirmedPids, [BROWSER.pid]);
+    assert.deepEqual(processState.signals, []);
+    assert.equal(store.read().length, 1);
+  } finally {
+    cleanup();
+  }
+});
+
+test('startup counts a pid reassigned after SIGTERM as missing, not terminated', async () => {
+  const { store, cleanup } = reapFixture('reassigned-after-term');
+  hostRuns(BROWSER);
+  processState.exitsOnSignal = false;
+  processState.startAfterSignal = 'Tue Nov 10 09:00:00 2026';
+  try {
+    store.replace({ kind: 'daemon' }, [BROWSER]);
+
+    const summary = await reapOwnedProcessRecordsAtStartup(store, {
+      termTimeoutMs: 1,
+      killTimeoutMs: 1,
+    });
+
+    assert.deepEqual(summary.missingPids, [BROWSER.pid]);
+    assert.deepEqual(summary.terminatedPids, []);
     assert.deepEqual(processState.signals, ['SIGTERM']);
     assert.equal(store.read().length, 0);
   } finally {
