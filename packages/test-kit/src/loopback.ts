@@ -1,3 +1,4 @@
+import { once } from 'node:events';
 import http from 'node:http';
 import net from 'node:net';
 
@@ -56,13 +57,9 @@ export async function listenOnLoopback(server: LoopbackServer): Promise<number> 
     sockets.add(socket);
     socket.on('close', () => sockets.delete(socket));
   });
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      server.off('error', reject);
-      resolve();
-    });
-  });
+  // `once` rejects when the server emits 'error' before 'listening'.
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') {
     throw new Error('Expected TCP server address.');

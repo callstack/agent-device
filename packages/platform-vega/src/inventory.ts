@@ -18,7 +18,7 @@ export function createVegaInventory(host: DeviceInventoryHostFor<'vega'>): Devic
   };
 }
 
-export function parseVegaDeviceList(rawOutput: string): DeviceInfo[] {
+function parseVegaDeviceList(rawOutput: string): DeviceInfo[] {
   if (!parseListedVegaSerials(rawOutput).some(isVegaVirtualDevice)) return [];
   return [
     {
