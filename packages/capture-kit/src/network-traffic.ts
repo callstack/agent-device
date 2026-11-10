@@ -61,14 +61,14 @@ export function mergeNetworkScans(
   secondary: NetworkScan,
   maxEntries = primary.dump.limits.maxEntries,
 ): NetworkScan {
-  const entries = [...primary.dump.entries];
+  const entries = primary.dump.entries.slice(0, maxEntries);
   const seen = new Set(entries.map(networkEntryKey));
   for (const entry of secondary.dump.entries) {
+    if (entries.length >= maxEntries) break;
     const key = networkEntryKey(entry);
     if (seen.has(key)) continue;
     seen.add(key);
     entries.push(entry);
-    if (entries.length >= maxEntries) break;
   }
   // The two windows can cover different, overlapping, or disjoint traffic. A
   // request either window named is named, and the rest union by identity, so

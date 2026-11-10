@@ -75,6 +75,52 @@ test('keeps missing canonical app-log text distinct and merges recovery first', 
   );
 });
 
+test('bounds merged network scans while preserving primary entries', () => {
+  const scan = (urls: string[], path: string) =>
+    readRecentNetworkTrafficFromText(
+      [...urls]
+        .reverse()
+        .map((url) => `GET ${url} status=200`)
+        .join('\n'),
+      {
+        path,
+        exists: urls.length > 0,
+        backend: 'android',
+        maxEntries: 2,
+        include: 'summary',
+        maxPayloadChars: 2048,
+        maxScanLines: 100,
+      },
+    );
+  const urls = (value: ReturnType<typeof scan>) => value.dump.entries.map(({ url }) => url);
+  const primary = scan(['https://a.example.test', 'https://b.example.test'], 'primary');
+  const secondary = scan(['https://c.example.test', 'https://d.example.test'], 'secondary');
+  const primaryBefore = urls(primary);
+
+  assert.deepEqual(urls(mergeNetworkScans(primary, secondary, 2)), [
+    'https://a.example.test',
+    'https://b.example.test',
+  ]);
+  assert.deepEqual(urls(primary), primaryBefore);
+  assert.deepEqual(
+    urls(
+      scan(['https://a.example.test', 'https://b.example.test', 'https://c.example.test'], 'large'),
+    ),
+    ['https://a.example.test', 'https://b.example.test'],
+  );
+  assert.deepEqual(
+    urls(
+      mergeNetworkScans(
+        scan(['https://a.example.test'], 'one'),
+        scan(['https://a.example.test', 'https://b.example.test'], 'duplicate'),
+        2,
+      ),
+    ),
+    ['https://a.example.test', 'https://b.example.test'],
+  );
+  assert.deepEqual(urls(mergeNetworkScans(scan([], 'empty-a'), scan([], 'empty-b'), 2)), []);
+});
+
 test('keeps Android adjacent enrichment disabled for Apple backends', () => {
   const { dump } = readRecentNetworkTrafficFromText(
     [
