@@ -5,6 +5,7 @@ import type { OpenApplicationInput } from './application-lifecycle-runtime.ts';
 import {
   bindDirectApplicationLifecycle,
   bindLocalApplicationLifecycleInteractor,
+  bindLocalDirectApplicationLifecycle,
   bindProviderApplicationLifecycleInteractor,
   invokeApplicationOpen,
 } from './application-lifecycle-interaction.ts';
@@ -74,6 +75,7 @@ test('direct lifecycle owners preserve the daemon runtime launch URL follow-up',
     binding,
     owner: 'Linux',
     openTargetIdentity: 'app-name',
+    closeBeforeRelaunch: true,
   });
 
   await lifecycle.openApplication(
@@ -90,6 +92,68 @@ test('direct lifecycle owners preserve the daemon runtime launch URL follow-up',
   });
   expect(calls[1]?.options).toMatchObject({ appBundleId: 'com.example.app' });
   expect(calls[1]?.options).toHaveProperty('launchArgs', undefined);
+});
+
+/** An interactor that records each open and close it receives, in order. */
+function lifecycleRecordingInteractor(calls: string[]): Interactor {
+  return {
+    open: async (app: string, options?: { terminateRunningApp?: boolean }) => {
+      calls.push(`open ${app} terminate=${String(options?.terminateRunningApp)}`);
+    },
+    openDevice: async () => undefined,
+    close: async (app: string) => {
+      calls.push(`close ${app}`);
+    },
+    setSetting: async () => undefined,
+  } as unknown as Interactor;
+}
+
+// CONTR3-1: the local direct owners (Linux, web, HarmonyOS, Vega) do not replace a running app on
+// open, so a relaunch that reached only `open` left the app running as it was.
+test('a local direct owner closes the running app before a relaunch open', async () => {
+  const calls: string[] = [];
+  const lifecycle = bindLocalDirectApplicationLifecycle({
+    owner: 'Linux',
+    openTargetIdentity: 'app-name',
+    host: { resolve: async () => lifecycleRecordingInteractor(calls) },
+    device: LINUX_DEVICE,
+    signal: new AbortController().signal,
+  });
+
+  await lifecycle.openApplication(
+    openInput({ target: 'gedit', positionals: ['gedit'], appBundleId: undefined, relaunch: true }),
+  );
+  await lifecycle.openApplication(
+    openInput({ target: 'gedit', positionals: ['gedit'], appBundleId: undefined }),
+  );
+
+  expect(calls).toEqual([
+    'close gedit',
+    'open gedit terminate=undefined',
+    'open gedit terminate=undefined',
+  ]);
+});
+
+test('an owner whose open restarts the app receives the relaunch as terminateRunningApp', async () => {
+  const calls: string[] = [];
+  const lifecycle = bindDirectApplicationLifecycle({
+    binding: bindProviderApplicationLifecycleInteractor({
+      device: IOS_SIMULATOR,
+      signal: new AbortController().signal,
+      resolveInteractor: () => lifecycleRecordingInteractor(calls),
+    }),
+    owner: 'provider',
+    openTargetIdentity: 'bundle-id',
+    closeBeforeRelaunch: false,
+  });
+
+  await lifecycle.openApplication(openInput({ relaunch: true }));
+  await lifecycle.openApplication(openInput());
+
+  expect(calls).toEqual([
+    'open com.example.app terminate=true',
+    'open com.example.app terminate=false',
+  ]);
 });
 
 test.each([
