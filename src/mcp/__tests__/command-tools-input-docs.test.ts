@@ -18,7 +18,6 @@ const UNDESCRIBED_TOOL_INPUTS = new Set([
   'audio.probeAction',
   'back.mode',
   'clipboard.action',
-  'clipboard.text',
   'close.saveScript',
   'debug.action',
   'diff.depth',

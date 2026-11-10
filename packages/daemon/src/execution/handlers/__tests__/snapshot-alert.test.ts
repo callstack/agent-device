@@ -84,6 +84,32 @@ test('alert accept retries a typed alert absence and succeeds on the second atte
   });
 });
 
+test('alert parses its subaction case-insensitively, as the registry classifies it', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim';
+  sessionStore.publish(sessionName, makeSession(sessionName));
+
+  const response = await handleSnapshotCommands(sessionName, sessionStore, ['ACCEPT']);
+
+  expect(response?.ok).toBe(true);
+  expect(mockRunnerCommand.mock.calls[0]?.[1]).toMatchObject({
+    command: 'alert',
+    action: 'accept',
+  });
+});
+
+test('alert refuses an unknown subaction instead of reading the alert', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim';
+  sessionStore.publish(sessionName, makeSession(sessionName));
+
+  await expect(
+    handleSnapshotCommands(sessionName, sessionStore, ['acceptt']),
+  ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+  expect(mockRunnerCommand).not.toHaveBeenCalled();
+  expect(sessionStore.get(sessionName)?.actions).toEqual([]);
+});
+
 test('alert accept adds a scoped-snapshot hint after retrying alert-not-found failures', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim';

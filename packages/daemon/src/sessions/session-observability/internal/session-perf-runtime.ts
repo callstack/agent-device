@@ -34,6 +34,7 @@ import type {
 } from '../../../core/request-runtime-binding.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
+import { requestCwd } from '../../../core/context.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { bindSessionPerfCapture } from '../../../core/session-capture-binding.ts';
 import { withCaptureOutputOwnership } from '../../../core/capture-output-ownership.ts';
@@ -146,7 +147,7 @@ async function executeAdmittedPerfPlan(
         appId: session.appBundleId,
         kind: plan.request.kind,
         outPath: plan.request.outPath
-          ? expandSessionPath(plan.request.outPath, params.req.meta?.cwd ?? params.host.cwd)
+          ? expandSessionPath(plan.request.outPath, requestCwd(params.req, params.host))
           : undefined,
         artifactsDir: path.join(
           params.sessionStore.ensureSessionDir(params.sessionName),
@@ -186,7 +187,7 @@ async function executeAdmittedPerfPlan(
       const data = await runtime.operations.perfProfileReport({
         appId: session.appBundleId,
         kind: plan.request.kind,
-        tracePath: expandSessionPath(tracePath, params.req.meta?.cwd ?? params.host.cwd),
+        tracePath: expandSessionPath(tracePath, requestCwd(params.req, params.host)),
         outPath,
         template: plan.request.template ?? (last?.kind === 'xctrace' ? last.template : undefined),
         profile: last,
@@ -294,7 +295,7 @@ async function stopPerfCapture(
   if (mismatchMessage) return errorResponse('INVALID_ARGS', mismatchMessage);
   if (request.outPath) {
     capture.handle.setOutputPath(
-      expandSessionPath(request.outPath, params.req.meta?.cwd ?? params.host.cwd),
+      expandSessionPath(request.outPath, requestCwd(params.req, params.host)),
     );
   }
   const completion = await finishLivePerfCapture({
@@ -440,8 +441,7 @@ function resolveNativeOutPath(
   requestedPath: string | undefined,
   fallbackFileName: string,
 ): string {
-  if (requestedPath)
-    return expandSessionPath(requestedPath, params.req.meta?.cwd ?? params.host.cwd);
+  if (requestedPath) return expandSessionPath(requestedPath, requestCwd(params.req, params.host));
   return path.join(
     params.sessionStore.ensureSessionDir(params.sessionName),
     `${timestampToken()}-${fallbackFileName}`,

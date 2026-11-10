@@ -1,13 +1,19 @@
 import {
-  isIosFamily,
-  isMacOs,
   publicPlatformString,
   type DeviceInfo,
+  type PublicPlatform,
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { JsonObject } from '@agent-device/contracts/client';
 
 type AppEventDevice = Pick<DeviceInfo, 'platform' | 'appleOs'>;
+
+const GLOBAL_APP_EVENT_URL_TEMPLATE_VARIABLE = 'AGENT_DEVICE_APP_EVENT_URL_TEMPLATE';
+const PLATFORM_APP_EVENT_URL_TEMPLATE_VARIABLES: Partial<Record<PublicPlatform, string>> = {
+  ios: 'AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE',
+  macos: 'AGENT_DEVICE_MACOS_APP_EVENT_URL_TEMPLATE',
+  android: 'AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE',
+};
 
 const APP_EVENT_NAME_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
 const MAX_APP_EVENT_PAYLOAD_BYTES = 8 * 1024;
@@ -46,13 +52,14 @@ export function resolveAppEventUrl(
   env: NodeJS.ProcessEnv,
 ): string {
   const platform = publicPlatformString(device);
-  const template = readAppEventUrlTemplate(device, env);
+  const variables = appEventUrlTemplateVariables(platform);
+  const template = readAppEventUrlTemplate(variables, env);
   if (!template) {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       `No app event URL template configured for ${platform}.`,
       {
-        hint: `Set AGENT_DEVICE_${platform.toUpperCase()}_APP_EVENT_URL_TEMPLATE or AGENT_DEVICE_APP_EVENT_URL_TEMPLATE, for example "myapp://agent-device/event?name={event}&payload={payload}".`,
+        hint: `Set ${variables.join(' or ')}, for example "myapp://agent-device/event?name={event}&payload={payload}".`,
       },
     );
   }
@@ -99,16 +106,19 @@ function parseTriggerEventPayload(
   }
 }
 
+/** The read order of template variables for one platform: its own variable first, if any. */
+function appEventUrlTemplateVariables(platform: PublicPlatform): readonly string[] {
+  const platformSpecific = PLATFORM_APP_EVENT_URL_TEMPLATE_VARIABLES[platform];
+  return platformSpecific
+    ? [platformSpecific, GLOBAL_APP_EVENT_URL_TEMPLATE_VARIABLE]
+    : [GLOBAL_APP_EVENT_URL_TEMPLATE_VARIABLE];
+}
+
 function readAppEventUrlTemplate(
-  device: AppEventDevice,
+  variables: readonly string[],
   env: NodeJS.ProcessEnv,
 ): string | undefined {
-  const platformSpecific = isIosFamily(device)
-    ? env.AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE
-    : isMacOs(device)
-      ? env.AGENT_DEVICE_MACOS_APP_EVENT_URL_TEMPLATE
-      : env.AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE;
-  const candidate = platformSpecific ?? env.AGENT_DEVICE_APP_EVENT_URL_TEMPLATE;
+  const candidate = variables.map((name) => env[name]).find((value) => value !== undefined);
   const trimmed = candidate?.trim();
   return trimmed ? trimmed : undefined;
 }

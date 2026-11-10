@@ -13,13 +13,17 @@ export type ResolvedPayloadInput =
   | { kind: 'file'; path: string }
   | { kind: 'inline'; text: string };
 
+export type PayloadPathOptions = {
+  /** Maps a path argument to the path to stat, for example against the caller's cwd. */
+  resolvePath?: (value: string) => string;
+};
+
+/** Error codes that prove the value names no existing file, so it may still be inline JSON. */
+const NO_SUCH_FILE_CODES = new Set(['ENOENT', 'ENAMETOOLONG', 'ENOTDIR']);
+
 export function resolvePayloadInput(
   value: string,
-  options?: {
-    subject?: string;
-    cwd?: string;
-    expandPath?: (value: string, cwd?: string) => string;
-  },
+  options?: { subject?: string } & PayloadPathOptions,
 ): ResolvedPayloadInput {
   const subject = options?.subject ?? 'Payload';
   const trimmed = value.trim();
@@ -27,7 +31,7 @@ export function resolvePayloadInput(
     throw new AppError('INVALID_ARGS', `${subject} cannot be empty`);
   }
 
-  const resolvedPath = options?.expandPath ? options.expandPath(trimmed, options.cwd) : trimmed;
+  const resolvedPath = options?.resolvePath ? options.resolvePath(trimmed) : trimmed;
 
   try {
     const stat = fs.statSync(resolvedPath);
@@ -41,7 +45,7 @@ export function resolvePayloadInput(
     if (code === 'EACCES' || code === 'EPERM') {
       throw new AppError('INVALID_ARGS', `${subject} file is not readable: ${resolvedPath}`);
     }
-    if (code && code !== 'ENOENT') {
+    if (code && !NO_SUCH_FILE_CODES.has(code)) {
       throw new AppError('COMMAND_FAILED', `Unable to read ${subject} file: ${resolvedPath}`, {
         cause: String(error),
       });

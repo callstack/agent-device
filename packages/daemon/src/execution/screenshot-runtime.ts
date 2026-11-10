@@ -23,7 +23,7 @@ import {
   readScreenshotResultMetadata,
 } from '@agent-device/capture-kit/screenshot-density';
 import { runtimeExecutionFromContext } from '../core/snapshot-runtime-capture-input.ts';
-import type { DaemonCommandContext } from '../core/context.ts';
+import { requestCwd, type DaemonCommandContext } from '../core/context.ts';
 import { captureSnapshotData } from '../core/snapshot-capture.ts';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import type {
@@ -349,7 +349,7 @@ function readScreenshotRequest(
   const positionals = req.positionals ?? [];
   const flags = req.flags ?? {};
   const expand = (value: string | undefined) =>
-    value === undefined ? undefined : expandSessionPath(value, req.meta?.cwd ?? hostCwd);
+    value === undefined ? undefined : expandSessionPath(value, requestCwd(req, { cwd: hostCwd }));
   const positionalPath = expand(positionals[0]);
   const outFlag = expand(flags.out);
   return {

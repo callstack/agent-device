@@ -62,6 +62,38 @@ test('doctor android inventory timeout surfaces the wedged-adb-server hint', asy
   assert.match(androidCheck?.hint ?? '', /adb kill-server && adb start-server/);
 });
 
+test('doctor reads every platform inventory concurrently and keeps platform order', async () => {
+  const req = { token: 't', session: 'default', command: 'doctor' } as DaemonRequest;
+  let markAppleStarted!: () => void;
+  const appleStarted = new Promise<void>((resolve) => {
+    markAppleStarted = resolve;
+  });
+  const checks: DoctorCheck[] = [];
+
+  const inventory = await withDeviceInventoryProvider(
+    async (request) => {
+      if (request.platform === 'android') {
+        // Android is read first and fails only once the Apple read has started, which a serial
+        // sweep never reaches.
+        await appleStarted;
+        throw new AppError('COMMAND_FAILED', 'adb is missing');
+      }
+      if (request.platform === 'apple') {
+        markAppleStarted();
+        return [BOOTED_IOS_SIMULATOR];
+      }
+      return [];
+    },
+    async () => await appendDeviceInventoryCheck(checks, req, undefined, process.env, false),
+  );
+
+  assert.deepEqual(
+    inventory?.devices.map((device) => device.id),
+    [BOOTED_IOS_SIMULATOR.id],
+  );
+  assert.equal(checks.find((check) => check.id === 'device-android')?.status, 'warn');
+});
+
 test('doctor inventory names as host devices only the platforms this host discovered', async () => {
   const androidEmulator: DeviceInfo = {
     platform: 'android',

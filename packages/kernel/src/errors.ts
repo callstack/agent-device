@@ -289,6 +289,12 @@ export const PRE_DISPATCH_REFUSAL_REASONS = {
    * or package, or install the app, then retry.
    */
   appNotInstalled: 'app_not_installed',
+  /**
+   * The request envelope itself was malformed (for example a positional that is not a string), so
+   * the transport refused it before any handler read it. Recovery: fix the client that built the
+   * request; resending it unchanged fails the same way.
+   */
+  malformedRequest: 'malformed_request',
 } as const;
 
 /** The refused composite step did not dispatch; earlier steps may already have dispatched. */
@@ -336,6 +342,16 @@ export function appNotInstalledDetails(): RefusalDetails<
 > {
   return {
     reason: PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled,
+    dispatched: 'no',
+  };
+}
+
+/** The details of a request envelope the transport refused before any handler read it. */
+export function malformedRequestDetails(): RefusalDetails<
+  (typeof PRE_DISPATCH_REFUSAL_REASONS)['malformedRequest']
+> {
+  return {
+    reason: PRE_DISPATCH_REFUSAL_REASONS.malformedRequest,
     dispatched: 'no',
   };
 }
