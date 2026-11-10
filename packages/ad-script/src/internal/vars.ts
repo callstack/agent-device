@@ -5,6 +5,7 @@ import type { SessionAction } from '@agent-device/contracts/session';
 // "genuinely shared recording vocabulary" relocated to its owner) — the key
 // shape comes from the sibling script grammar module.
 import { REPLAY_VAR_KEY_RE } from './script.ts';
+import type { ReplayFormat } from './format.ts';
 
 export type ReplayVarScope = {
   values: Readonly<Record<string, string>>;
@@ -20,6 +21,18 @@ export type ReplayVarSources = {
 };
 
 const SHELL_PREFIX = 'AD_VAR_';
+
+/**
+ * The variable names each replay format accepts from `-e KEY=VALUE` and `AD_VAR_<KEY>`: the
+ * names its `${...}` lookup can read. Maestro flows look up mixed-case and dotted names.
+ */
+const REPLAY_VAR_KEY_GRAMMAR: Record<ReplayFormat, { pattern: RegExp; description: string }> = {
+  ad: { pattern: REPLAY_VAR_KEY_RE, description: 'uppercase letters, digits, and underscores' },
+  maestro: {
+    pattern: /^[A-Za-z_][A-Za-z0-9_.]*$/,
+    description: 'letters, digits, underscores, and dots, starting with a letter or underscore',
+  },
+};
 const RESERVED_NAMESPACE_PREFIX = 'AD_';
 
 function isReservedNamespaceKey(key: string): boolean {
@@ -58,14 +71,17 @@ export function buildReplayVarScope(sources: ReplayVarSources): ReplayVarScope {
   return { values: merged, expandedBuiltinNames: new Set() };
 }
 
-export function collectReplayShellEnv(processEnv: NodeJS.ProcessEnv): Record<string, string> {
+export function collectReplayShellEnv(
+  processEnv: NodeJS.ProcessEnv,
+  format: ReplayFormat,
+): Record<string, string> {
   const result: Record<string, string> = {};
   for (const [rawKey, value] of Object.entries(processEnv)) {
     if (typeof value !== 'string') continue;
     if (!rawKey.startsWith(SHELL_PREFIX)) continue;
     const key = rawKey.slice(SHELL_PREFIX.length);
     if (key.length === 0) continue;
-    if (!REPLAY_VAR_KEY_RE.test(key)) continue;
+    if (!REPLAY_VAR_KEY_GRAMMAR[format].pattern.test(key)) continue;
     // Belt-and-suspenders: never let the stripped key land back in the reserved
     // AD_* namespace (e.g. shell `AD_VAR_AD_SESSION=evil` would become `AD_SESSION`).
     if (isReservedNamespaceKey(key)) continue;
@@ -74,7 +90,10 @@ export function collectReplayShellEnv(processEnv: NodeJS.ProcessEnv): Record<str
   return result;
 }
 
-export function parseReplayCliEnvEntries(entries: readonly string[]): Record<string, string> {
+export function parseReplayCliEnvEntries(
+  entries: readonly string[],
+  format: ReplayFormat,
+): Record<string, string> {
   const result: Record<string, string> = {};
   for (const entry of entries) {
     const eqIndex = entry.indexOf('=');
@@ -82,10 +101,11 @@ export function parseReplayCliEnvEntries(entries: readonly string[]): Record<str
       throw new AppError('INVALID_ARGS', `Invalid -e entry "${entry}": expected KEY=VALUE.`);
     }
     const key = entry.slice(0, eqIndex);
-    if (!REPLAY_VAR_KEY_RE.test(key)) {
+    const grammar = REPLAY_VAR_KEY_GRAMMAR[format];
+    if (!grammar.pattern.test(key)) {
       throw new AppError(
         'INVALID_ARGS',
-        `Invalid -e key "${key}": keys must be uppercase letters, digits, and underscores (e.g. APP_ID).`,
+        `Invalid -e key "${key}": keys must be ${grammar.description} (e.g. APP_ID).`,
       );
     }
     if (isReservedNamespaceKey(key)) {

@@ -314,25 +314,25 @@ test('runReplayCommand reports snapshot diagnostics on replay failure', async ()
   assert.match(String(diagnostics?.warning), /p95 2100ms over 4 captures/);
 });
 
-test('runReplayCommand applies CLI env overrides before Maestro compat mapping', async () => {
+test('runReplayCommand applies mixed-case CLI and shell env overrides before Maestro compat mapping', async () => {
   const { response, calls } = await runReplayFixture({
     label: 'maestro-env',
     script: [
-      'appId: ${APP_ID}',
+      'appId: ${appId}',
       'env:',
-      '  APP_ID: yaml-app',
-      '  BUTTON_ID: yaml-button',
+      '  appId: yaml-app',
+      '  buttonId: yaml-button',
       '---',
       '- launchApp',
       '- tapOn:',
-      '    id: ${BUTTON_ID}',
+      '    id: ${buttonId}',
       '',
     ].join('\n'),
     flags: {
       replayBackend: 'maestro',
       platform: 'android',
-      replayShellEnv: { AD_VAR_BUTTON_ID: 'shell-button' },
-      replayEnv: ['APP_ID=cli-app'],
+      replayShellEnv: { AD_VAR_buttonId: 'shell-button' },
+      replayEnv: ['appId=cli-app'],
     },
     invoke: async (req) => {
       if (req.command === 'snapshot') {

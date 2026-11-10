@@ -336,8 +336,8 @@ function readReplayScriptSourceEnv(
   replayShellEnv: Record<string, string>,
 ): Record<string, string> {
   return {
-    ...collectReplayShellEnv(replayShellEnv),
-    ...parseReplayCliEnvEntries(readReplayCliEnvEntries(input.env)),
+    ...collectReplayShellEnv(replayShellEnv, 'maestro'),
+    ...parseReplayCliEnvEntries(readReplayCliEnvEntries(input.env), 'maestro'),
   };
 }
 

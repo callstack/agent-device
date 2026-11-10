@@ -105,7 +105,7 @@ test('collectReplayShellEnv strips AD_VAR_ prefix and ignores other vars', () =>
     AD_VAR_: 'empty',
     OTHER_VAR: 'y',
     AD_APP_ID: 'no-legacy-prefix',
-  });
+  }, 'ad');
   assert.equal(result.APP_ID, 'settings');
   assert.equal(result.PATH, undefined);
   assert.equal(result['123'], undefined);
@@ -118,19 +118,37 @@ test('collectReplayShellEnv skips keys that land in reserved AD_* namespace afte
   const result = collectReplayShellEnv({
     AD_VAR_AD_SESSION: 'evil',
     AD_VAR_AD_FOO: 'evil',
-  });
+  }, 'ad');
   assert.equal(Object.prototype.hasOwnProperty.call(result, 'AD_SESSION'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(result, 'AD_FOO'), false);
 });
 
 test('parseReplayCliEnvEntries splits KEY=VALUE and rejects invalid keys', () => {
-  assert.deepEqual(parseReplayCliEnvEntries(['APP=settings', 'FOO=bar=baz']), {
+  assert.deepEqual(parseReplayCliEnvEntries(['APP=settings', 'FOO=bar=baz'], 'ad'), {
     APP: 'settings',
     FOO: 'bar=baz',
   });
-  assert.throws(() => parseReplayCliEnvEntries(['NOEQUAL']), AppError);
-  assert.throws(() => parseReplayCliEnvEntries(['lower=x']), AppError);
-  assert.throws(() => parseReplayCliEnvEntries(['=value']), AppError);
+  assert.throws(() => parseReplayCliEnvEntries(['NOEQUAL'], 'ad'), AppError);
+  assert.throws(() => parseReplayCliEnvEntries(['lower=x'], 'ad'), AppError);
+  assert.throws(() => parseReplayCliEnvEntries(['=value'], 'ad'), AppError);
+});
+
+test('Maestro -e and AD_VAR_ keys accept the mixed-case and dotted names Maestro flows look up', () => {
+  assert.deepEqual(parseReplayCliEnvEntries(['username=x', 'api.url=y'], 'maestro'), {
+    username: 'x',
+    'api.url': 'y',
+  });
+  assert.deepEqual(
+    collectReplayShellEnv({ AD_VAR_userName: 'shell', AD_VAR_9lives: 'no' }, 'maestro'),
+    { userName: 'shell' },
+  );
+  assert.deepEqual(collectReplayShellEnv({ AD_VAR_userName: 'shell' }, 'ad'), {});
+  assert.throws(
+    () => parseReplayCliEnvEntries(['9lives=x'], 'maestro'),
+    (error: unknown) =>
+      error instanceof AppError && error.code === 'INVALID_ARGS' && /starting with a letter/.test(error.message),
+  );
+  assert.throws(() => parseReplayCliEnvEntries(['AD_FOO=x'], 'maestro'), /AD_\* namespace is reserved/);
 });
 
 test('resolveReplayAction walks positionals and string flags', () => {
@@ -208,7 +226,7 @@ test.each([
   },
   {
     name: 'CLI -e via parseReplayCliEnvEntries',
-    run: () => parseReplayCliEnvEntries(['AD_FOO=x']),
+    run: () => parseReplayCliEnvEntries(['AD_FOO=x'], 'ad'),
     keyMatch: /AD_FOO/,
   },
   {
@@ -234,7 +252,7 @@ test.each([
 
 test('parseReplayCliEnvEntries error wording is user-friendly for invalid keys', () => {
   assert.throws(
-    () => parseReplayCliEnvEntries(['lower=x']),
+    () => parseReplayCliEnvEntries(['lower=x'], 'ad'),
     (error: unknown) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
