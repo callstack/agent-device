@@ -270,6 +270,25 @@ function resolveStringProps<T extends object>(
   return resolveStringValue(obj, scope, loc) as T;
 }
 
+/**
+ * The inverse of the interpolation `resolveReplayAction` applies to flags and runtime hints: every
+ * string in `value`, at any depth, gets the `\${` escape.
+ */
+export function escapeReplayStringValues<T>(value: T): T {
+  return escapeStringValue(value) as T;
+}
+
+function escapeStringValue(value: unknown): unknown {
+  if (typeof value === 'string') return escapeReplayLiteral(value);
+  if (Array.isArray(value)) return value.map((entry) => escapeStringValue(entry));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, escapeStringValue(entry)]),
+    );
+  }
+  return value;
+}
+
 function resolveStringValue(
   value: unknown,
   scope: ReplayVarScope,

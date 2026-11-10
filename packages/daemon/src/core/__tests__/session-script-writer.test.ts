@@ -116,6 +116,43 @@ test('write() escapes recorded literal ${...} text so replay resolves it back un
   expect(resolved[4]?.positionals).toEqual(['label="Other"', '${PASSWORD}']);
 });
 
+test('write() keeps a target annotation verbatim because replay never interpolates it', () => {
+  const root = mkdtempForTestSync('agent-device-script-writer-annotation-literal-');
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
+  const session = makeAuthoringSession('default');
+  const targetEvidence = {
+    role: 'button',
+    label: 'Pay ${amount}',
+    ancestry: [{ role: 'form', label: 'Checkout ${step}' }],
+    sibling: 0,
+    viewportOrder: 0,
+    verification: 'verified' as const,
+  };
+  recordActionEntry(
+    session,
+    {
+      command: 'click',
+      positionals: ['label="Pay ${amount}"'],
+      flags: {},
+      result: {},
+      targetEvidence,
+    },
+    hostCwd,
+  );
+
+  const { parsed } = writeAndParse(writer, session);
+  const resolved = resolveReplayAction(
+    parsed.actions[0]!,
+    { values: { amount: 'WRONG', step: 'WRONG' } },
+    { file: 'test.ad', line: 3 },
+  );
+  expect(resolved.positionals).toEqual(['label="Pay ${amount}"']);
+  expect(resolved.targetEvidence).toMatchObject({
+    label: 'Pay ${amount}',
+    ancestry: [{ role: 'form', label: 'Checkout ${step}' }],
+  });
+});
+
 // #3197: the recording half of `scroll --until`. A recorded hunt for an
 // off-screen element has to replay as the same hunt, so the flag must survive the
 // recorder's declared-key filter AND the writer's line, then parse back as a flag.

@@ -9,6 +9,7 @@ import {
   inferFillText,
   appendScriptSeriesFlags,
   escapeReplayLiteral,
+  escapeReplayStringValues,
   formatPortableActionLine,
   formatScriptArg,
   formatScriptStringLiteral,
@@ -482,27 +483,19 @@ function formatScript(
  * text gets the `\${` escape. Only a parameterized fill's own placeholder text stays live.
  */
 function escapeRecordedLiterals(action: SessionAction): SessionAction {
-  const escape = (value: unknown): unknown => {
-    if (typeof value === 'string') return escapeReplayLiteral(value);
-    if (Array.isArray(value)) return value.map(escape);
-    return value;
-  };
   const placeholder =
     action.command === 'fill' && action.recordedInputVariable !== undefined
       ? recordedInputPlaceholder(action.recordedInputVariable)
       : undefined;
   const lastIndex = action.positionals.length - 1;
-  const escapeRecord = <T extends object>(record: T | undefined): T | undefined =>
-    record &&
-    (Object.fromEntries(Object.entries(record).map(([key, value]) => [key, escape(value)])) as T);
   const refLabel = action.result?.refLabel;
   return {
     ...action,
     positionals: action.positionals.map((value, index) =>
       index === lastIndex && value === placeholder ? value : escapeReplayLiteral(value),
     ),
-    flags: escapeRecord(action.flags) ?? {},
-    runtime: escapeRecord(action.runtime),
+    flags: escapeReplayStringValues(action.flags),
+    runtime: escapeReplayStringValues(action.runtime),
     result:
       typeof refLabel === 'string'
         ? { ...action.result, refLabel: escapeReplayLiteral(refLabel) }

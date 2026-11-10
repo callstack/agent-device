@@ -4,6 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   buildReplayVarScope,
   collectReplayShellEnv,
+  escapeReplayStringValues,
   parseReplayCliEnvEntries,
   resolveReplayAction,
   resolveReplayString,
@@ -181,6 +182,27 @@ test('resolveReplayAction walks positionals and string flags', () => {
   assert.equal(resolved.flags?.snapshotScope, 'app');
   assert.equal(resolved.flags?.snapshotInteractiveOnly, true);
   assert.equal(resolved.flags?.snapshotDepth, 3);
+});
+
+test('escapeReplayStringValues undoes resolveReplayAction at every depth the resolver walks', () => {
+  const flags = {
+    snapshotScope: 'cost ${amount}',
+    nested: { label: '${name}', list: ['${a}', 7, { deep: '${b}' }] },
+    count: 2,
+  };
+  const action: SessionAction = {
+    ts: 0,
+    command: 'snapshot',
+    positionals: [],
+    flags: escapeReplayStringValues(flags) as SessionAction['flags'],
+    runtime: escapeReplayStringValues({ metroHost: '${HOST}' }),
+  };
+  const scope = buildReplayVarScope({
+    fileEnv: { amount: 'X', name: 'X', a: 'X', b: 'X', HOST: 'X' },
+  });
+  const resolved = resolveReplayAction(action, scope, LOC);
+  assert.deepEqual(resolved.flags, flags);
+  assert.deepEqual(resolved.runtime, { metroHost: '${HOST}' });
 });
 
 test('resolveReplayAction walks runtime hints', () => {

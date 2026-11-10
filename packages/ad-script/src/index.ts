@@ -54,6 +54,7 @@ export {
   collectReplayScrubbableVarValues,
   collectReplayShellEnv,
   escapeReplayLiteral,
+  escapeReplayStringValues,
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   readReplayShellEnvSource,
