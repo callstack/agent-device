@@ -55,6 +55,8 @@ export async function openAppLogOutput(
         }
         await closeOutput(output);
         rotateAppLogIfNeeded(pathname, rotation);
+        // Readers report a missing `app.log` as no output, so a rotation leaves an empty current file.
+        fs.closeSync(openVerifiedFileForAppend(pathname));
       });
       await disposal;
     },

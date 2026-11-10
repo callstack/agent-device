@@ -4,6 +4,7 @@ import path from 'node:path';
 import { withCommandHost } from '@agent-device/host-kit/command';
 import { afterEach, expect, test } from 'vitest';
 import { openAppLogOutput, readAppLogOutputTail } from './platform-runtime-app-log-output.ts';
+import { readRecentAppLogLines } from './platform-runtime-network-host.ts';
 import {
   bindTestCommandHost,
   createLiveTestHostEnvironment,
@@ -185,5 +186,11 @@ test('rotates when the final partial line flushed at disposal crosses the cap', 
   await sink[Symbol.asyncDispose]();
 
   expect(fs.readFileSync(`${outputPath}.1`, 'utf8')).toBe('p'.repeat(120));
-  expect(fs.existsSync(outputPath)).toBe(false);
+  expect(fs.readFileSync(outputPath, 'utf8')).toBe('');
+  expect(await readRecentAppLogLines(outputPath, 10)).toEqual({
+    path: outputPath,
+    exists: true,
+    text: '',
+    skippedLines: 0,
+  });
 });
