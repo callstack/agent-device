@@ -284,6 +284,26 @@ test('cli applies AGENT_DEVICE_PLATFORM to client-backed commands', async () => 
   assert.equal(result.calls[0]?.flags?.platform, 'android');
 });
 
+test('cli accepts every platform selector in AGENT_DEVICE_PLATFORM for a command without --platform', async () => {
+  const result = await runCliCapture(['auth', 'status', '--json'], {
+    env: { AGENT_DEVICE_PLATFORM: 'web' },
+    stateDirPrefix: 'agent-device-cli-platform-env-',
+  });
+  assert.equal(result.code, null, result.stdout);
+  assert.equal(JSON.parse(result.stdout).success, true);
+});
+
+test('cli rejects an unknown AGENT_DEVICE_PLATFORM with the platform selector list', async () => {
+  const result = await runCliCapture(['auth', 'status', '--json'], {
+    env: { AGENT_DEVICE_PLATFORM: 'symbian' },
+    stateDirPrefix: 'agent-device-cli-platform-env-',
+  });
+  assert.equal(result.code, 1);
+  const error = JSON.parse(result.stdout).error;
+  assert.equal(error.code, 'INVALID_ARGS');
+  assert.match(error.message, /apple, android, harmonyos, vega, linux, web, ios, macos/);
+});
+
 test('cli prints success acknowledgment for client-backed open in human mode', async () => {
   const result = await runCliCapture(['open', 'settings'], async () => ({
     ok: true,

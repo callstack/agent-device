@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { PLATFORM_SELECTORS, type PlatformSelector } from '@agent-device/kernel/device';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { DaemonLockPolicy } from '@agent-device/kernel/contracts';
 
@@ -77,13 +78,15 @@ function readConfiguredPlatform(raw: string | undefined): CliFlags['platform'] |
   if (raw === undefined) return undefined;
   const value = raw.trim().toLowerCase();
   if (!value) return undefined;
-  if (value === 'ios' || value === 'android' || value === 'apple') {
-    return value;
-  }
+  if (isPlatformSelector(value)) return value;
   throw new AppError(
     'INVALID_ARGS',
-    `Invalid AGENT_DEVICE_PLATFORM: ${raw}. Use ios, android, or apple.`,
+    `Invalid AGENT_DEVICE_PLATFORM: ${raw}. Use one of: ${PLATFORM_SELECTORS.join(', ')}.`,
   );
+}
+
+function isPlatformSelector(value: string): value is PlatformSelector {
+  return (PLATFORM_SELECTORS as readonly string[]).includes(value);
 }
 
 function readConflictMode(raw: string | undefined): DaemonLockPolicy | undefined {
