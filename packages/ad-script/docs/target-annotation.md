@@ -66,8 +66,11 @@ If per-field truncation still leaves more than 4 KiB, the writer removes `ancest
 This reduction is deterministic and uses the existing ancestry truncation direction.
 If only `ancestry[0]` remains and the payload still exceeds the limit, the writer sets `verification: "unverifiable"`.
 The limit measures serialized UTF-8 bytes, while field limits apply before JSON escaping.
-The writer drops `rect` if the downgraded payload still exceeds the limit, but does not recheck afterward.
-Escape-heavy values can therefore still produce an over-limit annotation that the parser rejects.
+Escape-heavy values can still exceed the limit after this downgrade.
+The writer then drops `rect`, `scrollRegion`, the remaining `ancestry`, and `label`, in that order.
+It measures the payload again after each drop and stops when the payload fits.
+Replay refuses recorded `"unverifiable"` evidence before it reads these fields, so the drops do not weaken replay.
+A capped field escapes to at most six times its limit, so `role` and `id` alone always fit and the writer never drops them.
 When the reduced tuple fits, the record-time self-check uses that tuple.
 A `verified` claim therefore applies to exactly the written evidence.
 

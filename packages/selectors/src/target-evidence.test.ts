@@ -221,6 +221,132 @@ test('computeTargetEvidence: max-size labels across K=8 ancestors reduce ancestr
   assert.deepEqual(reparsed, evidence);
 });
 
+// #4333: field caps count raw UTF-8 bytes, but the payload ceiling counts the serialized JSON. A
+// control character is one raw byte and six escaped ones (`\u0001`), so fields at their cap can
+// still overflow after the writer has dropped ancestry to its floor and dropped `rect`.
+const ESCAPE_HEAVY_FIELD = '\u0001'.repeat(TARGET_ANNOTATION_MAX_FIELD_BYTES);
+
+test('computeTargetEvidence: escape-heavy fields degrade until the unverifiable payload fits and reparses', () => {
+  const nodes = toSnapshotNodes([
+    { index: 0, type: ESCAPE_HEAVY_FIELD, label: ESCAPE_HEAVY_FIELD, depth: 0 },
+    {
+      index: 1,
+      type: ESCAPE_HEAVY_FIELD,
+      label: ESCAPE_HEAVY_FIELD,
+      identifier: ESCAPE_HEAVY_FIELD,
+      rect: { x: 0, y: 0, width: 10, height: 10 },
+      depth: 1,
+      parentIndex: 0,
+    },
+  ]);
+  const winner = nodes.at(-1)!;
+
+  const evidence = computeTargetEvidence({ node: winner, preActionNodes: nodes });
+
+  assert.ok(evidence);
+  assert.equal(evidence.verification, 'unverifiable');
+  const json = serializeTargetAnnotationV1(evidence);
+  assert.ok(
+    utf8ByteLength(json) <= TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
+    `payload is ${utf8ByteLength(json)} bytes`,
+  );
+  assert.deepEqual(parseTargetAnnotationV1Payload(json), evidence);
+});
+
+// #4333: the downgrade drops optional fields in a fixed order and stops at the first payload that
+// fits. Sweeping the winner's escape-heavy label across the ceiling passes every stopping point, so
+// no stopping point needs its own tuned length. The scroll container's label is short enough that
+// the winner fits whole without a label, and long enough that scrollRegion and ancestry each stop a
+// sweep.
+const OVERSIZED_DROP_ORDER = ['rect', 'scrollRegion', 'ancestry', 'label'] as const;
+const SCROLL_CONTAINER = { role: 'scrollview', label: '\u0001'.repeat(50) };
+
+test('computeTargetEvidence: an oversized payload drops rect, scrollRegion, ancestry, then label, and stops once it fits', () => {
+  const rect = { x: 0, y: 0, width: 10, height: 10 };
+  const build = (labelLength: number) =>
+    toSnapshotNodes([
+      { index: 0, type: 'Window', depth: 0 },
+      { index: 1, type: 'ScrollView', label: SCROLL_CONTAINER.label, depth: 1, parentIndex: 0 },
+      {
+        index: 2,
+        type: ESCAPE_HEAVY_FIELD,
+        identifier: ESCAPE_HEAVY_FIELD,
+        label: '\u0001'.repeat(labelLength),
+        rect,
+        depth: 2,
+        parentIndex: 1,
+      },
+    ]);
+  const unlabelled = build(0);
+  const whole = computeTargetEvidence({ node: unlabelled.at(-1)!, preActionNodes: unlabelled });
+  assert.equal(whole?.verification, 'verified');
+  assert.deepEqual(whole.scrollRegion, SCROLL_CONTAINER);
+  assert.deepEqual(whole.ancestry[0], SCROLL_CONTAINER);
+  const isPresent = (evidence: typeof whole, field: (typeof OVERSIZED_DROP_ORDER)[number]) =>
+    field === 'ancestry' ? evidence.ancestry.length > 0 : evidence[field] !== undefined;
+
+  const stops = new Set<number>();
+  for (let labelLength = 1; labelLength <= TARGET_ANNOTATION_MAX_FIELD_BYTES; labelLength += 1) {
+    const nodes = build(labelLength);
+    const evidence = computeTargetEvidence({ node: nodes.at(-1)!, preActionNodes: nodes });
+    assert.ok(evidence);
+    const firstKept = OVERSIZED_DROP_ORDER.findIndex((field) => isPresent(evidence, field));
+    const droppedCount = firstKept === -1 ? OVERSIZED_DROP_ORDER.length : firstKept;
+    for (const field of OVERSIZED_DROP_ORDER.slice(droppedCount)) {
+      assert.ok(
+        isPresent(evidence, field),
+        `${field} dropped out of order at length ${labelLength}`,
+      );
+    }
+    if (droppedCount > 0) {
+      // The values each field held before the downgrade; ancestry was already at its floor.
+      const undropped = {
+        rect,
+        scrollRegion: SCROLL_CONTAINER,
+        ancestry: [SCROLL_CONTAINER],
+        label: '\u0001'.repeat(labelLength),
+      };
+      const lastDropped = OVERSIZED_DROP_ORDER[droppedCount - 1]!;
+      const restored = Object.assign(structuredClone(evidence), {
+        [lastDropped]: undropped[lastDropped],
+      });
+      assert.ok(
+        utf8ByteLength(serializeTargetAnnotationV1(restored)) > TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
+        `${lastDropped} dropped at length ${labelLength} although the payload already fit`,
+      );
+    }
+    const json = serializeTargetAnnotationV1(evidence);
+    assert.ok(utf8ByteLength(json) <= TARGET_ANNOTATION_MAX_PAYLOAD_BYTES);
+    assert.deepEqual(parseTargetAnnotationV1Payload(json), evidence);
+    stops.add(droppedCount);
+  }
+  assert.deepEqual(
+    [...stops].sort((a, b) => a - b),
+    OVERSIZED_DROP_ORDER.map((_, index) => index).concat(OVERSIZED_DROP_ORDER.length),
+    'the sweep must stop once with nothing dropped and once after each field',
+  );
+});
+
+// The downgrade never drops `role` or `id`, so it relies on the two fitting even fully escaped. A
+// larger field cap breaks this, and the writer would again emit a payload its parser rejects.
+test('computeTargetEvidence: a downgrade with every optional field dropped fits at the worst-case escape ratio', () => {
+  const fullyDropped = {
+    id: ESCAPE_HEAVY_FIELD,
+    role: ESCAPE_HEAVY_FIELD,
+    ancestry: [],
+    sibling: Number.MAX_SAFE_INTEGER,
+    viewportOrder: Number.MAX_SAFE_INTEGER,
+    verification: 'unverifiable' as const,
+  };
+
+  const json = serializeTargetAnnotationV1(fullyDropped);
+
+  assert.ok(
+    utf8ByteLength(json) <= TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
+    `payload is ${utf8ByteLength(json)} bytes`,
+  );
+});
+
 test('computeTargetEvidence: a root node with no ancestors has empty ancestry and is still verified', () => {
   const nodes = toSnapshotNodes([
     {
