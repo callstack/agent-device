@@ -330,6 +330,31 @@ test('a 5xx with a non-JSON body keeps its status, dispatch disclosure, and idem
   assert.equal(calls, 2);
 });
 
+// A gateway's HTML 404/405/501 page carries no W3C error code: it is not the driver refusing the
+// route, so the caller must not fall back to a sibling route that could repeat the action.
+for (const status of [404, 405, 501]) {
+  test(`a non-JSON HTTP ${status} page is not an unsupported route`, async () => {
+    const transport = new WebDriverTransport({
+      clientVersion: '0.0.0-test',
+      endpoint: 'http://cloud-webdriver.test/wd/hub/',
+      requestPolicy: { timeoutMs: 30_000, retryAttempts: 0 },
+    });
+    globalThis.fetch = async () =>
+      new Response('<html>Not Found</html>', { status, headers: { 'Content-Type': 'text/html' } });
+
+    await assert.rejects(
+      transport.requestValue('POST', '/session/wd-1/appium/device/activate_app', {}),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(isWebDriverRouteUnsupported(error), false);
+        assert.equal(error.details?.status, status);
+        assert.equal(error.details?.dispatched, 'unknown');
+        return true;
+      },
+    );
+  });
+}
+
 test('a 2xx with a non-JSON body names its status', async () => {
   const transport = new WebDriverTransport({
     clientVersion: '0.0.0-test',

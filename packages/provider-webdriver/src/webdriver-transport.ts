@@ -212,10 +212,9 @@ export class WebDriverTransport {
     );
     if (ok)
       return { status, value: readWebDriverValue(text ? parseJsonResponse(text, status) : {}) };
-    // A gateway in front of the driver can answer an error with a non-JSON page (a `502 <html>`).
-    // Its status still decides retry and dispatch disclosure, so the raw body is only evidence.
     const parsed = text ? parseJsonBody(text) : { json: {} };
-    const payload = parsed === undefined ? truncateBody(text) : parsed.json;
+    if (parsed === undefined) throw nonJsonAnswerError(status, text);
+    const payload = parsed.json;
     const error = webdriverError(status, payload);
     if (isWebDriverRouteUnsupported(error)) {
       emitWebDriverDiagnostic(WEBDRIVER_ROUTE_UNSUPPORTED_REASON, {
@@ -382,6 +381,20 @@ function webdriverError(status: number, payload: unknown): AppError {
     // A 5xx means the driver received and processed the request, but not
     // whether the mutation it described completed before it failed.
     ...(status >= 500 ? dispatchDisclosure('unknown') : {}),
+  });
+}
+
+/**
+ * A non-JSON error answer comes from something in front of the driver (a gateway's `502 <html>`
+ * or a proxy's `404` page), not from the driver. Its status still decides retry, but it is never
+ * the driver's refusal of a route, so no sibling route is tried, and it cannot say whether the
+ * driver received the request. The raw body is truncated evidence only.
+ */
+function nonJsonAnswerError(status: number, text: string): AppError {
+  return new AppError('COMMAND_FAILED', `WebDriver request failed with HTTP ${status}.`, {
+    status,
+    response: truncateBody(text),
+    ...dispatchDisclosure('unknown'),
   });
 }
 
