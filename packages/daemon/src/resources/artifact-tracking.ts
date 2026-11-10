@@ -249,28 +249,37 @@ export async function listDownloadableArtifacts(
   const artifacts: DaemonArtifactInventoryEntry[] = [];
   for (const [id, entry] of pendingArtifacts()) {
     if (!canReadArtifact(entry, tenantId)) continue;
-    let stat: fs.Stats;
-    try {
-      stat = await fs.promises.stat(entry.artifactPath);
-    } catch {
-      cleanupDownloadableArtifact(id);
-      continue;
-    }
-    const listing = describeArtifactForInventory(id, entry, stat);
-    if (!listing || entry.cleanupRequested) continue;
-    artifacts.push({
-      id,
-      ...(entry.artifactType !== undefined ? { artifactType: entry.artifactType } : {}),
-      filename: listing.fileName,
-      mimeType: listing.mimeType,
-      ...(listing.sizeBytes !== undefined ? { sizeBytes: listing.sizeBytes } : {}),
-      createdAt: new Date(entry.createdAt).toISOString(),
-      expiresAt: new Date(entry.createdAt + ARTIFACT_CLEANUP_TIMEOUT_MS).toISOString(),
-      ...(entry.displayRotation !== undefined ? { displayRotation: entry.displayRotation } : {}),
-      ...(entry.sessionName !== undefined ? { sessionName: entry.sessionName } : {}),
-    });
+    const listed = await readInventoryEntry(id, entry);
+    if (listed) artifacts.push(listed);
   }
   return artifacts;
+}
+
+/** One entry's inventory row, or undefined when its source is gone or it is being cleaned up. */
+async function readInventoryEntry(
+  id: string,
+  entry: ArtifactEntry,
+): Promise<DaemonArtifactInventoryEntry | undefined> {
+  let stat: fs.Stats;
+  try {
+    stat = await fs.promises.stat(entry.artifactPath);
+  } catch {
+    cleanupDownloadableArtifact(id);
+    return undefined;
+  }
+  const listing = describeArtifactForInventory(id, entry, stat);
+  if (!listing || entry.cleanupRequested) return undefined;
+  return {
+    id,
+    ...(entry.artifactType !== undefined ? { artifactType: entry.artifactType } : {}),
+    filename: listing.fileName,
+    mimeType: listing.mimeType,
+    ...(listing.sizeBytes !== undefined ? { sizeBytes: listing.sizeBytes } : {}),
+    createdAt: new Date(entry.createdAt).toISOString(),
+    expiresAt: new Date(entry.createdAt + ARTIFACT_CLEANUP_TIMEOUT_MS).toISOString(),
+    ...(entry.displayRotation !== undefined ? { displayRotation: entry.displayRotation } : {}),
+    ...(entry.sessionName !== undefined ? { sessionName: entry.sessionName } : {}),
+  };
 }
 
 /**
