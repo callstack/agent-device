@@ -59,7 +59,7 @@ export const REPLAY_FLAGS = flagKeys('replayUpdate', 'replayEnv');
 // the common input keys in `commands/common-input-fields.ts`, which #2027
 // unified into one table. Neither list contains the other: 25 of the 42 keys
 // below (`remoteConfig`, `stateDir`, `daemonTransport`, `sessionIsolation`,
-// `leaseBackend`, `sessionLock`, every `provider*` and `aws*`) never become
+// `leaseBackend`, `sessionLock`, `devicePin`, every `provider*` and `aws*`) never become
 // structured command input, while the table's `cwd` and `debug` are not flags
 // and its `deviceTarget` row is spelled `target` here. Deriving this list from
 // that table would mean 25 rows carrying no schema, reader, or projection, so
@@ -81,6 +81,7 @@ export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
   'leaseId',
   'leaseBackend',
   'sessionLock',
+  'devicePin',
   'platform',
   'target',
   'device',

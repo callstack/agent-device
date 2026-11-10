@@ -38,6 +38,7 @@ const ENVIRONMENT_LINES = [
     description: 'Default screenshot scale factor',
   },
   { label: 'AGENT_DEVICE_SESSION_LOCK', description: 'Bound-session conflict mode' },
+  { label: 'AGENT_DEVICE_DEVICE_PIN', description: 'Pin the configured device selector' },
   { label: 'AGENT_DEVICE_DAEMON_BASE_URL', description: 'Connect to remote daemon' },
   {
     label: 'AGENT_DEVICE_DAEMON_AUTH_TOKEN',

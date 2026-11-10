@@ -18,18 +18,61 @@ import { type EnvMap } from '@agent-device/kernel/source-value';
 import type { DaemonLockPolicy } from '@agent-device/kernel/contracts';
 import { PLATFORM_SELECTORS, type PlatformSelector } from '@agent-device/kernel/device';
 
-export function resolveConfigBackedFlagDefaults(options: {
+type ConfigDefaultsOptions = {
   command: string | null;
   cwd: string;
   cliFlags: CliFlags;
   env: EnvMap;
-}): Partial<CliFlags> {
+};
+
+export function resolveConfigBackedFlagDefaults(options: ConfigDefaultsOptions): Partial<CliFlags> {
+  return resolveConfigBackedFlagDefaultsWithProvenance(options).flags;
+}
+
+/**
+ * The layer that set each resolved default: the config file it came from, or the environment
+ * variable. Later layers overwrite earlier ones, so an entry names the layer that won.
+ */
+export type FlagValueSource = {
+  kind: ConfigFileSource | 'env';
+  /** Human-readable origin, e.g. `project config file /repo/agent-device.json`. */
+  label: string;
+};
+
+export type FlagProvenance = Partial<Record<FlagKey, FlagValueSource>>;
+
+export type ConfigBackedFlagDefaults = {
+  flags: Partial<CliFlags>;
+  provenance: FlagProvenance;
+};
+
+export function resolveConfigBackedFlagDefaultsWithProvenance(
+  options: ConfigDefaultsOptions,
+): ConfigBackedFlagDefaults {
   const env = options.env;
-  const defaults = mergeDefinedFlags(
-    {} as Partial<CliFlags>,
-    loadConfigFileDefaults(resolveConfigPaths(options.cwd, options.cliFlags.config, env)),
-  );
-  return mergeDefinedFlags(defaults, readEnvFlagDefaults(env, options.command));
+  const provenance: FlagProvenance = {};
+  const flags: Partial<CliFlags> = {};
+  for (const entry of resolveConfigPaths(options.cwd, options.cliFlags.config, env)) {
+    const parsed = loadSingleConfigFile(entry);
+    mergeDefinedFlags(flags, parsed);
+    recordProvenance(provenance, parsed, { kind: entry.source, label: configFileLabel(entry) });
+  }
+  const envDefaults = readEnvFlagDefaults(env, options.command);
+  mergeDefinedFlags(flags, envDefaults.flags);
+  for (const [key, envName] of Object.entries(envDefaults.envNames)) {
+    provenance[key as FlagKey] = { kind: 'env', label: `environment variable ${envName}` };
+  }
+  return { flags, provenance };
+}
+
+function recordProvenance(
+  provenance: FlagProvenance,
+  flags: Partial<CliFlags>,
+  source: FlagValueSource,
+): void {
+  for (const [key, value] of Object.entries(flags)) {
+    if (value !== undefined) provenance[key as FlagKey] = source;
+  }
 }
 
 type ConfigFileSource = 'user' | 'project' | 'explicit';
@@ -60,15 +103,6 @@ function resolveConfigPaths(
 
 function resolveInputPath(inputPath: string, cwd: string, env: EnvMap): string {
   return resolveUserPath(inputPath, { cwd, env });
-}
-
-function loadConfigFileDefaults(pathsToCheck: ConfigPath[]): Partial<CliFlags> {
-  const merged: Partial<CliFlags> = {};
-  for (const entry of pathsToCheck) {
-    const parsed = loadSingleConfigFile(entry);
-    mergeDefinedFlags(merged, parsed);
-  }
-  return merged;
 }
 
 function loadSingleConfigFile(entry: ConfigPath): Partial<CliFlags> {
@@ -104,8 +138,12 @@ function loadSingleConfigFile(entry: ConfigPath): Partial<CliFlags> {
 
   return parseConfigObject(parsed as Record<string, unknown>, {
     source: entry.source,
-    label: `${entry.source === 'project' ? 'project ' : ''}config file ${filePath}`,
+    label: configFileLabel(entry),
   });
+}
+
+function configFileLabel(entry: ConfigPath): string {
+  return `${entry.source === 'project' ? 'project ' : ''}config file ${entry.path}`;
 }
 
 // The `record` config key was released (v0.21.10) as a project/user-config default, but
@@ -177,7 +215,10 @@ function parseConfigObject(
 // while every other command keeps working.
 const RETIRED_MAX_SIZE_ENV_COMMANDS = new Set(['screenshot', 'record']);
 
-function readEnvFlagDefaults(env: EnvMap, command: string | null): Partial<CliFlags> {
+function readEnvFlagDefaults(
+  env: EnvMap,
+  command: string | null,
+): { flags: Partial<CliFlags>; envNames: Partial<Record<FlagKey, string>> } {
   if (
     command !== null &&
     getOptionSpec(RETIRED_RECORD_CONFIG_KEY.flagKey)?.supportsCommand(command) === true &&
@@ -202,10 +243,10 @@ function readEnvFlagDefaults(env: EnvMap, command: string | null): Partial<CliFl
     );
   }
   const flags: Partial<CliFlags> = {};
+  const envNames: Partial<Record<FlagKey, string>> = {};
   for (const spec of getConfigurableOptionSpecs(command)) {
     if (spec.key === 'installSource') continue;
-    const envNames = spec.env.names;
-    const envValue = envNames
+    const envValue = spec.env.names
       .map((name) => ({ name, value: env[name] }))
       .find((entry) => typeof entry.value === 'string' && entry.value.trim().length > 0);
     if (!envValue) continue;
@@ -215,8 +256,9 @@ function readEnvFlagDefaults(env: EnvMap, command: string | null): Partial<CliFl
       `environment variable ${envValue.name}`,
       envValue.name,
     );
+    envNames[spec.key] = envValue.name;
   }
-  return flags;
+  return { flags, envNames };
 }
 
 /**

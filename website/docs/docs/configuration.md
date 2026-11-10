@@ -115,13 +115,45 @@ Use a numeric `artifact` value for an artifact ID. Use a string `artifact` value
 Project config can set a default lock mode for named sessions with `sessionLock`
 (`AGENT_DEVICE_SESSION_LOCK`). See [Lock a named session to a device](/docs/sessions#lock-a-named-session-to-a-device).
 
+## Pin a project to one device
+
+By default the `platform`, `device`, `udid`, and `serial` keys in `agent-device.json` are
+defaults: a `--device` flag or an MCP `device` input overrides them. Set `devicePin` to turn
+those defaults into a pin so a selector that names a different value fails instead of
+retargeting:
+
+```json
+{
+  "platform": "ios",
+  "device": "iPad Pro",
+  "devicePin": true
+}
+```
+
+With this config, `agent-device open --device "iPhone 16"` fails with `INVALID_ARGS` and
+`details.reason: "device_pin_conflict"`. The message and `details.pinSource` name the file
+that set the pin (`project config file /path/to/agent-device.json`), `details.pin` lists the
+pinned values, and `details.conflicts` lists each `{ key, pinned, requested }` pair. Branch on
+`details.reason`, never on the message.
+
+The pin only constrains the keys it sets: here `--udid` still narrows down to one iPad, and a
+selector that repeats the pinned value is accepted. A `devicePin` with no `platform`, `device`,
+`udid`, or `serial` beside it fails with `details.reason: "device_pin_without_selector"`. The
+pin is enforced on the client before a daemon is contacted, for the CLI, MCP tool calls, and
+batch files alike, and `AGENT_DEVICE_DEVICE_PIN=1` opts in from the environment when the
+selector lives in the user config.
+
+Pinning is separate from [session locks](/docs/sessions#lock-a-named-session-to-a-device): a
+lock protects a named session once it is bound; a pin scopes a whole project before any session
+exists.
+
 ## Supported environment variables
 
 Only the variables below, and those documented on command pages, are supported. Other `AGENT_DEVICE_*` names you may see in logs or source are internal.
 
 | Category | Env vars | Decision |
 | --- | --- | --- |
-| CLI defaults and config | `AGENT_DEVICE_HOME`, `AGENT_DEVICE_CONFIG`, `AGENT_DEVICE_SESSION`, `AGENT_DEVICE_PLATFORM`, `AGENT_DEVICE_SCREENSHOT_SCALE`, `AGENT_DEVICE_SESSION_LOCK`, `AGENT_DEVICE_DAEMON_BASE_URL`, `AGENT_DEVICE_DAEMON_AUTH_TOKEN`, `AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS`, `AGENT_DEVICE_CLOUD_BASE_URL` | Public. `AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS` is the ceiling (a positive integer number of milliseconds, default `120000`; any other value fails with `INVALID_ARGS` before a daemon spawns, and only when the client must start a daemon — a client that attaches to or reuses a running daemon never reads it) a client waits for a local daemon it starts to register; CLI, MCP, and Node clients share it. A live daemon is waited for while it records startup progress, so an overloaded host slows startup instead of failing it. A failed startup names the outcome in `details.reason`: `startup-exited` (the process ended before registering), `startup-stalled` (alive, no startup progress for a fixed 60 s window this variable does not change), or `startup-ceiling` (a startup was still live when the ceiling passed — this client's daemon or another client's; the client stops its own launch and never signals another client's live daemon. Only a progressing own launch outlasts the fixed stall window). Branch on `details.reason`, never on the message. |
+| CLI defaults and config | `AGENT_DEVICE_HOME`, `AGENT_DEVICE_CONFIG`, `AGENT_DEVICE_SESSION`, `AGENT_DEVICE_PLATFORM`, `AGENT_DEVICE_SCREENSHOT_SCALE`, `AGENT_DEVICE_SESSION_LOCK`, `AGENT_DEVICE_DEVICE_PIN`, `AGENT_DEVICE_DAEMON_BASE_URL`, `AGENT_DEVICE_DAEMON_AUTH_TOKEN`, `AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS`, `AGENT_DEVICE_CLOUD_BASE_URL` | Public. `AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS` is the ceiling (a positive integer number of milliseconds, default `120000`; any other value fails with `INVALID_ARGS` before a daemon spawns, and only when the client must start a daemon — a client that attaches to or reuses a running daemon never reads it) a client waits for a local daemon it starts to register; CLI, MCP, and Node clients share it. A live daemon is waited for while it records startup progress, so an overloaded host slows startup instead of failing it. A failed startup names the outcome in `details.reason`: `startup-exited` (the process ended before registering), `startup-stalled` (alive, no startup progress for a fixed 60 s window this variable does not change), or `startup-ceiling` (a startup was still live when the ceiling passed — this client's daemon or another client's; the client stops its own launch and never signals another client's live daemon. Only a progressing own launch outlasts the fixed stall window). Branch on `details.reason`, never on the message. |
 | Device scoping | `AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST`, `AGENT_DEVICE_IOS_SIMULATOR_DEVICE_SET` | Public. `AGENT_DEVICE_IOS_SIMULATOR_DEVICE_SET` is read by the daemon: every iOS simulator request that names no `--ios-simulator-device-set` uses that set, so iOS physical devices are not listed, and a request naming a different path string fails with `INVALID_ARGS` (`details.reason: "ios_simulator_device_set_outside_daemon_set"`). macOS and non-iOS requests ignore it. A daemon started by the CLI inherits the CLI's value; restart the daemon after changing it. |
 | Android test IME | `AGENT_DEVICE_TEST_IME` | Public. Same setting as `--test-ime` / `--no-test-ime` on `open`, `test`, and `replay`; see known limitations. |
 | Local daemon storage | `AGENT_DEVICE_STATE_DIR` | Public |

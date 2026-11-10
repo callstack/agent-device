@@ -261,9 +261,9 @@ function summarizeProviderScenarioFlagExclusions() {
       ],
     },
     {
-      name: 'remote connection and session-lock policy',
-      owner: 'connection/runtime/request policy tests',
-      keys: ['force', 'noLogin', 'sessionLock'],
+      name: 'remote connection, session-lock, and device-pin policy',
+      owner: 'connection/runtime/request policy and device-pin tests',
+      keys: ['force', 'noLogin', 'sessionLock', 'devicePin'],
     },
     {
       // The device spec is honoured by a backend in front of the daemon; the daemon only refuses it.

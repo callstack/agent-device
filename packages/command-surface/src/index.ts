@@ -37,8 +37,26 @@ export {
   applyDefaultPlatformBinding,
   resolveBindingSettings,
   resolveConfigBackedFlagDefaults,
+  resolveConfigBackedFlagDefaultsWithProvenance,
   type BindingSettings,
+  type ConfigBackedFlagDefaults,
+  type FlagProvenance,
+  type FlagValueSource,
 } from './schema/cli-config.ts';
+export {
+  assertSelectorHonorsDevicePin,
+  DEVICE_PIN_CONFLICT_REASON,
+  DEVICE_PIN_SELECTOR_KEYS,
+  DEVICE_PIN_WITHOUT_SELECTOR_REASON,
+  pickExplicitSelector,
+  resolveDevicePin,
+  resolveSelectorOrigins,
+  type DevicePin,
+  type DevicePinSelector,
+  type DevicePinSelectorKey,
+  type SelectorOrigins,
+  type SelectorValueOrigin,
+} from './schema/device-pin.ts';
 export { mergeDefinedFlags } from './schema/merge-flags.ts';
 
 const daemonWriters = {

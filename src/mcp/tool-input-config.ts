@@ -2,10 +2,13 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';
 import {
+  assertSelectorHonorsDevicePin,
   isFlagSupportedForCommand,
   mergeDefinedFlags,
+  pickExplicitSelector,
   resolveBindingSettings,
-  resolveConfigBackedFlagDefaults,
+  resolveConfigBackedFlagDefaultsWithProvenance,
+  resolveDevicePin,
   type BindingSettings,
   type CommandName,
   type JsonSchema,
@@ -22,12 +25,25 @@ export function resolveMcpConfigDefaults(
   supportedProperties: Readonly<Record<string, JsonSchema>>,
   host: HostEnvironment,
 ): { input: Record<string, unknown>; binding: BindingSettings } {
-  const defaults = resolveConfigBackedFlagDefaults({
+  const { flags: defaults, provenance } = resolveConfigBackedFlagDefaultsWithProvenance({
     command: name,
     cwd: host.cwd,
     env: host.env,
     cliFlags: explicitInput as CliFlags,
   });
+  // The pin is operator policy like the lock: a selector the model names must not retarget a
+  // pinned project, so it fails here with the same typed reason the CLI raises (#2161).
+  const devicePin = resolveDevicePin(defaults, provenance);
+  if (devicePin) {
+    assertSelectorHonorsDevicePin(
+      devicePin,
+      pickExplicitSelector(
+        explicitInput as Partial<CliFlags>,
+        new Set(Object.keys(explicitInput) as FlagKey[]),
+      ),
+      'input',
+    );
+  }
   const applicableDefaults: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(defaults)) {
     if (

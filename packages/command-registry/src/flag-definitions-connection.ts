@@ -408,4 +408,15 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     projectConfig: true,
     recorded: false,
   },
+  {
+    key: 'devicePin',
+    names: ['--device-pin'],
+    type: 'boolean',
+    usageLabel: '--device-pin',
+    usageHidden: true,
+    usageDescription:
+      'Turn the configured platform/device/udid/serial defaults into a pin: a selector that names a different value fails instead of retargeting (set devicePin in agent-device.json to scope a project to one device)',
+    projectConfig: true,
+    recorded: false,
+  },
 ];
