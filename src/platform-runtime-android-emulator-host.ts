@@ -38,6 +38,31 @@ export function createAndroidEmulatorHost(
 ): DeviceReadinessRuntimeHost['androidEmulator'] {
   // What each launch recorded about its emulator, so terminate signals only that process.
   const launched = new Map<number, { avdName: string; startTime: Promise<string | null> }>();
+  const terminate = async (pid: number): Promise<void> => {
+    const record = launched.get(pid);
+    if (!record) {
+      // Nothing names this pid as an emulator this host started, so nothing is signaled.
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'android_emulator_terminate_unrecorded_pid',
+        data: { pid },
+      });
+      return;
+    }
+    const startTime = await record.startTime;
+    const stop = await stopProcessAndConfirmExit(
+      {
+        pid,
+        identity: {
+          ...(startTime ? { startTime } : {}),
+          matches: (command) => isEmulatorCommandFor(command, record.avdName),
+        },
+      },
+      EMULATOR_STOP_BUDGET,
+    );
+    // A stop that could not prove the exit keeps the record, so a later terminate can retry.
+    if (stop.status === 'stopped') launched.delete(pid);
+  };
   return Object.freeze({
     discover: async (request, signal) => {
       signal.throwIfAborted();
@@ -53,49 +78,31 @@ export function createAndroidEmulatorHost(
           ? await readFrontmostAppPid().catch(() => undefined)
           : undefined;
       const pid = runCmdDetached('emulator', args);
-      // Recorded before any later step can throw, so a failed launch can still be stopped.
       launched.set(pid, {
         avdName,
         startTime: readProcessIdentityFacts(pid).then((facts) => facts.startTime),
       });
-      if (frontmostPid !== undefined) {
-        runCmdDetached('osascript', [
-          '-l',
-          'JavaScript',
-          '-e',
-          RETURN_FOCUS_SCRIPT,
-          String(pid),
-          String(frontmostPid),
-          String(bootBudgetMs),
-        ]);
+      // A caller learns the pid only from a launch that returns, so a launch that fails after the
+      // spawn stops its own emulator before it rethrows.
+      try {
+        if (frontmostPid !== undefined) {
+          runCmdDetached('osascript', [
+            '-l',
+            'JavaScript',
+            '-e',
+            RETURN_FOCUS_SCRIPT,
+            String(pid),
+            String(frontmostPid),
+            String(bootBudgetMs),
+          ]);
+        }
+      } catch (error) {
+        await terminate(pid);
+        throw error;
       }
       return pid;
     },
-    terminate: async (pid) => {
-      const record = launched.get(pid);
-      if (!record) {
-        // Nothing names this pid as an emulator this host started, so nothing is signaled.
-        emitDiagnostic({
-          level: 'warn',
-          phase: 'android_emulator_terminate_unrecorded_pid',
-          data: { pid },
-        });
-        return;
-      }
-      const startTime = await record.startTime;
-      const stop = await stopProcessAndConfirmExit(
-        {
-          pid,
-          identity: {
-            ...(startTime ? { startTime } : {}),
-            matches: (command) => isEmulatorCommandFor(command, record.avdName),
-          },
-        },
-        EMULATOR_STOP_BUDGET,
-      );
-      // A stop that could not prove the exit keeps the record, so a later terminate can retry.
-      if (stop.status === 'stopped') launched.delete(pid);
-    },
+    terminate,
   });
 }
 

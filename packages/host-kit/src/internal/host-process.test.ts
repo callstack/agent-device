@@ -5,6 +5,7 @@ import {
   expandProcessTree,
   isProcessAlive,
   isProcessGroupAlive,
+  judgeProcessIdentity,
   listHostProcesses,
   parseHostProcessList,
   readProcessCommand,
@@ -135,4 +136,35 @@ test('captureHostEnvironment copies the environment and reads the working direct
   assert.deepEqual(host, { env: { HOME: '/home/a', EMPTY: undefined }, cwd: '/work' });
   assert.notEqual(host.env, source.env);
   assert.equal(source.cwd.mock.calls.length, 1);
+});
+
+test('judgeProcessIdentity reads a command mismatch as reassigned only when no start time was recorded', () => {
+  const matches = (command: string) => command === 'recorded';
+  const facts = (startTime: string | null, command: string | null) => ({
+    startTime,
+    command,
+    zombie: false,
+  });
+  assert.equal(judgeProcessIdentity({ matches }, facts('S1', 'other')), 'reassigned');
+  assert.equal(
+    judgeProcessIdentity({ startTime: 'S1', matches }, facts('S1', 'other')),
+    'unverified',
+  );
+  assert.equal(
+    judgeProcessIdentity({ startTime: 'S1', matches }, facts(null, 'other')),
+    'unverified',
+  );
+  assert.equal(
+    judgeProcessIdentity({ startTime: 'S1', matches }, facts('S2', 'recorded')),
+    'reassigned',
+  );
+  assert.equal(judgeProcessIdentity({ startTime: 'S1', matches }, facts('S1', 'recorded')), 'ours');
+  assert.equal(judgeProcessIdentity({ startTime: 'S1', matches }, facts(null, null)), 'unverified');
+  assert.equal(
+    judgeProcessIdentity(
+      { startTime: 'S1', matches },
+      { ...facts('S1', 'recorded'), zombie: true },
+    ),
+    'exited',
+  );
 });

@@ -231,6 +231,13 @@ const STOP_CASES: HostCase[] = [
     expect: UNVERIFIED,
   },
   {
+    // A recorded start time the host withholds cannot rule out an `exec`, so a command mismatch is
+    // not proof the pid changed hands.
+    name: 'pid whose command line differs while its recorded start time is withheld',
+    identity: { startTime: null, command: '/usr/bin/other --serve' },
+    expect: UNVERIFIED,
+  },
+  {
     name: 'pid whose command line names a different program, with only a command recorded',
     claims: 'matches',
     identity: { command: '/usr/bin/other --serve' },

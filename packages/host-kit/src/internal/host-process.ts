@@ -727,12 +727,13 @@ export type ProcessStopBudget = Readonly<{
  * question before a signal:
  *
  * - `exited`: the host shows the pid as a zombie, so the recorded process already terminated.
- * - `reassigned`: a readable start time contradicts the record, or, with no start time to confirm,
- *   a readable command does: the pid now names a different process and the recorded one is gone.
+ * - `reassigned`: a readable start time contradicts the record, or, when no start time was
+ *   recorded, a readable command does: the pid now names a different process and the recorded one
+ *   is gone.
  * - `ours`: at least one recorded claim is confirmed by a readable fact and none is contradicted.
- * - `unverified`: no recorded claim is confirmed, or the recorded start time is confirmed while
- *   the command is not. That is the same lifetime running something else, as after an `exec` or
- *   an argv rewrite: it is neither proof the recorded process is gone nor permission to signal.
+ * - `unverified`: no recorded claim is confirmed, or a start time was recorded and the command
+ *   does not match. That may be the same lifetime running something else, as after an `exec` or an
+ *   argv rewrite, so it is neither proof the recorded process is gone nor permission to signal.
  */
 export type ProcessIdentityVerdict = 'ours' | 'exited' | 'reassigned' | 'unverified';
 
@@ -744,7 +745,7 @@ export function judgeProcessIdentity(
   const confirmedStartTime = Boolean(expected.startTime && facts.startTime);
   if (confirmedStartTime && facts.startTime !== expected.startTime) return 'reassigned';
   if (expected.matches && facts.command && !expected.matches(facts.command)) {
-    return confirmedStartTime ? 'unverified' : 'reassigned';
+    return expected.startTime ? 'unverified' : 'reassigned';
   }
   const confirmedCommand = Boolean(expected.matches && facts.command);
   return confirmedStartTime || confirmedCommand ? 'ours' : 'unverified';

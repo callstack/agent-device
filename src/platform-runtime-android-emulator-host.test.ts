@@ -139,7 +139,7 @@ test('a terminate that could not prove the exit keeps the launch for a retry', a
   expect(stopProcessAndConfirmExit).toHaveBeenCalledTimes(2);
 });
 
-test('a launch that fails after spawning can still be stopped by terminate', async () => {
+test('a launch that fails after spawning stops its own emulator before it rethrows', async () => {
   runCmdDetached
     .mockImplementationOnce(() => 4242)
     .mockImplementationOnce(() => {
@@ -148,7 +148,6 @@ test('a launch that fails after spawning can still be stopped by terminate', asy
   const host = createAndroidEmulatorHost('darwin');
 
   await expect(host.launch('Pixel_9', false, 90_000)).rejects.toThrow('osascript missing');
-  await host.terminate(4242);
 
   expect(stopProcessAndConfirmExit).toHaveBeenCalledOnce();
   expect(stopProcessAndConfirmExit).toHaveBeenCalledWith(
