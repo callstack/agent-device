@@ -15,15 +15,13 @@ import {
 } from '@agent-device/host-kit/request';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { consumeTextLines } from '@agent-device/host-kit/transport';
+import { MAX_HTTP_RPC_BODY_BYTES } from './http-server.ts';
 
 import {
   serializeDaemonProgressEnvelope,
   serializeDaemonResponseEnvelope,
   shouldStreamRequestProgress,
 } from '@agent-device/daemon-contracts/request-progress-protocol';
-
-/** The largest request either daemon transport reads before it checks the request's token. */
-export const MAX_DAEMON_REQUEST_CHARS = 1024 * 1024;
 
 export type DaemonServer = (net.Server | HttpServer) & {
   destroyConnections?: () => void;
@@ -66,7 +64,7 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
     const onData = AsyncResource.bind(async (chunk: string) => {
       const parsed = consumeTextLines(buffer, chunk);
       buffer = parsed.buffer;
-      if (buffer.length > MAX_DAEMON_REQUEST_CHARS) {
+      if (buffer.length > MAX_HTTP_RPC_BODY_BYTES) {
         refuseOversizedSocketRequest(socket, onData);
         buffer = '';
         return;
@@ -137,7 +135,7 @@ function refuseOversizedSocketRequest(
 ): void {
   socket.off('data', onData);
   const error = new AppError('INVALID_ARGS', 'Daemon request exceeds the size limit', {
-    maxChars: MAX_DAEMON_REQUEST_CHARS,
+    maxChars: MAX_HTTP_RPC_BODY_BYTES,
   });
   const response: DaemonResponse = { ok: false, error: normalizeError(error) };
   socket.end(`${JSON.stringify(response)}\n`);
