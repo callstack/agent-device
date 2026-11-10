@@ -73,6 +73,39 @@ test('a create-timeout surfaces provider evidence for the maybe-leaked session',
   }
 });
 
+/**
+ * `DELETE /session/{id}` is idempotent: one transient hub failure is retried rather than left as a
+ * billed session, and a hub that no longer knows the session (`invalid session id`) has ended it.
+ */
+test.each([
+  ['a transient delete failure is retried', 502, '<html>Bad Gateway</html>'],
+  [
+    'a delete answered invalid session id',
+    404,
+    JSON.stringify({ value: { error: 'invalid session id', message: 'session not found' } }),
+  ],
+] as const)('%s confirms the release', async (_name, status, body) => {
+  const deletes: number[] = [];
+  globalThis.fetch = async (input, init) => {
+    const method = init?.method ?? new Request(input as RequestInfo).method;
+    if (method !== 'DELETE') return jsonResponse({ sessionId: 'session-1', capabilities: {} });
+    deletes.push(deletes.length);
+    return deletes.length === 1 ? new Response(body, { status }) : jsonResponse({ value: null });
+  };
+  const runtime = makeRuntime({ requestPolicy: { retryAttempts: 1, retryDelayMs: 1 } });
+  const lease = makeLease();
+
+  try {
+    await runtime.leaseLifecycle.allocate!(lease);
+    assert.deepEqual(await runtime.leaseLifecycle.release!(lease), {
+      provider: 'webdriver-test',
+      providerSessionId: 'session-1',
+    });
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
 test('cloud artifact lookup does not accept a provider session id without its lease', async () => {
   let listCalls = 0;
   const runtime = makeRuntime({
