@@ -94,6 +94,7 @@ Matrix and provider contracts cover every `resolutionDisclosure` cell:
 - Runtime ambiguity/tiebreak and the five-alternative limit
 - Runtime/native exact-ref provenance
 - Runtime-ref `label-fallback` disclosure
+- Native-ref preflight `label-fallback` disclosure
 - Target-drag disclosure for the source and destination endpoints
 - Direct-iOS `not-observed`
 - Coordinate inapplicability
