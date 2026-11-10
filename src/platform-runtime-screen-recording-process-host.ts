@@ -10,6 +10,7 @@ import {
   type HostProcessIdentityFacts,
   type HostProcessInfo,
   isProcessAlive,
+  judgeProcessIdentity,
   listHostProcesses,
   readProcessIdentities,
   readProcessIdentityFacts,
@@ -122,11 +123,19 @@ async function readOwnershipEvidence(
 ): Promise<OwnershipEvidence> {
   if (!isProcessAlive(marker.pid)) return 'gone';
   const facts = await readProcessIdentityFacts(marker.pid, OWNERSHIP_PROBE_TIMEOUT_MS);
-  if (facts.zombie === true) return 'gone';
+  const verdict = judgeProcessIdentity(
+    {
+      startTime: marker.startTime,
+      matches: (observed) => commandMatches(marker.command, observed),
+    },
+    facts,
+  );
+  if (verdict === 'exited') return 'gone';
   if (marker.startTime.length === 0 || marker.command.length === 0) return 'not-ours';
+  if (verdict === 'reassigned') return 'not-ours';
+  // A recording marker is ours only while both recorded facts are confirmed.
   if (facts.startTime === null || facts.command === null) return 'unprovable';
-  if (facts.startTime !== marker.startTime) return 'not-ours';
-  return commandMatches(marker.command, facts.command) ? 'ours' : 'not-ours';
+  return verdict === 'ours' ? 'ours' : 'unprovable';
 }
 
 export async function terminateManagedProcessSet(

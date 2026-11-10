@@ -614,7 +614,8 @@ type StopSignal = GracefulStopSignal | 'SIGKILL';
  *
  * - `stopped`: the host released the pid, or proved the pid now names a different process.
  *   `signal` is the last signal this stop sent before that proof, and is absent when the recorded
- *   process was already gone before anything was signaled.
+ *   process was already gone before anything was signaled. `reassigned` says the proof was a pid
+ *   that now names a different process: the recorded process is gone, but nobody watched it leave.
  * - `retained` + `signal-failed`: `signal` was refused by `errno` while the process was there.
  *   `EPERM` usually means another owner holds it, and later signals are refused by the same check.
  * - `retained` + `exit-timeout`: SIGKILL was accepted and the process outlived its budget.
@@ -622,7 +623,7 @@ type StopSignal = GracefulStopSignal | 'SIGKILL';
  *   so nothing proves which process a signal would reach.
  */
 export type ConfirmedProcessStop =
-  | Readonly<{ status: 'stopped'; signal?: StopSignal }>
+  | Readonly<{ status: 'stopped'; signal?: StopSignal; reassigned?: true }>
   | Readonly<{ status: 'retained'; reason: 'signal-failed'; signal: StopSignal; errno: string }>
   | Readonly<{ status: 'retained'; reason: 'exit-timeout'; signal: 'SIGKILL' }>
   | Readonly<{ status: 'retained'; reason: 'identity-unverified' }>;
@@ -722,12 +723,37 @@ export type ProcessStopBudget = Readonly<{
 }>;
 
 /**
+ * What the host's facts say about the process a caller recorded. One rule answers every identity
+ * question before a signal:
+ *
+ * - `exited`: the host shows the pid as a zombie, so the recorded process already terminated.
+ * - `reassigned`: a readable start time or command contradicts the record, so the pid now names a
+ *   different process and the recorded one is gone.
+ * - `ours`: at least one recorded claim is confirmed by a readable fact and none is contradicted.
+ * - `unverified`: no recorded claim is confirmed. A silent host is never permission to signal.
+ */
+export type ProcessIdentityVerdict = 'ours' | 'exited' | 'reassigned' | 'unverified';
+
+export function judgeProcessIdentity(
+  expected: ProcessStopIdentity,
+  facts: HostProcessIdentityFacts,
+): ProcessIdentityVerdict {
+  if (facts.zombie) return 'exited';
+  if (expected.startTime && facts.startTime && facts.startTime !== expected.startTime) {
+    return 'reassigned';
+  }
+  if (expected.matches && facts.command && !expected.matches(facts.command)) return 'reassigned';
+  const confirmedStartTime = Boolean(expected.startTime && facts.startTime);
+  const confirmedCommand = Boolean(expected.matches && facts.command);
+  return confirmedStartTime || confirmedCommand ? 'ours' : 'unverified';
+}
+
+/**
  * The one TERM-then-KILL escalation in host-kit. Signals one process gracefully, waits the grace
  * period, re-proves identity, then sends SIGKILL, and proves which way the recorded process ended
- * so a caller only forgets one it watched leave. Identity settles it both ways: unreadable
- * identity retains rather than signaling a process this caller cannot name, while a released pid,
- * a zombie, a start time the host contradicts, or a command `identity.matches` rejects proves it
- * gone. A refusal is not absence, so each stage waits.
+ * so a caller only forgets one it watched leave. Every signal needs a host-confirmed identity
+ * ({@link judgeProcessIdentity}): an unreadable identity before either signal retains rather than
+ * signaling a process this caller cannot name. A refusal is not absence, so each stage waits.
  */
 export async function stopProcessAndConfirmExit(
   target: ProcessStopTarget,
@@ -736,39 +762,41 @@ export async function stopProcessAndConfirmExit(
   // Stale or malformed process state must never aim a signal at the caller itself.
   if (target.pid === process.pid) throw new RangeError('Cannot stop the current process');
   const identity = await proveStopTargetIdentity(target);
-  if (identity === 'gone') return { status: 'stopped' };
+  if (identity === 'released' || identity === 'exited') return { status: 'stopped' };
+  if (identity === 'reassigned') return { status: 'stopped', reassigned: true };
   if (identity === 'unverified') return { status: 'retained', reason: 'identity-unverified' };
   const graceful = budget.gracefulSignal ?? 'SIGTERM';
   const term = await proveSignalStage(target, graceful, budget.termTimeoutMs);
-  if (term.proof === 'exited') return { status: 'stopped', signal: graceful };
+  if (term.proof !== 'survived') return stageVerdict(term, graceful);
+  const kill = await proveSignalStage(target, 'SIGKILL', budget.killTimeoutMs);
+  if (kill.proof !== 'survived' && kill.proof !== 'unverified')
+    return stageVerdict(kill, 'SIGKILL');
+  return { status: 'retained', reason: 'exit-timeout', signal: 'SIGKILL' };
+}
+
+/** The verdict a signal stage settles on its own, before any further signal. */
+function stageVerdict(
+  stage: Exclude<SignalStageProof, { proof: 'survived' }>,
+  signal: StopSignal,
+): ConfirmedProcessStop {
+  if (stage.proof === 'exited') return { status: 'stopped', signal };
+  if (stage.proof === 'reassigned') return { status: 'stopped', signal, reassigned: true };
   // A refused graceful signal is the whole verdict: the host refuses SIGKILL by the same
   // permission check, so escalating would spend a second budget repeating it.
-  if (term.proof === 'refused') return retainedSignalFailure(graceful, term.errno);
-  const kill = await proveSignalStage(target, 'SIGKILL', budget.killTimeoutMs);
-  if (kill.proof === 'exited') return { status: 'stopped', signal: 'SIGKILL' };
-  if (kill.proof === 'refused') return retainedSignalFailure('SIGKILL', kill.errno);
-  return { status: 'retained', reason: 'exit-timeout', signal: 'SIGKILL' };
+  if (stage.proof === 'refused') return retainedSignalFailure(signal, stage.errno);
+  // The pid outlived the grace period and the host will not say what it is now.
+  return { status: 'retained', reason: 'identity-unverified' };
 }
 
 /**
  * Whether the live pid still names the process the caller recorded, read once before anything is
- * signaled. `ours` needs a claim the host confirmed: two recorded facts that no readable fact
- * contradicts only prove the host is silent, and silence about a pid this caller may not own is
- * exactly what must not become permission to signal it.
+ * signaled. `released` is a pid `kill(pid, 0)` no longer finds; the rest is {@link judgeProcessIdentity}.
  */
 async function proveStopTargetIdentity(
   target: ProcessStopTarget,
-): Promise<'ours' | 'gone' | 'unverified'> {
-  if (!isStopPidLive(target.pid)) return 'gone';
-  const facts = await readProcessIdentityFacts(target.pid);
-  if (facts.zombie) return 'gone';
-  if (target.identity.startTime && facts.startTime && facts.startTime !== target.identity.startTime)
-    return 'gone';
-  if (target.identity.matches && facts.command && !target.identity.matches(facts.command))
-    return 'gone';
-  const confirmedStartTime = Boolean(target.identity.startTime && facts.startTime);
-  const confirmedCommand = Boolean(target.identity.matches && facts.command);
-  return confirmedStartTime || confirmedCommand ? 'ours' : 'unverified';
+): Promise<ProcessIdentityVerdict | 'released'> {
+  if (!isStopPidLive(target.pid)) return 'released';
+  return judgeProcessIdentity(target.identity, await readProcessIdentityFacts(target.pid));
 }
 
 function retainedSignalFailure(signal: StopSignal, errno: string): ConfirmedProcessStop {
@@ -777,10 +805,15 @@ function retainedSignalFailure(signal: StopSignal, errno: string): ConfirmedProc
 
 /** What one signal stage proved, within the budget that stage was given. */
 type SignalStageProof =
-  | Readonly<{ proof: 'exited' }>
-  | Readonly<{ proof: 'refused'; errno: string }>
-  | Readonly<{ proof: 'survived' }>;
+  | Readonly<{ proof: 'exited' | 'reassigned' | 'unverified' | 'survived' }>
+  | Readonly<{ proof: 'refused'; errno: string }>;
 
+/**
+ * Sends one signal and waits its budget. A pid that outlives the budget is judged again, which is
+ * also the identity proof the next signal needs: `kill(pid, 0)` cannot tell, because `EPERM` also
+ * comes back for a zombie awaiting its parent, and on Windows for a process that exited while its
+ * object still had handles.
+ */
 async function proveSignalStage(
   target: ProcessStopTarget,
   signal: StopSignal,
@@ -791,8 +824,11 @@ async function proveSignalStage(
   // owner may release it inside this budget, and a released pid is what the caller may forget.
   if (errno === 'ESRCH') return { proof: 'exited' };
   if (await waitForStopPidRelease(target.pid, timeoutMs)) return { proof: 'exited' };
-  if (await proveRecordedProcessGone(target)) return { proof: 'exited' };
-  return errno === undefined ? { proof: 'survived' } : { proof: 'refused', errno };
+  const verdict = await proveStopTargetIdentity(target);
+  if (verdict === 'released' || verdict === 'exited') return { proof: 'exited' };
+  if (verdict === 'reassigned') return { proof: 'reassigned' };
+  if (errno !== undefined) return { proof: 'refused', errno };
+  return { proof: verdict === 'unverified' ? 'unverified' : 'survived' };
 }
 
 const STOP_LIVENESS_POLL_MS = 50;
@@ -822,22 +858,6 @@ async function waitForStopPidRelease(pid: number, timeoutMs: number): Promise<bo
     if (Date.now() >= deadline) return false;
     await sleep(Math.min(STOP_LIVENESS_POLL_MS, Math.max(0, deadline - Date.now())));
   }
-}
-
-/**
- * Whether the pid outliving its budget still proves the recorded process is gone, which the answer to
- * `kill(pid, 0)` cannot: `EPERM` also comes back for a zombie awaiting its parent, and on Windows for
- * a process that exited while its object still had handles. A start time the host contradicts proves
- * the pid changed hands, and a command `identity.matches` rejects proves it no longer runs what this
- * stop was meant for, so the next stage never signals it; the process table holding no row does not,
- * because a hidden or unreadable process is missing from it too.
- */
-async function proveRecordedProcessGone(target: ProcessStopTarget): Promise<boolean> {
-  const facts = await readProcessIdentityFacts(target.pid);
-  if (facts.zombie) return true;
-  const { startTime, matches } = target.identity;
-  if (startTime && facts.startTime && facts.startTime !== startTime) return true;
-  return Boolean(matches && facts.command && !matches(facts.command));
 }
 
 /** The errno that refused the signal, or `undefined` when the host accepted it. */

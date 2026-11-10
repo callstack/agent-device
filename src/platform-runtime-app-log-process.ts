@@ -20,8 +20,10 @@ import { openVerifiedFileForRead } from '@agent-device/host-kit/file';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import {
   isProcessAlive,
+  judgeProcessIdentity,
   readProcessIdentityFacts,
   stopProcessAndConfirmExit,
+  type ProcessStopIdentity,
 } from '@agent-device/host-kit/process';
 
 import { requireManagedSessionArtifactPath } from '@agent-device/daemon-contracts/session-artifact-paths';
@@ -401,35 +403,32 @@ function requireManagedMarkerPath(root: string, markerPath: string): string {
   });
 }
 
+function markerIdentity(marker: AppLogProcessMarker): ProcessStopIdentity {
+  return { startTime: marker.startTime, matches: (command) => command === marker.command };
+}
+
+/** Owned only while both recorded facts are confirmed, under the shared identity rule. */
 async function inspectOwnedProcess(marker: AppLogProcessMarker): Promise<AppLogProcessOwnership> {
   if (!isProcessAlive(marker.pid)) return 'missing';
   const facts = await readProcessIdentityFacts(marker.pid);
-  if (facts.zombie) return 'missing';
-  const matches =
-    marker.startTime.length > 0 &&
-    marker.command.length > 0 &&
-    facts.startTime === marker.startTime &&
-    facts.command === marker.command;
-  return matches ? 'owned-alive' : 'ownership-lost';
+  const verdict = judgeProcessIdentity(markerIdentity(marker), facts);
+  if (verdict === 'exited') return 'missing';
+  const bothConfirmed = facts.startTime !== null && facts.command !== null;
+  return verdict === 'ours' && bothConfirmed ? 'owned-alive' : 'ownership-lost';
 }
 
 /**
- * Stops the marked process through the shared TERM-then-KILL escalation, which re-proves the
- * marker's identity before each signal. A marker the host does not confirm is never signaled.
+ * Stops the marked process through the shared TERM-then-KILL escalation, whose own identity proof
+ * before each signal is the only check. A pid proven to name another process is a lost fence, not
+ * a missing process.
  */
 async function terminateOwnedProcess(
   marker: AppLogProcessMarker,
 ): Promise<'terminated' | 'already-missing' | 'ownership-lost'> {
-  const ownership = await inspectOwnedProcess(marker);
-  if (ownership === 'missing') return 'already-missing';
-  if (ownership === 'ownership-lost') return 'ownership-lost';
   const stop = await stopProcessAndConfirmExit(
-    {
-      pid: marker.pid,
-      identity: { startTime: marker.startTime, matches: (command) => command === marker.command },
-    },
+    { pid: marker.pid, identity: markerIdentity(marker) },
     APP_LOG_STOP_BUDGET,
   );
-  if (stop.status === 'stopped') return stop.signal ? 'terminated' : 'already-missing';
-  return 'ownership-lost';
+  if (stop.status !== 'stopped' || stop.reassigned) return 'ownership-lost';
+  return stop.signal ? 'terminated' : 'already-missing';
 }

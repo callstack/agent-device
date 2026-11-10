@@ -66,6 +66,8 @@ type HostCase = Readonly<{
   psFails?: boolean;
   /** The command line the process shows once it has received this signal, as after an `exec`. */
   commandAfterSignal?: Readonly<{ signal: Signal; command: string }>;
+  /** The signal after which the host refuses every `ps`, as one too loaded to answer. */
+  psFailsAfterSignal?: Signal;
   /** The opening signal the caller names for its stop. */
   gracefulSignal?: 'SIGTERM' | 'SIGINT';
   /** The signals the stop must spend, in order, and the verdict each host answer earns. */
@@ -89,6 +91,8 @@ const STOPPED_BY_KILL: Expect = {
   signals: ['SIGTERM', 'SIGKILL'],
 };
 const NEVER_SIGNALED: Expect = { outcome: STOPPED, signals: [] };
+/** The pid was proven to name another process before anything was signaled. */
+const REASSIGNED: Expect = { outcome: { status: 'stopped', reassigned: true }, signals: [] };
 const REFUSED_ON_TERM: Expect = { outcome: refused('SIGTERM'), signals: ['SIGTERM'] };
 const REFUSED_ON_KILL: Expect = { outcome: refused('SIGKILL'), signals: STOPPED_BY_KILL.signals };
 const EXIT_TIMED_OUT: Expect = {
@@ -200,7 +204,10 @@ const STOP_CASES: HostCase[] = [
     name: 'execs another program while it is given its grace period',
     commandAfterSignal: { signal: 'SIGTERM', command: '/usr/bin/other --serve' },
     ...HELD,
-    expect: { outcome: STOPPED_BY_TERM.outcome, signals: ['SIGTERM'] },
+    expect: {
+      outcome: { status: 'stopped', signal: 'SIGTERM', reassigned: true },
+      signals: ['SIGTERM'],
+    },
   },
   {
     name: 'finalizes on the interrupt its caller opens with',
@@ -217,17 +224,26 @@ const STOP_CASES: HostCase[] = [
   {
     name: 'pid the host has handed to another lifetime',
     identity: { startTime: OTHER_START },
-    expect: NEVER_SIGNALED,
+    expect: REASSIGNED,
   },
   {
     name: 'pid whose command line names a different program',
     identity: { command: '/usr/bin/other --serve' },
-    expect: NEVER_SIGNALED,
+    expect: REASSIGNED,
+  },
+  {
+    // A `ps` that stops answering under load after the grace period is not permission for SIGKILL:
+    // every signal needs a host-confirmed identity.
+    name: 'stops being described by the host during its grace period',
+    psFailsAfterSignal: 'SIGTERM',
+    ...HELD,
+    expect: { outcome: UNVERIFIED.outcome, signals: ['SIGTERM'] },
   },
 ];
 
 function driveHost(model: HostCase): { signals: Signal[] } {
   const signals: Signal[] = [];
+  let psRefused = false;
   let ended = false;
   let probes = 0;
   const hasEnded = () =>
@@ -245,6 +261,7 @@ function driveHost(model: HostCase): { signals: Signal[] } {
     }
     const name = signal as Signal;
     signals.push(name);
+    if (model.psFailsAfterSignal === name) psRefused = true;
     if (model.commandAfterSignal?.signal === name)
       identity.command = model.commandAfterSignal.command;
     const errno = model.answers?.[name];
@@ -260,7 +277,7 @@ function driveHost(model: HostCase): { signals: Signal[] } {
     command: model.identity?.command === undefined ? COMMAND : model.identity.command,
   };
   mockRunCmd.mockImplementation(async (_command: string, args: readonly string[]) => {
-    if (model.psFails) return PS_REFUSED;
+    if (model.psFails || psRefused) return PS_REFUSED;
     // A process the host has fully released, and one that left no row, both answer no fields.
     if (hasEnded() && model.afterExit !== 'zombie') return EMPTY;
     const field = String(args[3]);
