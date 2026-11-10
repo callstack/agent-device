@@ -13,7 +13,7 @@ import {
 } from '../../__tests__/support/session-factories.ts';
 import { markRepairTransactionComplete } from '../session-replay-transaction.ts';
 import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../session-script-publication-state.ts';
-import { parseReplayScriptDetailed } from '@agent-device/ad-script';
+import { parseReplayScriptDetailed, resolveReplayAction } from '@agent-device/ad-script';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 
 const hostCwd = createLiveTestHostEnvironment().cwd;
@@ -81,6 +81,34 @@ test('write() round-trips wait absent positionals without adding an annotation',
   const { script, parsed } = writeAndParse(writer, session);
   expect(script).not.toContain('target-v1');
   expect(parsed.actions[0]?.positionals).toEqual(['absent', 'label="Removed"', '2500']);
+});
+
+test('write() escapes recorded literal ${...} text so replay resolves it back unchanged, keeping --record-as placeholders live', () => {
+  const root = mkdtempForTestSync('agent-device-script-writer-literal-interpolation-');
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
+  const session = makeAuthoringSession('default');
+  const entries = [
+    { command: 'type', positionals: ['cost ${amount} \\${raw}'], flags: {} },
+    {
+      command: 'fill',
+      positionals: ['label="Password"', 'hunter2'],
+      flags: { recordAs: 'PASSWORD' },
+    },
+    { command: 'scroll', positionals: ['down'], flags: { until: 'label="${name}"' } },
+  ];
+  for (const entry of entries) {
+    recordActionEntry(session, { ...entry, result: {} }, hostCwd);
+  }
+
+  const { script, parsed } = writeAndParse(writer, session);
+  expect(script).not.toContain('hunter2');
+  const scope = { values: { PASSWORD: 'secret', amount: 'WRONG', name: 'WRONG' } };
+  const resolved = parsed.actions.map((entry, index) =>
+    resolveReplayAction(entry, scope, { file: 'test.ad', line: index + 2 }),
+  );
+  expect(resolved[0]?.positionals).toEqual(['cost ${amount} \\${raw}']);
+  expect(resolved[1]?.positionals).toEqual(['label="Password"', 'secret']);
+  expect(resolved[2]?.flags.until).toBe('label="${name}"');
 });
 
 // #3197: the recording half of `scroll --until`. A recorded hunt for an

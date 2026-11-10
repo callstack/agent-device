@@ -175,6 +175,30 @@ function parseInterpolation(
   return { abortEnd: raw.length };
 }
 
+/**
+ * The script text that `resolveReplayString` reads back as `literal`. Every `${` gains the `\${`
+ * escape, except where an exact `${NAME}` placeholder for a name in `placeholderNames` starts.
+ */
+export function escapeReplayLiteral(
+  literal: string,
+  placeholderNames: ReadonlySet<string>,
+): string {
+  let out = '';
+  let i = 0;
+  for (let start = literal.indexOf('${'); start >= 0; start = literal.indexOf('${', i)) {
+    out += literal.slice(i, start);
+    const end = literal.indexOf('}', start + 2);
+    if (end >= 0 && placeholderNames.has(literal.slice(start + 2, end))) {
+      out += literal.slice(start, end + 1);
+      i = end + 1;
+      continue;
+    }
+    out += '\\${';
+    i = start + 2;
+  }
+  return out + literal.slice(i);
+}
+
 export function resolveReplayString(
   raw: string,
   scope: ReplayVarScope,

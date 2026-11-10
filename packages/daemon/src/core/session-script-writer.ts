@@ -8,12 +8,14 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   inferFillText,
   appendScriptSeriesFlags,
+  escapeReplayLiteral,
   formatPortableActionLine,
   formatScriptArg,
   formatScriptStringLiteral,
   formatTargetAnnotationLines,
   isClickLikeCommand,
   isTouchTargetCommand,
+  readRecordedInputVariableName,
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
 import { expandSessionPath, safeSessionName } from '@agent-device/host-kit/session-paths';
@@ -463,16 +465,61 @@ function formatScript(
     // approach (b): emit the PUBLIC leaf platform (ios/macos), never the internal `apple`.
     `context platform=${publicPlatformString(session.device)} device=${formatScriptStringLiteral(session.device.name)}${kind} theme=${theme}`,
   );
+  const placeholderNames = readRecordedInputVariableNames(actions);
   for (const action of actions) {
     if (action.flags?.noRecord) continue;
     lines.push(...formatTargetAnnotationLines(action));
-    lines.push(formatActionLine(action));
+    lines.push(formatActionLine(escapeRecordedLiterals(action, placeholderNames)));
   }
   // ADR 0012 decision 6 (Fix 4): only a repair-armed session's healed script
   // carries the completeness sentinel — `write()` already refused to reach
   // here unless it was finalized, so every repair-armed write IS complete.
   if (appendCompleteSentinel) lines.push(HEAL_COMPLETE_SENTINEL);
   return `${lines.join('\n')}\n`;
+}
+
+/** `--record-as` names whose exact `${NAME}` fill placeholders the recorder put in these actions. */
+function readRecordedInputVariableNames(actions: readonly SessionAction[]): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const action of actions) {
+    if (action.command !== 'fill') continue;
+    const name = readRecordedInputVariableName(inferFillText(action));
+    if (name) names.add(name);
+  }
+  return names;
+}
+
+/**
+ * Replay interpolates every written positional, flag, and runtime string, so recorded literal
+ * text gets the `\${` escape. Only `--record-as` placeholders stay interpolated.
+ */
+function escapeRecordedLiterals(
+  action: SessionAction,
+  placeholderNames: ReadonlySet<string>,
+): SessionAction {
+  const escape = (value: unknown): unknown => {
+    if (typeof value === 'string') return escapeReplayLiteral(value, placeholderNames);
+    if (Array.isArray(value)) return value.map(escape);
+    return value;
+  };
+  const escapeRecord = <T extends object>(record: T | undefined): T | undefined =>
+    record &&
+    (Object.fromEntries(
+      Object.entries(record).map(([key, value]) => [key, escape(value)]),
+    ) as T);
+  const refLabel = action.result?.refLabel;
+  return {
+    ...action,
+    positionals: (action.positionals ?? []).map((value) =>
+      escapeReplayLiteral(value, placeholderNames),
+    ),
+    flags: escapeRecord(action.flags) ?? {},
+    runtime: escapeRecord(action.runtime),
+    result:
+      typeof refLabel === 'string'
+        ? { ...action.result, refLabel: escapeReplayLiteral(refLabel, placeholderNames) }
+        : action.result,
+  };
 }
 
 function formatActionLine(action: SessionAction): string {
