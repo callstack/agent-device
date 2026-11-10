@@ -127,7 +127,8 @@ test('omits textEntryRoute when the owner types blind, exactly as the leaf did',
 test('parse rejects a leading snapshot ref, empty text, and an out-of-range delay', () => {
   const rejectRef = { rejectRefTarget: true };
   // A leading target ref is a mistargeted fill; the hint names the ref to fill instead.
-  for (const ref of ['@e5', '@e5~s2']) {
+  // Any `@e<digit>` start is a ref target: suffixed, malformed-generation, or uppercase.
+  for (const ref of ['@e5', '@e5~s2', '@e12-label', '@e12_foo', '@e1~s3x', '@e5x', '@E5']) {
     expect(() => parseTypeTextRequest([ref, 'hello'], {}, rejectRef)).toThrow(
       expect.objectContaining({
         code: 'INVALID_ARGS',
@@ -148,7 +149,18 @@ test('parse rejects a leading snapshot ref, empty text, and an out-of-range dela
 
 test('parse types handles and words that only resemble a ref', () => {
   const rejectRef = { rejectRefTarget: true };
-  for (const text of ['@elena hi', '@eleven', '@nodejs', '@refund', '@john99', '@e', '@e5x']) {
+  // Refs are minted only as `e<n>`, so the retired `@ref` / `@node1` spellings name no node.
+  for (const text of [
+    '@elena hi',
+    '@Eleven',
+    '@nodejs',
+    '@refund',
+    '@ref',
+    '@node1',
+    '@john99',
+    '@e',
+    'e5',
+  ]) {
     expect(parseTypeTextRequest([text], {}, rejectRef)).toEqual({ text, delayMs: 0 });
   }
   // find's type leg always carries text, so even a real ref token is typed verbatim.
