@@ -337,18 +337,11 @@ test('Provider-backed integration daemon HTTP server destroys oversized RPC requ
   try {
     const port = await listenOnLoopback(server);
     // The multibyte padding is under the cap in string length and over it in bytes.
-    for (const padding of [
-      'x'.repeat(RPC_BODY_CAP_BYTES),
-      '\u00e9'.repeat(RPC_BODY_CAP_BYTES / 2),
-    ]) {
-      const oversizedBody = JSON.stringify({
-        jsonrpc: '2.0',
-        id: 'rpc-body-cap',
-        method: 'agent_device.command',
-        params: { command: 'session_list', padding },
-      });
+    for (const pad of ['x'.repeat(RPC_BODY_CAP_BYTES), '\u00e9'.repeat(RPC_BODY_CAP_BYTES / 2)]) {
+      const params = { command: 'session_list', padding: pad };
+      const rpc = { jsonrpc: '2.0', id: 'rpc-body-cap', method: 'agent_device.command', params };
+      const oversizedBody = JSON.stringify(rpc);
       assert.ok(Buffer.byteLength(oversizedBody) > RPC_BODY_CAP_BYTES);
-
       const outcome = await sendRawRpcBody(port, oversizedBody);
       assert.equal(handled, false);
       if (outcome.kind === 'response') {
