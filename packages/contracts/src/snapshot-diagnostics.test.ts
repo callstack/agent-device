@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import {
   mergeSnapshotDiagnostics,
+  readSnapshotDiagnosticsSummary,
   recordSnapshotTiming,
   summarizeSnapshotDiagnostics,
   summarizeSnapshotTimingSamples,
@@ -176,4 +177,36 @@ test('merged warning speaks about the warned run, never the fast aggregate', () 
   expect(merged?.warning).toContain('slow in 1 of 4 runs');
   expect(merged?.warning).toContain('worst run p95 2900ms');
   expect(merged?.warning).not.toContain(`p95 ${merged?.stats.p95Ms}ms`);
+});
+
+const VALID_STATS = { count: 4, p50Ms: 200, p95Ms: 900, maxMs: 1_000, slowThresholdMs: 1_500 };
+
+test('the summary reader refuses stats the type forbids', () => {
+  expect(readSnapshotDiagnosticsSummary({ stats: VALID_STATS })?.stats).toEqual(VALID_STATS);
+  for (const bad of [
+    { count: Number.POSITIVE_INFINITY },
+    { count: 2.5 },
+    { count: -1 },
+    { p95Ms: Number.NaN },
+    { maxMs: -5 },
+  ]) {
+    expect(readSnapshotDiagnosticsSummary({ stats: { ...VALID_STATS, ...bad } })).toBeUndefined();
+  }
+  expect(
+    readSnapshotDiagnosticsSummary({ stats: { ...VALID_STATS, platform: 'bogus' } })?.stats,
+  ).not.toHaveProperty('platform');
+});
+
+test('merge cost does not grow with a run capture count', () => {
+  const merged = mergeSnapshotDiagnostics([
+    { stats: { ...VALID_STATS, count: 1e12, platform: 'ios' } },
+    { stats: { ...VALID_STATS, count: 3, p50Ms: 100, p95Ms: 2_000, maxMs: 3_000, platform: 'ios' } },
+  ]);
+  expect(merged?.stats).toMatchObject({
+    count: 1e12 + 3,
+    p50Ms: 200,
+    p95Ms: 200,
+    maxMs: 3_000,
+    platform: 'ios',
+  });
 });

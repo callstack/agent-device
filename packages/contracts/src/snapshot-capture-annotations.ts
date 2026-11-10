@@ -1,5 +1,7 @@
 import type {
   IosTargetActivation,
+  IosTargetActivationPriorState,
+  IosTargetActivationReason,
   IosSnapshotObservation,
   SnapshotCaptureBackend,
   SnapshotQualityState,
@@ -9,7 +11,7 @@ import type {
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
 
 /**
- * The verdict names this host has to speak, each keyed against its kernel union so a name added
+ * The verdict and activation names this host has to speak, each keyed against its kernel union so a name added
  * there without a key here is a compile error. They cannot be one shared kernel predicate: the
  * eager-closure gate keeps `kernel/snapshot.ts` out of `facades/capture.ts` (#2872).
  */
@@ -23,6 +25,19 @@ const DECLARED_BACKENDS: Record<SnapshotCaptureBackend, true> = {
   queries: true,
   'private-ax': true,
   'android-helper': true,
+};
+
+const DECLARED_ACTIVATION_REASONS: Record<IosTargetActivationReason, true> = {
+  bundle_changed: true,
+  stale_target: true,
+  missing_after_wait: true,
+  interaction_foreground_guard: true,
+};
+const DECLARED_ACTIVATION_PRIOR_STATES: Record<IosTargetActivationPriorState, true> = {
+  unknown: true,
+  notRunning: true,
+  runningBackgroundSuspended: true,
+  runningBackground: true,
 };
 
 export type SnapshotCaptureAnalysis = {
@@ -134,9 +149,18 @@ export function readSnapshotObservation(value: unknown): IosSnapshotObservation 
 function readTargetActivation(value: unknown): IosTargetActivation | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
   const raw = value as Record<string, unknown>;
-  return typeof raw.reason === 'string' && typeof raw.priorState === 'string'
-    ? (raw as unknown as IosTargetActivation)
-    : undefined;
+  if (
+    !isDeclared(DECLARED_ACTIVATION_REASONS, raw.reason) ||
+    !isDeclared(DECLARED_ACTIVATION_PRIOR_STATES, raw.priorState)
+  ) {
+    return undefined;
+  }
+  const pid = raw.otherActiveApplicationPid;
+  return {
+    reason: raw.reason,
+    priorState: raw.priorState,
+    ...(Number.isSafeInteger(pid) ? { otherActiveApplicationPid: pid as number } : {}),
+  };
 }
 
 /**
@@ -162,7 +186,7 @@ function isDeclared<Key extends string, Value>(
 }
 
 function readObject(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === 'object' && value !== null
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
 }

@@ -1,5 +1,5 @@
 import type { SnapshotBackend, SnapshotProvenance } from '@agent-device/contracts/snapshot-model';
-import type { PublicPlatform } from '@agent-device/kernel/device';
+import { isPublicPlatform, type PublicPlatform } from '@agent-device/kernel/device';
 import { isRecord } from './json.ts';
 
 const SLOW_SNAPSHOT_P95_WARNING_MS = 1_500;
@@ -94,10 +94,10 @@ export function mergeSnapshotDiagnostics(
   const present = summaries.filter(
     (summary): summary is SnapshotDiagnosticsSummary => summary !== undefined,
   );
-  const samples = present.flatMap((summary) => samplesFromStats(summary.stats));
+  const samples = present.flatMap((summary) => weightedSamplesFromStats(summary.stats));
   if (samples.length === 0) return undefined;
   // Reconstructed samples carry no producer, so the counts come from each run's own map.
-  const stats = { ...buildSnapshotTimingStats(samples), ...mergedBackendCounts(present) };
+  const stats = { ...buildWeightedSnapshotTimingStats(samples), ...mergedBackendCounts(present) };
   // Reconstructed samples are lossy and order-less (a run's cold start comes
   // back as both its p95 and its max), so only layers holding ordered live
   // samples judge slowness; merge aggregates display stats and carries a
@@ -161,7 +161,9 @@ function percentileNearestRank(values: number[], percentile: number): number {
   return values[Math.min(index, values.length - 1)] ?? 0;
 }
 
-function singlePlatform(samples: SnapshotTimingSample[]): Pick<SnapshotTimingStats, 'platform'> {
+function singlePlatform(
+  samples: readonly { platform?: PublicPlatform }[],
+): Pick<SnapshotTimingStats, 'platform'> {
   const platforms = samples
     .map((sample) => sample.platform)
     .filter((platform): platform is PublicPlatform => Boolean(platform));
@@ -216,7 +218,9 @@ function readRequiredSnapshotTimingStats(
     maxMs: record.maxMs,
     slowThresholdMs: record.slowThresholdMs,
   };
-  if (Object.values(entries).some((value) => typeof value !== 'number')) return undefined;
+  if (!Number.isSafeInteger(entries.count) || (entries.count as number) < 0) return undefined;
+  const durations = [entries.p50Ms, entries.p95Ms, entries.maxMs, entries.slowThresholdMs];
+  if (!durations.every(isNonNegativeFiniteNumber)) return undefined;
   return entries as Pick<
     SnapshotTimingStats,
     'count' | 'p50Ms' | 'p95Ms' | 'maxMs' | 'slowThresholdMs'
@@ -225,7 +229,7 @@ function readRequiredSnapshotTimingStats(
 
 function readBackendCounts(value: Record<string, unknown>): Record<string, number> | undefined {
   const entries = Object.entries(value).filter((entry): entry is [string, number] => {
-    return typeof entry[1] === 'number';
+    return Number.isSafeInteger(entry[1]) && (entry[1] as number) >= 0;
   });
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
@@ -233,28 +237,64 @@ function readBackendCounts(value: Record<string, unknown>): Record<string, numbe
 function readOptionalSnapshotTimingStats(
   record: Record<string, unknown>,
 ): Pick<SnapshotTimingStats, 'platform' | 'backends'> {
-  const platform = typeof record.platform === 'string' ? record.platform : undefined;
+  const platform = isPublicPlatform(record.platform) ? record.platform : undefined;
   const backends = isRecord(record.backends) ? readBackendCounts(record.backends) : undefined;
   return {
-    ...(platform ? { platform: platform as SnapshotTimingStats['platform'] } : {}),
+    ...(platform ? { platform } : {}),
     ...(backends ? { backends } : {}),
   };
 }
 
-function samplesFromStats(stats: SnapshotTimingStats | undefined): SnapshotTimingSample[] {
-  if (!stats || stats.count <= 0) return [];
-  const platform = stats.platform;
-  if (stats.count === 1) return [{ durationMs: stats.maxMs, platform }];
-  if (stats.count === 2) {
+function isNonNegativeFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+type WeightedTimingSample = { durationMs: number; weight: number; platform?: PublicPlatform };
+
+/**
+ * One run's summary as at most three weighted points: its p50 stands for every capture below its
+ * p95. The weights sum to `count`, so the merge costs O(runs) whatever each run's capture count.
+ */
+function weightedSamplesFromStats(stats: SnapshotTimingStats): WeightedTimingSample[] {
+  const { count, platform } = stats;
+  if (count <= 0) return [];
+  if (count === 1) return [{ durationMs: stats.maxMs, weight: 1, platform }];
+  if (count === 2) {
     return [
-      { durationMs: stats.p50Ms, platform },
-      { durationMs: stats.maxMs, platform },
+      { durationMs: stats.p50Ms, weight: 1, platform },
+      { durationMs: stats.maxMs, weight: 1, platform },
     ];
   }
   return [
-    ...Array.from({ length: stats.count - 3 }, () => ({ durationMs: stats.p50Ms, platform })),
-    { durationMs: stats.p50Ms, platform },
-    { durationMs: stats.p95Ms, platform },
-    { durationMs: stats.maxMs, platform },
+    { durationMs: stats.p50Ms, weight: count - 2, platform },
+    { durationMs: stats.p95Ms, weight: 1, platform },
+    { durationMs: stats.maxMs, weight: 1, platform },
   ];
+}
+
+function buildWeightedSnapshotTimingStats(samples: WeightedTimingSample[]): SnapshotTimingStats {
+  const sorted = [...samples].sort((a, b) => a.durationMs - b.durationMs);
+  const count = sorted.reduce((sum, sample) => sum + sample.weight, 0);
+  return {
+    count,
+    p50Ms: weightedPercentileNearestRank(sorted, count, 50),
+    p95Ms: weightedPercentileNearestRank(sorted, count, 95),
+    maxMs: sorted.at(-1)?.durationMs ?? 0,
+    slowThresholdMs: SLOW_SNAPSHOT_P95_WARNING_MS,
+    ...singlePlatform(sorted),
+  };
+}
+
+function weightedPercentileNearestRank(
+  sorted: WeightedTimingSample[],
+  count: number,
+  percentile: number,
+): number {
+  const rank = Math.max(1, Math.ceil((percentile / 100) * count));
+  let covered = 0;
+  for (const sample of sorted) {
+    covered += sample.weight;
+    if (covered >= rank) return sample.durationMs;
+  }
+  return sorted.at(-1)?.durationMs ?? 0;
 }
