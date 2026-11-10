@@ -534,7 +534,7 @@ export function attachSessionAddressHints(
         error: {
           ...response.error,
           message:
-            'fill --record-as requires an armed script recording, but remote clients cannot start one. Connect to a local daemon and run open --save-script first, or omit --record-as.',
+            'fill --record-as requires an armed script recording, but remote clients cannot start one. Connect to a local daemon, start a fresh session with open --save-script, then retry the fill, or omit --record-as.',
         },
       };
     }

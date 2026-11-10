@@ -36,6 +36,7 @@ test('--record-as keeps requiring an armed recording when the text came from std
     caught = error;
   }
   expect(caught).toBeInstanceOf(AppError);
+  expect((caught as AppError).code).toBe('INVALID_ARGS');
   expect((caught as AppError).details?.reason).toBe('fill_record_as_requires_armed_recording');
   expect((caught as AppError).message).toMatch(/open --save-script/);
 });
