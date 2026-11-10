@@ -1,5 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   INTERACTION_DISPATCH_PATHS,
   INTERACTION_GUARANTEES,
@@ -63,4 +65,21 @@ test('every enforced matrix cell has at least one contract scenario', () => {
     [],
     'enforced matrix cells without a contract scenario — add one under test/integration/interaction-contract/ and register its manifest in index.ts',
   );
+});
+
+const CONTRACT_DIR = path.resolve(
+  import.meta.dirname,
+  '../../../test/integration/interaction-contract',
+);
+
+// The registration hook checks a manifest only from its contract file, so a manifest whose test
+// was renamed away would keep counting toward the matrix without any scenario check.
+test('every coverage manifest has a sibling contract test file', () => {
+  const files = new Set(fs.readdirSync(CONTRACT_DIR));
+  const manifests = [...files].filter((name) => name.endsWith('.coverage.ts'));
+  assert.ok(manifests.length > 0, 'no coverage manifests found');
+  const orphans = manifests.filter(
+    (name) => !files.has(name.replace(/\.coverage\.ts$/, '.contract.test.ts')),
+  );
+  assert.deepEqual(orphans, [], 'coverage manifests without a sibling *.contract.test.ts');
 });
