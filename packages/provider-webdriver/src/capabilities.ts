@@ -108,15 +108,15 @@ const BASE_WEBDRIVER_CAPABILITIES: CloudWebDriverCapabilityMap = {
   back: supported,
   home: {
     support: 'partial',
-    note: 'Uses provider/Appium mobile pressButton support where available.',
+    note: 'Presses the XCUITest `mobile: pressButton` home button on iOS and KEYCODE_HOME through `mobile: pressKey` on Android.',
   },
   orientation: {
     support: 'partial',
     note: 'Uses the WebDriver rotation/orientation endpoints; four-way rotation collapses to portrait/landscape on drivers that only accept the two-way endpoint. Rotates the current display, so an activity that does not pin its orientation may need rotating again once it is foreground.',
   },
   appSwitcher: {
-    support: 'partial',
-    note: 'Uses provider/Appium mobile pressButton support where available.',
+    support: 'unsupported',
+    note: 'XCUITest `mobile: pressButton` has no app-switcher button.',
   },
   volumeUp: {
     support: 'partial',
@@ -169,6 +169,10 @@ export function createCloudWebDriverCapabilities(options: {
     options.platform === 'android'
       ? {
           ...BASE_WEBDRIVER_CAPABILITIES,
+          appSwitcher: {
+            support: 'partial',
+            note: 'Presses KEYCODE_APP_SWITCH through `mobile: pressKey`.',
+          },
           volumeUp: androidHardwareButton,
           volumeDown: androidHardwareButton,
           power: androidHardwareButton,

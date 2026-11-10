@@ -64,6 +64,37 @@ test('iOS volume presses ride mobile pressButton and power refuses before the dr
   });
 });
 
+// PROV2-1: UiAutomator2 registers no `mobile: pressButton`, and XCUITest's pressButton names are
+// home, volumeup, and volumedown only.
+test('Android home and app switcher press their keycodes through mobile pressKey', async () => {
+  const transcript: string[] = [];
+  const android = createWebDriverInteractor({
+    client: recordingClient(transcript),
+    backend: 'android',
+    capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'android' }),
+  });
+  await android.home!();
+  await android.appSwitcher!();
+  assert.deepEqual(transcript, [
+    'mobile: pressKey [{"keycode":3}]',
+    'mobile: pressKey [{"keycode":187}]',
+  ]);
+});
+
+test('iOS home rides mobile pressButton and the app switcher refuses before the driver', async () => {
+  const transcript: string[] = [];
+  const ios = createWebDriverInteractor({
+    client: recordingClient(transcript),
+    backend: 'xctest',
+    capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'ios' }),
+  });
+  await ios.home!();
+  await assert.rejects(ios.appSwitcher!(), (error: unknown) => {
+    return error instanceof AppError && error.code === 'UNSUPPORTED_OPERATION';
+  });
+  assert.deepEqual(transcript, ['mobile: pressButton [{"name":"home"}]']);
+});
+
 test('Android power presses KEYCODE_POWER through mobile pressKey', async () => {
   const transcript: string[] = [];
   const android = createWebDriverInteractor({

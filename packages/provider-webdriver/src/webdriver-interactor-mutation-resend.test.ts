@@ -149,15 +149,24 @@ const MUTATING_ROUTES: Record<string, MutatingRouteRow> = {
   'mobile: deepLink': {
     act: ({ interactor }) => interactor.open('com.example.app', { url: 'example://home' }),
   },
-  'mobile: activateApp': { act: ({ interactor }) => interactor.openDevice() },
+  'mobile: activateApp': {
+    act: ({ client }) => client.activateApp('com.example.app'),
+    unsupportedRoute: 'POST /session/:id/appium/device/activate_app',
+  },
   'mobile: terminateApp': {
     act: ({ client }) => client.terminateApp('com.example.app'),
     unsupportedRoute: 'POST /session/:id/appium/device/terminate_app',
   },
   'mobile: pressButton': {
-    act: async ({ interactor }) => {
-      assert.ok(interactor.home);
-      await interactor.home();
+    // Only XCUITest has pressButton; the Android legs press keycodes.
+    act: async ({ client }) => {
+      const ios = createWebDriverInteractor({
+        client,
+        backend: 'xctest',
+        capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'ios' }),
+      });
+      assert.ok(ios.home);
+      await ios.home();
     },
   },
   'mobile: setClipboard': {

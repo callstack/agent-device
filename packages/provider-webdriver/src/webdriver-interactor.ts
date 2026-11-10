@@ -95,6 +95,9 @@ export type WebDriverInteractorOptions = {
   targetId?: string;
 };
 
+/** The Android keyevents for the system buttons, as the local Android owner sends them. */
+const ANDROID_SYSTEM_BUTTON_KEYCODES = { home: 3, appSwitcher: 187 } as const;
+
 export function createWebDriverInteractor(options: WebDriverInteractorOptions): Interactor {
   return new WebDriverInteractor(
     options.client,
@@ -133,7 +136,9 @@ class WebDriverInteractor implements Interactor {
     },
   ): Promise<void> {
     if (options?.url) {
-      await this.client.executeScript('mobile: deepLink', [{ url: options.url, package: app }]);
+      // XCUITest's deep-link extension names the target app `bundleId`; UiAutomator2's `package`.
+      const target = this.backend === 'xctest' ? { bundleId: app } : { package: app };
+      await this.client.executeScript('mobile: deepLink', [{ url: options.url, ...target }]);
       return;
     }
     const appId = options?.appBundleId ?? app;
@@ -141,9 +146,11 @@ class WebDriverInteractor implements Interactor {
     await this.client.activateApp(appId);
   }
 
-  async openDevice(): Promise<void> {
-    await this.client.executeScript('mobile: activateApp', [{}]);
-  }
+  /**
+   * A leased cloud session is already the foreground device, so there is nothing to raise. Both
+   * Appium drivers require an app id for `mobile: activateApp`.
+   */
+  async openDevice(): Promise<void> {}
 
   async close(app: string): Promise<void> {
     if (!app) return;
@@ -373,8 +380,19 @@ class WebDriverInteractor implements Interactor {
     await this.client.back();
   }
 
+  /**
+   * UiAutomator2 registers no `mobile: pressButton`, so Android presses KEYCODE_HOME through
+   * `mobile: pressKey`, the keyevent the local Android owner sends. XCUITest presses its `home`
+   * button.
+   */
   async home(): Promise<void> {
     this.requireSupport('home');
+    if (this.backend === 'android') {
+      await this.client.executeScript('mobile: pressKey', [
+        { keycode: ANDROID_SYSTEM_BUTTON_KEYCODES.home },
+      ]);
+      return;
+    }
     await this.client.executeScript('mobile: pressButton', [{ name: 'home' }]);
   }
 
@@ -383,9 +401,15 @@ class WebDriverInteractor implements Interactor {
     await setWebDriverOrientation(this.client, this.backend, orientation);
   }
 
+  /**
+   * Android presses KEYCODE_APP_SWITCH through `mobile: pressKey`. XCUITest `mobile: pressButton`
+   * has no app-switcher button, so the iOS capability map refuses before this leg.
+   */
   async appSwitcher(): Promise<void> {
     this.requireSupport('appSwitcher');
-    await this.client.executeScript('mobile: pressButton', [{ name: 'appSwitch' }]);
+    await this.client.executeScript('mobile: pressKey', [
+      { keycode: ANDROID_SYSTEM_BUTTON_KEYCODES.appSwitcher },
+    ]);
   }
 
   /**
