@@ -142,19 +142,28 @@ test('ADB discovery classifies transport failures from stderr without trusting s
   assert.match(String(versionMismatch.details?.hint), /Multiple adb installs conflict/);
 });
 
-test('ADB discovery keeps its own hint when stderr also carries an xcrun-style line', () => {
-  const error = androidDiscoveryCommandError(
+test('ADB discovery hint precedence: adb classification, then missing tool, then fallback', () => {
+  const xcrunLine = 'xcrun: error: unable to find utility "adb", not a developer tool or in PATH';
+  const missingTool = androidDiscoveryCommandError(
+    'adb devices failed',
+    { stdout: '', stderr: xcrunLine, exitCode: 1 },
+    'fallback',
+  );
+  const classified = androidDiscoveryCommandError(
     'adb devices failed',
     {
       stdout: '',
-      stderr: 'xcrun: error: unable to find utility "adb", not a developer tool or in PATH',
+      stderr: `${xcrunLine}\nadb server version (40) doesn't match this client (41); killing...`,
       exitCode: 1,
     },
     'fallback',
   );
 
-  assert.equal(error.details?.hint, 'fallback');
-  assert.equal(error.details?.processExitError, true);
+  assert.equal(missingTool.details?.reason, 'xcrun-tool-not-found');
+  assert.match(String(missingTool.details?.hint), /^xcrun could not find adb/);
+  assert.equal(missingTool.details?.processExitError, true);
+  assert.equal(classified.details?.adbFailure, 'server_version_mismatch');
+  assert.match(String(classified.details?.hint), /Multiple adb installs conflict/);
 });
 
 test('attachAdbFailureHint classifies timeouts first and never overwrites a site hint', () => {

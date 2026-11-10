@@ -292,10 +292,11 @@ export function androidDiscoveryCommandError(
   fallbackHint: string,
 ): AppError {
   const failure = classifyAndroidAdbFailure(result.stderr, result.stdout);
-  // The adb classification is spread last: an xcrun-style stderr line must not replace it.
+  const details = execFailureDetails(result);
+  // Precedence: the adb classification, then a missing-tool hint, then the caller's fallback.
   return new AppError('COMMAND_FAILED', message, {
-    ...execFailureDetails(result),
-    hint: failure?.hint ?? fallbackHint,
+    ...details,
+    hint: failure?.hint ?? (typeof details.hint === 'string' ? details.hint : fallbackHint),
     ...(failure ? { adbFailure: failure.reason } : {}),
     ...(failure?.retriable === undefined ? {} : { retriable: failure.retriable }),
   });

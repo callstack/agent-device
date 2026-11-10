@@ -113,7 +113,7 @@ test('a failed terminal transition preserves the primary error and reports it un
 
   expect(context.reportUndurableCleanup).toHaveBeenCalledWith(context.device, {
     confirmed: false,
-    reason: expect.stringMatching(/./),
+    reason: 'Test capture cleanup could not be confirmed',
   });
 });
 
