@@ -9,6 +9,7 @@ import {
   streamReadableToFile,
   validateArtifactContentLength,
 } from './artifact-download.ts';
+import { computeUploadHash } from './resumable-upload-transfer.ts';
 
 export async function receiveUpload(
   req: IncomingMessage,
@@ -29,17 +30,20 @@ export async function receiveUpload(
   }
 
   validateArtifactContentLength(req.headers['content-length']);
+  const expectedSha256 = readExpectedUploadSha256(req);
   const artifactFilename = sanitizeArtifactFilename(rawFilename);
   const tempDir = createArtifactTempDir('upload');
   try {
     if (artifactType === 'file') {
       const artifactPath = path.join(tempDir, artifactFilename);
       await streamReadableToFile(req, artifactPath);
+      await verifyUploadSha256(artifactPath, expectedSha256);
       return { artifactPath, tempDir };
     }
 
     const archivePath = path.join(tempDir, 'artifact.tar');
     await streamReadableToFile(req, archivePath);
+    await verifyUploadSha256(archivePath, expectedSha256);
     const artifactPath = await extractTarInstallableArtifact({
       archivePath,
       tempDir,
@@ -51,5 +55,29 @@ export async function receiveUpload(
   } catch (error) {
     fs.rmSync(tempDir, { recursive: true, force: true });
     throw error;
+  }
+}
+
+function readExpectedUploadSha256(req: IncomingMessage): string | undefined {
+  const hash = req.headers['x-artifact-hash'];
+  if (hash === undefined) return undefined;
+  const algorithm = req.headers['x-artifact-hash-algorithm'] ?? 'sha256';
+  if (algorithm !== 'sha256') {
+    throw new AppError('INVALID_ARGS', `Unsupported x-artifact-hash-algorithm: ${algorithm}`);
+  }
+  if (typeof hash !== 'string' || !/^[a-f0-9]{64}$/i.test(hash)) {
+    throw new AppError('INVALID_ARGS', 'Invalid x-artifact-hash header');
+  }
+  return hash.toLowerCase();
+}
+
+async function verifyUploadSha256(
+  payloadPath: string,
+  expectedSha256: string | undefined,
+): Promise<void> {
+  if (expectedSha256 === undefined) return;
+  const actualSha256 = await computeUploadHash(payloadPath);
+  if (actualSha256 !== expectedSha256) {
+    throw new AppError('INVALID_ARGS', 'Upload hash mismatch', { expectedSha256, actualSha256 });
   }
 }
