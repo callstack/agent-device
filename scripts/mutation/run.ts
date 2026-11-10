@@ -236,6 +236,10 @@ function changedFiles(base: string): string[] {
     cwd: repoRoot,
     allowFailure: true,
   });
+  // A failed diff is a harness failure: an empty change set would select nothing and pass.
+  if (result.exitCode !== 0) {
+    throw new Error(`git diff against ${base} failed: ${result.stderr.trim()}`);
+  }
   return result.stdout.split('\n').filter(Boolean);
 }
 
