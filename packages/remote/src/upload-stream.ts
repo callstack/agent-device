@@ -111,11 +111,15 @@ async function streamFileToHttpRequestAttempt(options: {
               // artifact: neither may follow a hop to an origin the caller did not choose.
               if (redirectedUrl.origin !== options.url.origin) {
                 reject(
-                  new AppError('COMMAND_FAILED', 'Artifact upload refused a cross-origin redirect', {
-                    reason: 'cross-origin-redirect',
-                    url: options.url.toString(),
-                    redirectOrigin: redirectedUrl.origin,
-                  }),
+                  new AppError(
+                    'COMMAND_FAILED',
+                    'Artifact upload refused a cross-origin redirect',
+                    {
+                      reason: 'cross-origin-redirect',
+                      url: options.url.toString(),
+                      redirectOrigin: redirectedUrl.origin,
+                    },
+                  ),
                 );
                 return;
               }
