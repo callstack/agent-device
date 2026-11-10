@@ -87,14 +87,13 @@ import { createAgentDeviceClient } from 'agent-device';
 
 const client = createAgentDeviceClient({
   leaseProvider: 'aws-device-farm',
-  platform: 'android',
   awsProjectArn: process.env.AWS_DEVICE_FARM_PROJECT_ARN,
   awsDeviceArn: process.env.AWS_DEVICE_FARM_DEVICE_ARN,
   awsAppArn: process.env.AWS_DEVICE_FARM_APP_ARN,
   awsRegion: process.env.AWS_REGION,
 });
 
-await client.apps.open({ app: 'com.example.app' });
+await client.apps.open({ app: 'com.example.app', platform: 'android' });
 const closed = await client.sessions.close();
 ```
 

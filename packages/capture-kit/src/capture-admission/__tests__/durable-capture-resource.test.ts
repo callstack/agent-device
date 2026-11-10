@@ -1,8 +1,7 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  createTestCaptureResource,
   makeDurableCaptureContext,
   makeDurableCaptureStartResult,
   testCaptureResource,
@@ -175,22 +174,25 @@ test('an unconfirmed failed-adoption cleanup blocks a replacement start in this 
     cleanup: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
   });
   const primary = new AppError('CANCELED', 'request canceled');
-  const resourceDir = path.dirname(context.resourcePath);
+  let writesFail = false;
+  const resource = createTestCaptureResource({
+    ...testCaptureStore,
+    write: (resourcePath, envelope) => {
+      if (writesFail) throw Object.assign(new Error('test write denied'), { code: 'EACCES' });
+      testCaptureStore.write(resourcePath, envelope);
+    },
+  });
 
-  try {
-    await expect(
-      testCaptureResource.adoptStarted({
-        ...context,
-        ...start,
-        throwIfCanceled: () => {
-          fs.chmodSync(resourceDir, 0o500);
-          throw primary;
-        },
-      }),
-    ).rejects.toBe(primary);
-  } finally {
-    fs.chmodSync(resourceDir, 0o700);
-  }
+  await expect(
+    resource.adoptStarted({
+      ...context,
+      ...start,
+      throwIfCanceled: () => {
+        writesFail = true;
+        throw primary;
+      },
+    }),
+  ).rejects.toBe(primary);
 
   expect(() => context.admissionLedger.assertStartAllowed(context.device)).toThrow(/process-local/);
 });

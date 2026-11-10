@@ -61,8 +61,9 @@ then the ares default device. `connect` does not contact the TV; the plugin read
 `ares-setup-device` when `open` starts the session.
 
 agent-device leases only iOS, Android, and HarmonyOS devices, so a webOS TV enters as an Android
-TV device that the plugin owns (`platform: android`, `target: tv`, id `webos:<ares device>`).
-Every command on that device goes to the plugin, never to adb.
+TV device that the plugin owns (`platform: android`, `target: tv`, id `webos:<TV ip>:<port>`,
+or `webos:<ares device>` for a USB entry). Every command on that device goes to the
+plugin, never to adb.
 
 ## How commands map to the TV
 

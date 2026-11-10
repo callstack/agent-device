@@ -4,7 +4,6 @@ A durable start returns a process-local live handle and a bounded, JSON-safe, ve
 The facet-specific handle provides idempotent `finish()` returning `FinishOutcome`, `forceCleanup()` returning `CleanupOutcome`, and an idempotent `[Symbol.asyncDispose]` adapter that carries no typed result.
 The adapter resolves only for confirmed cleanup or already-missing outcomes.
 Otherwise, it rejects with a normalized `ownership-lost` or `cleanup-pending` error.
-Known drift: today a rejected cleanup operation escapes the shared adapter without normalization (#4334).
 
 Each destructive finish or cleanup holds the authoritative ownership lease across fence validation, native side effect, and persisted transition, or uses a token atomically enforced by the native or provider operation.
 A preflight check alone is insufficient.

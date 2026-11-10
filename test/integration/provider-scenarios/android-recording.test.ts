@@ -4,7 +4,6 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { collectedRecordingPath } from '@agent-device/capture-kit/recording-stop-sequence';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
-import { ANDROID_RECORDING_CONTRACT_EVIDENCE } from './android-recording.coverage.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
 import {
   createAndroidRecordingScenarioHarness,
@@ -18,7 +17,7 @@ import {
   type PullCall,
 } from './android-recording-provider-fixtures.ts';
 
-test(ANDROID_RECORDING_CONTRACT_EVIDENCE.testName, async () => {
+test('Provider-backed integration Android record start and stop use the composed scoped runtime', async () => {
   await withAndroidRecordingScenario(
     'agent-device-provider-scenario-android-record-',
     async (tmpDir) => {

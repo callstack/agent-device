@@ -467,10 +467,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'packages/selectors/src/internal/resolve.ts#STALE_REF_HINT',
       },
-      // An @ref names exactly one node by construction (same cell as runtime-ref).
+      // The preflight's ref lookup goes through the same builder as runtime-ref, so it discloses
+      // label-fallback when it recovers the node by label. A no-op preflight discloses exact.
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'packages/command-runtime/src/commands/interaction/runtime/resolution-disclosure.ts#EXACT_REF_RESOLUTION',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/resolution-disclosure.ts#buildRefResolution',
       },
       outcomeObservation: {
         kind: 'waived',

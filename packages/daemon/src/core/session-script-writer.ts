@@ -403,8 +403,12 @@ function optimizeFillAction(
   action: SessionAction,
   selectorExpr: string,
 ): SessionAction | undefined {
-  const text = inferFillText(action);
-  return text.length > 0 ? { ...action, positionals: [selectorExpr, text] } : undefined;
+  // `''` is the explicit clear request, so only a fill that recorded no text argument is skipped.
+  const recordedText =
+    typeof action.result?.text === 'string' || (action.positionals?.length ?? 0) > 1;
+  return recordedText
+    ? { ...action, positionals: [selectorExpr, inferFillText(action)] }
+    : undefined;
 }
 
 function optimizeLongPressAction(action: SessionAction, selectorExpr: string): SessionAction {

@@ -10,7 +10,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   mkdtempForTestSync,
-  supportsLoopbackBind,
+  skipWhenLoopbackUnavailable,
   beginStderrCapture,
   withCapturedStderrAsync,
 } from '@agent-device/test-kit';
@@ -168,10 +168,7 @@ test('canConnectSocket times out stalled local daemon probes', async () => {
 });
 
 test('sendToDaemon reuses reachable local socket daemon metadata', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   const stateDir = mkdtempForTestSync('agent-device-local-socket-daemon-');
   let requestBody = '';
@@ -443,10 +440,7 @@ test('sendToDaemon forwards replay test progress before the HTTP NDJSON response
 });
 
 test('sendToDaemon reuses reachable local HTTP daemon metadata with token params', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   const stateDir = mkdtempForTestSync('agent-device-local-http-daemon-');
   const seenPaths: string[] = [];
@@ -1112,10 +1106,7 @@ test('sendToDaemon preserves install_source payload metadata for remote HTTP RPC
 });
 
 test('downloadRemoteArtifact downloads daemon artifact URL', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const tempRoot = mkdtempForTestSync('agent-device-remote-artifact-');
   const destinationPath = path.join(tempRoot, 'artifacts', 'screen.png');
   let seenUrl = '';
@@ -1146,10 +1137,7 @@ test('downloadRemoteArtifact downloads daemon artifact URL', async (t) => {
 });
 
 test('downloadRemoteArtifact times out stalled artifact responses and removes partial files', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const tempRoot = mkdtempForTestSync('agent-device-remote-artifact-timeout-');
   const destinationPath = path.join(tempRoot, 'artifacts', 'screen.png');
   const server = http.createServer((req, res) => {
@@ -1188,10 +1176,7 @@ test('downloadRemoteArtifact times out stalled artifact responses and removes pa
 });
 
 test('downloadRemoteArtifact removes partial files after mid-stream aborts', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const tempRoot = mkdtempForTestSync('agent-device-remote-artifact-abort-');
   const destinationPath = path.join(tempRoot, 'artifacts', 'screen.png');
   const server = http.createServer((req, res) => {

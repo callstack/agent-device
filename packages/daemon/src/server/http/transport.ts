@@ -1,5 +1,10 @@
-import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { AppError, normalizeError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import { readOptionalStringArrayField, type DaemonResponse } from '@agent-device/kernel/contracts';
+import {
+  AppError,
+  createRequestCanceledError,
+  malformedRequestDetails,
+  normalizeError,
+} from '@agent-device/kernel/errors';
 import { AsyncResource } from 'node:async_hooks';
 import net from 'node:net';
 import type { Server as HttpServer } from 'node:http';
@@ -194,6 +199,17 @@ function parseSocketDaemonRequest(line: string): DaemonRequest {
   // forge those semantics even though the legacy socket request otherwise
   // preserves its existing raw wire shape.
   const { internal: _internal, ...request } = parsed as Record<string, unknown>;
+  // Handlers join positionals into text, so a null or non-string element would reach them as
+  // "" or "null". Refuse it here, with the same element check HTTP applies.
+  try {
+    readOptionalStringArrayField(request, 'positionals');
+  } catch (error) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Invalid request: ${error instanceof Error ? error.message.replace(/^\$\./, '') : 'positionals'}`,
+      malformedRequestDetails(),
+    );
+  }
   return request as DaemonRequest;
 }
 

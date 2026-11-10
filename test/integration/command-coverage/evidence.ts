@@ -17,8 +17,20 @@ const C = PUBLIC_COMMANDS;
 export const MACOS_COVERAGE_GAP_ISSUE = 1916;
 export const TVOS_COVERAGE_GAP_ISSUE = 1914;
 
-// Android contract evidence that only the coverage declarations cite. Evidence shared with a
-// production test module keeps living next to that module and is imported by declarations.ts.
+// Android contract evidence. Each owner is the repository path of the test file that carries the
+// test name literally, so the coverage gate can read the claim back from that file.
+export const ANDROID_LIFECYCLE_CONTRACT_EVIDENCE: AndroidContractEvidence =
+  defineAndroidContractEvidence(
+    'test/integration/provider-scenarios/android-lifecycle.test.ts',
+    [C.boot, C.clipboard, C.network, C.reactNative, C.reinstall, C.shutdown, C.triggerAppEvent],
+    'Provider-backed integration Android Settings flow uses scripted ADB provider',
+  );
+export const ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE: AndroidContractEvidence =
+  defineAndroidContractEvidence(
+    'src/__tests__/install-source.test.ts',
+    [C.installFromSource],
+    'prepareAndroidInstallArtifact resolves package identity for direct APK URL sources',
+  );
 export const ANDROID_APPLICATION_LIFECYCLE_CONTRACT_EVIDENCE: AndroidContractEvidence =
   defineAndroidContractEvidence(
     'packages/platform-android/src/runtime.test.ts',

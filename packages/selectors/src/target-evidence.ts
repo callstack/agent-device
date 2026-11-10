@@ -151,15 +151,30 @@ function fitsPayloadCeiling(candidate: TargetAnnotationV1): boolean {
   );
 }
 
-/** Decision 3's terminal fail-closed downgrade; rect is diagnostic-only and dropped before emitting an over-cap payload. */
+/**
+ * Field caps count raw bytes and the ceiling counts escaped JSON, so dropping ancestry to its
+ * floor can still leave an over-cap payload. Replay refuses recorded-unverifiable evidence before
+ * it reads any other field, so each optional field drops in turn until the payload fits. A capped
+ * field escapes to at most six times its cap, so `role` and `id` alone always fit and never drop.
+ */
+const OVERSIZED_CANDIDATE_DEGRADATIONS: readonly ((candidate: TargetAnnotationV1) => void)[] = [
+  (candidate) => delete candidate.rect,
+  (candidate) => delete candidate.scrollRegion,
+  (candidate) => (candidate.ancestry = []),
+  (candidate) => delete candidate.label,
+];
+
+/** Decision 3's terminal fail-closed downgrade: never emit a payload the parser rejects. */
 function finalizeOversizedCandidate(candidate: TargetAnnotationV1): TargetAnnotationV1 {
   candidate.verification = 'unverifiable';
-  if (
-    utf8ByteLength(serializeTargetAnnotationV1(candidate)) > TARGET_ANNOTATION_MAX_PAYLOAD_BYTES
-  ) {
-    delete candidate.rect;
+  for (const degrade of OVERSIZED_CANDIDATE_DEGRADATIONS) {
+    if (fitsPayloadCeiling(candidate)) return candidate;
+    degrade(candidate);
   }
-  return candidate;
+  if (fitsPayloadCeiling(candidate)) return candidate;
+  throw new Error(
+    'target annotation exceeds the payload ceiling with only role and id left; the field cap no longer fits the ceiling',
+  );
 }
 
 // ---------------------------------------------------------------------------

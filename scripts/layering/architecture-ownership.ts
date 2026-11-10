@@ -299,6 +299,7 @@ export const ARCHITECTURE_OWNERSHIP = {
         'packages/provider-limrun/',
         'packages/provider-revyl/',
         'packages/provider-testmu/',
+        'packages/provider-tizen/',
         'packages/provider-webdriver/',
         'packages/provider-webos/',
         'packages/tv-cdp/',

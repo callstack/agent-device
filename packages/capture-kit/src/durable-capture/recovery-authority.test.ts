@@ -235,7 +235,7 @@ test('late handle cleanup failure does not skip control disposal when diagnostic
     expect(forceCleanup).toHaveBeenCalledOnce();
     expect(cleanupFailures).toHaveBeenCalledWith(
       'late_handle_cleanup_failed',
-      cleanupError,
+      expect.objectContaining({ cause: cleanupError }),
       primaryError,
     );
     expect(disposeControl).toHaveBeenCalledOnce();
@@ -312,7 +312,7 @@ test('aborted recovery does not skip control disposal when late handle diagnosti
     expect(primaryError).toBe(cancellation);
     expect(cleanupFailures).toHaveBeenCalledWith(
       'late_handle_cleanup_failed',
-      cleanupError,
+      expect.objectContaining({ cause: cleanupError }),
       cancellation,
     );
     expect(disposeControl).toHaveBeenCalledOnce();

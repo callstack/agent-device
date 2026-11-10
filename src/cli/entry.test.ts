@@ -88,10 +88,21 @@ test('no command prints usage and exits 1 after flushing', async () => {
   assert.deepEqual(entry.exits, [1]);
 });
 
-test('mcp starts the server unless help is requested', async () => {
+test('only a bare mcp starts the server; help prints usage and other arguments reach the CLI', async () => {
   const server = harness();
   await server.run(['mcp']);
   assert.deepEqual(server.loaded, ['mcp']);
+
+  for (const argv of [
+    ['mcp', '--state-dir', './sd'],
+    ['mcp', 'extra'],
+    ['--json', 'mcp'],
+  ]) {
+    const stray = harness();
+    await stray.run(argv);
+    assert.deepEqual(stray.loaded, ['cli'], argv.join(' '));
+    assert.deepEqual(stray.cliArgv, [argv]);
+  }
 
   const help = harness();
   await help.run(['mcp', '--help']);

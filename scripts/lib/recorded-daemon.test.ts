@@ -9,7 +9,7 @@ import {
   createTestHostEnvironment,
   listenOnLoopback,
   mkdtempForTestSync,
-  supportsLoopbackBind,
+  skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import { tryAcquireProcessLock } from '@agent-device/host-kit/file';
 import { sendToRecordedDaemon } from './recorded-daemon.ts';
@@ -66,7 +66,7 @@ const send = (
   });
 
 test('a request goes to the recorded daemon with its token and returns its answer', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const daemon = await recordedSocketDaemon(() => JSON.stringify({ ok: true, data: { n: 1 } }));
 
   assert.deepEqual(await send(daemon.stateDir), { ok: true, data: { n: 1 } });
@@ -77,7 +77,7 @@ test('a request goes to the recorded daemon with its token and returns its answe
 });
 
 test('an already-aborted signal dispatches nothing', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const daemon = await recordedSocketDaemon(() => JSON.stringify({ ok: true, data: {} }));
   const controller = new AbortController();
   controller.abort(new Error('caller gave up'));
@@ -95,7 +95,7 @@ test('an already-aborted signal dispatches nothing', async (t) => {
 });
 
 test('an invalid response rejects with a typed error and leaves the registration alone', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const daemon = await recordedSocketDaemon(() => 'this is not json');
 
   await assert.rejects(
@@ -107,7 +107,7 @@ test('an invalid response rejects with a typed error and leaves the registration
 });
 
 test('a timeout rejects without retiring the daemon', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const daemon = await recordedSocketDaemon('silent');
 
   await assert.rejects(send(daemon.stateDir, { timeoutMs: 100 }), (error: unknown) => {
@@ -134,7 +134,7 @@ test('a state directory that records no daemon is reported, not started', async 
 });
 
 test('recorded daemon requires a matching held registration claim', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const daemon = await recordedSocketDaemon(() => JSON.stringify({ ok: true, data: {} }));
   const owner = { pid: process.pid, startTime: 'recorded-start', acquiredAtMs: Date.now() };
   const lock = tryAcquireProcessLock({ lockDirPath: daemon.paths.lockPath, owner });
@@ -169,7 +169,7 @@ test('recorded daemon requires a matching held registration claim', async (t) =>
 });
 
 test('dual transport tries its recorded socket before HTTP', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const daemon = await recordedSocketDaemon(() =>
     JSON.stringify({ ok: true, data: { via: 'socket' } }),
   );
@@ -190,7 +190,7 @@ test('dual transport tries its recorded socket before HTTP', async (t) => {
 });
 
 test('a publishing registration cannot be used', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const daemon = await recordedSocketDaemon(() => JSON.stringify({ ok: true, data: {} }));
   fs.writeFileSync(daemon.paths.lockPath.replace(/\.lock$/, '.reclaim.lock'), '');
   await assert.rejects(

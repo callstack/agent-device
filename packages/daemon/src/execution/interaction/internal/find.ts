@@ -47,7 +47,7 @@ import { recordSessionAction } from '../../../core/session-action-recorder.ts';
 import { stripInternalInteractionFlags } from '../../../core/deferred-interaction-outcome.ts';
 import { resolveFindMatch } from './find-match-resolution.ts';
 import { executeFocusPoint } from '../../focus-runtime.ts';
-import { executeBoundTypeText } from '../../type-text-runtime.ts';
+import { executeBoundTypeText, parseTypeTextRequest } from '../../type-text-runtime.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../../selector-runtime.ts';
 import { admitAndBindSnapshotCapture } from '../../../core/snapshot-runtime-binding.ts';
 import type { FocusPointInput } from '@agent-device/contracts/focus-runtime';
@@ -379,6 +379,12 @@ async function handleFindType(
   if (!value) {
     return errorResponse('INVALID_ARGS', 'find type requires text');
   }
+  const context = () => {
+    const session = ctx.sessionStore.requireCurrent(ctx.sessionRef);
+    return contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath);
+  };
+  // The value is always text here, so a leading `@e12` is typed, not refused as a target ref.
+  const request = parseTypeTextRequest([value], context(), { rejectRefTarget: false });
   const focusResponse = await dispatchFocusForFindMatch(ctx, match);
   if (!focusResponse.ok) return focusResponse;
   const session = ctx.sessionStore.requireCurrent(ctx.sessionRef);
@@ -391,11 +397,7 @@ async function handleFindType(
   if (!typeText) {
     return errorResponse('COMMAND_FAILED', 'find type was admitted without a text-entry operation');
   }
-  const response = await executeBoundTypeText(
-    { operations: { typeText } },
-    [value],
-    contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
-  );
+  const response = await executeBoundTypeText({ operations: { typeText } }, request, context());
   recordFindAction(ctx, match, 'type');
   return { ok: true, data: response };
 }

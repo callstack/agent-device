@@ -1,6 +1,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { ANDROID_EMULATOR, IOS_DEVICE, MACOS_DEVICE } from '@agent-device/test-kit';
+import {
+  ANDROID_EMULATOR,
+  IOS_DEVICE,
+  MACOS_DEVICE,
+  WEB_DESKTOP_DEVICE,
+} from '@agent-device/test-kit';
 import { parseTriggerAppEventArgs, resolveAppEventUrl } from './app-events.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -25,6 +30,39 @@ test('trigger-app-event reports missing URL template as UNSUPPORTED_OPERATION', 
       error instanceof AppError &&
       error.code === 'UNSUPPORTED_OPERATION' &&
       /No app event URL template configured/i.test(error.message),
+  );
+});
+
+test('trigger-app-event on web ignores the Android template and hints only variables it reads', () => {
+  assert.throws(
+    () =>
+      resolveAppEventUrl(WEB_DESKTOP_DEVICE, 'screenshot_taken', undefined, {
+        AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE: 'myapp://android?name={event}',
+        AGENT_DEVICE_WEB_APP_EVENT_URL_TEMPLATE: 'myapp://web?name={event}',
+      }),
+    (error) =>
+      error instanceof AppError &&
+      error.code === 'UNSUPPORTED_OPERATION' &&
+      error.details?.hint ===
+        'Set AGENT_DEVICE_APP_EVENT_URL_TEMPLATE, for example "myapp://agent-device/event?name={event}&payload={payload}".',
+  );
+  assert.equal(
+    resolveAppEventUrl(WEB_DESKTOP_DEVICE, 'screenshot_taken', undefined, {
+      AGENT_DEVICE_APP_EVENT_URL_TEMPLATE: 'myapp://global?name={event}&platform={platform}',
+    }),
+    'myapp://global?name=screenshot_taken&platform=web',
+  );
+});
+
+test('trigger-app-event hint names the Android and global variables for Android', () => {
+  assert.throws(
+    () => resolveAppEventUrl(ANDROID_EMULATOR, 'screenshot_taken', undefined, NO_TEMPLATE),
+    (error) =>
+      error instanceof AppError &&
+      typeof error.details?.hint === 'string' &&
+      error.details.hint.startsWith(
+        'Set AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE or AGENT_DEVICE_APP_EVENT_URL_TEMPLATE,',
+      ),
   );
 });
 
