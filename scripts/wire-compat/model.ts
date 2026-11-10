@@ -87,7 +87,9 @@ export function compareWireLedgers(input: WireComparisonInput): WireComparison {
     const acked = new Map(current.compatibleChanges.map((ack) => [ack.declaration, ack]));
     const unacked = changed.filter((key) => {
       const ack = acked.get(key);
-      return ack?.digest !== digests.get(key) || ack.rationale.trim().length === 0;
+      return (
+        ack === undefined || ack.digest !== digests.get(key) || ack.rationale.trim().length === 0
+      );
     });
     if (unacked.length > 0) {
       failures.push(

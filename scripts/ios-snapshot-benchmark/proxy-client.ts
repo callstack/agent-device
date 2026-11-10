@@ -25,7 +25,7 @@ import {
   type AgentClient,
 } from './proxy-client-support.ts';
 import type { NetworkConditioner } from './proxy-conditioner.ts';
-import type { ProxyStartup } from './proxy-process.ts';
+import type { ProxyStartup } from './proxy-startup.ts';
 import type { Measurement, ProxyNetwork, RawSample, ScreenFixture } from './types.ts';
 
 export type ProxyMeasurementOptions = {

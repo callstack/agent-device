@@ -573,12 +573,12 @@ test('build.ts writes the default path and a summary consistent with the JSON', 
   // Report-only fields (#3283): no gate reads these, so this pins only the wire shape.
   assert.equal(payload.dominatorSummary.entry, 'src/daemon.ts');
   assert.ok(
-    payload.entries['src (agent-device)'].some(
+    payload.entries['src (agent-device)']!.some(
       (entry) => entry.subpath === '.' && entry.id === 'sdk/index.ts',
     ),
   );
   assert.equal(
-    payload.entrySummaries['daemon.ts'].reachableFiles,
+    payload.entrySummaries['daemon.ts']!.reachableFiles,
     payload.dominatorSummary.reachableFiles,
   );
   assert.ok(payload.dominatorSummary.reachableFiles > 0);

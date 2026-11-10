@@ -102,10 +102,10 @@ function iosSnapshotContractViolation(
 ): LayeringViolation | undefined {
   if (file !== IOS_SNAPSHOT_CONTRACT) return undefined;
   const implementation = parsed.program.body.find((statement) => !isTypeOnlyStatement(statement));
-  if (implementation && typeof implementation === 'object') {
+  if (implementation) {
     return violation(
       file,
-      lineAt(source, Number((implementation as Record<string, unknown>).start ?? 0)),
+      lineAt(source, implementation.start),
       'iOS snapshot contracts own typed vocabulary only; planning algorithms and provider/lifecycle implementations cannot enter contracts',
     );
   }
@@ -163,7 +163,7 @@ function moduleSpecifiers(
   source: string,
 ): ReadonlyArray<{ spec: string; line: number }> {
   const sites: Array<{ spec: string; line: number }> = [];
-  const add = (request: { value?: string; start?: number } | undefined): void => {
+  const add = (request: { value?: string; start?: number } | null | undefined): void => {
     if (request?.value)
       sites.push({ spec: request.value, line: lineAt(source, request.start ?? 0) });
   };

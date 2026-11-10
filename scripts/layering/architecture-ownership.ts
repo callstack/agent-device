@@ -195,6 +195,7 @@ export const LOGICAL_MODULE_POLICIES = [
   {
     name: 'daemon-session-observability',
     roots: ['packages/daemon/src/sessions/session-observability/'],
+    forbiddenTargetRoots: [],
     forbiddenTargetShapes: DAEMON_HANDLER_TARGET_SHAPES,
     facades: DAEMON_SESSION_OBSERVABILITY_FACADES,
   },
@@ -202,7 +203,7 @@ export const LOGICAL_MODULE_POLICIES = [
 
 export const ARCHITECTURE_OWNERSHIP = {
   logicalModules: LOGICAL_MODULE_POLICIES,
-  facades: LOGICAL_MODULE_POLICIES.flatMap((module) =>
+  facades: LOGICAL_MODULE_POLICIES.flatMap((module: LogicalModulePolicy) =>
     (module.facades ?? []).map((facade) => ({ name: module.name, ...facade })),
   ),
   vocabulary: [

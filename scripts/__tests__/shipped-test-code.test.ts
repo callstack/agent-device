@@ -25,7 +25,7 @@ test('testOnlyPathFailures rejects each test-only directory the packager must no
     'dist/mocks/device-factory.js',
   ]);
   assert.equal(failures.length, 5);
-  assert.match(failures[0], /UnitTests/);
+  assert.match(failures[0]!, /UnitTests/);
 });
 
 test('testOnlyPathFailures rejects test-only file names in any shipped language', () => {
@@ -79,7 +79,7 @@ test('testOnlyContentFailures rejects unit-test source that survived the package
     },
   ]);
   assert.equal(failures.length, 3);
-  assert.match(failures[0], /AGENT_DEVICE_RUNNER_UNIT_TESTS/);
+  assert.match(failures[0]!, /AGENT_DEVICE_RUNNER_UNIT_TESTS/);
 });
 
 test('testOnlyContentFailures rejects a --agent-device-* fixture argument in the packaged host app', () => {
@@ -91,7 +91,7 @@ test('testOnlyContentFailures rejects a --agent-device-* fixture argument in the
     },
   ]);
   assert.equal(failures.length, 1);
-  assert.match(failures[0], /--agent-device-\* fixture/);
+  assert.match(failures[0]!, /--agent-device-\* fixture/);
 });
 
 test('testOnlyContentFailures scans the packaged host app target at any depth', () => {

@@ -19,6 +19,9 @@ const EMPTY_RATCHETS: LayeringRatchets = {
   typeInversions: {},
   largestTypeCycle: [],
   sessionState: { writerOwnedFields: 0, ownerFileClaims: 0 },
+  sessionAuthority: { shapeFiles: [], authorityFiles: [] },
+  testOnlyExports: [],
+  unmatchedTests: [],
 };
 
 function contextWithFiles(
