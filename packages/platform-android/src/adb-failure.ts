@@ -1,7 +1,7 @@
+import type { InfrastructureAdbFailure } from '@agent-device/contracts/boot-failure';
 type AndroidAdbFailureReason =
+  | InfrastructureAdbFailure
   | 'timeout'
-  | 'device_offline'
-  | 'device_unauthorized'
   | 'device_not_found'
   | 'multiple_devices'
   | 'no_devices'
