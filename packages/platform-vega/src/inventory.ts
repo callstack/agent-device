@@ -1,4 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveVegaExecutable } from './vega-executable.ts';
 import type {
@@ -79,13 +80,7 @@ async function resolveVegaExecutableForInventory(
 }
 
 function assertCommandSuccess(result: HostCommandResult): void {
-  if (result.exitCode === 0) return;
-  throw new AppError('COMMAND_FAILED', 'Failed to list Vega devices', {
-    stdout: result.stdout,
-    stderr: result.stderr,
-    exitCode: result.exitCode,
-    processExitError: true,
-  });
+  requireExecSuccess(result, 'Failed to list Vega devices');
 }
 
 function isVegaVirtualDevice(serial: string): boolean {

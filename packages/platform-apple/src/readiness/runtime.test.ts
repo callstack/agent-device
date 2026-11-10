@@ -211,7 +211,11 @@ test('a failed bootstatus publishes no readiness and returns no device', async (
 
   await expect(
     ensureAppleReady(host, simulator(), new AbortController().signal),
-  ).rejects.toMatchObject({ code: 'COMMAND_FAILED', message: 'simctl bootstatus failed' });
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'simctl bootstatus failed',
+    details: { exitCode: 1, processExitError: true },
+  });
 
   expect(markBooted).not.toHaveBeenCalled();
 });

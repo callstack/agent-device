@@ -182,7 +182,7 @@ export function classifyAndroidAdbFailure(
 }
 
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
-import { isCommandTimeoutError } from '@agent-device/host-kit/command';
+import { execFailureDetails, isCommandTimeoutError } from '@agent-device/host-kit/command';
 import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
 import type { AndroidAdbExecutorResult } from './adb-transport.ts';
 
@@ -292,15 +292,15 @@ export function androidDiscoveryCommandError(
   fallbackHint: string,
 ): AppError {
   const failure = classifyAndroidAdbFailure(result.stderr, result.stdout);
-  return new AppError('COMMAND_FAILED', message, {
-    stdout: result.stdout,
-    stderr: result.stderr,
-    exitCode: result.exitCode,
-    processExitError: true,
-    hint: failure?.hint ?? fallbackHint,
-    ...(failure ? { adbFailure: failure.reason } : {}),
-    ...(failure?.retriable === undefined ? {} : { retriable: failure.retriable }),
-  });
+  return new AppError(
+    'COMMAND_FAILED',
+    message,
+    execFailureDetails(result, {
+      hint: failure?.hint ?? fallbackHint,
+      ...(failure ? { adbFailure: failure.reason } : {}),
+      ...(failure?.retriable === undefined ? {} : { retriable: failure.retriable }),
+    }),
+  );
 }
 
 export function attachAndroidDiscoveryTimeout<T>(error: T): T {
