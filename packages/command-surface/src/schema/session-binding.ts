@@ -2,7 +2,13 @@ import { AppError } from '@agent-device/kernel/errors';
 import { PLATFORM_SELECTORS, type PlatformSelector } from '@agent-device/kernel/device';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { DaemonLockPolicy } from '@agent-device/kernel/contracts';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 
+/**
+ * The session lock and default platform a request carries (`meta.lockPolicy`, `meta.lockPlatform`).
+ * One policy for every caller: the CLI passes its parsed flags, and the MCP and AI SDK executor
+ * passes only the operator's environment and config defaults, never a value from tool input.
+ */
 export type BindingSettings = {
   defaultPlatform?: CliFlags['platform'];
   lockPolicy?: DaemonLockPolicy;
@@ -22,7 +28,7 @@ type LockableFlags = Pick<
 >;
 
 type BindingOptions = {
-  env: NodeJS.ProcessEnv;
+  env: EnvMap;
   policyOverrides?: BindingPolicyOverrides;
   configuredPlatform?: CliFlags['platform'];
   configuredSession?: string;
@@ -61,7 +67,7 @@ export function resolveBindingSettings(options: BindingOptions): BindingSettings
 
 function resolveLockMode(
   overrides: BindingPolicyOverrides | undefined,
-  env: NodeJS.ProcessEnv,
+  env: EnvMap,
   defaultSessionConfigured: boolean,
 ): DaemonLockPolicy | undefined {
   const explicitPolicy = overrides?.sessionLock ?? readConflictMode(env.AGENT_DEVICE_SESSION_LOCK);

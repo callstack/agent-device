@@ -34,7 +34,12 @@ import type {
 } from '@agent-device/contracts/client';
 import { tryRunClientBackedCommand } from './cli/commands/router.ts';
 import { runAgentCdpCommand } from './cli/commands/agent-cdp.ts';
-import { getCommandSchema, readCliBatchStepsJson } from '@agent-device/command-surface';
+import {
+  applyDefaultPlatformBinding,
+  getCommandSchema,
+  readCliBatchStepsJson,
+  resolveBindingSettings,
+} from '@agent-device/command-surface';
 import {
   createRequestId,
   emitDiagnostic,
@@ -43,7 +48,6 @@ import {
   registerDiagnosticSensitiveValue,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import { applyDefaultPlatformBinding, resolveBindingSettings } from './cli/session-binding.ts';
 import { resolveCliOptions } from './cli/resolve-cli-options.ts';
 import { maybeRunUpgradeNotifier } from './cli/update-check.ts';
 import {

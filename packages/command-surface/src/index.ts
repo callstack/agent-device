@@ -34,6 +34,11 @@ export {
 } from './schema/command-schema.ts';
 export { isFlagSupportedForCommand } from './schema/option-schema.ts';
 export { resolveConfigBackedFlagDefaults } from './schema/cli-config.ts';
+export {
+  applyDefaultPlatformBinding,
+  resolveBindingSettings,
+  type BindingSettings,
+} from './schema/session-binding.ts';
 export { mergeDefinedFlags } from './schema/merge-flags.ts';
 
 const daemonWriters = {

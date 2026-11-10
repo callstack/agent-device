@@ -8,6 +8,7 @@ import {
   operatorAudience,
   operatorInputRefusal,
   type AgentDeviceClient,
+  type BindingSettings,
   type CommandExecutionResult,
   type CommandMetadata,
   type CommandName,
@@ -197,8 +198,13 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
       const { captureHostEnvironment } = await import('@agent-device/host-kit/process');
       const host = captureHostEnvironment(process);
       const supportedProperties = withMcpConfigSchema(name, metadata.inputSchema).properties;
-      const resolvedInput = resolveMcpConfigDefaults(name, input, supportedProperties, host);
-      const config = readMcpToolConfig(resolvedInput);
+      const { input: resolvedInput, binding } = resolveMcpConfigDefaults(
+        name,
+        input,
+        supportedProperties,
+        host,
+      );
+      const config = readMcpToolConfig(resolvedInput, binding);
       const commandInput = stripMcpConfigFields(resolvedInput);
       const pinnedInput = refPins.pinInput(name, commandInput, config.client.stateDir);
       // One host per tool call: the client's ensuring transport and the output formatter resolve
@@ -309,10 +315,22 @@ function returnsStructuredContent(name: CommandName, config: McpToolConfig): boo
   );
 }
 
-function readMcpToolConfig(record: Record<string, unknown>): McpToolConfig {
+function readMcpToolConfig(
+  record: Record<string, unknown>,
+  binding: BindingSettings,
+): McpToolConfig {
   return {
-    client: readClientConfig(record),
+    client: { ...readClientConfig(record), ...readLockConfig(binding) },
     outputFormat: readMcpOutputFormat(record.mcpOutputFormat),
+  };
+}
+
+/** Only an active lock adds keys, so the default request shape stays untouched. */
+function readLockConfig(binding: BindingSettings): AgentDeviceClientConfig {
+  if (!binding.lockPolicy) return {};
+  return {
+    lockPolicy: binding.lockPolicy,
+    ...(binding.defaultPlatform ? { lockPlatform: binding.defaultPlatform } : {}),
   };
 }
 
