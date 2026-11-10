@@ -461,20 +461,41 @@ export async function materializeRemoteArtifacts(
   return { ok: true, data: nextData };
 }
 
+/**
+ * Commands whose artifact destination this client named in an EARLIER request (`record start`,
+ * a perf or trace start with an output path). The daemon echoes that destination, and the paths it
+ * derives from it, as `localPath`, because this process kept no record of it.
+ */
+const COMMANDS_ECHOING_EARLIER_CLIENT_PATHS: ReadonlySet<string> = new Set([
+  'record',
+  'perf',
+  'trace',
+]);
+
+/**
+ * Where this client writes one downloaded artifact. The client chooses: a path it registered in
+ * this request wins, and a response `localPath` is accepted only as the echo of an earlier
+ * request's destination. Anything else lands in cwd under the response file name's basename.
+ */
 function resolveMaterializedArtifactPath(
   artifact: DaemonArtifact,
   req: DaemonWireRequest,
   host: HostEnvironment,
 ): string {
-  if (artifact.localPath && artifact.localPath.trim().length > 0) {
+  const requestedPath = req.meta?.clientArtifactPaths?.[artifact.field];
+  if (hasNonEmptyString(requestedPath)) return requestedPath;
+  if (
+    hasNonEmptyString(artifact.localPath) &&
+    COMMANDS_ECHOING_EARLIER_CLIENT_PATHS.has(req.command)
+  ) {
     return artifact.localPath;
   }
-  const requestedPath = req.meta?.clientArtifactPaths?.[artifact.field];
-  if (requestedPath && requestedPath.trim().length > 0) {
-    return requestedPath;
-  }
-  const fallbackName = artifact.fileName?.trim() || `${artifact.field}-${Date.now()}`;
-  return path.resolve(req.meta?.cwd ?? host.cwd, fallbackName);
+  const responseName = path.basename(artifact.fileName?.trim() ?? '');
+  const fileName =
+    responseName && responseName !== '.' && responseName !== '..'
+      ? responseName
+      : `${path.basename(artifact.field)}-${Date.now()}`;
+  return path.resolve(req.meta?.cwd ?? host.cwd, fileName);
 }
 
 type DownloadRemoteArtifactParams = {
