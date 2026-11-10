@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
-import { createTestHostEnvironment, supportsLoopbackBind } from '@agent-device/test-kit';
+import { createTestHostEnvironment, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { runCli } from '../cli.ts';
 import { createAgentDeviceClient } from '@agent-device/client';
 import {
@@ -39,7 +39,7 @@ async function bootHostAndProcess() {
 }
 
 test('a client reports and uses the state dir of its host when the process names another', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const { host, processStateDir } = await bootHostAndProcess();
   const client = createAgentDeviceClient({}, { host });
 
@@ -62,7 +62,7 @@ test('a CLI run builds its transport from the host it was given', async () => {
 });
 
 test('a default CLI run reaches the daemon on the state dir of the host it was given', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const { host, processStateDir } = await bootHostAndProcess();
   const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 

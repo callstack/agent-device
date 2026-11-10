@@ -25,10 +25,7 @@ export type ResolvedRefNode = {
 const RESOLUTION_DIAGNOSTIC_STRING_BYTE_CAP = 256;
 const MAX_RESOLUTION_ALTERNATIVES = 5;
 
-/**
- * A successful `@ref` lookup names exactly one node; label recovery discloses label-fallback instead.
- * ADR 0011 registry anchor: interaction-guarantees.ts cites it as a `via` symbol.
- */
+/** A successful `@ref` lookup names exactly one node; label recovery discloses label-fallback instead. */
 export const EXACT_REF_RESOLUTION: ResolutionDisclosure = {
   source: 'ref',
   phase: 'pre-action',
@@ -41,7 +38,7 @@ const LABEL_FALLBACK_REF_RESOLUTION: ResolutionDisclosure = {
   kind: 'label-fallback',
 };
 
-/** Shared construction site for every runtime-ref resolution disclosure. */
+/** Shared construction site for every runtime-ref and native-ref preflight resolution disclosure. */
 export function buildRefResolution(
   ref: string,
   node: SnapshotAddressableNode,

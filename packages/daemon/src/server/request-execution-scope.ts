@@ -23,6 +23,7 @@ import { AppError, errorMessage, normalizeError } from '@agent-device/kernel/err
 import {
   type DaemonCommandContext,
   contextFromFlags as contextFromFlagsWithLog,
+  requestCwd,
 } from '../core/context.ts';
 import { assertSessionSelectorMatches } from '../core/session-selector.ts';
 import {
@@ -330,7 +331,7 @@ export async function createRequestExecutionScope(params: {
       command,
       sessionName,
       dispatchLedger,
-      workspace: scopedReq.meta?.cwd ?? params.host.cwd,
+      workspace: requestCwd(scopedReq, params.host),
       callerCwd: scopedReq.meta?.cwd,
       stateDir: sessionStore.resolveDaemonStateDir(),
       deviceRuntimeGateway: params.deviceRuntimeGateway,
@@ -435,7 +436,7 @@ export async function createRequestExecutionScope(params: {
                 hasInMemorySessionOwner: (device) =>
                   sessionStore.findByDevice(device.id) !== undefined,
                 session: sessionName,
-                workspace: scopedReq.meta?.cwd ?? params.host.cwd,
+                workspace: requestCwd(scopedReq, params.host),
                 stateDir: sessionStore.resolveDaemonStateDir(),
                 env: params.host.env,
                 observeDeviceBoot: scope.platformServices.deviceBootObservation,

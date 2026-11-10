@@ -8,6 +8,7 @@ const PROVIDER_PLUGIN_CATALOG: readonly ProviderPluginDeclaration[] = [
   { provider: 'revyl', package: '@agent-device/revyl', label: 'Revyl' },
   { provider: 'testmu', package: '@agent-device/testmu', label: 'TestMu AI' },
   { provider: 'webos', package: '@agent-device/webos', label: 'LG webOS' },
+  { provider: 'tizen', package: '@agent-device/tizen', label: 'Samsung Tizen' },
 ];
 
 export function getProviderPluginDeclaration(

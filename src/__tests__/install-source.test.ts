@@ -26,7 +26,6 @@ import {
 import { prepareIosInstallArtifact } from '@agent-device/platform-apple/install-artifact';
 import { AppError } from '@agent-device/kernel/errors';
 import '../platform-runtime-android-adb-host.ts';
-import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from './install-source.coverage.ts';
 import { mkdtempForTest } from '@agent-device/test-kit';
 import * as networkTransport from '@agent-device/provision-kit/install-source-network-transport';
 
@@ -221,7 +220,7 @@ test('prepareIosInstallArtifact extracts a URL archive from any public host', as
   );
 });
 
-test(ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE.testName, async () => {
+test('prepareAndroidInstallArtifact resolves package identity for direct APK URL sources', async () => {
   const tempRoot = await mkdtempForTest('agent-device-direct-apk-url-');
   try {
     const manifestPath = path.join(tempRoot, 'AndroidManifest.xml');

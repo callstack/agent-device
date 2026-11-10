@@ -328,6 +328,7 @@ vega virtual-device stop
 - Vega OS: use `--platform vega --target tv` with Vega component IDs such as `com.example.app.main`, and `--serial VirtualDevice` to select the VVD explicitly. Commands go through the SDK-matched Vega CLI and VDA. The VVD supports app open/close, `back`, `home`, and the eight navigation buttons listed above, with exact holds.
 - Some Fire TV devices ship with Vega OS instead of Fire OS. Vega OS is a different OS and is supported only in the Vega Virtual Device: app inventory, snapshot, screenshot, selectors, install, touch/text/gesture, logs, and performance report unsupported for Vega targets, and physical Vega OS devices are not supported. Use the VVD display as visual truth.
 - LG webOS TVs run through the optional `@agent-device/webos` plugin, which drives web apps over the Chrome DevTools Protocol. See [LG webOS](/docs/webos).
+- Samsung Tizen TVs run through the optional `@agent-device/tizen` plugin, which drives web apps over the Chrome DevTools Protocol. See [Samsung Tizen](/docs/tizen).
 - On Android TV and tvOS, use `screenshot --overlay-refs` for visual focus evidence, especially when focus metadata is missing or transient.
 
 ## Desktop targets
@@ -578,6 +579,7 @@ These refusals carry `dispatched: no` and a typed `error.details.reason`, so bra
 - `named_session_not_found`: the request named a session this daemon does not hold, with no device selector to fall back on (or no selector it can answer without the session — `appstate` on an Apple target refuses this even with an explicit device). The daemon lost its sessions (replaced or restarted), or the name is wrong; `agent-device session list` shows what it holds. Commands that require a session before they read anything else (interactions, `find` clicks, RN tooling, `screenshot`-style generic commands) answer the same missing-session cause as a message-level `SESSION_NOT_FOUND` carrying no `details.reason` — some carry a `dispatched` stamp from the disclosure layer, some carry no `details` at all; read the cause from the message, and read a present `dispatched` with its usual meaning.
 - `session_app_required`: a per-app setting was requested but the session binds no app and none was named. Run `open <app>`, or name the app on the request for a setting that takes one (`settings clear-app-state com.example.app`).
 - `app_not_installed`: the named app resolves to no installed app on the target. Run `apps --all` for the exact bundle id or package, or install the app, then retry.
+- `malformed_request`: the local socket transport refused the request envelope before any handler read it, for example a positional that is not a string. Fix the client that built the request; resending it unchanged fails the same way.
 - `webdriver_route_unsupported`: on a WebDriver-backed device cloud, the driver does not implement the route; the limit is the cloud's driver, not the device. A command with a second route (`orientation` has two) tries it before failing. After an ambiguous failure on that transport, only read-only requests are resent.
 
 ## Find (semantic)

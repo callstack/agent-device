@@ -172,6 +172,44 @@ test('install binds the deployment use exactly once after one facts admission', 
   });
 });
 
+test('install resolves a relative app path against the caller cwd, not the daemon cwd', async () => {
+  const store = makeStore();
+  const session = makeSession('default', {
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator',
+    booted: true,
+  });
+  store.publish(session.name, session);
+  const root = mkdtempForTestSync('agent-device-install-caller-cwd-');
+  const callerCwd = path.join(root, 'caller');
+  fs.mkdirSync(callerCwd);
+  const appPath = path.join(callerCwd, 'Sample.apk');
+  fs.writeFileSync(appPath, 'placeholder');
+
+  const response = await handleSessionCommands({
+    host: createTestHostEnvironment({ cwd: path.join(root, 'daemon') }),
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 't',
+      session: session.name,
+      command: 'install',
+      positionals: ['./Sample.apk'],
+      flags: {},
+      meta: { cwd: callerCwd },
+    },
+    sessionName: session.name,
+    logPath: '/tmp/daemon.log',
+    sessionStore: store,
+    invoke,
+  });
+
+  expect(response).toMatchObject({ ok: true });
+  expect(mockDeployAppRuntime).toHaveBeenCalledWith(expect.objectContaining({ appPath }));
+});
+
 test('install fails closed before binding when its provider owner lacks deployment', async () => {
   const store = makeStore();
   const session = makeSession('default', {

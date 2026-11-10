@@ -86,7 +86,14 @@ for (const [failure, opener] of [
         throw denied;
       });
     } else if (failure === 'reading') {
-      fs.chmodSync(file, 0o000);
+      const readFileSync = fs.readFileSync;
+      vi.spyOn(fs, 'readFileSync').mockImplementation(((
+        target: fs.PathOrFileDescriptor,
+        ...rest: unknown[]
+      ) => {
+        if (target === file) throw denied;
+        return Reflect.apply(readFileSync, fs, [target, ...rest]);
+      }) as typeof fs.readFileSync);
     } else {
       fs.writeFileSync(file, '{');
     }
@@ -108,7 +115,6 @@ for (const [failure, opener] of [
           });
 
     vi.restoreAllMocks();
-    fs.chmodSync(file, 0o600);
     assert.equal(result.status, 'conflict');
     if (result.status !== 'conflict') return;
     assert.equal(

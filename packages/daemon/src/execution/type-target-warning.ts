@@ -1,11 +1,10 @@
+/**
+ * Returns the leading token when it reads as a snapshot ref target, else null. Snapshot refs are
+ * minted only as `e<n>`, so any token that starts with `@e` and a digit (any case, any suffix,
+ * including a malformed `~s` generation) is a mistargeted `fill`. Words such as `@elena` or
+ * `@john99` are text.
+ */
 export function findMistargetedTypeRefToken(value: string | undefined): string | null {
   const first = value?.trim().split(/\s+/, 1)[0];
-  if (!first || !first.startsWith('@') || first.length < 3) {
-    return null;
-  }
-  const body = first.slice(1);
-  if (/^[A-Za-z_-]*\d[\w-]*$/i.test(body) || /^(?:ref|node|element|el)[\w-]*$/i.test(body)) {
-    return first;
-  }
-  return null;
+  return first && /^@e\d/i.test(first) ? first : null;
 }

@@ -24,6 +24,7 @@ import {
   makeSession,
 } from './__tests__/interaction-touch-fixtures.ts';
 import { handleInteractionCommands } from '../index.ts';
+import { activateCompleteRefFrame, refFrameState } from '../../../core/ref-frame.ts';
 
 // Router ownership: one representative per touch command proves
 // handleInteractionCommands claims press/click/longpress/hover/fill.
@@ -265,6 +266,42 @@ test('hover @ref on web dispatches through the provider hoverRef route, not coor
     command: 'type',
     positionals: [' ok'],
   });
+});
+
+test('a mistargeted type @ref is refused before binding and keeps the ref frame live for fill', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'type-mistargeted-ref';
+  const session = makeSession(sessionName);
+  session.snapshot = {
+    nodes: attachRefs([{ index: 0, role: 'textbox', label: 'Name', enabled: true }]),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  activateCompleteRefFrame(session);
+  sessionStore.publish(sessionName, session);
+
+  const response = await handleInteractionCommands({
+    createCommandSurface: touchCreateCommandSurface,
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'type',
+      positionals: ['@e1', 'hi'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+    ...getRuntimeBindings(),
+  });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: { code: 'INVALID_ARGS', message: 'type does not accept a target ref like "@e1"' },
+  });
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('active');
+  expect(runtimeBindingSpies().bindDevice).not.toHaveBeenCalled();
+  expect(mockTypeText).not.toHaveBeenCalled();
 });
 
 test('click @ref on web records the ref result without fabricated coordinates', async () => {

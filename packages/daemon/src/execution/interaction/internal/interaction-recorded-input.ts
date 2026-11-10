@@ -23,6 +23,7 @@ export function assertRecordedFillParameterization(params: {
     throw new AppError(
       'INVALID_ARGS',
       'fill --record-as requires an armed script recording. Start a fresh session with open --save-script, then retry the fill.',
+      { reason: 'fill_record_as_requires_armed_recording' },
     );
   }
 }

@@ -10,7 +10,7 @@ import {
   listenOnLoopback,
   mkdtempForTestSync,
   startHttpDaemonFixture,
-  supportsLoopbackBind,
+  skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import { providerCredentialFingerprint as fingerprintFor } from '@agent-device/plugins/credential-fingerprint';
 import { builtinPluginInventory } from './test-utils/builtin-plugin-inventory.ts';
@@ -40,10 +40,7 @@ test.for(['socket', 'http'] as const)(
   'a local %s daemon gets a fingerprint, never the key, only on lease_allocate with credentials',
   { concurrent: false },
   async (transport, t) => {
-    if (!(await supportsLoopbackBind())) {
-      t.skip('loopback listeners are not permitted in this environment');
-      return;
-    }
+    if (await skipWhenLoopbackUnavailable(t)) return;
     clearCredentialEnv();
     vi.stubEnv('AGENT_DEVICE_DAEMON_BASE_URL', undefined);
     vi.stubEnv('AGENT_DEVICE_DAEMON_AUTH_TOKEN', undefined);
@@ -108,10 +105,7 @@ test(
   'a remote daemon gets no provider credential fingerprint',
   { concurrent: false },
   async (t) => {
-    if (!(await supportsLoopbackBind())) {
-      t.skip('loopback listeners are not permitted in this environment');
-      return;
-    }
+    if (await skipWhenLoopbackUnavailable(t)) return;
     clearCredentialEnv();
     vi.stubEnv('LIMRUN_API_KEY', API_KEY);
     const remote = await startHttpDaemonFixture({});

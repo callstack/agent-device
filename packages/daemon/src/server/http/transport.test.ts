@@ -83,6 +83,47 @@ test('Provider-backed integration daemon socket transport frames requests and no
   }
 });
 
+test('socket transport refuses a non-string positional before dispatch', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) {
+    return;
+  }
+  const observedRequests: DaemonRequest[] = [];
+  const server = createSocketServer(async (req): Promise<DaemonResponse> => {
+    observedRequests.push(req);
+    return { ok: true, data: {} };
+  });
+
+  try {
+    const port = await listenNetServer(server);
+    const client = await connectSocket(port);
+    const request = (positionals: unknown[]) =>
+      JSON.stringify({ token: 't', session: 'default', command: 'clipboard', positionals });
+
+    const responses = await writeSocketRequests(
+      client,
+      [request(['write', null]), request(['hi', 5]), request(['write', ''])],
+      3,
+    );
+
+    for (const response of responses.slice(0, 2)) {
+      assert.equal(response?.ok, false);
+      assert.equal(response?.error?.code, 'INVALID_ARGS');
+      assert.equal(response?.error?.details?.reason, 'malformed_request');
+      assert.equal(response?.error?.details?.dispatched, 'no');
+      assert.match(response?.error?.message ?? '', /positionals\[1\]: Expected a string/);
+    }
+    // `""` is a string, so the clear request still reaches its handler.
+    assert.equal(responses[2]?.ok, true);
+    assert.deepEqual(
+      observedRequests.map((req) => req.positionals),
+      [['write', '']],
+    );
+    client.destroy();
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
 // A socket client that vanishes mid-request must cancel that connection's
 // in-flight request via its request-scoped signal — never through a global
 // Apple-runner abort, and never touching another connection's request.

@@ -198,6 +198,35 @@ describe('system command interface', () => {
     );
   });
 
+  test('clipboard write "" reaches the daemon as the clear request', () => {
+    const metadata = findCommandMetadata('clipboard');
+    const input = metadata.readInput(readInputFromCli('clipboard', ['write', ''], flags()));
+    expect(input).toMatchObject({ action: 'write', text: '' });
+    expect(clipboardDaemonWriter(input as Record<string, unknown>).positionals).toEqual([
+      'write',
+      '',
+    ]);
+  });
+
+  test('clipboard structured input requires text for write and refuses it for read', () => {
+    const metadata = findCommandMetadata('clipboard');
+    expectInvalidArgs(
+      () => metadata.readInput({ action: 'write' }),
+      'clipboard write requires text',
+    );
+    expectInvalidArgs(
+      () => metadata.readInput({ action: 'read', text: 'x' }),
+      'clipboard read does not accept text',
+    );
+    expect(metadata.readInput({ action: 'read' })).toMatchObject({ action: 'read' });
+    expect(metadata.inputSchema).toMatchObject({
+      oneOf: [
+        { properties: { action: { const: 'write' } }, required: ['text'] },
+        { properties: { action: { const: 'read' } }, not: { required: ['text'] } },
+      ],
+    });
+  });
+
   test('clipboard writer serializes read and write subcommands', () => {
     expect(clipboardDaemonWriter({ action: 'read' }).positionals).toEqual(['read']);
     expect(clipboardDaemonWriter({ action: 'write', text: 'copied' }).positionals).toEqual([

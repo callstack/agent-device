@@ -206,12 +206,34 @@ test('a cold boot ends at bootstatus: one listing, one boot, one bootstatus, the
   expect(original.booted).toBe(false);
 });
 
+test('a failed boot keeps the simctl stderr for the error and publishes no readiness', async () => {
+  const stderr = 'Unable to boot device in current state: Creating';
+  const { host, calls, markBooted } = coldSimulatorHost({
+    bootFailure: { stderr, exitCode: 149 },
+  });
+
+  await expect(
+    ensureAppleReady(host, simulator(), new AbortController().signal),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'simctl boot failed',
+    details: { stderr, exitCode: 149, processExitError: true },
+  });
+
+  expect(calls.map((call) => simctlVerb(call.args))).toEqual(['list', 'boot']);
+  expect(markBooted).not.toHaveBeenCalled();
+});
+
 test('a failed bootstatus publishes no readiness and returns no device', async () => {
   const { host, markBooted } = coldSimulatorHost({ bootstatusExitCode: 1 });
 
   await expect(
     ensureAppleReady(host, simulator(), new AbortController().signal),
-  ).rejects.toMatchObject({ code: 'COMMAND_FAILED', message: 'simctl bootstatus failed' });
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'simctl bootstatus failed',
+    details: { exitCode: 1, processExitError: true },
+  });
 
   expect(markBooted).not.toHaveBeenCalled();
 });
@@ -279,6 +301,7 @@ function coldSimulatorHost(hooks: {
   onBoot?: () => void;
   onBootstatus?: () => void;
   bootstatusExitCode?: number;
+  bootFailure?: { stderr: string; exitCode: number };
 }) {
   const calls: Array<{ args: string[]; timeoutMs?: number }> = [];
   let state = 'Shutdown';
@@ -293,6 +316,7 @@ function coldSimulatorHost(hooks: {
     }
     if (request.args.includes('boot')) {
       hooks.onBoot?.();
+      if (hooks.bootFailure) return { stdout: '', ...hooks.bootFailure };
       state = 'Booted';
     }
     if (request.args.includes('bootstatus')) {

@@ -2,6 +2,7 @@ import { BOOT_TIMEOUT_REASON } from '@agent-device/contracts/device-readiness-ru
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { emitRequestProgress } from '@agent-device/host-kit/request';
 import { scopeSimctlArgsForDevice } from '../core/simctl.ts';
 import { getSimulatorState } from '../simulator-state.ts';
@@ -107,13 +108,7 @@ async function startSimulatorBoot(
   const output = `${boot.stdout}\n${boot.stderr}`.toLowerCase();
   const alreadyBooted =
     output.includes('already booted') || output.includes('current state: booted');
-  if (boot.exitCode !== 0 && !alreadyBooted) {
-    throw new AppError('COMMAND_FAILED', 'simctl boot failed', {
-      stdout: boot.stdout,
-      stderr: boot.stderr,
-      exitCode: boot.exitCode,
-    });
-  }
+  if (!alreadyBooted) requireExecSuccess(boot, 'simctl boot failed');
   return !alreadyBooted;
 }
 
@@ -137,13 +132,7 @@ async function waitForSimulatorBoot(
     },
     signal,
   );
-  if (status.exitCode !== 0) {
-    throw new AppError('COMMAND_FAILED', 'simctl bootstatus failed', {
-      stdout: status.stdout,
-      stderr: status.stderr,
-      exitCode: status.exitCode,
-    });
-  }
+  requireExecSuccess(status, 'simctl bootstatus failed');
   signal.throwIfAborted();
   if (Date.now() >= deadlineAtMs) throw bootDeadlineError(device);
 }

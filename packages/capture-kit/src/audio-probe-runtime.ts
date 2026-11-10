@@ -190,7 +190,7 @@ async function terminateForCleanup(process: HostAudioCaptureProcess): Promise<Cl
   }
 }
 
-function assertConfirmedAudioProbeCleanup(outcome: CleanupOutcome): void {
+function assertConfirmedAudioProbeCleanup(outcome: CleanupOutcome, cause?: unknown): void {
   if (isConfirmedCleanup(outcome)) return;
   throw new AppError(
     'COMMAND_FAILED',
@@ -200,6 +200,7 @@ function assertConfirmedAudioProbeCleanup(outcome: CleanupOutcome): void {
       retriable: outcome.reason !== 'ownership-fence-lost',
       hint: 'Keep audio-probe.resource.json and retry stop through its exact runtime owner.',
     },
+    cause,
   );
 }
 

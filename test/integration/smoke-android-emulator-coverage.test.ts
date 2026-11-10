@@ -209,7 +209,7 @@ test('Android emulator completeness checks selected scenario completion and reco
   );
 });
 
-test('Android command-contract declarations name an existing file containing the evidence test text', () => {
+test('Android command-contract evidence names an existing test file and claims exactly the rows that cite it', () => {
   const contractEntries = Object.entries(ANDROID_EMULATOR_E2E_COVERAGE).filter(
     (
       entry,
@@ -221,28 +221,41 @@ test('Android command-contract declarations name an existing file containing the
       >,
     ] => entry[1].level === 'command-contract',
   );
-  const declarations = new Map<string, (typeof contractEntries)[number][1]['evidence']>();
+  const declarations = new Map<
+    string,
+    { evidence: (typeof contractEntries)[number][1]['evidence']; citedBy: string[] }
+  >();
   for (const [command, entry] of contractEntries) {
     const { evidence } = entry;
     assert.ok(evidence.testName.trim().length > 0, `${evidence.owner} needs a named test`);
-    if (evidence.owner.endsWith('.ts')) {
-      const evidencePath = path.resolve(evidence.owner);
-      assert.equal(fs.existsSync(evidencePath), true, `${command} owner does not exist`);
-      assert.equal(
-        fs.readFileSync(evidencePath, 'utf8').includes(evidence.testName),
-        true,
-        `${command} owner file lacks the evidence test text in ${evidence.owner}`,
-      );
-    }
+    const evidencePath = path.resolve(evidence.owner);
+    assert.equal(
+      fs.existsSync(evidencePath),
+      true,
+      `${command} owner ${evidence.owner} is no file`,
+    );
+    assert.equal(
+      fs.readFileSync(evidencePath, 'utf8').includes(evidence.testName),
+      true,
+      `${command} owner file lacks the evidence test text in ${evidence.owner}`,
+    );
     const declarationKey = `${evidence.owner}:${evidence.testName}`;
     const existing = declarations.get(declarationKey);
     if (existing) {
-      assert.deepEqual(existing, evidence, `${command} contract evidence is inconsistent`);
+      assert.deepEqual(existing.evidence, evidence, `${command} contract evidence is inconsistent`);
+      existing.citedBy.push(command);
     } else {
-      declarations.set(declarationKey, evidence);
+      declarations.set(declarationKey, { evidence, citedBy: [command] });
     }
   }
   assert.ok(declarations.size > 0, 'Android command contracts need declared evidence');
+  for (const { evidence, citedBy } of declarations.values()) {
+    assert.deepEqual(
+      [...evidence.commands].sort(),
+      citedBy.sort(),
+      `${evidence.owner} must claim exactly the command-contract rows that cite it`,
+    );
+  }
 });
 
 test('Android behavior declarations equal the scenario behavior declarations with one owner each', () => {

@@ -3,7 +3,7 @@ import {
   bindTestCommandHost,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,6 +24,18 @@ import {
 } from '../../__tests__/support/session-factories.ts';
 
 bindTestCommandHost();
+
+/** Makes the claim file undeletable under any uid; returns the restore. */
+function denyClaimFileUnlink(claimPath: string): () => void {
+  const unlinkSync = fs.unlinkSync;
+  const spy = vi.spyOn(fs, 'unlinkSync').mockImplementation((target) => {
+    if (target === claimPath) {
+      throw Object.assign(new Error('test unlink denied'), { code: 'EACCES' });
+    }
+    unlinkSync(target);
+  });
+  return () => spy.mockRestore();
+}
 
 /**
  * #2833: what one expiry COMMITS, once it has run. Whether a session past its window is the kind that
@@ -84,8 +96,7 @@ test('a settle that cannot confirm the claim gone keeps the session record stand
 
   // A claim store this process cannot write into: the clear reaches NO verdict, which is different
   // information from a successor having taken the device.
-  const claimsDir = path.dirname(deviceClaimFilePath(deviceClaim.deviceKey));
-  fs.chmodSync(claimsDir, 0o500);
+  const restoreUnlink = denyClaimFileUnlink(deviceClaimFilePath(deviceClaim.deviceKey));
   try {
     const sweeps = createSweepBarrier();
     const controller = createSessionIdleExpiry({
@@ -101,7 +112,7 @@ test('a settle that cannot confirm the claim gone keeps the session record stand
     await sweeps.swept();
     controller.cancel();
   } finally {
-    fs.chmodSync(claimsDir, 0o700);
+    restoreUnlink();
   }
 
   // Deleting the record here would leave a claim owned by a live daemon that no longer knows it holds
@@ -308,7 +319,7 @@ test('a held-back settle leaves a repair transaction uncommitted, so a later pas
   sessionStore.retire(sessionStore.lookup('default')!);
   sessionStore.publish('default', session);
 
-  const claimsDir = path.dirname(deviceClaimFilePath(deviceClaim.deviceKey));
+  const claimPath = deviceClaimFilePath(deviceClaim.deviceKey);
   const sweeps = createSweepBarrier();
   const settleParams = {
     env: createTestHostEnvironment().env,
@@ -322,13 +333,13 @@ test('a held-back settle leaves a repair transaction uncommitted, so a later pas
 
   // Pass one: the claim store cannot be written into, so the clear reaches no verdict and the settle
   // is held back. The barrier is what makes this a COMPLETED pass rather than a started one.
-  fs.chmodSync(claimsDir, 0o500);
+  const restoreUnlink = denyClaimFileUnlink(claimPath);
   const heldBack = createSessionIdleExpiry(settleParams);
   try {
     heldBack.noteSessionsChanged();
     await sweeps.swept(1);
   } finally {
-    fs.chmodSync(claimsDir, 0o700);
+    restoreUnlink();
   }
   heldBack.cancel();
 

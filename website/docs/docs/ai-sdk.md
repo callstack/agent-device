@@ -48,6 +48,8 @@ try {
 
 Set `AI_MODEL` to a model available through your configured AI SDK provider. The agent decides which device tools to call to complete the prompt. The returned `client` targets the same session; close it in `finally` so the device is released even if generation fails.
 
+An `abortSignal` passed to `generateText`, `streamText`, or the agent cancels a running tool call: the tool closes its in-flight daemon request and fails with the canceled-request error. Cancellation stops the daemon request, not work that already reached the device: on iOS, a command the device received keeps running there, and the session waits for it. See [Command methods](/docs/client-api#command-methods).
+
 ## Choose tools and approvals
 
 `set: 'core'` is the default. It exposes the perceive-and-act loop: open, close, snapshot, click, press, fill, type, get, is, find, wait, back, scroll, swipe, alert, and screenshot.

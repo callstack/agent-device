@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError, errorMessage } from '@agent-device/kernel/errors';
 
 import { createReplyWaiters } from './replies.ts';
 
@@ -57,9 +57,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export async function listTargets(port: number): Promise<CdpTarget[]> {
+/** Keeps the error that ended an operation and names a page tunnel removal that failed with it. */
+export function withTunnelRemoval(primary: unknown, removal: unknown): AppError {
+  const failure = asAppError(primary, 'COMMAND_FAILED');
+  return new AppError(
+    failure.code,
+    failure.message,
+    { ...failure.details, tunnelRemoval: errorMessage(removal) },
+    failure,
+  );
+}
+
+export async function listTargets(port: number, signal?: AbortSignal): Promise<CdpTarget[]> {
+  const timeout = AbortSignal.timeout(5000);
   const response = await fetch(`http://localhost:${port}/json`, {
-    signal: AbortSignal.timeout(5000),
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
   if (!response.ok) {
     throw new AppError(

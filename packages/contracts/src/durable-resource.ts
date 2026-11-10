@@ -70,7 +70,7 @@ export function isConfirmedCleanup(
 /** Shares in-flight cleanup and retains only confirmed release across cleanup and disposal. */
 export function createRetryableCleanup(
   clean: () => Promise<CleanupOutcome>,
-  assertConfirmed: (outcome: CleanupOutcome) => void,
+  assertConfirmed: (outcome: CleanupOutcome, cause?: unknown) => void,
 ) {
   let cleanup: Promise<CleanupOutcome> | undefined;
   const forceCleanup = (): Promise<CleanupOutcome> =>
@@ -86,6 +86,21 @@ export function createRetryableCleanup(
     ));
   return {
     forceCleanup,
-    [Symbol.asyncDispose]: async () => assertConfirmed(await forceCleanup()),
+    [Symbol.asyncDispose]: async () => {
+      // A rejected cleanup confirms nothing, so disposal reports it as cleanup-pending.
+      const { outcome, cause } = await forceCleanup().then(
+        (confirmed) => ({ outcome: confirmed, cause: undefined }),
+        (error: unknown) => ({
+          outcome: {
+            status: 'cleanup-pending',
+            reason: 'cleanup-unconfirmed',
+            // Non-Error rejections keep the facet's default message; `cause` keeps the raw value.
+            message: error instanceof Error ? error.message : undefined,
+          } as const,
+          cause: error,
+        }),
+      );
+      assertConfirmed(outcome, cause);
+    },
   };
 }

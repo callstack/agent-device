@@ -294,7 +294,14 @@ export default defineConfig({
         test: {
           name: 'interaction-contract',
           include: ['test/integration/interaction-contract/**/*.test.ts'],
-          setupFiles: SETUP_FILES,
+          // Fails a contract file whose manifest claims a scenario that did not run.
+          globalSetup: [
+            'test/integration/interaction-contract/coverage-registration.global-setup.ts',
+          ],
+          setupFiles: [
+            ...SETUP_FILES,
+            'test/integration/interaction-contract/coverage-registration.ts',
+          ],
         },
       },
       {

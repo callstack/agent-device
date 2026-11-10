@@ -94,15 +94,13 @@ import { createAgentDeviceClient } from 'agent-device';
 
 const client = createAgentDeviceClient({
   leaseProvider: 'browserstack',
-  platform: 'android',
-  device: 'Google Pixel 8',
   providerOsVersion: '14.0',
   providerApp: 'bs://app-id',
   providerProject: 'agent-device',
   providerBuild: process.env.GITHUB_RUN_ID,
 });
 
-await client.apps.open({ app: 'com.example.app' });
+await client.apps.open({ app: 'com.example.app', platform: 'android', device: 'Google Pixel 8' });
 const snapshot = await client.capture.snapshot({ interactiveOnly: true });
 console.log(snapshot.nodes.slice(0, 5));
 await client.interactions.click({ selector: 'label="Continue"' });
@@ -114,7 +112,7 @@ if (providerSessionId) {
     provider: 'browserstack',
     providerSessionId,
   });
-  console.log(artifacts.cloudArtifacts);
+  if ('cloudArtifacts' in artifacts) console.log(artifacts.cloudArtifacts);
 }
 ```
 

@@ -98,6 +98,33 @@ test('relocates trace output and projects the client artifact path', () => {
   });
 });
 
+test('resolves relative trace paths against the caller cwd, not the daemon cwd', () => {
+  const { root, session, sessionStore } = fixture();
+  const callerCwd = path.join(root, 'caller');
+  const host = createTestHostEnvironment({ cwd: path.join(root, 'daemon') });
+  const withCallerCwd = (positionals: string[]): DaemonRequest => ({
+    ...request(positionals),
+    meta: { cwd: callerCwd },
+  });
+
+  handleTraceCommand({
+    host,
+    req: withCallerCwd(['start', 'started.trace']),
+    sessionName: session.name,
+    sessionStore,
+  });
+  expect(session.trace?.outPath).toBe(path.join(callerCwd, 'started.trace'));
+
+  const stop = handleTraceCommand({
+    host,
+    req: withCallerCwd(['stop', 'moved.trace']),
+    sessionName: session.name,
+    sessionStore,
+  });
+  expect(stop).toMatchObject({ ok: true, data: { outPath: path.join(callerCwd, 'moved.trace') } });
+  expect(fs.existsSync(path.join(callerCwd, 'moved.trace'))).toBe(true);
+});
+
 // #1900: `trace` never binds a device runtime (no `bindDevice`/`inspectFacts` call anywhere in
 // `handleTraceCommand`), so its session-scoped start/stop bookkeeping works identically for a web
 // session as it does for the android fixture every other test in this file uses.

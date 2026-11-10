@@ -13,6 +13,8 @@
     "packages/provider-revyl/src/plugin.ts",
     "packages/provider-webos/test/package-smoke.mjs",
     "packages/provider-webos/tsdown.config.ts",
+    "packages/provider-tizen/test/package-smoke.mjs",
+    "packages/provider-tizen/tsdown.config.ts",
     "vitest.mutation.config.ts",
     "src/sdk/index.ts",
     "src/sdk/io.ts",
@@ -76,6 +78,9 @@
   ],
   "dynamicallyLoaded": [
     "packages/daemon/src/execution/interaction/index.ts",
+    // The interaction-contract Vitest project loads these by path (globalSetup, setupFiles).
+    "test/integration/interaction-contract/coverage-registration.global-setup.ts",
+    "test/integration/interaction-contract/coverage-registration.ts",
     // The site's modules that Astro loads without an import Fallow can read: from an .astro
     // <script> block (hero.ts, dither-host.ts), as a worker URL (dither.worker.ts), by a path
     // in astro.config.mjs (routeData.ts) or by convention (ec.config.mjs, Expressive Code).
@@ -97,8 +102,9 @@
     // through this workspace link to core source so typecheck needs no build; Fallow then credits
     // the source files rather than the package.
     "agent-device",
-    // Nothing in the root imports the webOS plugin or the tv-cdp package it bundles, but layering
+    // Nothing in the root imports the TV plugins or the tv-cdp package they bundle, but layering
     // requires the root manifest to declare every workspace package.
+    "@agent-device/tizen",
     "@agent-device/tv-cdp",
     "@agent-device/webos",
     // Oxlint resolves the shared config's JS plugins dynamically from their package names.

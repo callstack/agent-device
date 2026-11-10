@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { closeLoopbackServer, supportsLoopbackBind } from '@agent-device/test-kit';
+import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { okResult, startScriptedDaemon } from './explicit-lifecycle-fixture.ts';
 
 // The stand-in daemon is a loopback server on an ephemeral port, so anything else on the host that
 // probes listening ports can reach it. Only the client under test speaks `POST /rpc`.
 
 test('a stray request that is not a daemon request is refused and never recorded', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const daemon = await startScriptedDaemon(okResult({}));
   const base = `http://127.0.0.1:${daemon.port}`;
   try {

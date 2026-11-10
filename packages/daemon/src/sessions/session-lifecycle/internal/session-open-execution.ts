@@ -24,6 +24,7 @@ import type {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
+import { requestCwd } from '../../../core/context.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import {
   abortAuthoringOnSecondOpen,
@@ -457,7 +458,7 @@ async function acquireDeviceClaimForOwner(params: {
       return await acquireDeviceClaim({
         device,
         session: sessionName,
-        workspace: req.meta?.cwd ?? params.host.cwd,
+        workspace: requestCwd(req, params.host),
         stateDir: sessionStore.resolveDaemonStateDir(),
         env: params.host.env,
         reconcileOrphanedDeviceClaim,

@@ -211,6 +211,48 @@ test('push treats an existing brace-prefixed payload as a file before inline JSO
   }
 });
 
+test('push parses an inline payload longer than a file name can be', async () => {
+  const sessionStore = makeSessionStore('agent-device-session-push-long-inline-');
+  sessionStore.publish('default', {
+    name: 'default',
+    createdAt: Date.now(),
+    actions: [],
+    device: {
+      platform: 'android',
+      id: 'emulator-5554',
+      name: 'Pixel',
+      kind: 'emulator',
+      booted: true,
+    },
+  });
+  // A payload without "/" over 255 bytes makes stat fail with ENAMETOOLONG, not ENOENT.
+  const payload = { action: 'com.example.app.PUSH', extras: { body: 'a'.repeat(400) } };
+  mockPushNotificationRuntime.mockImplementation(async (input) => {
+    expect(input).toEqual({ appId: 'com.example.app', payload });
+    return { action: payload.action, extrasCount: 1 };
+  });
+
+  const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'push',
+      positionals: ['com.example.app', JSON.stringify(payload)],
+      flags: {},
+    },
+    sessionName: 'default',
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+    invoke,
+  });
+
+  expect(response).toMatchObject({ ok: true });
+  expect(mockPushNotificationRuntime).toHaveBeenCalledOnce();
+});
+
 test('remote push parses inline JSON and never resolves it as a host file', async () => {
   const sessionStore = makeSessionStore('agent-device-session-push-remote-inline-');
   sessionStore.publish('default', {
