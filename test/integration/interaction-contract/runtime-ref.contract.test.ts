@@ -7,7 +7,6 @@ import { assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { scenarioName, scenarioNames } from './coverage-manifest.ts';
 import { RUNTIME_REF_COVERAGE } from './runtime-ref.coverage.ts';
-import { assertCoverageClaimsRegistered } from './coverage-registration.ts';
 import {
   closedDrawerSnapshot,
   continueButtonAtRect,
@@ -319,5 +318,3 @@ test(scenarioNames(RUNTIME_REF_COVERAGE, 'resolutionDisclosure')[1]!, async () =
     kind: 'label-fallback',
   });
 });
-
-assertCoverageClaimsRegistered(RUNTIME_REF_COVERAGE);

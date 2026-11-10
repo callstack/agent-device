@@ -3,7 +3,6 @@ import { test } from 'vitest';
 import { assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { runnerTapEntry, withIosContractDaemon } from './daemon-harness.ts';
 import { scenarioName } from './coverage-manifest.ts';
-import { assertCoverageClaimsRegistered } from './coverage-registration.ts';
 import { MAESTRO_DIRECT_SELECTOR_COVERAGE } from './maestro-direct-selector.coverage.ts';
 
 const MAESTRO_FLAGS = { maestro: { allowNonHittableCoordinateFallback: true } };
@@ -24,5 +23,3 @@ test(scenarioName(MAESTRO_DIRECT_SELECTOR_COVERAGE, 'responseConstruction'), asy
     },
   );
 });
-
-assertCoverageClaimsRegistered(MAESTRO_DIRECT_SELECTOR_COVERAGE);

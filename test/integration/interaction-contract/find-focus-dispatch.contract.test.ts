@@ -6,7 +6,6 @@ import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { scenarioName, scenarioNames } from './coverage-manifest.ts';
 import { FIND_FOCUS_DISPATCH_COVERAGE } from './find-focus-dispatch.coverage.ts';
-import { assertCoverageClaimsRegistered } from './coverage-registration.ts';
 import { fullyTiledParentSnapshot } from './fixtures.ts';
 import {
   runnerSnapshotEntry,
@@ -881,5 +880,3 @@ function twinFormTree(): unknown[] {
     },
   ];
 }
-
-assertCoverageClaimsRegistered(FIND_FOCUS_DISPATCH_COVERAGE);

@@ -7,7 +7,6 @@ import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/tes
 import { scenarioName } from './coverage-manifest.ts';
 import { RUNNER_CONTINUE_NODES, RUNNER_NON_HITTABLE_TEXT_INPUT_NODES } from './fixtures.ts';
 import { MAESTRO_FALLBACK_COVERAGE } from './maestro-fallback.coverage.ts';
-import { assertCoverageClaimsRegistered } from './coverage-registration.ts';
 import {
   runnerSnapshotEntry,
   runnerTapEntry,
@@ -137,5 +136,3 @@ test(
   },
   PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
 );
-
-assertCoverageClaimsRegistered(MAESTRO_FALLBACK_COVERAGE);

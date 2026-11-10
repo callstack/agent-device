@@ -8,7 +8,6 @@ import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { scenarioName, scenarioNames } from './coverage-manifest.ts';
 import { RUNTIME_SELECTOR_COVERAGE } from './runtime-selector.coverage.ts';
-import { assertCoverageClaimsRegistered } from './coverage-registration.ts';
 import {
   closedDrawerSnapshot,
   continueButtonAtRect,
@@ -471,5 +470,3 @@ test(scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'resolutionDisclosure')[1]!, async
   // The winner never appears among its own alternatives.
   assert.ok(!resolution.alternatives.some((entry) => entry.diagnosticRef === 'diag-e3'));
 });
-
-assertCoverageClaimsRegistered(RUNTIME_SELECTOR_COVERAGE);
