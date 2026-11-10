@@ -76,7 +76,7 @@ import {
   reapOwnedProcessRecordsAtStartup,
   type OwnerIdentity,
 } from '@agent-device/host-kit/process';
-import { isEnvTruthy, sleep } from '@agent-device/host-kit/retry';
+import { isEnvTruthy } from '@agent-device/host-kit/retry';
 import {
   parseIntegerEnv,
   readVersion,
@@ -840,10 +840,10 @@ async function startDaemonRuntimeOnHost(
       return report;
     } finally {
       await Promise.allSettled([
-        Promise.race([
-          Promise.resolve().then(releasePngWorker),
-          sleep(DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
-        ]),
+        settleWithinBudget(
+          async () => await releasePngWorker(),
+          DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS,
+        ),
         Promise.resolve().then(() => pluginClose.close()),
       ]);
       await Promise.allSettled([

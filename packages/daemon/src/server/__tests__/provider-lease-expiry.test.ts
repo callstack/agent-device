@@ -167,6 +167,27 @@ test('shutdown drain reports releases completed before and during its final retr
   }
 });
 
+test('a shutdown drain that settles inside its budget leaves no deadline timer behind', async () => {
+  vi.useFakeTimers();
+  const releaser = createExpiredProviderLeaseReleaser({
+    leaseLifecycleProvider: { release: vi.fn().mockResolvedValue({}) },
+    providerRuntimeIds: ['browserstack'],
+  });
+
+  try {
+    releaser.beginShutdown();
+    await expect(releaser.drain(2_000)).resolves.toEqual({
+      pending: [],
+      unknown: [],
+      released: [],
+    });
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    releaser.shutdown();
+    vi.useRealTimers();
+  }
+});
+
 test('a daemon killed while holding a provider lease recovers it on restart', async () => {
   const stateDir = mkdtempForTestSync('agent-device-live-provider-lease-');
   const recoverExpiredLease = vi.fn(async (_lease: DeviceLease) => undefined);
