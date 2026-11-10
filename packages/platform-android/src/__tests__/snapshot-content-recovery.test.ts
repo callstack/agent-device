@@ -310,6 +310,49 @@ test('returns a meaningful active system surface (notification shade) faithfully
   expect(result.outcome).toBe('system-surface-only');
 });
 
+test('returns a framework share sheet over the foreground app as a system surface', () => {
+  // ChooserActivity and ResolverActivity run in an application window owned by `android`, while
+  // the foreground app below still owns the task, so no node matches the foreground package.
+  const result = classifyAndroidHelperContent(
+    helperXml([
+      node({
+        windowType: 1,
+        windowActive: true,
+        packageName: 'android',
+        className: 'android.widget.FrameLayout',
+      }),
+      node({
+        text: 'repro text',
+        resourceId: 'android:id/content_preview_text',
+        packageName: 'android',
+        className: 'android.widget.TextView',
+      }),
+      node({
+        text: 'Copy',
+        resourceId: 'android:id/copy',
+        packageName: 'android',
+        className: 'android.widget.Button',
+      }),
+      node({
+        text: 'Messages',
+        resourceId: 'android:id/text1',
+        packageName: 'android',
+        className: 'android.widget.TextView',
+      }),
+    ]),
+    {
+      backend: 'android-helper',
+      nodeCount: 4,
+      rootPresent: true,
+      windowCount: 1,
+      captureMode: 'interactive-windows',
+    },
+    { foregroundAppPackage: 'com.example.app' },
+  );
+
+  expect(result.outcome).toBe('system-surface-only');
+});
+
 test('rejects an active navigation-bar window with three-button chrome', () => {
   // Back + Home + Recents are 3 meaningful nodes, but they are status/nav chrome: an active
   // nav-bar window is missing-app-content residue, never a usable shade/quick-settings surface.
