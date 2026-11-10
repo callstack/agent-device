@@ -1,3 +1,4 @@
+import { setImmediate } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import {
@@ -329,4 +330,35 @@ test('a request canceled before it starts does not start a daemon', async (t) =>
   } finally {
     await closeLoopbackServer(fresh.server);
   }
+});
+
+test('a request canceled while the daemon is being ensured settles at once and sends nothing', async () => {
+  const { stateDir } = stateDirAndPaths();
+  let finishEnsure: () => void = () => {};
+  const ensure = vi.spyOn(ensureModule, 'ensureDaemon').mockImplementation(
+    async () =>
+      await new Promise((resolve) => {
+        finishEnsure = () => resolve(undefined as never);
+      }),
+  );
+  const { sent, transport } = recordingTransport();
+  const ensuring = withEnsuredDaemon(transport);
+  const controller = new AbortController();
+
+  const pending = ensuring(request('devices', { stateDir, daemonTransport: 'http' }), {
+    signal: controller.signal,
+  });
+  await vi.waitFor(() => assert.equal(ensure.mock.calls.length, 1));
+  controller.abort();
+
+  await assert.rejects(pending, (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, 'request_canceled');
+    assert.equal(error.details?.dispatched, 'no');
+    return true;
+  });
+  finishEnsure();
+  // Let anything the finished ensure would trigger run before checking that nothing was sent.
+  await setImmediate();
+  assert.deepEqual(sent, []);
 });

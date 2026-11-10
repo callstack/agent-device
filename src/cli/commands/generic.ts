@@ -14,6 +14,7 @@ import type { ClientBackedCliCommandName } from './client-backed.ts';
 import type { ClientCommandParams } from './router-types.ts';
 import type { CommandRequestResult, LeaseDevice } from '@agent-device/contracts/client';
 import { isRecord } from '@agent-device/kernel/record';
+import { exitAfterFlush } from '../process-exit.ts';
 
 export async function runGenericClientBackedCommand({
   command,
@@ -57,9 +58,8 @@ export async function runGenericClientBackedCommand({
       debug,
       replayTestReporterRuntime,
     });
-    if (exitCode !== 0) {
-      process.exit(exitCode);
-    }
+    // #1596: the suite summary is what a piped caller reads; exit only after it reaches the pipe.
+    if (exitCode !== 0) await exitAfterFlush(exitCode);
   }
   return true;
 }

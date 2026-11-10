@@ -9,8 +9,17 @@ vi.mock('../cli/commands/web.ts', async (importOriginal) => {
   return { ...actual, runWebCommand: vi.fn(async () => 0) };
 });
 
+// Pass-through spy: the flushed exit path is the #1596 contract under test.
+vi.mock('../cli/process-exit.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../cli/process-exit.ts')>();
+  return { ...actual, exitAfterFlush: vi.fn(actual.exitAfterFlush) };
+});
+
 import { runCli } from '../cli.ts';
 import { runWebCommand } from '../cli/commands/web.ts';
+import { exitAfterFlush } from '../cli/process-exit.ts';
+
+const MCP_ARGS_MESSAGE = 'mcp accepts no flags or arguments other than --help and --version.';
 import { installIsolatedCliTestEnv } from './cli-test-env.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonResponse } from '@agent-device/daemon-client';
@@ -229,3 +238,81 @@ test('a failed `is` predicate exits non-zero, whatever answered it', async () =>
   assert.ok(output.includes('COMMAND_FAILED'), 'expected the typed failure on stderr');
   assert.ok(!output.includes('Passed'), 'a failed assertion must never render as passed');
 });
+
+test('#1596: a failing `test` suite exits 1 through the flushed exit path', async () => {
+  const flow = path.join(mkdtempForTestSync('agent-device-failing-suite-'), 'login.ad');
+  fs.writeFileSync(flow, 'open "Demo"\n');
+  const restoreEnv = installIsolatedCliTestEnv();
+  const exitSpy = installExitSpy();
+  const stdout = beginStdoutCapture();
+  const sendToDaemon = async (): Promise<DaemonResponse> => ({
+    ok: true,
+    data: {
+      total: 1,
+      executed: 1,
+      passed: 0,
+      failed: 1,
+      skipped: 0,
+      notRun: 0,
+      durationMs: 5,
+      failures: [],
+      tests: [],
+    },
+  });
+
+  try {
+    await runCli(['test', flow, '--json'], { sendToDaemon });
+  } finally {
+    stdout.restore();
+    exitSpy.restore();
+    restoreEnv();
+  }
+
+  assert.deepEqual(vi.mocked(exitAfterFlush).mock.calls, [[1]]);
+  assert.deepEqual(exitSpy.calls, [1]);
+  const envelope = JSON.parse(stdout.read());
+  assert.equal(envelope.success, true);
+  assert.equal(envelope.data.failed, 1);
+});
+
+test.each([
+  { argv: ['mcp', '--json'], stream: 'stdout', message: MCP_ARGS_MESSAGE },
+  { argv: ['mcp', '--debug'], stream: 'stderr', message: MCP_ARGS_MESSAGE },
+  {
+    argv: ['mcp', 'extra'],
+    stream: 'stderr',
+    message: 'mcp accepts at most 0 positional argument(s), received 1: extra',
+  },
+] as const)(
+  '$argv fails with INVALID_ARGS instead of starting a server that ignores it',
+  async ({ argv, stream, message }) => {
+    const restoreEnv = installIsolatedCliTestEnv();
+    const exitSpy = installTerminatingExitSpy();
+    const stdout = beginStdoutCapture();
+    const stderr = beginStderrCapture();
+    const sendToDaemon = async (): Promise<DaemonResponse> => {
+      throw new Error('sendToDaemon should not be called for mcp');
+    };
+
+    let exitCode: number;
+    try {
+      exitCode = await runCliExpectingExit([...argv], { sendToDaemon });
+    } finally {
+      stdout.restore();
+      stderr.restore();
+      exitSpy.restore();
+      restoreEnv();
+    }
+
+    assert.equal(exitCode, 1);
+    if (stream === 'stdout') {
+      const error = JSON.parse(stdout.read()).error;
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.equal(error.message, message);
+    } else {
+      const output = stderr.read();
+      assert.ok(output.includes('INVALID_ARGS'), output);
+      assert.ok(output.includes(message), output);
+    }
+  },
+);
