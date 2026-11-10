@@ -305,6 +305,41 @@ test('late exact-owner binding is rolled back when request cleanup already began
   expect(disposePublished).toHaveBeenCalledOnce();
 });
 
+test('late ordinary binding is disposed when request cleanup already began', async () => {
+  const runtime = makeGateway();
+  const selected = device('late-ordinary');
+  const published = await runtime.gateway.bind({
+    device: selected,
+    intent: { kind: 'ordinary' },
+    scope,
+  });
+  const disposePublished = vi.fn(async () => {});
+  const lateBinding = { ...published, [Symbol.asyncDispose]: disposePublished };
+  let publish: (binding: DeviceBinding<PlatformRuntimeOperations>) => void = () => {};
+  const gateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
+    inspectFacts: async () => runtime.gateway.inspectFacts(selected),
+    bind: vi.fn(
+      async () =>
+        await new Promise<DeviceBinding<PlatformRuntimeOperations>>((resolve) => {
+          publish = resolve;
+        }),
+    ),
+    shutdown: async () => {},
+  };
+  const bindings = createRequestRuntimeBindings({
+    gateway,
+    scope,
+    admitDeviceClaim,
+    dispatchLedger: createRequestDispatchLedger(),
+  });
+  const binding = bindings.bindDevice(selected, appLogInspectUse);
+  await bindings[Symbol.asyncDispose]();
+  publish(lateBinding);
+
+  await expect(binding).rejects.toThrow('Cannot register cleanup after disposal has begun');
+  expect(disposePublished).toHaveBeenCalledOnce();
+});
+
 test('late exact-owner rollback failure is secondary diagnostic evidence', async () => {
   const runtime = makeGateway();
   const selected = device('late-cleanup-failure');

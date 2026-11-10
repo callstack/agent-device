@@ -27,9 +27,9 @@ const daemonManifest = JSON.stringify({
     },
   },
 });
-const [daemon] = workspacePackagesFromManifests(
+const daemon = workspacePackagesFromManifests(
   new Map([['packages/daemon/package.json', daemonManifest]]),
-);
+)[0]!;
 
 function sites(file: string, specifier: string) {
   return [{ file, line: 1, specifier }];

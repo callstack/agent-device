@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { CASES } from '../help-conformance-cases.mjs';
+import { type BenchmarkCase, CASES } from '../help-conformance-cases.mjs';
 import type { CapturedSample } from '../help-conformance-sample-outputs.mjs';
 import * as samples from '../help-conformance-sample-outputs.mjs';
 import { SAMPLE_PRODUCERS } from './help-conformance-sample-producers.ts';
@@ -37,14 +37,7 @@ const WAIVED_GENERIC_HINT_CODES: Record<string, string> = {
 // `Error (CODE): message`, so any rendered error text names its own code.
 const RENDERED_ERROR_CODE = /(?:^|\n)Error \(([A-Z_]+)\):/g;
 
-type RecoveryCase = {
-  id: string;
-  task: string;
-  expectations?: string[];
-  matchers?: { id: string; pattern: RegExp }[];
-  forbidden?: { id: string; pattern: RegExp }[];
-  recovery: { code: string; sample: CapturedSample };
-};
+type RecoveryCase = BenchmarkCase & { recovery: NonNullable<BenchmarkCase['recovery']> };
 
 /**
  * The distinct codes a sample renders. A multi-line failure prints its summary line first and
@@ -56,7 +49,7 @@ function renderedErrorCodes(text: string): string[] {
 
 /** The cases that declare themselves recovery quizzes (see the cases module). */
 const RECOVERY_CASES: RecoveryCase[] = CASES.filter(
-  (testCase: { recovery?: unknown }): testCase is RecoveryCase => testCase.recovery !== undefined,
+  (testCase): testCase is RecoveryCase => testCase.recovery !== undefined,
 );
 
 const QUIZZED_CODES = new Set(RECOVERY_CASES.map((testCase) => testCase.recovery.code));
@@ -155,11 +148,7 @@ test('a recovery case scores the recovery command, not just plan validity', () =
 });
 
 test('no case quotes rendered error text outside a declared pinned sample', () => {
-  for (const testCase of CASES as {
-    id: string;
-    task: string;
-    recovery?: RecoveryCase['recovery'];
-  }[]) {
+  for (const testCase of CASES) {
     const pinned = testCase.recovery ? samples.sampleText(testCase.recovery.sample) : undefined;
     const outsidePinned = pinned ? testCase.task.split(pinned).join('\n') : testCase.task;
     assert.deepEqual(

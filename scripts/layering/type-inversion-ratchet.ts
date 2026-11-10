@@ -1,15 +1,13 @@
 // R6: type-only spine inversions, per zone pair. R5 cannot see these (a type-only import is free
 // at runtime), but "zone A is declared in terms of zone B" is still a boundary claim, and ranking
-// type edges surfaced 61 of them. The survivors are argued in docs/dependency-graph-findings.md
-// §0; the reference is the same count taken at the merge-base with origin/main, so a pair can
+// type edges surfaced 61 of them. The reference is the same count taken at the merge-base with origin/main, so a pair can
 // only shrink and no change can bank headroom by recording a number above the tree.
 //
 // Catches: a type-only import against the ranked spine's declared order — a design-level
 //   dependency (zone A is stated in terms of zone B) that R5 is blind to because it costs
 //   nothing at runtime, so nothing else flags "the type shape leaks the wrong direction."
 // Evidence: the R5-adjacent commits in check.ts's history introduced this ratchet; the 61-to-5
-//   reduction and the surviving deliberate inversions are recorded in
-//   docs/dependency-graph-findings.md.
+//   reduction is in that history.
 // Cost: 118 LOC (61 rule + 57 test), plus the shared merge-base measurement in
 //   ratchet-reference.ts.
 // Kill criterion: none enforced today; retire only by maintainer decision that type-only spine

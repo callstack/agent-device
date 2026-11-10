@@ -22,15 +22,5 @@
       "agent-device/plugins/webdriver": ["./src/sdk/plugin-webdriver.ts"]
     }
   },
-  "include": [
-    "src",
-    "test",
-    "scripts/help-conformance-command-validator.ts",
-    "scripts/clean-daemon.ts",
-    "scripts/coverage-crap/**/*.ts",
-    "scripts/coverage-changed/**/*.ts",
-    "scripts/vitest-coverage-run-stamp-reporter.ts",
-    "scripts/vitest-coverage-run-stamp-reporter.test.ts",
-    "packages/command-registry/src/global.d.ts"
-  ]
+  "include": ["src", "test", "scripts/**/*.ts", "packages/command-registry/src/global.d.ts"]
 }

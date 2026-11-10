@@ -9,10 +9,11 @@ import { formatMarkdown } from '../size-report.mjs';
 import {
   assertBundledLicenseNotices,
   assertPublishPackageContents,
+  type NpmPackEntry,
   parseNpmPackOutput,
 } from '../size-report-package.mjs';
 
-const fixturePack = JSON.parse(
+const fixturePack: { files: NpmPackEntry[] } = JSON.parse(
   await readFile(join(import.meta.dirname, 'fixtures', 'size-report-npm-pack.json'), 'utf8'),
 );
 
@@ -85,8 +86,10 @@ const TWO_LICENSES_NOTICES = [
 ].join('\n');
 
 /** The pack manifest's notices entry — non-empty by bytes, which is all a manifest can say. */
-function noticesEntry() {
-  return fixturePack.files.find((entry) => entry.path === 'dist/src/THIRD_PARTY_NOTICES.txt');
+function noticesEntry(): NpmPackEntry {
+  const entry = fixturePack.files.find(({ path }) => path === 'dist/src/THIRD_PARTY_NOTICES.txt');
+  assert.ok(entry, 'the fixture pack ships THIRD_PARTY_NOTICES.txt');
+  return entry;
 }
 
 /**

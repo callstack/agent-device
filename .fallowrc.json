@@ -72,12 +72,9 @@
     "scripts/di-seams/**",
     "scripts/maestro-conformance/corpus/**",
     "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests.xctestplan",
-    "scripts/help-conformance-sample-outputs.d.mts",
-    "scripts/help-conformance-runner-output.d.mts",
-    // A hand-written type surface for a plain-Node .mjs the typechecked program (and Fallow's
-    // graph) cannot import; its only consumer is the .mjs's real importers, resolved by tsc, not
-    // by an import edge. Same shape as the help-conformance declaration files above.
-    "scripts/size-report-package*.d.mts"
+    // Hand-written type surfaces for plain-Node .mjs modules. Their only consumers are the .mjs's
+    // real importers, resolved by tsc, not by an import edge Fallow's graph can follow.
+    "scripts/**/*.d.mts"
   ],
   "dynamicallyLoaded": [
     "packages/daemon/src/execution/interaction/index.ts",
@@ -113,7 +110,10 @@
     // Packaging linters with no importable API surface here: scripts/check-package.ts runs their
     // `node_modules/.bin` shims as subprocesses, which dependency analysis cannot follow to an import.
     "publint",
-    "@arethetypeswrong/cli"
+    "@arethetypeswrong/cli",
+    // Declarations only: @babel/core's types import convert-source-map, and scripts/mutation reaches
+    // them through @stryker-mutator/instrumenter. No source file imports the package by name.
+    "@types/convert-source-map"
   ],
   "ignoreExports": [
     {

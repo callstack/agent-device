@@ -55,7 +55,7 @@ export function sessionResourceOwnershipViolations(
   const violations: LayeringViolation[] = [];
   for (const [file, source] of sources) {
     if (!SCANNED_ROOTS.some((root) => file.startsWith(root))) continue;
-    const program = parseSync(file, source).program as AstNode;
+    const program = parseSync(file, source).program;
     visitAst(program, (node) => {
       if (node['type'] !== 'Property' || node['kind'] !== 'init' || node['computed'] === true) {
         return;

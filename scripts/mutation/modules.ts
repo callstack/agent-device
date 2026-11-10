@@ -145,15 +145,17 @@ export type ShardSpec = { name: string; module: ModuleId; shard?: string };
  * without the workflow assertions noticing.
  */
 export function shardMatrix(ids: readonly ModuleId[] = ALL_MODULE_IDS): ShardSpec[] {
-  return KERNEL_MODULES.filter((module) => ids.includes(module.id)).flatMap((module) => {
-    const count = module.shards ?? 1;
-    if (count === 1) return [{ name: module.id, module: module.id }];
-    return Array.from({ length: count }, (_unused, index) => ({
-      name: `${module.id}-${index + 1}`,
-      module: module.id,
-      shard: `${index + 1}/${count}`,
-    }));
-  });
+  return KERNEL_MODULES.filter((module) => ids.includes(module.id)).flatMap(
+    (module): ShardSpec[] => {
+      const count = module.shards ?? 1;
+      if (count === 1) return [{ name: module.id, module: module.id }];
+      return Array.from({ length: count }, (_unused, index) => ({
+        name: `${module.id}-${index + 1}`,
+        module: module.id,
+        shard: `${index + 1}/${count}`,
+      }));
+    },
+  );
 }
 
 export function normalizePath(filePath: string): string {

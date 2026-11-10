@@ -195,9 +195,9 @@ test('published ESM plugins declare bundled workspace build dependencies without
     'packages/provider-example/src/plugin.ts',
     "import { AppError } from '@agent-device/kernel/errors';",
   );
-  assert.deepEqual(checkPackageInternalSites(plugin, sites, [plugin, kernel]), []);
+  assert.deepEqual(checkPackageInternalSites(plugin, sites, [plugin, kernel], false), []);
   const undeclared = { ...plugin, workspaceDependencies: new Set<string>() };
-  const violations = checkPackageInternalSites(undeclared, sites, [undeclared, kernel]);
+  const violations = checkPackageInternalSites(undeclared, sites, [undeclared, kernel], false);
   assert.equal(violations.length, 1);
   assert.equal(violations[0]?.rule, 'R11 package-boundaries');
   assert.match(violations[0]?.message ?? '', /without declaring/);
@@ -925,7 +925,7 @@ test('the real tree parses, declares, and passes R11', () => {
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/xml'),
     'root must declare the xml workspace dependency',
   );
-  assert.deepEqual(checkPackageBoundaries(repoRoot, new Set()), []);
+  assert.deepEqual(checkPackageBoundaries(repoRoot), []);
 });
 
 test('Node resolution enforces the exports map at runtime', () => {

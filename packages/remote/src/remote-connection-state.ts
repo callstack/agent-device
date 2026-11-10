@@ -285,6 +285,46 @@ export function removeRemoteConnectionState(options: { stateDir: string; session
 }
 
 /**
+ * Whether any stored session record still connects through `remoteConfigPath`. A record that cannot
+ * be read or parsed, or that parses but fails validation, also counts as a reference, so a caller
+ * deciding whether to delete the profile keeps it.
+ */
+export function isRemoteConfigReferenced(options: {
+  stateDir: string;
+  remoteConfigPath: string;
+}): boolean {
+  const recordsDir = path.join(options.stateDir, 'remote-connections');
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(recordsDir, { withFileTypes: true });
+  } catch (error) {
+    return !isMissingPathError(error);
+  }
+  return entries.some((entry) => {
+    if (!entry.isFile() || entry.name.startsWith('.') || !entry.name.endsWith('.json')) {
+      return false;
+    }
+    let text: string;
+    try {
+      text = fs.readFileSync(path.join(recordsDir, entry.name), 'utf8');
+    } catch (error) {
+      return !isMissingPathError(error);
+    }
+    let record: unknown;
+    try {
+      record = JSON.parse(text);
+    } catch {
+      return true;
+    }
+    return !isRemoteConnectionState(record) || record.remoteConfigPath === options.remoteConfigPath;
+  });
+}
+
+function isMissingPathError(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT';
+}
+
+/**
  * The stored connection a command runs on, and the flags it contributes.
  *
  * `session` is the session the caller named (`--session`, `AGENT_DEVICE_SESSION`, or config), or

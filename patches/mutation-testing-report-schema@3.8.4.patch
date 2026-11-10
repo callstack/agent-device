@@ -1,0 +1,11 @@
+diff --git a/dist/src/index.d.ts b/dist/src/index.d.ts
+index 00f62c8d32165635b8060e3620cd857b418ac8db..bf361e9849775444541725833e2f0de11418a034 100644
+--- a/dist/src/index.d.ts
++++ b/dist/src/index.d.ts
+@@ -1,5 +1,5 @@
+ export type * from '../src-generated/schema.js';
+-import schema from './mutation-testing-report-schema.json';
++import schema from './mutation-testing-report-schema.json' with { type: 'json' };
+ export type SchemaType = typeof schema;
+ export { schema };
+ //# sourceMappingURL=index.d.ts.map
