@@ -8,7 +8,7 @@ const options = { invalidJsonMessage: 'Invalid JSON', rejectedMessage: 'Cloud re
 for (const status of [401, 403]) {
   test(`cloud response ${status} remains an authentication error`, async () => {
     await assert.rejects(
-      readCloudJsonResponse(new Response('{"token":"secret"}', { status }), options),
+      readCloudJsonResponse(new Response('private-body-secret', { status }), options),
       (error: unknown) => {
         const normalized = normalizeError(error);
         assert.equal(normalized.code, 'UNAUTHORIZED');
@@ -20,14 +20,14 @@ for (const status of [401, 403]) {
   });
 }
 
-for (const [status, retriable] of [
-  [404, undefined],
-  [429, true],
-  [503, true],
+for (const [status, retriable, body] of [
+  [404, undefined, '{"error":"private-body-secret"}'],
+  [429, true, '<html>secret</html>'],
+  [503, true, '<html>secret</html>'],
 ] as const) {
   test(`cloud response ${status} preserves status without requesting login`, async () => {
     await assert.rejects(
-      readCloudJsonResponse(new Response('<html>secret</html>', { status }), options),
+      readCloudJsonResponse(new Response(body, { status }), options),
       (error: unknown) => {
         const normalized = normalizeError(error);
         assert.equal(normalized.code, 'COMMAND_FAILED');
