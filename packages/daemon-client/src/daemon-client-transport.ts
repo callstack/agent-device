@@ -21,9 +21,12 @@ import {
   DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
   DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
   DAEMON_RPC_PROTOCOL_VERSION,
-  refuseOversizedDaemonRequest,
 } from '@agent-device/contracts/daemon-http';
-import { buildHttpRpcPayload, handleDaemonHttpResponseBody } from './daemon-client-rpc.ts';
+import {
+  buildHttpRpcPayload,
+  handleDaemonHttpResponseBody,
+  refuseOversizedDaemonRequest,
+} from './daemon-client-rpc.ts';
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
