@@ -431,6 +431,7 @@ extension RunnerTests {
         try reader.dispatch { try retapAt(read: input, app: app, element: input.element) }
       }
       if maskedTextShown(by: input) == .empty {
+        NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_CLEAR route=masked-skip shown=empty")
         return
       }
       let burst = Self.textClearBurst(valueLength: valueLength)
