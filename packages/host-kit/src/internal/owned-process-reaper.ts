@@ -155,8 +155,9 @@ function appendReapOutcome(
 
 /**
  * Stops one recorded process through the shared escalation. The record names the process by start
- * time and exact command, so a pid the host shows running anything else is proven gone and never
- * signaled, and one the host will not describe is kept rather than guessed at.
+ * time and exact command, and both must be read and match before any signal. A pid the host shows
+ * in another lifetime is proven gone and never signaled; one the host will not fully describe, or
+ * that shows the recorded lifetime running another command, is kept rather than guessed at.
  */
 async function reapOwnedProcess(
   record: OwnedProcessRecord,

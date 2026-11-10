@@ -138,33 +138,60 @@ test('captureHostEnvironment copies the environment and reads the working direct
   assert.equal(source.cwd.mock.calls.length, 1);
 });
 
-test('judgeProcessIdentity reads a command mismatch as reassigned only when no start time was recorded', () => {
-  const matches = (command: string) => command === 'recorded';
-  const facts = (startTime: string | null, command: string | null) => ({
-    startTime,
-    command,
-    zombie: false,
-  });
-  assert.equal(judgeProcessIdentity({ matches }, facts('S1', 'other')), 'reassigned');
-  assert.equal(
-    judgeProcessIdentity({ startTime: 'S1', matches }, facts('S1', 'other')),
+// One row per verdict rule: `ours` needs every recorded claim read and matching.
+test.each([
+  ['both claims read and matching', { startTime: 'S1', matches: true }, ['S1', 'recorded'], 'ours'],
+  ['only a start time recorded, read and matching', { startTime: 'S1' }, ['S1', null], 'ours'],
+  ['only a command recorded, read and matching', { matches: true }, [null, 'recorded'], 'ours'],
+  [
+    'a matching command beside an unread start time',
+    { startTime: 'S1', matches: true },
+    [null, 'recorded'],
     'unverified',
-  );
-  assert.equal(
-    judgeProcessIdentity({ startTime: 'S1', matches }, facts(null, 'other')),
+  ],
+  [
+    'a matching start time beside an unread command',
+    { startTime: 'S1', matches: true },
+    ['S1', null],
     'unverified',
-  );
-  assert.equal(
-    judgeProcessIdentity({ startTime: 'S1', matches }, facts('S2', 'recorded')),
+  ],
+  ['nothing read', { startTime: 'S1', matches: true }, [null, null], 'unverified'],
+  ['nothing recorded', {}, ['S1', 'recorded'], 'unverified'],
+  [
+    'a recorded start time beside a mismatching command',
+    { startTime: 'S1', matches: true },
+    ['S1', 'other'],
+    'unverified',
+  ],
+  [
+    'an unread recorded start time beside a mismatching command',
+    { startTime: 'S1', matches: true },
+    [null, 'other'],
+    'unverified',
+  ],
+  [
+    'a contradicted start time',
+    { startTime: 'S1', matches: true },
+    ['S2', 'recorded'],
     'reassigned',
-  );
-  assert.equal(judgeProcessIdentity({ startTime: 'S1', matches }, facts('S1', 'recorded')), 'ours');
-  assert.equal(judgeProcessIdentity({ startTime: 'S1', matches }, facts(null, null)), 'unverified');
+  ],
+  [
+    'a mismatching command with no start time recorded',
+    { matches: true },
+    ['S1', 'other'],
+    'reassigned',
+  ],
+] as const)('judgeProcessIdentity: %s', (_name, recorded, [startTime, command], verdict) => {
+  const expected = {
+    ...('startTime' in recorded ? { startTime: recorded.startTime } : {}),
+    ...('matches' in recorded ? { matches: (observed: string) => observed === 'recorded' } : {}),
+  };
+  assert.equal(judgeProcessIdentity(expected, { startTime, command, zombie: false }), verdict);
+});
+
+test('judgeProcessIdentity reads a zombie as exited whatever else the host says', () => {
   assert.equal(
-    judgeProcessIdentity(
-      { startTime: 'S1', matches },
-      { ...facts('S1', 'recorded'), zombie: true },
-    ),
+    judgeProcessIdentity({ startTime: 'S1' }, { startTime: 'S2', command: null, zombie: true }),
     'exited',
   );
 });

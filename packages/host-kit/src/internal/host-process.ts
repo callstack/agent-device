@@ -730,10 +730,11 @@ export type ProcessStopBudget = Readonly<{
  * - `reassigned`: a readable start time contradicts the record, or, when no start time was
  *   recorded, a readable command does: the pid now names a different process and the recorded one
  *   is gone.
- * - `ours`: at least one recorded claim is confirmed by a readable fact and none is contradicted.
- * - `unverified`: no recorded claim is confirmed, or a start time was recorded and the command
- *   does not match. That may be the same lifetime running something else, as after an `exec` or an
- *   argv rewrite, so it is neither proof the recorded process is gone nor permission to signal.
+ * - `ours`: every recorded claim was read and matches. One confirmed claim beside an unread one is
+ *   not enough, because the start-time and command reads can fail independently.
+ * - `unverified`: everything else. A claim the host did not answer, no claim at all, or a recorded
+ *   start time beside a command that does not match (the same lifetime may have exec'd or rewritten
+ *   its argv) is neither proof the recorded process is gone nor permission to signal.
  */
 export type ProcessIdentityVerdict = 'ours' | 'exited' | 'reassigned' | 'unverified';
 
@@ -742,13 +743,14 @@ export function judgeProcessIdentity(
   facts: HostProcessIdentityFacts,
 ): ProcessIdentityVerdict {
   if (facts.zombie) return 'exited';
-  const confirmedStartTime = Boolean(expected.startTime && facts.startTime);
-  if (confirmedStartTime && facts.startTime !== expected.startTime) return 'reassigned';
-  if (expected.matches && facts.command && !expected.matches(facts.command)) {
-    return expected.startTime ? 'unverified' : 'reassigned';
-  }
-  const confirmedCommand = Boolean(expected.matches && facts.command);
-  return confirmedStartTime || confirmedCommand ? 'ours' : 'unverified';
+  const { startTime, matches } = expected;
+  if (startTime && facts.startTime && facts.startTime !== startTime) return 'reassigned';
+  const commandMatches = facts.command === null || !matches ? undefined : matches(facts.command);
+  if (!startTime && commandMatches === false) return 'reassigned';
+  if (!startTime && !matches) return 'unverified';
+  const startTimeConfirmed = !startTime || facts.startTime === startTime;
+  const commandConfirmed = !matches || commandMatches === true;
+  return startTimeConfirmed && commandConfirmed ? 'ours' : 'unverified';
 }
 
 /**

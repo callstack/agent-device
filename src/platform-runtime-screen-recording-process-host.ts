@@ -133,10 +133,10 @@ async function readOwnershipEvidence(
   if (verdict === 'exited') return 'gone';
   if (marker.startTime.length === 0 || marker.command.length === 0) return 'not-ours';
   if (verdict === 'reassigned') return 'not-ours';
-  // A recording marker is ours only while both recorded facts are confirmed, and a readable fact
-  // that does not match is a refusal.
-  if (facts.startTime === null || facts.command === null) return 'unprovable';
-  return verdict === 'ours' ? 'ours' : 'not-ours';
+  if (verdict === 'ours') return 'ours';
+  // The host answered both facts and they do not name the marker: a refusal that also holds the
+  // spawned child's handle back, unlike a host that did not answer at all.
+  return facts.startTime !== null && facts.command !== null ? 'not-ours' : 'unprovable';
 }
 
 export async function terminateManagedProcessSet(

@@ -46,6 +46,7 @@ function driveHost(): void {
       const command = processState.commands.get(pid);
       return { stdout: command ? `${pid} ${command}\n` : '', stderr: '', exitCode: 0 };
     }
+    if (!processState.starts.has(pid)) return { stdout: '', stderr: 'timed out', exitCode: 1 };
     const state = processState.zombiePids.has(pid) ? 'Z' : 'S';
     return { stdout: `${pid} ${state} ${processState.starts.get(pid)}\n`, stderr: '', exitCode: 0 };
   });
@@ -314,6 +315,25 @@ test('startup counts a pid reassigned after SIGTERM as missing, not terminated',
     assert.deepEqual(summary.terminatedPids, []);
     assert.deepEqual(processState.signals, ['SIGTERM']);
     assert.equal(store.read().length, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+test('startup keeps a record whose start time the host did not answer, without signaling it', async () => {
+  // The start-time and command reads fail independently: a matching command alone is not the
+  // recorded lifetime.
+  const { store, cleanup } = reapFixture('unread-start');
+  hostRuns(BROWSER);
+  processState.starts.delete(BROWSER.pid);
+  try {
+    store.replace({ kind: 'daemon' }, [BROWSER]);
+
+    const summary = await reapOwnedProcessRecordsAtStartup(store);
+
+    assert.deepEqual(summary.unconfirmedPids, [BROWSER.pid]);
+    assert.deepEqual(processState.signals, []);
+    assert.equal(store.read().length, 1);
   } finally {
     cleanup();
   }

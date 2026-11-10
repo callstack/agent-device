@@ -170,19 +170,21 @@ const STOP_CASES: HostCase[] = [
   },
   {
     // Windows hides only the command line of an elevated or other-user process, and that is the #3540
-    // companion: it must be signaled and retained, never reported stopped.
+    // companion. With one recorded claim unread its lifetime is unconfirmed: it is retained, never
+    // signaled, and never reported stopped.
     name: 'recorded process hides its command line, as an elevated one does',
     identity: { command: null },
     ...DENIED_ON_TERM,
     ...HELD,
-    expect: REFUSED_ON_TERM,
+    expect: UNVERIFIED,
   },
   {
+    // The start-time and command reads fail independently: a matching command beside a start time
+    // the host did not answer is not a confirmed lifetime.
     name: 'recorded process hides its start time',
     identity: { startTime: null },
-    ...DENIED_ON_TERM,
     ...HELD,
-    expect: REFUSED_ON_TERM,
+    expect: UNVERIFIED,
   },
   {
     // POSIX `hidepid`, a `ps` that times out, or a Windows process that exited while its object still

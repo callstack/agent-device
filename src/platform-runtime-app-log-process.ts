@@ -407,14 +407,15 @@ function markerIdentity(marker: AppLogProcessMarker): ProcessStopIdentity {
   return { startTime: marker.startTime, matches: (command) => command === marker.command };
 }
 
-/** Owned only while both recorded facts are confirmed, under the shared identity rule. */
+/** Judged by the same identity rule the stop applies, so inspect and terminate agree. */
 async function inspectOwnedProcess(marker: AppLogProcessMarker): Promise<AppLogProcessOwnership> {
   if (!isProcessAlive(marker.pid)) return 'missing';
-  const facts = await readProcessIdentityFacts(marker.pid);
-  const verdict = judgeProcessIdentity(markerIdentity(marker), facts);
+  const verdict = judgeProcessIdentity(
+    markerIdentity(marker),
+    await readProcessIdentityFacts(marker.pid),
+  );
   if (verdict === 'exited') return 'missing';
-  const bothConfirmed = facts.startTime !== null && facts.command !== null;
-  return verdict === 'ours' && bothConfirmed ? 'owned-alive' : 'ownership-lost';
+  return verdict === 'ours' ? 'owned-alive' : 'ownership-lost';
 }
 
 /**
