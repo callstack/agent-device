@@ -41,7 +41,13 @@ export type SessionEventLogPage = {
   cursor: string;
   limit: number;
   events: SessionEventLogEntry[];
+  /** Present only when more lines follow this page. */
   nextCursor?: string;
+  /**
+   * The absolute index after the last line this page covered. A tailing reader resumes from it:
+   * it counts lines that did not parse as events, which `cursor + events.length` does not.
+   */
+  endCursor: string;
 };
 
 export type SessionEventLogInput = Omit<SessionEventLogEntry, 'version' | 'ts' | 'session'> & {
@@ -209,6 +215,7 @@ export function readSessionEventLog(
     limit,
     events,
     ...(page.nextCursor !== undefined ? { nextCursor: String(page.nextCursor) } : {}),
+    endCursor: String(page.endCursor),
   };
 }
 
@@ -221,9 +228,10 @@ function readSessionEventLogLines(
   files: readonly { path: string; firstLineIndex: number }[],
   cursor: number,
   limit: number,
-): { lines: string[]; nextCursor?: number } {
+): { lines: string[]; nextCursor?: number; endCursor: number } {
   const lines: string[] = [];
   let nextCursor: number | undefined;
+  let lineCount = 0;
   for (const file of files) {
     let lineIndex = file.firstLineIndex;
     scanEventLogLines(file.path, (line) => {
@@ -234,9 +242,11 @@ function readSessionEventLogLines(
       if (lineIndex >= cursor) lines.push(line);
       lineIndex += 1;
     });
+    lineCount = lineIndex;
     if (nextCursor !== undefined) break;
   }
-  return { lines, ...(nextCursor !== undefined ? { nextCursor } : {}) };
+  const endCursor = Math.min(cursor + limit, lineCount);
+  return { lines, ...(nextCursor !== undefined ? { nextCursor } : {}), endCursor };
 }
 
 function normalizeCursor(value: string | undefined): number {

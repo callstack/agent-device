@@ -37,6 +37,7 @@ type EventsCliResult = {
   path?: string;
   cursor?: string;
   nextCursor?: string;
+  endCursor?: string;
   limit?: number;
   events?: readonly EventsCliEntry[];
 };
@@ -104,7 +105,7 @@ function eventsCliOutput(data: EventsCliResult): CliOutput {
     data,
     text: events.length > 0 ? formatEventEntries(events) : 'No session events found.',
     stderr: joinDefinedLines([
-      formatKeyValueFields(data, ['path', 'cursor', 'nextCursor', 'limit'] as const),
+      formatKeyValueFields(data, ['path', 'cursor', 'nextCursor', 'endCursor', 'limit'] as const),
     ]),
   };
 }

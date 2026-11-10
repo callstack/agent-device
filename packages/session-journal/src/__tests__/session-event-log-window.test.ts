@@ -237,3 +237,33 @@ test('the default cap leaves an ordinary session log unrotated, and a non-intege
   assert.deepEqual(fs.readdirSync(dir), [path.basename(eventLogPath)]);
   assert.deepEqual(summaries(eventLogPath), ['event 0', 'event 1', 'event 2']);
 });
+
+test('a tailing reader resumes from endCursor past unparsable lines without replaying events', async () => {
+  delete process.env.AGENT_DEVICE_EVENT_LOG_MAX_BYTES;
+  const eventLogPath = resolveSessionEventLogPath(
+    mkdtempForTestSync('agent-device-event-log-tail-'),
+  );
+  await appendEvents(eventLogPath, 0, 2);
+  fs.appendFileSync(eventLogPath, '{"version":999,"kind":"future"}\n');
+  await appendEvents(eventLogPath, 2, 3);
+
+  const caughtUp = readSessionEventLog(eventLogPath, { cursor: '0', limit: 4 });
+  assert.deepEqual(
+    caughtUp.events.map((event) => event.summary),
+    ['event 0', 'event 1', 'event 2'],
+  );
+  assert.equal(caughtUp.nextCursor, undefined);
+  assert.equal(caughtUp.endCursor, '4');
+
+  await appendEvents(eventLogPath, 3, 4);
+  const resumed = readSessionEventLog(eventLogPath, { cursor: caughtUp.endCursor, limit: 4 });
+  assert.deepEqual(
+    resumed.events.map((event) => event.summary),
+    ['event 3'],
+  );
+  assert.equal(resumed.endCursor, '5');
+
+  const partial = readSessionEventLog(eventLogPath, { cursor: '1', limit: 2 });
+  assert.equal(partial.nextCursor, '3');
+  assert.equal(partial.endCursor, '3');
+});
