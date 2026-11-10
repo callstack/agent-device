@@ -56,12 +56,6 @@ export type ReplayScriptMetadata = {
 export type ParsedReplayScript = {
   actions: SessionAction[];
   actionLines: number[];
-  /**
-   * Per-action source file path, parallel to `actionLines`; `undefined` =
-   * the top-level replay file. A Maestro action inlined from a `runFlow`
-   * include carries the include's resolved path.
-   */
-  actionSourcePaths?: (string | undefined)[];
 };
 
 type PendingTargetAnnotation =

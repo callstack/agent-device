@@ -32,7 +32,6 @@ import { resolveReplayEntryIndex, type PendingRecordAndHeal } from './resume.ts'
 export type AdReplayManifest = Readonly<{
   actions: SessionAction[];
   actionLines: number[];
-  actionSourcePaths: (string | undefined)[] | undefined;
   metadata: ReplayScriptMetadata;
   /** SHA-256 digest of the canonical plan (`digestFlags` binds the same platform/target the replay invokes with). */
   planDigest: string;
@@ -83,7 +82,6 @@ export function inspectAdReplay(
   const planDigest = computeReplayPlanDigest({
     actions: parsed.actions,
     actionLines: parsed.actionLines,
-    actionSourcePaths: parsed.actionSourcePaths,
     metadata: {
       platform:
         digestFlags?.platform ?? resolveDeclaredScriptPlatform(parsed.actions) ?? metadata.platform,
@@ -94,7 +92,6 @@ export function inspectAdReplay(
   return {
     actions: parsed.actions,
     actionLines: parsed.actionLines,
-    actionSourcePaths: parsed.actionSourcePaths,
     metadata,
     planDigest,
     resolveEntryIndex: (params) => resolveReplayEntryIndex(params, actionCount, planDigest),
