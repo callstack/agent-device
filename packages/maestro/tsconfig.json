@@ -13,6 +13,7 @@
   "references": [
     { "path": "../ad-script" },
     { "path": "../capture-kit" },
+    { "path": "../command-registry" },
     { "path": "../contracts" },
     { "path": "../host-kit" },
     { "path": "../kernel" },

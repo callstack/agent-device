@@ -1,6 +1,7 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { GESTURE_FLING_DURATION_MS } from '@agent-device/contracts/gesture-plan';
 import { AppError } from '@agent-device/kernel/errors';
+import { parseWaitPositionals } from '@agent-device/command-registry/wait-positionals';
 import { selectorContainsKey } from '@agent-device/selectors';
 import { formatMaestroPoint } from './export-points.ts';
 import { DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY } from './compatibility-policy.ts';
@@ -262,55 +263,74 @@ function convertWaitAction(
   action: SessionAction,
   resolveSelector: MaestroExportOptions['resolveSelector'],
 ): ConvertedAction {
-  const [first, second] = action.positionals;
-  if (!first) return { kind: 'unsupported', message: 'wait requires a target or duration' };
-  if (isNumber(first)) {
-    return {
-      kind: 'commands',
-      commands: [{ waitForAnimationToEnd: { timeout: Number(first) } }],
-      warnings: [
-        'wait <ms> exports as waitForAnimationToEnd and may return before the full duration',
-      ],
-    };
+  const parsed = parseWaitPositionals(action.positionals);
+  if (!parsed) return { kind: 'unsupported', message: 'wait requires a target or duration' };
+  switch (parsed.kind) {
+    case 'sleep':
+      return {
+        kind: 'commands',
+        commands: [{ waitForAnimationToEnd: { timeout: parsed.durationMs } }],
+        warnings: [
+          'wait <ms> exports as waitForAnimationToEnd and may return before the full duration',
+        ],
+      };
+    case 'stable':
+      return {
+        kind: 'commands',
+        commands: [
+          parsed.timeoutMs === null
+            ? 'waitForAnimationToEnd'
+            : { waitForAnimationToEnd: { timeout: parsed.timeoutMs } },
+        ],
+        warnings: [
+          'wait stable exports as waitForAnimationToEnd, which uses its own screen-stability threshold instead of the quiet window',
+        ],
+      };
+    case 'absent':
+      return {
+        kind: 'unsupported',
+        message: 'strict wait absent requires zero selector matches and is unsupported by Maestro',
+      };
+    case 'ref':
+      return {
+        kind: 'unsupported',
+        message: 'wait @ref names a session-local ref; record a selector wait to export it',
+      };
+    case 'invalid':
+      return { kind: 'unsupported', message: parsed.message };
+    case 'text':
+      if (parsed.text.length === 0) {
+        return { kind: 'unsupported', message: 'wait text requires the text to wait for' };
+      }
+      return extendedWaitUntilVisible(parsed.text, parsed.timeoutMs);
+    case 'selector': {
+      const selector = resolveSelector(parsed.selectorExpression);
+      if (!selector) {
+        return { kind: 'unsupported', message: 'wait selector is not Maestro-compatible' };
+      }
+      return {
+        ...extendedWaitUntilVisible(selector, parsed.timeoutMs),
+        warnings: readLabelSelectorWarnings(parsed.selectorExpression),
+      };
+    }
   }
-  if (first === 'absent') {
-    return {
-      kind: 'unsupported',
-      message: 'strict wait absent requires zero selector matches and is unsupported by Maestro',
-    };
-  }
-  if (first === 'text' && second) {
-    return {
-      kind: 'commands',
-      commands: [
-        {
-          extendedWaitUntil: {
-            visible: second,
-            timeout: readTimeout(
-              action,
-              DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY.extendedWaitUntilTimeoutMs,
-            ),
-          },
-        },
-      ],
-    };
-  }
-  const selector = resolveSelector(first);
-  if (!selector) return { kind: 'unsupported', message: 'wait selector is not Maestro-compatible' };
+}
+
+function extendedWaitUntilVisible(
+  visible: NonNullable<MaestroSelectorProjection>,
+  timeoutMs: number | null,
+): Extract<ConvertedAction, { kind: 'commands' }> {
   return {
     kind: 'commands',
     commands: [
       {
         extendedWaitUntil: {
-          visible: selector,
-          timeout: readTimeout(
-            action,
-            DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY.extendedWaitUntilTimeoutMs,
-          ),
+          visible,
+          timeout:
+            timeoutMs ?? DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY.extendedWaitUntilTimeoutMs,
         },
       },
     ],
-    warnings: readLabelSelectorWarnings(first),
   };
 }
 
@@ -465,11 +485,6 @@ function appendWarnings(
       message,
     });
   }
-}
-
-function readTimeout(action: SessionAction, fallback: number): number {
-  const candidate = action.positionals.at(-1);
-  return candidate && isNumber(candidate) ? Number(candidate) : fallback;
 }
 
 function formatMaestroYaml(config: MaestroExportConfig, commands: MaestroExportCommand[]): string {
