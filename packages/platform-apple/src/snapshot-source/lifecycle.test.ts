@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { onTestFinished, test, vi } from 'vitest';
+import { test, vi } from 'vitest';
 import { SnapshotSourceError } from '@agent-device/capture-kit/snapshot-source-channel';
 import { snapshotSourceError } from './errors.ts';
 import { SnapshotBridgeManager } from './lifecycle.ts';
@@ -18,7 +18,10 @@ import {
   isHelperCrashFailure,
   exitDiagnostics,
   createLifecycleFixture,
+  installTimerOrderedTime,
 } from './lifecycle.fixtures.ts';
+
+installTimerOrderedTime();
 
 test('the bridge manager reuses a healthy per-device helper and stops it exactly once', async () => {
   const fixture = createLifecycleFixture();
@@ -82,8 +85,6 @@ test.each(['same-generation', 'same-generation-retry', 'new-generation'])(
     const fixture = createLifecycleFixture();
     const manager = new SnapshotBridgeManager({
       ...fixture.host,
-      ensureDirectory: async () => {},
-      remove: async () => {},
       connect: async (...args) => {
         if (connecting)
           throw snapshotSourceError('transport-failure', 'bridge-closed-before-connect');
@@ -139,13 +140,13 @@ test.each(['same-generation', 'same-generation-retry', 'new-generation'])(
       assert.equal(fixture.sockets[0]?.writes, 1);
     } finally {
       await manager.close();
-      vi.useRealTimers();
     }
   },
 );
 
 test('cancellation while queued prevents a later dispatch', async () => {
-  const fixture = createLifecycleFixture({ responseDelayMs: 200 });
+  const firstResponseDelayMs = 200;
+  const fixture = createLifecycleFixture({ responseDelayMs: firstResponseDelayMs });
   const manager = new SnapshotBridgeManager(fixture.host);
   const first = manager.request({
     target,
@@ -171,7 +172,10 @@ test('cancellation while queued prevents a later dispatch', async () => {
     queued,
     (error: unknown) => error instanceof SnapshotSourceError && error.failureKind === 'cancelled',
   );
-  assert.ok(Date.now() - startedAt < 100);
+  assert.ok(
+    Date.now() - startedAt < firstResponseDelayMs,
+    'the cancelled request waited for the in-flight response',
+  );
   assert.equal(fixture.sockets[0]?.writes, 1);
   await first;
   assert.equal(fixture.sockets.length, 1);
@@ -602,7 +606,6 @@ test('a capture whose exit status stays unread ends at its own deadline without 
   // Virtual time stands still through the host's real directory setup, so the 120 ms budget covers only
   // the connect retry and the exit wait this test is about, however loaded the run is.
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
-  onTestFinished(() => void vi.useRealTimers());
   const request = manager
     .request({
       target,
@@ -730,7 +733,6 @@ test('typed guest failures retain their kind after target validation', async () 
 test('slow helper readiness detaches from a capture and later uses the same process', async () => {
   vi.useFakeTimers();
   const fixture = createLifecycleFixture({ connectDelayMs: 3000 });
-  fixture.host = { ...fixture.host, ensureDirectory: async () => {}, remove: async () => {} };
   const manager = new SnapshotBridgeManager(fixture.host);
   try {
     const first = manager.request({
@@ -772,7 +774,6 @@ test('slow helper readiness detaches from a capture and later uses the same proc
     assert.equal(fixture.sockets[0]?.writes, 1);
   } finally {
     await manager.close();
-    vi.useRealTimers();
   }
 });
 
@@ -782,7 +783,6 @@ test.each(['same-generation', 'same-generation-retry', 'new-generation'])(
     vi.useFakeTimers();
     const options = { connectDelayMs: 20000 };
     const fixture = createLifecycleFixture(options);
-    fixture.host = { ...fixture.host, ensureDirectory: async () => {}, remove: async () => {} };
     const manager = new SnapshotBridgeManager(fixture.host);
     const caller = new AbortController();
     try {
@@ -840,7 +840,6 @@ test.each(['same-generation', 'same-generation-retry', 'new-generation'])(
       assert.equal(fixture.sockets[0]?.writes, 1);
     } finally {
       await manager.close();
-      vi.useRealTimers();
     }
   },
 );
@@ -919,7 +918,6 @@ test('caller abort cancels only the wait for shared helper readiness', async () 
 test('binary time and helper startup consume one readiness allowance', async () => {
   vi.useFakeTimers();
   const fixture = createLifecycleFixture({ connectDelayMs: 1500 });
-  fixture.host = { ...fixture.host, ensureDirectory: async () => {}, remove: async () => {} };
   const manager = new SnapshotBridgeManager(fixture.host);
   try {
     const captureDeadline = deadline(undefined, 5000);
@@ -956,7 +954,6 @@ test('binary time and helper startup consume one readiness allowance', async () 
     assert.equal(fixture.sockets[0]?.writes, 2);
   } finally {
     await manager.close();
-    vi.useRealTimers();
   }
 });
 

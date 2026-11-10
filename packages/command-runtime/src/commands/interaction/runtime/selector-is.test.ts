@@ -4,7 +4,6 @@ import type { AgentDeviceBackend, BackendSnapshotOptions } from '@agent-device/c
 import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { createAgentDevice } from '../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
-import { selector } from './selector-read-utils.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { createSelectorDevice, selectorReadSnapshot } from './__tests__/test-utils/index.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -60,7 +59,9 @@ test('runtime visibility predicates request snapshot rects', async () => {
     policy: localCommandPolicy(),
   });
 
-  await device.selectors.isVisible(selector('label=Continue'), {
+  await device.selectors.is({
+    predicate: 'visible',
+    selector: 'label=Continue',
     session: 'default',
   });
 

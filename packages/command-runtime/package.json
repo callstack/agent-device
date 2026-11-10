@@ -10,8 +10,7 @@
     "@agent-device/contracts": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*",
-    "@agent-device/selectors": "workspace:*",
-    "@agent-device/session-journal": "workspace:*"
+    "@agent-device/selectors": "workspace:*"
   },
   "exports": {
     ".": {

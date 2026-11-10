@@ -41,6 +41,9 @@ const REFERENCE: LayeringRatchets = {
   typeInversions: {},
   largestTypeCycle: typeCycleMembers({ 'provider-webdriver': 6 }),
   sessionState: { writerOwnedFields: 19, ownerFileClaims: 22 },
+  sessionAuthority: { shapeFiles: [], authorityFiles: [] },
+  testOnlyExports: [],
+  unmatchedTests: [],
 };
 
 /** The same measurement as the reference except where a test moves one number. */

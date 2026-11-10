@@ -168,7 +168,11 @@ test('the scripts that rewrite runner Swift select the packaged-source check', (
 test('the shared foreground geometry header selects the Apple runner builds', () => {
   // The runner's event bridge includes this bridge header by relative path, so its bytes change
   // the compiled runner on both platform lanes; a change nothing builds cannot be reviewed safely.
-  for (const check of ['swift-runner-ios', 'swift-runner-macos', 'packaged-runner-swift']) {
+  for (const check of [
+    'swift-runner-ios',
+    'swift-runner-macos',
+    'packaged-runner-swift',
+  ] as const) {
     assert.ok(
       ids(['apple/snapshot-bridge/ForegroundApplicationGeometry.h']).includes(check),
       check,

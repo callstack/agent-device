@@ -7,15 +7,19 @@
 import { describe, expect, it } from 'vitest';
 import { checkCase } from './invariant.ts';
 import { getFuzzTarget } from './registry.ts';
-import { decodeValidationCase, encodeValidationCase } from './validation-case.ts';
+import {
+  decodeValidationCase,
+  encodeValidationCase,
+  type ValidationCase,
+} from './validation-case.ts';
 
 describe('validation case envelope', () => {
   it('round-trips a case through the string form the corpus and artifacts carry', () => {
-    const original = {
+    const original: ValidationCase = {
       payload: ['open', 'com.example.app'],
       mutation: 'valid',
       expect: { outcome: 'accept' },
-    } as const;
+    };
     expect(decodeValidationCase(encodeValidationCase(original))).toEqual(original);
   });
 

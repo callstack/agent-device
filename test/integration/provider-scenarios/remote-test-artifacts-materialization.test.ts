@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import {
   downloadRemoteArtifact,
   materializeRemoteArtifacts,
@@ -150,11 +150,17 @@ test('directory downloads stage beside the destination and finish timeout cleanu
 
   const tempDir = mkdtempForTestSync('agent-device-remote-suite-timeout-');
   const clientRoot = path.join(tempDir, 'caller-side', 'artifacts');
+  const stagingEntries = () =>
+    fs.existsSync(clientRoot)
+      ? fs.readdirSync(clientRoot).filter((entry) => entry.startsWith('.agent-device-download-'))
+      : [];
   const server = http.createServer((_req, res) => {
     res.statusCode = 200;
     res.write('partial archive');
   });
 
+  // The download timeout is the only timer faked, so it fires only after the test sees staging.
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   try {
     const port = await listenOnLoopback(server);
     const download = downloadRemoteArtifact({
@@ -166,19 +172,27 @@ test('directory downloads stage beside the destination and finish timeout cleanu
       isDirectory: true,
       timeoutMs: 80,
     });
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    const stagingWhileActive = fs.existsSync(clientRoot)
-      ? fs.readdirSync(clientRoot).filter((entry) => entry.startsWith('.agent-device-download-'))
-      : [];
-    await assert.rejects(download, /timed out/);
-    assert.equal(stagingWhileActive.length, 1);
-    assert.deepEqual(
-      fs.existsSync(clientRoot)
-        ? fs.readdirSync(clientRoot).filter((entry) => entry.startsWith('.agent-device-download-'))
-        : [],
-      [],
+    let settledBeforeTimeout: { error?: unknown } | undefined;
+    download.then(
+      () => (settledBeforeTimeout = {}),
+      (error: unknown) => (settledBeforeTimeout = { error }),
     );
+    // Vitest's own test timeout aborts `t.signal`, which ends the wait without a wall-clock bound.
+    while (!settledBeforeTimeout && !t.signal.aborted && stagingEntries().length === 0) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    assert.equal(
+      stagingEntries().length,
+      1,
+      `the download settled before it staged: ${String(settledBeforeTimeout?.error)}`,
+    );
+
+    await vi.advanceTimersByTimeAsync(80);
+
+    await assert.rejects(download, /timed out/);
+    assert.deepEqual(stagingEntries(), []);
   } finally {
+    vi.useRealTimers();
     await closeLoopbackServer(server);
   }
 });

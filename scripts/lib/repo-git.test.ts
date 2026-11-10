@@ -15,6 +15,7 @@ test('parseUnifiedDiff numbers added lines per hunk and ignores deleted lines', 
     '+new line',
   ].join('\n');
   const [file] = parseUnifiedDiff(diff);
+  assert.ok(file);
   assert.equal(file.path, 'src/a.ts');
   assert.equal(file.deleted, false);
   assert.deepEqual(file.added, [1, 2, 12]);

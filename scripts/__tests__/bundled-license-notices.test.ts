@@ -9,6 +9,11 @@ import { mkdtempForTest } from '@agent-device/test-kit';
 
 const execFileAsync = promisify(execFile);
 
+/** One record type for fixture files, so table rows that name different files share a shape. */
+function fixtureFiles(files: Record<string, string>): Record<string, string> {
+  return files;
+}
+
 async function fixture(files: Record<string, string>): Promise<string> {
   const root = await fs.realpath(await mkdtempForTest('bundled-licenses-'));
   const contents = {
@@ -125,15 +130,17 @@ test.each([
 test.each([
   {
     name: 'package with neither license nor version',
-    files: {
+    files: fixtureFiles({
       'node_modules/omitted/package.json': JSON.stringify({ name: 'omitted', main: 'index.js' }),
       'node_modules/omitted/index.js': 'export const value = process.env.OMITTED;',
-    },
+    }),
     failure: /Bundled dependency omitted is missing its version/,
   },
   {
     name: 'module with no package.json',
-    files: { 'node_modules/omitted/index.js': 'export const value = process.env.OMITTED;' },
+    files: fixtureFiles({
+      'node_modules/omitted/index.js': 'export const value = process.env.OMITTED;',
+    }),
     failure:
       /Bundled module node_modules\/omitted\/index\.js has no package\.json naming its package/,
   },

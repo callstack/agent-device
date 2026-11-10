@@ -9,7 +9,9 @@ type Plan = ReturnType<typeof selectChecks>;
 
 export function checkOwnership(
   changedPaths: readonly string[] | null,
-): { early: Selection; plan?: never } | { early?: never; plan: Plan } {
+):
+  | { early: Selection; plan?: never; changedPaths?: never }
+  | { early?: never; plan: Plan; changedPaths: readonly string[] } {
   if (changedPaths === null) {
     return { early: { run: true, reason: 'the PR change set could not be established' } };
   }
@@ -25,7 +27,7 @@ export function checkOwnership(
       },
     };
   }
-  return { plan };
+  return { plan, changedPaths };
 }
 
 // A PR runs a device lane only when the affected-check model selects one of its checks.

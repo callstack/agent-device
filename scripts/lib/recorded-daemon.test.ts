@@ -84,7 +84,10 @@ test('an already-aborted signal dispatches nothing', async (t) => {
 
   await assert.rejects(
     send(daemon.stateDir, { signal: controller.signal }),
-    (error: unknown) => isRequestCanceledError(error) && error.details?.dispatched === 'no',
+    (error: unknown) =>
+      isRequestCanceledError(error) &&
+      error instanceof AppError &&
+      error.details?.dispatched === 'no',
   );
 
   assert.equal(daemon.connections(), 0);
