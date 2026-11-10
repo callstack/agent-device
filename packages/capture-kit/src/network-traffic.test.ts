@@ -102,12 +102,7 @@ test('bounds merged network scans while preserving primary entries', () => {
     'https://b.example.test',
   ]);
   assert.deepEqual(urls(primary), primaryBefore);
-  assert.deepEqual(
-    urls(
-      scan(['https://a.example.test', 'https://b.example.test', 'https://c.example.test'], 'large'),
-    ),
-    ['https://a.example.test', 'https://b.example.test'],
-  );
+  assert.deepEqual(urls(mergeNetworkScans(primary, secondary, 1)), ['https://a.example.test']);
   assert.deepEqual(
     urls(
       mergeNetworkScans(
