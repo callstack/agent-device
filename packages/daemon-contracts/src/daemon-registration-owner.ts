@@ -276,15 +276,16 @@ export function createOwnedReplayStateDir(): OwnedReplayStateDir {
   return owned;
 }
 
-/** Launches and monitors the actual child before recording its private-directory authority. */
 /**
- * Whether this process may repair the mode of a state path: only its owner can chmod it, and a
- * state dir another user set up keeps the mode that user chose. Windows has no POSIX owner.
+ * Repairs the mode of an open state path only when this process owns it: only its owner can chmod
+ * it, and a state dir another user set up keeps the mode that user chose. Checking and changing the
+ * same descriptor means a path swapped in between is never the one changed.
  */
-function isOwnedByCurrentUser(stat: fs.Stats): boolean {
-  return process.getuid !== undefined && stat.uid === process.getuid();
+function repairOwnedMode(fd: number, mode: number): void {
+  if (fs.fstatSync(fd).uid === process.getuid?.()) fs.fchmodSync(fd, mode);
 }
 
+/** Launches and monitors the actual child before recording its private-directory authority. */
 export function launchDaemonProcess(
   input: Readonly<{
     paths: DaemonPaths;
@@ -304,12 +305,18 @@ export function launchDaemonProcess(
     });
   fs.mkdirSync(input.paths.baseDir, { recursive: true, mode: 0o700 });
   // A mode applies only at creation: an older launcher left these at the umask default.
-  if (isOwnedByCurrentUser(fs.statSync(input.paths.baseDir))) {
-    fs.chmodSync(input.paths.baseDir, 0o700);
+  // Windows has no POSIX owner and cannot open a directory, so it keeps the creation mode alone.
+  if (process.getuid) {
+    const dirFd = fs.openSync(input.paths.baseDir, 'r');
+    try {
+      repairOwnedMode(dirFd, 0o700);
+    } finally {
+      fs.closeSync(dirFd);
+    }
   }
   const logFd = fs.openSync(input.paths.logPath, 'a', 0o600);
   try {
-    if (isOwnedByCurrentUser(fs.fstatSync(logFd))) fs.fchmodSync(logFd, 0o600);
+    repairOwnedMode(logFd, 0o600);
     const monitored = runCmdDetachedMonitored(process.execPath, input.args, {
       cwd: input.cwd,
       env: {
