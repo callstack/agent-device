@@ -9,8 +9,8 @@ import {
   connectionWorkspace,
   createTestClient,
   seedConnectionState,
-} from './remote-connection.fixtures.ts';
-import { disconnectCommand } from './test-utils/host-bound-commands.ts';
+} from '../../__tests__/remote-connection.fixtures.ts';
+import { disconnectCommand } from '../../__tests__/test-utils/host-bound-commands.ts';
 
 function seedReleasableConnection(prefix: string, session: string) {
   const workspace = connectionWorkspace(prefix);

@@ -2,7 +2,7 @@ import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { connectCommand } from '../cli/commands/connection.ts';
+import { connectCommand } from '../commands/connection.ts';
 import {
   readActiveConnectionState,
   type RemoteConnectionState,

@@ -8,7 +8,10 @@ import { fakeCreateCommandSurface } from '../../../__tests__/support/command-sur
 import { makeAndroidSession } from '../../../__tests__/support/session-factories.ts';
 import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../../resources/lease-registry.ts';
-import { expectOkData, makeSessionStore } from './session-test-suite.fixtures.ts';
+import {
+  expectOkData,
+  makeSessionStore,
+} from '../../__tests__/replay-suite/session-test-suite.fixtures.ts';
 import {
   bindTestCommandHost,
   createTestHostEnvironment,
