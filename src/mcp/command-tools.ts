@@ -63,7 +63,12 @@ type CommandToolExecutorDeps = {
 };
 
 type CommandToolExecutor = {
-  execute: (name: string, input: Record<string, unknown>) => Promise<ToolResult>;
+  /** `signal` cancels the call: an abort closes its in-flight daemon request and the call settles as an error result. */
+  execute: (
+    name: string,
+    input: Record<string, unknown>,
+    options?: { signal?: AbortSignal },
+  ) => Promise<ToolResult>;
 };
 
 type McpOutputFormat = 'optimized' | 'json';
@@ -156,7 +161,7 @@ export function listCommandTools(): Array<{
 export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): CommandToolExecutor {
   const refPins = createToolRefPinStore();
   return {
-    execute: async (name, input) => {
+    execute: async (name, input, options = {}) => {
       if (!isCommandName(name)) {
         throw new AppError('INVALID_ARGS', `Unknown command tool: ${name}`);
       }
@@ -198,7 +203,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
       const pinnedInput = refPins.pinInput(name, commandInput, config.client.stateDir);
       // One host per tool call: the client's ensuring transport and the output formatter resolve
       // the daemon and the styling from the same host the executor captured (#3794).
-      const client = await createClient(deps, config.client, host);
+      const client = await createClient(deps, config.client, host, options.signal);
       try {
         const result = await (deps.runCommand ?? runCommand)(client, name, pinnedInput);
         refPins.mergeCommandResult(name, result, config.client.stateDir, commandInput.session);
@@ -262,6 +267,7 @@ async function createClient(
   deps: CommandToolExecutorDeps,
   config: AgentDeviceClientConfig,
   host: HostEnvironment,
+  signal: AbortSignal | undefined,
 ): Promise<AgentDeviceClient> {
   if (deps.createClient) return await deps.createClient(config);
   const { createAgentDeviceClient } = await import('@agent-device/client');
@@ -271,9 +277,13 @@ async function createClient(
   return createAgentDeviceClient(config, {
     host,
     // The client builds the same request the daemon transport takes; its type only differs in the
-    // session being optional, which `sendToDaemon` defaults.
+    // session being optional, which `sendToDaemon` defaults. The call's signal rides every request
+    // the command makes, so a cancelled call closes whichever request is in flight.
     transport: async (req, context) =>
-      await ensuring(req as Parameters<typeof ensuring>[0], context),
+      await ensuring(
+        req as Parameters<typeof ensuring>[0],
+        signal ? { ...context, signal } : context,
+      ),
   });
 }
 

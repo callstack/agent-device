@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { setImmediate } from 'node:timers/promises';
 import { test } from 'vitest';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { helpTopicIds } from '../../commands/schema/cli-help.ts';
@@ -10,7 +9,7 @@ import {
   MCP_SERVER_INSTRUCTIONS,
   terminalOnlyCommandNames,
 } from '../server-guide.ts';
-import { createMcpPayloadQueue, handleMcpPayload } from '../server.ts';
+import { handleMcpPayload } from '../server.ts';
 
 test('MCP exposes every automatable CLI command as a structured direct tool, plus the MCP-only help tool', async () => {
   const response = await handleMcpMessage({
@@ -425,38 +424,3 @@ test('MCP JSON-RPC batches return responses in request order and skip notificati
     ['first', 'second'],
   );
 });
-
-test('MCP stdio payload queue serializes separate messages', async () => {
-  const started: JsonRpcId[] = [];
-  const writes: unknown[] = [];
-  const completions = new Map<JsonRpcId, (response: unknown) => void>();
-  const queue = createMcpPayloadQueue({
-    handlePayload: async (message) => {
-      const id = Array.isArray(message) ? null : ((message as { id?: JsonRpcId }).id ?? null);
-      started.push(id);
-      return await new Promise((resolve) => completions.set(id, resolve));
-    },
-    write: (message) => {
-      writes.push(message);
-    },
-  });
-
-  queue.push({ jsonrpc: '2.0', id: 'first', method: 'tools/call' });
-  queue.push({ jsonrpc: '2.0', id: 'second', method: 'tools/call' });
-  await Promise.resolve();
-
-  assert.deepEqual(started, ['first']);
-  completions.get('first')?.({ jsonrpc: '2.0', id: 'first', result: {} });
-  await setImmediate();
-
-  assert.deepEqual(started, ['first', 'second']);
-  completions.get('second')?.({ jsonrpc: '2.0', id: 'second', result: {} });
-  await queue.idle();
-
-  assert.deepEqual(
-    writes.map((message) => (message as { id: JsonRpcId }).id),
-    ['first', 'second'],
-  );
-});
-
-type JsonRpcId = string | number | null;

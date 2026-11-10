@@ -63,6 +63,8 @@ Tool results are compact text. A tool that declares an output schema, such as `p
 
 When a tool fails, the server returns an MCP tool result with `isError: true`. Check the tool result, not only whether the JSON-RPC call succeeded.
 
+The server runs one `tools/call` at a time, in the order it receives them. It answers `ping`, `tools/list`, and the handshake at once, even while a long tool call such as `test` or `wait` runs. A `notifications/cancelled` for a running or queued `tools/call` stops it, and the server sends no response for that request.
+
 The server does not run arbitrary shell commands. If the CLI is missing, the agent should ask you before installing or updating packages, reconnect the server after setup, and retry the original app-driving command without adding version or help probes.
 
 Configuration for a global install:
