@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import type { AgentDeviceClientConfig } from '@agent-device/contracts/client';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
+import { listMcpExposedCommandNames } from '@agent-device/command-registry/registry';
 import { createCommandToolExecutor } from '../command-tools.ts';
 
 afterEach(() => {
@@ -28,10 +29,24 @@ async function clientConfigFor(input: Record<string, unknown>): Promise<AgentDev
 test('AGENT_DEVICE_SESSION_LOCK sets the lock policy of every tool call', async () => {
   vi.stubEnv('AGENT_DEVICE_SESSION', 'qa');
   vi.stubEnv('AGENT_DEVICE_SESSION_LOCK', 'strip');
+  const policies = new Map<string, unknown>();
+  let current = '';
+  const executor = createCommandToolExecutor({
+    createClient: (config) => {
+      policies.set(current, config.lockPolicy);
+      return {} as AgentDeviceClient;
+    },
+    runCommand: async () => ({ ok: true }),
+  });
 
-  const config = await clientConfigFor({});
+  // Every tool, including ones such as `test` and `devices` that declare few flags of their own.
+  for (const name of listMcpExposedCommandNames()) {
+    current = name;
+    await executor.execute(name, {});
+  }
 
-  assert.equal(config.lockPolicy, 'strip');
+  assert.equal(policies.size, listMcpExposedCommandNames().length);
+  for (const [name, policy] of policies) assert.equal(policy, 'strip', name);
 });
 
 test('AGENT_DEVICE_SESSION turns on the reject lock bound to AGENT_DEVICE_PLATFORM', async () => {
