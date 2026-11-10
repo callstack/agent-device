@@ -4,8 +4,10 @@ Evidence for #4285 (report the keyboard band in snapshot responses), re-run at t
 rebased head after the review found the published frame wrong. The window-manager
 table on this build never carries the key plane: the panel row reports the whole
 display whether the keyboard shows or hides. The producer therefore publishes
-visibility, and publishes a band frame only when the table proves the rect smaller
-than the display. This run shows that contract live, with the guard regressions
+visibility, and publishes a band frame only when the table proves the rect covers
+under a 0.9 share of the display's area (`DISPLAY_SPANNING_RECT_SHARE`: at or above
+that share the panel is the window manager's full-surface container, not a key
+plane). This run shows that contract live, with the guard regressions
 the old full-screen frame caused now retired. Fix commit: `2878b86e4`.
 
 ## Device
