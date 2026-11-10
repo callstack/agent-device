@@ -38,6 +38,8 @@ import {
   type SelectorRuntimeParams,
 } from './selector-runtime-backend.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
+import { sleep } from '@agent-device/host-kit/retry';
 
 type DispatchWaitParams = SelectorRuntimeParams &
   Readonly<{ inspectFacts?: InspectDeviceRuntimeFacts; bindDevice?: BindDeviceRuntime }>;
@@ -47,6 +49,9 @@ export async function dispatchWaitViaRuntime(params: DispatchWaitParams): Promis
   const parsedOrResponse = parseWaitRequest(req);
   if ('ok' in parsedOrResponse) return parsedOrResponse;
   const parsed = parsedOrResponse;
+  if (parsed.kind === 'sleep' && !sessionStore.lookup(sessionName)) {
+    return await sleepWithoutSession(req, sessionName, parsed.durationMs);
+  }
   const { ref, session, device } = await resolveSessionDevice(sessionStore, sessionName, req);
   // ADR 0019: facts are the only support authority, through the selector family's one
   // admit-then-bind entry. A duration wait observes nothing, so it never asks for a binding —
@@ -95,6 +100,27 @@ export async function dispatchWaitViaRuntime(params: DispatchWaitParams): Promis
     ),
     consumedTree: consumedSessionSnapshot(params),
     captureProof: params.captureProof,
+  });
+}
+
+/**
+ * A sessionless duration wait observes no device and records nothing, so it never resolves a
+ * target device: device discovery would only add latency, or fail when no device is selectable.
+ * A named session that does not exist is still refused.
+ */
+async function sleepWithoutSession(
+  req: DaemonRequest,
+  sessionName: string,
+  durationMs: number,
+): Promise<DaemonResponse> {
+  const { requireNamedSessionHoldsDevice } = await import('../core/explicit-session-resolution.ts');
+  requireNamedSessionHoldsDevice({ req, sessionAddress: sessionName, session: undefined });
+  return await toDaemonResponse(async () => {
+    const signal = getRequestSignal(req.meta?.requestId);
+    signal?.throwIfAborted();
+    await sleep(durationMs, signal);
+    signal?.throwIfAborted();
+    return toDaemonWaitData({ waitedMs: durationMs });
   });
 }
 

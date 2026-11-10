@@ -33,6 +33,14 @@ import { handleSnapshotCommands } from '../sessions/handlers/snapshot.ts';
 import { resolveBoundSelectorCapture } from './selector-capture-binding.ts';
 import type { DaemonRequest } from '../index.ts';
 
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
+  return { ...actual, resolveTargetDevice: vi.fn(actual.resolveTargetDevice) };
+});
+
+import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
+
 const testCreateCommandSurface = commandSurfaceWithMembers((config) => ({
   selectors: {
     wait: async ({ target, session, requestId, signal }) => {
@@ -286,6 +294,31 @@ test('a duration wait inspects no facts and binds no device', async () => {
     expect(harness.captureSnapshot).not.toHaveBeenCalled();
   } finally {
     vi.useRealTimers();
+  }
+});
+
+test('a sessionless duration wait sleeps without resolving a target device', async () => {
+  vi.mocked(resolveTargetDevice).mockRejectedValue(
+    new AppError('DEVICE_NOT_FOUND', 'No device is selectable'),
+  );
+  try {
+    const harness = waitRuntimeHarness({ capture: captureUnavailable });
+    const response = await handleSnapshotCommands({
+      createCommandSurface: testCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
+      req: { command: 'wait', positionals: ['1'], token: 't', flags: {} } as DaemonRequest,
+      sessionName: 'default',
+      logPath: '/tmp/daemon.log',
+      sessionStore: makeSessionStore('agent-device-wait-runtime-sessionless-'),
+      inspectFacts: harness.inspectFacts,
+      bindDevice: harness.bindDevice,
+    });
+
+    expect(response).toEqual({ ok: true, data: { waitedMs: 1 } });
+    expect(resolveTargetDevice).not.toHaveBeenCalled();
+    expect(harness.inspectFacts).not.toHaveBeenCalled();
+  } finally {
+    vi.mocked(resolveTargetDevice).mockReset();
   }
 });
 
