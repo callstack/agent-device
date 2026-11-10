@@ -13,7 +13,6 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
-import type { SelectorTarget } from '@agent-device/contracts/interaction';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import type { RuntimeCommand } from '../../runtime-types.ts';
 import { assertExpectedResolvedTarget } from './replay-target-guard.ts';
@@ -52,11 +51,6 @@ export type IsCommandResult = {
   node?: SnapshotNode;
   preActionNodes?: SnapshotNode[];
 };
-
-export type IsSelectorCommandOptions = CommandContext &
-  SelectorSnapshotOptions & {
-    target: SelectorTarget;
-  };
 
 export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = async (
   runtime,
@@ -192,23 +186,3 @@ async function resolveAssertedPredicate(
     preActionNodes: capture.snapshot.nodes,
   };
 }
-
-export const isVisibleCommand: RuntimeCommand<IsSelectorCommandOptions, IsCommandResult> = async (
-  runtime,
-  options,
-): Promise<IsCommandResult> =>
-  await isCommand(runtime, {
-    ...options,
-    predicate: 'visible',
-    selector: options.target.selector,
-  });
-
-export const isHiddenCommand: RuntimeCommand<IsSelectorCommandOptions, IsCommandResult> = async (
-  runtime,
-  options,
-): Promise<IsCommandResult> =>
-  await isCommand(runtime, {
-    ...options,
-    predicate: 'hidden',
-    selector: options.target.selector,
-  });

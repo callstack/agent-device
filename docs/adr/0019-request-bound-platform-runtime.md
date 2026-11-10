@@ -3,7 +3,7 @@
 ## Status
 
 Accepted. Staged adoption completed on 2026-08-27.
-The screen-recording amendment in ADR 0024 remains proposed.
+The screen-recording amendment in ADR 0024 is accepted; its rollout (ADR 0024 section 7) is incomplete.
 
 ## Rules at a glance
 
@@ -144,14 +144,14 @@ Evidence must suit the helper; wall-clock behavior alone is insufficient.
 
 ### 5. Durable resources are reattachable by the same owner
 
-> **Proposed amendment (ADR 0024, 2026-09-14), `screen-recording` only.**
+> **Accepted amendment (ADR 0024, proposed 2026-09-14), `screen-recording` only. Its rollout is incomplete.**
 > Screen recording would use stop-and-collect, with identity proof renewed at signal time.
 > It would retain the manifest, destructive-step fences, and completed replay.
 > Backend `stop(target, budget)` and `collect` would replace `reattach` and `cleanup`.
 > This kind would remove cleanup-pending and the admission ledger, record recorder observation and native-path disposition beside the committed export, and archive each fence generation until both settle.
 > For each durable kind, failed finish would no longer imply forced cleanup once its failed-finish test states retry requirements.
 > App-log, audio-probe, and perf-capture would retain the recovery contracts unchanged.
-> ADR 0024 owns the rationale, matrix, and tests. This proposal takes effect only when accepted.
+> ADR 0024 owns the rationale, matrix, tests, and the remaining rollout steps. Until its step 4 lands, screen recording keeps `reattach` and `cleanup`.
 
 Durable work uses a process-local live handle and a bounded, versioned descriptor for recovery by the exact runtime owner.
 Destructive operations hold the ownership lease across fence validation, the native side effect, and the persisted transition, or use a token atomically enforced by the native or provider operation.

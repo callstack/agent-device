@@ -44,8 +44,6 @@ export type BackendResultEnvelope = {
   message?: string;
 };
 
-export type BackendResultVariant<T extends object> = T & BackendResultEnvelope;
-
 export type ScreenshotCommandOptions = CommandContext & {
   out?: FileOutputRef;
   fullscreen?: boolean;

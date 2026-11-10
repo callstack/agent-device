@@ -38,7 +38,9 @@ test('get text disambiguates an ambiguous selector (readText row)', async () => 
     readText: 'Save',
   });
 
-  const result = await device.selectors.getText(selector(AMBIGUOUS_SELECTOR), {
+  const result = await device.selectors.get({
+    property: 'text',
+    target: selector(AMBIGUOUS_SELECTOR),
     session: 'default',
   });
 
@@ -50,7 +52,7 @@ test('get attrs reports the ambiguity it refuses as an ambiguity, not an absence
   const device = createSelectorDevice(ambiguousSelectorReadSnapshot());
 
   const error = await device.selectors
-    .getAttrs(selector(AMBIGUOUS_SELECTOR), { session: 'default' })
+    .get({ property: 'attrs', target: selector(AMBIGUOUS_SELECTOR), session: 'default' })
     .then(
       () => null,
       (error: unknown) => error,
@@ -98,10 +100,12 @@ test('both strict rows report the matched alternative as details.selector, not t
       () => null,
       (error: unknown) => error as AppError,
     ),
-    device.selectors.getAttrs(selector(AUTHORED), { session: 'default' }).then(
-      () => null,
-      (error: unknown) => error as AppError,
-    ),
+    device.selectors
+      .get({ property: 'attrs', target: selector(AUTHORED), session: 'default' })
+      .then(
+        () => null,
+        (error: unknown) => error as AppError,
+      ),
   ]);
 
   for (const error of errors) {
@@ -179,7 +183,9 @@ test('is visible answers about React Native text reported twice (readUnique row)
 test('get attrs answers about React Native text reported twice (readUnique row)', async () => {
   const device = createSelectorDevice(rnTextEchoReadSnapshot());
 
-  const attrs = await device.selectors.getAttrs(selector(RN_TEXT_SELECTOR), {
+  const attrs = await device.selectors.get({
+    property: 'attrs',
+    target: selector(RN_TEXT_SELECTOR),
     session: 'default',
   });
 
@@ -247,7 +253,9 @@ test('is visible answers about the control a wrapper reports (readUnique row)', 
 test('get attrs answers about the control a wrapper reports (readUnique row)', async () => {
   const device = createSelectorDevice(unverifiedWrapperChainReadSnapshot());
 
-  const result = await device.selectors.getAttrs(selector(WRAPPER_CHAIN_SELECTOR), {
+  const result = await device.selectors.get({
+    property: 'attrs',
+    target: selector(WRAPPER_CHAIN_SELECTOR),
     session: 'default',
   });
 
@@ -331,7 +339,9 @@ const NESTED_TEXT_SELECTOR = 'label="Account"';
 test('get attrs answers about a covered element (readUnique ignores occlusion)', async () => {
   const device = createSelectorDevice(observationStagesSnapshot());
 
-  const attrs = await device.selectors.getAttrs(selector(COVERED_SELECTOR), {
+  const attrs = await device.selectors.get({
+    property: 'attrs',
+    target: selector(COVERED_SELECTOR),
     session: 'default',
   });
 
@@ -357,7 +367,9 @@ test('is visible answers about an off-screen element (readUnique ignores off-scr
 test('get attrs answers about the node it matched, never its hittable ancestor (readText/readUnique promote nothing)', async () => {
   const device = createSelectorDevice(observationStagesSnapshot());
 
-  const attrs = await device.selectors.getAttrs(selector(NESTED_TEXT_SELECTOR), {
+  const attrs = await device.selectors.get({
+    property: 'attrs',
+    target: selector(NESTED_TEXT_SELECTOR),
     session: 'default',
   });
 
