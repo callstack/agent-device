@@ -33,12 +33,12 @@ export {
   getCommandSchema,
 } from './schema/command-schema.ts';
 export { isFlagSupportedForCommand } from './schema/option-schema.ts';
-export { resolveConfigBackedFlagDefaults } from './schema/cli-config.ts';
 export {
   applyDefaultPlatformBinding,
   resolveBindingSettings,
+  resolveConfigBackedFlagDefaults,
   type BindingSettings,
-} from './schema/session-binding.ts';
+} from './schema/cli-config.ts';
 export { mergeDefinedFlags } from './schema/merge-flags.ts';
 
 const daemonWriters = {
