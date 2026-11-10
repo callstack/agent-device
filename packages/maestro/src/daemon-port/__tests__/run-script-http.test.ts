@@ -56,10 +56,10 @@ test('keeps local requests on the existing Fetch path', async () => {
     body: 'created',
     headers: { 'content-type': 'text/plain;charset=UTF-8', 'x-result': 'ok' },
   });
-  assert.deepEqual(fetchMock.mock.calls[0], [
-    'http://127.0.0.1:8080/local',
-    { method: 'POST', headers: { authorization: 'secret' }, body: '{}' },
-  ]);
+  const [url, { signal, ...init }] = fetchMock.mock.calls[0] as [string, RequestInit];
+  assert.equal(url, 'http://127.0.0.1:8080/local');
+  assert.deepEqual(init, { method: 'POST', headers: { authorization: 'secret' }, body: '{}' });
+  assert.ok(signal instanceof AbortSignal);
 });
 
 test('preserves Fetch decompression for public requests', async (t) => {

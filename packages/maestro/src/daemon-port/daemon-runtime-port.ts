@@ -354,13 +354,14 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       artifactPaths: artifactPathsFromData(await invoke({ kind: 'screenshot', path: input.path })),
     }),
     runScript: async (input, context) => ({
-      outputEnv: executeRunScriptFile({
+      outputEnv: await executeRunScriptFile({
         scriptPath: resolveScriptPath(input.file, context, options.sourcePath),
         publicNetworkOnly: options.publicNetworkOnly,
         env: {
           ...context.env,
           ...(input.env ? stringifyEnvironment(input.env) : {}),
         },
+        signal: context.signal,
       }),
     }),
   };

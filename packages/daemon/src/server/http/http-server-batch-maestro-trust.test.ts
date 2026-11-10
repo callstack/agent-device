@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import vm from 'node:vm';
 import { expect, test, vi } from 'vitest';
@@ -50,7 +51,19 @@ test.for(remoteCases)(
     const entry = path.join(root, 'flow.yaml');
     const scriptPath = path.join(root, kind === 'missing-runScript' ? 'missing.js' : 'host.js');
     const script = `output.result = ${JSON.stringify(SCRIPT_CANARY)}`;
-    if (kind === 'host-runScript') fs.writeFileSync(scriptPath, script);
+    // runScript executes in a child process; its loopback request is the execution canary.
+    const scriptRequests: string[] = [];
+    const scriptCanaryServer = http.createServer((request, response) => {
+      scriptRequests.push(request.url ?? '');
+      response.end('ok');
+    });
+    const scriptCanaryPort = await listenOnLoopback(scriptCanaryServer);
+    if (kind === 'host-runScript') {
+      fs.writeFileSync(
+        scriptPath,
+        `http.post(${JSON.stringify(`http://127.0.0.1:${scriptCanaryPort}/ran`)})\n${script}`,
+      );
+    }
     const step =
       kind === 'evalScript'
         ? `evalScript: \${${script}}`
@@ -141,6 +154,7 @@ test.for(remoteCases)(
       expect(await post(testRequest)).toMatchObject({ result: { ok: true, data: deniedSuite } });
       const batch = await post(batchRequest);
       expect(read.mock.calls.some(([file]) => file === scriptPath)).toBe(false);
+      expect(scriptRequests).toEqual([]);
       expect(evaluate.mock.calls.some(([code]) => String(code).includes(SCRIPT_CANARY))).toBe(
         false,
       );
@@ -165,17 +179,19 @@ test.for(remoteCases)(
           ok: true,
           data: { results: [{ data: { total: 1, passed: 1, failed: 0 } }] },
         });
-        expect(evaluate.mock.calls.some(([code]) => String(code).includes(SCRIPT_CANARY))).toBe(
-          true,
-        );
         if (kind === 'host-runScript') {
-          expect(read.mock.calls.some(([file]) => file === scriptPath)).toBe(true);
+          expect(scriptRequests).toEqual(['/ran']);
+        } else {
+          expect(
+            evaluate.mock.calls.some(([code]) => String(code).includes(SCRIPT_CANARY)),
+          ).toBe(true);
         }
       }
     } finally {
       read.mockRestore();
       evaluate.mockRestore();
       await closeLoopbackServer(server);
+      await closeLoopbackServer(scriptCanaryServer);
     }
   },
 );
