@@ -160,6 +160,7 @@ test('agent-browser provider keeps typed text out of argv and error details when
           assert.equal(error.code, 'COMMAND_FAILED');
           assert.match(error.message, /^agent-browser (fill|keyboard type) failed/);
           assert.equal(error.details?.reason, 'text-entry-failed');
+          assert.match(String(error.details?.hint), /snapshot -i/);
           assert.equal(error.message.includes(secret), false);
           assert.equal(JSON.stringify(error.details).includes(secret), false);
           return true;

@@ -234,7 +234,8 @@ async function sendTextEntry(send: AgentBrowserRunJson, command: readonly string
     args: ['batch'],
     command: commandName,
     reason: 'text-entry-failed',
-    hint: AGENT_BROWSER_DOCTOR_HINT,
+    // The backend ran and refused this entry, so its install is not the suspect.
+    hint: 'The page refused this text entry: the target may have changed or gone. Run snapshot -i again and retry with the ref it reports.',
   });
 }
 
