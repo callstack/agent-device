@@ -5,7 +5,7 @@ import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifac
 import { createAgentDevice } from '../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';
-import { ref, selector } from './selector-read-utils.ts';
+import { selector } from './selector-read-utils.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   createFakeClock,
@@ -57,11 +57,13 @@ test('runtime get selector target captures fresh snapshot without a stored sessi
     policy: localCommandPolicy(),
   });
 
-  const result = await device.selectors.getText(selector('label=Continue'), {
+  const result = await device.selectors.get({
+    property: 'text',
+    target: selector('label=Continue'),
     session: 'default',
   });
 
-  assert.equal(result.kind, 'text');
+  assert.ok(result.kind === 'text');
   assert.equal(result.text, 'Fresh text');
   assert.equal(captures, 1);
   assert.equal((await sessions.get('default'))?.snapshot?.nodes[0]?.label, 'Continue');
@@ -163,7 +165,9 @@ test('runtime selectors pass runtime signal to backend snapshot capture', async 
     signal: controller.signal,
   });
 
-  const result = await device.selectors.getAttrs(selector('label=Continue'), {
+  const result = await device.selectors.get({
+    property: 'attrs',
+    target: selector('label=Continue'),
     session: 'default',
   });
 
@@ -387,27 +391,6 @@ test('runtime find wait cancels and joins a capture that consumes its full deadl
   );
   assert.equal(captureCount, 1);
   assert.deepEqual((await sessions.get('default'))?.snapshot, initial);
-});
-
-test('runtime selector convenience methods use explicit target helpers', async () => {
-  const device = createSelectorDevice(selectorReadSnapshot(), {
-    readText: 'Continue',
-  });
-
-  const text = await device.selectors.getText(selector('label=Continue'), { session: 'default' });
-  const attrs = await device.selectors.getAttrs(ref('@e1'), { session: 'default' });
-  const visible = await device.selectors.isVisible(selector('label=Continue'), {
-    session: 'default',
-  });
-  const waited = await device.selectors.waitForText('Continue', {
-    session: 'default',
-    timeoutMs: 100,
-  });
-
-  assert.equal(text.kind, 'text');
-  assert.equal(attrs.kind, 'attrs');
-  assert.equal(visible.pass, true);
-  assert.deepEqual(waited, { kind: 'text', text: 'Continue', waitedMs: 0 });
 });
 
 // ---------------------------------------------------------------------------

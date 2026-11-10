@@ -156,7 +156,7 @@ function swiftParseFailures(
  * xctest-nightly) compiles the checkout tree, and check-package's clean install never builds the
  * packaged runner — the first compile of that tree is a user's. This is that user's build test.
  */
-function sharedHeaderFailures(scratchRoot: string, packagedRoot: string): string[] {
+function sharedHeaderFailures(packagedRoot: string): string[] {
   const project = fs.readFileSync(
     path.join(packagedRoot, 'AgentDeviceRunner', 'AgentDeviceRunner.xcodeproj', 'project.pbxproj'),
     'utf8',
@@ -191,7 +191,7 @@ function main(): number {
     const relativePaths = swiftFilesUnder(packagedRoot);
     const swiftc = findSwiftc();
     const failures = [
-      ...sharedHeaderFailures(scratchRoot, packagedRoot),
+      ...sharedHeaderFailures(packagedRoot),
       ...lineParityFailures(packagedRoot, relativePaths),
       ...(swiftc === undefined
         ? []

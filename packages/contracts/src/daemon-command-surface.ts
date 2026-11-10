@@ -190,10 +190,6 @@ export type DaemonWaitResult = Readonly<{
   preActionNodes?: SnapshotNode[];
 }>;
 
-export type DaemonWaitForTextOptions = CommandContext &
-  DaemonSelectorSnapshotOptions &
-  Readonly<{ text: string; timeoutMs?: number | null }>;
-
 export type DaemonPressOptions = CommandContext &
   RepeatedInput &
   DaemonPostActionOptions &
@@ -308,17 +304,13 @@ export type DaemonCommandSurfaceCapture = Readonly<{
   diffSnapshot: (options: DaemonSnapshotOptions) => Promise<DiffSnapshotCommandResult>;
 }>;
 
-/** The five selector reads the daemon's selector and wait routes serve. Function-typed
+/** The four selector reads the daemon's selector and wait routes serve. Function-typed
  * properties for the same contravariance reason as {@link DaemonCommandSurfaceCapture}. */
 export type DaemonCommandSurfaceSelectors = Readonly<{
   find: (options: DaemonFindOptions) => Promise<FindReadResult>;
   get: (options: DaemonGetOptions) => Promise<DaemonGetResult>;
   is: (options: DaemonIsOptions) => Promise<DaemonIsResult>;
   wait: (options: DaemonWaitOptions) => Promise<DaemonWaitResult>;
-  waitForText: (
-    text: string,
-    options?: Omit<DaemonWaitForTextOptions, 'text'>,
-  ) => Promise<DaemonWaitResult>;
 }>;
 
 /** The seven actions the daemon's touch, gesture and settle routes serve. Function-typed

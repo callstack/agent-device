@@ -14,12 +14,15 @@ export function installFakeManagedAgentBrowser(stateDir: string): FakeManagedAge
   return install;
 }
 
+/** The package tree `npm install` leaves behind, without the setup manifest. */
 export function writeFakeManagedAgentBrowserPackage(
   stateDir: string,
 ): FakeManagedAgentBrowserInstall {
   const install = expectedManagedAgentBrowserInstall(stateDir);
   fs.mkdirSync(path.dirname(install.entryScript), { recursive: true });
   fs.writeFileSync(install.entryScript, 'process.exit(0)\n');
+  // npm links a console shim beside the package; the fixture carries it so tests
+  // prove the shim is never spawned rather than merely absent (#2022).
   fs.mkdirSync(path.dirname(install.binaryPath), { recursive: true });
   fs.writeFileSync(install.binaryPath, '#!/bin/sh\nexit 0\n');
   fs.chmodSync(install.binaryPath, 0o755);
@@ -34,6 +37,7 @@ export function writeFakeManagedAgentBrowserPackage(
   return install;
 }
 
+/** Reports a different Node runtime to the code under test for one scenario. */
 export async function withNodeRuntime(
   overrides: { version?: string; platform?: NodeJS.Platform; execPath?: string },
   testFn: () => void | Promise<void>,

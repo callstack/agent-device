@@ -40,7 +40,7 @@ export function selectIosXctests(
 export function selectAppleBridgeProof(changedPaths: readonly string[] | null): Selection {
   const checked = checkOwnership(changedPaths);
   if (checked.early) return checked.early;
-  const input = changedPaths.find(
+  const input = checked.changedPaths.find(
     (file) =>
       file.startsWith('apple/') ||
       file.startsWith('packages/platform-apple/src/') ||

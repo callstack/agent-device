@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
+import { isRemoteConfigReferenced } from '@agent-device/remote/remote-connection-state';
 import type {
   RemoteConfigProfile,
   ResolvedRemoteConfigProfile,
@@ -32,6 +33,17 @@ export function writeGeneratedRemoteConfig(options: {
     // Best effort on filesystems that do not support POSIX mode bits.
   }
   return configPath;
+}
+
+/** Removes a profile `connect` generated once no session record connects through it. */
+export function removeGeneratedRemoteConfigIfUnused(options: {
+  stateDir: string;
+  remoteConfigPath: string;
+}): void {
+  const configDir = path.join(options.stateDir, 'remote-connections', 'generated');
+  if (path.dirname(path.resolve(options.remoteConfigPath)) !== path.resolve(configDir)) return;
+  if (isRemoteConfigReferenced(options)) return;
+  fs.rmSync(options.remoteConfigPath, { force: true });
 }
 
 function resolveGeneratedRemoteConfigProfile(options: {

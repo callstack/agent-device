@@ -6,6 +6,7 @@ import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import { makeRecordingSession } from '../../__tests__/support/session-teardown.fixtures.ts';
+import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -88,4 +89,29 @@ test('daemon shutdown resolves durable recording resources through the effective
 
   expect(stderrChunks.join('')).not.toMatch(/resource record is missing/);
   expect(sessionStore.get(effectiveSessionName)).toBeUndefined();
+});
+
+test('a session teardown that finishes inside its budget cancels its deadline timer', async () => {
+  vi.useFakeTimers();
+  const root = mkdtempForTestSync('agent-device-shutdown-deadline-');
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
+  const session = makeIosSession('shutdown-fast');
+  sessionStore.publish(session.name, session);
+  const stderrChunks: string[] = [];
+
+  const teardown = teardownDaemonSessionForShutdown({
+    ref: sessionStore.lookup(session.name)!,
+    sessionStore,
+    stderr: { write: (chunk) => stderrChunks.push(chunk) },
+    platformCleanup: platformResourceCleanupFixture(),
+  });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(await teardown).toBe(true);
+
+  expect(vi.getTimerCount()).toBe(0);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(stderrChunks.join('')).not.toMatch(/timed out/);
 });
