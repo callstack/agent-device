@@ -22,9 +22,9 @@ on:
         required: false
         default: '5000'
       seed-start:
-        description: 'First seed in the sweep'
+        description: 'First seed in the sweep (default: run number x runs, a fresh range each run)'
         required: false
-        default: '0'
+        default: ''
 
 permissions:
   contents: read
@@ -40,7 +40,8 @@ jobs:
     timeout-minutes: 20
     env:
       TORTURE_RUNS: ${{ github.event.inputs.runs || '5000' }}
-      TORTURE_SEED_START: ${{ github.event.inputs.seed-start || '0' }}
+      # Job-level env would override a value written to GITHUB_ENV, so the step below sets the start.
+      SEED_START_INPUT: ${{ github.event.inputs.seed-start }}
       # Standard scheduled-lane artifact envelope (#1430) built via the shared
       # scripts/lib/lane-envelope.ts (commit, tool/configHash, seed range, result);
       # the seed sweep rides in the typed data payload. Emitted by the test and
@@ -52,6 +53,11 @@ jobs:
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
+
+      # A seed fully determines execution order, so a fixed range only re-proves old seeds.
+      # Without an explicit start, each run sweeps the next unvisited range.
+      - name: Choose the seed range
+        run: echo "TORTURE_SEED_START=${SEED_START_INPUT:-$((GITHUB_RUN_NUMBER * TORTURE_RUNS))}" >> "$GITHUB_ENV"
 
       - name: Run concurrency torture sweep
         uses: ./.github/actions/run-gate

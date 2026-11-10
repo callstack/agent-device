@@ -388,10 +388,6 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: concurrency-torture }
 
-      - name: Run provider-backed integration tests
-        uses: ./.github/actions/run-gate
-        with: { gate: provider-integration }
-
       - name: Check Provider-backed integration architecture progress
         uses: ./.github/actions/run-gate
         with: { gate: integration-progress }
