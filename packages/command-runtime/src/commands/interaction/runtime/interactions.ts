@@ -21,6 +21,7 @@ import {
 } from './post-action-observation.ts';
 import { resolveInteractionTarget, type InteractionTarget } from './resolution.ts';
 import { admitResolvedTarget } from './pre-dispatch-admission.ts';
+import { guardPressReadiness } from './press-readiness.ts';
 import { pointObservationOf } from './target-visibility-stages.ts';
 import { dispatchNativeRefInteraction } from './native-ref-interaction.ts';
 import type {
@@ -159,7 +160,10 @@ async function tapCommand(
   if (!runtime.backend.tap) {
     throw new AppError('UNSUPPORTED_OPERATION', 'tap is not supported by this backend');
   }
-  const atRest = await admitResolvedTarget(runtime, options, resolutionRequest, resolved);
+  let atRest = await admitResolvedTarget(runtime, options, resolutionRequest, resolved);
+  if (!hasNonDefaultTapOptions(options)) {
+    atRest = await guardPressReadiness(runtime, options, resolutionRequest, atRest);
+  }
   const point = requireResolvedPoint(atRest);
   const pointObservation = pointObservationOf(atRest);
   let backendResult;

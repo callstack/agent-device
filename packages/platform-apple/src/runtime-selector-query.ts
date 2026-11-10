@@ -1,3 +1,4 @@
+import { AppError } from '@agent-device/kernel/errors';
 import type {
   QuerySelectorInput,
   QuerySelectorNodeReading,
@@ -40,10 +41,28 @@ export function bindAppleQuerySelectorRuntime(
       const { queryAppleRunnerSelector } = await import('./core/runner-selector-query.ts');
       const data = await queryAppleRunnerSelector(
         request.device,
-        input.selector,
+        input.authorizedTarget ? { authorizedTarget: input.authorizedTarget } : input.selector,
         input.options?.appBundleId,
         options,
       );
+      if (input.authorizedTarget) {
+        const readiness = data.pressReadiness;
+        if (
+          readiness !== 'ready' &&
+          readiness !== 'blocked' &&
+          readiness !== 'missing' &&
+          readiness !== 'ambiguous'
+        ) {
+          throw new AppError(
+            'UNSUPPORTED_OPERATION',
+            'Runner does not support authorized-target readiness; rebuild the Apple runner',
+          );
+        }
+        return Object.freeze({
+          found: readiness === 'ready' || readiness === 'blocked',
+          pressReadiness: readiness,
+        });
+      }
       const node = readQuerySelectorNode(data);
       return Object.freeze({
         found: data.found === true,

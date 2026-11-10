@@ -1,3 +1,4 @@
+import type { AuthorizedPressTarget } from '@agent-device/contracts/selector-observation-runtime';
 import {
   AppError,
   createRequestCanceledError,
@@ -127,6 +128,7 @@ export type RunnerCommand = {
   text?: string;
   selectorKey?: ElementSelectorKey;
   selectorValue?: string;
+  authorizedTarget?: AuthorizedPressTarget;
   allowNonHittableCoordinateFallback?: boolean;
   delayMs?: number;
   textEntryMode?: 'append' | 'replace';

@@ -369,6 +369,34 @@ extension RunnerTests {
     try resolveRunnerWindow(app: app).frame
   }
 
+  /// A mutation-read: count every exact target binding, including blocked duplicates. Unlike
+  /// public selector reads, a hittable sibling can never stand in for the authorized control.
+  func queryAuthorizedPressTarget(app: XCUIApplication, target: AuthorizedPressTarget) throws -> Response {
+    let expected = target.rect.cgRect
+    let point = CGPoint(x: target.point.x, y: target.point.y)
+    guard !expected.isEmpty, !expected.isInfinite, expected.contains(point) else {
+      return Response(ok: true, data: DataPayload(pressReadiness: "missing"))
+    }
+    func text(_ value: Any?) -> String {
+      String(describing: value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    guard let type = Self.elementTypeNamesByRawValue.first(where: { $0.value == target.type })?.key else {
+      return Response(ok: true, data: DataPayload(pressReadiness: "missing"))
+    }
+    let identity = NSPredicate(format: "elementType == %@", NSNumber(value: type))
+    let matches = try elementQueries(app: app, matching: .any)
+      .flatMap { $0.matching(identity).allElementsBoundByIndex }
+      .filter { element in
+        guard element.exists else { return false }
+        let frame = element.frame
+        guard frame.contains(point) else { return false }
+        return target.matches(type: elementTypeName(element.elementType), identifier: element.identifier,
+          label: element.label, value: text(element.value), rect: SnapshotRect(frame))
+      }
+    let state = matches.count > 1 ? "ambiguous" : matches.first.map { $0.isHittable ? "ready" : "blocked" } ?? "missing"
+    return Response(ok: true, data: DataPayload(pressReadiness: state))
+  }
+
   func queryElement(app: XCUIApplication, selectorKey: String, selectorValue: String) throws -> Response {
     // querySelector is a read — it backs get/is/wait and the offscreen-refusal
     // double-check, none of which mutate. The fail-closed raw-match rule exists

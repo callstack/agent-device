@@ -239,6 +239,29 @@ struct RunnerLitPanelFact: Codable {
   let heightPt: Double
 }
 
+struct AuthorizedPressTarget: Codable {
+  let type: String
+  let identifier: String?
+  let label: String?
+  let value: String?
+  let rect: SnapshotRect
+  let point: PressTargetPoint
+
+  func matches(type: String, identifier: String?, label: String?, value: String?, rect: SnapshotRect) -> Bool {
+    func text(_ value: String?) -> String { (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+    return self.type == type && text(self.identifier) == text(identifier)
+      && text(self.label) == text(label) && text(self.value) == text(value)
+      && [self.rect.x - rect.x, self.rect.y - rect.y, self.rect.width - rect.width, self.rect.height - rect.height]
+        .allSatisfy { $0.isFinite && abs($0) <= 1 }
+      && self.rect.width >= 0 && self.rect.height >= 0 && rect.width >= 0 && rect.height >= 0
+  }
+}
+
+struct PressTargetPoint: Codable {
+  let x: Double
+  let y: Double
+}
+
 struct Command: Codable {
   let command: CommandType
   let commandId: String?
@@ -247,6 +270,7 @@ struct Command: Codable {
   let text: String?
   let selectorKey: String?
   let selectorValue: String?
+  let authorizedTarget: AuthorizedPressTarget?
   let allowNonHittableCoordinateFallback: Bool?
   let delayMs: Int?
   let textEntryMode: String?
@@ -492,6 +516,7 @@ struct DataPayload: Codable {
   var imageBase64: String?
   var text: String?
   var found: Bool?
+  var pressReadiness: String?
   var items: [String]?
   /// Set on an alert read that is SpringBoard's `Open in “<App>”?` launch confirmation, in the
   /// device's language; absent otherwise.

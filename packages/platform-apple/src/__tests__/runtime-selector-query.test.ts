@@ -89,3 +89,39 @@ test('a node without a usable rect answers found without a node (the rescue stay
     found: true,
   });
 });
+
+// The proof must be explicit: a stale runner ignoring the new request field cannot authorize input.
+test('authorized target reads reject legacy responses instead of accepting found:true', async () => {
+  queryAppleRunnerSelector.mockResolvedValue({
+    found: true,
+    nodes: [{ rect: { x: 0, y: 0, width: 10, height: 10 }, hittable: true }],
+  });
+  await expect(
+    bind().querySelector({
+      authorizedTarget: {
+        type: 'Button',
+        label: 'Go',
+        rect: { x: 0, y: 0, width: 10, height: 10 },
+        point: { x: 5, y: 5 },
+      },
+    }),
+  ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
+});
+
+for (const pressReadiness of ['ready', 'blocked', 'missing', 'ambiguous'] as const) {
+  test(`preserves strict native ${pressReadiness} rather than applying read-selector preference`, async () => {
+    queryAppleRunnerSelector.mockResolvedValue({ pressReadiness });
+    await expect(
+      bind().querySelector({
+        authorizedTarget: {
+          type: 'Button',
+          rect: { x: 0, y: 0, width: 10, height: 10 },
+          point: { x: 5, y: 5 },
+        },
+      }),
+    ).resolves.toEqual({
+      found: pressReadiness === 'ready' || pressReadiness === 'blocked',
+      pressReadiness,
+    });
+  });
+}

@@ -1,3 +1,4 @@
+import { withRequestDeadline } from '@agent-device/host-kit/request';
 import { ref, createContractClock, createContractDevice } from './runtime-harness.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
@@ -264,7 +265,11 @@ test(
   scenario('responseConstruction'),
   async () => {
     await withIosContractDaemon(
-      [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTapEntry({ x: 200, y: 322 })],
+      [
+        runnerSnapshotEntry(RUNNER_CONTINUE_NODES),
+        { command: 'ios.runner.querySelector', result: { pressReadiness: 'ready' } },
+        runnerTapEntry({ x: 200, y: 322 }),
+      ],
       async (daemon) => {
         const snapshot = await daemon.callCommand('snapshot', [], {
           snapshotInteractiveOnly: true,
@@ -317,4 +322,25 @@ test(scenarioNames(RUNTIME_REF_COVERAGE, 'resolutionDisclosure')[1]!, async () =
     phase: 'pre-action',
     kind: 'label-fallback',
   });
+});
+
+// A stationary tree cannot prove native readiness: without the guard this sends input while blocked.
+test(scenarioNames(RUNTIME_REF_COVERAGE, 'targetStability')[2]!, async () => {
+  const events: string[] = [];
+  const requestId = 'contract-native-ready-ref';
+  const device = createContractDevice(continueButtonSnapshot(), {
+    readPressReadiness: async () => {
+      const state = events.includes('blocked') ? 'ready' : 'blocked';
+      events.push(state);
+      return state;
+    },
+    tap: async () => {
+      events.push('tap');
+    },
+  });
+  await withRequestDeadline(requestId, 2_000, async () => {
+    await device.interactions.press(ref('@e1'), { requestId });
+    return { ok: true, data: {} };
+  });
+  assert.deepEqual(events, ['blocked', 'ready', 'tap']);
 });

@@ -1,0 +1,290 @@
+[
+  {
+    "name": "same target",
+    "expected": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "candidate": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "matches": true
+  },
+  {
+    "name": "one point capture rounding",
+    "expected": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "candidate": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 41,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "matches": true
+  },
+  {
+    "name": "target moved",
+    "expected": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "candidate": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 42,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "matches": false
+  },
+  {
+    "name": "different control role",
+    "expected": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "candidate": {
+      "type": "StaticText",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "matches": false
+  },
+  {
+    "name": "different label same rectangle",
+    "expected": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "candidate": {
+      "type": "Button",
+      "label": "Replacement",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "matches": false
+  },
+  {
+    "name": "different identifier same rectangle",
+    "expected": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "candidate": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      },
+      "identifier": "other"
+    },
+    "matches": false
+  },
+  {
+    "name": "different native value",
+    "expected": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "candidate": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      },
+      "value": "1"
+    },
+    "matches": false
+  },
+  {
+    "name": "label case is identity",
+    "expected": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "candidate": {
+      "type": "Button",
+      "label": "continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "matches": false
+  },
+  {
+    "name": "anonymous exact rectangle",
+    "expected": {
+      "type": "Button",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "candidate": {
+      "type": "Button",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "matches": true
+  }
+]

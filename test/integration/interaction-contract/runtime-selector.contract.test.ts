@@ -1,3 +1,4 @@
+import { withRequestDeadline } from '@agent-device/host-kit/request';
 import { selector, createContractClock, createContractDevice } from './runtime-harness.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
@@ -258,6 +259,7 @@ test(
       [
         // A resolves and taps at y=300; B resolves at 360 and its two re-observations disagree.
         runnerSnapshotEntry(runnerNodesAtY(300)),
+        { command: 'ios.runner.querySelector', result: { pressReadiness: 'ready' } },
         runnerTapEntry({ x: 200, y: 322 }),
         runnerSnapshotEntry(runnerNodesAtY(360)),
         runnerSnapshotEntry(runnerNodesAtY(420)),
@@ -419,7 +421,11 @@ test(
   scenario('responseConstruction'),
   async () => {
     await withIosContractDaemon(
-      [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTapEntry({ x: 200, y: 322 })],
+      [
+        runnerSnapshotEntry(RUNNER_CONTINUE_NODES),
+        { command: 'ios.runner.querySelector', result: { pressReadiness: 'ready' } },
+        runnerTapEntry({ x: 200, y: 322 }),
+      ],
       async (daemon) => {
         const press = await daemon.callCommand('press', ['label=Continue']);
         const data = assertRpcOk(press);
@@ -469,4 +475,25 @@ test(scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'resolutionDisclosure')[1]!, async
   assert.equal(resolution.alternatives.length, 2);
   // The winner never appears among its own alternatives.
   assert.ok(!resolution.alternatives.some((entry) => entry.diagnosticRef === 'diag-e3'));
+});
+
+// A stationary tree cannot prove native readiness: without the guard this sends input while blocked.
+test(scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'targetStability')[3]!, async () => {
+  const events: string[] = [];
+  const requestId = 'contract-native-ready-selector';
+  const device = createContractDevice(continueButtonSnapshot(), {
+    readPressReadiness: async () => {
+      const state = events.includes('blocked') ? 'ready' : 'blocked';
+      events.push(state);
+      return state;
+    },
+    tap: async () => {
+      events.push('tap');
+    },
+  });
+  await withRequestDeadline(requestId, 2_000, async () => {
+    await device.interactions.press(selector('label="Continue"'), { requestId });
+    return { ok: true, data: {} };
+  });
+  assert.deepEqual(events, ['blocked', 'ready', 'tap']);
 });

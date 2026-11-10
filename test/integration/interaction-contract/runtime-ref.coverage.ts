@@ -23,5 +23,6 @@ export const RUNTIME_REF_COVERAGE = definePathCoverage('runtime-ref', {
   targetStability: [
     'runtime-ref targetStability: a ref whose authorized node is still moving is refused with target_still_moving',
     'runtime-ref targetStability: a ref that came to rest is tapped at the re-observed position',
+    'runtime-ref targetStability: stationary control waits for its native blocker to finish',
   ],
 });

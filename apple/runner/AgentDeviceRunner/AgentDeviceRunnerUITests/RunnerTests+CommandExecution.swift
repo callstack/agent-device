@@ -449,6 +449,9 @@ extension RunnerTests {
       let found = try findElement(app: activeApp, text: text) != nil
       return Response(ok: true, data: DataPayload(found: found))
     case .querySelector:
+      if let target = command.authorizedTarget {
+        return try queryAuthorizedPressTarget(app: activeApp, target: target)
+      }
       guard let selectorKey = command.selectorKey, let selectorValue = command.selectorValue else {
         return Response(ok: false, error: ErrorPayload(message: "querySelector requires selectorKey and selectorValue"))
       }

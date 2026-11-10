@@ -3,6 +3,26 @@ import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+  func testAuthorizedPressTargetMatchesGoldenParityTable() throws {
+    struct Fixture: Decodable {
+      let name: String
+      let expected: AuthorizedPressTarget
+      let candidate: AuthorizedPressTarget
+      let matches: Bool
+    }
+    let root = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let fixtures = try JSONDecoder().decode([Fixture].self, from:
+      Data(contentsOf: root.appendingPathComponent("contracts/fixtures/authorized-press-target.json")))
+    XCTAssertFalse(fixtures.isEmpty)
+    for fixture in fixtures {
+      let candidate = fixture.candidate
+      XCTAssertEqual(fixture.expected.matches(type: candidate.type, identifier: candidate.identifier,
+        label: candidate.label, value: candidate.value, rect: candidate.rect), fixture.matches, fixture.name)
+    }
+  }
+
   func testDirectSelectorRejectsTwoRawMatchesBeforeHittabilityPreference() {
     let decision = classifyDirectSelectorCandidates(
       [
@@ -118,6 +138,16 @@ extension RunnerTests {
     XCTAssertEqual(response.data?.nodes?.count, 1)
     XCTAssertEqual(response.data?.nodes?.first?.identifier, duplicateIdentifier)
     XCTAssertEqual(response.data?.nodes?.first?.hittable, true)
+
+    // The same native owner must not use the read preference for a previously resolved target.
+    for element in matches {
+      let frame = element.frame
+      let target = AuthorizedPressTarget(type: elementTypeName(element.elementType),
+        identifier: element.identifier, label: element.label, value: String(describing: element.value ?? ""),
+        rect: SnapshotRect(frame), point: PressTargetPoint(x: frame.midX, y: frame.midY))
+      let readiness = try queryAuthorizedPressTarget(app: app, target: target)
+      XCTAssertEqual(readiness.data?.pressReadiness, element.isHittable ? "ready" : "blocked")
+    }
   }
 #endif
 #endif

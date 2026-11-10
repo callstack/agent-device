@@ -11,6 +11,7 @@ type ContractBackendOverrides = Partial<
     | 'captureSnapshot'
     | 'tap'
     | 'tapTarget'
+    | 'readPressReadiness'
     | 'fill'
     | 'fillTarget'
     | 'performGesture'
@@ -48,6 +49,7 @@ export function createContractDevice(
         overrides.captureSnapshot ? await overrides.captureSnapshot(...args) : { snapshot },
       tap: async (...args) => await overrides.tap?.(...args),
       tapTarget: overrides.tapTarget,
+      readPressReadiness: overrides.readPressReadiness,
       fill: async (...args) => await overrides.fill?.(...args),
       fillTarget: overrides.fillTarget,
       performGesture: overrides.performGesture,

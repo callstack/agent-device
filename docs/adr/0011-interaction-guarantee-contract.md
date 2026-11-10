@@ -479,3 +479,20 @@ These tests must not seed a snapshot penalty to make the first tap safe.
 The recorder consumes optional-read issues before it forwards issues to XCTest.
 XCTest's expected-failure API must not own this scope.
 The reason: in a long-lived command test, that API can complete the enclosing test even if the command response succeeds.
+
+### Native readiness for ordinary iOS taps
+
+Ordinary resolved `press` and `click` actions wait implicitly when the request-bound Apple owner
+reports that the exact authorized control is not natively hittable. Snapshot hittability remains a
+geometric fact. The native mutation-read binds type, identifier, label, value, and rectangle before
+counting matches; a hittable duplicate cannot replace a blocked target. It preserves the original
+input point. During polling, canonical resolution must still authorize the same target on the same
+surface. The original request deadline and cancellation signal bound every read and capture.
+Ambiguity, changed authorization, unsupported native proof, cancellation, and timeout refuse before
+input. Raw coordinates and non-default tap options retain their existing semantics.
+
+An explicit transition-wait API and a fixed sleep were rejected because callers cannot infer native
+readiness from tree stability or a universal duration. Public selector reads retain their existing
+matching policy. This guard supplies a necessary condition for fully blocked controls; native
+hittability does not certify the preserved point against partial app-drawn coverage. It does not
+wait for a selector that canonical resolution could not initially find.

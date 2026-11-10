@@ -166,6 +166,9 @@ const FIND_FOCUS_DISPATCH_GAPS_ISSUE = 'https://github.com/callstack/agent-devic
  * failure and the caller-visible recovery are both tap-shaped, and widening this list is one
  * declaration plus one scenario per added command.
  */
+// Ordinary iOS taps additionally use press-readiness.ts#guardPressReadiness when the request
+// owns native querySelector. It preserves the authorized point and waits only while that exact
+// canonical binding remains valid. Native hittability is necessary, not proof of no partial cover.
 const RUNTIME_TREE_TARGET_STABILITY: GuaranteeEnforcement = {
   kind: 'runtime',
   via: 'packages/command-runtime/src/commands/interaction/runtime/pre-dispatch-admission.ts#admitResolvedTarget',
@@ -285,7 +288,8 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
 
 export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPathContract> = {
   'runtime-selector': {
-    description: 'Daemon tree capture, selector chain resolution, guarded coordinate tap.',
+    description:
+      'Daemon tree capture, selector chain resolution, guarded coordinate tap. Ordinary iOS taps also await strict native readiness when the owner provides it.',
     commands: ['press', 'click', 'fill', 'longpress', 'hover'],
     guarantees: {
       ...RUNTIME_TREE_SHARED_GUARANTEES,
