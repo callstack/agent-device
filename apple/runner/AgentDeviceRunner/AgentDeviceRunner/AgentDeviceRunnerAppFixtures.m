@@ -45,6 +45,7 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 @property(nonatomic, strong) UILabel *navigationBackStatus;
 @property(nonatomic, strong) UILabel *maskedToggleStatus;
 @property(nonatomic, strong) UILabel *maskedDeliveryStatus;
+@property(nonatomic, strong) UILabel *maskedTextLengthStatus;
 @property(nonatomic, assign) NSUInteger maskedTogglePresses;
 @property(nonatomic, strong) UILabel *alertActionStatus;
 @property(nonatomic, strong) UILabel *alertActivationBusyAnswer;
@@ -408,6 +409,9 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
 - (void)agentDeviceTextEntryDidChange:(UITextField *)textField {
   if (self.maskedDeliveryStatus != nil) {
     self.maskedDeliveryStatus.text = [textField.text hasSuffix:@"not-a-secret-123"] ? @"delivered" : @"pending";
+  }
+  if (self.maskedTextLengthStatus != nil) {
+    self.maskedTextLengthStatus.text = [NSString stringWithFormat:@"length=%lu", (unsigned long)textField.text.length];
   }
   // A field whose app owns its value, the way a controlled React Native `TextInput` does. A burst
   // typed faster than the app renders loses the characters that arrived while a render was in
@@ -871,6 +875,16 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [self.maskedDeliveryStatus.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [self.maskedDeliveryStatus.topAnchor constraintEqualToAnchor:self.maskedToggleStatus.bottomAnchor constant:8],
       ]];
+      // The text's length, which a mask hides: an empty field can show as many bullets as a full one.
+      self.maskedTextLengthStatus = [[UILabel alloc] init];
+      self.maskedTextLengthStatus.accessibilityIdentifier = @"agent-device-masked-text-length";
+      self.maskedTextLengthStatus.text = [NSString stringWithFormat:@"length=%lu", (unsigned long)textField.text.length];
+      self.maskedTextLengthStatus.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:self.maskedTextLengthStatus];
+      [NSLayoutConstraint activateConstraints:@[
+        [self.maskedTextLengthStatus.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.maskedTextLengthStatus.topAnchor constraintEqualToAnchor:self.maskedDeliveryStatus.bottomAnchor constant:8],
+      ]];
       if (secureField) {
         UILabel *counts = [[UILabel alloc] init];
         counts.accessibilityIdentifier = @"agent-device-secure-entry-counts";
@@ -879,7 +893,7 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [self.view addSubview:counts];
         [NSLayoutConstraint activateConstraints:@[
           [counts.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-          [counts.topAnchor constraintEqualToAnchor:self.maskedDeliveryStatus.bottomAnchor constant:8],
+          [counts.topAnchor constraintEqualToAnchor:self.maskedTextLengthStatus.bottomAnchor constant:8],
         ]];
         secureField.countLabel = counts;
       }

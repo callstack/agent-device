@@ -648,8 +648,7 @@ extension RunnerTests {
       field: { $0.textFields },
       text: "not-a-secret-12345",
       expectedValue: String(repeating: "\u{2022}", count: 9),
-      afterFilling: "abcdefghijklmnop",
-      showing: String(repeating: "\u{2022}", count: 8)
+      afterFilling: "abcdefghijklmnop"
     )
   }
 
@@ -667,17 +666,15 @@ extension RunnerTests {
     XCTAssertEqual(try secureEntryCounts().taps, 1)
   }
 
-  /// Fills `text` the way the daemon sends `fill`, after `earlierText` when given (which the field shows
-  /// as `earlierValue`, one bullet per character by default), and checks the field holds the new text
-  /// alone while the toggle over its right edge stays unpressed.
+  /// Fills `text` the way the daemon sends `fill`, after `earlierText` when given, and checks the field
+  /// holds the new text alone while the toggle over its right edge stays unpressed.
   @MainActor
   private func assertFillLeavesTheEdgeToggleUnpressed(
     launchArguments: [String],
     field: (XCUIApplication) -> XCUIElementQuery,
     text: String = "not-a-secret-123",
     expectedValue: String,
-    afterFilling earlierText: String? = nil,
-    showing earlierValue: String? = nil
+    afterFilling earlierText: String? = nil
   ) throws {
     app.launchArguments = [
       "--agent-device-text-entry-regression",
@@ -696,14 +693,18 @@ extension RunnerTests {
     XCTAssertEqual(togglePresses.label, "presses=0")
     if let earlierText {
       // Only the field this fill leaves is the precondition: a result that shows as a bullet placeholder
-      // reads back as that placeholder, which fill's own check reports as a mismatch.
+      // reads back as that placeholder, which fill's own check reports as a mismatch. An empty field
+      // shows that placeholder too, so the app's length witness tells the two apart.
       _ = try executeTypeCommand(
         activeApp: app,
         command: try fillCommandFixture(commandId: "fill-earlier-text", text: earlierText, at: input)
       )
-      let shown = earlierValue ?? String(repeating: "\u{2022}", count: earlierText.count)
-      let filled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", shown), object: input)
-      XCTAssertEqual(XCTWaiter.wait(for: [filled], timeout: appExistenceTimeout), .completed, String(describing: input.value))
+      let length = app.staticTexts["agent-device-masked-text-length"]
+      let filled = XCTNSPredicateExpectation(
+        predicate: NSPredicate(format: "label == %@", "length=\(earlierText.count)"),
+        object: length
+      )
+      XCTAssertEqual(XCTWaiter.wait(for: [filled], timeout: appExistenceTimeout), .completed, length.label)
     }
 
     let failureCountBefore = currentXCTestFailureCount()
