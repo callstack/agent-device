@@ -17,10 +17,12 @@ import {
 } from './client-companion-tunnel-contract.ts';
 import { normalizeBaseUrl } from '../metro/base-url.ts';
 import { runCmdDetached } from '@agent-device/host-kit/command';
+import { acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
 import {
   confirmedProcessStopDetails,
   describeUnconfirmedProcessStop,
   isProcessAlive,
+  readCurrentOwnerIdentity,
   readProcessCommand,
   readProcessStartTime,
   stopProcessAndConfirmExit,
@@ -114,17 +116,22 @@ function areCompanionScopesEqual(a: CompanionTunnelScope, b: CompanionTunnelScop
   return a.tenantId === b.tenantId && a.runId === b.runId && a.leaseId === b.leaseId;
 }
 
+type CompanionTunnelPaths = { statePath: string; logPath: string; lockPath: string };
+
 function resolveCompanionTunnelPaths(
   projectRoot: string,
   definition: CompanionTunnelDefinition,
   profileKey?: string,
   stateDir?: string,
-): { statePath: string; logPath: string } {
+): CompanionTunnelPaths {
   const dir = stateDir ?? path.join(projectRoot, '.agent-device');
+  // One lock per companion kind serializes every read-decide-write of its state files.
+  const lockPath = path.join(dir, `${definition.slug}.lock`);
   if (!profileKey) {
     return {
       statePath: path.join(dir, `${definition.slug}.json`),
       logPath: path.join(dir, `${definition.slug}.log`),
+      lockPath,
     };
   }
   const profileHash = hashString(profileKey).slice(0, 12);
@@ -132,7 +139,25 @@ function resolveCompanionTunnelPaths(
   return {
     statePath: path.join(profileDir, `${definition.slug}-${profileHash}.json`),
     logPath: path.join(profileDir, `${definition.slug}-${profileHash}.log`),
+    lockPath,
   };
+}
+
+async function withCompanionStateLock<Task>(
+  paths: CompanionTunnelPaths,
+  definition: CompanionTunnelDefinition,
+  task: () => Promise<Task>,
+): Promise<Task> {
+  const owner = readCurrentOwnerIdentity();
+  return await withProcessLock({
+    acquire: () =>
+      acquireProcessLock({
+        lockDirPath: paths.lockPath,
+        owner: { pid: owner.pid, startTime: owner.startTime, acquiredAtMs: Date.now() },
+        description: `${definition.displayName} state`,
+      }),
+    task,
+  });
 }
 
 function readCompanionState(statePath: string): CompanionTunnelState | null {
@@ -195,20 +220,15 @@ function removeDirectoryIfEmpty(dirPath: string): void {
   }
 }
 
-function clearCompanionArtifacts(
-  paths: { statePath: string; logPath: string },
-  definition: CompanionTunnelDefinition,
-): void {
+/** Runs under the state lock, whose directory keeps the base state directory in place. */
+function clearCompanionArtifacts(paths: CompanionTunnelPaths): void {
   const stateDir = path.dirname(paths.statePath);
   const logDir = path.dirname(paths.logPath);
   unlinkQuietly(paths.statePath);
   unlinkQuietly(paths.logPath);
-  removeDirectoryIfEmpty(stateDir);
+  if (stateDir !== path.dirname(paths.lockPath)) removeDirectoryIfEmpty(stateDir);
   if (logDir !== stateDir) {
     removeDirectoryIfEmpty(logDir);
-  }
-  if (path.basename(stateDir) === definition.slug) {
-    removeDirectoryIfEmpty(path.dirname(stateDir));
   }
 }
 
@@ -438,6 +458,18 @@ export async function ensureCompanionTunnel(
     options.profileKey,
     options.stateDir,
   );
+  return await withCompanionStateLock(
+    paths,
+    options.definition,
+    async () => await ensureCompanionTunnelLocked(options, consumerKey, paths),
+  );
+}
+
+async function ensureCompanionTunnelLocked(
+  options: EnsureCompanionTunnelOptions,
+  consumerKey: string | null,
+  paths: CompanionTunnelPaths,
+): Promise<EnsureCompanionTunnelResult> {
   const existing = readCompanionState(paths.statePath);
   if (existing && shouldReuseCompanion(existing, options)) {
     const nextState = withConsumer(existing, consumerKey);
@@ -456,7 +488,7 @@ export async function ensureCompanionTunnel(
   // exit aborts here instead of registering a second one beside the first.
   if (existing) {
     await stopCompanionProcess(existing, options.definition, paths);
-    clearCompanionArtifacts(paths, options.definition);
+    clearCompanionArtifacts(paths);
   }
 
   touchCompanionState(paths.statePath);
@@ -476,7 +508,7 @@ export async function ensureCompanionTunnel(
         throw stopError;
       }
     }
-    clearCompanionArtifacts(paths, options.definition);
+    clearCompanionArtifacts(paths);
     throw error;
   }
   return {
@@ -497,17 +529,19 @@ export async function stopCompanionTunnel(
     options.profileKey,
     options.stateDir,
   );
-  const existing = readCompanionState(paths.statePath);
-  if (!existing) {
-    clearCompanionArtifacts(paths, options.definition);
-    return { stopped: false, statePath: paths.statePath };
-  }
-  const nextState = withoutConsumer(existing, consumerKey);
-  if (nextState.consumers.length > 0) {
-    writeCompanionState(paths.statePath, nextState);
-    return { stopped: false, statePath: paths.statePath };
-  }
-  await stopCompanionProcess(existing, options.definition, paths);
-  clearCompanionArtifacts(paths, options.definition);
-  return { stopped: true, statePath: paths.statePath };
+  return await withCompanionStateLock(paths, options.definition, async () => {
+    const existing = readCompanionState(paths.statePath);
+    if (!existing) {
+      clearCompanionArtifacts(paths);
+      return { stopped: false, statePath: paths.statePath };
+    }
+    const nextState = withoutConsumer(existing, consumerKey);
+    if (nextState.consumers.length > 0) {
+      writeCompanionState(paths.statePath, nextState);
+      return { stopped: false, statePath: paths.statePath };
+    }
+    await stopCompanionProcess(existing, options.definition, paths);
+    clearCompanionArtifacts(paths);
+    return { stopped: true, statePath: paths.statePath };
+  });
 }
