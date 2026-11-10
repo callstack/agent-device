@@ -33,11 +33,12 @@ The runtime-ref path can recover a stale or unusable `@ref` through its recorded
 This recovery returns `{ source: "ref", phase: "pre-action", kind: "label-fallback" }`.
 Runtime-ref label recovery discloses its fallback provenance.
 
-The native-ref fast path always discloses `exact`.
-It dispatches the ref handle and forwards the recorded `fallbackLabel` to the backend.
-The daemon preflight can itself recover a node by label, but the response still discloses `exact`.
-Backend label recovery is also not reflected in the response.
-Thus, this disclosure can misstate ref provenance.
+The native-ref fast path discloses what its preflight observed.
+The preflight resolves the ref against the stored session snapshot through `tryResolveRefNode`.
+It discloses `exact` when the ref resolves, and `label-fallback` when it recovers the node by its trailing label.
+When the preflight is a no-op, the path dispatches the ref handle and discloses `exact`.
+The path forwards the recorded `fallbackLabel` to the backend.
+The daemon's touch backend dispatches only the ref, so no backend label recovery occurs on the daemon path.
 
 ## Direct-iOS selector
 
@@ -58,7 +59,7 @@ ADR 0011's matrix has a `resolutionDisclosure` guarantee for every interaction p
 - `runtime-selector` enforces the complete pre-action diagnostic shape.
 - `runtime-ref` enforces `exact` or `label-fallback` for trailing-label recovery.
 - `target-drag` enforces a disclosure for each endpoint: the source and the destination each carry their own `resolution`.
-- `native-ref` enforces `exact`.
+- `native-ref` enforces `exact` or `label-fallback` for preflight label recovery.
 - `maestro-direct-selector` enforces only `{ source: "direct-ios", kind: "not-observed" }`.
 - `coordinate` is inapplicable because no element resolves.
 - `find-focus-dispatch` is inapplicable because it issues no identity (ADR 0014).
@@ -85,6 +86,7 @@ Layer-3 coverage must claim every enforced/delegated cell:
 - Distinct-subtree rejection with candidates
 - Exact-ref provenance for runtime and native refs
 - Runtime-ref `label-fallback` recovery
+- Native-ref preflight `label-fallback` recovery
 - Direct-iOS `not-observed` without a snapshot
 
 Matrix and provider contracts cover every `resolutionDisclosure` cell:
@@ -92,6 +94,7 @@ Matrix and provider contracts cover every `resolutionDisclosure` cell:
 - Runtime ambiguity/tiebreak and the five-alternative limit
 - Runtime/native exact-ref provenance
 - Runtime-ref `label-fallback` disclosure
+- Native-ref preflight `label-fallback` disclosure
 - Target-drag disclosure for the source and destination endpoints
 - Direct-iOS `not-observed`
 - Coordinate inapplicability

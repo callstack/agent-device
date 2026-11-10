@@ -63,7 +63,9 @@ export type ResolutionDiagnosticEntry = {
  * its target, including each endpoint of a target-authored drag. Never ref-issuing.
  * `direct-ios`/`not-observed` = the XCTest fast path has no daemon tree to
  * report from; `ref`/`label-fallback` = a stale `@ref` recovered via
- * first-match label lookup, never exact ref provenance; `alternatives` holds
+ * first-match label lookup, never exact ref provenance. On the native-ref
+ * path the daemon preflight finds that label match, but the backend still
+ * dispatches the original ref; `alternatives` holds
  * at most 5 losing candidates, winner excluded.
  */
 export type ResolutionDisclosure =
