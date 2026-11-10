@@ -370,52 +370,80 @@ export async function acquireProcessLockAcquisition(
 ): Promise<ProcessLockAcquisition> {
   const deadline = Date.now() + (params.timeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS);
   const pollMs = params.pollMs ?? DEFAULT_LOCK_POLL_MS;
-  const ownerFilePath = path.join(params.lockDirPath, OWNER_FILE_NAME);
-  const observedOwner = createOwnerObservationReuse();
-  const observedGuardHolder = createGuardHolderObservationReuse();
-  if (params.signal?.aborted) throw createRequestCanceledError();
-  const guardHolderStartTime = (await readCurrentOwnerIdentityAsync()).startTime;
+  throwIfCanceled(params.signal);
+  const observe = await createWaitObservers();
   fs.mkdirSync(path.dirname(params.lockDirPath), { recursive: true });
   do {
-    if (params.signal?.aborted) throw createRequestCanceledError();
-    // Every process probe a wait spends runs off the event loop, before the synchronous attempt.
-    const reading = readProcessLockOwner(ownerFilePath);
-    const liveness =
-      reading.kind === 'owner' ? await observedOwner.classify(reading.owner) : undefined;
-    const abandonedGuard = await findAbandonedGuardAsync(params.lockDirPath, observedGuardHolder);
-    const attempt = attemptProcessLock(params, {
-      standing: judgeStandingClaim(reading, liveness),
-      // A record that changed since it was judged is reported without a fresh probe.
-      judgeOwner: (owner) =>
-        reading.kind === 'owner' && liveness && isSameClaim(owner, reading.owner)
-          ? liveness
-          : 'unknown',
-      abandonedGuard,
-      guardHolderStartTime,
-    });
+    throwIfCanceled(params.signal);
+    const attempt = attemptProcessLock(params, await gatherWaitEvidence(params, observe));
     if (attempt.status === 'acquired') return attempt.acquisition;
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
     await sleep(Math.min(pollMs, remaining), params.signal);
-    if (params.signal?.aborted) throw createRequestCanceledError();
+    throwIfCanceled(params.signal);
   } while (Date.now() < deadline);
-  const reading = readProcessLockOwner(ownerFilePath);
+  throw await processLockTimeoutError(params);
+}
+
+function throwIfCanceled(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw createRequestCanceledError();
+}
+
+type WaitObservers = Awaited<ReturnType<typeof createWaitObservers>>;
+
+/** What one waiter reuses across its polls: its own guard identity and the observations it reads. */
+async function createWaitObservers() {
+  return {
+    owner: createOwnerObservationReuse(),
+    guardHolder: createGuardHolderObservationReuse(),
+    guardHolderStartTime: (await readCurrentOwnerIdentityAsync()).startTime,
+  };
+}
+
+/** Every process probe a wait spends runs here, off the event loop, before the synchronous attempt. */
+async function gatherWaitEvidence(
+  params: ProcessLockOptions,
+  observe: WaitObservers,
+): Promise<AttemptEvidence> {
+  const reading = readProcessLockOwner(path.join(params.lockDirPath, OWNER_FILE_NAME));
+  const liveness =
+    reading.kind === 'owner' ? await observe.owner.classify(reading.owner) : undefined;
+  return {
+    standing: judgeStandingClaim(reading, liveness),
+    judgeOwner: judgeOwnerFromReading(reading, liveness),
+    abandonedGuard: await findAbandonedGuardAsync(params.lockDirPath, observe.guardHolder),
+    guardHolderStartTime: observe.guardHolderStartTime,
+  };
+}
+
+/** Reports the record judged here by that judgment; a record that changed since is `unknown`. */
+function judgeOwnerFromReading(
+  reading: ProcessLockOwnerReading,
+  liveness: OwnerLiveness | undefined,
+): (owner: ProcessLockOwnerRecord) => OwnerLiveness {
+  return (owner) =>
+    reading.kind === 'owner' && liveness && isSameClaim(owner, reading.owner)
+      ? liveness
+      : 'unknown';
+}
+
+async function processLockTimeoutError(params: ProcessLockOptions): Promise<AppError> {
+  const reading = readProcessLockOwner(path.join(params.lockDirPath, OWNER_FILE_NAME));
   const ownerLiveness =
     reading.kind === 'owner'
       ? await classifyOwnerLivenessAsync({ owner: reading.owner })
       : undefined;
-  const judgeOwner = (owner: ProcessLockOwnerRecord): OwnerLiveness =>
-    reading.kind === 'owner' && ownerLiveness && isSameClaim(owner, reading.owner)
-      ? ownerLiveness
-      : 'unknown';
-  throw new AppError(
+  return new AppError(
     'COMMAND_FAILED',
     `Timed out waiting for ${params.description ?? 'process lock'}`,
     {
       lockDirPath: params.lockDirPath,
       reason: 'process_lock_timeout',
       ...readProcessLockDiagnostics(params.lockDirPath, reading, ownerLiveness),
-      inspection: inspectProcessLockWith(params.lockDirPath, judgeOwner),
+      inspection: inspectProcessLockWith(
+        params.lockDirPath,
+        judgeOwnerFromReading(reading, ownerLiveness),
+      ),
       hint: staleLockHint(params.lockDirPath),
     },
   );
