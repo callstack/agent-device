@@ -203,13 +203,15 @@ test('explicit screenshot stabilization survives SDK projection and script recor
   assert.deepEqual(screenshotOptionsFromFlags(recorded), { stabilize: true });
 });
 
-test('native density survives the trip through flags and options', () => {
-  assert.equal(
-    screenshotOptionsFromFlags({ screenshotNativeDensity: true }).nativeDensity,
-    true,
-  );
-  assert.equal(
-    screenshotFlagsFromOptions({ nativeDensity: true }).screenshotNativeDensity,
-    true,
-  );
+test('native density survives script recording and replay', () => {
+  const projected = screenshotFlagsFromOptions({ nativeDensity: true });
+  const parts: string[] = [];
+  appendScreenshotScriptFlags(parts, projected);
+  assert.deepEqual(parts, ['--native-density']);
+  const recorded: Partial<ScreenshotRequestFlags> = {};
+  assert.deepEqual(readScreenshotScriptFlag({ args: parts, index: 0, flags: recorded }), {
+    handled: true,
+    nextIndex: 0,
+  });
+  assert.deepEqual(screenshotOptionsFromFlags(recorded), { nativeDensity: true });
 });

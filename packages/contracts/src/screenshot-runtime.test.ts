@@ -145,3 +145,23 @@ test.each([
     expect(screenshot).toHaveBeenLastCalledWith('/tmp/capture.png', expected);
   },
 );
+
+test.each([bindLocalScreenshotInteractor, bindProviderScreenshotInteractor])(
+  'a capture owner without native density support refuses the request before capture',
+  async (bind) => {
+    const resolveInteractor = vi.fn();
+    const operations = bind({
+      device: { ...device, platform: 'apple', appleOs: 'ios', kind: 'simulator' },
+      signal: new AbortController().signal,
+      resolveInteractor,
+      captureCapabilities: defaultCaptureOnly('provider capture'),
+    });
+    await expect(
+      operations.captureScreenshot({ outPath: '/tmp/out.png', options: { nativeDensity: true } }),
+    ).rejects.toMatchObject({
+      code: 'UNSUPPORTED_OPERATION',
+      details: { reason: 'screenshot-native-density-unsupported' },
+    });
+    expect(resolveInteractor).not.toHaveBeenCalled();
+  },
+);

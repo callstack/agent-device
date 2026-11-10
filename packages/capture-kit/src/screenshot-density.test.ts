@@ -2,9 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { assertSupportedScreenshotPixelDensity, readScreenshotResultMetadata } from './screenshot-density.ts';
-import { mkdtemp, writeFile } from 'node:fs/promises';
-import os from 'node:os';
+import {
+  assertSupportedScreenshotPixelDensity,
+  readScreenshotResultMetadata,
+} from './screenshot-density.ts';
+import { writeFile } from 'node:fs/promises';
+import { mkdtempForTest } from './tmp-dir.fixtures.ts';
+import { PNG } from './png.ts';
 import path from 'node:path';
 
 type Device = Pick<DeviceInfo, 'platform' | 'appleOs' | 'kind'>;
@@ -30,15 +34,9 @@ test('native density is refused where density is unsupported', () => {
 });
 
 test('a native capture reports its points, so a tap can be mapped from its pixels', async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'density-'));
+  const dir = await mkdtempForTest('density-');
   const file = path.join(dir, 'shot.png');
-  const png = Buffer.alloc(33);
-  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png);
-  png.writeUInt32BE(13, 8);
-  png.write('IHDR', 12, 'latin1');
-  png.writeUInt32BE(1206, 16);
-  png.writeUInt32BE(2622, 20);
-  await writeFile(file, png);
+  await writeFile(file, PNG.sync.write(new PNG({ width: 126, height: 273 })));
   assert.deepEqual(
     await readScreenshotResultMetadata({
       device: simulator,
@@ -48,6 +46,6 @@ test('a native capture reports its points, so a tap can be mapped from its pixel
       sourcePixelDensity: 3,
       scale: undefined,
     }),
-    { width: 1206, height: 2622, logicalWidth: 402, logicalHeight: 874, pixelDensity: 3 },
+    { width: 126, height: 273, logicalWidth: 42, logicalHeight: 91, pixelDensity: 3 },
   );
 });

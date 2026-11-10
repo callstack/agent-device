@@ -26,6 +26,7 @@ export const screenshotCommandSurface: CreateDaemonCommandSurface = async (confi
               fullscreen: options.fullscreen,
               overlayRefs: options.overlayRefs,
               pixelDensity: options.pixelDensity,
+              nativeDensity: options.nativeDensity,
               stabilize: options.stabilize,
               normalizeStatusBar: options.normalizeStatusBar,
               surface: options.surface,
@@ -33,6 +34,9 @@ export const screenshotCommandSurface: CreateDaemonCommandSurface = async (confi
           );
           return {
             path: reserved.path,
+            ...(captured?.pixelDensity !== undefined
+              ? { sourcePixelDensity: captured.pixelDensity }
+              : {}),
             ...(captured?.displayRotation ? { displayRotation: captured.displayRotation } : {}),
           };
         } catch (error) {

@@ -11,6 +11,7 @@ export type ScreenshotCommandResult = {
   path: string;
   artifacts?: ArtifactDescriptor[];
   displayRotation?: DeviceRotation;
+  sourcePixelDensity?: number;
   message?: string;
 };
 
@@ -46,7 +47,8 @@ export const screenshotCommand: RuntimeCommand<
       {
         fullscreen: options.fullscreen,
         overlayRefs: options.overlayRefs,
-        pixelDensity: options.nativeDensity ? 'native' : options.pixelDensity,
+        pixelDensity: options.pixelDensity,
+        nativeDensity: options.nativeDensity,
         screenMask: readScreenshotScreenMask(options.screenMask),
         stabilize: options.stabilize,
         normalizeStatusBar: options.normalizeStatusBar,

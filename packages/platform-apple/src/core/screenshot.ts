@@ -85,8 +85,9 @@ type SimulatorScreenshotFlowDeps = {
   normalizeDensity: (
     device: DeviceInfo,
     outPath: string,
-    pixelDensity: number | 'native' | undefined,
+    pixelDensity: number | undefined,
     sourcePixelDensity: number | undefined,
+    nativeDensity: boolean | undefined,
   ) => Promise<number | undefined>;
   captureWithRunner: (
     device: DeviceInfo,
@@ -104,7 +105,8 @@ type SimulatorScreenshotFlowOptions = {
   env: Readonly<EnvMap>;
   appBundleId?: string;
   fullscreen?: boolean;
-  pixelDensity?: number | 'native';
+  pixelDensity?: number;
+  nativeDensity?: boolean;
   screenMask?: ScreenshotScreenMask;
   normalizeStatusBar?: boolean;
   runnerOptions?: AppleRunnerCommandOptions;
@@ -185,7 +187,13 @@ export async function captureSimulatorScreenshotWithFallback(
   const captureAndNormalize = async () => {
     await deps.captureWithRetry(device, outPath, options.screenMask, display);
     noteDensity(
-      await deps.normalizeDensity(device, outPath, options.pixelDensity, display?.pointScale),
+      await deps.normalizeDensity(
+        device,
+        outPath,
+        options.pixelDensity,
+        display?.pointScale,
+        options.nativeDensity,
+      ),
     );
   };
   const captureWithFallback = async (): Promise<ScreenshotCaptureFacts> => {
@@ -221,12 +229,25 @@ export async function captureSimulatorScreenshotWithFallback(
       options.runnerOptions,
       options.env,
     );
+    if (options.nativeDensity && captured?.pixelsPerPoint === undefined) {
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        'The runner fallback did not report the captured pixel density',
+        { reason: 'screenshot-native-density-unsupported' },
+      );
+    }
     // The runner captures the display that actually hosts the app and reports the scale it encoded
     // that image at, so normalization reads the source instead of applying a panel the host guessed.
     // A runner that reports nothing measured nothing: the probe stays the pre-panel answer rather
     // than borrowing a scale from a panel nobody captured (#2728).
     noteDensity(
-      await deps.normalizeDensity(device, outPath, options.pixelDensity, captured?.pixelsPerPoint),
+      await deps.normalizeDensity(
+        device,
+        outPath,
+        options.pixelDensity,
+        captured?.pixelsPerPoint,
+        options.nativeDensity,
+      ),
     );
     return captureFacts;
   };
@@ -490,8 +511,9 @@ function shouldEnsureBootedAfterSimulatorScreenshotFailure(error: unknown): bool
 async function normalizeIosSimulatorScreenshotDensity(
   device: DeviceInfo,
   outPath: string,
-  pixelDensity: number | 'native' | undefined,
+  pixelDensity: number | undefined,
   sourcePixelDensity?: number,
+  nativeDensity?: boolean,
 ): Promise<number | undefined> {
   // Both the captured panel's `pointScale` and the runner's reported scale describe the image that
   // was actually taken. `SIMULATOR_MAINSCREEN_SCALE` describes one fixed panel, so on a foldable it
@@ -499,7 +521,7 @@ async function normalizeIosSimulatorScreenshotDensity(
   // measured the source — which a multi-panel capture and every runner capture do.
   const measuredSourcePixelDensity =
     sourcePixelDensity ?? (await readIosSimulatorMainScreenScale(device));
-  if (pixelDensity === 'native') return measuredSourcePixelDensity;
+  if (nativeDensity) return measuredSourcePixelDensity;
   const targetSize = computeDensityScaledScreenshotSize(
     await readPngSize(outPath),
     measuredSourcePixelDensity,

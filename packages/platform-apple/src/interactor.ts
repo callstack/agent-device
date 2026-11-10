@@ -599,6 +599,7 @@ async function runAppleScreenshot(
     env,
     appBundleId: options.appBundleId,
     pixelDensity: options.pixelDensity,
+    nativeDensity: options.nativeDensity,
     screenMask: options.screenMask,
     fullscreen: options.fullscreen,
     runnerOptions: runnerOpts,

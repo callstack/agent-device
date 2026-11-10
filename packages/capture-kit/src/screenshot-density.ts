@@ -63,10 +63,7 @@ export async function readScreenshotResultMetadata(params: {
     width: size.width,
     height: size.height,
   };
-  if (
-    !requiresDensityMetadata ||
-    (params.scale !== undefined && params.scale !== 1)
-  ) {
+  if (!requiresDensityMetadata || (params.scale !== undefined && params.scale !== 1)) {
     return result;
   }
 

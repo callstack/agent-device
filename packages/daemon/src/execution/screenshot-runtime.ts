@@ -336,10 +336,14 @@ function assertSupportedScreenshotCaptureBackend(flags: DaemonRequest['flags']):
       `--capture-backend takes ${SCREENSHOT_CAPTURE_BACKENDS.join(', ')}`,
     );
   }
-  if (flags?.screenshotPixelDensity !== undefined || flags?.screenshotNormalizeStatusBar) {
+  if (
+    flags?.screenshotPixelDensity !== undefined ||
+    flags?.screenshotNativeDensity ||
+    flags?.screenshotNormalizeStatusBar
+  ) {
     throw new AppError(
       'INVALID_ARGS',
-      '--pixel-density and --normalize-status-bar cannot be combined with --capture-backend runner: they belong to the simctl capture',
+      '--pixel-density, --native-density and --normalize-status-bar cannot be combined with --capture-backend runner: they belong to the simctl capture',
     );
   }
 }
@@ -382,17 +386,14 @@ function createBoundScreenshotBackend(
     captureScreenshot: async (_context, outPath, options) => {
       const resolved = screenshotOptionsFromFlags({
         ...dispatchContext,
-        ...screenshotFlagsFromOptions({
-          ...options,
-          pixelDensity: options?.pixelDensity === 'native' ? undefined : options?.pixelDensity,
-          nativeDensity: options?.pixelDensity === 'native' ? true : undefined,
-        }),
+        ...screenshotFlagsFromOptions(options ?? {}),
       });
       const facts = await captureScreenshot({
         outPath,
         options: {
           appBundleId: dispatchContext.appBundleId,
-          pixelDensity: resolved.nativeDensity ? 'native' : resolved.pixelDensity,
+          pixelDensity: resolved.pixelDensity,
+          nativeDensity: resolved.nativeDensity,
           screenMask: resolved.screenMask,
           fullscreen: resolved.fullscreen,
           normalizeStatusBar: resolved.normalizeStatusBar,
