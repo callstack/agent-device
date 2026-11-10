@@ -32,5 +32,7 @@ UPDATE_OUTPUT_ECONOMY_BASELINE=1 pnpm test:output-economy
 ```
 
 An intentional semantic addition that raises bytes or lines needs an exact reviewed entry in
-`output-economy.waivers.json`, including the resulting metric and a non-empty reason. The update
-still fails if the measured result differs from that explicit waiver.
+`output-economy.waivers.json`: the raised metric as `{ "from": <merge-base value>, "to": <new value> }`
+and a non-empty reason. The update still fails if the measured result differs from that explicit
+waiver. A waiver applies only while the merge-base value equals `from`, so it is inert after merge.
+Remove spent waivers when you next edit the file.

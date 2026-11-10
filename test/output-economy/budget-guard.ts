@@ -2,9 +2,15 @@ import type { EconomyMetrics } from './economy-metrics.ts';
 
 export type EconomyBaseline = Readonly<Record<string, EconomyMetrics>>;
 
+/** One reviewed raise: it applies only while the budget floor still equals `from`. */
+export type EconomyMetricRaise = {
+  from: number;
+  to: number;
+};
+
 export type EconomyBudgetWaiver = {
-  bytes?: number;
-  lines?: number;
+  bytes?: EconomyMetricRaise;
+  lines?: EconomyMetricRaise;
   removed?: true;
   reason: string;
 };
@@ -53,7 +59,8 @@ function compareEconomySample(
       : [{ sample, metric: 'sample', previous: 1, current: 0 }];
   }
   return BUDGET_METRICS.flatMap((metric) =>
-    current[metric] > previous[metric] && !waivesMetric(waiver, metric, current[metric])
+    current[metric] > previous[metric] &&
+    !waivesMetric(waiver, metric, previous[metric], current[metric])
       ? [{ sample, metric, previous: previous[metric], current: current[metric] }]
       : [],
   );
@@ -62,9 +69,11 @@ function compareEconomySample(
 function waivesMetric(
   waiver: EconomyBudgetWaiver | undefined,
   metric: (typeof BUDGET_METRICS)[number],
+  previous: number,
   current: number,
 ): boolean {
-  return isReviewedWaiver(waiver) && waiver[metric] === current;
+  const raise = isReviewedWaiver(waiver) ? waiver[metric] : undefined;
+  return raise !== undefined && raise.from === previous && raise.to === current;
 }
 
 function isReviewedWaiver(waiver: EconomyBudgetWaiver | undefined): waiver is EconomyBudgetWaiver {

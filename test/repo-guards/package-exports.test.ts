@@ -34,8 +34,10 @@ const supportedSubpaths = [
   './selectors',
   './finders',
   './ai-sdk',
+  './plugins',
+  './plugins/webdriver',
 ];
-const typeOnlySubpaths = new Set(['./remote-config']);
+const typeOnlySubpaths = new Set(['./remote-config', './plugins', './plugins/webdriver']);
 
 function exportTarget(subpath: string): { import: string; types: string } {
   const target = pkg.exports[subpath];
@@ -62,13 +64,7 @@ function sourcePathFor(subpath: string): string {
 }
 
 test('package exports only supported public subpaths', () => {
-  for (const subpath of supportedSubpaths) {
-    assert.equal(pkg.exports[subpath] !== undefined, true, `${subpath} should be exported`);
-  }
-
-  assert.equal(pkg.exports['./android-apps'], undefined);
-  assert.equal(pkg.exports['./daemon'], undefined);
-  assert.equal(pkg.exports['./host'], undefined);
+  assert.deepEqual(Object.keys(pkg.exports).sort(), [...supportedSubpaths].sort());
 });
 
 test('every public subpath is backed by a configured tsdown build entry', () => {

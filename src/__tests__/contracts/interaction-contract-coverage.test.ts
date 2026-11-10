@@ -1,5 +1,8 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   INTERACTION_DISPATCH_PATHS,
   INTERACTION_GUARANTEES,
@@ -63,4 +66,23 @@ test('every enforced matrix cell has at least one contract scenario', () => {
     [],
     'enforced matrix cells without a contract scenario — add one under test/integration/interaction-contract/ and register its manifest in index.ts',
   );
+});
+
+const CONTRACT_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../test/integration/interaction-contract',
+);
+
+test('every coverage manifest has a contract file that checks its claims are registered', () => {
+  const manifests = fs.readdirSync(CONTRACT_DIR).filter((name) => name.endsWith('.coverage.ts'));
+  assert.ok(manifests.length > 0, 'no coverage manifests found');
+  for (const manifest of manifests) {
+    const contractFile = manifest.replace(/\.coverage\.ts$/, '.contract.test.ts');
+    const contractPath = path.join(CONTRACT_DIR, contractFile);
+    assert.ok(fs.existsSync(contractPath), `${manifest} has no sibling ${contractFile}`);
+    assert.ok(
+      fs.readFileSync(contractPath, 'utf8').includes('assertCoverageClaimsRegistered('),
+      `${contractFile} must call assertCoverageClaimsRegistered with its manifest`,
+    );
+  }
 });
