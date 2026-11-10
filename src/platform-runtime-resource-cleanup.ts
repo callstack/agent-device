@@ -78,9 +78,9 @@ export function createPlatformResourceCleanup(
       await stopAndroidSnapshotHelperRuntimeForDevice(device);
     },
     async closeManagedBrowser(params) {
-      if (params.device.platform !== 'web') return;
+      if (params.device.platform !== 'web') return false;
       const backendKey = webBackendKeyOf(params.device.id);
-      if (backendKey === undefined) return;
+      if (backendKey === undefined) return false;
       await closeManagedWebRuntimeSession(
         {
           backendKey,
@@ -90,6 +90,7 @@ export function createPlatformResourceCleanup(
         },
         host,
       );
+      return true;
     },
     async cleanupSessionlessExecutionHost(device) {
       if (!isIosFamily(device)) return;

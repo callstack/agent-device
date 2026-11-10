@@ -121,7 +121,7 @@ test('a closed named web session refuses later browser commands and a second clo
     if (!ref) throw new Error('opened web session is missing');
     expect(await daemon.handler(request(session, 'close'))).toMatchObject({ ok: true });
     expect(daemon.sessionStore.get(session)).toBeUndefined();
-    expect(daemon.sessionStore.isWebSessionClosed(session)).toBe(true);
+    expect(daemon.sessionStore.hasClosedBrowserSession(session)).toBe(true);
     await teardownSessionResources({
       appLog: 'already-settled',
       ref,
@@ -173,20 +173,20 @@ test('a failed web close does not stick, and a failed reopen stays closed', asyn
     const failedClose = await daemon.handler(request(session, 'close', [], 'close-fail'));
     expect(failedClose.ok).toBe(false);
     expect(daemon.sessionStore.get(session)).toBeDefined();
-    expect(daemon.sessionStore.isWebSessionClosed(session)).toBe(false);
+    expect(daemon.sessionStore.hasClosedBrowserSession(session)).toBe(false);
 
     dispatchApplicationLifecycleEffect.mockImplementation(async () => undefined);
     expect(await daemon.handler(request(session, 'close', [], 'close-retry'))).toMatchObject({
       ok: true,
     });
-    expect(daemon.sessionStore.isWebSessionClosed(session)).toBe(true);
+    expect(daemon.sessionStore.hasClosedBrowserSession(session)).toBe(true);
 
     dispatchApplicationLifecycleEffect.mockImplementation(async (_device, command) => {
       if (command === 'open') throw new Error('open failed');
     });
     const failedOpen = await daemon.handler(request(session, 'open', ['about:blank'], 'open-fail'));
     expect(failedOpen.ok).toBe(false);
-    expect(daemon.sessionStore.isWebSessionClosed(session)).toBe(true);
+    expect(daemon.sessionStore.hasClosedBrowserSession(session)).toBe(true);
     expect(await daemon.handler(request(session, 'snapshot', [], 'snapshot-still'))).toMatchObject(
       closedSessionRefusal(session),
     );
@@ -195,7 +195,7 @@ test('a failed web close does not stick, and a failed reopen stays closed', asyn
     expect(await daemon.handler(request(session, 'open', ['about:blank'], 'open-2'))).toMatchObject(
       { ok: true },
     );
-    expect(daemon.sessionStore.isWebSessionClosed(session)).toBe(false);
+    expect(daemon.sessionStore.hasClosedBrowserSession(session)).toBe(false);
     expect(daemon.sessionStore.get(session)?.device.platform).toBe('web');
     const reopened = await daemon.handler(request(session, 'snapshot', [], 'snapshot-open'));
     if (!reopened.ok) {
@@ -213,7 +213,7 @@ test('a named web session that was never opened is not answered as closed', asyn
   const session = 'never-opened';
   try {
     const response = await daemon.handler(request(session, 'snapshot'));
-    expect(daemon.sessionStore.isWebSessionClosed(session)).toBe(false);
+    expect(daemon.sessionStore.hasClosedBrowserSession(session)).toBe(false);
     if (!response.ok) {
       expect(response.error.details?.reason).not.toBe(
         PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound,

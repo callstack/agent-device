@@ -3,6 +3,10 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 /** Platform-owned resource finalization invoked by neutral daemon orchestration. */
 export type PlatformResourceCleanup = Readonly<{
   stopSnapshotHelper(device: DeviceInfo): Promise<void>;
+  /**
+   * Closes the managed browser of a web session device. Returns true when this call closed one,
+   * and false when the device has no managed browser to close.
+   */
   closeManagedBrowser(
     params: Readonly<{
       /** The web session device whose browser closes; its id carries the backend key. */
@@ -11,7 +15,7 @@ export type PlatformResourceCleanup = Readonly<{
       /** The backend keys of the published web sessions. */
       openSessionNames: () => readonly string[];
     }>,
-  ): Promise<void>;
+  ): Promise<boolean>;
   cleanupSessionlessExecutionHost(device: DeviceInfo): Promise<void>;
   retainExecutionHostAfterClose(params: {
     device: DeviceInfo;

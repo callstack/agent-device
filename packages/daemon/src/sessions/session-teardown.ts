@@ -12,8 +12,7 @@ import type { SessionStore } from '../core/session-store.ts';
 import { finishLiveAudioProbe } from '@agent-device/capture-kit/audio-probe-session-resource';
 import { finishLivePerfCapture } from '@agent-device/capture-kit/perf-capture-session-resource';
 import { finishLiveScreenRecording } from '@agent-device/capture-kit/screen-recording-session-resource';
-import { webBackendKeyOf } from '@agent-device/kernel/device';
-import { isWebSession, openWebSessionNames } from './web-session-names.ts';
+import { openWebSessionNames } from './web-session-names.ts';
 import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
 
 export async function stopSessionAppLog(params: {
@@ -50,15 +49,13 @@ async function stopSessionWebBrowser(params: {
 }): Promise<void> {
   const { ref, sessionStore, platformCleanup } = params;
   const session = sessionStore.resolveCurrent(ref) ?? ref.session;
-  if (isWebSession(session) && sessionStore.isWebSessionClosed(ref.address)) return;
-  await platformCleanup.closeManagedBrowser({
+  if (sessionStore.hasClosedBrowserSession(ref.address)) return;
+  const closed = await platformCleanup.closeManagedBrowser({
     device: session.device,
     stateDir: sessionStore.resolveDaemonStateDir(),
     openSessionNames: () => openWebSessionNames(sessionStore),
   });
-  if (isWebSession(session) && webBackendKeyOf(session.device.id) !== undefined) {
-    sessionStore.markWebSessionClosed(ref.address);
-  }
+  if (closed) sessionStore.markClosedBrowserSession(ref.address);
 }
 
 export type SessionCleanupStep = { step: string; run: () => Promise<void> };

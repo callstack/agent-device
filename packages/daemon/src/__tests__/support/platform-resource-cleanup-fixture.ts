@@ -22,7 +22,7 @@ export function platformResourceCleanupFixture(
 ): PlatformResourceCleanupFixture {
   return Object.freeze({
     stopSnapshotHelper: vi.fn(overrides.stopSnapshotHelper ?? (async () => {})),
-    closeManagedBrowser: vi.fn(overrides.closeManagedBrowser ?? (async () => {})),
+    closeManagedBrowser: vi.fn(overrides.closeManagedBrowser ?? (async () => false)),
     cleanupSessionlessExecutionHost: vi.fn(
       overrides.cleanupSessionlessExecutionHost ?? (async () => {}),
     ),

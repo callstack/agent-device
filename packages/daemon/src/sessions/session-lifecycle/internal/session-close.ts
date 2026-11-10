@@ -193,12 +193,15 @@ async function closePlatformObservingWebSession(params: {
   logPath: string;
   lifecycle: CloseRuntime | CloseRuntimeWithRuntimeHintClear;
 }): Promise<unknown> {
-  if (isWebSession(params.session) && params.sessionStore.isWebSessionClosed(params.sessionName)) {
+  if (
+    isWebSession(params.session) &&
+    params.sessionStore.hasClosedBrowserSession(params.sessionName)
+  ) {
     return undefined;
   }
   const error = await dispatchTargetedPlatformClose(params);
   if (!error && isWebSession(params.session)) {
-    params.sessionStore.markWebSessionClosed(params.sessionName);
+    params.sessionStore.markClosedBrowserSession(params.sessionName);
   }
   return error;
 }
@@ -602,7 +605,7 @@ async function closeWithoutSession(params: {
     bindDevice,
     platformServices,
   } = params;
-  if (sessionStore.isWebSessionClosed(sessionName)) {
+  if (sessionStore.hasClosedBrowserSession(sessionName)) {
     return {
       ok: true,
       data: {

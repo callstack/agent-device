@@ -145,7 +145,7 @@ export async function runRequestHandlerChain(
 ): Promise<DaemonResponse | null> {
   if (
     !closedWebSessionAllows(params.req.command) &&
-    params.sessionStore.isWebSessionClosed(params.sessionName)
+    params.sessionStore.hasClosedBrowserSession(params.sessionName)
   ) {
     const { namedSessionNotFoundError } = await import('../core/explicit-session-resolution.ts');
     throw namedSessionNotFoundError(params.sessionName);

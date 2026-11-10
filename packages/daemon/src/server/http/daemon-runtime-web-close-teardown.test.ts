@@ -32,7 +32,10 @@ test('daemon shutdown awaits a slow web close inside its extended budget', async
   const session = makeWebSession('shutdown-slow-web-session');
   sessionStore.publish(session.name, session);
   const platformCleanup = platformResourceCleanupFixture({
-    closeManagedBrowser: async () => await new Promise((resolve) => setTimeout(resolve, 20_000)),
+    closeManagedBrowser: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20_000));
+      return false;
+    },
   });
   const stderrChunks: string[] = [];
 
