@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
@@ -23,7 +23,12 @@ test('teardown of an armed ordinary recording whose script write fails still ret
 
   // Idle-reap, shutdown and lease-end teardown have no caller to report to, so the failure stays
   // in the writer's diagnostic and the session must not be leaked.
+  const write = vi.spyOn(store, 'writeSessionLog');
   expect(() => store.finalizeRepairTeardown(ref)).not.toThrow();
+  expect(write.mock.results[0]?.value).toMatchObject({
+    written: false,
+    error: { details: { reason: 'script_target_exists', path: targetPath } },
+  });
   expect(store.retire(ref)).toBe(true);
   expect(fs.readFileSync(targetPath, 'utf8')).toBe('context platform=ios device="x"\n');
 });

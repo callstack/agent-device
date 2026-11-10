@@ -30,15 +30,13 @@ test('a record that does not parse counts as a reference', () => {
   expect(isRemoteConfigReferenced({ stateDir, remoteConfigPath: '/profile.json' })).toBe(true);
 });
 
-test('a valid record for another profile is not a reference', () => {
-  const stateDir = mkdtempForTestSync('agent-device-remote-refs-other-');
-  const configPath = path.join(stateDir, 'other.json');
+function writeRecord(stateDir: string, configPath: string): void {
   fs.writeFileSync(configPath, '{}');
   writeRemoteConnectionState({
     stateDir,
     state: {
       version: 1,
-      session: 'other',
+      session: 'recorded',
       remoteConfigPath: configPath,
       remoteConfigHash: hashRemoteConfigFile(configPath),
       tenant: 'acme',
@@ -47,6 +45,19 @@ test('a valid record for another profile is not a reference', () => {
       updatedAt: '2026-01-01T00:00:00.000Z',
     },
   });
+}
+
+test('a valid record for the profile is a reference', () => {
+  const stateDir = mkdtempForTestSync('agent-device-remote-refs-match-');
+  const configPath = path.join(stateDir, 'profile.json');
+  writeRecord(stateDir, configPath);
+
+  expect(isRemoteConfigReferenced({ stateDir, remoteConfigPath: configPath })).toBe(true);
+});
+
+test('a valid record for another profile is not a reference', () => {
+  const stateDir = mkdtempForTestSync('agent-device-remote-refs-other-');
+  writeRecord(stateDir, path.join(stateDir, 'other.json'));
 
   expect(isRemoteConfigReferenced({ stateDir, remoteConfigPath: '/profile.json' })).toBe(false);
 });

@@ -286,8 +286,8 @@ export function removeRemoteConnectionState(options: { stateDir: string; session
 
 /**
  * Whether any stored session record still connects through `remoteConfigPath`. A record that cannot
- * be read or parsed counts as a reference, so a caller deciding whether to delete the profile keeps
- * it.
+ * be read or parsed, or that parses but fails validation, also counts as a reference, so a caller
+ * deciding whether to delete the profile keeps it.
  */
 export function isRemoteConfigReferenced(options: {
   stateDir: string;
