@@ -6,6 +6,7 @@ import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import { bindInternalObservationAuthority } from '../../execution/internal-observation.ts';
+import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
 import type {
   BindDeviceRuntime,
@@ -60,6 +61,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
   logPath,
   sessionStore,
   leaseRegistry,
+  leaseLifecycleProvider,
   invoke,
   invokeReplayAction,
   bindDevice,
@@ -115,6 +117,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
         logPath,
         sessionStore,
         leaseRegistry,
+        leaseLifecycleProvider,
         inspectFacts,
         bindDevice,
         platformServices,
@@ -202,6 +205,7 @@ type ReplayTestSessionCleanupParams = Readonly<{
   logPath: string;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
   inspectFacts?: InspectDeviceRuntimeFacts;
   platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
@@ -229,6 +233,7 @@ async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): P
     logPath,
     sessionStore,
     leaseRegistry: params.leaseRegistry,
+    leaseLifecycleProvider: params.leaseLifecycleProvider,
     inspectFacts: params.inspectFacts,
     platformServices: params.platformServices,
     bindDevice: params.bindDevice,

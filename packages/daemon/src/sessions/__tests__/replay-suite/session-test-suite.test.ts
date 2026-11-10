@@ -44,6 +44,8 @@ import {
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts';
+import { LeaseRegistry } from '../../../resources/lease-registry.ts';
+import type { DeviceLease } from '@agent-device/contracts/device';
 
 bindTestCommandHost();
 
@@ -400,6 +402,61 @@ test('test stops before retrying when a rejected close leaves the prior macOS se
     status: 'failed',
     attempts: 1,
   });
+});
+
+test('suite-owned test-session close releases a non-retained provider lease through the provider', async () => {
+  const sessionStore = makeSessionStore();
+  const leaseRegistry = new LeaseRegistry();
+  const release = vi.fn(async (_lease: DeviceLease) => ({}));
+  const root = mkdtempForTestSync('agent-device-test-suite-provider-lease-');
+  fs.writeFileSync(path.join(root, '01-open.ad'), 'context platform=android\nopen "Settings"\n');
+  let leaseId: string | undefined;
+
+  const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'test',
+      positionals: [root],
+      meta: { cwd: root, requestId: 'suite-provider-lease' },
+      flags: {},
+    },
+    sessionName: 'default',
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    leaseRegistry,
+    leaseLifecycleProvider: { release },
+    invoke: async (req) => {
+      const lease = leaseRegistry.allocateLease({
+        tenantId: 'tenant-a',
+        runId: 'run-1',
+        leaseBackend: 'android-instance',
+        leaseProvider: 'proxy',
+      });
+      leaseId = lease.leaseId;
+      storeSessionForTest(
+        sessionStore,
+        makeAndroidSession(req.session, {
+          lease: {
+            leaseId: lease.leaseId,
+            tenantId: lease.tenantId,
+            runId: lease.runId,
+            leaseBackend: lease.backend,
+            leaseProvider: lease.leaseProvider,
+          },
+        }),
+        req.session,
+      );
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(expectOkData(response).passed).toBe(1);
+  expect(release).toHaveBeenCalledOnce();
+  expect(release.mock.calls[0]?.[0]).toMatchObject({ leaseId });
 });
 
 test('test stops retrying after maxAttempts when every attempt fails', async () => {
