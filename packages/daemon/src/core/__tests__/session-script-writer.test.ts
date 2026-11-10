@@ -83,7 +83,7 @@ test('write() round-trips wait absent positionals without adding an annotation',
   expect(parsed.actions[0]?.positionals).toEqual(['absent', 'label="Removed"', '2500']);
 });
 
-test('write() escapes recorded literal ${...} text so replay resolves it back unchanged, keeping --record-as placeholders live', () => {
+test('write() escapes recorded literal ${...} text and keeps only recorder-inserted placeholders live', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-literal-interpolation-');
   const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const session = makeAuthoringSession('default');
@@ -98,10 +98,21 @@ test('write() escapes recorded literal ${...} text so replay resolves it back un
     // Literal placeholder-shaped text stays literal, even with a matching --record-as name.
     { command: 'type', positionals: ['${PASSWORD}'], flags: {} },
     { command: 'fill', positionals: ['label="Other"', '${PASSWORD}'], flags: {} },
+    // Session echo protection (ADR 0017) inserts live placeholders for later echoes of the secret.
+    {
+      command: 'fill',
+      positionals: ['@e2', 'hunter2'],
+      flags: {},
+      result: { text: 'hunter2', selectorChain: ['label="Confirm"'] },
+    },
+    {
+      command: 'click',
+      positionals: ['@e3'],
+      flags: {},
+      result: { refLabel: 'Signed in with hunter2' },
+    },
   ];
-  for (const entry of entries) {
-    recordActionEntry(session, { ...entry, result: {} }, hostCwd);
-  }
+  for (const entry of entries) recordActionEntry(session, { result: {}, ...entry }, hostCwd);
 
   const { script, parsed } = writeAndParse(writer, session);
   expect(script).not.toContain('hunter2');
@@ -114,6 +125,8 @@ test('write() escapes recorded literal ${...} text so replay resolves it back un
   expect(resolved[2]?.flags.until).toBe('label="${name}"');
   expect(resolved[3]?.positionals).toEqual(['${PASSWORD}']);
   expect(resolved[4]?.positionals).toEqual(['label="Other"', '${PASSWORD}']);
+  expect(resolved[5]?.positionals).toEqual(['label="Confirm"', 'secret']);
+  expect(resolved[6]?.flags.snapshotScope).toBe('Signed in with secret');
 });
 
 test('write() keeps ref labels and target annotations verbatim because replay matches them literally', () => {

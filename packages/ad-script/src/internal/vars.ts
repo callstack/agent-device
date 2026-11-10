@@ -197,9 +197,25 @@ function parseInterpolation(
   return { abortEnd: raw.length };
 }
 
-/** The script text that `resolveReplayString` reads back as `literal`: every `${` gains the `\${` escape. */
-export function escapeReplayLiteral(literal: string): string {
-  return literal.replaceAll('${', () => '\\${');
+/**
+ * The script text that `resolveReplayString` reads back as `literal`. Every `${` gains the `\${`
+ * escape, except where an exact `${NAME}` placeholder for a name in `livePlaceholders` starts.
+ */
+function escapeReplayLiteral(literal: string, livePlaceholders: ReadonlySet<string>): string {
+  let out = '';
+  let i = 0;
+  for (let start = literal.indexOf('${'); start >= 0; start = literal.indexOf('${', i)) {
+    out += literal.slice(i, start);
+    const end = literal.indexOf('}', start + 2);
+    if (end >= 0 && livePlaceholders.has(literal.slice(start + 2, end))) {
+      out += literal.slice(start, end + 1);
+      i = end + 1;
+      continue;
+    }
+    out += '\\${';
+    i = start + 2;
+  }
+  return out + literal.slice(i);
 }
 
 export function resolveReplayString(
@@ -271,19 +287,33 @@ function resolveStringProps<T extends object>(
 }
 
 /**
- * The inverse of the interpolation `resolveReplayAction` applies to flags and runtime hints: every
- * string in `value`, at any depth, gets the `\${` escape.
+ * The inverse of `resolveReplayAction`, over exactly the fields it interpolates: every `${` in the
+ * written action is escaped, except the `${NAME}` placeholders named in `livePlaceholders`.
  */
-export function escapeReplayStringValues<T>(value: T): T {
-  return escapeStringValue(value) as T;
+export function escapeReplayAction(
+  action: SessionAction,
+  livePlaceholders: ReadonlySet<string>,
+): SessionAction {
+  const escape = (value: unknown): unknown => escapeStringValue(value, livePlaceholders);
+  return {
+    ...action,
+    positionals: (action.positionals ?? []).map((token) =>
+      escapeReplayLiteral(token, livePlaceholders),
+    ),
+    flags: (escape(action.flags) as SessionAction['flags'] | undefined) ?? {},
+    runtime: escape(action.runtime) as SessionAction['runtime'],
+  };
 }
 
-function escapeStringValue(value: unknown): unknown {
-  if (typeof value === 'string') return escapeReplayLiteral(value);
-  if (Array.isArray(value)) return value.map((entry) => escapeStringValue(entry));
+function escapeStringValue(value: unknown, livePlaceholders: ReadonlySet<string>): unknown {
+  if (typeof value === 'string') return escapeReplayLiteral(value, livePlaceholders);
+  if (Array.isArray(value)) return value.map((entry) => escapeStringValue(entry, livePlaceholders));
   if (value && typeof value === 'object') {
     return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, escapeStringValue(entry)]),
+      Object.entries(value).map(([key, entry]) => [
+        key,
+        escapeStringValue(entry, livePlaceholders),
+      ]),
     );
   }
   return value;

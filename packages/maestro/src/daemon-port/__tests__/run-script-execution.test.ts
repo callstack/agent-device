@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { executeRunScriptFile } from '../run-script-execution.ts';
 import { MAX_RUN_SCRIPT_HTTP_RESPONSE_BYTES } from '../run-script-http.ts';
 import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
@@ -63,14 +63,13 @@ test('executeRunScriptFile stops the script when its signal aborts', async () =>
   setTimeout(() => controller.abort(), 100);
   const startedAt = Date.now();
   try {
-    await expect(
-      executeRunScriptFile({
-        scriptPath,
-        env: {},
-        publicNetworkOnly: false,
-        signal: controller.signal,
-      }),
-    ).rejects.toBeInstanceOf(AppError);
+    const error = await executeRunScriptFile({
+      scriptPath,
+      env: {},
+      publicNetworkOnly: false,
+      signal: controller.signal,
+    }).catch((error: unknown) => error);
+    expect(isRequestCanceledError(error)).toBe(true);
     expect(Date.now() - startedAt).toBeLessThan(10_000);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

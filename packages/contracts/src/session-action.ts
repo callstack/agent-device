@@ -39,8 +39,9 @@ export type SessionAction = {
   /** `targets-v1` evidence for dual-endpoint interactions such as drag. */
   targetEvidences?: MultiTargetAnnotationV1;
   /**
-   * The `--record-as` variable of a parameterized `fill`. The recorder put its `${NAME}`
-   * placeholder in this action's text, the one recorded text that replay interpolates.
+   * The variable names whose `${NAME}` placeholders the recorder inserted in this action: a
+   * `--record-as` fill's own text, and session echo protection (ADR 0017). A written script keeps
+   * exactly these placeholders live and escapes every other recorded `${`.
    */
-  recordedInputVariable?: string;
+  livePlaceholders?: string[];
 };

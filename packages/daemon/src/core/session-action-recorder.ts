@@ -10,6 +10,7 @@ import type { MultiTargetAnnotationV1, TargetAnnotationV1 } from '@agent-device/
 import {
   inferFillText,
   isSensitiveFillText,
+  readRecordedInputVariableName,
   recordedInputPlaceholder,
   validateRecordedInputVariableName,
 } from '@agent-device/ad-script';
@@ -75,10 +76,14 @@ export function recordActionEntry(
   // very entry that introduced it. The session-wide guarantee is for LATER,
   // distinct actions, exactly as #1398 frames it; this entry keeps only the
   // existing fill-step-scoped exact-match protection below.
-  const recordedEntry = applySessionEchoProtection(
-    session,
-    parameterizeRecordedFill(entry, fillLiteral),
-  );
+  const parameterizedEntry = parameterizeRecordedFill(entry, fillLiteral);
+  const livePlaceholders = [
+    ...new Set([
+      ...(fillLiteral ? [fillLiteral.variableName] : []),
+      ...readEchoedVariableNames(session, parameterizedEntry),
+    ]),
+  ];
+  const recordedEntry = applySessionEchoProtection(session, parameterizedEntry);
   if (fillLiteral) registerRecordedFillLiteral(session, fillLiteral);
   const action: SessionAction = {
     ts: Date.now(),
@@ -96,7 +101,7 @@ export function recordActionEntry(
       : {}),
     ...(recordedEntry.targetEvidence ? { targetEvidence: recordedEntry.targetEvidence } : {}),
     ...(recordedEntry.targetEvidences ? { targetEvidences: recordedEntry.targetEvidences } : {}),
-    ...(fillLiteral ? { recordedInputVariable: fillLiteral.variableName } : {}),
+    ...(livePlaceholders.length > 0 ? { livePlaceholders } : {}),
   };
   session.actions.push(action);
   emitDiagnostic({
@@ -238,6 +243,30 @@ function applySessionEchoProtection(
     : entry.targetEvidences;
 
   return { ...entry, result, targetEvidence, targetEvidences };
+}
+
+/**
+ * The variables whose literal `applySessionEchoProtection` replaces with a placeholder in this
+ * entry's result, the recorded field the script writer emits. Annotations are never interpolated.
+ */
+function readEchoedVariableNames(session: SessionState, entry: RecordActionEntry): string[] {
+  const literals = session.recordedFillLiterals;
+  if (!literals || literals.size === 0 || !entry.result) return [];
+  const texts = collectStrings(entry.result);
+  const names: string[] = [];
+  for (const [literal, placeholder] of literals) {
+    if (!texts.some((text) => text.includes(literal))) continue;
+    const name = readRecordedInputVariableName(placeholder);
+    if (name) names.push(name);
+  }
+  return names;
+}
+
+function collectStrings(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(collectStrings);
+  if (value && typeof value === 'object') return Object.values(value).flatMap(collectStrings);
+  return [];
 }
 
 /**

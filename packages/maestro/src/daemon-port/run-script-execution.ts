@@ -27,6 +27,8 @@ export async function executeRunScriptFile(
     stdin: JSON.stringify(childRequest),
     signal,
     timeoutMs: RUN_SCRIPT_CHILD_TIMEOUT_MS,
+    // Its own process group, so a cancel or timeout also reaps an in-flight `http.post` child.
+    detached: true,
     allowFailure: true,
   });
   const output = readScriptChildOutput(result.stdout);

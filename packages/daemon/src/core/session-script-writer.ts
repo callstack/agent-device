@@ -8,15 +8,13 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   inferFillText,
   appendScriptSeriesFlags,
-  escapeReplayLiteral,
-  escapeReplayStringValues,
+  escapeReplayAction,
   formatPortableActionLine,
   formatScriptArg,
   formatScriptStringLiteral,
   formatTargetAnnotationLines,
   isClickLikeCommand,
   isTouchTargetCommand,
-  recordedInputPlaceholder,
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
 import { expandSessionPath, safeSessionName } from '@agent-device/host-kit/session-paths';
@@ -451,6 +449,7 @@ function buildScopedSnapshotAction(
       snapshotScope: scope,
     },
     result: { scope },
+    ...(action.livePlaceholders ? { livePlaceholders: action.livePlaceholders } : {}),
   };
 }
 
@@ -469,34 +468,15 @@ function formatScript(
   for (const action of actions) {
     if (action.flags?.noRecord) continue;
     lines.push(...formatTargetAnnotationLines(action));
-    lines.push(formatActionLine(escapeRecordedLiterals(action)));
+    // Replay interpolates the written positionals, flags, and runtime hints; only the
+    // placeholders the recorder inserted stay live.
+    lines.push(formatActionLine(escapeReplayAction(action, new Set(action.livePlaceholders))));
   }
   // ADR 0012 decision 6 (Fix 4): only a repair-armed session's healed script
   // carries the completeness sentinel — `write()` already refused to reach
   // here unless it was finalized, so every repair-armed write IS complete.
   if (appendCompleteSentinel) lines.push(HEAL_COMPLETE_SENTINEL);
   return `${lines.join('\n')}\n`;
-}
-
-/**
- * Replay interpolates every written positional, flag, and runtime string, so recorded literal
- * text gets the `\${` escape. Only a parameterized fill's own placeholder text stays live. The
- * ref label parses back into `result.refLabel`, which replay compares literally, so it stays as is.
- */
-function escapeRecordedLiterals(action: SessionAction): SessionAction {
-  const placeholder =
-    action.command === 'fill' && action.recordedInputVariable !== undefined
-      ? recordedInputPlaceholder(action.recordedInputVariable)
-      : undefined;
-  const lastIndex = action.positionals.length - 1;
-  return {
-    ...action,
-    positionals: action.positionals.map((value, index) =>
-      index === lastIndex && value === placeholder ? value : escapeReplayLiteral(value),
-    ),
-    flags: escapeReplayStringValues(action.flags),
-    runtime: escapeReplayStringValues(action.runtime),
-  };
 }
 
 function formatActionLine(action: SessionAction): string {

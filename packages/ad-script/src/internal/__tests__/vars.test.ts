@@ -4,7 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   buildReplayVarScope,
   collectReplayShellEnv,
-  escapeReplayStringValues,
+  escapeReplayAction,
   parseReplayCliEnvEntries,
   resolveReplayAction,
   resolveReplayString,
@@ -184,24 +184,28 @@ test('resolveReplayAction walks positionals and string flags', () => {
   assert.equal(resolved.flags?.snapshotDepth, 3);
 });
 
-test('escapeReplayStringValues undoes resolveReplayAction at every depth the resolver walks', () => {
+test('escapeReplayAction is the inverse of resolveReplayAction except for its live placeholders', () => {
   const flags = {
-    snapshotScope: 'cost ${amount}',
+    snapshotScope: 'cost ${amount} for ${PASSWORD}',
     nested: { label: '${name}', list: ['${a}', 7, { deep: '${b}' }] },
     count: 2,
   };
-  const action: SessionAction = {
-    ts: 0,
-    command: 'snapshot',
-    positionals: [],
-    flags: escapeReplayStringValues(flags) as SessionAction['flags'],
-    runtime: escapeReplayStringValues({ metroHost: '${HOST}' }),
-  };
+  const written = escapeReplayAction(
+    {
+      ts: 0,
+      command: 'fill',
+      positionals: ['label="${name}"', '${PASSWORD}'],
+      flags: flags as SessionAction['flags'],
+      runtime: { metroHost: '${HOST}' },
+    },
+    new Set(['PASSWORD']),
+  );
   const scope = buildReplayVarScope({
-    fileEnv: { amount: 'X', name: 'X', a: 'X', b: 'X', HOST: 'X' },
+    fileEnv: { amount: 'X', name: 'X', a: 'X', b: 'X', HOST: 'X', PASSWORD: 'secret' },
   });
-  const resolved = resolveReplayAction(action, scope, LOC);
-  assert.deepEqual(resolved.flags, flags);
+  const resolved = resolveReplayAction(written, scope, LOC);
+  assert.deepEqual(resolved.positionals, ['label="${name}"', 'secret']);
+  assert.deepEqual(resolved.flags, { ...flags, snapshotScope: 'cost ${amount} for secret' });
   assert.deepEqual(resolved.runtime, { metroHost: '${HOST}' });
 });
 
