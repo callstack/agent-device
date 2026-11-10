@@ -30,5 +30,9 @@ test('parseArgs bounds retention milliseconds', () => {
     parseArgs([...args, '2147483647'], { strictFlags: true }).flags.retentionMs,
     2147483647,
   );
-  assert.throws(() => parseArgs([...args, '2147483648'], { strictFlags: true }));
+  for (const value of ['0', '2147483648']) {
+    assert.throws(() => parseArgs([...args, value], { strictFlags: true }), {
+      code: 'INVALID_ARGS',
+    });
+  }
 });

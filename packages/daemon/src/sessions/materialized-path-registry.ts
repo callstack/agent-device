@@ -61,10 +61,7 @@ export async function retainMaterializedPaths(params: {
   sessionName?: string;
   ttlMs?: number;
 }): Promise<RetainedMaterializedPaths> {
-  const ttlMs = params.ttlMs ?? DEFAULT_MATERIALIZED_PATH_TTL_MS;
-  if (!Number.isInteger(ttlMs) || ttlMs <= 0 || ttlMs > MAX_MATERIALIZED_PATH_TTL_MS) {
-    throw new AppError('INVALID_ARGS', 'retentionMs must be an integer from 1 to 2147483647');
-  }
+  const ttlMs = resolveMaterializedPathRetentionMs(params.ttlMs);
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-materialized-'));
   try {
     const retainedInstallablePath = await copyPathInto(
@@ -98,6 +95,23 @@ export async function retainMaterializedPaths(params: {
     await fs.rm(rootPath, { recursive: true, force: true });
     throw error;
   }
+}
+
+export function resolveMaterializedPathRetentionMs(
+  ttlMs: unknown = DEFAULT_MATERIALIZED_PATH_TTL_MS,
+): number {
+  if (
+    typeof ttlMs !== 'number' ||
+    !Number.isInteger(ttlMs) ||
+    ttlMs <= 0 ||
+    ttlMs > MAX_MATERIALIZED_PATH_TTL_MS
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `retentionMs must be an integer from 1 to ${MAX_MATERIALIZED_PATH_TTL_MS}`,
+    );
+  }
+  return ttlMs;
 }
 
 export async function cleanupRetainedMaterializedPaths(
