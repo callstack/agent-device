@@ -652,8 +652,10 @@ async function sendSocketRequest(
   if (!port) throw daemonEndpointUnavailableError('socket');
   const callerSignal = options.signal;
   refuseAbortedRequest(callerSignal, req.meta?.requestId);
-  const requestLine = `${JSON.stringify(req)}\n`;
-  refuseOversizedDaemonRequest(requestLine, req.meta?.requestId);
+  // The daemon measures the request without its framing newline.
+  const request = JSON.stringify(req);
+  refuseOversizedDaemonRequest(request, req.meta?.requestId);
+  const requestLine = `${request}\n`;
   return new Promise((resolve, reject) => {
     let requestWritten = false;
     let settled = false;

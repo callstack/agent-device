@@ -292,19 +292,22 @@ async function requestUploadPreflight(options: {
 }
 
 const MAX_CREDENTIALED_REDIRECTS = 5;
+const REDIRECT_STATUSES: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]);
 
 /**
- * `fetch` for a request that carries daemon credentials. It follows a 307 or 308 only on the origin
+ * `fetch` for a request that carries daemon credentials. It follows a redirect only on the origin
  * the caller chose, and rejects a hop to any other origin: `fetch` drops `authorization` there but
- * keeps `x-agent-device-token`. Any other redirect comes back as the response, which callers treat
- * as a failed request.
+ * keeps `x-agent-device-token`. Each hop keeps fetch's method rules: 303, and 301 or 302 after a
+ * POST, continue as a GET without a body.
  */
 async function credentialedFetch(url: URL, init: RequestInit): Promise<Response> {
   let current = url;
+  let hopInit = init;
   for (let hop = 0; ; hop += 1) {
-    const response = await fetch(current, { ...init, redirect: 'manual' });
+    const response = await fetch(current, { ...hopInit, redirect: 'manual' });
     const location = response.headers.get('location');
-    if ((response.status !== 307 && response.status !== 308) || !location) return response;
+    if (!REDIRECT_STATUSES.has(response.status) || !location) return response;
+    await response.body?.cancel();
     const next = new URL(location, current);
     if (next.origin !== url.origin) {
       throw new AppError('COMMAND_FAILED', 'Upload request refused a cross-origin redirect', {
@@ -319,8 +322,23 @@ async function credentialedFetch(url: URL, init: RequestInit): Promise<Response>
         url: url.toString(),
       });
     }
+    hopInit = redirectedRequestInit(hopInit, response.status);
     current = next;
   }
+}
+
+/** The request a redirect continues with, by the fetch standard's method rules. */
+function redirectedRequestInit(init: RequestInit, status: number): RequestInit {
+  const method = (init.method ?? 'GET').toUpperCase();
+  const becomesGet =
+    (status === 303 && method !== 'GET' && method !== 'HEAD') ||
+    ((status === 301 || status === 302) && method === 'POST');
+  if (!becomesGet) return init;
+  const headers = new Headers(init.headers);
+  headers.delete('content-type');
+  headers.delete('content-length');
+  const { body: _body, ...rest } = init;
+  return { ...rest, method: 'GET', headers };
 }
 
 /**

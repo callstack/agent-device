@@ -492,7 +492,51 @@ test.for(['socket', 'http'] as const)(
       assert.ok(refusal instanceof AppError);
       assert.equal(refusal.code, 'INVALID_ARGS');
       assert.equal(refusal.details?.reason, 'daemon_request_too_large');
+      assert.equal(refusal.details?.daemonRequestSent, false);
       assert.equal(connections, 0);
+    } finally {
+      await closeLoopbackServer(server);
+    }
+  },
+);
+
+test.for([
+  { overBy: 0, sent: true },
+  { overBy: 1, sent: false },
+])(
+  'a socket request $overBy bytes over the limit, without its newline, is sent: $sent',
+  async ({ overBy, sent }, t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+    let connections = 0;
+    const server = net.createServer((socket) => {
+      connections += 1;
+      socket.destroy();
+    });
+    const port = await listenOnLoopback(server);
+    const request = (flow: string) => ({
+      token: 't',
+      session: 'default',
+      command: 'replay',
+      positionals: [],
+      flags: { replayScriptSource: { entry: 'flow.ad', files: { 'flow.ad': flow } } },
+      meta: { requestId: 'request-limit-boundary' },
+    });
+    const overhead = Buffer.byteLength(JSON.stringify(request('')));
+    try {
+      const outcome = await sendRequest(
+        { port, token: 't', pid: 1 },
+        request('x'.repeat(DAEMON_REQUEST_MAX_BYTES - overhead + overBy)),
+        'socket',
+        resolveDaemonPaths('/tmp/agent-device-request-limit-test'),
+        undefined,
+        { host: createTestHostEnvironment() },
+      ).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      assert.ok(outcome instanceof AppError);
+      assert.equal(outcome.details?.reason === 'daemon_request_too_large', !sent);
+      assert.equal(connections, sent ? 1 : 0);
     } finally {
       await closeLoopbackServer(server);
     }
