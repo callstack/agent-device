@@ -117,9 +117,23 @@ export function createExpiredProviderLeaseReleaser(options: {
   let phase: ReleaserPhase = 'running';
   /** The releases this drain window observed; replaced at each window so one window's set is never another's. */
   let drainReleasedLeases = new Map<string, DeviceLease>();
-  const runScoped = (run: () => Promise<void> | void): void => {
-    const scoped = async (): Promise<void> => await run();
-    void (options.withinDiagnosticsScope ? options.withinDiagnosticsScope(scoped) : scoped());
+  const runScoped = (run: () => Promise<void>): void => {
+    const guarded = async (): Promise<void> => {
+      try {
+        await run();
+      } catch (error) {
+        emitDiagnostic({
+          level: 'error',
+          phase: 'provider_lease_expiry_timer_failed',
+          data: { error: error instanceof Error ? error.message : String(error) },
+        });
+      }
+    };
+    // A timer callback has no caller: a scope that cannot even open must not become an unhandled
+    // rejection that ends the daemon.
+    void (
+      options.withinDiagnosticsScope ? options.withinDiagnosticsScope(guarded) : guarded()
+    ).catch(() => undefined);
   };
 
   /** Moves the lifecycle forward and nothing else: the phase never goes back. */
@@ -211,7 +225,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       if (phase === 'closed') return;
       journalRetryTimer ??= setTimeout(() => {
         journalRetryTimer = undefined;
-        runScoped(writeJournal);
+        runScoped(async () => writeJournal());
       }, retryDelayMs);
       journalRetryTimer.unref?.();
     }

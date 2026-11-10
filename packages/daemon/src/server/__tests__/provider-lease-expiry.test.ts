@@ -48,6 +48,43 @@ test('retries an expired live-only provider lease release after a transient fail
   }
 });
 
+test('a timer-driven retry whose diagnostics scope rejects leaves no unhandled rejection', async () => {
+  vi.useFakeTimers();
+  const unhandled = vi.fn();
+  process.on('unhandledRejection', unhandled);
+  const lease = new LeaseRegistry().allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'browserstack',
+  });
+  // A plain function: a `vi.fn` mock observes its own result and would mark the rejection handled.
+  let scopeCalls = 0;
+  const withinDiagnosticsScope = async () => {
+    scopeCalls += 1;
+    throw new Error('daemon log is unwritable');
+  };
+  const releaser = createExpiredProviderLeaseReleaser({
+    leaseLifecycleProvider: { release: vi.fn().mockRejectedValue(new Error('provider outage')) },
+    providerRuntimeIds: ['browserstack'],
+    retryDelayMs: 10,
+    withinDiagnosticsScope,
+  });
+
+  try {
+    await releaser.release(lease);
+    await vi.advanceTimersByTimeAsync(10);
+    vi.useRealTimers();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(scopeCalls).toBeGreaterThan(0);
+    expect(unhandled).not.toHaveBeenCalled();
+  } finally {
+    process.off('unhandledRejection', unhandled);
+    releaser.shutdown();
+    vi.useRealTimers();
+  }
+});
+
 test('a timer-driven release retry records its diagnostics in the daemon scope', async () => {
   vi.useFakeTimers();
   const logPath = path.join(mkdtempForTestSync('agent-device-expiry-retry-scope-'), 'daemon.log');
