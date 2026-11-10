@@ -1,3 +1,4 @@
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 
 import { createReplyWaiters } from './replies.ts';
@@ -27,6 +28,19 @@ type CdpMessage = {
   result?: unknown;
   error?: { message: string; code: number };
 };
+
+function parseCdpMessage(data: unknown): CdpMessage | undefined {
+  try {
+    const message: unknown = JSON.parse(String(data));
+    return isRecord(message) ? (message as CdpMessage) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 export async function listTargets(port: number): Promise<CdpTarget[]> {
   const response = await fetch(`http://localhost:${port}/json`, {
@@ -63,10 +77,27 @@ export async function connectCdp(target: CdpTarget): Promise<CdpSession> {
   const replies = createReplyWaiters<CdpMessage>();
   const listeners: ((method: string, params: Record<string, unknown>) => void)[] = [];
   const closeListeners: (() => void)[] = [];
+  // A throw from a WebSocket listener is an uncaught exception that ends the process, so a frame
+  // this session cannot read is dropped with a diagnostic and the session keeps serving requests.
   socket.onmessage = (event) => {
-    const message = JSON.parse(String(event.data)) as CdpMessage;
-    if (message.method) {
-      for (const listener of listeners) listener(message.method, message.params ?? {});
+    const message = parseCdpMessage(event.data);
+    if (message === undefined) {
+      emitDiagnostic({ level: 'debug', phase: 'tv_cdp_frame_unreadable', data: { target: target.url } });
+      return;
+    }
+    if (typeof message.method === 'string') {
+      const params = isRecord(message.params) ? message.params : {};
+      for (const listener of listeners) {
+        try {
+          listener(message.method, params);
+        } catch (error) {
+          emitDiagnostic({
+            level: 'debug',
+            phase: 'tv_cdp_event_listener_failed',
+            data: { method: message.method, error: String(error) },
+          });
+        }
+      }
     } else if (message.id !== undefined) {
       replies.deliver(String(message.id), message);
     }
