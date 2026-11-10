@@ -94,13 +94,13 @@ export async function downloadRemoteArtifactFromUrl(
         },
       },
       (res) => {
-        if ((res.statusCode ?? 500) >= 400) {
+        if (res.statusCode !== 200) {
           let body = '';
           res.setEncoding('utf8');
           res.on('data', (chunk) => {
-            body += chunk;
+            body = (body + chunk).slice(0, 65536);
           });
-          res.on('end', () => {
+          const fail = () => {
             settle(
               undefined,
               new AppError('COMMAND_FAILED', 'Failed to download remote artifact', {
@@ -110,7 +110,10 @@ export async function downloadRemoteArtifactFromUrl(
                 body,
               }),
             );
-          });
+          };
+          res.on('end', fail);
+          res.on('error', fail);
+          res.on('aborted', fail);
           return;
         }
         materializationStarted = true;
