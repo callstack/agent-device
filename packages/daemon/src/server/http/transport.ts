@@ -64,7 +64,7 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
     const onData = AsyncResource.bind(async (chunk: string) => {
       const parsed = consumeTextLines(buffer, chunk);
       buffer = parsed.buffer;
-      if (buffer.length > MAX_HTTP_RPC_BODY_BYTES) {
+      if ([buffer, ...parsed.lines].some(exceedsDaemonRequestLimit)) {
         refuseOversizedSocketRequest(socket, onData);
         buffer = '';
         return;
@@ -129,13 +129,17 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
   return server;
 }
 
+function exceedsDaemonRequestLimit(text: string): boolean {
+  return Buffer.byteLength(text, 'utf8') > MAX_HTTP_RPC_BODY_BYTES;
+}
+
 function refuseOversizedSocketRequest(
   socket: net.Socket,
   onData: (chunk: string) => Promise<void>,
 ): void {
   socket.off('data', onData);
   const error = new AppError('INVALID_ARGS', 'Daemon request exceeds the size limit', {
-    maxChars: MAX_HTTP_RPC_BODY_BYTES,
+    maxBytes: MAX_HTTP_RPC_BODY_BYTES,
   });
   const response: DaemonResponse = { ok: false, error: normalizeError(error) };
   socket.end(`${JSON.stringify(response)}\n`);

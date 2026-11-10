@@ -84,32 +84,48 @@ test('Provider-backed integration daemon socket transport frames requests and no
   }
 });
 
-test('socket transport refuses an unterminated request past the size limit and closes', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t)) return;
-  let handled = 0;
-  const server = createSocketServer(async (): Promise<DaemonResponse> => {
-    handled += 1;
-    return { ok: true, data: {} };
-  });
-  try {
-    const client = await connectSocket(await listenNetServer(server));
-    client.setEncoding('utf8');
-    let received = '';
-    client.on('data', (chunk) => {
-      received += chunk;
+const OVERSIZED_SOCKET_REQUESTS = [
+  { name: 'an unterminated request', request: 'x'.repeat(MAX_HTTP_RPC_BODY_BYTES + 1) },
+  {
+    name: 'a framed JSON request',
+    request: `${JSON.stringify({ command: 'session_list', pad: 'x'.repeat(MAX_HTTP_RPC_BODY_BYTES) })}\n`,
+  },
+  {
+    // Two bytes per character: under the limit in string length, over it in bytes.
+    name: 'a framed multibyte request',
+    request: `${JSON.stringify({ command: 'session_list', pad: '\u00e9'.repeat(MAX_HTTP_RPC_BODY_BYTES / 2) })}\n`,
+  },
+];
+
+test.for(OVERSIZED_SOCKET_REQUESTS)(
+  'socket transport refuses $name past the byte limit and closes',
+  async ({ request }, t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+    let handled = 0;
+    const server = createSocketServer(async (): Promise<DaemonResponse> => {
+      handled += 1;
+      return { ok: true, data: {} };
     });
-    const closed = new Promise<void>((resolve) => client.once('close', () => resolve()));
-    client.on('error', () => {});
-    client.write('x'.repeat(MAX_HTTP_RPC_BODY_BYTES + 1));
-    await closed;
-    const response = JSON.parse(received.trim()) as DaemonResponse;
-    assert.equal(response.ok, false);
-    assert.equal(response.ok ? undefined : response.error.code, 'INVALID_ARGS');
-    assert.equal(handled, 0);
-  } finally {
-    await closeLoopbackServer(server);
-  }
-});
+    try {
+      const client = await connectSocket(await listenNetServer(server));
+      client.setEncoding('utf8');
+      let received = '';
+      client.on('data', (chunk) => {
+        received += chunk;
+      });
+      const closed = new Promise<void>((resolve) => client.once('close', () => resolve()));
+      client.on('error', () => {});
+      client.write(request);
+      await closed;
+      const response = JSON.parse(received.trim()) as DaemonResponse;
+      assert.equal(response.ok, false);
+      assert.equal(response.ok ? undefined : response.error.code, 'INVALID_ARGS');
+      assert.equal(handled, 0);
+    } finally {
+      await closeLoopbackServer(server);
+    }
+  },
+);
 
 // A socket client that vanishes mid-request must cancel that connection's
 // in-flight request via its request-scoped signal — never through a global

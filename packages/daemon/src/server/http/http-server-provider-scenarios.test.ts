@@ -336,24 +336,27 @@ test('Provider-backed integration daemon HTTP server destroys oversized RPC requ
 
   try {
     const port = await listenOnLoopback(server);
-    const oversizedBody = JSON.stringify({
-      jsonrpc: '2.0',
-      id: 'rpc-body-cap',
-      method: 'agent_device.command',
-      params: {
-        command: 'session_list',
-        padding: 'x'.repeat(RPC_BODY_CAP_BYTES),
-      },
-    });
-    assert.ok(oversizedBody.length > RPC_BODY_CAP_BYTES);
+    // The multibyte padding is under the cap in string length and over it in bytes.
+    for (const padding of [
+      'x'.repeat(RPC_BODY_CAP_BYTES),
+      '\u00e9'.repeat(RPC_BODY_CAP_BYTES / 2),
+    ]) {
+      const oversizedBody = JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'rpc-body-cap',
+        method: 'agent_device.command',
+        params: { command: 'session_list', padding },
+      });
+      assert.ok(Buffer.byteLength(oversizedBody) > RPC_BODY_CAP_BYTES);
 
-    const outcome = await sendRawRpcBody(port, oversizedBody);
-    assert.equal(handled, false);
-    if (outcome.kind === 'response') {
-      assert.equal(outcome.status, 400);
-      assert.equal(JSON.parse(outcome.body).error.code, -32700);
-    } else {
-      assert.match(outcome.message, /aborted|reset|socket hang up|request too large/i);
+      const outcome = await sendRawRpcBody(port, oversizedBody);
+      assert.equal(handled, false);
+      if (outcome.kind === 'response') {
+        assert.equal(outcome.status, 400);
+        assert.equal(JSON.parse(outcome.body).error.code, -32700);
+      } else {
+        assert.match(outcome.message, /aborted|reset|socket hang up|request too large/i);
+      }
     }
 
     const health = await fetch(`http://127.0.0.1:${port}/health`);

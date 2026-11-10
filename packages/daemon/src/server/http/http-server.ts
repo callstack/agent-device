@@ -228,10 +228,12 @@ function readRpcRequestBody(
   onBody: (body: string) => void,
 ): void {
   let body = '';
+  let bodyBytes = 0;
   req.setEncoding('utf8');
-  req.on('data', (chunk) => {
+  req.on('data', (chunk: string) => {
     body += chunk;
-    if (body.length > MAX_HTTP_RPC_BODY_BYTES) {
+    bodyBytes += Buffer.byteLength(chunk, 'utf8');
+    if (bodyBytes > MAX_HTTP_RPC_BODY_BYTES) {
       req.destroy(new Error('request too large'));
     }
   });
