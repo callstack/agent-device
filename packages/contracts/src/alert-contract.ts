@@ -197,6 +197,16 @@ export const ALERT_CAPTURE_UNDECIDED_REASON = 'alert_capture_undecided';
 export const ALERT_ACTIONS = ['get', 'accept', 'dismiss', 'wait'] as const;
 export type AlertAction = (typeof ALERT_ACTIONS)[number];
 
+/**
+ * The one parse of an `alert` subaction: case-insensitive, matching how the registry classifies
+ * it for ref frames and recording. Returns undefined for an unknown word; each caller supplies
+ * its own default for an absent subaction and its own refusal.
+ */
+export function parseAlertAction(raw: string): AlertAction | undefined {
+  const action = raw.toLowerCase();
+  return ALERT_ACTIONS.find((candidate) => candidate === action);
+}
+
 export type AlertPlatform = 'android' | 'ios' | 'macos';
 
 export type AlertSource = 'permission' | 'native-dialog' | 'system-dialog';

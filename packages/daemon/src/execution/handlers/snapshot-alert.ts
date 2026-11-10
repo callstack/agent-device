@@ -2,6 +2,7 @@ import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import type { AlertRuntimeInput } from '@agent-device/contracts/alert-runtime';
 import {
   ALERT_ACTIONS,
+  parseAlertAction,
   type AlertAction,
   DEFAULT_ALERT_TIMEOUT_MS as DEFAULT_TIMEOUT_MS,
   MAX_ALERT_WINDOW_MS,
@@ -97,7 +98,7 @@ export async function handleAlertCommand(
   const { req, logPath, sessionStore, ref, device, inspectFacts, bindDevice, platformServices } =
     params;
   let session = ref ? sessionStore.requireCurrent(ref) : undefined;
-  const action = parseAlertAction(req.positionals?.[0]);
+  const action = readAlertAction(req.positionals?.[0]);
   const timeoutMs = alertWaitTimeoutMs(action, req.positionals?.[1]);
   const bound = await resolveBoundAlertRuntime({
     device,
@@ -147,13 +148,11 @@ function alertTarget(
 }
 
 /**
- * `alert [get|accept|dismiss|wait]`, parsed as the registry's ref-frame and recording policy
- * reads it: case-insensitive, `get` when absent. An unknown subaction is refused, so the handler
- * never reads where the registry classified a mutation.
+ * `get` when absent; an unknown subaction is refused, so the handler never reads where the
+ * registry classified a mutation.
  */
-function parseAlertAction(raw: string | undefined): AlertAction {
-  const action = (raw ?? 'get').toLowerCase();
-  const known = ALERT_ACTIONS.find((candidate) => candidate === action);
+function readAlertAction(raw: string | undefined): AlertAction {
+  const known = parseAlertAction(raw ?? 'get');
   if (!known) {
     throw new AppError(
       'INVALID_ARGS',

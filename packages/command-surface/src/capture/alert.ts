@@ -1,4 +1,8 @@
-import { ALERT_ACTIONS, type AlertAction } from '@agent-device/contracts/alert-contract';
+import {
+  ALERT_ACTIONS,
+  parseAlertAction,
+  type AlertAction,
+} from '@agent-device/contracts/alert-contract';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { AlertCommandOptions } from '@agent-device/contracts/client';
 import { enumField, integerField } from '../command-input.ts';
@@ -68,15 +72,8 @@ function readAlertInput(positionals: string[]): Record<string, unknown> {
 }
 
 function readAlertAction(value: string | undefined): AlertAction | undefined {
-  const action = value?.toLowerCase();
-  if (
-    action === undefined ||
-    action === 'get' ||
-    action === 'accept' ||
-    action === 'dismiss' ||
-    action === 'wait'
-  ) {
-    return action;
-  }
+  if (value === undefined) return undefined;
+  const action = parseAlertAction(value);
+  if (action) return action;
   throw new AppError('INVALID_ARGS', 'alert action must be get, accept, dismiss, or wait.');
 }
