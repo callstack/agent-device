@@ -54,6 +54,27 @@ test('lease preparation reads the connect selectors before any host command runs
   );
 });
 
+test('artifact lookup runs in the region of the session ARN, not the environment region', async () => {
+  const commands: string[][] = [];
+  const { webDriver } = awsDeviceFarmProvider.create({
+    ...host({ AWS_REGION: 'eu-west-1' }),
+    runHostCommand: async (command, args) => {
+      commands.push([command, ...args]);
+      return { stdout: '{"artifacts":[]}', stderr: '', exitCode: 0 };
+    },
+  });
+
+  await webDriver.listArtifacts!({
+    provider: 'aws-device-farm',
+    providerSessionId: 'arn:aws:devicefarm:us-west-2:123:session:project-a/session-a/00000',
+  });
+
+  assert.ok(commands.length > 0);
+  for (const command of commands) {
+    assert.equal(command[command.indexOf('--region') + 1], 'us-west-2', command.join(' '));
+  }
+});
+
 test('the factory connects through the lazy callbacks', async () => {
   const { connection } = awsDeviceFarmProvider.create(host({ AWS_REGION: 'eu-west-1' }));
   const { profile } = await connection.resolve({
