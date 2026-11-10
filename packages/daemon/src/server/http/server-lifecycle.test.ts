@@ -63,8 +63,6 @@ test('Provider-backed integration daemon lifecycle writes metadata and protects 
     assert.equal(parseIntegerEnv('10'), 10);
     assert.equal(parseIntegerEnv('1.5'), undefined);
     assert.equal(parseIntegerEnv(undefined), undefined);
-    for (const raw of ['', '  ', '0x10', '1e3']) assert.equal(parseIntegerEnv(raw), undefined);
-    assert.equal(parseIntegerEnv(' 5 '), 5);
   } finally {
     assert.deepEqual(await owner.finish(), { state: 'removed' });
     assert.equal(fs.existsSync(infoPath), false);

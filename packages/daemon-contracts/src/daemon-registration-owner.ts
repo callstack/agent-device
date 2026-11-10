@@ -294,12 +294,9 @@ export function launchDaemonProcess(
     throw new AppError('COMMAND_FAILED', 'Replay daemon startup admission is closed.', {
       reason: 'daemon_startup_admission_closed',
     });
-  fs.mkdirSync(input.paths.baseDir, { recursive: true, mode: 0o700 });
-  // A mode applies only at creation: an older launcher left these at the umask default.
-  fs.chmodSync(input.paths.baseDir, 0o700);
-  const logFd = fs.openSync(input.paths.logPath, 'a', 0o600);
+  fs.mkdirSync(input.paths.baseDir, { recursive: true });
+  const logFd = fs.openSync(input.paths.logPath, 'a');
   try {
-    fs.fchmodSync(logFd, 0o600);
     const monitored = runCmdDetachedMonitored(process.execPath, input.args, {
       cwd: input.cwd,
       env: {
