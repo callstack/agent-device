@@ -109,14 +109,18 @@ function toOrdinaryCloseSaveScriptFailure(error: AppError): AppError {
   return new AppError(
     'COMMAND_FAILED',
     `The session was closed, but its script was not saved: ${error.message}`,
-    {
-      ...error.details,
-      hint:
-        error.details?.reason === 'script_write_failed'
-          ? 'Check the target path and its permissions, then re-record with open --save-script.'
-          : 'Remove the existing target (or pass --force/--overwrite), then re-record with open --save-script.',
-      retriable: false,
-    },
+    { ...error.details, hint: closeSaveScriptHint(error), retriable: false },
     error.cause,
   );
+}
+
+function closeSaveScriptHint(error: AppError): string | undefined {
+  switch (error.details?.reason) {
+    case 'script_target_exists':
+      return 'Remove the existing target (or pass --force/--overwrite), then re-record with open --save-script.';
+    case 'script_write_failed':
+      return 'Check the target path and its permissions, then re-record with open --save-script.';
+    default:
+      return error.details?.hint;
+  }
 }

@@ -94,7 +94,7 @@ test('repair close failure keeps normalized metadata and is explicitly retriable
 test('ordinary publication failure retains its close action after making the error non-retriable', () => {
   const { req, ref, session, sessionStore } = setup('ordinary');
   const failure = new AppError('COMMAND_FAILED', 'target exists', {
-    reason: 'target-exists',
+    reason: 'script_target_exists',
     hint: 'Retry close.',
   });
   vi.spyOn(sessionStore, 'writeSessionLog').mockReturnValue({ written: false, error: failure });
@@ -111,10 +111,32 @@ test('ordinary publication failure retains its close action after making the err
     code: 'COMMAND_FAILED',
     message: 'The session was closed, but its script was not saved: target exists',
     details: {
-      reason: 'target-exists',
+      reason: 'script_target_exists',
       hint: 'Remove the existing target (or pass --force/--overwrite), then re-record with open --save-script.',
       retriable: false,
     },
+  });
+});
+
+test('ordinary close keeps the inner hint for a failure reason it does not own', () => {
+  const { req, ref, sessionStore } = setup('ordinary-validation');
+  const failure = new AppError('INVALID_ARGS', 'script cannot be published', {
+    reason: 'unportable_ref',
+    hint: 'Re-record the action with a selector.',
+  });
+  vi.spyOn(sessionStore, 'writeSessionLog').mockReturnValue({ written: false, error: failure });
+
+  const result = finalizeOrdinaryCloseScript({
+    req,
+    ref,
+    sessionStore,
+    platformCloseError: undefined,
+  });
+
+  expect(result?.details).toMatchObject({
+    reason: 'unportable_ref',
+    hint: 'Re-record the action with a selector.',
+    retriable: false,
   });
 });
 
