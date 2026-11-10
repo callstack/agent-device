@@ -18,11 +18,11 @@ on:
   workflow_dispatch:
     inputs:
       runs:
-        description: 'Number of seeded interleavings to sweep'
+        description: 'Number of seeded interleavings to sweep (at most 20000)'
         required: false
         default: '5000'
       seed-start:
-        description: 'First seed in the sweep (default: run number x runs, a fresh range each run)'
+        description: 'First seed in the sweep (default: run number x 20000, a fresh range each run)'
         required: false
         default: ''
 
@@ -39,9 +39,11 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     env:
-      TORTURE_RUNS: ${{ github.event.inputs.runs || '5000' }}
-      # Job-level env would override a value written to GITHUB_ENV, so the step below sets the start.
+      # Job-level env would override a value written to GITHUB_ENV, so the step below sets both values.
+      RUNS_INPUT: ${{ github.event.inputs.runs || '5000' }}
       SEED_START_INPUT: ${{ github.event.inputs.seed-start }}
+      # Each run owns the seed range [run_number * stride, run_number * stride + runs).
+      SEED_STRIDE: '20000'
       # Standard scheduled-lane artifact envelope (#1430) built via the shared
       # scripts/lib/lane-envelope.ts (commit, tool/configHash, seed range, result);
       # the seed sweep rides in the typed data payload. Emitted by the test and
@@ -55,9 +57,21 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       # A seed fully determines execution order, so a fixed range only re-proves old seeds.
-      # Without an explicit start, each run sweeps the next unvisited range.
+      # Without an explicit start, each run sweeps its own disjoint range.
       - name: Choose the seed range
-        run: echo "TORTURE_SEED_START=${SEED_START_INPUT:-$((GITHUB_RUN_NUMBER * TORTURE_RUNS))}" >> "$GITHUB_ENV"
+        run: |
+          digits='^[0-9]+$'
+          if [[ ! "$RUNS_INPUT" =~ $digits ]] || (( 10#$RUNS_INPUT < 1 || 10#$RUNS_INPUT > SEED_STRIDE )); then
+            echo "::error::runs must be an integer from 1 to $SEED_STRIDE"
+            exit 1
+          fi
+          if [[ -n "$SEED_START_INPUT" && ! "$SEED_START_INPUT" =~ $digits ]]; then
+            echo "::error::seed-start must be a non-negative integer"
+            exit 1
+          fi
+          seed_start="${SEED_START_INPUT:-$((GITHUB_RUN_NUMBER * SEED_STRIDE))}"
+          echo "TORTURE_RUNS=$((10#$RUNS_INPUT))" >> "$GITHUB_ENV"
+          echo "TORTURE_SEED_START=$((10#$seed_start))" >> "$GITHUB_ENV"
 
       - name: Run concurrency torture sweep
         uses: ./.github/actions/run-gate
