@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { launchDaemonProcess } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
@@ -48,5 +48,35 @@ test.skipIf(process.platform === 'win32').for(['fresh', 'loose'])(
 
     assert.equal(fs.statSync(paths.baseDir).mode & 0o777, 0o700);
     assert.equal(fs.statSync(paths.logPath).mode & 0o777, 0o600);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a launched daemon leaves the modes of a state dir another user owns',
+  async () => {
+    const paths = resolveDaemonPaths(
+      path.join(mkdtempForTestSync('agent-device-launch-foreign-'), 'state'),
+    );
+    fs.mkdirSync(paths.baseDir, { mode: 0o755 });
+    fs.chmodSync(paths.baseDir, 0o755);
+    fs.writeFileSync(paths.logPath, '', { mode: 0o644 });
+    fs.chmodSync(paths.logPath, 0o644);
+    const owner = fs.statSync(paths.baseDir).uid;
+    const getuid = vi.spyOn(process, 'getuid').mockReturnValue(owner + 1);
+    try {
+      const launch = launchDaemonProcess({
+        env: process.env,
+        cwd: process.cwd(),
+        paths,
+        args: ['-e', ''],
+        serverMode: 'socket',
+      });
+      await launch.exited;
+    } finally {
+      getuid.mockRestore();
+    }
+
+    assert.equal(fs.statSync(paths.baseDir).mode & 0o777, 0o755);
+    assert.equal(fs.statSync(paths.logPath).mode & 0o777, 0o644);
   },
 );

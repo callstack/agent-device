@@ -277,6 +277,14 @@ export function createOwnedReplayStateDir(): OwnedReplayStateDir {
 }
 
 /** Launches and monitors the actual child before recording its private-directory authority. */
+/**
+ * Whether this process may repair the mode of a state path: only its owner can chmod it, and a
+ * state dir another user set up keeps the mode that user chose. Windows has no POSIX owner.
+ */
+function isOwnedByCurrentUser(stat: fs.Stats): boolean {
+  return process.getuid !== undefined && stat.uid === process.getuid();
+}
+
 export function launchDaemonProcess(
   input: Readonly<{
     paths: DaemonPaths;
@@ -296,10 +304,12 @@ export function launchDaemonProcess(
     });
   fs.mkdirSync(input.paths.baseDir, { recursive: true, mode: 0o700 });
   // A mode applies only at creation: an older launcher left these at the umask default.
-  fs.chmodSync(input.paths.baseDir, 0o700);
+  if (isOwnedByCurrentUser(fs.statSync(input.paths.baseDir))) {
+    fs.chmodSync(input.paths.baseDir, 0o700);
+  }
   const logFd = fs.openSync(input.paths.logPath, 'a', 0o600);
   try {
-    fs.fchmodSync(logFd, 0o600);
+    if (isOwnedByCurrentUser(fs.fstatSync(logFd))) fs.fchmodSync(logFd, 0o600);
     const monitored = runCmdDetachedMonitored(process.execPath, input.args, {
       cwd: input.cwd,
       env: {
