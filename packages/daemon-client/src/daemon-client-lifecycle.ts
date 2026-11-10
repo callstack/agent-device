@@ -525,6 +525,19 @@ export function attachSessionAddressHints(
   settings: DaemonClientSettings,
 ): DaemonResponse {
   if (!response.ok) {
+    if (
+      settings.remoteBaseUrl &&
+      response.error.details?.reason === 'fill_record_as_requires_armed_recording'
+    ) {
+      return {
+        ...response,
+        error: {
+          ...response.error,
+          message:
+            'fill --record-as requires an armed script recording, but remote clients cannot start one. Connect to a local daemon and run open --save-script first, or omit --record-as.',
+        },
+      };
+    }
     return settings.ownedStateDir && isHeldRepairDivergence(response)
       ? attachRepairSessionAddressHint(response, settings.paths.baseDir)
       : response;
