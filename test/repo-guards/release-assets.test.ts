@@ -12,7 +12,7 @@ const workflows = ['release-ios-runner.yml', 'release-android-snapshot-helper.ym
 type Step = { name: string; run?: string; env?: Record<string, string> };
 
 function fixture() {
-  const root = mkdtempForTestSync('release-assets-');
+  const root = fs.realpathSync(mkdtempForTestSync('release-assets-'));
   const scripts = path.join(root, 'scripts');
   const bin = path.join(root, 'bin');
   fs.mkdirSync(scripts);
@@ -53,9 +53,9 @@ function fixture() {
   tool('tar', 'printf archive > "$2"');
   tool(
     'plistbuddy',
-    `case "$2" in
+    `case "$3" in
   *xctestrun) printf '%s\\n' '__TESTROOT__/Runner.app' ;;
-  *) case "$1" in *CFBundleIdentifier*) printf '%s\\n' 'com.example.runner' ;; *) printf '%s\\n' 'Runner "quoted" \\ path' ;; esac ;;
+  *) case "$2" in *CFBundleIdentifier*) printf '%s\\n' 'com.example.runner' ;; *) printf '%s\\n' 'Runner "quoted" \\ path' ;; esac ;;
 esac`,
   );
   const ios = path.join(scripts, 'package-ios-simulator-runner.sh');
@@ -165,15 +165,15 @@ test('package scripts reject invalid input before build or output', () => {
   }
 });
 
-test('package manifests encode metadata and preserve their contracts', () => {
-  const f = fixture();
-  for (const [version, tag] of [
-    ['1.2.3', 'v1.2.3'],
-    ['1.2.3-dev', 'v1.2.3-dev'],
-    ['1.2.3-rc.1+build.42', 'v1.2.3-rc.1+build.42'],
-  ]) {
-    for (const helper of ['ios', 'snapshot', 'ime']) {
-      for (const repository of ['', 'owner/repo']) {
+for (const [version, tag] of [
+  ['1.2.3', 'v1.2.3'],
+  ['1.2.3-dev', 'v1.2.3-dev'],
+  ['1.2.3-rc.1+build.42', 'v1.2.3-rc.1+build.42'],
+]) {
+  for (const helper of ['ios', 'snapshot', 'ime']) {
+    for (const repository of ['', 'owner/repo']) {
+      test(`${helper} ${version} manifest encodes ${repository ? 'URL' : 'null URL'} metadata`, () => {
+        const f = fixture();
         const output = path.join(f.root, `${helper}-${version}-${repository ? 'url' : 'null'}`);
         const script =
           helper === 'ios' ? 'package-ios-simulator-runner.sh' : 'package-android-helper.sh';
@@ -220,7 +220,7 @@ test('package manifests encode metadata and preserve their contracts', () => {
             );
           }
         }
-      }
+      });
     }
   }
-});
+}

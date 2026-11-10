@@ -12,11 +12,10 @@ const RELEASE = new RegExp(`^${N}\\.${N}\\.${N}$`);
 const DEVELOPMENT = new RegExp(`^${N}\\.${N}\\.${N}-dev$`);
 const NIGHTLY = new RegExp(`^${N}\\.${N}\\.${N}-nightly\\.(\\d{8})\\.([1-9]\\d*)$`);
 
-// Asset tags accept SemVer prerelease and build identifiers in addition to stable versions.
 const ASSET_TAG =
   /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?![\s\S])/;
 
-export function isAssetReleaseTag(tag) {
+function isAssetReleaseTag(tag) {
   return ASSET_TAG.test(tag);
 }
 
