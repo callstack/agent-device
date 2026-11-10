@@ -38,15 +38,13 @@ export {
   resolveBindingSettings,
   resolveConfigBackedFlagDefaultsWithProvenance,
   type BindingSettings,
-} from './schema/cli-config.ts';
-export {
   assertSelectorHonorsDevicePin,
   pickExplicitSelector,
   resolveDevicePin,
   resolveSelectorOrigins,
   type DevicePin,
   type SelectorOrigins,
-} from './schema/device-pin.ts';
+} from './schema/cli-config.ts';
 export { mergeDefinedFlags } from './schema/merge-flags.ts';
 
 const daemonWriters = {

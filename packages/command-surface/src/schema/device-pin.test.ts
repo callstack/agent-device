@@ -3,14 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { pluginHome } from '@agent-device/test-kit';
-import { resolveConfigBackedFlagDefaultsWithProvenance } from './cli-config.ts';
 import {
   assertSelectorHonorsDevicePin,
   DEVICE_PIN_CONFLICT_REASON,
   DEVICE_PIN_WITHOUT_SELECTOR_REASON,
+  resolveConfigBackedFlagDefaultsWithProvenance,
   resolveDevicePin,
   resolveSelectorOrigins,
-} from './device-pin.ts';
+} from './cli-config.ts';
 
 const cliFlags = { help: false, version: false, json: false };
 

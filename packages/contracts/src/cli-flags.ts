@@ -57,7 +57,7 @@ export type CliFlags = CloudProviderProfileFields &
     perfTemplate?: string;
     sessionLock?: 'reject' | 'strip';
     // Turns the configured platform/device/udid/serial defaults into a pin; see command-surface's
-    // `device-pin.ts` for the one place the pin is enforced.
+    // `cli-config.ts` (`assertSelectorHonorsDevicePin`) for the one place the pin is enforced.
     devicePin?: boolean;
     platform?: PlatformSelector;
     target?: DeviceTarget;
