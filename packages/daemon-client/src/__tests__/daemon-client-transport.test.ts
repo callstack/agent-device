@@ -507,10 +507,13 @@ test.for([
   'a socket request $overBy bytes over the limit, without its newline, is sent: $sent',
   async ({ overBy, sent }, t) => {
     if (await skipWhenLoopbackUnavailable(t)) return;
-    let connections = 0;
+    let receivedBytes = 0;
+    // The server reads the whole request line, then drops the connection without answering.
     const server = net.createServer((socket) => {
-      connections += 1;
-      socket.destroy();
+      socket.on('data', (chunk: Buffer) => {
+        receivedBytes += chunk.length;
+        if (chunk.includes(0x0a)) socket.destroy();
+      });
     });
     const port = await listenOnLoopback(server);
     const request = (flow: string) => ({
@@ -536,7 +539,9 @@ test.for([
       );
       assert.ok(outcome instanceof AppError);
       assert.equal(outcome.details?.reason === 'daemon_request_too_large', !sent);
-      assert.equal(connections, sent ? 1 : 0);
+      if (!sent) assert.equal(outcome.details?.daemonRequestSent, false);
+      // The whole request and its framing newline reached the daemon, or nothing did.
+      assert.equal(receivedBytes, sent ? DAEMON_REQUEST_MAX_BYTES + 1 : 0);
     } finally {
       await closeLoopbackServer(server);
     }
