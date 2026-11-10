@@ -5,6 +5,7 @@ import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fix
 import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { scenarioName } from './coverage-manifest.ts';
 import { COORDINATE_COVERAGE } from './coordinate.coverage.ts';
+import { assertCoverageClaimsRegistered } from './coverage-registration.ts';
 import { settledWelcomeSnapshot, viewportOnlySnapshot } from './fixtures.ts';
 import { createContractDevice } from './runtime-harness.ts';
 import { runnerTapEntry, runnerTapErrorEntry, withIosContractDaemon } from './daemon-harness.ts';
@@ -112,3 +113,5 @@ test('coordinate resolutionDisclosure: inapplicable — no resolution field is a
     assert.equal(data.resolution, undefined);
   });
 });
+
+assertCoverageClaimsRegistered(COORDINATE_COVERAGE);

@@ -2,12 +2,15 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { runnerTapEntry, withIosContractDaemon } from './daemon-harness.ts';
+import { scenarioName } from './coverage-manifest.ts';
+import { assertCoverageClaimsRegistered } from './coverage-registration.ts';
+import { MAESTRO_DIRECT_SELECTOR_COVERAGE } from './maestro-direct-selector.coverage.ts';
 
 const MAESTRO_FLAGS = { maestro: { allowNonHittableCoordinateFallback: true } };
 
 // Permission is not usage: when the runner hits the element normally, the
 // completed dispatch is the direct-selector path, not the coordinate fallback.
-test('maestro-direct-selector responseConstruction and resolutionDisclosure: allowed fallback not taken keeps direct-iOS resolution', async () => {
+test(scenarioName(MAESTRO_DIRECT_SELECTOR_COVERAGE, 'responseConstruction'), async () => {
   await withIosContractDaemon(
     [runnerTapEntry({ x: 50, y: 60, message: 'tapped' })],
     async (daemon, transcript) => {
@@ -21,3 +24,5 @@ test('maestro-direct-selector responseConstruction and resolutionDisclosure: all
     },
   );
 });
+
+assertCoverageClaimsRegistered(MAESTRO_DIRECT_SELECTOR_COVERAGE);

@@ -5,6 +5,7 @@ import type { InteractionGuarantee } from '@agent-device/contracts/interaction-g
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { scenarioName } from './coverage-manifest.ts';
 import { NATIVE_REF_COVERAGE } from './native-ref.coverage.ts';
+import { assertCoverageClaimsRegistered } from './coverage-registration.ts';
 import {
   closedDrawerSnapshot,
   continueButtonSnapshot,
@@ -202,3 +203,5 @@ test(scenario('resolutionDisclosure'), async () => {
   assert.equal(result.kind, 'ref');
   assert.deepEqual(result.resolution, { source: 'ref', phase: 'pre-action', kind: 'exact' });
 });
+
+assertCoverageClaimsRegistered(NATIVE_REF_COVERAGE);

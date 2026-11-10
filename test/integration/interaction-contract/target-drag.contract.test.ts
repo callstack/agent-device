@@ -7,6 +7,7 @@ import { scenarioName } from './coverage-manifest.ts';
 import { assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { TARGET_DRAG_COVERAGE } from './target-drag.coverage.ts';
+import { assertCoverageClaimsRegistered } from './coverage-registration.ts';
 import {
   coveredButtonSnapshot,
   dragEndpointsSnapshot,
@@ -224,3 +225,5 @@ test(
   },
   PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
 );
+
+assertCoverageClaimsRegistered(TARGET_DRAG_COVERAGE);

@@ -11,9 +11,9 @@ import type {
  * scenarios), and `index.ts` aggregates them statically for the gate test in
  * `src/__tests__/contracts/interaction-contract-coverage.test.ts`.
  *
- * Scenario strings double as the vitest test titles — the test files derive
- * their titles from the manifest (via `scenarioName`/`scenarioNames`), so a
- * claim without a matching scenario cannot be written by accident.
+ * Scenario strings double as the vitest test titles. Each contract file calls
+ * `assertCoverageClaimsRegistered` (coverage-registration.ts), which fails when
+ * a manifest claim names no test registered in that file.
  */
 export type ContractCoverageEntry = {
   path: InteractionPathId;
