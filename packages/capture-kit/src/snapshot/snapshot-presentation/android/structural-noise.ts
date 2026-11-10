@@ -2,21 +2,26 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { areSameVisualRow, hasRenderableArea, isRectContainedBy } from './geometry.ts';
 import { normalizeStructuralNodeLabel, visibleNodeLabel } from './labels.ts';
 import { isEditableNode, isRootNode } from './predicates.ts';
-import { collectDescendants, markNodeAndDescendantsForRemoval } from './tree.ts';
+import {
+  collectDescendants,
+  markNodeAndDescendantsForRemoval,
+  type ChildrenByParent,
+} from './tree.ts';
 
 const ACTIONABLE_STRUCTURAL_TYPE_TOKENS = ['button', 'switch', 'checkbox', 'radio'];
 const STRUCTURAL_NOISE_TYPE_TOKENS = ['button', 'image', 'textview', 'view'];
 
 export function markUnlabeledActionRowsForPromotion(
   nodes: SnapshotNode[],
+  children: ChildrenByParent,
   removed: Set<number>,
   replacements: Map<number, SnapshotNode>,
 ): void {
   for (const node of nodes) {
     if (removed.has(node.index) || !isUnlabeledActionRow(node)) continue;
 
-    const descendants = collectDescendants(nodes, node.index);
-    const promotedContent = collectPromotableRowContent(descendants, node, removed);
+    const descendants = collectDescendants(children, node.index);
+    const promotedContent = collectPromotableRowContent(descendants, children, node, removed);
     if (!promotedContent.label) continue;
 
     replacements.set(node.index, {
@@ -25,13 +30,14 @@ export function markUnlabeledActionRowsForPromotion(
       label: promotedContent.label,
     });
     for (const descendantIndex of promotedContent.removableIndexes) {
-      markNodeAndDescendantsForRemoval(nodes, descendantIndex, removed);
+      markNodeAndDescendantsForRemoval(children, descendantIndex, removed);
     }
   }
 }
 
 export function markAdjacentDuplicateStructuralNodesForRemoval(
   nodes: SnapshotNode[],
+  children: ChildrenByParent,
   removed: Set<number>,
   replacements: Map<number, SnapshotNode>,
 ): void {
@@ -48,7 +54,7 @@ export function markAdjacentDuplicateStructuralNodesForRemoval(
     const previous = lastByLabel.get(label);
     if (previous && shouldCollapseAdjacentStructuralDuplicate(previous, node, removed)) {
       const survivor = collapseAdjacentStructuralDuplicate(
-        nodes,
+        children,
         previous,
         node,
         removed,
@@ -63,6 +69,7 @@ export function markAdjacentDuplicateStructuralNodesForRemoval(
 
 export function markRepeatedActionRowDescendantsForRemoval(
   nodes: SnapshotNode[],
+  children: ChildrenByParent,
   removed: Set<number>,
 ): void {
   for (const node of nodes) {
@@ -71,13 +78,13 @@ export function markRepeatedActionRowDescendantsForRemoval(
     const parentLabel = normalizeStructuralNodeLabel(visibleNodeLabel(node));
     if (!parentLabel) continue;
 
-    const repeatedDescendants = collectDescendants(nodes, node.index).filter(
+    const repeatedDescendants = collectDescendants(children, node.index).filter(
       (descendant) =>
         !removed.has(descendant.index) &&
         isRepeatedActionRowDescendant(node, descendant, parentLabel),
     );
     for (const descendant of repeatedDescendants.filter(isPassiveRowContent)) {
-      markNodeAndDescendantsForRemoval(nodes, descendant.index, removed);
+      markNodeAndDescendantsForRemoval(children, descendant.index, removed);
     }
 
     const repeatedControls = repeatedDescendants.filter(
@@ -91,7 +98,7 @@ export function markRepeatedActionRowDescendantsForRemoval(
     if (repeatedControls.length < 2 || repeatedControlLabels.size < 2) continue;
 
     for (const descendant of repeatedControls) {
-      markNodeAndDescendantsForRemoval(nodes, descendant.index, removed);
+      markNodeAndDescendantsForRemoval(children, descendant.index, removed);
     }
   }
 }
@@ -107,6 +114,7 @@ function isUnlabeledActionRow(node: SnapshotNode): boolean {
 
 function collectPromotableRowContent(
   descendants: SnapshotNode[],
+  children: ChildrenByParent,
   parent: SnapshotNode,
   removed: Set<number>,
 ): { label: string; removableIndexes: number[] } {
@@ -126,7 +134,7 @@ function collectPromotableRowContent(
     }
     if (
       removed.has(descendant.index) ||
-      !isPromotableRowContent(descendant, descendants) ||
+      !isPromotableRowContent(descendant, children) ||
       !isRectContainedBy(descendant.rect, parent.rect)
     ) {
       continue;
@@ -141,7 +149,7 @@ function collectPromotableRowContent(
   return { label: labels.join(', '), removableIndexes };
 }
 
-function isPromotableRowContent(node: SnapshotNode, descendants: SnapshotNode[]): boolean {
+function isPromotableRowContent(node: SnapshotNode, children: ChildrenByParent): boolean {
   if (isPassiveRowContent(node)) return true;
 
   // Jetpack Compose can expose a content description through a passive leaf
@@ -154,7 +162,7 @@ function isPromotableRowContent(node: SnapshotNode, descendants: SnapshotNode[])
     !isEditableNode(node) &&
     type.includes('view') &&
     visibleNodeLabel(node).trim().length > 0 &&
-    !descendants.some((candidate) => candidate.parentIndex === node.index)
+    !children.get(node.index)?.length
   );
 }
 
@@ -198,7 +206,7 @@ function shouldCollapseAdjacentStructuralDuplicate(
 }
 
 function collapseAdjacentStructuralDuplicate(
-  nodes: SnapshotNode[],
+  children: ChildrenByParent,
   previous: SnapshotNode,
   node: SnapshotNode,
   removed: Set<number>,
@@ -218,7 +226,7 @@ function collapseAdjacentStructuralDuplicate(
       collapsedHint,
     ),
   });
-  markNodeAndDescendantsForRemoval(nodes, collapsed.index, removed);
+  markNodeAndDescendantsForRemoval(children, collapsed.index, removed);
   return replacements.get(survivor.index) ?? survivor;
 }
 

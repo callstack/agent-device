@@ -6,7 +6,12 @@ import {
   markRepeatedActionRowDescendantsForRemoval,
   markUnlabeledActionRowsForPromotion,
 } from './structural-noise.ts';
-import { findAncestor, markNodeAndDescendantsForRemoval } from './tree.ts';
+import {
+  buildChildrenByParent,
+  findAncestor,
+  markNodeAndDescendantsForRemoval,
+  type ChildrenByParent,
+} from './tree.ts';
 
 export type AndroidHelperPresentationInput = {
   nodes: SnapshotNode[];
@@ -40,29 +45,35 @@ function filterAndroidHelperTextOutputNodes(nodes: SnapshotNode[]): SnapshotNode
   const removed = new Set<number>();
   const replacements = new Map<number, SnapshotNode>();
   const nodeIndex = new Map(nodes.map((node) => [node.index, node]));
-  markZeroAreaNodesForRemoval(nodes, removed);
-  markRectlessScrollableDescendantsForRemoval(nodes, nodeIndex, removed, replacements);
-  markUnlabeledActionRowsForPromotion(nodes, removed, replacements);
-  markRepeatedActionRowDescendantsForRemoval(nodes, removed);
-  markAdjacentDuplicateStructuralNodesForRemoval(nodes, removed, replacements);
+  const children = buildChildrenByParent(nodes);
+  markZeroAreaNodesForRemoval(nodes, children, removed);
+  markRectlessScrollableDescendantsForRemoval(nodes, nodeIndex, children, removed, replacements);
+  markUnlabeledActionRowsForPromotion(nodes, children, removed, replacements);
+  markRepeatedActionRowDescendantsForRemoval(nodes, children, removed);
+  markAdjacentDuplicateStructuralNodesForRemoval(nodes, children, removed, replacements);
 
   return nodes
     .filter((node) => !removed.has(node.index))
     .map((node) => replacements.get(node.index) ?? node);
 }
 
-function markZeroAreaNodesForRemoval(nodes: SnapshotNode[], removed: Set<number>): void {
+function markZeroAreaNodesForRemoval(
+  nodes: SnapshotNode[],
+  children: ChildrenByParent,
+  removed: Set<number>,
+): void {
   for (const node of nodes) {
     if (!node.rect || hasRenderableArea(node.rect) || isRootNode(node)) {
       continue;
     }
-    markNodeAndDescendantsForRemoval(nodes, node.index, removed);
+    markNodeAndDescendantsForRemoval(children, node.index, removed);
   }
 }
 
 function markRectlessScrollableDescendantsForRemoval(
   nodes: SnapshotNode[],
   nodeIndex: ReadonlyMap<number, SnapshotNode>,
+  children: ChildrenByParent,
   removed: Set<number>,
   replacements: Map<number, SnapshotNode>,
 ): void {
@@ -71,23 +82,18 @@ function markRectlessScrollableDescendantsForRemoval(
 
     const scrollAncestor = findAncestor(node, nodeIndex, isScrollableNode);
     if (scrollAncestor) {
-      addHiddenContentHint(replacements, scrollAncestor, inferRectlessNodeDirection(node, nodes));
+      addHiddenContentHint(replacements, scrollAncestor, inferRectlessNodeDirection(node, children));
     }
-    markNodeAndDescendantsForRemoval(nodes, node.index, removed);
+    markNodeAndDescendantsForRemoval(children, node.index, removed);
   }
 }
 
 function inferRectlessNodeDirection(
   node: SnapshotNode,
-  nodes: SnapshotNode[],
+  children: ChildrenByParent,
 ): 'above' | 'below' | null {
-  const renderedSiblingIndexes = nodes
-    .filter(
-      (candidate) =>
-        candidate.parentIndex === node.parentIndex &&
-        candidate.rect &&
-        hasRenderableArea(candidate.rect),
-    )
+  const renderedSiblingIndexes = (children.get(node.parentIndex) ?? [])
+    .filter((candidate) => candidate.rect && hasRenderableArea(candidate.rect))
     .map((candidate) => candidate.index);
   if (renderedSiblingIndexes.length === 0) return null;
 
