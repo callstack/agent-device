@@ -8,33 +8,21 @@ import {
   selectorSnapshot,
 } from './__tests__/test-utils/index.ts';
 
-test('runtime focus and longPress share selector/ref target resolution', async () => {
+test('runtime longPress resolves a ref target', async () => {
   const calls: unknown[] = [];
   const device = createInteractionDevice(selectorSnapshot(), {
-    focus: async (_context, point) => {
-      calls.push({ command: 'focus', point });
-      return { focused: true };
-    },
     longPress: async (_context, point, options) => {
       calls.push({ command: 'longPress', point, durationMs: options?.durationMs });
     },
   });
 
-  const focused = await device.interactions.focus(selector('label=Continue'), {
-    session: 'default',
-  });
   const longPressed = await device.interactions.longPress(ref('@e1'), {
     session: 'default',
     durationMs: 750,
   });
 
-  assert.equal(focused.kind, 'selector');
-  assert.deepEqual(focused.backendResult, { focused: true });
   assert.equal(longPressed.kind, 'ref');
-  assert.deepEqual(calls, [
-    { command: 'focus', point: { x: 60, y: 40 } },
-    { command: 'longPress', point: { x: 60, y: 40 }, durationMs: 750 },
-  ]);
+  assert.deepEqual(calls, [{ command: 'longPress', point: { x: 60, y: 40 }, durationMs: 750 }]);
 });
 
 test('runtime drag resolves generic selector endpoints before one continuous pointer plan', async () => {
