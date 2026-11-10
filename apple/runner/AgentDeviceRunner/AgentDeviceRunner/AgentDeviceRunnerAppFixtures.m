@@ -670,6 +670,7 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     BOOL witnessesReplacement =
         [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-witness"];
     UITextField *textField;
+    AgentDeviceSecureEntryField *secureField = nil;
     if (digitCountValue) {
       textField = [[AgentDeviceDigitCountTextField alloc] init];
     } else if (digitGroupingValue) {
@@ -682,7 +683,7 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     } else if (maskedValue) {
       textField = [[AgentDeviceMaskedTextField alloc] init];
     } else if (secureEntry) {
-      AgentDeviceSecureEntryField *secureField = [[AgentDeviceSecureEntryField alloc] init];
+      secureField = [[AgentDeviceSecureEntryField alloc] init];
       secureField.secureTextEntry = YES;
       secureField.reportsPlaceholderAsValue = bulletPlaceholder;
       secureField.refusesFirstFocus = refusesFirstFocus;
@@ -870,7 +871,7 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [self.maskedDeliveryStatus.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [self.maskedDeliveryStatus.topAnchor constraintEqualToAnchor:self.maskedToggleStatus.bottomAnchor constant:8],
       ]];
-      if (secureEntry) {
+      if (secureField) {
         UILabel *counts = [[UILabel alloc] init];
         counts.accessibilityIdentifier = @"agent-device-secure-entry-counts";
         counts.text = @"deletes=0 taps=0";
@@ -880,7 +881,7 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
           [counts.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
           [counts.topAnchor constraintEqualToAnchor:self.maskedDeliveryStatus.bottomAnchor constant:8],
         ]];
-        ((AgentDeviceSecureEntryField *)textField).countLabel = counts;
+        secureField.countLabel = counts;
       }
       [self updateMaskedToggleStatus];
     }
