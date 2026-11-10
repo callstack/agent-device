@@ -507,9 +507,10 @@ The same synthetic captures now match `--hide-touches`:
 
 The `after` column comes from this host's offline synthetic harness.
 It reproduces the failure and confirms preserved geometry after the fix.
-`test/integration/recording-overlay.test.ts` carries the on-device completion measurements for a non-rot90 target and Duo inner panel.
-`AGENT_DEVICE_RECORDING_E2E` enables this device-lane case.
-It compares touched export with a `--hide-touches` control.
+`test/integration/recording-overlay.test.ts` covers only the default iOS simulator.
+`AGENT_DEVICE_RECORDING_E2E` enables that case, and no CI lane sets it.
+On-device completion measurements for a non-rot90 target and a Duo inner panel are an open gap.
+The test compares touched export with a `--hide-touches` control.
 It asserts equal track size and verifies that the overlay drew touches.
 
 The device test reads transform-applied export dimensions through AVFoundation.
