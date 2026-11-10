@@ -97,9 +97,7 @@ test('ordinary publication failure retains its close action after making the err
     reason: 'target-exists',
     hint: 'Retry close.',
   });
-  vi.spyOn(sessionStore, 'writeSessionLog').mockImplementation(() => {
-    throw failure;
-  });
+  vi.spyOn(sessionStore, 'writeSessionLog').mockReturnValue({ written: false, error: failure });
 
   const result = finalizeOrdinaryCloseScript({
     req: { ...req, flags: { saveScript: true } },
@@ -169,4 +167,36 @@ test('#1533: an ordinary armed authoring session still publishes on bare close',
   ).toBeUndefined();
 
   expect(fs.readdirSync(sessionsDir)).toHaveLength(1);
+});
+
+test('ordinary close reports a filesystem failure of its script write instead of a quiet success', () => {
+  const root = mkdtempForTestSync('agent-device-session-close-script-fs-');
+  roots.push(root);
+  // A regular file where the target directory must be: mkdir fails with a raw ErrnoException.
+  const blocker = path.join(root, 'blocker');
+  fs.writeFileSync(blocker, '');
+  const targetPath = path.join(blocker, 'flow.ad');
+  const { req, ref, sessionStore } = setup(
+    'fs-failure',
+    makeIosSession('fs-failure', {
+      appBundleId: 'com.example.app',
+      scriptPublication: authoringPublication('armed', { path: targetPath }),
+      actions: [{ ts: 1, command: 'click', positionals: ['id="save"'], flags: {} }],
+    }),
+  );
+
+  const result = finalizeOrdinaryCloseScript({
+    req,
+    ref,
+    sessionStore,
+    platformCloseError: undefined,
+  });
+
+  expect(result).toBeInstanceOf(AppError);
+  expect(result).toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'script_write_failed', path: targetPath, retriable: false },
+  });
+  expect(result?.message).toContain('The session was closed, but its script was not saved');
+  expect(result?.message).toContain(targetPath);
 });

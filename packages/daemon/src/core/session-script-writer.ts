@@ -184,22 +184,11 @@ function prepareSessionScript(
 }
 
 /**
- * `write()`'s catch-block classifier, extracted verbatim (no behavior change):
- * diagnose, then route by whether the session is repair-armed.
+ * `write()`'s catch-block classifier: diagnose, then return the failure as a typed error.
  *
- * ADR 0012 decision 6, R4 + BLOCKER 2: a repair COMMIT failure must be
- * SURFACED (no-clobber refusal, bare-`@ref`, or a filesystem error alike) so
- * close/teardown can report it and keep the session for retry — never
- * swallowed into a silent `{written:false}`. Ordinary (non-repair) recording
- * keeps its existing SHAPE of behavior: an AppError still fails loud (thrown,
- * not swallowed into `{written:false}`) and any other fs error is a quiet
- * skip — but an AppError is no longer only theoretical here. Since
- * `publishHealedScriptAtomically` refuses ANY pre-existing target uniformly
- * (maintainer-approved: refuse-on-exist applies to ordinary recording too, not
- * just repair heals), an ordinary `open`/`close --save-script` write against
- * an existing target now throws that same no-clobber AppError, surfacing here
- * as a genuine "fails loud" case rather than the "none is raised on that path"
- * it was before that change.
+ * ADR 0012 decision 6, R4 + BLOCKER 2: every armed write failure (no-clobber refusal, bare-`@ref`,
+ * or a filesystem error alike) is returned as `{ written: false, error }`, never thrown and never
+ * swallowed, so close can report it and teardown can continue to retire the session.
  */
 function handleSessionScriptWriteFailure(params: {
   session: SessionState;
@@ -224,8 +213,22 @@ function handleSessionScriptWriteFailure(params: {
   if (activePublication) {
     return { written: false, error: toActivePublicationFailure(error, scriptPath) };
   }
-  if (error instanceof AppError) throw error;
-  return { written: false };
+  return { written: false, error: toOrdinaryWriteFailure(error, scriptPath) };
+}
+
+function toOrdinaryWriteFailure(error: unknown, scriptPath: string | undefined): AppError {
+  if (error instanceof AppError) return error;
+  const detail = error instanceof Error ? error.message : String(error);
+  return new AppError(
+    'COMMAND_FAILED',
+    `Failed to write the session script${scriptPath ? ` to ${scriptPath}` : ''}: ${detail}`,
+    {
+      reason: 'script_write_failed',
+      ...(scriptPath ? { path: scriptPath } : {}),
+      hint: 'Check the target path and its permissions, then re-record with open --save-script.',
+    },
+    error,
+  );
 }
 
 /**

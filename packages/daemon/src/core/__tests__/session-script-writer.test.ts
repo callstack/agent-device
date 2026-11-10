@@ -466,7 +466,10 @@ test('write(session) without { force: true } still refuses, even when a prior wr
   });
 
   // Default (no options / force omitted): refuse-on-exist, unchanged.
-  expect(() => writer.write(session)).toThrow(/already exists/);
+  expect(writer.write(session)).toMatchObject({
+    written: false,
+    error: { details: { reason: 'script_target_exists' } },
+  });
   expect(fs.readFileSync(outPath, 'utf8')).toBe(before);
 });
 
@@ -606,15 +609,33 @@ test('an ordinary (non-repair) recording now refuses an existing target too (beh
     actions: [action({ command: 'click', positionals: ['id="new"'] })],
   });
 
-  // Unlike a repair-armed write (which returns `{written:false, error}`), an
-  // ordinary (non-repair-armed) write's catch block RETHROWS an AppError
-  // (`write()`: `if (repairArmed) return {...}; if (error instanceof
-  // AppError) throw error;`) — so refusal here surfaces as a thrown error,
-  // not a returned result.
-  expect(() => writer.write(session)).toThrow(/already exists/);
+  expect(writer.write(session)).toMatchObject({
+    written: false,
+    error: { message: expect.stringMatching(/already exists/) },
+  });
   // The pre-existing target is left byte-for-byte unchanged — refused, not
   // clobbered.
   expect(fs.readFileSync(outPath, 'utf8')).toBe(before);
+});
+
+test('an ordinary recording returns a filesystem write failure as a typed error, never a quiet skip', () => {
+  const root = mkdtempForTestSync('agent-device-script-writer-ordinary-fs-failure-');
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
+  const blocker = path.join(root, 'blocker');
+  fs.writeFileSync(blocker, '');
+  const outPath = path.join(blocker, 'flow.ad');
+  const session = makeAuthoringSession('default', {
+    scriptPublication: authoringPublication('armed', { path: outPath }),
+    actions: [action({ command: 'click', positionals: ['id="new"'] })],
+  });
+
+  expect(writer.write(session)).toMatchObject({
+    written: false,
+    error: {
+      code: 'COMMAND_FAILED',
+      details: { reason: 'script_write_failed', path: outPath },
+    },
+  });
 });
 
 // (f) confirm the absent-target case still succeeds for ordinary recording —
