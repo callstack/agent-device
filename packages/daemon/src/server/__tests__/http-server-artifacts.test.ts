@@ -10,7 +10,7 @@ import {
   listDownloadableArtifacts,
   trackDownloadableArtifact,
 } from '../../resources/artifact-tracking.ts';
-import { runCmdSync } from '@agent-device/host-kit/command';
+import { runCmdSync, withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import {
   closeLoopbackServer,
   listenOnLoopback,
@@ -61,16 +61,62 @@ test(ANDROID_ARTIFACTS_CONTRACT_EVIDENCE.testName, async () => {
 
   try {
     assert.deepEqual(
-      (await listDownloadableArtifacts(undefined)).map((artifact) => artifact.filename),
+      (await listDownloadableArtifacts(undefined, process.env)).map(
+        (artifact) => artifact.filename,
+      ),
       ['public.txt'],
     );
     assert.deepEqual(
-      (await listDownloadableArtifacts('tenant-a')).map((artifact) => artifact.filename),
+      (await listDownloadableArtifacts('tenant-a', process.env)).map(
+        (artifact) => artifact.filename,
+      ),
       ['public.txt', 'tenant-a.txt'],
     );
     assert.deepEqual(
-      (await listDownloadableArtifacts('tenant-b')).map((artifact) => artifact.filename),
+      (await listDownloadableArtifacts('tenant-b', process.env)).map(
+        (artifact) => artifact.filename,
+      ),
       ['public.txt', 'tenant-b.txt'],
+    );
+  } finally {
+    for (const artifactId of artifactIds) {
+      cleanupDownloadableArtifact(artifactId);
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('downloadable artifact inventory skips directory artifacts that fail to archive', async () => {
+  const tempDir = mkdtempForTestSync('agent-device-artifacts-archive-error-');
+  const filePath = path.join(tempDir, 'report.json');
+  const tracePath = path.join(tempDir, '--profile.trace');
+  fs.writeFileSync(filePath, '{}\n');
+  fs.mkdirSync(tracePath, { recursive: true });
+  fs.writeFileSync(path.join(tracePath, 'metadata.json'), '{}\n');
+  const artifactIds = [
+    trackDownloadableArtifact({
+      artifactPath: filePath,
+      artifactType: 'test-report',
+      fileName: 'report.json',
+    }),
+    trackDownloadableArtifact({
+      artifactPath: tracePath,
+      artifactType: 'trace-log',
+      fileName: 'profile.trace',
+    }),
+  ];
+
+  try {
+    const artifacts = await withCommandExecutorOverride(
+      (cmd) => {
+        if (cmd !== 'tar') return undefined;
+        throw new Error('tar unavailable');
+      },
+      async () => await listDownloadableArtifacts(undefined, process.env),
+    );
+    assert.deepEqual(
+      artifacts.map((artifact) => artifact.filename),
+      ['report.json'],
     );
   } finally {
     for (const artifactId of artifactIds) {
@@ -111,8 +157,7 @@ test('daemon artifact inventory exposes directory artifacts as tar.gz downloads'
     assert.ok(artifact, `expected ${artifactId} in artifact inventory`);
     assert.equal(artifact.filename, 'profile.trace.tar.gz');
     assert.equal(artifact.mimeType, 'application/gzip');
-    // The archive is built on the first download, so the listing cannot know its size yet.
-    assert.equal(artifact.sizeBytes, undefined);
+    assert.ok(artifact.sizeBytes > 0);
 
     const consumingDownload = await fetch(
       `${baseUrl}/artifacts/${encodeURIComponent(artifactId)}?download=1`,
@@ -122,7 +167,7 @@ test('daemon artifact inventory exposes directory artifacts as tar.gz downloads'
     );
     assert.equal(consumingDownload.status, 200);
     assert.equal(consumingDownload.headers.get('content-type'), 'application/gzip');
-    assert.ok(Number(consumingDownload.headers.get('content-length')) > 0);
+    assert.equal(consumingDownload.headers.get('content-length'), String(artifact.sizeBytes));
     assert.match(
       consumingDownload.headers.get('content-disposition') ?? '',
       /profile\.trace\.tar\.gz/,
@@ -386,7 +431,7 @@ test('downloadable artifact inventory reports a screenshot display rotation only
   });
 
   try {
-    const inventory = await listDownloadableArtifacts(undefined);
+    const inventory = await listDownloadableArtifacts(undefined, process.env);
     const rotated = inventory.find((entry) => entry.id === rotatedId);
     const plain = inventory.find((entry) => entry.id === plainId);
     assert.equal(rotated?.displayRotation, 'landscape-right');

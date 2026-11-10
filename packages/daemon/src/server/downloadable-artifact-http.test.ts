@@ -185,7 +185,7 @@ test('a completed download is not destroyed or cleaned up twice after its 200 re
   );
 });
 
-test.each(['lone', 'shared'] as const)(
+test.each(['lone', 'shared', 'inventory'] as const)(
   'a client abort cancels its preparation during a %s archive build',
   async (kind) => {
     const started = deferred();
@@ -208,18 +208,35 @@ test.each(['lone', 'shared'] as const)(
           try {
             fixture.start();
             await started.promise;
-            if (kind === 'shared') {
-              second = fetch(fixture.url, { headers: { authorization: 'Bearer fu-art-secret' } });
+            if (kind !== 'lone') {
+              const url =
+                kind === 'inventory'
+                  ? fixture.url.slice(0, fixture.url.lastIndexOf('/'))
+                  : fixture.url;
+              second = fetch(url, { headers: { authorization: 'Bearer fu-art-secret' } });
               void second.catch(() => {});
               await vi.waitFor(() => expect(fixture.receivedRequests()).toBe(2));
             }
             fixture.abortClient();
             await vi.waitFor(() => expect(fixture.closedResponses()).toBe(1));
-            expect(archiveSignal?.aborted).toBe(kind === 'lone');
+            if (kind !== 'inventory') expect(archiveSignal?.aborted).toBe(kind === 'lone');
             proceed.resolve();
             if (second) {
-              const response = await second;
+              let response = await second;
               expect(response.status).toBe(200);
+              if (kind === 'inventory') {
+                expect(await response.json()).toMatchObject({
+                  artifacts: [
+                    { id: fixture.url.split('/').at(-1), filename: 'capture.trace.tar.gz' },
+                  ],
+                });
+                expect(archiveSignal?.aborted).toBe(false);
+                expect(fs.existsSync(fixture.source)).toBe(true);
+                response = await fetch(fixture.url, {
+                  headers: { authorization: 'Bearer fu-art-secret' },
+                });
+                expect(response.status).toBe(200);
+              }
               const bytes = Buffer.from(await response.arrayBuffer());
               expect(bytes).toHaveLength(Number(response.headers.get('content-length')));
               expect(gunzipSync(bytes).includes(expected)).toBe(true);

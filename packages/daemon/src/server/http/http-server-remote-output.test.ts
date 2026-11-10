@@ -400,7 +400,7 @@ test.each(['local', 'local-client-destination', 'remote'] as const)(
           cleanupDownloadableArtifact(artifactId!);
         } else {
           expect(artifactId).toBeUndefined();
-          const inventory = await listDownloadableArtifacts(undefined);
+          const inventory = await listDownloadableArtifacts(undefined, {});
           expect(
             inventory.some(
               ({ filename }) => filename === 'caller.mp4' || filename === 'copied.mp4',

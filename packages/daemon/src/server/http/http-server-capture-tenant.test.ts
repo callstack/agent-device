@@ -121,10 +121,10 @@ test.each([false, true])(
       if (!stopped.ok) return;
       const artifactId = stopped.data?.artifacts?.[0]?.artifactId;
       expect(artifactId).toBeTypeOf('string');
-      expect(await listDownloadableArtifacts('tenant-b')).toEqual([]);
-      expect((await listDownloadableArtifacts(tenantId)).some(({ id }) => id === artifactId)).toBe(
-        true,
-      );
+      expect(await listDownloadableArtifacts('tenant-b', {})).toEqual([]);
+      expect(
+        (await listDownloadableArtifacts(tenantId, {})).some(({ id }) => id === artifactId),
+      ).toBe(true);
 
       const recovered = await stop();
       expect(recovered.ok, JSON.stringify(recovered)).toBe(true);

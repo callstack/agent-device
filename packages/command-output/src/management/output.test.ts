@@ -256,30 +256,16 @@ describe('artifactsCliOutput', () => {
             createdAt: '2026-07-02T12:00:00.000Z',
             expiresAt: '2026-07-02T12:15:00.000Z',
           },
-          {
-            id: 'artifact-2',
-            artifactType: 'trace-log',
-            filename: 'capture.trace.tar.gz',
-            mimeType: 'application/gzip',
-            createdAt: '2026-07-02T12:00:00.000Z',
-            expiresAt: '2026-07-02T12:15:00.000Z',
-          },
         ],
       },
     });
 
     expect(output.text).toBe(
-      [
-        'screenshot.png (screenshot): application/octet-stream 123 bytes id=artifact-1',
-        'capture.trace.tar.gz (trace-log): application/gzip id=artifact-2',
-      ].join('\n'),
+      'screenshot.png (screenshot): application/octet-stream 123 bytes id=artifact-1',
     );
     expect(output.data).toMatchObject({
       source: 'daemon',
-      artifacts: [
-        { id: 'artifact-1', artifactType: 'screenshot', filename: 'screenshot.png' },
-        { id: 'artifact-2', artifactType: 'trace-log', filename: 'capture.trace.tar.gz' },
-      ],
+      artifacts: [{ id: 'artifact-1', artifactType: 'screenshot', filename: 'screenshot.png' }],
     });
   });
 });

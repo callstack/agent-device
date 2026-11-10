@@ -17,44 +17,75 @@ import {
   type OpenedDownloadableArtifact,
 } from './artifact-tracking.ts';
 
-test('listing a directory artifact builds no archive until its first download', async () => {
-  const root = mkdtempForTestSync('fu-art-inventory-lazy-');
-  const artifactPath = path.join(root, 'capture.trace');
-  fs.mkdirSync(artifactPath);
-  fs.writeFileSync(path.join(artifactPath, 'payload'), 'directory artifact');
-  const runtime = createRuntimeStateHandle();
-  const archive = vi.spyOn(command, 'runCmd');
-  const downloads: OpenedDownloadableArtifact[] = [];
-  try {
-    const id = runtime.run(() =>
-      trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
-    );
-    const listed = await runtime.run(() => listDownloadableArtifacts(undefined));
-    expect(listed).toEqual([
-      expect.objectContaining({
-        id,
-        filename: 'capture.trace.tar.gz',
-        mimeType: 'application/gzip',
-      }),
-    ]);
-    expect(listed[0]).not.toHaveProperty('sizeBytes');
-    expect(archive).not.toHaveBeenCalled();
-
-    const download = await runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
-    downloads.push(download);
-    expect(archive).toHaveBeenCalledTimes(1);
-    const relisted = await runtime.run(() => listDownloadableArtifacts(undefined));
-    expect(relisted[0]?.sizeBytes).toBe(download.sizeBytes);
-  } finally {
-    for (const download of downloads) {
-      download.stream.destroy();
-      await vi.waitFor(() => expect(download.stream.closed).toBe(true));
-      download.release();
+test.each(['cleanup', 'expiry'] as const)(
+  '%s aborts an inventory-only archive and removes its source after tar settles',
+  async (trigger) => {
+    const root = mkdtempForTestSync('fu-art-inventory-expiry-');
+    const artifactPath = path.join(root, 'capture.trace');
+    fs.mkdirSync(artifactPath);
+    fs.writeFileSync(path.join(artifactPath, 'payload'), 'pending inventory archive');
+    const runtime = createRuntimeStateHandle();
+    let start!: () => void;
+    const started = new Promise<void>((resolve) => {
+      start = resolve;
+    });
+    let finish!: () => void;
+    const stopped = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    let archivePath = '';
+    let signal: AbortSignal | undefined;
+    const runCmd = command.runCmd;
+    const archive = vi.spyOn(command, 'runCmd').mockImplementationOnce(async (...args) => {
+      archivePath = String(args[1]?.[1]);
+      signal = args[2]?.signal;
+      fs.writeFileSync(archivePath, 'partial tar output');
+      start();
+      await stopped;
+      return await runCmd(...args);
+    });
+    let listing: ReturnType<typeof listDownloadableArtifacts> | undefined;
+    try {
+      const timers = vi.spyOn(globalThis, 'setTimeout');
+      let id: string;
+      let expire: (() => void) | undefined;
+      try {
+        id = runtime.run(() =>
+          trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
+        );
+        expire = timers.mock.calls.find(([, delay]) => delay === 15 * 60 * 1000)?.[0];
+      } finally {
+        timers.mockRestore();
+      }
+      listing = runtime.run(() => listDownloadableArtifacts(undefined, process.env));
+      await started;
+      expect(fs.existsSync(archivePath)).toBe(true);
+      if (trigger === 'expiry') {
+        expect(expire).toBeTypeOf('function');
+        runtime.run(() => expire!());
+      } else {
+        runtime.run(() => cleanupDownloadableArtifact(id));
+      }
+      expect(signal?.aborted).toBe(true);
+      expect(signal?.reason).toMatchObject({
+        code: 'COMMAND_FAILED',
+        details: { reason: 'RESOURCE_EXPIRED' },
+      });
+      expect(fs.existsSync(artifactPath)).toBe(true);
+      expect(fs.existsSync(archivePath)).toBe(true);
+      finish();
+      expect(await listing).toEqual([]);
+      expect(fs.existsSync(artifactPath)).toBe(false);
+      expect(fs.existsSync(path.dirname(archivePath))).toBe(false);
+      expect(archive).toHaveBeenCalledTimes(1);
+    } finally {
+      finish();
+      if (listing) await listing;
+      runtime.dispose();
+      archive.mockRestore();
     }
-    runtime.dispose();
-    archive.mockRestore();
-  }
-});
+  },
+);
 
 test('a missing cached directory archive is rebuilt from the live source', async () => {
   const root = mkdtempForTestSync('fu-art-cache-rebuild-');
