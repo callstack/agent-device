@@ -107,7 +107,7 @@ function unusable(
 function isScreenOwnedByMeaningfulSystemSurface(summary: AndroidHelperXmlSummary): boolean {
   return (
     summary.windowRootCount > 0 &&
-    summary.applicationWindowRootCount === 0 &&
+    summary.applicationWindowRootCount === summary.systemApplicationWindowRootCount &&
     summary.activeSystemSurfaceMeaningfulNodeCount >= MIN_SYSTEM_SURFACE_MEANINGFUL_NODES
   );
 }
@@ -189,6 +189,8 @@ type AndroidHelperXmlSummary = {
   systemUiNodeCount: number;
   windowRootCount: number;
   applicationWindowRootCount: number;
+  /** Application windows owned by the framework, such as ResolverActivity and ChooserActivity. */
+  systemApplicationWindowRootCount: number;
   activeSystemSurfaceMeaningfulNodeCount: number;
   meaningfulNodeCount: number;
   applicationMeaningfulNodeCount: number;
@@ -204,6 +206,7 @@ type AndroidHelperXmlSummary = {
 type AndroidHelperXmlSummaryState = Omit<AndroidHelperXmlSummary, 'windowTypes'> & {
   currentWindowType?: number;
   currentWindowActiveOrFocused?: boolean;
+  currentWindowSystemOwned?: boolean;
   windowTypes: Set<number>;
 };
 
@@ -228,6 +231,7 @@ function createAndroidHelperXmlSummaryState(
     systemUiNodeCount: 0,
     windowRootCount: 0,
     applicationWindowRootCount: 0,
+    systemApplicationWindowRootCount: 0,
     activeSystemSurfaceMeaningfulNodeCount: 0,
     meaningfulNodeCount: 0,
     applicationMeaningfulNodeCount: 0,
@@ -270,10 +274,12 @@ function recordAndroidHelperWindowNode(
 
   summary.currentWindowType = node.windowType;
   summary.currentWindowActiveOrFocused = node.windowActive === true || node.windowFocused === true;
+  summary.currentWindowSystemOwned = isExplicitAndroidSystemPackage(node.packageName);
   summary.windowRootCount += 1;
   summary.windowTypes.add(node.windowType);
   if (node.windowType === ANDROID_WINDOW_TYPE_APPLICATION) {
     summary.applicationWindowRootCount += 1;
+    if (summary.currentWindowSystemOwned) summary.systemApplicationWindowRootCount += 1;
   }
 }
 
@@ -306,10 +312,14 @@ function recordMeaningfulWindowOwnership(
   }
 }
 
+// Framework activities such as the share sheet's ChooserActivity and ResolverActivity run in an
+// application window owned by the `android` package (Android 13 and older, and some AOSP builds),
+// so they count as a system surface rather than as missing app content.
 function isInActiveSystemSurfaceWindow(summary: AndroidHelperXmlSummaryState): boolean {
   return (
     summary.currentWindowType !== undefined &&
-    summary.currentWindowType !== ANDROID_WINDOW_TYPE_APPLICATION &&
+    (summary.currentWindowType !== ANDROID_WINDOW_TYPE_APPLICATION ||
+      summary.currentWindowSystemOwned === true) &&
     summary.currentWindowActiveOrFocused === true
   );
 }
@@ -345,6 +355,7 @@ function finalizeAndroidHelperXmlSummary(
     systemUiNodeCount: summary.systemUiNodeCount,
     windowRootCount: summary.windowRootCount,
     applicationWindowRootCount: summary.applicationWindowRootCount,
+    systemApplicationWindowRootCount: summary.systemApplicationWindowRootCount,
     activeSystemSurfaceMeaningfulNodeCount: summary.activeSystemSurfaceMeaningfulNodeCount,
     meaningfulNodeCount: summary.meaningfulNodeCount,
     applicationMeaningfulNodeCount: summary.applicationMeaningfulNodeCount,
