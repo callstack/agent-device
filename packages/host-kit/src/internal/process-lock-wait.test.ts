@@ -23,13 +23,17 @@ vi.mock('./exec.ts', async (importOriginal) => {
   };
 });
 
-import { acquireProcessLock } from './process-lock.ts';
+import type * as ProcessLock from './process-lock.ts';
 import { writeLockOwnerFixture } from './process-lock.fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 let tmpDir: string;
+let acquireProcessLock: typeof ProcessLock.acquireProcessLock;
 
-beforeEach(() => {
+// A fresh module per test starts with this process's own identity unread, as a new daemon does.
+beforeEach(async () => {
+  vi.resetModules();
+  ({ acquireProcessLock } = await import('./process-lock.ts'));
   tmpDir = mkdtempForTestSync('agent-device-process-lock-wait-');
   processToolRuns.sync = 0;
   processToolRuns.async = 0;
@@ -62,10 +66,23 @@ test('waiting behind a live owner reads its identity off the event loop, about o
   );
 
   assert.equal(processToolRuns.sync, 0, 'a waiter blocked the event loop on the process tool');
-  // One read when the wait starts, one when the reused observation expires, one for the timeout
-  // report: never one per 100 ms poll.
+  // Two runs for this process's own identity, then one owner read when the wait starts, one when
+  // the reused observation expires, and one for the timeout report: never one per 100 ms poll.
   assert.ok(
-    processToolRuns.async <= 3,
+    processToolRuns.async >= 1 && processToolRuns.async <= 5,
     `the waiter ran the process tool ${processToolRuns.async} times`,
   );
+});
+
+// The guard a waiter takes names its holder, and this process's own start time is not read yet in a
+// fresh module: taking and giving back the lock must still never block on the process tool.
+test('acquiring and releasing a free lock reads this process identity off the event loop', async () => {
+  const release = await acquireProcessLock({
+    lockDirPath: path.join(tmpDir, 'free.lock'),
+    owner: { pid: process.pid, startTime: null, acquiredAtMs: Date.now() },
+  });
+  await release();
+
+  assert.equal(processToolRuns.sync, 0, 'taking the guard blocked on the process tool');
+  assert.ok(processToolRuns.async >= 1, 'this process identity was never read');
 });

@@ -17,6 +17,7 @@ import {
   isProcessPid,
   ownerIdentityMatches,
   readCurrentOwnerIdentity,
+  readCurrentOwnerIdentityAsync,
   type OwnerLiveness,
 } from './owner-identity.ts';
 import { sleep } from './retry.ts';
@@ -170,17 +171,23 @@ export function tryAcquireProcessLock(params: ProcessLockOptions): ProcessLockAt
     reading.kind === 'owner' ? classifyOwnerLiveness({ owner: reading.owner }) : undefined;
   return attemptProcessLock(params, {
     standing: judgeStandingClaim(reading, liveness),
+    judgeOwner: (owner) => classifyOwnerLiveness({ owner }),
     abandonedGuard: findAbandonedGuard(
       params.lockDirPath,
       (holder) => readHostProcessIdentityObservations([holder.pid]).get(holder.pid) ?? null,
     ),
+    guardHolderStartTime: readCurrentOwnerIdentity().startTime,
   });
 }
 
 /** What a contender judged before it made an attempt, with every process probe already spent. */
 type AttemptEvidence = Readonly<{
   standing: StandingClaimJudgment;
+  /** Judges an owner record the attempt reports on; it must not probe on an async path. */
+  judgeOwner: (owner: ProcessLockOwnerRecord) => OwnerLiveness;
   abandonedGuard: AbandonedGuard | undefined;
+  /** This process's start time, recorded in a guard it takes. */
+  guardHolderStartTime: string | null;
 }>;
 
 function attemptProcessLock(
@@ -190,8 +197,8 @@ function attemptProcessLock(
   const { lockDirPath } = params;
   const judgment = evidence.standing;
   if (judgment.kind === 'live') return { status: 'busy', inspection: judgment.inspection };
-  if (!holdReclaimMutex(lockDirPath, evidence.abandonedGuard)) {
-    return { status: 'busy', inspection: inspectProcessLock(lockDirPath) };
+  if (!holdReclaimMutex(lockDirPath, evidence.abandonedGuard, evidence.guardHolderStartTime)) {
+    return { status: 'busy', inspection: inspectProcessLockWith(lockDirPath, evidence.judgeOwner) };
   }
   const outcome = withMutationGuardHeld(
     lockDirPath,
@@ -205,7 +212,7 @@ function attemptProcessLock(
   }
   return {
     status: outcome.status,
-    inspection: outcome.inspection ?? inspectProcessLock(lockDirPath),
+    inspection: outcome.inspection ?? inspectProcessLockWith(lockDirPath, evidence.judgeOwner),
   };
 }
 
@@ -365,6 +372,7 @@ export async function acquireProcessLockAcquisition(
   const pollMs = params.pollMs ?? DEFAULT_LOCK_POLL_MS;
   const ownerFilePath = path.join(params.lockDirPath, OWNER_FILE_NAME);
   const observedOwner = createOwnerObservationReuse();
+  const guardHolderStartTime = (await readCurrentOwnerIdentityAsync()).startTime;
   fs.mkdirSync(path.dirname(params.lockDirPath), { recursive: true });
   do {
     if (params.signal?.aborted) throw createRequestCanceledError();
@@ -375,7 +383,13 @@ export async function acquireProcessLockAcquisition(
     const abandonedGuard = await findAbandonedGuardAsync(params.lockDirPath);
     const attempt = attemptProcessLock(params, {
       standing: judgeStandingClaim(reading, liveness),
+      // A record that changed since it was judged is reported without a fresh probe.
+      judgeOwner: (owner) =>
+        reading.kind === 'owner' && liveness && isSameClaim(owner, reading.owner)
+          ? liveness
+          : 'unknown',
       abandonedGuard,
+      guardHolderStartTime,
     });
     if (attempt.status === 'acquired') return attempt.acquisition;
     const remaining = deadline - Date.now();
@@ -591,17 +605,21 @@ const GUARD_TOKEN = /^[0-9a-f-]{36}$/;
  * see {@link reapAbandonedGuard}. Legacy age-based rmdir cannot remove this file, so fresh legacy
  * reclaim admission fails.
  */
-function holdReclaimMutex(lockDirPath: string, abandoned: AbandonedGuard | undefined): boolean {
-  if (createReclaimMutex(lockDirPath)) return true;
+function holdReclaimMutex(
+  lockDirPath: string,
+  abandoned: AbandonedGuard | undefined,
+  holderStartTime: string | null,
+): boolean {
+  if (createReclaimMutex(lockDirPath, holderStartTime)) return true;
   if (!abandoned || !reapAbandonedGuard(lockDirPath, abandoned)) return false;
-  return createReclaimMutex(lockDirPath);
+  return createReclaimMutex(lockDirPath, holderStartTime);
 }
 
-function createReclaimMutex(lockDirPath: string): boolean {
+function createReclaimMutex(lockDirPath: string, holderStartTime: string | null): boolean {
   const mutexPath = reclaimMutexPath(lockDirPath);
   const holder: GuardHolder = {
     pid: process.pid,
-    startTime: readCurrentOwnerIdentity().startTime,
+    startTime: holderStartTime,
     token: crypto.randomUUID(),
   };
   let descriptor: number;
@@ -724,7 +742,10 @@ async function findAbandonedGuardAsync(lockDirPath: string): Promise<AbandonedGu
  */
 async function waitForReclaimMutex(lockDirPath: string): Promise<boolean> {
   const deadline = Date.now() + RELEASE_GUARD_WAIT_MS;
-  while (!holdReclaimMutex(lockDirPath, await findAbandonedGuardAsync(lockDirPath))) {
+  const holderStartTime = (await readCurrentOwnerIdentityAsync()).startTime;
+  while (
+    !holdReclaimMutex(lockDirPath, await findAbandonedGuardAsync(lockDirPath), holderStartTime)
+  ) {
     if (Date.now() >= deadline) return false;
     await sleep(RELEASE_GUARD_POLL_MS);
   }

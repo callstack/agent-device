@@ -193,13 +193,13 @@ test('one identity read answers a whole fleet from two ps runs, on Linux and mac
       [303, { startTime: null, command: null, zombie: null }],
     ],
   );
-  assert.equal(mockRunCmd.mock.calls.length, 2);
-  assert.deepEqual(mockRunCmd.mock.calls[0]?.[1], [
-    '-p',
-    '101,202,303',
-    '-o',
-    'pid=,state=,lstart=',
-  ]);
+  assert.deepEqual(
+    mockRunCmd.mock.calls.map((call) => call[1]),
+    [
+      ['-p', '101,202,303', '-o', 'pid=,state=,lstart='],
+      ['-p', '101,202,303', '-o', 'pid=,command='],
+    ],
+  );
   assert.equal(mockRunCmdSync.mock.calls.length, 0, 'the identity read never blocks the loop');
 });
 

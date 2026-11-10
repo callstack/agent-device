@@ -4,6 +4,7 @@ import {
   isProcessZombie,
   readHostProcessIdentityObservations,
   readHostProcessIdentityObservationsAsync,
+  readProcessIdentityFacts,
   readProcessStartTime,
   type HostProcessIdentityObservation,
 } from './host-process.ts';
@@ -33,12 +34,25 @@ let currentOwnerIdentity: Readonly<OwnerIdentity> | undefined;
  * not kept: the next call asks the host again rather than recording an owner without one.
  */
 export function readCurrentOwnerIdentity(): OwnerIdentity {
-  if (currentOwnerIdentity?.pid !== process.pid) {
-    const identity = { pid: process.pid, startTime: readProcessStartTime(process.pid) };
-    if (identity.startTime === null) return identity;
-    currentOwnerIdentity = Object.freeze(identity);
-  }
-  return { ...currentOwnerIdentity };
+  return rememberedOwnerIdentity() ?? rememberOwnerIdentity(readProcessStartTime(process.pid));
+}
+
+/** {@link readCurrentOwnerIdentity} for a caller that is already waiting: no blocking `ps`. */
+export async function readCurrentOwnerIdentityAsync(): Promise<OwnerIdentity> {
+  return (
+    rememberedOwnerIdentity() ??
+    rememberOwnerIdentity((await readProcessIdentityFacts(process.pid)).startTime)
+  );
+}
+
+function rememberedOwnerIdentity(): OwnerIdentity | undefined {
+  return currentOwnerIdentity?.pid === process.pid ? { ...currentOwnerIdentity } : undefined;
+}
+
+function rememberOwnerIdentity(startTime: string | null): OwnerIdentity {
+  const identity = { pid: process.pid, startTime };
+  if (startTime !== null) currentOwnerIdentity = Object.freeze({ ...identity });
+  return identity;
 }
 
 export function ownerIdentityMatches(
