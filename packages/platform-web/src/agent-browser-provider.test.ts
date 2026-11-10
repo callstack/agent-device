@@ -149,22 +149,17 @@ test('agent-browser provider keeps typed text out of argv and error details when
       );
     };
     await withCommandExecutorOverride(executor, async () => {
-      for (const attempt of [
-        async () => await provider.fillRef?.('@e9', secret),
-        () => provider.typeText(secret),
-        () => provider.fill(11, 22, secret),
-      ]) {
+      for (const [attempt, command, hint] of [
+        [async () => await provider.fillRef?.('@e9', secret), 'fill', /snapshot -i/],
+        [() => provider.typeText(secret), 'keyboard type', /Focus the field again/],
+        [() => provider.fill(11, 22, secret), 'keyboard type', /Focus the field again/],
+      ] as const) {
         await assert.rejects(attempt, (error: unknown) => {
           assert.ok(error instanceof AppError);
           assert.equal(error.code, 'COMMAND_FAILED');
-          assert.match(error.message, /^agent-browser (fill|keyboard type) failed/);
+          assert.ok(error.message.startsWith(`agent-browser ${command} failed`), error.message);
           assert.equal(error.details?.reason, 'text-entry-failed');
-          assert.match(
-            String(error.details?.hint),
-            error.message.startsWith('agent-browser fill')
-              ? /snapshot -i/
-              : /Focus the field again/,
-          );
+          assert.match(String(error.details?.hint), hint);
           assert.equal(error.message.includes(secret), false);
           assert.equal(JSON.stringify(error.details).includes(secret), false);
           return true;
