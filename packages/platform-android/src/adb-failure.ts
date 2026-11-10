@@ -292,15 +292,13 @@ export function androidDiscoveryCommandError(
   fallbackHint: string,
 ): AppError {
   const failure = classifyAndroidAdbFailure(result.stderr, result.stdout);
-  return new AppError(
-    'COMMAND_FAILED',
-    message,
-    execFailureDetails(result, {
-      hint: failure?.hint ?? fallbackHint,
-      ...(failure ? { adbFailure: failure.reason } : {}),
-      ...(failure?.retriable === undefined ? {} : { retriable: failure.retriable }),
-    }),
-  );
+  // The adb classification is spread last: an xcrun-style stderr line must not replace it.
+  return new AppError('COMMAND_FAILED', message, {
+    ...execFailureDetails(result),
+    hint: failure?.hint ?? fallbackHint,
+    ...(failure ? { adbFailure: failure.reason } : {}),
+    ...(failure?.retriable === undefined ? {} : { retriable: failure.retriable }),
+  });
 }
 
 export function attachAndroidDiscoveryTimeout<T>(error: T): T {

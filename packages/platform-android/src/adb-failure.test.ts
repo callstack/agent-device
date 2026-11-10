@@ -142,6 +142,21 @@ test('ADB discovery classifies transport failures from stderr without trusting s
   assert.match(String(versionMismatch.details?.hint), /Multiple adb installs conflict/);
 });
 
+test('ADB discovery keeps its own hint when stderr also carries an xcrun-style line', () => {
+  const error = androidDiscoveryCommandError(
+    'adb devices failed',
+    {
+      stdout: '',
+      stderr: 'xcrun: error: unable to find utility "adb", not a developer tool or in PATH',
+      exitCode: 1,
+    },
+    'fallback',
+  );
+
+  assert.equal(error.details?.hint, 'fallback');
+  assert.equal(error.details?.processExitError, true);
+});
+
 test('attachAdbFailureHint classifies timeouts first and never overwrites a site hint', () => {
   const timeout = attachAdbFailureHint(
     new AppError('COMMAND_FAILED', 'adb shell failed', {
