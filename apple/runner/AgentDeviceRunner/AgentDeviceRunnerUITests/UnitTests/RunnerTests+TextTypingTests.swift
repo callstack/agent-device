@@ -639,7 +639,7 @@ extension RunnerTests {
   }
 
   // Deletes from a caret moved to the start reach none of the text, so the clear falls back to the caret
-  // tap at the right edge, which in this fixture lands on the toggle: the limit `fill`'s docs name.
+  // tap at the right edge, which in this fixture lands on the toggle.
   @MainActor
   func testMaskedTextTheDeletesCannotReachFallsBackToTheCaretTap() throws {
     app.launchArguments = [

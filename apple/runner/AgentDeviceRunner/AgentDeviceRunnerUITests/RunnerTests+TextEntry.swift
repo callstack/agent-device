@@ -436,14 +436,13 @@ extension RunnerTests {
       }
       let burst = Self.textClearBurst(valueLength: valueLength)
       reader.dispatch { input.element.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: burst)) }
-      // An input that stops answering (#3060) has had its one burst, as below.
-      guard let cleared = try reader.input() else {
-        return
-      }
-      let shown = maskedTextShown(by: cleared)
-      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_CLEAR route=masked-deletes shown=%@", String(describing: shown))
-      if shown != .text {
-        return
+      // An input that stops answering (#3060) goes on to the caret tap and burst below.
+      if let cleared = try reader.input() {
+        let shown = maskedTextShown(by: cleared)
+        NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_CLEAR route=masked-deletes shown=%@", String(describing: shown))
+        if shown != .text {
+          return
+        }
       }
     }
 #endif
