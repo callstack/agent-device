@@ -148,7 +148,7 @@ async function handleMcpBatch(messages: unknown[]): Promise<JsonRpcResponse[] | 
   for (const message of messages) {
     const parsed = singleMessage(message);
     const response =
-      parsed?.method === 'tools/call'
+      parsed?.jsonrpc === '2.0' && parsed.method === 'tools/call'
         ? batchedToolCallResponse(parsed.id)
         : await handleInboundMessage(message);
     responses.push(...responseArray(response));

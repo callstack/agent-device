@@ -1,3 +1,4 @@
+import { setImmediate } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import {
@@ -357,5 +358,7 @@ test('a request canceled while the daemon is being ensured settles at once and s
     return true;
   });
   finishEnsure();
+  // Let anything the finished ensure would trigger run before checking that nothing was sent.
+  await setImmediate();
   assert.deepEqual(sent, []);
 });

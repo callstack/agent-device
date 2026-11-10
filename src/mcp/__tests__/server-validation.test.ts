@@ -240,6 +240,18 @@ test('a batch refuses its tools/call elements with -32600 and serves the rest', 
   assert.deepEqual(response[1]?.result, {});
 });
 
+test('a batched tools/call without jsonrpc 2.0 is an invalid request, not a dropped notification', async () => {
+  const response = (await handleMcpPayload([
+    { method: 'tools/call', params: { name: 'help' } },
+    { jsonrpc: '2.0', id: 'ping', method: 'ping' },
+  ])) as JsonRpcResponse[];
+
+  assert.equal(response.length, 2);
+  assert.equal(response[0]?.id, null);
+  assert.equal(response[0]?.error?.code, -32600);
+  assert.deepEqual(response[1]?.result, {});
+});
+
 test('a batch is answered while a tools/call is still running', async () => {
   const tools = blockingToolCalls();
 
