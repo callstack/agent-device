@@ -44,7 +44,7 @@ async function pageSending(beforeAnswer: readonly string[]): Promise<string> {
     socket.write(
       `HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`,
     );
-    let pending = Buffer.alloc(0);
+    let pending: Buffer = Buffer.alloc(0);
     socket.on('data', (chunk: Buffer) => {
       pending = Buffer.concat([pending, chunk]);
       for (let read = readMaskedText(pending); read; read = readMaskedText(pending)) {

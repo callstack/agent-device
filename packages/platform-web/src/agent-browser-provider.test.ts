@@ -150,7 +150,7 @@ test('agent-browser provider keeps typed text out of argv and error details when
     };
     await withCommandExecutorOverride(executor, async () => {
       for (const attempt of [
-        () => provider.fillRef?.('@e9', secret),
+        async () => await provider.fillRef?.('@e9', secret),
         () => provider.typeText(secret),
         () => provider.fill(11, 22, secret),
       ]) {
