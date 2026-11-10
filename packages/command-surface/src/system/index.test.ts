@@ -208,6 +208,13 @@ describe('system command interface', () => {
     ]);
   });
 
+  test('clipboard writer refuses a write without text instead of sending a hole', () => {
+    expectInvalidArgs(
+      () => clipboardDaemonWriter({ action: 'write' }),
+      'clipboard write requires text',
+    );
+  });
+
   test('clipboard structured input requires text for write and refuses it for read', () => {
     const metadata = findCommandMetadata('clipboard');
     expectInvalidArgs(

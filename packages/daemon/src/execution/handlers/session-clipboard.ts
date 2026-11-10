@@ -87,10 +87,13 @@ async function executeClipboardWrite(
   context: DaemonCommandContext,
   positionals: readonly string[],
 ): Promise<Record<string, unknown>> {
-  if (positionals.length < 2) {
+  // A wire peer can send `["write", null]` for a missing text; joining it would clear the
+  // clipboard, so every text element must be a string.
+  const textParts: readonly unknown[] = positionals.slice(1);
+  if (textParts.length === 0 || textParts.some((part) => typeof part !== 'string')) {
     throw new AppError('INVALID_ARGS', 'clipboard write requires text (use "" to clear clipboard)');
   }
-  const text = positionals.slice(1).join(' ');
+  const text = textParts.join(' ');
   const input: ClipboardWriteInput = { ...clipboardInput(context), text };
   await runtime.operations.writeClipboard(input);
   return {
