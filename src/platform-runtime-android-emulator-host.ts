@@ -1,6 +1,7 @@
 import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/device-readiness-runtime';
 import { listLocalDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
 import { runCmd, runCmdDetached } from '@agent-device/host-kit/command';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   readProcessIdentityFacts,
   stopProcessAndConfirmExit,
@@ -52,10 +53,7 @@ export function createAndroidEmulatorHost(
           ? await readFrontmostAppPid().catch(() => undefined)
           : undefined;
       const pid = runCmdDetached('emulator', args);
-      launched.set(pid, {
-        avdName,
-        startTime: readProcessIdentityFacts(pid).then((facts) => facts.startTime),
-      });
+      const startTime = readProcessIdentityFacts(pid).then((facts) => facts.startTime);
       if (frontmostPid !== undefined) {
         runCmdDetached('osascript', [
           '-l',
@@ -67,11 +65,21 @@ export function createAndroidEmulatorHost(
           String(bootBudgetMs),
         ]);
       }
+      // Recorded only once the launch succeeds, so a failed launch leaves nothing behind.
+      launched.set(pid, { avdName, startTime });
       return pid;
     },
     terminate: async (pid) => {
       const record = launched.get(pid);
-      if (!record) return;
+      if (!record) {
+        // Nothing names this pid as an emulator this host started, so nothing is signaled.
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'android_emulator_terminate_unrecorded_pid',
+          data: { pid },
+        });
+        return;
+      }
       const startTime = await record.startTime;
       const stop = await stopProcessAndConfirmExit(
         {
