@@ -97,10 +97,11 @@ function requireManagedOutputPath(sessionsDir: string, pathname: string): string
  * `{m,n}` quantifiers. Write `\,` for any other literal comma.
  */
 function redactionPatterns(env: NodeJS.ProcessEnv): RegExp[] {
+  // `patternIndex` is the field's position in the variable, empty fields included.
   return splitTopLevelPatternList(env.AGENT_DEVICE_APP_LOG_REDACT_PATTERNS ?? '')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((pattern, patternIndex) => {
+    .map((part, patternIndex) => ({ pattern: part.trim(), patternIndex }))
+    .filter(({ pattern }) => pattern.length > 0)
+    .map(({ pattern, patternIndex }) => {
       try {
         return new RegExp(pattern, 'gi');
       } catch {

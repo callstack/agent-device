@@ -159,12 +159,12 @@ test('refuses an invalid redaction pattern before it opens app.log', async () =>
 
   await expect(
     openAppLogOutput(sessionsDir, outputPath, {
-      env: { AGENT_DEVICE_APP_LOG_REDACT_PATTERNS: 'secret-\\d+,(' },
+      env: { AGENT_DEVICE_APP_LOG_REDACT_PATTERNS: 'secret-\\d+,,(' },
       cwd: root,
     }),
   ).rejects.toMatchObject({
     code: 'INVALID_ARGS',
-    details: { reason: 'app_log_redact_pattern_invalid', patternIndex: 1 },
+    details: { reason: 'app_log_redact_pattern_invalid', patternIndex: 2 },
   });
   expect(fs.existsSync(outputPath)).toBe(false);
 });

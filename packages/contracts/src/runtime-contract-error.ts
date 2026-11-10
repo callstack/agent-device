@@ -1,4 +1,4 @@
-import { createRuntimeContractInvalidError, type AppError } from '@agent-device/kernel/errors';
+import { createRuntimeContractInvalidError } from '@agent-device/kernel/errors';
 
 /**
  * A runtime owner whose facts advertised an operation it cannot actually perform.
@@ -16,6 +16,4 @@ import { createRuntimeContractInvalidError, type AppError } from '@agent-device/
  * The shape itself lives in `kernel/errors`, so a binder that must not grow its closure, such as
  * `interactor-operation-binding.ts`, builds it from there.
  */
-export function invalidRuntimeContract(message: string): AppError {
-  return createRuntimeContractInvalidError(message);
-}
+export { createRuntimeContractInvalidError as invalidRuntimeContract };

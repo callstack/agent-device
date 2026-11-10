@@ -95,10 +95,7 @@ function collectReactNativeOverlayFacts(nodes: SnapshotNode[]): ReactNativeOverl
       hasOverlayControl,
       hasControllessRedBoxText,
       collapsedNodes,
-      collapsedEvidenceNodes: collectOverlayNodes(
-        collapsedNodes,
-        isReactNativeCollapsedWarningEvidenceLabel,
-      ),
+      collapsedEvidenceNodes: collapsedNodes.filter(isCollapsedWarningEvidence),
       openDebuggerWarningNodes,
     }),
   };
@@ -168,6 +165,18 @@ function isReactNativeOverlayDetected(params: {
     (params.hasOverlayControl &&
       (hasKnownReactNativeOverlayText(params.text) || params.hasReactNativeStackFrame))
   );
+}
+
+/**
+ * A collapsed match that is overlay evidence by itself. A label with only the generic
+ * `warn:`/`warning:`/`error:` prefix also appears in app text (a form's "Error: invalid email"), so
+ * it counts only on a pressable banner-shaped node: the LogBox notification is a pressable bar,
+ * while app error text is a passive label.
+ */
+function isCollapsedWarningEvidence(node: SnapshotNode): boolean {
+  if (collectOverlayNodes([node], isReactNativeCollapsedWarningEvidenceLabel).length > 0)
+    return true;
+  return node.hittable === true && isReactNativeCollapsedWarningBanner(node);
 }
 
 function isReactNativeOpenDebuggerWarningLabel(label: string): boolean {

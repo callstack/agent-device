@@ -120,6 +120,36 @@ describe('React Native overlay evidence', () => {
     expect(formatReactNativeOverlayWarning(nodes)).toBe(undefined);
   });
 
+  test('a collapsed LogBox bar labelled with only a severity prefix is still an overlay', () => {
+    // No `!, ` prefix, no listed marker, no stack text: the pressable banner shape is the signal.
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        type: 'Other',
+        label: 'Warning: state update on an unmounted component',
+        rect: collapsedBannerRect,
+        hittable: true,
+      }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes).detected).toBe(true);
+    expect(formatReactNativeOverlayWarning(nodes)).toContain('dismiss-overlay');
+  });
+
+  test('passive app error text in a banner-sized label is not an overlay', () => {
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        type: 'StaticText',
+        label: 'Error: invalid email',
+        rect: collapsedBannerRect,
+        hittable: false,
+      }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes).detected).toBe(false);
+  });
+
   test('a generic severity banner counts once a React Native stack frame is on screen', () => {
     const nodes = [
       node({ index: 0, ref: 'e1', label: 'Warning: state update on unmounted component' }),
