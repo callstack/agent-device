@@ -1,6 +1,6 @@
 import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/device-readiness-runtime';
 import { listLocalDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
-import { runCmd, runCmdDetached } from '@agent-device/host-kit/command';
+import { runCmd, runCmdDetached, runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   readProcessIdentityFacts,
@@ -82,28 +82,42 @@ export function createAndroidEmulatorHost(
         avdName,
         startTime: readProcessIdentityFacts(pid).then((facts) => facts.startTime),
       });
-      // A caller learns the pid only from a launch that returns, so a launch that fails after the
-      // spawn stops its own emulator before it rethrows.
-      try {
-        if (frontmostPid !== undefined) {
-          runCmdDetached('osascript', [
-            '-l',
-            'JavaScript',
-            '-e',
-            RETURN_FOCUS_SCRIPT,
-            String(pid),
-            String(frontmostPid),
-            String(bootBudgetMs),
-          ]);
-        }
-      } catch (error) {
-        await terminate(pid);
-        throw error;
-      }
+      if (frontmostPid !== undefined) returnFocusAfterLaunch(pid, frontmostPid, bootBudgetMs);
       return pid;
     },
     terminate,
   });
+}
+
+/**
+ * Hands focus back to the app that was frontmost before a windowed launch. This is best effort: a
+ * focus helper that fails to start never fails the launch or stops the booting emulator, and only
+ * leaves a diagnostic.
+ */
+function returnFocusAfterLaunch(pid: number, frontmostPid: number, bootBudgetMs: number): void {
+  const reportFailure = (error: string): void => {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'android_emulator_focus_return_failed',
+      data: { pid, error },
+    });
+  };
+  try {
+    const helper = runCmdDetachedMonitored('osascript', [
+      '-l',
+      'JavaScript',
+      '-e',
+      RETURN_FOCUS_SCRIPT,
+      String(pid),
+      String(frontmostPid),
+      String(bootBudgetMs),
+    ]);
+    void helper.exited.then((exit) => {
+      if (exit.error !== undefined) reportFailure(exit.error);
+    });
+  } catch (error) {
+    reportFailure(error instanceof Error ? error.message : String(error));
+  }
 }
 
 function isEmulatorCommandFor(command: string, avdName: string): boolean {

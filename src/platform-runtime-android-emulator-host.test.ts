@@ -1,14 +1,27 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 
-const { runCmd, runCmdDetached } = vi.hoisted(() => ({
+const { runCmd, runCmdDetached, runCmdDetachedMonitored, emitDiagnostic } = vi.hoisted(() => ({
   runCmd: vi.fn(async (_cmd: string, args: readonly string[]) => ({
     stdout: args[0] === 'front' ? 'ASN:0x0-0xa26a26:\n' : '"pid"=17044\n',
     stderr: '',
     exitCode: 0,
   })),
   runCmdDetached: vi.fn(() => 4242),
+  runCmdDetachedMonitored: vi.fn((_cmd: string, _args: readonly string[]) => ({
+    pid: 5151,
+    exited: Promise.resolve<{ pid: number; exitCode?: number; error?: string }>({
+      pid: 5151,
+      exitCode: 0,
+    }),
+  })),
+  emitDiagnostic: vi.fn(),
 }));
-vi.mock('@agent-device/host-kit/command', () => ({ runCmd, runCmdDetached }));
+vi.mock('@agent-device/host-kit/command', () => ({
+  runCmd,
+  runCmdDetached,
+  runCmdDetachedMonitored,
+}));
+vi.mock('@agent-device/host-kit/diagnostics', () => ({ emitDiagnostic }));
 const { readProcessIdentityFacts, stopProcessAndConfirmExit } = vi.hoisted(() => ({
   readProcessIdentityFacts: vi.fn(async () => ({
     startTime: 'Mon Nov  9 10:00:00 2026',
@@ -27,6 +40,8 @@ import { createAndroidEmulatorHost } from './platform-runtime-android-emulator-h
 beforeEach(() => {
   runCmd.mockClear();
   runCmdDetached.mockClear();
+  runCmdDetachedMonitored.mockClear();
+  emitDiagnostic.mockClear();
   stopProcessAndConfirmExit.mockClear();
 });
 
@@ -40,9 +55,9 @@ test('a windowed macOS launch hands focus back to the app frontmost before launc
     ['info', '-only', 'pid', 'ASN:0x0-0xa26a26:'],
     expect.anything(),
   );
-  expect(runCmdDetached).toHaveBeenCalledTimes(2);
-  expect(runCmdDetached).toHaveBeenNthCalledWith(1, 'emulator', ['-avd', 'Pixel_9']);
-  expect(runCmdDetached).toHaveBeenNthCalledWith(2, 'osascript', [
+  expect(runCmdDetached).toHaveBeenCalledOnce();
+  expect(runCmdDetached).toHaveBeenCalledWith('emulator', ['-avd', 'Pixel_9']);
+  expect(runCmdDetachedMonitored).toHaveBeenCalledWith('osascript', [
     '-l',
     'JavaScript',
     '-e',
@@ -59,6 +74,7 @@ test('a macOS launch with no readable frontmost app starts no focus watcher', as
   await createAndroidEmulatorHost('darwin').launch('Pixel_9', false, 90_000);
 
   expect(runCmdDetached).toHaveBeenCalledOnce();
+  expect(runCmdDetachedMonitored).not.toHaveBeenCalled();
 });
 
 test('a failed frontmost-app read still launches the emulator, without a focus watcher', async () => {
@@ -70,6 +86,7 @@ test('a failed frontmost-app read still launches the emulator, without a focus w
 
   expect(runCmdDetached).toHaveBeenCalledOnce();
   expect(runCmdDetached).toHaveBeenCalledWith('emulator', ['-avd', 'Pixel_9']);
+  expect(runCmdDetachedMonitored).not.toHaveBeenCalled();
 });
 
 test('a headless launch has no window to keep in the background', async () => {
@@ -90,6 +107,7 @@ test('a launch on another host leaves window focus alone', async () => {
 
   expect(runCmd).not.toHaveBeenCalled();
   expect(runCmdDetached).toHaveBeenCalledOnce();
+  expect(runCmdDetachedMonitored).not.toHaveBeenCalled();
 });
 
 test('terminate stops only the emulator this host launched, by its recorded identity', async () => {
@@ -139,19 +157,32 @@ test('a terminate that could not prove the exit keeps the launch for a retry', a
   expect(stopProcessAndConfirmExit).toHaveBeenCalledTimes(2);
 });
 
-test('a launch that fails after spawning stops its own emulator before it rethrows', async () => {
-  runCmdDetached
-    .mockImplementationOnce(() => 4242)
-    .mockImplementationOnce(() => {
+// The focus helper only hands focus back to the previous app, so it is best effort: a helper that
+// cannot start never fails the launch or stops the booting emulator.
+test.each([
+  [
+    'throws on spawn',
+    () => {
       throw new Error('osascript missing');
-    });
+    },
+  ],
+  [
+    'reports a spawn error after it starts',
+    () => ({
+      pid: 0,
+      exited: Promise.resolve({ pid: 0, error: 'spawn osascript ENOENT' }),
+    }),
+  ],
+] as const)('a focus helper that %s still returns the emulator pid', async (_name, spawn) => {
+  runCmdDetachedMonitored.mockImplementationOnce(spawn);
   const host = createAndroidEmulatorHost('darwin');
 
-  await expect(host.launch('Pixel_9', false, 90_000)).rejects.toThrow('osascript missing');
+  await expect(host.launch('Pixel_9', false, 90_000)).resolves.toBe(4242);
 
-  expect(stopProcessAndConfirmExit).toHaveBeenCalledOnce();
-  expect(stopProcessAndConfirmExit).toHaveBeenCalledWith(
-    expect.objectContaining({ pid: 4242 }),
-    expect.anything(),
+  await vi.waitFor(() =>
+    expect(emitDiagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({ phase: 'android_emulator_focus_return_failed' }),
+    ),
   );
+  expect(stopProcessAndConfirmExit).not.toHaveBeenCalled();
 });
