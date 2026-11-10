@@ -373,6 +373,7 @@ export async function acquireProcessLockAcquisition(
   const ownerFilePath = path.join(params.lockDirPath, OWNER_FILE_NAME);
   const observedOwner = createOwnerObservationReuse();
   const observedGuardHolder = createGuardHolderObservationReuse();
+  if (params.signal?.aborted) throw createRequestCanceledError();
   const guardHolderStartTime = (await readCurrentOwnerIdentityAsync()).startTime;
   fs.mkdirSync(path.dirname(params.lockDirPath), { recursive: true });
   do {

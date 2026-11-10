@@ -137,3 +137,21 @@ test('a release waiting on a long-standing live guard reads its holder about onc
     `the release ran the process tool ${processToolRuns.async} times`,
   );
 });
+
+test('an acquisition aborted before it starts is canceled without reading any process', async () => {
+  const controller = new AbortController();
+  controller.abort();
+
+  await assert.rejects(
+    () =>
+      acquireProcessLock({
+        lockDirPath: path.join(tmpDir, 'aborted.lock'),
+        owner: { pid: process.pid, startTime: null, acquiredAtMs: Date.now() },
+        signal: controller.signal,
+      }),
+    (error: unknown) =>
+      (error as { details?: { reason?: string } }).details?.reason === 'request_canceled',
+  );
+  assert.equal(processToolRuns.async + processToolRuns.sync, 0);
+  assert.equal(fs.existsSync(path.join(tmpDir, 'aborted.lock')), false);
+});
