@@ -87,25 +87,51 @@ function diffComparableLinesMyers(
   previous: SnapshotComparableLine[],
   current: SnapshotComparableLine[],
 ): SnapshotDiffLine[] {
-  // Myers diff is efficient for normal UI snapshots; very large trees may still be expensive.
+  // Myers' first snake takes the unchanged leading lines anyway, so they skip the search. Trailing
+  // lines are not trimmed: that would change which of several minimal diffs is printed.
+  let prefix = 0;
+  while (
+    prefix < previous.length &&
+    prefix < current.length &&
+    previous[prefix]!.comparable === current[prefix]!.comparable
+  ) {
+    prefix += 1;
+  }
+  return [
+    ...current.slice(0, prefix).map((line): SnapshotDiffLine => ({
+      kind: 'unchanged',
+      text: line.text,
+    })),
+    ...diffMiddleMyers(previous.slice(prefix), current.slice(prefix)),
+  ];
+}
+
+/**
+ * Myers' greedy search. `trace[d]` keeps only the diagonals step `d` can read, `k` in
+ * `[-d - 1, d + 1]`, at index `k + d + 1`, so the trace holds O(D^2) integers rather than D maps.
+ */
+function diffMiddleMyers(
+  previous: SnapshotComparableLine[],
+  current: SnapshotComparableLine[],
+): SnapshotDiffLine[] {
   const n = previous.length;
   const m = current.length;
   const max = n + m;
-  const v = new Map<number, number>();
-  const trace: Array<Map<number, number>> = [];
-  v.set(1, 0);
+  const offset = max + 1;
+  const v = new Int32Array(2 * max + 3);
+  const trace: Int32Array[] = [];
 
   for (let d = 0; d <= max; d += 1) {
-    trace.push(new Map(v));
+    trace.push(v.slice(offset - d - 1, offset + d + 2));
     for (let k = -d; k <= d; k += 2) {
-      const goDown = shouldGoDown(v, k, d);
-      let x = goDown ? getV(v, k + 1) : getV(v, k - 1) + 1;
+      const goDown = k === -d || (k !== d && v[offset + k - 1]! < v[offset + k + 1]!);
+      let x = goDown ? v[offset + k + 1]! : v[offset + k - 1]! + 1;
       let y = x - k;
       while (x < n && y < m && previous[x]!.comparable === current[y]!.comparable) {
         x += 1;
         y += 1;
       }
-      v.set(k, x);
+      v[offset + k] = x;
       if (x >= n && y >= m) {
         return backtrackMyers(trace, previous, current, n, m);
       }
@@ -116,7 +142,7 @@ function diffComparableLinesMyers(
 }
 
 function backtrackMyers(
-  trace: Array<Map<number, number>>,
+  trace: Int32Array[],
   previous: SnapshotComparableLine[],
   current: SnapshotComparableLine[],
   n: number,
@@ -127,11 +153,12 @@ function backtrackMyers(
   let y = m;
 
   for (let d = trace.length - 1; d >= 0; d -= 1) {
-    const v = trace[d]!;
+    const step = trace[d]!;
+    const at = (k: number) => step[k + d + 1]!;
     const k = x - y;
-    const goDown = shouldGoDown(v, k, d);
+    const goDown = k === -d || (k !== d && at(k - 1) < at(k + 1));
     const prevK = goDown ? k + 1 : k - 1;
-    const prevX = getV(v, prevK);
+    const prevX = at(prevK);
     const prevY = prevX - prevK;
 
     while (x > prevX && y > prevY) {
@@ -154,12 +181,4 @@ function backtrackMyers(
 
   lines.reverse();
   return lines;
-}
-
-function shouldGoDown(v: Map<number, number>, k: number, d: number): boolean {
-  return k === -d || (k !== d && getV(v, k - 1) < getV(v, k + 1));
-}
-
-function getV(v: Map<number, number>, k: number): number {
-  return v.get(k) ?? 0;
 }
