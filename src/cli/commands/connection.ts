@@ -17,7 +17,8 @@ import {
   type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
 } from '@agent-device/remote/remote-connection-state';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { isInactiveLeaseError } from '@agent-device/contracts/lease-scope';
 import {
   connectProviderNamesForError,
   connectionProviderCapabilities,
@@ -353,13 +354,16 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client, h
   }
   await stopMetroCleanup(state.metro);
   let released = false;
+  let releaseError: string | undefined;
   if (state.leaseId) {
     try {
       const release = await releaseRemoteConnectionLease(client, state, flags.daemonAuthToken);
       released = release.released;
       providerData ??= release.provider;
-    } catch {
-      // Bridges may release on close or be unreachable; local state still needs cleanup.
+    } catch (error) {
+      // An inactive lease is already gone. Any other failure leaves a live lease whose only local
+      // record is removed below, so the output must name it.
+      if (!isInactiveLeaseError(error)) releaseError = errorMessage(error);
     }
   }
   removeRemoteConnectionState({ stateDir, session: connectedSession });
@@ -369,9 +373,10 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client, h
       connected: false,
       session: connectedSession,
       released,
+      ...(releaseError ? { leaseId: state.leaseId, releaseError } : {}),
       ...(providerData ? { provider: providerData } : {}),
     },
-    () => renderDisconnectOutput(connectedSession, providerData),
+    () => renderDisconnectOutput(state, providerData, releaseError),
   );
   return true;
 };
@@ -404,11 +409,19 @@ export const connectionCommand: ClientCommandHandler = async ({ positionals, fla
 };
 
 function renderDisconnectOutput(
-  session: string,
+  state: RemoteConnectionState,
   providerData: CloudProviderSessionResult | undefined,
+  releaseError: string | undefined,
 ): string {
   return [
-    `Disconnected remote session "${session}".`,
+    `Disconnected remote session "${state.session}".`,
+    ...(releaseError
+      ? [
+          `Could not release lease ${state.leaseId} (tenant ${state.tenant}, run ${state.runId}) ` +
+            `at ${state.daemon?.baseUrl ?? 'its daemon'}: ${releaseError}. ` +
+            'It was left in place — release it manually if it is still active.',
+        ]
+      : []),
     ...formatProviderReleaseWarnings(providerData),
     ...formatDeliveredArtifactLines(providerData?.cloudArtifacts),
   ].join('\n');

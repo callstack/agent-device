@@ -2175,6 +2175,96 @@ test('disconnect human output surfaces provider release warnings and artifact li
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+function seedReleasableConnection(prefix: string, session: string) {
+  const workspace = connectionWorkspace(prefix);
+  fs.writeFileSync(workspace.remoteConfigPath, '{}');
+  seedConnectionState({
+    stateDir: workspace.stateDir,
+    state: {
+      session,
+      remoteConfigPath: workspace.remoteConfigPath,
+      tenant: 'acme',
+      runId: 'run-123',
+      leaseId: 'lease-1',
+      leaseBackend: 'android-instance',
+      daemon: { baseUrl: 'https://daemon.example' },
+    },
+  });
+  return workspace;
+}
+
+test('disconnect names a lease whose release failed in text and JSON output', async () => {
+  const { tempRoot, stateDir } = seedReleasableConnection(
+    'agent-device-disconnect-release-failed-',
+    'adc-release-failed',
+  );
+  const client = createTestClient({
+    closeSession: async () => ({
+      session: 'adc-release-failed',
+      identifiers: { session: 'adc-release-failed' },
+    }),
+    release: async () => {
+      throw new Error('connect ECONNREFUSED');
+    },
+  });
+  const flags = { help: false, version: false, stateDir, session: 'adc-release-failed' };
+
+  const text = await withCapturedStdoutAsync(async () => {
+    await disconnectCommand({ positionals: [], flags: { ...flags, json: false }, client });
+  });
+
+  assert.match(text, /Disconnected remote session "adc-release-failed"\./);
+  assert.match(
+    text,
+    /Could not release lease lease-1 \(tenant acme, run run-123\) at https:\/\/daemon\.example: connect ECONNREFUSED\./,
+  );
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-release-failed' }), null);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+
+  const second = seedReleasableConnection(
+    'agent-device-disconnect-release-failed-json-',
+    'adc-release-failed',
+  );
+  const json = await withCapturedStdoutAsync(async () => {
+    await disconnectCommand({
+      positionals: [],
+      flags: { ...flags, stateDir: second.stateDir, json: true },
+      client,
+    });
+  });
+  const payload = JSON.parse(json).data;
+  assert.equal(payload.released, false);
+  assert.equal(payload.leaseId, 'lease-1');
+  assert.equal(payload.releaseError, 'connect ECONNREFUSED');
+  fs.rmSync(second.tempRoot, { recursive: true, force: true });
+});
+
+test('disconnect treats an already-inactive lease as released without a failure notice', async () => {
+  const { tempRoot, stateDir } = seedReleasableConnection(
+    'agent-device-disconnect-release-inactive-',
+    'adc-release-inactive',
+  );
+
+  const text = await withCapturedStdoutAsync(async () => {
+    await disconnectCommand({
+      positionals: [],
+      flags: { json: false, help: false, version: false, stateDir, session: 'adc-release-inactive' },
+      client: createTestClient({
+        closeSession: async () => ({
+          session: 'adc-release-inactive',
+          identifiers: { session: 'adc-release-inactive' },
+        }),
+        release: async () => {
+          throw new AppError('UNAUTHORIZED', 'lease expired', { reason: 'LEASE_EXPIRED' });
+        },
+      }),
+    });
+  });
+
+  assert.equal(text.trim(), 'Disconnected remote session "adc-release-inactive".');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('disconnect releases proxy lease with provider client and device metadata', async () => {
   const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
     'agent-device-disconnect-proxy-',
