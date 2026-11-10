@@ -109,7 +109,13 @@ type LinuxToolProviderParts = { display: LinuxDisplayConfig } & Partial<LinuxToo
 function completeLocalLinuxToolProvider(provider: LinuxToolProviderParts): LinuxToolProvider {
   const runCommand = provider.runCommand ?? runCmd;
   const whichCommand = provider.whichCommand ?? whichOnPath;
-  const launchDetached = provider.launchDetached ?? runCmdDetachedMonitored;
+  // A caller that injected its own executor also owns app launches: the host-local detached
+  // runner is the default only beside the host-local `runCmd`.
+  const launchDetached =
+    provider.launchDetached ??
+    (provider.runCommand === undefined
+      ? runCmdDetachedMonitored
+      : launchThroughExecutor(provider.runCommand));
   const display = provider.display;
   return {
     runCommand,
@@ -181,6 +187,19 @@ export async function runLinuxToolCommand(
   options?: ExecOptions,
 ): Promise<ExecResult> {
   return await resolveLinuxToolProvider().runCommand(cmd, args, options);
+}
+
+/** A launcher over an injected executor, settling `exited` from the command's own result. */
+function launchThroughExecutor(runCommand: LinuxToolCommandExecutor): LinuxToolDetachedLauncher {
+  return (cmd, args) => ({
+    exited: runCommand(cmd, args, { allowFailure: true }).then(
+      (result): ExecDetachedExit => ({ pid: 0, exitCode: result.exitCode }),
+      (error: unknown): ExecDetachedExit => ({
+        pid: 0,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    ),
+  });
 }
 
 /** What a launched app's exit says went wrong: a start failure, a non-zero exit, or a signal. */

@@ -93,8 +93,9 @@ export async function appFileUploadForm(
 }
 
 /**
- * The longest one app upload may run. Builds of a few hundred MB on a slow uplink take minutes, so
- * this bounds a stalled transfer, not a slow one.
+ * The total deadline for one app upload, from request start to answer. It is not an idle timeout:
+ * a healthy upload that is still sending after 15 minutes is aborted too. Builds of a few hundred
+ * MB on a slow uplink take minutes, so it is set well above that.
  */
 const HUB_APP_UPLOAD_TIMEOUT_MS = 15 * 60_000;
 

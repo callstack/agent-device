@@ -129,9 +129,6 @@ test('source aborts an in-flight provider request when its binding is cancelled'
   assert.equal(requestSignal?.aborted, true);
 });
 
-// #1774: `POST /session` is the one non-idempotent request, and a retry after a
-// failed create is a second billed device session. A 5xx that the transport
-// would retry on any other route must reach the caller unretried here.
 // App activation falls back to `mobile: activateApp` only on the driver's own refusal of the route.
 test('app activation falls back on a W3C unknown command but not on a gateway 404 page', async () => {
   for (const [first, fallsBack] of [
@@ -158,6 +155,9 @@ test('app activation falls back on a W3C unknown command but not on a gateway 40
   }
 });
 
+// #1774: `POST /session` is the one non-idempotent request, and a retry after a
+// failed create is a second billed device session. A 5xx that the transport
+// would retry on any other route must reach the caller unretried here.
 test('createSession does not retry a transient create failure', async () => {
   let calls = 0;
   globalThis.fetch = async () => {

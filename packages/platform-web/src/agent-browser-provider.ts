@@ -457,7 +457,6 @@ type AgentBrowserBatchEntry = {
   command?: unknown;
   success?: unknown;
   result?: unknown;
-  error?: unknown;
 };
 
 /**

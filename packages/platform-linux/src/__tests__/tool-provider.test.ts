@@ -266,6 +266,22 @@ test('local Linux desktop provider reports nothing for a launched app that exits
   assert.deepEqual(await launchDiagnostics({ pid: 4, exitCode: 0 }), []);
 });
 
+test('local Linux desktop provider launches through an injected executor when it injects no launcher', async () => {
+  const commands: Array<[string, string[], boolean | undefined]> = [];
+  const provider = createLocalLinuxToolProvider({
+    host: { env: process.env, cwd: process.cwd() },
+    whichCommand: async (cmd) => cmd === 'demo-app',
+    runCommand: async (cmd, args, options) => {
+      commands.push([cmd, args, options?.allowFailure]);
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+  });
+
+  await provider.desktop.openTarget('demo-app');
+
+  assert.deepEqual(commands, [['demo-app', [], true]]);
+});
+
 test('local Linux desktop provider falls back to pkill when wmctrl is unavailable', async () => {
   const commands: Array<[string, string[], boolean | undefined]> = [];
   const provider = createLocalLinuxToolProvider({
