@@ -179,3 +179,25 @@ test('the record fetch names the held lease and sends no lease header without on
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
+
+test.each(['.', '..'])(
+  'invalid remote session %s cannot write or remove outside records',
+  async (session) => {
+    const stateDir = mkdtempForTestSync('remote-diagnostics-contained-');
+    const outside = path.join(
+      stateDir,
+      ...(session === '.' ? ['remote-diagnostics'] : []),
+      'requests',
+      'abc123.ndjson',
+    );
+    fs.mkdirSync(path.dirname(outside), { recursive: true });
+    fs.writeFileSync(outside, 'sentinel');
+    const localized = await localizeRemoteDaemonError(
+      { ...remoteError(), diagnosticsRecord: { session, requestId: 'abc123' } },
+      { endpoint: { baseUrl: 'http://127.0.0.1:1', token: 'secret' }, stateDir },
+    );
+    assert.equal(localized.logPath, undefined);
+    assert.equal(typeof localized.logPathUnavailable, 'string');
+    assert.equal(fs.readFileSync(outside, 'utf8'), 'sentinel');
+  },
+);

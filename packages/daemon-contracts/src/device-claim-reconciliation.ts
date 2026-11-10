@@ -1,6 +1,5 @@
 import { appLogDurableResource } from '@agent-device/capture-kit/app-log-durable-resource';
 import { recoverAppLogResourceAfterDaemonLock } from '@agent-device/capture-kit/app-log-resource-recovery';
-import path from 'node:path';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
@@ -16,7 +15,7 @@ import { recoverPerfCaptureResourceAfterDaemonLock } from '@agent-device/capture
 import { perfCaptureDurableResource } from '@agent-device/capture-kit/perf-capture-session-resource';
 import { recoverScreenRecordingResourceAfterDaemonLock } from '@agent-device/capture-kit/screen-recording-recovery';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
-import { safeSessionName } from '@agent-device/host-kit/session-paths';
+import { resolveSessionDir } from './session-artifact-paths.ts';
 
 export function createDeviceClaimReconciler(params: {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
@@ -30,7 +29,7 @@ export function createDeviceClaimReconciler(params: {
     if (inspection.status === 'retained') return inspection;
     try {
       const sessionsDir = resolveDaemonPaths(claim.stateDir).sessionsDir;
-      const sessionDir = path.join(sessionsDir, safeSessionName(claim.session));
+      const sessionDir = resolveSessionDir(sessionsDir, claim.session);
       for (const { resourceKind, resourcePath } of inspection.ownedResources) {
         const resource = DEVICE_CLAIM_DURABLE_RESOURCES[resourceKind];
         const currentOwnership = inspectResourceOwnership(resource, claim, sessionDir);
@@ -89,7 +88,7 @@ export type ClaimRecoveryInspection =
 export function inspectDeviceClaimRecovery(claim: DeviceClaim): ClaimRecoveryInspection {
   try {
     const sessionsDir = resolveDaemonPaths(claim.stateDir).sessionsDir;
-    const sessionDir = path.join(sessionsDir, safeSessionName(claim.session));
+    const sessionDir = resolveSessionDir(sessionsDir, claim.session);
     const recoveryKinds: DurableSessionResourceKind[] = [];
     const ownedResources: { resourceKind: DurableSessionResourceKind; resourcePath: string }[] = [];
     for (const resource of Object.values(DEVICE_CLAIM_DURABLE_RESOURCES)) {
