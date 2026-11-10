@@ -343,7 +343,8 @@ test('an admitted ref operation whose interactor lacks the member is a runtime c
 
   for (const run of [
     () => operations.tapRef!({ ref: '@e4', execution: { requestId: 'tap' } }),
-    () => operations.fillRef!({ ref: '@e4', text: 'x', delayMs: 0, execution: { requestId: 'fill' } }),
+    () =>
+      operations.fillRef!({ ref: '@e4', text: 'x', delayMs: 0, execution: { requestId: 'fill' } }),
   ]) {
     await expect(run()).rejects.toMatchObject({
       code: 'COMMAND_FAILED',

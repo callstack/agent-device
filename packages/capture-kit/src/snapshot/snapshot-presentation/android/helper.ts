@@ -82,7 +82,11 @@ function markRectlessScrollableDescendantsForRemoval(
 
     const scrollAncestor = findAncestor(node, nodeIndex, isScrollableNode);
     if (scrollAncestor) {
-      addHiddenContentHint(replacements, scrollAncestor, inferRectlessNodeDirection(node, children));
+      addHiddenContentHint(
+        replacements,
+        scrollAncestor,
+        inferRectlessNodeDirection(node, children),
+      );
     }
     markNodeAndDescendantsForRemoval(children, node.index, removed);
   }

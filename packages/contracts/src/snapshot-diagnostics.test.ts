@@ -200,7 +200,9 @@ test('the summary reader refuses stats the type forbids', () => {
 test('merge cost does not grow with a run capture count', () => {
   const merged = mergeSnapshotDiagnostics([
     { stats: { ...VALID_STATS, count: 1e12, platform: 'ios' } },
-    { stats: { ...VALID_STATS, count: 3, p50Ms: 100, p95Ms: 2_000, maxMs: 3_000, platform: 'ios' } },
+    {
+      stats: { ...VALID_STATS, count: 3, p50Ms: 100, p95Ms: 2_000, maxMs: 3_000, platform: 'ios' },
+    },
   ]);
   expect(merged?.stats).toMatchObject({
     count: 1e12 + 3,

@@ -27,9 +27,16 @@ test('two disjoint 3,000-line screens diff within the edit-distance budget', () 
 
 test('a shared leading block is reported unchanged before the changed tail', () => {
   const shared = screen('Shared', 2_000);
-  const diff = buildSnapshotDiff([...shared, ...screen('Old', 2)], [...shared, ...screen('New', 3)], {
-    flatten: true,
-  });
+  const diff = buildSnapshotDiff(
+    [...shared, ...screen('Old', 2)],
+    [...shared, ...screen('New', 3)],
+    {
+      flatten: true,
+    },
+  );
   assert.deepEqual(diff.summary, { additions: 3, removals: 2, unchanged: 2_000 });
-  assert.equal(diff.lines.slice(0, 2_000).every((line) => line.kind === 'unchanged'), true);
+  assert.equal(
+    diff.lines.slice(0, 2_000).every((line) => line.kind === 'unchanged'),
+    true,
+  );
 });

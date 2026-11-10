@@ -233,7 +233,10 @@ async function testSleep(_milliseconds: number, signal?: AbortSignal): Promise<v
 }
 
 describe('PID-scoped app-log capture after a failed PID poll', () => {
-  function startCapture(resolvePid: () => Promise<string>, start: () => Promise<AppLogBackgroundProcess>) {
+  function startCapture(
+    resolvePid: () => Promise<string>,
+    start: () => Promise<AppLogBackgroundProcess>,
+  ) {
     return createPidScopedAppLogProcess({
       host: hostFixture(outputFixture().sink),
       backend: 'android',
@@ -251,7 +254,8 @@ describe('PID-scoped app-log capture after a failed PID poll', () => {
   }
 
   test('keeps the active stream and keeps polling after one rejected poll', async () => {
-    const started = processFixture(deferred<{ stdout: string; stderr: string; exitCode: number }>());
+    const started =
+      processFixture(deferred<{ stdout: string; stderr: string; exitCode: number }>());
     const resolvePid = vi
       .fn<() => Promise<string>>()
       .mockResolvedValueOnce('123')
@@ -267,7 +271,8 @@ describe('PID-scoped app-log capture after a failed PID poll', () => {
   });
 
   test('starts the stream once a rejected waiting poll is followed by a PID', async () => {
-    const started = processFixture(deferred<{ stdout: string; stderr: string; exitCode: number }>());
+    const started =
+      processFixture(deferred<{ stdout: string; stderr: string; exitCode: number }>());
     const resolvePid = vi
       .fn<() => Promise<string>>()
       .mockResolvedValueOnce('')

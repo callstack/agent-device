@@ -129,7 +129,9 @@ describe('React Native overlay evidence', () => {
   });
 
   test('a collapsed LogBox summary banner is an overlay by itself', () => {
-    const nodes = [node({ index: 0, ref: 'e1', label: '!, Warning: x', rect: collapsedBannerRect })];
+    const nodes = [
+      node({ index: 0, ref: 'e1', label: '!, Warning: x', rect: collapsedBannerRect }),
+    ];
     expect(analyzeReactNativeOverlay(nodes).detected).toBe(true);
   });
 });

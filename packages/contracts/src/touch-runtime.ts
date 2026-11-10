@@ -202,7 +202,9 @@ function bindTouch(
             const interactor = await interactorFor(input);
             return await requireInteractorMethod(interactor.fillRef, 'fillRef').call(
               interactor,
-              input.ref, input.text, input.delayMs,
+              input.ref,
+              input.text,
+              input.delayMs,
             );
           },
         }
