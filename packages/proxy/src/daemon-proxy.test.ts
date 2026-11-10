@@ -284,6 +284,30 @@ test.each([
   expect(upstream.requests).toHaveLength(0);
 });
 
+test('the upstream health probe has its own bound without upstreamTimeoutMs', async () => {
+  const healthBound = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(healthBound.signal);
+  const upstreamAborted = signalled();
+  try {
+    const proxy = proxyWith(
+      (request) =>
+        new Promise<Response>((_resolve, reject) => {
+          request.signal.addEventListener('abort', () => {
+            upstreamAborted.resolve();
+            reject(request.signal.reason);
+          });
+        }),
+    );
+    const response = proxy.handle(new Request(`${PROXY_ORIGIN}/agent-device/health`));
+    expect(timeout.mock.calls).toEqual([[5_000]]);
+    healthBound.abort();
+    await upstreamAborted.promise;
+    expect((await response).status).toBe(500);
+  } finally {
+    timeout.mockRestore();
+  }
+});
+
 test('aborting a health request aborts the upstream health probe', async () => {
   const upstreamReceived = signalled();
   const upstreamAborted = signalled();

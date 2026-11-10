@@ -106,6 +106,8 @@ type ProxyCaller = { tenantId?: string; uploadHeaders: Record<string, string> };
 const DEFAULT_UPLOAD_CREDENTIAL_HEADERS = Object.keys(buildDaemonHttpAuthHeaders('client'));
 
 const DEFAULT_MAX_RPC_BODY_BYTES = 1024 * 1024;
+/** `/health` answers quickly or not at all; its probe never waits on `upstreamTimeoutMs`. */
+const UPSTREAM_HEALTH_TIMEOUT_MS = 5_000;
 const DAEMON_PROXY_PREFIX = `${DAEMON_HTTP_BASE_PATH}/`;
 const FORWARDED_REQUEST_HEADERS = [
   'content-type',
@@ -322,7 +324,7 @@ async function readUpstreamHealth(
     new Request(buildDaemonHttpUrl(options.upstreamBaseUrl, 'health'), {
       method: 'GET',
       headers: buildUpstreamHeaders(new Headers(), options.upstreamToken, '/health'),
-      signal: upstreamSignal(request, options),
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(UPSTREAM_HEALTH_TIMEOUT_MS)]),
     }),
   );
   const text = await response.text();
