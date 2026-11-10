@@ -1,13 +1,9 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, installFakeManagedAgentBrowser } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  createFailNthCommandExecutor,
-  installFakeManagedAgentBrowser,
-  mkdtempForTestSync,
-} from './test-utils.ts';
+import { createFailNthCommandExecutor, mkdtempForTestSync } from './test-utils.ts';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
 

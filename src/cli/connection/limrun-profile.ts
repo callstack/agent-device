@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { RemoteConfigProfile } from '@agent-device/remote/remote-config-schema';
 import { AppError } from '@agent-device/kernel/errors';
@@ -13,6 +14,7 @@ import {
   limrunPlatformForLeaseBackend,
   readLimrunCredentials,
 } from '../../provider-limrun-credentials.ts';
+import { buildConnectClientId } from './client-id.ts';
 
 const DEFAULT_LIMRUN_TENANT = 'limrun';
 export function resolveLimrunConnectProfile(options: {
@@ -59,7 +61,7 @@ function buildLimrunRemoteProfile(options: {
     stateDir: daemonPaths.baseDir,
     daemonTransport: 'auto',
     tenant: flags.tenant ?? DEFAULT_LIMRUN_TENANT,
-    runId: flags.runId ?? `cli-${Date.now().toString(36)}`,
+    runId: flags.runId ?? limrunRunId(daemonPaths.baseDir, flags.session),
     sessionIsolation: 'tenant',
     leaseBackend,
     leaseProvider: 'limrun',
@@ -71,6 +73,15 @@ function buildLimrunRemoteProfile(options: {
     providerNetworkHosts: flags.providerNetworkHosts,
     ...readMetroProfileFields(flags),
   };
+}
+
+/**
+ * A named session reconnects under the same run. An unscoped connect gets a fresh session later in
+ * `resolveConnectContext`, so it gets a fresh run here rather than one shared by every unscoped call.
+ */
+function limrunRunId(stateDir: string, session: string | undefined): string {
+  const identity = session ?? crypto.randomUUID();
+  return `limrun-${buildConnectClientId('limrun', stateDir, identity)}`;
 }
 
 function validateLimrunConnectFlags(flags: CliFlags): 'android-instance' | 'ios-instance' {

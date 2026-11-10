@@ -4,6 +4,7 @@ import path from 'node:path';
 import { withCommandHost } from '@agent-device/host-kit/command';
 import { afterEach, expect, test } from 'vitest';
 import { openAppLogOutput, readAppLogOutputTail } from './platform-runtime-app-log-output.ts';
+import { readRecentAppLogLines } from './platform-runtime-network-host.ts';
 import {
   bindTestCommandHost,
   createLiveTestHostEnvironment,
@@ -185,4 +186,63 @@ test('a brace that is not a quantifier does not hide the next redaction pattern'
   expect(fs.readFileSync(outputPath, 'utf8')).toBe(
     '[REDACTED] [REDACTED] [REDACTED] [REDACTED] kept\n',
   );
+});
+
+test('rotates app.log when an open sink crosses the size cap', async () => {
+  const root = mkdtempForTestSync('agent-device-app-log-rotate-');
+  roots.push(root);
+  const sessionsDir = path.join(root, 'sessions');
+  const outputPath = path.join(sessionsDir, 'one', 'app.log');
+  const env = { AGENT_DEVICE_APP_LOG_MAX_BYTES: '100' };
+
+  const sink = await openAppLogOutput(sessionsDir, outputPath, { env, cwd: root });
+  for (let index = 0; index < 10; index += 1) {
+    await sink.write(`${String(index).padStart(2, '0')} ${'x'.repeat(36)}\n`);
+  }
+  await sink[Symbol.asyncDispose]();
+
+  const current = fs.readFileSync(outputPath, 'utf8');
+  const rotated = fs.readFileSync(`${outputPath}.1`, 'utf8');
+  expect(Buffer.byteLength(current)).toBeLessThan(100);
+  expect(Buffer.byteLength(rotated)).toBeGreaterThanOrEqual(100);
+  expect(current.endsWith(`09 ${'x'.repeat(36)}\n`)).toBe(true);
+});
+
+test('counts marker appends from another writer toward the size cap', async () => {
+  const root = mkdtempForTestSync('agent-device-app-log-rotate-marker-');
+  roots.push(root);
+  const sessionsDir = path.join(root, 'sessions');
+  const outputPath = path.join(sessionsDir, 'one', 'app.log');
+  const env = { AGENT_DEVICE_APP_LOG_MAX_BYTES: '100' };
+
+  const sink = await openAppLogOutput(sessionsDir, outputPath, { env, cwd: root });
+  await sink.write(`${'a'.repeat(39)}\n`);
+  // `logs mark` appends to the same file through its own descriptor.
+  fs.appendFileSync(outputPath, `${'m'.repeat(79)}\n`);
+  await sink.write(`${'b'.repeat(39)}\n`);
+  await sink[Symbol.asyncDispose]();
+
+  expect(fs.existsSync(`${outputPath}.1`)).toBe(true);
+  expect(fs.readFileSync(outputPath, 'utf8')).toBe('');
+});
+
+test('rotates when the final partial line flushed at disposal crosses the cap', async () => {
+  const root = mkdtempForTestSync('agent-device-app-log-rotate-dispose-');
+  roots.push(root);
+  const sessionsDir = path.join(root, 'sessions');
+  const outputPath = path.join(sessionsDir, 'one', 'app.log');
+  const env = { AGENT_DEVICE_APP_LOG_MAX_BYTES: '100' };
+
+  const sink = await openAppLogOutput(sessionsDir, outputPath, { env, cwd: root });
+  await sink.write('p'.repeat(120));
+  await sink[Symbol.asyncDispose]();
+
+  expect(fs.readFileSync(`${outputPath}.1`, 'utf8')).toBe('p'.repeat(120));
+  expect(fs.readFileSync(outputPath, 'utf8')).toBe('');
+  expect(await readRecentAppLogLines(outputPath, 10)).toEqual({
+    path: outputPath,
+    exists: true,
+    text: '',
+    skippedLines: 0,
+  });
 });

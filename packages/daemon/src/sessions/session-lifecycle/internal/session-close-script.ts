@@ -95,33 +95,32 @@ export function finalizeOrdinaryCloseScript(params: {
   // On a platform-close failure that action was never recorded, so the log still publishes to the
   // session default rather than the request's explicit path — the lifecycle armed by `open` is
   // what authorizes the write, and it is untouched by that failure.
-  try {
-    const result = sessionStore.writeSessionLog(ref, {
-      force: effectiveWriteForce(session, req.flags?.force),
-    });
-    if (result.written) markCloseGeneratedPublicationDone(session, result.path);
+  const result = sessionStore.writeSessionLog(ref, {
+    force: effectiveWriteForce(session, req.flags?.force),
+  });
+  if (result.written) {
+    markCloseGeneratedPublicationDone(session, result.path);
     return undefined;
-  } catch (error) {
-    return toOrdinaryCloseSaveScriptFailure(error);
   }
+  return result.error ? toOrdinaryCloseSaveScriptFailure(result.error) : undefined;
 }
 
-function toOrdinaryCloseSaveScriptFailure(error: unknown): AppError {
-  const overrides = {
-    hint: 'Remove the existing target (or pass --force/--overwrite), then re-record with open --save-script.',
-    retriable: false,
-  };
-  if (error instanceof AppError) {
-    return new AppError(
-      'COMMAND_FAILED',
-      `The session was closed, but its script was not saved: ${error.message}`,
-      { ...error.details, ...overrides },
-      error.cause,
-    );
-  }
+function toOrdinaryCloseSaveScriptFailure(error: AppError): AppError {
   return new AppError(
     'COMMAND_FAILED',
-    `The session was closed, but its script was not saved: ${normalizeError(error).message}`,
-    overrides,
+    `The session was closed, but its script was not saved: ${error.message}`,
+    { ...error.details, hint: closeSaveScriptHint(error), retriable: false },
+    error.cause,
   );
+}
+
+function closeSaveScriptHint(error: AppError): string | undefined {
+  switch (error.details?.reason) {
+    case 'script_target_exists':
+      return 'Remove the existing target (or pass --force/--overwrite), then re-record with open --save-script.';
+    case 'script_write_failed':
+      return 'Check the target path and its permissions, then re-record with open --save-script.';
+    default:
+      return error.details?.hint;
+  }
 }

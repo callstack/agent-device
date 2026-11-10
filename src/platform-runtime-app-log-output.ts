@@ -1,5 +1,9 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { ensureAppLogPath } from '@agent-device/capture-kit/app-log-files';
+import {
+  ensureAppLogPath,
+  resolveAppLogRotationConfig,
+  rotateAppLogIfNeeded,
+} from '@agent-device/capture-kit/app-log-files';
 import type { AppLogOutputSink } from '@agent-device/contracts/app-log-runtime';
 import fs from 'node:fs';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -14,18 +18,8 @@ export async function openAppLogOutput(
   pathname = requireManagedOutputPath(sessionsDir, pathname);
   const patterns = redactionPatterns(host.env);
   ensureAppLogPath(pathname, host.env);
-  const descriptor = openVerifiedFileForAppend(pathname);
-  let stream: fs.WriteStream;
-  try {
-    stream = fs.createWriteStream(pathname, { fd: descriptor, autoClose: true });
-  } catch (error) {
-    fs.closeSync(descriptor);
-    throw error;
-  }
-  let streamError: Error | undefined;
-  stream.on('error', (error) => {
-    streamError ??= error;
-  });
+  const rotation = resolveAppLogRotationConfig(host.env);
+  let output = openAppendOutput(pathname);
   let pending = '';
   let writes = Promise.resolve();
   let disposal: Promise<void> | undefined;
@@ -34,26 +28,85 @@ export async function openAppLogOutput(
     writes = next.catch(() => undefined);
     return next;
   };
+  // A sink stays open for a whole `logs start` stream, so the cap is checked as it writes. The size
+  // comes from the descriptor, so `logs mark` appends through another descriptor count too.
+  const rotateIfNeeded = async () => {
+    if (fs.fstatSync(output.descriptor).size < rotation.maxBytes) return;
+    try {
+      await closeOutput(output);
+      rotateAppLogIfNeeded(pathname, rotation);
+    } finally {
+      output = openAppendOutput(pathname);
+    }
+  };
   const writeText = async (text: string) => {
     const combined = `${pending}${text}`;
     const lines = combined.split('\n');
     pending = lines.pop() ?? '';
-    for (const line of lines) await writeChunk(stream, redact(`${line}\n`, patterns));
+    await writeOutput(output, lines.map((line) => redact(`${line}\n`, patterns)).join(''));
+    await rotateIfNeeded();
   };
   return {
     write: async (chunk) => await enqueue(async () => await writeText(decodeAppLogChunk(chunk))),
     [Symbol.asyncDispose]: async () => {
       disposal ??= enqueue(async () => {
         if (pending) {
-          await writeChunk(stream, redact(pending, patterns));
+          await writeOutput(output, redact(pending, patterns));
           pending = '';
         }
-        await closeStream(stream);
-        if (streamError) throw streamError;
+        await closeOutput(output);
+        rotateAppLogIfNeeded(pathname, rotation);
+        // Readers report a missing `app.log` as no output, so a rotation leaves an empty current file.
+        fs.closeSync(openVerifiedFileForAppend(pathname));
       });
       await disposal;
     },
   };
+}
+
+type AppendOutput = {
+  stream: fs.WriteStream;
+  descriptor: number;
+  error?: Error;
+};
+
+function openAppendOutput(pathname: string): AppendOutput {
+  const descriptor = openVerifiedFileForAppend(pathname);
+  let output: AppendOutput;
+  try {
+    output = {
+      stream: fs.createWriteStream(pathname, { fd: descriptor, autoClose: true }),
+      descriptor,
+    };
+  } catch (error) {
+    fs.closeSync(descriptor);
+    throw error;
+  }
+  output.stream.on('error', (error) => {
+    output.error ??= error;
+  });
+  return output;
+}
+
+async function writeOutput(output: AppendOutput, chunk: string): Promise<void> {
+  if (!chunk) return;
+  await new Promise<void>((resolve, reject) => {
+    output.stream.write(chunk, (error) => (error ? reject(error) : resolve()));
+  });
+}
+
+async function closeOutput(output: AppendOutput): Promise<void> {
+  const { stream } = output;
+  if (!stream.closed) {
+    await new Promise<void>((resolve, reject) => {
+      stream.once('error', reject);
+      stream.end(() => {
+        stream.off('error', reject);
+        resolve();
+      });
+    });
+  }
+  if (output.error) throw output.error;
 }
 
 export async function readAppLogOutputTail(
@@ -142,22 +195,4 @@ function redact(chunk: string, patterns: readonly RegExp[]): string {
 
 function decodeAppLogChunk(chunk: string | Uint8Array): string {
   return typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8');
-}
-
-async function writeChunk(stream: fs.WriteStream, chunk: string): Promise<void> {
-  if (!chunk) return;
-  await new Promise<void>((resolve, reject) => {
-    stream.write(chunk, (error) => (error ? reject(error) : resolve()));
-  });
-}
-
-async function closeStream(stream: fs.WriteStream): Promise<void> {
-  if (stream.closed) return;
-  await new Promise<void>((resolve, reject) => {
-    stream.once('error', reject);
-    stream.end(() => {
-      stream.off('error', reject);
-      resolve();
-    });
-  });
 }

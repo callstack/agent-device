@@ -104,6 +104,8 @@ export function createExpiredProviderLeaseReleaser(options: {
   stateDir?: string;
   recoverableProviderIds?: readonly string[];
   retryDelayMs?: number;
+  /** Gives a timer-driven retry, which runs outside any request, a diagnostics scope. */
+  withinDiagnosticsScope?: (run: () => Promise<void>) => Promise<void>;
 }): ExpiredProviderLeaseReleaser {
   const pendingLiveLeases = new Map<string, DeviceLease>();
   const pendingRecoveryLeases = new Map<string, DeviceLease>();
@@ -115,6 +117,24 @@ export function createExpiredProviderLeaseReleaser(options: {
   let phase: ReleaserPhase = 'running';
   /** The releases this drain window observed; replaced at each window so one window's set is never another's. */
   let drainReleasedLeases = new Map<string, DeviceLease>();
+  const runScoped = (run: () => Promise<void>): void => {
+    const guarded = async (): Promise<void> => {
+      try {
+        await run();
+      } catch (error) {
+        emitDiagnostic({
+          level: 'error',
+          phase: 'provider_lease_expiry_timer_failed',
+          data: { error: error instanceof Error ? error.message : String(error) },
+        });
+      }
+    };
+    // A timer callback has no caller: a scope that cannot even open must not become an unhandled
+    // rejection that ends the daemon.
+    void (
+      options.withinDiagnosticsScope ? options.withinDiagnosticsScope(guarded) : guarded()
+    ).catch(() => undefined);
+  };
 
   /** Moves the lifecycle forward and nothing else: the phase never goes back. */
   const advancePhase = (next: ReleaserPhase): void => {
@@ -205,7 +225,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       if (phase === 'closed') return;
       journalRetryTimer ??= setTimeout(() => {
         journalRetryTimer = undefined;
-        writeJournal();
+        runScoped(async () => writeJournal());
       }, retryDelayMs);
       journalRetryTimer.unref?.();
     }
@@ -247,7 +267,7 @@ export function createExpiredProviderLeaseReleaser(options: {
     }
     retryTimer = setTimeout(() => {
       retryTimer = undefined;
-      void retryPending();
+      runScoped(retryPending);
     }, retryDelayMs);
     retryTimer.unref?.();
     emitDiagnostic({
@@ -388,7 +408,11 @@ export function createExpiredProviderLeaseReleaser(options: {
     drain: async (timeoutMs) => {
       // Shutdown gets one final, bounded attempt at every pending release. A
       // provider call that hangs must not keep the daemon alive indefinitely.
-      await Promise.race([retryPending(), sleep(Math.max(0, timeoutMs))]);
+      const deadline = new AbortController();
+      await Promise.race([
+        retryPending().finally(() => deadline.abort()),
+        sleep(Math.max(0, timeoutMs), deadline.signal),
+      ]);
       const result = {
         pending: [...pendingLiveLeases.values(), ...pendingRecoveryLeases.values()],
         unknown: [

@@ -133,12 +133,12 @@ async function finishValidationCommand(
   pid: number | undefined,
 ): Promise<void> {
   readActiveCommand(`${lockDirPath}.active.json`);
-  if (pid !== undefined) await waitForCommandExit(lockDirPath, pid);
+  if (pid !== undefined) await waitForCommandExit(pid);
   readActiveCommand(`${lockDirPath}.active.json`);
   fs.rmSync(`${lockDirPath}.active.json`, { force: true });
 }
 
-async function waitForCommandExit(lockDirPath: string, pid: number): Promise<void> {
+async function waitForCommandExit(pid: number): Promise<void> {
   const deadline = Date.now() + 10_000;
   while (isProcessGroupAlive(pid)) {
     if (Date.now() >= deadline)

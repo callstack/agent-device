@@ -307,7 +307,6 @@ import type {
   BackendDumpNetworkOptions,
   BackendDumpNetworkResult,
   BackendNetworkEntry,
-  BackendNetworkIncludeMode,
 } from './backend-diagnostics.ts';
 
 export type {
@@ -316,7 +315,6 @@ export type {
   BackendDumpNetworkOptions,
   BackendDumpNetworkResult,
   BackendNetworkEntry,
-  BackendNetworkIncludeMode,
 };
 
 export type BackendLogEntry = {

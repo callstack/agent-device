@@ -40,7 +40,6 @@ import {
   createSelectorWaitCommands,
   type WaitCommandOptions,
   type WaitCommandResult,
-  type WaitForTextCommandOptions,
 } from './selector-wait.ts';
 import {
   DEFAULT_STABLE_QUIET_MS,
@@ -50,11 +49,7 @@ import {
 } from './stable-capture.ts';
 
 export type { SelectorSnapshotOptions } from './selector-read-shared.ts';
-export type {
-  WaitCommandOptions,
-  WaitCommandResult,
-  WaitForTextCommandOptions,
-} from './selector-wait.ts';
+export type { WaitCommandOptions, WaitCommandResult } from './selector-wait.ts';
 export type { ElementTarget, ResolvedTarget };
 
 export type FindReadCommandOptions = CommandContext & {
@@ -93,16 +88,6 @@ export type GetCommandResult =
       preActionNodes: SnapshotNode[];
     };
 
-export type GetTextCommandOptions = CommandContext &
-  SelectorSnapshotOptions & {
-    target: ElementTarget;
-  };
-
-export type GetAttrsCommandOptions = CommandContext &
-  SelectorSnapshotOptions & {
-    target: ElementTarget;
-  };
-
 const selectorWaitCommands = createSelectorWaitCommands<AgentDeviceRuntime>({
   captureSnapshot: captureSelectorSnapshot,
   requireSnapshot: requireSnapshotSession,
@@ -116,11 +101,6 @@ const selectorWaitCommands = createSelectorWaitCommands<AgentDeviceRuntime>({
 
 export const waitCommand: RuntimeCommand<WaitCommandOptions, WaitCommandResult> =
   selectorWaitCommands.waitCommand;
-
-export const waitForTextCommand: RuntimeCommand<
-  WaitForTextCommandOptions,
-  Extract<WaitCommandResult, { kind: 'text' }>
-> = selectorWaitCommands.waitForTextCommand;
 
 export const findCommand: RuntimeCommand<FindReadCommandOptions, FindReadCommandResult> = async (
   runtime,
@@ -214,36 +194,6 @@ export const getCommand: RuntimeCommand<GetCommandOptions, GetCommandResult> = a
     selectorChain,
     preActionNodes: resolved.capture.snapshot.nodes,
   };
-};
-
-export const getTextCommand: RuntimeCommand<
-  GetTextCommandOptions,
-  Extract<GetCommandResult, { kind: 'text' }>
-> = async (runtime, options): Promise<Extract<GetCommandResult, { kind: 'text' }>> => {
-  const result = await getCommand(runtime, {
-    ...options,
-    property: 'text',
-    target: options.target,
-  });
-  if (result.kind !== 'text') {
-    throw new AppError('COMMAND_FAILED', 'getText returned non-text result');
-  }
-  return result;
-};
-
-export const getAttrsCommand: RuntimeCommand<
-  GetAttrsCommandOptions,
-  Extract<GetCommandResult, { kind: 'attrs' }>
-> = async (runtime, options): Promise<Extract<GetCommandResult, { kind: 'attrs' }>> => {
-  const result = await getCommand(runtime, {
-    ...options,
-    property: 'attrs',
-    target: options.target,
-  });
-  if (result.kind !== 'attrs') {
-    throw new AppError('COMMAND_FAILED', 'getAttrs returned non-attrs result');
-  }
-  return result;
 };
 
 async function waitForFindMatch(

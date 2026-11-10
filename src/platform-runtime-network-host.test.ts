@@ -15,12 +15,12 @@ afterEach(() => {
   }
 });
 
-test('reads the exact newest line-bounded app-log suffix', () => {
+test('reads the exact newest line-bounded app-log suffix', async () => {
   const directory = createTemporaryDirectory();
   const pathname = path.join(directory, 'app.log');
   fs.writeFileSync(pathname, 'one\ntwo\nthree\nfour\n');
 
-  assert.deepEqual(readRecentAppLogLines(pathname, 3), {
+  assert.deepEqual(await readRecentAppLogLines(pathname, 3), {
     path: pathname,
     exists: true,
     text: 'three\nfour\n',
@@ -28,13 +28,13 @@ test('reads the exact newest line-bounded app-log suffix', () => {
   });
 });
 
-test('distinguishes missing files and rejects a final-component symbolic link', () => {
+test('distinguishes missing files and rejects a final-component symbolic link', async () => {
   const directory = createTemporaryDirectory();
   const outside = path.join(directory, 'outside.log');
   const linked = path.join(directory, 'app.log');
   fs.writeFileSync(outside, 'GET https://outside.example.test');
 
-  assert.deepEqual(readRecentAppLogLines(linked, 100), {
+  assert.deepEqual(await readRecentAppLogLines(linked, 100), {
     path: linked,
     exists: false,
     text: '',
@@ -42,10 +42,10 @@ test('distinguishes missing files and rejects a final-component symbolic link', 
   });
 
   fs.symlinkSync(outside, linked);
-  assert.throws(() => readRecentAppLogLines(linked, 100), /regular file/);
+  await assert.rejects(readRecentAppLogLines(linked, 100), /regular file/);
 });
 
-test('preserves absolute source line numbers after selecting a bounded suffix', () => {
+test('preserves absolute source line numbers after selecting a bounded suffix', async () => {
   const directory = createTemporaryDirectory();
   const pathname = path.join(directory, 'app.log');
   const text = [
@@ -54,7 +54,7 @@ test('preserves absolute source line numbers after selecting a bounded suffix', 
   ].join('\n');
   fs.writeFileSync(pathname, `${text}\n`);
 
-  const recent = readRecentAppLogLines(pathname, 4000);
+  const recent = await readRecentAppLogLines(pathname, 4000);
   const { dump } = readRecentNetworkTrafficFromText(recent.text, {
     path: recent.path,
     exists: recent.exists,
@@ -67,6 +67,28 @@ test('preserves absolute source line numbers after selecting a bounded suffix', 
   });
 
   assert.equal(dump.entries[0]?.line, 5001);
+});
+
+test('selects the same suffix across read blocks as a whole-file split', async () => {
+  const directory = createTemporaryDirectory();
+  const pathname = path.join(directory, 'app.log');
+  // About 1 MiB in many 64 KiB blocks, with multi-byte characters that can straddle a block edge.
+  const text = Array.from(
+    { length: 30_000 },
+    (_, index) => `line ${index} ✓ ${'y'.repeat(20)}`,
+  ).join('\n');
+  fs.writeFileSync(pathname, text);
+  const lines = text.split('\n');
+
+  for (const maxScanLines of [1, 4321, 20_000]) {
+    const skippedLines = lines.length - maxScanLines;
+    assert.deepEqual(await readRecentAppLogLines(pathname, maxScanLines), {
+      path: pathname,
+      exists: true,
+      text: lines.slice(skippedLines).join('\n'),
+      skippedLines,
+    });
+  }
 });
 
 function createTemporaryDirectory(): string {

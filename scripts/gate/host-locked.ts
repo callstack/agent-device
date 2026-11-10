@@ -11,10 +11,11 @@ import {
   VALIDATION_PARENT_ENV,
 } from '../check-affected/host-lock.ts';
 import { getCheckSpec } from '../check-affected/checks.ts';
+import type { CheckId } from '../check-affected/model.ts';
 import { abortOnTerminationSignal } from '../check-affected/termination.ts';
 
 export type GateExecution = {
-  id: string;
+  id: CheckId;
   command: readonly string[];
   cwd: string;
   env: NodeJS.ProcessEnv;
@@ -22,7 +23,7 @@ export type GateExecution = {
   report?: (message: string) => void;
 };
 
-export function requiresHostLock(id: string, env: NodeJS.ProcessEnv): boolean {
+export function requiresHostLock(id: CheckId, env: NodeJS.ProcessEnv): boolean {
   return (
     getCheckSpec(id).hostLocked &&
     (process.platform === 'darwin' || process.platform === 'linux') &&

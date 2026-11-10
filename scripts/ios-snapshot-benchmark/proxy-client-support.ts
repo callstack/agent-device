@@ -22,7 +22,7 @@ import {
   type FixturePreparationOptions,
 } from './fixture-admission.ts';
 import { type NetworkConditioner, type ProxyRpcRecord } from './proxy-conditioner.ts';
-import type { ProxyStartup } from './proxy-process.ts';
+import type { ProxyStartup } from './proxy-startup.ts';
 import { asRecord } from './result-values.ts';
 import type { Failure, ProxyNetwork, RawSample, ScreenFixture } from './types.ts';
 
@@ -212,7 +212,7 @@ function buildSuccessfulClientSample(
 }
 
 function firstClientResult(result: Record<string, unknown>): Record<string, unknown> | undefined {
-  return asRecord(result.results?.[0]);
+  return asRecord(Array.isArray(result.results) ? result.results[0] : undefined);
 }
 
 function snapshotFromClientResult(

@@ -148,10 +148,10 @@ This repository already proved the same "make the gap declare itself" pattern in
 Each guarantee has exactly one home that all TypeScript paths import.
 Most of these homes already exist after #1075:
 
-- `isNodeVisibleOnScreen`.
+- `throwIfOffscreenInteractionTarget`.
 - `accumulateDisambiguationCandidate`.
 - `isSnapshotNodeInteractionBlocked`.
-- `describeResolvedNode`.
+- `describeResolvedInteractionNode`.
 - `interactionResultExtra`.
 - `reconcileNonHittableHintWithEvidence`.
 
@@ -370,7 +370,7 @@ Also, the structural rule never reached the read door.
   A regular iOS snapshot omits unverified hittability, so the ladder that relates a wrapper to its control cannot fire.
   #2482 collapsed that chain for mutating resolution only.
   As a result, `is visible` and `get attrs` refused the same screen as ambiguous, while `press` tapped it.
-  The collapse now sits beside the classification that asks for it (`resolveUnverifiedWrapperControl`).
+  The collapse now sits beside the classification that asks for it (`resolveUnverifiedWrapperControlWithIndex`).
   The collapse applies where a refusal was the answer.
   The uniqueness rows resolve the control instead of reporting no match:
   - `is <predicate>`.
