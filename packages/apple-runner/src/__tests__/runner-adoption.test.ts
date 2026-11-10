@@ -191,11 +191,11 @@ test('adoption succeeds for a live, matching, probe-healthy runner', async () =>
   expect(session).not.toBeNull();
   expect(session?.endpoint.port).toBe(lease.port);
   expect(session?.state).toBe('ready');
-  expect(session?.child.pid).toBe(424242);
+  expect(session?.launch.local?.child?.pid).toBe(424242);
   expect(session?.sessionId).toBe(lease.sessionId);
   expect(session?.xctestrunArtifact?.reason).toBe('adopted_from_lease');
   expect(session?.xctestrunArtifact?.cacheKey).toBe(lease.cacheKey);
-  expect(session?.lease?.cacheKey).toBe(lease.cacheKey);
+  expect(session?.launch.local?.lease?.cacheKey).toBe(lease.cacheKey);
   // Adoption transfers ownership: the lease on disk now belongs to us.
   expect(readStaleRunnerLease(simulator.id)).toBeNull();
 });
@@ -213,7 +213,7 @@ test('the probe and the adopted session carry the token the runner was launched 
   });
   expect(session).toMatchObject({
     endpoint: { port: lease.port, token: 'runner-token-fixture' },
-    lease: { runnerToken: 'runner-token-fixture' },
+    launch: { local: { lease: { runnerToken: 'runner-token-fixture' } } },
   });
 });
 
@@ -365,7 +365,7 @@ test('adoption accepts a legacy lease whose live pid is runner-shaped', async ()
   const session = await tryAdoptRunnerSessionFromLease(simulator, {});
 
   expect(session?.state).toBe('ready');
-  expect(session?.child.pid).toBe(424242);
+  expect(session?.launch.local?.child?.pid).toBe(424242);
 });
 
 test('a runner for a simulator in a custom simulator set is adopted', async () => {
@@ -492,7 +492,7 @@ test('physical coredevice lane adopts the detached runner and names its lane', a
   const session = await tryAdoptRunnerSessionFromLease(physicalCoreDevice, {});
 
   expect(session?.state).toBe('ready');
-  expect(session?.child.pid).toBe(lease.runnerPid);
+  expect(session?.launch.local?.child?.pid).toBe(lease.runnerPid);
   expect(session?.endpoint.port).toBe(lease.port);
   expect(
     emittedDiagnostics.find((event) => event.phase === 'ios_runner_lease_adopted')?.data,

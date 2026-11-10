@@ -96,8 +96,8 @@ describe('routine-workflow output-behavior oracle', () => {
       orient.samples.mcp && 'data' in orient.samples.mcp ? orient.samples.mcp.data : undefined;
     expect(mcp).toMatchObject({
       isError: false,
-      structuredContent: { refsGeneration: 12 },
       content: [{ type: 'text', text: expect.stringContaining('@e3 [button] "Place order"') }],
     });
+    expect(mcp).not.toHaveProperty('structuredContent');
   });
 });

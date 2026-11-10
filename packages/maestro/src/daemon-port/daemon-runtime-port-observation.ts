@@ -23,7 +23,8 @@ import {
   type TouchReferenceFrame,
 } from '@agent-device/capture-kit/touch-reference-frame';
 import { isPositiveFiniteRect, rectContains } from '@agent-device/kernel/rect';
-import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { Rect } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { buildIosInteractiveSnapshotPresentation } from '@agent-device/capture-kit/ios-snapshot-engine';
 
 export const MAESTRO_OBSERVATION_POLL_MS = MAESTRO_RUNTIME_ADAPTER_POLICY.observationPollMs;

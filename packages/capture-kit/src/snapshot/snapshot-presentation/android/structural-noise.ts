@@ -113,7 +113,17 @@ function collectPromotableRowContent(
   const labels: string[] = [];
   const removableIndexes: number[] = [];
   const seen = new Set<string>();
+  const independentActionSubtrees = new Set<number>();
   for (const descendant of descendants) {
+    if (
+      descendant.hittable === true ||
+      isEditableNode(descendant) ||
+      (descendant.parentIndex !== undefined &&
+        independentActionSubtrees.has(descendant.parentIndex))
+    ) {
+      independentActionSubtrees.add(descendant.index);
+      continue;
+    }
     if (
       removed.has(descendant.index) ||
       !isPromotableRowContent(descendant, descendants) ||

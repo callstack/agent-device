@@ -8,21 +8,6 @@ private final class RunnerCoordinateTapObserver {
   var count = 0
 }
 
-private final class RunnerSynthesizedTapFailureStub: NSObject {
-  @objc(synthesizeTapWithApplication:resolvedWindow:x:y:deadline:errorMessage:)
-  class func synthesizeTap(
-    application: XCUIApplication,
-    resolvedWindow: Any?,
-    x: Double,
-    y: Double,
-    deadline: NSDate?,
-    errorMessage: AutoreleasingUnsafeMutablePointer<NSString?>?
-  ) -> RunnerTapSynthesisStatus {
-    errorMessage?.pointee = "forced private synthesis failure"
-    return .failed
-  }
-}
-
 extension RunnerTests {
   private func observeCoordinateTaps(droppingFirst: Bool = false) throws -> (
     observer: RunnerCoordinateTapObserver, restore: () -> Void
@@ -47,12 +32,18 @@ extension RunnerTests {
 
   /// Makes private tap synthesis fail until the returned closure restores it.
   func forceSynthesizedTapFailure() throws -> () -> Void {
-    let selector = NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:x:y:deadline:errorMessage:")
+    let selector = NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:interfaceOrientation:point:deadline:errorMessage:")
     let synthesizedTapMethod = try XCTUnwrap(class_getClassMethod(RunnerSynthesizedGesture.self, selector))
-    let failureStubMethod = try XCTUnwrap(class_getClassMethod(RunnerSynthesizedTapFailureStub.self, selector))
+    let failureStubMethod = try XCTUnwrap(class_getClassMethod(RunnerTapSynthesisStub.self, selector))
     let originalImplementation = method_getImplementation(synthesizedTapMethod)
     method_setImplementation(synthesizedTapMethod, method_getImplementation(failureStubMethod))
-    return { method_setImplementation(synthesizedTapMethod, originalImplementation) }
+    let status = RunnerTapSynthesisStub.status
+    RunnerTapSynthesisStub.status = .failed
+    return {
+      RunnerTapSynthesisStub.status = status
+      RunnerTapSynthesisStub.interruptionHandlingDisabled = nil
+      method_setImplementation(synthesizedTapMethod, originalImplementation)
+    }
   }
 }
 #endif

@@ -48,6 +48,11 @@ extension RunnerTests {
     XCTAssertEqual(orphaned, [], "CommandType cases with no production request")
   }
 
+  func testRunnerSurfacePreparationMatchesTheSharedPolicyFixture() throws {
+    let policies = try XCTUnwrap(runnerContractFixture("runner-surface-policy.json") as? [String: String])
+    XCTAssertEqual(policies, Dictionary(uniqueKeysWithValues: CommandType.allCases.map { ($0.rawValue, $0.surfacePolicy.rawValue) }))
+  }
+
   func testQueuedReadOnlyTraitsMatchTheDaemonParityFixture() throws {
     let rows = try XCTUnwrap(
       runnerContractFixture("runner-command-read-only.json") as? [[String: Any]]
@@ -58,13 +63,13 @@ extension RunnerTests {
       let name = String(describing: request)
       let command = try decodeProductionRunnerRequest(request, name)
       let readOnly = try XCTUnwrap(row["readOnly"] as? Bool, name)
-      XCTAssertNil(inlineResponse(for: command), name)
+      XCTAssertNil(offQueueRoute(for: command), name)
       XCTAssertEqual(command.traits.isReadOnly, readOnly, name)
       covered.insert(command.command)
     }
     let queued = try Set(CommandType.allCases.filter { type in
       let command = try runnerCommandFixture(#"{"command":"\#(type.rawValue)"}"#)
-      return inlineResponse(for: command) == nil
+      return offQueueRoute(for: command) == nil
     })
     XCTAssertEqual(covered, queued, "every queued CommandType needs parity coverage")
   }
@@ -76,16 +81,23 @@ extension RunnerTests {
     let plans = requests.compactMap { $0["gesturePlan"] as? [String: Any] }
     let pointers = plans.flatMap { $0["pointers"] as? [[String: Any]] ?? [] }
     let samples = pointers.flatMap { $0["samples"] as? [[String: Any]] ?? [] }
+    let litPanels = requests.compactMap { $0["litPanel"] as? [String: Any] }
     let commands = try entries.map { try decodeProductionRunnerRequest($0.request, $0.name) }
+    XCTAssertEqual(commands.compactMap(\.sequenceOrientation).first, 1)
     let command = try XCTUnwrap(commands.first, "no production request")
     let plan = try XCTUnwrap(
       commands.compactMap(\.gesturePlan).first,
       "no production request carries a gesturePlan"
     )
+    let litPanel = try XCTUnwrap(
+      commands.compactMap(\.litPanel).first,
+      "no production request carries a litPanel, so a foldable's surface route would go unpinned"
+    )
     let step = try JSONDecoder().decode(SequenceStep.self, from: Data(#"{"kind":"tap"}"#.utf8))
     let sample = try XCTUnwrap(plan.pointers.first?.samples.first)
     assertEveryStoredField(of: command, appearsIn: requests, "Command")
     assertEveryStoredField(of: step, appearsIn: steps, "SequenceStep")
+    assertEveryStoredField(of: litPanel, appearsIn: litPanels, "RunnerLitPanelFact")
     assertEveryStoredField(of: plan, appearsIn: plans, "RunnerGesturePlan")
     assertEveryStoredField(
       of: plan.viewport,
@@ -234,19 +246,20 @@ extension RunnerTests {
 
   /// Commands that did not exist at the merge-base, so no classification of its is compared with
   /// theirs. `appState` arrived with #2929, `pasteboardWrite` with the runner-written simulator
-  /// clipboard.
+  /// clipboard, `snapshotBridge` with the runner-served Simulator AX bridge.
   private static let commandsNewerThanTheMergeBase: Set<CommandType> = [
-    .appState, .pasteboardWrite, .volumeUp, .volumeDown,
+    .appState, .pasteboardWrite, .volumeUp, .volumeDown, .snapshotBridge,
   ]
 
   /// The commands production never runs through the prepared path's body: `executeOnMain` answers
-  /// these before `executeOnMainPrepared` runs, and `executeDispatched` answers `snapshot` earlier
-  /// still, on both this and the merge-base chain. The merge-base witness predicate was therefore
+  /// these before `executeOnMainPrepared` runs, `executeDispatched` answers `snapshot` earlier
+  /// still, on both this and the merge-base chain, and the transport answers `snapshotBridge` off
+  /// its queue before any of them. The merge-base witness predicate was therefore
   /// never evaluated for them and neither is the derived one. If a command starts reaching the
   /// prepared path, removing it here is a claim the equivalence assertion below has to keep proving.
   private static let commandsAnsweredBeforeThePreparedPath: Set<CommandType> = [
     .status, .uptime, .appState, .pasteboardWrite, .activate, .terminate, .targetReset, .shutdown,
-    .recordStart, .recordStop, .snapshot,
+    .recordStart, .recordStop, .snapshot, .snapshotBridge,
   ]
 
   private func assertRememberedTextEntryWitnessInvalidation(
@@ -332,6 +345,7 @@ extension RunnerTests {
       (.status, expectation(interaction: false, retry: true, launch: .noApp, converts: false, retains: true, isReadOnly: true)),
       (.uptime, expectation(interaction: false, retry: false, launch: .noApp, converts: false, retains: true, isReadOnly: false)),
       (.appState, expectation(interaction: false, retry: true, launch: .noApp, converts: false, retains: true, isReadOnly: true)),
+      (.snapshotBridge, expectation(interaction: false, retry: true, launch: .noApp, converts: false, retains: false, isReadOnly: true)),
       (.pasteboardWrite, expectation(interaction: false, retry: false, launch: .noApp, converts: false, retains: true, isReadOnly: false)),
       (.activate, expectation(interaction: false, retry: false, launch: .mayLaunch, converts: true, retains: true, isReadOnly: false)),
       (.terminate, expectation(interaction: false, retry: false, launch: .noApp, converts: false, retains: true, isReadOnly: false)),

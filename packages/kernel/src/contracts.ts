@@ -254,7 +254,8 @@ export function errorResponse(
   };
 }
 
-export const NO_ACTIVE_SESSION_MESSAGE = 'No active session. Run open first.';
+export const NO_ACTIVE_SESSION_MESSAGE =
+  'No active session. Run agent-device open <app> first, then retry the command.';
 
 /**
  * Whether the caller named the session it wants, traced from what the request carries rather than
@@ -275,7 +276,7 @@ export function namesSessionExplicitly(request: {
 }
 
 /**
- * Shared "No active session. Run open first." failure used by handlers that require
+ * Shared no-active-session failure used by handlers that require
  * an open session before dispatching.
  */
 export function noActiveSessionError(): DaemonFailureResponse {
@@ -358,6 +359,18 @@ function optionalStringArray(
   if (value === undefined) return undefined;
   const items = expectArray(value, `${path}.${key}`);
   return items.map((item, index) => expectString(item, `${path}.${key}[${String(index)}]`));
+}
+
+/**
+ * Reads `record[key]` as an optional array of strings, the same check `commandRpcParamsSchema`
+ * applies to HTTP positionals. Throws an `Error` naming the offending element, such as
+ * `$.positionals[1]: Expected a string`.
+ */
+export function readOptionalStringArrayField(
+  record: Record<string, unknown>,
+  key: string,
+): string[] | undefined {
+  return optionalStringArray(record, key, '$');
 }
 
 function optionalInteger(

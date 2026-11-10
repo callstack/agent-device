@@ -61,6 +61,7 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     androidDeviceAllowlist: options.androidDeviceAllowlist,
     osVersion: options.osVersion,
     imageTag: options.imageTag,
+    deviceMode: options.deviceMode,
     physical: options.physical,
     surface: options.surface,
     activity: options.activity,

@@ -14,6 +14,8 @@ enum BackgroundDeliveryMechanism: String, Encodable, CaseIterable {
   case axSelectedText = "ax-selected-text"
   case axConfirm = "ax-confirm"
   case axScrollBar = "ax-scroll-bar"
+  /// `AXShowMenu`, confirmed by the app's new menu window.
+  case axShowMenu = "ax-show-menu"
   /// Keyboard events posted to the app's process, which inactive apps do accept.
   case keyEvents = "key-events"
 }
@@ -25,6 +27,7 @@ enum BackgroundRefusal: String, CaseIterable {
   case noAccessibleTarget = "no-accessible-target"
   case noTextInput = "no-settable-text-input"
   case noScrollBar = "no-scroll-bar"
+  case noContextMenu = "no-context-menu"
 }
 
 struct BackgroundPressResponse: Encodable {
@@ -39,6 +42,15 @@ struct BackgroundPressResponse: Encodable {
 }
 
 struct BackgroundTextResponse: Encodable {
+  let bundleId: String?
+  let mechanism: BackgroundDeliveryMechanism
+  let role: String?
+  let windowTitle: String?
+}
+
+struct BackgroundMenuResponse: Encodable {
+  let x: Double
+  let y: Double
   let bundleId: String?
   let mechanism: BackgroundDeliveryMechanism
   let role: String?
@@ -71,8 +83,17 @@ private let pressableControlRoles: Set<String> = [
 ]
 private let pressSearchMaxAncestors = 4
 
-func refusal(_ reason: BackgroundRefusal, _ message: String, app: NSRunningApplication) -> HelperError {
-  .commandFailed(message, details: ["reason": reason.rawValue, "bundleId": app.bundleIdentifier ?? ""])
+func refusal(
+  _ reason: BackgroundRefusal,
+  _ message: String,
+  app: NSRunningApplication,
+  details: [String: String] = [:]
+) -> HelperError {
+  .commandFailed(
+    message,
+    details: details.merging(["reason": reason.rawValue, "bundleId": app.bundleIdentifier ?? ""]) {
+      $1
+    })
 }
 
 func requireSessionApplication(bundleId: String?) throws -> NSRunningApplication {
@@ -192,6 +213,131 @@ func fillInBackground(
   return BackgroundTextResponse(
     bundleId: app.bundleIdentifier, mechanism: .axValue, role: role(of: input),
     windowTitle: windowTitle(of: input))
+}
+
+private let popUpMenuWindowLayer = Int(CGWindowLevelForKey(.popUpMenuWindow))
+/// An app that opens a menu tracks it until the menu closes and answers `AXShowMenu` only then,
+/// so the action's reply is abandoned after this long and the menu window decides the outcome.
+private let showMenuReplyTimeoutSeconds: Float = 0.5
+private let menuWindowWaitMs = 1_000
+private let menuWindowPollMs = 50
+
+/// Opens the context menu of the element at a point, the way a secondary click does: the nearest
+/// element up the hit chain that offers `AXShowMenu` opens it. Success is the app's new menu
+/// window, never the action's own reply.
+func showMenuInBackground(
+  point: CGPoint,
+  app: NSRunningApplication,
+  cursor: GhostCursor?
+) throws -> BackgroundMenuResponse {
+  try requireAppWindowPoint(point, app: app)
+  cursor?.move(to: point)
+  let hit = hitTest(in: app, point: point)
+  let owner: AXUIElement
+  switch contextMenuOwner(
+    from: hit.element,
+    role: role(of:),
+    offersMenu: { actionNames(of: $0).contains(showMenuAction as String) },
+    parent: { elementAttribute($0, attribute: kAXParentAttribute as String) }
+  ) {
+  case .owner(let element): owner = element
+  case .noTarget:
+    throw refusal(
+      .noAccessibleTarget, "the app's hit test found no accessibility element at the point",
+      app: app, details: ["axError": String(hit.axError.rawValue)])
+  case .noMenu:
+    throw refusal(
+      .noContextMenu, "no accessibility element at the point offers a context menu", app: app)
+  }
+  if isInMenuBar(owner) {
+    throw refusal(.noAccessibleTarget, "the point is on the app's menu bar", app: app)
+  }
+  let pid = app.processIdentifier
+  let menusBefore = popUpMenuWindowNumbers(pid: pid, windowInfo: try requireWindowInfo())
+  AXUIElementSetMessagingTimeout(owner, showMenuReplyTimeoutSeconds)
+  let reply = AXUIElementPerformAction(owner, showMenuAction)
+  guard try waitForNewMenuWindow(pid: pid, excluding: menusBefore) else {
+    throw HelperError.commandFailed(
+      "the element offered a context menu, but no menu opened",
+      details: [
+        "reason": "context-menu-not-observed",
+        "axError": String(reply.rawValue),
+        "bundleId": app.bundleIdentifier ?? "",
+        "hint": "No menu window appeared. Take a snapshot to check the app before you retry.",
+      ]
+    )
+  }
+  cursor?.pulse()
+  return BackgroundMenuResponse(
+    x: point.x,
+    y: point.y,
+    bundleId: app.bundleIdentifier,
+    mechanism: .axShowMenu,
+    role: role(of: owner),
+    windowTitle: windowTitle(of: owner)
+  )
+}
+
+func popUpMenuWindowNumbers(pid: pid_t, windowInfo: [[String: Any]]) -> Set<Int> {
+  Set(
+    windowInfo.compactMap { entry in
+      guard (entry[kCGWindowOwnerPID as String] as? Int32) == pid,
+        (entry[kCGWindowLayer as String] as? Int) == popUpMenuWindowLayer
+      else {
+        return nil
+      }
+      return entry[kCGWindowNumber as String] as? Int
+    })
+}
+
+private let showMenuAction = "AXShowMenu" as CFString
+
+/// Where a secondary click's context menu comes from: no hit-test element, no element with a
+/// menu, or the element that owns it.
+enum ContextMenuOwner<Element> {
+  case noTarget
+  case noMenu
+  case owner(Element)
+}
+
+extension ContextMenuOwner: Equatable where Element: Equatable {}
+
+/// An open menu's items sit under the element that opened it, so the walk stops at a menu too.
+private let contextMenuOwnerBoundaryRoles: Set<String> = ["AXWindow", "AXApplication", "AXMenu"]
+
+/// AppKit offers a secondary click to the hit view and then to each superview in turn, so the
+/// nearest ancestor with a menu owns it.
+func contextMenuOwner<Element>(
+  from hit: Element?,
+  role: (Element) -> String,
+  offersMenu: (Element) -> Bool,
+  parent: (Element) -> Element?
+) -> ContextMenuOwner<Element> {
+  guard var element = hit else { return .noTarget }
+  for _ in 0..<32 {
+    if contextMenuOwnerBoundaryRoles.contains(role(element)) { return .noMenu }
+    if offersMenu(element) { return .owner(element) }
+    guard let next = parent(element) else { return .noMenu }
+    element = next
+  }
+  return .noMenu
+}
+
+/// A window list that never became readable is a refusal, not an unobserved menu.
+private func waitForNewMenuWindow(pid: pid_t, excluding before: Set<Int>) throws -> Bool {
+  let deadline = Date().addingTimeInterval(Double(menuWindowWaitMs) / 1000)
+  var readAny = false
+  repeat {
+    if let info = appWindowInfo() {
+      readAny = true
+      if !popUpMenuWindowNumbers(pid: pid, windowInfo: info).subtracting(before).isEmpty {
+        return true
+      }
+    }
+    Thread.sleep(forTimeInterval: Double(menuWindowPollMs) / 1000)
+  } while Date() < deadline
+  if !readAny { _ = try requireWindowInfo(nil) }
+  return false
 }
 
 /// Scrolls the scroll area at the center of the app's front window.
@@ -350,13 +496,19 @@ private func isInMenuBar(_ element: AXUIElement) -> Bool {
 
 /// The app's own hit test, scoped to the app so windows of other apps above it do not answer.
 private func elementAtPoint(in app: NSRunningApplication, point: CGPoint) -> AXUIElement? {
+  hitTest(in: app, point: point).element
+}
+
+/// The app's hit test with its accessibility result, so a failed hit test stays distinct from
+/// an element that cannot take the action.
+private func hitTest(
+  in app: NSRunningApplication,
+  point: CGPoint
+) -> (element: AXUIElement?, axError: AXError) {
   let appElement = AXUIElementCreateApplication(app.processIdentifier)
   var hit: AXUIElement?
-  guard AXUIElementCopyElementAtPosition(appElement, Float(point.x), Float(point.y), &hit) == .success
-  else {
-    return nil
-  }
-  return hit
+  let axError = AXUIElementCopyElementAtPosition(appElement, Float(point.x), Float(point.y), &hit)
+  return (axError == .success ? hit : nil, axError)
 }
 
 private func pressSearchChain(from hit: AXUIElement) -> [AXUIElement] {
@@ -381,10 +533,14 @@ private func actionWindow(app: NSRunningApplication, hit: AXUIElement?) -> AXUIE
   }
   guard let front = try? frontWindowFrame(pid: app.processIdentifier) else { return nil }
   return windows(of: AXUIElementCreateApplication(app.processIdentifier)).first { window in
-    guard let rect = rectAttribute(window) else { return false }
-    return abs(rect.x - front.minX) < 1 && abs(rect.y - front.minY) < 1
-      && abs(rect.width - front.width) < 1 && abs(rect.height - front.height) < 1
+    rectAttribute(window).map { isSameFrame($0, front) } ?? false
   }
+}
+
+/// Whether an accessibility window frame is the frame of a WindowServer window.
+private func isSameFrame(_ rect: RectResponse, _ frame: CGRect) -> Bool {
+  abs(rect.x - frame.minX) < 1 && abs(rect.y - frame.minY) < 1
+    && abs(rect.width - frame.width) < 1 && abs(rect.height - frame.height) < 1
 }
 
 private func windowTitle(of element: AXUIElement) -> String? {
@@ -531,6 +687,24 @@ func appWindowInfo() -> [[String: Any]]? {
 /// none. A window list that cannot be read is a refusal, not an empty list: the caller must not
 /// report "no window" for a WindowServer it could not ask.
 func frontWindow(pid: pid_t, windowInfo: [[String: Any]]? = appWindowInfo()) throws -> OnScreenWindow? {
+  let windowInfo = try requireWindowInfo(windowInfo)
+  return frontWindow(
+    among: onScreenWindows(pid: pid, windowInfo: windowInfo),
+    isSharingIndicator: { isWindowSharingIndicator(pid: pid, frame: $0.bounds) }
+  )
+}
+
+/// The frontmost candidate that is not a window-sharing indicator. A lone window is never one: an
+/// indicator only appears in front of the window it belongs to.
+func frontWindow(
+  among candidates: [OnScreenWindow],
+  isSharingIndicator: (OnScreenWindow) -> Bool
+) -> OnScreenWindow? {
+  guard candidates.count > 1 else { return candidates.first }
+  return candidates.first { !isSharingIndicator($0) }
+}
+
+func requireWindowInfo(_ windowInfo: [[String: Any]]? = appWindowInfo()) throws -> [[String: Any]] {
   guard let windowInfo else {
     throw HelperError.commandFailed(
       "the app's on-screen windows could not be read",
@@ -540,7 +714,46 @@ func frontWindow(pid: pid_t, windowInfo: [[String: Any]]? = appWindowInfo()) thr
       ]
     )
   }
-  return onScreenWindows(pid: pid, windowInfo: windowInfo).first
+  return windowInfo
+}
+
+/// While a ScreenCaptureKit stream shares one of an app's windows, macOS 27 adds a 66 x 20
+/// normal-layer window titled "Window" in front of it. Its only child is a button titled
+/// `WindowSharingSessionButton`. That window is a system indicator, not the app's front window.
+private let windowSharingIndicatorButtonTitle = "WindowSharingSessionButton"
+
+/// Whether a child of a window, by its accessibility role and title, marks the window as the
+/// indicator. The title is read only for a button.
+func isWindowSharingIndicatorButton(role: String, title: @autoclosure () -> String?) -> Bool {
+  role == "AXButton" && title() == windowSharingIndicatorButtonTitle
+}
+
+/// `AXUIElementSetMessagingTimeout` applies only to the element it is set on, so every element the
+/// probe reads gets it, and the probe stops at its own deadline.
+private let sharingIndicatorReplyTimeoutSeconds: Float = 0.1
+private let sharingIndicatorProbeSeconds = 0.5
+
+/// An accessibility tree that cannot be read in time, from a hung app or without Accessibility
+/// access, reads as no indicator, so the frontmost window stays the choice as before the indicator
+/// check. Refusing instead would fail screenshots, which need no accessibility read today.
+private func isWindowSharingIndicator(pid: pid_t, frame: CGRect) -> Bool {
+  let deadline = Date().addingTimeInterval(sharingIndicatorProbeSeconds)
+  func bounded(_ element: AXUIElement) -> AXUIElement? {
+    guard Date() < deadline else { return nil }
+    AXUIElementSetMessagingTimeout(element, sharingIndicatorReplyTimeoutSeconds)
+    return element
+  }
+  guard let appElement = bounded(AXUIElementCreateApplication(pid)) else { return false }
+  let window = windows(of: appElement).first { window in
+    guard let window = bounded(window), let rect = rectAttribute(window) else { return false }
+    return isSameFrame(rect, frame)
+  }
+  guard let window else { return false }
+  return children(of: window).contains { child in
+    guard let child = bounded(child) else { return false }
+    return isWindowSharingIndicatorButton(
+      role: role(of: child), title: stringAttribute(child, attribute: kAXTitleAttribute as String))
+  }
 }
 
 func frontWindowFrame(pid: pid_t, windowInfo: [[String: Any]]? = appWindowInfo()) throws -> CGRect? {

@@ -1,6 +1,8 @@
-import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { Rect, SnapshotKeyboardBandFact, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { areCapturedRectsAtSamePosition } from '@agent-device/kernel/rect-center';
 import { collectKeyboardChromeRefs } from '@agent-device/capture-kit/snapshot-chrome';
+import type { PostGestureSurfaceReading } from '@agent-device/capture-kit/post-gesture-stability';
 import { stateMarkers } from '@agent-device/capture-kit/snapshot-lines';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import type { InteractionSurfaceEntry } from './session-state.ts';
@@ -119,6 +121,49 @@ export function classifyBaselineSurfaceEvidence(
   // capture of the same screen.
   if (droppedFromBaseline && addedSinceBaseline) return 'changed';
   return 'unchanged';
+}
+
+/**
+ * `classifyBaselineSurfaceEvidence` for the post-gesture distrust verdict, which also counts the soft
+ * keyboard arriving or leaving as a change.
+ *
+ * A drag that dismisses the keyboard moves no content, so on content alone the quiet pair after it
+ * equals the pre-gesture baseline, and the loop distrusted a read that had in fact changed until the
+ * distrust cap: about 3.5 s for every keyboard dismissal by drag. A tree-bound keyboard fact
+ * (`treeBound`) was read from the same acquired tree as its capture's nodes, so a stale tree repeats
+ * the baseline's fact, and two tree-bound facts that disagree prove the read fresh.
+ *
+ * Every other keyboard reading proves nothing and falls back to the content comparison:
+ * - Keyboard nodes. The baseline is often a broader capture than the quiet reads, and a narrower
+ *   presentation can leave the keyboard's nodes out while the keyboard is still up.
+ * - A fact sampled apart from the tree. A WebDriver (Appium) capture reads page source before its
+ *   separate visibility probe, so a stale source can arrive with a newer visibility.
+ * - A missing or unmeasurable fact on either side.
+ */
+export function classifyPostGestureBaselineEvidence(
+  baseline: PostGestureSurfaceReading<InteractionSurfaceSignature>,
+  quiet: PostGestureSurfaceReading<InteractionSurfaceSignature>,
+): InteractionSurfaceChange {
+  const before = treeBoundKeyboardShown(baseline.keyboard);
+  const after = treeBoundKeyboardShown(quiet.keyboard);
+  if (before !== undefined && after !== undefined && before !== after) return 'changed';
+  return classifyBaselineSurfaceEvidence(baseline.signature, quiet.signature);
+}
+
+/**
+ * Whether a tree-bound keyboard fact shows the keyboard up (true) or down (false); undefined for a
+ * fact that is not tree-bound or proves neither.
+ */
+function treeBoundKeyboardShown(fact: SnapshotKeyboardBandFact | undefined): boolean | undefined {
+  switch (fact?.kind) {
+    case 'visible':
+    case 'derived':
+      return fact.treeBound === true ? true : undefined;
+    case 'absent':
+      return fact.treeBound === true ? false : undefined;
+    default:
+      return undefined;
+  }
 }
 
 /**

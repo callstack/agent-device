@@ -166,15 +166,21 @@ async function readDoctorDeviceInventory(selector: DeviceInventoryRequest): Prom
     return { ...combineDiscoveries([await readDeviceInventory(selector)]), failures: [] };
   }
 
+  // Each platform spawns its own tooling, so the reads overlap. Results fold in selector order.
+  const settled = await Promise.allSettled(
+    LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS.map(
+      async (platform) => await readDeviceInventory({ ...selector, platform }),
+    ),
+  );
   const discoveries: DeviceInventoryDiscovery[] = [];
   const failures: DoctorInventoryFailure[] = [];
-  for (const platform of LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS) {
-    try {
-      discoveries.push(await readDeviceInventory({ ...selector, platform }));
-    } catch (error) {
-      failures.push(inventoryFailure(platform, error));
-    }
-  }
+  settled.forEach((result, index) => {
+    if (result.status === 'fulfilled') discoveries.push(result.value);
+    else
+      failures.push(
+        inventoryFailure(LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS[index]!, result.reason),
+      );
+  });
   return { ...combineDiscoveries(discoveries), failures };
 }
 

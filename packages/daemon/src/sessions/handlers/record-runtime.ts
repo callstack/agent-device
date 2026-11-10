@@ -1,6 +1,7 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import path from 'node:path';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type {
   ScreenRecordingCompletion,
@@ -25,10 +26,7 @@ import {
   type DeviceInfo,
   type Platform,
 } from '@agent-device/kernel/device';
-import {
-  resolveTargetDevice,
-  type ResolveDeviceFlags,
-} from '@agent-device/device-selection/dispatch-resolve';
+import { type ResolveDeviceFlags } from '@agent-device/device-selection/dispatch-resolve';
 import { hasDeviceSelectionInput } from '../../core/device/device-selector-intent.ts';
 import { ensureBoundDeviceReady } from '../../core/request-runtime-binding.ts';
 import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
@@ -51,6 +49,7 @@ import type {
   BindExactDeviceRuntime,
 } from '../../core/request-runtime-binding.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { requestCwd } from '../../core/context.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import { sessionHasOwnersBeyondRecording } from '../../core/session-state.ts';
 import { withCaptureOutputOwnership } from '../../core/capture-output-ownership.ts';
@@ -75,6 +74,7 @@ import {
   buildRecordingUnsupportedResponse,
   isDaemonOwnedRecordingOutput,
 } from './record-runtime-response.ts';
+import { resolveRequestTargetDevice } from '../../core/request-device-resolution.ts';
 
 /**
  * A stop either finishes the live export or reports one the daemon already finished. Only the
@@ -193,7 +193,7 @@ async function resolveUnheldRecordingDevice(
 ): Promise<DeviceInfo> {
   const { req, sessionName } = params;
   if (!namesSessionWithoutTarget(req))
-    return await resolveTargetDevice(req.flags ?? {}, { env: params.sessionStore.host.env });
+    return await resolveRequestTargetDevice(req, { env: params.sessionStore.host.env });
   if (plan.kind === 'stop-recovery') {
     const recorded = screenRecordingManifestDevice({
       sessionName,
@@ -230,7 +230,11 @@ async function resolveManifestDevice(
   };
   const identityFlag = deviceIdentityFlag(recorded.family);
   if (identityFlag) selector[identityFlag] = recorded.id;
-  return await resolveTargetDevice(selector, { env: params.sessionStore.host.env });
+  return await resolveRequestTargetDevice(
+    params.req,
+    { env: params.sessionStore.host.env },
+    selector,
+  );
 }
 
 async function startRecording(
@@ -254,6 +258,18 @@ async function startRecording(
   const startFact = admission.facts.screenRecordingStart;
   if (!startFact.available) return buildRecordingUnsupportedResponse(startFact);
   const runtime = await params.bindDevice(session.device, use);
+  // A recording that died with its device can leave a record that no claim or daemon start
+  // retries. Settle the records this start would refuse on, unless their session is still held.
+  await screenRecordingDurableResource.settleStartConflicts({
+    resourcePath: screenRecordingDurableResource.resourcePath(
+      params.sessionStore,
+      params.sessionName,
+    ),
+    device: session.device,
+    holdsSession: (sessionId) => params.sessionStore.lookup(sessionId) !== undefined,
+    scope: params.requestScope,
+    acquireControl: exactRecoveryControl(params, session.device, false),
+  });
   const { fence, outputPaths } = prepareRecordingStart(params, session);
   binding.assertAdoptable();
   const started = await runtime.operations.screenRecordingStart(
@@ -358,7 +374,7 @@ function resolveRecordingStartPaths(
     ...resolveRecordingOutputPaths({
       requestedPath,
       platform,
-      cwd: req.meta?.cwd ?? hostCwd,
+      cwd: requestCwd(req, { cwd: hostCwd }),
     }),
     ...(clientOutputPath === undefined ? {} : { clientOutputPath }),
   };
@@ -503,19 +519,34 @@ async function finishRecovered(
   const completion = await finishRecoveredScreenRecording({
     resourcePath: recovery.resourcePath,
     scope: params.requestScope,
-    acquireControl: async (envelope, recoveryScope) => {
-      const runtime = await params.bindExactDevice(
-        session.device,
-        envelope.owner,
-        envelope.fence,
-        screenRecordingRecoveryUse,
-        recoveryScope,
-      );
-      if (needsReadiness) await ensureBoundDeviceReady(runtime, params.platformServices);
-      return createScreenRecordingRecoveryControl({ runtime, dispose: async () => {} });
-    },
+    acquireControl: exactRecoveryControl(params, session.device, needsReadiness),
   });
   return { completion, recordsSessionAction: true };
+}
+
+/**
+ * Recovery control bound to a record's own owner and fence, for a recording whose live handle this
+ * daemon no longer holds. A recovered stop and the start-time settle share it.
+ */
+function exactRecoveryControl(
+  params: RecordRuntimeHandlerParams,
+  device: SessionState['device'],
+  needsReadiness: boolean,
+) {
+  return async (
+    envelope: DurableResourceEnvelope<'screen-recording'>,
+    recoveryScope: PlatformRequestScope,
+  ) => {
+    const runtime = await params.bindExactDevice(
+      device,
+      envelope.owner,
+      envelope.fence,
+      screenRecordingRecoveryUse,
+      recoveryScope,
+    );
+    if (needsReadiness) await ensureBoundDeviceReady(runtime, params.platformServices);
+    return createScreenRecordingRecoveryControl({ runtime, dispose: async () => {} });
+  };
 }
 
 function createRecordOnlySession(

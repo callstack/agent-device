@@ -35,6 +35,8 @@ export async function handleRequestTimeout(
     /** Named together so the recovery hint cannot be assembled from a swapped session and action. */
     session?: string;
     action?: string;
+    /** Whether the request left this process before the window expired. */
+    requestSent: boolean;
   }>,
 ): Promise<AppError> {
   const {
@@ -48,6 +50,7 @@ export async function handleRequestTimeout(
     platform,
     session,
     action,
+    requestSent,
   } = params;
   // The command's declared policy (`timeoutPolicy.onTimeout`, ADR 0008) decides whether a local
   // timed-out request is RESET-ELIGIBLE; the liveness probe decides whether the eligibility runs.
@@ -96,10 +99,11 @@ export async function handleRequestTimeout(
     timeoutMs,
     requestId,
     reason: 'daemon_transport_timeout',
+    daemonRequestSent: requestSent,
     ...(retirement ? { retirement, stateDir: statePaths.baseDir } : {}),
     hint:
       retirement?.status === 'retained'
-        ? `The daemon could not be safely retired. State was retained at ${statePaths.baseDir}. ${retirement.error?.hint ?? 'Retry with --debug and inspect daemon diagnostics before retrying.'}`
+        ? `The daemon could not be safely retired. State was retained at ${statePaths.baseDir}. ${retirement.error?.hint ?? 'Read the request log and daemon.log in that directory before you retry.'}`
         : resolveRequestTimeoutHint({
             remote,
             resetDaemon: resetDaemon,
@@ -182,15 +186,15 @@ export function resolveRequestTimeoutHint(params: {
     } again to wait for that export and receive the completed recording.`;
   }
   if (remote) {
-    return 'Retry with --debug and verify the remote daemon URL, auth token, and remote host logs.';
+    return 'Verify the remote daemon URL, auth token, and remote host logs.';
   }
   if (resetDaemon) {
     // The reset SIGKILLs the daemon pid only; child processes it owned (Apple runners included)
     // are not proven stopped from here, so the hint claims nothing about them.
-    return 'Retry with --debug and check daemon diagnostics logs. The daemon did not answer the liveness probe and was reset after the timeout.';
+    return 'The daemon did not answer the liveness probe and was reset after the timeout. Read the request log for the timed-out step.';
   }
   if (stopCommand) {
-    return `Retry with --debug and check daemon diagnostics logs. The daemon did not answer the liveness probe, and this request does not retire a daemon it did not start. Stop it with ${stopCommand}, then retry. SDK clients call ensureDaemon() to start a fresh one.`;
+    return `The daemon did not answer the liveness probe, and this request does not retire a daemon it did not start. Stop it with ${stopCommand}, then retry. SDK clients call ensureDaemon() to start a fresh one.`;
   }
   const iosPrepareHint =
     applePlatformDeclared && command === PUBLIC_COMMANDS.snapshot
@@ -199,9 +203,9 @@ export function resolveRequestTimeoutHint(params: {
   // The daemon canceled the request when this client's connection was destroyed, and stayed
   // reachable (the probe answered, or the command's policy forbids the reset), so the session
   // survives and can still be closed or inspected.
-  return `Retry with --debug and check daemon diagnostics logs. The timed-out ${
+  return `The timed-out ${
     command ?? 'request'
-  } request was canceled; the daemon was kept alive so the session can still be closed or inspected.${iosPrepareHint}`;
+  } request was canceled; the daemon was kept alive so the session can still be closed or inspected. Read the request log for the timed-out step.${iosPrepareHint}`;
 }
 
 function daemonWasForceKilled(retirement: DaemonRetirementResult | undefined): boolean {

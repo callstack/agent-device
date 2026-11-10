@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test } from 'vitest';
 import {
+  acceptSnapshotBridgeEnvelope,
   assertSnapshotBridgeEnvelope,
   bridgeFailureFromEnvelope,
   createSnapshotBridgeDescribeRequest,
@@ -16,6 +17,8 @@ import {
   SnapshotBridgeFrameDecoder,
 } from './protocol.ts';
 import type { SnapshotSourceLimits } from './types.ts';
+import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
+import { SnapshotSourceError } from '@agent-device/capture-kit/snapshot-source-channel';
 
 const limits: SnapshotSourceLimits = {
   maxRequestBytes: 1024,
@@ -120,14 +123,74 @@ test('snapshot bridge failures stay typed at the guest boundary', () => {
   }
 });
 
+test('a refusal that names no target keeps its own typed failure', () => {
+  assert.throws(
+    () =>
+      acceptSnapshotBridgeEnvelope(
+        {
+          protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
+          sourceVersion: SNAPSHOT_SOURCE_VERSION,
+          requestId: 'request-1',
+          ok: false,
+          error_kind: 'bad_request',
+          error_code: 'bounds-invalid',
+        },
+        { requestId: 'request-1', pid: 123, generation: 'generation-1' },
+      ),
+    (error: unknown) =>
+      error instanceof SnapshotSourceError &&
+      error.failureKind === 'malformed-tree' &&
+      error.failureCode === 'bounds-invalid',
+  );
+});
+
+test('a surface host refusal names the running host executable', () => {
+  assert.throws(
+    () =>
+      bridgeFailureFromEnvelope({
+        error_kind: 'unsupported',
+        error_code: 'system-surface-host-present',
+        surfaceHostExecutable: 'SafariViewService.app/SafariViewService',
+      }),
+    (error: unknown) =>
+      error instanceof SnapshotSourceError &&
+      error.failureKind === 'unsupported' &&
+      error.failureCode === 'system-surface-host-present' &&
+      error.details?.surfaceHostExecutable === 'SafariViewService.app/SafariViewService',
+  );
+});
+
+// The route sends every registered host executable on each checked request (#2751). A registry the
+// guest's bounds refuse would answer `surface-hosts-invalid` and retire the generation, so the
+// registry must stay inside the bounds the guest validates.
+test('every registered surface host fits the bounds the guest validates', async () => {
+  const native = await readFile(
+    path.join(import.meta.dirname, '../../../../apple/snapshot-bridge/SnapshotBridgeRequest.m'),
+    'utf8',
+  );
+  const bound = (name: string) => Number(native.match(new RegExp(`${name} = (\\d+);`))?.[1]);
+  const maximumHosts = bound('kMaximumSurfaceHosts');
+  const maximumLength = bound('kMaximumSurfaceHostExecutableLength');
+
+  assert.ok(maximumHosts > 0 && maximumLength > 0, 'guest bounds not found');
+  assert.ok(IOS_SYSTEM_SURFACE_HOSTS.length <= maximumHosts);
+  for (const host of IOS_SYSTEM_SURFACE_HOSTS) {
+    assert.ok(host.processExecutable.length > 0);
+    assert.ok(host.processExecutable.length <= maximumLength);
+  }
+});
+
 test('wire vocabulary guard keeps TS and Objective-C literals aligned', async () => {
   const native = await Promise.all(
     [
       'SnapshotBridge.m',
+      'SnapshotBridgeRequest.h',
+      'SnapshotBridgeRequest.m',
       'SnapshotBridgeRuntime.m',
       'SnapshotBridgeRuntime.h',
       'SnapshotBridgeCapture.h',
       'SnapshotBridgeCapture.m',
+      'SnapshotBridgeSurfaceHosts.m',
     ].map((fileName) =>
       readFile(
         path.join(import.meta.dirname, '../../../../apple/snapshot-bridge', fileName),
@@ -141,8 +204,11 @@ test('wire vocabulary guard keeps TS and Objective-C literals aligned', async ()
   assert.deepEqual(wireVocabulary.requestKeys, SNAPSHOT_SOURCE_WIRE_KEYS);
   assert.deepEqual(wireVocabulary.responseKeys, SNAPSHOT_SOURCE_RESPONSE_KEYS);
   assert.deepEqual(wireVocabulary.attributeKeys, SNAPSHOT_SOURCE_ATTRIBUTE_KEYS);
-  assert.match(nativeSource, /kProtocolVersion = 1/);
-  assert.match(nativeSource, /kSourceVersion = @"agent-device-simulator-ax-v1\.9\.0"/);
+  assert.match(nativeSource, /^#define SNAPSHOT_BRIDGE_PROTOCOL_VERSION 1$/m);
+  assert.match(
+    nativeSource,
+    /^#define SNAPSHOT_BRIDGE_SOURCE_VERSION @"agent-device-simulator-ax-v1\.10\.0"$/m,
+  );
   for (const key of [
     ...wireVocabulary.requestKeys,
     ...wireVocabulary.responseKeys,

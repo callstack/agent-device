@@ -5,15 +5,127 @@ import { buffer } from 'node:stream/consumers';
 import { gunzipSync } from 'node:zlib';
 import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { AppError, isRequestCanceledError, normalizeError } from '@agent-device/kernel/errors';
 import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import * as command from '@agent-device/host-kit/command';
 import {
   cleanupDownloadableArtifact,
+  listDownloadableArtifacts,
   openDownloadableArtifact,
   trackDownloadableArtifact,
   trackUploadedArtifact,
   type OpenedDownloadableArtifact,
 } from './artifact-tracking.ts';
+
+test.each(['cleanup', 'expiry'] as const)(
+  '%s aborts an inventory-only archive and removes its source after tar settles',
+  async (trigger) => {
+    const root = mkdtempForTestSync('fu-art-inventory-expiry-');
+    const artifactPath = path.join(root, 'capture.trace');
+    fs.mkdirSync(artifactPath);
+    fs.writeFileSync(path.join(artifactPath, 'payload'), 'pending inventory archive');
+    const runtime = createRuntimeStateHandle();
+    let start!: () => void;
+    const started = new Promise<void>((resolve) => {
+      start = resolve;
+    });
+    let finish!: () => void;
+    const stopped = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    let archivePath = '';
+    let signal: AbortSignal | undefined;
+    const runCmd = command.runCmd;
+    const archive = vi.spyOn(command, 'runCmd').mockImplementationOnce(async (...args) => {
+      archivePath = String(args[1]?.[1]);
+      signal = args[2]?.signal;
+      fs.writeFileSync(archivePath, 'partial tar output');
+      start();
+      await stopped;
+      return await runCmd(...args);
+    });
+    let listing: ReturnType<typeof listDownloadableArtifacts> | undefined;
+    try {
+      const timers = vi.spyOn(globalThis, 'setTimeout');
+      let id: string;
+      let expire: (() => void) | undefined;
+      try {
+        id = runtime.run(() =>
+          trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
+        );
+        expire = timers.mock.calls.find(([, delay]) => delay === 15 * 60 * 1000)?.[0];
+      } finally {
+        timers.mockRestore();
+      }
+      listing = runtime.run(() => listDownloadableArtifacts(undefined, process.env));
+      await started;
+      expect(fs.existsSync(archivePath)).toBe(true);
+      if (trigger === 'expiry') {
+        expect(expire).toBeTypeOf('function');
+        runtime.run(() => expire!());
+      } else {
+        runtime.run(() => cleanupDownloadableArtifact(id));
+      }
+      expect(signal?.aborted).toBe(true);
+      expect(signal?.reason).toMatchObject({
+        code: 'COMMAND_FAILED',
+        details: { reason: 'RESOURCE_EXPIRED' },
+      });
+      expect(fs.existsSync(artifactPath)).toBe(true);
+      expect(fs.existsSync(archivePath)).toBe(true);
+      finish();
+      expect(await listing).toEqual([]);
+      expect(fs.existsSync(artifactPath)).toBe(false);
+      expect(fs.existsSync(path.dirname(archivePath))).toBe(false);
+      expect(archive).toHaveBeenCalledTimes(1);
+    } finally {
+      finish();
+      if (listing) await listing;
+      runtime.dispose();
+      archive.mockRestore();
+    }
+  },
+);
+
+test('a missing cached directory archive is rebuilt from the live source', async () => {
+  const root = mkdtempForTestSync('fu-art-cache-rebuild-');
+  const artifactPath = path.join(root, 'capture.trace');
+  const expected = Buffer.from('live source after cached archive disappears');
+  fs.mkdirSync(artifactPath);
+  fs.writeFileSync(path.join(artifactPath, 'payload'), expected);
+  const runtime = createRuntimeStateHandle();
+  const downloads: OpenedDownloadableArtifact[] = [];
+  try {
+    const id = runtime.run(() =>
+      trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
+    );
+    const first = await runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+    downloads.push(first);
+    expect(gunzipSync(await buffer(first.stream)).includes(expected)).toBe(true);
+    await closed(first.stream);
+    first.release();
+    const oldArchive = String(first.stream.path);
+    fs.unlinkSync(oldArchive);
+    expect(fs.existsSync(artifactPath)).toBe(true);
+    const second = await runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+    downloads.push(second);
+    expect(gunzipSync(await buffer(second.stream)).includes(expected)).toBe(true);
+    await closed(second.stream);
+    second.release();
+    expect(String(second.stream.path)).not.toBe(oldArchive);
+    expect(fs.existsSync(path.dirname(oldArchive))).toBe(false);
+    runtime.run(() => cleanupDownloadableArtifact(id));
+    expect(fs.existsSync(artifactPath)).toBe(false);
+    expect(fs.existsSync(path.dirname(String(second.stream.path)))).toBe(false);
+  } finally {
+    for (const download of downloads) {
+      download.stream.destroy();
+      await closed(download.stream);
+      download.release();
+    }
+    runtime.dispose();
+  }
+});
 
 test('cancelling the archive builder preserves a second download waiting for its full archive', async () => {
   const root = mkdtempForTestSync('fu-art-shared-build-');
@@ -84,6 +196,143 @@ test('cancelling the archive builder preserves a second download waiting for its
   }
 });
 
+test.each(['deadline-aborted', 'late-aborted'] as const)(
+  'a live artifact starts a fresh archive while a %s build is settling',
+  async (failure) => {
+    const root = mkdtempForTestSync('fu-art-retry-build-');
+    const artifactPath = path.join(root, 'capture.trace');
+    fs.mkdirSync(artifactPath);
+    const expected = Buffer.from('fresh archive payload');
+    fs.writeFileSync(path.join(artifactPath, 'payload'), expected);
+    const runtime = createRuntimeStateHandle();
+    let finishAborted!: () => void;
+    const settling = new Promise<void>((resolve) => {
+      finishAborted = resolve;
+    });
+    let aborted!: () => void;
+    const cancelled = new Promise<void>((resolve) => {
+      aborted = resolve;
+    });
+    let tarSucceeded!: () => void;
+    const succeeded = new Promise<void>((resolve) => {
+      tarSucceeded = resolve;
+    });
+    let firstArchiveDir = '';
+    const runCmd = command.runCmd;
+    const archive = vi.spyOn(command, 'runCmd').mockImplementationOnce(async (...args) => {
+      firstArchiveDir = path.dirname(String(args[1]?.[1]));
+      args[2]?.signal?.addEventListener('abort', aborted, { once: true });
+      if (failure === 'late-aborted') {
+        const result = await runCmd(...args);
+        tarSucceeded();
+        await settling;
+        return result;
+      }
+      await settling;
+      return await runCmd(...args);
+    });
+    const openings: Array<Promise<OpenedDownloadableArtifact>> = [];
+    try {
+      const id = runtime.run(() =>
+        trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
+      );
+      const timers = vi.spyOn(globalThis, 'setTimeout');
+      const first = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+      openings.push(first);
+      void first.catch(() => {});
+      const deadline = timers.mock.calls.find(([, delay]) => delay === 15 * 60 * 1000)?.[0];
+      timers.mockRestore();
+      if (failure === 'late-aborted') await succeeded;
+      expect(deadline).toBeTypeOf('function');
+      runtime.run(() => deadline!());
+      await cancelled;
+      const second = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+      openings.push(second);
+      void second.catch(() => {});
+      finishAborted();
+      await expect(first).rejects.toMatchObject({ details: { reason: 'RESOURCE_EXPIRED' } });
+      expect(fs.existsSync(firstArchiveDir)).toBe(false);
+      const download = await second;
+      const closed = once(download.stream, 'close');
+      const bytes = await buffer(download.stream);
+      await closed;
+      download.release();
+      expect(gunzipSync(bytes).includes(expected)).toBe(true);
+      expect(archive).toHaveBeenCalledTimes(2);
+      if (failure === 'late-aborted') runtime.dispose();
+      else runtime.run(() => cleanupDownloadableArtifact(id));
+      expect(fs.existsSync(artifactPath)).toBe(false);
+      expect(fs.existsSync(path.dirname(String(download.stream.path)))).toBe(false);
+    } finally {
+      finishAborted();
+      for (const result of await Promise.allSettled(openings)) {
+        if (result.status !== 'fulfilled') continue;
+        const download = result.value;
+        if (!download.stream.closed) {
+          const closed = once(download.stream, 'close');
+          download.stream.destroy();
+          await closed;
+        }
+        download.release();
+      }
+      runtime.dispose();
+      archive.mockRestore();
+    }
+  },
+);
+
+test.each(['before opening', 'while archiving'] as const)(
+  'caller cancellation %s has a typed reason without forwarding caller data',
+  async (phase) => {
+    const root = mkdtempForTestSync('fu-art-client-cancel-');
+    const artifactPath = path.join(root, 'capture.trace');
+    fs.mkdirSync(artifactPath);
+    fs.writeFileSync(path.join(artifactPath, 'payload'), 'cancelled payload');
+    const runtime = createRuntimeStateHandle();
+    const archive = vi.spyOn(command, 'runCmd').mockImplementationOnce(async (...args) => {
+      const signal = args[2]!.signal!;
+      await new Promise<void>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+      throw new Error('aborted tar cannot complete');
+    });
+    const caller = new AbortController();
+    const reason = new AppError('COMMAND_FAILED', 'private caller cancellation data', {
+      reason: 'RESOURCE_EXPIRED',
+    });
+    let opening: Promise<OpenedDownloadableArtifact> | undefined;
+    try {
+      const id = runtime.run(() =>
+        trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
+      );
+      if (phase === 'before opening') caller.abort(reason);
+      opening = runtime.run(() =>
+        openDownloadableArtifact(id, undefined, process.env, caller.signal),
+      );
+      void opening.catch(() => {});
+      if (phase === 'while archiving') caller.abort(reason);
+      const error = await opening.catch((error: unknown) => error);
+      expect(isRequestCanceledError(error)).toBe(true);
+      const normalized = normalizeError(error);
+      expect(normalized).toMatchObject({
+        code: 'COMMAND_FAILED',
+        message: 'request canceled',
+        details: { reason: 'request_canceled' },
+      });
+      expect(JSON.stringify(normalized)).not.toContain('private caller cancellation data');
+      expect(JSON.stringify(normalized)).not.toContain('RESOURCE_EXPIRED');
+      expect(fs.existsSync(artifactPath)).toBe(true);
+      runtime.run(() => cleanupDownloadableArtifact(id));
+      expect(fs.existsSync(artifactPath)).toBe(false);
+    } finally {
+      caller.abort();
+      if (opening) await Promise.allSettled([opening]);
+      runtime.dispose();
+      archive.mockRestore();
+    }
+  },
+);
+
 test('disposing every archive waiter aborts the shared build and removes its temporary directory', async () => {
   const root = mkdtempForTestSync('fu-art-cancel-all-');
   const artifactPath = path.join(root, 'capture.trace');
@@ -118,7 +367,7 @@ test('disposing every archive waiter aborts the shared build and removes its tem
     openings.push(runtime.run(() => openDownloadableArtifact(id, undefined, process.env)));
     for (const opening of openings) void opening.catch(() => {});
     runtime.dispose();
-    expect(archiveSignal?.aborted).toBe(true);
+    await aborted(archiveSignal);
     expect(fs.existsSync(artifactPath)).toBe(true);
     expect(fs.existsSync(archiveDir)).toBe(true);
     continueArchive();
@@ -136,8 +385,40 @@ test('disposing every archive waiter aborts the shared build and removes its tem
   }
 });
 
+async function closed(stream: OpenedDownloadableArtifact['stream']): Promise<void> {
+  if (!stream.closed) await once(stream, 'close');
+}
+
+async function aborted(signal: AbortSignal | undefined): Promise<void> {
+  if (!signal) throw new Error('the archive build never received an abort signal');
+  if (!signal.aborted) await once(signal, 'abort');
+}
+
+/** Spies on `fs.rmSync` and resolves `removal(target)` once that path has been removed. */
+function watchRemovals() {
+  const rmSync = fs.rmSync;
+  const removedPaths = new Set<string>();
+  const waiters: Array<{ target: string; resolve: () => void }> = [];
+  const spy = vi.spyOn(fs, 'rmSync').mockImplementation((target, options) => {
+    try {
+      rmSync(target, options);
+    } finally {
+      removedPaths.add(String(target));
+      for (const waiter of waiters) if (waiter.target === String(target)) waiter.resolve();
+    }
+  });
+  return {
+    spy,
+    removal: (target: string) =>
+      removedPaths.has(target)
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => waiters.push({ target, resolve })),
+  };
+}
+
 function holdArtifactReads() {
   const pending: Array<{ file: string; complete: () => void }> = [];
+  const pendingWaiters: Array<{ count: number; resolve: () => void }> = [];
   const createReadStream = fs.createReadStream;
   let held = true;
   const spy = vi.spyOn(fs, 'createReadStream').mockImplementation((file, options) =>
@@ -149,8 +430,11 @@ function holdArtifactReads() {
         read(fd, buffer, offset, length, position, callback) {
           fs.read(fd, buffer, offset, length, position, (error, bytesRead, readBuffer) => {
             const complete = () => callback(error, bytesRead, readBuffer);
-            if (held) pending.push({ file: String(file), complete });
-            else complete();
+            if (!held) return complete();
+            pending.push({ file: String(file), complete });
+            for (const waiter of pendingWaiters) {
+              if (pending.length >= waiter.count) waiter.resolve();
+            }
           });
         },
       },
@@ -158,6 +442,11 @@ function holdArtifactReads() {
   );
   return {
     pending,
+    /** Resolves once `count` reads are held, without polling the read queue. */
+    untilPending: (count: number) =>
+      pending.length >= count
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => pendingWaiters.push({ count, resolve })),
     release: () => {
       held = false;
       for (const { complete } of pending.splice(0)) complete();
@@ -175,7 +464,7 @@ test.each(['old-first', 'new-first'] as const)(
     fs.writeFileSync(path.join(artifactPath, 'payload'), 'shared source marker');
     const runtime = createRuntimeStateHandle();
     const reads = holdArtifactReads();
-    const removed = vi.spyOn(fs, 'rmSync');
+    const { spy: removed, removal } = watchRemovals();
     const downloads: OpenedDownloadableArtifact[] = [];
     const track = () =>
       runtime.run(() => trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }));
@@ -192,7 +481,8 @@ test.each(['old-first', 'new-first'] as const)(
       );
       runtime.run(() => cleanupDownloadableArtifact(secondId));
       for (const download of downloads) download.stream.resume();
-      await vi.waitFor(() => expect(reads.pending).toHaveLength(2));
+      await reads.untilPending(2);
+      expect(reads.pending).toHaveLength(2);
       runtime.dispose();
       expect(fs.existsSync(artifactPath)).toBe(true);
       for (const download of downloads) expect(download.stream.closed).toBe(false);
@@ -202,13 +492,12 @@ test.each(['old-first', 'new-first'] as const)(
       );
       expect(pendingIndex).toBeGreaterThanOrEqual(0);
       reads.pending.splice(pendingIndex, 1)[0]!.complete();
-      await vi.waitFor(() =>
-        expect(downloads.filter(({ stream }) => stream.closed)).toHaveLength(1),
-      );
-      expect(firstToClose.stream.closed).toBe(true);
+      await closed(firstToClose.stream);
+      expect(downloads.filter(({ stream }) => stream.closed)).toHaveLength(1);
       expect(fs.existsSync(artifactPath)).toBe(true);
       reads.release();
-      await vi.waitFor(() => expect(fs.existsSync(artifactPath)).toBe(false));
+      await removal(artifactPath);
+      expect(fs.existsSync(artifactPath)).toBe(false);
       for (const download of downloads) {
         expect(download.stream.closed).toBe(true);
         const archiveDir = path.dirname(String(download.stream.path));
@@ -239,7 +528,7 @@ test.each(['expiry-first', 'deadline-first'] as const)(
     const reads = holdArtifactReads();
     const timers = vi.spyOn(globalThis, 'setTimeout');
     const clearedTimers = vi.spyOn(globalThis, 'clearTimeout');
-    const removed = vi.spyOn(fs, 'rmSync');
+    const { spy: removed, removal } = watchRemovals();
     let download: OpenedDownloadableArtifact | undefined;
     try {
       const id = runtime.run(() =>
@@ -253,7 +542,8 @@ test.each(['expiry-first', 'deadline-first'] as const)(
       download = await opening;
       const archiveDir = path.dirname(String(download.stream.path));
       download.stream.resume();
-      await vi.waitFor(() => expect(reads.pending).toHaveLength(1));
+      await reads.untilPending(1);
+      expect(reads.pending).toHaveLength(1);
       if (order === 'expiry-first') runtime.run(expire);
       expect(download.stream.destroyed).toBe(false);
       expect(fs.existsSync(artifactPath)).toBe(true);
@@ -264,14 +554,15 @@ test.each(['expiry-first', 'deadline-first'] as const)(
       expect(download.stream.closed).toBe(false);
       expect(fs.existsSync(artifactPath)).toBe(true);
       reads.release();
-      await vi.waitFor(() => expect(download!.stream.closed).toBe(true));
+      await closed(download.stream);
       if (order === 'deadline-first') {
         expect(fs.existsSync(artifactPath)).toBe(true);
         expect(fs.existsSync(archiveDir)).toBe(true);
         expect(clearedTimers.mock.calls.some(([timer]) => timer === expiryTimer)).toBe(false);
         runtime.run(expire);
       }
-      await vi.waitFor(() => expect(fs.existsSync(artifactPath)).toBe(false));
+      await removal(artifactPath);
+      expect(fs.existsSync(artifactPath)).toBe(false);
       expect(download.stream.closed).toBe(true);
       expect(fs.existsSync(archiveDir)).toBe(false);
       for (const target of [artifactPath, archiveDir]) {

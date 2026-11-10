@@ -2,8 +2,8 @@ import { ref, createContractDevice } from './runtime-harness.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import { scenarioName } from './coverage-manifest.ts';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import { scenarioName, scenarioNames } from './coverage-manifest.ts';
 import { NATIVE_REF_COVERAGE } from './native-ref.coverage.ts';
 import {
   closedDrawerSnapshot,
@@ -193,7 +193,7 @@ test(scenario('responseConstruction'), async () => {
   assert.ok(Array.isArray(result.preAction?.nodes));
 });
 
-test(scenario('resolutionDisclosure'), async () => {
+test(scenarioNames(NATIVE_REF_COVERAGE, 'resolutionDisclosure')[0]!, async () => {
   const calls: string[] = [];
   const device = createNativeRefDevice(continueButtonSnapshot(), calls);
 
@@ -201,4 +201,23 @@ test(scenario('resolutionDisclosure'), async () => {
 
   assert.equal(result.kind, 'ref');
   assert.deepEqual(result.resolution, { source: 'ref', phase: 'pre-action', kind: 'exact' });
+});
+
+test(scenarioNames(NATIVE_REF_COVERAGE, 'resolutionDisclosure')[1]!, async () => {
+  const calls: string[] = [];
+  const device = createNativeRefDevice(continueButtonSnapshot(), calls);
+
+  // @e9 is not in the stored tree; the preflight recovers the Continue button by its trailing label.
+  const result = await device.interactions.click(ref('@e9', { fallbackLabel: 'Continue' }), {
+    session: 'default',
+  });
+
+  assert.deepEqual(calls, ['@e9']);
+  assert.equal(result.kind, 'ref');
+  assert.equal(result.node?.label, 'Continue');
+  assert.deepEqual(result.resolution, {
+    source: 'ref',
+    phase: 'pre-action',
+    kind: 'label-fallback',
+  });
 });

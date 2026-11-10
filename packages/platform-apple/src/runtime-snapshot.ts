@@ -92,7 +92,10 @@ type SnapshotRuntimeOperation = Pick<
  * observation boundary defers those failures to canonical capture (ADR 0019 section 2).
  */
 export function bindAppleFindTextRuntime(
-  host: PlatformRuntimeHost,
+  host: {
+    appleApplications: Pick<PlatformRuntimeHost['appleApplications'], 'hasLiveRunnerSession'>;
+    localInteractors: Pick<PlatformRuntimeHost['localInteractors'], 'resolve'>;
+  },
   request: AppleSnapshotRequest,
 ): Pick<PlatformRuntimeOperations, 'findText'> {
   return Object.freeze({
@@ -117,7 +120,9 @@ type AdmittedAppleNativeFind = Readonly<{ appBundleId: string; signal: AbortSign
  * request/poll signal the runner call needs.
  */
 async function admitAppleNativeFind(
-  host: Pick<PlatformRuntimeHost, 'appleApplications'>,
+  host: {
+    appleApplications: Pick<PlatformRuntimeHost['appleApplications'], 'hasLiveRunnerSession'>;
+  },
   request: AppleSnapshotRequest,
   input: Readonly<{
     options?: Readonly<{ appBundleId?: string; surface?: SessionSurface }>;
@@ -145,7 +150,9 @@ async function admitAppleNativeFind(
  * (see the find-runtime doc above).
  */
 async function runnerCanAnswerNow(
-  host: Pick<PlatformRuntimeHost, 'appleApplications'>,
+  host: {
+    appleApplications: Pick<PlatformRuntimeHost['appleApplications'], 'hasLiveRunnerSession'>;
+  },
   device: DeviceInfo,
   execution: Readonly<{ requestId?: string }> | undefined,
 ): Promise<boolean> {

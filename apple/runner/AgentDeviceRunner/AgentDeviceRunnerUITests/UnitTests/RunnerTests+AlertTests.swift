@@ -54,7 +54,7 @@ extension RunnerTests {
     let alert = try requireResolvedAlert(within: RunnerTests.defaultAlertCommandTimeout)
     XCTAssertEqual(alert.source, .dismissPopup)
     XCTAssertEqual(alert.root.elementType, .window)
-    XCTAssertTrue(alert.buttons.contains { $0.identifier == " Dismiss Popup " })
+    XCTAssertTrue(alert.actions.contains { $0.identifier == " Dismiss Popup " })
   }
 
   @MainActor
@@ -65,7 +65,7 @@ extension RunnerTests {
     let alert = try requireResolvedAlert(within: RunnerTests.defaultAlertCommandTimeout)
     XCTAssertEqual(alert.source, .dismissPopup)
     XCTAssertEqual(alert.root.identifier, "Dismiss popup")
-    XCTAssertTrue(alert.buttons.contains { $0.identifier == "agent-device-close-popover" })
+    XCTAssertTrue(alert.actions.contains { $0.identifier == "agent-device-close-popover" })
   }
 
   /// `alert dismiss` on the marker window must still name its close button: the marker is the
@@ -77,7 +77,9 @@ extension RunnerTests {
     defer { terminateCrowdedScreen() }
 
     let alert = try requireResolvedAlert(within: RunnerTests.defaultAlertCommandTimeout)
-    let button = try XCTUnwrap(chooseAlertButton(alert, action: "dismiss"))
+    let button = try XCTUnwrap(try chooseAlertButton(
+      alert, action: "dismiss", deadline: Date().addingTimeInterval(Self.defaultAlertCommandTimeout)
+    ))
     XCTAssertEqual(button.identifier, "agent-device-close-popover")
   }
 
@@ -93,7 +95,7 @@ extension RunnerTests {
     defer { terminateCrowdedScreen() }
 
     let alert = try requireResolvedAlert(within: RunnerTests.defaultAlertCommandTimeout)
-    let inspection = handleAlert(alert, action: "get", deadline: Date().addingTimeInterval(RunnerTests.defaultAlertCommandTimeout))
+    let inspection = try handleAlert(alert, action: "get", deadline: Date().addingTimeInterval(RunnerTests.defaultAlertCommandTimeout))
     XCTAssertTrue(inspection.ok)
     XCTAssertEqual(inspection.data?.message, "Relaunch to continue")
   }

@@ -79,7 +79,7 @@ export function hasSimulatorBridge(device: DeviceInfo): boolean {
 export function createLaunchObservationProbe(
   deps: Readonly<{
     source: SimulatorSnapshotSource;
-    resolveTarget: SimulatorSnapshotTargetResolver;
+    resolveTarget: SimulatorSnapshotTargetResolver['resolveTarget'];
     clock: PlatformRuntimeHost['clock'];
     isBridgeDisabled: (target: SimulatorSnapshotTarget) => boolean;
   }>,
@@ -142,7 +142,7 @@ function probeFailed(failure: PostOpenObservationFailure): LaunchObservation {
  * budget.
  */
 async function resolveLaunchedTarget(
-  resolveTarget: SimulatorSnapshotTargetResolver,
+  resolveTarget: SimulatorSnapshotTargetResolver['resolveTarget'],
   device: DeviceInfo,
   appBundleId: string,
   signal: AbortSignal,

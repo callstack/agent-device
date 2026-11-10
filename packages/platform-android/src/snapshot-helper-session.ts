@@ -10,10 +10,7 @@ import type {
   AndroidSnapshotHelperCaptureOptions,
   AndroidSnapshotHelperOutput,
 } from './snapshot-helper-types.ts';
-import {
-  resolveAndroidSnapshotHelperCaptureOptions,
-  type AndroidSnapshotHelperResolvedCaptureOptions,
-} from './snapshot-helper-capture.ts';
+import { resolveAndroidSnapshotHelperCaptureOptions } from './snapshot-helper-capture.ts';
 import {
   isAndroidSnapshotHelperSessionRequestTimeout,
   parseAndroidSnapshotHelperSessionTouchResponse,
@@ -25,7 +22,7 @@ import {
   getLiveAndroidSnapshotHelperSession,
   retireFailedAndroidSnapshotHelperSession,
   stopAndroidSnapshotHelperSession,
-  type AndroidSnapshotHelperSession,
+  type AndroidSnapshotHelperSessionAcquisition,
   type AndroidSnapshotHelperSessionHelperIdentity,
 } from './snapshot-helper-session-lifecycle.ts';
 
@@ -33,22 +30,15 @@ export async function captureAndroidSnapshotWithHelperSession(
   options: AndroidSnapshotHelperCaptureOptions,
 ): Promise<AndroidSnapshotHelperOutput | undefined> {
   const acquired = await acquireAndroidSnapshotHelperSession(options);
-  if (!acquired) return undefined;
-  return await captureFromAndroidSnapshotHelperSession({
-    session: acquired.session,
-    deviceKey: acquired.deviceKey,
-    options,
-    resolved: acquired.resolved,
-  });
+  return acquired ? await captureFromAndroidSnapshotHelperSession(acquired, options) : undefined;
 }
 
-async function captureFromAndroidSnapshotHelperSession(params: {
-  session: AndroidSnapshotHelperSession;
-  deviceKey: string;
-  options: AndroidSnapshotHelperCaptureOptions;
-  resolved: AndroidSnapshotHelperResolvedCaptureOptions;
-}): Promise<AndroidSnapshotHelperOutput | undefined> {
-  const { session, deviceKey, options, resolved } = params;
+/** Captures over a session that is ready; `undefined` means the session failed and was retired. */
+export async function captureFromAndroidSnapshotHelperSession(
+  acquired: AndroidSnapshotHelperSessionAcquisition,
+  options: AndroidSnapshotHelperCaptureOptions,
+): Promise<AndroidSnapshotHelperOutput | undefined> {
+  const { session, deviceKey, resolved } = acquired;
   const requestedAtMs = Date.now();
   const reused = session.capturedCount > 0;
   try {

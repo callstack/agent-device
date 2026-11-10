@@ -1,3 +1,4 @@
+import { makeRunnerSession as makeLocalRunnerSession } from './runner-session-fixtures.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -38,7 +39,7 @@ function sessionFailingWith(
 ): RunnerSession {
   const runnerLogPath = path.join(mkdtempForTestSync('runner-early-exit-'), 'runner.log');
   fs.writeFileSync(runnerLogPath, log);
-  return {
+  return makeLocalRunnerSession({
     sessionId: 'early-exit-session',
     device: { platform: 'apple', id: 'device-1', name: 'iPhone', kind: 'device', booted: true },
     deviceId: 'device-1',
@@ -53,7 +54,7 @@ function sessionFailingWith(
     state: 'starting',
     startupDeviceStates,
     commandCharges: new RunnerCommandAccounting(),
-  };
+  });
 }
 
 const IMAGE_DOWN_STATES = {
@@ -179,8 +180,10 @@ const SET_WITHOUT_UDID = CAPTURED_SCOPED_SIMULATOR.setWithoutUdid;
 // An external xctestrun: the session carries no build of its own, so the Xcode it names is the one a
 // runner cache decision in this process already read, if any.
 function simulatorSessionFailingWith(log: string, simulatorSetPath?: string): RunnerSession {
-  return {
-    ...sessionFailingWith(log),
+  const failed = sessionFailingWith(log);
+  return makeLocalRunnerSession({
+    ...failed,
+    ...failed.launch.local,
     device: {
       platform: 'apple',
       id: CAPTURED_SCOPED_SIMULATOR.udid,
@@ -199,7 +202,7 @@ function simulatorSessionFailingWith(log: string, simulatorSetPath?: string): Ru
       buildMs: 0,
       xctestrunPathSource: 'external',
     },
-  };
+  });
 }
 
 test('a scoped-set simulator whose destination is missing names its set and the Xcode', async () => {

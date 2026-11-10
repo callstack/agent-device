@@ -28,7 +28,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runCmdSync } from '@agent-device/host-kit/command';
-import { SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME } from '@agent-device/apple-runner';
+import { SHARED_SNAPSHOT_BRIDGE_READER_FILENAMES } from '@agent-device/apple-runner';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const packageAppleRunnerScript = path.join(repoRoot, 'scripts/package-apple-runner-source.mjs');
@@ -147,16 +147,16 @@ function swiftParseFailures(
 }
 
 /**
- * The packaged UITests target finds the shared full-screen header through HEADER_SEARCH_PATHS.
- * Resolve the packaged project's own search paths in the scratch packaging layout: the package
- * ships `apple/snapshot-bridge/` at its root, so at least one entry must land on that directory
- * and carry the header RunnerXCTestEventBridge.m includes by bare name.
+ * The packaged UITests target finds the snapshot bridge reader and its shared full-screen header
+ * through HEADER_SEARCH_PATHS. Resolve the packaged project's own search paths in the scratch
+ * packaging layout: the package ships `apple/snapshot-bridge/` at its root, so at least one entry
+ * must land on that directory and carry every file the runner includes by bare name.
  *
  * No other job would miss a broken search path: every xcodebuild lane (smoke-ios-run, smoke-macos,
  * xctest-nightly) compiles the checkout tree, and check-package's clean install never builds the
  * packaged runner — the first compile of that tree is a user's. This is that user's build test.
  */
-function sharedHeaderFailures(scratchRoot: string, packagedRoot: string): string[] {
+function sharedHeaderFailures(packagedRoot: string): string[] {
   const project = fs.readFileSync(
     path.join(packagedRoot, 'AgentDeviceRunner', 'AgentDeviceRunner.xcodeproj', 'project.pbxproj'),
     'utf8',
@@ -166,22 +166,18 @@ function sharedHeaderFailures(scratchRoot: string, packagedRoot: string): string
     return [`${PACKAGED_DIR}: the packaged project declares no HEADER_SEARCH_PATHS.`];
   }
   const srcRoot = path.join(packagedRoot, 'AgentDeviceRunner');
-  const resolvesToHeader = searchPath
+  const resolvesToReader = searchPath
     .split(',')
     .map((entry) => entry.trim().replaceAll('"', ''))
     .filter((entry) => entry.startsWith('$(SRCROOT)/'))
     .some((entry) =>
-      fs.existsSync(
-        path.join(
-          srcRoot,
-          entry.replace('$(SRCROOT)', '.'),
-          SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME,
-        ),
+      SHARED_SNAPSHOT_BRIDGE_READER_FILENAMES.every((filename) =>
+        fs.existsSync(path.join(srcRoot, entry.replace('$(SRCROOT)', '.'), filename)),
       ),
     );
-  if (!resolvesToHeader) {
+  if (!resolvesToReader) {
     return [
-      `${PACKAGED_DIR}: no HEADER_SEARCH_PATHS entry resolves to ${SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME} ` +
+      `${PACKAGED_DIR}: no HEADER_SEARCH_PATHS entry resolves to every snapshot bridge reader file ` +
         `from ${path.join(PACKAGED_DIR, 'AgentDeviceRunner')} — a user's xcodebuild cannot compile the runner.`,
     ];
   }
@@ -195,7 +191,7 @@ function main(): number {
     const relativePaths = swiftFilesUnder(packagedRoot);
     const swiftc = findSwiftc();
     const failures = [
-      ...sharedHeaderFailures(scratchRoot, packagedRoot),
+      ...sharedHeaderFailures(packagedRoot),
       ...lineParityFailures(packagedRoot, relativePaths),
       ...(swiftc === undefined
         ? []

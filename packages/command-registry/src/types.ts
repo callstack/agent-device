@@ -88,7 +88,9 @@ export type CommandTimeoutPolicy = {
  *  - `observe`             — device inventory/ownership projection; may report a
  *                            claim, never mutates one.
  *  - `require-owner`       — session-bound work; trusts the invariant `open`
- *                            established and does NO claim-store I/O.
+ *                            established and does NO claim-store I/O. Refuses a
+ *                            foreign in-memory session holder when its own session
+ *                            is unheld.
  *  - `transient-exclusive` — sessionless device mutation; acquires a
  *                            command-scoped claim before device operations reach
  *                            the handler, refuses a foreign claim, and releases

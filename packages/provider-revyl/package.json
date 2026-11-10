@@ -25,6 +25,7 @@
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*",
+    "@agent-device/provision-kit": "workspace:*",
     "@agent-device/provider-webdriver": "workspace:*",
     "@agent-device/test-kit": "workspace:*",
     "agent-device": "workspace:*"
@@ -40,7 +41,8 @@
       "supportsArtifacts": false,
       "supportsDeferredAppSelection": false,
       "supportsDirectPortReverse": false,
-      "usesCloudWebDriverLease": false
+      "usesCloudWebDriverLease": false,
+      "holdsCloudDevice": true
     },
     "credentialVariables": [
       "REVYL_API_KEY",

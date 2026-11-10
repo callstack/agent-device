@@ -119,7 +119,7 @@ function readIosNodeIdentifier(node: IosTreeNode): string | undefined {
  * The node's screen-space rect, or undefined when the provider omitted a complete one. A component that
  * is not a finite number (an AX sentinel such as an infinite origin) makes the frame unusable.
  */
-export function readIosNodeRect(node: IosTreeNode): RawSnapshotNode['rect'] {
+function readIosNodeRect(node: IosTreeNode): RawSnapshotNode['rect'] {
   const rect = node.rect ?? node.frame;
   if (
     !rect ||
@@ -137,7 +137,7 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-export function readIosNodeChildren(node: IosTreeNode): IosTreeNode[] {
+function readIosNodeChildren(node: IosTreeNode): IosTreeNode[] {
   return node.children ?? node.nodes ?? node.elements ?? [];
 }
 

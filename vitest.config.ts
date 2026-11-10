@@ -120,6 +120,10 @@ export default defineConfig({
       ),
       slowTestGateReporter(),
       coverageRunStampReporter(COVERAGE_UNINSTRUMENTED_PROJECTS),
+      // Vitest adds this only when no reporters are configured; it puts failing tests on the check.
+      ...(process.env.GITHUB_ACTIONS === 'true'
+        ? [['github-actions', { jobSummary: { enabled: false } }] satisfies [string, object]]
+        : []),
     ],
     projects: [
       {
@@ -184,6 +188,8 @@ export default defineConfig({
             // Package attribution models npm-pack output. Keep it in the fast lane so every new
             // package path remains accounted for.
             'scripts/__tests__/size-report-package.test.ts',
+            'scripts/__tests__/bundled-license-notices.test.ts',
+            'scripts/lib/cli-entrypoint.test.ts',
             // Publish preparation spawns only fixture-owned scripts and proves both Android
             // helper families are rebuilt through the shared release/size-report owner.
             'scripts/__tests__/prepare-publish-assets.test.ts',
@@ -233,6 +239,7 @@ export default defineConfig({
             // The Android failed-step evidence reader: it replays adb output through the probe
             // seam, so the crash/process/activity selectors need no emulator to be pinned.
             'test/integration/android-emulator-e2e/device-evidence.test.ts',
+            'test/integration/android-emulator-e2e/live-ime-window.test.ts',
             // The frozen replay-compat corpus (#1417): parse-only, no device or
             // subprocess work, so it belongs in the fast lane next to the
             // grammar it guards.
@@ -287,7 +294,14 @@ export default defineConfig({
         test: {
           name: 'interaction-contract',
           include: ['test/integration/interaction-contract/**/*.test.ts'],
-          setupFiles: SETUP_FILES,
+          // Fails a contract file whose manifest claims a scenario that did not run.
+          globalSetup: [
+            'test/integration/interaction-contract/coverage-registration.global-setup.ts',
+          ],
+          setupFiles: [
+            ...SETUP_FILES,
+            'test/integration/interaction-contract/coverage-registration.ts',
+          ],
         },
       },
       {

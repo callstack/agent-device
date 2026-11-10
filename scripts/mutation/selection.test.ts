@@ -71,6 +71,25 @@ function listAffected(cwd: string, extraArgs: readonly string[] = []): ShardSpec
   return JSON.parse(result.stdout.trim().split('\n').at(-1)!) as ShardSpec[];
 }
 
+test('an unresolvable base fails selection instead of selecting nothing', () => {
+  const result = runCmdSync(
+    'node',
+    [
+      '--experimental-strip-types',
+      path.join(repoRoot, 'scripts/mutation/run.ts'),
+      '--list-affected',
+      '--base',
+      'refs/heads/mutation-selection-missing-base',
+    ],
+    { cwd: repoRoot, allowFailure: true },
+  );
+  assert.notEqual(result.exitCode, 0, result.stdout);
+  assert.match(
+    result.stderr,
+    /git diff against refs\/heads\/mutation-selection-missing-base failed/,
+  );
+});
+
 test('a lane-tooling diff selects real mutants', () => {
   const dir = worktreeWithCommit('tooling', ['scripts/mutation/run.ts']);
   // The lane's own sources own no kernel, so derivation alone yields nothing:

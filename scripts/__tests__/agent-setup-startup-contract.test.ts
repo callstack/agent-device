@@ -30,7 +30,7 @@ function readCanonicalRule(content: string): string {
   const section = content.slice(sectionStart, sectionEnd === -1 ? undefined : sectionEnd);
   const ruleBlocks = [...section.matchAll(/^```text\n([\s\S]*?)^```$/gm)];
   assert.equal(ruleBlocks.length, 1, 'recommended agent rule section must hold one rule block');
-  return ruleBlocks[0][1];
+  return ruleBlocks[0]![1]!;
 }
 
 function assertOpenFirstSetup(content: string): void {

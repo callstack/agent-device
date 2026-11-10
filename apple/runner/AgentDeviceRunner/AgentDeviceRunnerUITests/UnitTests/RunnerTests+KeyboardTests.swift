@@ -4,6 +4,20 @@ import AgentDeviceSnapshotPresentation
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
 #if os(iOS)
+  /// Keyboard reads stay application-wide on a lit-panel request, so a failed lit-window walk
+  /// cannot turn `keyboard dismiss` into a refusal.
+  @MainActor
+  func testKeyboardDismissIgnoresAFailedLitPanelWindowWalk() throws {
+    try withLitPanelWindow(frame: CGRect(x: 0, y: 0, width: 669, height: 951)) { _ in
+      litPanelWindowWalkIssueForTesting = true
+      defer { litPanelWindowWalkIssueForTesting = false }
+      let command = try runnerCommandFixture(#"{"command":"keyboardDismiss","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#)
+      setRequestLitPanel(from: command)
+      let response = try executeOnMainPrepared(command: command, activeApp: app)
+      XCTAssertTrue(response.ok, String(describing: response.error))
+    }
+  }
+
   @MainActor
   func testCapturedKeyboardBandIncludesTheInputAssistantOutsideTheKeyboard() {
     let keyboard = ElementAttributesFixture(.keyboard, CGRect(x: 0, y: 600, width: 390, height: 244))
@@ -131,6 +145,7 @@ extension RunnerTests {
     XCTAssertEqual(fact.payload.kind, "absent")
     XCTAssertNil(fact.payload.frame)
     XCTAssertNil(fact.payload.reason)
+    XCTAssertEqual(fact.payload.treeBound, true)
   }
 
   func testKeyboardBandFactPublishesTheMeasuredBandInAppOrientationSpace() {
@@ -143,6 +158,7 @@ extension RunnerTests {
     XCTAssertEqual(payload.kind, "visible")
     XCTAssertEqual(payload.frame, SnapshotRect(x: 0, y: 198, width: 874, height: 204))
     XCTAssertNil(payload.reason)
+    XCTAssertEqual(payload.treeBound, true)
   }
 
   func testKeyboardBandFactRefusesUnusableGeometryInsteadOfClaimingAbsence() {
@@ -177,19 +193,22 @@ extension RunnerTests {
     ]
     for fact in cases {
       let data = try JSONEncoder().encode(fact.payload)
-      // `encodeIfPresent` for the two optional fields: a fact carries its own evidence and nothing
+      // `encodeIfPresent` for the optional fields: a fact carries its own evidence and nothing
       // else, so the daemon never has to distinguish a null from an absent key.
       let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
       switch fact {
       case .visible:
         XCTAssertNil(object["reason"])
         XCTAssertNotNil(object["frame"])
+        XCTAssertEqual(object["treeBound"] as? Bool, true)
       case .absent:
         XCTAssertNil(object["frame"])
         XCTAssertNil(object["reason"])
+        XCTAssertEqual(object["treeBound"] as? Bool, true)
       case .unmeasurable:
         XCTAssertNil(object["frame"])
         XCTAssertNotNil(object["reason"])
+        XCTAssertNil(object["treeBound"])
       }
       XCTAssertEqual(try JSONDecoder().decode(KeyboardBandFactPayload.self, from: data), fact.payload)
     }

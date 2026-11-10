@@ -290,7 +290,7 @@ extension RunnerTests {
         timeout: 1,
         timeoutError: snapshotMainThreadTimeoutError("reading private AX viewport")
       ) {
-        self.safeSnapshotViewport(app: app, readingOrientation: true)
+        try self.safeSnapshotViewport(app: app, readingOrientation: true)
       }
       if case .missing = reported {
         return fallback

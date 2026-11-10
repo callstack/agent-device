@@ -250,7 +250,7 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   // The live read is a SEPARATE runner request (the direct querySelector), so
   // it shares the runner's prepareActiveCommandContext surface policy only with
   // a RUNNER-ROUTED capture: eligible simulator captures go to the host AX
-  // bridge (packages/platform-apple/src/snapshot-route.ts), and a bridge-served
+  // bridge (packages/capture-kit/src/snapshot-router/router.ts), and a bridge-served
   // capture never reaches that seam. #2448 puts the system-surface case (the
   // web sign-in sheet) back on the runner, where both reads do share it. Either
   // way this is not a same-instant guarantee — no captured surface identity
@@ -467,10 +467,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'packages/selectors/src/internal/resolve.ts#STALE_REF_HINT',
       },
-      // An @ref names exactly one node by construction (same cell as runtime-ref).
+      // The preflight's ref lookup goes through the same builder as runtime-ref, so it discloses
+      // label-fallback when it recovers the node by label. A no-op preflight discloses exact.
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'packages/command-runtime/src/commands/interaction/runtime/resolution-disclosure.ts#EXACT_REF_RESOLUTION',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/resolution-disclosure.ts#buildRefResolution',
       },
       outcomeObservation: {
         kind: 'waived',
@@ -566,7 +567,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       // #2622: the seam dispatches the point itself, so the shared #2589 guard runs here rather
       // than at the interaction leaf's door. Same refusal, same typed details, measured at the
-      // center the seam dispatches.
+      // point the seam dispatches.
       keyboardOcclusion: {
         kind: 'runtime',
         via: 'packages/selectors/src/keyboard-occlusion.ts#assertTapTargetClearOfVisibleKeyboard',
@@ -574,14 +575,14 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       offscreen: {
         kind: 'waived',
         reason:
-          'gap: the `findAct` row declares `offscreen: "ignore"` because find ranks across the whole tree and prefers on-screen matches rather than refusing off-screen ones (#1625), and focus/type never re-enter the acting leaf where the runtime rows refuse. So the seam dispatches at a captured rect center the acting paths would reject as outside the root viewport — a closed drawer or an off-viewport carousel is a silent no-op focus here.',
+          'gap: the `findAct` row declares `offscreen: "ignore"` because find ranks across the whole tree and prefers on-screen matches rather than refusing off-screen ones (#1625), and focus/type never re-enter the acting leaf where the runtime rows refuse. So the seam dispatches at a captured touch point the acting paths would reject as outside the root viewport — a closed drawer or an off-viewport carousel is a silent no-op focus here.',
         trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
       },
+      // The rule treats a nested text field as a competitor to avoid, but this seam means to focus
+      // one, so `resolveFocusTarget` chooses the node the rule then aims inside (#3734).
       parentOwnedTouchPoint: {
-        kind: 'waived',
-        reason:
-          'gap: the seam aims `centerOfRect` of the resolved node rather than the parent-owned point `resolveInteractionTouchPoint` chooses, so a match whose center is tiled by an independently interactive descendant activates that descendant instead of failing closed — and the keyboard guard above measures the same center the tap uses, which is the point actually dispatched but not the point the acting paths would aim.',
-        trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
+        kind: 'runtime',
+        via: 'packages/selectors/src/interaction-touch-point.ts#resolveInteractionTouchPoint',
       },
       // The guarantee is promotion AND annotation. This seam runs only the first half, so the
       // cell cannot claim `runtime` for the whole guarantee (the same shape `native-ref` classifies
@@ -589,7 +590,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       nonHittable: {
         kind: 'waived',
         reason:
-          "gap: the promotion half does run — the `findAct` row declares `hittable-ancestor-below-root`, so the seam dispatches the promoted ancestor's center (regression-proven in packages/daemon/src/execution/interaction/internal/__tests__/find.test.ts) — but the annotation half never does: the response is the focus runtime's point payload, so a match still reporting `hittable: false` after promotion is accepted silently, where press/click/fill answer with `targetHittable: false` plus a hint. Closing it needs the annotation composed at this seam, which is response-shape work the `responseIdentity` waiver below also records.",
+          "gap: the promotion half does run — the `findAct` row declares `hittable-ancestor-below-root`, so the seam dispatches the promoted ancestor's touch point unless `resolveFocusTarget` chooses a text field instead (regression-proven in packages/daemon/src/execution/interaction/internal/__tests__/find.test.ts) — but the annotation half never does: the response is the focus runtime's point payload, so a match still reporting `hittable: false` after promotion is accepted silently, where press/click/fill answer with `targetHittable: false` plus a hint. Closing it needs the annotation composed at this seam, which is response-shape work the `responseIdentity` waiver below also records.",
         trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
       },
       // One construction site per dispatch kind, both shared with the plain commands: the focus
@@ -636,7 +637,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       targetStability: {
         kind: 'waived',
         reason:
-          "gap: the seam dispatches a rect center captured one runner round trip earlier without the #3471 re-observation, so a focus issued right after an action that animated the surface can aim a position the target has already vacated and report success on the vacancy. The gate itself is the acting leaf's (`guardResolvedTargetAgainstMotion`), and this route does not pass through it.",
+          "gap: the seam dispatches a touch point captured one runner round trip earlier without the #3471 re-observation, so a focus issued right after an action that animated the surface can aim a position the target has already vacated and report success on the vacancy. The gate itself is the acting leaf's (`guardResolvedTargetAgainstMotion`), and this route does not pass through it.",
         trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
       },
     },

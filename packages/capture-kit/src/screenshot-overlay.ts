@@ -4,8 +4,8 @@ import {
   type Rect,
   type ScreenshotOverlayRef,
   type SnapshotNode,
-  type SnapshotState,
 } from '@agent-device/kernel/snapshot';
+import { type SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { decodePngAsync, encodePngAsync } from './png-worker-client.ts';
 import {
   projectSnapshotRectToScreenshot,

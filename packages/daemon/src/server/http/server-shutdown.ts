@@ -4,7 +4,6 @@ import type {
 } from '@agent-device/contracts/plugin-inventory';
 import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import type { DaemonServer } from './transport.ts';
-import { sleep } from '@agent-device/host-kit/retry';
 import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
 import { SessionStore } from '../../core/session-store.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
@@ -355,13 +354,12 @@ export async function teardownDaemonSessionForShutdown(params: {
       : true;
     return genericTeardownSucceeded && lifecycleTeardownSucceeded;
   })();
-  const genericTeardownSucceeded = await Promise.race([
-    teardown,
-    sleep(timeoutMs).then(() => {
-      stderr.write(`Daemon session teardown timed out (${session.name}).\n`);
-      return false;
-    }),
-  ]);
+  const teardownOutcome = await settleWithinBudget(async () => await teardown, timeoutMs);
+  if (teardownOutcome.kind === 'deadline') {
+    stderr.write(`Daemon session teardown timed out (${session.name}).\n`);
+  }
+  const genericTeardownSucceeded =
+    teardownOutcome.kind === 'completed' ? teardownOutcome.value : false;
   const teardownSucceeded = appLogTeardownSucceeded && genericTeardownSucceeded;
   // ADR 0012 decision 6, R7 + commit semantics (C2/C5a): commit the healed
   // `.ad` iff the repair transaction completed, else leave a bounded

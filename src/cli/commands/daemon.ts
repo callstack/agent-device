@@ -53,7 +53,7 @@ export const daemonCommand: ClientCommandHandler = async ({ positionals, flags, 
     });
   }
   const data = { ...result, clean: shouldClean };
-  await writeCommandOutput(flags, data, () => renderDaemonStop(data));
+  await writeCommandOutput(flags, data, () => renderDaemonStop(data, paths.baseDir));
   return true;
 };
 
@@ -92,8 +92,11 @@ function renderDaemonStop(
   result: Pick<DaemonStopResult, 'stopped' | 'mode' | 'warnings'> & {
     clean: boolean;
   },
+  stateDir: string,
 ): string {
-  const headline = result.stopped ? `Daemon stopped (${result.mode}).` : 'No running daemon found.';
+  const headline = result.stopped
+    ? `Daemon stopped (${result.mode}).`
+    : `No running daemon for ${stateDir}. A daemon may run under another --state-dir; inspect claims with agent-device device status.`;
   return [headline, result.clean ? 'Retained runner cleanup completed.' : null, ...result.warnings]
     .filter((line): line is string => Boolean(line))
     .join('\n');

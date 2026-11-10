@@ -12,7 +12,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   mkdtempForTestSync,
-  supportsLoopbackBind,
+  skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 
 const DEVELOPER_DIR = '/Applications/Xcode.app/Contents/Developer';
@@ -21,10 +21,7 @@ test.for([DEVELOPER_DIR, '', undefined])(
   'sendToDaemon forwards local DEVELOPER_DIR (%s) and strips remote developerDir',
   { concurrent: false },
   async (developerDir, t) => {
-    if (!(await supportsLoopbackBind())) {
-      t.skip('loopback listeners are not permitted in this environment');
-      return;
-    }
+    if (await skipWhenLoopbackUnavailable(t)) return;
     const saved = {
       developerDir: process.env.DEVELOPER_DIR,
       baseUrl: process.env.AGENT_DEVICE_DAEMON_BASE_URL,

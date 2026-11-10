@@ -39,9 +39,7 @@ import path from 'node:path';
 import {
   type CallExpression,
   type Expression,
-  type Node,
   parseSync,
-  type StringLiteral,
   type TemplateLiteral,
   Visitor,
 } from 'oxc-parser';
@@ -69,22 +67,21 @@ const MODULE_BUILTIN = new Set(['module', 'node:module']);
 
 const builtins = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
 
+/** The two node kinds a literal specifier can be spelled with. */
+type SpecifierLiteral = Extract<Expression, { type: 'Literal' }> | TemplateLiteral;
+
 /**
  * `'pkg'` and `` `pkg` `` are the same specifier. The second is the only spelling the minified
  * shipped files use, so treating it as non-literal blinds this reader to the whole bundle.
+ *
+ * Callers narrow to the two literal kinds first. No named function here takes the whole
+ * `Expression` union as a parameter: Freerange walks every parameter type, and that union makes
+ * the walk take minutes per function.
  */
-function literalSpecifier(node: Node | Expression | null | undefined): string | undefined {
-  if (!node) return undefined;
-  if (node.type === 'Literal') {
-    const { value } = node as StringLiteral;
-    return typeof value === 'string' ? value : undefined;
-  }
-  if (node.type === 'TemplateLiteral') {
-    const template = node as TemplateLiteral;
-    if (template.expressions.length > 0 || template.quasis.length !== 1) return undefined;
-    return template.quasis[0]?.value.cooked ?? undefined;
-  }
-  return undefined;
+function literalSpecifier(node: SpecifierLiteral): string | undefined {
+  if (node.type === 'Literal') return typeof node.value === 'string' ? node.value : undefined;
+  if (node.expressions.length > 0 || node.quasis.length !== 1) return undefined;
+  return node.quasis[0]?.value.cooked ?? undefined;
 }
 
 /** The local names `createRequire` is reachable through in one file, under any import alias. */
@@ -95,7 +92,9 @@ type CreateRequireBindings = {
   namespaces: Set<string>;
 };
 
-function isCreateRequire(callee: Expression, bindings: CreateRequireBindings): boolean {
+/** Whether `call` is `createRequire(…)`, through any alias or namespace import. */
+function callsCreateRequire(call: CallExpression, bindings: CreateRequireBindings): boolean {
+  const { callee } = call;
   if (callee.type === 'Identifier') return bindings.locals.has(callee.name);
   return (
     callee.type === 'MemberExpression' &&
@@ -116,12 +115,13 @@ type PendingCall =
 /** The first argument, when it is a literal specifier rather than a computed expression. */
 function firstArgumentSpecifier(call: CallExpression): string | undefined {
   const [first] = call.arguments;
-  if (!first || first.type === 'SpreadElement') return undefined;
+  if (first?.type !== 'Literal' && first?.type !== 'TemplateLiteral') return undefined;
   return literalSpecifier(first);
 }
 
 /** `<name>.resolve` — the object name, for the `require.resolve('pkg')` spelling. */
-function resolveTarget(callee: Expression): string | undefined {
+function resolveTarget(call: CallExpression): string | undefined {
+  const { callee } = call;
   if (callee.type !== 'MemberExpression' || callee.computed) return undefined;
   if (callee.object.type !== 'Identifier') return undefined;
   if (callee.property.type !== 'Identifier' || callee.property.name !== 'resolve') return undefined;
@@ -136,14 +136,14 @@ function pendingCall(
   if (specifier === undefined) return undefined;
   const { callee } = call;
   // `createRequire(import.meta.url)('pkg')` — the alias is inline, so nothing needs resolving.
-  if (callee.type === 'CallExpression' && isCreateRequire(callee.callee, bindings)) {
+  if (callee.type === 'CallExpression' && callsCreateRequire(callee, bindings)) {
     return { form: 'resolved', specifier };
   }
   if (callee.type === 'Identifier') {
     return { form: 'callee', name: callee.name, specifier, single: call.arguments.length === 1 };
   }
   // `require.resolve('pkg')`, which also takes an options bag as a second argument.
-  const target = resolveTarget(callee);
+  const target = resolveTarget(call);
   return target === undefined ? undefined : { form: 'resolve', name: target, specifier };
 }
 
@@ -177,10 +177,12 @@ function moduleSpecifiers(file: string, source: string): string[] {
     VariableDeclarator(node) {
       if (node.id.type !== 'Identifier') return;
       if (node.init?.type !== 'CallExpression') return;
-      if (isCreateRequire(node.init.callee, bindings)) requireAliases.add(node.id.name);
+      if (callsCreateRequire(node.init, bindings)) requireAliases.add(node.id.name);
     },
     ImportExpression(node) {
-      const specifier = literalSpecifier(node.source);
+      const { source } = node;
+      if (source.type !== 'Literal' && source.type !== 'TemplateLiteral') return;
+      const specifier = literalSpecifier(source);
       if (specifier !== undefined) dynamic.push(specifier);
     },
     CallExpression(node) {

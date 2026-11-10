@@ -306,14 +306,22 @@ async function releaseLocalResources(owner: LimrunLeaseOwner): Promise<void> {
   const session = owner.session ?? (await sessionTheCreateBuilt(owner));
   if (session === undefined) return;
   const { awaitLimrunWithinBudget } = await import('./lifecycle-budget.ts');
-  const tunnel =
-    session.platform === 'android' ? cleanupLimrunAndroidAdbTunnel(session) : Promise.resolve();
-  // Disconnect closes the ADB endpoint: reverse cleanup gets its window, but cannot postpone disconnect
-  // past that window. Both promises are observed before either can settle.
-  const disconnect = awaitLimrunWithinBudget(tunnel, LOCAL_TEARDOWN_BUDGET_MS).then(() => {
-    session.client.disconnect();
+  const platformResources = Promise.allSettled([
+    session.syncCache?.dispose(),
+    session.platform === 'android'
+      ? cleanupLimrunAndroidAdbTunnel(session)
+      : session.runner.dispose(),
+  ]).then((outcomes) => {
+    const refused = outcomes.find((outcome) => outcome.status === 'rejected');
+    if (refused?.status === 'rejected') throw refused.reason;
   });
-  const results = await Promise.allSettled([tunnel, disconnect]);
+  // Runner and reverse cleanup use the connection, but cannot postpone disconnect beyond their budget.
+  const disconnect = awaitLimrunWithinBudget(platformResources, LOCAL_TEARDOWN_BUDGET_MS).then(
+    () => {
+      session.client.disconnect();
+    },
+  );
+  const results = await Promise.allSettled([platformResources, disconnect]);
   const refused = results.find((result) => result.status === 'rejected');
   if (refused?.status === 'rejected') throw refused.reason;
 }

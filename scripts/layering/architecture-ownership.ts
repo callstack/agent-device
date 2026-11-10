@@ -195,6 +195,7 @@ export const LOGICAL_MODULE_POLICIES = [
   {
     name: 'daemon-session-observability',
     roots: ['packages/daemon/src/sessions/session-observability/'],
+    forbiddenTargetRoots: [],
     forbiddenTargetShapes: DAEMON_HANDLER_TARGET_SHAPES,
     facades: DAEMON_SESSION_OBSERVABILITY_FACADES,
   },
@@ -202,7 +203,7 @@ export const LOGICAL_MODULE_POLICIES = [
 
 export const ARCHITECTURE_OWNERSHIP = {
   logicalModules: LOGICAL_MODULE_POLICIES,
-  facades: LOGICAL_MODULE_POLICIES.flatMap((module) =>
+  facades: LOGICAL_MODULE_POLICIES.flatMap((module: LogicalModulePolicy) =>
     (module.facades ?? []).map((facade) => ({ name: module.name, ...facade })),
   ),
   vocabulary: [
@@ -281,6 +282,27 @@ export const ARCHITECTURE_OWNERSHIP = {
       kind: 'executable-policy',
       roots: ['packages/capture-kit/src/snapshot/'],
       forbiddenTargetRoots: [DAEMON_SOURCE_ROOT],
+    },
+    {
+      // ADR 0038: the snapshot source router depends on no platform or provider code.
+      name: 'snapshot-router',
+      kind: 'executable-policy',
+      roots: ['packages/capture-kit/src/snapshot-router/'],
+      forbiddenTargetRoots: [
+        'packages/apple-runner/',
+        'packages/platform-android/',
+        'packages/platform-apple/',
+        'packages/platform-harmonyos/',
+        'packages/platform-linux/',
+        'packages/platform-vega/',
+        'packages/platform-web/',
+        'packages/provider-limrun/',
+        'packages/provider-revyl/',
+        'packages/provider-testmu/',
+        'packages/provider-webdriver/',
+        'packages/provider-webos/',
+        'packages/tv-cdp/',
+      ],
     },
   ],
 } as const;

@@ -12,6 +12,18 @@ private struct AlertCommandTraitsFixture: Decodable {
 }
 
 extension RunnerTests {
+#if os(iOS)
+  /// A frame sample resolves the lit panel without booking it, so it never replaces the request's booking.
+  @MainActor
+  func testFrameSamplingResolvesTheLitPanelWithoutBookingIt() throws {
+    try withLitPanelWindow(frame: CGRect(x: 0, y: 0, width: 669, height: 951)) { _ in
+      setRequestLitPanel(from: try runnerCommandFixture(#"{"command":"snapshot","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#))
+      _ = captureRunnerFrame(app: app)
+      XCTAssertNil(litPanelState.surface)
+    }
+  }
+#endif
+
   func testAlertRetryFactMatchesTheSharedGoldenTable() throws {
     let fixtureURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -101,7 +113,7 @@ extension RunnerTests {
     let message = try XCTUnwrap(response.data?.message)
     // The answer names the file rather than carrying bytes, and the name is a host-resolvable form:
     // absolute on macOS, container-relative `tmp/…` on iOS. Both name the one file just written
-    // into the runner's temporary directory.
+    // into the runner's data container on iOS, regardless of the host's TMPDIR.
     let fileName = URL(fileURLWithPath: message).lastPathComponent
     XCTAssertTrue(message.hasSuffix(fileName), message)
 #if os(iOS)
@@ -109,7 +121,11 @@ extension RunnerTests {
 #elseif os(macOS)
     XCTAssertTrue(message.hasPrefix("/"), message)
 #endif
+#if os(iOS)
+    let storedPath = (NSHomeDirectory() as NSString).appendingPathComponent(message)
+#else
     let storedPath = (NSTemporaryDirectory() as NSString).appendingPathComponent(fileName)
+#endif
     XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: storedPath)), pngData)
     XCTAssertEqual(response.data?.screenshotMetadata?.pixelsPerPoint, 3)
     try? FileManager.default.removeItem(atPath: storedPath)

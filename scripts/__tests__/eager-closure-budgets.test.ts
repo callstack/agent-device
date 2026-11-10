@@ -43,9 +43,9 @@ import {
 /**
  * The ADR-0019 loading-shape probe, generalized (#1739, #1960).
  *
- * ADR-0019 requires platform-package façades to stay implementation-lazy and is explicit that a
- * startup threshold alone is not a substitute for preserving the loading shape: "the tracking
- * issue owns the exact probe and planted-red procedure." #1950 built the walker this file reuses
+ * ADR 0019 §1, implementation laziness, requires platform-package façades to stay implementation-lazy.
+ * A startup threshold alone is not a substitute for preserving the loading shape.
+ * #1950 built the walker this file reuses
  * (`@agent-device/test-kit`, AST-level: static value edges plus top-level
  * dynamic
  * imports, type-only erased) and proved the planted-red procedure on one file. This is that

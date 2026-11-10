@@ -32,19 +32,19 @@ extension RunnerTests {
   }
 #endif
 
-  func testSynthesizedReplacementRequiresPenalizedXCTestAndCoordinates() {
+  func testSynthesizedReplacementRequiresUnavailableXCTestAndCoordinates() {
     let cases = [
-      (hasElement: false, hasPoint: true, penalized: true, expected: true),
-      (hasElement: false, hasPoint: true, penalized: false, expected: false),
-      (hasElement: false, hasPoint: false, penalized: true, expected: false),
-      (hasElement: true, hasPoint: true, penalized: true, expected: false),
+      (hasElement: false, hasPoint: true, unavailable: true, expected: true),
+      (hasElement: false, hasPoint: true, unavailable: false, expected: false),
+      (hasElement: false, hasPoint: false, unavailable: true, expected: false),
+      (hasElement: true, hasPoint: true, unavailable: true, expected: false),
     ]
     for testCase in cases {
       XCTAssertEqual(
         Self.shouldUseSynthesizedFirstResponderReplacement(
           hasResolvedElement: testCase.hasElement,
           hasRefreshPoint: testCase.hasPoint,
-          xCTestChannelPenalized: testCase.penalized
+          xCTestUnavailable: testCase.unavailable
         ),
         testCase.expected
       )
@@ -398,7 +398,7 @@ extension RunnerTests {
   }
 #endif
 
-  func testResolvedCoordinateTextEntryRouteRequiresReplacementCoordinatesAndPenalizedXCTest() {
+  func testResolvedCoordinateTextEntryRouteRequiresReplacementCoordinatesAndUnavailableXCTest() {
     let cases: [(TextTypingRepairMode, Bool, Bool, Bool, Bool)] = [
       (.replacement, true, true, false, false),
       (.replacement, true, true, true, true),
@@ -406,13 +406,13 @@ extension RunnerTests {
       (.replacement, false, true, true, false),
       (.replacement, true, false, true, false),
     ]
-    for (mode, hasX, hasY, penalized, expected) in cases {
+    for (mode, hasX, hasY, unavailable, expected) in cases {
       XCTAssertEqual(
         Self.shouldUseResolvedCoordinateTextEntryRoute(
           repairMode: mode,
           hasX: hasX,
           hasY: hasY,
-          xCTestChannelPenalized: penalized
+          xCTestUnavailable: unavailable
         ),
         expected
       )
@@ -733,7 +733,7 @@ extension RunnerTests {
     defer { tearDownSynthesizedReplacementField() }
     let synthesizer = RecordingTextEntrySynthesizer()
     let frame = field.frame
-    let result = typeTextReliably(
+    let result = try typeTextReliably(
       app: app,
       target: TextEntryTarget(
         element: nil,
@@ -745,7 +745,7 @@ extension RunnerTests {
       text: "abc",
       delaySeconds: 0.001,
       repairMode: .replacement,
-      xCTestChannelPenalized: true,
+      xCTestUnavailable: true,
       synthesizer: synthesizer
     )
 
@@ -778,10 +778,10 @@ extension RunnerTests {
   // `_XCTestCaseInterruptionException`, which XCTest records as a test failure even when production
   // code catches it. Springboard is always running, so the query resolves to no input at the point.
   @MainActor
-  func testSynthesizedReplacementTypesNothingWhenItCannotReadTheFieldBack() {
+  func testSynthesizedReplacementTypesNothingWhenItCannotReadTheFieldBack() throws {
     let synthesizer = RecordingTextEntrySynthesizer()
     let failures = currentXCTestFailureCount()
-    let result = typeTextReliably(
+    let result = try typeTextReliably(
       app: springboard,
       target: TextEntryTarget(
         element: nil,
@@ -792,7 +792,7 @@ extension RunnerTests {
       text: "abc",
       delaySeconds: 0,
       repairMode: .replacement,
-      xCTestChannelPenalized: true,
+      xCTestUnavailable: true,
       synthesizer: synthesizer
     )
 
@@ -809,14 +809,14 @@ extension RunnerTests {
   // fail closed: it used to fall through to the vacuous-typing early return and report
   // `verified: true` for a clear that never ran.
   @MainActor
-  func testEmptyReplacementWithoutResolvableTargetFailsClosed() {
-    let result = typeTextReliably(
+  func testEmptyReplacementWithoutResolvableTargetFailsClosed() throws {
+    let result = try typeTextReliably(
       app: springboard,
       target: TextEntryTarget(element: nil, refreshPoint: nil, prefersFocusedElement: false, contentTranslation: .none),
       text: "",
       delaySeconds: 0,
       repairMode: .replacement,
-      xCTestChannelPenalized: false,
+      xCTestUnavailable: false,
       synthesizer: RecordingTextEntrySynthesizer()
     )
 
@@ -830,7 +830,7 @@ extension RunnerTests {
   func testSynthesizedReplacementCommitSkipsSubmitKeyText() {
     for expectedText in ["ada@example.test\n", "ada@example.test\r"] {
       XCTAssertEqual(
-        awaitSynthesizedReplacementCommit(
+        try awaitSynthesizedReplacementCommit(
           app: XCUIApplication(),
           target: TextEntryTarget(element: nil, refreshPoint: CGPoint(x: 10, y: 20), prefersFocusedElement: false, contentTranslation: .none),
           expectedText: expectedText

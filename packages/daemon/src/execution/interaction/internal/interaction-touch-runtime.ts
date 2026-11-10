@@ -8,7 +8,7 @@ import type {
   ResolvedInteractionTarget,
 } from '@agent-device/contracts/interaction';
 import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gesture';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { asAppError, normalizeError } from '@agent-device/kernel/errors';
 import { readResolvedInteractionTarget } from '@agent-device/host-kit/interaction-outcome';
 import { publishAmbiguousMatchCandidateRefs } from '../../session-snapshot.ts';

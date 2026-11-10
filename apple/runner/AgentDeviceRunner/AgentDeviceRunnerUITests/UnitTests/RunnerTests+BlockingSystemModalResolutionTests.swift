@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
@@ -15,25 +16,184 @@ extension RunnerTests {
     XCTAssertFalse(RemoteHostedSystemModalPolicy.isEligibleHostState(.unknown))
   }
 
-  /// An unreadable modal is still a prompt on screen: answering it as absent makes the host retry
-  /// and report `ALERT_NOT_FOUND` while the prompt blocks the app.
-  func testSystemModalAlertResolutionKeepsAnUnreadableModalUnresolved() {
-    var resolvedModalCount = 0
-    let resolveModal: (ResolvedBlockingSystemModal) -> AlertResolution = { _ in
-      resolvedModalCount += 1
-      return .absent
-    }
-
-    guard case .unresolved = Self.alertResolution(forSystemModal: .unresolved, resolved: resolveModal) else {
-      return XCTFail("an unreadable system modal must resolve as unresolved")
-    }
-    XCTAssertNil(Self.alertResolution(forSystemModal: .absent, resolved: resolveModal))
-    let modal = ResolvedBlockingSystemModal(root: app, ownerApp: app, actions: [], window: nil)
-    guard case .absent = Self.alertResolution(forSystemModal: .resolved(modal), resolved: resolveModal) else {
-      return XCTFail("a readable system modal must answer with its own resolution")
-    }
-    XCTAssertEqual(resolvedModalCount, 1)
+  func testRequiredModalReadPreservesSuccessfulEmptyAndOptionalValues() throws {
+    let elements: [XCUIElement] = try readModalValue(deadline: .distantFuture) { [] }
+    XCTAssertTrue(elements.isEmpty)
+    let element: XCUIElement? = try readModalValue(deadline: .distantFuture) { nil as XCUIElement? }
+    XCTAssertNil(element)
+    let visible = try readModalValue(deadline: .distantFuture) { false }
+    XCTAssertFalse(visible)
+    XCTAssertNoThrow(try readModalValue(deadline: .distantFuture) { () })
   }
+
+#if os(iOS)
+  @MainActor
+  func testAlertRequiredQueryFailureNeverReportsAbsence() throws {
+    modalElementsQueryOverrideForTesting = {
+      NSException(name: .internalInconsistencyException, reason: "injected required query failure", userInfo: nil).raise()
+      return []
+    }
+    defer { modalElementsQueryOverrideForTesting = nil }
+    XCTAssertThrowsError(try firstBlockingSystemModal(in: springboard)) { error in
+      guard case ModalReadFailure.queryFailed = error else { return XCTFail("unexpected error: \(error)") }
+    }
+    for action in ["get", "accept", "wait"] {
+      let command = try runnerCommandFixture(
+        #"{"command":"alert","commandId":"required-query-\#(action)","action":"\#(action)"}"#
+      )
+      let response = try executeOnMainPrepared(command: command, activeApp: app)
+      XCTAssertEqual(response.error?.code, RunnerWireErrorCode.alertUnresolved, action)
+    }
+  }
+
+  @MainActor
+  func testAlertSpentSearchDeadlineNeverReportsAbsence() throws {
+    let deadline = Date.distantPast
+    XCTAssertThrowsError(try firstBlockingSystemModal(in: springboard, deadline: deadline)) { error in
+      guard case ModalReadFailure.deadlineExceeded = error else { return XCTFail("unexpected error: \(error)") }
+    }
+    for action in ["get", "accept", "wait"] {
+      let command = try runnerCommandFixture(
+        #"{"command":"alert","commandId":"spent-search-\#(action)","action":"\#(action)"}"#
+      )
+      let response = try executeOnMainPrepared(command: command, activeApp: app, alertDeadline: deadline)
+      XCTAssertEqual(response.error?.code, RunnerWireErrorCode.alertUnresolved, action)
+    }
+  }
+
+  @MainActor
+  func testAlertSearchFinishingAfterDeadlineNeverReportsAbsence() {
+    modalElementsQueryOverrideForTesting = {
+      Thread.sleep(forTimeInterval: 0.02)
+      return []
+    }
+    defer { modalElementsQueryOverrideForTesting = nil }
+    guard case .unresolved = resolveBlockingSystemModal(deadline: Date().addingTimeInterval(0.01)) else {
+      return XCTFail("an empty query that finished too late cannot establish absence")
+    }
+  }
+
+  @MainActor
+  func testAlertSuccessfulEmptySearchIsAbsent() {
+    modalElementsQueryOverrideForTesting = { [] }
+    defer { modalElementsQueryOverrideForTesting = nil }
+    guard case .absent = resolveBlockingSystemModal(deadline: .distantFuture) else {
+      return XCTFail("a completed empty search establishes absence")
+    }
+  }
+
+  @MainActor
+  func testAlertRequiredActionsQueryFailureThrows() {
+    modalElementsQueryOverrideForTesting = {
+      NSException(name: .internalInconsistencyException, reason: "injected actions query failure", userInfo: nil).raise()
+      return []
+    }
+    defer { modalElementsQueryOverrideForTesting = nil }
+    XCTAssertThrowsError(try readModalActions(in: app, deadline: .distantFuture)) { error in
+      guard case ModalReadFailure.queryFailed = error else { return XCTFail("unexpected error: \(error)") }
+    }
+  }
+
+  @MainActor
+  func testUnreadableRemoteModalMirrorNeverResolvesAsAnEmptyAlert() throws {
+    app.launchArguments = ["--agent-device-alert-replacement-regression"]
+    app.launch()
+    defer {
+      modalElementsQueryOverrideForTesting = nil
+      app.terminate()
+    }
+    let modal = app.alerts.firstMatch
+    XCTAssertTrue(modal.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let window = app.windows.firstMatch
+    var queryIndex = 0
+    modalElementsQueryOverrideForTesting = {
+      queryIndex += 1
+      switch queryIndex {
+      case 1: return [window]
+      case 2: return [modal]
+      default: return []
+      }
+    }
+    for action in ["get", "accept", "dismiss", "wait"] {
+      queryIndex = 0
+      let command = try runnerCommandFixture(
+        #"{"command":"alert","commandId":"unreadable-mirror-\#(action)","action":"\#(action)"}"#
+      )
+      let response = try executeOnMainPrepared(command: command, activeApp: app)
+      XCTAssertFalse(response.ok, action)
+      XCTAssertEqual(response.error?.code, RunnerWireErrorCode.alertUnresolved, action)
+    }
+    XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
+  }
+
+  @MainActor
+  func testAlertWithNoEnabledButtonsStaysResolved() throws {
+    app.launchArguments = ["--agent-device-alert-replacement-regression", "--agent-device-alert-replacement-disabled-buttons"]
+    app.launch()
+    defer { app.terminate() }
+    let root = app.alerts.firstMatch
+    XCTAssertTrue(root.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let buttons = root.buttons.allElementsBoundByIndex
+    XCTAssertEqual(buttons.count, 2)
+    XCTAssertTrue(buttons.allSatisfy { !$0.isEnabled })
+    guard case .resolved(let alert) = resolveAlert(
+      app: app, deadline: Date().addingTimeInterval(Self.defaultAlertCommandTimeout)
+    ) else { return XCTFail("a recognized surface remains resolved without enabled buttons") }
+    XCTAssertEqual(alert.source, .appAlert)
+    XCTAssertEqual(alert.actions.count, 2)
+    let inspection = try handleAlert(alert, action: "get", deadline: .distantFuture)
+    XCTAssertTrue(inspection.ok)
+    XCTAssertEqual(inspection.data?.message, "First confirmation")
+    XCTAssertEqual(inspection.data?.items, ["Cancel", "OK"])
+    for action in ["accept", "dismiss"] {
+      let response = try handleAlert(alert, action: action, deadline: .distantFuture)
+      XCTAssertEqual(response.error?.code, RunnerWireErrorCode.alertButtonNotFound, action)
+    }
+  }
+
+  @MainActor
+  func testAppAlertWithoutHittableControlsRemainsRetriableUntilControlsAppear() throws {
+    for action in ["get", "wait", "accept", "dismiss"] {
+      app.launchArguments = ["--agent-device-alert-replacement-regression"]
+      app.launch()
+      defer {
+        modalElementsQueryOverrideForTesting = nil
+        invalidateCachedTarget(reason: "unit_test_cleanup")
+        app.terminate()
+      }
+      let root = app.alerts.firstMatch
+      XCTAssertTrue(root.waitForFixtureExistence(timeout: appExistenceTimeout))
+      let covered = app.staticTexts["agent-device-alert-actions"]
+      XCTAssertTrue(covered.exists)
+      XCTAssertFalse(covered.isHittable)
+      var queryIndex = 0
+      modalElementsQueryOverrideForTesting = {
+        queryIndex += 1
+        if queryIndex <= 2 { return [] }
+        if queryIndex == 3 { return [root] }
+        return [covered]
+      }
+      let command = try runnerCommandFixture(
+        #"{"command":"alert","commandId":"app-controls-\#(action)","action":"\#(action)"}"#
+      )
+      for _ in 0..<2 {
+        queryIndex = 0
+        let response = try executeOnMainPrepared(command: command, activeApp: app)
+        XCTAssertFalse(response.ok, action)
+        XCTAssertEqual(response.error?.code, RunnerWireErrorCode.alertUnresolved, action)
+      }
+      XCTAssertEqual(covered.label, "First actions: 0; replacement actions: 0")
+      modalElementsQueryOverrideForTesting = nil
+      let response = try executeOnMainPrepared(command: command, activeApp: app)
+      XCTAssertTrue(response.ok, "\(action): \(String(describing: response.error))")
+      if action == "get" || action == "wait" {
+        XCTAssertEqual(response.data?.items, ["Cancel", "OK"])
+      } else {
+        XCTAssertEqual(covered.label, "First actions: 1; replacement actions: 0")
+      }
+    }
+  }
+#endif
 
   // No SpringBoard host (`hasSpringBoardSystemModalHost`) means modal resolution must return
   // `.absent` without probing com.apple.springboard (#1351). Written for tvOS, where no lane

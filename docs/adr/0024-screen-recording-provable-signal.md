@@ -2,11 +2,13 @@
 
 ## Status
 
-Proposed (2026-09-14).
-This ADR amends ADR 0019 section 5 for the `screen-recording` resource kind only.
+Accepted. Proposed 2026-09-14; production code now implements and cites its rules (for example rule 6 in the durable-capture coordinator).
+This amendment changes the modality of the record from proposed to accepted.
+The rollout in section 7 is incomplete: steps 2 to 7 remain open, so screen recording still exposes `reattach` and `cleanup` and keeps its admission ledger until step 4 lands.
+This ADR amends ADR 0019 section 5 and the capture-kit recovery contracts for the `screen-recording` resource kind only.
 ADR 0019 receives a short pointer paragraph, which section 2.7 of this ADR describes.
 ADR 0022 and ADR 0023 have the same relationship to ADR 0019.
-App-log, audio-probe, and perf-capture keep the ADR 0019 contract unchanged.
+App-log and audio-probe keep the ADR 0019 contract unchanged; perf capture already preserves retry material after a failed finish.
 The shared mechanism of rule 6 reaches each of these kinds only through the own failed-finish test of that kind.
 
 Completed rollout history is in git history.
@@ -68,9 +70,9 @@ Six rules make the table operational:
    A collection, validation, or commit failure preserves the material that a retry needs.
    Only session teardown and failed-start rollback invoke forced cleanup.
    Forced cleanup is never inferred from "finish threw".
-   The mechanism is in the shared coordinator (`capture-kit/durable-capture/transitions.ts`).
+   The mechanism is in the shared coordinator (`packages/capture-kit/src/durable-capture/transitions.ts`).
    But each kind must earn its scope.
-   Each of app-log, audio-probe, and perf-capture gets its own failed-finish test that proves what its retry needs.
+   Each of app-log and audio-probe gets its own failed-finish test that proves what its retry needs; perf capture already has one (`session-capture-binding.test.ts`).
    A kind whose retry needs nothing keeps its current disposal explicitly.
    The Android data loss alone establishes the rule for recording only.
 
@@ -79,74 +81,17 @@ the reduction of the Android device marker to marker-only content (2.6), and `--
 
 ## 1. Context
 
-`record start` / `record stop` is one command family.
-But each of its fixes in the last three months touched 10 to 35 files (#2447, #2457, #2487, #2534, #2564, #2565, #2566).
-The subsystem has ~10,150 production lines and ~19,000 test lines across these areas:
+A playable export and a stopped recorder are independent facts. The ADR 0019 section 5 contract refuses a usable export when ownership is uncertain. Its forced cleanup after a failed finish can destroy the material that a retry needs. On Android, forced cleanup after a failed pull can remove the remote artifact and the marker, so a retry has nothing to pull. Screen recording and perf capture now preserve retry material after a failed finish; app logs and audio probes still dispose. Platform backends need different identity and stop procedures, while the coordinator needs one guarded stop-and-export path.
 
-- `contracts`
-- `capture-kit`
-- `host-kit`
-- four platform packages
-- nine `src/platform-runtime-screen-recording-*` hosts
-- eight daemon modules
+HarmonyOS and web reattachment return `unreattachable`. Android can report `active` or `completed`; Apple can return an `active` export-restoration handle when a simulator recorder is gone and its export remains recoverable. An active recording holds off the idle reaper, and the startup reaper initially sends `SIGINT` to orphaned owned `simctl recordVideo` processes.
 
-Nine user-facing record bugs were filed since July 2026.
-In five of them, the ownership machinery refused because of its own uncertainty:
-
-| Issue | Refusal | Native cause? |
-| --- | --- | --- |
-| #2549 | `ps` 1 s probe timed out under load → `cleanup-pending`, session wedged | no |
-| #2550 | device manifest `deviceId` ≠ current serial → "recovery evidence already exists" | no |
-| #2476 | reused pid → "completed evidence cannot be safely retired" | no |
-| #2281 | client window expired → no CLI path to the finished export | no |
-| #1117 | daemon lost session state → "no active recording" | no |
-| #2170 | CoreSimulator host lock after `SIGKILL` | yes |
-| #1651 | validator rejected a static single-frame clip; `moov` patched in place | yes |
-| #615 | `screenrecord` 180 s cap | yes |
-| #2551 | clip ends at the last screen change | yes |
-
-Three facts make the fail-closed contract cost more than it protects:
-
-- **Reattachment is already dead on four of five backends.**
-  `reattachAppleRecording` and the HarmonyOS and web operations return `unreattachable` unconditionally.
-  After daemon loss, `finishRecoveredDurableCapture` runs descriptor cleanup and then **throws**.
-  It throws even when cleanup succeeded and the finalized MP4 is on disk.
-  Only Android can answer `active` or `completed`.
-  Ten ownership and outcome enums express distinctions that four backends cannot make.
-- **Daemon loss mid-recording is rare and already mitigated.**
-  An active recording holds off the idle reaper.
-  The startup reaper already sends `SIGINT` to orphaned `simctl recordVideo` children from `owned-processes.json`.
-  The local daemon logs of the maintainer hold zero recording reattachments.
-  All the reported failures are ordinary same-daemon stops.
-- **A failed export destroys its own retry.**
-  `finishDurableCaptureHandle` calls `handle.forceCleanup()` when `finish` throws (`transitions.ts`, `compensateFailedFinish`).
-  On Android, that reaches `cleanupVerifiedAndroidEvidence`, which removes the remote artifact and marker.
-  A pull that fails once under load leaves nothing to pull a second time.
-
-`#2551` was reproduced with raw `adb` on an API 36 emulator.
-`SIGINT` at +16 s produced a clip whose last frame is at +12.6 s, the last screen change.
-Changes after the last input were captured.
-The clip length comes from the change-driven encoding of `screenrecord`, not from our stop path.
-Disclosure (PR #2566) is the whole fix.
+#2551's short clips come from `screenrecord`'s change-driven encoding, not the stop path; disclosure (PR #2566) is the fix.
 
 ## 2. Decision
 
 ### 2.1 Shape
 
-```mermaid
-flowchart TD
-    Commands["record start / stop"] --> Owner["Recording coordinator"]
-    Recovery["Startup recovery / abandoned recordings"] --> Owner
-    Owner <--> Manifest["Recording manifest<br/>identity + artifacts + committed export<br/>last recorder observation"]
-    Owner --> Backend["Platform backend<br/>start · stop safely · collect"]
-    Backend --> Apple["Apple"]
-    Backend --> Android["Android"]
-    Backend --> Harmony["HarmonyOS"]
-    Backend --> Web["Web"]
-    Owner --> Finalizer["Shared validation + post-processing"]
-    Finalizer --> Commit["Commit export → return / replay"]
-    Markers["Native orphan markers<br/>owned-processes.json, Android device marker<br/>cover incomplete starts"] -.-> Recovery
-```
+Commands and recovery use one recording coordinator. The coordinator owns the manifest and calls the platform backend and shared finalizer. Native orphan markers cover incomplete starts before a manifest exists, and recovery reads them.
 
 The coordinator reuses the existing manifest store, fence, pending-transfer guard, and completed replay (PR #2534).
 There is no new framework.
@@ -237,7 +182,7 @@ Native-path disposition is complete only after fenced retirement succeeds or the
 A path marked retirable still needs its manifest until retirement completes.
 
 **Checkpoints mark durable, valid artifacts; they never mark attempts.**
-`collected` is recorded only after the collected copy passes the playability sniff (`ftyp` + `moov`, the existing check in `video.ts`).
+`collected` is recorded only after the collected copy passes the playability sniff (`ftyp` + `moov`, the existing video check in `packages/capture-kit/src/recording/video.ts`).
 Thus a pull of a not-yet-finalized MP4 leaves no checkpoint.
 `finalized` is recorded after the export is written.
 Step 1 records its observation.
@@ -249,7 +194,7 @@ A retry resumes at the first missing checkpoint, after it re-runs step 1 when it
 The collected copy is preserved until step 4 commits.
 The finalizer reads it and writes the export beside it.
 Thus a retry after a failed commit re-runs nothing that changes the video.
-Today, `exportProcessedVideo` applies the touch overlay **in place** (`overlay.ts` renames the processed file over its input; PR #2586 removed start trimming).
+Today, `exportProcessedVideo` applies the touch overlay **in place** (`packages/capture-kit/src/recording/overlay.ts` renames the processed file over its input; PR #2586 removed start trimming).
 That is why the copy is required: without it, a retry after a commit failure would burn the overlay twice.
 After commit, the collected copy is removed.
 A failed removal is a diagnostic, never an error.
@@ -282,7 +227,7 @@ settle recorder  (request: recovery only)
 
 1. If the session already holds a live handle, refuse (`recording already in progress`).
 2. If the recording manifest of the device is `open` and **actively owned**, refuse.
-   Actively owned means: the owner named in the manifest is alive by the existing owner-identity check (`host-kit/internal/owner-identity.ts`), and that owner holds the fence.
+   Actively owned means: the owner named in the manifest is alive by the existing owner-identity check in `packages/host-kit/src/internal/owner-identity.ts`, and that owner holds the fence.
    This is the ADR 0019 rule, and it is unchanged.
 3. Otherwise, the manifest is abandoned or completed.
    Hand it to recovery (2.5) under the ownership guard **before** launch.
@@ -364,11 +309,12 @@ Its full deletion is deferred until the launch and rotation crash windows are sh
 
 ### 2.7 ADR 0019 amendment
 
-Section 5 currently has these requirements:
+ADR 0019 section 5 and the capture-kit recovery contracts currently have these requirements:
 
 - Every durable facet exposes `reattach` and `cleanup`.
 - Uncertain cleanup stays `cleanup-pending`.
-- When finish throws, forced cleanup runs (in `transitions.ts`).
+- When finish throws, forced cleanup runs in `packages/capture-kit/src/durable-capture/transitions.ts` for kinds whose failed-finish policy disposes (app logs and audio probes).
+  Screen recording and perf capture preserve retry material.
 
 The proposed amendment:
 *Screen recording would be a **stop-and-collect** resource.
@@ -378,7 +324,7 @@ This kind would remove the `cleanup-pending` phase and admission ledger.
 It would record the recorder observation and native-path disposition beside the committed export.
 A manifest would remain archived by fence generation until both are settled.
 For each durable kind, failed finish would no longer imply forced cleanup once its failed-finish test states its retry requirements.
-App-log, audio-probe, and perf-capture would retain the ADR 0019 contract unchanged.*
+App-log and audio-probe would retain the ADR 0019 contract unchanged.*
 
 ### 2.8 Android duration (separate decision)
 
@@ -389,15 +335,15 @@ This step comes after 2.1–2.7, and 2.1–2.7 do not require it.
 
 ## 3. Cross-platform matrix
 
-| Backend | `stop` from a live handle | `stop` from a descriptor (recovery) | `collect` | Today after daemon loss |
-| --- | --- | --- | --- | --- |
-| iOS / tvOS simulator | `ChildProcess.kill` tiers; descendant markers probed before pid signals | probe markers; signal on ours; `unconfirmed` if the host is silent; `lost` on mismatch | local copy of the `simctl` output file; native file retained until the writer is proven gone | cleanup signals, then **throws** |
-| iOS device (CoreDevice), macOS | runner stop RPC bound to `runnerSessionId` | same RPC if the runner session matches; `lost` if the runner restarted | device copy (iOS); local copy of the runner's output file (macOS) | cleanup stops the runner, **never retrieves**, throws |
-| Android | probe `/proc`, then `kill -2` → `-9`; `unconfirmed` when `/proc` is unreadable | same, from the pid triple in the descriptor | `adb pull` of every chunk, playability sniff | reattach through the device manifest; five ownership states |
-| HarmonyOS | one `aa start` toggle, tracked by the handle | **no signal**; `mediatool query` by file name; `unconfirmed` if found, `lost` if not | stage + `hdc file recv` | `cleanup-pending`, manual |
-| Web | provider `record stop` on the session browser | stop if the browser is alive, else `lost` | local copy of the WebM; native file retained while the browser is not proven gone | `cleanup-pending`, manual |
-| Limrun (iOS, Android) | provider stop RPC on the live session; the served download URL is memoized so a stop is never repeated | **no signal**: the recording lives and dies with the instance; `unreattachable` | HTTP download of the served MP4 to the output path, bounded by a deadline that ends inside the `record` request window (60 s of its 90 s envelope) and not cancellable; retriable from the memoized URL while the instance lives | `cleanup-pending`, manual; the instance (and its file) is deleted on lease release |
-| WebDriver providers, Vega | unavailable | — | — | unchanged |
+| Backend | `stop` from a live handle | `stop` from a descriptor (recovery) | `collect` |
+| --- | --- | --- | --- |
+| iOS / tvOS simulator | `ChildProcess.kill` tiers; descendant markers probed before pid signals | probe markers; signal on ours; `unconfirmed` if the host is silent; `lost` on mismatch | local copy of the `simctl` output file; native file retained until the writer is proven gone |
+| iOS device (CoreDevice), macOS | runner stop RPC bound to `runnerSessionId` | same RPC if the runner session matches; `lost` if the runner restarted | device copy (iOS); local copy of the runner's output file (macOS) |
+| Android | probe `/proc`, then `kill -2` → `-9`; `unconfirmed` when `/proc` is unreadable | same, from the pid triple in the descriptor | `adb pull` of every chunk, playability sniff |
+| HarmonyOS | one `aa start` toggle, tracked by the handle | **no signal**; `mediatool query` by file name; `unconfirmed` if found, `lost` if not | stage + `hdc file recv` |
+| Web | provider `record stop` on the session browser | stop if the browser is alive, else `lost` | local copy of the WebM; native file retained while the browser is not proven gone |
+| Limrun (iOS, Android) | provider stop RPC on the live session; the served download URL is memoized so a stop is never repeated | **no signal**: the recording lives and dies with the instance; `unreattachable` | HTTP download of the served MP4 to the output path, bounded by a deadline that ends inside the `record` request window (60 s of its 90 s envelope) and not cancellable; retriable from the memoized URL while the instance lives |
+| WebDriver providers, Vega | unavailable | — | — |
 
 Two traps stay visible:
 
@@ -444,7 +390,7 @@ Every published surface changes additively.
 - Finish fails at collect → no `forceCleanup`.
   The remote artifact and the manifest are intact, and the manifest is `open`.
   The second stop succeeds.
-  (Rule 6; today this deletes the Android artifact.)
+  (Rule 6; shipped for screen recording.)
   There is one such test for each durable kind, and each test states what its retry needs.
   A kind that keeps disposal says so in the test name.
 - Commit fails after finalize (overlay applied) → the manifest is `open` at phase `finalized`, and the collected copy is present.
@@ -516,8 +462,8 @@ These steps remain:
 
 2. Rule 6 in the shared coordinator, gated for each kind:
    a failed finish no longer runs forced cleanup for a kind once the failed-finish test of that kind states what its retry needs.
-   Recording comes first.
-   The other three kinds each come in their own commit.
+   Recording and perf capture have shipped.
+   App logs and audio probes remain, each in its own commit.
    This step is independently shippable.
 3. Consolidate **stop, export, and replay** with existing primitives:
    the coordinator stop of 2.3, `recorder` and `capturedDurationMs` on the response, recovery through the coordinator (2.5), and the admission order of 2.4.
@@ -541,30 +487,10 @@ Each backend proves the ordinary stop, the host-silent stop, the post-daemon-los
 
 ## 8. End state
 
-| Area | Before | After step 4 | After step 5 |
-| --- | --- | --- | --- |
-| `contracts` recording types, ops, plan | 505 | ~350 | ~350 |
-| `platform-android/recording` | 1,566 | ~1,100 | ~800 |
-| `platform-apple/recording` | 685 | ~450 | ~450 |
-| `platform-harmonyos/recording` | 386 | ~300 | ~300 |
-| `platform-web/recording` | 171 | ~140 | ~140 |
-| nine `src/platform-runtime-screen-recording-*` hosts | 1,325 | ~1,100 | ~1,000 |
-| `src/daemon` recording modules | 899 | ~500 | ~500 |
-| shared: finalizer, durable-capture, host-kit, commands, layering, Swift | ~4,600 | ~4,600 | ~4,600 |
-| **Recording-specific total** | **~10,150** | **~8,500** | **~8,100** |
-| Recording test lines | ~19,000 | ~15,000 | ~14,000 |
-| Ownership / outcome enums | 10 | 3 | 3 |
-| Runtime operations for recording | 3 (start, reattach, cleanup) | 3 (start, stop, collect) | 3 |
-| `record stop` paths | 2 (live; recovery that throws on 4 backends) | 1 | 1 |
-| Files on an Android stop path | 9 | ~7 | ~6 |
-
-The reduction is modest, because the device marker stays, the root host files stay, and rotation stays below API 34.
-What this design buys is one path, one store, three enums, and no refusal that a silent host or a reused pid can produce.
-A later, separate ADR may fold the nine root host files into per-platform transports once the layering gates (R16) are re-cut.
-That is shape, not policy, and no row of the table in section 1 needs it.
+The proposed end state has one stop path, one lifecycle store, three ownership and outcome enums (from ten), and three runtime operations: start, stop, collect. Rotation remains below API 34. A later, separate ADR may fold the root host files into per-platform transports once the R16 layering gates are re-cut.
 
 Deletion test:
 
 - `screenRecordingReattach`, `screenRecordingCleanup`, `cleanup-pending` for recording, and `ScreenRecordingAdmissionLedger` no longer exist in production.
-- `transitions.ts` has no cleanup-on-failed-finish path.
+- `packages/capture-kit/src/durable-capture/transitions.ts` has no cleanup-on-failed-finish path for screen recording.
 - Every situation in the rules table has a passing test on every backend where it applies.

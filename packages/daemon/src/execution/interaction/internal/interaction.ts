@@ -22,8 +22,9 @@ import {
 } from '../../android-system-dialog.ts';
 import { dispatchGestureViaRuntime, dispatchSwipeViaRuntime } from './interaction-gesture.ts';
 import {
+  parseTypeTextRequest,
   resolveBoundTypeTextRuntime,
-  type BoundTypeTextExecutor,
+  type TypeTextRequest,
 } from '../../type-text-runtime.ts';
 import { errorResponse, noActiveSessionError } from '@agent-device/kernel/contracts';
 
@@ -93,6 +94,21 @@ async function dispatchTypeViaRuntime(params: InteractionRouteInput): Promise<Da
   const { sessionName, sessionStore } = params;
   const session = sessionStore.get(sessionName);
   if (!session) return noActiveSessionError();
+  const context = params.contextFromFlags(
+    params.req.flags,
+    session.appBundleId,
+    session.trace?.outPath,
+  );
+  // An invalid request is refused before binding, dialog recovery, and ref-frame expiry, so the
+  // `fill @eN` hint of a mistargeted ref still names a live ref.
+  let request: TypeTextRequest;
+  try {
+    request = parseTypeTextRequest(params.req.positionals ?? [], context, {
+      rejectRefTarget: true,
+    });
+  } catch (error) {
+    return { ok: false, error: normalizeError(error) };
+  }
   // R41: exact-owner facts admission replaces the capability bucket, and the one binding made
   // here is the only way this request's text can reach a device.
   const bound = await resolveBoundTypeTextRuntime({
@@ -108,7 +124,10 @@ async function dispatchTypeViaRuntime(params: InteractionRouteInput): Promise<Da
   );
   if (recordingRecovery.response) return recordingRecovery.response;
 
-  return await runTypeTextViaRuntime(params, session, bound.typeText, recordingRecovery.warning);
+  return await runTypeTextViaRuntime(params, session, {
+    typeText: () => bound.typeText(request, context),
+    recordingRecoveryWarning: recordingRecovery.warning,
+  });
 }
 
 type AndroidRecordingDialogRecovery = {
@@ -145,8 +164,10 @@ async function recoverAndroidRecordingDialogForType(
 async function runTypeTextViaRuntime(
   params: InteractionRouteInput,
   session: SessionState,
-  boundTypeText: BoundTypeTextExecutor,
-  recordingRecoveryWarning?: string,
+  {
+    typeText,
+    recordingRecoveryWarning,
+  }: { typeText: () => Promise<Record<string, unknown>>; recordingRecoveryWarning?: string },
 ): Promise<DaemonResponse> {
   const { req, sessionStore } = params;
   const actionStartedAt = Date.now();
@@ -158,13 +179,9 @@ async function runTypeTextViaRuntime(
       observation: params.androidObservation,
     });
     // ADR 0014 side-effect seam: the entry mutates the focused field; expire the frame before
-    // executing so a later step cannot reuse it. R41: the bound executor already validates and
-    // composes the retired leaf's exact result, so nothing here re-validates or re-formats it.
+    // executing so a later step cannot reuse it. The request was validated before this point.
     expireRefFrame(session);
-    const result = await boundTypeText(
-      req.positionals ?? [],
-      params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
-    );
+    const result = await typeText();
     await ensureAndroidBlockingSystemDialogReady({
       session,
       command: req.command,

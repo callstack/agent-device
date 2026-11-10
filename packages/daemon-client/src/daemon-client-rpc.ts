@@ -3,6 +3,7 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   AppError,
+  asAppError,
   readDiagnosticsRecordRef,
   toAppErrorCode,
   type DaemonError,
@@ -36,6 +37,7 @@ export function handleDaemonHttpResponseBody(
       reject(
         new AppError('COMMAND_FAILED', 'Invalid daemon RPC response', {
           requestId: req.meta?.requestId,
+          reason: 'daemon_response_invalid',
         }),
       );
       return;
@@ -48,6 +50,7 @@ export function handleDaemonHttpResponseBody(
         'Invalid daemon response',
         {
           requestId: req.meta?.requestId,
+          reason: 'daemon_response_invalid',
           line: body,
         },
         err instanceof Error ? err : undefined,
@@ -162,7 +165,21 @@ async function resolveDaemonHttpResult(
         : result,
     );
   } catch (error) {
-    reject(error);
+    // The daemon answered, so the request ran; only bringing its artifacts here failed.
+    reject(await discloseAnsweredRequestFailure(error, req));
+  }
+}
+
+/** Never throws, so the request settles even if the disclosure module cannot load. */
+async function discloseAnsweredRequestFailure(
+  error: unknown,
+  req: DaemonWireRequest,
+): Promise<unknown> {
+  try {
+    const { discloseRequestFailure } = await import('./daemon-client-dispatch-disclosure.ts');
+    return discloseRequestFailure(asAppError(error), req, true);
+  } catch {
+    return error;
   }
 }
 

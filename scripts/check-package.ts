@@ -31,6 +31,11 @@ import {
   type PackedManifest as PackedDependencies,
 } from './lib/shipped-imports.ts';
 import { assertInstalledSnapshotBridge } from './size-report-install.mjs';
+import {
+  assertBundledLicenseNotices,
+  parseNpmPackOutput,
+  type NpmPackEntry,
+} from './size-report-package.mjs';
 import { testOnlyContentFailures, testOnlyPathFailures } from './lib/shipped-test-code.ts';
 import { DAEMON_SOURCE_ENTRY, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 
@@ -91,21 +96,21 @@ function step(message: string): void {
  * npm reports is the package's own declaration of what it ships, which is what the test-code guard
  * reads — a clean-install tree would also hold the installed dependencies' files.
  */
-function packTarball(): { tarball: string; packedPaths: string[] } {
+function packTarball(): { tarball: string; packedEntries: readonly NpmPackEntry[] } {
   if (!fs.existsSync(path.join(repoRoot, 'dist', 'src'))) {
     throw new Error('No dist/src build found. Run `pnpm build` first.');
   }
   fs.mkdirSync(packDestination, { recursive: true });
-  const packed = JSON.parse(
+  const packed = parseNpmPackOutput(
     run(
       'npm',
       ['pack', '--ignore-scripts', '--json', '--pack-destination', packDestination],
       repoRoot,
     ),
-  ) as [{ filename: string; files: { path: string }[] }];
+  );
   return {
-    tarball: path.join(packDestination, packed[0].filename),
-    packedPaths: packed[0].files.map((file) => file.path),
+    tarball: path.join(packDestination, packed.filename),
+    packedEntries: packed.files,
   };
 }
 
@@ -237,9 +242,20 @@ function smokeTestBin(installedRoot: string, manifest: PackedManifest): void {
 
 step(`Packing and verifying agent-device in ${workDir}`);
 try {
-  const { tarball, packedPaths } = packTarball();
+  const { tarball, packedEntries } = packTarball();
+  assertBundledLicenseNotices(packedEntries, {
+    noticesRoot: repoRoot,
+    context: `The build packed from ${repoRoot}`,
+  });
+  const packedPaths = packedEntries.map((file) => file.path);
   lintTarball(tarball);
   const installedRoot = installIntoCleanConsumer(tarball);
+  // A user's machine is the tree that has to carry the attribution, so the content policy runs again
+  // against the installed file, not only the working-tree copy the tarball was built from.
+  assertBundledLicenseNotices(packedEntries, {
+    noticesRoot: installedRoot,
+    context: `The installed package at ${installedRoot}`,
+  });
   assertInstalledSnapshotBridge(installedRoot);
   assertInstalledTreeIsNotASourceCheckout(installedRoot);
   assertPackedTreeCarriesNoTestCode(installedRoot, packedPaths);

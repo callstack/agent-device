@@ -62,7 +62,10 @@ export class LeaseRegistry {
   private readonly maxActiveSimulatorLeases: number;
   private readonly resolveLeaseTtlMs: ReturnType<typeof createLeaseTtlResolver>;
   private readonly now: () => number;
-  private readonly onLeaseExpired?: (lease: DeviceLease) => void;
+  private readonly onLeaseExpired?: (
+    lease: DeviceLease,
+    reason?: 'PROVIDER_INSTANCE_ENDED',
+  ) => void;
   private readonly onProviderLeasesChanged?: (leases: readonly DeviceLease[]) => void;
   private readonly providerSessionOwnership: ProviderSessionOwnershipRegistry;
 
@@ -217,7 +220,7 @@ export class LeaseRegistry {
   /**
    * Extends a lease's life. A request naming a `ttlMs` asks for that inactivity window; one naming
    * none renews for the window the lease already carries, the way protected work renews for its
-   * existing one (ADR 0007). Resolving an absent `ttlMs` to the registry default instead would
+   * existing one (packages/daemon/docs/remote-device-lease-contracts.md). Resolving an absent `ttlMs` to the registry default instead would
    * shorten a lease every time a caller heartbeats without repeating its allocation TTL — which is
    * what an admitted request does, and what expired the lease paying for a device mid-upload (#2946).
    */
@@ -263,6 +266,16 @@ export class LeaseRegistry {
     this.inFlightWork.forget(lease.leaseId);
     this.reportProviderLeases(lease);
     return { released: true, lease };
+  }
+
+  endProviderLease(request: ReleaseLeaseRequest): void {
+    const lease = this.getLease(request);
+    if (!lease) return;
+    this.leases.delete(lease.leaseId);
+    this.unbindLease(lease);
+    this.inFlightWork.forget(lease.leaseId);
+    this.onLeaseExpired?.(lease, 'PROVIDER_INSTANCE_ENDED');
+    this.reportProviderLeases(lease);
   }
 
   /**

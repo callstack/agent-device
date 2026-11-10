@@ -67,7 +67,9 @@ test('a named alias wins over a pattern alias that also matches it', () => {
   const firstExact = aliases.findIndex(
     ({ find, replacement }) => !replacement.includes('$1') && find.source.includes('testing/'),
   );
-  const lastPattern = aliases.findLastIndex(({ replacement }) => replacement.includes('$1'));
+  const lastPattern = aliases
+    .map(({ replacement }) => replacement.includes('$1'))
+    .lastIndexOf(true);
   assert.ok(
     firstExact === -1 || lastPattern === -1 || firstExact < lastPattern,
     'every exact alias must precede every pattern alias',

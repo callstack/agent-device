@@ -276,7 +276,7 @@ test('runner session starts xcodebuild through provider seams and reuses an aliv
 
   assert.equal(reused, session);
   assert.equal(session.endpoint.port, 8123);
-  assert.equal(session.xctestrunPath, '/tmp/session-runner.xctestrun');
+  assert.equal(session.launch.local!.xctestrunPath, '/tmp/session-runner.xctestrun');
   assert.equal(mockRunCmdBackground.mock.calls.length, 1);
   assert.equal(mockRunCmdBackground.mock.calls[0]?.[0], 'xcodebuild');
   const xcodebuildArgs = mockRunCmdBackground.mock.calls[0]?.[1];
@@ -673,6 +673,8 @@ function makeRecordingCleanupAdapter() {
   const treeKills: Array<{ pid: number | undefined; signal: string }> = [];
   const xcodebuildCleanups: RunnerXcodebuildCleanupTarget[] = [];
   const adapter: RunnerLeaseCleanupAdapter = {
+    confirmRunnerTermination: async () => true,
+    enableIosSimulatorAppAccessibility: async () => {},
     async cleanupRunnerProcessTree(pid, signal) {
       treeKills.push({ pid, signal });
     },
@@ -822,7 +824,7 @@ test('runner session startup reclaims a foreign runner lease whose owner state d
   // hold a live runner connection, so the old runner (pid 4321) must be
   // killed and a FRESH runner launched instead of silently adopting it.
   assert.equal(mockRunCmdBackground.mock.calls.length, 1);
-  assert.notEqual(session.child.pid, 4_321);
+  assert.notEqual(session.launch.local!.child?.pid, 4_321);
   const pkillCalls = mockRunAppleToolCommand.mock.calls.filter(isXcodebuildPkillCall);
   assert.ok(pkillCalls.length >= 2);
   assert.match(String(pkillCalls[0]?.[1]?.[2] ?? ''), /owner-state-dir-gone/);
@@ -912,6 +914,8 @@ test('runner lease cleanup reclaims only leases owned by the stopped daemon', as
   await cleanupRunnerLeasesForOwner(
     { pid: ownerPid, startTime: ownerStartTime },
     {
+      confirmRunnerTermination: async () => true,
+      enableIosSimulatorAppAccessibility: async () => {},
       cleanupRunnerProcessTree: async () => {},
       cleanupRunnerXcodebuildProcesses: async () => {},
       cleanupTempFile: mockCleanupTempFile,

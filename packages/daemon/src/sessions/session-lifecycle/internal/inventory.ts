@@ -12,14 +12,16 @@ import {
   type ProviderAppCatalogQuery,
 } from '@agent-device/contracts/device';
 import { asAppError } from '@agent-device/kernel/errors';
-import { unsupportedOperationResponse } from '../../../core/runtime-admission.ts';
+import {
+  ownerHoldsNoLiveSession,
+  unsupportedOperationResponse,
+} from '../../../core/runtime-admission.ts';
 import {
   requireRuntimeBinding,
   requireRuntimeFacts,
 } from '../../../core/session-runtime-admission.ts';
 import {
   isApplePlatform,
-  hostDeviceIdPrefix,
   isIosFamily,
   isMacOs,
   matchesPlatformSelector,
@@ -34,6 +36,8 @@ import {
   inspectDeviceClaims,
   canonicalLocalDeviceKey,
   deviceClaimIdentity,
+  isClaimOfHostScopedDevice,
+  type DeviceClaim,
 } from '@agent-device/daemon-contracts/device-claims';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef } from '../../../core/session-state.ts';
@@ -44,9 +48,14 @@ import {
   selectorTargetsSessionDevice,
 } from '../../../resources/session-device-resolution.ts';
 import { resolveSessionScope, sessionMatchesInventoryScope } from '../../session-routing.ts';
-import type { BoundDeviceRuntime, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
+import type {
+  BoundDeviceRuntime,
+  RuntimeFacts,
+  RuntimeOperationKey,
+} from '@agent-device/contracts/platform-runtime';
 import {
   type PlatformRuntimeOperations,
+  appStateUse,
   appsRuntimeUse,
 } from '@agent-device/contracts/platform-runtime-operations';
 import { ensureAppsRuntimeReady, listAppsFromRuntime } from '../../../execution/apps-runtime.ts';
@@ -55,6 +64,7 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
 import { resolveLeaseScope } from '../../../core/lease-context.ts';
+import { leaseProviderRequiringRuntime } from '@agent-device/contracts/lease-scope';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 
 export type SessionInventoryCommandInput = Readonly<{
@@ -147,13 +157,13 @@ async function devicesInventoryResponse(
   env: HostEnvironment['env'],
 ): Promise<DaemonResponse> {
   try {
-    const blockingClaims = blockingClaimOwnersByDevice(env);
+    const claims = blockingClaims(env);
     return {
       ok: true,
       data: {
         devices: (await resolveInventoryDevices(req, env)).map((device) => ({
           ...publicDeviceInfo(device),
-          ...claimedByProjection(device, blockingClaims),
+          ...claimedByProjection(device, claims),
         })),
       },
     };
@@ -170,35 +180,23 @@ async function devicesInventoryResponse(
   }
 }
 
-function blockingClaimOwnersByDevice(
-  env: HostEnvironment['env'],
-): Map<string, { session: string; workspace: string }> {
-  const owners = new Map<string, { session: string; workspace: string }>();
-  for (const entry of inspectDeviceClaims({}, env)) {
-    const claim = entry.claim;
-    if (!claim || deviceClaimOwnerCannotRelease(entry.classification)) continue;
-    owners.set(claim.deviceKey, {
-      session: claim.session,
-      workspace: claim.workspace,
-    });
-  }
-  return owners;
+function blockingClaims(env: HostEnvironment['env']): DeviceClaim[] {
+  return inspectDeviceClaims({}, env).flatMap((entry) =>
+    entry.claim && !deviceClaimOwnerCannotRelease(entry.classification) ? [entry.claim] : [],
+  );
 }
 
 function claimedByProjection(
   device: DeviceInfo,
-  owners: Map<string, { session: string; workspace: string }>,
+  claims: DeviceClaim[],
 ): { claimedBy?: { session: string; workspace: string } } {
   const identity = deviceClaimIdentity(device);
-  // A host whose app devices are claimed is not free as a whole (ADR 0035).
-  const appDevicePrefix = canonicalLocalDeviceKey({
-    ...identity,
-    id: hostDeviceIdPrefix(device.id),
-  });
-  const owner =
-    owners.get(canonicalLocalDeviceKey(identity)) ??
-    [...owners].find(([deviceKey]) => deviceKey.startsWith(appDevicePrefix))?.[1];
-  return owner ? { claimedBy: owner } : {};
+  const deviceKey = canonicalLocalDeviceKey(identity);
+  // A host whose app or web session devices are claimed is not free as a whole (ADR 0035).
+  const claim =
+    claims.find((candidate) => candidate.deviceKey === deviceKey) ??
+    claims.find((candidate) => isClaimOfHostScopedDevice(identity, candidate));
+  return claim ? { claimedBy: { session: claim.session, workspace: claim.workspace } } : {};
 }
 
 async function resolveInventoryDevices(
@@ -216,7 +214,14 @@ function inventoryDeviceQuery(
   env: HostEnvironment['env'],
 ) {
   const flags = req.flags;
+  // A provider runtime's connection lists only what its lease serves; without this scope the provider
+  // declines and the inventory falls back to this host's devices. A logical lease such as `proxy`
+  // lists the devices of the host behind it, so it keeps the unscoped query.
+  const scope = resolveLeaseScope(req);
+  const leaseProvider = leaseProviderRequiringRuntime(scope);
   return {
+    leaseProvider,
+    leaseId: leaseProvider ? scope.leaseId : undefined,
     platform,
     target: flags?.target,
     deviceName: flags?.device,
@@ -292,12 +297,30 @@ async function capabilitiesInventoryResponse(params: {
         : {}),
       availableCommands: listRuntimeFactCommands().filter((command) => {
         // A session that already owns an app identity answers appstate itself, so it stays
-        // available even when the sessionless runtime probe cannot see a foreground app.
-        if (command === 'appstate' && sessionOwnedAppStateAvailable) return true;
+        // available even when the sessionless runtime probe cannot see a foreground app. The
+        // exception is an owner with no live session, whose refusal appstate reports.
+        if (
+          command === 'appstate' &&
+          sessionOwnedAppStateAvailable &&
+          !ownerRefusesSessionAppState(facts)
+        ) {
+          return true;
+        }
         return commandIsAvailableFromFacts(command, facts);
       }),
     },
   };
+}
+
+function ownerRefusesSessionAppState(
+  facts: RuntimeFacts<PlatformRuntimeOperations> | undefined,
+): boolean {
+  if (!facts) return true;
+  const required: readonly RuntimeOperationKey<PlatformRuntimeOperations>[] = appStateUse.required;
+  const unavailable = required
+    .map((operation) => facts.operations[operation])
+    .find((fact) => !fact.available);
+  return unavailable?.available === false && ownerHoldsNoLiveSession(unavailable.reason);
 }
 
 function isSessionOwnedAppStateAvailable(
@@ -456,7 +479,7 @@ async function resolveInventoryCommandDevice(params: {
   return {
     device: await resolveCommandDevice({
       session,
-      flags,
+      req,
       env: sessionStore.host.env,
       platformServices,
       androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),

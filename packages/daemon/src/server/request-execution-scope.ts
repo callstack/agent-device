@@ -2,7 +2,6 @@ import { restrictRemoteHostInputs } from './remote-host-input-policy.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
-import { resolveTargetDeviceSelection } from '@agent-device/device-selection/dispatch-resolve';
 import {
   resolveSessionRequestLog,
   resolveSessionRunnerLogPath,
@@ -24,12 +23,14 @@ import { AppError, errorMessage, normalizeError } from '@agent-device/kernel/err
 import {
   type DaemonCommandContext,
   contextFromFlags as contextFromFlagsWithLog,
+  requestCwd,
 } from '../core/context.ts';
 import { assertSessionSelectorMatches } from '../core/session-selector.ts';
 import {
   resolveCallerScopeRoot,
   resolveEffectiveSessionName,
 } from '../sessions/session-routing.ts';
+import { deriveWebSessionIdentity } from '../core/session-tenant-scope.ts';
 import {
   assertRequestLeaseAdmissionPreflight,
   scopeRequestSession,
@@ -51,6 +52,7 @@ import {
 } from './request-binding.ts';
 import {
   beginOpenDeviceWait,
+  findSessionDeviceConflict,
   readOpenWaitBudgetMs,
 } from '../sessions/open-device-contention-wait.ts';
 import {
@@ -124,9 +126,11 @@ async function resolveFreshBoundedOpenDevice(req: DaemonRequest, env: EnvMap): P
     throw new AppError('INVALID_ARGS', 'Invalid open target');
   }
   const openReq = foreground.type === 'resolved' ? foreground.req : req;
+  const { resolveRequestTargetDeviceSelection } =
+    await import('../core/request-device-resolution.ts');
   return (
-    await resolveTargetDeviceSelection(
-      openReq.flags ?? {},
+    await resolveRequestTargetDeviceSelection(
+      openReq,
       buildOpenTargetDeviceResolutionOptions(openReq.positionals?.[0], env, openReq.flags?.surface),
     )
   ).device;
@@ -151,7 +155,7 @@ async function resolveBoundedClaimDevice(
   if (req.command === 'install_source' && session) return session.device;
   const params = {
     session,
-    flags: req.flags,
+    req,
     env,
     platformServices,
     androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),
@@ -233,9 +237,16 @@ export async function createRequestExecutionScope(params: {
   daemonPolicy?: DaemonPolicy;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
-  let scopedReq = applyRequestCommandDefaults(
-    scopeRequestSession(restrictRemoteHostInputs(params.req)),
-  );
+  const tenantScopedReq = scopeRequestSession(restrictRemoteHostInputs(params.req));
+  // A nested batch or replay step arrives with the identity of the request that spawned it, and its
+  // own name is already the store key.
+  const webSession =
+    params.req.internal?.webSession ??
+    deriveWebSessionIdentity(params.req.session, tenantScopedReq);
+  let scopedReq = applyRequestCommandDefaults({
+    ...tenantScopedReq,
+    internal: { ...tenantScopedReq.internal, webSession },
+  });
 
   const command = scopedReq.command;
   const startedAtMs = Date.now();
@@ -320,13 +331,14 @@ export async function createRequestExecutionScope(params: {
       command,
       sessionName,
       dispatchLedger,
-      workspace: scopedReq.meta?.cwd ?? params.host.cwd,
+      workspace: requestCwd(scopedReq, params.host),
       callerCwd: scopedReq.meta?.cwd,
       stateDir: sessionStore.resolveDaemonStateDir(),
       deviceRuntimeGateway: params.deviceRuntimeGateway,
       platformRequestScope: params.platformRequestScope,
       daemonPolicy: params.daemonPolicy,
       claimRecoveryGateway: params.claimRecoveryGateway,
+      sessionStore,
     });
 
     let bindingCleanup: Promise<void> | undefined;
@@ -394,15 +406,21 @@ export async function createRequestExecutionScope(params: {
                   throw new AppError(code, message, details);
                 }
               },
-              closeWouldReleaseProviderLease: () =>
-                Boolean(
-                  session?.lease &&
-                  inspectSessionProviderReleaseOnClose({
-                    session,
-                    leaseRegistry,
-                    leaseLifecycleProvider: params.leaseLifecycleProvider,
-                  }),
-                ),
+              closeWouldReleaseProviderLease: async () => {
+                if (!session?.lease) return false;
+                const facts =
+                  scopedReq.flags?.shutdown === true
+                    ? await scope.inspectFacts(session.device)
+                    : undefined;
+                return inspectSessionProviderReleaseOnClose({
+                  shutdownRequested:
+                    facts?.device.providerMode === 'provider-runtime' &&
+                    facts.operations.shutdownTarget.available,
+                  session,
+                  leaseRegistry,
+                  leaseLifecycleProvider: params.leaseLifecycleProvider,
+                });
+              },
               claimRecovery: {
                 currentSessionExists: Boolean(session),
                 resolveDevice: async () => {
@@ -418,7 +436,7 @@ export async function createRequestExecutionScope(params: {
                 hasInMemorySessionOwner: (device) =>
                   sessionStore.findByDevice(device.id) !== undefined,
                 session: sessionName,
-                workspace: scopedReq.meta?.cwd ?? params.host.cwd,
+                workspace: requestCwd(scopedReq, params.host),
                 stateDir: sessionStore.resolveDaemonStateDir(),
                 env: params.host.env,
                 observeDeviceBoot: scope.platformServices.deviceBootObservation,
@@ -558,13 +576,15 @@ function createRequestDeviceAccess(params: {
   platformRequestScope: PlatformRequestScope;
   daemonPolicy: DaemonPolicy | undefined;
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
+  sessionStore: SessionStore;
 }): {
   claimAdmission: DeviceClaimAdmission;
   runtimeBindings: RequestRuntimeBindings;
 } {
   const { deviceRuntimeGateway, platformRequestScope, daemonPolicy } = params;
+  const claimPolicy = resolveCommandDeviceClaimPolicy(params.command);
   const claimAdmission = createDeviceClaimAdmission({
-    policy: resolveCommandDeviceClaimPolicy(params.command),
+    policy: claimPolicy,
     command: params.command,
     session: params.sessionName,
     workspace: params.workspace,
@@ -589,9 +609,29 @@ function createRequestDeviceAccess(params: {
       scope: platformRequestScope,
       dispatchLedger: params.dispatchLedger,
       admitDeviceClaim: claimAdmission.admit,
-      admitDevice: daemonPolicy
-        ? (device) => assertDaemonPolicyAdmitsDevice(daemonPolicy, device)
-        : undefined,
+      admitDevice:
+        daemonPolicy || claimPolicy === 'require-owner'
+          ? (device) => {
+              if (daemonPolicy) {
+                assertDaemonPolicyAdmitsDevice(daemonPolicy, device);
+              }
+              if (claimPolicy === 'require-owner' && !params.sessionStore.get(params.sessionName)) {
+                const refusal = findSessionDeviceConflict({
+                  req: params.req,
+                  device,
+                  sessionStore: params.sessionStore,
+                  sessionName: params.sessionName,
+                });
+                if (refusal) {
+                  throw new AppError(
+                    refusal.error.code,
+                    refusal.error.message,
+                    refusal.error.details,
+                  );
+                }
+              }
+            }
+          : undefined,
     }),
   };
 }
@@ -806,10 +846,12 @@ export function getLeaseRegistryExecutionLocks(
 
 export type LeaseSessionEnd = Readonly<{
   /**
-   * Ends every session opened under `leaseId` and clears its device claim, each inside that
-   * session's execution lock pair so a command still running on it finishes first. Never rejects.
+   * Ends sessions and retained execution hosts owned by `leaseId` under their execution locks.
+   * Clears live sessions' device claims after teardown. Never rejects.
    */
   end: (leaseId: string, reason: LeaseEndReason) => Promise<void>;
+  /** Retries retained-host cleanup that failed after the registry removed its lease. */
+  retryPending: () => Promise<void>;
   /**
    * Called when the daemon begins to leave. Shutdown tears every session down without taking an
    * execution lock, so no lease end may start a teardown after this, including one already queued
@@ -820,18 +862,22 @@ export type LeaseSessionEnd = Readonly<{
   drain: () => Promise<void>;
 }>;
 
+const LEASE_END_RETRY_INTERVAL_MS = 10_000;
+
 export function createLeaseSessionEnd(params: {
   env: HostEnvironment['env'];
   sessionStore: SessionStore;
   executionLocks: Map<string, Promise<unknown>>;
   teardownSession: SessionTeardown;
+  cleanupSessionlessExecutionHost: PlatformResourceCleanup['cleanupSessionlessExecutionHost'];
   withinDiagnosticsScope?: (run: () => Promise<void>) => Promise<void>;
 }): LeaseSessionEnd {
   const { sessionStore, executionLocks, teardownSession } = params;
   let closing = false;
-  const inFlight = new Set<Promise<void>>();
+  const inFlight = new Map<string, Set<Promise<void>>>();
+  const pending = new Map<string, { reason: LeaseEndReason; nextRetryAt: number }>();
 
-  const endUnderLocks = async (leaseId: string, reason: LeaseEndReason): Promise<void> => {
+  const endLiveSessions = async (leaseId: string, reason: LeaseEndReason): Promise<void> => {
     const refs = sessionStore.listRefs().filter((ref) => ref.session.lease?.leaseId === leaseId);
     await Promise.all(
       refs.map(
@@ -855,6 +901,37 @@ export function createLeaseSessionEnd(params: {
     );
   };
 
+  const endUnderLocks = async (leaseId: string, reason: LeaseEndReason): Promise<void> => {
+    await endLiveSessions(leaseId, reason);
+    // A close queued before this lease end can retire its session while we wait for its locks.
+    const retainedHosts = sessionStore.listRetainedExecutionHosts(leaseId);
+    await Promise.all(
+      retainedHosts.map(async (host) => {
+        try {
+          await withRequestExecutionLockKeys(
+            executionLocks,
+            existingSessionExecutionLockKeys(host.address, host.device.id),
+            async () => {
+              if (closing || !sessionStore.ownsRetainedExecutionHost(host)) return;
+              if (!sessionStore.findByDevice(host.device.id)) {
+                await params.cleanupSessionlessExecutionHost(host.device);
+              }
+              sessionStore.releaseRetainedExecutionHost(host);
+            },
+          );
+        } catch (error) {
+          emitDiagnostic({
+            level: 'warn',
+            phase: 'retained_execution_host_cleanup_failed',
+            data: { leaseId, reason, deviceId: host.device.id, error: errorMessage(error) },
+          });
+        }
+      }),
+    );
+    // A reopen can publish its same-lease session while retained-host cleanup waits for the device.
+    await endLiveSessions(leaseId, reason);
+  };
+
   const run = async (leaseId: string, reason: LeaseEndReason): Promise<void> => {
     try {
       await endUnderLocks(leaseId, reason);
@@ -864,27 +941,50 @@ export function createLeaseSessionEnd(params: {
         phase: 'leased_session_end_failed',
         data: { leaseId, reason, error: errorMessage(error) },
       });
+    } finally {
+      if (
+        !closing &&
+        sessionStore.listRetainedExecutionHosts(leaseId).length === 0 &&
+        !sessionStore.listRefs().some((ref) => ref.session.lease?.leaseId === leaseId)
+      ) {
+        pending.delete(leaseId);
+      } else if (!closing) {
+        pending.set(leaseId, { reason, nextRetryAt: Date.now() + LEASE_END_RETRY_INTERVAL_MS });
+      }
+    }
+  };
+
+  const end = async (leaseId: string, reason: LeaseEndReason): Promise<void> => {
+    if (closing) return;
+    pending.set(leaseId, { reason, nextRetryAt: 0 });
+    const ending = params.withinDiagnosticsScope
+      ? params.withinDiagnosticsScope(async () => await run(leaseId, reason))
+      : run(leaseId, reason);
+    const running = inFlight.get(leaseId) ?? new Set<Promise<void>>();
+    running.add(ending);
+    inFlight.set(leaseId, running);
+    try {
+      await ending;
+    } finally {
+      running.delete(ending);
+      if (running.size === 0) inFlight.delete(leaseId);
     }
   };
 
   return {
-    end: async (leaseId, reason) => {
-      if (closing) return;
-      const ending = params.withinDiagnosticsScope
-        ? params.withinDiagnosticsScope(async () => await run(leaseId, reason))
-        : run(leaseId, reason);
-      inFlight.add(ending);
-      try {
-        await ending;
-      } finally {
-        inFlight.delete(ending);
-      }
+    end,
+    retryPending: async () => {
+      await Promise.all(
+        Array.from(pending, async ([leaseId, { reason, nextRetryAt }]) => {
+          if (!inFlight.has(leaseId) && Date.now() >= nextRetryAt) await end(leaseId, reason);
+        }),
+      );
     },
     cancel: () => {
       closing = true;
     },
     drain: async () => {
-      await Promise.allSettled(inFlight);
+      await Promise.allSettled(Array.from(inFlight.values()).flatMap((running) => [...running]));
     },
   };
 }

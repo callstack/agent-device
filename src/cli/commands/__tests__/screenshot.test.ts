@@ -118,6 +118,7 @@ test.each([false, true])(
       {
         transport: async (req): Promise<DaemonResponse> => {
           assert.equal(req.command, 'screenshot');
+          assert.equal(req.flags?.screenshotScreenMask, 'black');
           captures += 1;
           const out = req.positionals?.[0];
           assert.equal(typeof out, 'string');
@@ -130,7 +131,13 @@ test.each([false, true])(
       diffCommand({
         host: createTestHostEnvironment(),
         positionals: ['screenshot', ...(live ? [] : [current])],
-        flags: { json: true, baseline, out: diff, threshold: '1' } as CliFlags,
+        flags: {
+          json: true,
+          baseline,
+          out: diff,
+          threshold: '1',
+          ...(live ? { screenshotScreenMask: 'black' } : {}),
+        } as CliFlags,
         client,
       }),
     );
@@ -144,3 +151,18 @@ test.each([false, true])(
     assert.deepEqual([image.width, image.height], [2, 3]);
   },
 );
+
+test('the Node screenshot client sends the mask in its daemon request', async () => {
+  const client = createAgentDeviceClient(
+    { session: 'qa' },
+    {
+      transport: async (req): Promise<DaemonResponse> => {
+        assert.equal(req.command, 'screenshot');
+        assert.equal(req.flags?.screenshotScreenMask, 'black');
+        return { ok: true, data: { path: '/tmp/masked.png' } };
+      },
+    },
+  );
+  const result = await client.capture.screenshot({ path: '/tmp/masked.png', screenMask: 'black' });
+  assert.equal(result.path, '/tmp/masked.png');
+});

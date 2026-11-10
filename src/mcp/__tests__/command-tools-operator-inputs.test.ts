@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
+import { LEASE_DEVICE_SPEC_KEYS } from '@agent-device/contracts/lease-scope';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
 
@@ -259,13 +260,57 @@ test('MCP neither advertises nor admits the CLI-only fill textStdin marker', asy
   assert.deepEqual(calls, [], 'a refused operator input must never reach the command route');
 });
 
+// The opt-out is how the CALLER verifies the screen. A model picks tool arguments from what a screen
+// says, and without the wait a read after a gesture can return a tree the gesture is still moving,
+// so no schema offers the switch. The operator still sets it, through the environment or the user
+// config, and that value reaches the command route.
+test('MCP neither advertises nor admits the stabilization opt-out, and still resolves the operator default', async () => {
+  for (const tool of listCommandTools()) {
+    const properties = tool.inputSchema.properties ?? {};
+    assert.equal('postGestureStabilization' in properties, false, `${tool.name} advertises it`);
+  }
+  const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      calls.push({ name, input: input as Record<string, unknown> });
+      return {};
+    },
+  });
+
+  const refused = await executor.execute('scroll', {
+    direction: 'down',
+    postGestureStabilization: false,
+  });
+  assert.equal(refused.isError, true);
+  assert.match(
+    refused.content[0]?.text ?? '',
+    /postGestureStabilization is not accepted as a tool argument/,
+  );
+  assert.match(refused.content[0]?.text ?? '', /AGENT_DEVICE_POST_GESTURE_STABILIZATION/);
+  assert.equal(calls.length, 0, 'a refused operator input must never reach the command route');
+
+  vi.stubEnv('AGENT_DEVICE_POST_GESTURE_STABILIZATION', '0');
+  for (const [name, input] of [
+    ['scroll', { direction: 'down' }],
+    ['swipe', { from: { x: 1, y: 1 }, to: { x: 1, y: 9 } }],
+  ] as const) {
+    const admitted = await executor.execute(name, input);
+    assert.equal(admitted.isError, false, name);
+  }
+  assert.deepEqual(
+    calls.map((call) => call.input.postGestureStabilization),
+    [false, false],
+  );
+});
+
 // The proxy lease device spec is not operator infrastructure, so the schema offers it (issue #3864).
 test('MCP open, install, reinstall and uninstall advertise the proxy lease device spec', () => {
   for (const name of ['open', 'install', 'reinstall', 'uninstall']) {
     const tool = listCommandTools().find((candidate) => candidate.name === name);
     assert.ok(tool, `expected an MCP tool named ${name}`);
     const properties = tool.inputSchema.properties ?? {};
-    for (const key of ['osVersion', 'imageTag', 'physical']) {
+    for (const key of LEASE_DEVICE_SPEC_KEYS) {
       assert.equal(key in properties, true, `${name} does not advertise ${key}`);
     }
   }

@@ -6,6 +6,8 @@ import type { ToolResult } from '../../mcp/command-tools.ts';
 
 const createClientCalls: unknown[] = [];
 const executorCalls: Array<{ name: string; input: Record<string, unknown> }> = [];
+const executorDeps: unknown[] = [];
+const executorSignals: Array<AbortSignal | undefined> = [];
 
 const defaultExecuteResult: ToolResult = {
   isError: false,
@@ -28,12 +30,20 @@ vi.mock('../../mcp/command-tools.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../mcp/command-tools.ts')>();
   return {
     ...actual,
-    createCommandToolExecutor: () => ({
-      execute: async (name: string, input: Record<string, unknown>) => {
-        executorCalls.push({ name, input });
-        return executeResult(name, input);
-      },
-    }),
+    createCommandToolExecutor: (deps: unknown) => {
+      executorDeps.push(deps);
+      return {
+        execute: async (
+          name: string,
+          input: Record<string, unknown>,
+          options?: { signal?: AbortSignal },
+        ) => {
+          executorCalls.push({ name, input });
+          executorSignals.push(options?.signal);
+          return executeResult(name, input);
+        },
+      };
+    },
   };
 });
 
@@ -42,6 +52,8 @@ const { createAgentDeviceTools } = await import('../index.ts');
 afterEach(() => {
   createClientCalls.length = 0;
   executorCalls.length = 0;
+  executorDeps.length = 0;
+  executorSignals.length = 0;
   executeResult = async () => defaultExecuteResult;
 });
 
@@ -58,11 +70,18 @@ function rawSchemaOf(
   ).inputSchema.jsonSchema;
 }
 
+/** Calls a tool the way the AI SDK does: with the call's execution options. */
 function executeOf(
   tools: Awaited<ReturnType<typeof createAgentDeviceTools>>['tools'],
   name: string,
+  abortSignal?: AbortSignal,
 ) {
-  return tools[name]!.execute as (input: Record<string, unknown>) => Promise<unknown>;
+  const execute = tools[name]!.execute as (
+    input: Record<string, unknown>,
+    options: { toolCallId: string; messages: unknown[]; abortSignal?: AbortSignal },
+  ) => Promise<unknown>;
+  return async (input: Record<string, unknown>) =>
+    await execute(input, { toolCallId: 'call-1', messages: [], abortSignal });
 }
 
 test('defaults to the core tool set and pins the session for every call', async () => {
@@ -118,6 +137,19 @@ test('MCP transport/config controls are hidden from the schema and cannot reach 
   ]);
 });
 
+test('the stabilization opt-out is caller policy, so no tool schema offers it', async () => {
+  const { tools } = await createAgentDeviceTools({ session: 'my-session', set: 'all' });
+
+  for (const name of ['scroll', 'swipe']) {
+    assert.ok(name in tools, `${name} is part of the tool set`);
+    assert.equal(
+      'postGestureStabilization' in rawSchemaOf(tools, name).properties,
+      false,
+      `${name} offers the opt-out to the model`,
+    );
+  }
+});
+
 test("set: 'all' includes extended-tier commands too", async () => {
   const { tools } = await createAgentDeviceTools({ session: 's', set: 'all' });
   assert.ok('devices' in tools, 'set: all reaches every MCP-exposed command, not just core');
@@ -163,4 +195,20 @@ test('approval is returned as toolApproval, ready for ToolLoopAgent', async () =
     approval: { close: 'user-approval' },
   });
   assert.deepEqual(toolApproval, { close: 'user-approval' });
+});
+
+test('asks the executor for structuredContent from every tool, because execute returns it', async () => {
+  await createAgentDeviceTools({ session: 'my-session' });
+
+  // Without it, an untyped tool such as snapshot returns {} from execute.
+  assert.deepEqual(executorDeps, [{ structuredContent: 'always' }]);
+});
+
+test("the AI SDK call's abortSignal reaches the executor", async () => {
+  const { tools } = await createAgentDeviceTools({ session: 'my-session' });
+  const controller = new AbortController();
+
+  await executeOf(tools, 'snapshot', controller.signal)({});
+
+  assert.deepEqual(executorSignals, [controller.signal]);
 });

@@ -276,6 +276,25 @@ test('a recorded drag writes and parses one targets-v1 annotation for both endpo
   });
 });
 
+test('a resolved fill that cleared the field writes a selector line with an empty text argument', () => {
+  const root = mkdtempForTestSync('agent-device-script-writer-clear-fill-');
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
+  const session = makeRepairCompleteSession('default', {
+    actions: [
+      action({
+        command: 'fill',
+        positionals: ['@e3', ''],
+        result: { selectorChain: ['id="email"'], text: '' },
+      }),
+    ],
+  });
+
+  const { parsed } = writeAndParse(writer, session);
+  expect(parsed.actions.map((a) => [a.command, a.positionals])).toEqual([
+    ['fill', ['id="email"', '']],
+  ]);
+});
+
 test('a bare-@ref fill action also fails loud, not just click-like commands', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-bare-ref-fill-');
   const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
@@ -466,7 +485,10 @@ test('write(session) without { force: true } still refuses, even when a prior wr
   });
 
   // Default (no options / force omitted): refuse-on-exist, unchanged.
-  expect(() => writer.write(session)).toThrow(/already exists/);
+  expect(writer.write(session)).toMatchObject({
+    written: false,
+    error: { details: { reason: 'script_target_exists' } },
+  });
   expect(fs.readFileSync(outPath, 'utf8')).toBe(before);
 });
 
@@ -606,15 +628,33 @@ test('an ordinary (non-repair) recording now refuses an existing target too (beh
     actions: [action({ command: 'click', positionals: ['id="new"'] })],
   });
 
-  // Unlike a repair-armed write (which returns `{written:false, error}`), an
-  // ordinary (non-repair-armed) write's catch block RETHROWS an AppError
-  // (`write()`: `if (repairArmed) return {...}; if (error instanceof
-  // AppError) throw error;`) — so refusal here surfaces as a thrown error,
-  // not a returned result.
-  expect(() => writer.write(session)).toThrow(/already exists/);
+  expect(writer.write(session)).toMatchObject({
+    written: false,
+    error: { details: { reason: 'script_target_exists', path: outPath } },
+  });
   // The pre-existing target is left byte-for-byte unchanged — refused, not
   // clobbered.
   expect(fs.readFileSync(outPath, 'utf8')).toBe(before);
+});
+
+test('an ordinary recording returns a filesystem write failure as a typed error, never a quiet skip', () => {
+  const root = mkdtempForTestSync('agent-device-script-writer-ordinary-fs-failure-');
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
+  const blocker = path.join(root, 'blocker');
+  fs.writeFileSync(blocker, '');
+  const outPath = path.join(blocker, 'flow.ad');
+  const session = makeAuthoringSession('default', {
+    scriptPublication: authoringPublication('armed', { path: outPath }),
+    actions: [action({ command: 'click', positionals: ['id="new"'] })],
+  });
+
+  expect(writer.write(session)).toMatchObject({
+    written: false,
+    error: {
+      code: 'COMMAND_FAILED',
+      details: { reason: 'script_write_failed', path: outPath },
+    },
+  });
 });
 
 // (f) confirm the absent-target case still succeeds for ordinary recording —

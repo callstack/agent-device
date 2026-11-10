@@ -2,7 +2,7 @@ import { Worker } from 'node:worker_threads';
 import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { resolveInternalEntryModulePath } from './internal-entry.ts';
-import { decodePng, hasPngSignature, PNG } from './png.ts';
+import { decodePng, PNG } from './png.ts';
 import {
   computeScreenshotDiffPixels,
   type ScreenshotDiffPixelsJob,
@@ -314,20 +314,4 @@ export async function computeScreenshotDiffPixelsAsync(
     ...computeScreenshotDiffPixels(job),
   }));
   return { ...result, diffData: toBuffer(result.diffData) };
-}
-
-/**
- * PNG bytes for a provider screenshot in whatever container it arrived in. A PNG returns as is
- * without a worker round trip; a JPEG is decoded and re-encoded on the worker so a full-resolution
- * capture never blocks the daemon event loop. Decode failures carry the canonical `AppError`.
- */
-export async function transcodeScreenshotToPngAsync(bytes: Buffer, label: string): Promise<Buffer> {
-  if (hasPngSignature(bytes)) return bytes;
-  const result = await runPngJob({ kind: 'jpeg-to-png', image: bytes, label }, async () => {
-    // Read on demand so the JPEG decoder stays out of the import closure of every entry that only
-    // needs the worker's other jobs.
-    const { transcodeScreenshotToPng } = await import('./screenshot-image.ts');
-    return { kind: 'jpeg-to-png', png: transcodeScreenshotToPng(bytes, label) };
-  });
-  return toBuffer(result.png);
 }

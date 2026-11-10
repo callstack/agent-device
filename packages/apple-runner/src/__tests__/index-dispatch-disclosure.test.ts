@@ -1,3 +1,4 @@
+import { makeRunnerSession as makeLocalRunnerSession } from './runner-session-fixtures.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, test, vi } from 'vitest';
@@ -40,7 +41,7 @@ afterEach(async () => {
 });
 
 function runnerSession(port: number): RunnerSession {
-  return {
+  return makeLocalRunnerSession({
     sessionId: `fake:${port}`,
     device: IOS_SIMULATOR,
     deviceId: IOS_SIMULATOR.id,
@@ -51,7 +52,7 @@ function runnerSession(port: number): RunnerSession {
     child: { pid: process.pid, exitCode: null },
     state: 'ready',
     commandCharges: new RunnerCommandAccounting(),
-  };
+  });
 }
 
 const TAP: RunnerCommand = { command: 'tap', x: 10, y: 10, commandId: 'cmd-1' };
@@ -113,7 +114,10 @@ async function pressSeriesRefusedOnSecondChunk(): Promise<unknown> {
   const firstChunk = Array.from({ length: 20 }, () => ({ ok: true, kind: 'tap' }));
   server = await startFakeRunnerServer({
     sequence: [
-      { kind: 'ok', data: { completedSteps: 20, sequenceResults: firstChunk } },
+      {
+        kind: 'ok',
+        data: { sequenceOrientation: 1, completedSteps: 20, sequenceResults: firstChunk },
+      },
       { kind: 'runnerError', code: 'RUNNER_BUSY', message: 'runner busy' },
     ],
   });
@@ -178,6 +182,7 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
   'ios-runner.reply.APP_SCREEN_UNRESOLVED': () => replyFailure('APP_SCREEN_UNRESOLVED'),
   'ios-runner.reply.APP_SCREEN_CAPTURE_UNRENDERABLE': () =>
     replyFailure('APP_SCREEN_CAPTURE_UNRENDERABLE'),
+  'ios-runner.reply.APP_SCREEN_OFF_LIT_PANEL': () => replyFailure('APP_SCREEN_OFF_LIT_PANEL'),
   'ios-runner.reply.ELEMENT_NOT_FOUND': () => replyFailure('ELEMENT_NOT_FOUND'),
   'ios-runner.reply.ELEMENT_OFFSCREEN': () => replyFailure('ELEMENT_OFFSCREEN'),
   'ios-runner.reply.AMBIGUOUS_MATCH': () => replyFailure('AMBIGUOUS_MATCH'),

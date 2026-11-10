@@ -20,19 +20,23 @@ test('screenshot flag projection maps CLI flags to runtime options', () => {
       overlayRefs: true,
       screenshotCropOn: 'role=button label=Save',
       screenshotPixelDensity: 2,
+      screenshotScreenMask: 'black',
       screenshotFullscreen: true,
       screenshotScale: 0.3,
       screenshotNoStabilize: true,
       screenshotNormalizeStatusBar: true,
+      screenshotCaptureBackend: 'runner',
     }),
     {
       overlayRefs: true,
       cropOn: 'role=button label=Save',
       pixelDensity: 2,
+      screenMask: 'black',
       fullscreen: true,
       scale: 0.3,
       stabilize: false,
       normalizeStatusBar: true,
+      captureBackend: 'runner',
     },
   );
 });
@@ -43,17 +47,21 @@ test('screenshot flag projection maps public options to request flags', () => {
       overlayRefs: true,
       cropOn: 'label="Network & internet"',
       pixelDensity: 3,
+      screenMask: 'black',
       fullscreen: true,
       stabilize: false,
       normalizeStatusBar: true,
+      captureBackend: 'runner',
     }),
     {
       overlayRefs: true,
       screenshotCropOn: 'label="Network & internet"',
       screenshotPixelDensity: 3,
+      screenshotScreenMask: 'black',
       screenshotFullscreen: true,
       screenshotNoStabilize: true,
       screenshotNormalizeStatusBar: true,
+      screenshotCaptureBackend: 'runner',
     },
   );
 });
@@ -117,11 +125,23 @@ test('screenshot script flags use the shared recorded flag contract', () => {
     message: /requires a selector expression/,
   });
 
+  result = readScreenshotScriptFlag({ args: ['--screen-mask', 'black'], index: 0, flags });
+  assert.deepEqual(result, { handled: true, nextIndex: 1 });
+  assert.equal(flags.screenshotScreenMask, 'black');
+  assert.throws(
+    () => readScreenshotScriptFlag({ args: ['--screen-mask', 'alpha'], index: 0, flags: {} }),
+    { code: 'INVALID_ARGS' },
+  );
+  assert.throws(() => readScreenshotScriptFlag({ args: ['--screen-mask'], index: 0, flags: {} }), {
+    code: 'INVALID_ARGS',
+  });
   appendScreenshotScriptFlags(parts, flags);
 
   assert.deepEqual(parts, [
     '--pixel-density',
     '3',
+    '--screen-mask',
+    'black',
     '--fullscreen',
     '--scale',
     '0.3',
@@ -131,10 +151,12 @@ test('screenshot script flags use the shared recorded flag contract', () => {
   assert.deepEqual(SCREENSHOT_ACTION_FLAG_KEYS, [
     'screenshotCropOn',
     'screenshotPixelDensity',
+    'screenshotScreenMask',
     'screenshotFullscreen',
     'screenshotScale',
     'screenshotNoStabilize',
     'screenshotNormalizeStatusBar',
+    'screenshotCaptureBackend',
   ]);
   assert.deepEqual(
     SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS.map((definition) => definition.key),
@@ -145,11 +167,24 @@ test('screenshot script flags use the shared recorded flag contract', () => {
     'overlayRefs',
     'screenshotCropOn',
     'screenshotPixelDensity',
+    'screenshotScreenMask',
     'screenshotFullscreen',
     'screenshotScale',
     'screenshotNoStabilize',
     'screenshotNormalizeStatusBar',
+    'screenshotCaptureBackend',
   ]);
+});
+
+test('the capture backend stays out of recorded scripts', () => {
+  const parts: string[] = [];
+  appendScreenshotScriptFlags(parts, { screenshotCaptureBackend: 'runner' });
+  assert.deepEqual(parts, []);
+  assert.equal(
+    SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS.find(({ key }) => key === 'screenshotCaptureBackend')
+      ?.recorded,
+    false,
+  );
 });
 
 test('explicit screenshot stabilization survives SDK projection and script recording', () => {

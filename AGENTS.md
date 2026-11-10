@@ -12,7 +12,7 @@ Read only your task's row. Follow other links only when they apply.
 | Domain vocabulary | `CONTEXT.md` |
 | Read architecture decisions | `docs/adr/README.md` |
 | Write or amend an ADR | `docs/adr/FORMAT.md` |
-| Source changes, package boundaries, routing, diagnostics | `docs/agents/code-ownership.md` |
+| Source, package boundaries, routing, diagnostics, CI | `docs/agents/code-ownership.md` |
 | Checks or a failed gate | `docs/agents/testing.md` |
 | New or changed tests | `docs/agents/test-authoring.md` |
 | Test audits or deletions | `docs/agents/test-audit.md` |

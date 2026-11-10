@@ -247,15 +247,10 @@ describe('baseline-independent actionability floors', () => {
     expect(text).toContain('snapshot -i');
   });
 
-  test('MCP snapshot measures optimized text and structured content together', () => {
+  test('MCP snapshot returns the optimized text without an untyped structured copy', () => {
+    expect(rendered.mcpSnapshot.structuredContent).toBeUndefined();
     expect(rendered.mcpSnapshot).toMatchObject({
       isError: false,
-      structuredContent: {
-        refsGeneration: 12,
-        nodes: expect.arrayContaining([
-          expect.objectContaining({ ref: 'e3', label: 'Place order' }),
-        ]),
-      },
       content: [
         {
           type: 'text',

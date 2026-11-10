@@ -21,7 +21,17 @@ import { test } from 'vitest';
 // above the `new AppError(` — the reason doubles as documentation.
 // ---------------------------------------------------------------------------
 
-const SRC_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'src');
+const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const PACKAGES_ROOT = path.join(REPO_ROOT, 'packages');
+// Root `src/` plus every workspace package's `src/`: most exec wraps live in packages.
+const SOURCE_ROOTS = [
+  path.join(REPO_ROOT, 'src'),
+  ...fs
+    .readdirSync(PACKAGES_ROOT, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(PACKAGES_ROOT, entry.name, 'src'))
+    .filter((root) => fs.existsSync(root)),
+];
 const ALLOW_MARKER = 'exec-guard-allow:';
 // Longhand `stdout: x.stdout` and shorthand `stdout,` property forms alike.
 const TRIO_KEYS = [/\bstdout\s*[:,}]/, /\bstderr\s*[:,}]/, /\bexitCode\s*[:,}]/] as const;
@@ -87,12 +97,17 @@ function collectFileViolations(filePath: string): string[] {
     searchFrom = callStart + 1;
     if (!isInlineTrioViolation(source, callStart)) continue;
     const line = source.slice(0, callStart).split('\n').length;
-    violations.push(`${path.relative(SRC_ROOT, filePath)}:${line}`);
+    violations.push(`${path.relative(REPO_ROOT, filePath)}:${line}`);
   }
 }
 
 test('AppError details never rebuild the exec stdout/stderr/exitCode trio inline', () => {
-  const violations = listSourceFiles(SRC_ROOT).flatMap(collectFileViolations);
+  const files = SOURCE_ROOTS.flatMap((root) => listSourceFiles(root));
+  assert.ok(
+    files.some((file) => file.startsWith(PACKAGES_ROOT)),
+    'guard must scan packages/*/src',
+  );
+  const violations = files.flatMap(collectFileViolations);
 
   assert.deepEqual(
     violations,

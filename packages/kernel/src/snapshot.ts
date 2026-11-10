@@ -385,15 +385,15 @@ export type HiddenContentHint = {
  * Keyboard evidence in the node coordinate space: `visible` measured; `derived` from the shared
  * docked-tree policy before projection; `visibility-only` boolean; `tree-rejected` rejected geometry
  * against a usable viewport with optional visibility; `unmeasurable` unknown; `absent` explicit absence.
- * On iOS XCTest, visible and absent come from the complete pre-projection root snapshot; a successful
- * full scan with no keyboard proves absence. Missing partial/projected nodes or omitted facts never do.
+ * `treeBound`: read from the capture's own tree (iOS XCTest, Android, docked-tree), not a probe. A full
+ * pre-projection iOS root scan proves absence; projected or partial nodes and omitted facts never do.
  */
 export type SnapshotKeyboardBandFact =
-  | { kind: 'visible'; frame: Rect }
-  | { kind: 'derived'; derivation: 'docked-tree'; frame: Rect }
+  | { kind: 'visible'; frame: Rect; treeBound?: true }
+  | { kind: 'derived'; derivation: 'docked-tree'; frame: Rect; treeBound?: true }
   | { kind: 'visibility-only'; visible: boolean }
   | { kind: 'tree-rejected'; derivation: 'docked-tree'; visible?: boolean }
-  | { kind: 'absent' }
+  | { kind: 'absent'; treeBound?: true }
   | { kind: 'unmeasurable'; reason: string };
 
 /**
@@ -568,106 +568,6 @@ export function formatRole(type: string): string {
 }
 
 /**
- * The channel↔producer pairs that can actually occur. `xctest` trees come from the local Apple
- * runner, Appium page-source XML, or a cloud provider's AX element tree (Limrun, Revyl), and only
- * the runner's output has been through its presentation (clip fold, effective geometry, scope).
- * Logic that assumes those guarantees must key on the producer, never on the channel alone.
- *
- * This table owns both vocabularies: the platform channel (`SnapshotBackend` is its `backend`
- * projection) and the acquisition producer, beside the in-plan `SnapshotCaptureBackend`. Every
- * carrier embeds the pair atomically, so a cross-channel pair does not compile.
- */
-export type SnapshotProvenance =
-  | {
-      backend: 'xctest';
-      producer:
-        | 'apple-runner'
-        | 'simulator-ax-bridge'
-        | 'appium-source'
-        | 'limrun-ios-tree'
-        | 'revyl-ios-tree';
-    }
-  | { backend: 'android'; producer: 'android-uiautomator' | 'appium-source' | 'cdp-dom' }
-  | { backend: 'harmonyos-arkui'; producer: 'harmonyos-uitest' }
-  | { backend: 'macos-helper'; producer: 'macos-helper' }
-  | { backend: 'linux-atspi'; producer: 'linux-atspi' }
-  | { backend: 'web'; producer: 'agent-browser' };
-
-export type SnapshotBackend = SnapshotProvenance['backend'];
-
-type OptionalProducerProvenance<Pair> = Pair extends {
-  backend: infer Backend;
-  producer: infer Producer;
-}
-  ? { backend: Backend; producer?: Producer }
-  : never;
-
-/**
- * The provenance carrier for {@link SnapshotState}: the producer may be absent (a client-side
- * fallback that rebuilds a state from a bare backend result knows the channel and nothing more),
- * but a present pair still has to come from the {@link SnapshotProvenance} table — the channel
- * may not carry a foreign producer.
- */
-export type SnapshotStateProvenance =
-  | OptionalProducerProvenance<SnapshotProvenance>
-  | { backend?: undefined; producer?: undefined };
-
-/**
- * The provenance a capture hands to the daemon snapshot assembly: either nothing is known about
- * the origin, or the WHOLE pair is. A channel that arrived without its producer would leave the
- * assembly guessing who presented the tree, which is exactly the backend-name presentation
- * policy #2199 deleted — so it does not compile. Every production capture satisfies this: the
- * interactor boundary (`SnapshotResult`) already carries {@link SnapshotProvenance}.
- */
-export type SnapshotCaptureProvenance =
-  | SnapshotProvenance
-  | { backend?: undefined; producer?: undefined };
-
-/**
- * Narrows a provenance-carrying value to just its pair without decorrelating the two fields
- * (reading `backend` and `producer` separately would lose the pairing for the type system).
- */
-export function snapshotStateProvenance(
-  value: SnapshotStateProvenance | undefined,
-): SnapshotStateProvenance {
-  if (value === undefined || value.backend === undefined) return {};
-  switch (value.backend) {
-    case 'xctest':
-      return { backend: value.backend, producer: value.producer };
-    case 'android':
-      return { backend: value.backend, producer: value.producer };
-    case 'harmonyos-arkui':
-      return { backend: value.backend, producer: value.producer };
-    case 'macos-helper':
-      return { backend: value.backend, producer: value.producer };
-    case 'linux-atspi':
-      return { backend: value.backend, producer: value.producer };
-    case 'web':
-      return { backend: value.backend, producer: value.producer };
-  }
-}
-
-export function isSnapshotBackend(value: unknown): value is SnapshotBackend {
-  return (
-    value === 'xctest' ||
-    value === 'android' ||
-    value === 'harmonyos-arkui' ||
-    value === 'macos-helper' ||
-    value === 'linux-atspi' ||
-    value === 'web'
-  );
-}
-
-export function usesMobileSnapshotPresentation(backend: SnapshotBackend | undefined): boolean {
-  return (
-    backend === undefined ||
-    backend === 'xctest' ||
-    backend === 'android' ||
-    backend === 'harmonyos-arkui'
-  );
-}
-
-/**
  * Reasons the Apple runner can stamp when serving a command required re-activating the session app
  * (#2682). Mirrors its `activateTarget(bundleId:reason:)` call sites.
  */
@@ -740,84 +640,6 @@ export type IosTargetActivation = Readonly<{
   priorState: IosTargetActivationPriorState;
   otherActiveApplicationPid?: number;
 }>;
-
-export type SnapshotState = {
-  nodes: SnapshotNode[];
-  createdAt: number;
-  truncated?: boolean;
-  snapshotQuality?: SnapshotQualityVerdict;
-  snapshotQualityNotes?: SnapshotQualityNote[];
-  comparisonSafe?: boolean;
-  presentationKey?: string;
-  /** The presentation this capture was taken with; absent means the default full tree. */
-  presentation?: SnapshotPresentation;
-  /** Opaque equality key for iOS acquisition and presentation lineage. */
-  comparisonKey?: string;
-  /**
-   * Android: the capture is an occluding system surface (notification shade, quick settings)
-   * rather than app content. Consumers that surface this tree to the agent must disclose the
-   * occlusion (see `@agent-device/contracts/android-system-surface-disclosure`).
-   */
-  systemSurfaceOnly?: boolean;
-  /**
-   * iOS: the bundle id of the in-place system surface this capture describes (a web sign-in sheet
-   * presented over the app, #2438). Two captures that disagree here describe different surfaces and
-   * must never be compared as the same presentation; consumers that surface the tree disclose it.
-   */
-  iosSystemSurfaceBundleId?: string;
-  /**
-   * iOS: whether this capture read a modal presentation over the app's own content (#3565), decided
-   * on the acquired tree before interactive filtering, compaction, depth, or scope, so every view of
-   * one screen carries one value. `'absent'` is read, never defaulted; an unreadable or unexplained
-   * capture answers `'unknown'`. Settle's presented-surface confirmation arms on this fact.
-   */
-  presentedSurface?: PresentedSurface;
-  /**
-   * iOS and Android: keyboard observations made during acquisition. Measured and derived frames
-   * take precedence over reconstruction from the presented tree. Visibility-only and unknown facts
-   * carry no band; missing nodes or an omitted fact never establish absence.
-   */
-  keyboard?: SnapshotKeyboardBandFact;
-  /**
-   * The box these rects are measured in, as the producer measured it (#3182). The state is the carrier
-   * the response reads, so the stored tree and the published `viewport` are one fact rather than two:
-   * a consumer of a stored capture — a later diff, a re-read of the session's tree — gets the box the
-   * producer measured instead of inferring one from the largest rect still on screen.
-   */
-  viewport?: SnapshotViewportSize;
-  /**
-   * iOS: this capture's own command found the session app out of foreground and the runner
-   * activated it before answering, so an earlier observation in the session described whatever held
-   * the foreground instead (#2682). Consumers that surface this tree disclose the repair.
-   */
-  targetActivation?: IosTargetActivation;
-  /** What post-gesture stabilization proved about the gesture before this capture. */
-  postGestureOutcome?: PostGestureOutcome;
-} & SnapshotStateProvenance;
-
-/** The gesture a post-gesture outcome fact names: the command and its positionals. */
-export type PostGestureAction = { action: string; positionals: string[] };
-
-/**
- * `unsettled`: the surface was still changing when the stabilization deadline expired.
- * `no-effect`: the settled surface still matches the pre-gesture tree (#1600).
- */
-export type PostGestureOutcome = {
-  kind: 'unsettled' | 'no-effect';
-  gesture: PostGestureAction;
-};
-
-/**
- * A capture taken at once to recover or widen `previous` reads the same moment after the same
- * gesture, so it carries that capture's outcome.
- */
-export function inheritPostGestureOutcome<T extends SnapshotState>(
-  previous: SnapshotState,
-  recapture: T,
-): T {
-  recapture.postGestureOutcome ??= previous.postGestureOutcome;
-  return recapture;
-}
 
 export type SnapshotUnchanged = {
   ageMs: number;
@@ -902,42 +724,14 @@ export function snapshotRefBodies(refCarriers: readonly { ref?: string }[]): str
 }
 
 /**
- * The one producer that resolves actions against refs of its own, and so owns the ref namespace of
- * every tree it publishes. A producer that mints nothing belongs nowhere in this list: it keeps
- * dense positional numbering. Adding a second producer that mints its own refs means adding it here.
- */
-const REF_NAMESPACE_OWNERS: readonly SnapshotProvenance['producer'][] = ['agent-browser'];
-
-/**
- * The ref-minting mode of a capture, from the pair that produced it. This is the one place that
- * knows which producers own their ref namespace, so the projection that publishes a tree and the
- * projection that later re-attaches refs to it cannot disagree.
- *
- * It reads the producer and not the platform channel, per the rule the provenance table states:
- * several producers can feed one channel with different guarantees, and a second web adapter
- * (webdriver-backed, or anything else that lands on this channel) mints no refs of its own — it
- * needs dense numbering, which a channel-keyed check would silently take away from it. The
- * parameter is the whole pair or nothing, so a caller cannot present a channel and leave this to
- * guess who acquired the tree.
- */
-export function snapshotRefMinting(
-  provenance: SnapshotCaptureProvenance | undefined,
-): SnapshotRefMinting {
-  // agent-browser resolves click/fill/hover against refs it minted itself, in tree order and not
-  // densely (#2283). A ref minted beside it would either name a different element or nothing.
-  const producer = provenance?.producer;
-  return producer !== undefined && REF_NAMESPACE_OWNERS.includes(producer)
-    ? 'backend-issued'
-    : 'dense';
-}
-
-/**
  * Versioned-ref grammar (#1076): a ref argument may carry an optional
  * `~s<generation>` suffix pinning it to the session snapshot generation that
- * minted it, e.g. `@e12~s3`. The suffix is accepted INPUT only — snapshot
- * output stays plain `e12` refs (the tree is the most token-expensive artifact
- * agents consume), and ref-issuing responses carry the generation ONCE as the
- * additive `refsGeneration` field.
+ * minted it, e.g. `@e12~s3`. Snapshot output stays plain `e12` refs (the tree is
+ * the most token-expensive artifact agents consume), except the CLI text of a
+ * `--scope` snapshot, which prints every ref in this pinned form unless `--raw`
+ * is set (ADR 0014).
+ * Ref-issuing responses carry the generation ONCE as the additive
+ * `refsGeneration` field.
  */
 const REF_GENERATION_SUFFIX_RE = /^~s(\d+)$/;
 

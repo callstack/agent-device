@@ -25,18 +25,21 @@ type LimrunLifecycleParams = Readonly<{
 /** Limrun owns its live-session lifecycle, relaunch, and exact port-reverse mechanics. */
 export function bindLimrunApplicationLifecycle(
   params: LimrunLifecycleParams,
+  appleLifecycle?: ApplicationLifecycleRuntimeOperations,
 ): ApplicationLifecycleRuntimeOperations {
-  const lifecycle = bindDirectApplicationLifecycle({
-    owner: 'Limrun',
-    openTargetIdentity: 'bundle-id',
-    closeBeforeRelaunch: true,
-    configureProviderPortReverse: async (input) => await params.configurePortReverse(input),
-    binding: bindProviderApplicationLifecycleInteractor({
-      device: params.device,
-      signal: params.signal,
-      resolveInteractor: (runner) => params.getInteractor(params.device, runner),
-    }),
-  });
+  const lifecycle =
+    appleLifecycle ??
+    bindDirectApplicationLifecycle({
+      owner: 'Limrun',
+      openTargetIdentity: 'bundle-id',
+      closeBeforeRelaunch: true,
+      configureProviderPortReverse: async (input) => await params.configurePortReverse(input),
+      binding: bindProviderApplicationLifecycleInteractor({
+        device: params.device,
+        signal: params.signal,
+        resolveInteractor: (runner) => params.getInteractor(params.device, runner),
+      }),
+    });
   const resolve = params.resolveAppReference;
   if (!resolve) return lifecycle;
   return Object.freeze({

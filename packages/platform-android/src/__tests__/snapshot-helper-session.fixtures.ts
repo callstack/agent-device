@@ -186,9 +186,15 @@ export type SessionProviderOptions = {
   stalledCleanup?: boolean;
   /** How many `forward --remove` calls hang until their cleanup budget aborts them. */
   stalledForwardRemovals?: number;
+  /**
+   * How many snapshot requests the first helper process leaves unanswered. A stall belongs to the
+   * helper that hung, so a helper started after it answers.
+   */
   stalledSnapshots?: number;
-  /** How many snapshot requests each helper process answers before `stalledSnapshots` applies. */
+  /** How many snapshot requests the first helper answers before `stalledSnapshots` applies. */
   answeredSnapshotsBeforeStall?: number;
+  /** Called when the helper receives a request it leaves unanswered. */
+  onStalledSnapshot?: () => void;
   /** Whether `adb features` advertises the shell protocol that forwards device exit status. */
   shellProtocolV2?: boolean;
   /** Make the `adb features` probe fail the way an adb too old to know the command does. */
@@ -211,7 +217,7 @@ export type FakeAndroidHelperRuntimeRelease =
 
 export function createSessionProvider(options: SessionProviderOptions): AndroidAdbProvider {
   bindAndroidAdbTestHost();
-  let stalledSnapshots = options.stalledSnapshots ?? 0;
+  let spawnedHelpers = 0;
   return {
     exec: createSessionExec(options),
     spawn: (args) => {
@@ -219,6 +225,8 @@ export function createSessionProvider(options: SessionProviderOptions): AndroidA
       const port = readSessionPort(args);
       const process = new FakeAndroidProcess();
       options.processes?.push(process);
+      spawnedHelpers += 1;
+      let stalledSnapshots = spawnedHelpers === 1 ? (options.stalledSnapshots ?? 0) : 0;
       let snapshotCount = 0;
       const sockets = new Set<net.Socket>();
       const server = net.createServer((socket) => {
@@ -263,6 +271,7 @@ export function createSessionProvider(options: SessionProviderOptions): AndroidA
           snapshotCount += 1;
           if (snapshotCount > (options.answeredSnapshotsBeforeStall ?? 0) && stalledSnapshots > 0) {
             stalledSnapshots -= 1;
+            options.onStalledSnapshot?.();
             return;
           }
           const body = `<hierarchy><node text="snapshot ${snapshotCount}" /></hierarchy>`;

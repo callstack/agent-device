@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import {

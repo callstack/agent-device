@@ -3,14 +3,17 @@ import Network
 /// Who reached the runner listener, decided once per connection from its path. The host reaches the
 /// runner only over loopback (a simulator or macOS host, or usbmux on a device) or through the
 /// device's CoreDevice tunnel, a `utun` interface of type `.other`. A peer on any other interface
-/// reached the device directly over a network it shares with it, and is closed before it can hold a
-/// connection open.
+/// reached the device directly over a shared network and requires explicit forwarding support.
 enum RunnerListenerPeer: Equatable {
   /// May hold an idle connection: the simulator listener watch (`runner-retention.ts`) does, to
   /// learn when the runner dies.
   case loopback
   case tunnel
   case directNetwork
+
+  func isAdmitted(acceptsForwardedConnections: Bool) -> Bool {
+    self != .directNetwork || acceptsForwardedConnections
+  }
 
   static func of(_ connection: NWConnection) -> RunnerListenerPeer {
     classify(

@@ -2,7 +2,9 @@
 context platform=ios target=mobile
 open com.apple.Preferences --relaunch
 snapshot
+scroll down --until "role=cell label=General || role=button label=General" --max-passes 5
 click "role=cell label=General || role=button label=General"
 wait "label=About || label=\"Software Update\"" 5000
 back
+wait "role=cell label=General || role=button label=General" 5000
 is exists "role=cell label=General || role=button label=General"

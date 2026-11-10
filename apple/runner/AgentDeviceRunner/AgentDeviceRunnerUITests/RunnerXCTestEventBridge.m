@@ -109,15 +109,15 @@ static NSString *RunnerApplicationScreenFailureDescription(
       return @"no resolved application window";
     case RunnerApplicationScreenFailureUnresolvedScreen:
       return @"no resolved window display ID";
+    case RunnerApplicationScreenFailureOffLitPanel:
+      return @"every application window is off the lit panel";
     case RunnerApplicationScreenFailureNone:
       return @"application screen resolved";
   }
 }
 
-// One window read. Both answers are required: an app with no window answers `frame` with
-// `(0,0 0x0)` without raising, so only `exists` says whether the window is there. The window
-// object is handed back because resolving this instance is what its `screen` will answer from.
-// The frame is reported even when refused, so a refusal names what it looked at.
+// Check existence before geometry: reading a missing window's frame records an XCTest failure,
+// even when the exception is caught. Keep the resolved instance for its screen lookup.
 static RunnerApplicationScreenFailure RunnerResolveUsableWindow(
   id application,
   id _Nullable *window,
@@ -125,23 +125,24 @@ static RunnerApplicationScreenFailure RunnerResolveUsableWindow(
 ) {
   __block id readWindow = nil;
   __block CGRect frame = CGRectNull;
+  __block BOOL frameRead = NO;
   __block BOOL resolved = NO;
   NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
     id candidate = [[application valueForKey:@"windows"] valueForKey:@"firstMatch"];
     NSNumber *present = [candidate valueForKey:@"exists"];
     resolved = [present isKindOfClass:NSNumber.class] && present.boolValue;
+    if (!resolved) return;
     NSValue *frameValue = [candidate valueForKey:@"frame"];
     [frameValue getValue:&frame size:sizeof(frame)];
+    frameRead = YES;
     readWindow = candidate;
   }];
   *observedFrame = frame;
   if (exception != nil || !resolved || !AgentDeviceForegroundFrameIsMeasurable(frame)) {
     NSLog(
-      @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=window frame=(%g,%g %gx%g) raised=%@ resolved=%@",
-      frame.origin.x,
-      frame.origin.y,
-      frame.size.width,
-      frame.size.height,
+      @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=window frame=%@ raised=%@ resolved=%@",
+      frameRead ? [NSString stringWithFormat:@"(%g,%g %gx%g)",
+        frame.origin.x, frame.origin.y, frame.size.width, frame.size.height] : @"unread",
       exception != nil ? @"yes" : @"no",
       resolved ? @"yes" : @"no"
     );
@@ -184,6 +185,156 @@ static RunnerApplicationScreenFailure RunnerReadResolvedWindowScreen(
   *screen = readScreen;
   *displayID = readDisplayID;
   return RunnerApplicationScreenFailureNone;
+}
+
+static BOOL RunnerFrameFillsLitPanel(CGRect frame, RunnerLitPanel panel) {
+  const CGFloat tolerance = 0.5;
+  if (fabs(frame.origin.x) > tolerance || fabs(frame.origin.y) > tolerance) {
+    return NO;
+  }
+  BOOL upright = fabs(frame.size.width - panel.widthPt) <= tolerance &&
+    fabs(frame.size.height - panel.heightPt) <= tolerance;
+  BOOL turned = fabs(frame.size.width - panel.heightPt) <= tolerance &&
+    fabs(frame.size.height - panel.widthPt) <= tolerance;
+  return upright || turned;
+}
+
+// One window: whether it is there, its frame, and the display showing it. `frame` is not asked of a
+// window that says it is gone, because that read records an XCTest issue (#2995).
+static RunnerApplicationScreenFailure RunnerReadLitPanelCandidate(
+  id candidate,
+  CGRect *frame,
+  id _Nullable *screen,
+  NSUInteger *displayID
+) {
+  __block CGRect readFrame = CGRectNull;
+  __block BOOL present = NO;
+  NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
+    NSNumber *exists = [candidate valueForKey:@"exists"];
+    present = [exists isKindOfClass:NSNumber.class] && exists.boolValue;
+    if (present) {
+      [[candidate valueForKey:@"frame"] getValue:&readFrame size:sizeof(readFrame)];
+    }
+  }];
+  *frame = readFrame;
+  if (exception != nil) {
+    return RunnerApplicationScreenFailureUnresolvedScreen;
+  }
+  if (!present || !AgentDeviceForegroundFrameIsMeasurable(readFrame)) {
+    return RunnerApplicationScreenFailureUnresolvedWindow;
+  }
+  return RunnerReadResolvedWindowScreen(candidate, readFrame, screen, displayID);
+}
+
+// The application's window list, or nil when the query raises or answers no list.
+static NSArray *_Nullable RunnerCopyWindowList(id application) {
+  __block NSArray *windows = nil;
+  NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
+    id elements = [[application valueForKey:@"windows"] valueForKey:@"allElementsBoundByIndex"];
+    windows = [elements isKindOfClass:NSArray.class] ? elements : nil;
+  }];
+  return exception == nil ? windows : nil;
+}
+
+RunnerApplicationScreenFailure RunnerResolveLitPanelWindow(
+  id application,
+  RunnerLitPanel litPanel,
+  id _Nullable *window,
+  CGRect *windowFrame,
+  id _Nullable *screen
+) {
+  *window = nil;
+  *windowFrame = CGRectNull;
+  *screen = nil;
+  // An unread list is not an app without windows, so it never reaches the system-surface fallback.
+  NSArray *windows = RunnerCopyWindowList(application);
+  if (windows == nil) {
+    return RunnerApplicationScreenFailureUnresolvedScreen;
+  }
+  // A window the walk could not place may be the panel's surface, so it refuses every booking. A
+  // list past the cap refuses only when no full-panel window was found before it.
+  BOOL unplaced = NO;
+  BOOL truncated = windows.count > AGENT_DEVICE_MAX_LIT_PANEL_WINDOWS;
+  BOOL placedAny = NO;
+  id chosen = nil;
+  id chosenScreen = nil;
+  CGRect chosenFrame = CGRectNull;
+  RunnerApplicationScreenFailure outcome = RunnerApplicationScreenFailureUnresolvedWindow;
+  NSUInteger count = MIN(windows.count, (NSUInteger)AGENT_DEVICE_MAX_LIT_PANEL_WINDOWS);
+  for (NSUInteger index = 0; index < count; index += 1) {
+    id candidate = windows[index];
+    CGRect frame = CGRectNull;
+    id candidateScreen = nil;
+    NSUInteger displayID = 0;
+    RunnerApplicationScreenFailure read =
+      RunnerReadLitPanelCandidate(candidate, &frame, &candidateScreen, &displayID);
+    if (read == RunnerApplicationScreenFailureUnresolvedWindow) {
+      continue;
+    }
+    if (read != RunnerApplicationScreenFailureNone) {
+      unplaced = YES;
+      continue;
+    }
+    placedAny = YES;
+    if (displayID != litPanel.displayID) {
+      continue;
+    }
+    if (RunnerFrameFillsLitPanel(frame, litPanel)) {
+      chosen = candidate;
+      chosenScreen = candidateScreen;
+      chosenFrame = frame;
+      truncated = NO;
+      break;
+    }
+    if (chosen == nil ||
+        frame.size.width * frame.size.height > chosenFrame.size.width * chosenFrame.size.height) {
+      chosen = candidate;
+      chosenScreen = candidateScreen;
+      chosenFrame = frame;
+    }
+  }
+  if (unplaced || truncated) {
+    outcome = RunnerApplicationScreenFailureUnresolvedScreen;
+  } else if (chosen != nil) {
+    outcome = RunnerApplicationScreenFailureNone;
+    *window = chosen;
+    *windowFrame = chosenFrame;
+    *screen = chosenScreen;
+  } else if (placedAny) {
+    outcome = RunnerApplicationScreenFailureOffLitPanel;
+  }
+  NSLog(
+    @"AGENT_DEVICE_RUNNER_LIT_PANEL_WINDOW lit=%lu(%gx%g) windows=%lu outcome=%@ frame=(%g,%g %gx%g)",
+    (unsigned long)litPanel.displayID,
+    litPanel.widthPt,
+    litPanel.heightPt,
+    (unsigned long)windows.count,
+    RunnerApplicationScreenFailureDescription(outcome),
+    chosenFrame.origin.x,
+    chosenFrame.origin.y,
+    chosenFrame.size.width,
+    chosenFrame.size.height
+  );
+  return outcome;
+}
+
+NSArray *RunnerCopyLitPanelWindows(id application, NSUInteger litDisplayID) {
+  NSArray *windows = RunnerCopyWindowList(application);
+  if (windows == nil) {
+    return nil;
+  }
+  NSMutableArray *lit = [NSMutableArray array];
+  for (id candidate in windows) {
+    CGRect frame = CGRectNull;
+    id screen = nil;
+    NSUInteger displayID = 0;
+    if (RunnerReadLitPanelCandidate(candidate, &frame, &screen, &displayID) ==
+          RunnerApplicationScreenFailureNone &&
+        displayID == litDisplayID) {
+      [lit addObject:candidate];
+    }
+  }
+  return lit;
 }
 
 BOOL RunnerResolveApplicationScreen(
@@ -249,6 +400,37 @@ static Class<AgentDeviceForegroundElement> _Nullable RunnerForegroundElementClas
     resolved = YES;
   }
   return cached;
+}
+
+CGSize RunnerSoleScreenSize(void) {
+  __block NSUInteger screenCount = 0;
+  __block CGRect bounds = CGRectNull;
+  __block CGFloat scale = 0;
+  NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
+    NSArray<XCUIScreen *> *screens = XCUIScreen.screens;
+    screenCount = screens.count;
+    if (screenCount != 1) return;
+    XCUIScreen *screen = screens.firstObject;
+    NSValue *boundsValue = [screen valueForKey:@"bounds"];
+    [boundsValue getValue:&bounds size:sizeof(bounds)];
+    NSNumber *scaleValue = [screen valueForKey:@"scale"];
+    if ([scaleValue isKindOfClass:NSNumber.class]) scale = scaleValue.doubleValue;
+  }];
+  if (exception != nil || screenCount != 1 ||
+      !AgentDeviceForegroundFrameIsMeasurable(bounds) || !isfinite(scale) || scale <= 0) {
+    NSLog(
+      @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=sole-screen-size screens=%lu bounds=(%g,%g %gx%g) scale=%g raised=%@",
+      (unsigned long)screenCount,
+      bounds.origin.x,
+      bounds.origin.y,
+      bounds.size.width,
+      bounds.size.height,
+      scale,
+      exception != nil ? @"yes" : @"no"
+    );
+    return CGSizeZero;
+  }
+  return CGSizeMake(bounds.size.width / scale, bounds.size.height / scale);
 }
 
 // One contained probe: it checks each selector before sending it and reads the target pid and both
@@ -321,8 +503,11 @@ NSString * _Nullable RunnerResolveSoleScreen(
     );
     return @"private XCTest event synthesis unavailable: no resolved application window and no sole screen to route to";
   }
-  // An iPhone keeps every app full-screen, so its idiom answers the rule and the route never pays
-  // for the probe. Off the phone idiom the route opens only on the fills-screen proof.
+  // An iPhone keeps every app full-screen, so its idiom answers the rule and admission never pays
+  // for the fills-screen probe. Off the phone idiom the route opens only on that proof. The display
+  // size is a separate XCTest screen read the caller makes after admission, the first time
+  // a command needs the box; a command keeps a successful read, and the next gesture retries a failed
+  // one.
   if (UIDevice.currentDevice.userInterfaceIdiom != UIUserInterfaceIdiomPhone &&
       RunnerProbeApplicationFillsScreen(application) != RunnerFullScreenEvidenceFillsScreen) {
     return @"private XCTest event synthesis unavailable: no resolved application window, and the sole screen is not provably the app's full-screen frame";

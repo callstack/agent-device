@@ -1,7 +1,7 @@
 import XCTest
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
-private final class DisplayScreenFixture: NSObject {
+final class DisplayScreenFixture: NSObject {
   @objc let displayID: UInt
   init(_ displayID: UInt) { self.displayID = displayID }
 }
@@ -9,7 +9,7 @@ private final class DisplayScreenFixture: NSObject {
 /// A window the runtime answers only once its query has resolved. `frame` is the read that
 /// resolves it: while the query is unresolved `screen` names main, which is what a fresh runner
 /// process that has not queried this app yet reports (#2728).
-private final class DisplayWindowFixture: NSObject {
+final class DisplayWindowFixture: NSObject {
   private let windowFrame: CGRect
   private let resolvedDisplayID: UInt
   private let present: Bool
@@ -28,11 +28,30 @@ private final class DisplayWindowFixture: NSObject {
   // Handed back as one object so a test can prove the resolver captures the screen the window
   // reported rather than a fresh value for the same key. Unresolved, it names main.
   @objc var screen: NSObject { resolved ? windowScreen : DisplayScreenFixture(1) }
+
+  override func value(forKey key: String) -> Any? {
+    switch key {
+    case "exists": return exists
+    case "frame":
+#if os(macOS)
+      return NSValue(rect: frame)
+#else
+      return NSValue(cgRect: frame)
+#endif
+    case "screen": return screen
+    default: return super.value(forKey: key)
+    }
+  }
 }
 
 private final class DisplayWindowsFixture: NSObject {
   @objc let firstMatch: NSObject
   init(_ window: NSObject) { firstMatch = window }
+}
+
+private final class WindowListFixture: NSObject {
+  @objc let allElementsBoundByIndex: [NSObject]
+  init(_ windows: [NSObject]) { allElementsBoundByIndex = windows }
 }
 
 private final class DisplayApplicationFixture: NSObject {
@@ -202,6 +221,7 @@ extension RunnerTests {
     XCTAssertEqual(failure, .unresolvedWindow)
     XCTAssertNil(screen)
     XCTAssertEqual(displayID, 0)
+    XCTAssertFalse(window.resolved, "a missing window's frame lookup records an XCTest failure")
   }
   /// The sole-screen rule's decision, at the seam the production probe feeds: the values the
   /// AXRuntime probe reads in, never a device list. The windowed/unknown rows below fail without
@@ -246,6 +266,165 @@ extension RunnerTests {
         name
       )
     }
+  }
+  // MARK: - The lit panel's window (ADR 0025)
+
+  /// The inner panel as the host names it: 669x951 native points, presented turned as 951x669.
+  private static let innerPanel = RunnerLitPanel(displayID: 3, widthPt: 669, heightPt: 951)
+  private static let innerHome = CGRect(x: 0, y: 0, width: 951, height: 669)
+  /// SpringBoard's first window: the status bar on the outer panel, whichever panel is lit.
+  private static let outerStatusBar = CGRect(x: 452, y: 0, width: 226, height: 155.3)
+
+  private func resolveLitPanelWindow(
+    _ windows: [NSObject],
+    panel: RunnerLitPanel = innerPanel
+  ) -> (failure: RunnerApplicationScreenFailure, window: AnyObject?, frame: CGRect, screen: AnyObject?) {
+    var window: AnyObject?
+    var frame = CGRect.null
+    var screen: AnyObject?
+    let failure = RunnerResolveLitPanelWindow(
+      DisplayApplicationFixture(windows: WindowListFixture(windows)), panel, &window, &frame, &screen)
+    return (failure, window, frame, screen)
+  }
+
+  func testLitPanelWindowSkipsTheFirstWindowOnTheDarkPanel() {
+    let statusBar = DisplayWindowFixture(frame: Self.outerStatusBar, displayID: 1)
+    let home = DisplayWindowFixture(frame: Self.innerHome, displayID: 3)
+    let later = DisplayWindowFixture(frame: Self.innerHome, displayID: 3)
+    let walk = resolveLitPanelWindow([statusBar, home, later])
+    XCTAssertEqual(walk.failure, .none)
+    XCTAssertTrue(walk.window === home)
+    XCTAssertEqual(walk.frame, Self.innerHome)
+    XCTAssertFalse(later.resolved, "the walk stops at the first full-panel window")
+  }
+
+  func testLitPanelWindowAcceptsThePanelBoxEitherWayUp() {
+    for frame in [CGRect(x: 0, y: 0, width: 669, height: 951), Self.innerHome] {
+      let window = DisplayWindowFixture(frame: frame, displayID: 3)
+      let walk = resolveLitPanelWindow([window])
+      XCTAssertEqual(walk.failure, .none, "\(frame)")
+      XCTAssertTrue(walk.window === window)
+    }
+  }
+
+  /// A full-size window on the dark panel is the trap: geometry alone would book a screen nobody
+  /// is looking at.
+  func testLitPanelWindowRefusesWindowsThatAreAllOnTheDarkPanel() {
+    let walk = resolveLitPanelWindow([
+      DisplayWindowFixture(frame: Self.outerStatusBar, displayID: 1),
+      DisplayWindowFixture(frame: CGRect(x: 0, y: 0, width: 466, height: 678), displayID: 1),
+    ])
+    XCTAssertEqual(walk.failure, .offLitPanel)
+    XCTAssertNil(walk.window)
+    XCTAssertEqual(resolveLitPanelWindow([]).failure, .unresolvedWindow, "no window at all")
+  }
+
+  /// An unread window list is not an app without windows: it must not reach the system-surface
+  /// fallback, which only `UnresolvedWindow` takes.
+  func testLitPanelWindowRefusesAWindowListItCannotRead() {
+    var window: AnyObject?
+    var frame = CGRect.null
+    var screen: AnyObject?
+    let failure = RunnerResolveLitPanelWindow(
+      DisplayApplicationFixture(windows: UnanswerableWindowsFixture()), Self.innerPanel, &window, &frame, &screen)
+    XCTAssertEqual(failure, .unresolvedScreen)
+    XCTAssertNil(window)
+  }
+
+  /// A window the walk could not place may itself be the panel's surface, so a full-panel window
+  /// read after it is not booked.
+  func testLitPanelWindowRefusesAFullPanelWindowReadAfterAnUnplacedOne() {
+    let home = DisplayWindowFixture(frame: Self.innerHome, displayID: 3)
+    let walk = resolveLitPanelWindow([ScreenlessWindowFixture(), home])
+    XCTAssertEqual(walk.failure, .unresolvedScreen)
+    XCTAssertNil(walk.window)
+  }
+
+  func testLitPanelWindowRefusesAFrameReadExceptionBeforeAnyLaterWindow() {
+    let laterWindows: [[NSObject]] = [
+      [],
+      [DisplayWindowFixture(frame: Self.innerHome, displayID: 3)],
+      [DisplayWindowFixture(frame: Self.outerStatusBar, displayID: 1)],
+    ]
+    for later in laterWindows {
+      let walk = resolveLitPanelWindow([FramelessWindowFixture()] + later)
+      XCTAssertEqual(walk.failure, .unresolvedScreen)
+      XCTAssertNil(walk.window)
+      XCTAssertTrue(walk.frame.isNull)
+    }
+  }
+
+  /// An app that occupies part of the lit panel has no full-panel box; being on the lit display is
+  /// still the fact the first-window route could not establish.
+  func testLitPanelWindowBooksTheLargestWindowOnTheLitDisplay() {
+    let strip = DisplayWindowFixture(frame: Self.outerStatusBar, displayID: 3)
+    let sheet = DisplayWindowFixture(frame: CGRect(x: 0, y: 90, width: 300, height: 400), displayID: 3)
+    let walk = resolveLitPanelWindow([
+      DisplayWindowFixture(frame: Self.innerHome, displayID: 1), strip, sheet,
+    ])
+    XCTAssertEqual(walk.failure, .none)
+    XCTAssertTrue(walk.window === sheet)
+  }
+
+  /// A window the walk could not place, or one past its cap, could be the panel's surface, so a
+  /// lesser window is not booked in its place.
+  func testLitPanelWindowRefusesALesserWindowWhenTheListWasNotFullyPlaced() {
+    let sheet = DisplayWindowFixture(frame: CGRect(x: 0, y: 90, width: 300, height: 400), displayID: 3)
+    XCTAssertEqual(
+      resolveLitPanelWindow([ScreenlessWindowFixture(), sheet]).failure, .unresolvedScreen)
+    let beyondCap = (0..<Int(AGENT_DEVICE_MAX_LIT_PANEL_WINDOWS)).map { _ in
+      DisplayWindowFixture(frame: Self.outerStatusBar, displayID: 1)
+    } + [DisplayWindowFixture(frame: Self.innerHome, displayID: 3)]
+    XCTAssertEqual(resolveLitPanelWindow([sheet] + beyondCap).failure, .unresolvedScreen)
+  }
+
+  /// #2995: a `frame` read on a window the query says is gone records an XCTest issue.
+  func testLitPanelWindowNeverAsksAnAbsentWindowForItsFrame() {
+    let absent = DisplayWindowFixture(frame: Self.innerHome, displayID: 3, present: false)
+    let failure = resolveLitPanelWindow([absent]).failure
+    XCTAssertEqual(failure, .unresolvedWindow)
+    XCTAssertEqual(RunnerAppScreenCaptureFailure(failure).response.error?.code, "APP_SCREEN_WINDOW_UNRESOLVED")
+    XCTAssertFalse(absent.resolved)
+  }
+
+  func testLitPanelElementSearchIncludesWindowsPastTheBookingCap() {
+    let early = DisplayWindowFixture(frame: Self.innerHome, displayID: 3)
+    let later = DisplayWindowFixture(frame: Self.innerHome, displayID: 3)
+    let windows: [NSObject] = [early] + (0..<Int(AGENT_DEVICE_MAX_LIT_PANEL_WINDOWS)).map { _ in
+      DisplayWindowFixture(frame: Self.outerStatusBar, displayID: 1)
+    } + [later]
+    let lit = RunnerCopyLitPanelWindows(
+      DisplayApplicationFixture(windows: WindowListFixture(windows)), Self.innerPanel.displayID)
+    XCTAssertEqual(lit?.count, 2)
+    XCTAssertTrue((lit?.last as AnyObject) === later)
+  }
+
+  /// The one owner of the windows an element read may search: those that report the lit display.
+  /// A window that is gone or names no display is left out.
+  func testLitPanelWindowsAreTheWindowsThatReportTheLitDisplay() {
+    let home = DisplayWindowFixture(frame: Self.innerHome, displayID: 3)
+    let dock = DisplayWindowFixture(frame: Self.innerHome, displayID: 3)
+    let windows: [NSObject] = [
+      DisplayWindowFixture(frame: Self.outerStatusBar, displayID: 1), home, ScreenlessWindowFixture(),
+      DisplayWindowFixture(frame: Self.innerHome, displayID: 3, present: false), dock,
+    ]
+    let lit = RunnerCopyLitPanelWindows(
+      DisplayApplicationFixture(windows: WindowListFixture(windows)), Self.innerPanel.displayID)
+    XCTAssertEqual(lit?.count, 2)
+    XCTAssertTrue((lit?.first as AnyObject) === home)
+    XCTAssertTrue((lit?.last as AnyObject) === dock)
+    XCTAssertNil(
+      RunnerCopyLitPanelWindows(
+        DisplayApplicationFixture(windows: UnanswerableWindowsFixture()), Self.innerPanel.displayID),
+      "an unreadable window list is not an empty lit display"
+    )
+  }
+
+  func testLitPanelScreenIsTheScreenTheChosenWindowReported() {
+    let home = DisplayWindowFixture(frame: Self.innerHome, displayID: 3)
+    let walk = resolveLitPanelWindow([DisplayWindowFixture(frame: Self.outerStatusBar, displayID: 1), home])
+    XCTAssertEqual(walk.failure, .none)
+    XCTAssertTrue(walk.screen === home.screen)
   }
 }
 #endif

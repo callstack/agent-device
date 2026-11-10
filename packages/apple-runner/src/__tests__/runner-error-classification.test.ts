@@ -162,6 +162,13 @@ test('connect loop stops for terminal verdicts', () => {
     ),
     false,
   );
+  for (const reason of ['runner_session_draining', 'runner_session_stopped'] as const) {
+    const terminal = runnerConnectFailure(reason);
+    assert.equal(shouldRetryRunnerConnectError(terminal), false, reason);
+    assert.equal(isRetryableRunnerError(terminal), false, reason);
+    assert.equal(shouldRebuildCachedRunnerArtifact(terminal), false, reason);
+    assert.equal(shouldRestartRunnerBeforeCommandSend(terminal, TAP), false, reason);
+  }
   const unattached = new AppError('DEVICE_NOT_FOUND', 'device not attached', {
     usbmuxDeviceAttached: false,
   });
@@ -426,6 +433,7 @@ test('runner_endpoint_probe_exhausted is decided by the typed reason, not the me
 test('a refused screen capture keeps the runner reason and stays off the wire code', () => {
   assert.deepEqual([...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].sort(), [
     'APP_SCREEN_CAPTURE_UNRENDERABLE',
+    'APP_SCREEN_OFF_LIT_PANEL',
     'APP_SCREEN_UNRESOLVED',
     'APP_SCREEN_WINDOW_UNRESOLVED',
   ]);
@@ -539,4 +547,25 @@ test('a runner that does not require the token is session-fatal and never retrie
     assert.equal(shouldRestartRunnerAfterReadinessPreflight(refusal), false);
     assert.equal(shouldRebuildCachedRunnerArtifact(refusal), false);
   }
+});
+
+test('forwarding recovery requires the typed gateway failure, never matching prose', () => {
+  const message = 'Runner HTTP forwarding is unavailable';
+  const typed = new AppError('COMMAND_FAILED', message, {
+    reason: 'runner_forwarding_unavailable',
+    status: 502,
+  });
+  assert.equal(isRetryableRunnerError(typed), true);
+  assert.equal(shouldRestartRunnerBeforeCommandSend(typed, { command: 'tap' }), false);
+  assert.equal(shouldRebuildCachedRunnerArtifact(typed), false);
+  assert.equal(
+    shouldRestartRunnerAfterReadinessPreflight(
+      new AppError('COMMAND_FAILED', message, {
+        ...typed.details,
+        runnerReadinessPreflightFailed: true,
+      }),
+    ),
+    false,
+  );
+  assert.equal(isRetryableRunnerError(new AppError('COMMAND_FAILED', message)), false);
 });

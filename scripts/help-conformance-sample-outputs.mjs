@@ -85,8 +85,7 @@ Detected an overly complex or slow accessibility tree. Fell back to the private-
 // (packages/daemon/src/core/session-recovery-hints.ts) — the parity test drives that exact producer.
 export const DEVICE_IN_USE_SAMPLE = {
   command: 'agent-device open https://example.test --platform web --session default',
-  output: `Error (DEVICE_IN_USE): Device is already in use by session "checkout".
-Hint: Run agent-device session list to inspect active sessions. To reuse this device, rerun the command with --session checkout. To open a new session on this device, first run agent-device close --session checkout. To wait for the device to free up, run the same open with --wait <ms>.`,
+  output: `Error (DEVICE_IN_USE): Device is already in use by session "checkout". Not dispatched. Next: Run agent-device session list to inspect active sessions. To reuse this device, rerun the command with --session checkout. To open a new session on this device, first run agent-device close --session checkout. To wait for the device to free up, run the same open with --wait <ms>.`,
 };
 
 // Enforced cross-daemon device claim conflict from
@@ -94,8 +93,7 @@ Hint: Run agent-device session list to inspect active sessions. To reuse this de
 // the exact status command is the only safe next step while ownership is live.
 export const DEVICE_CLAIM_IN_USE_SAMPLE = {
   command: 'agent-device open Demo --platform android --serial emulator-5554',
-  output: `Error (DEVICE_IN_USE): android device emulator-5554 is owned by session "checkout" in workspace "/worktrees/checkout".
-Hint: Inspect the owner with: agent-device device status --platform android --serial emulator-5554`,
+  output: `Error (DEVICE_IN_USE): android device emulator-5554 is owned by session "checkout" in workspace "/worktrees/checkout". Not dispatched. Next: Inspect the owner with: agent-device device status --platform android --serial emulator-5554`,
 };
 
 // ADR 0014 mutation rejection from
@@ -105,8 +103,7 @@ Hint: Inspect the owner with: agent-device device status --platform android --se
 // names the plain ref; the hint is the precise resolveRefStalenessWarning.
 export const STALE_REF_SAMPLE = {
   command: 'agent-device press @e2~s5',
-  output: `Error (COMMAND_FAILED): Ref @e2 was minted from a superseded snapshot generation
-Hint: Ref @e2 was minted from snapshot s5 but the session's ref frame is now s7 — re-run snapshot -i.`,
+  output: `Error (COMMAND_FAILED): Ref @e2 was minted from a superseded snapshot generation. Not dispatched. Next: Ref @e2 was minted from snapshot s5 but the session's ref frame is now s7 — re-run snapshot -i.`,
 };
 
 // AMBIGUOUS_MATCH from buildAmbiguousMatchError (packages/daemon/src/execution/selector-match-errors.ts)
@@ -119,12 +116,12 @@ Hint: Ref @e2 was minted from snapshot s5 but the session's ref frame is now s7 
 // the agent must re-observe or narrow, not guess which @ref is the right row.
 export const AMBIGUOUS_MATCH_SAMPLE = {
   command: 'agent-device find text "Follow"',
-  output: `Error (AMBIGUOUS_MATCH): find matched 3 elements for text "Follow". Use a more specific locator or selector.
-Hint: Multiple candidates matched. Narrow the query or pass an exact identifier.
+  output: `Error (AMBIGUOUS_MATCH): find matched 3 elements for text "Follow". Use a more specific locator or selector. Not dispatched. Next: Multiple candidates matched. Narrow the query or pass an exact identifier.
 Candidates:
   @e2 [button] "Follow"
   @e5 [button] "Follow"
-  @e9 [button] "Follow"`,
+  @e9 [button] "Follow"
+Error (AMBIGUOUS_MATCH): find matched 3 elements for text "Follow". Use a more specific locator or selector. Not dispatched. Next: Multiple candidates matched. Narrow the query or pass an exact identifier.`,
 };
 
 // APP_NOT_INSTALLED from buildAppNotInstalledError
@@ -132,8 +129,7 @@ Candidates:
 // exact producer; the hint is defaultHintForCode('APP_NOT_INSTALLED').
 export const APP_NOT_INSTALLED_SAMPLE = {
   command: 'agent-device open Shoply --platform ios',
-  output: `Error (APP_NOT_INSTALLED): No app found matching "Shoply"
-Hint: Run apps to discover the exact installed package or bundle id, or install the app before open.`,
+  output: `Error (APP_NOT_INSTALLED): No app found matching "Shoply". Next: Run apps to discover the exact installed package or bundle id, or install the app before open.`,
 };
 
 // Successful BrowserStack connect output from renderConnectSuccess. The

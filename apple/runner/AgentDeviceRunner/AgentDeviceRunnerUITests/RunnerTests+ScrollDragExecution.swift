@@ -38,9 +38,9 @@ extension RunnerTests {
     message: String,
     context: SynthesizedCoordinateContext,
     releaseBehavior: ScrollReleaseBehavior?
-  ) -> Response {
+  ) throws -> Response {
 #if os(iOS)
-    return executeDragGesture(
+    return try executeDragGesture(
       activeApp: activeApp,
       x: x,
       y: y,
@@ -52,7 +52,7 @@ extension RunnerTests {
       synthesized: (profile: scrollDragProfile(releaseBehavior: releaseBehavior), policyKind: .scroll)
     )
 #else
-    return executeDragGesture(
+    return try executeDragGesture(
       activeApp: activeApp,
       x: x,
       y: y,
@@ -77,7 +77,7 @@ extension RunnerTests {
     message: String,
     synthesizedContext: SynthesizedCoordinateContext? = nil,
     synthesized: (profile: SynthesizedDragProfile, policyKind: SynthesizedGesturePolicyKind)? = nil
-  ) -> Response {
+  ) throws -> Response {
     let durationMs = durationMs ?? runnerDefaultDragDurationMs
     let commandName = dragCommandName(message: message)
     guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite else {
@@ -86,7 +86,7 @@ extension RunnerTests {
         error: ErrorPayload(code: "INVALID_ARGS", message: "\(commandName) requires finite coordinates")
       )
     }
-    if let synthesized, let synthesizedResponse = executeSynthesizedDragGesture(
+    if let synthesized, let synthesizedResponse = try executeSynthesizedDragGesture(
       activeApp: activeApp,
       x: x,
       y: y,
@@ -100,7 +100,7 @@ extension RunnerTests {
     ) {
       return synthesizedResponse
     }
-    return executeCoordinateDrag(
+    return try executeCoordinateDrag(
       activeApp: activeApp,
       x: x,
       y: y,
@@ -124,17 +124,17 @@ extension RunnerTests {
     holdDuration: TimeInterval,
     message: String,
     fallback: GestureFallback? = nil
-  ) -> Response {
-    let dragPoints = keyboardAvoidingDragPoints(app: activeApp, x: x, y: y, x2: x2, y2: y2)
-    let dragFrame = resolvedDragVisualizationFrame(
+  ) throws -> Response {
+    let dragPoints = try keyboardAvoidingDragPoints(app: activeApp, x: x, y: y, x2: x2, y2: y2)
+    let dragFrame = try resolvedDragVisualizationFrame(
       app: activeApp,
       x: dragPoints.x,
       y: dragPoints.y,
       x2: dragPoints.x2,
       y2: dragPoints.y2
     )
-    let (timing, outcome) = performGesture(activeApp) {
-      dragAt(
+    let (timing, outcome) = try performGesture(activeApp) {
+      try dragAt(
         app: activeApp,
         x: dragPoints.x,
         y: dragPoints.y,
@@ -161,10 +161,10 @@ extension RunnerTests {
     context: SynthesizedCoordinateContext?,
     policyKind: SynthesizedGesturePolicyKind,
     profile: SynthesizedDragProfile
-  ) -> Response? {
+  ) throws -> Response? {
 #if os(iOS)
-    let context = context ?? synthesizedCoordinateContext(app: activeApp)
-    guard let plan = axFreeSynthesizedDragPlan(
+    let context = try context ?? synthesizedCoordinateContext(app: activeApp)
+    guard let plan = try axFreeSynthesizedDragPlan(
       app: activeApp,
       x: x,
       y: y,
@@ -188,11 +188,11 @@ extension RunnerTests {
       y: plan.points.y,
       x2: plan.points.x2,
       y2: plan.points.y2,
-      referenceWidth: Double(plan.referenceFrame.width),
-      referenceHeight: Double(plan.referenceFrame.height)
+      referenceWidth: Double(plan.context.geometry.windowOnScreen.rect.width),
+      referenceHeight: Double(plan.context.geometry.windowOnScreen.rect.height)
     )
-    switch performSynthesizedGesture(activeApp, kind: policyKind, context: plan.context, synthesize: {
-      synthesizedDragAt(
+    switch try performSynthesizedGesture(activeApp, kind: policyKind, context: plan.context, synthesize: {
+      try synthesizedDragAt(
         app: activeApp,
         x: plan.points.x,
         y: plan.points.y,
@@ -206,7 +206,7 @@ extension RunnerTests {
     case .performed(let timing):
       return gestureResponse(message: message, timing: timing, frame: .drag(dragFrame))
     case .xctestFallback(let fallbackMessage, let hint):
-      return executeCoordinateDrag(
+      return try executeCoordinateDrag(
         activeApp: activeApp,
         x: plan.points.x,
         y: plan.points.y,

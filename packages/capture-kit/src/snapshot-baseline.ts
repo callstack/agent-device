@@ -1,4 +1,4 @@
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
 
 /**

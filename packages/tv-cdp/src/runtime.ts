@@ -33,6 +33,7 @@ import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/p
 import {
   bindProviderScreenshotInteractor,
   screenshotRuntimeOperationFacts,
+  defaultCaptureOnly,
 } from '@agent-device/contracts/screenshot-runtime';
 import {
   bindProviderScrollInteractor,
@@ -371,7 +372,12 @@ function createTvPlatformRuntime(
             resolveInteractor,
             presentIosAcquisition: host.snapshot.presentIosAcquisition,
           }),
-          ...bindProviderScreenshotInteractor({ device, signal, resolveInteractor }),
+          ...bindProviderScreenshotInteractor({
+            device,
+            signal,
+            resolveInteractor,
+            captureCapabilities: defaultCaptureOnly('a TV target captures through CDP'),
+          }),
           ...bindProviderTouchInteractor({
             device,
             signal,

@@ -260,3 +260,144 @@ test('uninstall resolves, removes and invalidates on the device readiness return
     signal,
   );
 });
+
+test.each([false, true])(
+  'reinstall removes data before the replacement is materialized with a hosted installer: %s',
+  async (hosted) => {
+    const events: string[] = [];
+    const signal = new AbortController().signal;
+    const artifact = {
+      installablePath: '/tmp/new.apk',
+      cleanup: async () => {
+        events.push('cleanup');
+      },
+    };
+    const install = vi.fn(async () => {
+      events.push('install');
+      return { packageName: 'com.example.app' };
+    });
+    native.uninstallAndroidPackage.mockImplementation(async () => {
+      events.push('uninstall');
+    });
+    native.installAndroidArtifact.mockImplementation(async () => {
+      events.push('install');
+      return 'com.example.app';
+    });
+    const host = hostFixture({
+      withInvalidatedAppResolutionCache: async (_device, operation) => {
+        events.push('invalidate-before');
+        try {
+          return await operation();
+        } finally {
+          events.push('invalidate-after');
+        }
+      },
+      prepareArtifact: async () => {
+        events.push('materialize');
+        return artifact;
+      },
+    });
+    const operations = createAndroidAppDeploymentOperations({
+      host,
+      device,
+      signal,
+      ...(hosted ? { install } : {}),
+    });
+    expect(
+      await operations.deployApp!({
+        app: 'com.example.app',
+        appPath: '/tmp/new.apk',
+        replaceExisting: true,
+      }),
+    ).toEqual({ packageName: 'com.example.app', launchTarget: 'com.example.app' });
+    expect(events).toEqual([
+      'invalidate-before',
+      'uninstall',
+      'materialize',
+      'install',
+      'cleanup',
+      'invalidate-after',
+    ]);
+    if (hosted) {
+      expect(install).toHaveBeenCalledExactlyOnceWith(artifact, signal);
+      expect(native.installAndroidArtifact).not.toHaveBeenCalled();
+    } else {
+      expect(install).not.toHaveBeenCalled();
+      expect(native.installAndroidArtifact).toHaveBeenCalledExactlyOnceWith(
+        host,
+        device,
+        artifact.installablePath,
+        undefined,
+        signal,
+      );
+    }
+  },
+);
+
+test.each(['path', 'prepared'] as const)(
+  'a hosted %s install uses the provider identity and leaves artifact cleanup with its owner',
+  async (source) => {
+    const cleanup = vi.fn(async () => {});
+    const artifact = { installablePath: '/tmp/app.apk', cleanup };
+    const prepareArtifact = vi.fn(async () => artifact);
+    const install = vi.fn(async () => ({ packageName: 'com.example.hosted' }));
+    const signal = new AbortController().signal;
+    const operations = createAndroidAppDeploymentOperations({
+      host: hostFixture({ prepareArtifact }),
+      device,
+      signal,
+      install,
+    });
+
+    const result =
+      source === 'path'
+        ? await operations.deployApp!({
+            app: '',
+            appPath: artifact.installablePath,
+            replaceExisting: false,
+          })
+        : await operations.deployMaterializedApp!({ artifact });
+
+    expect(result).toEqual({
+      packageName: 'com.example.hosted',
+      appName: 'hosted',
+      launchTarget: 'com.example.hosted',
+    });
+    expect(install).toHaveBeenCalledExactlyOnceWith(artifact, signal);
+    expect(native.installAndroidArtifact).not.toHaveBeenCalled();
+    expect(prepareArtifact).toHaveBeenCalledTimes(source === 'path' ? 1 : 0);
+    expect(cleanup).toHaveBeenCalledTimes(source === 'path' ? 1 : 0);
+  },
+);
+
+test.each(['path', 'prepared'] as const)(
+  'a hosted %s install preserves provider metadata and falls back to materialized identity',
+  async (source) => {
+    const artifact = {
+      installablePath: '/tmp/app.apk',
+      packageName: 'com.example.materialized',
+      appName: 'Materialized app',
+      cleanup: vi.fn(async () => {}),
+    };
+    const providerResult = {
+      appName: 'Provider app',
+      launchTarget: 'com.example.materialized/.MainActivity',
+    };
+    const install = vi.fn(async () => providerResult);
+    const operations = createAndroidAppDeploymentOperations({
+      host: hostFixture({ prepareArtifact: async () => artifact }),
+      device,
+      signal: new AbortController().signal,
+      install,
+    });
+    const result =
+      source === 'path'
+        ? await operations.deployApp!({
+            app: '',
+            appPath: artifact.installablePath,
+            replaceExisting: false,
+          })
+        : await operations.deployMaterializedApp!({ artifact });
+    expect(result).toEqual({ ...providerResult, packageName: artifact.packageName });
+  },
+);

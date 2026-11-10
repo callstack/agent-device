@@ -37,10 +37,5 @@ export type {
   KnownAppErrorCode,
   NormalizedError,
 } from '@agent-device/kernel/errors';
-export type {
-  Point,
-  RawSnapshotNode,
-  Rect,
-  SnapshotNode,
-  SnapshotState,
-} from '@agent-device/kernel/snapshot';
+export type { Point, RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+export type { SnapshotState } from '@agent-device/contracts/snapshot-model';

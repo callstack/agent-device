@@ -67,7 +67,7 @@ export async function admitBoundedCompositeResourceRequest(params: {
   req: DaemonRequest;
   session: SessionState | undefined;
   validateSessionReopen: (session: SessionState) => Promise<void>;
-  closeWouldReleaseProviderLease: () => boolean;
+  closeWouldReleaseProviderLease: () => boolean | Promise<boolean>;
   claimRecovery: {
     currentSessionExists: boolean;
     resolveDevice: () => Promise<DeviceInfo>;
@@ -108,7 +108,11 @@ async function admitSessionLifecycleRequest(
   if (req.command === 'close' && req.internal?.closeAppOnly === true) return;
   if (req.command === 'open' && session) await params.validateSessionReopen(session);
   if (req.command === 'close') {
-    assertBoundedCompositeSessionDisposal(req, session, params.closeWouldReleaseProviderLease());
+    assertBoundedCompositeSessionDisposal(
+      req,
+      session,
+      await params.closeWouldReleaseProviderLease(),
+    );
   }
   await assertBoundedClaimRecovery(req, params.claimRecovery);
 }

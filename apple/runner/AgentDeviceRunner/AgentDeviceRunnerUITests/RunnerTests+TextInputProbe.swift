@@ -20,18 +20,15 @@ enum TextInputProbeOutcome {
 }
 
 extension RunnerTests {
-  func textInputAt(app: XCUIApplication, x: Double, y: Double, contentTranslation: TextEntryContentTranslation) -> ResolvedTextEntryInput? {
-    textInputCandidatesAt(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation).first
-  }
-
-  func textInputCandidatesAt(app: XCUIApplication, point: CGPoint, contentTranslation: TextEntryContentTranslation) -> [ResolvedTextEntryInput] {
-    safely("TEXT_INPUT_AT_POINT", []) {
-      queryTextInputs(app: app, point: point, contentTranslation: contentTranslation, shouldStop: { false })
+  func textInputCandidatesAt(app: XCUIApplication, point: CGPoint, contentTranslation: TextEntryContentTranslation) throws -> [ResolvedTextEntryInput] {
+    let queries = try textInputQueries(app: app)
+    return safely("TEXT_INPUT_AT_POINT", []) {
+      queryTextInputs(queries: queries, point: point, contentTranslation: contentTranslation, shouldStop: { false })
     }
   }
 
-  func coordinateTapTextInputAt(app: XCUIApplication, x: Double, y: Double) -> XCUIElement? {
-    switch probeTextInputs(app: app, point: CGPoint(x: x, y: y), contentTranslation: liveContentTranslation(app: app)) {
+  func coordinateTapTextInputAt(app: XCUIApplication, x: Double, y: Double) throws -> XCUIElement? {
+    switch try probeTextInputs(app: app, point: CGPoint(x: x, y: y), contentTranslation: liveContentTranslation(app: app)) {
     case .matches(let inputs):
       return inputs.first?.element
     case .absent:
@@ -58,8 +55,8 @@ extension RunnerTests {
     x: Double,
     y: Double,
     contentTranslation: TextEntryContentTranslation
-  ) -> CoordinateTextInputResolution {
-    switch probeTextInputs(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation) {
+  ) throws -> CoordinateTextInputResolution {
+    switch try probeTextInputs(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation) {
     case .matches(let inputs):
       guard let input = inputs.first, let identity = input.identity else { return .unavailable }
       return .input(TextInputAtPoint(element: input.element, identity: identity))
@@ -84,23 +81,32 @@ extension RunnerTests {
   }
 
   /// What `target`'s input reads between a replacement's clear passes, read inside the same issue
-  /// containment, with a placeholder read as empty. A read that cannot answer is `.unavailable`.
-  func clearedFieldRead(app: XCUIApplication, target: TextEntryTarget) -> TextValueRead {
+  /// containment, with a placeholder read as empty. A read that cannot answer is `.unavailable`;
+  /// a lit-panel refusal propagates.
+  func clearedFieldRead(app: XCUIApplication, target: TextEntryTarget) throws -> TextValueRead {
+    var refusal: Error?
     let probed = containingTextInputProbeIssues(fallback: TextValueRead.unavailable) { _ in
-      textValueRead(for: resolveTextEntryInput(app: app, target: target)?.attributes, treatingPlaceholderAsEmpty: true)
+      do {
+        return textValueRead(for: try resolveTextEntryInput(app: app, target: target)?.attributes, treatingPlaceholderAsEmpty: true)
+      } catch {
+        refusal = error
+        return .unavailable
+      }
     }
+    if let refusal { throw refusal }
     guard case .success(let read) = probed else { return .unavailable }
     return read
   }
 
-  func probeTextInputs(app: XCUIApplication, point: CGPoint, contentTranslation: TextEntryContentTranslation) -> TextInputProbeOutcome {
+  func probeTextInputs(app: XCUIApplication, point: CGPoint, contentTranslation: TextEntryContentTranslation) throws -> TextInputProbeOutcome {
+    let queries = try textInputQueries(app: app)
     switch containingTextInputProbeIssues(fallback: TextInputProbeOutcome.unavailable(.emptyTree), { shouldStop in
       var treeReadable = app.descendants(matching: .any).firstMatch.exists
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
       if textInputProbeBlindForTesting { treeReadable = false }
 #endif
       guard treeReadable else { return .unavailable(.emptyTree) }
-      let inputs = queryTextInputs(app: app, point: point, contentTranslation: contentTranslation, shouldStop: shouldStop)
+      let inputs = queryTextInputs(queries: queries, point: point, contentTranslation: contentTranslation, shouldStop: shouldStop)
       return inputs.isEmpty ? .absent : .matches(inputs)
     }) {
     case .success(let outcome):
@@ -171,14 +177,19 @@ extension RunnerTests {
     return true
   }
 
+  /// Resolved before the probe's issue containment, so a lit-panel refusal is not read as no input.
+  private func textInputQueries(app: XCUIApplication) throws -> [XCUIElementQuery] {
+    try elementQueries(app: app, matching: .textField, .secureTextField, .searchField, .textView)
+  }
+
   private func queryTextInputs(
-    app: XCUIApplication,
+    queries: [XCUIElementQuery],
     point: CGPoint,
     contentTranslation: TextEntryContentTranslation,
     shouldStop: () -> Bool
   ) -> [ResolvedTextEntryInput] {
     var inputs: [ResolvedTextEntryInput] = []
-    for query in [app.textFields, app.secureTextFields, app.searchFields, app.textViews] {
+    for query in queries {
       if shouldStop() { break }
       let candidates = query.allElementsBoundByIndex
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS

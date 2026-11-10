@@ -7,7 +7,10 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { simulatorAddressFor } from './core/simctl.ts';
 import { createLaunchObservationProbe } from './snapshot-observability.ts';
-import type { SnapshotSourceFailure, SnapshotSourceOutcome } from './snapshot-source-facade.ts';
+import type {
+  SnapshotSourceFailure,
+  SnapshotSourceOutcome,
+} from '@agent-device/capture-kit/snapshot-source-channel';
 import type { SimulatorSnapshotTarget } from './snapshot-target.ts';
 
 const simulator = {

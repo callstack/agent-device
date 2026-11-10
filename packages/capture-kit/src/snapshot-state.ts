@@ -14,18 +14,20 @@ import {
   snapshotOptionsFromFlags,
   type SnapshotPresentation,
   type SnapshotPresentationFlagInput,
-  snapshotRefMinting,
   type IosTargetActivation,
   type PresentedSurface,
   type RawSnapshotNode,
-  type SnapshotBackend,
-  type SnapshotCaptureProvenance,
   type SnapshotKeyboardBandFact,
-  snapshotStateProvenance,
-  type SnapshotState,
   type SnapshotViewportSize,
   type SnapshotQualityNote,
 } from '@agent-device/kernel/snapshot';
+import {
+  snapshotRefMinting,
+  type SnapshotBackend,
+  type SnapshotCaptureProvenance,
+  snapshotStateProvenance,
+  type SnapshotState,
+} from '@agent-device/contracts/snapshot';
 import {
   annotateCoveredSnapshotNodes,
   annotateSnapshotNodesCoveredByPolicy,

@@ -11,7 +11,11 @@ import {
   type RunnerResponsePayload,
 } from './runner-contract.ts';
 import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
-import { RUNNER_REPLY_LOST_REASON } from './runner-error-classification.ts';
+import {
+  RUNNER_REPLY_LOST_REASON,
+  shouldRetainRunnerSession,
+  shouldRecoverRunnerStatus,
+} from './runner-error-classification.ts';
 import {
   RUNNER_IN_FLIGHT_LIFECYCLE_STATES,
   settleRunnerChargeForTerminalStatus,
@@ -210,9 +214,13 @@ async function tryRecoverRunnerCommandAfterTransportError(
   options: AppleRunnerCommandOptions,
   signal?: AbortSignal,
 ): Promise<RunnerTransportRecovery> {
-  if (command.command === 'status' || !command.commandId?.trim()) {
+  if (
+    !shouldRecoverRunnerStatus(transportError) ||
+    command.command === 'status' ||
+    !command.commandId?.trim()
+  ) {
     return {
-      type: 'retainInvalidation',
+      type: shouldRetainRunnerSession(transportError) ? 'skipInvalidation' : 'retainInvalidation',
       reason: 'status_recovery_unavailable',
       lostReply: {
         recovery: 'status_recovery_unavailable',

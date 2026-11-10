@@ -73,6 +73,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     positionalArgs: ['status|release'],
     allowedFlags: ['stale'],
     supportedFlags: ['platform', 'device', 'udid', 'serial'],
+    explicitOnlyFlags: ['platform', 'device', 'udid', 'serial'],
   },
   connect: {
     text: {
@@ -151,7 +152,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     text: {
       summary: 'Start MCP server',
       description:
-        'Start the official stdio MCP server. It exposes structured command tools backed by the agent-device client.',
+        'Start the official stdio MCP server. It exposes structured command tools backed by the agent-device client. It accepts no flags or arguments other than --help and --version; configure it with AGENT_DEVICE_* environment variables or AGENT_DEVICE_CONFIG.',
     },
   },
   proxy: {

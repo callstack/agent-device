@@ -21,10 +21,10 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testSequenceAcceptsDoubleTapKind() {
+  func testSequenceAcceptsDoubleTapKind() throws {
     // A doubleTap step missing coords must fail on the coords check, not the kind allowlist —
     // proving "doubleTap" passes validateSequenceStep without needing a device to execute on.
-    let response = executeSequenceForTest(steps: [
+    let response = try executeSequenceForTest(steps: [
       sequenceStep(kind: "doubleTap", x: nil)
     ])
     XCTAssertEqual(response.ok, false)
@@ -35,7 +35,7 @@ extension RunnerTests {
 
   @MainActor
   func testSequenceRejectsUnknownKind() throws {
-    let response = executeSequenceForTest(steps: [
+    let response = try executeSequenceForTest(steps: [
       sequenceStep(kind: "tap", x: 1, y: 2),
       sequenceStep(kind: "pinch", x: 3, y: 4),
     ])
@@ -46,16 +46,16 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testSequenceRejectsEmpty() {
-    let response = executeSequenceForTest(steps: [])
+  func testSequenceRejectsEmpty() throws {
+    let response = try executeSequenceForTest(steps: [])
     XCTAssertEqual(response.ok, false)
     XCTAssertEqual(response.error?.code, "INVALID_ARGS")
   }
 
   @MainActor
-  func testSequenceRejectsTooManySteps() {
+  func testSequenceRejectsTooManySteps() throws {
     let steps = (0..<21).map { _ in sequenceStep(kind: "tap", x: 1, y: 2) }
-    let response = executeSequenceForTest(steps: steps)
+    let response = try executeSequenceForTest(steps: steps)
     XCTAssertEqual(response.ok, false)
     XCTAssertEqual(response.error?.code, "INVALID_ARGS")
     XCTAssertTrue(response.error?.message.contains("at most 20") ?? false)
@@ -156,9 +156,9 @@ extension RunnerTests {
   /// Validation runs before any executor call, so the INVALID_ARGS paths are exercised without
   /// reaching the device executor (which is never invoked when validation rejects).
   @MainActor
-  private func executeSequenceForTest(steps: [SequenceStep]) -> Response {
+  private func executeSequenceForTest(steps: [SequenceStep]) throws -> Response {
     let command = makeSequenceCommand(steps: steps)
-    return executeSequence(command: command, activeApp: app)
+    return try executeSequence(command: command, activeApp: app)
   }
 
   /// Build a sequence Command via JSON so the test does not depend on the memberwise init's
@@ -201,6 +201,42 @@ extension RunnerTests {
     XCTAssertEqual(response.data?.completedSteps, 1)
     XCTAssertNil(response.data?.failedStepIndex)
     XCTAssertEqual(response.data?.sequenceResults?.first?.ok, true)
+  }
+}
+#endif
+
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+extension RunnerTests {
+  /// The iOS backend sends coordinate taps as synthesized steps. Where neither a window nor the sole
+  /// screen gives that tap a context, its touch frame reads the app frame. On a tree XCTest cannot
+  /// snapshot that read is held, and the tap is synthesized without a touch frame, as the
+  /// synthesized `tap` command is.
+  @MainActor
+  func testSynthesizedTapSequenceWithoutASynthesisContextOnAnUnserializableTreeTapsWithoutARecordedIssue() throws {
+    app.launch()
+    mainOwned.app = app
+    let restoreDisplay = try simulateUnreadableDisplay()
+    let restoreXCTest = try simulateUnserializableAppTree()
+    defer {
+      restoreXCTest()
+      restoreDisplay()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    mainOwned.soleDisplayPortraitSize = nil
+    let sequence = try runnerCommandFixture(
+      #"{"command":"sequence","commandId":"synthesized-tap-sequence","steps":[{"kind":"tap","x":40,"y":40,"synthesized":true}]}"#
+    )
+    let failureCountBefore = currentXCTestFailureCount()
+
+    let response = try executeOnMainPrepared(command: sequence, activeApp: app)
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(response.data?.completedSteps, 1)
+    XCTAssertNil(response.data?.failedStepIndex)
+    XCTAssertEqual(response.data?.sequenceResults?.first?.ok, true)
+    XCTAssertEqual(RunnerCoordinateTapCounter.taps, 0)
   }
 }
 #endif

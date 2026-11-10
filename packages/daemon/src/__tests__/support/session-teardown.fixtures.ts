@@ -2,6 +2,7 @@ import path from 'node:path';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { webSessionDevice } from '@agent-device/kernel/device';
 import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import type { SessionStore } from '../../core/session-store.ts';
@@ -63,5 +64,6 @@ export function makeRecordingSession(params: {
 }
 
 export function makeWebSession(name: string): SessionState {
-  return { name, device: WEB_DESKTOP_DEVICE, createdAt: Date.now(), actions: [] };
+  const device = webSessionDevice(WEB_DESKTOP_DEVICE, { name });
+  return { name, device, createdAt: Date.now(), actions: [] };
 }

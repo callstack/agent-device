@@ -7,6 +7,7 @@
 import type { FillUnconfirmedVerification } from '@agent-device/contracts/fill-evidence';
 import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { ShellWord } from '@agent-device/kernel/device-shell';
 import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
@@ -45,6 +46,14 @@ import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
  */
 const ANDROID_INPUT_TEXT_CHUNK_SIZE = 8;
 
+function isAndroidBackspaceSequence(text: string): boolean {
+  if (text.length === 0) return false;
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) !== 0x08) return false;
+  }
+  return true;
+}
+
 export async function typeAndroid(device: DeviceInfo, text: string, delayMs = 0): Promise<void> {
   const providerText = resolveAndroidTextInjector(device);
   if (providerText) {
@@ -53,6 +62,11 @@ export async function typeAndroid(device: DeviceInfo, text: string, delayMs = 0)
     return;
   }
   const channel = await admitAndroidTextChannel(device, 'type', text);
+  if (isAndroidBackspaceSequence(text)) {
+    await deleteAndroidCharacters(device, text.length, delayMs);
+    emitAndroidTextDiagnostic('type', 'adb-shell', text);
+    return;
+  }
   if (channel.backend === 'test-ime') {
     await typeAndroidImeHelper(device, channel.packageName, text, delayMs);
     return;
@@ -234,7 +248,9 @@ async function admitAndroidTextChannel(
   if (isAndroidImeHelperPackage(packageName)) {
     return { backend: 'test-ime', packageName };
   }
-  assertAndroidShellTextSupported(text);
+  if (!(action === 'type' && isAndroidBackspaceSequence(text))) {
+    assertAndroidShellTextSupported(text);
+  }
   assertAndroidShellInputIsAppOwned(inputState, action);
   return { backend: 'adb-shell' };
 }
@@ -402,6 +418,41 @@ async function typeAndroidShellChunk(device: DeviceInfo, text: string): Promise<
       throw unsupportedAndroidShellTextError(text, error);
     }
     throw error;
+  }
+}
+
+async function deleteAndroidCharacters(
+  device: DeviceInfo,
+  count: number,
+  delayMs = 0,
+): Promise<void> {
+  const deletes = Math.max(0, count);
+  if (deletes === 0) return;
+  let dispatchedSteps = 0;
+  const dispatchKeyevent = async (words: readonly ShellWord[]) => {
+    try {
+      await runAndroidShell(device, words);
+    } catch (error) {
+      throw discloseAdbInputDispatch(error);
+    }
+  };
+  try {
+    if (delayMs > 0) {
+      for (let i = 0; i < deletes; i++) {
+        await dispatchKeyevent(['input', 'keyevent', 'KEYCODE_DEL']);
+        dispatchedSteps += 1;
+        if (i + 1 < deletes) await sleep(delayMs);
+      }
+      return;
+    }
+    const batchSize = 24;
+    for (let i = 0; i < deletes; i += batchSize) {
+      const size = Math.min(batchSize, deletes - i);
+      await dispatchKeyevent(['input', 'keyevent', ...Array(size).fill('KEYCODE_DEL')]);
+      dispatchedSteps += 1;
+    }
+  } catch (error) {
+    throw discloseDispatchAfterSteps(error, dispatchedSteps);
   }
 }
 

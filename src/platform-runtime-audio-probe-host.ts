@@ -63,11 +63,9 @@ export function createAudioProbeRuntimeHost(options: {
     web: Object.freeze({
       resolve: async (device: DeviceInfo): Promise<WebAudioProbeTransport | undefined> => {
         if (device.platform !== 'web') return undefined;
-        const { resolveWebProviderForHost } = await import('@agent-device/platform-web');
-        // Every reader of one web request resolves the same provider through the one policy
-        // (#3794).
-        const provider = await resolveWebProviderForHost(host);
-        const probeAudio = provider.probeAudio?.bind(provider);
+        const { resolveRequestScopedWebProvider } = await import('@agent-device/platform-web');
+        const provider = await resolveRequestScopedWebProvider();
+        const probeAudio = provider?.probeAudio?.bind(provider);
         if (!probeAudio) return undefined;
         return Object.freeze({
           probe: async (input) =>

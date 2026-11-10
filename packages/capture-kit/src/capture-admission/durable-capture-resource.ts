@@ -17,7 +17,10 @@ import type { LiveResourceHandle } from '@agent-device/contracts/durable-resourc
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DurableCaptureAdmissionLedger } from './durable-capture-admission-ledger.ts';
-import { createNextDurableCaptureFence } from './durable-capture-start-preflight.ts';
+import {
+  createNextDurableCaptureFence,
+  listDurableCaptureStartConflicts,
+} from './durable-capture-start-preflight.ts';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import type { DurableSessionResourceKind } from './durable-session-resource-kinds.ts';
 
@@ -100,6 +103,39 @@ export function createDurableCaptureResource<
     },
     recoverOne(params: SessionCaptureRecoveryParams<K, H, C>, resourcePath: string) {
       return recoverDurableCaptureResource(recoveryParams(params), resourcePath);
+    },
+    /**
+     * Finishes the records on `device` that would refuse a start at `resourcePath` and whose
+     * session the daemon no longer holds, as their own stop would, and runs exact-owner recovery
+     * only for a record that cannot finish. A held session's record belongs to its own stop or
+     * close. A record on another device is never recovered through the start device. A record
+     * left open still refuses.
+     */
+    async settleStartConflicts(
+      params: Omit<SessionCaptureRecoveryParams<K, H, C>, 'sessionsDir'> &
+        Readonly<{
+          resourcePath: string;
+          device: DeviceInfo;
+          holdsSession(sessionId: string): boolean;
+        }>,
+    ): Promise<void> {
+      const { resourcePath, device, holdsSession, ...recovery } = params;
+      const conflicts = listDurableCaptureStartConflicts(definition, resourcePath, device);
+      for (const record of conflicts.records) {
+        if (!record.onStartDevice || holdsSession(record.envelope.sessionId)) continue;
+        try {
+          await finishRecoveredDurableCapture(definition, {
+            resourcePath: record.resourcePath,
+            scope: recovery.scope,
+            acquireControl: recovery.acquireControl,
+          });
+        } catch {
+          await recoverDurableCaptureResource(
+            recoveryParams({ ...recovery, sessionsDir: conflicts.sessionsDir }),
+            record.resourcePath,
+          );
+        }
+      }
     },
   });
 }

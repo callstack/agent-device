@@ -92,6 +92,12 @@ if [ -n "$EXPECTED_RUNNER_BUNDLE_ID" ] && [ "$RUNNER_BUNDLE_ID" != "$EXPECTED_RU
 fi
 
 ditto "$RUNNER_APP_PATH" "$STAGED_APP_PATH"
+# Limrun hosts run XCTest with Xcode 27, which loads XCTest from its own platform directory. A runner
+# that embeds XCTest.framework comes from an older Xcode, and its test host crashes there.
+if [ -d "$STAGED_APP_PATH/Frameworks/XCTest.framework" ]; then
+  echo "The runner app embeds XCTest.framework. Build the simulator runner with Xcode 27 (set DEVELOPER_DIR to an Xcode 27 install): Limrun hosts load XCTest from their own Xcode 27, and an older embedded copy crashes the test host." >&2
+  exit 1
+fi
 rm -f "$ARCHIVE_PATH"
 (
   cd "$STAGE_DIR"

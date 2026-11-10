@@ -76,7 +76,7 @@ import {
   reapOwnedProcessRecordsAtStartup,
   type OwnerIdentity,
 } from '@agent-device/host-kit/process';
-import { isEnvTruthy, sleep } from '@agent-device/host-kit/retry';
+import { isEnvTruthy } from '@agent-device/host-kit/retry';
 import {
   parseIntegerEnv,
   readVersion,
@@ -268,6 +268,7 @@ async function startDaemonRuntimeOnHost(
     recoverExpiredLease: deps.recoverExpiredLease,
     stateDir: baseDir,
     recoverableProviderIds: deps.recoverableProviderIds,
+    withinDiagnosticsScope: async (run) => await withDaemonDiagnosticsScope({ logPath }, run),
   });
   rollback.onRollback(() => expiredProviderLeaseReleaser.shutdown());
   const leaseRegistry = new LeaseRegistry({
@@ -275,7 +276,7 @@ async function startDaemonRuntimeOnHost(
     defaultLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_TTL_MS),
     minLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MIN_TTL_MS),
     maxLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MAX_TTL_MS),
-    onLeaseExpired: (lease) => {
+    onLeaseExpired: (lease, reason) => {
       void expiredProviderLeaseReleaser.release(lease).then(
         (outcome) => {
           // A lease can expire after shutdown closed the releaser, and the sweep runs outside any
@@ -294,16 +295,27 @@ async function startDaemonRuntimeOnHost(
           }).catch(() => undefined);
         },
       );
-      void endSessionsForLease(lease.leaseId, 'LEASE_EXPIRED');
+      if (!reason) void endSessionsForLease(lease.leaseId, 'LEASE_EXPIRED');
     },
     onProviderLeasesChanged: (leases) => expiredProviderLeaseReleaser.recordLiveLeases(leases),
   });
   // The registry only notices an expired lease when something calls it; this sweep ends an
   // abandoned lease (and, through `onLeaseExpired`, its session and claim) without a later request.
-  const leaseExpirySweep = setInterval(
-    () => leaseRegistry.consumeExpiredLeases(),
-    LEASE_EXPIRY_SWEEP_INTERVAL_MS,
-  );
+  const leaseExpirySweep = setInterval(() => {
+    // The sweep runs outside any request, so the releases it starts report into a daemon scope.
+    void withDaemonDiagnosticsScope({ logPath }, () => {
+      try {
+        leaseRegistry.consumeExpiredLeases();
+      } catch (error) {
+        emitDiagnostic({
+          level: 'error',
+          phase: 'lease_expiry_sweep_failed',
+          data: { error: error instanceof Error ? error.message : String(error) },
+        });
+      }
+    }).catch(() => undefined);
+    void leaseSessionEnd.retryPending();
+  }, LEASE_EXPIRY_SWEEP_INTERVAL_MS);
   leaseExpirySweep.unref();
   rollback.onRollback(() => clearInterval(leaseExpirySweep));
   const dispatchRequest = createRequestHandler({
@@ -312,7 +324,8 @@ async function startDaemonRuntimeOnHost(
     token,
     sessionStore,
     leaseRegistry,
-    endSessionsForLease: async (leaseId) => await endSessionsForLease(leaseId, 'LEASE_RELEASED'),
+    endSessionsForLease: async (leaseId, reason) =>
+      await endSessionsForLease(leaseId, reason ?? 'LEASE_RELEASED'),
     appLogAdmissionLedger,
     audioProbeAdmissionLedger,
     perfCaptureAdmissionLedger,
@@ -420,6 +433,7 @@ async function startDaemonRuntimeOnHost(
     sessionStore,
     executionLocks: getLeaseRegistryExecutionLocks(leaseRegistry),
     teardownSession: settleIdleExpiredSession,
+    cleanupSessionlessExecutionHost: deps.platformResourceCleanup.cleanupSessionlessExecutionHost,
     withinDiagnosticsScope: async (run) => await withDaemonDiagnosticsScope({ logPath }, run),
   });
 
@@ -585,14 +599,16 @@ async function startDaemonRuntimeOnHost(
   });
   // Only the registered daemon may read the state directory's lease records and act on them. Loading and
   // adoption run before the first await, so their report reaches this startup's diagnostics.
-  void expiredProviderLeaseReleaser
-    .recoverInherited((diagnostic) => startupDiagnostics.push(diagnostic))
-    .catch((error) => {
-      // Startup has no request scope, so the failure goes to the daemon log directly.
-      void emitDaemonDiagnostic(logPath, 'provider_lease_startup_recovery_failed', {
-        error: error instanceof Error ? error.message : String(error),
-      }).catch(() => undefined);
-    });
+  void withDaemonDiagnosticsScope({ logPath }, async () => {
+    await expiredProviderLeaseReleaser.recoverInherited((diagnostic) =>
+      startupDiagnostics.push(diagnostic),
+    );
+  }).catch((error) => {
+    // Startup has no request scope, so the failure goes to the daemon log directly.
+    void emitDaemonDiagnostic(logPath, 'provider_lease_startup_recovery_failed', {
+      error: error instanceof Error ? error.message : String(error),
+    }).catch(() => undefined);
+  });
   await reapOwnedProcessRecordsAtStartup(deps.ownedProcessRecords, {
     openWebSessionNames: openWebSessionNames(sessionStore),
     purposes: ['simctl-screen-recording'],
@@ -606,11 +622,9 @@ async function startDaemonRuntimeOnHost(
   // Marker-gated lifecycle recovery owns test-IME orphan repair. Its implementation remains
   // lazy until the marker exists, so a normal daemon startup does not load or probe adb.
   void applicationLifecycle.recoverStartupResources({ stateDir: baseDir }).catch((error) => {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'daemon_lifecycle_startup_recovery_failed',
-      data: { error: error instanceof Error ? error.message : String(error) },
-    });
+    void emitDaemonDiagnostic(logPath, 'daemon_lifecycle_startup_recovery_failed', {
+      error: error instanceof Error ? error.message : String(error),
+    }).catch(() => undefined);
   });
   recordStartupPhase('recovery-finished');
   const { openDaemonServers, reconcileDeviceClaimsForDaemonStartup } =
@@ -751,39 +765,46 @@ async function startDaemonRuntimeOnHost(
       });
     } catch {}
     expiredProviderLeaseReleaser.beginShutdown();
-    const sessions = await teardownDaemonSessions();
-    const leaseFinalization = await withDaemonDiagnosticsScope({ logPath }, async () =>
-      finalizeDaemonLeases({
-        leaseRegistry,
-        expiredProviderLeaseReleaser,
-        timeoutMs: DAEMON_LEASE_RELEASE_TIMEOUT_MS,
-      }),
-    );
-    try {
-      await deps.ownerLifecycle.resetAndroidSnapshotHelper();
-    } catch (error) {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'daemon_shutdown_android_snapshot_helper_cleanup_failed',
-        data: { error: error instanceof Error ? error.message : String(error) },
-      });
-    }
-    const providerReleaseDrain = await expiredProviderLeaseReleaser.drain(
-      DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS,
-    );
-    emitDiagnostic({
-      level: providerReleaseDrain.pending.length === 0 ? 'info' : 'warn',
-      phase: 'daemon_shutdown_provider_release_drain',
-      data: {
-        releasedLeaseIds: providerReleaseDrain.released.map((lease) => lease.leaseId),
-        pendingLeaseIds: providerReleaseDrain.pending.map((lease) => lease.leaseId),
-        // The drain only sees work it still holds, so the refusals the finalizer was given are reported
-        // here as well: they are leases this daemon will not end, and this is the shutdown's one summary.
-        refusedLeaseIds: [...leaseFinalization.refused],
-        releasedDeviceKeys: shutdownClaimLedger.claims.released.map((claim) => claim.deviceKey),
-        orphanedDeviceKeys: shutdownClaimLedger.claims.orphaned.map((claim) => claim.deviceKey),
+    // Session teardown, lease finalization and the release drain run outside any request, so they
+    // share one daemon scope; without it every claim, lease and drain diagnostic here is dropped.
+    const { sessions, providerReleaseDrain } = await withDaemonDiagnosticsScope(
+      { logPath },
+      async () => {
+        const tornDown = await teardownDaemonSessions();
+        const leaseFinalization = await finalizeDaemonLeases({
+          leaseRegistry,
+          expiredProviderLeaseReleaser,
+          timeoutMs: DAEMON_LEASE_RELEASE_TIMEOUT_MS,
+        });
+        try {
+          await deps.ownerLifecycle.resetAndroidSnapshotHelper();
+        } catch (error) {
+          emitDiagnostic({
+            level: 'warn',
+            phase: 'daemon_shutdown_android_snapshot_helper_cleanup_failed',
+            data: { error: error instanceof Error ? error.message : String(error) },
+          });
+        }
+        const drain = await expiredProviderLeaseReleaser.drain(
+          DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS,
+        );
+        emitDiagnostic({
+          level: drain.pending.length === 0 ? 'info' : 'warn',
+          phase: 'daemon_shutdown_provider_release_drain',
+          data: {
+            releasedLeaseIds: drain.released.map((lease) => lease.leaseId),
+            pendingLeaseIds: drain.pending.map((lease) => lease.leaseId),
+            // The drain only sees work it still holds, so the refusals the finalizer was given are
+            // reported here as well: they are leases this daemon will not end, and this is the
+            // shutdown's one summary.
+            refusedLeaseIds: [...leaseFinalization.refused],
+            releasedDeviceKeys: shutdownClaimLedger.claims.released.map((claim) => claim.deviceKey),
+            orphanedDeviceKeys: shutdownClaimLedger.claims.orphaned.map((claim) => claim.deviceKey),
+          },
+        });
+        return { sessions: tornDown, providerReleaseDrain: drain };
       },
-    });
+    );
     expiredProviderLeaseReleaser.shutdown();
     const ownerClose = await settleWithinBudget(
       () => withDaemonDiagnosticsScope({ logPath }, () => deviceRuntimeGateway.shutdown()),
@@ -838,10 +859,10 @@ async function startDaemonRuntimeOnHost(
       return report;
     } finally {
       await Promise.allSettled([
-        Promise.race([
-          Promise.resolve().then(releasePngWorker),
-          sleep(DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
-        ]),
+        settleWithinBudget(
+          async () => await releasePngWorker(),
+          DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS,
+        ),
         Promise.resolve().then(() => pluginClose.close()),
       ]);
       await Promise.allSettled([

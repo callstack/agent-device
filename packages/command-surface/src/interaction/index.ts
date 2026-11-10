@@ -75,11 +75,11 @@ const interactionEvidenceSchema: JsonSchema = objectSchema(
     interactiveNodeCount: numberSchema('Subset of nodeCount the platform reports as hittable.'),
     digest: stringSchema('Order-independent digest of the post-action node multiset.'),
     changedFromBefore: booleanSchema(
-      'Whether the post-action digest differs from the pre-action capture digest. false is evidence, not failure. With surfaceChange present, no digest comparison is made: it reports that surface transition.',
+      'Whether the post-action digest differs from the pre-action capture digest. false is evidence, not failure. Absent when no pre-action baseline was captured, so no comparison is claimed. With surfaceChange present, no digest comparison is made: it reports that surface transition.',
     ),
     surfaceChange: postActionSurfaceChangeSchema,
   },
-  ['nodeCount', 'interactiveNodeCount', 'digest', 'changedFromBefore'],
+  ['nodeCount', 'interactiveNodeCount', 'digest'],
 );
 
 const responseCostSchema: JsonSchema = objectSchema(
@@ -403,7 +403,7 @@ const interactionCliSchemas = {
     // Arity is enforced by swipePayloadFromPositionals (assertGestureArity), so
     // an extra positional reaches that migration-hint error, not this schema's.
     allowsExtraPositionals: true,
-    allowedFlags: ['count', 'pauseMs', 'pattern'],
+    allowedFlags: ['count', 'pauseMs', 'pattern', 'postGestureStabilization'],
   },
   gesture: {
     usageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform|tap|drag> ...',
@@ -446,6 +446,7 @@ const interactionCliSchemas = {
       'until',
       'maxPasses',
       ...postActionObservationCliFlags('scroll'),
+      'postGestureStabilization',
     ],
   },
 } as const satisfies Record<string, CommandSchemaOverride>;
@@ -523,6 +524,8 @@ const swipeCommandFacet = defineCommandFacet({
   name: 'swipe',
   text: {
     summary: 'Fling between coordinates',
+    cliDetail:
+      'The first read after a swipe waits for two captures to agree. --no-post-gesture-stabilization skips that wait for a caller whose own polling verifies the screen.',
   },
   metadata: metadata('swipe'),
   run: (client, input) => client.interactions.swipe(input as SwipeOptions),
@@ -559,6 +562,8 @@ const scrollCommandFacet = defineCommandFacet({
   name: 'scroll',
   text: {
     summary: 'Scroll in a direction or to an edge',
+    cliDetail:
+      'A caller that verifies the screen by polling can add --no-post-gesture-stabilization. The scroll then returns right after its gesture, with no movement field and no scroll_no_progress refusal, and the next read skips the stabilization wait. With --settle the settle observation already reports the outcome, and the option removes the same wait from its first capture.',
   },
   metadata: metadata('scroll'),
   run: (client, input) => client.interactions.scroll(input as ScrollOptions),
@@ -608,11 +613,15 @@ const gestureCommandFacet = defineCommandFacet({
   text: {
     summary: 'Run pan, fling, swipe, pinch, rotate, transform, tap, or drag gestures',
     cliDetail:
-      'Argument shapes: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], tap <x1> <y1> <x2> <y2> [... <x5> <y5>] [--hold-ms <ms>] [--count <n>] [--pause-ms <ms>], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
+      'Argument shapes: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], tap <x1> <y1> <x2> <y2> [... <x5> <y5>] [--hold-ms <ms>] [--count <n>] [--pause-ms <ms>], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values. gesture swipe accepts --no-post-gesture-stabilization to skip the stabilization wait before the next read, for a caller whose own polling verifies the screen.',
   },
   metadata: metadata('gesture'),
   run: (client, input) =>
-    client.interactions.gesture({ ...readGesturePayload(input), ...commonToClientOptions(input) }),
+    client.interactions.gesture({
+      ...readGesturePayload(input),
+      ...commonToClientOptions(input),
+      ...(input.postGestureStabilization === false ? { postGestureStabilization: false } : {}),
+    }),
   cliSchema: interactionCliSchemas.gesture,
   cliReader: gestureCliReaders.gesture,
   daemonWriter: gestureDaemonWriters.gesture,

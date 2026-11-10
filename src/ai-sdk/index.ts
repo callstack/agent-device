@@ -93,7 +93,8 @@ export async function createAgentDeviceTools(
     session,
     ...(platform ? { lockPlatform: platform } : {}),
   });
-  const executor = createCommandToolExecutor();
+  // `execute` below returns structuredContent, so every tool must produce it.
+  const executor = createCommandToolExecutor({ structuredContent: 'always' });
 
   const hiddenFields = new Set<string>(ALWAYS_HIDDEN_FIELDS);
   if (platform) hiddenFields.add('platform');
@@ -110,7 +111,7 @@ export async function createAgentDeviceTools(
       ...(definition.outputSchema
         ? { outputSchema: jsonSchema(definition.outputSchema as unknown as Json7Schema) }
         : {}),
-      execute: async (input) => {
+      execute: async (input, { abortSignal }) => {
         // Strip hidden fields from the model's input too, not just the schema
         // it was generated from: `additionalProperties: false` should already
         // reject an out-of-schema field, but the pinned session/state-dir
@@ -120,7 +121,9 @@ export async function createAgentDeviceTools(
           session,
           ...(platform ? { platform } : {}),
         };
-        const result = await executor.execute(definition.name, filledInput);
+        const result = await executor.execute(definition.name, filledInput, {
+          signal: abortSignal,
+        });
         if (result.isError) {
           // command-tools.ts's executor already normalizes a caught error into
           // this exact shape as `structuredContent` (ADR 0012) — reuse it

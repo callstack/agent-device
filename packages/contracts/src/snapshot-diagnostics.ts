@@ -1,4 +1,4 @@
-import type { SnapshotBackend } from '@agent-device/kernel/snapshot';
+import type { SnapshotBackend, SnapshotProvenance } from '@agent-device/contracts/snapshot-model';
 import type { PublicPlatform } from '@agent-device/kernel/device';
 import { isRecord } from './json.ts';
 
@@ -13,6 +13,8 @@ const MIN_SLOW_WARM_SAMPLES = 2;
 export type SnapshotTimingSample = {
   durationMs: number;
   backend?: SnapshotBackend;
+  /** The acquisition that served the capture: one channel, such as `xctest`, has several. */
+  producer?: SnapshotProvenance['producer'];
   // approach (b): the PUBLIC leaf platform (ios/macos) surfaced in snapshotDiagnostics, never `apple`.
   platform?: PublicPlatform;
 };
@@ -24,6 +26,10 @@ export type SnapshotTimingStats = {
   maxMs: number;
   slowThresholdMs: number;
   platform?: PublicPlatform;
+  /**
+   * Captures per producer that served them, keyed by producer id such as `simulator-ax-bridge` or
+   * `apple-runner`. A capture with no known producer counts under its channel, such as `xctest`.
+   */
   backends?: Record<string, number>;
 };
 
@@ -90,7 +96,8 @@ export function mergeSnapshotDiagnostics(
   );
   const samples = present.flatMap((summary) => samplesFromStats(summary.stats));
   if (samples.length === 0) return undefined;
-  const stats = buildSnapshotTimingStats(samples);
+  // Reconstructed samples carry no producer, so the counts come from each run's own map.
+  const stats = { ...buildSnapshotTimingStats(samples), ...mergedBackendCounts(present) };
   // Reconstructed samples are lossy and order-less (a run's cold start comes
   // back as both its p95 and its max), so only layers holding ordered live
   // samples judge slowness; merge aggregates display stats and carries a
@@ -136,6 +143,18 @@ function buildSnapshotTimingStats(samples: SnapshotTimingSample[]): SnapshotTimi
   };
 }
 
+function mergedBackendCounts(
+  summaries: SnapshotDiagnosticsSummary[],
+): Pick<SnapshotTimingStats, 'backends'> {
+  const backends: Record<string, number> = {};
+  for (const [served, count] of summaries.flatMap((summary) =>
+    Object.entries(summary.stats.backends ?? {}),
+  )) {
+    backends[served] = (backends[served] ?? 0) + count;
+  }
+  return Object.keys(backends).length > 0 ? { backends } : {};
+}
+
 function percentileNearestRank(values: number[], percentile: number): number {
   if (values.length === 0) return 0;
   const index = Math.max(0, Math.ceil((percentile / 100) * values.length) - 1);
@@ -153,8 +172,9 @@ function singlePlatform(samples: SnapshotTimingSample[]): Pick<SnapshotTimingSta
 function backendCounts(samples: SnapshotTimingSample[]): Pick<SnapshotTimingStats, 'backends'> {
   const backends: Record<string, number> = {};
   for (const sample of samples) {
-    if (!sample.backend) continue;
-    backends[sample.backend] = (backends[sample.backend] ?? 0) + 1;
+    const served = sample.producer ?? sample.backend;
+    if (!served) continue;
+    backends[served] = (backends[served] ?? 0) + 1;
   }
   return Object.keys(backends).length > 0 ? { backends } : {};
 }

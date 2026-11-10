@@ -1,3 +1,6 @@
+import { assertScreenshotCaptureSupport } from '@agent-device/contracts/screenshot-runtime';
+import { appleScreenshotCaptureCapabilities } from './screenshot-support.ts';
+import { hasScopedAppleToolProvider } from './core/tool-provider.ts';
 import { closeIosApp, openIosApp, openIosDevice } from './core/app-launch.ts';
 import { readIosClipboardText, writeIosClipboardText } from './core/app-device-io.ts';
 import { readIosSetting, setIosSetting } from './core/app-settings.ts';
@@ -23,6 +26,7 @@ import {
 } from '@agent-device/contracts/session';
 import { DEVICE_ROTATIONS, type DeviceRotation } from '@agent-device/contracts/device';
 import { normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
+import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producers';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -92,10 +96,17 @@ export function createAppleInteractor(
         env,
       ),
     snapshot: async (options) =>
-      await captureAppleSnapshot(device, options, runnerOpts, helperSurface(options?.surface), env),
+      await captureAppleSnapshot(
+        device,
+        { ...options, appBundleId: options?.appBundleId ?? runnerContext.appBundleId },
+        runnerOpts,
+        helperSurface(options?.surface),
+        env,
+      ),
     // The live text at a point: helper for a helper-routed macOS surface, XCTest runner for
     // every other Apple leaf.
-    readTextAtPoint: async (point, options) => {
+    readTextAtPoint: async (point, input) => {
+      const options = { ...input, appBundleId: input?.appBundleId ?? runnerContext.appBundleId };
       const helper = helperSurface(options?.surface);
       return helper
         ? await readMacOsSurfaceTextAtPoint(
@@ -113,7 +124,11 @@ export function createAppleInteractor(
     findText: async (text, options) => {
       const result = (await runAppleRunnerCommand(
         device,
-        { command: 'findText', text, appBundleId: options?.appBundleId },
+        {
+          command: 'findText',
+          text,
+          appBundleId: options?.appBundleId ?? runnerContext.appBundleId,
+        },
         options?.signal ? { ...runnerOpts, signal: options.signal } : runnerOpts,
       )) as { found?: boolean };
       return { found: result?.found === true };
@@ -233,10 +248,36 @@ export function createAppleInteractor(
     setSetting: (setting, state, appId, options) =>
       setIosSetting(device, setting, state, appId, options, env, runnerOpts.signal),
     readSetting: (setting) => readIosSetting(device, setting),
-    readAlert: (options) => readAppleAlert(device, runnerOpts, options, env),
-    awaitAlert: (options) => awaitAppleAlert(device, runnerOpts, options, env),
-    acceptAlert: (options) => actOnAppleAlert(device, runnerOpts, 'accept', options, env),
-    dismissAlert: (options) => actOnAppleAlert(device, runnerOpts, 'dismiss', options, env),
+    readAlert: (options) =>
+      readAppleAlert(
+        device,
+        runnerOpts,
+        { ...options, appBundleId: options?.appBundleId ?? runnerContext.appBundleId },
+        env,
+      ),
+    awaitAlert: (options) =>
+      awaitAppleAlert(
+        device,
+        runnerOpts,
+        { ...options, appBundleId: options?.appBundleId ?? runnerContext.appBundleId },
+        env,
+      ),
+    acceptAlert: (options) =>
+      actOnAppleAlert(
+        device,
+        runnerOpts,
+        'accept',
+        { ...options, appBundleId: options?.appBundleId ?? runnerContext.appBundleId },
+        env,
+      ),
+    dismissAlert: (options) =>
+      actOnAppleAlert(
+        device,
+        runnerOpts,
+        'dismiss',
+        { ...options, appBundleId: options?.appBundleId ?? runnerContext.appBundleId },
+        env,
+      ),
     ...overrides,
   };
   const served =
@@ -286,21 +327,22 @@ async function captureAppleRunnerSnapshot(
   assertReportedRunnerSnapshotNodes(device, options, result);
   const warnings = runnerSnapshotWarnings(result);
   const presentation = presentRunnerSnapshotForDevice(device, options, result);
-  return {
-    nodes: presentation.nodes,
-    truncated: result.truncated ?? false,
-    backend: 'xctest' as const,
-    producer: 'apple-runner' as const,
-    ...(presentation.viewport ? { viewport: presentation.viewport } : {}),
-    ...(result.quality ? { quality: result.quality } : {}),
-    ...(result.qualityNotes ? { qualityNotes: result.qualityNotes } : {}),
-    ...(result.systemSurface ? { systemSurface: result.systemSurface } : {}),
-    ...(result.presentedSurface ? { presentedSurface: result.presentedSurface } : {}),
-    ...(result.keyboard ? { keyboard: result.keyboard } : {}),
-    ...(result.targetActivation ? { targetActivation: result.targetActivation } : {}),
-    ...(result.observation ? { observation: result.observation } : {}),
-    ...(warnings.length > 0 ? { warnings } : {}),
-  };
+  return stampSnapshotIdentity(
+    {
+      nodes: presentation.nodes,
+      truncated: result.truncated ?? false,
+      ...(presentation.viewport ? { viewport: presentation.viewport } : {}),
+      ...(result.quality ? { quality: result.quality } : {}),
+      ...(result.qualityNotes ? { qualityNotes: result.qualityNotes } : {}),
+      ...(result.systemSurface ? { systemSurface: result.systemSurface } : {}),
+      ...(result.presentedSurface ? { presentedSurface: result.presentedSurface } : {}),
+      ...(result.keyboard ? { keyboard: result.keyboard } : {}),
+      ...(result.targetActivation ? { targetActivation: result.targetActivation } : {}),
+      ...(result.observation ? { observation: result.observation } : {}),
+      ...(warnings.length > 0 ? { warnings } : {}),
+    },
+    { backend: 'xctest', producer: 'apple-runner' },
+  );
 }
 
 function runnerSnapshotCommand(options: SnapshotOptions | undefined): RunnerCommand {
@@ -342,7 +384,10 @@ function assertReportedRunnerSnapshotNodes(
   if ((result.nodes?.length ?? 0) > 0) return;
   if (acceptsEmptyScopedSnapshot(options, result)) return;
   if (device.kind !== 'simulator') return;
-  throw new AppError('COMMAND_FAILED', 'XCTest snapshot returned 0 nodes on iOS simulator.');
+  throw new AppError('COMMAND_FAILED', 'XCTest snapshot returned 0 nodes on iOS simulator.', {
+    reason: 'empty-snapshot',
+    ...(result.quality ? { snapshotQuality: result.quality } : {}),
+  });
 }
 
 /**
@@ -446,8 +491,7 @@ function readRunnerOrientation(result: Record<string, unknown>): DeviceRotation 
  * composed OUTSIDE a daemon request (on daemon requests the request-boundary
  * `appleRunnerProvider` resolver scopes the same transport around everything):
  * runner-command methods run inside the provider scope, while methods backed
- * by local Apple tooling (simctl/devicectl) have no provider-neutral transport
- * and fail fast until the provider session composes its own on top.
+ * by Apple tooling require a scoped tool provider so remote execution cannot reach local tools.
  */
 function withInjectedAppleRunnerTransport(
   device: DeviceInfo,
@@ -458,13 +502,34 @@ function withInjectedAppleRunnerTransport(
 ): Interactor {
   const providerInteractor: Interactor = {
     ...interactor,
-    open: async () => rejectLocalAppleToolMethod('open'),
-    openDevice: async () => rejectLocalAppleToolMethod('openDevice'),
-    close: async () => rejectLocalAppleToolMethod('close'),
-    screenshot: async () => rejectLocalAppleToolMethod('screenshot'),
-    readClipboard: async () => rejectLocalAppleToolMethod('readClipboard'),
-    setSetting: async () => rejectLocalAppleToolMethod('setSetting'),
-    readSetting: async () => rejectLocalAppleToolMethod('readSetting'),
+    open: async (...args) => {
+      if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('open');
+      return await interactor.open!(...args);
+    },
+    openDevice: async (...args) => {
+      if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('openDevice');
+      return await interactor.openDevice!(...args);
+    },
+    close: async (...args) => {
+      if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('close');
+      return await interactor.close!(...args);
+    },
+    screenshot: async (...args) => {
+      if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('screenshot');
+      return await interactor.screenshot!(...args);
+    },
+    readClipboard: async (...args) => {
+      if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('readClipboard');
+      return await interactor.readClipboard!(...args);
+    },
+    setSetting: async (...args) => {
+      if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('setSetting');
+      return await interactor.setSetting!(...args);
+    },
+    readSetting: async (...args) => {
+      if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('readSetting');
+      return await interactor.readSetting!(...args);
+    },
     // The foldable probe and HID dispatch use local tooling; a provider device keeps the runner.
     setOrientation: async (orientation) =>
       await setRunnerOrientation(device, orientation, runnerContext, runnerOpts),
@@ -493,6 +558,10 @@ async function runAppleScreenshot(
   helper: MacOsHelperSurface | undefined,
   env: Readonly<EnvMap>,
 ): Promise<ScreenshotCaptureFacts> {
+  await assertScreenshotCaptureSupport(
+    options,
+    appleScreenshotCaptureCapabilities(device, options, helper),
+  );
   if (helper) {
     if (options.fullscreen) {
       throw new AppError(
@@ -530,6 +599,7 @@ async function runAppleScreenshot(
     env,
     appBundleId: options.appBundleId,
     pixelDensity: options.pixelDensity,
+    screenMask: options.screenMask,
     fullscreen: options.fullscreen,
     runnerOptions: runnerOpts,
     normalizeStatusBar: options.normalizeStatusBar,

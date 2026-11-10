@@ -82,6 +82,7 @@ export function deviceClaimConflictError(
         ? `The recorded owner can no longer release this device; settle its resources and release the claim with: ${recoveryCommand}`
         : `Inspect the owner with: ${recoveryCommand}`,
       retriable: false,
+      dispatched: 'no',
     },
   );
 }

@@ -18,6 +18,19 @@ export type BoundContextFromFlags = (
   traceLogPath?: string,
 ) => DaemonCommandContext;
 
+/**
+ * The directory a relative path argument of this request resolves against: the caller's cwd, or
+ * the daemon's own cwd when the client sent none. One daemon serves several workspaces. The RPC
+ * schema validates `meta` only as an object, so a non-string `cwd` falls back to the daemon's.
+ */
+export function requestCwd(
+  req: Pick<DaemonRequest, 'meta'>,
+  host: Readonly<{ cwd: string }>,
+): string {
+  const cwd: unknown = req.meta?.cwd;
+  return typeof cwd === 'string' ? cwd : host.cwd;
+}
+
 // The pass-through flags come from their one declaration
 // (`DISPATCH_CONTEXT_FLAG_KEYS`); what stays written out here is what this
 // mapper actually decides — the request-scope fields, and the three flag
@@ -39,7 +52,7 @@ export function contextFromFlags(
     logPath,
     traceLogPath,
     ...dispatchContextFlags(flags),
-    screenshotCaptureBackend: flags?.maestro?.screenshotCaptureBackend,
+    preferredScreenshotCaptureBackend: flags?.maestro?.screenshotCaptureBackend,
     ...screenshotFlagsFromOptions(flags),
     clickButton: resolveClickButton(flags),
   };

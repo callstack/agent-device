@@ -5,8 +5,16 @@ import { listCommandMetadata } from '@agent-device/command-surface';
 import { getFlagDefinitions } from '@agent-device/command-registry/flag-registry';
 import { walkFiles } from './lib/walk-files.ts';
 
-const EMPTY_COVERAGE_METRIC = { pct: 0 };
-const EMPTY_STATEMENT_COVERAGE = { covered: 0, pct: 0, total: 0 };
+type CoverageMetricKey = 'statements' | 'branches' | 'functions' | 'lines';
+type CoverageMetric = { covered?: number; pct?: number; total?: number };
+/** One entry of Istanbul's `json-summary` report: `total` or a file path. */
+type CoverageSummaryEntry = Partial<Record<CoverageMetricKey, CoverageMetric>>;
+type CoverageSummaryJson = Record<string, CoverageSummaryEntry>;
+
+export type IntegrationProgressModel = ReturnType<typeof buildIntegrationProgressModel>;
+
+const EMPTY_COVERAGE_METRIC: CoverageMetric = { pct: 0 };
+const EMPTY_STATEMENT_COVERAGE: CoverageMetric = { covered: 0, pct: 0, total: 0 };
 
 export function buildIntegrationProgressModel({ root = process.cwd() } = {}) {
   const coverageSummary = path.join(root, 'coverage/coverage-summary.json');
@@ -113,8 +121,13 @@ export function buildIntegrationProgressModel({ root = process.cwd() } = {}) {
   };
 }
 
-export function buildIntegrationProgressFailures(progress) {
-  const failures = [];
+export function buildIntegrationProgressFailures(
+  progress: Pick<
+    IntegrationProgressModel,
+    'missingPublicCommands' | 'missingFlagRows' | 'unclassifiedFlagKeys'
+  >,
+): string[] {
+  const failures: string[] = [];
   if (progress.missingPublicCommands.length > 0) {
     failures.push(
       `missing Provider-backed integration command coverage: ${progress.missingPublicCommands.map((row) => row.command).join(', ')}`,
@@ -131,8 +144,8 @@ export function buildIntegrationProgressFailures(progress) {
   return failures;
 }
 
-function summarizeProviderScenarioFlagCoverage(files) {
-  const flagTargets = [
+function summarizeProviderScenarioFlagCoverage(files: readonly string[]) {
+  const flagTargets: [key: string, reason: string, aliases?: string[]][] = [
     ['platform', 'selection across platform-specific provider-backed integration flows'],
     ['target', 'target-class routing such as tv/mobile/desktop'],
     ['device', 'human-readable device selection'],
@@ -203,6 +216,7 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['verify', 'descriptor post-action evidence capture'],
     ['settle', 'descriptor post-action settled-diff observation'],
     ['settleQuietMs', 'settle quiet-window tuning'],
+    ['postGestureStabilization', 'scroll movement check and stabilization wait opt-out'],
   ];
   const sources = files.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
   return flagTargets.map(([key, reason, aliases = []]) => {
@@ -214,7 +228,7 @@ function summarizeProviderScenarioFlagCoverage(files) {
   });
 }
 
-function countFlagReferences(text, key) {
+function countFlagReferences(text: string, key: string): number {
   const escaped = key.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
   return text.match(new RegExp(`\\b${escaped}\\s*:`, 'g'))?.length ?? 0;
 }
@@ -255,7 +269,7 @@ function summarizeProviderScenarioFlagExclusions() {
       // The device spec is honoured by a backend in front of the daemon; the daemon only refuses it.
       name: 'proxy lease device spec',
       owner: 'proxy allocate-by-spec, request-router refusal, and lease-scope tests',
-      keys: ['osVersion', 'imageTag', 'physical'],
+      keys: ['osVersion', 'imageTag', 'deviceMode', 'physical'],
     },
     {
       name: 'cloud artifact provider lookup',
@@ -378,9 +392,15 @@ function summarizeProviderScenarioFlagExclusions() {
       keys: ['waitMs'],
     },
     {
+      // A provider scenario has no XCTest runner capture to select, so these stay on the owner's tests.
       name: 'Apple simulator screenshot rendering options',
       owner: 'iOS platform and screenshot-diff runtime tests',
-      keys: ['screenshotNormalizeStatusBar', 'screenshotPixelDensity'],
+      keys: [
+        'screenshotNormalizeStatusBar',
+        'screenshotPixelDensity',
+        'screenshotScreenMask',
+        'screenshotCaptureBackend',
+      ],
     },
     {
       // Reading accessibility custom actions has no provider-scenario surface:
@@ -420,7 +440,7 @@ function readPublicCliFlagKeys() {
   );
 }
 
-function isCommandContractSource(file) {
+function isCommandContractSource(file: string): boolean {
   return (
     file.endsWith('.ts') &&
     !file.endsWith('.test.ts') &&
@@ -428,7 +448,7 @@ function isCommandContractSource(file) {
   );
 }
 
-function summarizeFiles(files) {
+function summarizeFiles(files: readonly string[]) {
   let lines = 0;
   let tests = 0;
   for (const file of files) {
@@ -439,7 +459,7 @@ function summarizeFiles(files) {
   return { files: files.length, lines, tests };
 }
 
-function summarizeMockHeavyHandlerFiles(root, files) {
+function summarizeMockHeavyHandlerFiles(root: string, files: readonly string[]) {
   return files
     .map((file) => {
       const text = fs.readFileSync(file, 'utf8');
@@ -453,7 +473,7 @@ function summarizeMockHeavyHandlerFiles(root, files) {
     .slice(0, 12);
 }
 
-function summarizeProviderPressure(files) {
+function summarizeProviderPressure(files: readonly string[]) {
   const surfaces = [
     {
       name: 'Android ADB provider',
@@ -540,7 +560,7 @@ function buildAppleGenericHostToolPattern(): RegExp {
   );
 }
 
-function countSurfaceReferences(files, pattern) {
+function countSurfaceReferences(files: readonly string[], pattern: RegExp) {
   let references = 0;
   let filesWithReferences = 0;
   for (const file of files) {
@@ -551,11 +571,14 @@ function countSurfaceReferences(files, pattern) {
   return { references, files: filesWithReferences };
 }
 
-function countPatternReferences(text, pattern) {
+function countPatternReferences(text: string, pattern: RegExp): number {
   return text.match(pattern)?.length ?? 0;
 }
 
-function summarizePublicCommandCoverage(files, clientCommandMethods) {
+function summarizePublicCommandCoverage(
+  files: readonly string[],
+  clientCommandMethods: ReadonlyMap<string, string>,
+) {
   const publicCommands = readPublicCommands();
   const commandRefsByFile = files.map((file) => ({
     file,
@@ -589,8 +612,8 @@ function readPublicCommands() {
     .sort();
 }
 
-function readClientCommandMethods(commandContractFiles) {
-  const commands = new Map();
+function readClientCommandMethods(commandContractFiles: readonly string[]): Map<string, string> {
+  const commands = new Map<string, string>();
   for (const file of commandContractFiles) {
     const text = fs.readFileSync(file, 'utf8');
     for (const block of readCommandContractBlocks(text)) {
@@ -604,12 +627,13 @@ function readClientCommandMethods(commandContractFiles) {
   return commands;
 }
 
-function readCommandContractBlocks(text) {
-  const constants = new Map();
+function readCommandContractBlocks(text: string): { name: string; source: string }[] {
+  const constants = new Map<string, string>();
   for (const match of text.matchAll(/\bconst\s+([A-Z0-9_]+)\s*=\s*['"]([^'"]+)['"]/g)) {
-    constants.set(match[1], match[2]);
+    constants.set(match[1]!, match[2]!);
   }
-  const nameOf = (token) => token.match(/^['"]([^'"]+)['"]$/)?.[1] ?? constants.get(token);
+  const nameOf = (token: string): string | undefined =>
+    token.match(/^['"]([^'"]+)['"]$/)?.[1] ?? constants.get(token);
 
   const starts = [
     ...text.matchAll(
@@ -619,7 +643,7 @@ function readCommandContractBlocks(text) {
     ...text.matchAll(/defineCommand\(\s*\{[\s\S]*?\bname:\s*(['"][^'"]+['"])/g),
   ]
     .flatMap((match) => {
-      const name = nameOf(match[1]);
+      const name = nameOf(match[1]!);
       return name ? [{ index: match.index ?? 0, name }] : [];
     })
     .sort((a, b) => a.index - b.index);
@@ -633,25 +657,32 @@ function readCommandContractBlocks(text) {
   });
 }
 
-function extractProviderScenarioCommandReferences(text, clientCommandMethods) {
+function extractProviderScenarioCommandReferences(
+  text: string,
+  clientCommandMethods: ReadonlyMap<string, string>,
+): string[] {
   return [
     ...extractLiteralCommandReferences(text),
     ...extractClientCommandReferences(text, clientCommandMethods),
   ];
 }
 
-function extractLiteralCommandReferences(text) {
-  const commands = [];
+function extractLiteralCommandReferences(text: string): string[] {
+  const commands: string[] = [];
   for (const match of text.matchAll(
     /\bcommand:\s*['"]([^'"]+)['"]|\.callCommand\(\s*['"]([^'"]+)['"]/g,
   )) {
-    commands.push(match[1] ?? match[2]);
+    const command = match[1] ?? match[2];
+    if (command) commands.push(command);
   }
   return commands;
 }
 
-function extractClientCommandReferences(text, clientCommandMethods) {
-  const commands = [];
+function extractClientCommandReferences(
+  text: string,
+  clientCommandMethods: ReadonlyMap<string, string>,
+): string[] {
+  const commands: string[] = [];
   for (const [method, command] of clientCommandMethods) {
     const escapedMethod = method.replace('.', String.raw`\.`);
     const matches = countPatternReferences(text, new RegExp(`\\.${escapedMethod}\\s*\\(`, 'g'));
@@ -660,11 +691,11 @@ function extractClientCommandReferences(text, clientCommandMethods) {
   return commands;
 }
 
-function countTestDeclarations(text) {
+function countTestDeclarations(text: string): number {
   return [...text.matchAll(/(?:^|[^\w.])test\(/g)].length;
 }
 
-function readCoverageSummary(coverageSummary) {
+function readCoverageSummary(coverageSummary: string) {
   const total = readCoverageSummaryJson(coverageSummary)?.total;
   if (!total) return null;
   return {
@@ -675,7 +706,7 @@ function readCoverageSummary(coverageSummary) {
   };
 }
 
-function readLowCoverageFiles(root, coverageSummary) {
+function readLowCoverageFiles(root: string, coverageSummary: string) {
   const summary = readCoverageSummaryJson(coverageSummary);
   if (!summary) return [];
   return Object.entries(summary)
@@ -686,16 +717,16 @@ function readLowCoverageFiles(root, coverageSummary) {
     .slice(0, 10);
 }
 
-function readCoverageSummaryJson(coverageSummary) {
+function readCoverageSummaryJson(coverageSummary: string): CoverageSummaryJson | null {
   if (!fs.existsSync(coverageSummary)) return null;
   return JSON.parse(fs.readFileSync(coverageSummary, 'utf8'));
 }
 
-function readCoveragePercent(total, key) {
+function readCoveragePercent(total: CoverageSummaryEntry, key: CoverageMetricKey): number {
   return Number((total[key] ?? EMPTY_COVERAGE_METRIC).pct);
 }
 
-function readLowCoverageFile(root, file, value) {
+function readLowCoverageFile(root: string, file: string, value: CoverageSummaryEntry) {
   const statements = value.statements ?? EMPTY_STATEMENT_COVERAGE;
   const statementTotal = Number(statements.total);
   const statementCovered = Number(statements.covered);
@@ -707,11 +738,11 @@ function readLowCoverageFile(root, file, value) {
   };
 }
 
-function ratio(numerator, denominator) {
+function ratio(numerator: number, denominator: number): string {
   if (denominator === 0) return 'n/a';
   return `${((numerator / denominator) * 100).toFixed(1)}%`;
 }
 
-export function formatPercent(value) {
+export function formatPercent(value: number): string {
   return `${value.toFixed(2)}%`;
 }

@@ -1,5 +1,5 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { systemSurfaceDisclosure } from '@agent-device/contracts/android-system-surface-disclosure';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';

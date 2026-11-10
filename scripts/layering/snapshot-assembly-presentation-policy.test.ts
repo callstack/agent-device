@@ -61,11 +61,11 @@ test('R74 rejects the assembly importing the iOS snapshot engine', () => {
   );
 });
 
-test('R74 rejects the assembly reading the producer capability table', () => {
+test('R74 rejects the assembly importing the iOS acquisition module', () => {
   const result = violations(
     appended(
       assemblyFile,
-      `\nimport { iosSnapshotTruncationEvidence } from '@agent-device/capture-kit/ios-snapshot-acquisition';\nvoid iosSnapshotTruncationEvidence;\n`,
+      `\nimport { createIosSnapshotAcquisition } from '@agent-device/capture-kit/ios-snapshot-acquisition';\nvoid createIosSnapshotAcquisition;\n`,
     ),
   );
 
@@ -79,6 +79,43 @@ test('R74 rejects the assembly reading the producer capability table', () => {
     JSON.stringify(result),
   );
 });
+
+/** Every import form the resolved edges carry, against the registry module. */
+const REGISTRY_IMPORT_FORMS: readonly (readonly [string, string])[] = [
+  [
+    'an aliased named import',
+    `import { SNAPSHOT_PRODUCERS as registry } from '@agent-device/contracts/snapshot-producers';\nvoid registry;`,
+  ],
+  [
+    'a namespace import',
+    `import * as producers from '@agent-device/contracts/snapshot-producers';\nvoid producers;`,
+  ],
+  [
+    'a type-only import',
+    `import type { SnapshotProducerFacts } from '@agent-device/contracts/snapshot-producers';\nexport type Facts = SnapshotProducerFacts;`,
+  ],
+  [
+    'a re-export',
+    `export { snapshotProducerFacts } from '@agent-device/contracts/snapshot-producers';`,
+  ],
+  [
+    'a dynamic import',
+    `export const rows = async () => (await import('@agent-device/contracts/snapshot-producers')).SNAPSHOT_PRODUCERS;`,
+  ],
+];
+
+for (const [form, addition] of REGISTRY_IMPORT_FORMS) {
+  test(`R74 rejects the assembly importing the producer registry through ${form}`, () => {
+    const result = violations(appended(assemblyFile, `\n${addition}\n`)).filter(
+      (entry) =>
+        entry.rule === SNAPSHOT_ASSEMBLY_PRESENTATION_RULE &&
+        entry.file === assemblyFile &&
+        entry.message.includes('must not import the producer registry'),
+    );
+
+    assert.notDeepEqual(result, [], form);
+  });
+}
 
 test('R74 rejects a backend-name presentation branch in the assembly', () => {
   const result = violations(
@@ -146,5 +183,20 @@ test('R74 fails closed when the assembly moves out from under it', () => {
   assert.deepEqual(
     result.filter((entry) => entry.message.includes('is missing')).map((entry) => entry.file),
     [...SNAPSHOT_ASSEMBLY_FILES],
+  );
+});
+
+test('R74 fails closed when the producer registry moves out from under it', () => {
+  const sources = currentSources();
+  sources.delete('packages/contracts/src/snapshot-producers.ts');
+
+  const result = snapshotAssemblyPresentationViolations(
+    sources,
+    resolveImportEdges(sources, workspaceSpecifierTargets(repoRoot)),
+  );
+
+  assert.deepEqual(
+    result.filter((entry) => entry.message.includes('is missing')).map((entry) => entry.file),
+    ['packages/contracts/src/snapshot-producers.ts'],
   );
 });

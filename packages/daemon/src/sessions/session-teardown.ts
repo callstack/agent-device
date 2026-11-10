@@ -49,10 +49,8 @@ async function stopSessionWebBrowser(params: {
 }): Promise<void> {
   const { ref, sessionStore, platformCleanup } = params;
   const session = sessionStore.resolveCurrent(ref) ?? ref.session;
-  const sessionName = ref.address;
   await platformCleanup.closeManagedBrowser({
     device: session.device,
-    sessionName,
     stateDir: sessionStore.resolveDaemonStateDir(),
     openSessionNames: () => openWebSessionNames(sessionStore),
   });
@@ -85,6 +83,7 @@ export function reportSessionCleanupFailures(params: {
   sessionName: string;
   phase: string;
   failures: readonly SessionCleanupFailure[];
+  hint?: string;
 }): AppError | undefined {
   if (params.failures.length === 0) return undefined;
   const failedSteps = params.failures.map(({ step }) => step);
@@ -107,7 +106,9 @@ export function reportSessionCleanupFailures(params: {
       reason: 'session_cleanup_incomplete',
       session: params.sessionName,
       failedSteps,
-      hint: 'Some session resources failed to release. The session was retired; inspect the session log, device state, and retained claims before recovery. Do not retry close on the retired session.',
+      hint:
+        params.hint ??
+        'Some session resources failed to release. The session was retired; inspect the session log, device state, and retained claims before recovery. Do not retry close on the retired session.',
     },
   );
 }

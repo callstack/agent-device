@@ -10,7 +10,7 @@ extension RunnerTests {
       #"{"command":"type","commandId":"type-without-focus","text":"hello","textEntryMode":"append"}"#
     )
 
-    let response = executeTypeCommand(
+    let response = try executeTypeCommand(
       activeApp: XCUIApplication(bundleIdentifier: "com.example.agentdevice.missing-input"),
       command: command
     )
@@ -31,7 +31,7 @@ extension RunnerTests {
     try skipUnlessSoftwareKeyboardIsHidden()
 
     let failureCountBefore = currentXCTestFailureCount()
-    let typeResponse = executeTypeCommand(
+    let typeResponse = try executeTypeCommand(
       activeApp: app,
       command: try runnerCommandFixture(
         #"{"command":"type","commandId":"type-hardware-keyboard","text":"hardware-keyboard","textEntryMode":"append"}"#
@@ -46,7 +46,7 @@ extension RunnerTests {
 
     // The tap witness is one-shot: a second bare type without a new tap has no target.
     let unfocusedFailureCountBefore = currentXCTestFailureCount()
-    let unfocusedResponse = executeTypeCommand(
+    let unfocusedResponse = try executeTypeCommand(
       activeApp: app,
       command: try runnerCommandFixture(
         #"{"command":"type","commandId":"type-hardware-keyboard-unfocused","text":"-again","textEntryMode":"append"}"#
@@ -63,7 +63,7 @@ extension RunnerTests {
     // keyboard here is a product change, not an environment fact.
     XCTAssertFalse(isKeyboardVisible(app: app))
     let appendFailureCountBefore = currentXCTestFailureCount()
-    let appendResponse = executeTypeCommand(
+    let appendResponse = try executeTypeCommand(
       activeApp: app,
       command: try runnerCommandFixture(
         #"{"command":"type","commandId":"type-hardware-keyboard-again","text":"-again","textEntryMode":"append"}"#
@@ -83,7 +83,7 @@ extension RunnerTests {
     try skipUnlessSoftwareKeyboardIsHidden()
 
     let failureCountBefore = currentXCTestFailureCount()
-    let submitResponse = executeTypeCommand(
+    let submitResponse = try executeTypeCommand(
       activeApp: app,
       command: try runnerCommandFixture(
         #"{"command":"type","commandId":"type-hardware-keyboard-submit","text":"\n"}"#
@@ -102,7 +102,7 @@ extension RunnerTests {
     try skipUnlessSoftwareKeyboardIsHidden()
 
     let failureCountBefore = currentXCTestFailureCount()
-    let result = typeTextReliably(
+    let result = try typeTextReliably(
       app: app,
       target: TextEntryTarget(
         element: textField,
@@ -146,7 +146,7 @@ extension RunnerTests {
     let typeCommand = try runnerCommandFixture(
       #"{"command":"type","commandId":"type-disappearing-input","text":"ab","delayMs":50,"textEntryMode":"append"}"#
     )
-    let typeResponse = executeTypeCommand(activeApp: app, command: typeCommand)
+    let typeResponse = try executeTypeCommand(activeApp: app, command: typeCommand)
 
     XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
     XCTAssertFalse(typeResponse.ok)
@@ -163,7 +163,7 @@ extension RunnerTests {
     let textField = try launchRemovableInputFixture("--agent-device-text-entry-auto-submit")
 
     let failureCountBefore = currentXCTestFailureCount()
-    let response = executeTypeCommand(
+    let response = try executeTypeCommand(
       activeApp: app,
       command: try fillCommandFixture(commandId: "fill-auto-submit", text: "123456", at: textField)
     )
@@ -183,7 +183,7 @@ extension RunnerTests {
   func testFillReplacesAValueLongerThanOneClearBurst() throws {
     let textField = try launchRemovableInputFixture("--agent-device-text-entry-long-prefill")
 
-    let response = executeTypeCommand(
+    let response = try executeTypeCommand(
       activeApp: app,
       command: try fillCommandFixture(commandId: "fill-long-prefill", text: "Ada Lovelace", at: textField)
     )
@@ -197,7 +197,7 @@ extension RunnerTests {
   func testFillClearsAValueLongerThanOneClearBurst() throws {
     let textField = try launchRemovableInputFixture("--agent-device-text-entry-long-prefill")
 
-    let response = executeTypeCommand(
+    let response = try executeTypeCommand(
       activeApp: app,
       command: try fillCommandFixture(commandId: "clear-long-prefill", text: "", at: textField)
     )
@@ -216,7 +216,7 @@ extension RunnerTests {
     )
 
     let failureCountBefore = currentXCTestFailureCount()
-    _ = executeTypeCommand(
+    _ = try executeTypeCommand(
       activeApp: app,
       command: try fillCommandFixture(commandId: "fill-clear-replaced-input", text: "", at: textField)
     )
@@ -234,7 +234,7 @@ extension RunnerTests {
     let textField = try launchRemovableInputFixture("--agent-device-text-entry-auto-submit-without-successor")
 
     let failureCountBefore = currentXCTestFailureCount()
-    let response = executeTypeCommand(
+    let response = try executeTypeCommand(
       activeApp: app,
       command: try fillCommandFixture(commandId: "fill-auto-submit-no-successor", text: "123456", at: textField)
     )
@@ -253,7 +253,7 @@ extension RunnerTests {
     let textField = try launchRemovableInputFixture("--agent-device-text-entry-disappear-after-input")
 
     let failureCountBefore = currentXCTestFailureCount()
-    let response = executeTypeCommand(
+    let response = try executeTypeCommand(
       activeApp: app,
       command: try fillCommandFixture(commandId: "fill-disappearing-input", text: "123456", at: textField)
     )
@@ -272,7 +272,7 @@ extension RunnerTests {
     let textField = try launchRemovableInputFixture("--agent-device-text-entry-replace-after-input")
 
     let failureCountBefore = currentXCTestFailureCount()
-    let response = executeTypeCommand(
+    let response = try executeTypeCommand(
       activeApp: app,
       command: try fillCommandFixture(commandId: "fill-replaced-input", text: "123456", at: textField)
     )
@@ -294,7 +294,7 @@ extension RunnerTests {
     )
 
     let failureCountBefore = currentXCTestFailureCount()
-    let response = executeTypeCommand(
+    let response = try executeTypeCommand(
       activeApp: app,
       command: try fillCommandFixture(commandId: "fill-disappearing-masked-input", text: "123456", at: textField)
     )
@@ -314,7 +314,7 @@ extension RunnerTests {
     )
 
     let failureCountBefore = currentXCTestFailureCount()
-    let response = executeTypeCommand(
+    let response = try executeTypeCommand(
       activeApp: app,
       command: try fillCommandFixture(commandId: "fill-replaced-masked-input", text: "123456", at: textField)
     )
@@ -349,7 +349,7 @@ extension RunnerTests {
     defer { textEntryWarmupPauseForTesting = nil }
 
     let failureCountBefore = currentXCTestFailureCount()
-    let response = executeTypeCommand(
+    let response = try executeTypeCommand(
       activeApp: app,
       command: try fillCommandFixture(commandId: "fill-masked-replaced-in-pause", text: "123456", at: textField)
     )
@@ -375,7 +375,7 @@ extension RunnerTests {
     )
 
     let failureCountBefore = currentXCTestFailureCount()
-    let response = executeTypeCommand(
+    let response = try executeTypeCommand(
       activeApp: app,
       command: try fillCommandFixture(commandId: "fill-unnamed-successor", text: "123456", at: textField)
     )
@@ -398,7 +398,7 @@ extension RunnerTests {
     )
 
     let failureCountBefore = currentXCTestFailureCount()
-    let response = executeTypeCommand(
+    let response = try executeTypeCommand(
       activeApp: app,
       command: try fillCommandFixture(commandId: "fill-digit-count-auto-submit", text: "123456", at: textField)
     )
@@ -425,7 +425,7 @@ extension RunnerTests {
     let frameBefore = textField.frame
 
     let failureCountBefore = currentXCTestFailureCount()
-    let response = executeTypeCommand(
+    let response = try executeTypeCommand(
       activeApp: app,
       command: try fillCommandFixture(commandId: "fill-moves-on-input", text: "hello", at: textField)
     )
@@ -451,7 +451,7 @@ extension RunnerTests {
     )
 
     let failureCountBefore = currentXCTestFailureCount()
-    let response = executeTypeCommand(
+    let response = try executeTypeCommand(
       activeApp: app,
       command: try fillCommandFixture(commandId: "fill-unnamed-replaced", text: "123456", at: textField)
     )
@@ -510,7 +510,7 @@ extension RunnerTests {
     let failureCountBefore = currentXCTestFailureCount()
     // The target the `type` command builds when it cannot resolve an input but the keyboard is up:
     // no element, no refresh point, focused-element preference.
-    let result = typeTextReliably(
+    let result = try typeTextReliably(
       app: app,
       target: TextEntryTarget(
         element: nil,
@@ -564,7 +564,7 @@ extension RunnerTests {
     try tapHardwareKeyboardInput(commandId: "tap-masked-input")
 
     let failureCountBefore = currentXCTestFailureCount()
-    let fillResponse = executeTypeCommand(
+    let fillResponse = try executeTypeCommand(
       activeApp: app,
       command: try runnerCommandFixture(
         #"{"command":"type","commandId":"fill-masked-input","text":"not-a-secret-123","textEntryMode":"replace"}"#

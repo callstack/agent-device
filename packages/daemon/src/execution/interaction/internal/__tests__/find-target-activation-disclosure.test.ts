@@ -1,6 +1,7 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { IosTargetActivation, PostGestureOutcome } from '@agent-device/kernel/snapshot';
+import type { IosTargetActivation } from '@agent-device/kernel/snapshot';
+import type { PostGestureOutcome } from '@agent-device/contracts/snapshot-model';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
 import { makeIosSession } from '../../../../__tests__/support/session-factories.ts';

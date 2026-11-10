@@ -132,7 +132,7 @@ export function createRequestRuntimeBindings(params: {
       const intent: DeviceBindingIntent = { kind: 'ordinary' };
       bindingPromise = params.gateway
         .bind({ device, intent, scope: params.scope })
-        .then((binding) => cleanups.use(binding))
+        .then(async (binding) => await adoptBinding(cleanups, binding, params.scope))
         .then(admitBinding);
       bindings.set(key, bindingPromise);
       void bindingPromise.catch(() => {
@@ -149,7 +149,7 @@ export function createRequestRuntimeBindings(params: {
     params.admitDevice?.(device);
     const intent: DeviceBindingIntent = { kind: 'exact-owner', owner, fence };
     const published = await params.gateway.bind({ device, intent, scope });
-    const adopted = await adoptExactBinding(cleanups, published, scope);
+    const adopted = await adoptBinding(cleanups, published, scope);
     const binding = await admitBinding(adopted);
     return recordBoundMutations(narrowDeviceBinding(binding, use), params.dispatchLedger);
   };
@@ -167,7 +167,8 @@ export function createRequestRuntimeBindings(params: {
   };
 }
 
-async function adoptExactBinding(
+/** Adopts a published binding into the request cleanups, or disposes it when cleanup already began. */
+async function adoptBinding(
   cleanups: AsyncCleanupStack,
   binding: DeviceBinding<PlatformRuntimeOperations>,
   scope: PlatformRequestScope,

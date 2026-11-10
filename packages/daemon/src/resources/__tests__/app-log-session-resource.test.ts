@@ -218,9 +218,11 @@ test('unwritable tombstone plus rejecting cleanup blocks same-process replacemen
     ...runtime.result.envelope,
     sessionId: 'wrong-session',
   });
+  // A plain file where the resource directory belongs makes every write fail under any uid,
+  // which a chmod cannot do for root.
   const resourceDir = path.dirname(context.resourcePath);
-  fs.mkdirSync(resourceDir, { recursive: true });
-  fs.chmodSync(resourceDir, 0o500);
+  fs.mkdirSync(path.dirname(resourceDir), { recursive: true });
+  fs.writeFileSync(resourceDir, '');
 
   try {
     await expect(
@@ -232,7 +234,7 @@ test('unwritable tombstone plus rejecting cleanup blocks same-process replacemen
       }),
     ).rejects.toMatchObject({ details: { reason: 'runtime-contract-invalid' } });
   } finally {
-    fs.chmodSync(resourceDir, 0o700);
+    fs.rmSync(resourceDir, { force: true });
   }
 
   expect(appLogResourceStore.read(context.resourcePath)).toEqual({ status: 'missing' });

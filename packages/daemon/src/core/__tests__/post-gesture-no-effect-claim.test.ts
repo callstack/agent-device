@@ -19,7 +19,7 @@ import {
   markDeferredInteractionOutcome,
 } from '../deferred-interaction-outcome.ts';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
-import type { PostGestureAction } from '@agent-device/kernel/snapshot';
+import type { PostGestureAction } from '@agent-device/contracts/snapshot-model';
 import type { SessionState } from '../session-state.ts';
 import {
   chromeWithListSnapshot,

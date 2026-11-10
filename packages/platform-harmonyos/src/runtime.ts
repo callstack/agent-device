@@ -29,7 +29,10 @@ import {
   unavailableFact,
   whenAdmitted,
 } from '@agent-device/contracts/platform-runtime';
-import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
+import {
+  screenshotRuntimeOperationFacts,
+  defaultCaptureOnly,
+} from '@agent-device/contracts/screenshot-runtime';
 import { selectorObservationRuntimeOperationFacts } from '@agent-device/contracts/selector-observation-runtime';
 import {
   bindLocalSnapshotInteractor,
@@ -341,6 +344,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
             signal: request.scope.signal,
             resolveInteractor: host.localInteractors.resolve,
             facts: facts.operations,
+            captureCapabilities: defaultCaptureOnly('a HarmonyOS device captures through hdc'),
             pause: async (milliseconds) =>
               await host.clock.sleep(milliseconds, request.scope.signal),
           }),

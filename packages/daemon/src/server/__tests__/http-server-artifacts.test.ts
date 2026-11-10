@@ -17,7 +17,6 @@ import {
   mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
-import { ANDROID_ARTIFACTS_CONTRACT_EVIDENCE } from './http-server-artifacts.coverage.ts';
 
 type ArtifactInventoryResponse = {
   artifacts: Array<{
@@ -31,7 +30,7 @@ type ArtifactInventoryResponse = {
   }>;
 };
 
-test(ANDROID_ARTIFACTS_CONTRACT_EVIDENCE.testName, async () => {
+test('downloadable artifact inventory is filtered by tenant', async () => {
   const tempDir = mkdtempForTestSync('agent-device-artifacts-tenants-');
   const publicPath = path.join(tempDir, 'public.txt');
   const tenantAPath = path.join(tempDir, 'tenant-a.txt');

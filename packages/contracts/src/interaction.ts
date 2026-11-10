@@ -63,7 +63,9 @@ export type ResolutionDiagnosticEntry = {
  * its target, including each endpoint of a target-authored drag. Never ref-issuing.
  * `direct-ios`/`not-observed` = the XCTest fast path has no daemon tree to
  * report from; `ref`/`label-fallback` = a stale `@ref` recovered via
- * first-match label lookup, never exact ref provenance; `alternatives` holds
+ * first-match label lookup, never exact ref provenance. On the native-ref
+ * path the daemon preflight finds that label match, but the backend still
+ * dispatches the original ref; `alternatives` holds
  * at most 5 losing candidates, winner excluded.
  */
 export type ResolutionDisclosure =
@@ -232,6 +234,11 @@ export type PostActionSurfaceChange = {
  * `changedFromBefore: false` is evidence, not failure — the command still
  * succeeded.
  *
+ * The field is ABSENT when no pre-action baseline was captured, so "no comparison
+ * was made" stays distinguishable from "nothing changed": a missing baseline must
+ * not read as an unchanged screen, because a coordinate tap that landed on
+ * nothing would otherwise report the same verdict as one that changed nothing.
+ *
  * When `surfaceChange` is present the two captures describe different surfaces, so the digest
  * comparison is not made at all: `changedFromBefore` then reports that transition, which replaced
  * the whole observed surface.
@@ -241,7 +248,7 @@ export type InteractionEvidence = {
   nodeCount: number;
   interactiveNodeCount: number;
   digest: string;
-  changedFromBefore: boolean;
+  changedFromBefore?: boolean;
   surfaceChange?: PostActionSurfaceChange;
 };
 

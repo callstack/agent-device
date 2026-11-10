@@ -2,6 +2,7 @@ import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   retiredScreenshotMaxSizeFlagError,
+  SCREENSHOT_CAPTURE_BACKENDS,
   screenshotFlagsFromOptions,
   screenshotOptionsFromFlags,
 } from '@agent-device/contracts/capture';
@@ -22,7 +23,7 @@ import {
   readScreenshotResultMetadata,
 } from '@agent-device/capture-kit/screenshot-density';
 import { runtimeExecutionFromContext } from '../core/snapshot-runtime-capture-input.ts';
-import type { DaemonCommandContext } from '../core/context.ts';
+import { requestCwd, type DaemonCommandContext } from '../core/context.ts';
 import { captureSnapshotData } from '../core/snapshot-capture.ts';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import type {
@@ -64,6 +65,7 @@ export async function resolveScreenshotGenericExecution(
   const retiredMaxSize = retiredScreenshotMaxSizeFlagError('screenshot', req.flags);
   if (retiredMaxSize) throw new AppError('INVALID_ARGS', retiredMaxSize);
   assertSupportedScreenshotPixelDensity(session.device, req.flags?.screenshotPixelDensity);
+  assertSupportedScreenshotCaptureBackend(req.flags);
 
   const request = readScreenshotRequest(req, params.hostCwd);
   const cropOn =
@@ -317,6 +319,24 @@ async function annotateScreenshotWithSessionRefs(
   });
 }
 
+/** Each capture owner declares its backends; what stays here is the shape of the request. */
+function assertSupportedScreenshotCaptureBackend(flags: DaemonRequest['flags']): void {
+  const backend: unknown = flags?.screenshotCaptureBackend;
+  if (backend === undefined) return;
+  if (!(SCREENSHOT_CAPTURE_BACKENDS as readonly unknown[]).includes(backend)) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `--capture-backend takes ${SCREENSHOT_CAPTURE_BACKENDS.join(', ')}`,
+    );
+  }
+  if (flags?.screenshotPixelDensity !== undefined || flags?.screenshotNormalizeStatusBar) {
+    throw new AppError(
+      'INVALID_ARGS',
+      '--pixel-density and --normalize-status-bar cannot be combined with --capture-backend runner: they belong to the simctl capture',
+    );
+  }
+}
+
 /**
  * `screenshot [path]` and `--out <path>` are the same destination expressed two ways, and both are
  * user-typed paths resolved against the client's cwd. The normalized form is also what the session
@@ -329,7 +349,7 @@ function readScreenshotRequest(
   const positionals = req.positionals ?? [];
   const flags = req.flags ?? {};
   const expand = (value: string | undefined) =>
-    value === undefined ? undefined : expandSessionPath(value, req.meta?.cwd ?? hostCwd);
+    value === undefined ? undefined : expandSessionPath(value, requestCwd(req, { cwd: hostCwd }));
   const positionalPath = expand(positionals[0]);
   const outFlag = expand(flags.out);
   return {
@@ -362,6 +382,7 @@ function createBoundScreenshotBackend(
         options: {
           appBundleId: dispatchContext.appBundleId,
           pixelDensity: resolved.pixelDensity,
+          screenMask: resolved.screenMask,
           fullscreen: resolved.fullscreen,
           normalizeStatusBar: resolved.normalizeStatusBar,
           stabilize: resolved.stabilize,
@@ -371,7 +392,8 @@ function createBoundScreenshotBackend(
           skipIosSimulatorBootCheck:
             dispatchContext.skipIosSimulatorBootCheck ??
             (isIosFamily(session.device) && session.device.kind === 'simulator'),
-          captureBackend: dispatchContext.screenshotCaptureBackend,
+          captureBackend: resolved.captureBackend,
+          preferredCaptureBackend: dispatchContext.preferredScreenshotCaptureBackend,
         },
         execution: screenshotExecutionFromContext(dispatchContext),
       });

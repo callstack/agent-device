@@ -77,6 +77,18 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
+    key: 'deviceMode',
+    names: ['--device-mode'],
+    type: 'string',
+    usageLabel: '--device-mode <slim|full>',
+    usageDescription:
+      'Proxy lease: iOS simulator mode (slim or full) the backend leases; refused without such a backend',
+    inputDescription:
+      'iOS simulator mode for the device a proxy backend leases, slim or full, sent as given; the backend validates it. A blank string names nothing; a non-string fails with INVALID_ARGS, reason device-spec-invalid. Only the CLI allocating a lease through connect proxy sends it to that backend; a daemon refuses every other request that names it, with reason device-spec-unsupported.',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'physical',
     names: ['--physical'],
     type: 'boolean',
@@ -411,7 +423,7 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--launch-console <path>',
     usageDescription:
-      'open: capture the initial local iOS simulator launch console window to a file',
+      'open: capture the initial local or Limrun iOS simulator launch console window to a file',
     projectConfig: false,
     recorded: false,
   },

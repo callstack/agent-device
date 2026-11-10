@@ -10,7 +10,7 @@ import { createPlatformResourceCleanup } from './platform-runtime-resource-clean
 
 const platformResourceCleanup = createPlatformResourceCleanup(createLiveTestHostEnvironment());
 
-const PLAIN_CLOSE = { shutdownRequested: false, hasScreenRecording: false, hasLease: false };
+const PLAIN_CLOSE = { shutdownRequested: false, hasScreenRecording: false, leaseWillEnd: false };
 
 function retains(device: DeviceInfo, overrides: Partial<typeof PLAIN_CLOSE> = {}): boolean {
   return platformResourceCleanup.retainExecutionHostAfterClose({
@@ -28,7 +28,7 @@ test('a plain close keeps the runner host of an iOS simulator', () => {
 test.each([
   { name: 'a shutdown request', overrides: { shutdownRequested: true } },
   { name: 'a live screen recording', overrides: { hasScreenRecording: true } },
-  { name: 'a lease', overrides: { hasLease: true } },
+  { name: 'a lease that ends on close', overrides: { leaseWillEnd: true } },
 ])('$name releases the runner host of an iOS simulator', ({ overrides }) => {
   expect(retains(IOS_SIMULATOR, overrides)).toBe(false);
 });

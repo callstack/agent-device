@@ -30,6 +30,7 @@ import {
 import {
   bindLocalScreenshotInteractor,
   screenshotRuntimeOperationFacts,
+  defaultCaptureOnly,
 } from '@agent-device/contracts/screenshot-runtime';
 import { selectorObservationRuntimeOperationFacts } from '@agent-device/contracts/selector-observation-runtime';
 import {
@@ -247,6 +248,7 @@ function bindWebRuntime(
           device,
           signal,
           resolveInteractor: host.localInteractors.resolve,
+          captureCapabilities: defaultCaptureOnly('a web target captures through its browser'),
         })
       : {}),
     ...(facts.operations.focusPoint.available

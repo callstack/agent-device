@@ -135,6 +135,8 @@ const installCommandFacet = defineCommandFacet({
   name: 'install',
   text: {
     summary: 'Install an app binary from a path',
+    cliDetail:
+      'A HarmonyOS .hap installs from its path alone, for example agent-device install ./build/entry-default-signed.hap --platform harmonyos.',
   },
   metadata: installCommandMetadata,
   run: (client, input) => client.apps.install(input),

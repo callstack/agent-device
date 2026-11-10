@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { Point, SnapshotKeyboardBandFact, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { Point, SnapshotKeyboardBandFact } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   KEYBOARD_COVERED_BAND_RECT,

@@ -5,11 +5,21 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { assertCatalogComplete, CHECK_CATALOG, resolveCommand } from './checks.ts';
 import { ALL_CHECKS, selectChecks, type CheckId, type SelectInput } from './model.ts';
+import { packageEntrySources } from '../build-entries.ts';
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const PACKAGE_ENTRY_FILES = packageEntrySources(
+  (
+    JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
+      exports: Record<string, { import?: string }>;
+    }
+  ).exports,
+);
 
 function plan(changedFiles: string[], extra: Partial<SelectInput> = {}) {
   return selectChecks({
     changedFiles,
-    packageEntryFiles: ['src/index.ts', 'packages/selectors/src/index.ts'],
+    packageEntryFiles: PACKAGE_ENTRY_FILES,
     ...extra,
   });
 }
@@ -158,7 +168,11 @@ test('the scripts that rewrite runner Swift select the packaged-source check', (
 test('the shared foreground geometry header selects the Apple runner builds', () => {
   // The runner's event bridge includes this bridge header by relative path, so its bytes change
   // the compiled runner on both platform lanes; a change nothing builds cannot be reviewed safely.
-  for (const check of ['swift-runner-ios', 'swift-runner-macos', 'packaged-runner-swift']) {
+  for (const check of [
+    'swift-runner-ios',
+    'swift-runner-macos',
+    'packaged-runner-swift',
+  ] as const) {
     assert.ok(
       ids(['apple/snapshot-bridge/ForegroundApplicationGeometry.h']).includes(check),
       check,
@@ -221,17 +235,24 @@ test('MCP metadata change selects the mcp-metadata check and the site build that
   assert.deepEqual(ids(['server.json']), ['mcp-metadata', 'docs-links']);
 });
 
+test('every package export maps to an existing build entry source', () => {
+  assert.ok(PACKAGE_ENTRY_FILES.includes('src/sdk/index.ts'));
+  for (const file of PACKAGE_ENTRY_FILES) {
+    assert.ok(fs.existsSync(path.join(repoRoot, file)), `${file} does not exist`);
+  }
+});
+
 test('public package surface change selects the build and the published-package gate via exports', () => {
-  const result = ids(['src/index.ts']);
+  const result = ids(['src/sdk/index.ts']);
   assert.ok(result.includes('build'));
   // A public entry is the one surface a consumer resolves by name, so building it is not enough:
   // check:package proves it still imports from an install with no workspace links.
   assert.ok(result.includes('package'));
-  assert.ok(ids(['packages/selectors/src/index.ts']).includes('package'));
+  assert.ok(ids(['src/ai-sdk/index.ts']).includes('package'));
 });
 
 test('docs-only change selects no checks and records the docs paths', () => {
-  const result = plan(['docs/adr/0011.md', 'LICENSE', 'website/page.mdx.md']);
+  const result = plan(['docs/adr/README.md', 'LICENSE', 'website/page.mdx.md']);
   assert.equal(result.failOpen, false);
   assert.deepEqual(result.checks, []);
   assert.equal(result.docsOnlyPaths.length, 3);
@@ -276,6 +297,12 @@ test('agent guidance owns its focused contract instead of disappearing as docs-o
     assert.deepEqual(result.checks, ['agent-guidance']);
     assert.deepEqual(result.docsOnlyPaths, []);
   }
+});
+
+test('an ADR record owns the citation guard instead of disappearing as docs-only', () => {
+  const result = plan(['docs/adr/0011-interactive-replay.md']);
+  assert.deepEqual(result.checks, ['adr-citations']);
+  assert.deepEqual(result.docsOnlyPaths, []);
 });
 
 test('test app source selects root lint and format plus its isolated typecheck', () => {
@@ -480,8 +507,6 @@ test('vitest-related delegates changed paths to Vitest instead of modeling proje
     'worker sizing belongs to vitest.config.ts',
   );
 });
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 test('every configured scan root selects native duplication regardless of extension', () => {
   const config: { path: string[] } = JSON.parse(

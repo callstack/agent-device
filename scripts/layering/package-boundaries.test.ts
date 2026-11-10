@@ -195,9 +195,9 @@ test('published ESM plugins declare bundled workspace build dependencies without
     'packages/provider-example/src/plugin.ts',
     "import { AppError } from '@agent-device/kernel/errors';",
   );
-  assert.deepEqual(checkPackageInternalSites(plugin, sites, [plugin, kernel]), []);
+  assert.deepEqual(checkPackageInternalSites(plugin, sites, [plugin, kernel], false), []);
   const undeclared = { ...plugin, workspaceDependencies: new Set<string>() };
-  const violations = checkPackageInternalSites(undeclared, sites, [undeclared, kernel]);
+  const violations = checkPackageInternalSites(undeclared, sites, [undeclared, kernel], false);
   assert.equal(violations.length, 1);
   assert.equal(violations[0]?.rule, 'R11 package-boundaries');
   assert.match(violations[0]?.message ?? '', /without declaring/);
@@ -554,6 +554,8 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/snapshot-quality-backend-capabilities',
     '@agent-device/capture-kit/snapshot-quality-verdict',
     '@agent-device/capture-kit/snapshot-rect-projection',
+    '@agent-device/capture-kit/snapshot-router',
+    '@agent-device/capture-kit/snapshot-source-channel',
     '@agent-device/capture-kit/snapshot-state',
     '@agent-device/capture-kit/snapshot-state-fixtures',
     '@agent-device/capture-kit/snapshot-timeout-policy',
@@ -578,6 +580,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/provision-kit/install-source-config',
     '@agent-device/provision-kit/install-source-network',
     '@agent-device/provision-kit/install-source-network-transport',
+    '@agent-device/provision-kit/provider-lease-table',
     '@agent-device/provision-kit/toolchain-probe',
   ]);
   assert.deepEqual([...provisionKitPackage.workspaceDependencies].sort(), [
@@ -644,7 +647,6 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/platform-apple/runner/operations',
     '@agent-device/platform-apple/session-observation',
     '@agent-device/platform-apple/simctl',
-    '@agent-device/platform-apple/simctl-settings',
     '@agent-device/platform-apple/simulator',
     '@agent-device/platform-apple/simulator-boot',
     '@agent-device/platform-apple/snapshot-source',
@@ -757,15 +759,13 @@ test('the real tree parses, declares, and passes R11', () => {
   );
   const selectorsPackage = packages.find((pkg) => pkg.name === '@agent-device/selectors');
   assert.ok(selectorsPackage, 'selectors package must exist');
-  // Subpaths, and each split is the point: `.` is the string-only façade
-  // every in-repo consumer uses, `./ast` is the published parser surface that
-  // `agent-device/selectors` has shipped since before the engine moved into
-  // this package, `./engine` is the resolve/list surface reserved for the
-  // selector-pipeline owner (R19, #1656) — a route reaching it skips the
-  // structural stages its policy row declares — and
-  // `./parameterized-recorded-fill` is the recorded-fill parameterization the
-  // daemon used to own (#2340). The per-file subpaths under `./interaction-*`,
-  // `./selector-pipeline*`, `./press-retarget`, `./touch-semantics` are the
+  // Subpaths, and each split is the point: `.` is the string-only façade every in-repo consumer
+  // uses, `./ast` is the published parser surface that `agent-device/selectors` has shipped since
+  // before the engine moved into this package, `./engine` is the resolve/list surface reserved for
+  // the selector-pipeline owner (R19, #1656) — a route reaching it skips the structural stages its
+  // policy row declares — and `./parameterized-recorded-fill` is the recorded-fill parameterization
+  // the daemon used to own (#2340). The per-file subpaths under `./interaction-*`,
+  // `./node-touch-point`, `./selector-pipeline*`, `./press-retarget`, `./touch-semantics` are the
   // execution surface the core selector pipeline moved into this package —
   // one subpath per module so consumers pull only the stage they run. The `-fixtures`
   // entries are R83 burn-down, deleted with the export. Any other subpath, or the AST leaking
@@ -783,6 +783,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/selectors/interaction-targeting',
     '@agent-device/selectors/interaction-touch-point',
     '@agent-device/selectors/keyboard-occlusion',
+    '@agent-device/selectors/node-touch-point',
     '@agent-device/selectors/parameterized-recorded-fill',
     '@agent-device/selectors/press-retarget',
     '@agent-device/selectors/selector-pipeline',
@@ -925,7 +926,7 @@ test('the real tree parses, declares, and passes R11', () => {
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/xml'),
     'root must declare the xml workspace dependency',
   );
-  assert.deepEqual(checkPackageBoundaries(repoRoot, new Set()), []);
+  assert.deepEqual(checkPackageBoundaries(repoRoot), []);
 });
 
 test('Node resolution enforces the exports map at runtime', () => {

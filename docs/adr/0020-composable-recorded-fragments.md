@@ -303,7 +303,7 @@ The absolute resolved filesystem path is excluded.
 Therefore, a child move keeps the child digest, but it requires an explicit parent locator edit and parent repin.
 
 The digest excludes session timestamps, device names, absolute source paths, and ordinary comments.
-Native `${VAR}` placeholders remain unresolved in the digest, as ADR 0012's late-bound-value rule requires.
+Native `${VAR}` placeholders remain unresolved in the digest, as the [plan digest contract](../../packages/ad-replay/docs/divergence-and-resume.md#plan-digest) requires.
 Maestro's effective static environment and parse-time expansion continue to participate in the Maestro plan digest under ADR 0015.
 A changed target annotation changes the digest because the annotation changes execution-time verification.
 The reason is not that the annotation is diagnostic text.
@@ -663,7 +663,7 @@ This is the intentional v1 tradeoff: stale reuse stays visible, and multiple flo
   Screen identity is app semantics.
   A caller-selected, identity-bearing landmark reuses the verified `wait` contract, and no cross-platform fingerprint is necessary.
 - **Expand all fragments into one flat global plan: rejected.**
-  ADR 0012's Maestro include incident showed that expansion-only provenance shifts ordinals and loses the included source boundary.
+  The [divergence provenance contract](../../packages/ad-replay/docs/divergence-and-resume.md#report-fields) preserves source files and lines through Maestro includes, where expansion can shift ordinals and lose the included source boundary.
   A nested plan may execute actions in order, but it must retain the fragment address at every step.
 - **Use path-only or floating includes: rejected.**
   A shared file can change between authoring and replay.

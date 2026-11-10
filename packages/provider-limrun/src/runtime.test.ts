@@ -83,7 +83,6 @@ vi.mock('@limrun/api', () => ({
       delete: state.androidDelete,
     };
     readonly assets = {
-      getOrUpload: vi.fn(),
       list: vi.fn(async () => state.uploadedApps),
     };
   },
@@ -610,10 +609,11 @@ test('the runtime inventory answers only for its own live lease', async () => {
     // A request for another provider or without a lease is not the runtime's to answer.
     assert.equal(await runtime.deviceInventoryProvider?.({ leaseProvider: 'maestro' }), null);
     assert.equal(await runtime.deviceInventoryProvider?.({ leaseProvider: 'limrun' }), null);
-    // A limrun lease with no live session declines; the daemon keeps its own inventory answer.
-    assert.equal(
+    // A limrun lease with no live session serves no device; declining would let the daemon list its
+    // own devices for a Limrun connection (#4304).
+    assert.deepEqual(
       await runtime.deviceInventoryProvider?.({ leaseProvider: 'limrun', leaseId: 'lease-none' }),
-      null,
+      [],
     );
 
     const device = await allocateAndroidDevice(runtime, 'lease-inventory');

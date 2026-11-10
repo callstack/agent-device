@@ -98,6 +98,7 @@ export type RunnerStartRetirementReason = 'device_teardown' | 'last_waiter_cance
  */
 export type RunnerStartAdmission = Readonly<{
   deviceId: string;
+  readonly signal: AbortSignal;
   /** Whether preparation and publication are still admitted for a start holding this token. */
   admitted: boolean;
   /** Why admission closed, or `undefined` while it is open. */
@@ -328,12 +329,16 @@ function registerStartAdmission(admission: StartAdmission): StartAdmission {
 
 function createStartAdmission(deviceId: string, mintedByStart: boolean): StartAdmission {
   const interestedWaiters = new Set<AbortSignal>();
+  let cancellation = new AbortController();
   let retired: RunnerStartRetirementReason | undefined;
   return {
     deviceId,
     interestedWaiters,
     mintedByStart,
     retryPending: false,
+    get signal() {
+      return cancellation.signal;
+    },
     get admitted() {
       return retired === undefined;
     },
@@ -343,6 +348,7 @@ function createStartAdmission(deviceId: string, mintedByStart: boolean): StartAd
     close(reason) {
       if (retired) return false;
       retired = reason;
+      cancellation.abort(runnerStartRetiredError(reason));
       emitDiagnostic({
         level: 'debug',
         phase: 'ios_runner_start_admission_retired',
@@ -352,6 +358,7 @@ function createStartAdmission(deviceId: string, mintedByStart: boolean): StartAd
     },
     readmit() {
       retired = undefined;
+      cancellation = new AbortController();
       emitDiagnostic({
         level: 'debug',
         phase: 'ios_runner_start_admission_readmitted',

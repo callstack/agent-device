@@ -70,6 +70,7 @@ test('the plugin declares what a Revyl lease is and is not', () => {
     supportsDeferredAppSelection: false,
     supportsDirectPortReverse: false,
     usesCloudWebDriverLease: false,
+    holdsCloudDevice: true,
   });
 });
 
@@ -138,6 +139,7 @@ test('one account and origin is one runtime identity whatever the URL spelling',
     resolveRevylRuntimeInstance({ apiKey: 'k', backendUrl: 'https://staging.revyl.test' }),
     base,
   );
-  // The identity is a hash, never the key: it travels into diagnostics.
-  assert.match(base, /^principal-[0-9a-f]{32}$/);
+  // The identity is a hash, never the key: it travels into diagnostics. The pin keeps a reordered or
+  // renamed principal field from re-identifying every Revyl owner without a test noticing.
+  assert.equal(base, 'principal-f22648ac37319e6167fe173ccefb0d9c093c4b80f96c3d757c646468b6f83957');
 });

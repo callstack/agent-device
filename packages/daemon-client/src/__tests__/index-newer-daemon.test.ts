@@ -6,7 +6,7 @@ import {
   closeLoopbackServer,
   mkdtempForTestSync,
   startHttpDaemonFixture,
-  supportsLoopbackBind,
+  skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
@@ -32,10 +32,7 @@ afterEach(() => {
 });
 
 test('sendToDaemon refuses to replace a reachable daemon newer than the client', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const stateDir = mkdtempForTestSync('agent-device-daemon-newer-refused-');
   const paths = resolveDaemonPaths(stateDir);
   const newerDaemon = await startHttpDaemonFixture({ via: 'newer-daemon' });
@@ -84,10 +81,7 @@ test('sendToDaemon refuses to replace a reachable daemon newer than the client',
 });
 
 test('sendToDaemon refuses a newer socket-only daemon when the client prefers http', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const stateDir = mkdtempForTestSync('agent-device-daemon-newer-socket-only-');
   const paths = resolveDaemonPaths(stateDir);
   const newerDaemon = await startHttpDaemonFixture({ via: 'newer-socket-daemon' });

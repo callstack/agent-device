@@ -1,3 +1,5 @@
+import type { LeaseRegistry } from '../../../resources/lease-registry.ts';
+import { inspectSessionLeaseRetainedOnClose } from '../../lease-lifecycle.ts';
 import type { CloseApplicationFinalizationResult } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -26,8 +28,10 @@ export type PlatformCloseDispatcher = (params: {
 
 export type SessionCloseTeardownResult = Readonly<{
   platformCloseError: unknown;
+  retainExecutionHost: boolean;
   saveScriptError?: Error;
   shutdownResult?: TargetShutdownResult;
+  shutdownPrepared: boolean;
 }>;
 
 /** Runs owned resources, native close, native hint cleanup, and final lifecycle disposal. */
@@ -36,6 +40,7 @@ export async function runSessionCloseTeardown(params: {
   ref: SessionRef;
   logPath: string;
   sessionStore: SessionStore;
+  leaseRegistry: LeaseRegistry;
   lifecycle: CloseRuntime | CloseRuntimeWithRuntimeHintClear;
   clearRuntimeHints?: RuntimeHintClearOperation;
   cleanupFailures: SessionCleanupFailure[];
@@ -78,7 +83,11 @@ export async function runSessionCloseTeardown(params: {
     device: session.device,
     shutdownRequested: req.flags?.shutdown === true,
     hasScreenRecording: Boolean(session.screenRecording),
-    hasLease: Boolean(session.lease),
+    leaseWillEnd:
+      Boolean(session.lease) &&
+      !(await attemptCleanup('lease_retention', async () =>
+        inspectSessionLeaseRetainedOnClose({ session, leaseRegistry: params.leaseRegistry }),
+      )),
   });
   const configuredRuntimeHints = sessionStore.getRuntimeHints(sessionName);
   const resourceStops = sessionResourceStopSteps({
@@ -112,7 +121,7 @@ export async function runSessionCloseTeardown(params: {
         surface: session.surface ?? 'app',
         retainRunner: retainExecutionHost,
         stateDir: sessionStore.resolveDaemonStateDir(),
-        shutdownTarget: req.flags?.shutdown === true,
+        shutdownTarget: req.flags?.shutdown === true && lifecycle.owner.kind === 'local-family',
       })) ?? {},
   );
   const saveScriptError = repairArmed
@@ -121,16 +130,28 @@ export async function runSessionCloseTeardown(params: {
   await attemptCleanup('materialized_paths', () =>
     cleanupRetainedMaterializedPathsForSession(sessionName),
   );
-  return { platformCloseError, saveScriptError, shutdownResult: finalization?.shutdown };
+  return {
+    platformCloseError,
+    retainExecutionHost,
+    saveScriptError,
+    shutdownResult: finalization?.shutdown,
+    shutdownPrepared: finalization !== undefined,
+  };
 }
 
 export function closeCleanupError(
   sessionName: string,
   failures: readonly SessionCleanupFailure[],
+  options: { sessionKept: boolean },
 ): Error | undefined {
   return reportSessionCleanupFailures({
     sessionName,
     phase: 'session_close_cleanup_failed',
     failures,
+    ...(options.sessionKept
+      ? {
+          hint: 'Some session resources failed to release. The session was kept; retry close with the same options, leaving out --save-script once the script is published, to rerun the failed cleanup and release the remaining resources.',
+        }
+      : {}),
   });
 }

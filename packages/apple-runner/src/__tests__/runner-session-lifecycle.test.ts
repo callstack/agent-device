@@ -245,7 +245,7 @@ test('every launch mints its own listener token for the runner, the session, and
   );
   assert.match(first.endpoint.token, /^[A-Za-z0-9_-]{32}$/);
   assert.notEqual(first.endpoint.token, second.endpoint.token);
-  assert.equal(second.lease?.runnerToken, second.endpoint.token);
+  assert.equal(second.launch.local?.lease?.runnerToken, second.endpoint.token);
 });
 
 test('stopping the same registered runner twice tears it down once', async () => {
@@ -276,13 +276,12 @@ test('stop and invalidate do not start a second disposal already in progress', a
   await vi.waitFor(() => assert.equal(session.state, 'draining'));
   assert.equal(hasLiveIosRunnerSession(device), false);
 
-  await stopIosRunnerSession(device.id);
-  await invalidateRunnerSession(session, 'late command failure');
+  const stop = stopIosRunnerSession(device.id);
+  const invalidation = invalidateRunnerSession(session, 'late command failure');
 
-  assert.equal(vi.mocked(disposeRunnerSession).mock.calls.length, 1);
   assert.equal(mockWaitForRunner.mock.calls.length, 1);
   resolveShutdown(runnerResponse({ uptimeMs: 1 }));
-  await disposal;
+  await Promise.all([disposal, stop, invalidation]);
 
   assert.equal(session.state, 'stopped');
 });
@@ -339,7 +338,7 @@ test('shutdown detach moves a handed-off session to stopped without killing its 
   const device = { ...IOS_SIMULATOR, id: 'runner-lifecycle-detach' };
   const session = await ensureRunnerSession(device, {});
   await serveOneCommand(device, session);
-  const runnerPid = session.child.pid;
+  const runnerPid = session.launch.local!.child?.pid;
   assert.ok(runnerPid);
   runnerStateTransitions.length = 0;
 
@@ -593,7 +592,7 @@ test("the handoff releases this daemon's log bookkeeping only after the lease sa
   await serveOneCommand(device, session);
   // What a release done too early would show: the lease this callback reads back is still owned.
   const tokenWhenReleased: string[] = [];
-  session.endOutputObservation = () => {
+  session.launch.local!.endOutputObservation = () => {
     tokenWhenReleased.push(leaseRaw(device.id));
   };
 
@@ -606,7 +605,7 @@ test("the handoff releases this daemon's log bookkeeping only after the lease sa
 test('a registered runner whose process died is recycled instead of reused', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-lifecycle-dead-process' };
   const first = await ensureRunnerSession(device, {});
-  const firstPid = first.child.pid;
+  const firstPid = first.launch.local?.child?.pid;
   assert.ok(firstPid);
   runnerStateTransitions.length = 0;
 
@@ -621,7 +620,7 @@ test('a registered runner whose process died is recycled instead of reused', asy
   const second = await ensureRunnerSession(device, {});
 
   assert.notEqual(second.sessionId, first.sessionId);
-  assert.equal(second.child.pid, firstPid + 1);
+  assert.equal(second.launch.local?.child?.pid, firstPid + 1);
   assert.equal(first.state, 'stopped');
   assert.deepEqual(runnerStateTransitions, ['draining', 'stopped']);
   assert.deepEqual(readRunnerSessionLiveness(device.id), {
@@ -650,7 +649,7 @@ test('the same udid in another simulator set starts its own runner instead of re
   assert.match(leaseRaw(tenantB.id), /"simulatorSetPath": "\/tmp\/tenant-b\/simulators"/);
 });
 
-test('a draining session is never reused while its next command starts a fresh runner', async () => {
+test('a replacement waits for the draining generation to finish cleanup', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-lifecycle-draining-reuse' };
   const first = await ensureRunnerSession(device, {});
   let resolveShutdown!: (response: Response) => void;
@@ -666,16 +665,23 @@ test('a draining session is never reused while its next command starts a fresh r
 
   mockGetFreePort.mockResolvedValueOnce(8124);
   mockRunCmdBackground.mockReturnValueOnce(makeBackgroundRunner(4243));
-  const second = await ensureRunnerSession(device, {});
+  let replacementStarted = false;
+  const replacement = ensureRunnerSession(device, {}).then((session) => {
+    replacementStarted = true;
+    return session;
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(replacementStarted, false);
+  resolveShutdown(runnerResponse({ uptimeMs: 1 }));
+  const second = await replacement;
 
   assert.notEqual(second.sessionId, first.sessionId);
-  assert.equal(first.state, 'draining');
+  assert.equal(first.state, 'stopped');
   assert.deepEqual(readRunnerSessionLiveness(device.id), {
     sessionId: second.sessionId,
     liveness: 'starting',
   });
 
-  resolveShutdown(runnerResponse({ uptimeMs: 1 }));
   await disposal;
   assert.equal(first.state, 'stopped');
   assert.equal(second.state, 'starting');
@@ -733,4 +739,45 @@ test('runner session restarts alive runner when expected xctestrun artifact chan
   assert.notEqual(restarted, session);
   assert.equal(restarted.xctestrunArtifact?.derived, '/tmp/derived-next');
   assert.equal(mockRunCmdBackground.mock.calls.length, 2);
+});
+
+test('shutdown retires a published macOS prepare without bypassing XCTest interrupt grace', async () => {
+  const { openRunnerStartAdmission, finishRunnerStartAdmission } =
+    await import('../runner-xctestrun.ts');
+  const device = { ...MACOS_DEVICE, id: 'macos-shutdown-prepare' };
+  const admission = openRunnerStartAdmission(device.id);
+  const process = makeBackgroundRunner(4242);
+  let finish!: (result: Awaited<typeof process.wait>) => void;
+  process.wait = new Promise((resolve) => {
+    finish = resolve;
+  });
+  mockRunCmdBackground.mockReturnValueOnce(process);
+  const session = await ensureRunnerSession(device, { startAdmission: admission });
+  const executionSignal = mockRunCmdBackground.mock.calls[0]?.[2]?.signal as AbortSignal;
+  let shutdown: Promise<void> | undefined;
+  vi.useFakeTimers();
+  try {
+    shutdown = abortAllIosRunnerSessions();
+    assert.equal(admission.signal.aborted, true);
+    assert.equal(executionSignal.aborted, false);
+    await vi.advanceTimersByTimeAsync(4_999);
+    assert.deepEqual(
+      mockSignalProcessGroupBestEffort.mock.calls.map(([, signal]) => signal),
+      ['SIGINT'],
+    );
+    await vi.advanceTimersByTimeAsync(1);
+    assert.deepEqual(
+      mockSignalProcessGroupBestEffort.mock.calls.map(([, signal]) => signal),
+      ['SIGINT', 'SIGTERM'],
+    );
+    mockIsProcessAlive.mockReturnValue(false);
+    finish({ exitCode: 0, stdout: '', stderr: '' });
+    await shutdown;
+    assert.equal(session.state, 'stopped');
+  } finally {
+    finish({ exitCode: 0, stdout: '', stderr: '' });
+    finishRunnerStartAdmission(admission);
+    await shutdown;
+    vi.useRealTimers();
+  }
 });

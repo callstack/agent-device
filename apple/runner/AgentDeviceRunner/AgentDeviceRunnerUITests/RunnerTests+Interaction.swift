@@ -5,6 +5,13 @@ import AgentDeviceSnapshotPresentation
 import CoreGraphics
 #endif
 
+/// A coordinate gesture refused before XCTest could build a coordinate from an app it cannot
+/// snapshot. `executeOnMainPrepared` answers it as `UNSUPPORTED_OPERATION` with its hint.
+struct RunnerCoordinateRefusal: Error {
+  let message: String
+  let hint: String?
+}
+
 private struct RunnerUnsupportedOperationError: LocalizedError {
   let message: String
 
@@ -12,9 +19,29 @@ private struct RunnerUnsupportedOperationError: LocalizedError {
 }
 
 extension RunnerTests {
+  /// How a planned gesture reaches the device, with the one-pointer motion schedule that route runs.
   enum PlannedGestureExecution: Equatable {
     case fastSwipe
-    case sampled
+    /// `schedule` is the plan's profile for one pointer, and nil for several contacts.
+    case sampled(schedule: String?)
+#if os(iOS) && targetEnvironment(simulator)
+    /// One HID touch marked as a screen-edge swipe, which only a simulator can dispatch.
+    case screenEdgeTouch
+#endif
+
+    /// The schedule the response reports as `executionProfile`; ADR 0013 names each one.
+    var schedule: String? {
+      switch self {
+      case .fastSwipe:
+        return "endpoint-hold"
+      case .sampled(let schedule):
+        return schedule
+#if os(iOS) && targetEnvironment(simulator)
+      case .screenEdgeTouch:
+        return "edge-ease-in"
+#endif
+      }
+    }
   }
 
   enum SynthesizedDragProfile: Equatable {
@@ -55,9 +82,6 @@ extension RunnerTests {
     let points: DragPoints
     let context: SynthesizedCoordinateContext
 
-    var referenceFrame: CGRect {
-      context.referenceFrame
-    }
   }
 
   struct SelectorElementMatch {
@@ -66,46 +90,46 @@ extension RunnerTests {
     let usedNonHittableFallback: Bool
   }
 
-  func performBackGesture(app: XCUIApplication) {
+  func performBackGesture(app: XCUIApplication) throws {
     if pressTvRemote(.menu) {
       return
     }
-    performCoordinateBackGesture(app: app)
+    try performCoordinateBackGesture(app: app)
   }
 
-  private func performCoordinateBackGesture(app: XCUIApplication) {
+  private func performCoordinateBackGesture(app: XCUIApplication) throws {
 #if !os(tvOS)
-    let target = resolveRunnerWindow(app: app).window ?? app
+    let target = try normalizedOffsetAnchor(app: app)
     let start = target.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5))
     let end = target.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
     start.press(forDuration: 0.05, thenDragTo: end)
 #endif
   }
 
-  func performSystemBackAction(app: XCUIApplication) -> Bool {
+  func performSystemBackAction(app: XCUIApplication) throws -> Bool {
 #if os(macOS)
     return false
 #else
     if pressTvRemote(.menu) {
       return true
     }
-    performBackGesture(app: app)
+    try performBackGesture(app: app)
     return true
 #endif
   }
 
-  func performAppSwitcherGesture(app: XCUIApplication) {
+  func performAppSwitcherGesture(app: XCUIApplication) throws {
     if pressTvRemote(.home) {
       sleepFor(resolveTvRemoteDoublePressDelay())
       _ = pressTvRemote(.home)
       return
     }
-    performCoordinateAppSwitcherGesture(app: app)
+    try performCoordinateAppSwitcherGesture(app: app)
   }
 
-  private func performCoordinateAppSwitcherGesture(app: XCUIApplication) {
+  private func performCoordinateAppSwitcherGesture(app: XCUIApplication) throws {
 #if !os(tvOS)
-    let target = resolveRunnerWindow(app: app).window ?? app
+    let target = try normalizedOffsetAnchor(app: app)
     let start = target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.99))
     let end = target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
     start.press(forDuration: 0.6, thenDragTo: end)
@@ -166,10 +190,12 @@ extension RunnerTests {
 #endif
   }
 
-  func findElement(app: XCUIApplication, text: String) -> XCUIElement? {
+  func findElement(app: XCUIApplication, text: String) throws -> XCUIElement? {
     let predicate = NSPredicate(format: "label CONTAINS[c] %@ OR identifier CONTAINS[c] %@ OR value CONTAINS[c] %@", text, text, text)
-    let element = app.descendants(matching: .any).matching(predicate).firstMatch
-    return element.exists ? element : nil
+    return try elementQueries(app: app, matching: .any)
+      .lazy
+      .map { $0.matching(predicate).firstMatch }
+      .first { $0.exists }
   }
 
   func findElement(
@@ -179,7 +205,7 @@ extension RunnerTests {
     allowNonHittableFallback: Bool = false,
     expectedPoint: CGPoint? = nil,
     rawMatchPolicy: DirectSelectorRawMatchPolicy = .rejectDistinctMatches
-  ) -> SelectorElementMatch {
+  ) throws -> SelectorElementMatch {
     let value = selectorValue.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !value.isEmpty else {
       return SelectorElementMatch(element: nil, isAmbiguous: false, usedNonHittableFallback: false)
@@ -198,13 +224,17 @@ extension RunnerTests {
       return SelectorElementMatch(element: nil, isAmbiguous: false, usedNonHittableFallback: false)
     }
 
-    let matches = app.descendants(matching: .any).matching(predicate).allElementsBoundByIndex
+    let matches = try elementQueries(app: app, matching: .any)
+      .flatMap { $0.matching(predicate).allElementsBoundByIndex }
       .filter(\.exists)
-    let facts = matches.map { element in
-      SelectorCandidateFacts(
-        isHittable: element.isHittable,
-        hasTappableFrame: hasTappableFrame(app: app, element: element),
-        containsExpectedPoint: expectedPoint.map(element.frame.contains) ?? true
+    let facts = try matches.map { element in
+      let isHittable = element.isHittable
+      let containsExpectedPoint = expectedPoint.map(element.frame.contains) ?? true
+      return SelectorCandidateFacts(
+        isHittable: isHittable,
+        hasTappableFrame: allowNonHittableFallback && !isHittable && containsExpectedPoint
+          ? try hasTappableFrame(app: app, element: element) : false,
+        containsExpectedPoint: containsExpectedPoint
       )
     }
     switch classifyDirectSelectorCandidates(
@@ -230,13 +260,18 @@ extension RunnerTests {
   // with no frame at all cannot be coordinate-tapped, otherwise the decision
   // is the shared TapPointPolicy center-in-frame rule (golden parity table
   // with the TS twin). app.frame is the frame source here — replay taps
-  // resolved bounds Maestro-style, so the union frame is intentional.
-  private func hasTappableFrame(app: XCUIApplication, element: XCUIElement) -> Bool {
+  // resolved bounds Maestro-style, so the union frame is intentional. A
+  // lit-panel request uses its booked window, because app.frame names one
+  // panel (ADR 0025).
+  private func hasTappableFrame(app: XCUIApplication, element: XCUIElement) throws -> Bool {
+    let windowFrame = try requestLitPanel == nil
+      ? readableAppFrame(app: app)
+      : requireRequestLitPanelSurface(app: app).geometry.windowOnScreen.rect
     let frame = element.frame
     if frame.isEmpty {
       return false
     }
-    return TapPointPolicy.isAllowed(elementFrame: frame, windowFrame: app.frame)
+    return TapPointPolicy.isAllowed(elementFrame: frame, windowFrame: windowFrame)
   }
 
   // The tappable on-screen viewport. app.frame is unsuitable: it unions
@@ -253,22 +288,74 @@ extension RunnerTests {
   /// Stops at the first qualifying window. Reading a window that will be discarded is not free: a
   /// transient candidate that disappears between its `exists` answer and its `frame` fetch makes
   /// XCTest record an issue, and an issue `record(_:)` does not mute ends the runner session
-  /// (ADR 0004, ADR 0005, #2995).
+  /// (`apple/runner/README.md` "XCTest accessibility channel policy", ADR 0005, #2995).
   ///
   /// The read that remains is not atomic: a window vanishing while it is the one being resolved still
   /// records, and the chosen window is read again on its way to a display ID
   /// (`RunnerResolveWindowDisplayID`).
-  func resolveRunnerWindow(app: XCUIApplication) -> (window: XCUIElement?, frame: CGRect) {
-    guard let resolved = resolveRunnerWindowElement(app: app) else {
-      return (nil, app.frame)
+  ///
+  /// Without a window the frame is the app's own, from the held `heldAppFrame` read, and empty when
+  /// that does not read either. A coordinate gesture resolves through `resolveCoordinateWindow`
+  /// instead, which refuses there.
+  func resolveRunnerWindow(app: XCUIApplication) throws -> (window: XCUIElement?, frame: CGRect) {
+    try resolveRunnerWindow(app: app) { heldAppFrame(app: $0) ?? .zero }
+  }
+
+  /// `resolveRunnerWindow` for a coordinate gesture: without a window it reads the app frame through
+  /// `readableAppFrame`, so a tree that answers neither refuses the gesture.
+  func resolveCoordinateWindow(app: XCUIApplication) throws -> (window: XCUIElement?, frame: CGRect) {
+    try resolveRunnerWindow(app: app, appFrame: readableAppFrame)
+  }
+
+  private func resolveRunnerWindow(
+    app: XCUIApplication,
+    appFrame: (XCUIApplication) throws -> CGRect
+  ) throws -> (window: XCUIElement?, frame: CGRect) {
+    if requestLitPanel != nil {
+      let booked = try requireRequestLitPanelSurface(app: app)
+      return (booked.window, booked.geometry.windowOnScreen.rect)
     }
+    guard let resolved = resolveRunnerWindowElement(app: app) else { return (nil, try appFrame(app)) }
     return (resolved.window, resolved.frame)
+  }
+
+  /// The app's own frame, or nil where it does not read. On iOS the read is held inside an issue
+  /// scope: on a tree XCTest cannot snapshot it fails after its retries, and an unheld issue ends the
+  /// runner test. A read that records an issue or leaves a non-finite frame (the infinite point XCTest
+  /// would anchor on) is nil; a finite empty frame reads. Every iOS read of the app frame goes through
+  /// here.
+  func heldAppFrame(app: XCUIApplication) -> CGRect? {
+#if os(iOS)
+    var frame = CGRect.null
+    let held = holdingRecordedIssues { frame = app.frame }
+    let finite = !frame.isNull && !frame.isInfinite
+      && frame.minX.isFinite && frame.minY.isFinite && frame.maxX.isFinite && frame.maxY.isFinite
+    guard held.issues.isEmpty, held.exceptionMessage == nil, finite else { return nil }
+    return frame
+#else
+    return app.frame
+#endif
+  }
+
+  /// The app frame a coordinate gesture decides on: `heldAppFrame`, refusing with the coded
+  /// `RunnerCoordinateRefusal` where it does not read.
+  func readableAppFrame(app: XCUIApplication) throws -> CGRect {
+#if os(iOS)
+    guard let frame = heldAppFrame(app: app) else { throw unreadableTreeRefusal }
+    return frame
+#else
+    return app.frame
+#endif
   }
 
   /// The app's first window with a usable frame, or nil. Unlike `resolveRunnerWindow` it never falls
   /// back to `app.frame`: when the windows query fails because XCTest cannot serialize the app's
   /// tree, that read fails the same way after XCTest's own retries (about 2s on Bluesky's feed).
   func resolveRunnerWindowElement(app: XCUIApplication) -> (window: XCUIElement, frame: CGRect)? {
+    if requestLitPanel != nil {
+      guard bookRequestLitPanelSurface(app: app) == nil, let booked = litPanelState.surface else { return nil }
+      return (booked.window, booked.geometry.windowOnScreen.rect)
+    }
     for window in app.windows.allElementsBoundByIndex where window.exists {
       let frame = window.frame
       if !frame.isEmpty {
@@ -278,17 +365,17 @@ extension RunnerTests {
     return nil
   }
 
-  func onScreenWindowFrame(app: XCUIApplication) -> CGRect {
-    resolveRunnerWindow(app: app).frame
+  func onScreenWindowFrame(app: XCUIApplication) throws -> CGRect {
+    try resolveRunnerWindow(app: app).frame
   }
 
-  func queryElement(app: XCUIApplication, selectorKey: String, selectorValue: String) -> Response {
+  func queryElement(app: XCUIApplication, selectorKey: String, selectorValue: String) throws -> Response {
     // querySelector is a read — it backs get/is/wait and the offscreen-refusal
     // double-check, none of which mutate. The fail-closed raw-match rule exists
     // to stop a mutation acting on an unseen duplicate; applying it here would
     // instead turn a decorative non-hittable duplicate into an AMBIGUOUS_MATCH
     // for readers that previously resolved the hittable element.
-    let match = findElement(
+    let match = try findElement(
       app: app,
       selectorKey: selectorKey,
       selectorValue: selectorValue,
@@ -350,9 +437,9 @@ extension RunnerTests {
     return left.elementType.rawValue < right.elementType.rawValue
   }
 
-  func readTextAt(app: XCUIApplication, x: Double, y: Double) -> String? {
+  func readTextAt(app: XCUIApplication, x: Double, y: Double) throws -> String? {
     let point = CGPoint(x: x, y: y)
-    let textInputCandidates = textInputCandidatesAt(app: app, point: point, contentTranslation: liveContentTranslation(app: app))
+    let textInputCandidates = try textInputCandidatesAt(app: app, point: point, contentTranslation: liveContentTranslation(app: app))
       .map(\.element)
     for element in textInputCandidates where prefersExpandedTextRead(element) {
       if let text = readableText(for: element) {
@@ -360,7 +447,8 @@ extension RunnerTests {
       }
     }
 
-    let candidates = app.descendants(matching: .any).allElementsBoundByIndex
+    let candidates = try elementQueries(app: app, matching: .any)
+      .flatMap { $0.allElementsBoundByIndex }
       .filter { element in
         element.exists && !element.frame.isEmpty && element.frame.contains(point)
       }
@@ -405,16 +493,80 @@ extension RunnerTests {
     }
   }
 
-  func tapAt(app: XCUIApplication, x: Double, y: Double) -> RunnerInteractionOutcome {
+  /// `context` is this call's own windows read when the caller already holds one, so a command
+  /// reads the tree's window once.
+  func tapAt(
+    app: XCUIApplication,
+    x: Double,
+    y: Double,
+    context: SynthesizedCoordinateContext? = nil
+  ) throws -> RunnerInteractionOutcome {
     if let outcome = selectFocusedTvElement(app: app, point: CGPoint(x: x, y: y), action: "tap") {
       return outcome
     }
-    return performCoordinateTap(app: app, x: x, y: y)
+#if os(iOS)
+    return try runOnMainActor({ try tapAtScreenPoint(app: app, x: x, y: y, context: context) }).get()
+#else
+    return try performCoordinateTap(app: app, x: x, y: y)
+#endif
   }
+
+#if os(iOS)
+  /// An XCTest coordinate resolves its anchor through the application's accessibility snapshot.
+  /// On a tree XCTest cannot serialize (a deep React Native screen) that read fails, XCTest records
+  /// an issue that ends the runner test, and the infinite point it leaves raises an exception.
+  /// This call's own windows read decides: a tree that answers takes the XCTest coordinate tap,
+  /// one that does not is synthesized at the screen point, and a synthesis that cannot run throws
+  /// instead of reaching the XCTest coordinate.
+  @MainActor
+  private func tapAtScreenPoint(
+    app: XCUIApplication,
+    x: Double,
+    y: Double,
+    context: SynthesizedCoordinateContext?
+  ) throws -> RunnerInteractionOutcome {
+    guard let context = try context ?? synthesizedCoordinateContext(app: app) else {
+      // No window and no sole screen: the tree is unreadable only when the app's own frame is too.
+      _ = try readableAppFrame(app: app)
+      return try performCoordinateTap(app: app, x: x, y: y, treeProven: true)
+    }
+    guard context.treeUnreadable else {
+      return try performCoordinateTap(app: app, x: x, y: y, treeProven: true)
+    }
+    switch try performSynthesizedTapGesture(app: app, x: x, y: y, context: context) {
+    case .performed:
+      return .performed
+    case .xctestFallback(let message, let hint), .refused(_, let message, let hint):
+      throw RunnerCoordinateRefusal(message: message, hint: hint)
+    }
+  }
+
+  var unreadableTreeRefusal: RunnerCoordinateRefusal {
+    RunnerCoordinateRefusal(
+      message: "XCTest cannot anchor a coordinate gesture: the app's accessibility tree answered no window and no frame",
+      hint: "XCTest cannot snapshot this app's accessibility tree, so the runner dispatched nothing. Retry on a shallower screen, or run snapshot -i and act on a ref once its capture reads back."
+    )
+  }
+
+  /// The element an XCTest coordinate gesture anchors on: the resolved window, or the app itself
+  /// where no window answers but the app's own frame does. When neither reads, the tree is
+  /// unreadable and the gesture refuses. Every iOS XCUICoordinate that does not come with a proven
+  /// tree resolves through here, and the app frame reads only through `readableAppFrame`.
+  private func requireReadableTreeAnchor(app: XCUIApplication) throws -> XCUIElement {
+    if requestLitPanel != nil {
+      return try requireRequestLitPanelSurface(app: app).window
+    }
+    if let resolved = resolveRunnerWindowElement(app: app) {
+      return resolved.window
+    }
+    _ = try readableAppFrame(app: app)
+    return app
+  }
+#endif
 
   func mouseClickAt(app: XCUIApplication, x: Double, y: Double, button: String) throws {
 #if os(macOS)
-    let coordinate = interactionCoordinate(app: app, x: x, y: y)
+    let coordinate = try interactionCoordinate(app: app, x: x, y: y)
     switch button {
     case "primary":
       coordinate.tap()
@@ -447,7 +599,7 @@ extension RunnerTests {
       durationMs: durationMs
     )
 
-    let coordinate = interactionCoordinate(app: app, x: x, y: y)
+    let coordinate = try interactionCoordinate(app: app, x: x, y: y)
     let interval = desktopScrollEventIntervalSeconds(durationMs: durationMs, eventCount: events.count)
     for (index, deltas) in events.enumerated() {
       // Keep desktop scrolling on XCTest's coordinate API so macOS owns wheel synthesis, natural
@@ -521,21 +673,21 @@ extension RunnerTests {
     }
   }
 
-  func doubleTapAt(app: XCUIApplication, x: Double, y: Double) -> RunnerInteractionOutcome {
+  func doubleTapAt(app: XCUIApplication, x: Double, y: Double) throws -> RunnerInteractionOutcome {
     if let outcome = selectFocusedTvElement(app: app, point: CGPoint(x: x, y: y), action: "double tap") {
       guard case .performed = outcome else { return outcome }
       sleepFor(0.1)
       _ = pressTvRemote(.select)
       return .performed
     }
-    return performCoordinateDoubleTap(app: app, x: x, y: y)
+    return try performCoordinateDoubleTap(app: app, x: x, y: y)
   }
 
-  func longPressAt(app: XCUIApplication, x: Double, y: Double, duration: TimeInterval) -> RunnerInteractionOutcome {
+  func longPressAt(app: XCUIApplication, x: Double, y: Double, duration: TimeInterval) throws -> RunnerInteractionOutcome {
     if let outcome = longSelectFocusedTvElement(app: app, point: CGPoint(x: x, y: y), duration: duration) {
       return outcome
     }
-    return performCoordinateLongPress(app: app, x: x, y: y, duration: duration)
+    return try performCoordinateLongPress(app: app, x: x, y: y, duration: duration)
   }
 
   func dragAt(
@@ -545,7 +697,7 @@ extension RunnerTests {
     x2: Double,
     y2: Double,
     holdDuration: TimeInterval
-  ) -> RunnerInteractionOutcome {
+  ) throws -> RunnerInteractionOutcome {
     // tvOS has no coordinate drag. Preserve the direction as a focus move.
     let dx = x2 - x
     let dy = y2 - y
@@ -555,41 +707,46 @@ extension RunnerTests {
     if pressTvRemote(button) {
       return .performed
     }
-    return performCoordinateDrag(app: app, x: x, y: y, x2: x2, y2: y2, holdDuration: holdDuration)
+    return try performCoordinateDrag(app: app, x: x, y: y, x2: x2, y2: y2, holdDuration: holdDuration)
   }
 
-  private func performCoordinateTap(app: XCUIApplication, x: Double, y: Double) -> RunnerInteractionOutcome {
+  private func performCoordinateTap(
+    app: XCUIApplication,
+    x: Double,
+    y: Double,
+    treeProven: Bool = false
+  ) throws -> RunnerInteractionOutcome {
 #if os(tvOS)
     return .unsupported(
       message: "coordinate tap is not supported on tvOS; move focus with swipe or scroll, then select the focused element",
       hint: "tvOS has no coordinate input; move focus with swipe/scroll to the target, then select it."
     )
 #else
-    interactionCoordinate(app: app, x: x, y: y).tap()
+    try interactionCoordinate(app: app, x: x, y: y, treeProven: treeProven).tap()
     return .performed
 #endif
   }
 
-  private func performCoordinateDoubleTap(app: XCUIApplication, x: Double, y: Double) -> RunnerInteractionOutcome {
+  private func performCoordinateDoubleTap(app: XCUIApplication, x: Double, y: Double) throws -> RunnerInteractionOutcome {
 #if os(tvOS)
     return .unsupported(
       message: "coordinate double tap is not supported on tvOS; move focus with swipe or scroll, then select the focused element",
       hint: "tvOS has no coordinate input; move focus with swipe/scroll to the target, then select it."
     )
 #else
-    interactionCoordinate(app: app, x: x, y: y).doubleTap()
+    try interactionCoordinate(app: app, x: x, y: y).doubleTap()
     return .performed
 #endif
   }
 
-  private func performCoordinateLongPress(app: XCUIApplication, x: Double, y: Double, duration: TimeInterval) -> RunnerInteractionOutcome {
+  private func performCoordinateLongPress(app: XCUIApplication, x: Double, y: Double, duration: TimeInterval) throws -> RunnerInteractionOutcome {
 #if os(tvOS)
     return .unsupported(
       message: "coordinate long press is not supported on tvOS; move focus with swipe or scroll, then long-select the focused element",
       hint: "tvOS has no coordinate input; move focus with swipe/scroll to the target, then long-select it."
     )
 #else
-    interactionCoordinate(app: app, x: x, y: y).press(forDuration: duration)
+    try interactionCoordinate(app: app, x: x, y: y).press(forDuration: duration)
     return .performed
 #endif
   }
@@ -601,34 +758,60 @@ extension RunnerTests {
     x2: Double,
     y2: Double,
     holdDuration: TimeInterval
-  ) -> RunnerInteractionOutcome {
+  ) throws -> RunnerInteractionOutcome {
 #if os(tvOS)
     return .unsupported(
       message: "coordinate drag is not supported on tvOS",
       hint: "tvOS has no coordinate input; use remote-driven swipe/scroll to move focus instead."
     )
 #else
-    let start = interactionCoordinate(app: app, x: x, y: y)
-    let end = interactionCoordinate(app: app, x: x2, y: y2)
+    let start = try interactionCoordinate(app: app, x: x, y: y)
+    let end = try interactionCoordinate(app: app, x: x2, y: y2, treeProven: true)
     start.press(forDuration: holdDuration, thenDragTo: end)
     return .performed
 #endif
   }
 
 #if !os(tvOS)
-  private func interactionCoordinate(app: XCUIApplication, x: Double, y: Double) -> XCUICoordinate {
+  /// The element a normalized-offset XCTest gesture anchors on: the resolved window, which on iOS
+  /// must come from a tree that answers.
+  private func normalizedOffsetAnchor(app: XCUIApplication) throws -> XCUIElement {
 #if os(iOS)
+    return try requireReadableTreeAnchor(app: app)
+#else
+    return try resolveCoordinateWindow(app: app).window ?? app
+#endif
+  }
+
+  /// `treeProven` is set by a caller whose own windows read already showed the tree answers.
+  private func interactionCoordinate(
+    app: XCUIApplication,
+    x: Double,
+    y: Double,
+    treeProven: Bool = false
+  ) throws -> XCUICoordinate {
+#if os(iOS)
+    if !treeProven {
+      _ = try requireReadableTreeAnchor(app: app)
+    }
     // Coordinate taps, double taps, long presses, and drags anchor at the app origin, not the
     // resolved window: callers pass screen points, and `app.frame` starts at the screen origin even
     // for a placed iPad window (#3899). The first qualifying
     // window is not always the one under the finger — a SpringBoard `alert accept` can live in an
     // alert window while the wallpaper or status-bar window qualifies first, so a window-relative
     // anchor misses the button. Reference frames and the synthesized display ID still resolve
-    // through `resolveRunnerWindow`, so a foldable tap keeps its panel and stays on its display.
-    let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
-    return origin.withOffset(CGVector(dx: x, dy: y))
+    // through `resolveRunnerWindow`. A foldable anchors at the lit panel's window instead, because
+    // the app origin names the outer panel whichever one is lit.
+    if requestLitPanel == nil {
+      let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+      return origin.withOffset(CGVector(dx: x, dy: y))
+    }
+    let booked = try requireRequestLitPanelSurface(app: app)
+    let origin = booked.window.coordinate(withNormalizedOffset: .zero)
+    let point = booked.geometry.contentPoint(from: SurfacePoint(CGPoint(x: x, y: y))).point
+    return origin.withOffset(CGVector(dx: point.x, dy: point.y))
 #else
-    let resolved = resolveRunnerWindow(app: app)
+    let resolved = try resolveCoordinateWindow(app: app)
     let root = resolved.window ?? app
     let origin = root.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
     let offsetX = x - Double(resolved.frame.origin.x)

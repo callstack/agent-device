@@ -2,7 +2,7 @@ import {
   snapshotCaptureAnnotationsFrom,
   type SnapshotCaptureAnnotations,
 } from '@agent-device/contracts/capture';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { sleep } from '@agent-device/host-kit/retry';
 import type { SnapshotFreshnessReason, SnapshotFreshnessWindow } from './types.ts';
 

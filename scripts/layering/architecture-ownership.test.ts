@@ -142,5 +142,6 @@ test('lookalike paths and symbols remain undeclared', () => {
   assert.equal(matchesDeclaredRoot(`${client.roots[0]}-extra`, client.roots[0]), false);
   assert.equal(matchesDeclaredRoot('src/snapshot-policy.ts', 'src/snapshot/'), false);
   assert.equal(matchesDeclaredRoot(`${capability.root}.bak`, capability.root), false);
-  assert.equal(capability.exports.includes('createRequestRuntimeBindingsExtra'), false);
+  const declaredExports: readonly string[] = capability.exports;
+  assert.equal(declaredExports.includes('createRequestRuntimeBindingsExtra'), false);
 });

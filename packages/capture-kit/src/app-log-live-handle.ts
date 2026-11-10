@@ -48,7 +48,7 @@ export function createAppLogLiveHandleFromFinish(
   });
 }
 
-function assertConfirmedCleanup(outcome: CleanupOutcome): void {
+function assertConfirmedCleanup(outcome: CleanupOutcome, cause?: unknown): void {
   if (isConfirmedCleanup(outcome)) return;
   throw new AppError(
     'COMMAND_FAILED',
@@ -61,5 +61,6 @@ function assertConfirmedCleanup(outcome: CleanupOutcome): void {
           ? 'Use the current resource owner or recovery record before retrying cleanup.'
           : 'Keep the recovery record and retry cleanup through the exact runtime owner.',
     },
+    cause,
   );
 }

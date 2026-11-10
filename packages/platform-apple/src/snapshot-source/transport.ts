@@ -2,9 +2,7 @@ import { asSnapshotSourceError, snapshotSourceError } from './errors.ts';
 import { remainingSnapshotSourceMs, type SnapshotSourceDeadline } from './deadline.ts';
 import { bridgeProcessExited } from './process.ts';
 import {
-  assertSnapshotBridgeEnvelope,
-  assertSnapshotBridgeTargetIdentity,
-  bridgeFailureFromEnvelope,
+  acceptSnapshotBridgeEnvelope,
   parseSnapshotBridgeEnvelope,
   SnapshotBridgeFrameDecoder,
   type SnapshotBridgeEnvelope,
@@ -15,6 +13,48 @@ import type {
   SnapshotSourceProcess,
   SnapshotSourceSocket,
 } from './types.ts';
+
+type BridgeExitWatcher = Readonly<{ onExit: () => void; onError: (error: unknown) => void }>;
+
+const bridgeExitWatchers = new WeakMap<SnapshotSourceProcess, Set<BridgeExitWatcher>>();
+
+/**
+ * Tells `watcher` when the bridge process exits or its exit status cannot be read, and returns the
+ * call that stops watching.
+ *
+ * `bridgeProcess.wait` stays pending for the bridge's whole life, and a reaction on a pending promise
+ * cannot be removed. A reaction per round trip would keep each round trip's decoder, request frame and
+ * response envelope reachable until the bridge exits, so the process carries one reaction and a round
+ * trip only joins and leaves the set it notifies.
+ */
+function watchBridgeExit(
+  bridgeProcess: SnapshotSourceProcess,
+  watcher: BridgeExitWatcher,
+): () => void {
+  const watchers = bridgeExitWatchers.get(bridgeProcess) ?? startBridgeExitWatch(bridgeProcess);
+  watchers.add(watcher);
+  return () => {
+    watchers.delete(watcher);
+  };
+}
+
+function startBridgeExitWatch(bridgeProcess: SnapshotSourceProcess): Set<BridgeExitWatcher> {
+  const watchers = new Set<BridgeExitWatcher>();
+  bridgeExitWatchers.set(bridgeProcess, watchers);
+  // The entry goes once the status settles, so a round trip that starts after the exit registers on
+  // the settled promise and still hears about the exit on its next turn.
+  bridgeProcess.wait.then(
+    () => {
+      bridgeExitWatchers.delete(bridgeProcess);
+      for (const watcher of watchers) watcher.onExit();
+    },
+    (error: unknown) => {
+      bridgeExitWatchers.delete(bridgeProcess);
+      for (const watcher of watchers) watcher.onError(error);
+    },
+  );
+  return watchers;
+}
 
 export async function roundTripSnapshotBridge(
   input: Readonly<{
@@ -50,16 +90,11 @@ export async function roundTripSnapshotBridge(
           throw snapshotSourceError('transport-failure', 'bridge-data-invalid');
         const body = decoder.push(chunk);
         if (body) {
-          const envelope = parseSnapshotBridgeEnvelope(body);
-          assertSnapshotBridgeEnvelope(envelope, input.requestId);
-          assertSnapshotBridgeTargetIdentity(envelope, {
+          const envelope = acceptSnapshotBridgeEnvelope(parseSnapshotBridgeEnvelope(body), {
+            requestId: input.requestId,
             pid: input.expectedPid,
             generation: input.expectedGeneration,
           });
-          if (envelope.ok !== true) bridgeFailureFromEnvelope(envelope);
-          if (typeof envelope.truncated !== 'boolean') {
-            throw snapshotSourceError('malformed-tree', 'truncated-invalid');
-          }
           finishResolve(envelope);
           return;
         }
@@ -78,14 +113,12 @@ export async function roundTripSnapshotBridge(
         }
       }
     };
-    input.process.wait.then(
-      () => {
-        if (!settled) void bridgeProcessExited(input.host, input.process).then(finishReject);
+    const stopWatchingExit = watchBridgeExit(input.process, {
+      onExit: () => {
+        void bridgeProcessExited(input.host, input.process).then(finishReject);
       },
-      (error: unknown) => {
-        if (!settled) finishReject(asSnapshotSourceError(error));
-      },
-    );
+      onError,
+    });
     const finishResolve = (value: SnapshotBridgeEnvelope) => finish(() => resolve(value));
     const finishReject = (error: unknown) => finish(() => reject(error));
     const finish = (action: () => void) => {
@@ -96,6 +129,7 @@ export async function roundTripSnapshotBridge(
       input.socket.off('data', onData);
       input.socket.off('error', onError);
       input.socket.off('close', onClose);
+      stopWatchingExit();
       action();
     };
 

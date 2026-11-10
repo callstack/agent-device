@@ -31,8 +31,10 @@ import { isUncommittedRepairSession } from '../../core/session-replay-transactio
 //   their timer and listener observation cannot survive a handoff. Active eligible runners retain the
 //   graceful-shutdown adoption policy.
 //
-// - `createDaemonLifecycleAdmission` answers `daemon_quiesce` before dispatch, using the same
-//   work census as idle reap. Embedded runtimes refuse it; their host owns close().
+// - `createDaemonLifecycleAdmission` answers `daemon_quiesce` before dispatch. Its census counts
+//   every session, including the reapable ones idle reap skips (an uncommitted repair, or a session
+//   a failed `close` kept), so a replacement still refuses them; idle reap calls close() directly and
+//   does not pass this admission. Embedded runtimes refuse it; their host owns close().
 
 const DAEMON_IDLE_REAP_DEFAULT_MS = 5 * 60_000;
 
@@ -62,15 +64,17 @@ export function resolveDaemonIdleReapMs(
  * the idle timer on every command while an ABANDONED one is reaped after the
  * idle window and leaves a `REPAIR_SESSION_EXPIRED` tombstone
  * (`teardownDaemonSession`) rather than leaking the daemon/lease indefinitely.
- * Every ordinary open session (and a repair that already committed) blocks
- * idle-reap as before.
+ * A session that `close` kept after unconfirmed cleanup (#4237) does not block it either: reaping the
+ * daemon retries that cleanup in shutdown teardown, and a claim still unconfirmed goes stale with the
+ * daemon, as it did before `close` kept such sessions. Every other open session (and a repair that
+ * already committed) blocks idle-reap as before.
  */
 export function hasReapBlockingOpenSessions(sessionStore: SessionStore): boolean {
-  return sessionStore.toArray().some((session) => !isReapableRepairSession(session));
+  return sessionStore.toArray().some((session) => !isReapableSession(session));
 }
 
-function isReapableRepairSession(session: SessionState): boolean {
-  return isUncommittedRepairSession(session);
+function isReapableSession(session: SessionState): boolean {
+  return isUncommittedRepairSession(session) || session.closeEffectsUnconfirmed === true;
 }
 
 // Recording lifecycle is session-scoped (session.screenRecording), so a recording

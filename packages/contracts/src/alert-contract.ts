@@ -1,4 +1,11 @@
 export const ALERT_POLL_INTERVAL_MS = 300;
+/**
+ * The minimum budget for a retry of `alert accept` or `alert dismiss` through the XCTest runner.
+ * A read cut off by the runner's main-thread watchdog is reported as `MAIN_THREAD_TIMEOUT`, not
+ * absence. Live late-prompt reads were accepted up to 1492 ms; three were cut off at 1502–1610 ms.
+ * `alert wait` and the macOS helper do not use it.
+ */
+export const ALERT_MIN_READ_BUDGET_MS = 1_500;
 export const DEFAULT_ALERT_TIMEOUT_MS = 10_000;
 export const ALERT_ACTION_RETRY_MS = 2_000;
 
@@ -15,8 +22,8 @@ export const MAX_ALERT_WINDOW_MS = 2_147_483_647;
  * The one alert failure the family retries on: the backend looked and there was no alert *yet*.
  * Both Apple backends state it in typed form — the XCTest runner as this `ErrorPayload.code`
  * (surfacing as `details.runnerErrorCode`, like `RUNNER_BUSY`, without changing the wire error
- * code), the macOS helper as details.reason — and so do the tree-based acting legs (Android and
- * Limrun iOS, through the shared driver), as this `details.reason` paired with `dispatched:
+ * code), the macOS helper as details.reason — and so does the tree-based Android acting leg
+ * (through the shared driver), as this `details.reason` paired with `dispatched:
  * 'no'`. Retry and the fallback hint key on these, never on the message text: a transport,
  * runner or helper failure must never read as an absent alert.
  */
@@ -32,9 +39,9 @@ export const ALERT_NOT_FOUND_REASON = 'alert-not-found';
 export const ALERT_BUTTON_NOT_FOUND_RUNNER_CODE = 'ALERT_BUTTON_NOT_FOUND';
 
 /**
- * The Apple XCUITest runner saw a blocking system modal but could not read its remote host, so
- * it has no buttons to report or press. A prompt is on screen: this is never absence, and it
- * travels as its own wire code with `dispatched: no`.
+ * The Apple XCUITest runner could not complete required alert acquisition: a query failed,
+ * the search deadline expired, a system modal's host could not be read, or an app surface has
+ * no actionable controls yet. It travels as its own wire code with `dispatched: no`.
  */
 export const ALERT_UNRESOLVED_RUNNER_CODE = 'ALERT_UNRESOLVED';
 
@@ -189,6 +196,16 @@ export const ALERT_CAPTURE_UNDECIDED_REASON = 'alert_capture_undecided';
 
 export const ALERT_ACTIONS = ['get', 'accept', 'dismiss', 'wait'] as const;
 export type AlertAction = (typeof ALERT_ACTIONS)[number];
+
+/**
+ * The one parse of an `alert` subaction: case-insensitive, matching how the registry classifies
+ * it for ref frames and recording. Returns undefined for an unknown word; each caller supplies
+ * its own default for an absent subaction and its own refusal.
+ */
+export function parseAlertAction(raw: string): AlertAction | undefined {
+  const action = raw.toLowerCase();
+  return ALERT_ACTIONS.find((candidate) => candidate === action);
+}
 
 export type AlertPlatform = 'android' | 'ios' | 'macos';
 

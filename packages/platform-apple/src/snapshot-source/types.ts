@@ -1,9 +1,5 @@
 import type { ExecResult } from '@agent-device/host-kit/command';
-import type {
-  CaptureHint,
-  IosSnapshotAcquisition,
-  IosViewportEvidence,
-} from '@agent-device/contracts/ios-snapshot';
+import type { CaptureHint, IosViewportEvidence } from '@agent-device/contracts/ios-snapshot';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { NativeBuildHost } from '../native-build/host.ts';
 import type { SimulatorAddress } from '../core/simctl.ts';
@@ -16,50 +12,35 @@ export type SnapshotSourceLimits = Readonly<{
   maxDurationMs: number;
 }>;
 
-export type SnapshotSourceTarget = Readonly<{
-  simulator: SimulatorAddress;
-  runtime: string;
+/** The app generation a bridge read is planned against, whichever process reads the tree. */
+export type SnapshotBridgeTarget = Readonly<{
   pid: number;
   generation: string;
   targetId?: string;
   processStartTime?: string;
 }>;
 
-export type SnapshotSourceRequest = Readonly<{
-  target: SnapshotSourceTarget;
+/** A target the host reaches through its own guest bridge process on a local Simulator. */
+export type SnapshotSourceTarget = SnapshotBridgeTarget &
+  Readonly<{
+    simulator: SimulatorAddress;
+    runtime: string;
+  }>;
+
+export type SnapshotBridgeSourceRequest<Target extends SnapshotBridgeTarget> = Readonly<{
+  target: Target;
   hint: CaptureHint;
+  /**
+   * System surface host executables whose running process refuses this capture with
+   * `system-surface-host-present`. Absent means the caller already knows no host presents. The
+   * guest accepts 1 to 8 names of 1 to 256 characters each.
+   */
+  surfaceHostExecutables?: readonly string[];
   limits?: Partial<SnapshotSourceLimits>;
   signal?: AbortSignal;
 }>;
 
-export type SnapshotSourceSuccess = Readonly<{
-  stage: 'acquired';
-  acquisition: IosSnapshotAcquisition;
-}>;
-
-export type SnapshotSourceFailureKind =
-  | 'unsupported'
-  | 'malformed-tree'
-  | 'stale-target'
-  | 'timeout'
-  | 'cancelled'
-  | 'process-crash'
-  | 'transport-failure'
-  /** The bridge binary is still being prepared by a detached attempt; nothing failed. */
-  | 'preparing';
-
-export type SnapshotSourceFailure = Readonly<{
-  kind: SnapshotSourceFailureKind;
-  code: string;
-  details?: Readonly<Record<string, unknown>>;
-}>;
-
-export type SnapshotSourceOutcome =
-  | SnapshotSourceSuccess
-  | Readonly<{
-      stage: 'failed';
-      failure: SnapshotSourceFailure;
-    }>;
+export type SnapshotSourceRequest = SnapshotBridgeSourceRequest<SnapshotSourceTarget>;
 
 export type SnapshotSourceProcess = Readonly<{
   pid: number;

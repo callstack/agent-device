@@ -13,10 +13,14 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
  * `Interactor` seam the point reads use. The read never starts a runner: with no live runner session
  * (a bridge simulator right after `open`, an idle-stopped runner, a device whose runner is down) it
  * answers nothing and the session record alone answers upstream. That is what keeps `appState` on
- * the simulator host in the runner-demand table, since it demands no runner of its own.
+ * the simulator host in the runner-demand table, since it demands no runner of its own. A session
+ * with no bundle id (one opened from a URL) has no app for the runner to read, so it answers nothing
+ * too.
  */
 export function bindAppleAppStateRuntime(
-  host: Pick<PlatformRuntimeHost, 'appleApplications'>,
+  host: {
+    appleApplications: Pick<PlatformRuntimeHost['appleApplications'], 'hasLiveRunnerSession'>;
+  },
   params: Readonly<{
     device: DeviceInfo;
     signal: AbortSignal;
@@ -26,6 +30,7 @@ export function bindAppleAppStateRuntime(
   return Object.freeze({
     appState: async (input?: AppStateRuntimeInput): Promise<AppStateRuntimeResult> => {
       params.signal.throwIfAborted();
+      if (!input?.appBundleId) return {};
       if (!(await host.appleApplications.hasLiveRunnerSession(params.device, {}))) return {};
       const interactor = await params.resolveInteractor(params.device, {
         appBundleId: input?.appBundleId,

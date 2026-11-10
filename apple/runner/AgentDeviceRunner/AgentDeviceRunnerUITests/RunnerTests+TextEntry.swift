@@ -161,6 +161,7 @@ extension RunnerTests {
     let prefersFocusedElement: Bool
     let contentTranslation: TextEntryContentTranslation
     let fromTapWitness: Bool
+    let reusesCurrentFocus: Bool
     /// The input the first resolved element was. Once bound, resolution refuses any other input.
     let boundIdentity: TextEntryInputIdentity?
     /// The text input that sat under `refreshPoint` before the focus tap, which binds the target to
@@ -179,6 +180,7 @@ extension RunnerTests {
       prefersFocusedElement: Bool,
       contentTranslation: TextEntryContentTranslation,
       fromTapWitness: Bool = false,
+      reusesCurrentFocus: Bool = false,
       boundIdentity: TextEntryInputIdentity? = nil,
       inputAtRefreshPoint: TextInputAtPoint? = nil,
       postFocusRead: ResolvedTextEntryInput? = nil
@@ -188,6 +190,7 @@ extension RunnerTests {
       self.prefersFocusedElement = prefersFocusedElement
       self.contentTranslation = contentTranslation
       self.fromTapWitness = fromTapWitness
+      self.reusesCurrentFocus = reusesCurrentFocus
       self.boundIdentity = boundIdentity ?? inputAtRefreshPoint?.identity
       self.inputAtRefreshPoint = inputAtRefreshPoint
       self.postFocusRead = postFocusRead
@@ -206,6 +209,7 @@ extension RunnerTests {
         prefersFocusedElement: prefersFocusedElement,
         contentTranslation: contentTranslation,
         fromTapWitness: fromTapWitness,
+        reusesCurrentFocus: reusesCurrentFocus,
         boundIdentity: boundIdentity ?? input.identity,
         inputAtRefreshPoint: inputAtRefreshPoint
       )
@@ -286,28 +290,28 @@ extension RunnerTests {
   struct TextEntryReader {
     private(set) var target: TextEntryTarget
     private var lastRead: ResolvedTextEntryInput?
-    private let resolve: (TextEntryTarget) -> ResolvedTextEntryInput?
+    private let resolve: (TextEntryTarget) throws -> ResolvedTextEntryInput?
 
-    init(target: TextEntryTarget, resolve: @escaping (TextEntryTarget) -> ResolvedTextEntryInput?) {
+    init(target: TextEntryTarget, resolve: @escaping (TextEntryTarget) throws -> ResolvedTextEntryInput?) {
       self.target = target.withResolvedInput(target.postFocusRead)
       lastRead = target.postFocusRead
       self.resolve = resolve
     }
 
-    mutating func input() -> ResolvedTextEntryInput? {
+    mutating func input() throws -> ResolvedTextEntryInput? {
       if let lastRead {
         return lastRead
       }
-      let read = resolve(target)
+      let read = try resolve(target)
       target = target.withResolvedInput(read)
       lastRead = read
       return read
     }
 
     /// Runs `dispatch`, which posts to the app or pauses, so the next `input()` resolves again.
-    mutating func dispatch<T>(_ dispatch: () -> T) -> T {
+    mutating func dispatch<T>(_ dispatch: () throws -> T) rethrows -> T {
       lastRead = nil
-      return dispatch()
+      return try dispatch()
     }
   }
 
@@ -395,8 +399,8 @@ extension RunnerTests {
   /// left, delete bursts run from the caret, and a value longer than one burst is read again after
   /// each burst until it reads empty, stops shortening, or has had at least one burst more than it
   /// needs.
-  func clearTextInput(app: XCUIApplication, reader: inout TextEntryReader) {
-    guard let input = reader.input() else {
+  func clearTextInput(app: XCUIApplication, reader: inout TextEntryReader) throws {
+    guard let input = try reader.input() else {
       return
     }
     // Skip the clear (edge-tap, select all, delete bursts) ONLY when we can confirm the
@@ -411,14 +415,16 @@ extension RunnerTests {
     if existing?.isEmpty == true {
       return
     }
-    // Read before the caret tap, which dispatches to the app.
+    let defersCaretTap = reader.target.reusesCurrentFocus
     var valueLength = normalizedElementText(input.attributes.value).count
     // The tap also focuses the field, which a clear can reach with focus unconfirmed.
 #if !os(tvOS)
-    reader.dispatch { moveCaretToEnd(app: app, input: input) }
+    if !defersCaretTap {
+      try reader.dispatch { try moveCaretToEnd(app: app, input: input) }
+    }
 #endif
     // An input that stops answering once focused (#3060) cannot be read back, so it gets one burst.
-    guard reader.input() != nil else {
+    guard try reader.input() != nil else {
       let burst = Self.textClearBurst(valueLength: valueLength)
       reader.dispatch { input.element.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: burst)) }
       return
@@ -430,9 +436,9 @@ extension RunnerTests {
     // bursts alone.
     if existing != nil {
       var passes = 0
-      let outcome = Self.clearUntilEmpty(
+      let outcome = try Self.clearUntilEmpty(
         clearOnce: {
-          guard let input = reader.input() else {
+          guard let input = try reader.input() else {
             return .stop
           }
           passes += 1
@@ -443,28 +449,41 @@ extension RunnerTests {
           return .posted
         },
         read: {
-          textValueRead(for: reader.input()?.attributes, treatingPlaceholderAsEmpty: true)
+          textValueRead(for: try reader.input()?.attributes, treatingPlaceholderAsEmpty: true)
         }
       )
       NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_CLEAR route=element passes=%d outcome=%@", passes, String(describing: outcome))
       // Text left after every pass goes to the bursts; an input that no longer resolves is not typed into.
       guard outcome == .notCleared,
-            let remaining = reader.input().flatMap({ editableTextValue(for: $0.attributes, treatingPlaceholderAsEmpty: true) })
+            let remaining = try reader.input().flatMap({ editableTextValue(for: $0.attributes, treatingPlaceholderAsEmpty: true) })
       else {
         return
       }
       valueLength = remaining.count
     }
 #endif
+    if defersCaretTap {
+      guard let fallbackInput = try reader.input() else {
+        return
+      }
+#if !os(tvOS)
+      try reader.dispatch { try moveCaretToEnd(app: app, input: fallbackInput) }
+#endif
+      guard try reader.input() != nil else {
+        let burst = Self.textClearBurst(valueLength: valueLength)
+        reader.dispatch { fallbackInput.element.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: burst)) }
+        return
+      }
+    }
     for _ in 0...(valueLength / Self.maxTextClearBurst + 1) {
-      guard let input = reader.input() else {
+      guard let input = try reader.input() else {
         return
       }
       let burst = Self.textClearBurst(valueLength: valueLength)
       reader.dispatch { input.element.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: burst)) }
       // A burst that covers the value needs no read.
       guard burst < valueLength + Self.textClearSlack,
-            let remaining = reader.input().flatMap({ editableTextValue(for: $0.attributes, treatingPlaceholderAsEmpty: true) }),
+            let remaining = try reader.input().flatMap({ editableTextValue(for: $0.attributes, treatingPlaceholderAsEmpty: true) }),
             Self.textClearContinues(clearedLength: valueLength, remainingLength: remaining.count)
       else {
         return
@@ -516,10 +535,11 @@ extension RunnerTests {
 
   /// Resolves the target's input, with the snapshot the resolution read it through. A bound target
   /// accepts only an input whose snapshot carries its bound identity, so every post, read-back,
-  /// verification poll, and repair refuses an input that took the bound one's place.
-  func resolveTextEntryInput(app: XCUIApplication, target: TextEntryTarget) -> ResolvedTextEntryInput? {
+  /// verification poll, and repair refuses an input that took the bound one's place. Every search runs
+  /// under the element search's roots, so a lit-panel refusal propagates.
+  func resolveTextEntryInput(app: XCUIApplication, target: TextEntryTarget) throws -> ResolvedTextEntryInput? {
     guard let boundIdentity = target.boundIdentity else {
-      return resolveUnboundTextEntryInput(app: app, target: target)
+      return try resolveUnboundTextEntryInput(app: app, target: target)
     }
     func boundInput(_ candidate: XCUIElement) -> ResolvedTextEntryInput? {
       guard let input = ResolvedTextEntryInput(reading: candidate, contentTranslation: target.contentTranslation),
@@ -538,14 +558,14 @@ extension RunnerTests {
     }
     if target.inputAtRefreshPoint == nil,
        let refreshPoint = target.refreshPoint,
-       case .matches(let candidates) = probeTextInputs(app: app, point: refreshPoint, contentTranslation: target.contentTranslation),
+       case .matches(let candidates) = try probeTextInputs(app: app, point: refreshPoint, contentTranslation: target.contentTranslation),
        let match = candidates.first(where: { $0.identity == boundIdentity }) {
       return match
     }
     if let focused = focusedTextInput(app: app), let input = boundInput(focused) {
       return input
     }
-    if let byIdentifier = boundTextEntryInputQuery(app: app, identity: boundIdentity),
+    if let byIdentifier = try boundTextEntryInputQuery(app: app, identity: boundIdentity),
        let input = boundInput(byIdentifier) {
       return input
     }
@@ -554,12 +574,14 @@ extension RunnerTests {
 
   /// Whether a bound target's input is proven gone: XCTest found no match for it, or a different
   /// input answers in its place, and nothing at its point carries its identity. A failed probe
-  /// proves nothing. Unbound targets and unidentified inputs without an element cannot be proven
-  /// gone.
-  func boundTextEntryInputIsGone(app: XCUIApplication, target: TextEntryTarget) -> Bool {
-    guard let boundIdentity = target.boundIdentity,
-          let query = boundTextEntryInputQuery(app: app, identity: boundIdentity) ?? target.element
-    else {
+  /// proves nothing; a lit-panel refusal propagates. Unbound targets and unidentified inputs
+  /// without an element cannot be proven gone.
+  func boundTextEntryInputIsGone(app: XCUIApplication, target: TextEntryTarget) throws -> Bool {
+    guard let boundIdentity = target.boundIdentity else {
+      return false
+    }
+    let byIdentifier = try boundTextEntryInputQuery(app: app, identity: boundIdentity)
+    guard let query = byIdentifier ?? target.element else {
       return false
     }
     switch probeTextEntryInput(query) {
@@ -573,7 +595,7 @@ extension RunnerTests {
     guard let refreshPoint = target.refreshPoint else {
       return true
     }
-    switch probeTextInputs(app: app, point: refreshPoint, contentTranslation: target.contentTranslation) {
+    switch try probeTextInputs(app: app, point: refreshPoint, contentTranslation: target.contentTranslation) {
     case .absent:
       return true
     case .matches(let candidates):
@@ -583,12 +605,15 @@ extension RunnerTests {
     }
   }
 
-  /// The app-wide query for an input whose identifier is unique enough to search by.
-  private func boundTextEntryInputQuery(app: XCUIApplication, identity: TextEntryInputIdentity) -> XCUIElement? {
+  /// The query, under the element search's roots, for an input whose identifier is distinctive.
+  private func boundTextEntryInputQuery(app: XCUIApplication, identity: TextEntryInputIdentity) throws -> XCUIElement? {
     guard identity.isDistinguishable else {
       return nil
     }
-    return app.descendants(matching: identity.elementType).matching(identifier: identity.identifier).element
+    let queries = try elementQueries(app: app, matching: identity.elementType).map {
+      $0.matching(identifier: identity.identifier)
+    }
+    return (queries.count == 1 ? queries.first : queries.first { $0.count > 0 })?.element
   }
 
   /// Snapshots one candidate: its identity, a proven no-match, or a failure that proves nothing.
@@ -606,7 +631,7 @@ extension RunnerTests {
   }
 
   /// Resolution for a target not bound to an input yet: the first element that exists.
-  private func resolveUnboundTextEntryInput(app: XCUIApplication, target: TextEntryTarget) -> ResolvedTextEntryInput? {
+  private func resolveUnboundTextEntryInput(app: XCUIApplication, target: TextEntryTarget) throws -> ResolvedTextEntryInput? {
     let read = { (element: XCUIElement) in
       ResolvedTextEntryInput(reading: element, contentTranslation: target.contentTranslation)
     }
@@ -617,13 +642,13 @@ extension RunnerTests {
       return input
     }
     if let refreshPoint = target.refreshPoint,
-       let refreshed = textInputAt(app: app, x: refreshPoint.x, y: refreshPoint.y, contentTranslation: target.contentTranslation) {
+       let refreshed = try textInputCandidatesAt(app: app, point: refreshPoint, contentTranslation: target.contentTranslation).first {
       return refreshed
     }
     return focusedTextInput(app: app).flatMap(read)
   }
 
-  private func moveCaretToEnd(app: XCUIApplication, input: ResolvedTextEntryInput) {
+  private func moveCaretToEnd(app: XCUIApplication, input: ResolvedTextEntryInput) throws {
 #if os(tvOS)
     return
 #else
@@ -642,7 +667,7 @@ extension RunnerTests {
     guard let frame = input.frameOnScreen, !frame.isEmpty else {
       return
     }
-    _ = tapAt(
+    _ = try tapAt(
       app: app,
       x: frame.minX + max(2, frame.width - 4),
       y: frame.minY + max(2, frame.height / 2)

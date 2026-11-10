@@ -146,6 +146,7 @@ export const MACOS_HELPER_REFUSAL_REASONS = [
   'no-accessible-target',
   'no-settable-text-input',
   'no-scroll-bar',
+  'no-context-menu',
 ] as const;
 export const MACOS_DELIVERY_MECHANISMS = [
   'ax-press',
@@ -154,6 +155,7 @@ export const MACOS_DELIVERY_MECHANISMS = [
   'ax-selected-text',
   'ax-confirm',
   'ax-scroll-bar',
+  'ax-show-menu',
   'key-events',
 ] as const;
 /** How an app-surface action reached the app, as the helper reports it. */
@@ -587,6 +589,15 @@ export async function runMacOsFillAction(
     ['fill', '--x', String(x), '--y', String(y), '--text', text],
     options,
   );
+}
+
+/** Opens the context menu of the app session's element at a point, as a secondary click does. */
+export async function runMacOsShowMenuAction(
+  x: number,
+  y: number,
+  options: { bundleId: string; signal?: AbortSignal; env: Readonly<EnvMap> },
+): Promise<{ mechanism?: MacOsDeliveryMechanism; role?: string; windowTitle?: string }> {
+  return await runMacOsAppSurfaceAction(['show-menu', '--x', String(x), '--y', String(y)], options);
 }
 
 /** Scrolls the scroll area at the center of the app session's front window. */

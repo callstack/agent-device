@@ -1,5 +1,6 @@
 import {
   ALERT_ACTION_RETRY_MS,
+  ALERT_MIN_READ_BUDGET_MS,
   ALERT_NOT_FOUND_REASON,
   ALERT_NOT_FOUND_RUNNER_CODE,
   ALERT_POLL_INTERVAL_MS,
@@ -85,6 +86,8 @@ export async function readAppleAlert(
 /**
  * Poll `get` until one answers or the caller's window runs out. The first attempt gets the whole
  * window and later ones only what is left, so a runner that blocks cannot outlive the budget.
+ * After a completed observation, another read needs more than one polling interval of budget.
+ * A dispatched read still owns its result, including a watchdog timeout.
  */
 export async function awaitAppleAlert(
   device: DeviceInfo,
@@ -95,12 +98,15 @@ export async function awaitAppleAlert(
   const runAlert = runAppleAlert(device, runnerOptions, options, env);
   const timeout = options?.timeoutMs ?? DEFAULT_ALERT_TIMEOUT_MS;
   const start = Date.now();
-  let firstAttempt = true;
   let lastRetriable: AppError | undefined;
   while (Date.now() - start < timeout) {
+    const remainingMs = remainingBudgetMs(start, timeout);
+    if (lastRetriable && remainingMs <= ALERT_POLL_INTERVAL_MS) {
+      await sleep(remainingMs);
+      break;
+    }
     try {
-      const budgetMs = firstAttempt ? timeout : remainingBudgetMs(start, timeout);
-      firstAttempt = false;
+      const budgetMs = lastRetriable ? remainingMs : timeout;
       return await runAlert('get', budgetMs);
     } catch (error) {
       // Only a typed absence or an unreadable prompt is worth waiting out. Anything else — a dead
@@ -109,9 +115,12 @@ export async function awaitAppleAlert(
       if (!isAlertRetriableError(error)) throw error;
       lastRetriable = error;
     }
-    await sleep(ALERT_POLL_INTERVAL_MS);
+    const remainingMsAfterRead = timeout - (Date.now() - start);
+    if (remainingMsAfterRead > 0) {
+      await sleep(Math.min(ALERT_POLL_INTERVAL_MS, remainingMsAfterRead));
+    }
   }
-  if (lastRetriable && isAlertUnresolvedError(lastRetriable)) throw lastRetriable;
+  if (isAlertUnresolvedError(lastRetriable)) throw lastRetriable;
   throw new AppError('COMMAND_FAILED', 'alert wait timed out', lastRetriable?.details);
 }
 
@@ -120,6 +129,10 @@ export async function awaitAppleAlert(
  * is still animating in — or an unreadable prompt. Any other failure is reported on its first
  * occurrence. A window exhausted on absence carries the scoped-snapshot fallback the agent needs
  * next; one exhausted on an unreadable prompt keeps the runner's own hint.
+ *
+ * Retries start within `ALERT_ACTION_RETRY_MS`. Each XCTest runner retry gets at least
+ * `ALERT_MIN_READ_BUDGET_MS` to avoid cutting alert acquisition short, so an in-flight retry
+ * can finish after the retry window. The macOS helper ignores the read budget.
  */
 export async function actOnAppleAlert(
   device: DeviceInfo,
@@ -137,7 +150,7 @@ export async function actOnAppleAlert(
     try {
       const budgetMs = firstAttempt
         ? runnerTimeoutMs
-        : remainingBudgetMs(start, ALERT_ACTION_RETRY_MS);
+        : Math.max(remainingBudgetMs(start, ALERT_ACTION_RETRY_MS), ALERT_MIN_READ_BUDGET_MS);
       firstAttempt = false;
       return await runAlert(action, budgetMs);
     } catch (error) {

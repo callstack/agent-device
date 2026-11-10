@@ -22,6 +22,15 @@ extension RunnerTests {
     }
   }
 
+  func testListenerPeerRequiresExplicitForwardingForDirectNetworkAccess() {
+    XCTAssertFalse(RunnerListenerPeer.directNetwork.isAdmitted(acceptsForwardedConnections: false))
+    XCTAssertTrue(RunnerListenerPeer.directNetwork.isAdmitted(acceptsForwardedConnections: true))
+    for peer: RunnerListenerPeer in [.loopback, .tunnel] {
+      XCTAssertTrue(peer.isAdmitted(acceptsForwardedConnections: false))
+      XCTAssertTrue(peer.isAdmitted(acceptsForwardedConnections: true))
+    }
+  }
+
   func testListenerPeerRecognizesEveryLoopbackAddressForm() {
     let peer = { (host: String) in NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: 8100) }
     XCTAssertTrue(RunnerListenerPeer.isLoopback(peer("127.0.0.1")))

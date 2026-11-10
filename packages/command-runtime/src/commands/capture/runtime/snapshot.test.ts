@@ -11,7 +11,7 @@ import { createAgentDevice } from '../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import type { PostGestureOutcome } from '@agent-device/kernel/snapshot';
+import type { PostGestureOutcome } from '@agent-device/contracts/snapshot-model';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import {
   attachSnapshotClickabilityEvidence,
@@ -73,7 +73,6 @@ test('runtime snapshot upgrades an absent truncation flag only for producers tha
     'apple-runner': false,
     'simulator-ax-bridge': false,
     'appium-source': undefined,
-    'limrun-ios-tree': undefined,
     'revyl-ios-tree': undefined,
   } as const satisfies Record<IosSnapshotProducer, boolean | undefined>;
 
@@ -86,6 +85,18 @@ test('runtime snapshot upgrades an absent truncation flag only for producers tha
 
     assert.equal(result.truncated, expected[producer], producer);
   }
+});
+
+test('runtime snapshot leaves truncation unknown for a producer this host does not list', async () => {
+  // A plugin built against another release can name a producer this host has no registry row for.
+  const producer = 'future-ios-tree' as IosSnapshotProducer;
+  const device = createSnapshotOnlyDevice({
+    snapshot: { nodes: [], backend: 'xctest', producer, createdAt: 1 },
+  });
+
+  const result = await device.capture.snapshot({ session: 'default' });
+
+  assert.equal(result.truncated, undefined);
 });
 
 test('runtime snapshot recognizes equivalent bounds and still updates its baseline', async () => {

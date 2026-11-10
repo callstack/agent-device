@@ -82,6 +82,29 @@ test('batch structured interaction target is projected to positionals, not devic
   assert.equal(step?.flags?.udid, 'sim-1');
 });
 
+test('batch steps carry the stabilization opt-out as the daemon flag, only where a step asks', async () => {
+  const result = await runCliCapture([
+    'batch',
+    '--steps',
+    JSON.stringify([
+      { command: 'scroll', input: { direction: 'down', postGestureStabilization: false } },
+      {
+        command: 'swipe',
+        input: { from: { x: 10, y: 10 }, to: { x: 10, y: 200 }, postGestureStabilization: false },
+      },
+      { command: 'scroll', input: { direction: 'up' } },
+    ]),
+    '--json',
+  ]);
+
+  assert.equal(result.code, null);
+  const steps = result.calls[0]?.flags?.batchSteps ?? [];
+  assert.equal(steps.length, 3);
+  assert.equal(steps[0]?.flags?.postGestureStabilization, false);
+  assert.equal(steps[1]?.flags?.postGestureStabilization, false);
+  assert.equal(Object.hasOwn(steps[2]?.flags ?? {}, 'postGestureStabilization'), false);
+});
+
 test('batch rejects invalid structured step input before daemon projection', async () => {
   const result = await runCliCapture([
     'batch',

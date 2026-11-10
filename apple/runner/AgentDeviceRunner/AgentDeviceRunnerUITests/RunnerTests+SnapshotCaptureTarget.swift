@@ -12,7 +12,15 @@ struct SnapshotCaptureTarget {
   let app: XCUIApplication
   let bundleId: String?
   let processIdentifier: Int?
+  /// The lit panel's window the request booked; set only on a multi-panel request.
+  var litPanelSurface: LitPanelSurface? = nil
+  /// Set on an observe-only capture, whose answer asserts app provenance: the system-alert tier then
+  /// refuses the capture instead of answering with the SpringBoard tree (#3348).
+  var refusesSystemAlertSubstitution = false
 }
+
+/// The system-alert tier would have answered a capture that must come from the app.
+struct SystemAlertSubstitutionRefused: Error {}
 
 /// What snapshot command preparation hands the off-main capture.
 enum SnapshotCommandPreparation {

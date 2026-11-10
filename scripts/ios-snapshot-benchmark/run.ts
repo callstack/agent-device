@@ -10,7 +10,16 @@ import { classifyFailure, formatCliFailure, openFixture, type CliContext } from 
 import { BenchmarkControlError, runDeepButtonControls } from './deep-control.ts';
 import { CONTRACT, screenFixture } from './definitions.ts';
 import { deepButtonFixtureEvidence } from './deep-button.ts';
-import { readGitRevision, readHostIdentity, readTarget, readToolchain } from '../lib/bench-host.ts';
+import {
+  type GitRevision,
+  type HostIdentity,
+  readGitRevision,
+  readHostIdentity,
+  readTarget,
+  readToolchain,
+  type Target,
+  type Toolchain,
+} from '../lib/bench-host.ts';
 import {
   BenchmarkCellAdmissionError,
   BenchmarkContentionError,
@@ -29,13 +38,9 @@ import {
   type BenchmarkStop,
   type BenchmarkResult,
   type DeepButtonEvidence,
-  type GitRevision,
-  type HostIdentity,
   type Measurement,
   type PackageSize,
   type ProxyNetwork,
-  type Target,
-  type Toolchain,
 } from './types.ts';
 
 type BenchmarkMetadata = {

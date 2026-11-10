@@ -148,10 +148,10 @@ This repository already proved the same "make the gap declare itself" pattern in
 Each guarantee has exactly one home that all TypeScript paths import.
 Most of these homes already exist after #1075:
 
-- `isNodeVisibleOnScreen`.
+- `throwIfOffscreenInteractionTarget`.
 - `accumulateDisambiguationCandidate`.
 - `isSnapshotNodeInteractionBlocked`.
-- `describeResolvedNode`.
+- `describeResolvedInteractionNode`.
 - `interactionResultExtra`.
 - `reconcileNonHittableHintWithEvidence`.
 
@@ -204,6 +204,13 @@ Before the ledger holds a sent mutation, the registry's `recordingEffect` decide
   If no producer classified the failure, the router fills `unknown`.
 - For `'observes-app'`, the router sets `no` over any producer value.
 - A command with no declared effect passes through.
+
+`resolveCommandDispatchDisclosure` in the command registry owns this verdict.
+The client starts from this verdict for its own transport failures, because the router never sees them.
+A failure after the request left the client gets the verdict: a timeout, a connection lost after the send, or a reply it cannot read or parse.
+The client has no ledger, so it adds one rule: a sent delegating composite (`batch`, `replay`, `test`, declared `refFrameEffect: 'delegated'`) is `unknown`.
+The router needs no such rule: each nested request discloses itself, and a sent nested mutation makes the ledger nonzero.
+A failure before the send is `no`.
 
 For a read, `no` means that a resend repeats no app-visible action.
 The registry declares `record`, `trace`, and `perf` as `'observes-app'`, although their recorder and profiler controls reach the device.
@@ -363,7 +370,7 @@ Also, the structural rule never reached the read door.
   A regular iOS snapshot omits unverified hittability, so the ladder that relates a wrapper to its control cannot fire.
   #2482 collapsed that chain for mutating resolution only.
   As a result, `is visible` and `get attrs` refused the same screen as ambiguous, while `press` tapped it.
-  The collapse now sits beside the classification that asks for it (`resolveUnverifiedWrapperControl`).
+  The collapse now sits beside the classification that asks for it (`resolveUnverifiedWrapperControlWithIndex`).
   The collapse applies where a refusal was the answer.
   The uniqueness rows resolve the control instead of reporting no match:
   - `is <predicate>`.

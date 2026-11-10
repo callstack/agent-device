@@ -1,5 +1,5 @@
 {
-  "description": "Golden table for keyboard occlusion on interaction tap points (#2589), consumed by packages/contracts/src/tap-keyboard-occlusion.ts. A visible software keyboard is its own system surface: it is never a covering sibling of app content, so the same-window occlusion classifier cannot see it, and it leaves the app window rect intact, so the viewport rule passes a covered tab bar. The band runs from the topmost keyboard node down to the bottom of the viewport, across the keyboard's own columns; the tap point is the point the interaction dispatches: the rect center the platform aims at for a ref handed over by name, or the touch point a parent with interactive descendants resolves instead. `nodes` are captured snapshot nodes as they appear in the projection the interaction resolved against \u2014 note that regular and interactive projections prune the keyboard's own container, leaving Key nodes beside app chrome. Three rules decide whether reported geometry may be measured at all. Docking: the band is derived only where the keyboard's own reported geometry reaches the viewport's bottom edge within 80 units \u2014 measured on iPhone 17 Pro (26.2) the reported key plane stops 58 pt short of an 874 pt portrait viewport and lands exactly on a 402 pt landscape one, and on iPad Pro 11-inch (M4) 3 pt short of a 1210 pt viewport \u2014 so an iPad floating keyboard, an app-drawn keypad, or an IME that stops above its own navigation bar stays unmeasured and fails open. The budget is counted in the same units as the rects it guards, which is what a measured Android IME asks for rather than what a dp table would give: with three-button navigation on Pixel 7 (Android 16, 1080x2400 at 420 dpi), Gboard's reported region runs to the physical display bottom at 2400 while the 126 px navigation bar occupies 2274..2400 inside it, so no Android keyboard measured so far needs slack for the bar. Width: geometry that comes back taller than it is wide did not arrive in the app's orientation space, i.e. it came from a capture that normalized no space \u2014 the producers that can name the app's interface orientation either turn it back (the runner's tree tiers) or refuse the capture (the Simulator AX bridge) \u2014 and is refused measurement for the same reason. Tiling: the keys themselves must form one unbroken run of columns, because a split iPad keyboard docks both clusters at the bottom edge while its surface container still spans the whole screen, and the app content between the clusters is visible and tappable. Reported seams are zero on every measured tree \u2014 iPhone 17 Pro's reported row adjoins across 395 pt, iPad Pro 11-inch's across 743.5 pt, and Gboard's across 1070 px \u2014 so the allowance covers rounding rather than layout, and a gapped band is refused measurement like the two above. That rule is deliberately blunt in both directions, and the last two cases name the trade: a sparse layout such as the iOS emoji panel reports corner keys over a wide container, does not tile, and reads `undetermined` \u2014 the guard abstains there rather than inventing which gaps are app content; and a projection that reports the container with no keys at all has nothing left to check, so the band is the container's own claim. Every captured iOS and Android keyboard measured so far reports its keys, so the second shape is the harness's, not a captured one. `target` names either a resolved node index or a bare coordinate point; both paths read one decision and choose their own consequence. A case that reaches a band declares its whole shape \u2014 the frame the refusal and the disclosure both quote, and the control rects that excuse a bare coordinate, which is where plane exclusion shows up. Provider facts distinguish measured visible frames, derived docked-tree bands, visibility-only probes, explicit absence, and unknown. Missing keyboard nodes are undetermined, never absence. A carried derived band was established before projection and stays usable after projection removes keyboard nodes; it obeys the same docking/orientation/tiling rules at acquisition. A measured floating frame needs no bottom extension.",
+  "description": "Golden table for keyboard occlusion on interaction tap points (#2589), consumed by packages/contracts/src/tap-keyboard-occlusion.ts. A visible software keyboard is its own system surface: it is never a covering sibling of app content, so the same-window occlusion classifier cannot see it, and it leaves the app window rect intact, so the viewport rule passes a covered tab bar. The band runs from the topmost keyboard node down to the bottom of the viewport, across the keyboard's own columns; the tap point is the point the interaction dispatches: the rect center the platform aims at for a ref handed over by name, or the touch point a parent with interactive descendants resolves instead. `nodes` are captured snapshot nodes as they appear in the projection the interaction resolved against \u2014 note that regular and interactive projections prune the keyboard's own container, leaving Key nodes beside app chrome. Three rules decide whether reported geometry may be measured at all. Docking: the band is derived only where the keyboard's own reported geometry reaches the viewport's bottom edge within 80 units \u2014 measured on iPhone 17 Pro (26.2) the reported key plane stops 58 pt short of an 874 pt portrait viewport and lands exactly on a 402 pt landscape one, and on iPad Pro 11-inch (M4) 3 pt short of a 1210 pt viewport \u2014 so an iPad floating keyboard, an app-drawn keypad, or an IME that stops above its own navigation bar stays unmeasured and fails open. The budget is counted in the same units as the rects it guards, which is what a measured Android IME asks for rather than what a dp table would give: with three-button navigation on Pixel 7 (Android 16, 1080x2400 at 420 dpi), Gboard's reported region runs to the physical display bottom at 2400 while the 126 px navigation bar occupies 2274..2400 inside it, so no Android keyboard measured so far needs slack for the bar. Width: geometry that comes back taller than it is wide did not arrive in the app's orientation space, i.e. it came from a capture that normalized no space \u2014 the producers that can name the app's interface orientation either turn it back (the runner's tree tiers) or refuse the capture (the Simulator AX bridge) \u2014 and is refused measurement for the same reason. Tiling: the keys themselves must form one unbroken run of columns, because a split iPad keyboard docks both clusters at the bottom edge while its surface container still spans the whole screen, and the app content between the clusters is visible and tappable. Reported seams are zero on every measured tree \u2014 iPhone 17 Pro's reported row adjoins across 395 pt, iPad Pro 11-inch's across 743.5 pt, and Gboard's across 1070 px \u2014 so the allowance covers rounding rather than layout, and a gapped band is refused measurement like the two above. That rule is deliberately blunt in both directions, and the last two cases name the trade: a sparse layout such as the iOS emoji panel reports corner keys over a wide container, does not tile, and reads `undetermined` \u2014 the guard abstains there rather than inventing which gaps are app content; and a projection that reports the container with no keys at all has nothing left to check, so the band is the container's own claim. Every captured iOS and Android keyboard measured so far reports its keys, so the second shape is the harness's, not a captured one. `target` names either a resolved node index or a bare coordinate point; both paths read one decision and choose their own consequence. A case that reaches a band declares its whole shape \u2014 the frame the refusal and the disclosure both quote, and the control rects that excuse a bare coordinate, which is where plane exclusion shows up. Provider facts distinguish measured visible frames, derived docked-tree bands, visibility-only probes, explicit absence, and unknown. Missing keyboard nodes are undetermined, never absence. The one exception is a capture of the app's whole in-process tree, such as the Simulator AX bridge, where the system keyboard is one of the app's own windows: `treeComplete` pins that observation, and only a complete tree with no keyboard trace at all (no keyboard window, no `Keyboard` or `Key` node, and no keyboard role, which includes the remote keyboard placeholder and the input assistant) establishes absence; a keyboard window that exposes no keys stays undetermined. A carried derived band was established before projection and stays usable after projection removes keyboard nodes; it obeys the same docking/orientation/tiling rules at acquisition. A measured floating frame needs no bottom extension.",
   "constants": {
     "occlusionReason": "tap_keyboard_occludes_target"
   },
@@ -4186,7 +4186,8 @@
           "y": 583,
           "width": 402,
           "height": 291
-        }
+        },
+        "treeBound": true
       },
       "expected": {
         "kind": "occluded",
@@ -4366,7 +4367,8 @@
           "y": 583,
           "width": 402,
           "height": 291
-        }
+        },
+        "treeBound": true
       },
       "expected": {
         "kind": "clear",
@@ -4422,7 +4424,8 @@
           "y": 583,
           "width": 402,
           "height": 291
-        }
+        },
+        "treeBound": true
       },
       "expected": {
         "kind": "occluded",
@@ -4586,7 +4589,8 @@
           "y": 580,
           "width": 390,
           "height": 264
-        }
+        },
+        "treeBound": true
       }
     },
     {
@@ -4899,7 +4903,8 @@
           "y": 580,
           "width": 390,
           "height": 264
-        }
+        },
+        "treeBound": true
       },
       "expected": {
         "kind": "occluded",
@@ -4969,7 +4974,8 @@
           "y": 580,
           "width": 390,
           "height": 264
-        }
+        },
+        "treeBound": true
       },
       "expected": {
         "kind": "clear",
@@ -5295,6 +5301,668 @@
             "y": 600,
             "width": 390,
             "height": 244
+          }
+        ]
+      }
+    },
+    {
+      "name": "a complete in-process tree with no keyboard trace establishes absence",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "keyboard": {
+        "kind": "absent",
+        "treeBound": true
+      },
+      "treeComplete": true,
+      "expected": {
+        "kind": "no-keyboard"
+      }
+    },
+    {
+      "name": "a truncated in-process tree with no keyboard nodes never establishes absence",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "keyboard": {
+        "kind": "unmeasurable",
+        "reason": "keyboard-not-observed"
+      },
+      "treeComplete": false,
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a complete in-process tree holding only the remote keyboard placeholder never establishes absence",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Other",
+          "role": "_UIRemoteKeyboardPlaceholderView",
+          "identifier": "inputView",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 539,
+            "width": 402,
+            "height": 335
+          }
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 2
+      },
+      "keyboard": {
+        "kind": "unmeasurable",
+        "reason": "keyboard-not-observed"
+      },
+      "treeComplete": true,
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a complete in-process tree holding only the input assistant bar never establishes absence",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Other",
+          "role": "TUISystemInputAssistantView",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 830,
+            "width": 402,
+            "height": 44
+          }
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 2
+      },
+      "keyboard": {
+        "kind": "unmeasurable",
+        "reason": "keyboard-not-observed"
+      },
+      "treeComplete": true,
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a complete in-process tree holding a keyboard window without keys never establishes absence",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Window",
+          "role": "UIRemoteKeyboardWindow",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 2
+      },
+      "keyboard": {
+        "kind": "unmeasurable",
+        "reason": "keyboard-not-observed"
+      },
+      "treeComplete": true,
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a complete in-process tree holding a keyboard window with only the input assistant bar never establishes absence",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Window",
+          "role": "UIRemoteKeyboardWindow",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 2,
+          "type": "Other",
+          "role": "TUISystemInputAssistantView",
+          "parentIndex": 1,
+          "rect": {
+            "x": 0,
+            "y": 830,
+            "width": 402,
+            "height": 44
+          }
+        },
+        {
+          "index": 3,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 3
+      },
+      "keyboard": {
+        "kind": "unmeasurable",
+        "reason": "keyboard-not-observed"
+      },
+      "treeComplete": true,
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a complete in-process tree holding a keyboard window with only the remote keyboard placeholder never establishes absence",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Window",
+          "role": "UIRemoteKeyboardWindow",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 2,
+          "type": "Other",
+          "role": "_UIRemoteKeyboardPlaceholderView",
+          "parentIndex": 1,
+          "rect": {
+            "x": 0,
+            "y": 539,
+            "width": 402,
+            "height": 335
+          }
+        },
+        {
+          "index": 3,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 3
+      },
+      "keyboard": {
+        "kind": "unmeasurable",
+        "reason": "keyboard-not-observed"
+      },
+      "treeComplete": true,
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a complete in-process tree with a docked keyboard carries its derived band, not absence",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "TabBar",
+          "label": "Tab Bar",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 791,
+            "width": 402,
+            "height": 83
+          }
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 1,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 0,
+          "rect": {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "W",
+          "parentIndex": 0,
+          "rect": {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "E",
+          "parentIndex": 0,
+          "rect": {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "R",
+          "parentIndex": 0,
+          "rect": {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "T",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 8,
+          "type": "Key",
+          "label": "Y",
+          "parentIndex": 0,
+          "rect": {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 9,
+          "type": "Key",
+          "label": "U",
+          "parentIndex": 0,
+          "rect": {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 10,
+          "type": "Key",
+          "label": "I",
+          "parentIndex": 0,
+          "rect": {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 11,
+          "type": "Key",
+          "label": "O",
+          "parentIndex": 0,
+          "rect": {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 12,
+          "type": "Key",
+          "label": "P",
+          "parentIndex": 0,
+          "rect": {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 13,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 2
+      },
+      "keyboard": {
+        "kind": "derived",
+        "derivation": "docked-tree",
+        "frame": {
+          "x": 4.67,
+          "y": 590,
+          "width": 395,
+          "height": 284
+        },
+        "treeBound": true
+      },
+      "treeComplete": true,
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 4.67,
+          "y": 590,
+          "width": 395,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
           }
         ]
       }

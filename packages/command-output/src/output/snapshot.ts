@@ -8,14 +8,17 @@ import {
   formatSnapshotLine,
 } from '@agent-device/capture-kit/snapshot-lines';
 import {
-  isSnapshotBackend,
-  usesMobileSnapshotPresentation,
   type SnapshotNode,
   type SnapshotUnchanged,
   type SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
+import {
+  isSnapshotBackend,
+  usesMobileSnapshotPresentation,
+} from '@agent-device/contracts/snapshot';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { buildMobileSnapshotPresentation } from '@agent-device/capture-kit/mobile-snapshot-semantics';
+import { pinnedRefText } from '../output-common.ts';
 
 type SnapshotTextOptions = {
   raw?: boolean;
@@ -40,6 +43,8 @@ export function formatSnapshotText(
   if (unchanged) {
     return `${prefix}${noticesBlock}${formatUnchangedSnapshotText(unchanged)}\n`;
   }
+  const pin = scopedRefPin(data, options);
+  const scopedRefsLine = scopedRefsDisclosure(pin);
   const visiblePresentation =
     options.raw || !useMobilePresentation
       ? null
@@ -64,9 +69,9 @@ export function formatSnapshotText(
     return `${prefix}${header}\n${noticesBlock}${formatRawSnapshotLines(nodes)}\n`;
   }
   if (options.flatten) {
-    return `${prefix}${header}\n${noticesBlock}${formatFlattenedSnapshotLines(displayedNodes)}${formatSnapshotSummaryBlock(visiblePresentation)}\n`;
+    return `${prefix}${header}\n${scopedRefsLine}${noticesBlock}${formatFlattenedSnapshotLines(displayedNodes, pin)}${formatSnapshotSummaryBlock(visiblePresentation)}\n`;
   }
-  return `${prefix}${header}\n${noticesBlock}${formatStructuredSnapshotLines(displayedNodes)}${formatSnapshotSummaryBlock(visiblePresentation)}\n`;
+  return `${prefix}${header}\n${scopedRefsLine}${noticesBlock}${formatStructuredSnapshotLines(displayedNodes, pin)}${formatSnapshotSummaryBlock(visiblePresentation)}\n`;
 }
 
 function readUnchangedSnapshot(data: Record<string, unknown>): SnapshotUnchanged | null {
@@ -141,14 +146,48 @@ function formatRawSnapshotLines(nodes: SnapshotNode[]): string {
   return nodes.map((node) => JSON.stringify(node)).join('\n');
 }
 
-function formatFlattenedSnapshotLines(nodes: SnapshotNode[]): string {
-  return buildFlattenedSnapshotDisplayLines(nodes).join('\n');
+/**
+ * ADR 0014: an intentionally scoped snapshot publishes only its returned
+ * namespace, so the reusable refs it prints must be paste-ready pins. A
+ * complete tree stays plain to protect the token budget, and --raw stays
+ * byte-for-byte.
+ */
+function scopedRefPin(
+  data: Record<string, unknown>,
+  options: SnapshotTextOptions,
+): number | undefined {
+  if (options.scoped !== true || options.raw) return undefined;
+  return typeof data.refsGeneration === 'number' ? data.refsGeneration : undefined;
 }
 
-function formatStructuredSnapshotLines(nodes: SnapshotNode[]): string {
+function scopedRefsDisclosure(pin: number | undefined): string {
+  return pin === undefined ? '' : `Refs generation: ${pin}\n`;
+}
+
+function formatFlattenedSnapshotLines(nodes: SnapshotNode[], pin?: number): string {
+  return buildFlattenedSnapshotDisplayLines(nodes, pin).join('\n');
+}
+
+function formatStructuredSnapshotLines(nodes: SnapshotNode[], pin?: number): string {
   return renderSnapshotDisplayLines(
     buildSnapshotDisplayLines(nodes, { summarizeTextSurfaces: true }),
+    pin,
   ).join('\n');
+}
+
+/**
+ * ADR 0014: a scoped snapshot's reusable refs render in the ready-to-copy
+ * `@eN~s<refsGeneration>` form. The line's own ref is its first `@` occurrence,
+ * so a label that mentions another ref cannot displace it. `pin` undefined
+ * leaves the line untouched.
+ */
+function pinnedSnapshotLineText(text: string, node: SnapshotNode, pin: number | undefined): string {
+  const pinned = pinnedRefText(node.ref, pin);
+  if (!pinned) return text;
+  const plain = `@${node.ref}`;
+  const refStart = text.indexOf(plain);
+  if (refStart === -1) return text;
+  return `${text.slice(0, refStart)}${pinned}${text.slice(refStart + plain.length)}`;
 }
 
 function formatSnapshotSummaryBlock(
@@ -288,7 +327,10 @@ export function readSnapshotWarnings(data: Record<string, unknown>): string[] {
 
 type SnapshotDisplayLine = ReturnType<typeof buildSnapshotDisplayLines>[number];
 
-function renderSnapshotDisplayLines(lines: ReturnType<typeof buildSnapshotDisplayLines>): string[] {
+function renderSnapshotDisplayLines(
+  lines: ReturnType<typeof buildSnapshotDisplayLines>,
+  pin?: number,
+): string[] {
   const output: string[] = [];
   const pendingBelow: SnapshotDisplayLine[] = [];
   const lineNodesByIndex = new Map(lines.map((line) => [line.node.index, line.node]));
@@ -304,7 +346,7 @@ function renderSnapshotDisplayLines(lines: ReturnType<typeof buildSnapshotDispla
 
   for (const line of lines) {
     flushClosedBelowHints(line);
-    output.push(line.text);
+    output.push(pinnedSnapshotLineText(line.text, line.node, pin));
     output.push(...readHiddenContentHintLines(line, 'above'));
     if (line.node.hiddenContentBelow) {
       pendingBelow.push(line);
@@ -340,10 +382,14 @@ function isDescendantOfRenderedLine(
   return false;
 }
 
-function buildFlattenedSnapshotDisplayLines(nodes: SnapshotNode[]): string[] {
+function buildFlattenedSnapshotDisplayLines(nodes: SnapshotNode[], pin?: number): string[] {
   // Flattened output has no subtree boundary to defer below-hints past.
   return buildSnapshotDisplayLines(nodes, { summarizeTextSurfaces: true }).flatMap((line) => [
-    formatSnapshotLine(line.node, 0, false, line.type, { summarizeTextSurfaces: true }),
+    pinnedSnapshotLineText(
+      formatSnapshotLine(line.node, 0, false, line.type, { summarizeTextSurfaces: true }),
+      line.node,
+      pin,
+    ),
     ...readHiddenContentHintLines({ ...line, depth: 0 }),
   ]);
 }

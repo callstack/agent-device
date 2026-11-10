@@ -22,6 +22,7 @@ test('the pre-dispatch refusal reasons are the values consumers branch on', () =
     sessionOrDeviceSelectorRequired: 'session_or_device_selector_required',
     namedSessionNotFound: 'named_session_not_found',
     appNotInstalled: 'app_not_installed',
+    malformedRequest: 'malformed_request',
   });
 });
 

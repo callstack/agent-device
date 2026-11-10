@@ -12,7 +12,7 @@ extension RunnerTests {
     durationMs: Double,
     profile: SynthesizedDragProfile,
     context: SynthesizedCoordinateContext? = nil
-  ) -> RunnerInteractionOutcome {
+  ) throws -> RunnerInteractionOutcome {
 #if os(iOS)
     guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite else {
       return .unsupported(
@@ -20,54 +20,32 @@ extension RunnerTests {
         hint: "Retry with finite x, y, x2, and y2 values."
       )
     }
-    let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    guard let context = context ?? synthesizedCoordinateContext(app: app) else {
+    guard let context = try context ?? synthesizedCoordinateContext(app: app) else {
       return .unsupported(
         message: "synthesized coordinate drag could not resolve an app window with a finite screen frame",
         hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
       )
     }
-    let frame = context.referenceFrame
-    let rotationFrame = synthesizedRotationFrame(fallback: frame, interfaceOrientation: orientation)
-    let start = CoordinateSpaceRotation.native(
-      point: CGPoint(x: x, y: y),
-      in: rotationFrame,
-      interfaceOrientation: orientation
-    )
-    let end = CoordinateSpaceRotation.native(
-      point: CGPoint(x: x2, y: y2),
-      in: rotationFrame,
-      interfaceOrientation: orientation
-    )
+    guard let geometry = digitizerGeometry(app: app, surface: context.geometry) else {
+      return Self.unmeasuredSoleDisplayOutcome(gesture: "drag")
+    }
+    let frame = context.geometry.windowOnScreen.rect
+    let start = geometry.digitizerPoint(from: SurfacePoint(CGPoint(x: x, y: y))).point
+    let end = geometry.digitizerPoint(from: SurfacePoint(CGPoint(x: x2, y: y2))).point
     logSynthesizedDispatch(
       kind: "drag",
       start: start,
       end: end,
       referenceFrame: frame,
-      orientation: orientation
+      orientation: context.geometry.orientation
     )
-    let message = switch profile {
-    case .controlledScroll:
-      RunnerSynthesizedGesture.synthesizeControlledScroll(
-        withApplication: app,
-        resolvedWindow: context.resolvedWindow,
-        x: Double(start.x),
-        y: Double(start.y),
-        x2: Double(end.x),
-        y2: Double(end.y),
-        durationMs: durationMs
-      )
-    case .fastSwipe:
-      RunnerSynthesizedGesture.synthesizeSwipe(
-        withApplication: app,
-        resolvedWindow: context.resolvedWindow,
-        x: Double(start.x),
-        y: Double(start.y),
-        x2: Double(end.x),
-        y2: Double(end.y),
-        durationMs: durationMs
-      )
-    }
+    let message = RunnerSynthesizedGesture.synthesizeDrag(
+      withApplication: app,
+      resolvedWindow: context.resolvedWindow,
+      interfaceOrientation: geometry.orientation,
+      drag: RunnerSynthesizedDrag(start: start, end: end, durationMs: durationMs,
+                                  controlledScroll: ObjCBool(profile == .controlledScroll))
+    )
     if let message {
       return .unsupported(
         message: message,
@@ -95,7 +73,7 @@ extension RunnerTests {
     y: Double,
     context: SynthesizedCoordinateContext? = nil,
     deadline: Date? = nil
-  ) -> RunnerInteractionOutcome? {
+  ) throws -> RunnerInteractionOutcome? {
 #if os(iOS)
     guard x.isFinite, y.isFinite else {
       return .unsupported(
@@ -103,31 +81,30 @@ extension RunnerTests {
         hint: "Retry with finite x and y values."
       )
     }
-    let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    guard let context = context ?? synthesizedCoordinateContext(app: app) else {
-      return .unsupported(
-        message: "synthesized coordinate tap could not resolve an app window with a finite screen frame",
-        hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
-      )
-    }
-    let point = CoordinateSpaceRotation.native(
-      point: CGPoint(x: x, y: y),
-      in: synthesizedRotationFrame(fallback: context.referenceFrame, interfaceOrientation: orientation),
-      interfaceOrientation: orientation
+    let context = try context ?? synthesizedCoordinateContext(app: app)
+    let resolution = pointGestureTarget(
+      app: app,
+      x: x,
+      y: y,
+      context: context,
+      gesture: .tap
     )
+    guard case .target(let point, let resolvedWindow, let referenceFrame, let orientation) = resolution else {
+      return resolution.refusal
+    }
     logSynthesizedDispatch(
       kind: "tap",
       start: point,
       end: nil,
-      referenceFrame: context.referenceFrame,
+      referenceFrame: referenceFrame,
       orientation: orientation
     )
     var message: NSString?
     let status = RunnerSynthesizedGesture.synthesizeTap(
       withApplication: app,
-      resolvedWindow: context.resolvedWindow,
-      x: Double(point.x),
-      y: Double(point.y),
+      resolvedWindow: resolvedWindow,
+      interfaceOrientation: orientation,
+      point: point,
       deadline: deadline,
       errorMessage: &message
     )
@@ -170,30 +147,28 @@ extension RunnerTests {
     y: Double,
     durationMs: Double,
     context: SynthesizedCoordinateContext?
-  ) -> RunnerInteractionOutcome {
+  ) throws -> RunnerInteractionOutcome {
     guard x.isFinite, y.isFinite, durationMs.isFinite, durationMs > 0 else {
       return .unsupported(
         message: "synthesized coordinate long press requires finite coordinates and a positive duration",
         hint: "Retry with finite x and y values and a positive durationMs."
       )
     }
-    guard let context else {
-      return .unsupported(
-        message: "synthesized coordinate long press could not resolve an app window with a finite screen frame",
-        hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
-      )
-    }
-    let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    let point = CoordinateSpaceRotation.native(
-      point: CGPoint(x: x, y: y),
-      in: synthesizedRotationFrame(fallback: context.referenceFrame, interfaceOrientation: orientation),
-      interfaceOrientation: orientation
+    let resolution = pointGestureTarget(
+      app: app,
+      x: x,
+      y: y,
+      context: context,
+      gesture: .longpress
     )
+    guard case .target(let point, let resolvedWindow, let referenceFrame, let orientation) = resolution else {
+      return resolution.refusal
+    }
     logSynthesizedDispatch(
       kind: "longPress",
       start: point,
       end: nil,
-      referenceFrame: context.referenceFrame,
+      referenceFrame: referenceFrame,
       orientation: orientation
     )
     let samples: [[String: NSNumber]] = [0, durationMs].map { offsetMs in
@@ -205,7 +180,8 @@ extension RunnerTests {
     }
     if let message = RunnerSynthesizedGesture.synthesizeGesture(
       withApplication: app,
-      resolvedWindow: context.resolvedWindow,
+      resolvedWindow: resolvedWindow,
+      interfaceOrientation: orientation,
       pointerSamples: [samples]
     ) {
       return .unsupported(
@@ -223,7 +199,7 @@ extension RunnerTests {
     y: Double,
     x2: Double,
     y2: Double
-  ) -> DragPoints {
+  ) throws -> DragPoints {
     let original = DragPoints(x: x, y: y, x2: x2, y2: y2)
 #if os(iOS)
     guard let keyboardFrame = visibleKeyboardFrame(app: app) else {
@@ -241,7 +217,7 @@ extension RunnerTests {
       return original
     }
 
-    let appFrame = onScreenWindowFrame(app: app)
+    let appFrame = try onScreenWindowFrame(app: app)
     guard !appFrame.isEmpty else {
       return original
     }
@@ -278,9 +254,11 @@ extension RunnerTests {
 #endif
   }
 
-  func resolvedTouchVisualizationFrame(app: XCUIApplication, x: Double, y: Double) -> TouchVisualizationFrame {
-    let appFrame = app.frame
-    let referenceFrame = resolvedTouchReferenceFrame(app: app, appFrame: appFrame)
+  func resolvedTouchVisualizationFrame(app: XCUIApplication, x: Double, y: Double) throws -> TouchVisualizationFrame {
+    let resolved = try resolveCoordinateWindow(app: app)
+    // Without a window the fallback frame is the app's own, so a windowless tree reads it once.
+    let appFrame = resolved.window == nil ? resolved.frame : try readableAppFrame(app: app)
+    let referenceFrame = touchReferenceFrame(app: app, resolved: resolved)
     let originX = appFrame.isEmpty ? referenceFrame.minX : appFrame.minX
     let originY = appFrame.isEmpty ? referenceFrame.minY : appFrame.minY
     return TouchVisualizationFrame(
@@ -294,15 +272,14 @@ extension RunnerTests {
   /// The touch visualization frame of a synthesized gesture, read from its context instead of the
   /// app tree.
   func touchVisualizationFrame(
-    x: Double,
-    y: Double,
+    point: SurfacePoint<InterfaceScreenSpace>,
     context: SynthesizedCoordinateContext
   ) -> TouchVisualizationFrame {
     TouchVisualizationFrame(
-      x: Double(context.referenceFrame.minX) + x,
-      y: Double(context.referenceFrame.minY) + y,
-      referenceWidth: Double(context.referenceFrame.width),
-      referenceHeight: Double(context.referenceFrame.height)
+      x: Double(point.point.x),
+      y: Double(point.point.y),
+      referenceWidth: Double(context.geometry.windowOnScreen.rect.width),
+      referenceHeight: Double(context.geometry.windowOnScreen.rect.height)
     )
   }
 
@@ -312,9 +289,9 @@ extension RunnerTests {
     y: Double,
     x2: Double,
     y2: Double
-  ) -> DragVisualizationFrame {
-    let start = resolvedTouchVisualizationFrame(app: app, x: x, y: y)
-    let end = resolvedTouchVisualizationFrame(app: app, x: x2, y: y2)
+  ) throws -> DragVisualizationFrame {
+    let start = try resolvedTouchVisualizationFrame(app: app, x: x, y: y)
+    let end = try resolvedTouchVisualizationFrame(app: app, x: x2, y: y2)
     return DragVisualizationFrame(
       x: start.x,
       y: start.y,
@@ -325,13 +302,15 @@ extension RunnerTests {
     )
   }
 
-  func resolvedTouchReferenceFrame(app: XCUIApplication, appFrame: CGRect) -> CGRect {
-    let resolved = resolveRunnerWindow(app: app)
-    if resolved.window != nil {
+  /// The resolved window's frame, or the app's own frame where no window answers, clear of the
+  /// keyboard.
+  func resolvedTouchReferenceFrame(app: XCUIApplication) throws -> CGRect {
+    touchReferenceFrame(app: app, resolved: try resolveCoordinateWindow(app: app))
+  }
+
+  private func touchReferenceFrame(app: XCUIApplication, resolved: (window: XCUIElement?, frame: CGRect)) -> CGRect {
+    if resolved.window != nil || !resolved.frame.isEmpty {
       return frameAvoidingKeyboard(app: app, frame: resolved.frame)
-    }
-    if !appFrame.isEmpty {
-      return frameAvoidingKeyboard(app: app, frame: appFrame)
     }
     return CGRect(x: 0, y: 0, width: 0, height: 0)
   }
@@ -340,17 +319,17 @@ extension RunnerTests {
   /// context its record is routed through, so a tree with no window whose app provably fills its
   /// sole screen plans on that screen, the same route a synthesized tap or scroll takes.
   @MainActor
-  func gestureViewportFrame(app: XCUIApplication) -> CGRect {
+  func gestureViewportFrame(app: XCUIApplication) throws -> CGRect {
 #if os(iOS)
-    guard let context = synthesizedCoordinateContext(app: app) else {
-      return frameAvoidingKeyboard(app: app, frame: app.frame)
+    guard let context = try synthesizedCoordinateContext(app: app) else {
+      return frameAvoidingKeyboard(app: app, frame: try readableAppFrame(app: app))
     }
     // The sole-screen route means the windows query just failed, so a keyboard probe would too.
     return context.resolvedWindow == nil
-      ? context.referenceFrame
-      : frameAvoidingKeyboard(app: app, frame: context.referenceFrame)
+      ? context.geometry.windowOnScreen.rect
+      : frameAvoidingKeyboard(app: app, frame: context.geometry.windowOnScreen.rect)
 #else
-    return resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
+    return try resolvedTouchReferenceFrame(app: app)
 #endif
   }
 
@@ -385,16 +364,16 @@ extension RunnerTests {
     x2: Double,
     y2: Double,
     context: SynthesizedCoordinateContext? = nil
-  ) -> SynthesizedDragPlan? {
+  ) throws -> SynthesizedDragPlan? {
 #if os(iOS)
-    let context = context ?? synthesizedCoordinateContext(app: app)
+    let context = try context ?? synthesizedCoordinateContext(app: app)
     guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite,
       let context
     else {
       return nil
     }
     let points = context.allowsKeyboardProbe
-      ? keyboardAvoidingDragPoints(app: app, x: x, y: y, x2: x2, y2: y2)
+      ? try keyboardAvoidingDragPoints(app: app, x: x, y: y, x2: x2, y2: y2)
       : DragPoints(x: x, y: y, x2: x2, y2: y2)
     return SynthesizedDragPlan(
       points: points,
@@ -445,11 +424,19 @@ extension RunnerTests {
   func synthesizedCoordinateContext(
     app: XCUIApplication,
     windowQueryRejected: Bool = false
-  ) -> SynthesizedCoordinateContext? {
+  ) throws -> SynthesizedCoordinateContext? {
 #if os(iOS)
     var health = mainOwned.accessibilityHealth
     let window: XCUIElement?
     let referenceFrame: CGRect
+    var treeUnreadable = false
+    if requestLitPanel != nil {
+      let booked = try requireRequestLitPanelSurface(app: app)
+      guard let context = SynthesizedCoordinateContext(
+        validating: booked.geometry, resolvedWindow: booked.window, accessibilityHealth: health
+      ) else { throw RunnerAppScreenCaptureFailure.unresolvedScreen }
+      return context
+    }
     // A tree that just rejected a query skips the windows query only where the sole screen answers
     // without it; anywhere else that query is still the only route.
     let rejectedTreeSoleScreenFrame = windowQueryRejected ? soleScreenReferenceFrame(app: app) : nil
@@ -462,13 +449,15 @@ extension RunnerTests {
       // The windows query just failed on this tree, so this gesture's keyboard probes and XCTest
       // fallbacks would fail on it too, after XCTest's own retries.
       health = .unavailable
+      treeUnreadable = true
     } else {
       return nil
     }
     return SynthesizedCoordinateContext(
-      validating: referenceFrame,
+      validating: surfaceGeometry(windowFrame: referenceFrame, app: app),
       resolvedWindow: window,
-      accessibilityHealth: health
+      accessibilityHealth: health,
+      treeUnreadable: treeUnreadable
     )
 #else
     return nil
@@ -486,14 +475,11 @@ extension RunnerTests {
   /// anything else (a windowed iPad, a multi-screen foldable) keeps requiring a window.
   @MainActor
   func soleScreenReferenceFrame(app: XCUIApplication) -> CGRect? {
-    var resolvedScreen: AnyObject?
-    var resolvedDisplayID: UInt = 0
-    guard RunnerResolveSoleScreen(app, &resolvedScreen, &resolvedDisplayID) == nil else {
-      return nil
+    guard soleScreenRouteAdmits(app) else { return nil }
+    let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
+    let frame = soleDisplayPortraitSize().flatMap {
+      Self.soleScreenReferenceFrame(portraitSize: $0, interfaceOrientation: orientation)
     }
-    let frame = soleDisplayFrame(
-      interfaceOrientation: Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    )
     NSLog(
       "AGENT_DEVICE_RUNNER_SYNTHESIZED_SOLE_SCREEN_ROUTE resolved=%@",
       frame.map { NSCoder.string(for: $0) } ?? "none"
@@ -501,48 +487,152 @@ extension RunnerTests {
     return frame
   }
 
-  /// The box a synthesized turn swaps side lengths about. The digitizer turns about its display, so a
-  /// placed iPad window's smaller box is not the basis (#3899); a multi-screen host keeps the
-  /// resolved window, which names its panel (ADR 0025).
-  func synthesizedRotationFrame(fallback: CGRect, interfaceOrientation: Int) -> CGRect {
-    soleDisplayFrame(interfaceOrientation: interfaceOrientation) ?? fallback
+  /// The sole-screen admission rule `RunnerResolveSoleScreen` owns: an iPhone by its idiom, an iPad
+  /// only on the fills-screen proof.
+  @MainActor
+  private func soleScreenRouteAdmits(_ app: XCUIApplication) -> Bool {
+    var resolvedScreen: AnyObject?
+    var resolvedDisplayID: UInt = 0
+    return RunnerResolveSoleScreen(app, &resolvedScreen, &resolvedDisplayID) == nil
   }
 
-  private func soleDisplayFrame(interfaceOrientation: Int) -> CGRect? {
-    guard XCUIScreen.screens.count == 1 else { return nil }
-    let screen = UIScreen.main
-    let scale = screen.nativeScale
-    guard scale > 0 else { return nil }
-    return Self.soleScreenReferenceFrame(
-      nativePortraitSize: CGSize(
-        width: screen.nativeBounds.width / scale,
-        height: screen.nativeBounds.height / scale
-      ),
-      interfaceOrientation: interfaceOrientation
+  @MainActor
+  func digitizerGeometry(app: XCUIApplication, surface: SurfaceGeometry) -> SurfaceGeometry? {
+    if surface.panelNativeSize != nil { return surface }
+    guard XCUIScreen.screens.count == 1 else { return surface }
+    switch surface.orientation {
+    case RunnerInterfaceOrientation.landscapeLeft, RunnerInterfaceOrientation.landscapeRight,
+      RunnerInterfaceOrientation.portraitUpsideDown:
+      break
+    default:
+      return surface
+    }
+    guard let portraitSize = soleDisplayPortraitSize() else {
+      let routeAdmits = soleScreenRouteAdmits(app)
+      NSLog(
+        "AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=rotation-basis basis=%@",
+        routeAdmits ? "window" : "refused"
+      )
+      return routeAdmits ? surface : nil
+    }
+    return SurfaceGeometry(windowOnScreen: surface.windowOnScreen,
+                           panelNativeSize: portraitSize, orientation: surface.orientation)
+  }
+
+  func surfaceGeometry(windowFrame: CGRect, app: XCUIApplication) -> SurfaceGeometry {
+    SurfaceGeometry(windowOnScreen: SurfaceRect(windowFrame),
+                    panelNativeSize: requestLitPanel.map { CGSize(width: $0.widthPt, height: $0.heightPt) },
+                    orientation: Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app)))
+  }
+
+  private enum SynthesizedPointGesture: String {
+    case tap
+    case longpress
+
+    /// The gesture's name in the unresolved-window refusal, which predates this enum.
+    var unresolvedWindowName: String { self == .tap ? "tap" : "long press" }
+  }
+
+  private enum PointGestureResolution {
+    /// A nil `resolvedWindow` routes the record to the sole screen.
+    case target(point: CGPoint, resolvedWindow: XCUIElement?, referenceFrame: CGRect, orientation: Int)
+    case refused(RunnerInteractionOutcome)
+
+    /// Read only on the branch that is not a target, so its `.performed` answer is never returned.
+    var refusal: RunnerInteractionOutcome {
+      if case .refused(let outcome) = self { return outcome }
+      return .performed
+    }
+  }
+
+  /// Where a synthesized point gesture lands: its native point and the window that routes it, or the
+  /// refusal that stops it before dispatch.
+  @MainActor
+  private func pointGestureTarget(
+    app: XCUIApplication,
+    x: Double,
+    y: Double,
+    context: SynthesizedCoordinateContext?,
+    gesture: SynthesizedPointGesture
+  ) -> PointGestureResolution {
+    if let context {
+      guard let geometry = digitizerGeometry(app: app, surface: context.geometry) else {
+        return .refused(Self.unmeasuredSoleDisplayOutcome(gesture: gesture.rawValue))
+      }
+      let point = geometry.digitizerPoint(from: SurfacePoint(CGPoint(x: x, y: y))).point
+      return .target(point: point, resolvedWindow: context.resolvedWindow, referenceFrame: context.geometry.windowOnScreen.rect, orientation: geometry.orientation)
+    }
+    let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
+    if let unrotated = unrotatedSoleScreenPoint(app: app, x: x, y: y, interfaceOrientation: orientation) {
+      return .target(point: unrotated, resolvedWindow: nil, referenceFrame: .null, orientation: orientation)
+    }
+    return .refused(
+      .unsupported(
+        message: "synthesized coordinate \(gesture.unresolvedWindowName) could not resolve an app window with a finite screen frame",
+        hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
+      )
+    )
+  }
+
+  /// A point gesture with no context: no window resolved and the sole screen's size is unreadable,
+  /// so there is no box (#4091). On an admitted sole screen a portrait turn leaves the point as it
+  /// is, so it is dispatched as given; any other turn needs the box and refuses. Nil refuses.
+  @MainActor
+  private func unrotatedSoleScreenPoint(
+    app: XCUIApplication,
+    x: Double,
+    y: Double,
+    interfaceOrientation: Int
+  ) -> CGPoint? {
+    guard XCUIScreen.screens.count == 1, soleScreenRouteAdmits(app) else { return nil }
+    let unrotated = interfaceOrientation == RunnerInterfaceOrientation.portrait
+    NSLog(
+      "AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=rotation-basis basis=%@ window=none",
+      unrotated ? "unrotated" : "refused"
+    )
+    return unrotated ? CGPoint(x: x, y: y) : nil
+  }
+
+  /// Not `UIScreen.main`: the runner process can read that in compatibility mode (#4091). A failed
+  /// read is not kept, so the next gesture reads again.
+  @MainActor
+  func soleDisplayPortraitSize() -> CGSize? {
+    if let cached = mainOwned.soleDisplayPortraitSize { return cached }
+    let screen = RunnerSoleScreenSize()
+    guard screen.width > 0, screen.height > 0 else { return nil }
+    let size = CGSize(width: min(screen.width, screen.height), height: max(screen.width, screen.height))
+    mainOwned.soleDisplayPortraitSize = size
+    return size
+  }
+
+  static func unmeasuredSoleDisplayOutcome(gesture: String) -> RunnerInteractionOutcome {
+    .unsupported(
+      message:
+        "synthesized \(gesture) could not read the size of the device's only screen, and the app is not "
+        + "proven to fill it, so its coordinates cannot be rotated",
+      hint: "Retry after the app is foregrounded; the runner log records why the screen size could not be read."
     )
   }
 #endif
 
-  /// The screen in the app's interface orientation, anchored at the origin like a window frame. An
-  /// unknown orientation cannot say which way to lay the screen, so it names no frame.
+  /// The screen, in points, in the app's interface orientation, anchored at the origin like a window
+  /// frame. An unknown orientation cannot say which way to lay the screen, so it names no frame.
   static func soleScreenReferenceFrame(
-    nativePortraitSize size: CGSize,
+    portraitSize size: CGSize,
     interfaceOrientation: Int
   ) -> CGRect? {
-    guard size.width > 0, size.height > 0 else { return nil }
-    switch interfaceOrientation {
-    case RunnerInterfaceOrientation.portrait, RunnerInterfaceOrientation.portraitUpsideDown:
-      return CGRect(origin: .zero, size: size)
-    case RunnerInterfaceOrientation.landscapeLeft, RunnerInterfaceOrientation.landscapeRight:
-      return CGRect(x: 0, y: 0, width: size.height, height: size.width)
-    default:
-      return nil
-    }
+    SurfaceGeometry.panelFrame(nativeSize: size, orientation: interfaceOrientation)
   }
 
-  func swipe(app: XCUIApplication, direction: String) -> DragVisualizationFrame? {
+#if !os(iOS)
+  func surfaceGeometry(windowFrame: CGRect, app: XCUIApplication) -> SurfaceGeometry {
+    SurfaceGeometry(windowOnScreen: SurfaceRect(windowFrame), panelNativeSize: nil, orientation: 0)
+  }
+#endif
+
+  func swipe(app: XCUIApplication, direction: String) throws -> DragVisualizationFrame? {
     if performTvRemoteSwipeIfAvailable(direction: direction) {
-      let frame = resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
+      let frame = try resolvedTouchReferenceFrame(app: app)
       let midX = frame.midX
       let midY = frame.midY
       return DragVisualizationFrame(
@@ -588,6 +678,14 @@ extension RunnerTests {
       }
     } else if plan.executionProfile != nil {
       return "multi-touch gesture cannot define a single-pointer execution profile"
+    }
+    if let contactOrigin = plan.contactOrigin {
+      guard contactOrigin == runnerScreenEdgeContactOrigin else {
+        return "planned gesture has an unsupported contact origin"
+      }
+      guard plan.topology == "single" else {
+        return "only a single-pointer gesture can start as a screen-edge touch"
+      }
     }
     guard plan.durationMs.isFinite, plan.durationMs >= 16, plan.durationMs <= 10_000 else {
       return "planned gesture durationMs must be between 16 and 10000"
@@ -673,33 +771,44 @@ extension RunnerTests {
   }
 
   func plannedGestureExecution(for plan: RunnerGesturePlan) -> PlannedGestureExecution {
-    plan.topology == "single" && plan.executionProfile == "endpoint-hold"
-      ? .fastSwipe
-      : .sampled
+#if os(iOS) && targetEnvironment(simulator)
+    if plan.contactOrigin == runnerScreenEdgeContactOrigin {
+      return .screenEdgeTouch
+    }
+#endif
+    guard plan.topology == "single" else { return .sampled(schedule: nil) }
+    return plan.executionProfile == "endpoint-hold" ? .fastSwipe : .sampled(schedule: plan.executionProfile)
   }
 
-  func sampledPlannedGesture(
-    app: XCUIApplication,
-    plan: RunnerGesturePlan
-  ) -> RunnerInteractionOutcome {
 #if os(iOS)
-    let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    // The portable planner and validation use this exact viewport. Using app.frame here can
-    // diverge when XCTest unions transformed/off-screen descendants into the application frame.
-    let frame = CGRect(
-      x: plan.viewport.x,
-      y: plan.viewport.y,
-      width: plan.viewport.width,
-      height: plan.viewport.height
-    )
-    let rotationFrame = synthesizedRotationFrame(fallback: frame, interfaceOrientation: orientation)
+  /// A planned gesture's surface and each pointer's `{ x, y, offsetMs }` samples in native
+  /// (portrait-up) digitizer points.
+  struct NativePlannedGesture {
+    let context: SynthesizedCoordinateContext
+    let orientation: Int
+    let pointerSamples: [[[String: NSNumber]]]
+  }
+
+  enum NativePlannedGestureResolution {
+    case resolved(NativePlannedGesture)
+    case refused(RunnerInteractionOutcome)
+  }
+
+  @MainActor
+  func nativePlannedGesture(
+    app: XCUIApplication,
+    plan: RunnerGesturePlan,
+    gesture: String
+  ) throws -> NativePlannedGestureResolution {
+    guard let context = try synthesizedCoordinateContext(app: app) else {
+      return .refused(.unsupported(message: "\(gesture) could not resolve a surface", hint: nil))
+    }
+    guard let geometry = digitizerGeometry(app: app, surface: context.geometry) else {
+      return .refused(Self.unmeasuredSoleDisplayOutcome(gesture: gesture))
+    }
     let pointerSamples: [[[String: NSNumber]]] = plan.pointers.map { pointer in
       pointer.samples.map { sample in
-        let point = CoordinateSpaceRotation.native(
-          point: CGPoint(x: sample.point.x, y: sample.point.y),
-          in: rotationFrame,
-          interfaceOrientation: orientation
-        )
+        let point = geometry.digitizerPoint(from: SurfacePoint(CGPoint(x: sample.point.x, y: sample.point.y))).point
         return [
           "x": NSNumber(value: Double(point.x)),
           "y": NSNumber(value: Double(point.y)),
@@ -707,11 +816,28 @@ extension RunnerTests {
         ]
       }
     }
-    let resolvedWindow = resolveRunnerWindowElement(app: app)?.window
+    return .resolved(NativePlannedGesture(
+      context: context, orientation: geometry.orientation, pointerSamples: pointerSamples
+    ))
+  }
+#endif
+
+  @MainActor
+  func sampledPlannedGesture(
+    app: XCUIApplication,
+    plan: RunnerGesturePlan
+  ) throws -> RunnerInteractionOutcome {
+#if os(iOS)
+    let planned: NativePlannedGesture
+    switch try nativePlannedGesture(app: app, plan: plan, gesture: "gesture") {
+    case .resolved(let resolved): planned = resolved
+    case .refused(let outcome): return outcome
+    }
     if let message = RunnerSynthesizedGesture.synthesizeGesture(
       withApplication: app,
-      resolvedWindow: resolvedWindow,
-      pointerSamples: pointerSamples
+      resolvedWindow: planned.context.resolvedWindow,
+      interfaceOrientation: planned.orientation,
+      pointerSamples: planned.pointerSamples
     ) {
       return .unsupported(
         message: message,

@@ -94,7 +94,7 @@ function freezeSnapshot(snapshot: ScreenRecordingLiveSnapshot): ScreenRecordingL
   return Object.freeze({ ...snapshot, gestureEvents: Object.freeze([...snapshot.gestureEvents]) });
 }
 
-function assertConfirmedCleanup(outcome: CleanupOutcome): void {
+function assertConfirmedCleanup(outcome: CleanupOutcome, cause?: unknown): void {
   if (isConfirmedCleanup(outcome)) return;
   throw new AppError(
     'COMMAND_FAILED',
@@ -107,5 +107,6 @@ function assertConfirmedCleanup(outcome: CleanupOutcome): void {
           ? 'Use the current recording owner or recovery record before retrying cleanup.'
           : 'Keep the recovery record and retry cleanup through the exact runtime owner.',
     },
+    cause,
   );
 }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { RawSnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { preferOnscreenMatches } from '../find-match-ranking.ts';
 

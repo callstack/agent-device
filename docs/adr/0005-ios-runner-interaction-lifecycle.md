@@ -103,7 +103,7 @@ The cost of a `RUNNER_BUSY` refusal to the caller depends on the daemon's own pe
 It does not depend on any runner-side classification of the command.
 The trait is `RUNNER_COMMAND_TRAITS` in `packages/apple-runner/src/runner-command-traits.ts`.
 `runAppleRunnerCommand` reads it through `isReadOnlyRunnerCommand` when it decides whether to wrap the send in a resend loop.
-This asymmetry is shipped, and `runner-client-busy-resend.test.ts` asserts it:
+This asymmetry is shipped, and `index-busy-resend.test.ts` in the Apple runner package asserts it:
 
 - A read-only command treats the refusal as *not yet*.
   It waits for the drain on the busy-specific budget sized to outlast the drain.

@@ -18,7 +18,12 @@ import {
   withTestDeviceInventory,
   withTestDeviceInventoryProvider as withDeviceInventoryProvider,
 } from '../inventory-gateways.fixtures.ts';
-import { hostAppDevice, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  hostAppDevice,
+  webSessionDevice,
+  type DeviceInfo,
+  type WebSessionIdentity,
+} from '@agent-device/kernel/device';
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -158,6 +163,59 @@ test('an app target selects the app device in either order of one request', asyn
     (await resolveInOrder([undefined])).map((device) => device.id),
     [macDesktop.id],
   );
+});
+
+test('a web request names the device of its session, and a request without one keeps the host', async () => {
+  const webHost: DeviceInfo = {
+    platform: 'web',
+    id: 'agent-browser-chrome',
+    name: 'Agent Browser Chrome',
+    kind: 'device',
+    target: 'desktop',
+    booted: true,
+  };
+  const resolveWeb = async (webSession: WebSessionIdentity | undefined): Promise<DeviceInfo> =>
+    await withTestDeviceInventory(
+      { local: async () => [webHost] },
+      async () =>
+        await resolveTargetDeviceInContext(
+          { platform: 'web' },
+          webSession ? { env: {}, webSession } : { env: {} },
+        ),
+    );
+
+  assert.deepEqual(await resolveWeb({ name: 'one' }), webSessionDevice(webHost, { name: 'one' }));
+  assert.notEqual((await resolveWeb({ name: 'two' })).id, (await resolveWeb({ name: 'one' })).id);
+  assert.equal((await resolveWeb(undefined)).id, webHost.id);
+  await assert.rejects(
+    resolveWeb({ name: 'one ' }),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'web_session_name_invalid',
+  );
+  assert.notEqual(
+    (await resolveWeb({ name: 'one', tenantId: 'tenant-1' })).id,
+    (await resolveWeb({ name: 'one', tenantId: 'tenant-2' })).id,
+  );
+  await assert.rejects(
+    resolveWeb({ name: 'one:app:two' }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.details?.reason === 'web_session_name_invalid',
+  );
+});
+
+test('a web session leaves a device other than the local web host as selected', async () => {
+  const resolved = await withDeviceInventoryProvider(
+    async () => [androidEmulator],
+    async () =>
+      await resolveTargetDeviceInContext(
+        { platform: 'android' },
+        { env: {}, webSession: { name: 'one' } },
+      ),
+  );
+
+  assert.equal(resolved.id, androidEmulator.id);
 });
 
 test('resolveTargetDevice narrows local Android discovery to an explicit serial', async () => {

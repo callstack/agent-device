@@ -5,12 +5,8 @@ import type { DaemonPlatformServices } from '../../platform-services.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
-import type {
-  Point,
-  Rect,
-  SnapshotPreferredBackend,
-  SnapshotState,
-} from '@agent-device/kernel/snapshot';
+import type { Point, Rect, SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { RequestCaptureProof } from '../../capture-disclosure.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';

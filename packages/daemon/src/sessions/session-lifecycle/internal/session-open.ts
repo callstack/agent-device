@@ -1,7 +1,7 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
-import { resolveTargetDeviceSelection } from '@agent-device/device-selection/dispatch-resolve';
+import { resolveRequestTargetDeviceSelection } from '../../../core/request-device-resolution.ts';
 import {
   openApplicationRuntimeUse,
   openApplicationWithRuntimeHintApplyAndClearUse,
@@ -9,13 +9,15 @@ import {
   openApplicationWithRuntimeHintClearUse,
   resolveOpenApplicationRuntimePlan,
 } from '@agent-device/contracts/application-lifecycle-runtime-plan';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { webSessionBackendKey, type DeviceInfo } from '@agent-device/kernel/device';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { refreshSessionDeviceIfNeeded } from '../../../resources/session-device-resolution.ts';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
+import { requestWebSession } from '../../../core/session-tenant-scope.ts';
+import { isWebSession } from '../../web-session-names.ts';
 import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
 import {
   invalidOpenArgs,
@@ -79,6 +81,15 @@ function firstSessionOpenLocks(sessionStore: SessionStore): Map<string, Promise<
     firstSessionOpenLocksByStore.set(sessionStore, locks);
   }
   return locks;
+}
+
+/**
+ * The key first opens serialize on. An app device keys by its host, so a whole-host open and an
+ * app device open never both pass the session check (ADR 0035). A web host has no whole-host open,
+ * so a web session device keys by itself and web sessions of one host open in parallel (ADR 0037).
+ */
+function firstSessionOpenLockKey(device: DeviceInfo): string {
+  return device.hostApp?.hostDeviceId ?? device.id;
 }
 
 type OpenRuntimeAdmission =
@@ -247,6 +258,8 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
   requireOpenSessionAdmission(sessionStore, sessionName, existingRef);
   if (existingRef) {
     const session = sessionStore.requireCurrent(existingRef);
+    // A reopen names its browser by the supplied name too: a blank one is no alias of the default.
+    if (isWebSession(session)) webSessionBackendKey(requestWebSession(req));
     const resolved = await resolveExistingOpenRequest({
       req,
       session,
@@ -352,8 +365,8 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
   });
   if (preResolvedValidation) return { type: 'response', response: preResolvedValidation };
 
-  const selection = await resolveTargetDeviceSelection(
-    req.flags ?? {},
+  const selection = await resolveRequestTargetDeviceSelection(
+    req,
     buildOpenTargetDeviceResolutionOptions(openTarget, params.host.env, req.flags?.surface),
   );
   const device = selection.device;
@@ -388,11 +401,9 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     return { type: 'response', response: runtimePlanAdmission.response };
   const { admission, runtimeHintPlan } = runtimePlanAdmission;
 
-  // Keyed by the host: the session check and publication of first opens on one host run one at a
-  // time, so a whole-host open and an app device open never both pass the check (ADR 0035).
   return await withKeyedLock(
     firstSessionOpenLocks(sessionStore),
-    device.hostApp?.hostDeviceId ?? device.id,
+    firstSessionOpenLockKey(device),
     async () =>
       await openNewSessionWithDeviceClaim({
         host: params.host,

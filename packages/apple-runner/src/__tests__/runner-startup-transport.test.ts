@@ -35,10 +35,13 @@ vi.mock('../runner-usbmux.ts', async (importOriginal) => {
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { shouldRetryRunnerConnectError } from '../runner-error-classification.ts';
 import { clearDeviceTunnelIpCache } from '../runner-command-route.ts';
 import { readRunnerLogTail } from '../runner-io.ts';
 import { resolveRunnerEarlyExitHint, waitForRunner } from '../runner-startup-transport.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
+import { makeRunnerSession } from './runner-session-fixtures.ts';
+import { buildFixtureById } from './runner-startup-failure-fixtures.ts';
 
 beforeEach(() => {
   clearDeviceTunnelIpCache();
@@ -59,6 +62,147 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
 });
+
+test.each(['process exit', 'launch log'] as const)(
+  'forwarding failure does not hide a confirmed runner %s',
+  async (failure) => {
+    const session = makeRunnerSession({
+      device: iosSimulator,
+      state: 'starting',
+      readLogTail: () =>
+        failure === 'launch log'
+          ? buildFixtureById('simulator-service-hub-bless-refused').output
+          : '',
+      endpoint: {
+        ...RUNNER_ENDPOINT_FIXTURE,
+        http: { url: 'https://instance.invalid/command' },
+      },
+    });
+    vi.stubGlobal('fetch', async () => {
+      if (failure === 'process exit') session.launch.local!.child!.exitCode = 65;
+      return new Response('Bad Gateway', { status: 502 });
+    });
+    await assert.rejects(
+      waitForRunner(iosSimulator, session.endpoint, { command: 'uptime' }, undefined, 100, session),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        if (failure === 'process exit') {
+          assert.equal(error.details?.runnerConnectFailureReason, 'xcodebuild_exited_early');
+        } else {
+          assert.equal(error.details?.reason, 'simulator_service_hub_unavailable');
+        }
+        return true;
+      },
+    );
+  },
+);
+
+test('stops connect retries and reports early exit when child process is terminated by signal (#4265)', async () => {
+  const session = makeRunnerSession({
+    device: iosSimulator,
+    state: 'starting',
+    endpoint: {
+      ...RUNNER_ENDPOINT_FIXTURE,
+      http: { url: 'https://instance.invalid/command' },
+    },
+  });
+  let attempts = 0;
+  vi.stubGlobal('fetch', async () => {
+    attempts++;
+    session.launch.local!.child!.exitCode = null;
+    session.launch.local!.child!.signalCode = 'SIGTERM';
+    return new Response('Bad Gateway', { status: 502 });
+  });
+  let rejectedError: unknown;
+  await assert.rejects(
+    waitForRunner(iosSimulator, session.endpoint, { command: 'uptime' }, undefined, 1000, session),
+    (error: unknown) => {
+      rejectedError = error;
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.runnerConnectFailureReason, 'xcodebuild_exited_early');
+      return true;
+    },
+  );
+  assert.equal(attempts, 1, `Expected exactly 1 attempt before retry stopped`);
+  assert.equal(shouldRetryRunnerConnectError(rejectedError), false);
+});
+
+test.each(['draining', 'stopped'] as const)(
+  'stops connect retries and reports session terminal error when session state transitions to %s (#4265)',
+  async (terminalState) => {
+    const session = makeRunnerSession({
+      device: iosSimulator,
+      state: 'starting',
+      endpoint: {
+        ...RUNNER_ENDPOINT_FIXTURE,
+        http: { url: 'https://instance.invalid/command' },
+      },
+    });
+    let attempts = 0;
+    vi.stubGlobal('fetch', async () => {
+      attempts++;
+      session.state = terminalState;
+      return new Response('Bad Gateway', { status: 502 });
+    });
+    let rejectedError: unknown;
+    await assert.rejects(
+      waitForRunner(
+        iosSimulator,
+        session.endpoint,
+        { command: 'uptime' },
+        undefined,
+        1000,
+        session,
+      ),
+      (error: unknown) => {
+        rejectedError = error;
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.runnerConnectFailureReason, `runner_session_${terminalState}`);
+        return true;
+      },
+    );
+    assert.equal(attempts, 1, `Expected exactly 1 attempt before retry stopped`);
+    assert.equal(shouldRetryRunnerConnectError(rejectedError), false);
+  },
+);
+
+test.each(['draining', 'stopped'] as const)(
+  'immediately fails connect without retrying when session is already %s (#4265)',
+  async (terminalState) => {
+    const session = makeRunnerSession({
+      device: iosSimulator,
+      state: terminalState,
+      endpoint: {
+        ...RUNNER_ENDPOINT_FIXTURE,
+        http: { url: 'https://instance.invalid/command' },
+      },
+    });
+    let fetchCalls = 0;
+    vi.stubGlobal('fetch', async () => {
+      fetchCalls++;
+      return new Response('OK', { status: 200 });
+    });
+    let rejectedError: unknown;
+    await assert.rejects(
+      waitForRunner(
+        iosSimulator,
+        session.endpoint,
+        { command: 'uptime' },
+        undefined,
+        1000,
+        session,
+      ),
+      (error: unknown) => {
+        rejectedError = error;
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.runnerConnectFailureReason, `runner_session_${terminalState}`);
+        return true;
+      },
+    );
+    assert.equal(fetchCalls, 0, `Expected 0 fetch calls for already-terminal session`);
+    assert.equal(shouldRetryRunnerConnectError(rejectedError), false);
+  },
+);
 
 test('waitForRunner propagates request cancellation without fallback', async () => {
   const signal = AbortSignal.abort();
@@ -272,12 +416,12 @@ test('waitForRunner types a simulator runner that never accepts as a refused con
 });
 
 test('waitForRunner discloses no when the runner exited before any attempt could write', async () => {
-  const session: RunnerSession = {
+  const session: RunnerSession = makeRunnerSession({
     ...makeReadyRunnerSession(),
     device: iosDevice,
     deviceId: iosDevice.id,
     child: { pid: 1234, exitCode: 65 } as ExecBackgroundResult['child'],
-  };
+  });
   await assert.rejects(
     () =>
       waitForRunner(
@@ -420,7 +564,7 @@ test('waitForRunner preserves xcodebuild diagnostics when the runner exits durin
     runnerLogPath,
     'The application could not be launched because the Developer App Certificate is not trusted.\n',
   );
-  const session: RunnerSession = {
+  const session: RunnerSession = makeRunnerSession({
     sessionId: 'starting-device-session',
     device: xctestIosDevice,
     deviceId: xctestIosDevice.id,
@@ -434,9 +578,9 @@ test('waitForRunner preserves xcodebuild diagnostics when the runner exits durin
     child: { pid: 1234, exitCode: null } as ExecBackgroundResult['child'],
     state: 'starting',
     commandCharges: new RunnerCommandAccounting(),
-  };
+  });
   mockUsbmuxPostCommand.mockImplementation(async () => {
-    (session.child as { exitCode: number | null }).exitCode = 65;
+    (session.launch.local!.child as { exitCode: number | null }).exitCode = 65;
     throw new Error('ECONNREFUSED');
   });
 
@@ -472,7 +616,7 @@ test('waitForRunner preserves xcodebuild diagnostics when the runner exits durin
 test('waitForRunner carries the disk-image state when the runner is still alive at the connect deadline (#2683)', async () => {
   // The alive-child twin of the early exit: `xcodebuild` never exits, the runner never answers, and
   // the failure a locked phone produces this way must still say what the phone reported.
-  const session: RunnerSession = {
+  const session: RunnerSession = makeRunnerSession({
     sessionId: 'starting-device-session',
     device: xctestIosDevice,
     deviceId: xctestIosDevice.id,
@@ -488,7 +632,7 @@ test('waitForRunner carries the disk-image state when the runner is still alive 
       developerDiskImage: 'unavailable',
       developerDiskImageHint: 'Unlock the iPhone so it can mount the developer disk image.',
     },
-  };
+  });
   mockUsbmuxPostCommand.mockRejectedValue(new Error('ECONNREFUSED'));
   vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
 
@@ -582,7 +726,7 @@ test('waitForRunner falls back to the tunnel route inside the same attempt', asy
 });
 
 function makeReadyRunnerSession(): RunnerSession {
-  return {
+  return makeRunnerSession({
     sessionId: 'ready-session',
     device: iosSimulator,
     deviceId: iosSimulator.id,
@@ -593,7 +737,7 @@ function makeReadyRunnerSession(): RunnerSession {
     child: { pid: 1234, exitCode: null } as ExecBackgroundResult['child'],
     state: 'ready',
     commandCharges: new RunnerCommandAccounting(),
-  };
+  });
 }
 
 test('resolveRunnerEarlyExitHint surfaces busy-connecting guidance', () => {

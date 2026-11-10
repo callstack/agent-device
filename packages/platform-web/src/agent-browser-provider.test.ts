@@ -1,4 +1,4 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, withNodeRuntime } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { beforeEach, test, vi } from 'vitest';
@@ -7,7 +7,6 @@ import {
   managedAgentBrowserCliArgs,
   mkdtempForTestSync,
   withManagedAgentBrowserProvider,
-  withNodeRuntime,
 } from './__tests__/test-utils.ts';
 
 const { providerStartupCleanupMock } = vi.hoisted(() => ({
@@ -41,6 +40,19 @@ const mockProviderStartupCleanup = vi.mocked(providerStartupCleanupMock);
 
 beforeEach(() => {
   mockProviderStartupCleanup.mockReset();
+});
+
+test('agent-browser provider keys its browser on its backend key as given', async () => {
+  await withManagedAgentBrowserProvider({ session: 'p_web-session' }, async (provider) => {
+    const calls: AgentBrowserCall[] = [];
+    await withCommandExecutorOverride(recordingExecutor(calls), async () => {
+      await provider.open('https://example.test');
+    });
+    assert.deepEqual(
+      calls.map((call) => call.args),
+      [['open', 'https://example.test', '--json', '--session', 'p_web-session']],
+    );
+  });
 });
 
 test('agent-browser provider maps supported operations to session-scoped JSON commands', async () => {
@@ -133,6 +145,7 @@ test('agent-browser provider runs provider-startup cleanup before the first mana
   assert.deepEqual(mockProviderStartupCleanup.mock.calls[0]?.[1], {
     env: process.env,
     openWebSessionNames: [],
+    startingSession: 'web-session',
   });
 });
 

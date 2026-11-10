@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
   // MARK: - Sequence command
@@ -20,7 +21,7 @@ extension RunnerTests {
   }
 
   @MainActor
-  func executeSequence(command: Command, activeApp: XCUIApplication) -> Response {
+  func executeSequence(command: Command, activeApp: XCUIApplication) throws -> Response {
     guard let steps = command.steps, !steps.isEmpty else {
       return sequenceInvalidArgs("sequence requires at least one step")
     }
@@ -35,20 +36,54 @@ extension RunnerTests {
       }
     }
 
-    let synthesizedContext = synthesizedSequenceCoordinateContext(steps: steps, app: activeApp)
+    let synthesizedContext = try synthesizedSequenceCoordinateContext(steps: steps, app: activeApp)
 
     // Touch frame resolves from the first step's coords so recording-gestures works unchanged. A
-    // synthesized context already names the frame, so the app tree is not read for it again.
+    // synthesized context already names the frame, so the app tree is not read for it again. Where
+    // the app frame refuses that read, a first step with no synthesized route would anchor through the
+    // same read, so it refuses before any step runs; a synthesized one needs no app frame and runs
+    // without a touch frame, as a synthesized `tap` command does.
     let firstStep = steps[0]
-    let firstFrame = (firstStep.x != nil && firstStep.y != nil)
-      ? synthesizedContext.map { touchVisualizationFrame(x: firstStep.x!, y: firstStep.y!, context: $0) }
-        ?? resolvedTouchVisualizationFrame(app: activeApp, x: firstStep.x!, y: firstStep.y!)
-      : nil
-
-    let execution = assembleSequenceExecution(steps: steps) { _, step in
-      performSequenceStep(step, activeApp: activeApp, synthesizedContext: synthesizedContext)
+    var firstFrame: TouchVisualizationFrame?
+    var firstStepRefusal: RunnerCoordinateRefusal?
+    if let x = firstStep.x, let y = firstStep.y {
+      if let synthesizedContext {
+        firstFrame = touchVisualizationFrame(point: SurfacePoint(CGPoint(x: x, y: y)), context: synthesizedContext)
+      } else {
+        do {
+          firstFrame = try resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
+        } catch let refusal as RunnerCoordinateRefusal {
+          if synthesizedPolicyKind(forSequenceStep: firstStep) == nil {
+            firstStepRefusal = refusal
+          }
+        }
+      }
     }
-    return sequenceResponse(execution: execution, touchFrame: firstFrame)
+
+#if os(iOS)
+    let orientation = command.sequenceOrientation ?? synthesizedContext?.geometry.orientation ?? litPanelState.surface?.geometry.orientation
+      ?? Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: activeApp))
+#else
+    let orientation: Int? = nil
+#endif
+    let execution = try assembleSequenceExecution(steps: steps) { index, step in
+      if index == 0, let firstStepRefusal {
+        return finishedSequenceStep(step, timing: measureGesture {}, outcome: .unsupported(
+          message: firstStepRefusal.message,
+          hint: firstStepRefusal.hint
+        ))
+      }
+#if os(iOS)
+      if orientation != Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: activeApp)) {
+        return finishedSequenceStep(step, timing: measureGesture {}, outcome: .unsupported(
+          message: "sequence stopped because the screen orientation changed",
+          hint: "Inspect the screen before continuing with the remaining actions."
+        ))
+      }
+#endif
+      return try performSequenceStep(step, activeApp: activeApp, synthesizedContext: synthesizedContext)
+    }
+    return sequenceResponse(execution: execution, touchFrame: firstFrame, sequenceOrientation: orientation)
   }
 
   /// Pure, device-free assembler: runs each step in order via `perform`, stops at the first
@@ -58,8 +93,8 @@ extension RunnerTests {
   /// results.count == completedSteps + (failedStepIndex != nil ? 1 : 0).
   func assembleSequenceExecution(
     steps: [SequenceStep],
-    perform: (Int, SequenceStep) -> SequenceStepOutcome
-  ) -> SequenceExecutionResult {
+    perform: (Int, SequenceStep) throws -> SequenceStepOutcome
+  ) rethrows -> SequenceExecutionResult {
     var results: [SequenceStepResult] = []
     var completedSteps = 0
     var failedStepIndex: Int?
@@ -67,7 +102,7 @@ extension RunnerTests {
     var gestureEndUptimeMs: Double?
 
     for (index, step) in steps.enumerated() {
-      let stepOutcome = perform(index, step)
+      let stepOutcome = try perform(index, step)
       if gestureStartUptimeMs == nil {
         gestureStartUptimeMs = stepOutcome.gestureStartUptimeMs
       }
@@ -81,18 +116,20 @@ extension RunnerTests {
             kind: step.kind,
             errorCode: nil,
             errorMessage: nil,
+            errorHint: nil,
             gestureStartUptimeMs: stepOutcome.gestureStartUptimeMs,
             gestureEndUptimeMs: stepOutcome.gestureEndUptimeMs
           )
         )
         completedSteps += 1
-      case .unsupported(let message, _):
+      case .unsupported(let message, let hint):
         results.append(
           SequenceStepResult(
             ok: false,
             kind: step.kind,
             errorCode: "UNSUPPORTED_OPERATION",
             errorMessage: message,
+            errorHint: hint,
             gestureStartUptimeMs: stepOutcome.gestureStartUptimeMs,
             gestureEndUptimeMs: stepOutcome.gestureEndUptimeMs
           )
@@ -144,13 +181,13 @@ extension RunnerTests {
     _ step: SequenceStep,
     activeApp: XCUIApplication,
     synthesizedContext: SynthesizedCoordinateContext? = nil
-  ) -> SequenceStepOutcome {
+  ) throws -> SequenceStepOutcome {
     let x = step.x ?? 0
     let y = step.y ?? 0
     let longPressDurationMs = min(max(step.durationMs ?? 800, 16), 10000)
     if let policyKind = synthesizedPolicyKind(forSequenceStep: step) {
-      switch performSynthesizedGesture(activeApp, kind: policyKind, context: synthesizedContext, synthesize: {
-        synthesizedSequenceStep(
+      switch try performSynthesizedGesture(activeApp, kind: policyKind, context: synthesizedContext, synthesize: {
+        try synthesizedSequenceStep(
           policyKind,
           app: activeApp,
           x: x,
@@ -171,15 +208,21 @@ extension RunnerTests {
         break
       }
     }
-    let (timing, outcome) = performGesture(activeApp) {
-      switch step.kind {
-      case "doubleTap":
-        // doubleTapAt per step, matching the behavior of the retired tapSeries doubleTap path.
-        return doubleTapAt(app: activeApp, x: x, y: y)
-      case "longPress":
-        return longPressAt(app: activeApp, x: x, y: y, duration: longPressDurationMs / 1000.0)
-      default:
-        return tapAt(app: activeApp, x: x, y: y)
+    let (timing, outcome) = try performGesture(activeApp) {
+      // A refused coordinate gesture is this step's outcome: the steps that already ran keep their
+      // results, and the failed step reports the coded refusal instead of aborting the command.
+      do {
+        switch step.kind {
+        case "doubleTap":
+          // doubleTapAt per step, matching the behavior of the retired tapSeries doubleTap path.
+          return try doubleTapAt(app: activeApp, x: x, y: y)
+        case "longPress":
+          return try longPressAt(app: activeApp, x: x, y: y, duration: longPressDurationMs / 1000.0)
+        default:
+          return try tapAt(app: activeApp, x: x, y: y)
+        }
+      } catch let refusal as RunnerCoordinateRefusal {
+        return .unsupported(message: refusal.message, hint: refusal.hint)
       }
     }
     return finishedSequenceStep(step, timing: timing, outcome: outcome)
@@ -193,11 +236,11 @@ extension RunnerTests {
     y: Double,
     longPressDurationMs: Double,
     context: SynthesizedCoordinateContext?
-  ) -> RunnerInteractionOutcome? {
+  ) throws -> RunnerInteractionOutcome? {
     switch policyKind {
 #if os(iOS)
     case .coordinateLongPress:
-      return synthesizedLongPressAt(
+      return try synthesizedLongPressAt(
         app: app,
         x: x,
         y: y,
@@ -206,7 +249,7 @@ extension RunnerTests {
       )
 #endif
     default:
-      return synthesizedTapAt(app: app, x: x, y: y, context: context)
+      return try synthesizedTapAt(app: app, x: x, y: y, context: context)
     }
   }
 
@@ -230,7 +273,8 @@ extension RunnerTests {
 
   private func sequenceResponse(
     execution: SequenceExecutionResult,
-    touchFrame: TouchVisualizationFrame?
+    touchFrame: TouchVisualizationFrame?,
+    sequenceOrientation: Int?
   ) -> Response {
     return Response(
       ok: true,
@@ -243,6 +287,7 @@ extension RunnerTests {
         referenceWidth: touchFrame?.referenceWidth,
         referenceHeight: touchFrame?.referenceHeight,
         completedSteps: execution.completedSteps,
+        sequenceOrientation: sequenceOrientation,
         failedStepIndex: execution.failedStepIndex,
         sequenceResults: execution.results
       )

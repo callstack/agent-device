@@ -432,7 +432,11 @@ test('a runner disposal failure propagates out of close (#2615)', async () => {
     throw new Error('runner artifact cleanup failed');
   });
 
-  await assert.rejects(() => closeRunner(device, false), /runner artifact cleanup failed/);
+  try {
+    await assert.rejects(() => closeRunner(device, false), /runner artifact cleanup failed/);
+  } finally {
+    mockCleanupTempFile.mockReset();
+  }
 });
 
 test('a drain that lands after close is issued cannot return a busy runner to reuse (#2615)', async () => {
@@ -446,7 +450,7 @@ test('a drain that lands after close is issued cannot return a busy runner to re
     stdout: string;
     stderr: string;
   }) => void = () => {};
-  session.testPromise = new Promise((resolve) => {
+  session.launch.local!.testPromise = new Promise((resolve) => {
     settleRunnerExit = resolve;
   });
 
@@ -574,4 +578,42 @@ async function ensureReadyRunner(device: DeviceInfo): Promise<RunnerSession> {
   await executeRunnerCommandWithSession(device, session, { command: 'uptime' }, undefined, 1_000);
   await session.listenerWatch?.ready;
   return session;
+}
+
+for (const operation of ['abort', 'stop'] as const) {
+  test(`global ${operation} cancels a local start waiting for simulator boot`, async () => {
+    const device = { ...deviceNamed(`shutdown-boot-${operation}`), booted: false };
+    let entered!: () => void;
+    const booting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let releaseBoot!: (reason: unknown) => void;
+    let bootSignal: AbortSignal | undefined;
+    mockRunXcrun.mockImplementation(async (args, options) => {
+      if (!args.includes('bootstatus')) return { exitCode: 0, stdout: '', stderr: '' };
+      bootSignal = options.signal;
+      entered();
+      return await new Promise((_resolve, reject) => {
+        releaseBoot = reject;
+        options.signal?.addEventListener('abort', () => reject(options.signal.reason), {
+          once: true,
+        });
+      });
+    });
+    const starting = ensureRunnerSession(device, {});
+    const canceled = assert.rejects(starting);
+    await booting;
+    const shutdown =
+      operation === 'abort' ? abortAllIosRunnerSessions() : stopAllIosRunnerSessions();
+    try {
+      assert.equal(bootSignal?.aborted, true);
+      await shutdown;
+      await canceled;
+      assert.equal(mockRunCmdBackground.mock.calls.length, 0);
+      assert.equal(readRunnerSessionLiveness(device.id), null);
+    } finally {
+      releaseBoot(new Error('test cleanup'));
+      await Promise.allSettled([starting, shutdown]);
+    }
+  });
 }

@@ -1,4 +1,5 @@
-import { centerOfRect, type SnapshotState } from '@agent-device/kernel/snapshot';
+import { centerOfRect } from '@agent-device/kernel/snapshot';
+import { type SnapshotState } from '@agent-device/contracts/snapshot-model';
 import {
   createActionableTouchResolver,
   isRootInteractionContainer,

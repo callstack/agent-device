@@ -3,7 +3,7 @@ import type { SettleObservation, SurfaceScopedNodes } from '@agent-device/contra
 import type { PostOpenObservation } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { SnapshotCaptureAnnotations } from '@agent-device/contracts/capture';
 import { isApplePlatform, isMobilePlatform } from '@agent-device/kernel/device';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { MovingTargetBaseline } from '@agent-device/contracts/runtime-contract';
 import {
   captureAndroidFreshnessRecoveredAttempt,
@@ -17,7 +17,7 @@ import {
 import {
   areInteractionSurfaceSignaturesStable,
   buildInteractionSurfaceSignature,
-  classifyBaselineSurfaceEvidence,
+  classifyPostGestureBaselineEvidence,
   haveIdenticalDiscriminatingSurfaces,
   summarizeDiscriminatingSurfaceDivergence,
   snapshotSurfaceComparisonKey,
@@ -150,6 +150,7 @@ function markSurfaceStabilization(
             provenance: 'pre-action' as const,
             signature: baselineSignature,
             comparisonKey: snapshotSurfaceComparisonKey(session.snapshot),
+            keyboard: session.snapshot?.keyboard,
           },
         }
       : {}),
@@ -374,10 +375,11 @@ export async function capturePostGestureStabilizedResult<T>(params: {
           return {
             signature: buildInteractionSurfaceSignature(snapshot.nodes),
             comparisonKey: snapshotSurfaceComparisonKey(snapshot),
+            keyboard: snapshot.keyboard,
           };
         },
         signaturesStable: areInteractionSurfaceSignaturesStable,
-        classifyBaselineEvidence: classifyBaselineSurfaceEvidence,
+        classifyBaselineEvidence: classifyPostGestureBaselineEvidence,
         surfacesIdentical: haveIdenticalDiscriminatingSurfaces,
         summarizeDivergence: summarizeDiscriminatingSurfaceDivergence,
       },

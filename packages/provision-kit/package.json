@@ -38,6 +38,10 @@
       "types": "./src/install-source-network-transport.ts",
       "default": "./src/install-source-network-transport.ts"
     },
+    "./provider-lease-table": {
+      "types": "./src/provider-lease-table.ts",
+      "default": "./src/provider-lease-table.ts"
+    },
     "./toolchain-probe": {
       "types": "./src/toolchain-probe.ts",
       "default": "./src/toolchain-probe.ts"

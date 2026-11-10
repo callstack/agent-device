@@ -226,7 +226,7 @@
   {
     "id": "ios-runner.reply.ALERT_UNRESOLVED",
     "producer": "ios-runner",
-    "trigger": "structured runner reply with code ALERT_UNRESOLVED: a visible blocking system modal whose host could not be read, refused before any activation",
+    "trigger": "structured runner reply with code ALERT_UNRESOLVED: required alert acquisition failed, exhausted its deadline, or found an app surface without actionable controls, refused before any activation",
     "dispatched": "no"
   },
   {
@@ -245,6 +245,12 @@
     "id": "ios-runner.reply.APP_SCREEN_CAPTURE_UNRENDERABLE",
     "producer": "ios-runner",
     "trigger": "structured runner reply with code APP_SCREEN_CAPTURE_UNRENDERABLE: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.APP_SCREEN_OFF_LIT_PANEL",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code APP_SCREEN_OFF_LIT_PANEL: a refusal that ran nothing",
     "dispatched": "no"
   },
   {
@@ -582,5 +588,59 @@
     "producer": "web-agent-browser",
     "trigger": "a coordinate fill whose click returned and whose in-page selection found no editable field the click reached: the fill is refused before any text is sent, and the failure reports unknown with details.dispatchedSteps 4",
     "dispatched": "unknown"
+  },
+  {
+    "id": "daemon-client.socket-closed-after-send",
+    "producer": "daemon-client",
+    "trigger": "the daemon closed the socket after reading a press request and before replying; the request was sent, so the client discloses the press's declared mutates-app effect",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon-client.http-reset-after-send",
+    "producer": "daemon-client",
+    "trigger": "the daemon reset the HTTP connection after reading a press request and before replying",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon-client.invalid-response-after-send",
+    "producer": "daemon-client",
+    "trigger": "the daemon answered a press request over the socket with a line that is not a JSON-RPC response",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon-client.timeout-after-send",
+    "producer": "daemon-client",
+    "trigger": "the client's request window expired after it sent a press request to a remote daemon that never answered",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon-client.read-failure-after-send",
+    "producer": "daemon-client",
+    "trigger": "the daemon closed the socket after reading a snapshot request; snapshot declares observes-app, so nothing app-visible ran",
+    "dispatched": "no"
+  },
+  {
+    "id": "daemon-client.refused-before-send",
+    "producer": "daemon-client",
+    "trigger": "the socket connection was refused before a press request could be written",
+    "dispatched": "no"
+  },
+  {
+    "id": "daemon-client.delegated-composite-after-send",
+    "producer": "daemon-client",
+    "trigger": "the daemon closed the socket after reading a batch request; batch declares a delegated ref-frame effect, so its nested requests may have acted",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon-client.artifact-fetch-after-answer",
+    "producer": "daemon-client",
+    "trigger": "a remote daemon answered a press request with an artifact, then the artifact download failed; the daemon ran the request",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon-client.http-refused-before-send",
+    "producer": "daemon-client",
+    "trigger": "the HTTP connection was refused before a press request could be sent; the request never left the client",
+    "dispatched": "no"
   }
 ]

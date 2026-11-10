@@ -1,3 +1,4 @@
+import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { test, expect, vi } from 'vitest';
 import * as path from 'node:path';
@@ -414,7 +415,9 @@ test('boot forwards Android serial admission policy to readiness', async () => {
 
 test('boot --headless requires avd selector when device cannot be resolved', async () => {
   const sessionStore = makeSessionStore();
-  mockResolveTargetDevice.mockRejectedValue(new AppError('DEVICE_NOT_FOUND', 'No device found'));
+  mockResolveTargetDevice.mockRejectedValue(
+    new AppError('DEVICE_NOT_FOUND', 'The provider connection has no allocated instance.'),
+  );
   const response = await handleSessionCommands({
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
@@ -440,6 +443,55 @@ test('boot --headless requires avd selector when device cannot be resolved', asy
     expect(response.error.code).toBe('INVALID_ARGS');
     expect(response.error.message).toMatch(/boot --headless requires --device <avd-name>/);
   }
+});
+
+test('boot --headless preserves an unallocated provider refusal for an active session', async () => {
+  const sessionStore = makeSessionStore();
+  sessionStore.publish(
+    'default',
+    makeSession('default', {
+      platform: 'apple',
+      appleOs: 'ios',
+      id: 'limrun:ios:missing-lease',
+      name: 'Limrun iOS',
+      kind: 'simulator',
+      booted: true,
+    }),
+  );
+  const actual = await vi.importActual<
+    typeof import('@agent-device/device-selection/dispatch-resolve')
+  >('@agent-device/device-selection/dispatch-resolve');
+  mockResolveTargetDevice.mockImplementation(actual.resolveTargetDevice);
+  const local = vi.fn(async () => [sessionStore.get('default')!.device]);
+  await expect(
+    withTestDeviceInventory({ local }, () =>
+      handleBootCommand({
+        host: createTestHostEnvironment(),
+        platformServices: daemonPlatformServicesFixture(),
+        req: {
+          token: 't',
+          session: 'default',
+          command: 'boot',
+          positionals: [],
+          flags: { headless: true },
+          meta: { leaseProvider: 'limrun' },
+        },
+        sessionName: 'default',
+        sessionStore,
+        inspectFacts: mockInspectDeviceRuntimeFacts,
+        bindDevice: mockBindDeviceRuntime,
+      }),
+    ),
+  ).rejects.toMatchObject({
+    code: 'DEVICE_NOT_FOUND',
+    details: {
+      reason: 'provider_instance_unallocated',
+      hint: 'Run boot or open to allocate an instance. SDK callers allocate one with leases.allocate and pass its leaseId.',
+    },
+  });
+  expect(local).not.toHaveBeenCalled();
+  expect(mockInspectDeviceRuntimeFacts).not.toHaveBeenCalled();
+  expect(mockBindDeviceRuntime).not.toHaveBeenCalled();
 });
 
 test('boot --headless rejects non-Android selectors', async () => {

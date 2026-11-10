@@ -9,7 +9,9 @@ type Plan = ReturnType<typeof selectChecks>;
 
 export function checkOwnership(
   changedPaths: readonly string[] | null,
-): { early: Selection; plan?: never } | { early?: never; plan: Plan } {
+):
+  | { early: Selection; plan?: never; changedPaths?: never }
+  | { early?: never; plan: Plan; changedPaths: readonly string[] } {
   if (changedPaths === null) {
     return { early: { run: true, reason: 'the PR change set could not be established' } };
   }
@@ -25,7 +27,7 @@ export function checkOwnership(
       },
     };
   }
-  return { plan };
+  return { plan, changedPaths };
 }
 
 // A PR runs a device lane only when the affected-check model selects one of its checks.
@@ -46,7 +48,8 @@ export function selectDeviceLane(
 
 function changedPathsFromGit(baseSha: string): string[] | null {
   if (!/^[a-f0-9]{40}$/.test(baseSha)) return null;
-  const result = spawnSync('git', ['diff', '--name-only', '-z', baseSha, 'HEAD'], {
+  // `--no-renames` keeps both sides of a rename, so a file moved out of a lane's root still selects it.
+  const result = spawnSync('git', ['diff', '--name-only', '--no-renames', '-z', baseSha, 'HEAD'], {
     encoding: 'utf8',
   });
   if (result.error || result.status !== 0 || result.stdout === null) return null;

@@ -29,7 +29,10 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
 import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
-import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
+import {
+  screenshotRuntimeOperationFacts,
+  defaultCaptureOnly,
+} from '@agent-device/contracts/screenshot-runtime';
 import { selectorObservationRuntimeOperationFacts } from '@agent-device/contracts/selector-observation-runtime';
 import {
   bindLocalSnapshotInteractor,
@@ -571,6 +574,7 @@ function androidInteractionOperations(
     ...bindLocalInteractorOperationSet({
       ...resolver,
       facts: facts.operations,
+      captureCapabilities: defaultCaptureOnly('an Android device captures through adb'),
       pause: async (milliseconds) => await host.clock.sleep(milliseconds, request.scope.signal),
     }),
   };

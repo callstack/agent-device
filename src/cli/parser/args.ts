@@ -461,6 +461,17 @@ export async function usageForCommand(command: string): Promise<string | null> {
   return buildCommandUsageText(normalizeCommandAlias(command));
 }
 
+/** The one-line synopsis of a command or alias, or `null` for an unknown or retired name. */
+export async function commandSynopsis(command: string): Promise<string | null> {
+  const { buildCommandSynopsis } = await import('../../commands/schema/cli-help.ts');
+  try {
+    return buildCommandSynopsis(normalizeCommandAlias(command));
+  } catch (error) {
+    if (error instanceof AppError) return null;
+    throw error;
+  }
+}
+
 function normalizeCommandAlias(command: string): string {
   const retiredMessage = retiredCliCommandMessage(command);
   if (retiredMessage) throw new AppError('INVALID_ARGS', retiredMessage);

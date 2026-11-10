@@ -64,6 +64,19 @@ describe('single-pointer plans', () => {
     assert.deepEqual(rightFling.pointers[0].samples.at(-1)?.point, { x: 360, y: 430 });
   });
 
+  test('edge presets start as screen-edge contacts and in-page presets do not', () => {
+    const contactOrigin = (preset: 'left' | 'right' | 'left-edge' | 'right-edge') => {
+      const plan = buildGesturePlan({ intent: 'fling', preset }, PORTRAIT);
+      assert.ok(plan.topology === 'single');
+      return plan.contactOrigin;
+    };
+
+    assert.equal(contactOrigin('left-edge'), 'screen-edge');
+    assert.equal(contactOrigin('right-edge'), 'screen-edge');
+    assert.equal(contactOrigin('left'), undefined);
+    assert.equal(contactOrigin('right'), undefined);
+  });
+
   test('single-pointer pan preserves its execution profile', () => {
     const plan = buildGesturePlan(
       {

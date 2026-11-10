@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
-import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { executeMaestroPlan } from './engine.ts';
 import {
   isMaestroControlCommandDescriptor,

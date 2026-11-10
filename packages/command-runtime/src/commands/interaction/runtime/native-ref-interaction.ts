@@ -6,6 +6,7 @@ import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pip
 import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import type {
   InteractionTarget,
+  ResolutionDisclosure,
   ResolvedInteractionTarget,
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
@@ -59,6 +60,7 @@ export async function preflightNativeRefInteraction(
   hint?: string;
   node?: SnapshotNode;
   preAction?: SurfaceScopedNodes;
+  resolution?: ResolutionDisclosure;
 }> {
   const session = await runtime.sessions.get(options.session ?? 'default');
   const storedSnapshot = session?.snapshot;
@@ -95,13 +97,15 @@ export async function preflightNativeRefInteraction(
     // evidence source for the fast path, at zero extra capture cost.
     node: visibleNode,
     preAction: surfaceScopedNodes(storedSnapshot),
+    resolution: resolved.resolution,
   };
 }
 
 /**
  * ADR 0011 native-ref dispatch, shared by click/fill/hover @ref: run the
  * preflight guards against the stored node, hand the ref to the backend as
- * its own element handle, and return the exact-ref result envelope. Callers
+ * its own element handle, and return the ref result envelope. It discloses the
+ * preflight's resolution, or `exact` when the preflight produced none. Callers
  * decide WHEN the path applies (backend capability, no non-default options,
  * no replay guard, no settle baseline); this owns only the dispatch itself so
  * the three commands cannot drift on preflight or disclosure.
@@ -128,8 +132,8 @@ export async function dispatchNativeRefInteraction(
   return {
     kind: 'ref',
     target: { kind: 'ref', ref: target.ref },
-    resolution: EXACT_REF_RESOLUTION,
     ...preflight,
+    resolution: preflight.resolution ?? EXACT_REF_RESOLUTION,
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
   };
 }

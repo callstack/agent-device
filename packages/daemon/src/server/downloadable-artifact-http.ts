@@ -9,8 +9,9 @@ import {
   listDownloadableArtifacts,
   openDownloadableArtifact,
 } from '../resources/artifact-tracking.ts';
-import { sendRestJsonError } from './http-errors.ts';
+import { failStreamedHttpResponse, sendRestJsonError } from './http-errors.ts';
 import { decodeUriSegment } from './http-request-target.ts';
+import { responseDisconnectSignal } from './http/response-disconnect-signal.ts';
 
 type DownloadableArtifactHttpRoute =
   | { kind: 'inventory' }
@@ -83,6 +84,7 @@ async function handleArtifactDownload(
     return;
   }
 
+  const signal = responseDisconnectSignal(req, res);
   try {
     const auth = await authorize({
       req,
@@ -94,7 +96,12 @@ async function handleArtifactDownload(
     });
     if (!auth) return;
 
-    const artifact = await openDownloadableArtifact(artifactId, auth.tenantId, options.hostEnv);
+    const artifact = await openDownloadableArtifact(
+      artifactId,
+      auth.tenantId,
+      options.hostEnv,
+      signal,
+    );
     const { stream } = artifact;
     const closed = finished(stream, { cleanup: true }).catch(() => {});
     try {
@@ -141,14 +148,7 @@ async function handleArtifactDownload(
       artifact.release();
     }
   } catch (error) {
-    if (res.destroyed) return;
-    if (res.headersSent) {
-      res.destroy(error instanceof Error ? error : undefined);
-      return;
-    }
-    res.removeHeader('content-length');
-    res.removeHeader('content-disposition');
-    sendRestJsonError(res, normalizeError(error));
+    failStreamedHttpResponse(res, error);
   }
 }
 

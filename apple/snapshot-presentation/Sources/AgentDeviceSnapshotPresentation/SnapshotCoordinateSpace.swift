@@ -2,8 +2,8 @@ import Foundation
 import CoreGraphics
 
 // Rotation between an app's interface space and the device's native (portrait-up) space, shared by
-// synthesized dispatch (forward) and capture (inverse). Rationale and measurements: ADR 0004
-// "the coordinate space of a captured subtree" and contracts/fixtures/window-coordinate-space.json.
+// synthesized dispatch (forward) and capture (inverse). Decision: ADR 0004 "Geometry". Rules:
+// apple/snapshot-presentation/README.md "Coordinate space" and contracts/fixtures/window-coordinate-space.json.
 
 public enum RunnerInterfaceOrientation {
   public static let unknown = 0
@@ -11,6 +11,66 @@ public enum RunnerInterfaceOrientation {
   public static let portraitUpsideDown = 2
   public static let landscapeRight = 3
   public static let landscapeLeft = 4
+}
+
+public enum WindowContentSpace {}
+public enum InterfaceScreenSpace {}
+public enum NativeDigitizerSpace {}
+
+public struct SurfacePoint<Space>: Equatable, Sendable {
+  public let point: CGPoint
+  public init(_ point: CGPoint) { self.point = point }
+}
+
+public struct SurfaceRect<Space>: Equatable, Sendable {
+  public let rect: CGRect
+  public init(_ rect: CGRect) { self.rect = rect }
+}
+
+/// Geometry measured once for a window. Panel size is absent when the runtime cannot prove it.
+public struct SurfaceGeometry: Sendable {
+  public let windowOnScreen: SurfaceRect<InterfaceScreenSpace>
+  public let panelNativeSize: CGSize?
+  public let orientation: Int
+
+  public init(windowOnScreen: SurfaceRect<InterfaceScreenSpace>, panelNativeSize: CGSize?, orientation: Int) {
+    self.windowOnScreen = windowOnScreen
+    self.panelNativeSize = panelNativeSize
+    self.orientation = orientation
+  }
+
+  public var digitizerBasis: SurfaceRect<InterfaceScreenSpace> {
+    SurfaceRect(panelNativeSize.flatMap { Self.panelFrame(nativeSize: $0, orientation: orientation) }
+      ?? windowOnScreen.rect)
+  }
+
+  public func screenPoint(from content: SurfacePoint<WindowContentSpace>) -> SurfacePoint<InterfaceScreenSpace> {
+    let frame = windowOnScreen.rect
+    let space = SnapshotGeometrySpace.windowContent(offset: CGSize(width: frame.minX, height: frame.minY))
+    return SurfacePoint(space.orientedFrame(of: CGRect(origin: content.point, size: .zero)).origin)
+  }
+
+  public func contentPoint(from screen: SurfacePoint<InterfaceScreenSpace>) -> SurfacePoint<WindowContentSpace> {
+    let origin = screenPoint(from: SurfacePoint(.zero)).point
+    return SurfacePoint(CGPoint(x: screen.point.x - origin.x, y: screen.point.y - origin.y))
+  }
+
+  public func digitizerPoint(from screen: SurfacePoint<InterfaceScreenSpace>) -> SurfacePoint<NativeDigitizerSpace> {
+    SurfacePoint(CoordinateSpaceRotation.native(
+      point: screen.point, in: digitizerBasis.rect, interfaceOrientation: orientation))
+  }
+
+  public static func panelFrame(nativeSize size: CGSize, orientation: Int) -> CGRect? {
+    guard size.width > 0, size.height > 0 else { return nil }
+    switch orientation {
+    case RunnerInterfaceOrientation.portrait, RunnerInterfaceOrientation.portraitUpsideDown:
+      return CGRect(origin: .zero, size: size)
+    case RunnerInterfaceOrientation.landscapeLeft, RunnerInterfaceOrientation.landscapeRight:
+      return CGRect(x: 0, y: 0, width: size.height, height: size.width)
+    default:
+      return nil
+    }
+  }
 }
 
 public enum CoordinateSpaceRotation {

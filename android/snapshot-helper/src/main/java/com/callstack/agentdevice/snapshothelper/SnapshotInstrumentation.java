@@ -3,6 +3,7 @@ package com.callstack.agentdevice.snapshothelper;
 import android.app.Instrumentation;
 import android.app.UiAutomation;
 import android.content.res.Resources;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Base64;
@@ -375,7 +376,12 @@ public final class SnapshotInstrumentation extends Instrumentation {
   }
 
   private UiAutomation tryGetConnectedUiAutomation() {
-    UiAutomation automation = getUiAutomation();
+    UiAutomation automation;
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+      automation = getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
+    } else {
+      automation = getUiAutomation();
+    }
     if (automation == null) {
       return null;
     }

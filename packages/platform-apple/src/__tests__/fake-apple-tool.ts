@@ -1,7 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { AppleToolProvider } from '../core/tool-provider.ts';
-import { withAppleToolProvider } from '../core/tool-provider.ts';
+import { withAppleToolProvider, createLocalAppleToolProvider } from '../core/tool-provider.ts';
 import { execFailureDetails, type ExecResult } from '@agent-device/host-kit/command';
 import { IOS_DEVICE } from './device-fixtures.ts';
 
@@ -38,7 +38,7 @@ export async function withFakeAppleTool<T>(
     return result;
   };
 
-  const provider: AppleToolProvider = {
+  const provider = createLocalAppleToolProvider({
     ...options.provider,
     whichCommand: options.provider?.whichCommand ?? (async () => true),
     runCommand: async (cmd, args, execOptions) =>
@@ -51,7 +51,7 @@ export async function withFakeAppleTool<T>(
       run: async (args, execOptions) =>
         await respond(['devicectl', ...args], 'xcrun', execOptions?.allowFailure),
     },
-  };
+  });
 
   return await withAppleToolProvider(provider, async () => await run({ calls, device }));
 }

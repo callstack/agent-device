@@ -15,6 +15,7 @@ import {
   type LockfileInstallSyncResult,
 } from './lockfile-install-sync.ts';
 import { runValidation, type ValidationContext } from './execution.ts';
+import { packageEntrySources } from '../build-entries.ts';
 import { parseScriptArgs } from '../lib/cli-args.ts';
 import { runEntrypoint } from '../lib/cli-entrypoint.ts';
 import {
@@ -104,14 +105,6 @@ type PackageJson = {
 
 function loadPackageJson(): PackageJson {
   return JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as PackageJson;
-}
-
-// Public package surface = the source files behind package.json `exports`.
-function packageEntryFiles(pkg: PackageJson): string[] {
-  return Object.values(pkg.exports ?? {})
-    .map((entry) => entry.import)
-    .filter((target): target is string => typeof target === 'string')
-    .map((target) => target.replace(/^\.\/dist\//, '').replace(/\.js$/, '.ts'));
 }
 
 function printPlanJson(plan: CheckPlan, args: Args): void {
@@ -280,7 +273,10 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     const changedFiles = readChangedFiles(base, args.head);
     return {
       changedFiles,
-      plan: selectChecks({ changedFiles, packageEntryFiles: packageEntryFiles(currentPackage) }),
+      plan: selectChecks({
+        changedFiles,
+        packageEntryFiles: packageEntrySources(currentPackage.exports),
+      }),
     };
   };
   if (args.run)

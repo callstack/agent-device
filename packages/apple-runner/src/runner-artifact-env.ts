@@ -59,12 +59,6 @@ function escapeForExtendedRegex(value: string): string {
   return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
-const RUNNER_XCTESTRUN_CAPTURE_OPTIONS = {
-  PreferredScreenCaptureFormat: 'screenshots',
-  SystemAttachmentLifetime: 'keepNever',
-  UserAttachmentLifetime: 'keepNever',
-} as const;
-
 type XctestrunTarget = {
   TestBundlePath?: unknown;
   EnvironmentVariables?: EnvMap;
@@ -216,3 +210,9 @@ function toXctestrunTarget(
   if (options.requireTestBundlePath && !target.TestBundlePath) return null;
   return target;
 }
+
+export const RUNNER_XCTESTRUN_CAPTURE_OPTIONS = {
+  PreferredScreenCaptureFormat: 'screenshots',
+  SystemAttachmentLifetime: 'keepNever',
+  UserAttachmentLifetime: 'keepNever',
+} as const;

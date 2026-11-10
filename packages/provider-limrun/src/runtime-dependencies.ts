@@ -1,13 +1,32 @@
+import type { AndroidPerfHost } from '@agent-device/contracts/perf-runtime-host';
+import type { LimrunAndroidPerfOperations } from './android-perf-runtime.ts';
+import type {
+  AppDeploymentInstaller,
+  AppDeploymentRuntimeOperations,
+} from '@agent-device/contracts/app-deployment-runtime';
+import type { InstanceClient as LimrunIosClient } from '@limrun/api/ios-client';
 import type {
   AndroidAdbInvocation,
   AndroidTextInjectionRequest,
 } from '@agent-device/platform-android/mechanics';
+import type {
+  AppleApplicationTools,
+  ApplicationLifecycleRuntimeOperations,
+} from '@agent-device/contracts/application-lifecycle-runtime';
 import type { AppsFilter } from '@agent-device/contracts/device';
-import type { Interactor } from '@agent-device/contracts/interactor-types';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { AndroidInputOwner } from '@agent-device/contracts/android-input-ownership';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppError } from '@agent-device/kernel/errors';
-import type { SimctlSettingRequest } from '@agent-device/contracts/settings';
+import type {
+  PlatformRuntimeHost,
+  PlatformRuntimeOperations,
+} from '@agent-device/contracts/platform-runtime-operations';
+import type { RuntimeFacts, RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
+import type {
+  SnapshotRuntimeOperations,
+  SnapshotRuntimePresenter,
+} from '@agent-device/contracts/snapshot-runtime';
 
 export type LimrunAdbCommandOptions = {
   allowFailure?: boolean;
@@ -71,7 +90,24 @@ export type LimrunAndroidKeyboardDismissResult = LimrunAndroidKeyboardState & {
   dismissed: boolean;
 };
 
+export type LimrunDeploymentRequest = {
+  host: PlatformRuntimeHost;
+  signal: AbortSignal;
+  install: AppDeploymentInstaller;
+};
+
 export type LimrunAndroidRuntimeAdapter = {
+  bindPerformance(
+    device: DeviceInfo,
+    adb: LimrunAdbProvider,
+    host: AndroidPerfHost,
+    owner: RuntimeOwnerRef,
+  ): Promise<LimrunAndroidPerfOperations>;
+  bindDeployment(
+    device: DeviceInfo,
+    adb: LimrunAdbProvider,
+    request: LimrunDeploymentRequest,
+  ): Promise<Partial<AppDeploymentRuntimeOperations>>;
   // Interactors need provider-scoped capabilities; command helpers below need only ADB execution.
   createInteractor(device: DeviceInfo, adb: LimrunAdbProvider): Interactor;
   /**
@@ -124,6 +160,7 @@ export type LimrunFileDownload = Readonly<{
   headers: Readonly<Record<string, string>>;
   destinationPath: string;
   timeoutMs: number;
+  signal?: AbortSignal;
 }>;
 
 export type LimrunHostAdapter = {
@@ -131,18 +168,48 @@ export type LimrunHostAdapter = {
     invocation: AndroidAdbInvocation,
     options?: LimrunAdbCommandOptions,
   ): Promise<LimrunAdbCommandResult>;
-  archiveDirectory(options: {
-    sourceDirectory: string;
-    entryName: string;
-    archivePath: string;
-  }): Promise<void>;
   downloadFile(options: LimrunFileDownload): Promise<void>;
 };
 
+export type LimrunIosRunner = {
+  bindDeployment(request: LimrunDeploymentRequest): Partial<AppDeploymentRuntimeOperations>;
+  readonly applicationTools: AppleApplicationTools;
+  readonly facts: Partial<RuntimeFacts<PlatformRuntimeOperations>['operations']>;
+  createInteractor(context?: RunnerContext): Interactor;
+  resetTarget(signal?: AbortSignal): Promise<void>;
+  bindApplicationLifecycle(request: {
+    signal: AbortSignal;
+    clock: PlatformRuntimeHost['clock'];
+    resolveInteractor(device: DeviceInfo, context: RunnerContext): Promise<Interactor>;
+  }): ApplicationLifecycleRuntimeOperations;
+  bindRunnerOperations(request: {
+    signal: AbortSignal;
+    resolveInteractor(device: DeviceInfo, context: RunnerContext): Promise<Interactor>;
+    /**
+     * The provider's own capture. The runner serves the Simulator AX bridge over it and falls back
+     * to this capture whenever the bridge cannot serve the screen.
+     */
+    snapshot: Readonly<{ capture: SnapshotRuntimeOperations; present: SnapshotRuntimePresenter }>;
+  }): Pick<
+    PlatformRuntimeOperations,
+    'appState' | 'findText' | 'querySelector' | 'readTextAtPoint'
+  > &
+    SnapshotRuntimeOperations;
+  dispose(): Promise<void>;
+};
+
 export type LimrunIosRuntimeAdapter = {
-  /** Runs the Apple simctl plan, supplied by the composition root so this provider imports no platform package. */
-  applySimctlSetting(request: SimctlSettingRequest): Promise<Record<string, unknown> | void>;
-  resolveAppAlias(app: string): Promise<string>;
+  createAppLogReader(input: {
+    client: LimrunIosClient;
+    apiUrl: string;
+    token: string;
+  }): import('@agent-device/capture-kit/provider-app-log').ProviderAppLogReader;
+  createRunner(session: {
+    client: Pick<LimrunIosClient, 'simctl' | 'listApps' | 'deviceInfo'>;
+    apiUrl: string;
+    token: string;
+    device: DeviceInfo;
+  }): Promise<LimrunIosRunner>;
   readBundleAppName(appPath: string): Promise<string | undefined>;
 };
 

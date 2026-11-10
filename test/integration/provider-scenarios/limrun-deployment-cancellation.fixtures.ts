@@ -7,24 +7,79 @@ import { limrunTestDependencies } from '../../../src/platform-runtime-gateway.fi
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
-export type LimrunDeploymentAsset = { signedDownloadUrl: string; md5: string };
-
-export const LIMRUN_DEPLOYMENT_ASSET: LimrunDeploymentAsset = {
-  signedDownloadUrl: 'https://assets.example.test/app',
-  md5: 'asset-md5',
-};
-
 export const LIMRUN_IOS_APPS = [
   { bundleId: 'com.apple.Preferences', name: 'Settings', installType: 'System' },
   { bundleId: 'com.example.ios', name: 'Example', installType: 'User' },
 ];
 
-export async function bindLimrunDeployment(platform: 'android' | 'ios', signal: AbortSignal) {
-  const registration = createLimrunRuntime({ apiKey: 'limrun-test-key' }, limrunDependencies(), {
-    includePlatformModule: true,
-  });
+export async function bindLimrunDeployment(
+  platform: 'android' | 'ios',
+  signal: AbortSignal,
+  ios: LimrunRuntimeDependencies['ios'] = limrunTestDependencies.ios,
+) {
+  const registration = createLimrunRuntime(
+    {
+      instances: {
+        [platform]: {
+          apiUrl: 'https://limrun.example.test',
+          token: 'instance-token',
+          adbUrl: 'wss://limrun.example.test/adb',
+        },
+      },
+    },
+    limrunDependencies(ios),
+    {
+      includePlatformModule: true,
+    },
+  );
   const device = await allocatedDevice(registration.runtime, lease(platform));
+  const events: string[] = [];
+  let artifactPath: string | undefined;
+  const deployment = {
+    resolveAppBundleId: async () => 'com.example.ios',
+    resolveAppPackage: async () => 'com.example.android',
+    prepareArtifact: async (input: { source: { path: string } }) => {
+      events.push('prepare');
+      artifactPath = input.source.path + '.prepared';
+      fs.copyFileSync(input.source.path, artifactPath);
+      const preparedPath = artifactPath;
+      return {
+        installablePath: preparedPath,
+        bundleId: 'com.example.ios',
+        packageName: 'com.example.android',
+        cleanup: async () => {
+          events.push('cleanup');
+          fs.rmSync(preparedPath);
+        },
+      };
+    },
+    withInvalidatedAppResolutionCache: async (
+      _device: unknown,
+      operation: () => Promise<unknown>,
+    ) => operation(),
+  };
   const owner = await registration.platformModule.loadRuntime({
+    appleTools: {
+      run: async () => {
+        events.push('uninstall');
+        return { stdout: '', stderr: '', exitCode: 0 };
+      },
+    },
+    androidTools: {
+      runAdb: async () => {
+        events.push('uninstall');
+        return { stdout: '', stderr: '', exitCode: 0 };
+      },
+    },
+    appleDeployment: deployment,
+    androidDeployment: deployment,
+    deviceReadiness: {
+      appleAutomation: {
+        wasRecentlyObservedBooted: async () => true,
+        keepHot: () => {},
+        markBooted: () => {},
+      },
+    },
     snapshot: {
       captureSurface: async () => ({
         backend: 'xctest' as const,
@@ -59,11 +114,18 @@ export async function bindLimrunDeployment(platform: 'android' | 'ios', signal: 
   };
   return {
     binding,
-    deploy: async () =>
+    events,
+    artifactExists: () => artifactPath !== undefined && fs.existsSync(artifactPath),
+    materialize: async () => {
+      const materialize = binding.operations.materializeAppSource;
+      if (!materialize) throw new Error('Expected materialization operation');
+      return await materialize({ source: { kind: 'path', path: appPath } });
+    },
+    deploy: async (replaceExisting = false) =>
       await deployApp({
         app: platform === 'ios' ? 'com.example.ios' : 'com.example.android',
         appPath,
-        replaceExisting: false,
+        replaceExisting,
       }),
     shutdown,
     dispose: async () => {
@@ -99,10 +161,18 @@ function lease(platform: 'android' | 'ios'): DeviceLease {
   };
 }
 
-function limrunDependencies(): LimrunRuntimeDependencies {
+function limrunDependencies(ios: LimrunRuntimeDependencies['ios']): LimrunRuntimeDependencies {
   return {
     clientVersion: 'test',
     android: {
+      bindPerformance: async () => {
+        throw new Error('Unexpected performance binding');
+      },
+      bindDeployment: async (device, _adb, request) => {
+        const { createAndroidAppDeploymentOperations } =
+          await import('@agent-device/platform-android/mechanics');
+        return createAndroidAppDeploymentOperations({ ...request, device });
+      },
       createInteractor: () => ({}) as never,
       createPortReverse: async () => ({
         ensure: async () => {},
@@ -135,8 +205,7 @@ function limrunDependencies(): LimrunRuntimeDependencies {
     host: {
       runAdb: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
       downloadFile: async () => undefined,
-      archiveDirectory: async () => {},
     },
-    ios: limrunTestDependencies.ios,
+    ios,
   };
 }

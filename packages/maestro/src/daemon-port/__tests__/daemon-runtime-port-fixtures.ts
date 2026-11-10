@@ -1,6 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { formatRole } from '@agent-device/kernel/snapshot';
-import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { MaestroSourceReader } from '@agent-device/maestro';
 import type { CreateDaemonMaestroRuntimeOperationsOptions } from '../daemon-runtime-port.ts';
 

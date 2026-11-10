@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events';
+import { createLimrunRuntimeDependencies } from '../../../src/sdk/limrun-runtime-dependencies.ts';
 import { afterEach, expect, test, vi } from 'vitest';
 import { bindLimrunDeployment } from './limrun-deployment-cancellation.fixtures.ts';
 
@@ -23,7 +25,27 @@ vi.mock('@limrun/api', () => ({
 vi.mock('@limrun/api/ios-client', () => ({
   createInstanceClient: vi.fn(async () => ({
     disconnect: vi.fn(async () => undefined),
-    simctl: state.simctl,
+    simctl: (args: string[]) =>
+      Object.assign(
+        new EventEmitter(),
+        args[0] === 'list'
+          ? {
+              wait: async () => ({
+                code: 0,
+                stderr: '',
+                stdout: JSON.stringify({
+                  devices: {
+                    runtime: [
+                      { udid: 'ios-device', name: 'iPhone', state: 'Booted', isAvailable: true },
+                    ],
+                  },
+                }),
+              }),
+            }
+          : state.simctl(args),
+        { stop() {} },
+      ),
+    listApps: async () => [{ bundleId: 'com.example.ios', name: 'Example', installType: 'User' }],
     deviceInfo: { udid: 'ios-device', screenWidth: 402, screenHeight: 874, model: 'iPhone' },
   })),
 }));
@@ -41,7 +63,11 @@ test('a Limrun iOS permission the runtime refuses reports the local unsupported 
         'An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=1):\nSimulator device failed to complete the requested operation.\nOperation not permitted\nUnderlying error (domain=NSPOSIXErrorDomain, code=1):\n\tFailed to set access\n\tOperation not permitted',
     }),
   }));
-  const { binding, dispose } = await bindLimrunDeployment('ios', new AbortController().signal);
+  const { binding, dispose } = await bindLimrunDeployment(
+    'ios',
+    new AbortController().signal,
+    createLimrunRuntimeDependencies({ env: {}, cwd: process.cwd() }).ios,
+  );
   try {
     const refusal = binding.operations.setSetting!({
       setting: 'permission',
@@ -68,7 +94,11 @@ test('a Limrun iOS simctl failure that is not a refusal stays a command failure'
   state.simctl.mockImplementation(() => ({
     wait: async () => ({ code: 2, stdout: '', stderr: 'Invalid device: booted' }),
   }));
-  const { binding, dispose } = await bindLimrunDeployment('ios', new AbortController().signal);
+  const { binding, dispose } = await bindLimrunDeployment(
+    'ios',
+    new AbortController().signal,
+    createLimrunRuntimeDependencies({ env: {}, cwd: process.cwd() }).ios,
+  );
   try {
     await expect(
       binding.operations.setSetting!({
@@ -81,6 +111,30 @@ test('a Limrun iOS simctl failure that is not a refusal stays a command failure'
       code: 'COMMAND_FAILED',
       details: { exitCode: 2, stderr: 'Invalid device: booted' },
     });
+  } finally {
+    await dispose();
+  }
+});
+
+test('a Limrun iOS permission resolves an app display name through the remote app list', async () => {
+  state.simctl.mockImplementation(() => ({
+    wait: async () => ({ code: 0, stdout: '', stderr: '' }),
+  }));
+  const { binding, dispose } = await bindLimrunDeployment(
+    'ios',
+    new AbortController().signal,
+    createLimrunRuntimeDependencies({ env: {}, cwd: process.cwd() }).ios,
+  );
+  try {
+    await binding.operations.setSetting!({
+      setting: 'permission',
+      state: 'grant',
+      appBundleId: 'Example',
+      options: { permissionTarget: 'camera' },
+    });
+    expect(state.simctl.mock.calls).toEqual([
+      [['privacy', 'booted', 'grant', 'camera', 'com.example.ios']],
+    ]);
   } finally {
     await dispose();
   }

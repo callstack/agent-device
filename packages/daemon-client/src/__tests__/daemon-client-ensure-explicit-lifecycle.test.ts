@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { closeLoopbackServer, supportsLoopbackBind } from '@agent-device/test-kit';
+import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import { DAEMON_QUIESCE_COMMAND } from '@agent-device/daemon-contracts/daemon-resolution';
 import { DAEMON_STARTUP_EXIT_CODES } from '@agent-device/daemon-contracts/daemon-registration-owner';
@@ -95,9 +95,7 @@ async function failureOf(run: Promise<unknown>): Promise<AppError> {
 }
 
 async function withLoopback(t: { skip: (note: string) => void }): Promise<boolean> {
-  if (await supportsLoopbackBind()) return true;
-  t.skip('loopback listeners are not permitted in this environment');
-  return false;
+  return !(await skipWhenLoopbackUnavailable(t));
 }
 
 test('attach reports a missing daemon without starting one', async (t) => {

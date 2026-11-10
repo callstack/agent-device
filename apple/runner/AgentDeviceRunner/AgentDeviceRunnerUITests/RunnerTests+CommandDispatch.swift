@@ -7,6 +7,8 @@ extension RunnerTests {
   func executeAccepted(command: Command) throws -> Response {
     commandJournal.start(command: command)
     pendingTargetActivation = nil
+    let panelRequestID = setRequestLitPanel(from: command)
+    defer { endRequestLitPanel(panelRequestID) }
     do {
       let response = try executeDispatched(command: command)
       commandJournal.finish(command: command, response: response)
@@ -432,9 +434,11 @@ extension RunnerTests {
           outputPath: resolvedOutPath,
           fps: command.fps.map { Int32($0) }
         )
+        // The pump outlives this request, so the clip keeps the panel its `recordStart` named.
+        let clipLitPanel = requestLitPanel
         try startRecording(recorder) { [weak self] in
           guard let self else { return .failure(.unresolvedScreen) }
-          return self.captureRunnerFrameResult(app: activeApp)
+          return self.captureRunnerFrameResult(app: activeApp, litPanel: clipLitPanel)
         }
         activeRecording = recorder
         return Response(ok: true, data: DataPayload(message: "recording started"))
@@ -462,6 +466,8 @@ extension RunnerTests {
       return executeUptime()
     case .appState:
       return executeAppState(command: command)
+    case .snapshotBridge:
+      return executeSnapshotBridge(command: command)
     case .pasteboardWrite:
       return executePasteboardWrite(command: command)
     case .activate:
@@ -690,11 +696,13 @@ extension RunnerTests {
     return XCUIApplication(bundleIdentifier: host.bundleId).state
   }
 
-  func observeOnlyUnavailableResponse() -> Response {
+  func observeOnlyUnavailableResponse(
+    hint: String = "XCUIApplication must report runningForeground before and after capture. This state report does not prove screen ownership (#2696)."
+  ) -> Response {
     Response(ok: false, error: ErrorPayload(
       code: "OBSERVATION_UNAVAILABLE",
       message: "The session app cannot be observed without activation.",
-      hint: "XCUIApplication must report runningForeground before and after capture. This state report does not prove screen ownership (#2696)."
+      hint: hint
     ))
   }
 

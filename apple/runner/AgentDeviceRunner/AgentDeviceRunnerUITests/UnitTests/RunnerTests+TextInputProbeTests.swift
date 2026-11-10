@@ -2,6 +2,30 @@ import XCTest
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+  /// One text-input lookup walks the lit windows once, however many input types it queries.
+  @MainActor
+  func testTextInputProbeWalksTheLitWindowsOnce() throws {
+    try withLitPanelWindow(frame: CGRect(x: 0, y: 0, width: 669, height: 951)) { windowListReads in
+      setRequestLitPanel(from: try runnerCommandFixture(
+        #"{"command":"type","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#
+      ))
+      _ = try probeTextInputs(app: app, point: CGPoint(x: 10, y: 10), contentTranslation: .none)
+      XCTAssertEqual(windowListReads(), 1)
+    }
+  }
+
+  /// A content-vector read on a lit-panel request that nothing booked yet books the request's
+  /// window and answers its origin, instead of refusing for want of an earlier booking.
+  @MainActor
+  func testUnbookedLitPanelContentTranslationBooksTheRequestWindow() throws {
+    try withLitPanelWindow(frame: CGRect(x: 0, y: 80, width: 669, height: 871)) { _ in
+      setRequestLitPanel(from: try runnerCommandFixture(#"{"command":"type","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#))
+      guard case .known(let vector) = liveContentTranslation(app: app) else { return XCTFail("no vector") }
+      XCTAssertEqual(vector, CGSize(width: 0, height: 80))
+      XCTAssertNotNil(litPanelState.surface)
+    }
+  }
+
   func testTextInputProbePreservesEnclosingRunnerWait() {
     app.launchArguments = ["--agent-device-text-entry-regression"]
     app.launch()
@@ -15,7 +39,7 @@ extension RunnerTests {
     let completed = expectation(description: "optional probe completed inside runner wait")
     DispatchQueue.main.async {
       self.textInputProbeIssueForTesting = XCTIssue(type: .assertionFailure, compactDescription: "Optional probe issue during runner wait")
-      _ = self.probeTextInputs(app: self.app, point: point, contentTranslation: .none)
+      _ = try? self.probeTextInputs(app: self.app, point: point, contentTranslation: .none)
       completed.fulfill()
     }
     guard XCTWaiter.wait(for: [completed], timeout: 5) == .completed else {
@@ -174,8 +198,8 @@ extension RunnerTests {
     }
     XCTExpectFailure("Required read and later issue belong to their caller", options: options) {
       textInputProbeIssueForTesting = expected
-      _ = textInputAt(app: app, x: point.x, y: point.y, contentTranslation: .none)
-      _ = probeTextInputs(app: app, point: point, contentTranslation: .none)
+      _ = try? textInputCandidatesAt(app: app, point: point, contentTranslation: .none)
+      _ = try? probeTextInputs(app: app, point: point, contentTranslation: .none)
       record(expected)
     }
     XCTAssertEqual(observed, 2)
@@ -192,7 +216,7 @@ extension RunnerTests {
     XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
     let frame = field.frame
     textInputProbeIssueForTesting = XCTIssue(type: .assertionFailure, compactDescription: "Failed to get matching snapshot: kAXErrorIllegalArgument")
-    let outcome = probeTextInputs(app: app, point: CGPoint(x: frame.midX, y: frame.midY), contentTranslation: .none)
+    let outcome = try probeTextInputs(app: app, point: CGPoint(x: frame.midX, y: frame.midY), contentTranslation: .none)
     guard case .unavailable = outcome else {
       return XCTFail("A suppressed AX issue must discard the matching candidate")
     }
@@ -236,7 +260,9 @@ extension RunnerTests {
     )
     XCTAssertTrue(try execute(command: nextTap).ok)
     XCTAssertNotNil(textEntryTapWitness)
-    XCTAssertTrue(try execute(command: type).ok)
+    let retype = try runnerCommandFixture(#"{"appBundleId":"com.callstack.agentdevice.runner","command":"type","commandId":"type-after-probe-recovery","text":"must-not-type","textEntryMode":"append"}"#)
+    let retyped = try execute(command: retype)
+    XCTAssertTrue(retyped.ok, String(describing: retyped.error))
     XCTAssertEqual(field.value as? String, "must-not-type")
   }
 #endif

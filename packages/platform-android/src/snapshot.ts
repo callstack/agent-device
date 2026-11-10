@@ -40,7 +40,6 @@ import {
 } from './snapshot-helper-types.ts';
 import {
   captureAndroidSnapshotWithHelper,
-  captureAndroidSnapshotWithHelperSession,
   ensureAndroidSnapshotHelper,
   forgetAndroidSnapshotHelperInstall,
   stopAndroidSnapshotHelperSession,
@@ -50,7 +49,11 @@ import {
   type AndroidSnapshotHelperInstallResult,
   type AndroidSnapshotHelperOutput,
 } from './snapshot-helper.ts';
-import { getLiveAndroidSnapshotHelperSession } from './snapshot-helper-session-lifecycle.ts';
+import {
+  acquireAndroidSnapshotHelperSession,
+  getLiveAndroidSnapshotHelperSession,
+} from './snapshot-helper-session-lifecycle.ts';
+import { captureFromAndroidSnapshotHelperSession } from './snapshot-helper-session.ts';
 import { isAndroidSnapshotHelperNotCurrentError } from './snapshot-helper-install.ts';
 import {
   getAndroidSnapshotHelperSessionDeviceKey,
@@ -72,6 +75,7 @@ import {
   readAndroidCaptureFailureReason,
 } from '@agent-device/contracts/android-snapshot-quality';
 import {
+  captureRetryingRefusedAndroidSnapshotHelperStart,
   resetAndroidSnapshotHelperRuntime,
   retireAndroidSnapshotHelperAfterContentFailure,
 } from './snapshot-helper-runtime.ts';
@@ -478,10 +482,18 @@ async function captureAndroidUiHierarchyFromHelper(params: {
   });
   captureOptions.idleWait = params.idleWait;
   let sessionCapture: AndroidSnapshotHelperOutput | undefined;
+  // A helper that reached a ready session was started, so a refused start after it is not #4109.
+  let sessionReady = false;
   try {
     await withDiagnosticTimer(
       ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE,
-      async () => (sessionCapture = await captureAndroidSnapshotWithHelperSession(captureOptions)),
+      async () => {
+        const acquired = await acquireAndroidSnapshotHelperSession(captureOptions);
+        sessionReady = acquired !== undefined;
+        if (acquired) {
+          sessionCapture = await captureFromAndroidSnapshotHelperSession(acquired, captureOptions);
+        }
+      },
       () => ({
         packageName: artifact.manifest.packageName,
         version: artifact.manifest.version,
@@ -501,19 +513,27 @@ async function captureAndroidUiHierarchyFromHelper(params: {
       phase: 'android_snapshot_helper_session_fallback',
       data: { reason: normalizeError(error).message },
     });
-    await resetAndroidSnapshotHelperRuntime(adb, artifact.manifest.packageName);
+    await resetAndroidSnapshotHelperRuntime({ adb, packageName: artifact.manifest.packageName });
   }
-  return await withDiagnosticTimer(
-    ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE,
-    async () => await captureAndroidSnapshotWithHelper(captureOptions),
-    {
-      packageName: artifact.manifest.packageName,
-      version: artifact.manifest.version,
-      timeoutMs: ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
-      commandTimeoutMs: ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS,
-      transport: 'instrumentation' satisfies AndroidSnapshotHelperTransport,
-    },
-  );
+  const captureOneShot = async () =>
+    await withDiagnosticTimer(
+      ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE,
+      async () => await captureAndroidSnapshotWithHelper(captureOptions),
+      {
+        packageName: artifact.manifest.packageName,
+        version: artifact.manifest.version,
+        timeoutMs: ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
+        commandTimeoutMs: ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS,
+        transport: 'instrumentation' satisfies AndroidSnapshotHelperTransport,
+      },
+    );
+  return await captureRetryingRefusedAndroidSnapshotHelperStart({
+    capture: captureOneShot,
+    sessionReady,
+    adb,
+    packageName: artifact.manifest.packageName,
+    signal,
+  });
 }
 
 function formatAndroidHelperCaptureResult(
@@ -694,7 +714,10 @@ async function rejectAndroidHelperCaptureFailure(params: {
     },
   });
   await stopAndroidSnapshotHelperSession(params.helperDeviceKey);
-  await resetAndroidSnapshotHelperRuntime(params.adb, params.artifact.manifest.packageName);
+  await resetAndroidSnapshotHelperRuntime({
+    adb: params.adb,
+    packageName: params.artifact.manifest.packageName,
+  });
   forgetAndroidSnapshotHelperInstall({
     deviceKey: params.helperDeviceKey,
     packageName: params.artifact.manifest.packageName,
@@ -901,7 +924,8 @@ function applyHiddenContentHintsToInteractiveNodes(
 /**
  * The keyboard band an Android capture measured, read from the window roots the helper already
  * captured: each root carries its `AccessibilityWindowInfo` type and screen bounds, so this costs no
- * adb call. Bounds are screen pixels, the same space as every node rect.
+ * adb call and the fact is bound to the captured tree (`treeBound`). Bounds are screen pixels, the
+ * same space as every node rect.
  *
  * An input method that draws nothing (agent-device's test IME) puts no window on screen and reads as
  * `absent`, and so does an input method window whose bounds parsed to an empty box. One whose bounds
@@ -942,7 +966,9 @@ export function androidSnapshotKeyboardFromTree(
   if (metadata.missingRootWindowTypes?.includes(ANDROID_WINDOW_TYPE_INPUT_METHOD)) {
     return { kind: 'unmeasurable', reason: 'window-root-unavailable' };
   }
-  if (inputMethodRects.length > 0) return { kind: 'visible', frame: unionRects(inputMethodRects) };
+  if (inputMethodRects.length > 0) {
+    return { kind: 'visible', frame: unionRects(inputMethodRects), treeBound: true };
+  }
   if (
     metadata.captureMode !== 'interactive-windows' ||
     windows.some((window) => window.windowType === undefined)
@@ -952,7 +978,7 @@ export function androidSnapshotKeyboardFromTree(
   if (metadata.helperTruncated === true) {
     return { kind: 'unmeasurable', reason: 'capture-truncated' };
   }
-  return { kind: 'absent' };
+  return { kind: 'absent', treeBound: true };
 }
 
 function isEmptyFiniteRect(rect: Rect | undefined): boolean {

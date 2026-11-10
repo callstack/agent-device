@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { CHECK_CATALOG, type CheckSpec } from '../check-affected/checks.ts';
 import { selectChecks, type CheckId } from '../check-affected/model.ts';
+import { packageEntrySources } from '../build-entries.ts';
 import { OPAQUE_RUNNERS } from './declarations.ts';
 import { ENV_PREFIX, commandSegments } from './shell.ts';
 import { loadLanes, triggersOnPath, type Lane } from './workflows.ts';
@@ -220,10 +221,7 @@ export function loadModel(
   const config = fs.readFileSync(path.join(repoRoot, 'vitest.config.ts'), 'utf8');
   return {
     scripts: pkg.scripts,
-    packageEntryFiles: Object.values(pkg.exports ?? {})
-      .map((entry) => entry.import)
-      .filter((target): target is string => typeof target === 'string')
-      .map((target) => target.replace(/^\.\/dist\//, '').replace(/\.js$/, '.ts')),
+    packageEntryFiles: packageEntrySources(pkg.exports),
     vitestProjects: [...config.matchAll(/name:\s*'([^']+)'/g)].map((match) => match[1] as string),
     lanes: loadLanes(path.join(repoRoot, '.github/workflows'), repoRoot, pkg.scripts),
     trackedFiles: new Set(trackedFiles),

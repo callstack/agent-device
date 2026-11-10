@@ -186,10 +186,7 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
   assert.equal(rawFixtureControl.hittable, true, JSON.stringify(rawFixtureControl));
   assert.equal(rawFixtureControl.interactionBlocked, undefined, JSON.stringify(rawFixtureControl));
   assert.equal(rawSwitcherSurface.json?.data?.snapshotQuality?.backend, 'tree');
-  assert.ok(
-    Number(rawSwitcherSurface.json?.data?.snapshotDiagnostics?.stats?.backends?.xctest) > 0,
-    JSON.stringify(rawSwitcherSurface.json),
-  );
+  assert.ok(appleCaptureCount(rawSwitcherSurface) > 0, JSON.stringify(rawSwitcherSurface.json));
   const switcherPath = path.join(context.artifactDir, 'system-app-switcher.png');
   await capturePng(context, 'capture app switcher', switcherPath);
   assertFilesDiffer(homePath, switcherPath, 'app switcher should differ from Home');
@@ -336,4 +333,10 @@ export async function assertObservabilityAndArtifacts(context: LiveContext): Pro
   assert.equal(reactNative.json?.data?.detected, false, JSON.stringify(reactNative.json));
   assert.equal(reactNative.json?.data?.dismissed, false, JSON.stringify(reactNative.json));
   verifyCommand(context, C.reactNative, 'Release fixture returns a typed no-overlay verdict');
+}
+
+/** Captures the session's Apple producers served: `backends` counts the producer of each capture. */
+function appleCaptureCount(result: { json?: any }): number {
+  const backends = result.json?.data?.snapshotDiagnostics?.stats?.backends ?? {};
+  return Number(backends['apple-runner'] ?? 0) + Number(backends['simulator-ax-bridge'] ?? 0);
 }

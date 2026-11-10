@@ -151,6 +151,16 @@ extension RunnerTests {
     #endif
   }
 
+  func testRunnerListenerRequiresTheConfiguredBindAddressAndPort() throws {
+    let address = try XCTUnwrap(IPv4Address("10.23.45.67"))
+    let port = try XCTUnwrap(NWEndpoint.Port(rawValue: 8100))
+    let listener = try Self.makeRunnerListener(port: port, bindAddress: address)
+    XCTAssertEqual(
+      listener.parameters.requiredLocalEndpoint,
+      .hostPort(host: .ipv4(address), port: port)
+    )
+  }
+
   func testListenerRefusesRequestsWithoutTheTokenBeforeDecoding() throws {
     let listener = try startTransportListener()
     defer { listener.cancel() }
@@ -889,15 +899,20 @@ extension RunnerTests {
     }
   #endif
 
-  /// Routes `command` the way the transport routes it: an inline read, then the journal's verdict on its
+  /// Routes `command` the way the transport routes it: an off-queue read, then the journal's verdict on its
   /// `commandId`. A finished id comes back as the answer the runner recorded for it; the execute path
   /// rethrows what the dispatch threw, which the wire path turns into its own response. Sends that need
   /// the wire path itself, including coalescing and admission end to end, go through
   /// `startTransportListener` instead.
   func execute(command: Command) throws -> Response {
     dispatchPrecondition(condition: .onQueue(.main))
-    if let response = inlineResponse(for: command) {
+    switch offQueueRoute(for: command) {
+    case .inline(let response):
       return response
+    case .snapshotBridge:
+      return executeSnapshotBridge(command: command)
+    case nil:
+      break
     }
     switch commandJournal.accept(command: command) {
     case .terminal(let outcome):

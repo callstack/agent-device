@@ -29,7 +29,7 @@ extension RunnerTests {
       let original = AlertSurfacePresentation(title: title, content: [], buttons: ["OK"])
       XCTAssertEqual(
         RunnerAlertVerification.verify(original: original, observation: .visible(original)),
-        .stillVisible
+        nil
       )
     }
   }

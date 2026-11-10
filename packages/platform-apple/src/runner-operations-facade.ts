@@ -1,4 +1,9 @@
 export {
+  RUNNER_STARTUP_TIMEOUT_MS,
+  createLaunchedAppleRunnerProvider,
+  mintRunnerToken,
+  runnerListenerEnv,
+  RUNNER_XCTESTRUN_CAPTURE_OPTIONS,
   applyXctestRunnerAppIconFromDerivedPath,
   detachIosRunnerSessionsForShutdown,
   findRunnerXctestrun,
@@ -40,4 +45,12 @@ export async function cleanupRunnerLeasesForOwner(
   const { cleanupRunnerLeasesForOwner: cleanup } = await import('./core/runner-client.ts');
   const { runnerLeaseCleanupAdapter } = await import('@agent-device/apple-runner');
   await cleanup(owner, runnerLeaseCleanupAdapter);
+}
+
+/** Binds provider-owned sessions to the shared Apple runner execution. */
+export async function createAppleRunnerRuntime(
+  options: Parameters<typeof import('./runner-runtime.ts').createAppleRunnerRuntime>[0],
+) {
+  const { createAppleRunnerRuntime } = await import('./runner-runtime.ts');
+  return createAppleRunnerRuntime(options);
 }

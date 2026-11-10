@@ -3,8 +3,8 @@ import type {
   SnapshotAddressableNode,
   SnapshotKeyboardBandFact,
   SnapshotNode,
-  SnapshotState,
 } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { findNodeByRef, hasSnapshotRef, normalizeRef } from '@agent-device/kernel/snapshot';
 import { resolveRectCenter } from '@agent-device/kernel/rect-center';
 import type {
@@ -25,6 +25,7 @@ import type {
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
+import { resolveNodeTouchPoint } from '@agent-device/selectors/node-touch-point';
 import { localIdentitiesEqual, readNodeLocalIdentity } from '@agent-device/ad-script';
 import type { ResolveInteractionTargetParams } from './interaction-resolution-request.ts';
 import { assertReplayTargetResolution } from './replay-target-guard.ts';
@@ -37,7 +38,6 @@ import {
   assertVisibleRefTarget,
   runInteractionPipelineStages,
 } from './target-visibility-stages.ts';
-import { resolveNodeTouchPoint } from './resolution-touch-point.ts';
 
 /** The node a ref target acts on, plus the tree the shared guards read it against. */
 type RefResolution = {

@@ -33,15 +33,16 @@ async function finalizeScreenRecording(
   host: HostEnvironment,
   input: Parameters<ScreenRecordingRuntimeHost['finalize']['complete']>[0],
 ) {
-  const overlayDeadline = startRecordingOverlayBudget();
+  const finalizeDeadline = startRecordingOverlayBudget();
   await waitForStableFile(input.outputPath);
-  await waitForPlayableVideo(input.outputPath, { host });
-  if (!(await isPlayableVideo(input.outputPath, host))) throw unplayableRecording(input.outputPath);
+  if (!(await waitForPlayableVideo(input.outputPath, { host, deadline: finalizeDeadline }))) {
+    throw unplayableRecording(input.outputPath);
+  }
   const telemetryPath = persistRecordingTelemetry({
     recording: { outPath: input.outputPath, gestureEvents: [...input.gestureEvents] },
   });
   if (!input.showTouches || input.gestureEvents.length === 0) return { telemetryPath };
-  return await overlayTouches(host, input, telemetryPath, overlayDeadline);
+  return await overlayTouches(host, input, telemetryPath, finalizeDeadline);
 }
 
 async function overlayTouches(

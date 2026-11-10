@@ -85,6 +85,7 @@ export type DispatchContext = ScreenshotDispatchFlags &
     traceLogPath?: string;
     runnerLeaseContext?: RunnerLogicalLeaseContext;
     screenshotCaptureBackend?: 'runner';
+    preferredScreenshotCaptureBackend?: 'runner';
     snapshotIncludeRects?: boolean;
     skipIosSimulatorBootCheck?: boolean;
     /** Maestro replay compatibility for coordinate-resolved fill targets. */

@@ -89,12 +89,6 @@ export async function resolveGestureViewport(
   return resolveVisibleSnapshotViewport(capture.snapshot.nodes, 'gesture');
 }
 
-export type FocusCommandOptions = CommandContext & {
-  target: InteractionTarget;
-};
-
-export type FocusCommandResult = ResolvedInteractionTarget & BackendResultEnvelope;
-
 export type LongPressCommandOptions = CommandContext & {
   target: InteractionTarget;
   durationMs?: number;
@@ -111,28 +105,6 @@ export type HoverCommandOptions = CommandContext & {
 } & SettlePostActionObservationOptions;
 
 export type { HoverCommandResult };
-
-export const focusCommand: RuntimeCommand<FocusCommandOptions, FocusCommandResult> = async (
-  runtime,
-  options,
-): Promise<FocusCommandResult> => {
-  const resolved = await resolveInteractionTarget(runtime, options, {
-    action: 'focus',
-    requireInteractive: true,
-    pipeline: SELECTOR_PIPELINE_POLICIES.resolvedTarget,
-  });
-  if (!runtime.backend.focus) {
-    throw new AppError('UNSUPPORTED_OPERATION', 'focus is not supported by this backend');
-  }
-  const point = requireResolvedPoint(resolved);
-  const backendResult = await runtime.backend.focus(toBackendContext(runtime, options), point);
-  const formattedBackendResult = toBackendResult(backendResult);
-  return {
-    ...resolved,
-    ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
-    ...successText(`Focused (${point.x}, ${point.y})`),
-  };
-};
 
 export const longPressCommand: RuntimeCommand<
   LongPressCommandOptions,

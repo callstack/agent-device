@@ -13,6 +13,7 @@ import { expireRefFrame } from '../../../core/ref-frame.ts';
 import type { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import { releaseSessionLease } from '../../lease-lifecycle.ts';
 import { recordEndedLease } from '../../../core/request-ended-leases.ts';
+import { releaseTargetLease } from '../../target-lease-release.ts';
 import {
   hasRepairPlatformCloseReceipt,
   isRepairArmedSession,
@@ -122,15 +123,50 @@ async function prepareRepairClose(params: {
 }
 
 async function releaseProviderLeaseForClose(params: {
+  shutdownPrepared: boolean;
+  cleanupFailures: SessionCleanupFailure[];
+  sessionName: string;
   req: DaemonRequest;
   session: SessionState;
   leaseRegistry: LeaseRegistry;
   leaseLifecycleProvider: LeaseLifecycleProvider | undefined;
-}): Promise<{ providerData?: Record<string, unknown>; response?: DaemonResponse }> {
+  lifecycle: CloseRuntime | CloseRuntimeWithRuntimeHintClear;
+}): Promise<{
+  providerData?: Record<string, unknown>;
+  shutdownResult?: TargetShutdownResult;
+  response?: DaemonResponse;
+}> {
   try {
+    let providerRelease: { providerData?: Record<string, unknown> } | undefined;
+    let shutdownResult: TargetShutdownResult | undefined;
+    const shutdownTarget = params.lifecycle.operations.shutdownTarget;
+    if (
+      params.req.flags?.shutdown &&
+      shutdownTarget &&
+      params.lifecycle.owner.kind === 'provider-runtime'
+    ) {
+      if (!params.shutdownPrepared) {
+        throw (
+          closeCleanupError(params.sessionName, params.cleanupFailures, { sessionKept: true }) ??
+          new AppError('COMMAND_FAILED', 'Target shutdown preparation failed. Retry close.')
+        );
+      }
+      shutdownResult = await shutdownTarget({
+        releaseLease: async (leaseId) => {
+          const result = await releaseTargetLease({
+            ...params,
+            owner: params.lifecycle.owner,
+            leaseId,
+          });
+          providerRelease = { providerData: result.provider };
+          return result.shutdown;
+        },
+      });
+    }
+    if (providerRelease) return { ...providerRelease, shutdownResult };
     const { endedLeaseId, providerData } = await releaseSessionLease(params);
     if (endedLeaseId) recordEndedLease(params.req, endedLeaseId);
-    return { providerData };
+    return { providerData, shutdownResult };
   } catch (error) {
     const normalized = normalizeError(error);
     return {
@@ -138,8 +174,8 @@ async function releaseProviderLeaseForClose(params: {
         ok: false,
         error: {
           ...normalized,
-          hint: 'The provider device could not be released. Retry close after the provider is reachable.',
-          details: { ...normalized.details, session: params.session.name },
+          hint: 'The target could not be shut down or released. Retry close after resolving the failure.',
+          details: { ...normalized.details, session: params.sessionName },
           retriable: true,
         },
       },
@@ -302,19 +338,21 @@ export async function handleSessionCloseCommands(
     lifecycle: admission.runtime,
   });
   if ('response' in repair) return repair.response;
-  const closed = await runCloseTeardownAndRelease({
-    env: params.host.env,
-    req,
-    ref,
-    logPath,
-    sessionStore,
-    leaseRegistry,
-    leaseLifecycleProvider,
-    lifecycle: admission.runtime,
-    clearRuntimeHints: admission.clearRuntimeHints,
-    repairArmed: repair.repairArmed,
-    platformResourceCleanup,
-  });
+  const closed = await markSessionKeptAfterTeardown(sessionStore, ref, () =>
+    runCloseTeardownAndRelease({
+      env: params.host.env,
+      req,
+      ref,
+      logPath,
+      sessionStore,
+      leaseRegistry,
+      leaseLifecycleProvider,
+      lifecycle: admission.runtime,
+      clearRuntimeHints: admission.clearRuntimeHints,
+      repairArmed: repair.repairArmed,
+      platformResourceCleanup,
+    }),
+  );
   if (closed.kind === 'response') return closed.response;
   return buildCloseSuccessResponse({
     session,
@@ -323,6 +361,23 @@ export async function handleSessionCloseCommands(
     shutdownResult: closed.shutdownResult,
     providerData: closed.providerData,
   });
+}
+
+/**
+ * #4237: the one owner of "a kept session is marked". A close that ran its teardown either retires
+ * the session or keeps it for a retried close, whichever step failed (platform close, cleanup, or
+ * provider lease release). Every kept session is marked, so daemon idle reap never waits on it.
+ */
+async function markSessionKeptAfterTeardown<Result>(
+  sessionStore: SessionStore,
+  ref: SessionRef,
+  finalize: () => Promise<Result>,
+): Promise<Result> {
+  try {
+    return await finalize();
+  } finally {
+    if (sessionStore.resolveCurrent(ref)) sessionStore.markCloseEffectsUnconfirmed(ref);
+  }
 }
 
 type SessionCloseFinalization =
@@ -336,7 +391,9 @@ type SessionCloseFinalization =
 // Everything between a settled repair decision and a success response:
 // failure-isolated resource teardown, provider lease release, then (only
 // once both are known) the device-claim clear and session delete. A failed
-// lease release keeps the session retryable instead (`{kind:'response'}`).
+// teardown that withholds the device claim keeps the session and its lease
+// for a retried close; a failed lease release keeps the session retryable
+// too (`{kind:'response'}`).
 async function runCloseTeardownAndRelease(params: {
   env: HostEnvironment['env'];
   req: DaemonRequest;
@@ -362,7 +419,14 @@ async function runCloseTeardownAndRelease(params: {
   } = params;
   const { address: sessionName } = ref;
   const cleanupFailures: SessionCleanupFailure[] = [];
-  const { platformCloseError, saveScriptError, shutdownResult } = await runSessionCloseTeardown({
+  const {
+    platformCloseError,
+    retainExecutionHost,
+    saveScriptError,
+    shutdownPrepared,
+    shutdownResult,
+  } = await runSessionCloseTeardown({
+    leaseRegistry,
     req,
     ref,
     logPath,
@@ -376,18 +440,13 @@ async function runCloseTeardownAndRelease(params: {
     platformResourceCleanup: params.platformResourceCleanup,
   });
   let session = sessionStore.requireCurrent(ref);
-  const leaseRelease = await releaseProviderLeaseForClose({
-    req,
-    session,
-    leaseRegistry,
-    leaseLifecycleProvider,
-  });
-  if (leaseRelease.response) return { kind: 'response', response: leaseRelease.response };
-  session = sessionStore.resolveCurrent(ref) ?? session;
-  const cleanupAggregate = closeCleanupError(sessionName, cleanupFailures);
-  const deviceClaimBlockingError = platformCloseError ?? cleanupAggregate;
-  if (deviceClaimBlockingError) {
-    if (session.deviceClaim) {
+  // Each cleanup report is built where the session's fate is decided, so its diagnostic and hint
+  // describe what actually happened to the session. It is built even when a platform-close error
+  // takes precedence, so that error never hides the cleanup failures.
+  if (session.deviceClaim) {
+    const cleanupError = closeCleanupError(sessionName, cleanupFailures, { sessionKept: true });
+    const claimBlockingError = platformCloseError ?? cleanupError;
+    if (claimBlockingError) {
       emitDiagnostic({
         level: 'warn',
         phase: 'device_claim_close_effects_unconfirmed',
@@ -396,14 +455,35 @@ async function runCloseTeardownAndRelease(params: {
           session: sessionName,
         },
       });
+      // The withheld claim names a live owner, so `--stale` cannot reclaim it. Retiring the
+      // session would leave nothing able to release it; keeping it, and its lease, lets a retried
+      // close rerun the teardown.
+      throw claimBlockingError;
     }
-  } else {
-    await clearDeviceClaim(session.deviceClaim, params.env);
   }
-  sessionStore.retire(ref);
-  if (deviceClaimBlockingError) throw deviceClaimBlockingError;
+  const leaseRelease = await releaseProviderLeaseForClose({
+    req,
+    session,
+    leaseRegistry,
+    leaseLifecycleProvider,
+    lifecycle,
+    shutdownPrepared,
+    cleanupFailures,
+    sessionName,
+  });
+  if (leaseRelease.response) return { kind: 'response', response: leaseRelease.response };
+  session = sessionStore.resolveCurrent(ref) ?? session;
+  const cleanupError = closeCleanupError(sessionName, cleanupFailures, { sessionKept: false });
+  const closeError = platformCloseError ?? cleanupError;
+  if (!closeError) await clearDeviceClaim(session.deviceClaim, params.env);
+  sessionStore.retire(ref, { retainExecutionHost });
+  if (closeError) throw closeError;
   if (saveScriptError) throw saveScriptError;
-  return { kind: 'closed', providerData: leaseRelease.providerData, shutdownResult };
+  return {
+    kind: 'closed',
+    providerData: leaseRelease.providerData,
+    shutdownResult: leaseRelease.shutdownResult ?? shutdownResult,
+  };
 }
 
 function buildCloseSuccessResponse(params: {
@@ -487,7 +567,7 @@ async function closeWithoutSession(params: {
     return errorResponse('SESSION_NOT_FOUND', 'No active session');
   const device = await resolveCommandDevice({
     session: undefined,
-    flags: req.flags,
+    req,
     env,
     platformServices,
   });

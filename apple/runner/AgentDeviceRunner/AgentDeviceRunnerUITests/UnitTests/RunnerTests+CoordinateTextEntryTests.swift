@@ -6,7 +6,7 @@ extension RunnerTests {
   /// cannot answer. A fixture that does not expose its own field is a broken lane, not a refusal.
   @MainActor
   func requireTextInputAtPoint(app: XCUIApplication, x: Double, y: Double) throws -> TextInputAtPoint {
-    switch coordinateTapTextInputIdentityAt(app: app, x: x, y: y, contentTranslation: liveContentTranslation(app: app)) {
+    switch try coordinateTapTextInputIdentityAt(app: app, x: x, y: y, contentTranslation: liveContentTranslation(app: app)) {
     case .input(let input):
       return input
     case .absent:
@@ -65,7 +65,7 @@ extension RunnerTests {
     let typeCommand = try runnerCommandFixture(
       #"{"command":"type","commandId":"type-after-penalized-non-text-target","text":"must-not-type","textEntryMode":"append"}"#
     )
-    let typeResponse = executeTypeCommand(activeApp: app, command: typeCommand)
+    let typeResponse = try executeTypeCommand(activeApp: app, command: typeCommand)
 
     XCTAssertFalse(typeResponse.ok)
     XCTAssertEqual(typeResponse.error?.code, "TEXT_INPUT_NOT_FOCUSED")
@@ -99,7 +99,7 @@ extension RunnerTests {
       #"{"command":"type","commandId":"fill-penalized-non-text-point","text":"must-not-replace","textEntryMode":"replace","x":\#(nonTextFrame.midX),"y":\#(nonTextFrame.midY)}"#
     )
     let failureCountBefore = currentXCTestFailureCount()
-    let fillResponse = executeTypeCommand(activeApp: app, command: fillCommand)
+    let fillResponse = try executeTypeCommand(activeApp: app, command: fillCommand)
 
     XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
     XCTAssertFalse(fillResponse.ok, String(describing: fillResponse.error))

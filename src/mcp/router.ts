@@ -29,7 +29,11 @@ type JsonRpcResponse =
   | { jsonrpc: '2.0'; id: JsonRpcId; result: unknown }
   | { jsonrpc: '2.0'; id: JsonRpcId; error: { code: number; message: string; data?: unknown } };
 
-export async function handleMcpMessage(message: JsonRpcMessage): Promise<JsonRpcResponse | null> {
+/** `signal` aborts a `tools/call` the client cancelled; other methods finish too fast to need it. */
+export async function handleMcpMessage(
+  message: JsonRpcMessage,
+  context: { signal?: AbortSignal } = {},
+): Promise<JsonRpcResponse | null> {
   if (message.jsonrpc !== '2.0' || typeof message.method !== 'string') {
     return errorResponse(message.id ?? null, -32600, 'Invalid JSON-RPC request.');
   }
@@ -38,7 +42,7 @@ export async function handleMcpMessage(message: JsonRpcMessage): Promise<JsonRpc
 
   try {
     const era = resolveProtocolEra(message.method, message.params);
-    const result = await handleRequest(message.method, message.params, era);
+    const result = await handleRequest(message.method, message.params, era, context.signal);
     return successResponse(message.id, finalizeResult(result, era));
   } catch (error) {
     if (error instanceof UnsupportedProtocolVersionError) {
@@ -60,7 +64,12 @@ export async function handleMcpMessage(message: JsonRpcMessage): Promise<JsonRpc
   }
 }
 
-async function handleRequest(method: string, params: unknown, era: ProtocolEra): Promise<unknown> {
+async function handleRequest(
+  method: string,
+  params: unknown,
+  era: ProtocolEra,
+  signal: AbortSignal | undefined,
+): Promise<unknown> {
   if (isMethodRemovedInEra(method, era)) {
     throw new JsonRpcMethodNotFoundError(
       `${method} was removed in MCP ${MODERN_PROTOCOL_VERSION}.`,
@@ -105,13 +114,13 @@ async function handleRequest(method: string, params: unknown, era: ProtocolEra):
         ...cacheFields(era, STATIC_RESULT_CACHE_TTL_MS),
       };
     case 'tools/call':
-      return await callTool(params);
+      return await callTool(params, signal);
     default:
       throw new JsonRpcMethodNotFoundError(`Unsupported MCP method: ${method}`);
   }
 }
 
-async function callTool(params: unknown): Promise<ToolResult> {
+async function callTool(params: unknown, signal: AbortSignal | undefined): Promise<ToolResult> {
   const record = asRecord(params);
   const name = stringField(record, 'name');
   try {
@@ -119,7 +128,7 @@ async function callTool(params: unknown): Promise<ToolResult> {
     // Command-level failures are handled (and ref-pinned) by the executor's
     // own catch; this one covers failures outside a resolved command call
     // (unknown tool name, malformed params).
-    return await commandToolExecutor.execute(name, optionalArguments(record.arguments));
+    return await commandToolExecutor.execute(name, optionalArguments(record.arguments), { signal });
   } catch (error) {
     return textToolResult(formatToolErrorText(normalizeToolError(error)), true);
   }

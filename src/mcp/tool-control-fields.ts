@@ -33,7 +33,7 @@ const MCP_TOOL_CONFIG_FIELDS = {
       type: 'string',
       enum: ['optimized', 'json'],
       description:
-        'MCP text content format. Defaults to optimized agent-friendly text; use json for JSON text. Structured content is always returned separately.',
+        'MCP text content format. Defaults to optimized agent-friendly text; use json for JSON text and structured content from every tool.',
     },
   },
   includeCost: {

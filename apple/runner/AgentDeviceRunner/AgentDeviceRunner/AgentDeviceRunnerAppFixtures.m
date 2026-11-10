@@ -11,26 +11,30 @@
 #import "AgentDeviceRunnerApp.h"
 #import <UIKit/UIKit.h>
 #import <UserNotifications/UserNotifications.h>
+#import "UnitTests/AgentDeviceTextEntryFields.h"
 
-// A plain text field whose accessibility value is the masked rendering of its text. This is how
-// a React Native `secureTextEntry` input reaches XCTest: `.textField`, not `.secureTextField`,
-// with a value of bullets (tester-army/e2e#872).
-@interface AgentDeviceMaskedTextField : UITextField
-@end
-
-@implementation AgentDeviceMaskedTextField
-
-- (NSString *)accessibilityValue {
-  NSUInteger length = self.text.length;
-  if (length == 0) {
-    return [super accessibilityValue];
+// Mirrors the App Tracking Transparency prompt's real button order: the affirmative button is
+// last (#3627). The answer label records which button the app actually took, so a test asserts
+// the app's answer instead of the command's own report. `--agent-device-alert-affirmative-only`
+// shows the same alert with no decline button at all.
+static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, UILabel *answer) {
+  UIAlertController *alert = [UIAlertController
+    alertControllerWithTitle:@"“Runner” Would Like to Track Your Activity"
+                     message:@"Track your activity across other companies' apps and websites."
+              preferredStyle:UIAlertControllerStyleAlert];
+  NSArray<NSArray *> *buttons = affirmativeOnly
+      ? @[ @[@"Allow", @"Authorized"], @[@"OK", @"Authorized"] ]
+      : @[ @[@"Ask App Not to Track", @"Declined"], @[@"Allow", @"Authorized"] ];
+  for (NSArray *button in buttons) {
+    [alert addAction:[UIAlertAction actionWithTitle:button[0]
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+                                              (void)action;
+                                              answer.text = button[1];
+                                            }]];
   }
-  // Half the typed length, as observed in the report: the mask hides the count as well.
-  NSUInteger bullets = MAX((NSUInteger)1, length / 2);
-  return [@"" stringByPaddingToLength:bullets withString:@"\u2022" startingAtIndex:0];
+  return alert;
 }
-
-@end
 
 @interface AgentDeviceRunnerFixtureViewController : AgentDeviceRunnerViewController
 @end
@@ -79,39 +83,6 @@
 @implementation AgentDeviceDigitCountTextField
 - (NSString *)accessibilityValue {
   return [NSString stringWithFormat:@"%lu of 6 digits", (unsigned long)self.text.length];
-}
-@end
-
-// XCTest reads every element's accessibility value each time it snapshots the app, which it does
-// for every element query and every attribute read from a live element. Counting this field's
-// value reads therefore counts the accessibility queries a command makes. The value is masked, so a
-// fill's read-back ends at its first read instead of polling through a stability window whose
-// poll count depends on how fast the host answers.
-static NSUInteger AgentDeviceTextEntryValueReads = 0;
-
-@interface AgentDeviceValueReadCountingTextField : AgentDeviceMaskedTextField
-@end
-
-@implementation AgentDeviceValueReadCountingTextField
-- (NSString *)accessibilityValue {
-  AgentDeviceTextEntryValueReads += 1;
-  return [super accessibilityValue];
-}
-@end
-
-// Reports the read count as its accessibility label and the counted field's text as its value, so
-// reading either changes no view state and the masked text stays checkable.
-@interface AgentDeviceValueReadCountLabel : UILabel
-@property(nonatomic, weak) UITextField *countedField;
-@end
-
-@implementation AgentDeviceValueReadCountLabel
-- (NSString *)accessibilityLabel {
-  return [NSString stringWithFormat:@"%lu", (unsigned long)AgentDeviceTextEntryValueReads];
-}
-
-- (NSString *)accessibilityValue {
-  return self.countedField.text;
 }
 @end
 
@@ -354,7 +325,7 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
   for (NSString *buttonTitle in @[@"Cancel", @"OK"]) {
     UIAlertActionStyle style = [buttonTitle isEqualToString:@"Cancel"]
         ? UIAlertActionStyleCancel : UIAlertActionStyleDefault;
-    [alert addAction:[UIAlertAction actionWithTitle:buttonTitle style:style handler:^(UIAlertAction *action) {
+    UIAlertAction *button = [UIAlertAction actionWithTitle:buttonTitle style:style handler:^(UIAlertAction *action) {
       (void)action;
       if (!replacement) {
         self.alertActivationBusyAnswer.text = self.alertActivationBusyBackstop != nil
@@ -373,33 +344,17 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
           [self presentAlertFixtureReplacement:YES];
         }];
       }
-    }]];
+    }];
+    button.enabled = ![arguments containsObject:@"--agent-device-alert-replacement-disabled-buttons"];
+    [alert addAction:button];
   }
   [self presentViewController:alert animated:NO completion:nil];
 }
 
-// Mirrors the App Tracking Transparency prompt's real button order: the affirmative button is
-// last (#3627). The answer label records which button the app actually took, so a test asserts
-// the app's answer instead of the command's own report. `--agent-device-alert-affirmative-only`
-// shows the same alert with no decline button at all.
 - (void)presentAlertDeclineChoiceFixture {
   BOOL affirmativeOnly =
       [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-affirmative-only"];
-  UIAlertController *alert = [UIAlertController
-    alertControllerWithTitle:@"“Runner” Would Like to Track Your Activity"
-                     message:@"Track your activity across other companies' apps and websites."
-              preferredStyle:UIAlertControllerStyleAlert];
-  NSArray<NSArray *> *buttons = affirmativeOnly
-      ? @[ @[@"Allow", @"Authorized"], @[@"OK", @"Authorized"] ]
-      : @[ @[@"Ask App Not to Track", @"Declined"], @[@"Allow", @"Authorized"] ];
-  for (NSArray *button in buttons) {
-    [alert addAction:[UIAlertAction actionWithTitle:button[0]
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction *action) {
-                                              (void)action;
-                                              self.alertDeclineAnswer.text = button[1];
-                                            }]];
-  }
+  UIAlertController *alert = RunnerAlertDeclineChoiceFixture(affirmativeOnly, self.alertDeclineAnswer);
   [self presentViewController:alert animated:NO completion:nil];
 }
 
@@ -705,6 +660,8 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-masked-value"];
     BOOL countsValueReads =
         [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-counts-value-reads"];
+    BOOL witnessesReplacement =
+        [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-witness"];
     UITextField *textField;
     if (digitCountValue) {
       textField = [[AgentDeviceDigitCountTextField alloc] init];
@@ -717,6 +674,8 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       textField = [[AgentDeviceSubmitClearingTextField alloc] init];
     } else if (maskedValue) {
       textField = [[AgentDeviceMaskedTextField alloc] init];
+    } else if (witnessesReplacement) {
+      textField = [[AgentDeviceTextEntryWitnessField alloc] init];
     } else if (countsValueReads) {
       textField = [[AgentDeviceValueReadCountingTextField alloc] init];
     } else {
@@ -754,7 +713,7 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       [textField.widthAnchor constraintEqualToConstant:240],
       [textField.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
     ]];
-    if (countsValueReads) {
+    if (countsValueReads || witnessesReplacement) {
       AgentDeviceValueReadCountLabel *valueReads = [[AgentDeviceValueReadCountLabel alloc] init];
       valueReads.countedField = textField;
       valueReads.accessibilityIdentifier = @"agent-device-text-entry-value-reads";

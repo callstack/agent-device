@@ -12,6 +12,7 @@ import {
   requireAndroidResourceId,
 } from './live-assertions.ts';
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
+import { waitForImeWindow } from './live-ime-window.ts';
 
 const C = PUBLIC_COMMANDS;
 export const ANDROID_TEST_IME_PACKAGE = 'com.callstack.agentdevice.imehelper';
@@ -119,6 +120,11 @@ export async function assertKeyboardIme(context: LiveContext): Promise<void> {
     JSON.stringify(keyboardStatus.json),
   );
 
+  await waitForImeWindow(
+    context,
+    true,
+    'Android keyboard was reported visible but its InputMethod window never drew',
+  );
   const keyboardVisiblePath = path.join(context.artifactDir, 'keyboard-visible.png');
   await capturePng(context, 'capture visible Android keyboard', keyboardVisiblePath);
   const dismiss = await runStep(context, 'dismiss Android keyboard safely', [
@@ -133,6 +139,11 @@ export async function assertKeyboardIme(context: LiveContext): Promise<void> {
     JSON.stringify(dismiss.json),
   );
 
+  await waitForImeWindow(
+    context,
+    false,
+    'Android keyboard was reported hidden but its InputMethod window is still drawn',
+  );
   const keyboardHiddenPath = path.join(context.artifactDir, 'keyboard-hidden.png');
   await capturePng(context, 'capture dismissed Android keyboard', keyboardHiddenPath);
   assertFilesDiffer(

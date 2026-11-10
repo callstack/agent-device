@@ -71,7 +71,7 @@ protected, operator-controlled configuration. Do not put either value in `./agen
 Remote daemon URLs that aren't loopback always require authentication. Saved `connect` profiles and
 explicit `--remote-config` files also work; generated profiles do not store tokens.
 
-When a command fails against a remote daemon, its `Diagnostics Log:` path is on your machine; see
+When a command fails against a remote daemon, its `Log:` path is on your machine; see
 [Capture a clean repro window](/docs/debugging-profiling#capture-a-clean-repro-window).
 
 Project-safe keys include command defaults such as `platform`, `target`, `device`, `session`,
@@ -92,6 +92,7 @@ explicit config:
 - Metro endpoint/token fields (`metro*`, `bundleUrl`)
 - request headers and structured install sources
 - local code and write destinations (`reporter`, `reportJunit`, `saveScript`, `launchConsole`)
+- `postGestureStabilization: false`, which skips the directional scroll `movement` check and the wait that keeps the first read after a scroll or swipe from a tree still in motion; see [Scroll](/docs/commands#scroll)
 
 Project config can also set `snapshotDepth`, `snapshotScope`, `screenshotScale`, `activity`, `relaunch`, `shutdown`, `fps`, and `quality`. Local paths and executable modules, such as `stepsFile` and `reporter`, are allowed only in user or explicit config.
 The `record` config key and `AGENT_DEVICE_RECORD` were removed. `--record` is per-invocation only: pass it on the command, or set `record: true` in an SDK/MCP call, to keep a corrective read in a healed script.

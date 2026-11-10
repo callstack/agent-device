@@ -5,7 +5,8 @@ import { ref, selector } from './selector-read-utils.ts';
 import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { createAgentDevice } from '../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
-import type { Point, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { Point } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { summarizeAxEvidence } from '@agent-device/capture-kit/snapshot-evidence';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
@@ -53,6 +54,51 @@ test('runtime click with verify captures a baseline for point targets and report
   assert.ok(result.evidence);
   assert.equal(result.evidence?.changedFromBefore, true);
   assert.equal(result.evidence?.nodeCount, 0);
+  assert.equal(captureCount, 2);
+});
+
+test('runtime click with verify reports unchanged evidence for a matching point baseline', async () => {
+  const device = createInteractionDevice(selectorSnapshot(), {
+    captureSnapshot: async () => ({ snapshot: selectorSnapshot() }),
+    tap: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.click(
+    { kind: 'point', x: 10, y: 20 },
+    { session: 'default', verify: true },
+  );
+
+  assert.equal(result.kind, 'point');
+  assert.ok(result.evidence);
+  assert.equal(result.evidence?.changedFromBefore, false);
+});
+
+test('runtime click with verify omits changedFromBefore when the baseline capture fails', async () => {
+  let captureCount = 0;
+  const device = createInteractionDevice(selectorSnapshot(), {
+    captureSnapshot: async () => {
+      captureCount += 1;
+      // Capture 1 = the pre-action baseline request, which fails on a
+      // tree-blind surface. Capture 2 = the post-action verify capture.
+      if (captureCount === 1) throw new Error('interactive capture unavailable');
+      return { snapshot: selectorSnapshot() };
+    },
+    tap: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.click(
+    { kind: 'point', x: 10, y: 20 },
+    { session: 'default', verify: true },
+  );
+
+  assert.equal(result.kind, 'point');
+  assert.ok(result.evidence);
+  // No baseline, no claim: the evidence must not read as an unchanged screen,
+  // because "nothing changed" and "nothing was compared" are different facts
+  // and the second must not launder the first past a caller watching for a
+  // coordinate tap that landed on nothing.
+  assert.equal('changedFromBefore' in (result.evidence ?? {}), false);
+  assert.equal(typeof result.evidence?.digest, 'string');
   assert.equal(captureCount, 2);
 });
 

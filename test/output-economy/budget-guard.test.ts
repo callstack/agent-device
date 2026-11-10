@@ -36,19 +36,38 @@ describe('monotonic output budget guard', () => {
 
     expect(
       findEconomyBudgetIncreases(base, candidate, {
-        snapshot: { bytes: 110, reason: 'Structured output gained a required recovery handle.' },
+        snapshot: {
+          bytes: { from: 100, to: 110 },
+          reason: 'Structured output gained a required recovery handle.',
+        },
       }),
     ).toEqual([]);
     expect(
       findEconomyBudgetIncreases(base, candidate, {
-        snapshot: { bytes: 111, reason: 'Wrong proposed ceiling.' },
+        snapshot: { bytes: { from: 100, to: 111 }, reason: 'Wrong proposed ceiling.' },
       }),
     ).toHaveLength(1);
     expect(
       findEconomyBudgetIncreases(base, candidate, {
-        snapshot: { bytes: 110, reason: '   ' },
+        snapshot: { bytes: { from: 100, to: 110 }, reason: '   ' },
       }),
     ).toHaveLength(1);
+  });
+
+  test('a spent waiver cannot excuse a later return to its ceiling', () => {
+    // The waiver raised 100 -> 110 and the floor later shrank to 50: the same ceiling is a new raise.
+    expect(
+      findEconomyBudgetIncreases(
+        { snapshot: metrics(50) },
+        { snapshot: metrics(110) },
+        {
+          snapshot: {
+            bytes: { from: 100, to: 110 },
+            reason: 'Raise reviewed against the old floor.',
+          },
+        },
+      ),
+    ).toEqual([{ sample: 'snapshot', metric: 'bytes', previous: 50, current: 110 }]);
   });
 
   test('rejects silently removing a measured surface', () => {

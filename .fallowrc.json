@@ -72,15 +72,15 @@
     "scripts/di-seams/**",
     "scripts/maestro-conformance/corpus/**",
     "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests.xctestplan",
-    "scripts/help-conformance-sample-outputs.d.mts",
-    "scripts/help-conformance-runner-output.d.mts",
-    // A hand-written type surface for a plain-Node .mjs the typechecked program (and Fallow's
-    // graph) cannot import; its only consumer is the .mjs's real importers, resolved by tsc, not
-    // by an import edge. Same shape as the help-conformance declaration files above.
-    "scripts/size-report-package.d.mts"
+    // Hand-written type surfaces for plain-Node .mjs modules. Their only consumers are the .mjs's
+    // real importers, resolved by tsc, not by an import edge Fallow's graph can follow.
+    "scripts/**/*.d.mts"
   ],
   "dynamicallyLoaded": [
     "packages/daemon/src/execution/interaction/index.ts",
+    // The interaction-contract Vitest project loads these by path (globalSetup, setupFiles).
+    "test/integration/interaction-contract/coverage-registration.global-setup.ts",
+    "test/integration/interaction-contract/coverage-registration.ts",
     // The site's modules that Astro loads without an import Fallow can read: from an .astro
     // <script> block (hero.ts, dither-host.ts), as a worker URL (dither.worker.ts), by a path
     // in astro.config.mjs (routeData.ts) or by convention (ec.config.mjs, Expressive Code).
@@ -114,7 +114,10 @@
     // Packaging linters with no importable API surface here: scripts/check-package.ts runs their
     // `node_modules/.bin` shims as subprocesses, which dependency analysis cannot follow to an import.
     "publint",
-    "@arethetypeswrong/cli"
+    "@arethetypeswrong/cli",
+    // Declarations only: @babel/core's types import convert-source-map, and scripts/mutation reaches
+    // them through @stryker-mutator/instrumenter. No source file imports the package by name.
+    "@types/convert-source-map"
   ],
   "ignoreExports": [
     {
@@ -328,9 +331,9 @@
       "exports": ["*"]
     },
     {
-      // Apple Simulator snapshot acquisition is a private package facet consumed by downstream runtime work; Fallow cannot see external consumers through the workspace exports map. Only the shared failure/limits/request-target types report without an exemption; the factory and its source interface resolve through the package boundary.
+      // Apple Simulator snapshot acquisition is a private package facet consumed by downstream runtime work; Fallow cannot see external consumers through the workspace exports map. Only the shared limits/request-target types report without an exemption; the factory and its source interface resolve through the package boundary.
       "file": "packages/platform-apple/src/snapshot-source-facade.ts",
-      "exports": ["SnapshotSourceFailureKind", "SnapshotSourceLimits", "SnapshotSourceTarget"]
+      "exports": ["SnapshotSourceLimits", "SnapshotSourceTarget"]
     },
     {
       // The native wire vocabulary is exported only so the parity test can pin the Objective-C literals; it is not part of the snapshot-source package facet.

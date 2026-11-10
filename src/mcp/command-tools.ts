@@ -8,6 +8,7 @@ import {
   operatorAudience,
   operatorInputRefusal,
   type AgentDeviceClient,
+  type BindingSettings,
   type CommandExecutionResult,
   type CommandMetadata,
   type CommandName,
@@ -55,10 +56,20 @@ type CommandToolExecutorDeps = {
     name: CommandName,
     input: Record<string, unknown>,
   ) => Promise<CommandExecutionResult>;
+  /**
+   * `always` returns `structuredContent` for every successful call. A host that reads results as
+   * data, such as the AI SDK adapter, sets it; the MCP server leaves it unset.
+   */
+  structuredContent?: 'always';
 };
 
 type CommandToolExecutor = {
-  execute: (name: string, input: Record<string, unknown>) => Promise<ToolResult>;
+  /** `signal` cancels the call: an abort closes its in-flight daemon request and the call settles as an error result. */
+  execute: (
+    name: string,
+    input: Record<string, unknown>,
+    options?: { signal?: AbortSignal },
+  ) => Promise<ToolResult>;
 };
 
 type McpOutputFormat = 'optimized' | 'json';
@@ -151,7 +162,7 @@ export function listCommandTools(): Array<{
 export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): CommandToolExecutor {
   const refPins = createToolRefPinStore();
   return {
-    execute: async (name, input) => {
+    execute: async (name, input, options = {}) => {
       if (!isCommandName(name)) {
         throw new AppError('INVALID_ARGS', `Unknown command tool: ${name}`);
       }
@@ -187,19 +198,26 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
       const { captureHostEnvironment } = await import('@agent-device/host-kit/process');
       const host = captureHostEnvironment(process);
       const supportedProperties = withMcpConfigSchema(name, metadata.inputSchema).properties;
-      const resolvedInput = resolveMcpConfigDefaults(name, input, supportedProperties, host);
-      const config = readMcpToolConfig(resolvedInput);
+      const { input: resolvedInput, binding } = resolveMcpConfigDefaults(
+        name,
+        input,
+        supportedProperties,
+        host,
+      );
+      const config = readMcpToolConfig(resolvedInput, binding);
       const commandInput = stripMcpConfigFields(resolvedInput);
       const pinnedInput = refPins.pinInput(name, commandInput, config.client.stateDir);
       // One host per tool call: the client's ensuring transport and the output formatter resolve
       // the daemon and the styling from the same host the executor captured (#3794).
-      const client = await createClient(deps, config.client, host);
+      const client = await createClient(deps, config.client, host, options.signal);
       try {
         const result = await (deps.runCommand ?? runCommand)(client, name, pinnedInput);
         refPins.mergeCommandResult(name, result, config.client.stateDir, commandInput.session);
         return {
           isError: false,
-          structuredContent: await projectStructuredContent(name, result),
+          ...(deps.structuredContent === 'always' || returnsStructuredContent(name, config)
+            ? { structuredContent: await projectStructuredContent(name, result) }
+            : {}),
           content: [
             {
               type: 'text',
@@ -255,6 +273,7 @@ async function createClient(
   deps: CommandToolExecutorDeps,
   config: AgentDeviceClientConfig,
   host: HostEnvironment,
+  signal: AbortSignal | undefined,
 ): Promise<AgentDeviceClient> {
   if (deps.createClient) return await deps.createClient(config);
   const { createAgentDeviceClient } = await import('@agent-device/client');
@@ -264,9 +283,13 @@ async function createClient(
   return createAgentDeviceClient(config, {
     host,
     // The client builds the same request the daemon transport takes; its type only differs in the
-    // session being optional, which `sendToDaemon` defaults.
+    // session being optional, which `sendToDaemon` defaults. The call's signal rides every request
+    // the command makes, so a cancelled call closes whichever request is in flight.
     transport: async (req, context) =>
-      await ensuring(req as Parameters<typeof ensuring>[0], context),
+      await ensuring(
+        req as Parameters<typeof ensuring>[0],
+        signal ? { ...context, signal } : context,
+      ),
   });
 }
 
@@ -279,10 +302,35 @@ async function runCommand(
   return await commandSurface.runCommand(client, name, input);
 }
 
-function readMcpToolConfig(record: Record<string, unknown>): McpToolConfig {
+/**
+ * A typed tool must return its declared `structuredContent`. A tool without an `outputSchema` has
+ * no structured contract, so it returns the compact text alone unless the caller asks for machine
+ * output. Some clients, Claude Code among them, show the model `structuredContent` instead of the
+ * text, so an unrequested raw result would replace the compact text in the model's context.
+ */
+function returnsStructuredContent(name: CommandName, config: McpToolConfig): boolean {
+  if (name in MCP_COMMAND_OUTPUT_SCHEMAS) return true;
+  return (
+    rendersJsonText(config.outputFormat, config.client.responseLevel) || config.client.cost === true
+  );
+}
+
+function readMcpToolConfig(
+  record: Record<string, unknown>,
+  binding: BindingSettings,
+): McpToolConfig {
   return {
-    client: readClientConfig(record),
+    client: { ...readClientConfig(record), ...readLockConfig(binding) },
     outputFormat: readMcpOutputFormat(record.mcpOutputFormat),
+  };
+}
+
+/** Only an active lock adds keys, so the default request shape stays untouched. */
+function readLockConfig(binding: BindingSettings): AgentDeviceClientConfig {
+  if (!binding.lockPolicy) return {};
+  return {
+    lockPolicy: binding.lockPolicy,
+    ...(binding.defaultPlatform ? { lockPlatform: binding.defaultPlatform } : {}),
   };
 }
 
@@ -519,10 +567,7 @@ async function renderToolText(params: {
   // formatter expects `nodes`, which the digest drops) — rendering it through
   // them would print misleading text that contradicts `structuredContent`. Emit
   // the leveled payload verbatim as JSON instead.
-  if (
-    params.outputFormat === 'json' ||
-    (params.responseLevel !== undefined && params.responseLevel !== 'default')
-  ) {
+  if (rendersJsonText(params.outputFormat, params.responseLevel)) {
     return renderJsonText(params.result);
   }
   const cliOutput = await formatCliOutput({
@@ -546,6 +591,10 @@ function toolTextWithWarnings(name: CommandName, cliOutput: CliOutput): string {
   if (responseWarningRoute(findCommandMetadata(name)) !== 'stderr') return text;
   const stderr = cliOutput.stderr?.trimEnd() ?? '';
   return stderr === '' ? text : `${text}${text.endsWith('\n') ? '' : '\n'}${stderr}`;
+}
+
+function rendersJsonText(outputFormat: McpOutputFormat, responseLevel?: ResponseLevel): boolean {
+  return outputFormat === 'json' || (responseLevel !== undefined && responseLevel !== 'default');
 }
 
 function renderJsonText(value: unknown): string {

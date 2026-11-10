@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { isIosFamily } from '@agent-device/kernel/device';
+import { isIosFamily, webBackendKeyOf } from '@agent-device/kernel/device';
 import type { PlatformResourceCleanup } from '@agent-device/daemon';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
@@ -50,23 +50,28 @@ export async function cleanupManagedWebRuntimeOrphans(
 
 async function closeManagedWebRuntimeSession(
   params: {
-    sessionName: string;
+    backendKey: string;
     stateDir: string;
     openWebSessionNames: () => readonly string[];
+    ownedProcessRecords?: OwnedProcessRecordStore;
   },
   host: HostEnvironment,
 ): Promise<void> {
   const { createAgentBrowserWebProvider } = await import('@agent-device/platform-web');
   const provider = await createAgentBrowserWebProvider({
     host,
-    session: params.sessionName,
+    session: params.backendKey,
     stateDir: params.stateDir,
     openWebSessionNames: params.openWebSessionNames,
+    ownedProcessRecords: params.ownedProcessRecords,
   });
   await provider.close();
 }
 
-export function createPlatformResourceCleanup(host: HostEnvironment): PlatformResourceCleanup {
+export function createPlatformResourceCleanup(
+  host: HostEnvironment,
+  ownedProcessRecords?: OwnedProcessRecordStore,
+): PlatformResourceCleanup {
   return Object.freeze({
     async stopSnapshotHelper(device) {
       if (device.platform !== 'android') return;
@@ -74,11 +79,14 @@ export function createPlatformResourceCleanup(host: HostEnvironment): PlatformRe
     },
     async closeManagedBrowser(params) {
       if (params.device.platform !== 'web') return;
+      const backendKey = webBackendKeyOf(params.device.id);
+      if (backendKey === undefined) return;
       await closeManagedWebRuntimeSession(
         {
-          sessionName: params.sessionName,
+          backendKey,
           stateDir: params.stateDir,
           openWebSessionNames: params.openSessionNames,
+          ownedProcessRecords,
         },
         host,
       );
@@ -108,7 +116,7 @@ export function createPlatformResourceCleanup(host: HostEnvironment): PlatformRe
         params.device.kind === 'simulator' &&
         !params.shutdownRequested &&
         !params.hasScreenRecording &&
-        !params.hasLease
+        !params.leaseWillEnd
       );
     },
   });

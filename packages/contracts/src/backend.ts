@@ -1,3 +1,4 @@
+import type { ScreenshotScreenMask } from './screenshot.ts';
 import type { ScreenshotResultData } from './snapshot-types.ts';
 import type { SnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
@@ -20,13 +21,8 @@ import type {
   PlatformSelector,
   PublicPlatform,
 } from '@agent-device/kernel/device';
-import type {
-  Point,
-  Rect,
-  SnapshotNode,
-  SnapshotOptions,
-  SnapshotState,
-} from '@agent-device/kernel/snapshot';
+import type { Point, Rect, SnapshotNode, SnapshotOptions } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 
 // The backend's public leaf platform (approach b): backends distinguish iOS from
 // macOS (e.g. snapshot backend routing, the macOS surface guard), so this carries the
@@ -71,6 +67,7 @@ export type BackendScreenshotOptions = {
   fullscreen?: boolean;
   overlayRefs?: boolean;
   pixelDensity?: number;
+  screenMask?: ScreenshotScreenMask;
   stabilize?: boolean;
   normalizeStatusBar?: boolean;
   surface?: SessionSurface;
@@ -314,7 +311,6 @@ import type {
   BackendDumpNetworkOptions,
   BackendDumpNetworkResult,
   BackendNetworkEntry,
-  BackendNetworkIncludeMode,
 } from './backend-diagnostics.ts';
 
 export type {
@@ -323,7 +319,6 @@ export type {
   BackendDumpNetworkOptions,
   BackendDumpNetworkResult,
   BackendNetworkEntry,
-  BackendNetworkIncludeMode,
 };
 
 export type BackendLogEntry = {

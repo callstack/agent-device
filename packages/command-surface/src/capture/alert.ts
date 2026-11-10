@@ -1,4 +1,8 @@
-import { ALERT_ACTIONS, type AlertAction } from '@agent-device/contracts/alert-contract';
+import {
+  ALERT_ACTIONS,
+  parseAlertAction,
+  type AlertAction,
+} from '@agent-device/contracts/alert-contract';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { AlertCommandOptions } from '@agent-device/contracts/client';
 import { enumField, integerField } from '../command-input.ts';
@@ -17,7 +21,7 @@ import { AppError } from '@agent-device/kernel/errors';
 const ALERT_COMMAND_NAME = 'alert';
 
 const alertCommandDescription =
-  "Inspect, wait for, accept, or dismiss a platform alert. Use get before acting when the alert content matters; accept and dismiss change the active alert state. Each iOS XCTest execution activates once, then only observes. Local Apple XCTest and Limrun iOS choose recognized English labels by preference (Allow While Using App before Allow Once); on iOS simulators, local XCTest also recognizes the device's preferred languages' wording of those labels from the OS permission-prompt strings, on any alert, while Limrun iOS stays English; equal-ranked choices and unknown labels refuse, including a lone unknown button. Open, Done, and Confirm… accept; Keep Browsing, Deny, and Skip dismiss. On the Apple XCUITest runner, dismiss taps only a recognized decline label (Cancel, Don't Allow, Ask App Not to Track, and similar) or the close element of a popover whose accessibility marker reads exactly \"dismiss popup\"; when no button fits the action, accept and dismiss answer ALERT_BUTTON_NOT_FOUND having tapped nothing — read labels with alert get, then press the button by label. Inspect again after an unconfirmed action; never assume a timeout means nothing happened.";
+  "Inspect, wait for, accept, or dismiss a platform alert. Use get before acting when the alert content matters; accept and dismiss change the active alert state. Each iOS XCTest execution activates once, then only observes. Apple XCTest and Limrun iOS choose recognized English labels by preference (Allow While Using App before Allow Once); on iOS simulators, including Limrun, the runner also recognizes the device's preferred languages' wording of those labels from the OS permission-prompt strings, on any alert; equal-ranked choices and unknown labels refuse, including a lone unknown button. Open, Done, and Confirm… accept; Keep Browsing, Deny, and Skip dismiss. On the Apple XCUITest runner, dismiss taps only a recognized decline label (Cancel, Don't Allow, Ask App Not to Track, and similar) or the close element of a popover whose accessibility marker reads exactly \"dismiss popup\"; when no button fits the action, accept and dismiss answer ALERT_BUTTON_NOT_FOUND having tapped nothing — read labels with alert get, then press the button by label. Inspect again after an unconfirmed action; never assume a timeout means nothing happened.";
 
 const alertCommandMetadata = defineFieldCommandMetadata(
   ALERT_COMMAND_NAME,
@@ -68,15 +72,8 @@ function readAlertInput(positionals: string[]): Record<string, unknown> {
 }
 
 function readAlertAction(value: string | undefined): AlertAction | undefined {
-  const action = value?.toLowerCase();
-  if (
-    action === undefined ||
-    action === 'get' ||
-    action === 'accept' ||
-    action === 'dismiss' ||
-    action === 'wait'
-  ) {
-    return action;
-  }
+  if (value === undefined) return undefined;
+  const action = parseAlertAction(value);
+  if (action) return action;
   throw new AppError('INVALID_ARGS', 'alert action must be get, accept, dismiss, or wait.');
 }

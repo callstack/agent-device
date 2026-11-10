@@ -1,4 +1,4 @@
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { parseSelectorChain } from './parse.ts';
 import { listSelectorChainMatches as listSelectorChainMatchesAst } from './resolve.ts';
 import { resolveSelectorChainWithPolicy as resolveSelectorChainWithPolicyAst } from './resolve-with-policy.ts';

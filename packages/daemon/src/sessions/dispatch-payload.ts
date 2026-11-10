@@ -1,10 +1,13 @@
 import { promises as fs } from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolvePayloadInput } from './payload-input.ts';
+import { resolvePayloadInput, type PayloadPathOptions } from './payload-input.ts';
 import type { JsonObject } from '@agent-device/contracts/client';
 
-export async function readNotificationPayload(payloadArg: string): Promise<JsonObject> {
-  const source = resolvePayloadInput(payloadArg, { subject: 'Push payload' });
+export async function readNotificationPayload(
+  payloadArg: string,
+  pathOptions?: PayloadPathOptions,
+): Promise<JsonObject> {
+  const source = resolvePayloadInput(payloadArg, { subject: 'Push payload', ...pathOptions });
   const payloadText =
     source.kind === 'inline' ? source.text : await readPushPayloadFile(source.path);
   return parseNotificationPayload(payloadText, payloadArg);

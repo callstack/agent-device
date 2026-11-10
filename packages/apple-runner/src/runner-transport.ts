@@ -42,7 +42,7 @@ async function postRunnerCommandOnce(
 ): Promise<Response> {
   throwIfCanceledBeforeSend(signal);
   const deadline = Deadline.fromTimeoutMs(timeoutMs);
-  const resolver = createRunnerCommandRouteResolver(device, endpoint.port);
+  const resolver = createRunnerCommandRouteResolver(device, endpoint.port, endpoint.http);
   let route = await resolver.resolveRoute(deadline.remainingMs());
   if (route.kind === 'usbmux') {
     try {
@@ -102,16 +102,24 @@ export async function postRunnerCommandOverRoute(
       'no',
     );
   }
-  return await fetchWithTimeout(
+  const response = await fetchWithTimeout(
     route.url,
     {
       method: 'POST',
-      headers: runnerRequestHeaders(endpoint),
+      headers: forwardedRunnerHeaders(endpoint),
       body: JSON.stringify(command),
     },
     timeoutMs,
     signal,
   );
+  if (endpoint.http && [502, 503, 504].includes(response.status)) {
+    await response.body?.cancel();
+    throw new AppError('COMMAND_FAILED', 'Runner HTTP forwarding is unavailable', {
+      reason: 'runner_forwarding_unavailable',
+      status: response.status,
+    });
+  }
+  return response;
 }
 
 /** A cancellation that lands before the POST is issued proves the runner received nothing. */
@@ -154,4 +162,12 @@ export async function fetchWithTimeout(
     }
     throw error;
   }
+}
+
+function forwardedRunnerHeaders(endpoint: RunnerEndpoint): Record<string, string> {
+  if (!endpoint.http?.headers) return runnerRequestHeaders(endpoint);
+  const headers = new Headers(endpoint.http.headers);
+  for (const [key, value] of Object.entries(runnerRequestHeaders(endpoint)))
+    headers.set(key, value);
+  return Object.fromEntries(headers);
 }

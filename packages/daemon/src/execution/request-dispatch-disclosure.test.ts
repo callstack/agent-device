@@ -432,6 +432,29 @@ for (const row of ROWS) {
   });
 }
 
+// A batch the daemon refuses before any step runs never reached a device. The router gives a
+// delegating composite no verdict of its own (its nested requests disclose themselves), so this
+// refusal must carry no `dispatched` at all: the fixture table has no row for an absent verdict.
+const REFUSED_BATCHES: ReadonlyArray<[string, NonNullable<DaemonRequest['flags']>]> = [
+  ['an invalid max-steps value', { batchMaxSteps: 0, batchSteps: [{ command: 'press' }] }],
+  ['an empty step list', { batchSteps: [] }],
+];
+
+for (const [name, flags] of REFUSED_BATCHES) {
+  test(`a batch refused before any step (${name}) discloses no dispatch`, async () => {
+    await assert.rejects(
+      route(makeIosAppSession(SESSION), { command: 'batch', positionals: [], flags }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'INVALID_ARGS');
+        assert.equal('dispatched' in (error.details ?? {}), false);
+        return true;
+      },
+    );
+    assert.equal(routeOperationSpies.tapPoint.mock.calls.length, 0);
+  });
+}
+
 test('a command without a declared recording effect rethrows its failure unnormalized', async () => {
   const req: DaemonRequest = { token: 't', session: SESSION, command: 'devices', positionals: [] };
   assert.equal(resolveCommandRecordingEffect(req), undefined);

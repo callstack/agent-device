@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { createWebInteractor } from './interactor.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { withWebProvider, type WebProvider } from './index.ts';
+import { withWebProvider } from './index.ts';
+import { makeWebProvider } from './__tests__/test-utils.ts';
 
 test('web interactor delegates first-slice operations to the scoped provider', async () => {
   const calls: string[] = [];
@@ -110,18 +111,3 @@ test('web interactor reports unsupported operations explicitly', async () => {
       error.message === 'back is not supported on web',
   );
 });
-
-function makeWebProvider(overrides: Partial<WebProvider> = {}): WebProvider {
-  return {
-    open: async () => {},
-    close: async () => {},
-    snapshot: async () => ({ nodes: [] }),
-    screenshot: async () => {},
-    setViewport: async () => {},
-    click: async () => {},
-    fill: async () => {},
-    typeText: async () => {},
-    scroll: async () => {},
-    ...overrides,
-  };
-}

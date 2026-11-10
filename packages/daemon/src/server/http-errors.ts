@@ -50,12 +50,13 @@ export function sendRestJsonError(res: http.ServerResponse, normalized: Normaliz
  * destroying the connection, so the client sees a truncated body rather than a
  * complete one.
  */
-export function failStreamedHttpResponse(res: http.ServerResponse, error: Error): void {
+export function failStreamedHttpResponse(res: http.ServerResponse, error: unknown): void {
+  if (res.destroyed) return;
   if (res.headersSent) {
-    res.destroy(error);
+    res.destroy(error instanceof Error ? error : undefined);
     return;
   }
-  const normalized = normalizeError(error);
-  res.statusCode = statusCodeForNormalizedError(normalized);
-  res.end(normalized.message);
+  res.removeHeader('content-length');
+  res.removeHeader('content-disposition');
+  sendRestJsonError(res, normalizeError(error));
 }

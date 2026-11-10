@@ -1,4 +1,3 @@
-import { resolveRemoteRequestDiagnosticsPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import { parseRawArgs, usage, usageForCommand } from './cli/parser/args.ts';
 import { suggestCommandFor } from './cli/parser/command-suggestions.ts';
 import {
@@ -35,7 +34,12 @@ import type {
 } from '@agent-device/contracts/client';
 import { tryRunClientBackedCommand } from './cli/commands/router.ts';
 import { runAgentCdpCommand } from './cli/commands/agent-cdp.ts';
-import { readCliBatchStepsJson } from '@agent-device/command-surface';
+import {
+  applyDefaultPlatformBinding,
+  getCommandSchema,
+  readCliBatchStepsJson,
+  resolveBindingSettings,
+} from '@agent-device/command-surface';
 import {
   createRequestId,
   emitDiagnostic,
@@ -44,7 +48,6 @@ import {
   registerDiagnosticSensitiveValue,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import { applyDefaultPlatformBinding, resolveBindingSettings } from './cli/session-binding.ts';
 import { resolveCliOptions } from './cli/resolve-cli-options.ts';
 import { maybeRunUpgradeNotifier } from './cli/update-check.ts';
 import {
@@ -69,13 +72,9 @@ type CliDaemonRequest = Parameters<CliDaemonTransport>[0];
 type CliDaemonTransportOptions = Parameters<CliDaemonTransport>[1];
 type ClientDaemonRequest = Parameters<AgentDeviceDaemonTransport>[0];
 
-const printHumanError = (
-  err: AppError | NormalizedError,
-  options: { showDetails?: boolean } = {},
-): Promise<void> =>
-  import('./commands/output/human-error.ts').then(({ printHumanError: write }) =>
-    write(err, options),
-  );
+const printHumanError = async (
+  ...args: Parameters<typeof import('./cli/failure-output.ts').printHumanError>
+): Promise<void> => (await import('./cli/failure-output.ts')).printHumanError(...args);
 
 const printJson = (
   result: { success: true; data?: unknown } | { success: false; error: NormalizedError },
@@ -265,23 +264,7 @@ async function parseCliInputOrExit(
   try {
     parsed = resolveCliOptions(argv, { cwd: options.host.cwd, env: options.host.env });
   } catch (error) {
-    emitDiagnostic({
-      level: 'error',
-      phase: 'cli_parse_failed',
-      data: {
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
-    const normalized = normalizeError(error, {
-      diagnosticId: getDiagnosticsMeta().diagnosticId,
-      logPath: flushDiagnosticsToSessionFile({ force: true })?.path,
-    });
-    if (options.jsonRequested) {
-      await printJson({ success: false, error: normalized });
-    } else {
-      await printHumanError(normalized, { showDetails: options.debugEnabled });
-    }
-    return exitAfterFlush(1);
+    return await exitOnParseFailure(error, argv, options);
   }
 
   for (const warning of parsed.warnings) {
@@ -320,7 +303,47 @@ async function parseCliInputOrExit(
     return exitAfterFlush(1);
   }
 
+  // The process entry starts the MCP server only for a bare `mcp`; anything that reaches here
+  // carried flags the server would silently ignore.
+  if (parsed.command === 'mcp') {
+    return await exitOnParseFailure(
+      new AppError(
+        'INVALID_ARGS',
+        'mcp accepts no flags or arguments other than --help and --version.',
+        {
+          hint: 'Run agent-device mcp alone. Configure the server with AGENT_DEVICE_* environment variables or AGENT_DEVICE_CONFIG.',
+        },
+      ),
+      argv,
+      options,
+    );
+  }
+
   return { parsed, command: parsed.command, positionals: parsed.positionals };
+}
+
+async function exitOnParseFailure(
+  error: unknown,
+  argv: string[],
+  options: { jsonRequested: boolean; debugEnabled: boolean },
+): Promise<never> {
+  emitDiagnostic({
+    level: 'error',
+    phase: 'cli_parse_failed',
+    data: {
+      error: error instanceof Error ? error.message : String(error),
+    },
+  });
+  const normalized = normalizeError(error, {
+    diagnosticId: getDiagnosticsMeta().diagnosticId,
+    logPath: flushDiagnosticsToSessionFile({ force: true })?.path,
+  });
+  if (options.jsonRequested) {
+    await printJson({ success: false, error: normalized });
+  } else {
+    await printHumanError(normalized, { debugTier: options.debugEnabled, argv });
+  }
+  return await exitAfterFlush(1);
 }
 
 type CliRunContext = {
@@ -365,14 +388,17 @@ async function resolveRunContextOrExit(
       configuredPlatform: parsed.flags.platform,
       configuredSession: parsed.flags.session,
     });
-    const flags = binding.lockPolicy
-      ? { ...parsed.flags }
-      : applyDefaultPlatformBinding(parsed.flags, {
-          env: base.host.env,
-          policyOverrides: parsed.flags,
-          configuredPlatform: parsed.flags.platform,
-          configuredSession: parsed.flags.session,
-        });
+    const skipPlatformDefault =
+      getCommandSchema(base.command)?.explicitOnlyFlags?.includes('platform') === true;
+    const flags =
+      binding.lockPolicy || skipPlatformDefault
+        ? { ...parsed.flags }
+        : applyDefaultPlatformBinding(parsed.flags, {
+            env: base.host.env,
+            policyOverrides: parsed.flags,
+            configuredPlatform: parsed.flags.platform,
+            configuredSession: parsed.flags.session,
+          });
     // A leased remote config, or a connect without one (it always leases through a provider), needs
     // an explicit session before anything is resolved or leased (#3931).
     const leasedConnect = base.command === 'connect' && !flags.remoteConfig;
@@ -416,7 +442,10 @@ async function resolveRunContextOrExit(
     if (parsed.flags.json) {
       await printJson({ success: false, error: normalized });
     } else {
-      await printHumanError(normalized, { showDetails: base.debugOutputEnabled });
+      await printHumanError(normalized, {
+        debugTier: base.debugOutputEnabled,
+        command: parsed.command,
+      });
     }
     return exitAfterFlush(1);
   }
@@ -641,66 +670,32 @@ async function handleRunCliFailure(
     }
     return;
   }
+  // Stop the live --debug tail first so none of its output lands after the error's
+  // closing summary line.
+  if (logTailStopper) logTailStopper();
   if (ctx.effectiveFlags.json) {
     await printJson({
       success: false,
       error: normalized,
     });
   } else {
-    await printHumanError(normalized, { showDetails: ctx.debugOutputEnabled });
-    if (ctx.debugOutputEnabled) {
-      printFailureLogTail(ctx, normalized);
-    }
+    await printHumanError(normalized, {
+      debugTier: ctx.debugOutputEnabled,
+      command: ctx.command,
+      logTail: ctx.debugOutputEnabled
+        ? {
+            daemonBaseUrl: ctx.effectiveFlags.daemonBaseUrl,
+            daemonPaths: ctx.daemonPaths,
+            record: normalized.diagnosticsRecord,
+          }
+        : undefined,
+    });
   }
-  if (logTailStopper) logTailStopper();
   // #1596: a bare `process.exit()` right after these writes can drop them —
   // Node flushes stdout/stderr synchronously only to a file or TTY, and this
   // CLI is commonly piped by whatever is driving it. `exitAfterFlush` waits
   // for the writes above to actually reach the pipe first.
   await exitAfterFlush(1);
-}
-
-const DAEMON_LOG_TAIL_MAX_BYTES = 64_000;
-
-/**
- * The evidence `--debug` puts inline in the caller's own log after a failure.
- *
- * For a LOCAL daemon that is the daemon log this process can read. For a REMOTE
- * one that file belongs to another machine (the same reason
- * `maybeStartDaemonLogTail` does not follow it), so the tail comes from the
- * request record fetched to this host instead — which is what makes a CI job's
- * transcript carry the evidence without a second round trip (#1801).
- */
-function printFailureLogTail(ctx: CliRunContext, normalized: NormalizedError): void {
-  if (!ctx.effectiveFlags.daemonBaseUrl) {
-    printLogFileTail('daemon log', ctx.daemonPaths.logPath);
-    return;
-  }
-  const record = normalized.diagnosticsRecord;
-  if (!record) return;
-  // Recomputed from the locator through the same helper that wrote the copy, so
-  // the tail can only ever come from the fetched record (absent when the fetch
-  // failed, since nothing was written).
-  printLogFileTail(
-    'remote diagnostics',
-    resolveRemoteRequestDiagnosticsPath(ctx.daemonPaths.baseDir, record),
-  );
-}
-
-function printLogFileTail(label: string, logPath: string): void {
-  try {
-    if (fs.existsSync(logPath)) {
-      const content = fs.readFileSync(logPath, 'utf8');
-      const lines = content.split('\n');
-      let tail = lines.slice(Math.max(0, lines.length - 200)).join('\n');
-      if (tail.length > DAEMON_LOG_TAIL_MAX_BYTES) {
-        tail = tail.slice(tail.length - DAEMON_LOG_TAIL_MAX_BYTES);
-      }
-      if (tail.trim().length > 0) {
-        process.stderr.write(`\n[${label}]\n${tail}\n`);
-      }
-    }
-  } catch {}
 }
 
 function isDebugRequested(argv: string[]): boolean {
@@ -785,6 +780,7 @@ function resolveActiveConnectionDefaults(options: {
     options.command === 'connection' ||
     options.command === 'daemon' ||
     options.command === 'plugins' ||
+    options.command === 'device' ||
     options.command === 'proxy'
   ) {
     return null;
@@ -883,8 +879,8 @@ function createCliDaemonTransport(options: CliDaemonTransportSetup): AgentDevice
   if (!options.flags.remoteConfig) return send;
   return async (req, context) => {
     const response = await send(req, context);
-    const { forgetEndedProxyLease } = await import('./cli/connection/ended-lease.ts');
-    forgetEndedProxyLease(options.flags, response, options.host);
+    const { forgetEndedConnectionLease } = await import('./cli/connection/ended-lease.ts');
+    forgetEndedConnectionLease(options.flags, response, options.host);
     return response;
   };
 }
@@ -951,7 +947,10 @@ const isDirectRun = pathToFileURL(process.argv[1] ?? '').href === import.meta.ur
 if (isDirectRun) {
   runCli(process.argv.slice(2)).catch(async (error) => {
     const appErr = asAppError(error);
-    await printHumanError(normalizeError(appErr), { showDetails: true });
+    await printHumanError(normalizeError(appErr), {
+      debugTier: true,
+      argv: process.argv.slice(2),
+    });
     await exitAfterFlush(1);
   });
 }

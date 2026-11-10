@@ -3,15 +3,12 @@ import type { BoundRuntimeCommand, RuntimeCommand } from '../../runtime-types.ts
 import {
   clickCommand,
   fillCommand,
-  focusCommand,
   hoverCommand,
   longPressCommand,
   pressCommand,
   type ClickCommandOptions,
   type FillCommandOptions,
   type FillCommandResult,
-  type FocusCommandOptions,
-  type FocusCommandResult,
   type HoverCommandOptions,
   type HoverCommandResult,
   type InteractionTarget,
@@ -22,58 +19,35 @@ import {
 } from './interactions.ts';
 import {
   findCommand,
-  getAttrsCommand,
   getCommand,
-  getTextCommand,
   waitCommand,
-  waitForTextCommand,
-  type ElementTarget,
   type FindReadCommandOptions,
   type FindReadCommandResult,
-  type GetAttrsCommandOptions,
   type GetCommandOptions,
   type GetCommandResult,
-  type GetTextCommandOptions,
   type WaitCommandOptions,
   type WaitCommandResult,
-  type WaitForTextCommandOptions,
 } from './selector-read.ts';
-import {
-  isCommand,
-  isHiddenCommand,
-  isVisibleCommand,
-  type IsCommandOptions,
-  type IsCommandResult,
-  type IsSelectorCommandOptions,
-} from './selector-is.ts';
+import { isCommand, type IsCommandOptions, type IsCommandResult } from './selector-is.ts';
 import {
   gestureCommand,
   type GestureCommandOptions,
   type GestureCommandResult,
 } from './gesture-command.ts';
 import { settleObservationCommand, type SettleObservationCommandOptions } from './settle.ts';
-import type { SelectorTarget, SettleObservation } from '@agent-device/contracts/interaction';
+import type { SettleObservation } from '@agent-device/contracts/interaction';
 
 export type SelectorCommands = {
   find: RuntimeCommand<FindReadCommandOptions, FindReadCommandResult>;
   get: RuntimeCommand<GetCommandOptions, GetCommandResult>;
-  getText: RuntimeCommand<GetTextCommandOptions, Extract<GetCommandResult, { kind: 'text' }>>;
-  getAttrs: RuntimeCommand<GetAttrsCommandOptions, Extract<GetCommandResult, { kind: 'attrs' }>>;
   is: RuntimeCommand<IsCommandOptions, IsCommandResult>;
-  isVisible: RuntimeCommand<IsSelectorCommandOptions, IsCommandResult>;
-  isHidden: RuntimeCommand<IsSelectorCommandOptions, IsCommandResult>;
   wait: RuntimeCommand<WaitCommandOptions, WaitCommandResult>;
-  waitForText: RuntimeCommand<
-    WaitForTextCommandOptions,
-    Extract<WaitCommandResult, { kind: 'text' }>
-  >;
 };
 
 export type InteractionCommands = {
   click: RuntimeCommand<ClickCommandOptions, PressCommandResult>;
   press: RuntimeCommand<PressCommandOptions, PressCommandResult>;
   fill: RuntimeCommand<FillCommandOptions, FillCommandResult>;
-  focus: RuntimeCommand<FocusCommandOptions, FocusCommandResult>;
   longPress: RuntimeCommand<LongPressCommandOptions, LongPressCommandResult>;
   hover: RuntimeCommand<HoverCommandOptions, HoverCommandResult>;
   gesture: RuntimeCommand<GestureCommandOptions, GestureCommandResult>;
@@ -89,28 +63,8 @@ export type InteractionCommands = {
 export type BoundSelectorCommands = {
   find: BoundRuntimeCommand<FindReadCommandOptions, FindReadCommandResult>;
   get: BoundRuntimeCommand<GetCommandOptions, GetCommandResult>;
-  getText: (
-    target: ElementTarget,
-    options?: Omit<GetTextCommandOptions, 'target'>,
-  ) => Promise<Extract<GetCommandResult, { kind: 'text' }>>;
-  getAttrs: (
-    target: ElementTarget,
-    options?: Omit<GetAttrsCommandOptions, 'target'>,
-  ) => Promise<Extract<GetCommandResult, { kind: 'attrs' }>>;
   is: BoundRuntimeCommand<IsCommandOptions, IsCommandResult>;
-  isVisible: (
-    target: SelectorTarget,
-    options?: Omit<IsSelectorCommandOptions, 'target'>,
-  ) => Promise<IsCommandResult>;
-  isHidden: (
-    target: SelectorTarget,
-    options?: Omit<IsSelectorCommandOptions, 'target'>,
-  ) => Promise<IsCommandResult>;
   wait: BoundRuntimeCommand<WaitCommandOptions, WaitCommandResult>;
-  waitForText: (
-    text: string,
-    options?: Omit<WaitForTextCommandOptions, 'text'>,
-  ) => Promise<Extract<WaitCommandResult, { kind: 'text' }>>;
 };
 
 export type BoundInteractionCommands = {
@@ -127,10 +81,6 @@ export type BoundInteractionCommands = {
     text: string,
     options?: Omit<FillCommandOptions, 'target' | 'text'>,
   ) => Promise<FillCommandResult>;
-  focus: (
-    target: InteractionTarget,
-    options?: Omit<FocusCommandOptions, 'target'>,
-  ) => Promise<FocusCommandResult>;
   longPress: (
     target: InteractionTarget,
     options?: Omit<LongPressCommandOptions, 'target'>,
@@ -146,20 +96,14 @@ export type BoundInteractionCommands = {
 const selectorCommands: SelectorCommands = {
   find: findCommand,
   get: getCommand,
-  getText: getTextCommand,
-  getAttrs: getAttrsCommand,
   is: isCommand,
-  isVisible: isVisibleCommand,
-  isHidden: isHiddenCommand,
   wait: waitCommand,
-  waitForText: waitForTextCommand,
 };
 
 const interactionCommands: InteractionCommands = {
   click: clickCommand,
   press: pressCommand,
   fill: fillCommand,
-  focus: focusCommand,
   longPress: longPressCommand,
   hover: hoverCommand,
   gesture: gestureCommand,
@@ -170,15 +114,8 @@ export function bindSelectorCommands(runtime: AgentDeviceRuntime): BoundSelector
   return {
     find: (options) => selectorCommands.find(runtime, options),
     get: (options) => selectorCommands.get(runtime, options),
-    getText: (target, options = {}) => selectorCommands.getText(runtime, { ...options, target }),
-    getAttrs: (target, options = {}) => selectorCommands.getAttrs(runtime, { ...options, target }),
     is: (options) => selectorCommands.is(runtime, options),
-    isVisible: (target, options = {}) =>
-      selectorCommands.isVisible(runtime, { ...options, target }),
-    isHidden: (target, options = {}) => selectorCommands.isHidden(runtime, { ...options, target }),
     wait: (options) => selectorCommands.wait(runtime, options),
-    waitForText: (text, options = {}) =>
-      selectorCommands.waitForText(runtime, { ...options, text }),
   };
 }
 
@@ -188,7 +125,6 @@ export function bindInteractionCommands(runtime: AgentDeviceRuntime): BoundInter
     press: (target, options = {}) => interactionCommands.press(runtime, { ...options, target }),
     fill: (target, text, options = {}) =>
       interactionCommands.fill(runtime, { ...options, target, text }),
-    focus: (target, options = {}) => interactionCommands.focus(runtime, { ...options, target }),
     longPress: (target, options = {}) =>
       interactionCommands.longPress(runtime, { ...options, target }),
     hover: (target, options = {}) => interactionCommands.hover(runtime, { ...options, target }),

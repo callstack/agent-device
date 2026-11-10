@@ -7,6 +7,7 @@ import { invalidRuntimeContract } from './runtime-contract-error.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
+import type { ProviderInteractorOperationResolver } from './interactor-operation-binding.ts';
 
 /** A live text read at a resolved point, with optional identity to preserve the selected control. */
 export type ReadTextAtPointInput = Readonly<{
@@ -119,6 +120,24 @@ export function bindElementTextRuntime(
           ...(input.options?.target ? { target: input.options.target } : {}),
         }),
       );
+    },
+  });
+}
+
+/** Provider text reads use the same interactor ownership check as other provider operations. */
+export function bindProviderElementTextRuntime(
+  params: Readonly<{
+    device: DeviceInfo;
+    signal: AbortSignal;
+    resolveInteractor: ProviderInteractorOperationResolver;
+  }>,
+): ElementTextRuntimeOperations {
+  return bindElementTextRuntime({
+    ...params,
+    resolveInteractor: async (_device, runner) => {
+      // Keep provider binding dependencies out of local text reads' eager module closure.
+      const { providerInteractorSource } = await import('./interactor-operation-binding.ts');
+      return await providerInteractorSource({ ...params, operation: 'element-text' })(runner);
     },
   });
 }

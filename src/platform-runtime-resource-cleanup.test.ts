@@ -6,7 +6,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 });
 
 import { runCmd } from '@agent-device/host-kit/command';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { webSessionDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   ANDROID_EMULATOR,
   WEB_DESKTOP_DEVICE,
@@ -27,14 +27,13 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-async function closeBrowser(device: DeviceInfo, sessionName: string): Promise<void> {
+async function closeBrowser(device: DeviceInfo): Promise<void> {
   const stateDir = mkdtempForTestSync('agent-device-resource-cleanup-web-close-');
   await installFakeManagedAgentBrowser(stateDir);
   await platformResourceCleanup.closeManagedBrowser({
     device,
-    sessionName,
     stateDir,
-    openSessionNames: () => [sessionName],
+    openSessionNames: () => [],
   });
 }
 
@@ -45,7 +44,7 @@ test('closing a web session tells agent-browser to close right away', async () =
     exitCode: 0,
   });
 
-  await closeBrowser(WEB_DESKTOP_DEVICE, 'web-session');
+  await closeBrowser(webSessionDevice(WEB_DESKTOP_DEVICE, { name: 'web-session' }));
 
   const closeCall = mockRunCmd.mock.calls.find(([, args]) => (args as string[]).includes('close'));
   // `node <entry> close ...`: the managed backend never runs through its `.bin` shim (#2022).
@@ -54,7 +53,7 @@ test('closing a web session tells agent-browser to close right away', async () =
     'close',
     '--json',
     '--session',
-    'web-session',
+    'p_web-session',
   ]);
 });
 
@@ -65,11 +64,13 @@ test('a refused web close rejects so the caller can report it', async () => {
     exitCode: 1,
   });
 
-  await expect(closeBrowser(WEB_DESKTOP_DEVICE, 'web-session')).rejects.toThrow();
+  await expect(
+    closeBrowser(webSessionDevice(WEB_DESKTOP_DEVICE, { name: 'web-session' })),
+  ).rejects.toThrow();
 });
 
 test('closing a non-web session never reaches the agent-browser process', async () => {
-  await closeBrowser(ANDROID_EMULATOR, 'android-session');
+  await closeBrowser(ANDROID_EMULATOR);
 
   expect(mockRunCmd).not.toHaveBeenCalled();
 });

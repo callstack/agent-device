@@ -4,9 +4,9 @@ import {
   type Rect,
   type SnapshotNode,
   type SnapshotPresentation,
-  type SnapshotState,
   type SnapshotUnchanged,
 } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 
 type SnapshotIdentity = {
   previousAppBundleId?: string;

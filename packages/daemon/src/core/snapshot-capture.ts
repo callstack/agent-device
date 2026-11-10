@@ -13,11 +13,13 @@ import {
   snapshotOptionsFromFlags,
   type PresentedSurface,
   type RawSnapshotNode,
-  type SnapshotCaptureProvenance,
   type SnapshotKeyboardBandFact,
-  type SnapshotState,
   type SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
+import {
+  type SnapshotCaptureProvenance,
+  type SnapshotState,
+} from '@agent-device/contracts/snapshot-model';
 import { resolveRefLabel } from '@agent-device/capture-kit/snapshot-node-lookup';
 import { STALE_REF_HINT } from '@agent-device/selectors';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
@@ -132,6 +134,7 @@ async function captureSnapshotAttempt(params: CaptureSnapshotParams): Promise<Sn
   recordSnapshotTiming(params.session, {
     durationMs: Date.now() - startedAt,
     backend: data.backend,
+    producer: data.producer,
     // approach (b): emit the PUBLIC leaf platform (ios/macos), never the internal `apple`.
     platform: publicPlatformString(params.device),
   });

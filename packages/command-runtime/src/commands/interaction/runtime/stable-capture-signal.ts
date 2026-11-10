@@ -1,9 +1,5 @@
-import type {
-  Rect,
-  SnapshotCaptureBackend,
-  SnapshotNode,
-  SnapshotState,
-} from '@agent-device/kernel/snapshot';
+import type { Rect, SnapshotCaptureBackend, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { createSnapshotVisibility, isViewportRootNode } from '@agent-device/contracts/snapshot';
 import { areCapturedRectsAtSamePosition } from '@agent-device/kernel/rect-center';
 

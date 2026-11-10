@@ -96,7 +96,6 @@ export {
   type LoopbackServer,
   type SkippableTestContext,
   skipWhenLoopbackUnavailable,
-  supportsLoopbackBind,
   trackLoopbackSockets,
   waitForHttpOk,
 } from './loopback.ts';

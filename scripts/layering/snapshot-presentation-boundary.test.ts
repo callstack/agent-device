@@ -2,8 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { ARCHITECTURE_OWNERSHIP, matchesDeclaredRoot } from './architecture-ownership.ts';
-import { resolveImportEdges } from './model.ts';
+import { executablePolicyViolations } from './executable-policies.ts';
 import { workspaceSpecifierTargets } from './package-boundaries.ts';
 import { listTrackedTypeScriptFiles } from './tracked-sources.ts';
 
@@ -11,30 +10,12 @@ const repoRoot = path.resolve(import.meta.dirname, '../..');
 
 /**
  * The `snapshot-policy` declaration owns presentation, freshness, timeout and overlay policy;
- * `packages/daemon/src/` owns the assembly that orders them (#1983, ADR 0004). The dependency runs one way
+ * `packages/daemon/src/` owns the assembly that orders them (#1983, ADR 0004 "Ownership"). The dependency runs one way
  * only, so a policy stays testable without standing up a session.
  *
  * The real tree is clean, which is exactly why the positive control below exists: a filter that
  * stopped matching would look identical to a boundary being obeyed.
  */
-function daemonImportsFromSnapshotFacet(
-  sources: ReadonlyMap<string, string>,
-  workspaceTargets?: ReadonlyMap<string, string>,
-): string[] {
-  const snapshotPolicy = ARCHITECTURE_OWNERSHIP.executablePolicies.find(
-    ({ name }) => name === 'snapshot-policy',
-  );
-  if (!snapshotPolicy) throw new Error('snapshot-policy ownership declaration is missing');
-
-  return resolveImportEdges(sources, workspaceTargets)
-    .filter(
-      (edge) =>
-        snapshotPolicy.roots.some((root) => matchesDeclaredRoot(edge.file, root)) &&
-        snapshotPolicy.forbiddenTargetRoots.some((root) => matchesDeclaredRoot(edge.target, root)),
-    )
-    .map((edge) => `${edge.file}:${edge.line} -> ${edge.target}`);
-}
-
 test('the snapshot facet cannot import daemon assembly', () => {
   const files = listTrackedTypeScriptFiles(repoRoot);
   const sources = new Map(
@@ -42,7 +23,7 @@ test('the snapshot facet cannot import daemon assembly', () => {
   );
 
   assert.deepEqual(
-    daemonImportsFromSnapshotFacet(sources, workspaceSpecifierTargets(repoRoot)),
+    executablePolicyViolations(sources, workspaceSpecifierTargets(repoRoot))['snapshot-policy'],
     [],
     'the host-side snapshot facet must not depend on daemon assembly',
   );
@@ -57,7 +38,7 @@ test('the boundary reports a facet module that reaches back into the daemon', ()
     ],
   ]);
 
-  assert.deepEqual(daemonImportsFromSnapshotFacet(sources), [
+  assert.deepEqual(executablePolicyViolations(sources)['snapshot-policy'], [
     'packages/capture-kit/src/snapshot/snapshot-freshness/android.ts:1 -> packages/daemon/src/types.ts',
   ]);
 });

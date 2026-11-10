@@ -1,6 +1,6 @@
 // Per-entry eager-closure budgets -- the ADR-0019 loading-shape probe (#1739, #1960).
 //
-// ADR-0019's "Implementation-laziness" section requires platform-package façades to stay
+// ADR 0019 §1, implementation laziness, requires platform-package façades to stay
 // implementation-lazy and says a startup-time threshold alone does not preserve the loading
 // shape (`docs/adr/0019-request-bound-platform-runtime.md`). The AST walker in
 // `@agent-device/test-kit` counts the repo modules that importing an
@@ -167,6 +167,13 @@ export const APPROVED_CLOSURE_ADDITIONS: readonly Readonly<{
       'The iOS snapshot presenter attaches the text-input geometry it measured before projection to the nodes it publishes, so the tap probe can skip on fresh evidence. The owner of capture-private evidence is one WeakMap and its accessors, imported through its own subpath.',
     owner: 'thymikee',
   },
+  {
+    module: 'packages/contracts/src/snapshot-producers.ts',
+    issue: '#4309',
+    reason:
+      'The registry and identity stamp are the provenance contract every capture path already evaluates; this is the module boundary only (#4309, #4205). Measured: +1 module and +5 to +9 top-level statements per closure that reaches snapshot-model.',
+    owner: 'thymikee',
+  },
 ]);
 
 /** The category is a function of the path, never a hand-written column. */
@@ -205,7 +212,6 @@ const APPLE_DOMAIN_MECHANICS_ENTRY_FILES: ReadonlySet<string> = new Set([
   'packages/platform-apple/src/runner-operations-facade.ts',
   'packages/platform-apple/src/runner-owner-facade.ts',
   'packages/platform-apple/src/simctl-facade.ts',
-  'packages/platform-apple/src/simctl-settings-facade.ts',
   'packages/platform-apple/src/simulator-facade.ts',
   'packages/platform-apple/src/tool-provider-facade.ts',
 ]);
@@ -573,7 +579,7 @@ function grewPastTheRule(growth: GrowthForAggregation): boolean {
  */
 function packageOf(relativeFile: string): string {
   const match = /^(packages\/[^/]+)\//.exec(relativeFile);
-  return match ? match[1] : 'src';
+  return match?.[1] ?? 'src';
 }
 
 /** True when nothing in `graph` records `candidate` as the direct importer of a same-package file. */
