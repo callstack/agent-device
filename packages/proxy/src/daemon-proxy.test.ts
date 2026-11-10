@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { buildDaemonHttpAuthHeaders } from '@agent-device/contracts/daemon-http';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   createDaemonProxy,
   type DaemonProxyAuthenticatedClient,
@@ -210,6 +211,50 @@ test('an oversized rpc body resolves with a 400 instead of rejecting', async () 
   );
 
   expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    id: null,
+    error: { data: { code: 'INVALID_ARGS', message: 'Proxy request body is too large.' } },
+  });
+  expect(upstream.requests).toHaveLength(0);
+});
+
+test('an rpc whose upstream exchange fails answers a JSON-RPC error that keeps code and message', async () => {
+  const proxy = proxyWith(async () => {
+    throw new AppError('COMMAND_FAILED', 'Daemon is unreachable', { reason: 'upstream_down' });
+  });
+
+  const response = await proxy.handle(
+    rpcRequest({ jsonrpc: '2.0', id: 9, method: 'agent-device.command', params: {} }),
+  );
+
+  expect(response.status).toBe(500);
+  expect(await response.json()).toMatchObject({
+    jsonrpc: '2.0',
+    id: 9,
+    error: {
+      code: -32000,
+      message: 'Daemon is unreachable',
+      data: {
+        code: 'COMMAND_FAILED',
+        message: 'Daemon is unreachable',
+        details: { reason: 'upstream_down' },
+      },
+    },
+  });
+});
+
+test.each([
+  { body: '{not json', code: -32700 },
+  { body: 'null', code: -32600 },
+  { body: '[1]', code: -32600 },
+])('an rpc body $body is refused with $code before the daemon', async ({ body, code }) => {
+  const upstream = recordingUpstream(() => Response.json({}));
+  const proxy = proxyWith(upstream.fetch);
+
+  const response = await proxy.handle(rpcRequest(undefined, { body }));
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ jsonrpc: '2.0', id: null, error: { code } });
   expect(upstream.requests).toHaveLength(0);
 });
 
