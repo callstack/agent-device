@@ -100,15 +100,8 @@ export async function runReplayCommand(command: ReplayCommand): Promise<DaemonRe
       dispatch: command.dispatch,
     });
     if (!planPreparation.ok) return planPreparation.response;
-    const {
-      replayReq,
-      actions,
-      actionLines,
-      planDigest,
-      entryIndex,
-      varSources,
-      actionTracePath,
-    } = planPreparation.value;
+    const { replayReq, actions, actionLines, planDigest, entryIndex, varSources, actionTracePath } =
+      planPreparation.value;
     const sessionPreparation = prepareReplaySession({
       req,
       entryIndex,

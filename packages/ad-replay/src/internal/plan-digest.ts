@@ -40,9 +40,7 @@ function buildCanonicalPlan(params: {
   return {
     platform: metadata.platform ?? null,
     target: metadata.target ?? null,
-    steps: actions.map((action, index) =>
-      canonicalizeAction(action, actionLines[index] ?? null),
-    ),
+    steps: actions.map((action, index) => canonicalizeAction(action, actionLines[index] ?? null)),
   };
 }
 

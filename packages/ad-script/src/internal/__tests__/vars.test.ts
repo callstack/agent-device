@@ -98,14 +98,17 @@ test('buildReplayVarScope precedence: cli > shell > file > builtin', () => {
 });
 
 test('collectReplayShellEnv strips AD_VAR_ prefix and ignores other vars', () => {
-  const result = collectReplayShellEnv({
-    AD_VAR_APP_ID: 'settings',
-    PATH: '/bin',
-    AD_VAR_123: 'x',
-    AD_VAR_: 'empty',
-    OTHER_VAR: 'y',
-    AD_APP_ID: 'no-legacy-prefix',
-  }, 'ad');
+  const result = collectReplayShellEnv(
+    {
+      AD_VAR_APP_ID: 'settings',
+      PATH: '/bin',
+      AD_VAR_123: 'x',
+      AD_VAR_: 'empty',
+      OTHER_VAR: 'y',
+      AD_APP_ID: 'no-legacy-prefix',
+    },
+    'ad',
+  );
   assert.equal(result.APP_ID, 'settings');
   assert.equal(result.PATH, undefined);
   assert.equal(result['123'], undefined);
@@ -115,10 +118,13 @@ test('collectReplayShellEnv strips AD_VAR_ prefix and ignores other vars', () =>
 });
 
 test('collectReplayShellEnv skips keys that land in reserved AD_* namespace after strip', () => {
-  const result = collectReplayShellEnv({
-    AD_VAR_AD_SESSION: 'evil',
-    AD_VAR_AD_FOO: 'evil',
-  }, 'ad');
+  const result = collectReplayShellEnv(
+    {
+      AD_VAR_AD_SESSION: 'evil',
+      AD_VAR_AD_FOO: 'evil',
+    },
+    'ad',
+  );
   assert.equal(Object.prototype.hasOwnProperty.call(result, 'AD_SESSION'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(result, 'AD_FOO'), false);
 });
@@ -146,9 +152,14 @@ test('Maestro -e and AD_VAR_ keys accept the mixed-case and dotted names Maestro
   assert.throws(
     () => parseReplayCliEnvEntries(['9lives=x'], 'maestro'),
     (error: unknown) =>
-      error instanceof AppError && error.code === 'INVALID_ARGS' && /starting with a letter/.test(error.message),
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      /starting with a letter/.test(error.message),
   );
-  assert.throws(() => parseReplayCliEnvEntries(['AD_FOO=x'], 'maestro'), /AD_\* namespace is reserved/);
+  assert.throws(
+    () => parseReplayCliEnvEntries(['AD_FOO=x'], 'maestro'),
+    /AD_\* namespace is reserved/,
+  );
 });
 
 test('resolveReplayAction walks positionals and string flags', () => {

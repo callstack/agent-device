@@ -182,9 +182,9 @@ test.for(remoteCases)(
         if (kind === 'host-runScript') {
           expect(scriptRequests).toEqual(['/ran']);
         } else {
-          expect(
-            evaluate.mock.calls.some(([code]) => String(code).includes(SCRIPT_CANARY)),
-          ).toBe(true);
+          expect(evaluate.mock.calls.some(([code]) => String(code).includes(SCRIPT_CANARY))).toBe(
+            true,
+          );
         }
       }
     } finally {

@@ -504,9 +504,7 @@ function escapeRecordedLiterals(
   };
   const escapeRecord = <T extends object>(record: T | undefined): T | undefined =>
     record &&
-    (Object.fromEntries(
-      Object.entries(record).map(([key, value]) => [key, escape(value)]),
-    ) as T);
+    (Object.fromEntries(Object.entries(record).map(([key, value]) => [key, escape(value)])) as T);
   const refLabel = action.result?.refLabel;
   return {
     ...action,
