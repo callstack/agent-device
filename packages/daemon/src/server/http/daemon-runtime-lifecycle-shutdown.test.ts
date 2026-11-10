@@ -604,8 +604,10 @@ test('a lease-expiry sweep that throws is recorded instead of rejecting unhandle
   const unhandled = vi.fn();
   process.on('unhandledRejection', unhandled);
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> | undefined;
+  let sweep: { mockRestore(): void } | undefined;
   try {
-    const runtime = await startDaemonRuntime({
+    runtime = await startDaemonRuntime({
       composeDeps: daemonRuntimeDepsFixture(),
       host: createTestHostEnvironment({
         env: {
@@ -620,16 +622,18 @@ test('a lease-expiry sweep that throws is recorded instead of rejecting unhandle
     });
     expect(runtime).not.toBeNull();
     const [leaseRegistry] = leaseProbe.registries;
-    const sweep = vi.spyOn(leaseRegistry!, 'consumeExpiredLeases').mockImplementation(() => {
+    sweep = vi.spyOn(leaseRegistry!, 'consumeExpiredLeases').mockImplementation(() => {
       throw new Error('lease registry corrupted');
     });
 
     await vi.advanceTimersByTimeAsync(1_000);
     vi.useRealTimers();
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(sweep).toHaveBeenCalled();
+    expect(leaseRegistry!.consumeExpiredLeases).toHaveBeenCalled();
+    // Shutdown consumes expired leases too, so the throwing sweep is restored before close.
     sweep.mockRestore();
     await runtime?.close();
+    runtime = undefined;
 
     expect(unhandled).not.toHaveBeenCalled();
     const daemonLog = fs.readFileSync(path.join(stateDir, 'daemon.log'), 'utf8');
@@ -637,6 +641,8 @@ test('a lease-expiry sweep that throws is recorded instead of rejecting unhandle
     expect(daemonLog).toMatch(/lease registry corrupted/);
   } finally {
     vi.useRealTimers();
+    sweep?.mockRestore();
+    await runtime?.close();
     process.off('unhandledRejection', unhandled);
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
