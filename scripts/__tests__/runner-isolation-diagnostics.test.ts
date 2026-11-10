@@ -243,9 +243,9 @@ describe('scripts/build-xcuitest-apple.sh cleanup', () => {
     expect(fs.readFileSync(path.join(derived, 'macos', 'sentinel'), 'utf8')).toBe('keep');
   });
 
-  test('cleans a supported project override', () => {
+  test('cleans a supported project override whose name starts with dots', () => {
     fs.mkdirSync(path.join(repoRoot, '.tmp'), { recursive: true });
-    const derived = fs.mkdtempSync(path.join(repoRoot, '.tmp', 'runner-clean-test-'));
+    const derived = fs.mkdtempSync(path.join(repoRoot, '.tmp', '..runner-clean-test-'));
     try {
       const result = runBuildScript('', 65, { clean: true, derived });
       expect(result.status).toBe(65);

@@ -316,7 +316,12 @@ export function assertSafeDerivedCleanup(
 function isPathInsideProjectTmp(targetPath: string, projectRoot: string): boolean {
   const projectTmpRoot = path.resolve(projectRoot, '.tmp');
   const relativePath = path.relative(projectTmpRoot, path.resolve(targetPath));
-  if (relativePath === '' || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+  if (
+    relativePath === '' ||
+    relativePath === '..' ||
+    relativePath.startsWith('..' + path.sep) ||
+    path.isAbsolute(relativePath)
+  ) {
     return false;
   }
   let candidate = projectTmpRoot;

@@ -89,9 +89,10 @@ for (const platform of ['ios', 'macos']) {
     const homeDir = fs.mkdtempSync(
       path.join(os.tmpdir(), `agent-device-clean-xcuitest-override-${platform}-`),
     );
-    fs.mkdirSync(path.join(repoRoot, '.tmp'), { recursive: true });
-    const overrideRoot = fs.mkdtempSync(path.join(repoRoot, '.tmp', 'clean-xcuitest-'));
+    let overrideRoot: string | undefined;
     try {
+      fs.mkdirSync(path.join(repoRoot, '.tmp'), { recursive: true });
+      overrideRoot = fs.mkdtempSync(path.join(repoRoot, '.tmp', 'clean-xcuitest-'));
       const defaultRoot = path.join(homeDir, '.agent-device', 'apple-runner', 'derived');
       const defaultPlatformDir = path.join(defaultRoot, 'macos');
       fs.mkdirSync(path.join(defaultRoot, 'Build'), { recursive: true });
@@ -114,7 +115,7 @@ for (const platform of ['ios', 'macos']) {
       assert.equal(fs.existsSync(path.join(defaultRoot, 'Build')), true);
       assert.equal(fs.existsSync(defaultPlatformDir), true);
     } finally {
-      fs.rmSync(overrideRoot, { recursive: true, force: true });
+      if (overrideRoot !== undefined) fs.rmSync(overrideRoot, { recursive: true, force: true });
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
   });
