@@ -231,3 +231,53 @@ async function testSleep(_milliseconds: number, signal?: AbortSignal): Promise<v
     signal?.addEventListener('abort', onAbort, { once: true });
   });
 }
+
+describe('PID-scoped app-log capture after a failed PID poll', () => {
+  function startCapture(resolvePid: () => Promise<string>, start: () => Promise<AppLogBackgroundProcess>) {
+    return createPidScopedAppLogProcess({
+      host: hostFixture(outputFixture().sink),
+      backend: 'android',
+      outputPath: '/tmp/app.log',
+      pidPath: '/tmp/app-log.pid',
+      processStart: start,
+      setupSignal: new AbortController().signal,
+      resolvePid,
+      command: (pid) => ({
+        kind: 'host',
+        request: { executable: 'adb', args: ['logcat', '--pid', pid] },
+      }),
+      cleanupFailureMessage: 'cleanup failed',
+    });
+  }
+
+  test('keeps the active stream and keeps polling after one rejected poll', async () => {
+    const started = processFixture(deferred<{ stdout: string; stderr: string; exitCode: number }>());
+    const resolvePid = vi
+      .fn<() => Promise<string>>()
+      .mockResolvedValueOnce('123')
+      .mockRejectedValueOnce(new Error('adb shell pidof timed out'))
+      .mockResolvedValue('123');
+    const handle = await startCapture(resolvePid, async () => started.process);
+
+    await vi.waitFor(() => expect(resolvePid.mock.calls.length).toBeGreaterThanOrEqual(4));
+    expect(started.dispose).not.toHaveBeenCalled();
+    expect(started.terminate).not.toHaveBeenCalled();
+    await expect(handle.finish()).resolves.toMatchObject({ status: 'completed' });
+    expect(started.terminate).toHaveBeenCalledOnce();
+  });
+
+  test('starts the stream once a rejected waiting poll is followed by a PID', async () => {
+    const started = processFixture(deferred<{ stdout: string; stderr: string; exitCode: number }>());
+    const resolvePid = vi
+      .fn<() => Promise<string>>()
+      .mockResolvedValueOnce('')
+      .mockRejectedValueOnce(new Error('adb shell pidof timed out'))
+      .mockResolvedValue('456');
+    const start = vi.fn(async () => started.process);
+    const handle = await startCapture(resolvePid, start);
+
+    await vi.waitFor(() => expect(start).toHaveBeenCalledOnce());
+    await handle.finish();
+    expect(started.terminate).toHaveBeenCalledOnce();
+  });
+});
