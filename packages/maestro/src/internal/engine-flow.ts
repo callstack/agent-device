@@ -56,6 +56,9 @@ export function resolveNumeric(
   if (effectiveConstraints.positive && num <= 0) {
     throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
   }
+  if (effectiveConstraints.max !== undefined && num > effectiveConstraints.max) {
+    throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
+  }
   return num;
 }
 

@@ -545,6 +545,24 @@ describe('MaestroRuntimePort', () => {
     ).rejects.toThrow(/extendedWaitUntil\.timeout must be a non-negative finite number/);
   });
 
+  test('rejects a resolved eraseText count above the erase ceiling before the operation runs', async () => {
+    const eraseText = vi.fn(async () => ({}));
+    const operations = makeOperations({ eraseText });
+    const program = parseMaestroProgram('---\n- eraseText:\n    charactersToErase: ${CHARS}\n');
+
+    await expect(
+      executeMaestroProgram(program, createMaestroRuntimePort(operations), {
+        env: { CHARS: '600000000' },
+      }),
+    ).rejects.toMatchObject({
+      code: 'INVALID_ARGS',
+      message: expect.stringContaining(
+        'eraseText.charactersToErase must be a positive integer up to 10000',
+      ),
+    });
+    expect(eraseText).not.toHaveBeenCalled();
+  });
+
   test('applies the default delay for doubleTapOn when none is specified', async () => {
     const calls: RecordedCall[] = [];
     const operations = makeOperations({

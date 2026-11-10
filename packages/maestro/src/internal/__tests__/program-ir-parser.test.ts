@@ -795,6 +795,19 @@ describe('parseMaestroProgram', () => {
       () => parseMaestroProgram('---\n- eraseText: 0\n'),
       /eraseText.*positive integer.*line 2/i,
     );
+    assert.equal(
+      commandOfKind(parseMaestroProgram('---\n- eraseText: 10000\n').commands[0], 'eraseText')
+        .charactersToErase,
+      10_000,
+    );
+    assert.throws(
+      () => parseMaestroProgram('---\n- eraseText: 10001\n'),
+      /eraseText expects a positive integer up to 10000.*line 2/i,
+    );
+    assert.throws(
+      () => parseMaestroProgram('---\n- eraseText:\n    charactersToErase: 600000000\n'),
+      /eraseText\.charactersToErase expects a positive integer up to 10000.*line 3/i,
+    );
   });
 });
 
