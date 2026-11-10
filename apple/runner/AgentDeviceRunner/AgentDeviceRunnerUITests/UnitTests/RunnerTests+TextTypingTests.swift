@@ -627,6 +627,47 @@ extension RunnerTests {
     )
   }
 
+  // An empty one needs no clear, but the text typed next needs focus just as the deletes do.
+  @MainActor
+  func testFirstFillIntoAnEmptySecureFieldThatRefusedTheFocusTap() throws {
+    try assertFillLeavesTheEdgeToggleUnpressed(
+      launchArguments: ["--agent-device-text-entry-secure-entry", "--agent-device-text-entry-refuses-first-focus"],
+      field: { $0.secureTextFields },
+      expectedValue: String(repeating: "\u{2022}", count: 16)
+    )
+    XCTAssertEqual(try secureEntryCounts().deletes, 0)
+  }
+
+  // Deletes from a caret moved to the start reach none of the text, so the clear falls back to the caret
+  // tap at the right edge, which in this fixture lands on the toggle: the limit `fill`'s docs name.
+  @MainActor
+  func testMaskedTextTheDeletesCannotReachFallsBackToTheCaretTap() throws {
+    app.launchArguments = [
+      "--agent-device-text-entry-regression",
+      "--agent-device-text-entry-soft-keyboard",
+      "--agent-device-text-entry-masked-value",
+      "--agent-device-text-entry-prefilled",
+    ]
+    app.launch()
+    addTeardownBlock { [self] in
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let input = app.textFields["agent-device-hardware-keyboard-input"]
+    XCTAssertTrue(input.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let togglePresses = app.staticTexts["agent-device-masked-toggle-presses"]
+    XCTAssertTrue(togglePresses.waitForFixtureExistence(timeout: appExistenceTimeout))
+    input.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.5)).tap()
+
+    let response = try executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-caret-at-start", text: "abc", at: input)
+    )
+
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(togglePresses.label, "presses=1")
+  }
+
   // The issue's own case: its placeholder is eight bullets, which React Native reports as the value of
   // the empty field.
   @MainActor

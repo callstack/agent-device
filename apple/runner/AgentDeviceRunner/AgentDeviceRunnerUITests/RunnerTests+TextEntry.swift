@@ -408,8 +408,8 @@ extension RunnerTests {
     // be stale after the field repositions on focus (e.g. the Settings search bar jumps
     // bottom->top and reveals a "Suggestions" list) — tapping there navigates away instead of
     // clearing; and replacing into an already-empty field is a no-op anyway.
-    // textValueForClear returns nil for secure (and unknown) fields, and on iOS for a placeholder
-    // that is itself a mask, where we CANNOT confirm emptiness — those must still be cleared, or
+    // textValueForClear returns nil for secure (and unknown) fields, and for a placeholder that is
+    // itself a mask, where we CANNOT confirm emptiness — those must still be cleared, or
     // replace would concatenate stale + new text. So distinguish nil (clear) from "" (skip). On iOS
     // the masked route below can still prove a masked field empty.
     let existing = textValueForClear(input.attributes)
@@ -424,24 +424,25 @@ extension RunnerTests {
     // a secure field on its first delete after the field takes focus, and deletes from a caret left
     // at the end reach the rest, so deletes go first and the caret moves only for masked text left.
     if textValueRead(for: input.attributes) == .unreadable {
-      if maskedTextShown(by: input) == .empty {
-        return
-      }
-      // Deletes into a field without focus record an XCTest failure, which tears down the runner. The
-      // focus step can leave focus unconfirmed, so the field gets the readiness repeat at its center,
-      // clear of a control at the edge.
+      // Deletes or text sent to a field without focus record an XCTest failure, which tears down the
+      // runner. The focus step can leave focus unconfirmed, so the field gets the readiness repeat at
+      // its center, clear of a control at the edge, even when it is empty and needs no clear.
       if input.snapshot.map({ snapshotHasKeyboardFocus($0) }) != true {
         try reader.dispatch { try retapAt(read: input, app: app, element: input.element) }
       }
+      if maskedTextShown(by: input) == .empty {
+        return
+      }
       let burst = Self.textClearBurst(valueLength: valueLength)
       reader.dispatch { input.element.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: burst)) }
-      // An input that stops answering (#3060) goes on to the caret tap and burst below.
-      if let cleared = try reader.input() {
-        let shown = maskedTextShown(by: cleared)
-        NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_CLEAR route=masked-deletes shown=%@", String(describing: shown))
-        if shown == .empty || shown == .maskPlaceholder {
-          return
-        }
+      // An input that stops answering (#3060) has had its one burst, as below.
+      guard let cleared = try reader.input() else {
+        return
+      }
+      let shown = maskedTextShown(by: cleared)
+      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_CLEAR route=masked-deletes shown=%@", String(describing: shown))
+      if shown != .text {
+        return
       }
     }
 #endif
@@ -547,11 +548,8 @@ extension RunnerTests {
     case empty
     /// A placeholder that is itself a mask, which text of the same length shows too.
     case maskPlaceholder
-    /// A mask other than the placeholder, so text is in the field.
-    case mask
-    /// Any other value, which says nothing about the text. Like `.mask`, it leaves the clear to the
-    /// caret tap; the clear's log line tells the two apart.
-    case unknown
+    /// Anything else, such as a mask other than the placeholder: text may be in the field.
+    case text
   }
 
   static func maskedTextShown(value: String, showsPlaceholder: Bool) -> MaskedTextShown {
@@ -562,7 +560,7 @@ extension RunnerTests {
     if showsPlaceholder {
       return isMaskedTextValue(shown) ? .maskPlaceholder : .empty
     }
-    return isMaskedTextValue(shown) ? .mask : .unknown
+    return .text
   }
 
   /// `maskedTextShown(value:showsPlaceholder:)` for `input`, with the placeholder rule the shared read uses.
@@ -808,17 +806,16 @@ extension RunnerTests {
   }
 
   /// The text a clear can trust in the input `attributes` describe, with a placeholder read as empty;
-  /// nil when unreadable. On iOS a placeholder that is itself a mask is nil too, since text of its length
-  /// shows it as well: the masked clear reads that field back instead of skipping it.
+  /// nil when unreadable. A placeholder that is itself a mask is nil too, since text of its length shows
+  /// it as well, so that field is cleared instead of skipped. Only the clear reads it this way: the
+  /// shared read keeps such a placeholder empty for verification, as a PIN field that shows its digits needs.
   func textValueForClear(_ attributes: (any XCUIElementAttributes)?) -> String? {
     guard let value = editableTextValue(for: attributes, treatingPlaceholderAsEmpty: true) else {
       return nil
     }
-#if os(iOS)
     if value.isEmpty, Self.isMaskedTextValue(normalizedElementText(attributes?.value)) {
       return nil
     }
-#endif
     return value
   }
 
