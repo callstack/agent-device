@@ -114,35 +114,27 @@ function redactionPatterns(env: NodeJS.ProcessEnv): RegExp[] {
     });
 }
 
+/** An escape, a whole character class, or one other character: commas inside the first two are literal. */
+const PATTERN_TOKEN_RE = /\\[\s\S]?|\[(?:\\[\s\S]|[^\]\\])*\]?|[\s\S]/g;
+
 function splitTopLevelPatternList(value: string): string[] {
-  const parts: string[] = [];
-  let current = '';
+  const parts: string[] = [''];
   let depth = 0;
-  let inClass = false;
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index]!;
-    if (char === '\\') {
-      current += value.slice(index, index + 2);
-      index += 1;
+  for (const [token] of value.matchAll(PATTERN_TOKEN_RE)) {
+    if (token === ',' && depth === 0) {
+      parts.push('');
       continue;
     }
-    if (inClass) {
-      if (char === ']') inClass = false;
-    } else if (char === '[') {
-      inClass = true;
-    } else if (char === '(' || char === '{') {
-      depth += 1;
-    } else if ((char === ')' || char === '}') && depth > 0) {
-      depth -= 1;
-    } else if (char === ',' && depth === 0) {
-      parts.push(current);
-      current = '';
-      continue;
-    }
-    current += char;
+    depth = Math.max(0, depth + groupDepthChange(token));
+    parts[parts.length - 1] += token;
   }
-  parts.push(current);
   return parts;
+}
+
+function groupDepthChange(token: string): number {
+  if (token === '(' || token === '{') return 1;
+  if (token === ')' || token === '}') return -1;
+  return 0;
 }
 
 function redact(chunk: string, patterns: readonly RegExp[]): string {

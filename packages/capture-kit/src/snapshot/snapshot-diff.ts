@@ -124,15 +124,11 @@ function diffMiddleMyers(
   for (let d = 0; d <= max; d += 1) {
     trace.push(v.slice(offset - d - 1, offset + d + 2));
     for (let k = -d; k <= d; k += 2) {
-      const goDown = k === -d || (k !== d && v[offset + k - 1]! < v[offset + k + 1]!);
-      let x = goDown ? v[offset + k + 1]! : v[offset + k - 1]! + 1;
-      let y = x - k;
-      while (x < n && y < m && previous[x]!.comparable === current[y]!.comparable) {
-        x += 1;
-        y += 1;
-      }
+      const read = (diagonal: number) => v[offset + diagonal]!;
+      const start = shouldGoDown(read, k, d) ? read(k + 1) : read(k - 1) + 1;
+      const x = followSnake(previous, current, start, start - k);
       v[offset + k] = x;
-      if (x >= n && y >= m) {
+      if (x >= n && x - k >= m) {
         return backtrackMyers(trace, previous, current, n, m);
       }
     }
@@ -154,31 +150,48 @@ function backtrackMyers(
 
   for (let d = trace.length - 1; d >= 0; d -= 1) {
     const step = trace[d]!;
-    const at = (k: number) => step[k + d + 1]!;
+    const at = (diagonal: number) => step[diagonal + d + 1]!;
     const k = x - y;
-    const goDown = k === -d || (k !== d && at(k - 1) < at(k + 1));
-    const prevK = goDown ? k + 1 : k - 1;
+    const prevK = shouldGoDown(at, k, d) ? k + 1 : k - 1;
     const prevX = at(prevK);
     const prevY = prevX - prevK;
 
-    while (x > prevX && y > prevY) {
+    for (; x > prevX && y > prevY; x -= 1, y -= 1) {
       lines.push({ kind: 'unchanged', text: current[y - 1]!.text });
-      x -= 1;
-      y -= 1;
     }
-
     if (d === 0) break;
-
-    if (x === prevX) {
-      const added = current[prevY]!;
-      lines.push({ kind: 'added', text: added.text, ...(added.ref ? { ref: added.ref } : {}) });
-      y = prevY;
-    } else {
-      lines.push({ kind: 'removed', text: previous[prevX]!.text });
-      x = prevX;
-    }
+    lines.push(x === prevX ? addedLine(current[prevY]!) : removedLine(previous[prevX]!));
+    x = prevX;
+    y = prevY;
   }
 
   lines.reverse();
   return lines;
+}
+
+function shouldGoDown(read: (diagonal: number) => number, k: number, d: number): boolean {
+  return k === -d || (k !== d && read(k - 1) < read(k + 1));
+}
+
+/** Advances along matching lines from `(x, y)` and returns the `x` where the match ends. */
+function followSnake(
+  previous: SnapshotComparableLine[],
+  current: SnapshotComparableLine[],
+  x: number,
+  y: number,
+): number {
+  while (x < previous.length && y < current.length) {
+    if (previous[x]!.comparable !== current[y]!.comparable) break;
+    x += 1;
+    y += 1;
+  }
+  return x;
+}
+
+function addedLine(line: SnapshotComparableLine): SnapshotDiffLine {
+  return { kind: 'added', text: line.text, ...(line.ref ? { ref: line.ref } : {}) };
+}
+
+function removedLine(line: SnapshotComparableLine): SnapshotDiffLine {
+  return { kind: 'removed', text: line.text };
 }

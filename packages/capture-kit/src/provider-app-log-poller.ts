@@ -69,29 +69,21 @@ function createPollerHandle(
   let state: AppLogLiveSnapshot['state'] = 'active';
   const stop = new AbortController();
   let previous = existingTail;
+  const pollOnce = async (): Promise<AppLogLiveSnapshot['state']> => {
+    const read = await boundedRead(options, stop.signal);
+    // A slow provider read is transient like a failed one: retry on the next tick.
+    if (read.status === 'timeout' || stop.signal.aborted) return 'recovering';
+    const delta = appendedTail(previous, read.text);
+    if (delta) await output.write(delta.endsWith('\n') ? delta : `${delta}\n`);
+    previous = read.text;
+    return 'active';
+  };
   const polling = (async () => {
     while (!stop.signal.aborted) {
-      try {
-        const read = await boundedRead(options, stop.signal);
-        if (stop.signal.aborted) return;
-        // A slow provider read is transient like a failed one: retry on the next tick.
-        if (read.status === 'timeout') {
-          state = 'recovering';
-        } else {
-          const delta = appendedTail(previous, read.text);
-          if (delta) await output.write(delta.endsWith('\n') ? delta : `${delta}\n`);
-          previous = read.text;
-          state = 'active';
-        }
-      } catch {
-        if (stop.signal.aborted) return;
-        state = 'recovering';
-      }
-      try {
-        await host.clock.sleep(POLL_INTERVAL_MS, stop.signal);
-      } catch {
-        if (stop.signal.aborted) return;
-      }
+      const next = await pollOnce().catch(() => 'recovering' as const);
+      if (stop.signal.aborted) return;
+      state = next;
+      await host.clock.sleep(POLL_INTERVAL_MS, stop.signal).catch(() => undefined);
     }
   })();
   const pendingDisposals = new Set<AsyncDisposable>([options.reader, output]);
