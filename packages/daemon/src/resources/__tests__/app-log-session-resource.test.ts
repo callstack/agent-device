@@ -208,45 +208,44 @@ test.each([
   expect(context.sessionStore.get(context.sessionName)?.appLog).toBeUndefined();
 });
 
-test.skipIf(process.getuid?.() === 0)(
-  'unwritable tombstone plus rejecting cleanup blocks same-process replacement',
-  async () => {
-    const context = makeContext();
-    const runtime = makeStartResult(context, {
-      status: 'cleanup-pending',
-      reason: 'cleanup-unconfirmed',
-    });
-    const incoherentEnvelope = createDurableResourceEnvelope({
-      ...runtime.result.envelope,
-      sessionId: 'wrong-session',
-    });
-    const resourceDir = path.dirname(context.resourcePath);
-    fs.mkdirSync(resourceDir, { recursive: true });
-    fs.chmodSync(resourceDir, 0o500);
+test('unwritable tombstone plus rejecting cleanup blocks same-process replacement', async () => {
+  const context = makeContext();
+  const runtime = makeStartResult(context, {
+    status: 'cleanup-pending',
+    reason: 'cleanup-unconfirmed',
+  });
+  const incoherentEnvelope = createDurableResourceEnvelope({
+    ...runtime.result.envelope,
+    sessionId: 'wrong-session',
+  });
+  // A plain file where the resource directory belongs makes every write fail under any uid,
+  // which a chmod cannot do for root.
+  const resourceDir = path.dirname(context.resourcePath);
+  fs.mkdirSync(path.dirname(resourceDir), { recursive: true });
+  fs.writeFileSync(resourceDir, '');
 
-    try {
-      await expect(
-        adoptStartedSessionAppLog({
-          ...context,
-          pendingHandle: runtime.result.pendingHandle,
-          envelope: incoherentEnvelope,
-          throwIfCanceled: () => {},
-        }),
-      ).rejects.toMatchObject({ details: { reason: 'runtime-contract-invalid' } });
-    } finally {
-      fs.chmodSync(resourceDir, 0o700);
-    }
-
-    expect(appLogResourceStore.read(context.resourcePath)).toEqual({ status: 'missing' });
-    expect(() =>
-      createNextAppLogFence({
-        ledger: context.admissionLedger,
-        resourcePath: context.resourcePath,
-        device: context.device,
+  try {
+    await expect(
+      adoptStartedSessionAppLog({
+        ...context,
+        pendingHandle: runtime.result.pendingHandle,
+        envelope: incoherentEnvelope,
+        throwIfCanceled: () => {},
       }),
-    ).toThrow(/process-local/);
-  },
-);
+    ).rejects.toMatchObject({ details: { reason: 'runtime-contract-invalid' } });
+  } finally {
+    fs.rmSync(resourceDir, { force: true });
+  }
+
+  expect(appLogResourceStore.read(context.resourcePath)).toEqual({ status: 'missing' });
+  expect(() =>
+    createNextAppLogFence({
+      ledger: context.admissionLedger,
+      resourcePath: context.resourcePath,
+      device: context.device,
+    }),
+  ).toThrow(/process-local/);
+});
 
 test('lost durable record during failed adoption installs a same-device process block', async () => {
   const context = makeContext({

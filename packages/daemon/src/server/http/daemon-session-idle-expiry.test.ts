@@ -3,7 +3,7 @@ import {
   bindTestCommandHost,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,6 +24,18 @@ import {
 } from '../../__tests__/support/session-factories.ts';
 
 bindTestCommandHost();
+
+/** Makes the claim file undeletable under any uid; returns the restore. */
+function denyClaimFileUnlink(claimPath: string): () => void {
+  const unlinkSync = fs.unlinkSync;
+  const spy = vi.spyOn(fs, 'unlinkSync').mockImplementation((target) => {
+    if (target === claimPath) {
+      throw Object.assign(new Error('test unlink denied'), { code: 'EACCES' });
+    }
+    unlinkSync(target);
+  });
+  return () => spy.mockRestore();
+}
 
 /**
  * #2833: what one expiry COMMITS, once it has run. Whether a session past its window is the kind that
@@ -77,49 +89,45 @@ test('a session past its window releases its claim, is deleted, and leaves a mar
   controller.cancel();
 });
 
-test.skipIf(process.getuid?.() === 0)(
-  'a settle that cannot confirm the claim gone keeps the session record standing',
-  async () => {
-    const fixture = makeFixture('agent-device-idle-expiry-claim-unconfirmed-');
-    const { sessionStore } = fixture;
-    const { deviceClaim } = await sessionWithLiveClaim(fixture);
+test('a settle that cannot confirm the claim gone keeps the session record standing', async () => {
+  const fixture = makeFixture('agent-device-idle-expiry-claim-unconfirmed-');
+  const { sessionStore } = fixture;
+  const { deviceClaim } = await sessionWithLiveClaim(fixture);
 
-    // A claim store this process cannot write into: the clear reaches NO verdict, which is different
-    // information from a successor having taken the device.
-    const claimsDir = path.dirname(deviceClaimFilePath(deviceClaim.deviceKey));
-    fs.chmodSync(claimsDir, 0o500);
-    try {
-      const sweeps = createSweepBarrier();
-      const controller = createSessionIdleExpiry({
-        env: createTestHostEnvironment().env,
-        sessionStore,
-        idleExpiryMs: WINDOW_MS,
-        executionLocks: new Map(),
-        settleSession: async () => {},
-        withinDiagnosticsScope: sweeps.withinDiagnosticsScope,
-        now: () => NOW,
-      });
-      controller.noteSessionsChanged();
-      await sweeps.swept();
-      controller.cancel();
-    } finally {
-      fs.chmodSync(claimsDir, 0o700);
-    }
+  // A claim store this process cannot write into: the clear reaches NO verdict, which is different
+  // information from a successor having taken the device.
+  const restoreUnlink = denyClaimFileUnlink(deviceClaimFilePath(deviceClaim.deviceKey));
+  try {
+    const sweeps = createSweepBarrier();
+    const controller = createSessionIdleExpiry({
+      env: createTestHostEnvironment().env,
+      sessionStore,
+      idleExpiryMs: WINDOW_MS,
+      executionLocks: new Map(),
+      settleSession: async () => {},
+      withinDiagnosticsScope: sweeps.withinDiagnosticsScope,
+      now: () => NOW,
+    });
+    controller.noteSessionsChanged();
+    await sweeps.swept();
+    controller.cancel();
+  } finally {
+    restoreUnlink();
+  }
 
-    // Deleting the record here would leave a claim owned by a live daemon that no longer knows it holds
-    // it — un-reclaimable by `device release --stale`, which proves staleness from owner liveness.
-    assert.notEqual(
-      sessionStore.get('default'),
-      undefined,
-      'an unconfirmed clear holds the record back for retry',
-    );
-    assert.equal(
-      fs.existsSync(resolveIdleSessionTombstonePath(sessionStore.resolveSessionDir('default'))),
-      false,
-      'a settle that did not release the device must not report the session as expired',
-    );
-  },
-);
+  // Deleting the record here would leave a claim owned by a live daemon that no longer knows it holds
+  // it — un-reclaimable by `device release --stale`, which proves staleness from owner liveness.
+  assert.notEqual(
+    sessionStore.get('default'),
+    undefined,
+    'an unconfirmed clear holds the record back for retry',
+  );
+  assert.equal(
+    fs.existsSync(resolveIdleSessionTombstonePath(sessionStore.resolveSessionDir('default'))),
+    false,
+    'a settle that did not release the device must not report the session as expired',
+  );
+});
 
 test('a claim that yields no attributable owner keeps the session record standing', async () => {
   const fixture = makeFixture('agent-device-idle-expiry-unattributable-');
@@ -296,75 +304,72 @@ test('a settled session of another kind is never touched by the sweep', async ()
   controller.cancel();
 });
 
-test.skipIf(process.getuid?.() === 0)(
-  'a held-back settle leaves a repair transaction uncommitted, so a later pass can still publish it',
-  async () => {
-    const fixture = makeFixture('agent-device-idle-expiry-repair-held-');
-    const { sessionStore } = fixture;
-    const { deviceClaim } = await sessionWithLiveClaim(fixture);
-    // A repair transaction that reached its last executable step: this is the state whose healed `.ad`
-    // a teardown commits, and a commit is ONE-WAY — writing onto an already-committed transaction is an
-    // idempotent no-op. Finalizing a settle that is about to be held back would therefore mark a
-    // still-live session's script as published and no later teardown would ever publish it.
-    const session = makeRepairCompleteSession('default', {
-      createdAt: NOW - WINDOW_MS - 1,
-      deviceClaim: { ...deviceClaim },
-    });
-    sessionStore.retire(sessionStore.lookup('default')!);
-    sessionStore.publish('default', session);
+test('a held-back settle leaves a repair transaction uncommitted, so a later pass can still publish it', async () => {
+  const fixture = makeFixture('agent-device-idle-expiry-repair-held-');
+  const { sessionStore } = fixture;
+  const { deviceClaim } = await sessionWithLiveClaim(fixture);
+  // A repair transaction that reached its last executable step: this is the state whose healed `.ad`
+  // a teardown commits, and a commit is ONE-WAY — writing onto an already-committed transaction is an
+  // idempotent no-op. Finalizing a settle that is about to be held back would therefore mark a
+  // still-live session's script as published and no later teardown would ever publish it.
+  const session = makeRepairCompleteSession('default', {
+    createdAt: NOW - WINDOW_MS - 1,
+    deviceClaim: { ...deviceClaim },
+  });
+  sessionStore.retire(sessionStore.lookup('default')!);
+  sessionStore.publish('default', session);
 
-    const claimsDir = path.dirname(deviceClaimFilePath(deviceClaim.deviceKey));
-    const sweeps = createSweepBarrier();
-    const settleParams = {
-      env: createTestHostEnvironment().env,
-      sessionStore,
-      idleExpiryMs: WINDOW_MS,
-      executionLocks: new Map(),
-      settleSession: async () => {},
-      withinDiagnosticsScope: sweeps.withinDiagnosticsScope,
-      now: () => NOW,
-    } as const;
+  const claimPath = deviceClaimFilePath(deviceClaim.deviceKey);
+  const sweeps = createSweepBarrier();
+  const settleParams = {
+    env: createTestHostEnvironment().env,
+    sessionStore,
+    idleExpiryMs: WINDOW_MS,
+    executionLocks: new Map(),
+    settleSession: async () => {},
+    withinDiagnosticsScope: sweeps.withinDiagnosticsScope,
+    now: () => NOW,
+  } as const;
 
-    // Pass one: the claim store cannot be written into, so the clear reaches no verdict and the settle
-    // is held back. The barrier is what makes this a COMPLETED pass rather than a started one.
-    fs.chmodSync(claimsDir, 0o500);
-    const heldBack = createSessionIdleExpiry(settleParams);
-    try {
-      heldBack.noteSessionsChanged();
-      await sweeps.swept(1);
-    } finally {
-      fs.chmodSync(claimsDir, 0o700);
-    }
-    heldBack.cancel();
+  // Pass one: the claim store cannot be written into, so the clear reaches no verdict and the settle
+  // is held back. The barrier is what makes this a COMPLETED pass rather than a started one.
+  const restoreUnlink = denyClaimFileUnlink(claimPath);
+  const heldBack = createSessionIdleExpiry(settleParams);
+  try {
+    heldBack.noteSessionsChanged();
+    await sweeps.swept(1);
+  } finally {
+    restoreUnlink();
+  }
+  heldBack.cancel();
 
-    assert.notEqual(sessionStore.get('default'), undefined);
-    assert.equal(
-      session.scriptPublication?.kind === 'repair' ? session.scriptPublication.status : undefined,
-      'complete',
-      "a settle that released nothing must not publish this session's repair transaction",
-    );
-    assert.equal(
-      fs.existsSync(path.join(sessionStore.resolveSessionDir('default'), 'repair-tombstone.json')),
-      false,
-      'and must not leave a repair tombstone for a transaction that never ended',
-    );
+  assert.notEqual(sessionStore.get('default'), undefined);
+  assert.equal(
+    session.scriptPublication?.kind === 'repair' ? session.scriptPublication.status : undefined,
+    'complete',
+    "a settle that released nothing must not publish this session's repair transaction",
+  );
+  assert.equal(
+    fs.existsSync(path.join(sessionStore.resolveSessionDir('default'), 'repair-tombstone.json')),
+    false,
+    'and must not leave a repair tombstone for a transaction that never ended',
+  );
 
-    // Pass two, over the SAME live record: the session is still there, so this is the continuity that
-    // matters. A first pass that had finalized while held back would have stamped COMMITTED onto this
-    // very object, and this pass's write would then be the idempotent no-op that loses the script.
-    const retried = createSessionIdleExpiry(settleParams);
-    retried.noteSessionsChanged();
-    await sweeps.swept(2);
-    retried.cancel();
+  // Pass two, over the SAME live record: the session is still there, so this is the continuity that
+  // matters. A first pass that had finalized while held back would have stamped COMMITTED onto this
+  // very object, and this pass's write would then be the idempotent no-op that loses the script.
+  const retried = createSessionIdleExpiry(settleParams);
+  retried.noteSessionsChanged();
+  await sweeps.swept(2);
+  retried.cancel();
 
-    assert.equal(sessionStore.get('default'), undefined, 'the reclaim that was owed does land');
-    assert.equal(
-      session.scriptPublication?.kind === 'repair' ? session.scriptPublication.status : undefined,
-      'committed',
-      'and the held-back transaction is published by the pass that finally ends the session',
-    );
-  },
-);
+  assert.equal(sessionStore.get('default'), undefined, 'the reclaim that was owed does land');
+  assert.equal(
+    session.scriptPublication?.kind === 'repair' ? session.scriptPublication.status : undefined,
+    'committed',
+    'and the held-back transaction is published by the pass that finally ends the session',
+  );
+});
 
 test('a committed expiry finalizes the repair transaction it ends', async () => {
   const fixture = makeFixture('agent-device-idle-expiry-repair-committed-');

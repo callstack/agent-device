@@ -1,9 +1,8 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { adoptStartedDurableCapture } from './adoption.ts';
 import {
+  createTestCaptureDefinition,
   makeDurableCaptureContext,
   makeDurableCaptureStartResult,
   testCaptureDefinition,
@@ -82,41 +81,41 @@ test('canceled adoption terminalizes its manifest when the session retires durin
   expect(context.reportUndurableCleanup).toHaveBeenCalledWith(context.device, { confirmed: true });
 });
 
-test.skipIf(process.getuid?.() === 0)(
-  'a failed terminal transition preserves the primary error and reports it unconfirmed',
-  async () => {
-    const context = makeDurableCaptureContext();
-    const start = makeDurableCaptureStartResult(context, {
-      cleanup: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
-    });
-    const primary = new AppError('CANCELED', 'request canceled');
-    const resourceDir = path.dirname(context.resourcePath);
+test('a failed terminal transition preserves the primary error and reports it unconfirmed', async () => {
+  const context = makeDurableCaptureContext();
+  const start = makeDurableCaptureStartResult(context, {
+    cleanup: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
+  });
+  const primary = new AppError('CANCELED', 'request canceled');
+  let writesFail = false;
+  const definition = createTestCaptureDefinition({
+    ...testCaptureStore,
+    write: (resourcePath, envelope) => {
+      if (writesFail) throw Object.assign(new Error('test write denied'), { code: 'EACCES' });
+      testCaptureStore.write(resourcePath, envelope);
+    },
+  });
 
-    try {
-      await expect(
-        adoptStartedDurableCapture(
-          testCaptureDefinition,
-          {
-            ...context,
-            ...start,
-            throwIfCanceled: () => {
-              fs.chmodSync(resourceDir, 0o500);
-              throw primary;
-            },
-          },
-          context.resourcePath,
-        ),
-      ).rejects.toBe(primary);
-    } finally {
-      fs.chmodSync(resourceDir, 0o700);
-    }
+  await expect(
+    adoptStartedDurableCapture(
+      definition,
+      {
+        ...context,
+        ...start,
+        throwIfCanceled: () => {
+          writesFail = true;
+          throw primary;
+        },
+      },
+      context.resourcePath,
+    ),
+  ).rejects.toBe(primary);
 
-    expect(context.reportUndurableCleanup).toHaveBeenCalledWith(context.device, {
-      confirmed: false,
-      reason: expect.stringMatching(/./),
-    });
-  },
-);
+  expect(context.reportUndurableCleanup).toHaveBeenCalledWith(context.device, {
+    confirmed: false,
+    reason: expect.stringMatching(/./),
+  });
+});
 
 test('adoption refuses a retired lifetime even when its address has a vacant successor', async () => {
   const context = makeDurableCaptureContext();
