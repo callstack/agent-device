@@ -53,7 +53,7 @@ Capture screenshots, logs, network, audio, perf, traces, recordings, and `.ad` r
 
 `agent-device mcp` starts the stdio MCP server. It exposes installed CLI commands as structured tools. Some local workflows are CLI-only and have no MCP tool.
 
-`agent-device mcp` accepts no flags or arguments; any other argument fails with `INVALID_ARGS`. To configure the server, such as its state directory, set `AGENT_DEVICE_*` environment variables or `AGENT_DEVICE_CONFIG` in the client's server entry.
+`agent-device mcp` accepts no flags or arguments other than `--help` and `--version`; any other argument fails with `INVALID_ARGS`. To configure the server, such as its state directory, set `AGENT_DEVICE_*` environment variables or `AGENT_DEVICE_CONFIG` in the client's server entry.
 
 For web automation, MCP tools can target `platform: "web"` once the managed browser backend is set up, but `agent-device web setup` and `agent-device web doctor` are CLI-only. Run setup from a terminal that uses the same state directory as the MCP server before you ask an MCP client to drive a browser session.
 
@@ -63,7 +63,7 @@ Tool results are compact text. A tool that declares an output schema, such as `p
 
 When a tool fails, the server returns an MCP tool result with `isError: true`. Check the tool result, not only whether the JSON-RPC call succeeded.
 
-The server runs one `tools/call` at a time, in the order it receives them. It answers `ping`, `tools/list`, and the handshake at once, even while a long tool call such as `test` or `wait` runs. A `notifications/cancelled` for a running or queued `tools/call` stops it, and the server sends no response for that request.
+The server runs one `tools/call` at a time, in the order it receives them. It answers `ping`, `tools/list`, and the handshake at once, even while a long tool call such as `test` or `wait` runs. A `notifications/cancelled` for a running or queued `tools/call` stops it, and the server sends no response for that request. Cancellation stops the daemon request, not work that already reached the device: on iOS, a command the device received keeps running there, and the session waits for it. See [Command methods](/docs/client-api#command-methods). A JSON-RPC batch cannot carry a `tools/call`; the server refuses that element with `-32600`.
 
 The server does not run arbitrary shell commands. If the CLI is missing, the agent should ask you before installing or updating packages, reconnect the server after setup, and retry the original app-driving command without adding version or help probes.
 

@@ -307,9 +307,13 @@ async function parseCliInputOrExit(
   // carried flags the server would silently ignore.
   if (parsed.command === 'mcp') {
     return await exitOnParseFailure(
-      new AppError('INVALID_ARGS', 'mcp accepts no flags or arguments.', {
-        hint: 'Run agent-device mcp alone. Configure the server with AGENT_DEVICE_* environment variables or AGENT_DEVICE_CONFIG.',
-      }),
+      new AppError(
+        'INVALID_ARGS',
+        'mcp accepts no flags or arguments other than --help and --version.',
+        {
+          hint: 'Run agent-device mcp alone. Configure the server with AGENT_DEVICE_* environment variables or AGENT_DEVICE_CONFIG.',
+        },
+      ),
       argv,
       options,
     );
