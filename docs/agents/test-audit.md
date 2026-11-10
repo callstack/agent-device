@@ -1,6 +1,6 @@
 # Audit tests
 
-Optimize for detection and feedback time, not deletion counts.
+Optimize detection and feedback time, not deletion counts.
 For test quality, use [test authoring](test-authoring.md).
 For checks, use [validation](testing.md).
 
@@ -8,14 +8,14 @@ For checks, use [validation](testing.md).
 
 Never delete independent completeness guards for registries, gates, layering, or DI seams.
 Retain golden tables, cross-language checks, `@ts-expect-error` pins, identity checks,
-exact-array duplicate checks, and vocabulary checks independent of the implementation.
+exact-array duplicate checks, and vocabulary checks that survive a simultaneous production/fixture update.
 
-If a mutant proves equivalent detection, move the mock's unique assertions into the provider scenario.
-Then delete the weaker mock.
+For duplicated command behavior, move the mock's unique assertions to the provider scenario.
+With the mock removed, prove that the scenario catches the same mutant as the mock.
+After detection is proven, delete the weaker mock.
 Source inspection alone does not prove detection.
 Without measured evidence, slow or implementation-like tests are not redundant.
 If only a device exposes the failure, retain an owned E2E scenario.
-Keep focused tests for exhaustive logic and independent contracts.
 
 ## Candidate evidence
 
@@ -29,14 +29,15 @@ Before you edit, record:
 
 Before a never-run deletion, prove non-collection or skipping in every automatic and manual lane.
 For mutations, use [isolated experiments](test-experiments.md).
-For a behavioral deletion, prove retained detection with the candidate removed.
 Report baseline and mutant counts.
 For an obsolete test with no remaining contract, record consumer and runner evidence.
 
 ## Delegated audits
 
-Assign disjoint read scopes to read-only reviewers.
-Each brief names the reviewed SHA, production owner, runner, skip guards, retention criteria, and failure.
+Assign disjoint review scopes.
+Name the reviewed SHA in each brief.
+Require production-owner inspection, skip/runner verification, retention criteria, and concrete failure scenarios.
+Do not assign edit ownership to a reviewer.
 
 Put one batch for one owner boundary in each PR.
 Remove unused test-only seams with the tests.

@@ -7,6 +7,7 @@
    Run `pnpm check:affected --run --head <commit>`.
 3. For a broad refactor or an explicitly requested full gate, run `pnpm check`.
 
+Serialized validation requires macOS or Linux.
 On Windows, use plan mode or focused checks.
 Wait for the owner to finish.
 Do not add lock wrappers.
@@ -14,10 +15,10 @@ A wait ends after two hours.
 Focused tests do not lock.
 Avoid subprocess-heavy tests beside a broad gate.
 
-Stop at failure.
+The runner stops at failure.
 Its receipt records refs, checkout state, commands, exits, skips, and results.
 
-For the selected plan, run `pnpm check:affected`.
+For a plan, run `pnpm check:affected`.
 For reasons, add `--verbose`.
 For JSON, run `pnpm --silent check:affected --json`.
 With `--run --json`, stdout contains the receipt and stderr contains progress.
@@ -28,13 +29,14 @@ It does not run every catalog check.
 
 Only a passed receipt with `exactCommit: true` proves validation at the named commit.
 A dirty-tree pass is local feedback.
-Checkout checks invalidate persistent changes; they do not sandbox the checkout.
+Detected checkout changes invalidate the run.
+Initial/final checks detect persistent changes.
+They do not sandbox the checkout.
 During validation, stop all edits.
 
 ## Interpret selection
 
-Package manifest and TypeScript config changes can affect every consumer.
-Do not narrow their full selection.
+For package manifest or TypeScript config changes, retain full selection.
 `FAIL-OPEN` means the selector could not safely narrow the set.
 Read `failOpenReasons` in plan JSON or `plan.failOpenReasons` in a receipt.
 Do not reduce selection to get a pass.
@@ -44,7 +46,6 @@ GitHub owns full coverage, native builds, device lanes, provider integration, an
 On a narrowed plan, related tests replace only provider integration.
 For skipped-check owners, read `results[].reason`.
 Until source-read ownership is complete, keep #4050's full-unit production fallback.
-For docs-only changes, run selected checks.
 Do not add tests that assert prose.
 
 ## A gate failed
@@ -56,8 +57,7 @@ Never call a failing gate passed.
 | --- | --- |
 | Failure caused by this change | Fix its owner and rerun. Until a run passes, report failed validation. |
 | Suspected host or infrastructure fault | Save the log. Compare the same command on unchanged base in an isolated checkout without competing tests. Until compared, report cause unproven. A solo pass does not prove contention. |
-| Matching failure on unchanged base | Report Base-blocked with SHAs, command, and logs. Name the blocker and owner or issue. For authorized publication, use a draft with remaining checks.
-Do not mark merge-ready. |
+| Matching failure on unchanged base | Report Base-blocked with SHAs, command, and logs. Name the blocker and owner or issue. For authorized publication, use a draft with remaining checks. Do not mark merge-ready. |
 | Unavailable or inconclusive base comparison | Record the missing evidence and next action. Report blocked with cause unproven. |
 | Repaired fault or upstream fix | Rerun the failed check and affected gate at head. Require new evidence to change blocked status. |
 

@@ -112,7 +112,7 @@ persisted artifacts, and released API consumers get compatibility handling.
 ### Interactions, selectors, and refs
 
 **Interactor**:
-The platform mechanics interface used by legacy dispatch and some bound runtime adapters.
+A platform mechanics interface for legacy dispatch and bound runtime adapters.
 _Avoid_: New command-facing contracts
 
 **Interaction dispatch path**:
@@ -130,7 +130,7 @@ descendants at its center.
 One dispatch-path-by-guarantee classification: enforced, delegated, inapplicable, or waived.
 
 **Owned waiver**:
-A recorded guarantee exception: an intentional divergence or a tracked implementation gap.
+A guarantee exception with an explicit owner: intentional divergence or a `gap:` with a tracking issue.
 
 **Delegation-on-error**:
 A fast path that returns semantic failures to the shared path; it establishes failure-side
@@ -292,7 +292,7 @@ Provider-hosted session output: video, automation or device logs, or dashboard l
 An optional semantic category from the owner of a daemon-managed downloadable artifact.
 
 **Provider-backed integration scenario**:
-A device-free test on the real daemon path with fake external device and host tools.
+A device-free test on the real daemon request path, faking only external device and host tools.
 
 **Provider transcript**:
 An exact record of external provider calls, to verify command translation.
@@ -301,7 +301,7 @@ An exact record of external provider calls, to verify command translation.
 A command-level flow of user-visible behavior through daemon commands.
 
 **In-process provider scenario harness**:
-A runner that calls the daemon handler without HTTP.
+A runner for the daemon handler without HTTP.
 
 **HTTP contract test**:
 A narrow test of JSON-RPC transport, authentication, and response finalization.

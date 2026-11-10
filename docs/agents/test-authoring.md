@@ -49,9 +49,9 @@ Do not disable isolation to hide failures.
 Do not switch the fork pool to hide failures.
 Do not add unit retries to hide failures.
 Use existing clocks or tool seams instead of production-time waits.
-When a test exceeds its budget, remove real waits or reduce setup work.
-Split tests by behavior.
-Keep split tests beside their source module.
+Slow-test pins only shrink.
+For a new pin, give measured justification.
+Split tests only with their source module.
 Import the subject module, not a platform barrel.
 
 ## Run a focused test
@@ -61,8 +61,7 @@ For `packages/apple-runner/src/**`, use `--project apple-runner`.
 Local runs default to four workers.
 For a different host share, set `AGENT_DEVICE_VITEST_MAX_WORKERS=<n>`. CI ignores it.
 The root tsconfig includes scripts TypeScript.
-Typechecking does not prove test collection.
-Verify each test's runner inclusion.
+Verify runner inclusion; typechecking does not prove collection.
 
 For a provider scenario, use `pnpm exec vitest run --project provider-integration <path>`.
 For device smoke, use the owning checked-in harness.
