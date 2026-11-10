@@ -167,6 +167,66 @@ test.each([
   expect(refFrameTree(input.session)).toBe(input.snapshot);
 });
 
+test('suggestion and candidate refs outside the published screen refs lose their ref', () => {
+  const input = scenario(25);
+
+  const result = boundReplayDivergenceForSession({
+    sessionStore: input.replaySession.store,
+    observationStore: input.replaySession.observationStore,
+    divergence: divergence(input, {
+      kind: 'target-ambiguous',
+      suggestions: [
+        { selector: 'label="Button 1"', basis: 'label', ref: 'e1' },
+        { selector: 'label="Button 25"', basis: 'label', ref: 'e25' },
+      ],
+      suggestionCount: 2,
+      targetBinding: {
+        classification: 'target-ambiguous',
+        matchCount: 2,
+        recorded: { role: 'button', label: 'Save' },
+        mismatches: [],
+        candidates: [
+          { ref: 'e2', role: 'button', label: 'Button 2' },
+          { ref: 'e24', role: 'button', label: 'Button 24' },
+        ],
+      },
+    }),
+    responseLevel: 'default',
+    evidence: input.evidence,
+  });
+
+  expect(refFrameScope(input.session)).toEqual(
+    new Set(Array.from({ length: 20 }, (_, index) => `e${index + 1}`)),
+  );
+  expect(result.suggestions).toEqual([
+    { selector: 'label="Button 1"', basis: 'label', ref: 'e1' },
+    { selector: 'label="Button 25"', basis: 'label' },
+  ]);
+  expect(result.targetBinding?.candidates).toEqual([
+    { ref: 'e2', role: 'button', label: 'Button 2' },
+    { role: 'button', label: 'Button 24' },
+  ]);
+});
+
+test('an empty published screen returns no suggestion refs', () => {
+  const input = scenario();
+
+  const result = boundReplayDivergenceForSession({
+    sessionStore: input.replaySession.store,
+    observationStore: input.replaySession.observationStore,
+    divergence: divergence(input, {
+      screen: { state: 'available', refsGeneration: input.refsGeneration, refs: [] },
+      suggestions: [{ selector: 'label="Button 1"', basis: 'label', ref: 'e1' }],
+      suggestionCount: 1,
+    }),
+    responseLevel: 'default',
+    evidence: input.evidence,
+  });
+
+  expect(result.suggestions).toEqual([{ selector: 'label="Button 1"', basis: 'label' }]);
+  expect(refFrameScope(input.session)).toEqual(new Set(['old']));
+});
+
 test('missing capture evidence fails closed instead of exposing unauthorized refs', () => {
   const input = scenario();
 
