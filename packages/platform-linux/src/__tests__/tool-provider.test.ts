@@ -8,7 +8,11 @@ import {
 } from '@agent-device/host-kit/diagnostics';
 import assert from 'node:assert/strict';
 import { pressLinux } from '../input-actions.ts';
-import { createLocalLinuxToolProvider, withLinuxToolProvider } from '../tool-provider.ts';
+import {
+  createLocalLinuxToolProvider,
+  resolveLinuxToolProvider,
+  withLinuxToolProvider,
+} from '../tool-provider.ts';
 import type { ExecDetachedExit } from '@agent-device/host-kit/command';
 
 bindTestCommandHost();
@@ -170,10 +174,21 @@ test('local Linux desktop provider translates semantic lifecycle calls to host t
 });
 
 // `open <binary>` used to run the app as a piped child of the daemon, which kept every
-// byte the app printed in daemon memory for the app's whole life. The default launcher detaches.
-test.skipIf(!fs.existsSync('/proc/self/fd'))(
-  'local Linux desktop provider launches an app binary detached from daemon pipes by default',
-  async () => {
+// byte the app printed in daemon memory for the app's whole life. The default launcher detaches,
+// for a provider built over a host and for the ambient one a call outside any runtime resolves.
+test.skipIf(!fs.existsSync('/proc/self/fd')).each([
+  [
+    'a host-built',
+    () =>
+      createLocalLinuxToolProvider({
+        host: { env: process.env, cwd: process.cwd() },
+        whichCommand: async (cmd) => cmd === 'fake-desktop-app',
+      }),
+  ],
+  ['the ambient', () => resolveLinuxToolProvider()],
+] as const)(
+  '%s Linux desktop provider launches an app binary detached from daemon pipes',
+  async (_name, makeProvider) => {
     const binDir = await mkdtempForTest('linux-open-binary-');
     const report = path.join(binDir, 'stdout-target');
     fs.writeFileSync(
@@ -184,12 +199,7 @@ test.skipIf(!fs.existsSync('/proc/self/fd'))(
     const originalPath = process.env['PATH'];
     process.env['PATH'] = `${binDir}${path.delimiter}${originalPath ?? ''}`;
     try {
-      const provider = createLocalLinuxToolProvider({
-        host: { env: process.env, cwd: process.cwd() },
-        whichCommand: async (cmd) => cmd === 'fake-desktop-app',
-      });
-
-      await provider.desktop.openTarget('fake-desktop-app');
+      await makeProvider().desktop.openTarget('fake-desktop-app');
 
       await vi.waitFor(() => assert.ok(fs.existsSync(report)));
       assert.equal(fs.readFileSync(report, 'utf8').trim(), '/dev/null');

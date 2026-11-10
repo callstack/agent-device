@@ -153,9 +153,8 @@ export function createLocalLinuxToolProvider(
  * ambient read it replaces. A composed runtime binds its own host at `createLinuxInteractor`, so
  * its display decision never comes from here (#3794).
  */
+// Names no executor, so the host-local defaults apply, including the detached app launcher.
 const localLinuxToolProvider = completeLocalLinuxToolProvider({
-  runCommand: runCmd,
-  whichCommand: whichOnPath,
   display: {
     detectDisplayServer: () => detectLinuxDisplayServer(commandHostEnvironment().env),
   },
