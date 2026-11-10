@@ -27,12 +27,16 @@ export async function openAppLogOutput(
     writes = next.catch(() => undefined);
     return next;
   };
-  // A sink stays open for a whole `logs start` stream, so the cap is checked as it writes.
+  // A sink stays open for a whole `logs start` stream, so the cap is checked as it writes. The size
+  // comes from the descriptor, so `logs mark` appends through another descriptor count too.
   const rotateIfNeeded = async () => {
-    if (output.bytes < rotation.maxBytes) return;
-    await closeOutput(output);
-    rotateAppLogIfNeeded(pathname, rotation);
-    output = openAppendOutput(pathname);
+    if (fs.fstatSync(output.descriptor).size < rotation.maxBytes) return;
+    try {
+      await closeOutput(output);
+      rotateAppLogIfNeeded(pathname, rotation);
+    } finally {
+      output = openAppendOutput(pathname);
+    }
   };
   const writeText = async (text: string) => {
     const combined = `${pending}${text}`;
@@ -50,6 +54,7 @@ export async function openAppLogOutput(
           pending = '';
         }
         await closeOutput(output);
+        rotateAppLogIfNeeded(pathname, rotation);
       });
       await disposal;
     },
@@ -58,8 +63,7 @@ export async function openAppLogOutput(
 
 type AppendOutput = {
   stream: fs.WriteStream;
-  /** Bytes the file holds: its size at open plus every byte written since. */
-  bytes: number;
+  descriptor: number;
   error?: Error;
 };
 
@@ -69,7 +73,7 @@ function openAppendOutput(pathname: string): AppendOutput {
   try {
     output = {
       stream: fs.createWriteStream(pathname, { fd: descriptor, autoClose: true }),
-      bytes: fs.fstatSync(descriptor).size,
+      descriptor,
     };
   } catch (error) {
     fs.closeSync(descriptor);
@@ -86,7 +90,6 @@ async function writeOutput(output: AppendOutput, chunk: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     output.stream.write(chunk, (error) => (error ? reject(error) : resolve()));
   });
-  output.bytes += Buffer.byteLength(chunk);
 }
 
 async function closeOutput(output: AppendOutput): Promise<void> {
