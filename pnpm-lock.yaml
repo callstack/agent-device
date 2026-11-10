@@ -432,9 +432,6 @@ importers:
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors
-      '@agent-device/session-journal':
-        specifier: workspace:*
-        version: link:../session-journal
     devDependencies:
       '@agent-device/command-registry':
         specifier: workspace:*
