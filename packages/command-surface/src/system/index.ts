@@ -380,15 +380,48 @@ const keyboardCommandMetadata = defineFieldCommandMetadata(
 );
 
 // `clipboard read` prints the clipboard content verbatim, so its warnings belong on stderr.
-const clipboardCommandMetadata = defineFieldCommandMetadata(
+const clipboardFields = {
+  action: requiredField(enumField(CLIPBOARD_ACTION_VALUES)),
+  text: stringField(
+    'Text for write; required for write ("" clears the clipboard), refused for read.',
+    {
+      allowEmpty: true,
+    },
+  ),
+};
+
+const clipboardFieldMetadata = defineFieldCommandMetadata(
   CLIPBOARD_COMMAND_NAME,
   clipboardCommandDescription,
+  clipboardFields,
   {
-    action: requiredField(enumField(CLIPBOARD_ACTION_VALUES)),
-    text: stringField(),
+    parseableOutput: true,
+    readInput: (input: unknown) => {
+      const { action, text, ...common } = readFieldInput(input, clipboardFields);
+      if (action === 'read') {
+        if (text !== undefined) {
+          throw new AppError('INVALID_ARGS', 'clipboard read does not accept text.');
+        }
+        return { ...common, action };
+      }
+      if (text === undefined) {
+        throw new AppError('INVALID_ARGS', 'clipboard write requires text (use "" to clear).');
+      }
+      return { ...common, action, text };
+    },
   },
-  { parseableOutput: true },
 );
+
+const clipboardCommandMetadata = {
+  ...clipboardFieldMetadata,
+  inputSchema: {
+    ...clipboardFieldMetadata.inputSchema,
+    oneOf: [
+      { properties: { action: constSchema('write') }, required: ['text'] },
+      { properties: { action: constSchema('read') }, not: { required: ['text'] } },
+    ],
+  },
+};
 
 const tvRemoteCommandMetadata = defineFieldCommandMetadata(
   TV_REMOTE_COMMAND_NAME,
