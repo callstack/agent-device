@@ -11,14 +11,14 @@ import {
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 test.each([1.5, Number.NaN, Number.POSITIVE_INFINITY, 0, -1, 2_147_483_648])(
-  'retainMaterializedPaths rejects invalid TTL %s before filesystem work',
+  'retainMaterializedPaths rejects unsupported TTL %s',
   async (ttlMs) => {
-    const error = await retainMaterializedPaths({ installablePath: '/missing', ttlMs }).then(
+    const failure = await retainMaterializedPaths({ installablePath: '/missing', ttlMs }).then(
       () => null,
-      (caught: unknown) => caught,
+      (error: unknown) => error,
     );
-    expect(error).toBeInstanceOf(AppError);
-    expect((error as AppError).code).toBe('INVALID_ARGS');
+    assert.ok(failure instanceof AppError);
+    assert.equal(failure.code, 'INVALID_ARGS');
   },
 );
 

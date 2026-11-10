@@ -392,26 +392,19 @@ async function runAndroidSetupAndInstallWorkflow(
   assert.equal(reinstallBundle.appId, 'com.example.demo');
   assert.equal(path.basename(reinstallBundle.appPath), 'Demo.aab');
 
-  for (const retentionMs of [1.5, 2_147_483_648]) {
-    const callsBefore = world.adbCalls.length;
-    await assert.rejects(
-      client.apps.installFromSource({
-        source: { kind: 'path', path: manifestApkPath },
-        retainPaths: true,
-        retentionMs,
-        ...selection,
-      }),
-      (error: { code?: string }) => error.code === 'INVALID_ARGS',
-    );
-    assert.equal(world.adbCalls.length, callsBefore);
-  }
-
-  const installFromManifest = await client.apps.installFromSource({
-    source: { kind: 'path', path: manifestApkPath },
+  const installOptions = {
+    source: { kind: 'path' as const, path: manifestApkPath },
     retainPaths: true,
     retentionMs: 60_000,
     ...selection,
-  });
+  };
+  for (const retentionMs of [1.5, 2_147_483_648]) {
+    const callsBefore = world.adbCalls.length;
+    const invalid = client.apps.installFromSource({ ...installOptions, retentionMs });
+    await assert.rejects(invalid, { code: 'INVALID_ARGS' });
+    assert.equal(world.adbCalls.length, callsBefore);
+  }
+  const installFromManifest = await client.apps.installFromSource(installOptions);
   assert.equal(installFromManifest.packageName, 'io.example.demo_manifest');
   assert.equal(installFromManifest.appName, 'Manifest');
   assert.equal(installFromManifest.launchTarget, 'io.example.demo_manifest');
