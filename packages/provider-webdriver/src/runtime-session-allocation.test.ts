@@ -494,6 +494,43 @@ test('a release the provider refused reports the session left running', async ()
 });
 
 /**
+ * `DELETE /session/{id}` is idempotent: one transient hub failure is retried rather than left as a
+ * billed session, and a hub that no longer knows the session (`invalid session id`) has ended it.
+ */
+for (const { name, answers } of [
+  {
+    name: 'a transient delete failure is retried',
+    answers: [{ status: 502, body: '<html>Bad Gateway</html>' }],
+  },
+  {
+    name: 'a delete answered invalid session id',
+    answers: [
+      {
+        status: 404,
+        body: { value: { error: 'invalid session id', message: 'session not found' } },
+      },
+    ],
+  },
+] as const) {
+  test(`${name} confirms the release`, async () => {
+    const hub = startWebDriverHub({ deleteAnswers: answers });
+    globalThis.fetch = hub.fetch;
+    const runtime = makeRuntime({ requestPolicy: { retryAttempts: 1, retryDelayMs: 1 } });
+    const lease = makeLease();
+
+    try {
+      await runtime.leaseLifecycle.allocate!(lease);
+      assert.deepEqual(await settle(() => runtime.leaseLifecycle.release!(lease)), {
+        status: 'resolved',
+        value: { provider: 'webdriver-test', providerSessionId: 'session-1' },
+      });
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+}
+
+/**
  * A create the hub refused still hands back what the provider prepared, and that hand-back is the
  * plugin's own code too. A `cleanup` that never answers there would keep the allocation from answering,
  * with the lease held behind it and nothing on the lease left to end, so it gets the same budget the
@@ -656,10 +693,13 @@ function startWebDriverHub(
     deleteFailure?: string;
     heldDeletes?: number;
     createFailure?: string;
+    /** Answers the hub gives to the first `DELETE`s, in order, before it ends sessions normally. */
+    deleteAnswers?: readonly Readonly<{ status: number; body: unknown }>[];
   }> = {},
 ) {
   const created: string[] = [];
   const deleted: string[] = [];
+  const deleteAnswers = [...(options.deleteAnswers ?? [])];
   let deletesToHold = options.heldDeletes ?? 0;
   let deleteFailure = options.deleteFailure;
   const held: (() => void)[] = [];
@@ -710,6 +750,13 @@ function startWebDriverHub(
           return jsonResponse(
             { value: { error: 'unknown error', message: `${deleteFailure}: ${sessionId}` } },
             500,
+          );
+        }
+        const answer = deleteAnswers.shift();
+        if (answer) {
+          return new Response(
+            typeof answer.body === 'string' ? answer.body : JSON.stringify(answer.body),
+            { status: answer.status },
           );
         }
         deleted.push(sessionId);

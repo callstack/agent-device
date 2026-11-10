@@ -305,6 +305,47 @@ test('a 5xx response to a POST discloses an unresolved outcome and is not resent
   assert.equal(calls, 1);
 });
 
+test('a 5xx with a non-JSON body keeps its status, dispatch disclosure, and idempotent retry', async () => {
+  const transport = new WebDriverTransport({
+    clientVersion: '0.0.0-test',
+    endpoint: 'http://cloud-webdriver.test/wd/hub/',
+    requestPolicy: { timeoutMs: 30_000, retryAttempts: 1, retryDelayMs: 1 },
+  });
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response('<html><body>502 Bad Gateway</body></html>', {
+      status: 502,
+      headers: { 'Content-Type': 'text/html' },
+    });
+  };
+
+  await assert.rejects(transport.requestValue('GET', '/session/wd-1/source'), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.status, 502);
+    assert.equal(error.details?.dispatched, 'unknown');
+    assert.equal(error.details?.response, '<html><body>502 Bad Gateway</body></html>');
+    return true;
+  });
+  assert.equal(calls, 2);
+});
+
+test('a 2xx with a non-JSON body names its status', async () => {
+  const transport = new WebDriverTransport({
+    clientVersion: '0.0.0-test',
+    endpoint: 'http://cloud-webdriver.test/wd/hub/',
+    requestPolicy: { timeoutMs: 30_000, retryAttempts: 0 },
+  });
+  globalThis.fetch = async () => new Response('ok', { status: 200 });
+
+  await assert.rejects(transport.requestValue('GET', '/status'), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.message, 'WebDriver response was not valid JSON.');
+    assert.equal(error.details?.status, 200);
+    return true;
+  });
+});
+
 const ROUTE_ANSWERS: readonly { status: number; body: unknown; unsupported: boolean }[] = [
   { status: 404, body: { value: { error: 'unknown command', message: 'x' } }, unsupported: true },
   { status: 405, body: { value: { error: 'unknown method', message: 'x' } }, unsupported: true },

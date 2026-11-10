@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   emitWebDriverDiagnostic,
+  isWebDriverInvalidSession,
   isWebDriverRouteUnsupported,
   WebDriverTransport,
   type WebDriverAuth,
@@ -101,9 +102,19 @@ export class WebDriverClient {
     return session;
   }
 
+  /**
+   * `DELETE /session/{id}` is idempotent, so it gets the retry budget: one transient failure must
+   * not leave a billed session. A driver that answers `invalid session id` no longer has the
+   * session, which is the outcome the delete asked for, including when an earlier attempt landed
+   * before its answer was lost.
+   */
   async deleteSession(): Promise<void> {
     const sessionId = this.requireSessionId();
-    await this.requestValue('DELETE', `/session/${sessionId}`);
+    try {
+      await this.requestValue('DELETE', `/session/${sessionId}`, undefined, { idempotent: true });
+    } catch (error) {
+      if (!isWebDriverInvalidSession(error)) throw error;
+    }
     this.sessionId = undefined;
   }
 
