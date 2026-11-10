@@ -480,7 +480,8 @@ function formatScript(
 
 /**
  * Replay interpolates every written positional, flag, and runtime string, so recorded literal
- * text gets the `\${` escape. Only a parameterized fill's own placeholder text stays live.
+ * text gets the `\${` escape. Only a parameterized fill's own placeholder text stays live. The
+ * ref label parses back into `result.refLabel`, which replay compares literally, so it stays as is.
  */
 function escapeRecordedLiterals(action: SessionAction): SessionAction {
   const placeholder =
@@ -488,7 +489,6 @@ function escapeRecordedLiterals(action: SessionAction): SessionAction {
       ? recordedInputPlaceholder(action.recordedInputVariable)
       : undefined;
   const lastIndex = action.positionals.length - 1;
-  const refLabel = action.result?.refLabel;
   return {
     ...action,
     positionals: action.positionals.map((value, index) =>
@@ -496,10 +496,6 @@ function escapeRecordedLiterals(action: SessionAction): SessionAction {
     ),
     flags: escapeReplayStringValues(action.flags),
     runtime: escapeReplayStringValues(action.runtime),
-    result:
-      typeof refLabel === 'string'
-        ? { ...action.result, refLabel: escapeReplayLiteral(refLabel) }
-        : action.result,
   };
 }
 

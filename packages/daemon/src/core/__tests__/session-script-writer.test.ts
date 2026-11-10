@@ -116,10 +116,9 @@ test('write() escapes recorded literal ${...} text so replay resolves it back un
   expect(resolved[4]?.positionals).toEqual(['label="Other"', '${PASSWORD}']);
 });
 
-test('write() keeps a target annotation verbatim because replay never interpolates it', () => {
-  const root = mkdtempForTestSync('agent-device-script-writer-annotation-literal-');
+test('write() keeps ref labels and target annotations verbatim because replay matches them literally', () => {
+  const root = mkdtempForTestSync('agent-device-script-writer-literal-identity-');
   const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
-  const session = makeAuthoringSession('default');
   const targetEvidence = {
     role: 'button',
     label: 'Pay ${amount}',
@@ -128,26 +127,22 @@ test('write() keeps a target annotation verbatim because replay never interpolat
     viewportOrder: 0,
     verification: 'verified' as const,
   };
-  recordActionEntry(
-    session,
-    {
-      command: 'click',
-      positionals: ['label="Pay ${amount}"'],
-      flags: {},
-      result: {},
-      targetEvidence,
-    },
-    hostCwd,
-  );
+  const session = makeAuthoringSession('default', {
+    actions: [
+      action({ command: 'click', positionals: ['@e3'], result: { refLabel: 'Pay ${amount}' } }),
+      action({ command: 'click', positionals: ['label="Pay ${amount}"'], targetEvidence }),
+    ],
+  });
 
-  const { parsed } = writeAndParse(writer, session);
-  const resolved = resolveReplayAction(
-    parsed.actions[0]!,
-    { values: { amount: 'WRONG', step: 'WRONG' } },
-    { file: 'test.ad', line: 3 },
+  const scope = { values: { amount: 'WRONG', step: 'WRONG' } };
+  const [snapshot, refClick, selectorClick] = writeAndParse(writer, session).parsed.actions.map(
+    (entry, index) => resolveReplayAction(entry, scope, { file: 'test.ad', line: index + 2 }),
   );
-  expect(resolved.positionals).toEqual(['label="Pay ${amount}"']);
-  expect(resolved.targetEvidence).toMatchObject({
+  // The label also scopes the recorded snapshot, a flag replay does interpolate.
+  expect(snapshot?.flags.snapshotScope).toBe('Pay ${amount}');
+  expect(refClick?.result?.refLabel).toBe('Pay ${amount}');
+  expect(selectorClick?.positionals).toEqual(['label="Pay ${amount}"']);
+  expect(selectorClick?.targetEvidence).toMatchObject({
     label: 'Pay ${amount}',
     ancestry: [{ role: 'form', label: 'Checkout ${step}' }],
   });
