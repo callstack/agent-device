@@ -225,8 +225,12 @@ describe('provider app-log poller', () => {
     expect(readLogs).toHaveBeenCalledTimes(1);
 
     settleSlowRead('ignored\n');
-    sleeps.resolveNext(1_000);
-    await vi.waitFor(() => expect(writes).toEqual(['line\n']));
+    // The read's settlement and the released tick race through microtasks. A tick that runs first
+    // only reports recovering and sleeps again, so release ticks until the second read lands.
+    await vi.waitFor(() => {
+      if (sleeps.hasPending(1_000)) sleeps.resolveNext(1_000);
+      expect(writes).toEqual(['line\n']);
+    });
     expect(readLogs).toHaveBeenCalledTimes(2);
     expect(handle.inspect().state).toBe('active');
     await handle.finish();
