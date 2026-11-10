@@ -1,5 +1,7 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
-import { afterAll, beforeEach, test } from 'vitest';
+import { bindTestCommandHost, mkdtempForTest } from '@agent-device/test-kit';
+import fs from 'node:fs';
+import path from 'node:path';
+import { afterAll, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { pressLinux } from '../input-actions.ts';
 import { createLocalLinuxToolProvider, withLinuxToolProvider } from '../tool-provider.ts';
@@ -161,6 +163,39 @@ test('local Linux desktop provider translates semantic lifecycle calls to host t
     ['wmctrl', ['-c', 'Demo'], true],
   ]);
 });
+
+// PROV-6: `open <binary>` used to run the app as a piped child of the daemon, which kept every
+// byte the app printed in daemon memory for the app's whole life.
+test.skipIf(!fs.existsSync('/proc/self/fd'))(
+  'local Linux desktop provider launches an app binary detached from daemon pipes',
+  async () => {
+    const binDir = await mkdtempForTest('linux-open-binary-');
+    const report = path.join(binDir, 'stdout-target');
+    fs.writeFileSync(
+      path.join(binDir, 'fake-desktop-app'),
+      `#!/bin/sh\nreadlink /proc/self/fd/2 > '${report}.tmp' && mv '${report}.tmp' '${report}'\n`,
+      { mode: 0o755 },
+    );
+    const originalPath = process.env['PATH'];
+    process.env['PATH'] = `${binDir}${path.delimiter}${originalPath ?? ''}`;
+    try {
+      const provider = createLocalLinuxToolProvider({
+        host: { env: process.env, cwd: process.cwd() },
+        whichCommand: async (cmd) => cmd === 'fake-desktop-app',
+        runCommand: async (cmd) => {
+          throw new Error(`the app launch must not run as a captured command: ${cmd}`);
+        },
+      });
+
+      await provider.desktop.openTarget('fake-desktop-app');
+
+      await vi.waitFor(() => assert.ok(fs.existsSync(report)));
+      assert.equal(fs.readFileSync(report, 'utf8').trim(), '/dev/null');
+    } finally {
+      process.env['PATH'] = originalPath;
+    }
+  },
+);
 
 test('local Linux desktop provider falls back to pkill when wmctrl is unavailable', async () => {
   const commands: Array<[string, string[], boolean | undefined]> = [];

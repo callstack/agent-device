@@ -3,6 +3,7 @@ import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   runCmd,
+  runCmdDetachedMonitored,
   whichCmd,
   type ExecOptions,
   type ExecResult,
@@ -180,11 +181,14 @@ function createLocalLinuxDesktopProvider(
       }
 
       if (await whichCommand(target)) {
-        runCommand(target, [], { allowFailure: true }).catch((error) => {
+        // A desktop app outlives the command that opened it. Run detached with its output
+        // discarded: a piped child would keep everything it prints in daemon memory until it exits.
+        void runCmdDetachedMonitored(target, []).exited.then((exit) => {
+          if (exit.error === undefined) return;
           emitDiagnostic({
             level: 'warn',
             phase: 'linux_app_launch',
-            data: { app: target, error: String(error) },
+            data: { app: target, error: exit.error },
           });
         });
         await sleep(500);
