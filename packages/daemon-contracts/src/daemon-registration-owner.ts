@@ -277,13 +277,23 @@ export function createOwnedReplayStateDir(): OwnedReplayStateDir {
 }
 
 /**
- * Repairs the mode of an open state path only when this process owns it: only its owner can chmod
- * it, and a state dir another user set up keeps the mode that user chose. Checking and changing the
- * same descriptor means a path swapped in between is never the one changed.
+ * Tightens a state path an older launcher left at the umask default. The repair never decides
+ * whether the daemon starts: a path another user owns, or a mount without chmod, keeps its mode.
  */
-function repairOwnedMode(fd: number, mode: number): void {
-  if (fs.fstatSync(fd).uid === process.getuid?.()) fs.fchmodSync(fd, mode);
+function repairStateMode(target: string, mode: number): void {
+  try {
+    fs.chmodSync(target, mode);
+  } catch (error) {
+    if (!MODE_REPAIR_SKIPPED_CODES.has((error as NodeJS.ErrnoException).code ?? '')) throw error;
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'daemon_state_mode_repair_skipped',
+      data: { path: target, error: normalizeError(error) },
+    });
+  }
 }
+
+const MODE_REPAIR_SKIPPED_CODES = new Set(['EPERM', 'EROFS', 'ENOTSUP', 'EOPNOTSUPP']);
 
 /** Launches and monitors the actual child before recording its private-directory authority. */
 export function launchDaemonProcess(
@@ -304,19 +314,10 @@ export function launchDaemonProcess(
       reason: 'daemon_startup_admission_closed',
     });
   fs.mkdirSync(input.paths.baseDir, { recursive: true, mode: 0o700 });
-  // A mode applies only at creation: an older launcher left these at the umask default.
-  // Windows has no POSIX owner and cannot open a directory, so it keeps the creation mode alone.
-  if (process.getuid) {
-    const dirFd = fs.openSync(input.paths.baseDir, 'r');
-    try {
-      repairOwnedMode(dirFd, 0o700);
-    } finally {
-      fs.closeSync(dirFd);
-    }
-  }
+  repairStateMode(input.paths.baseDir, 0o700);
   const logFd = fs.openSync(input.paths.logPath, 'a', 0o600);
   try {
-    repairOwnedMode(logFd, 0o600);
+    repairStateMode(input.paths.logPath, 0o600);
     const monitored = runCmdDetachedMonitored(process.execPath, input.args, {
       cwd: input.cwd,
       env: {

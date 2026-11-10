@@ -51,18 +51,15 @@ test.skipIf(process.platform === 'win32').for(['fresh', 'loose'])(
   },
 );
 
-test.skipIf(process.platform === 'win32')(
-  'a launched daemon leaves the modes of a state dir another user owns',
-  async () => {
+test.for(['EPERM', 'EROFS'])(
+  'a launched daemon starts when chmod on its state paths fails with %s',
+  async (code) => {
     const paths = resolveDaemonPaths(
-      path.join(mkdtempForTestSync('agent-device-launch-foreign-'), 'state'),
+      path.join(mkdtempForTestSync('agent-device-launch-chmod-'), 'state'),
     );
-    fs.mkdirSync(paths.baseDir, { mode: 0o755 });
-    fs.chmodSync(paths.baseDir, 0o755);
-    fs.writeFileSync(paths.logPath, '', { mode: 0o644 });
-    fs.chmodSync(paths.logPath, 0o644);
-    const owner = fs.statSync(paths.baseDir).uid;
-    const getuid = vi.spyOn(process, 'getuid').mockReturnValue(owner + 1);
+    const chmod = vi.spyOn(fs, 'chmodSync').mockImplementation(() => {
+      throw Object.assign(new Error(code), { code });
+    });
     try {
       const launch = launchDaemonProcess({
         env: process.env,
@@ -72,11 +69,12 @@ test.skipIf(process.platform === 'win32')(
         serverMode: 'socket',
       });
       await launch.exited;
+      assert.deepEqual(
+        chmod.mock.calls.map(([target]) => target),
+        [paths.baseDir, paths.logPath],
+      );
     } finally {
-      getuid.mockRestore();
+      chmod.mockRestore();
     }
-
-    assert.equal(fs.statSync(paths.baseDir).mode & 0o777, 0o755);
-    assert.equal(fs.statSync(paths.logPath).mode & 0o777, 0o644);
   },
 );
