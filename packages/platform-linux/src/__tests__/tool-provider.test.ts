@@ -9,6 +9,7 @@ import {
 import assert from 'node:assert/strict';
 import { pressLinux } from '../input-actions.ts';
 import { createLocalLinuxToolProvider, withLinuxToolProvider } from '../tool-provider.ts';
+import type { ExecDetachedExit } from '@agent-device/host-kit/command';
 
 bindTestCommandHost();
 
@@ -220,30 +221,49 @@ test('local Linux desktop provider launches an app binary through its detached l
   assert.deepEqual(captured, []);
 });
 
-test('local Linux desktop provider reports a launch that fails, exits non-zero, or is signalled', async () => {
-  const exits = [
-    { pid: 1, error: 'spawn demo-app ENOENT' },
-    { pid: 2, exitCode: 3 },
-    { pid: 3, signal: 'SIGKILL' as const },
-    { pid: 4, exitCode: 0 },
-  ];
-  const settled: Promise<unknown>[] = [];
+/** The `linux_app_launch` events one `openTarget` writes, once its launch has exited. */
+async function launchDiagnostics(exit: ExecDetachedExit): Promise<Record<string, unknown>[]> {
+  const logPath = path.join(await mkdtempForTest('linux-launch-diagnostics-'), 'request.ndjson');
+  let exited: Promise<ExecDetachedExit> | undefined;
   const provider = createLocalLinuxToolProvider({
     host: { env: process.env, cwd: process.cwd() },
     whichCommand: async () => true,
     launchDetached: () => {
-      const exited = Promise.resolve(exits[settled.length]!);
-      settled.push(exited);
+      exited = Promise.resolve(exit);
       return { exited };
     },
   });
-
-  await withDiagnosticsScope({ command: 'open' }, async () => {
-    for (const _exit of exits) await provider.desktop.openTarget('demo-app');
-    await Promise.all(settled);
-    // The three failures each report once; a clean exit reports nothing.
-    assert.equal(countDiagnosticEventsByPhase(['linux_app_launch']), 3);
+  return await withDiagnosticsScope({ command: 'open', debug: true, logPath }, async () => {
+    await provider.desktop.openTarget('demo-app');
+    await exited;
+    const expected = countDiagnosticEventsByPhase(['linux_app_launch']);
+    const read = () =>
+      (fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').trim().split('\n') : [])
+        .filter((line) => line.length > 0)
+        .map((line) => JSON.parse(line) as { phase: string; data?: Record<string, unknown> })
+        .filter((event) => event.phase === 'linux_app_launch');
+    await vi.waitFor(() => assert.equal(read().length, expected));
+    return read().map((event) => event.data ?? {});
   });
+}
+
+test.each([
+  [
+    'a start failure',
+    { pid: 1, error: 'spawn demo-app ENOENT' },
+    { error: 'spawn demo-app ENOENT' },
+  ],
+  ['a non-zero exit', { pid: 2, exitCode: 3 }, { exitCode: 3 }],
+  ['a signal', { pid: 3, signal: 'SIGKILL' }, { signal: 'SIGKILL' }],
+] as const)(
+  'local Linux desktop provider reports %s of a launched app once',
+  async (_name, exit, field) => {
+    assert.deepEqual(await launchDiagnostics(exit), [{ app: 'demo-app', ...field }]);
+  },
+);
+
+test('local Linux desktop provider reports nothing for a launched app that exits cleanly', async () => {
+  assert.deepEqual(await launchDiagnostics({ pid: 4, exitCode: 0 }), []);
 });
 
 test('local Linux desktop provider falls back to pkill when wmctrl is unavailable', async () => {
