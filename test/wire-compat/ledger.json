@@ -142,7 +142,7 @@
     "packages/daemon/src/server/upload-http.ts#sendJson": "sha256:c2317b4b14a10731684c9160038005965856150f05f8923765a3fa833d2ecae9",
     "packages/daemon/src/server/upload-http.ts#sendUploadedArtifactResponse": "sha256:9e418403448d58a96284fed605762fa71f9349bf2c70ad79df69b2b3e27487d6",
     "packages/remote/src/artifact-download.ts#RemoteArtifactDownload": "sha256:f73a888f4f8c9d603701c505bb342787b1ca6559a13b15da2385e60349ecea8e",
-    "packages/remote/src/artifact-download.ts#downloadRemoteArtifactFromUrl": "sha256:cde1ed3649d73da51a0413216aa24a561a2ec57d08ed533ffa985b95b1941cf6",
+    "packages/remote/src/artifact-download.ts#downloadRemoteArtifactFromUrl": "sha256:0111afbb147ff167adec1fe64f729911b102d4f5324423d3df8bcc3caac21864",
     "packages/remote/src/daemon-artifacts.ts#DaemonArtifactEndpoint": "sha256:45226717ac52c0af2a62f74e91549582d95f4a4abc49be87989e026291a88c82",
     "packages/remote/src/daemon-artifacts.ts#DownloadRemoteArtifactParams": "sha256:ba6d2f6ac51e05ccc5e0c940b355d62374e018b1ae6f6f744becf6e1760cbb63",
     "packages/remote/src/daemon-artifacts.ts#buildDaemonArtifactUrl": "sha256:06dcde057809b507f70f7bb5cdef9bde6515be84b67e45865cf19e70b8636208",
@@ -452,8 +452,8 @@
     },
     {
       "declaration": "packages/remote/src/artifact-download.ts#downloadRemoteArtifactFromUrl",
-      "digest": "sha256:cde1ed3649d73da51a0413216aa24a561a2ec57d08ed533ffa985b95b1941cf6",
-      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006)."
+      "digest": "sha256:0111afbb147ff167adec1fe64f729911b102d4f5324423d3df8bcc3caac21864",
+      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006). Client-only, implementation-compatible error repair: supported /artifacts downloads still return HTTP 200 with the same bytes, request headers and artifact framing. Redirect/error statuses now fail clearly instead of saving their bodies as artifacts; interrupted error responses settle with the existing COMMAND_FAILED category and numeric statusCode. The bounded body is local diagnostic context, not a new peer payload. Released daemons already return 200 for successful artifact downloads, so supported skewed peers parse the same successful framing (ADR 0006)."
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-progress.ts#shouldReadDaemonProgressStream",
