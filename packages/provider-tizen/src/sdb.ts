@@ -2,7 +2,12 @@ import net from 'node:net';
 
 import { isCommandTimeoutError, runCmd, runCmdStreaming } from '@agent-device/host-kit/command';
 import { Deadline, pollUntilSettled, sleep } from '@agent-device/host-kit/retry';
-import { AppError, asAppError, isRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  asAppError,
+  createRequestCanceledError,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
 import { listTargets, withTunnelRemoval, type PageTunnel } from '@agent-device/tv-cdp';
 
 import { sdbError, type HostEnv } from './tools.ts';
@@ -186,6 +191,8 @@ export function createSdb(bin: () => string, env: HostEnv) {
           if (isRequestCanceledError(error)) throw error;
         });
         await sleep(settleMs, signal);
+        // sleep resolves early on abort; a cancel there must not start the debug launch.
+        if (signal?.aborted) throw createRequestCanceledError();
         const remotePort = await debugLaunch(appId, signal, timeoutMs);
         const tunnel = await forward(remotePort, signal);
         const { value: target } = await pollUntilSettled({
