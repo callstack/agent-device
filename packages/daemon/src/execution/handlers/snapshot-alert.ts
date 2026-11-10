@@ -1,6 +1,7 @@
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import type { AlertRuntimeInput } from '@agent-device/contracts/alert-runtime';
 import {
+  ALERT_ACTIONS,
   type AlertAction,
   DEFAULT_ALERT_TIMEOUT_MS as DEFAULT_TIMEOUT_MS,
   MAX_ALERT_WINDOW_MS,
@@ -96,7 +97,8 @@ export async function handleAlertCommand(
   const { req, logPath, sessionStore, ref, device, inspectFacts, bindDevice, platformServices } =
     params;
   let session = ref ? sessionStore.requireCurrent(ref) : undefined;
-  const action = normalizeAlertAction(req.positionals?.[0]);
+  const action = parseAlertAction(req.positionals?.[0]);
+  const timeoutMs = alertWaitTimeoutMs(action, req.positionals?.[1]);
   const bound = await resolveBoundAlertRuntime({
     device,
     action,
@@ -120,7 +122,7 @@ export async function handleAlertCommand(
     session?.trace?.outPath,
   );
   const data = await bound.execute({
-    timeoutMs: alertWaitTimeoutMs(action, req.positionals?.[1]),
+    timeoutMs,
     ...alertTarget(session),
     execution: runtimeExecutionFromContext(context),
   });
@@ -144,9 +146,21 @@ function alertTarget(
   };
 }
 
-function normalizeAlertAction(action: string | undefined): AlertAction {
-  if (action === 'accept' || action === 'dismiss' || action === 'wait') return action;
-  return 'get';
+/**
+ * `alert [get|accept|dismiss|wait]`, parsed as the registry's ref-frame and recording policy
+ * reads it: case-insensitive, `get` when absent. An unknown subaction is refused, so the handler
+ * never reads where the registry classified a mutation.
+ */
+function parseAlertAction(raw: string | undefined): AlertAction {
+  const action = (raw ?? 'get').toLowerCase();
+  const known = ALERT_ACTIONS.find((candidate) => candidate === action);
+  if (!known) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `alert requires a subcommand: ${ALERT_ACTIONS.join(', ')} (got "${raw}")`,
+    );
+  }
+  return known;
 }
 
 /**
