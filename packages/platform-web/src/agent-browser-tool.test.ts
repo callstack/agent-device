@@ -1,4 +1,9 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import {
+  bindTestCommandHost,
+  installFakeManagedAgentBrowser,
+  withNodeRuntime,
+  writeFakeManagedAgentBrowserPackage,
+} from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,13 +13,7 @@ import {
   runManagedAgentBrowser,
   setupManagedAgentBrowser,
 } from './agent-browser-tool.ts';
-import {
-  installFakeManagedAgentBrowser,
-  mkdtempForTestSync,
-  withNodeRuntime,
-  writeFakeManagedAgentBrowserPackage,
-  writeFakeNpmCliScript,
-} from './__tests__/test-utils.ts';
+import { mkdtempForTestSync, writeFakeNpmCliScript } from './__tests__/test-utils.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 

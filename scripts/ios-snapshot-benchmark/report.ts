@@ -59,7 +59,7 @@ function packageSizeLines(result: BenchmarkResult): string {
   return measuredPackageSizeLines(packageSize);
 }
 
-function measuredPackageSizeLines(packageSize: PackageSize & { status: 'measured' }): string {
+function measuredPackageSizeLines(packageSize: PackageSize): string {
   return [
     ...packedSizeLines(packageSize),
     cleanInstalledSizeLine(packageSize),

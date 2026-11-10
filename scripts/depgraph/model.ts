@@ -130,7 +130,8 @@ function declaredAuthorities(edge: ResolvedImportEdge): DeclaredAuthorityLabel[]
   for (const rule of AUTHORITY_RULES) {
     const subject = rule.side === 'source' ? edge.file : edge.target;
     if (!rule.roots.some((root) => matchesDeclaredRoot(subject, root))) continue;
-    if (rule.symbols && !edge.symbols.some((symbol) => rule.symbols.includes(symbol))) continue;
+    const { symbols } = rule;
+    if (symbols && !edge.symbols.some((symbol) => symbols.includes(symbol))) continue;
     labels.add(rule.label);
   }
   return orderedDeclaredAuthorities(labels);

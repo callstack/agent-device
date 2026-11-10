@@ -30,9 +30,6 @@
       "path": "../selectors"
     },
     {
-      "path": "../session-journal"
-    },
-    {
       "path": "../platform-android"
     },
     {

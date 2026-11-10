@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed (2026-09-14).
+Accepted. Proposed 2026-09-14; production code now implements and cites its rules (for example rule 6 in the durable-capture coordinator).
+This amendment changes the modality of the record from proposed to accepted.
+The rollout in section 7 is incomplete: steps 2 to 7 remain open, so screen recording still exposes `reattach` and `cleanup` and keeps its admission ledger until step 4 lands.
 This ADR amends ADR 0019 section 5 and the capture-kit recovery contracts for the `screen-recording` resource kind only.
 ADR 0019 receives a short pointer paragraph, which section 2.7 of this ADR describes.
 ADR 0022 and ADR 0023 have the same relationship to ADR 0019.

@@ -152,7 +152,7 @@ The derivation has three consequences:
 
 - No surface can arm recording without a move of the lifecycle that authorizes it.
   Thus, the #1533 drift is unrepresentable, not only guarded against.
-  `buildNextOpenSession` and the close finalizer now make no recording decision at all.
+  `publishOpenSession` and the close finalizer now make no recording decision at all.
 - The aggregate answers the whole publication gate of the writer.
   The separate ABORTED check of the writer is gone, because a terminal authoring lifecycle is already not recording.
   Thus, no second gate can disagree with the first about *authoring*.

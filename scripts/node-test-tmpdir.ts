@@ -49,7 +49,7 @@ const testRunTmpDir = fs.mkdtempSync(
   path.join(TEST_RUN_TMP_ROOT, `${TEST_RUN_TMP_PREFIX}${process.pid}-`),
 );
 
-const childEnv = {
+const childEnv: NodeJS.ProcessEnv = {
   ...process.env,
   TMPDIR: testRunTmpDir,
   // Match Vitest's hermetic-env setup: integration daemons must exercise the

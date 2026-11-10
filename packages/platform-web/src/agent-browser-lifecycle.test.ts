@@ -1,9 +1,9 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, installFakeManagedAgentBrowser } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { installFakeManagedAgentBrowser, mkdtempForTestSync } from './__tests__/test-utils.ts';
+import { mkdtempForTestSync } from './__tests__/test-utils.ts';
 
 const { runCmdMock, probe } = vi.hoisted(() => ({
   runCmdMock: vi.fn(),

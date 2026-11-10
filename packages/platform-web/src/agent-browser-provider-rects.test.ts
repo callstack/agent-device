@@ -1,8 +1,8 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, installFakeManagedAgentBrowser } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test, vi } from 'vitest';
-import { installFakeManagedAgentBrowser, mkdtempForTestSync } from './__tests__/test-utils.ts';
+import { mkdtempForTestSync } from './__tests__/test-utils.ts';
 
 const { providerStartupCleanupMock } = vi.hoisted(() => ({
   providerStartupCleanupMock: vi.fn(),
