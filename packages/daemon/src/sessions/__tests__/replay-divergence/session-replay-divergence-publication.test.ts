@@ -174,14 +174,14 @@ test('suggestion and candidate refs outside the published screen refs lose their
     sessionStore: input.replaySession.store,
     observationStore: input.replaySession.observationStore,
     divergence: divergence(input, {
-      kind: 'target-ambiguous',
+      kind: 'identity-mismatch',
       suggestions: [
         { selector: 'label="Button 1"', basis: 'label', ref: 'e1' },
         { selector: 'label="Button 25"', basis: 'label', ref: 'e25' },
       ],
       suggestionCount: 2,
       targetBinding: {
-        classification: 'target-ambiguous',
+        classification: 'identity-mismatch',
         matchCount: 2,
         recorded: { role: 'button', label: 'Save' },
         mismatches: [],
