@@ -197,7 +197,7 @@ test('remote auth does not fall back to login when session refresh gets 503', as
           },
           fetch: async () => {
             fetchCalls += 1;
-            return new Response('{"error":"secret"}', { status: 503 });
+            return new Response('<html>private-body-secret</html>', { status: 503 });
           },
         },
       }),

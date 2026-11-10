@@ -20,15 +20,19 @@ for (const status of [401, 403]) {
   });
 }
 
-for (const status of [404, 429, 503]) {
+for (const [status, retriable] of [
+  [404, undefined],
+  [429, true],
+  [503, true],
+] as const) {
   test(`cloud response ${status} preserves status without requesting login`, async () => {
     await assert.rejects(
-      readCloudJsonResponse(new Response('{"accessToken":"secret"}', { status }), options),
+      readCloudJsonResponse(new Response('<html>secret</html>', { status }), options),
       (error: unknown) => {
         const normalized = normalizeError(error);
         assert.equal(normalized.code, 'COMMAND_FAILED');
         assert.equal(normalized.details?.status, status);
-        assert.equal(normalized.retriable, status === 429 || status >= 500 ? true : undefined);
+        assert.equal(normalized.retriable, retriable);
         assert.doesNotMatch(JSON.stringify(normalized), /secret|accessToken/);
         return true;
       },
@@ -43,4 +47,17 @@ test('cloud response keeps successful JSON and invalid JSON behavior', async () 
     assert.equal(normalizeError(error).details?.status, 200);
     return true;
   });
+});
+
+test('malformed successful JSON never exposes response text through its cause', async () => {
+  await assert.rejects(
+    readCloudJsonResponse(new Response('private-body-secret'), options),
+    (error: unknown) => {
+      const normalized = normalizeError(error);
+      assert.equal(normalized.code, 'COMMAND_FAILED');
+      assert.equal(normalized.details?.status, 200);
+      assert.doesNotMatch(JSON.stringify(normalized), /private-body-secret/);
+      return true;
+    },
+  );
 });

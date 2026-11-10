@@ -8,19 +8,6 @@ export async function readCloudJsonResponse<T>(
   },
 ): Promise<T> {
   const text = await response.text();
-  let parsed: unknown = {};
-  if (text.trim().length > 0) {
-    try {
-      parsed = JSON.parse(text);
-    } catch (error) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        options.invalidJsonMessage,
-        { status: response.status },
-        error instanceof Error ? error : undefined,
-      );
-    }
-  }
   if (!response.ok) {
     const status = response.status;
     const code = status === 401 || status === 403 ? 'UNAUTHORIZED' : 'COMMAND_FAILED';
@@ -30,6 +17,14 @@ export async function readCloudJsonResponse<T>(
         ? { retriable: true, hint: 'Retry the request later. Do not sign in again.' }
         : {}),
     });
+  }
+  let parsed: unknown = {};
+  if (text.trim().length > 0) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new AppError('COMMAND_FAILED', options.invalidJsonMessage, { status: response.status });
+    }
   }
   return parsed as T;
 }

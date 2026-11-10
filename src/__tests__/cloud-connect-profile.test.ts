@@ -366,40 +366,12 @@ test('connect without remote config rejects legacy remoteConfig string profile r
   }
 });
 
-test('connect without remote config reports cloud profile authorization failures', async () => {
-  const tempRoot = mkdtempForTestSync('agent-device-connect-cloud-denied-');
-  const stateDir = path.join(tempRoot, '.state');
-  mockedResolveCloudAccessForConnect.mockResolvedValue({
-    accessToken: 'adc_agent_cloud',
-    cloudBaseUrl: 'https://cloud.example',
-  });
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(
-      async () =>
-        new Response(JSON.stringify({ error: 'forbidden' }), {
-          status: 403,
-          headers: { 'content-type': 'application/json' },
-        }),
-    ),
-  );
-
-  try {
-    await assert.rejects(connectWithGeneratedCloudProfile(stateDir), (error: unknown) => {
-      assert.equal((error as { code?: string }).code, 'UNAUTHORIZED');
-      assert.match(
-        (error as Error).message,
-        /Cloud connection profile endpoint rejected the request/,
-      );
-      return true;
-    });
-  } finally {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
-  }
-});
-
-for (const status of [429, 503]) {
-  test(`connect without remote config propagates cloud profile ${status} failures`, async () => {
+for (const [status, code] of [
+  [403, 'UNAUTHORIZED'],
+  [429, 'COMMAND_FAILED'],
+  [503, 'COMMAND_FAILED'],
+] as const) {
+  test(`connect without remote config preserves cloud profile ${status} failures`, async () => {
     const tempRoot = mkdtempForTestSync(`agent-device-connect-cloud-${status}-`);
     const stateDir = path.join(tempRoot, '.state');
     mockedResolveCloudAccessForConnect.mockResolvedValue({
@@ -408,14 +380,16 @@ for (const status of [429, 503]) {
     });
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response('{"error":"secret"}', { status })),
+      vi.fn(async () => new Response('<html>private-body-secret</html>', { status })),
     );
     try {
       await assert.rejects(connectWithGeneratedCloudProfile(stateDir), (error: unknown) => {
         const normalized = normalizeError(error);
-        assert.equal(normalized.code, 'COMMAND_FAILED');
+        assert.equal(normalized.code, code);
         assert.equal(normalized.details?.status, status);
-        assert.equal(normalized.retriable, true);
+        if (code === 'COMMAND_FAILED') assert.equal(normalized.retriable, true);
+        assert.match(normalized.message, /Cloud connection profile endpoint rejected the request/);
+        assert.doesNotMatch(JSON.stringify(normalized), /private-body-secret/);
         return true;
       });
       assert.equal(readActiveConnectionState({ stateDir }), null);
