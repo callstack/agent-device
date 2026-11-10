@@ -16,10 +16,15 @@ export function ensureAppLogPath(outPath: string, env: NodeJS.ProcessEnv): void 
   const directory = path.dirname(outPath);
   if (!fs.existsSync(directory)) fs.mkdirSync(directory, { recursive: true });
   assertAppLogFileIsNotSymbolicLink(outPath);
-  rotateAppLogIfNeeded(outPath, {
+  rotateAppLogIfNeeded(outPath, resolveAppLogRotationConfig(env));
+}
+
+/** The size cap and rotated-file count `app.log` writers apply. */
+export function resolveAppLogRotationConfig(env: NodeJS.ProcessEnv): AppLogRotationConfig {
+  return {
     maxBytes: positiveIntEnv(env.AGENT_DEVICE_APP_LOG_MAX_BYTES, DEFAULT_MAX_APP_LOG_BYTES),
     maxRotatedFiles: positiveIntEnv(env.AGENT_DEVICE_APP_LOG_MAX_FILES, DEFAULT_MAX_ROTATED_FILES),
-  });
+  };
 }
 
 export function rotateAppLogIfNeeded(outPath: string, config: AppLogRotationConfig): void {
