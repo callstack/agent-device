@@ -4,7 +4,7 @@
 
 Partly accepted.
 The session event log contract is accepted and implemented in `packages/session-journal/src`: `events.ndjson` v1 entries, size-capped rotation to one retained generation, the verifying retention-window sidecar, and the typed `EVENT_LOG_CURSOR_EXPIRED` and `EVENT_LOG_WINDOW_UNVERIFIED` cursor errors of the `events` command.
-Out-of-request work, such as the idle sweep, runs in a session-scoped diagnostics scope.
+Out-of-request work, such as the idle sweep and lease session end, runs in the daemon-level diagnostics scope (`session: 'daemon'`), not in a per-session teardown scope.
 The rest of this record remains proposed (2026-07-24) and is not implemented: the event catalog, the single journal append point, registered sinks, forked scopes with parent scope identity, and the usage record.
 The proposed names below (`EVENT_CATALOG`, `EventKind`, `UsageRecord`, `parentScopeId`) do not exist in code.
 The [pre-slimming text](https://github.com/callstack/agent-device/blob/e35d0d496fb820d57d95fcad1b6b62dfa9962abb/docs/adr/0018-unified-event-journal.md) is historical context only: its inventory and step order are not current guidance.
