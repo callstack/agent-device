@@ -23,7 +23,7 @@ test('the weekly sweep shards exactly the registry matrix', () => {
   const jobs = [...yaml.matchAll(/^ {10}- \{ (?<entry>[^}]+) \}$/gm)].map((match) =>
     Object.fromEntries(
       match
-        .groups!.entry.split(', ')
+        .groups!.entry!.split(', ')
         .map((pair) => pair.split(': ') as [string, string])
         .map(([key, value]) => [key, value]),
     ),

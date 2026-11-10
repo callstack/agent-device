@@ -107,12 +107,12 @@ test('the AGENTS.md task router points only at files that exist', async () => {
   const table = content.match(/\| When the task involves \| Read \|([\s\S]*?)\n\n/)?.[1];
   assert.ok(table, 'AGENTS.md must retain its task-routing table');
 
-  const routedPaths = [...table.matchAll(/`([^`]+\.md)`/g)].map((match) => match[1]);
+  const routedPaths = [...table.matchAll(/`([^`]+\.md)`/g)].map((match) => match[1]!);
   assert.ok(routedPaths.length > 0, 'task-routing table must name at least one owned document');
 
   const rootEntries = new Set(await readdir(ROOT));
   for (const relativePath of routedPaths) {
-    const [firstSegment] = relativePath.split('/');
+    const firstSegment = relativePath.split('/')[0] ?? relativePath;
     assert.ok(rootEntries.has(firstSegment), `routed path does not exist: ${relativePath}`);
     await assert.doesNotReject(read(relativePath), `routed path does not exist: ${relativePath}`);
   }

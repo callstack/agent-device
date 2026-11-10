@@ -128,7 +128,9 @@ async function sendRequest(
   const upstream = await fetch(buildTargetUrl(options.upstreamPort, context.path), {
     method: context.method,
     headers: forwardHeaders(context.headers),
-    ...(context.body.byteLength > 0 ? { body: context.body, duplex: 'half' } : {}),
+    ...(context.body.byteLength > 0
+      ? { body: new Uint8Array(context.body), duplex: 'half' as const }
+      : {}),
   });
   const body = Buffer.from(await upstream.arrayBuffer());
   await waitForNetwork(options.network, body.byteLength);

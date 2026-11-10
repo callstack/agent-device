@@ -101,7 +101,7 @@ function callsInOrder(file: string, source: string, first: string, second: strin
 
 function callOffsets(file: string, source: string, expected: string): number[] {
   const found: number[] = [];
-  const program = parseSync(file, source).program as AstNode;
+  const program = parseSync(file, source).program;
   visitAst(program, (node) => {
     if (node['type'] !== 'CallExpression') return;
     const callee = node['callee'] as AstNode | undefined;
@@ -118,7 +118,7 @@ function callOffsets(file: string, source: string, expected: string): number[] {
 
 function containsIdentifier(file: string, source: string, expected: string): boolean {
   let found = false;
-  const program = parseSync(file, source).program as AstNode;
+  const program = parseSync(file, source).program;
   visitAst(program, (node) => {
     if (node['type'] === 'Identifier' && node['name'] === expected) found = true;
   });

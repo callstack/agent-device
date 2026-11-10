@@ -122,7 +122,7 @@ test.each([
 // The build enumerates the bundled modules itself. A package whose `package.json` names neither a
 // version nor a license, or a module with no `package.json` at all, is still bundled code: beside a
 // licensed neighbor it must stop the build, not drop out of a notices file that names the neighbor.
-test.each([
+test.each<{ name: string; files: Record<string, string>; failure: RegExp }>([
   {
     name: 'package with neither license nor version',
     files: {

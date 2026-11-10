@@ -73,7 +73,7 @@ export async function shardFiles(
       content: source,
       mutate: true,
     })),
-    { excludedMutations: [...excludedMutations], ignorers: [] },
+    { excludedMutations: [...excludedMutations], ignorers: [], plugins: null },
   );
   // Two groups per job give the packer room to spread mutation-dense files.
   const budget = Math.max(1, Math.ceil(generated.mutants.length / (shard.count * 2)));

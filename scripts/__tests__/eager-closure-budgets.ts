@@ -579,7 +579,7 @@ function grewPastTheRule(growth: GrowthForAggregation): boolean {
  */
 function packageOf(relativeFile: string): string {
   const match = /^(packages\/[^/]+)\//.exec(relativeFile);
-  return match ? match[1] : 'src';
+  return match?.[1] ?? 'src';
 }
 
 /** True when nothing in `graph` records `candidate` as the direct importer of a same-package file. */

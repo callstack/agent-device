@@ -42,8 +42,9 @@ test('every platform and provider package is a forbidden router target', () => {
     .map((name) => `packages/${name}/`);
 
   assert.ok(packages.length > 0, 'expected platform and provider packages');
+  const forbiddenRoots: readonly string[] = routerPolicy().forbiddenTargetRoots;
   for (const root of packages) {
-    assert.ok(routerPolicy().forbiddenTargetRoots.includes(root), `${root} is not forbidden`);
+    assert.ok(forbiddenRoots.includes(root), `${root} is not forbidden`);
   }
 });
 

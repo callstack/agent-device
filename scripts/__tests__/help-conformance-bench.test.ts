@@ -8,7 +8,10 @@ import { test } from 'vitest';
 import { scoreExpectations } from '../help-conformance-case-checks.mjs';
 import { validateAgentDeviceCommand } from '../help-conformance-command-validator.ts';
 import { opensAndCloses, usesValidationPrep } from '../help-conformance-expectations.mjs';
-import { validatePlanCommands } from '../help-conformance-plan-validator.mjs';
+import {
+  type PlanCommandValidation,
+  validatePlanCommands,
+} from '../help-conformance-plan-validator.mjs';
 import { classifyRunnerOutput, extractCommands } from '../help-conformance-runner-output.mjs';
 import { summarizeResults } from '../help-conformance-summary.mjs';
 
@@ -22,6 +25,21 @@ const AGENT_DEVICE_SKILL = join(
   'agent-device',
   'SKILL.md',
 );
+
+type Segments<N extends number, Acc extends PlanCommandValidation[] = []> = Acc['length'] extends N
+  ? Acc
+  : Segments<N, [...Acc, PlanCommandValidation]>;
+
+/** Validates a plan and asserts it yields exactly `count` segment results. */
+async function validateSegments<const N extends number>(
+  count: N,
+  commands: string[],
+  options?: Parameters<typeof validatePlanCommands>[1],
+): Promise<Segments<N>> {
+  const results = await validatePlanCommands(commands, options);
+  assert.equal(results.length, count);
+  return results as Segments<N>;
+}
 
 // These tests spawn the real script in --dry-run mode with every required doc
 // overridden, so no LLM call and no built CLI is needed: the raw-first-screen
@@ -374,7 +392,7 @@ test('runner output classifies model commands as success and infrastructure nois
 
 test('plan validator rejects shell projection and non-permitted executables', async () => {
   const [redirected, piped, newline, carriageReturn, escapedNewline, shellCommand] =
-    await validatePlanCommands([
+    await validateSegments(6, [
       'agent-device snapshot -i > evidence.json',
       'agent-device snapshot -i | tee evidence.txt',
       'agent-device press @e1 --settle\ncat',
@@ -387,7 +405,7 @@ test('plan validator rejects shell projection and non-permitted executables', as
   }
   assert.equal(shellCommand.issues[0]?.kind, 'executable-policy');
 
-  const [quotedNewline] = await validatePlanCommands([
+  const [quotedNewline] = await validateSegments(1, [
     'agent-device fill label=Biography "line one\nline two" --settle',
   ]);
   assert.equal(quotedNewline.issues.length, 0);
@@ -399,7 +417,7 @@ test('plan validator rejects shell projection and non-permitted executables', as
     '--settle',
   ]);
 
-  const [placeholder] = await validatePlanCommands(['agent-device press @<search-ref> --settle']);
+  const [placeholder] = await validateSegments(1, ['agent-device press @<search-ref> --settle']);
   assert.ok(placeholder.issues.some(({ kind }) => kind === 'pseudo-ref'));
   assert.ok(placeholder.issues.some(({ kind }) => kind === 'shell-projection'));
 });
@@ -409,7 +427,7 @@ test('plan validator rejects shell projection and non-permitted executables', as
 // on `&&` and validate each chained segment as its own agent-device command,
 // instead of failing the whole line as one shell-projection violation.
 test('plan validator splits an unquoted && chain into independently valid segments', async () => {
-  const [press, fill] = await validatePlanCommands([
+  const [press, fill] = await validateSegments(2, [
     'agent-device press \'label="Search"\' --settle && agent-device fill \'label="Search"\' "query" --settle',
   ]);
   assert.equal(press.issues.length, 0);
@@ -419,7 +437,7 @@ test('plan validator splits an unquoted && chain into independently valid segmen
 });
 
 test('plan validator fails only the offending segment of a chained plan', async () => {
-  const [goodFirst, badSecond] = await validatePlanCommands([
+  const [goodFirst, badSecond] = await validateSegments(2, [
     'agent-device snapshot -i && agent-device press @<search-ref> --settle',
   ]);
   assert.equal(goodFirst.issues.length, 0);
@@ -427,7 +445,7 @@ test('plan validator fails only the offending segment of a chained plan', async 
 });
 
 test('plan validator does not split && inside a quoted selector value', async () => {
-  const [single] = await validatePlanCommands([
+  const [single] = await validateSegments(1, [
     'agent-device fill \'label="A && B"\' "value" --settle',
   ]);
   assert.equal(single.issues.length, 0);
@@ -435,12 +453,12 @@ test('plan validator does not split && inside a quoted selector value', async ()
 });
 
 test('plan validator still rejects an unquoted lone & as a shell operator', async () => {
-  const [lone] = await validatePlanCommands(['agent-device open foo & agent-device close']);
+  const [lone] = await validateSegments(1, ['agent-device open foo & agent-device close']);
   assert.equal(lone.issues[0]?.kind, 'shell-projection');
 });
 
 test('plan validator keeps single-command results identical when no chain is present', async () => {
-  const [single] = await validatePlanCommands(['agent-device snapshot -i']);
+  const [single] = await validateSegments(1, ['agent-device snapshot -i']);
   assert.equal(single.issues.length, 0);
   assert.deepEqual(single.tokens, ['agent-device', 'snapshot', '-i']);
   assert.equal(single.command, 'agent-device snapshot -i');
@@ -450,19 +468,19 @@ test('plan validator keeps single-command results identical when no chain is pre
 // that silently dropped the empty segment (instead of failing it) would
 // bless a plan that fails at execution — exactly the gap review found.
 test('plan validator rejects a leading && as an empty chain operand', async () => {
-  const [empty, closeSegment] = await validatePlanCommands(['&& agent-device close']);
+  const [empty, closeSegment] = await validateSegments(2, ['&& agent-device close']);
   assert.equal(empty.issues[0]?.kind, 'empty-chain-operand');
   assert.equal(closeSegment.issues.length, 0);
 });
 
 test('plan validator rejects a trailing && as an empty chain operand', async () => {
-  const [pressSegment, empty] = await validatePlanCommands(['agent-device press @e1 --settle &&']);
+  const [pressSegment, empty] = await validateSegments(2, ['agent-device press @e1 --settle &&']);
   assert.equal(pressSegment.issues.length, 0);
   assert.equal(empty.issues[0]?.kind, 'empty-chain-operand');
 });
 
 test('plan validator rejects a doubled && as an empty chain operand', async () => {
-  const [openSegment, empty, closeSegment] = await validatePlanCommands([
+  const [openSegment, empty, closeSegment] = await validateSegments(3, [
     'agent-device open foo && && agent-device close',
   ]);
   assert.equal(openSegment.issues.length, 0);
@@ -516,7 +534,7 @@ test('case matchers score parsed tokens so shell quoting does not change results
 test('foreground attach grammar accepts both auto-discovery and an explicit known app', async () => {
   const autoDiscoveryCommand = 'agent-device open --foreground --platform ios';
   const explicitTargetCommand = 'agent-device open --foreground --platform ios com.example.app';
-  const [autoDiscovery, explicitTarget] = await validatePlanCommands([
+  const [autoDiscovery, explicitTarget] = await validateSegments(2, [
     autoDiscoveryCommand,
     explicitTargetCommand,
   ]);
@@ -553,7 +571,8 @@ test('compact skill starts a known-app task with foreground open and an initial 
 });
 
 test('plan validator applies narrow grammar to permitted external commands', async () => {
-  const results = await validatePlanCommands(
+  const results = await validateSegments(
+    6,
     [
       'mkdir -p dogfood-output',
       'mkdir dogfood-output',
@@ -573,7 +592,7 @@ test('plan validator applies narrow grammar to permitted external commands', asy
 });
 
 test('plan validator strips shell comments without mutating command arguments', async () => {
-  const [snapshot, press] = await validatePlanCommands([
+  const [snapshot, press] = await validateSegments(2, [
     'agent-device snapshot -i # capture evidence',
     'agent-device press @e64 --settle # tap result',
   ]);
@@ -584,7 +603,8 @@ test('plan validator strips shell comments without mutating command arguments', 
 });
 
 test('plan validator keeps agent result alignment across skipped and external lines', async () => {
-  const results = await validatePlanCommands(
+  const results = await validateSegments(
+    5,
     [
       'agent-device snapshot -i > evidence.json',
       'mkdir -p evidence',
