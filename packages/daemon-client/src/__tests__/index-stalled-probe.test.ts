@@ -18,7 +18,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   mkdtempForTestSync,
-  supportsLoopbackBind,
+  skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -104,10 +104,7 @@ async function withLiveStandIn(
   version: string,
   body: (standIn: LiveStandIn) => Promise<void>,
 ): Promise<void> {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const stateDir = mkdtempForTestSync('agent-device-stalled-probe-');
   const root = mkdtempForTestSync('agent-device-stalled-probe-daemon-');
   const daemonDir = path.join(root, 'agent-device', 'dist', 'src', 'internal');
@@ -232,10 +229,7 @@ async function expectDeadDaemonReplaced(
   t: { skip: (reason: string) => void },
   deadVersion: string,
 ): Promise<void> {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const stateDir = mkdtempForTestSync('agent-device-dead-probe-');
   const gone = runCmdBackground(process.execPath, ['-e', ''], {
     stdio: 'ignore',

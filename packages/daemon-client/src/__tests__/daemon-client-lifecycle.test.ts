@@ -12,7 +12,7 @@ import {
   listenOnLoopback,
   mkdtempForTestSync,
   startHttpDaemonFixture,
-  supportsLoopbackBind,
+  skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import {
   spawnRegisteredDaemonFixture,
@@ -366,10 +366,7 @@ test('sendToDaemon reports early daemon exit with log tail and startup paths', a
 });
 
 test('daemon acquisition reclaims a proven reused owner before publication', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   const stateDir = makeTempStateDir('agent-device-daemon-stale-lock-');
   const paths = resolveDaemonPaths(stateDir);
@@ -405,10 +402,7 @@ test('daemon acquisition reclaims a proven reused owner before publication', asy
 });
 
 test('sendToDaemon does not reuse reachable daemon metadata with mismatched version or signature', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   const cases: Array<{
     name: string;
@@ -475,10 +469,7 @@ test('sendToDaemon does not reuse reachable daemon metadata with mismatched vers
 });
 
 test('sendToDaemon prints a takeover notice before replacing an unreachable daemon', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   const stateDir = makeTempStateDir('agent-device-daemon-unreachable-takeover-');
   const paths = resolveDaemonPaths(stateDir);
@@ -516,10 +507,7 @@ test('sendToDaemon prints a takeover notice before replacing an unreachable daem
 });
 
 test('sendToDaemon replaces socket-only daemon metadata when HTTP transport is requested', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   const stateDir = makeTempStateDir('agent-device-daemon-http-takeover-');
   const paths = resolveDaemonPaths(stateDir);
@@ -557,10 +545,7 @@ test('sendToDaemon replaces socket-only daemon metadata when HTTP transport is r
 });
 
 test('sendToDaemon falls back from failed socket transport to HTTP using daemon metadata ports', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   const stateDir = makeTempStateDir('agent-device-daemon-transport-fallback-');
   const paths = resolveDaemonPaths(stateDir);
@@ -594,10 +579,7 @@ test('sendToDaemon falls back from failed socket transport to HTTP using daemon 
 });
 
 test('sendToDaemon does not replay over HTTP after the socket request is written', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   const stateDir = makeTempStateDir('agent-device-daemon-transport-written-');
   const paths = resolveDaemonPaths(stateDir);
@@ -671,10 +653,7 @@ function unheldDivergenceError(): Record<string, unknown> {
 }
 
 test('sendToDaemon keeps an owned ephemeral daemon alive and hints its --state-dir on a resumable repair divergence', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   const daemon = await startHttpDaemonErrorFixture(heldDivergenceError());
   let ownedStateDir = '';
@@ -709,10 +688,7 @@ test('sendToDaemon keeps an owned ephemeral daemon alive and hints its --state-d
 });
 
 test('C1: keep-alive keys on repairSessionHeld, NOT resume.allowed — a HELD divergence with allowed:false still keeps the daemon alive', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   const daemon = await startHttpDaemonErrorFixture(
     heldDivergenceError({
@@ -748,10 +724,7 @@ test('C1: keep-alive keys on repairSessionHeld, NOT resume.allowed — a HELD di
 });
 
 test('sendToDaemon tears down an owned ephemeral daemon on an UNHELD divergence (no repairSessionHeld signal)', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   const daemon = await startHttpDaemonErrorFixture(unheldDivergenceError());
   let ownedStateDir = '';
@@ -780,10 +753,7 @@ test('sendToDaemon tears down an owned ephemeral daemon on an UNHELD divergence 
 });
 
 test('BLOCKER 2 (third follow-up): a shutdown-time repair commit failure is surfaced and the owned state dir survives', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   for (const failRelease of [false, true]) {
     const daemon = await startHttpDaemonFixture({ session: 'default' });
@@ -846,10 +816,7 @@ test('BLOCKER 2 (third follow-up): a shutdown-time repair commit failure is surf
 });
 
 test('continuation: sendToDaemon keeps the daemon alive on a held divergence even WITHOUT --save-script on the request', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   // The `replay --from` continuation of a repair does NOT repeat --save-script
   // (R2); the daemon still sets `repairSessionHeld` from the PERSISTED armed
@@ -931,10 +898,7 @@ function parseAddressHint(hint: string): { stateDir: string; session: string } {
 }
 
 test('sendToDaemon keeps an owned ephemeral daemon alive and hints its --state-dir when a close-less replay leaves the session active', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   const daemon = await startHttpDaemonFixture(activeReplaySuccessData());
   let ownedStateDir = '';
@@ -970,10 +934,7 @@ test('sendToDaemon keeps an owned ephemeral daemon alive and hints its --state-d
 });
 
 test('closes the loop: a follow-up sendToDaemon using the hinted --state-dir/--session reaches the SAME kept-alive daemon, without spawning a new one', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   const daemon = await startHttpDaemonFixture(activeReplaySuccessData());
   let ownedStateDir = '';
@@ -1009,10 +970,7 @@ test('closes the loop: a follow-up sendToDaemon using the hinted --state-dir/--s
 });
 
 test('sendToDaemon tears down an owned ephemeral daemon when replay reports the session was closed (sessionActive: false)', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   const daemon = await startHttpDaemonFixture(activeReplaySuccessData({ sessionActive: false }));
   let ownedStateDir = '';
@@ -1041,10 +999,7 @@ test('sendToDaemon tears down an owned ephemeral daemon when replay reports the 
 });
 
 test('ADR 0012 R7 x ADR 0016: a completed --save-script repair also keeps its owning daemon alive (its terminal source close is always skipped)', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   // A repair-armed replay that completes with NO divergence always skips its
   // terminal source `close` (ADR 0012, "the terminal source close ... is
@@ -1087,10 +1042,7 @@ test('ADR 0012 R7 x ADR 0016: a completed --save-script repair also keeps its ow
 });
 
 test('issue #1384: sendToDaemon does not stop a client-started daemon at an explicit --state-dir when replay leaves the session active', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   // The literal #1384 repro: an explicit AGENT_DEVICE_STATE_DIR/--state-dir
   // means `ownedStateDir` is false, but this client still STARTS the daemon
@@ -1133,10 +1085,7 @@ test('issue #1384: sendToDaemon does not stop a client-started daemon at an expl
 });
 
 test('sendToDaemon still tears down a `test` command owned ephemeral daemon even if its response data carried sessionActive:true', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
 
   // `test` never actually sets this field in practice (its own per-file
   // runner always closes each session before the suite summary is built) —

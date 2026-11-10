@@ -15,7 +15,7 @@ import {
   closeLoopbackServer,
   mkdtempForTestSync,
   startHttpDaemonFixture,
-  supportsLoopbackBind,
+  skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import {
   spawnRegisteredDaemonFixture,
@@ -127,7 +127,7 @@ test.for([
 ])(
   'existing registration observation requires proved matching birth times ($proof)',
   async ({ startTime, infoStart, expectedAllowed, expectedState }, t) => {
-    if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
+    if (await skipWhenLoopbackUnavailable(t)) return;
     const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-observation-proof-'));
     const http = await startHttpDaemonFixture({ devices: [] });
     assert.ok(observationIdentity.startTime?.trim());
@@ -249,7 +249,7 @@ test.for(['early exit', 'timeout'] as const)(
 
 for (const command of ['devices', 'test']) {
   test(`a joined busy contender adopts a real winner for ${command}`, async (t) => {
-    if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
+    if (await skipWhenLoopbackUnavailable(t)) return;
     const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-winner-'));
     const http = await startHttpDaemonFixture({ devices: [] });
     const deferred = path.join(paths.baseDir, 'defer-publication');
@@ -306,7 +306,7 @@ for (const command of ['devices', 'test']) {
 }
 
 test('a client-held claim is waited out before a fresh daemon attempt', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-client-holder-'));
   const http = await startHttpDaemonFixture({ devices: [] });
   const claim = tryAcquireProcessLock({
@@ -352,7 +352,7 @@ for (const exit of [
   { exitCode: DAEMON_STARTUP_EXIT_CODES.busy, signal: 'SIGTERM' as const },
 ]) {
   test(`generic exit ${exit.error ?? exit.signal ?? exit.exitCode} cannot adopt or stop a foreign winner`, async (t) => {
-    if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
+    if (await skipWhenLoopbackUnavailable(t)) return;
     const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-generic-exit-'));
     const http = await startHttpDaemonFixture({ devices: [] });
     const deferred = path.join(paths.baseDir, 'defer-publication');
@@ -384,7 +384,7 @@ for (const exit of [
 }
 
 test('a busy contender that exits sweeps its own pre-lock marker before the retried attempt', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-busy-retry-marker-'));
   const http = await startHttpDaemonFixture({ devices: [] });
   const claim = tryAcquireProcessLock({
@@ -432,7 +432,7 @@ test('a busy contender that exits sweeps its own pre-lock marker before the retr
 
 test('a joined busy contender waits for a published winner to become ready without signaling it', async (t) => {
   // The contender records its pre-lock phase through the real protocol; the handoff must sweep it.
-  if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-delayed-ready-'));
   let probes = 0;
   const http = await startHttpDaemonFixture({ devices: [] }, { ready: () => ++probes >= 12 });
@@ -537,7 +537,7 @@ test.for([
   { budget: 'ample', offset: 0, launches: 2, alive: false, rpcs: 1 },
   { budget: 'near deadline', offset: 11_000, launches: 1, alive: true, rpcs: 0 },
 ])('an older winner is replaced only with enough startup time ($budget)', async (expected, t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-older-winner-'));
   // The replacement-window behavior is budget-independent; this pins the original 15 s shape.
   vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '15000');
@@ -600,7 +600,7 @@ test.for([
 });
 
 test('a failed own transport probe retires and joins the private startup before rejecting', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const http = await startHttpDaemonFixture({ devices: [] });
   let paths: DaemonPaths | undefined;
   let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
@@ -648,7 +648,7 @@ test('a failed own transport probe retires and joins the private startup before 
 test.for(['default', 'private replay'] as const)(
   'a missed initial birth probe recovers the monitored child for $0',
   async (route, t) => {
-    if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
+    if (await skipWhenLoopbackUnavailable(t)) return;
     const http = await startHttpDaemonFixture({ devices: [], sessionActive: false });
     const defaultPaths = resolveDaemonPaths(mkdtempForTestSync('daemon-missed-birth-'));
     const ensure = vi.spyOn(lifecycle, 'ensureManagedDaemon');

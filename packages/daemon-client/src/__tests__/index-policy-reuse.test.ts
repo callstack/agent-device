@@ -17,7 +17,7 @@ import {
   closeLoopbackServer,
   mkdtempForTestSync,
   startHttpDaemonFixture,
-  supportsLoopbackBind,
+  skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import { loadDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -32,7 +32,7 @@ afterEach(() => {
 });
 
 test('a host-bound transport resolves policy from its host environment and working directory', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const fixture = await startReusableDaemon({ policyDigest: undefined });
   try {
     vi.stubEnv('AGENT_DEVICE_DAEMON_POLICY', '');
@@ -54,10 +54,7 @@ test('a host-bound transport resolves policy from its host environment and worki
 });
 
 test('a caller naming a policy refuses a running daemon without that policy', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const fixture = await startReusableDaemon({ policyDigest: undefined });
   try {
     await assert.rejects(
@@ -76,10 +73,7 @@ test('a caller naming a policy refuses a running daemon without that policy', as
 });
 
 test('a caller naming a policy refuses a running daemon that enforces a different policy', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const otherDigest = 'a'.repeat(64);
   const fixture = await startReusableDaemon({ policyDigest: otherDigest });
   try {
@@ -103,10 +97,7 @@ test('a caller naming a policy refuses a running daemon that enforces a differen
 });
 
 test('a caller naming a policy reuses a daemon that enforces the same policy', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
   const fixture = await startReusableDaemon({ policyDigest: 'matching' });
   try {
     assert.deepEqual(await sendSmoke(fixture.stateDir), { ok: true, data: { via: 'http' } });
@@ -117,10 +108,7 @@ test('a caller naming a policy reuses a daemon that enforces the same policy', a
 });
 
 test('a caller naming a policy refuses a daemon another caller started without it', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
+  if (await skipWhenLoopbackUnavailable(t)) return;
   // No daemon runs yet. While this caller starts one, another caller's daemon without the policy
   // wins the state dir: its metadata is what startup finds.
   const fixture = await startReusableDaemon({ policyDigest: undefined, publish: 'on-spawn' });
