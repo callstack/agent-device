@@ -66,7 +66,7 @@ An inserted or removed wrapper ancestor changes identity.
 Replay classifies every annotated step before dispatch through six exact verification paths.
 Only a verified result sends the action.
 Anything that the evidence cannot isolate is an `identity-unverifiable` divergence, never a silent pick.
-The recorder must never emit a payload that its parser rejects. The writer downgrades oversized evidence to `verification: "unverifiable"` and drops its rect. Escape-heavy values can still exceed the serialized limit; the implementation does not recheck after dropping the rect.
+The recorder must never emit a payload that its parser rejects. The writer downgrades oversized evidence to `verification: "unverifiable"` and drops its rect. If the payload still exceeds the serialized limit after dropping the rect (escape-heavy values), the writer measures again and writes no annotation; that action replays without a target check.
 The format is additive. Old readers ignore the comment, and new readers run unannotated actions without the check.
 An annotation binds only to the next physical action line.
 

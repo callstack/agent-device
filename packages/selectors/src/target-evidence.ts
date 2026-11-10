@@ -151,13 +151,22 @@ function fitsPayloadCeiling(candidate: TargetAnnotationV1): boolean {
   );
 }
 
-/** Decision 3's terminal fail-closed downgrade; rect is diagnostic-only and dropped before emitting an over-cap payload. */
-function finalizeOversizedCandidate(candidate: TargetAnnotationV1): TargetAnnotationV1 {
+/**
+ * Decision 3's terminal fail-closed downgrade; rect is diagnostic-only and dropped before emitting an over-cap payload.
+ * The field caps apply before JSON escaping, so escape-heavy labels can leave even the parent-only payload over the
+ * ceiling: measure again after the drop and emit no annotation rather than one the parser would reject.
+ */
+function finalizeOversizedCandidate(candidate: TargetAnnotationV1): TargetAnnotationV1 | undefined {
   candidate.verification = 'unverifiable';
   if (
     utf8ByteLength(serializeTargetAnnotationV1(candidate)) > TARGET_ANNOTATION_MAX_PAYLOAD_BYTES
   ) {
     delete candidate.rect;
+  }
+  if (
+    utf8ByteLength(serializeTargetAnnotationV1(candidate)) > TARGET_ANNOTATION_MAX_PAYLOAD_BYTES
+  ) {
+    return undefined;
   }
   return candidate;
 }
