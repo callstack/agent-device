@@ -22,6 +22,9 @@ import {
   shouldStreamRequestProgress,
 } from '@agent-device/daemon-contracts/request-progress-protocol';
 
+/** The largest request either daemon transport reads before it checks the request's token. */
+export const MAX_DAEMON_REQUEST_CHARS = 1024 * 1024;
+
 export type DaemonServer = (net.Server | HttpServer) & {
   destroyConnections?: () => void;
 };
@@ -63,6 +66,11 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
     const onData = AsyncResource.bind(async (chunk: string) => {
       const parsed = consumeTextLines(buffer, chunk);
       buffer = parsed.buffer;
+      if (buffer.length > MAX_DAEMON_REQUEST_CHARS) {
+        refuseOversizedSocketRequest(socket, onData);
+        buffer = '';
+        return;
+      }
       for (const line of parsed.lines) {
         let response: DaemonResponse;
         inFlightRequests += 1;
@@ -121,6 +129,18 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
     sockets.clear();
   };
   return server;
+}
+
+function refuseOversizedSocketRequest(
+  socket: net.Socket,
+  onData: (chunk: string) => Promise<void>,
+): void {
+  socket.off('data', onData);
+  const error = new AppError('INVALID_ARGS', 'Daemon request exceeds the size limit', {
+    maxChars: MAX_DAEMON_REQUEST_CHARS,
+  });
+  const response: DaemonResponse = { ok: false, error: normalizeError(error) };
+  socket.end(`${JSON.stringify(response)}\n`);
 }
 
 function parseSocketDaemonRequest(line: string): DaemonRequest {

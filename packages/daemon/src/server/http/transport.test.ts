@@ -4,7 +4,12 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import net from 'node:net';
 import { test } from 'vitest';
-import { createSocketServer, listenHttpServer, listenNetServer } from './transport.ts';
+import {
+  createSocketServer,
+  listenHttpServer,
+  listenNetServer,
+  MAX_DAEMON_REQUEST_CHARS,
+} from './transport.ts';
 import {
   clearRequestAbortRegistration,
   getRequestSignal,
@@ -78,6 +83,33 @@ test('Provider-backed integration daemon socket transport frames requests and no
     const httpPort = await listenHttpServer(httpServer);
     assert.equal(typeof httpPort, 'number');
     await closeLoopbackServer(httpServer);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+test('socket transport refuses an unterminated request past the size limit and closes', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let handled = 0;
+  const server = createSocketServer(async (): Promise<DaemonResponse> => {
+    handled += 1;
+    return { ok: true, data: {} };
+  });
+  try {
+    const client = await connectSocket(await listenNetServer(server));
+    client.setEncoding('utf8');
+    let received = '';
+    client.on('data', (chunk) => {
+      received += chunk;
+    });
+    const closed = new Promise<void>((resolve) => client.once('close', () => resolve()));
+    client.on('error', () => {});
+    client.write('x'.repeat(MAX_DAEMON_REQUEST_CHARS + 1));
+    await closed;
+    const response = JSON.parse(received.trim()) as DaemonResponse;
+    assert.equal(response.ok, false);
+    assert.equal(response.ok ? undefined : response.error.code, 'INVALID_ARGS');
+    assert.equal(handled, 0);
   } finally {
     await closeLoopbackServer(server);
   }

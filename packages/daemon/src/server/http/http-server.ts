@@ -67,8 +67,7 @@ import {
   type TenantTrustDecision,
 } from './tenant-trust.ts';
 import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
-
-const MAX_HTTP_RPC_BODY_BYTES = 1024 * 1024;
+import { MAX_DAEMON_REQUEST_CHARS } from './transport.ts';
 
 export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;
@@ -231,7 +230,7 @@ function readRpcRequestBody(
   req.setEncoding('utf8');
   req.on('data', (chunk) => {
     body += chunk;
-    if (body.length > MAX_HTTP_RPC_BODY_BYTES) {
+    if (body.length > MAX_DAEMON_REQUEST_CHARS) {
       req.destroy(new Error('request too large'));
     }
   });
