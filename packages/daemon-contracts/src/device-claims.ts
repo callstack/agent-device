@@ -511,7 +511,7 @@ async function removeSupersededScopedClaims(deviceKeys: string[], env: EnvMap): 
  */
 export function processOwnsActiveDeviceClaim(device: DeviceInfo, env: EnvMap): boolean {
   const deviceKey = canonicalLocalDeviceKey(deviceClaimIdentity(device));
-  // Identity equality needs only the recorded owner, never a process-table read.
+  // The claim's recorded owner is compared without a process-table read of that owner.
   const claim = readDeviceClaimEntry(resolveDeviceClaimPath(deviceKey, env))?.claim;
   return (
     claim !== undefined &&

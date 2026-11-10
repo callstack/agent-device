@@ -115,10 +115,26 @@ test('terminate stops only the emulator this host launched, by its recorded iden
 test('terminate signals nothing for a pid this host did not launch', async () => {
   const host = createAndroidEmulatorHost('linux');
   await host.launch('Pixel_9', true, 90_000);
-  await host.terminate(4242);
 
-  await host.terminate(4242);
   await host.terminate(5151);
+  expect(stopProcessAndConfirmExit).not.toHaveBeenCalled();
 
+  await host.terminate(4242);
+  await host.terminate(4242);
   expect(stopProcessAndConfirmExit).toHaveBeenCalledOnce();
+});
+
+test('a terminate that could not prove the exit keeps the launch for a retry', async () => {
+  const host = createAndroidEmulatorHost('linux');
+  await host.launch('Pixel_9', true, 90_000);
+  stopProcessAndConfirmExit.mockResolvedValueOnce({
+    status: 'retained',
+    reason: 'exit-timeout',
+    signal: 'SIGKILL',
+  } as never);
+
+  await host.terminate(4242);
+  await host.terminate(4242);
+
+  expect(stopProcessAndConfirmExit).toHaveBeenCalledTimes(2);
 });

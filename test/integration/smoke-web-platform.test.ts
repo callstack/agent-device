@@ -27,6 +27,7 @@ import {
   isProcessAlive,
   listHostProcesses,
   readProcessStartTime,
+  readProcessIdentities,
   stopProcessAndConfirmExit,
 } from '@agent-device/host-kit/process';
 
@@ -300,14 +301,19 @@ async function forceKillManagedBrowserProcesses(status: AgentBrowserToolStatus):
   const processes = await listHostProcesses({ timeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS });
   const summary = await summarizeAgentBrowserProcesses(processes, status);
   if (summary.count === 0) return;
-  // The listing named each process, so the stop signals only a pid still running that command.
+  // Chrome renderers share command lines, so each stop also names the lifetime read beside them.
+  const fleet = expandProcessTree(summary.pids, processes);
+  const identities = await readProcessIdentities(fleet.map(({ pid }) => pid));
   await Promise.all(
-    expandProcessTree(summary.pids, processes).map(
+    fleet.map(
       async (processInfo) =>
         await stopProcessAndConfirmExit(
           {
             pid: processInfo.pid,
-            identity: { matches: (command) => command === processInfo.command },
+            identity: {
+              startTime: identities.get(processInfo.pid)?.startTime ?? undefined,
+              matches: (command) => command === processInfo.command,
+            },
           },
           {
             termTimeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS,

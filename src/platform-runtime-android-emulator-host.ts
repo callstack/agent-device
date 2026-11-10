@@ -72,9 +72,8 @@ export function createAndroidEmulatorHost(
     terminate: async (pid) => {
       const record = launched.get(pid);
       if (!record) return;
-      launched.delete(pid);
       const startTime = await record.startTime;
-      await stopProcessAndConfirmExit(
+      const stop = await stopProcessAndConfirmExit(
         {
           pid,
           identity: {
@@ -84,6 +83,8 @@ export function createAndroidEmulatorHost(
         },
         EMULATOR_STOP_BUDGET,
       );
+      // A stop that could not prove the exit keeps the record, so a later terminate can retry.
+      if (stop.status === 'stopped') launched.delete(pid);
     },
   });
 }

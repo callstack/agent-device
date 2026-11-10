@@ -799,8 +799,7 @@ test('an owner that reopened its app after the reboot keeps the device', async (
 });
 
 // Claim writes run on the daemon event loop every session shares. Acquiring a free device and
-// clearing it again compares recorded owners only, so it must not block that loop on the host
-// process tool, and asks the host about an owner at most once.
+// clearing it again compares recorded owners only, so no owner is ever asked about.
 test('acquiring and clearing a free device never blocks on the process table', async () => {
   const root = useClaimsRoot();
   const syncReads = vi.spyOn(hostProcess, 'readHostProcessIdentityObservations');
@@ -817,5 +816,5 @@ test('acquiring and clearing a free device never blocks on the process table', a
   assert.equal(await clearDeviceClaim(acquired.ownership, process.env), 'deleted');
 
   assert.equal(syncReads.mock.calls.length, 0);
-  assert.ok(asyncReads.mock.calls.length <= 1, `${asyncReads.mock.calls.length} host reads`);
+  assert.equal(asyncReads.mock.calls.length, 0);
 });
