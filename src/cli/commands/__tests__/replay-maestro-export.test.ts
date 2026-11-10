@@ -162,6 +162,8 @@ wait stable
 wait stable 500 3000
 wait text "Ready" 2000
 wait 'id="done"' 4000
+wait id="save" enabled=true 25000
+wait text Sign in 2000
 `);
 
     expect(parseYamlDocs(result.yaml)).toEqual([
@@ -172,6 +174,8 @@ wait 'id="done"' 4000
         { waitForAnimationToEnd: { timeout: 3000 } },
         { extendedWaitUntil: { visible: 'Ready', timeout: 2000 } },
         { extendedWaitUntil: { visible: { id: 'done' }, timeout: 4000 } },
+        { extendedWaitUntil: { visible: { id: 'save', enabled: true }, timeout: 25000 } },
+        { extendedWaitUntil: { visible: 'Sign in', timeout: 2000 } },
       ],
     ]);
     const stableWarning =
@@ -188,12 +192,17 @@ wait 'id="done"' 4000
 wait @e3
 wait text
 wait stable 500 junk
+wait visible label="Save" 25000
 `);
     expect(run).toThrowError(AppError);
     expect(run).toThrowError('line 2 (wait @e3): wait @ref names a session-local ref');
     expect(run).toThrowError('line 3 (wait text): wait text requires the text to wait for');
     expect(run).toThrowError(
       'line 4 (wait stable 500 junk): wait stable takes at most a numeric quietMs and timeoutMs',
+    );
+    // The whole selector reaches the projection, which refuses `visible`; it never exports as text.
+    expect(run).toThrowError(
+      'line 5 (wait visible label="Save" 25000): wait selector is not Maestro-compatible',
     );
   });
 

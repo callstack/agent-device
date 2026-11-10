@@ -33,6 +33,23 @@ export type RunScriptHttpChildOutput =
   | { response: RunScriptHttpResponse }
   | { error: RunScriptChildError };
 
+/**
+ * The HTTP child's whole job: run the request read from `input` and report the response or the
+ * typed error that ended it. Any other failure rejects, and the child reports it on stderr.
+ */
+export async function runScriptHttpChildOutput(
+  input: string,
+  environment: NodeJS.ProcessEnv,
+): Promise<RunScriptHttpChildOutput> {
+  try {
+    const request = JSON.parse(input) as RunScriptHttpRequest;
+    return { response: await executeRunScriptHttpRequest(request, environment) };
+  } catch (error) {
+    if (!(error instanceof AppError)) throw error;
+    return { error: { code: error.code, message: error.message, details: error.details } };
+  }
+}
+
 export async function executeRunScriptHttpRequest(
   input: RunScriptHttpRequest,
   environment: NodeJS.ProcessEnv,

@@ -28,12 +28,25 @@ export type RunScriptChildOutput =
   | { outputEnv: Record<string, string> }
   | { error: RunScriptChildError };
 
+/** The script child's whole job: run the request read from `input` and report its result. */
+export function runScriptChildOutput(input: string): RunScriptChildOutput {
+  try {
+    return { outputEnv: runScriptInProcess(JSON.parse(input) as RunScriptRequest) };
+  } catch (error) {
+    if (error instanceof AppError) {
+      return { error: { code: error.code, message: error.message, details: error.details } };
+    }
+    const normalized = normalizeError(error);
+    return { error: { code: normalized.code, message: normalized.message } };
+  }
+}
+
 /**
  * Runs a trusted flow-local script with the compatibility helpers Maestro exposes. `node:vm`
  * isolates globals for the run but is not a security sandbox. The script and its `http.post`
  * calls are synchronous, so only the script child process calls this.
  */
-export function runScriptInProcess(request: RunScriptRequest): Record<string, string> {
+function runScriptInProcess(request: RunScriptRequest): Record<string, string> {
   const { scriptPath, env, publicNetworkOnly } = request;
   const script = fs.readFileSync(scriptPath, 'utf8');
   const output: Record<string, unknown> = Object.create(null) as Record<string, unknown>;

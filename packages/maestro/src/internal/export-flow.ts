@@ -1,7 +1,7 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { GESTURE_FLING_DURATION_MS } from '@agent-device/contracts/gesture-plan';
 import { AppError } from '@agent-device/kernel/errors';
-import { selectorContainsKey } from '@agent-device/selectors';
+import { selectorContainsKey, splitSelectorFromArgs } from '@agent-device/selectors';
 import { formatMaestroPoint } from './export-points.ts';
 import { DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY } from './compatibility-policy.ts';
 import type { ConvertedAction, MaestroExportCommand, MaestroExportConfig } from './export-types.ts';
@@ -264,7 +264,7 @@ function convertWaitAction(
   action: SessionAction,
   resolveSelector: MaestroExportOptions['resolveSelector'],
 ): ConvertedAction {
-  const [first, second] = action.positionals;
+  const [first] = action.positionals;
   if (!first) return { kind: 'unsupported', message: 'wait requires a target or duration' };
   if (first.startsWith('@')) {
     return {
@@ -288,17 +288,24 @@ function convertWaitAction(
       message: 'strict wait absent requires zero selector matches and is unsupported by Maestro',
     };
   }
+  // Like the shared grammar: a trailing number is the timeout, and the tokens before it are the
+  // whole selector expression or text.
+  const last = action.positionals.at(-1);
+  const timeoutMs = action.positionals.length > 1 && isNumber(last) ? Number(last) : null;
+  const target = timeoutMs === null ? action.positionals : action.positionals.slice(0, -1);
   if (first === 'text') {
-    if (!second) {
-      return { kind: 'unsupported', message: 'wait text requires the text to wait for' };
-    }
-    return extendedWaitUntilVisible(second, action);
+    const text = target.slice(1).join(' ').trim();
+    if (!text) return { kind: 'unsupported', message: 'wait text requires the text to wait for' };
+    return extendedWaitUntilVisible(text, timeoutMs);
   }
-  const selector = resolveSelector(first);
+  const split = splitSelectorFromArgs(target);
+  const expression =
+    split && split.rest.length === 0 ? split.selectorExpression : target.join(' ').trim();
+  const selector = resolveSelector(expression);
   if (!selector) return { kind: 'unsupported', message: 'wait selector is not Maestro-compatible' };
   return {
-    ...extendedWaitUntilVisible(selector, action),
-    warnings: readLabelSelectorWarnings(first),
+    ...extendedWaitUntilVisible(selector, timeoutMs),
+    warnings: readLabelSelectorWarnings(expression),
   };
 }
 
@@ -326,7 +333,7 @@ function convertStableWait(args: readonly string[]): ConvertedAction {
 
 function extendedWaitUntilVisible(
   visible: NonNullable<MaestroSelectorProjection>,
-  action: SessionAction,
+  timeoutMs: number | null,
 ): Extract<ConvertedAction, { kind: 'commands' }> {
   return {
     kind: 'commands',
@@ -334,19 +341,12 @@ function extendedWaitUntilVisible(
       {
         extendedWaitUntil: {
           visible,
-          timeout: readTimeout(
-            action,
-            DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY.extendedWaitUntilTimeoutMs,
-          ),
+          timeout:
+            timeoutMs ?? DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY.extendedWaitUntilTimeoutMs,
         },
       },
     ],
   };
-}
-
-function readTimeout(action: SessionAction, fallback: number): number {
-  const candidate = action.positionals.at(-1);
-  return candidate && isNumber(candidate) ? Number(candidate) : fallback;
 }
 
 function readLabelSelectorWarnings(expression: string): string[] {
