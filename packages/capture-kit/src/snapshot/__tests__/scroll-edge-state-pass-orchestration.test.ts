@@ -5,7 +5,7 @@ import {
   formatScrollEdgeMessage,
   runScrollEdgePasses,
 } from '../scroll-edge-state.ts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { captureThrows, scrollSnapshot, windowRoot } from './scroll-edge-state-fixtures.ts';
 
 // ---------------------------------------------------------------------------
@@ -182,6 +182,43 @@ test('captureScrollEdgeState: an empty capture with no scope does not retry', as
 // ---------------------------------------------------------------------------
 // captureScrollEdgeState: error wrapping
 // ---------------------------------------------------------------------------
+
+test('captureScrollEdgeState: a typed capture failure and a request cancel pass through unchanged', async () => {
+  const typed = new AppError('COMMAND_FAILED', 'device gone', { reason: 'device_unavailable' });
+  const canceled = createRequestCanceledError();
+  for (const original of [typed, canceled]) {
+    await assert.rejects(
+      captureScrollEdgeState({
+        edge: 'bottom',
+        scope: 'feed',
+        captureNodes: async () => {
+          throw original;
+        },
+      }),
+      (error: unknown) => error === original,
+    );
+  }
+});
+
+test('captureScrollEdgeState: a failing unscoped retry is not labelled as the scoped container', async () => {
+  const original = new Error('runner timed out');
+  await assert.rejects(
+    captureScrollEdgeState({
+      edge: 'bottom',
+      scope: 'stale-scope',
+      captureNodes: async (scope) => {
+        if (scope) return [];
+        throw original;
+      },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.message, 'Failed to verify scroll bottom state');
+      assert.equal(error.cause, original);
+      return true;
+    },
+  );
+});
 
 test('captureScrollEdgeState: a captureNodes failure is wrapped in a COMMAND_FAILED AppError, scoped variant', async () => {
   const original = new Error('runner timed out');
