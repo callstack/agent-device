@@ -14,7 +14,7 @@ function requiresLoopbackCoverage(): boolean {
   );
 }
 
-export async function supportsLoopbackBind(): Promise<boolean> {
+async function supportsLoopbackBind(): Promise<boolean> {
   if (loopbackBindSupportPromise) {
     return await loopbackBindSupportPromise;
   }
