@@ -2,6 +2,10 @@ import { bindTestCommandHost, mkdtempForTest } from '@agent-device/test-kit';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeEach, test, vi } from 'vitest';
+import {
+  countDiagnosticEventsByPhase,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
 import assert from 'node:assert/strict';
 import { pressLinux } from '../input-actions.ts';
 import { createLocalLinuxToolProvider, withLinuxToolProvider } from '../tool-provider.ts';
@@ -165,9 +169,9 @@ test('local Linux desktop provider translates semantic lifecycle calls to host t
 });
 
 // `open <binary>` used to run the app as a piped child of the daemon, which kept every
-// byte the app printed in daemon memory for the app's whole life.
+// byte the app printed in daemon memory for the app's whole life. The default launcher detaches.
 test.skipIf(!fs.existsSync('/proc/self/fd'))(
-  'local Linux desktop provider launches an app binary detached from daemon pipes',
+  'local Linux desktop provider launches an app binary detached from daemon pipes by default',
   async () => {
     const binDir = await mkdtempForTest('linux-open-binary-');
     const report = path.join(binDir, 'stdout-target');
@@ -182,9 +186,6 @@ test.skipIf(!fs.existsSync('/proc/self/fd'))(
       const provider = createLocalLinuxToolProvider({
         host: { env: process.env, cwd: process.cwd() },
         whichCommand: async (cmd) => cmd === 'fake-desktop-app',
-        runCommand: async (cmd) => {
-          throw new Error(`the app launch must not run as a captured command: ${cmd}`);
-        },
       });
 
       await provider.desktop.openTarget('fake-desktop-app');
@@ -196,6 +197,54 @@ test.skipIf(!fs.existsSync('/proc/self/fd'))(
     }
   },
 );
+
+test('local Linux desktop provider launches an app binary through its detached launcher', async () => {
+  const launches: Array<[string, string[]]> = [];
+  const captured: string[] = [];
+  const provider = createLocalLinuxToolProvider({
+    host: { env: process.env, cwd: process.cwd() },
+    whichCommand: async (cmd) => cmd === 'demo-app',
+    runCommand: async (cmd) => {
+      captured.push(cmd);
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+    launchDetached: (cmd, args) => {
+      launches.push([cmd, args]);
+      return { exited: new Promise(() => {}) };
+    },
+  });
+
+  await provider.desktop.openTarget('demo-app');
+
+  assert.deepEqual(launches, [['demo-app', []]]);
+  assert.deepEqual(captured, []);
+});
+
+test('local Linux desktop provider reports a launch that fails, exits non-zero, or is signalled', async () => {
+  const exits = [
+    { pid: 1, error: 'spawn demo-app ENOENT' },
+    { pid: 2, exitCode: 3 },
+    { pid: 3, signal: 'SIGKILL' as const },
+    { pid: 4, exitCode: 0 },
+  ];
+  const settled: Promise<unknown>[] = [];
+  const provider = createLocalLinuxToolProvider({
+    host: { env: process.env, cwd: process.cwd() },
+    whichCommand: async () => true,
+    launchDetached: () => {
+      const exited = Promise.resolve(exits[settled.length]!);
+      settled.push(exited);
+      return { exited };
+    },
+  });
+
+  await withDiagnosticsScope({ command: 'open' }, async () => {
+    for (const _exit of exits) await provider.desktop.openTarget('demo-app');
+    await Promise.all(settled);
+    // The three failures each report once; a clean exit reports nothing.
+    assert.equal(countDiagnosticEventsByPhase(['linux_app_launch']), 3);
+  });
+});
 
 test('local Linux desktop provider falls back to pkill when wmctrl is unavailable', async () => {
   const commands: Array<[string, string[], boolean | undefined]> = [];

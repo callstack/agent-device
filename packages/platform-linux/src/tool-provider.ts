@@ -5,6 +5,7 @@ import {
   runCmd,
   runCmdDetachedMonitored,
   whichCmd,
+  type ExecDetachedExit,
   type ExecOptions,
   type ExecResult,
   commandHostEnvironment,
@@ -33,6 +34,15 @@ export type LinuxToolCommandExecutor = (
 ) => Promise<ExecResult>;
 
 export type LinuxToolAvailabilityChecker = (cmd: string) => Promise<boolean>;
+
+/**
+ * Starts a process that outlives the call, with its output discarded, and settles `exited` when it
+ * ends: with `error` when it could not start, else with its exit code or signal.
+ */
+export type LinuxToolDetachedLauncher = (
+  cmd: string,
+  args: string[],
+) => { exited: Promise<ExecDetachedExit> };
 
 export type LinuxDesktopProvider = {
   openTarget(target: string): Promise<void>;
@@ -81,6 +91,7 @@ export type LinuxToolProvider = {
   display: LinuxDisplayConfig;
   runCommand: LinuxToolCommandExecutor;
   whichCommand: LinuxToolAvailabilityChecker;
+  launchDetached: LinuxToolDetachedLauncher;
   desktop: LinuxDesktopProvider;
   clipboard?: LinuxClipboardProvider;
   screenshot?: LinuxScreenshotProvider;
@@ -98,12 +109,15 @@ type LinuxToolProviderParts = { display: LinuxDisplayConfig } & Partial<LinuxToo
 function completeLocalLinuxToolProvider(provider: LinuxToolProviderParts): LinuxToolProvider {
   const runCommand = provider.runCommand ?? runCmd;
   const whichCommand = provider.whichCommand ?? whichOnPath;
+  const launchDetached = provider.launchDetached ?? runCmdDetachedMonitored;
   const display = provider.display;
   return {
     runCommand,
     whichCommand,
+    launchDetached,
     display,
-    desktop: provider.desktop ?? createLocalLinuxDesktopProvider(runCommand, whichCommand),
+    desktop:
+      provider.desktop ?? createLocalLinuxDesktopProvider(runCommand, whichCommand, launchDetached),
     clipboard:
       provider.clipboard ?? createLocalLinuxClipboardProvider(runCommand, whichCommand, display),
     screenshot:
@@ -169,9 +183,18 @@ export async function runLinuxToolCommand(
   return await resolveLinuxToolProvider().runCommand(cmd, args, options);
 }
 
+/** What a launched app's exit says went wrong: a start failure, a non-zero exit, or a signal. */
+function describeLaunchExit(exit: ExecDetachedExit): Record<string, unknown> | undefined {
+  if (exit.error !== undefined) return { error: exit.error };
+  if (exit.signal !== undefined) return { signal: exit.signal };
+  if (exit.exitCode !== undefined && exit.exitCode !== 0) return { exitCode: exit.exitCode };
+  return undefined;
+}
+
 function createLocalLinuxDesktopProvider(
   runCommand: LinuxToolCommandExecutor,
   whichCommand: LinuxToolAvailabilityChecker,
+  launchDetached: LinuxToolDetachedLauncher,
 ): LinuxDesktopProvider {
   return {
     async openTarget(target) {
@@ -183,12 +206,13 @@ function createLocalLinuxDesktopProvider(
       if (await whichCommand(target)) {
         // A desktop app outlives the command that opened it. Run detached with its output
         // discarded: a piped child would keep everything it prints in daemon memory until it exits.
-        void runCmdDetachedMonitored(target, []).exited.then((exit) => {
-          if (exit.error === undefined) return;
+        void launchDetached(target, []).exited.then((exit) => {
+          const failure = describeLaunchExit(exit);
+          if (failure === undefined) return;
           emitDiagnostic({
             level: 'warn',
             phase: 'linux_app_launch',
-            data: { app: target, error: exit.error },
+            data: { app: target, ...failure },
           });
         });
         await sleep(500);
