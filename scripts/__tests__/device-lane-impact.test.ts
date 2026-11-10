@@ -1,4 +1,6 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { parse } from 'yaml';
@@ -88,5 +90,40 @@ test.each([
   for (const step of gated) {
     expect(steps.indexOf(step!), step?.name).toBeGreaterThan(selection);
     expect(step?.if, step?.name).toContain(`steps.${id}.outputs.run != 'false'`);
+  }
+});
+
+test('a file moved out of a device-owned root still selects that lane', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'device-lane-rename-'));
+  const git = (...args: string[]) =>
+    execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+  const source = 'packages/platform-android/src/adb-executor.ts';
+  try {
+    git('init', '-q', '-b', 'main');
+    git('config', 'user.email', 'test@example.com');
+    git('config', 'user.name', 'Test');
+    fs.mkdirSync(path.join(root, path.dirname(source)), { recursive: true });
+    fs.writeFileSync(path.join(root, source), 'export const executor = true;\n');
+    git('add', '.');
+    git('commit', '-qm', 'base');
+    const base = git('rev-parse', 'HEAD');
+    git('mv', source, source.replace(/\.ts$/, '.test.ts'));
+    git('commit', '-qm', 'move');
+    const output = execFileSync(
+      process.execPath,
+      [
+        '--experimental-strip-types',
+        path.join(repoRoot, 'scripts/device-lane-impact.ts'),
+        ...LANES.android,
+      ],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, BASE_SHA: base, GITHUB_EVENT_NAME: 'pull_request' },
+      },
+    );
+    expect(output).toContain(`run; replay-android input changed: ${source}`);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });
