@@ -215,6 +215,44 @@ test('notifications/cancelled aborts the running tools/call and skips a queued o
   );
 });
 
+test('a cancellation in the same chunk as its tools/call stops the call before it starts', async () => {
+  const tools = blockingToolCalls();
+
+  tools.session.receive(`${line({ jsonrpc: '2.0', id: 7, method: 'tools/call' })}${cancel(7)}`);
+  await tools.session.end();
+
+  assert.deepEqual(tools.started, []);
+  assert.deepEqual(tools.writes, []);
+});
+
+test('a batch refuses its tools/call elements with -32600 and serves the rest', async () => {
+  const response = (await handleMcpPayload([
+    { jsonrpc: '2.0', id: 'call', method: 'tools/call', params: { name: 'help' } },
+    { jsonrpc: '2.0', method: 'tools/call', params: { name: 'help' } },
+    { jsonrpc: '2.0', id: 'ping', method: 'ping' },
+  ])) as JsonRpcResponse[];
+
+  assert.deepEqual(
+    response.map((entry) => entry.id),
+    ['call', 'ping'],
+  );
+  assert.equal(response[0]?.error?.code, -32600);
+  assert.deepEqual(response[1]?.result, {});
+});
+
+test('a batch is answered while a tools/call is still running', async () => {
+  const tools = blockingToolCalls();
+
+  tools.session.receive(line({ jsonrpc: '2.0', id: 'call', method: 'tools/call' }));
+  tools.session.receive(line([{ jsonrpc: '2.0', id: 'ping', method: 'ping' }]));
+  await setImmediate();
+
+  assert.equal(tools.writes.length, 1, 'the batch answer does not wait for the tool call');
+  tools.finish('call');
+  await tools.session.end();
+  assert.equal(tools.writes.length, 2);
+});
+
 function line(message: unknown): string {
   return `${JSON.stringify(message)}\n`;
 }

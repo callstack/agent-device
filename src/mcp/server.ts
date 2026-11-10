@@ -23,10 +23,11 @@ export async function runAgentDeviceMcpServer(): Promise<void> {
 /**
  * One stdio connection: newline-delimited JSON-RPC in, responses out.
  *
- * `tools/call` requests and batches run one at a time, in arrival order, because they drive
- * devices and share the executor's ref pins. Every other request is answered at once, so `ping`
- * and `tools/list` never wait behind a long tool call. `notifications/cancelled` aborts the named
- * `tools/call`, queued or running, and the server sends no response for it.
+ * `tools/call` requests run one at a time, in arrival order, because they drive devices and share
+ * the executor's ref pins. Every other request, and every batch, is answered at once, so `ping` and
+ * `tools/list` never wait behind a long tool call. `notifications/cancelled` aborts the named
+ * `tools/call`, queued or running, and the server sends no response for it. A batch never carries
+ * a `tools/call`: see `handleMcpBatch`.
  */
 export function createMcpStdioSession(
   options: {
@@ -84,7 +85,7 @@ export function createMcpStdioSession(
       if (id !== undefined) toolCalls.get(id)?.abort();
       return;
     }
-    if (Array.isArray(payload) || message?.method === 'tools/call') {
+    if (message?.method === 'tools/call') {
       enqueueToolCall(payload, message?.id);
       return;
     }
@@ -137,12 +138,35 @@ export function handleMcpPayload(
   return handleInboundMessage(payload, context);
 }
 
+/**
+ * JSON-RPC batching exists only for legacy clients (MCP 2025-06-18 removed it). A `tools/call` in a
+ * batch is refused with -32600: it could not be cancelled on its own or queued behind other tool
+ * calls, so it is accepted only as its own message.
+ */
 async function handleMcpBatch(messages: unknown[]): Promise<JsonRpcResponse[] | null> {
   const responses: JsonRpcResponse[] = [];
   for (const message of messages) {
-    responses.push(...responseArray(await handleInboundMessage(message)));
+    const parsed = singleMessage(message);
+    const response =
+      parsed?.method === 'tools/call'
+        ? batchedToolCallResponse(parsed.id)
+        : await handleInboundMessage(message);
+    responses.push(...responseArray(response));
   }
   return responses.length > 0 ? responses : null;
+}
+
+/** A notification gets no response, as anywhere else. */
+function batchedToolCallResponse(id: JsonRpcId | undefined): JsonRpcResponse | null {
+  if (id === undefined) return null;
+  return {
+    jsonrpc: '2.0',
+    id,
+    error: {
+      code: -32600,
+      message: 'tools/call is not accepted in a JSON-RPC batch. Send it as its own message.',
+    },
+  };
 }
 
 // Parse-at-the-boundary: validate each inbound payload against the shared JSON-RPC
