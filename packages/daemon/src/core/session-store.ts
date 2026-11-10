@@ -307,6 +307,8 @@ export class SessionStore {
     const result = this.writeSessionLog(ref, {
       force: effectiveWriteForce(session, undefined),
     });
+    // An ordinary recording's write failure has no caller to report to here: the writer already
+    // emitted `session_script_write_failed`, and the teardown must still retire the session.
     if (isUncommittedRepairSession(session)) {
       if (!result.written && result.error) {
         this.writeRepairTombstone(ref, REPAIR_TOMBSTONE_TTL_MS, {

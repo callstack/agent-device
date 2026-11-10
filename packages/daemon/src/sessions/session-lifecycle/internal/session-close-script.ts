@@ -110,8 +110,11 @@ function toOrdinaryCloseSaveScriptFailure(error: AppError): AppError {
     'COMMAND_FAILED',
     `The session was closed, but its script was not saved: ${error.message}`,
     {
-      hint: 'Remove the existing target (or pass --force/--overwrite), then re-record with open --save-script.',
       ...error.details,
+      hint:
+        error.details?.reason === 'script_write_failed'
+          ? 'Check the target path and its permissions, then re-record with open --save-script.'
+          : 'Remove the existing target (or pass --force/--overwrite), then re-record with open --save-script.',
       retriable: false,
     },
     error.cause,

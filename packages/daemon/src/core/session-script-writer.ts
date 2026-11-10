@@ -34,15 +34,13 @@ import {
 } from './session-script-active-publication.ts';
 
 /**
- * `{ written: true; path }` — committed. `{ written: false }` (no `error`) —
- * intentionally not written (not recording, an aborted/incomplete repair
- * transaction, an aborted ordinary authoring recording (#1533), or an
- * idempotent already-committed no-op). `{ written: false;
- * error }` — ADR 0012 decision 6 (BLOCKER 2): a repair COMMIT was attempted but
- * FAILED (no-clobber refusal, a bare-`@ref` R4 failure, or a filesystem write
- * error). The `error` (a distinct AppError code/message) is surfaced to
- * close/teardown so the failure is reportable and the session can be kept for
- * retry, never swallowed into a silent skip.
+ * `{ written: true; path }` — committed. `{ written: false }` (no `error`) — intentionally not
+ * written (not recording, an aborted/incomplete repair transaction, an aborted ordinary authoring
+ * recording (#1533), or an idempotent already-committed no-op). `{ written: false; error }` — an
+ * armed write was attempted and failed (no-clobber refusal, a bare-`@ref` R4 failure, or a
+ * filesystem error) for a repair commit, an active publication, or an ordinary recording alike.
+ * The writer never throws: close surfaces the error, and teardown keeps it in the
+ * `session_script_write_failed` diagnostic (ADR 0012 decision 6, BLOCKER 2).
  */
 export type SessionScriptWriteResult =
   | { written: true; path: string; actionCount: number }

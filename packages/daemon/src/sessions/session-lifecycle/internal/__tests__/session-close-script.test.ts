@@ -112,6 +112,7 @@ test('ordinary publication failure retains its close action after making the err
     message: 'The session was closed, but its script was not saved: target exists',
     details: {
       reason: 'target-exists',
+      hint: 'Remove the existing target (or pass --force/--overwrite), then re-record with open --save-script.',
       retriable: false,
     },
   });
@@ -172,7 +173,7 @@ test('#1533: an ordinary armed authoring session still publishes on bare close',
 test('ordinary close reports a filesystem failure of its script write instead of a quiet success', () => {
   const root = mkdtempForTestSync('agent-device-session-close-script-fs-');
   roots.push(root);
-  // A regular file where the target directory must be: mkdir fails with a raw ErrnoException.
+  // A regular file where the target directory must be: publishing into it fails with ENOTDIR.
   const blocker = path.join(root, 'blocker');
   fs.writeFileSync(blocker, '');
   const targetPath = path.join(blocker, 'flow.ad');
@@ -195,7 +196,12 @@ test('ordinary close reports a filesystem failure of its script write instead of
   expect(result).toBeInstanceOf(AppError);
   expect(result).toMatchObject({
     code: 'COMMAND_FAILED',
-    details: { reason: 'script_write_failed', path: targetPath, retriable: false },
+    details: {
+      reason: 'script_write_failed',
+      path: targetPath,
+      hint: 'Check the target path and its permissions, then re-record with open --save-script.',
+      retriable: false,
+    },
   });
   expect(result?.message).toContain('The session was closed, but its script was not saved');
   expect(result?.message).toContain(targetPath);

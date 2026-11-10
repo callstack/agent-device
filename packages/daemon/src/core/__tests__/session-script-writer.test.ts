@@ -611,7 +611,7 @@ test('an ordinary (non-repair) recording now refuses an existing target too (beh
 
   expect(writer.write(session)).toMatchObject({
     written: false,
-    error: { message: expect.stringMatching(/already exists/) },
+    error: { details: { reason: 'script_target_exists', path: outPath } },
   });
   // The pre-existing target is left byte-for-byte unchanged — refused, not
   // clobbered.
