@@ -173,7 +173,8 @@ test('owner cleanup still releases other leases when one device lease lock is co
         cleanupTempFile: () => {},
       },
     );
-    await vi.advanceTimersByTimeAsync(31_000);
+    vi.setSystemTime(Date.now() + 31_000);
+    await vi.advanceTimersByTimeAsync(100);
     await cleanup;
     assert.equal(currentRunnerLeaseOwnerToken(free.deviceId), null);
     assert.ok(
