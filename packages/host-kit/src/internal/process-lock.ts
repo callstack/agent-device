@@ -372,6 +372,7 @@ export async function acquireProcessLockAcquisition(
   const pollMs = params.pollMs ?? DEFAULT_LOCK_POLL_MS;
   const ownerFilePath = path.join(params.lockDirPath, OWNER_FILE_NAME);
   const observedOwner = createOwnerObservationReuse();
+  const observedGuardHolder = createGuardHolderObservationReuse();
   const guardHolderStartTime = (await readCurrentOwnerIdentityAsync()).startTime;
   fs.mkdirSync(path.dirname(params.lockDirPath), { recursive: true });
   do {
@@ -380,7 +381,7 @@ export async function acquireProcessLockAcquisition(
     const reading = readProcessLockOwner(ownerFilePath);
     const liveness =
       reading.kind === 'owner' ? await observedOwner.classify(reading.owner) : undefined;
-    const abandonedGuard = await findAbandonedGuardAsync(params.lockDirPath);
+    const abandonedGuard = await findAbandonedGuardAsync(params.lockDirPath, observedGuardHolder);
     const attempt = attemptProcessLock(params, {
       standing: judgeStandingClaim(reading, liveness),
       // A record that changed since it was judged is reported without a fresh probe.
@@ -723,17 +724,47 @@ function findAbandonedGuard(
     : undefined;
 }
 
-async function findAbandonedGuardAsync(lockDirPath: string): Promise<AbandonedGuard | undefined> {
+async function findAbandonedGuardAsync(
+  lockDirPath: string,
+  observedHolder: GuardHolderObservationReuse,
+): Promise<AbandonedGuard | undefined> {
   const standing = readGuardHolder(reclaimMutexPath(lockDirPath));
   if (!standing) return undefined;
   const probed =
     standing.holder.pid !== process.pid &&
     standing.ageMs >= GUARD_HOLDER_PROBE_AFTER_MS &&
     isProcessAlive(standing.holder.pid);
-  const observations = probed
-    ? await readHostProcessIdentityObservationsAsync([standing.holder.pid])
-    : new Map<number, HostProcessIdentityObservation>();
-  return findAbandonedGuard(lockDirPath, (holder) => observations.get(holder.pid) ?? null);
+  const observation = probed ? await observedHolder.observe(standing.holder) : null;
+  return findAbandonedGuard(lockDirPath, (holder) =>
+    holder.token === standing.holder.token ? observation : null,
+  );
+}
+
+type GuardHolderObservationReuse = ReturnType<typeof createGuardHolderObservationReuse>;
+
+/**
+ * Reads a guard holder's process identity at most once per {@link OWNER_OBSERVATION_REUSE_MS} for
+ * the same guard token, by the same rule as {@link createOwnerObservationReuse}: a reused
+ * observation can only keep a guard retained a little longer, never reap a live holder's guard.
+ */
+function createGuardHolderObservationReuse() {
+  let reused:
+    | Readonly<{ token: string; observation: HostProcessIdentityObservation | null; atMs: number }>
+    | undefined;
+  return {
+    async observe(holder: GuardHolder): Promise<HostProcessIdentityObservation | null> {
+      if (reused?.token === holder.token && Date.now() - reused.atMs < OWNER_OBSERVATION_REUSE_MS) {
+        return reused.observation;
+      }
+      const observations = await readHostProcessIdentityObservationsAsync([holder.pid]);
+      reused = {
+        token: holder.token,
+        observation: observations.get(holder.pid) ?? null,
+        atMs: Date.now(),
+      };
+      return reused.observation;
+    },
+  };
 }
 
 /**
@@ -743,8 +774,13 @@ async function findAbandonedGuardAsync(lockDirPath: string): Promise<AbandonedGu
 async function waitForReclaimMutex(lockDirPath: string): Promise<boolean> {
   const deadline = Date.now() + RELEASE_GUARD_WAIT_MS;
   const holderStartTime = (await readCurrentOwnerIdentityAsync()).startTime;
+  const observedHolder = createGuardHolderObservationReuse();
   while (
-    !holdReclaimMutex(lockDirPath, await findAbandonedGuardAsync(lockDirPath), holderStartTime)
+    !holdReclaimMutex(
+      lockDirPath,
+      await findAbandonedGuardAsync(lockDirPath, observedHolder),
+      holderStartTime,
+    )
   ) {
     if (Date.now() >= deadline) return false;
     await sleep(RELEASE_GUARD_POLL_MS);

@@ -4,7 +4,8 @@ import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
 const { processToolRuns } = vi.hoisted(() => ({
-  processToolRuns: { sync: 0, async: 0 },
+  // `unanswered` makes the process tool answer nothing at once, as a host too loaded to say.
+  processToolRuns: { sync: 0, async: 0, unanswered: false },
 }));
 
 vi.mock('./exec.ts', async (importOriginal) => {
@@ -13,7 +14,12 @@ vi.mock('./exec.ts', async (importOriginal) => {
   return {
     ...actual,
     runCmd: (...args: Parameters<typeof actual.runCmd>) => {
-      if (isProcessTool(args[0])) processToolRuns.async += 1;
+      if (isProcessTool(args[0])) {
+        processToolRuns.async += 1;
+        if (processToolRuns.unanswered) {
+          return Promise.resolve({ stdout: '', stderr: '', exitCode: 1 });
+        }
+      }
       return actual.runCmd(...args);
     },
     runCmdSync: (...args: Parameters<typeof actual.runCmdSync>) => {
@@ -37,6 +43,7 @@ beforeEach(async () => {
   tmpDir = mkdtempForTestSync('agent-device-process-lock-wait-');
   processToolRuns.sync = 0;
   processToolRuns.async = 0;
+  processToolRuns.unanswered = false;
 });
 
 afterEach(() => {
@@ -85,4 +92,48 @@ test('acquiring and releasing a free lock reads this process identity off the ev
 
   assert.equal(processToolRuns.sync, 0, 'taking the guard blocked on the process tool');
   assert.ok(processToolRuns.async >= 1, 'this process identity was never read');
+});
+
+// A release waits up to five seconds for a guard. One that has stood for a minute under a live
+// holder is probed, but its holder's identity is read about once a second, not on every 5 ms poll.
+test('a release waiting on a long-standing live guard reads its holder about once a second', async () => {
+  const lockDirPath = path.join(tmpDir, 'guarded.lock');
+  const release = await acquireProcessLock({
+    lockDirPath,
+    owner: { pid: process.pid, startTime: null, acquiredAtMs: Date.now() },
+  });
+  const mutexPath = path.join(tmpDir, 'guarded.reclaim.lock');
+  fs.writeFileSync(
+    mutexPath,
+    JSON.stringify({
+      pid: process.ppid,
+      startTime: null,
+      token: '00000000-0000-4000-8000-000000000002',
+    }),
+  );
+  const standing = new Date(Date.now() - 60_000);
+  fs.utimesSync(mutexPath, standing, standing);
+  processToolRuns.sync = 0;
+  processToolRuns.async = 0;
+  processToolRuns.unanswered = true;
+  vi.useFakeTimers();
+  let outcome: unknown;
+  try {
+    const releasing = release().then(
+      () => 'released',
+      (error: unknown) => error,
+    );
+    await vi.advanceTimersByTimeAsync(6_000);
+    outcome = await releasing;
+  } finally {
+    vi.useRealTimers();
+  }
+
+  assert.match(String(outcome), /Cannot verify ownership/);
+  assert.equal(processToolRuns.sync, 0);
+  // Two runs for this process's own identity, then one holder read per second of the wait.
+  assert.ok(
+    processToolRuns.async >= 1 && processToolRuns.async <= 8,
+    `the release ran the process tool ${processToolRuns.async} times`,
+  );
 });
