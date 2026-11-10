@@ -225,6 +225,8 @@ test('computeTargetEvidence: max-size labels across K=8 ancestors reduce ancestr
 // control character is one raw byte and six escaped ones (`\u0001`), so fields at their cap can
 // still overflow after the writer has dropped ancestry to its floor and dropped `rect`.
 const ESCAPE_HEAVY_FIELD = '\u0001'.repeat(TARGET_ANNOTATION_MAX_FIELD_BYTES);
+/** JSON bytes per raw byte for a one-byte control character, the largest expansion JSON escaping makes. */
+const MAX_JSON_ESCAPE_EXPANSION = JSON.stringify('\u0001').length - '""'.length;
 
 test('computeTargetEvidence: escape-heavy fields degrade until the unverifiable payload fits and reparses', () => {
   const nodes = toSnapshotNodes([
@@ -330,20 +332,23 @@ test('computeTargetEvidence: an oversized payload drops rect, scrollRegion, ance
 // The downgrade never drops `role` or `id`, so it relies on the two fitting even fully escaped. A
 // larger field cap breaks this, and the writer would again emit a payload its parser rejects.
 test('computeTargetEvidence: a downgrade with every optional field dropped fits at the worst-case escape ratio', () => {
-  const fullyDropped = {
-    id: ESCAPE_HEAVY_FIELD,
-    role: ESCAPE_HEAVY_FIELD,
+  const skeleton = serializeTargetAnnotationV1({
+    id: '',
+    role: '',
     ancestry: [],
     sibling: Number.MAX_SAFE_INTEGER,
     viewportOrder: Number.MAX_SAFE_INTEGER,
-    verification: 'unverifiable' as const,
-  };
+    verification: 'unverifiable',
+  });
+  const retainedFields = ['id', 'role'].length;
 
-  const json = serializeTargetAnnotationV1(fullyDropped);
+  const worstCaseBytes =
+    utf8ByteLength(skeleton) +
+    retainedFields * MAX_JSON_ESCAPE_EXPANSION * TARGET_ANNOTATION_MAX_FIELD_BYTES;
 
   assert.ok(
-    utf8ByteLength(json) <= TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
-    `payload is ${utf8ByteLength(json)} bytes`,
+    worstCaseBytes <= TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
+    `role and id at the field cap escape to a ${worstCaseBytes}-byte payload`,
   );
 });
 

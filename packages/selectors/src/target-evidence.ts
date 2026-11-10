@@ -168,10 +168,13 @@ const OVERSIZED_CANDIDATE_DEGRADATIONS: readonly ((candidate: TargetAnnotationV1
 function finalizeOversizedCandidate(candidate: TargetAnnotationV1): TargetAnnotationV1 {
   candidate.verification = 'unverifiable';
   for (const degrade of OVERSIZED_CANDIDATE_DEGRADATIONS) {
-    if (fitsPayloadCeiling(candidate)) break;
+    if (fitsPayloadCeiling(candidate)) return candidate;
     degrade(candidate);
   }
-  return candidate;
+  if (fitsPayloadCeiling(candidate)) return candidate;
+  throw new Error(
+    'target annotation exceeds the payload ceiling with only role and id left; the field cap no longer fits the ceiling',
+  );
 }
 
 // ---------------------------------------------------------------------------

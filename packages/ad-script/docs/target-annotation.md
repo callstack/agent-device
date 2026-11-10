@@ -71,6 +71,7 @@ The writer then drops `rect`, `scrollRegion`, the remaining `ancestry`, and `lab
 It measures the payload again after each drop and stops when the payload fits.
 Replay refuses recorded `"unverifiable"` evidence before it reads these fields, so the drops do not weaken replay.
 A capped field escapes to at most six times its limit, so `role` and `id` alone always fit and the writer never drops them.
+If a field limit change breaks that bound, the writer throws instead of writing a payload that exceeds the limit.
 When the reduced tuple fits, the record-time self-check uses that tuple.
 A `verified` claim therefore applies to exactly the written evidence.
 
