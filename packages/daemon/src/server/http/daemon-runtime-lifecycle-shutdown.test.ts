@@ -219,6 +219,8 @@ test('a SIGTERM shutdown gives the handoff a diagnostics scope to write its reas
     const daemonLog = fs.readFileSync(path.join(stateDir, 'daemon.log'), 'utf8');
     expect(daemonLog).toMatch(/"phase":"detach_scope_probe"/);
     expect(daemonLog).toMatch(/"lane":"physical_coredevice"/);
+    // The shutdown's one lease and claim summary also runs outside any request.
+    expect(daemonLog).toMatch(/"phase":"daemon_shutdown_provider_release_drain"/);
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

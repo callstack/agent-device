@@ -104,6 +104,8 @@ export function createExpiredProviderLeaseReleaser(options: {
   stateDir?: string;
   recoverableProviderIds?: readonly string[];
   retryDelayMs?: number;
+  /** Gives a timer-driven retry, which runs outside any request, a diagnostics scope. */
+  withinDiagnosticsScope?: (run: () => Promise<void>) => Promise<void>;
 }): ExpiredProviderLeaseReleaser {
   const pendingLiveLeases = new Map<string, DeviceLease>();
   const pendingRecoveryLeases = new Map<string, DeviceLease>();
@@ -115,6 +117,10 @@ export function createExpiredProviderLeaseReleaser(options: {
   let phase: ReleaserPhase = 'running';
   /** The releases this drain window observed; replaced at each window so one window's set is never another's. */
   let drainReleasedLeases = new Map<string, DeviceLease>();
+  const runScoped = (run: () => Promise<void> | void): void => {
+    const scoped = async (): Promise<void> => await run();
+    void (options.withinDiagnosticsScope ? options.withinDiagnosticsScope(scoped) : scoped());
+  };
 
   /** Moves the lifecycle forward and nothing else: the phase never goes back. */
   const advancePhase = (next: ReleaserPhase): void => {
@@ -205,7 +211,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       if (phase === 'closed') return;
       journalRetryTimer ??= setTimeout(() => {
         journalRetryTimer = undefined;
-        writeJournal();
+        runScoped(writeJournal);
       }, retryDelayMs);
       journalRetryTimer.unref?.();
     }
@@ -247,7 +253,7 @@ export function createExpiredProviderLeaseReleaser(options: {
     }
     retryTimer = setTimeout(() => {
       retryTimer = undefined;
-      void retryPending();
+      runScoped(retryPending);
     }, retryDelayMs);
     retryTimer.unref?.();
     emitDiagnostic({
