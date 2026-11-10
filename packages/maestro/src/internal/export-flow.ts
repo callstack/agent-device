@@ -1,7 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { GESTURE_FLING_DURATION_MS } from '@agent-device/contracts/gesture-plan';
 import { AppError } from '@agent-device/kernel/errors';
-import { parseWaitPositionals } from '@agent-device/command-registry/wait-positionals';
 import { selectorContainsKey } from '@agent-device/selectors';
 import { formatMaestroPoint } from './export-points.ts';
 import { DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY } from './compatibility-policy.ts';
@@ -259,66 +258,67 @@ function convertTypeAction(action: SessionAction): ConvertedAction {
   return { kind: 'commands', commands: [{ inputText: text }] };
 }
 
+// The `wait` keyword forms follow `@agent-device/command-registry/wait-positionals`. That module
+// stays off this package's eager closure, so the keywords that are not selectors are named here.
 function convertWaitAction(
   action: SessionAction,
   resolveSelector: MaestroExportOptions['resolveSelector'],
 ): ConvertedAction {
-  const parsed = parseWaitPositionals(action.positionals);
-  if (!parsed) return { kind: 'unsupported', message: 'wait requires a target or duration' };
-  switch (parsed.kind) {
-    case 'sleep':
-      return {
-        kind: 'commands',
-        commands: [{ waitForAnimationToEnd: { timeout: parsed.durationMs } }],
-        warnings: [
-          'wait <ms> exports as waitForAnimationToEnd and may return before the full duration',
-        ],
-      };
-    case 'stable':
-      return {
-        kind: 'commands',
-        commands: [
-          parsed.timeoutMs === null
-            ? 'waitForAnimationToEnd'
-            : { waitForAnimationToEnd: { timeout: parsed.timeoutMs } },
-        ],
-        warnings: [
-          'wait stable exports as waitForAnimationToEnd, which uses its own screen-stability threshold instead of the quiet window',
-        ],
-      };
-    case 'absent':
-      return {
-        kind: 'unsupported',
-        message: 'strict wait absent requires zero selector matches and is unsupported by Maestro',
-      };
-    case 'ref':
-      return {
-        kind: 'unsupported',
-        message: 'wait @ref names a session-local ref; record a selector wait to export it',
-      };
-    case 'invalid':
-      return { kind: 'unsupported', message: parsed.message };
-    case 'text':
-      if (parsed.text.length === 0) {
-        return { kind: 'unsupported', message: 'wait text requires the text to wait for' };
-      }
-      return extendedWaitUntilVisible(parsed.text, parsed.timeoutMs);
-    case 'selector': {
-      const selector = resolveSelector(parsed.selectorExpression);
-      if (!selector) {
-        return { kind: 'unsupported', message: 'wait selector is not Maestro-compatible' };
-      }
-      return {
-        ...extendedWaitUntilVisible(selector, parsed.timeoutMs),
-        warnings: readLabelSelectorWarnings(parsed.selectorExpression),
-      };
-    }
+  const [first, second] = action.positionals;
+  if (!first) return { kind: 'unsupported', message: 'wait requires a target or duration' };
+  if (first.startsWith('@')) {
+    return {
+      kind: 'unsupported',
+      message: 'wait @ref names a session-local ref; record a selector wait to export it',
+    };
   }
+  if (isNumber(first)) {
+    return {
+      kind: 'commands',
+      commands: [{ waitForAnimationToEnd: { timeout: Number(first) } }],
+      warnings: [
+        'wait <ms> exports as waitForAnimationToEnd and may return before the full duration',
+      ],
+    };
+  }
+  if (first === 'stable') return convertStableWait(action.positionals[2]);
+  if (first === 'absent') {
+    return {
+      kind: 'unsupported',
+      message: 'strict wait absent requires zero selector matches and is unsupported by Maestro',
+    };
+  }
+  if (first === 'text') {
+    if (!second) {
+      return { kind: 'unsupported', message: 'wait text requires the text to wait for' };
+    }
+    return extendedWaitUntilVisible(second, action);
+  }
+  const selector = resolveSelector(first);
+  if (!selector) return { kind: 'unsupported', message: 'wait selector is not Maestro-compatible' };
+  return {
+    ...extendedWaitUntilVisible(selector, action),
+    warnings: readLabelSelectorWarnings(first),
+  };
+}
+
+function convertStableWait(timeout: string | undefined): ConvertedAction {
+  return {
+    kind: 'commands',
+    commands: [
+      timeout !== undefined && isNumber(timeout)
+        ? { waitForAnimationToEnd: { timeout: Number(timeout) } }
+        : 'waitForAnimationToEnd',
+    ],
+    warnings: [
+      'wait stable exports as waitForAnimationToEnd, which uses its own screen-stability threshold instead of the quiet window',
+    ],
+  };
 }
 
 function extendedWaitUntilVisible(
   visible: NonNullable<MaestroSelectorProjection>,
-  timeoutMs: number | null,
+  action: SessionAction,
 ): Extract<ConvertedAction, { kind: 'commands' }> {
   return {
     kind: 'commands',
@@ -326,12 +326,19 @@ function extendedWaitUntilVisible(
       {
         extendedWaitUntil: {
           visible,
-          timeout:
-            timeoutMs ?? DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY.extendedWaitUntilTimeoutMs,
+          timeout: readTimeout(
+            action,
+            DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY.extendedWaitUntilTimeoutMs,
+          ),
         },
       },
     ],
   };
+}
+
+function readTimeout(action: SessionAction, fallback: number): number {
+  const candidate = action.positionals.at(-1);
+  return candidate && isNumber(candidate) ? Number(candidate) : fallback;
 }
 
 function readLabelSelectorWarnings(expression: string): string[] {

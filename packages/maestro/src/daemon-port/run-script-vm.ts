@@ -1,6 +1,4 @@
 import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { runCmdSync } from '@agent-device/host-kit/command';
@@ -13,6 +11,7 @@ import {
   type RunScriptHttpRequest,
   type RunScriptHttpResponse,
 } from './run-script-http.ts';
+import { resolveRunScriptChildArgs } from './run-script-execution.ts';
 
 const RUN_SCRIPT_TIMEOUT_MS = 30_000;
 const RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS = 1_000;
@@ -169,34 +168,6 @@ function readHttpChildOutput(stdout: string): RunScriptHttpChildOutput | undefin
 
 function resolveHttpChildArgs(): string[] {
   return resolveRunScriptChildArgs('run-script-http-child');
-}
-
-/** The node arguments that start a packaged runScript child entry beside this module. */
-export function resolveRunScriptChildArgs(
-  entry: 'run-script-child' | 'run-script-http-child',
-): string[] {
-  const modulePath = resolveChildModulePath(entry, import.meta.url);
-  if (!modulePath) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `Maestro runScript helper entrypoint ${entry} is unavailable; rebuild the package`,
-    );
-  }
-  return modulePath.endsWith('.ts') ? ['--experimental-strip-types', modulePath] : [modulePath];
-}
-
-function resolveChildModulePath(entry: string, importMetaUrl: string): string | null {
-  try {
-    const currentModulePath = fileURLToPath(importMetaUrl);
-    const extension = path.extname(currentModulePath) || '.js';
-    const candidates = [
-      path.join(path.dirname(currentModulePath), entry + extension),
-      path.join(path.dirname(currentModulePath), 'internal', entry + extension),
-    ];
-    return candidates.find((candidate) => fs.existsSync(candidate)) ?? null;
-  } catch {
-    return null;
-  }
 }
 
 function buildHttpChildInput(
