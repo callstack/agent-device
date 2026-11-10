@@ -276,6 +276,25 @@ test('a recorded drag writes and parses one targets-v1 annotation for both endpo
   });
 });
 
+test('a resolved fill that cleared the field writes a selector line with an empty text argument', () => {
+  const root = mkdtempForTestSync('agent-device-script-writer-clear-fill-');
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
+  const session = makeRepairCompleteSession('default', {
+    actions: [
+      action({
+        command: 'fill',
+        positionals: ['@e3', ''],
+        result: { selectorChain: ['id="email"'], text: '' },
+      }),
+    ],
+  });
+
+  const { parsed } = writeAndParse(writer, session);
+  expect(parsed.actions.map((a) => [a.command, a.positionals])).toEqual([
+    ['fill', ['id="email"', '']],
+  ]);
+});
+
 test('a bare-@ref fill action also fails loud, not just click-like commands', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-bare-ref-fill-');
   const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
