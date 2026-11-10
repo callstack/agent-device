@@ -638,6 +638,21 @@ extension RunnerTests {
     )
   }
 
+  // A plain masked field whose eight bullets match its eight-bullet placeholder can't be told from empty
+  // either, so the refill still clears it. The fixture shows one bullet per two characters, so the 18
+  // characters refilled show as 9 bullets, and kept stale text would show as 17.
+  @MainActor
+  func testRefillOfAMaskedFieldClearsTextThatReadsLikeItsBulletPlaceholder() throws {
+    try assertFillLeavesTheEdgeToggleUnpressed(
+      launchArguments: ["--agent-device-text-entry-masked-value", "--agent-device-text-entry-bullet-placeholder"],
+      field: { $0.textFields },
+      text: "not-a-secret-12345",
+      expectedValue: String(repeating: "\u{2022}", count: 9),
+      afterFilling: "abcdefghijklmnop",
+      showing: String(repeating: "\u{2022}", count: 8)
+    )
+  }
+
   // iOS doesn't clear a field that kept its focus on its next edit, and eight characters read the same
   // as the eight-bullet placeholder, so the refill must still clear them. It reads the field's focus,
   // so it adds no tap to the first fill's one.
@@ -652,14 +667,17 @@ extension RunnerTests {
     XCTAssertEqual(try secureEntryCounts().taps, 1)
   }
 
-  /// Fills "not-a-secret-123" the way the daemon sends `fill`, after `earlierText` when given, and checks
-  /// the field holds the new text alone while the toggle over its right edge stays unpressed.
+  /// Fills `text` the way the daemon sends `fill`, after `earlierText` when given (which the field shows
+  /// as `earlierValue`, one bullet per character by default), and checks the field holds the new text
+  /// alone while the toggle over its right edge stays unpressed.
   @MainActor
   private func assertFillLeavesTheEdgeToggleUnpressed(
     launchArguments: [String],
     field: (XCUIApplication) -> XCUIElementQuery,
+    text: String = "not-a-secret-123",
     expectedValue: String,
-    afterFilling earlierText: String? = nil
+    afterFilling earlierText: String? = nil,
+    showing earlierValue: String? = nil
   ) throws {
     app.launchArguments = [
       "--agent-device-text-entry-regression",
@@ -677,20 +695,21 @@ extension RunnerTests {
     XCTAssertTrue(togglePresses.waitForFixtureExistence(timeout: appExistenceTimeout))
     XCTAssertEqual(togglePresses.label, "presses=0")
     if let earlierText {
-      let earlier = try executeTypeCommand(
+      // Only the field this fill leaves is the precondition: a result that shows as a bullet placeholder
+      // reads back as that placeholder, which fill's own check reports as a mismatch.
+      _ = try executeTypeCommand(
         activeApp: app,
         command: try fillCommandFixture(commandId: "fill-earlier-text", text: earlierText, at: input)
       )
-      XCTAssertTrue(earlier.ok, String(describing: earlier.error))
-      let earlierValue = String(repeating: "\u{2022}", count: earlierText.count)
-      let filled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", earlierValue), object: input)
+      let shown = earlierValue ?? String(repeating: "\u{2022}", count: earlierText.count)
+      let filled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", shown), object: input)
       XCTAssertEqual(XCTWaiter.wait(for: [filled], timeout: appExistenceTimeout), .completed, String(describing: input.value))
     }
 
     let failureCountBefore = currentXCTestFailureCount()
     let response = try executeTypeCommand(
       activeApp: app,
-      command: try fillCommandFixture(commandId: "fill-masked-input-beside-toggle", text: "not-a-secret-123", at: input)
+      command: try fillCommandFixture(commandId: "fill-masked-input-beside-toggle", text: text, at: input)
     )
 
     XCTAssertTrue(response.ok, String(describing: response.error))

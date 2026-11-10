@@ -408,11 +408,11 @@ extension RunnerTests {
     // be stale after the field repositions on focus (e.g. the Settings search bar jumps
     // bottom->top and reveals a "Suggestions" list) — tapping there navigates away instead of
     // clearing; and replacing into an already-empty field is a no-op anyway.
-    // editableTextValue returns nil for secure (and unknown) fields, where we CANNOT confirm
-    // emptiness — those must still be cleared, or replace would concatenate stale + new text.
-    // So distinguish nil (clear) from "" (skip). On iOS the masked route below can still prove a
-    // masked field empty.
-    let existing = editableTextValue(for: input.attributes, treatingPlaceholderAsEmpty: true)
+    // textValueForClear returns nil for secure (and unknown) fields, and on iOS for a placeholder
+    // that is itself a mask, where we CANNOT confirm emptiness — those must still be cleared, or
+    // replace would concatenate stale + new text. So distinguish nil (clear) from "" (skip). On iOS
+    // the masked route below can still prove a masked field empty.
+    let existing = textValueForClear(input.attributes)
     if existing?.isEmpty == true {
       return
     }
@@ -804,6 +804,21 @@ extension RunnerTests {
     ) else {
       return nil
     }
+    return value
+  }
+
+  /// The text a clear can trust in the input `attributes` describe, with a placeholder read as empty;
+  /// nil when unreadable. On iOS a placeholder that is itself a mask is nil too, since text of its length
+  /// shows it as well: the masked clear reads that field back instead of skipping it.
+  func textValueForClear(_ attributes: (any XCUIElementAttributes)?) -> String? {
+    guard let value = editableTextValue(for: attributes, treatingPlaceholderAsEmpty: true) else {
+      return nil
+    }
+#if os(iOS)
+    if value.isEmpty, Self.isMaskedTextValue(normalizedElementText(attributes?.value)) {
+      return nil
+    }
+#endif
     return value
   }
 
