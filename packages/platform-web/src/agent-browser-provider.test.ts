@@ -26,7 +26,7 @@ import { createAgentBrowserWebProvider } from './agent-browser-provider.ts';
 import { buildSelectFocusedContentEvalScript } from './agent-browser-select-content.ts';
 import type { WebSnapshotResult } from './provider.ts';
 import { withCommandExecutorOverride, type ExecResult } from '@agent-device/host-kit/command';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 
@@ -200,6 +200,58 @@ test('agent-browser provider keeps typed text out of every backend failure shape
         },
       );
     }
+  });
+});
+
+test('agent-browser provider keeps a text entry failure from before the command ran intact', async () => {
+  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
+    const missing = new AppError('TOOL_MISSING', 'agent-browser backend is not installed', {
+      hint: 'Run `agent-device web setup` to install the managed web backend.',
+    });
+    const canceled = createRequestCanceledError({ cmd: 'node' });
+    for (const failure of [missing, canceled]) {
+      await withCommandExecutorOverride(
+        async () => {
+          throw failure;
+        },
+        async () => {
+          await assert.rejects(provider.typeText('hunter2-secret'), (error: unknown) => {
+            assert.ok(error instanceof AppError);
+            assert.equal(error.code, failure.code);
+            assert.equal(error.message, failure.message);
+            assert.equal(error.details?.hint, failure.details?.hint);
+            assert.equal(error.details?.reason, failure.details?.reason);
+            return true;
+          });
+        },
+      );
+    }
+  });
+});
+
+test('agent-browser provider keeps a text entry timeout but drops the output it captured', async () => {
+  const secret = 'hunter2-secret';
+  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
+    await withCommandExecutorOverride(
+      async () => {
+        throw new AppError('COMMAND_FAILED', 'node timed out after 30000ms', {
+          stdout: `typed ${secret}`,
+          stderr: '',
+          exitCode: 1,
+          timeoutMs: 30_000,
+        });
+      },
+      async () => {
+        await assert.rejects(provider.typeText(secret), (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.message, 'node timed out after 30000ms');
+          assert.equal(error.details?.timeoutMs, 30_000);
+          assert.equal(error.cause, undefined);
+          assert.equal(JSON.stringify(error.details).includes(secret), false);
+          return true;
+        });
+      },
+    );
   });
 });
 
