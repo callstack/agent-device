@@ -9,7 +9,7 @@ import {
   type TraceCommandResult,
 } from '@agent-device/contracts/recording';
 import type { SessionStore } from '../../core/session-store.ts';
-import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { requestCwd, type DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionRef } from '../../core/session-state.ts';
 import { recordSessionAction } from '../../core/session-action-recorder.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
@@ -40,7 +40,7 @@ function startTrace(
   if (session.trace) return errorResponse('INVALID_ARGS', 'trace already in progress');
   const outPath = expandSessionPath(
     req.positionals?.[1] ?? sessionStore.defaultTracePath(session),
-    host.cwd,
+    requestCwd(req, host),
   );
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.appendFileSync(outPath, '');
@@ -66,7 +66,11 @@ function stopTrace(
 ): DaemonResponse {
   const session = sessionStore.requireCurrent(ref);
   if (!session.trace) return errorResponse('INVALID_ARGS', 'no active trace');
-  const outPath = relocateTraceOutput(host, session.trace.outPath, req.positionals?.[1]);
+  const outPath = relocateTraceOutput(
+    requestCwd(req, host),
+    session.trace.outPath,
+    req.positionals?.[1],
+  );
   const daemonOwned = session.trace.remoteCaptureOutputPath === outPath;
   const tenantId = session.trace.remoteCaptureTenantId;
   const clientOutPath =
@@ -98,12 +102,12 @@ function stopTrace(
 }
 
 function relocateTraceOutput(
-  host: HostEnvironment,
+  cwd: string,
   currentPath: string,
   requestedPath: string | undefined,
 ): string {
   if (!requestedPath) return currentPath;
-  const resolved = expandSessionPath(requestedPath, host.cwd);
+  const resolved = expandSessionPath(requestedPath, cwd);
   fs.mkdirSync(path.dirname(resolved), { recursive: true });
   if (fs.existsSync(currentPath)) fs.renameSync(currentPath, resolved);
   else fs.appendFileSync(resolved, '');

@@ -23,9 +23,8 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../core/request-runtime-binding.ts';
 import type { SessionStore } from '../../core/session-store.ts';
-import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { requestCwd, type DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
-import { resolvePayloadInput } from '../payload-input.ts';
 import { resolveDeployResultTarget } from '@agent-device/contracts/deploy-result-target';
 import { withSuccessText } from '@agent-device/kernel/success-text';
 import { recordSessionAction } from '../../core/session-action-recorder.ts';
@@ -78,7 +77,7 @@ export async function handleAppDeploymentCommand(params: {
   // Acquire before the cleanup scope: a rejected foreign upload ID must not delete that upload.
   const appPath = uploadedArtifactId
     ? prepareUploadedArtifact(uploadedArtifactId, req.meta?.tenantId)
-    : expandSessionPath(target.appPathInput, params.host.cwd);
+    : expandSessionPath(target.appPathInput, requestCwd(req, params.host));
   try {
     if (!fs.existsSync(appPath)) {
       return errorResponse('INVALID_ARGS', `App binary not found: ${appPath}`);
@@ -149,9 +148,9 @@ export async function handlePushNotificationCommand(
   }
   const payload = req.internal?.publicNetworkOnly
     ? parseInlineNotificationPayload(payloadArg)
-    : await readNotificationPayload(
-        resolvePushPayload(payloadArg, req.meta?.cwd ?? params.host.cwd),
-      );
+    : await readNotificationPayload(payloadArg, {
+        resolvePath: (value) => expandSessionPath(value, requestCwd(req, params.host)),
+      });
   const device = await resolveCommandDevice({
     session,
     req,
@@ -319,13 +318,4 @@ function resolveDeployTarget(
     };
   }
   return { ok: true, app: first, appPathInput: second };
-}
-
-function resolvePushPayload(payloadArg: string, cwd: string): string {
-  const resolved = resolvePayloadInput(payloadArg, {
-    subject: 'Push payload',
-    cwd,
-    expandPath: (value, currentCwd) => expandSessionPath(value, currentCwd ?? cwd),
-  });
-  return resolved.kind === 'file' ? resolved.path : resolved.text;
 }
