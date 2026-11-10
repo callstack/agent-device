@@ -316,7 +316,15 @@ export function assertSafeDerivedCleanup(
 function isPathInsideProjectTmp(targetPath: string, projectRoot: string): boolean {
   const projectTmpRoot = path.resolve(projectRoot, '.tmp');
   const relativePath = path.relative(projectTmpRoot, path.resolve(targetPath));
-  return relativePath !== '' && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
+  if (relativePath === '' || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    return false;
+  }
+  let candidate = projectTmpRoot;
+  for (const segment of ['', ...relativePath.split(path.sep)]) {
+    candidate = path.join(candidate, segment);
+    if (fs.lstatSync(candidate, { throwIfNoEntry: false })?.isSymbolicLink()) return false;
+  }
+  return true;
 }
 
 export async function evaluateExistingXctestrun(options: {

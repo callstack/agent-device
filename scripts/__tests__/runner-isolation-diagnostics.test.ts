@@ -255,3 +255,24 @@ describe('scripts/build-xcuitest-apple.sh cleanup', () => {
     }
   });
 });
+
+for (const [name, suffix] of [
+  ['derived root', ''],
+  ['ancestor', 'nested'],
+] as const) {
+  test(`cleanup refuses a symlink at the ${name} and preserves its target`, () => {
+    const outside = mkdtempForTestSync('runner-clean-outside-');
+    fs.mkdirSync(path.join(repoRoot, '.tmp'), { recursive: true });
+    const scratch = fs.mkdtempSync(path.join(repoRoot, '.tmp', 'runner-clean-link-'));
+    const link = path.join(scratch, 'link');
+    fs.symlinkSync(outside, link, 'dir');
+    try {
+      const result = runBuildScript('', 65, { clean: true, derived: path.join(link, suffix) });
+      expect(fs.readFileSync(path.join(outside, suffix, 'Build', 'sentinel'), 'utf8')).toBe('keep');
+      expect(result.status).toBe(1);
+      expect(fs.existsSync(result.xcodebuildArgs)).toBe(false);
+    } finally {
+      fs.rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+}
