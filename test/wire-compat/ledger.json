@@ -72,7 +72,7 @@
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpRoute": "sha256:e63c4581ccde668913914149c9092d16ecf8a5cbd7ab33c6eb8617e77fc1015e",
     "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:fbb1ffa587ffb8b2975936fd35113c1970da16c58a713014df2c6ba885eecdd5",
-    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory": "sha256:651806eabbd78d51d4bb21dab0b8a28847fb6087941f73dee735c24d9c2a79fa",
+    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory": "sha256:74f524029d20a56c3da63e71171395cdfa666ff7d2517202132d572d1620b908",
     "packages/daemon/src/server/downloadable-artifact-http.ts#readArtifactId": "sha256:3472ee52d951fdf7ef00ee500298602c68f0e1e3b8c44ff51b09981efabf348c",
     "packages/daemon/src/server/downloadable-artifact-http.ts#readRequestPathname": "sha256:6b3a49c72365cf7da4552abef59862c073461f746025e28d409048815dd586f2",
     "packages/daemon/src/server/downloadable-artifact-http.ts#resolveDownloadableArtifactHttpRoute": "sha256:9fcdc9619e8d378e8f04ef7b3584863af446e855702ddce83a16ec194a6d98af",
@@ -257,8 +257,8 @@
     },
     {
       "declaration": "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory",
-      "digest": "sha256:651806eabbd78d51d4bb21dab0b8a28847fb6087941f73dee735c24d9c2a79fa",
-      "rationale": "#3753 threads the daemon runtime's host environment into the same archive spawn from the inventory route. The JSON body it writes and the error path are unchanged; no peer-visible field moves."
+      "digest": "sha256:74f524029d20a56c3da63e71171395cdfa666ff7d2517202132d572d1620b908",
+      "rationale": "The inventory route no longer archives directory artifacts, so it drops the host environment it passed to the archive spawn. Routes, authorization, the error path and every field name are unchanged. The one peer-visible difference is that `sizeBytes` is absent for a directory artifact that has not been downloaded yet; released clients only print that field in the `artifacts` CLI line and never use it to frame a download, which reads its own content-length header."
     },
     {
       "declaration": "packages/kernel/src/errors.ts#normalizeError",
