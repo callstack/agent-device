@@ -16,6 +16,18 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   withoutCommandExecutorOverride: async <T>(fn: () => Promise<T>) => await fn(),
 }));
 
+const identitiesMock = vi.hoisted(() =>
+  vi.fn(
+    async (pids: Iterable<number>) =>
+      new Map(
+        [...pids].map((pid) => [
+          pid,
+          { startTime: `start-${pid}`, command: `command-${pid}`, zombie: false },
+        ]),
+      ),
+  ),
+);
+
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
   return {
@@ -26,8 +38,7 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
       probe.unanswered
         ? new Map<number, { state: string; startTime: string }>()
         : await actual.readHostProcessIdentityObservationsAsync(pids),
-    readProcessStartTime: (pid: number) => `start-${pid}`,
-    readProcessCommand: (pid: number) => `command-${pid}`,
+    readProcessIdentities: identitiesMock,
   };
 });
 
@@ -466,9 +477,11 @@ test('records the managed browser daemon and Chrome fleet at the spawn owner', a
       exitCode: 0,
     });
 
+    identitiesMock.mockClear();
     const summary = await recordManagedAgentBrowserProcesses(status, store);
 
     expect(summary.pids).toEqual([101, 201, 301]);
+    expect(identitiesMock.mock.calls).toEqual([[[101, 201, 301]]]);
     expect(store.replace).toHaveBeenCalledWith(
       { kind: 'daemon' },
       [101, 201, 301].map((pid) => ({
