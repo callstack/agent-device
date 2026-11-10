@@ -134,3 +134,23 @@ test('redacts with the patterns of the command host, not the process', async () 
 
   expect(fs.readFileSync(outputPath, 'utf8')).toBe('token [REDACTED] leaked\n');
 });
+
+test('rotates app.log when an open sink crosses the size cap', async () => {
+  const root = mkdtempForTestSync('agent-device-app-log-rotate-');
+  roots.push(root);
+  const sessionsDir = path.join(root, 'sessions');
+  const outputPath = path.join(sessionsDir, 'one', 'app.log');
+  const env = { AGENT_DEVICE_APP_LOG_MAX_BYTES: '100' };
+
+  const sink = await openAppLogOutput(sessionsDir, outputPath, { env, cwd: root });
+  for (let index = 0; index < 10; index += 1) {
+    await sink.write(`${String(index).padStart(2, '0')} ${'x'.repeat(36)}\n`);
+  }
+  await sink[Symbol.asyncDispose]();
+
+  const current = fs.readFileSync(outputPath, 'utf8');
+  const rotated = fs.readFileSync(`${outputPath}.1`, 'utf8');
+  expect(Buffer.byteLength(current)).toBeLessThan(100);
+  expect(Buffer.byteLength(rotated)).toBeGreaterThanOrEqual(100);
+  expect(current.endsWith(`09 ${'x'.repeat(36)}\n`)).toBe(true);
+});
