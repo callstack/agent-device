@@ -20,7 +20,7 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../core/request-runtime-binding.ts';
-import { resolveBoundTypeTextRuntime } from '../type-text-runtime.ts';
+import { parseTypeTextRequest, resolveBoundTypeTextRuntime } from '../type-text-runtime.ts';
 import { expectRefusesUnavailableExactOwnerFact } from '../../__tests__/support/runtime-binding-conformance.ts';
 
 const appleDevice = {
@@ -76,12 +76,14 @@ test('resolves one admitted binding and reproduces the retired leaf result exact
   expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
   expect(harness.bindDevice).toHaveBeenCalledTimes(1);
   expect(harness.bindDevice).toHaveBeenCalledWith(appleDevice, typeTextRuntimeUse);
-  const result = await resolved.typeText(['hello world'], {
-    delayMs: 25,
-    appBundleId: 'com.example.app',
-    requestId: 'type-context',
-    logPath: '/tmp/session.log',
-  });
+  const result = await resolved.typeText(
+    { text: 'hello world', delayMs: 25 },
+    {
+      appBundleId: 'com.example.app',
+      requestId: 'type-context',
+      logPath: '/tmp/session.log',
+    },
+  );
 
   // The retired leaf's exact composition: route evidence, text, delay, and the char-count
   // message — nothing else from the owner's result survives.
@@ -116,45 +118,46 @@ test('omits textEntryRoute when the owner types blind, exactly as the leaf did',
   });
   expect(resolved.ok).toBe(true);
   if (!resolved.ok) return;
-  const result = await resolved.typeText(['hi'], {});
+  const result = await resolved.typeText({ text: 'hi', delayMs: 0 }, {});
 
   expect('textEntryRoute' in result).toBe(false);
   expect(result).toEqual({ text: 'hi', delayMs: 0, message: 'Typed 2 chars' });
 });
 
-test('parses exactly as the retired leaf did: refs rejected, spaces joined, delay bounded', async () => {
-  const harness = runtimeHarness();
-  const resolved = await resolveBoundTypeTextRuntime({
-    platformServices: daemonPlatformServicesFixture(),
-    device: appleDevice,
-    inspectFacts: harness.inspectFacts,
-    bindDevice: harness.bindDevice,
-  });
-  expect(resolved.ok).toBe(true);
-  if (!resolved.ok) return;
-
-  // A leading target ref is a mistargeted fill, with the same hint text the leaf raised.
-  await expect(resolved.typeText(['@e5', 'hello'], {})).rejects.toMatchObject({
-    code: 'INVALID_ARGS',
-    message: 'type does not accept a target ref like "@e5"',
-    details: {
-      hint: 'Use fill @e5 "text" to target that field, or press @e5 then type "text" to append.',
-    },
-  });
-  // Empty text is refused after the ref check, not before.
-  await expect(resolved.typeText([], {})).rejects.toMatchObject({
-    code: 'INVALID_ARGS',
-    message: 'type requires text',
-  });
-  // The 0-10000 delay bound survives the migration.
-  await expect(resolved.typeText(['hi'], { delayMs: 10_001 })).rejects.toMatchObject({
-    code: 'INVALID_ARGS',
-  });
-  // Multiple positionals join with spaces — the wire shape find's leg and batch both rely on.
-  await resolved.typeText(['hello', 'world'], {});
-  expect(harness.typeText).toHaveBeenLastCalledWith(
-    expect.objectContaining({ text: 'hello world' }),
+test('parse rejects a leading snapshot ref, empty text, and an out-of-range delay', () => {
+  const rejectRef = { rejectRefTarget: true };
+  // A leading target ref is a mistargeted fill; the hint names the ref to fill instead.
+  for (const ref of ['@e5', '@e5~s2']) {
+    expect(() => parseTypeTextRequest([ref, 'hello'], {}, rejectRef)).toThrow(
+      expect.objectContaining({
+        code: 'INVALID_ARGS',
+        message: `type does not accept a target ref like "${ref}"`,
+        details: {
+          hint: `Use fill ${ref} "text" to target that field, or press ${ref} then type "text" to append.`,
+        },
+      }),
+    );
+  }
+  expect(() => parseTypeTextRequest([], {}, rejectRef)).toThrow(
+    expect.objectContaining({ code: 'INVALID_ARGS', message: 'type requires text' }),
   );
+  expect(() => parseTypeTextRequest(['hi'], { delayMs: 10_001 }, rejectRef)).toThrow(
+    expect.objectContaining({ code: 'INVALID_ARGS' }),
+  );
+});
+
+test('parse types handles and words that only resemble a ref', () => {
+  const rejectRef = { rejectRefTarget: true };
+  for (const text of ['@elena hi', '@eleven', '@nodejs', '@refund', '@john99', '@e', '@e5x']) {
+    expect(parseTypeTextRequest([text], {}, rejectRef)).toEqual({ text, delayMs: 0 });
+  }
+  // find's type leg always carries text, so even a real ref token is typed verbatim.
+  expect(parseTypeTextRequest(['@e5 hi'], {}, { rejectRefTarget: false })).toEqual({
+    text: '@e5 hi',
+    delayMs: 0,
+  });
+  // Multiple positionals join with spaces: the wire shape find's leg and batch both rely on.
+  expect(parseTypeTextRequest(['hello', 'world'], {}, rejectRef).text).toBe('hello world');
 });
 
 test('rejects an unavailable exact-owner fact before binding, with the owner hint', async () => {

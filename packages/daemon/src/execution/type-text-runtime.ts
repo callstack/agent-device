@@ -18,14 +18,15 @@ type BoundTypeTextOperations = Readonly<{
   operations: Readonly<{ typeText: TypeTextRuntimeOperations['typeText'] }>;
 }>;
 
+/** A validated `type` request: the joined text and the bounded keystroke delay. */
+export type TypeTextRequest = Readonly<{ text: string; delayMs: number }>;
+
 /**
- * Executes one text entry against an already-admitted binding, byte-for-byte reproducing the
- * retired `handleTypeCommand` leaf: the mistargeted-ref rejection inspects the first positional,
- * the text is the positionals joined by spaces, `delay-ms` validates 0–10 000 from the resolved
- * context, and only `textEntryRoute` survives from the owner's result.
+ * Executes one validated text entry against an already-admitted binding. Callers parse with
+ * `parseTypeTextRequest` first, so an invalid request is refused before any side effect.
  */
 export type BoundTypeTextExecutor = (
-  positionals: readonly string[],
+  request: TypeTextRequest,
   context: DaemonCommandContext,
 ) => Promise<Record<string, unknown>>;
 
@@ -54,17 +55,23 @@ export async function resolveBoundTypeTextRuntime(
   const runtime = admission.runtime;
   return {
     ok: true,
-    typeText: async (positionals, context) =>
-      await executeBoundTypeText(runtime, positionals, context),
+    typeText: async (request, context) => await executeBoundTypeText(runtime, request, context),
   };
 }
 
-export async function executeBoundTypeText(
-  runtime: BoundTypeTextOperations,
+/**
+ * Validates the positionals of `type`: the text is the positionals joined by spaces, and
+ * `delay-ms` is bounded to 0-10 000. `rejectRefTarget` refuses a leading snapshot ref, which is a
+ * mistargeted `fill`; find's `type` leg passes false because its value is always text.
+ */
+export function parseTypeTextRequest(
   positionals: readonly string[],
   context: DaemonCommandContext,
-): Promise<Record<string, unknown>> {
-  const mistargetedRef = findMistargetedTypeRefToken(positionals[0]);
+  options: { rejectRefTarget: boolean },
+): TypeTextRequest {
+  const mistargetedRef = options.rejectRefTarget
+    ? findMistargetedTypeRefToken(positionals[0])
+    : null;
   if (mistargetedRef) {
     throw new AppError(
       'INVALID_ARGS',
@@ -77,6 +84,14 @@ export async function executeBoundTypeText(
   const text = positionals.join(' ');
   if (!text) throw new AppError('INVALID_ARGS', 'type requires text');
   const delayMs = requireIntInRange(context.delayMs ?? 0, 'delay-ms', 0, 10_000);
+  return { text, delayMs };
+}
+
+export async function executeBoundTypeText(
+  runtime: BoundTypeTextOperations,
+  { text, delayMs }: TypeTextRequest,
+  context: DaemonCommandContext,
+): Promise<Record<string, unknown>> {
   const backendResult = await runtime.operations.typeText(typeTextInput(text, delayMs, context));
   const textEntryRoute = backendResult?.textEntryRoute;
   return {
