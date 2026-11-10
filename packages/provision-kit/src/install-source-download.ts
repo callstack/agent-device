@@ -1,6 +1,5 @@
 import { createWriteStream, promises as fs } from 'node:fs';
 import path from 'node:path';
-import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -12,11 +11,6 @@ import { approveDownloadSourceUrl } from './install-source-network.ts';
 import * as networkTransport from './install-source-network-transport.ts';
 
 const MAX_REDIRECTS = 5;
-/**
- * How long a download may go without progress: no response headers, or no body bytes. The whole
- * transfer has no bound of its own; the request's envelope, through `signal`, bounds it.
- */
-const SOURCE_DOWNLOAD_STALL_TIMEOUT_MS = 120_000;
 const DEFAULT_USER_AGENT = 'agent-device';
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const NETWORK_ERROR_CODE_RE = /^[A-Z][A-Z0-9_]{0,63}$/;
@@ -34,10 +28,6 @@ const FORBIDDEN_HEADERS = new Set([
   'upgrade',
 ]);
 
-/**
- * Downloads an install source into `tempDir`. A download that makes no progress for the stall
- * window fails with a timeout; an aborted `signal` rejects with the abort's own error.
- */
 export async function downloadInstallSource(params: {
   tempDir: string;
   url: string;
@@ -47,68 +37,21 @@ export async function downloadInstallSource(params: {
 }): Promise<string> {
   let currentUrl = parseSourceUrl(params.url);
   let headers = withDefaultUserAgent(sanitizeHeaders(params.headers));
-  const stall = createStallGuard(params.signal);
-  try {
-    for (let redirectCount = 0; ; redirectCount += 1) {
-      const response = await requestHop(currentUrl, headers, stall.signal, params.environment);
-      try {
-        const redirected = readRedirect(response, currentUrl, redirectCount);
-        if (redirected) {
-          if (redirected.origin !== currentUrl.origin) headers = crossOriginHeaders(headers);
-          currentUrl = redirected;
-          stall.progress();
-          continue;
-        }
-        assertSuccessfulResponse(response);
-        return await writeResponse(params.tempDir, currentUrl, response, stall);
-      } finally {
-        await response.close();
+  for (let redirectCount = 0; ; redirectCount += 1) {
+    const response = await requestHop(currentUrl, headers, params.signal, params.environment);
+    try {
+      const redirected = readRedirect(response, currentUrl, redirectCount);
+      if (redirected) {
+        if (redirected.origin !== currentUrl.origin) headers = crossOriginHeaders(headers);
+        currentUrl = redirected;
+        continue;
       }
+      assertSuccessfulResponse(response);
+      return await writeResponse(params.tempDir, currentUrl, response);
+    } finally {
+      await response.close();
     }
-  } catch (error) {
-    if (!stall.stalled() || params.signal.aborted) throw error;
-    throw new AppError(
-      'COMMAND_FAILED',
-      `App source download made no progress for ${SOURCE_DOWNLOAD_STALL_TIMEOUT_MS}ms`,
-      { timeoutMs: SOURCE_DOWNLOAD_STALL_TIMEOUT_MS },
-      error,
-    );
-  } finally {
-    stall.dispose();
   }
-}
-
-type StallGuard = {
-  /** Aborts when the caller aborts or the download stalls. */
-  signal: AbortSignal;
-  progress(): void;
-  stalled(): boolean;
-  dispose(): void;
-};
-
-function createStallGuard(outer: AbortSignal): StallGuard {
-  const controller = new AbortController();
-  let stalled = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const onOuterAbort = () => controller.abort(outer.reason);
-  outer.addEventListener('abort', onOuterAbort, { once: true });
-  const arm = () => {
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      stalled = true;
-      controller.abort();
-    }, SOURCE_DOWNLOAD_STALL_TIMEOUT_MS);
-  };
-  arm();
-  return {
-    signal: controller.signal,
-    progress: arm,
-    stalled: () => stalled,
-    dispose: () => {
-      clearTimeout(timer);
-      outer.removeEventListener('abort', onOuterAbort);
-    },
-  };
 }
 
 async function requestHop(
@@ -179,7 +122,6 @@ async function writeResponse(
   tempDir: string,
   url: URL,
   response: networkTransport.InstallSourceNetworkResponse,
-  stall: StallGuard,
 ): Promise<string> {
   const encoding = readHeader(response.headers, 'content-encoding');
   if (encoding && encoding.toLowerCase() !== 'identity') {
@@ -197,19 +139,7 @@ async function writeResponse(
       ),
   });
   try {
-    const progress = new Transform({
-      transform(chunk, _encoding, callback) {
-        stall.progress();
-        callback(null, chunk);
-      },
-    });
-    await pipeline(
-      response.body,
-      progress,
-      byteLimit,
-      createWriteStream(destinationPath, { flags: 'wx' }),
-      { signal: stall.signal },
-    );
+    await pipeline(response.body, byteLimit, createWriteStream(destinationPath, { flags: 'wx' }));
     return destinationPath;
   } catch (error) {
     await fs.rm(destinationPath, { force: true }).catch(() => {});

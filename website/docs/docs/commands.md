@@ -690,7 +690,7 @@ agent-device install-from-source --github-actions-artifact thymikee/RNCLI83:6635
 ```
 
 - `install-from-source <url>` installs an artifact the daemon can reach at a URL; use `install` or `reinstall` for local files. Device coverage matches `install`.
-- `install-from-source` allows 600 seconds overall, including the download. The download fails if it receives no data for 120 seconds. The local Android and iOS install limits match `install`.
+- `install-from-source` allows 600 seconds overall, including up to 120 seconds for the download. The local Android and iOS install limits match `install`.
 - A URL may point to an Android `.apk` or `.aab`, or, from any public host, to an archive containing one `.apk`, `.aab`, `.ipa`, or iOS `.app`.
 - `--github-actions-artifact <owner/repo:artifact>` lets a compatible remote daemon fetch a GitHub Actions artifact with its own credentials. A numeric artifact is treated as an id, anything else as a name.
 - Repeat `--header <name:value>` for authenticated or signed downloads. Sensitive headers are not forwarded to other origins.

@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { LocalInstallSource } from '@agent-device/kernel/contracts';
-import { createRequestCanceledError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { ArchiveBudget } from '@agent-device/host-kit/archive';
 import { expandUserHomePath } from '@agent-device/host-kit/file';
 
@@ -45,6 +45,7 @@ const INTERNAL_ARCHIVE_EXTENSIONS = ['.zip', '.tar', '.tar.gz', '.tgz'] as const
  * @public Archive extensions accepted by install-source resolution.
  */
 export const ARCHIVE_EXTENSIONS = Object.freeze([...INTERNAL_ARCHIVE_EXTENSIONS] as const);
+const DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS = 120_000;
 
 export async function materializeInstallablePath(
   options: MaterializeInstallableOptions,
@@ -123,18 +124,44 @@ async function downloadToTempFile(
   if (requestSignal?.aborted) {
     throw createRequestCanceledError();
   }
+  const timeoutSignal = AbortSignal.timeout(DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS);
+  const signal = requestSignal ? AbortSignal.any([requestSignal, timeoutSignal]) : timeoutSignal;
   try {
     return await downloadInstallSource({
       tempDir,
       url,
       headers,
-      signal: requestSignal ?? new AbortController().signal,
+      signal,
       environment: options.environment,
     });
   } catch (error) {
-    if (requestSignal?.aborted) throw createRequestCanceledError(undefined, error);
-    throw error;
+    throw classifyDownloadError(
+      error,
+      requestSignal,
+      timeoutSignal,
+      DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS,
+    );
   }
+}
+
+function classifyDownloadError(
+  error: unknown,
+  requestSignal: AbortSignal | undefined,
+  timeoutSignal: AbortSignal,
+  timeoutMs: number,
+): unknown {
+  if (requestSignal?.aborted) {
+    return createRequestCanceledError(undefined, error);
+  }
+  if (timeoutSignal.aborted) {
+    return new AppError(
+      'COMMAND_FAILED',
+      `App source download timed out after ${timeoutMs}ms`,
+      { timeoutMs },
+      error,
+    );
+  }
+  return error;
 }
 
 export async function validateDownloadSourceUrl(parsedUrl: URL): Promise<void> {
