@@ -127,6 +127,51 @@ test.for(OVERSIZED_SOCKET_REQUESTS)(
   },
 );
 
+test('socket transport answers the complete requests framed before an oversized one, then refuses it', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const handled: string[] = [];
+  let oversizedReceived = () => {};
+  const oversizedArrived = new Promise<void>((resolve) => {
+    oversizedReceived = resolve;
+  });
+  // The first request is still in flight when the transport has read past the limit.
+  const server = createSocketServer(async (req): Promise<DaemonResponse> => {
+    handled.push(req.command);
+    await oversizedArrived;
+    return { ok: true, data: { command: req.command } };
+  });
+  server.on('connection', (socket: net.Socket) => {
+    let receivedBytes = 0;
+    socket.on('data', (chunk: string) => {
+      receivedBytes += Buffer.byteLength(chunk);
+      if (receivedBytes > 2 * MAX_HTTP_RPC_BODY_BYTES) oversizedReceived();
+    });
+  });
+  try {
+    const client = await connectSocket(await listenNetServer(server));
+    client.setEncoding('utf8');
+    let received = '';
+    client.on('data', (chunk) => {
+      received += chunk;
+    });
+    const closed = new Promise<void>((resolve) => client.once('close', () => resolve()));
+    client.on('error', () => {});
+    client.write(`${JSON.stringify({ command: 'session_list', positionals: [] })}\n`);
+    client.write('x'.repeat(2 * MAX_HTTP_RPC_BODY_BYTES));
+    await closed;
+    const responses = received
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as DaemonResponse);
+    assert.deepEqual(handled, ['session_list']);
+    assert.equal(responses.length, 2);
+    assert.deepEqual(responses[0], { ok: true, data: { command: 'session_list' } });
+    assert.equal(responses[1]?.ok ? undefined : responses[1]?.error.code, 'INVALID_ARGS');
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
 // A socket client that vanishes mid-request must cancel that connection's
 // in-flight request via its request-scoped signal — never through a global
 // Apple-runner abort, and never touching another connection's request.

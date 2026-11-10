@@ -61,15 +61,25 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
     socket.setEncoding('utf8');
     socket.on('close', AsyncResource.bind(cancelInFlightRequests));
     socket.on('error', AsyncResource.bind(cancelInFlightRequests));
+    // An oversized request ends the connection, but only after the complete requests framed
+    // before it are answered: the refusal is the last line this connection writes.
+    let oversizedRequestRefusalPending = false;
+    const refuseOversizedRequestWhenIdle = () => {
+      if (!oversizedRequestRefusalPending || inFlightRequests > 0 || socket.destroyed) return;
+      refuseOversizedSocketRequest(socket);
+    };
     const onData = AsyncResource.bind(async (chunk: string) => {
+      if (oversizedRequestRefusalPending) return;
       const parsed = consumeTextLines(buffer, chunk);
       buffer = parsed.buffer;
-      if ([buffer, ...parsed.lines].some(exceedsDaemonRequestLimit)) {
-        refuseOversizedSocketRequest(socket, onData);
+      const oversizedLine = parsed.lines.findIndex(exceedsDaemonRequestLimit);
+      const lines = oversizedLine === -1 ? parsed.lines : parsed.lines.slice(0, oversizedLine);
+      if (oversizedLine !== -1 || exceedsDaemonRequestLimit(buffer)) {
+        oversizedRequestRefusalPending = true;
         buffer = '';
-        return;
+        socket.off('data', onData);
       }
-      for (const line of parsed.lines) {
+      for (const line of lines) {
         let response: DaemonResponse;
         inFlightRequests += 1;
         let requestIdForCleanup: string | undefined;
@@ -117,6 +127,7 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
           );
         }
       }
+      refuseOversizedRequestWhenIdle();
     });
     socket.on('data', onData);
   });
@@ -133,11 +144,7 @@ function exceedsDaemonRequestLimit(text: string): boolean {
   return Buffer.byteLength(text, 'utf8') > MAX_HTTP_RPC_BODY_BYTES;
 }
 
-function refuseOversizedSocketRequest(
-  socket: net.Socket,
-  onData: (chunk: string) => Promise<void>,
-): void {
-  socket.off('data', onData);
+function refuseOversizedSocketRequest(socket: net.Socket): void {
   const error = new AppError('INVALID_ARGS', 'Daemon request exceeds the size limit', {
     maxBytes: MAX_HTTP_RPC_BODY_BYTES,
   });
