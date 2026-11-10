@@ -73,3 +73,17 @@ test('find type performs exactly one facts inspection and one bind (ADR 0019 §9
   expect(spies.inspectFacts).toHaveBeenCalledTimes(1);
   expect(spies.bindDevice).toHaveBeenCalledTimes(1);
 });
+
+test('find type enters a value that starts with a ref token as text', async () => {
+  const response = await runMutatingFind(['Email', 'type', '@e5 hi'], {
+    index: 0,
+    ref: 'e1',
+    type: 'TextField',
+    label: 'Email',
+    hittable: true,
+    rect: { x: 10, y: 20, width: 200, height: 40 },
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(mockTypeText).toHaveBeenCalledWith(expect.objectContaining({ text: '@e5 hi' }));
+});
