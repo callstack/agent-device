@@ -24,12 +24,18 @@ test('a launched daemon starts in the working directory of the host that launche
   assert.equal(fs.readFileSync(reported, 'utf8'), hostCwd);
 });
 
-test.skipIf(process.platform === 'win32')(
-  'a launched daemon gets a private state dir and log',
-  async () => {
+test.skipIf(process.platform === 'win32').for(['fresh', 'loose'])(
+  'a launched daemon gets a private state dir and log from a %s state dir',
+  async (start) => {
     const paths = resolveDaemonPaths(
       path.join(mkdtempForTestSync('agent-device-launch-mode-'), 'state'),
     );
+    if (start === 'loose') {
+      fs.mkdirSync(paths.baseDir, { mode: 0o755 });
+      fs.chmodSync(paths.baseDir, 0o755);
+      fs.writeFileSync(paths.logPath, '', { mode: 0o644 });
+      fs.chmodSync(paths.logPath, 0o644);
+    }
     const launch = launchDaemonProcess({
       env: process.env,
       cwd: process.cwd(),
