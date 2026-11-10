@@ -285,7 +285,7 @@ test('cli applies AGENT_DEVICE_PLATFORM to client-backed commands', async () => 
 });
 
 test('cli accepts every platform selector in AGENT_DEVICE_PLATFORM for a command without --platform', async () => {
-  const result = await runCliCapture(['auth', 'status', '--json'], {
+  const result = await captureCli(['auth', 'status', '--json'], {
     env: { AGENT_DEVICE_PLATFORM: 'web' },
     stateDirPrefix: 'agent-device-cli-platform-env-',
   });
@@ -294,7 +294,7 @@ test('cli accepts every platform selector in AGENT_DEVICE_PLATFORM for a command
 });
 
 test('cli rejects an unknown AGENT_DEVICE_PLATFORM with the platform selector list', async () => {
-  const result = await runCliCapture(['auth', 'status', '--json'], {
+  const result = await captureCli(['auth', 'status', '--json'], {
     env: { AGENT_DEVICE_PLATFORM: 'symbian' },
     stateDirPrefix: 'agent-device-cli-platform-env-',
   });
