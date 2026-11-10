@@ -245,7 +245,8 @@ function readSessionEventLogLines(
     lineCount = lineIndex;
     if (nextCursor !== undefined) break;
   }
-  const endCursor = Math.min(cursor + limit, lineCount);
+  // A cursor past the end stays where the reader asked to resume; it never moves backward.
+  const endCursor = Math.max(cursor, Math.min(cursor + limit, lineCount));
   return { lines, ...(nextCursor !== undefined ? { nextCursor } : {}), endCursor };
 }
 

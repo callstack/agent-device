@@ -93,29 +93,32 @@ function requireManagedOutputPath(sessionsDir: string, pathname: string): string
 }
 
 /**
- * Splits `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS` on top-level commas only, so commas inside
- * `{m,n}`, `[...]`, or `(...)` stay in their pattern. Write `\,` for a literal top-level comma.
+ * Splits `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS` on commas outside groups, character classes, and
+ * `{m,n}` quantifiers. Write `\,` for any other literal comma.
  */
 function redactionPatterns(env: NodeJS.ProcessEnv): RegExp[] {
   return splitTopLevelPatternList(env.AGENT_DEVICE_APP_LOG_REDACT_PATTERNS ?? '')
     .map((part) => part.trim())
     .filter(Boolean)
-    .map((pattern) => {
+    .map((pattern, patternIndex) => {
       try {
         return new RegExp(pattern, 'gi');
-      } catch (error) {
+      } catch {
+        // The pattern text and the engine's message can quote the secret the rule protects.
         throw new AppError(
           'INVALID_ARGS',
-          `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS contains an invalid regular expression: ${pattern}`,
-          { reason: 'app_log_redact_pattern_invalid', pattern },
-          error,
+          `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS entry ${patternIndex + 1} is not a valid regular expression`,
+          { reason: 'app_log_redact_pattern_invalid', patternIndex },
         );
       }
     });
 }
 
-/** An escape, a whole character class, or one other character: commas inside the first two are literal. */
-const PATTERN_TOKEN_RE = /\\[\s\S]?|\[(?:\\[\s\S]|[^\]\\])*\]?|[\s\S]/g;
+/**
+ * One regex token: an escape, a whole character class, a `{m}`/`{m,}`/`{m,n}` quantifier, or one
+ * other character. Only parentheses nest; a brace that is not a quantifier is a literal.
+ */
+const PATTERN_TOKEN_RE = /\\[\s\S]?|\[(?:\\[\s\S]|[^\]\\])*\]?|\{\d+(?:,\d*)?\}|[\s\S]/g;
 
 function splitTopLevelPatternList(value: string): string[] {
   const parts: string[] = [''];
@@ -125,16 +128,11 @@ function splitTopLevelPatternList(value: string): string[] {
       parts.push('');
       continue;
     }
-    depth = Math.max(0, depth + groupDepthChange(token));
+    if (token === '(') depth += 1;
+    else if (token === ')') depth = Math.max(0, depth - 1);
     parts[parts.length - 1] += token;
   }
   return parts;
-}
-
-function groupDepthChange(token: string): number {
-  if (token === '(' || token === '{') return 1;
-  if (token === ')' || token === '}') return -1;
-  return 0;
 }
 
 function redact(chunk: string, patterns: readonly RegExp[]): string {

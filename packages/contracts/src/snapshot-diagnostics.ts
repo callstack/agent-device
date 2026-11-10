@@ -1,6 +1,21 @@
 import type { SnapshotBackend, SnapshotProvenance } from '@agent-device/contracts/snapshot-model';
-import { isPublicPlatform, type PublicPlatform } from '@agent-device/kernel/device';
+import type { PublicPlatform } from '@agent-device/kernel/device';
 import { isRecord } from './json.ts';
+
+/**
+ * The public platforms, keyed against the kernel union so a platform added there without a key here
+ * is a compile error. A local table, because a runtime import of `kernel/device` would add its
+ * closure to every capture facade (eager-closure budget).
+ */
+const DECLARED_PLATFORMS: Record<PublicPlatform, true> = {
+  ios: true,
+  macos: true,
+  android: true,
+  harmonyos: true,
+  vega: true,
+  linux: true,
+  web: true,
+};
 
 const SLOW_SNAPSHOT_P95_WARNING_MS = 1_500;
 
@@ -221,6 +236,8 @@ function readRequiredSnapshotTimingStats(
   if (!Number.isSafeInteger(entries.count) || (entries.count as number) < 0) return undefined;
   const durations = [entries.p50Ms, entries.p95Ms, entries.maxMs, entries.slowThresholdMs];
   if (!durations.every(isNonNegativeFiniteNumber)) return undefined;
+  const [p50Ms, p95Ms, maxMs] = durations as number[];
+  if (p50Ms! > p95Ms! || p95Ms! > maxMs!) return undefined;
   return entries as Pick<
     SnapshotTimingStats,
     'count' | 'p50Ms' | 'p95Ms' | 'maxMs' | 'slowThresholdMs'
@@ -237,12 +254,16 @@ function readBackendCounts(value: Record<string, unknown>): Record<string, numbe
 function readOptionalSnapshotTimingStats(
   record: Record<string, unknown>,
 ): Pick<SnapshotTimingStats, 'platform' | 'backends'> {
-  const platform = isPublicPlatform(record.platform) ? record.platform : undefined;
+  const platform = isDeclaredPlatform(record.platform) ? record.platform : undefined;
   const backends = isRecord(record.backends) ? readBackendCounts(record.backends) : undefined;
   return {
     ...(platform ? { platform } : {}),
     ...(backends ? { backends } : {}),
   };
+}
+
+function isDeclaredPlatform(value: unknown): value is PublicPlatform {
+  return typeof value === 'string' && Object.hasOwn(DECLARED_PLATFORMS, value);
 }
 
 function isNonNegativeFiniteNumber(value: unknown): value is number {

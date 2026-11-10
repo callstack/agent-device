@@ -136,6 +136,18 @@ test('every declared activation reason and prior state survives; an undeclared o
       );
     }
   }
+  for (const otherActiveApplicationPid of [0, -4, 1.5]) {
+    assert.deepEqual(
+      readSerializedSnapshotCaptureAnnotations({
+        targetActivation: {
+          reason: 'stale_target',
+          priorState: 'notRunning',
+          otherActiveApplicationPid,
+        },
+      }).targetActivation,
+      { reason: 'stale_target', priorState: 'notRunning' },
+    );
+  }
   for (const targetActivation of [
     { reason: 'bogus', priorState: 'notRunning' },
     { reason: 'stale_target', priorState: 'runningForeground' },

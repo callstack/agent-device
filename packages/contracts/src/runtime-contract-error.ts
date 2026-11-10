@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { createRuntimeContractInvalidError, type AppError } from '@agent-device/kernel/errors';
 
 /**
  * A runtime owner whose facts advertised an operation it cannot actually perform.
@@ -13,10 +13,9 @@ import { AppError } from '@agent-device/kernel/errors';
  * symbol nobody in `contracts` consumes. This module stays a subpath of its own and imports nothing
  * else from `contracts`, so a platform package whose facts advertised an operation its interactor
  * cannot perform builds the same failure here instead of restating the code, reason, and hint.
+ * The shape itself lives in `kernel/errors`, so a binder that must not grow its closure, such as
+ * `interactor-operation-binding.ts`, builds it from there.
  */
 export function invalidRuntimeContract(message: string): AppError {
-  return new AppError('COMMAND_FAILED', message, {
-    reason: 'runtime-contract-invalid',
-    hint: 'This is an agent-device runtime contract bug; report the selected device and command.',
-  });
+  return createRuntimeContractInvalidError(message);
 }

@@ -98,30 +98,43 @@ test.each([
   expect(nodes.find((node) => node.index === 4)?.label).toBe('Nested value');
 });
 
-test('2,000 nested unlabeled action rows present in time linear in each subtree', () => {
-  // Each unlabeled hittable row collects its descendants. A full node scan per visited node costs
-  // nodes x subtree per row, about 4e9 steps for this nesting; a children map costs the subtree.
-  const depth = 2_000;
-  const input: SnapshotNode[] = [{ index: 0, type: 'root' }];
-  for (let level = 1; level <= depth; level += 1) {
-    input.push({
-      index: level,
-      parentIndex: level - 1,
-      type: 'android.view.View',
-      hittable: true,
-      rect: { x: 0, y: 0, width: 400, height: 400 },
+test('nested unlabeled action rows read each parent link a bounded number of times', () => {
+  // Each unlabeled hittable row collects its descendants. A full node scan per visited node reads
+  // nodes x subtree parent links per row (about 4.5e6 for this nesting); a children map reads
+  // each link a constant number of times.
+  const depth = 300;
+  let parentReads = 0;
+  const count = (node: SnapshotNode): SnapshotNode =>
+    new Proxy(node, {
+      get(target, key, receiver) {
+        if (key === 'parentIndex') parentReads += 1;
+        return Reflect.get(target, key, receiver);
+      },
     });
+  const input: SnapshotNode[] = [count({ index: 0, type: 'root' })];
+  for (let level = 1; level <= depth; level += 1) {
+    input.push(
+      count({
+        index: level,
+        parentIndex: level - 1,
+        type: 'android.view.View',
+        hittable: true,
+        rect: { x: 0, y: 0, width: 400, height: 400 },
+      }),
+    );
   }
-  input.push({
-    index: depth + 1,
-    parentIndex: depth,
-    type: 'android.widget.TextView',
-    label: 'Leaf',
-    rect: { x: 8, y: 8, width: 200, height: 32 },
-  });
-  const started = performance.now();
+  input.push(
+    count({
+      index: depth + 1,
+      parentIndex: depth,
+      type: 'android.widget.TextView',
+      label: 'Leaf',
+      rect: { x: 8, y: 8, width: 200, height: 32 },
+    }),
+  );
+
   const { nodes } = buildAndroidHelperPresentationInput(helperData, input, {});
-  const elapsedMs = performance.now() - started;
+
   expect(nodes.find((node) => node.index === depth)?.label).toBe('Leaf');
-  expect(elapsedMs).toBeLessThan(2_000);
+  expect(parentReads).toBeLessThan(50 * depth);
 });

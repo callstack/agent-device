@@ -263,6 +263,10 @@ test('a tailing reader resumes from endCursor past unparsable lines without repl
   );
   assert.equal(resumed.endCursor, '5');
 
+  const pastEnd = readSessionEventLog(eventLogPath, { cursor: '9', limit: 4 });
+  assert.deepEqual(pastEnd.events, []);
+  assert.equal(pastEnd.endCursor, '9');
+
   const partial = readSessionEventLog(eventLogPath, { cursor: '1', limit: 2 });
   assert.equal(partial.nextCursor, '3');
   assert.equal(partial.endCursor, '3');

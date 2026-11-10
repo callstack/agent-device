@@ -137,7 +137,6 @@ test('redacts with the patterns of the command host, not the process', async () 
 
 test('keeps commas inside quantifiers and classes in one redaction pattern', async () => {
   const root = mkdtempForTestSync('agent-device-app-log-redact-comma-');
-  roots.push(root);
   const sessionsDir = path.join(root, 'sessions');
   const outputPath = path.join(sessionsDir, 'one', 'app.log');
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
@@ -154,7 +153,6 @@ test('keeps commas inside quantifiers and classes in one redaction pattern', asy
 
 test('refuses an invalid redaction pattern before it opens app.log', async () => {
   const root = mkdtempForTestSync('agent-device-app-log-redact-invalid-');
-  roots.push(root);
   const sessionsDir = path.join(root, 'sessions');
   const outputPath = path.join(sessionsDir, 'one', 'app.log');
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
@@ -166,7 +164,25 @@ test('refuses an invalid redaction pattern before it opens app.log', async () =>
     }),
   ).rejects.toMatchObject({
     code: 'INVALID_ARGS',
-    details: { reason: 'app_log_redact_pattern_invalid', pattern: '(' },
+    details: { reason: 'app_log_redact_pattern_invalid', patternIndex: 1 },
   });
   expect(fs.existsSync(outputPath)).toBe(false);
+});
+
+test('a brace that is not a quantifier does not hide the next redaction pattern', async () => {
+  const root = mkdtempForTestSync('agent-device-app-log-redact-brace-');
+  const sessionsDir = path.join(root, 'sessions');
+  const outputPath = path.join(sessionsDir, 'one', 'app.log');
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+
+  const sink = await openAppLogOutput(sessionsDir, outputPath, {
+    env: { AGENT_DEVICE_APP_LOG_REDACT_PATTERNS: '(1{,2),33,(4},5),66' },
+    cwd: root,
+  });
+  await sink.write('1{,2 4},5 33 66 kept\n');
+  await sink[Symbol.asyncDispose]();
+
+  expect(fs.readFileSync(outputPath, 'utf8')).toBe(
+    '[REDACTED] [REDACTED] [REDACTED] [REDACTED] kept\n',
+  );
 });

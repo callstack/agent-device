@@ -319,27 +319,92 @@ function resolveNodeOverlayLabel(node: SnapshotNode): string | undefined {
   return undefined;
 }
 
+type DescendantLabel = Readonly<{ label: string; score: number; position: number }>;
+
 /**
- * The best-scoring labelled descendant of every ref'd ancestor, in one walk up from each labelled
- * node (O(nodes x depth)). Ties keep the earlier node, as a per-target scan in node order would.
+ * The best-scoring labelled descendant of every ref'd node, folded bottom-up in one post-order pass
+ * (O(nodes)). Ties keep the earlier node, as a per-target scan in node order would. A node whose
+ * parent chain never reaches a root (a parent cycle) contributes to no ancestor.
  */
 function buildDescendantOverlayLabels(
   nodes: SnapshotState['nodes'],
   nodeByIndex: ReadonlyMap<number, SnapshotNode>,
 ): Map<string, string> {
-  const best = new Map<string, { label: string; score: number }>();
-  for (const node of nodes) {
-    const label = resolveNodeOverlayLabel(node);
-    if (!label) continue;
-    const score = scoreDescendantLabelCandidate(node);
-    findSnapshotAncestor(nodes, node, nodeByIndex, (ancestor) => {
-      if (!ancestor.ref || ancestor.ref === node.ref) return null;
-      const current = best.get(ancestor.ref);
-      if (!current || score > current.score) best.set(ancestor.ref, { label, score });
-      return null;
-    });
+  const children = collectOverlayChildren(nodes, nodeByIndex);
+  const best: Array<DescendantLabel | undefined> = [];
+  const visited = new Set<number>();
+  const pending: Array<{ position: number; expanded: boolean }> = children.roots.map(
+    (position) => ({ position, expanded: false }),
+  );
+  while (pending.length > 0) {
+    const entry = pending.pop()!;
+    if (entry.expanded) {
+      best[entry.position] = foldChildLabels(nodes, children.byParent.get(entry.position), best);
+      continue;
+    }
+    if (visited.has(entry.position)) continue;
+    visited.add(entry.position);
+    pending.push({ position: entry.position, expanded: true });
+    for (const child of children.byParent.get(entry.position) ?? []) {
+      pending.push({ position: child, expanded: false });
+    }
   }
-  return new Map([...best].map(([ref, entry]) => [ref, entry.label]));
+  const labels = new Map<string, string>();
+  nodes.forEach((node, position) => {
+    const label = best[position]?.label;
+    if (node.ref && label !== undefined && !labels.has(node.ref)) labels.set(node.ref, label);
+  });
+  return labels;
+}
+
+function collectOverlayChildren(
+  nodes: SnapshotState['nodes'],
+  nodeByIndex: ReadonlyMap<number, SnapshotNode>,
+): { roots: number[]; byParent: Map<number, number[]> } {
+  const positions = new Map(nodes.map((node, position) => [node, position]));
+  const roots: number[] = [];
+  const byParent = new Map<number, number[]>();
+  nodes.forEach((node, position) => {
+    const { parentIndex } = node;
+    const parent =
+      parentIndex === undefined ? undefined : (nodeByIndex.get(parentIndex) ?? nodes[parentIndex]);
+    const parentPosition = parent && parent !== node ? positions.get(parent) : undefined;
+    if (parentPosition === undefined) {
+      roots.push(position);
+      return;
+    }
+    const siblings = byParent.get(parentPosition);
+    if (siblings) siblings.push(position);
+    else byParent.set(parentPosition, [position]);
+  });
+  return { roots, byParent };
+}
+
+function foldChildLabels(
+  nodes: SnapshotState['nodes'],
+  childPositions: readonly number[] | undefined,
+  best: ReadonlyArray<DescendantLabel | undefined>,
+): DescendantLabel | undefined {
+  let winner: DescendantLabel | undefined;
+  for (const position of childPositions ?? []) {
+    const child = nodes[position]!;
+    const label = resolveNodeOverlayLabel(child);
+    const own = label
+      ? { label, score: scoreDescendantLabelCandidate(child), position }
+      : undefined;
+    winner = betterDescendantLabel(betterDescendantLabel(winner, own), best[position]);
+  }
+  return winner;
+}
+
+function betterDescendantLabel(
+  current: DescendantLabel | undefined,
+  candidate: DescendantLabel | undefined,
+): DescendantLabel | undefined {
+  if (!current || !candidate) return current ?? candidate;
+  if (candidate.score !== current.score)
+    return candidate.score > current.score ? candidate : current;
+  return candidate.position < current.position ? candidate : current;
 }
 
 function scoreDescendantLabelCandidate(node: SnapshotNode): number {

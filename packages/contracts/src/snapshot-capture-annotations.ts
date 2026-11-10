@@ -159,7 +159,9 @@ function readTargetActivation(value: unknown): IosTargetActivation | undefined {
   return {
     reason: raw.reason,
     priorState: raw.priorState,
-    ...(Number.isSafeInteger(pid) ? { otherActiveApplicationPid: pid as number } : {}),
+    ...(Number.isSafeInteger(pid) && (pid as number) > 0
+      ? { otherActiveApplicationPid: pid as number }
+      : {}),
   };
 }
 

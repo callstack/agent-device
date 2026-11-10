@@ -46,9 +46,9 @@ export type DurableCaptureRecoveryParams<K extends string, H extends LiveResourc
     scope: PlatformRequestScope,
   ): Promise<DurableCaptureRecoveryControl<K, H, C>>;
   /**
-   * Bounds one record's reattach acquisition only. The settle phase that follows (the owner's
-   * `forceCleanup`, descriptor cleanup, control disposal) runs under the record fence and has no
-   * bound here, so each owner must bound its own cleanup.
+   * Bounds one record's reattach acquisition only. The settle phase that follows has no bound
+   * here: the owner's `forceCleanup` and descriptor cleanup run under the record fence, and control
+   * disposal runs after the fence is released. Each owner must bound its own cleanup.
    */
   acquisitionDeadlineMs?: number;
   onDiagnostic?: (diagnostic: ResourceDiagnostic) => void;
@@ -62,9 +62,13 @@ export async function recoverDurableCaptureResourcesAfterDaemonLock<
   const paths = params.definition.store.list(params.sessionsDir);
   const outcomes: DurableCaptureRecoveryOutcome[] = [];
   for (const resourcePath of paths) {
-    // A canceled scope fails every later acquisition; the remaining records stay for the next scan.
-    if (params.scope.signal.aborted) break;
-    outcomes.push(await recoverDurableCaptureResource(params, resourcePath));
+    // A canceled scope fails every later acquisition; the remaining records are retained for the
+    // next scan without acquiring control.
+    outcomes.push(
+      params.scope.signal.aborted
+        ? 'retained'
+        : await recoverDurableCaptureResource(params, resourcePath),
+    );
   }
   return {
     scanned: paths.length,

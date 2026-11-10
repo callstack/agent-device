@@ -104,7 +104,7 @@ async function pollActiveProcessPid(
     if (!(await waitForPidPoll(input, wait))) return;
     const observedPid = await resolvePidOrUnknown(input);
     if (input.stopped()) return;
-    // An unanswered poll proves no process change, so the running stream keeps capturing.
+    // An unanswered poll is inconclusive, so retain the stream and retry on the next tick.
     if (observedPid === undefined || observedPid === scopedProcess.pid) continue;
     await scopedProcess.process.terminate();
     return;

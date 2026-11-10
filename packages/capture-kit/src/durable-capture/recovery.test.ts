@@ -153,7 +153,7 @@ test('a canceled recovery scope acquires no control for the records it has not r
       },
       acquireControl,
     }),
-  ).resolves.toEqual({ scanned: 1, recovered: 0, retained: 0 });
+  ).resolves.toEqual({ scanned: 1, recovered: 0, retained: 1 });
   expect(acquireControl).not.toHaveBeenCalled();
   expect(testCaptureStore.read(context.resourcePath)).toMatchObject({
     status: 'decoded',

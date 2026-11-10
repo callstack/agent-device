@@ -189,6 +189,8 @@ test('the summary reader refuses stats the type forbids', () => {
     { count: -1 },
     { p95Ms: Number.NaN },
     { maxMs: -5 },
+    { p50Ms: 950 },
+    { p95Ms: 1_200 },
   ]) {
     expect(readSnapshotDiagnosticsSummary({ stats: { ...VALID_STATS, ...bad } })).toBeUndefined();
   }
