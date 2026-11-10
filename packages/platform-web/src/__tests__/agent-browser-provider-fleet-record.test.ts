@@ -9,6 +9,7 @@ import {
   type CommandExecutorOverride,
 } from '@agent-device/host-kit/command';
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   agentBrowserJsonResult,
   installFakeManagedAgentBrowser,
@@ -63,6 +64,7 @@ function createTwoSessionDaemon() {
     });
   return {
     store,
+    providerOf,
     a: providerOf('session-a'),
     b: providerOf('session-b'),
     setPublished: (names: string[]) => {
@@ -70,6 +72,84 @@ function createTwoSessionDaemon() {
     },
   };
 }
+
+test('a closed browser refuses later requests from new providers until an explicit reopen', async () => {
+  const daemon = createTwoSessionDaemon();
+  const commands: string[] = [];
+  await withCommandExecutorOverride(
+    async (_command, args) => {
+      commands.push(managedAgentBrowserCliArgs(args)[0]!);
+      return agentBrowserJsonResult({ success: true, data: {} });
+    },
+    async () => {
+      await daemon.a.open('about:blank');
+      await daemon.a.close();
+      daemon.setPublished([]);
+      const closed = daemon.providerOf('session-a');
+      for (const command of [
+        () => closed.snapshot(),
+        () => closed.screenshot('/tmp/closed.png'),
+        () => closed.clickRef!('@e1'),
+      ]) {
+        await assert.rejects(command, (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'SESSION_NOT_FOUND');
+          assert.equal(error.details?.reason, 'web_session_closed');
+          assert.equal(error.details?.dispatched, 'no');
+          return true;
+        });
+      }
+      assert.deepEqual(commands, ['open', 'close']);
+      await daemon.b.snapshot();
+      await closed.open('about:blank');
+      await daemon.providerOf('session-a').snapshot();
+      assert.deepEqual(commands, ['open', 'close', 'snapshot', 'open', 'snapshot']);
+    },
+  );
+});
+
+test('a failed reopen does not authorize calls on a closed browser', async () => {
+  const daemon = createTwoSessionDaemon();
+  await withCommandExecutorOverride(succeedingBackend, async () => {
+    await daemon.a.open('about:blank');
+    await daemon.a.close();
+  });
+  daemon.setPublished([]);
+  await withCommandExecutorOverride(
+    async () => agentBrowserJsonResult({ success: false, error: 'open failed' }, 1),
+    async () => {
+      await assert.rejects(() => daemon.a.open('about:blank'));
+    },
+  );
+  let calls = 0;
+  await withCommandExecutorOverride(
+    async () => {
+      calls += 1;
+      return agentBrowserJsonResult({ success: true, data: {} });
+    },
+    async () => {
+      await assert.rejects(() => daemon.providerOf('session-a').snapshot(), {
+        code: 'SESSION_NOT_FOUND',
+      });
+    },
+  );
+  assert.equal(calls, 0);
+});
+
+test('a failed close leaves browser requests available for cleanup and retry', async () => {
+  const daemon = createTwoSessionDaemon();
+  await withCommandExecutorOverride(
+    async (_command, args) =>
+      managedAgentBrowserCliArgs(args)[0] === 'close'
+        ? agentBrowserJsonResult({ success: false, error: 'close failed' }, 1)
+        : agentBrowserJsonResult({ success: true, data: {} }),
+    async () => {
+      await daemon.a.open('about:blank');
+      await assert.rejects(() => daemon.a.close());
+      await daemon.providerOf('session-a').snapshot();
+    },
+  );
+});
 
 test('a close that ends while another session is opening keeps the fleet record', async () => {
   const daemon = createTwoSessionDaemon();

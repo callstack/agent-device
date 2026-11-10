@@ -504,6 +504,21 @@ async function runAgentBrowserCommand(
   interpret: (result: { stdout: string; stderr: string; exitCode: number }) => unknown,
   run: AgentBrowserRunOptions,
 ): Promise<unknown> {
+  if (
+    cliArgs[0] !== 'open' &&
+    options.ownedProcessRecords &&
+    agentBrowserFleetOf(options.ownedProcessRecords).wasClosed(fleetSessionOf(options))
+  ) {
+    throw new AppError(
+      'SESSION_NOT_FOUND',
+      'Browser session is closed. Run open before retrying.',
+      {
+        reason: 'web_session_closed',
+        dispatched: 'no',
+        hint: 'Run agent-device open <url> --platform web with the same --session to reopen it.',
+      },
+    );
+  }
   let stdout = '';
   let stderr = '';
   let exitCode = 0;
@@ -609,7 +624,8 @@ function settleFleetMembership(
 ): void {
   const succeeded = params.commandCompleted && params.semanticSuccess && params.exitCode === 0;
   if (params.cliArgs[0] === 'open') fleet.openSettled(session, succeeded);
-  else if (params.cliArgs[0] === 'close' && params.commandCompleted) fleet.closed(session);
+  else if (params.cliArgs[0] === 'close' && params.commandCompleted)
+    fleet.closed(session, succeeded);
 }
 
 /**
