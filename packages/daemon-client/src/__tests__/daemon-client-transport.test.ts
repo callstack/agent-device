@@ -18,6 +18,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   DAEMON_HTTP_INSTANCE_HEADER,
   DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
+  DAEMON_REQUEST_MAX_BYTES,
   DAEMON_RPC_PROTOCOL_VERSION,
 } from '@agent-device/contracts/daemon-http';
 import { sendToDaemon } from '../index.ts';
@@ -452,6 +453,51 @@ test('proxy forwards cached upstream identity and rejects a restarted upstream b
     await closeLoopbackServer(upstream);
   }
 });
+
+test.for(['socket', 'http'] as const)(
+  'a %s request over the daemon request limit is refused before it is sent',
+  async (transport, t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+    let connections = 0;
+    const server = transport === 'socket' ? net.createServer() : http.createServer();
+    server.on('connection', (socket: net.Socket) => {
+      connections += 1;
+      socket.destroy();
+    });
+    const port = await listenOnLoopback(server);
+    try {
+      const replayScriptSource = {
+        entry: 'flow.ad',
+        files: { 'flow.ad': 'x'.repeat(DAEMON_REQUEST_MAX_BYTES) },
+      };
+      const refusal = await sendRequest(
+        transport === 'socket'
+          ? { port, token: 't', pid: 1 }
+          : { httpPort: port, token: 't', pid: 1 },
+        {
+          token: 't',
+          session: 'default',
+          command: 'replay',
+          positionals: [],
+          flags: { replayScriptSource },
+        },
+        transport,
+        resolveDaemonPaths('/tmp/agent-device-request-limit-test'),
+        undefined,
+        { host: createTestHostEnvironment() },
+      ).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      assert.ok(refusal instanceof AppError);
+      assert.equal(refusal.code, 'INVALID_ARGS');
+      assert.equal(refusal.details?.reason, 'daemon_request_too_large');
+      assert.equal(connections, 0);
+    } finally {
+      await closeLoopbackServer(server);
+    }
+  },
+);
 
 test('an endpoint missing for the requested transport rejects with a typed reason the classifier accepts', async () => {
   const socketOnly = { port: 1, token: 't', pid: 1 };

@@ -27,6 +27,7 @@ import {
 import {
   buildDaemonHealthPayload,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
+  DAEMON_REQUEST_MAX_BYTES,
 } from '@agent-device/contracts/daemon-http';
 import { readVersion } from '@agent-device/host-kit/version';
 import { readHostCpuArch } from '@agent-device/host-kit/process';
@@ -68,7 +69,7 @@ import {
 } from './tenant-trust.ts';
 import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
 
-export const MAX_HTTP_RPC_BODY_BYTES = 1024 * 1024;
+const MAX_HTTP_RPC_BODY_BYTES = DAEMON_REQUEST_MAX_BYTES;
 
 export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;

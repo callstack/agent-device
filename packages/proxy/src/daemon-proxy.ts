@@ -16,6 +16,7 @@ import {
   buildDaemonHttpUrl,
   isTenantOwnedSessionName,
   normalizeTenantId,
+  DAEMON_REQUEST_MAX_BYTES,
 } from '@agent-device/contracts/daemon-http';
 import {
   carriesUnbackedHostPathInstallSource,
@@ -105,7 +106,7 @@ type ProxyCaller = { tenantId?: string; uploadHeaders: Record<string, string> };
 /** The client request headers an upload ticket repeats when `authenticate` names none. */
 const DEFAULT_UPLOAD_CREDENTIAL_HEADERS = Object.keys(buildDaemonHttpAuthHeaders('client'));
 
-const DEFAULT_MAX_RPC_BODY_BYTES = 1024 * 1024;
+const DEFAULT_MAX_RPC_BODY_BYTES = DAEMON_REQUEST_MAX_BYTES;
 /** `/health` answers quickly or not at all; its probe never waits on `upstreamTimeoutMs`. */
 const UPSTREAM_HEALTH_TIMEOUT_MS = 5_000;
 const DAEMON_PROXY_PREFIX = `${DAEMON_HTTP_BASE_PATH}/`;

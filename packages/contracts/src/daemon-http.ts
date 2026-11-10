@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { AppError } from '@agent-device/kernel/errors';
 
 // The daemon HTTP wire vocabulary shared by the daemon server, the remote
 // proxy, and every client that talks to them: the base path, the tenant, lease
@@ -64,6 +65,29 @@ export function buildDaemonHttpLeaseHeaders(leaseId: string | undefined): Record
 // that cross this boundary and fails when one changes shape without a bump or
 // an acknowledged-compatible entry (#1432).
 export const DAEMON_RPC_PROTOCOL_VERSION = 2;
+
+/**
+ * The largest serialized daemon request, in UTF-8 bytes, that any transport reads: the socket
+ * line, the HTTP `/rpc` body, and the proxy's `/rpc` body. Clients refuse a larger request before
+ * sending it. It sits well above what a client builds: `test` inlines one replay bundle per flow,
+ * each up to 2 MiB before JSON escaping, so 64 MiB fits a suite of several maximum-size flows with
+ * worst-case escaping. It also bounds the memory one unauthenticated connection can hold.
+ */
+export const DAEMON_REQUEST_MAX_BYTES = 64 * 1024 * 1024;
+
+/** Throws before sending a serialized request that no daemon transport would read. */
+export function refuseOversizedDaemonRequest(payload: string, requestId: string | undefined): void {
+  const requestBytes = Buffer.byteLength(payload, 'utf8');
+  if (requestBytes <= DAEMON_REQUEST_MAX_BYTES) return;
+  throw new AppError('INVALID_ARGS', 'Daemon request exceeds the size limit', {
+    reason: 'daemon_request_too_large',
+    requestBytes,
+    maxBytes: DAEMON_REQUEST_MAX_BYTES,
+    requestId,
+    daemonRequestSent: false,
+    hint: 'Split the replay suite or flow into smaller runs.',
+  });
+}
 
 export const DAEMON_HTTP_INSTANCE_HEADER = 'x-agent-device-instance';
 export const DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER = 'x-agent-device-upstream-instance';

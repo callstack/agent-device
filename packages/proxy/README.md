@@ -139,7 +139,7 @@ authenticate: async (request) => {
 | `clientToken` | required without `authenticate` | Token clients must send as their daemon auth token. |
 | `authenticate` | none | Authenticates each client and names its tenant; replaces `clientToken`. |
 | `upstreamFetch` | global `fetch` | Sends one request to the daemon. |
-| `maxRpcBodyBytes` | 1 MiB | Larger `/rpc` bodies get a 400 response. |
+| `maxRpcBodyBytes` | 64 MiB, the daemon's own request limit | Larger `/rpc` bodies get a 400 response. |
 | `upstreamTimeoutMs` | none | Longest time one daemon request may take, including its body. Without it, a request lasts as long as the client waits, and the client's command timeout bounds it. |
 
 ## Health and restarts

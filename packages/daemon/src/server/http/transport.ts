@@ -15,7 +15,7 @@ import {
 } from '@agent-device/host-kit/request';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { consumeTextLines } from '@agent-device/host-kit/transport';
-import { MAX_HTTP_RPC_BODY_BYTES } from './http-server.ts';
+import { DAEMON_REQUEST_MAX_BYTES } from '@agent-device/contracts/daemon-http';
 
 import {
   serializeDaemonProgressEnvelope,
@@ -36,7 +36,7 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
       'close',
       AsyncResource.bind(() => sockets.delete(socket)),
     );
-    let buffer = '';
+    let pending: PendingSocketRequest = EMPTY_PENDING_SOCKET_REQUEST;
     let inFlightRequests = 0;
     const activeRequestIds = new Set<string>();
     let canceledInFlight = false;
@@ -118,8 +118,8 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
     };
     const onData = AsyncResource.bind(async (chunk: string) => {
       if (oversizedRequestRefusalPending) return;
-      const framed = frameSocketRequests(buffer, chunk);
-      buffer = framed.buffer;
+      const framed = frameSocketRequests(pending, chunk);
+      pending = framed.pending;
       if (framed.oversized) {
         oversizedRequestRefusalPending = true;
         socket.off('data', onData);
@@ -138,32 +138,47 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
   return server;
 }
 
+/** The unterminated tail of a connection's input, with its UTF-8 size kept as it grows. */
+type PendingSocketRequest = Readonly<{ text: string; bytes: number }>;
+
+const EMPTY_PENDING_SOCKET_REQUEST: PendingSocketRequest = { text: '', bytes: 0 };
+
 /**
  * Splits a chunk into the complete requests to answer. A request past the byte limit, framed or
  * still unterminated, ends the framing: the requests before it are answered, nothing after it is.
+ * A chunk without a newline only grows the pending tail, so a large request costs one pass.
  */
 function frameSocketRequests(
-  buffer: string,
+  pending: PendingSocketRequest,
   chunk: string,
-): { lines: string[]; buffer: string; oversized: boolean } {
-  const parsed = consumeTextLines(buffer, chunk);
+): { lines: string[]; pending: PendingSocketRequest; oversized: boolean } {
+  if (!chunk.includes('\n')) {
+    const grown = { text: pending.text + chunk, bytes: pending.bytes + Buffer.byteLength(chunk) };
+    if (grown.bytes > DAEMON_REQUEST_MAX_BYTES) {
+      return { lines: [], pending: EMPTY_PENDING_SOCKET_REQUEST, oversized: true };
+    }
+    return { lines: [], pending: grown, oversized: false };
+  }
+  const parsed = consumeTextLines(pending.text, chunk);
   const oversizedLine = parsed.lines.findIndex(exceedsDaemonRequestLimit);
   if (oversizedLine !== -1) {
-    return { lines: parsed.lines.slice(0, oversizedLine), buffer: '', oversized: true };
+    const lines = parsed.lines.slice(0, oversizedLine);
+    return { lines, pending: EMPTY_PENDING_SOCKET_REQUEST, oversized: true };
   }
-  if (exceedsDaemonRequestLimit(parsed.buffer)) {
-    return { lines: parsed.lines, buffer: '', oversized: true };
+  const rest = { text: parsed.buffer, bytes: Buffer.byteLength(parsed.buffer) };
+  if (rest.bytes > DAEMON_REQUEST_MAX_BYTES) {
+    return { lines: parsed.lines, pending: EMPTY_PENDING_SOCKET_REQUEST, oversized: true };
   }
-  return { ...parsed, oversized: false };
+  return { lines: parsed.lines, pending: rest, oversized: false };
 }
 
 function exceedsDaemonRequestLimit(text: string): boolean {
-  return Buffer.byteLength(text, 'utf8') > MAX_HTTP_RPC_BODY_BYTES;
+  return Buffer.byteLength(text, 'utf8') > DAEMON_REQUEST_MAX_BYTES;
 }
 
 function refuseOversizedSocketRequest(socket: net.Socket): void {
   const error = new AppError('INVALID_ARGS', 'Daemon request exceeds the size limit', {
-    maxBytes: MAX_HTTP_RPC_BODY_BYTES,
+    maxBytes: DAEMON_REQUEST_MAX_BYTES,
   });
   const response: DaemonResponse = { ok: false, error: normalizeError(error) };
   socket.end(`${JSON.stringify(response)}\n`);

@@ -5,6 +5,7 @@ import {
   loadReplayScriptSourceBundle,
   REPLAY_SCRIPT_SOURCE_BUNDLE_MAX_BYTES,
 } from '@agent-device/replay-port/script-source-bundle';
+import { DAEMON_REQUEST_MAX_BYTES } from '@agent-device/contracts/daemon-http';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 
 // #1802: the caller reads every script file a replay run needs and sends the text. These pin the
@@ -75,4 +76,12 @@ test('an oversized bundle is refused with the limit named', async () => {
       message: expect.stringContaining(`over the ${REPLAY_SCRIPT_SOURCE_BUNDLE_MAX_BYTES}-byte`),
     }),
   );
+});
+
+test('a maximum-size bundle fits a daemon request even when every byte escapes', () => {
+  // A control character is one source byte and six JSON bytes (\u0001), the worst escaping case.
+  const flow = '\u0001'.repeat(REPLAY_SCRIPT_SOURCE_BUNDLE_MAX_BYTES);
+  const replayScriptSource = { entry: 'flow.ad', files: { 'flow.ad': flow } };
+  const request = JSON.stringify({ command: 'replay', flags: { replayScriptSource } });
+  expect(Buffer.byteLength(request)).toBeLessThan(DAEMON_REQUEST_MAX_BYTES);
 });

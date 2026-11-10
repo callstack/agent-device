@@ -12,7 +12,10 @@ import {
   prepareUploadedArtifact,
   trackDownloadableArtifact,
 } from '../../resources/artifact-tracking.ts';
-import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
+import {
+  DAEMON_REQUEST_MAX_BYTES,
+  DAEMON_RPC_PROTOCOL_VERSION,
+} from '@agent-device/contracts/daemon-http';
 import { createDaemonHttpServer } from './http-server.ts';
 import {
   emitRequestProgress,
@@ -65,7 +68,7 @@ type JsonRpcResponseEnvelope = {
   };
 };
 
-const RPC_BODY_CAP_BYTES = 1024 * 1024;
+const RPC_BODY_CAP_BYTES = DAEMON_REQUEST_MAX_BYTES;
 
 test('Provider-backed integration daemon HTTP server maps RPC methods, auth, and request cancellation through the real transport', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'daemon HTTP integration coverage')) {
@@ -336,20 +339,20 @@ test('Provider-backed integration daemon HTTP server destroys oversized RPC requ
 
   try {
     const port = await listenOnLoopback(server);
-    // The multibyte padding is under the cap in string length and over it in bytes.
-    for (const pad of ['x'.repeat(RPC_BODY_CAP_BYTES), '\u00e9'.repeat(RPC_BODY_CAP_BYTES / 2)]) {
-      const params = { command: 'session_list', padding: pad };
-      const rpc = { jsonrpc: '2.0', id: 'rpc-body-cap', method: 'agent_device.command', params };
-      const oversizedBody = JSON.stringify(rpc);
-      assert.ok(Buffer.byteLength(oversizedBody) > RPC_BODY_CAP_BYTES);
-      const outcome = await sendRawRpcBody(port, oversizedBody);
-      assert.equal(handled, false);
-      if (outcome.kind === 'response') {
-        assert.equal(outcome.status, 400);
-        assert.equal(JSON.parse(outcome.body).error.code, -32700);
-      } else {
-        assert.match(outcome.message, /aborted|reset|socket hang up|request too large/i);
-      }
+    // Under the cap in string length and over it in bytes, so the cap must count bytes.
+    const padding = '\u00e9'.repeat(RPC_BODY_CAP_BYTES / 2);
+    const params = { command: 'session_list', padding };
+    const rpc = { jsonrpc: '2.0', id: 'rpc-body-cap', method: 'agent_device.command', params };
+    const oversizedBody = JSON.stringify(rpc);
+    assert.ok(oversizedBody.length < RPC_BODY_CAP_BYTES);
+    assert.ok(Buffer.byteLength(oversizedBody) > RPC_BODY_CAP_BYTES);
+    const outcome = await sendRawRpcBody(port, oversizedBody);
+    assert.equal(handled, false);
+    if (outcome.kind === 'response') {
+      assert.equal(outcome.status, 400);
+      assert.equal(JSON.parse(outcome.body).error.code, -32700);
+    } else {
+      assert.match(outcome.message, /aborted|reset|socket hang up|request too large/i);
     }
 
     const health = await fetch(`http://127.0.0.1:${port}/health`);

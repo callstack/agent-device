@@ -104,7 +104,8 @@
     "packages/daemon/src/server/http/http-rpc-envelope.ts#JsonRpcRequest": "sha256:7c299fe17818993a0bacbb48e12dcd1fd28b3595cf8efcae3484acbec383ce22",
     "packages/daemon/src/server/http/http-rpc-envelope.ts#JsonRpcResponse": "sha256:13b36c1e2b9eae9437fdac982efde142fd4abba947e11011fa22191675b6e4ba",
     "packages/daemon/src/server/http/http-rpc-methods.ts#LEASE_RPC_METHOD_TO_COMMAND": "sha256:ff52d6c6040080973d51c572ea09b0e23eaa07c7f7b813061599d404dfc811ca",
-    "packages/daemon/src/server/http/http-server.ts#MAX_HTTP_RPC_BODY_BYTES": "sha256:2043c12854318cb4781b85407667ec6dd66e08e61fef1134d977a04a4bb5ca37",
+    "packages/daemon/src/server/http/http-server.ts#MAX_HTTP_RPC_BODY_BYTES": "sha256:eed6cb154db2b67ffe5f058ef0570fec247a5d2a43af2d42952dee0b08870a87",
+    "packages/contracts/src/daemon-http.ts#DAEMON_REQUEST_MAX_BYTES": "sha256:4348e1d7a6d025d6d75fddf075e52fe0555ce7c7b69b4dd4d64dc28ce1f73a87",
     "packages/daemon/src/server/http/http-rpc-methods.ts#RELEASE_MATERIALIZED_PATHS_RPC_METHODS": "sha256:75a18d3496894309dd6042b16c4dcc241c16ec6336783e6310eddd6db7437ccb",
     "packages/daemon/src/server/http/http-rpc-methods.ts#SUPPORTED_RPC_METHODS": "sha256:4d5ed730dcb669b0dacca3bb4977f35686bab9b7fb464c0590fd50f838e6c243",
     "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest": "sha256:1c323f97c3cefec8f95633b6abd127342bf75494bfb109d1cc6eadf3ceacaeae",
@@ -481,11 +482,6 @@
       "rationale": "The client names its request as DaemonWireRequest (packages/contracts/src/daemon-wire-request.ts, a narrowing of the listed kernel DaemonRequest) and its response as the kernel DaemonResponse, instead of the daemon package's DaemonRequest/DaemonResponse aliases, so the daemon package is no longer a client import. The declaration's serialized fields, method names and framing are unchanged; only the compile-time type names in its signature moved, so a peer on protocol 2 parses exactly what it did. #4302 (client-side only): the invalid-response error also gains details.reason 'daemon_response_invalid', so the client can disclose whether the request reached the device; it is raised locally from a reply this client could not parse, and no daemon reads it."
     },
     {
-      "declaration": "packages/daemon/src/server/http/http-server.ts#MAX_HTTP_RPC_BODY_BYTES",
-      "digest": "sha256:2043c12854318cb4781b85407667ec6dd66e08e61fef1134d977a04a4bb5ca37",
-      "rationale": "Only adds `export` so the socket transport refuses an unterminated request line at the same limit. The value and the HTTP /rpc behavior are unchanged, so a released peer sees the same 1 MiB bound on HTTP."
-    },
-    {
       "declaration": "packages/remote/src/upload-stream.ts#streamFileToHttpRequestAttempt",
       "digest": "sha256:b49e17dab9a638f3e547af01717aad52264e20334d62489608bf2c7f9a238838",
       "rationale": "The upload client refuses a redirect to another origin, including a 308 that carries a Location, instead of re-sending the daemon token or ticket headers and the artifact there. Same-origin redirects, the Location-less 308 resume contract, and the redirect limit are unchanged. A released daemon or proxy answers its upload routes on its own origin, so it parses the same requests. A direct-upload ticket that redirects cross-origin fails as a non-retryable direct upload, and uploadArtifact then takes the legacy /upload route on the daemon."
@@ -504,6 +500,11 @@
       "declaration": "packages/remote/src/upload-client.ts#finalizeDirectUpload",
       "digest": "sha256:d25ad008a8f1f9ba4046f657a902e510ba12c0f851669a24839f143ba2ded5b5",
       "rationale": "The request goes through credentialedFetch: a 307 or 308 is followed only on the daemon's own origin, and a hop to another origin rejects instead of carrying x-agent-device-token there. The request body, headers, and route are unchanged. A released daemon or proxy never redirects this route, so it parses the same requests. A refused finalize fails the direct upload, and uploadArtifact then takes the legacy /upload route."
+    },
+    {
+      "declaration": "packages/daemon/src/server/http/http-server.ts#MAX_HTTP_RPC_BODY_BYTES",
+      "digest": "sha256:eed6cb154db2b67ffe5f058ef0570fec247a5d2a43af2d42952dee0b08870a87",
+      "rationale": "The /rpc body limit is now DAEMON_REQUEST_MAX_BYTES (64 MiB), the one request limit the socket transport, the proxy default, and client writers share, raised from 1 MiB. A larger limit refuses nothing a released client sends; a new client refuses a request over 64 MiB before sending it, and a released daemon still answers anything between 1 MiB and 64 MiB with its own -32700 refusal, as before."
     }
   ]
 }

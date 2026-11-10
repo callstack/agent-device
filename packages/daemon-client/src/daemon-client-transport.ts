@@ -21,6 +21,7 @@ import {
   DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
   DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
   DAEMON_RPC_PROTOCOL_VERSION,
+  refuseOversizedDaemonRequest,
 } from '@agent-device/contracts/daemon-http';
 import { buildHttpRpcPayload, handleDaemonHttpResponseBody } from './daemon-client-rpc.ts';
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
@@ -651,6 +652,8 @@ async function sendSocketRequest(
   if (!port) throw daemonEndpointUnavailableError('socket');
   const callerSignal = options.signal;
   refuseAbortedRequest(callerSignal, req.meta?.requestId);
+  const requestLine = `${JSON.stringify(req)}\n`;
+  refuseOversizedDaemonRequest(requestLine, req.meta?.requestId);
   return new Promise((resolve, reject) => {
     let requestWritten = false;
     let settled = false;
@@ -662,7 +665,7 @@ async function sendSocketRequest(
         return;
       }
       requestWritten = true;
-      socket.write(`${JSON.stringify(req)}\n`);
+      socket.write(requestLine);
     });
     const timeoutHandle =
       typeof timeoutMs === 'number'
@@ -787,6 +790,7 @@ async function sendHttpRequest(
   if (!rpcEndpoint) throw daemonEndpointUnavailableError('http');
   const rpcUrl = new URL(rpcEndpoint);
   const rpcPayload = JSON.stringify(buildHttpRpcPayload(req, { includeTokenParam: !info.baseUrl }));
+  refuseOversizedDaemonRequest(rpcPayload, req.meta?.requestId);
   const headers: Record<string, string | number> = {
     'content-type': 'application/json',
     'content-length': Buffer.byteLength(rpcPayload),

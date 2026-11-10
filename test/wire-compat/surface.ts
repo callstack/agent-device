@@ -104,6 +104,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       // A shrunk body limit rejects payloads a released client still sends, so
       // it is a route requirement rather than an implementation detail.
       ...from(HTTP_SERVER, 'MAX_HTTP_RPC_BODY_BYTES'),
+      ...from(DAEMON_HTTP, 'DAEMON_REQUEST_MAX_BYTES'),
       ...from(
         UPLOAD_HTTP,
         'DIRECT_UPLOAD_PATH_PREFIX',
