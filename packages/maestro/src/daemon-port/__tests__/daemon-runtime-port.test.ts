@@ -94,7 +94,7 @@ test('delegates lifecycle and coordinate gestures through public daemon commands
       source: { line: 2 },
       appId: 'com.example.app',
       clearState: true,
-      launchArguments: { kind: 'map', values: { seed: 7 } },
+      launchArguments: { kind: 'map', values: { seed: 7, '-mode': 'demo', verbose: true } },
     },
     generation: 0,
     env: {},
@@ -122,7 +122,7 @@ test('delegates lifecycle and coordinate gestures through public daemon commands
       positionals: ['com.example.app'],
       flags: expect.objectContaining({
         clearAppState: true,
-        launchArgs: ['seed', '7'],
+        launchArgs: ['-seed', '7', '-mode', 'demo', 'verbose', 'true'],
       }),
     }),
     expect.objectContaining({ command: 'snapshot' }),
