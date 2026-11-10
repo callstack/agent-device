@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { readFile, stat } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type {
@@ -87,13 +87,22 @@ export async function appFileUploadForm(
     );
   }
   const form = new FormData();
-  form.set(fileField, new Blob([await readFile(appPath)]), path.basename(appPath));
+  // A file-backed blob streams the build into the request instead of holding it in memory.
+  form.set(fileField, await fs.openAsBlob(appPath), path.basename(appPath));
   return form;
 }
 
 /**
- * POSTs an app upload to a hosted hub and returns the hub's app reference. A non-2xx answer, a
- * body that is not JSON, or one without a reference is `COMMAND_FAILED` with the HTTP status.
+ * The longest one app upload may run. Builds of a few hundred MB on a slow uplink take minutes, so
+ * this bounds a stalled transfer, not a slow one.
+ */
+const HUB_APP_UPLOAD_TIMEOUT_MS = 15 * 60_000;
+
+/**
+ * POSTs an app upload to a hosted hub and returns the hub's app reference. A 401/403 is
+ * `UNAUTHORIZED`; any other non-2xx answer, a body that is not JSON, or one without a reference is
+ * `COMMAND_FAILED` with the HTTP status. A transport failure or the upload deadline is
+ * `COMMAND_FAILED` with its cause; the caller's own cancellation keeps its reason.
  */
 export async function postHubAppUpload(
   form: FormData,
@@ -106,16 +115,40 @@ export async function postHubAppUpload(
   },
   signal?: AbortSignal,
 ): Promise<string> {
-  const response = await fetch(options.endpoint, {
-    method: 'POST',
-    headers: {
-      ...agentDeviceRequestHeaders(options.clientVersion),
-      Authorization: basicAuthHeader(options.auth),
-    },
-    body: form,
-    signal,
-  });
-  const json = await readProviderJsonBody(response);
+  const timeoutSignal = AbortSignal.timeout(HUB_APP_UPLOAD_TIMEOUT_MS);
+  let response: Response;
+  let json: unknown;
+  try {
+    response = await fetch(options.endpoint, {
+      method: 'POST',
+      headers: {
+        ...agentDeviceRequestHeaders(options.clientVersion),
+        Authorization: basicAuthHeader(options.auth),
+      },
+      body: form,
+      signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal,
+    });
+    json = await readProviderJsonBody(response);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    const timedOut = timeoutSignal.aborted;
+    throw new AppError(
+      'COMMAND_FAILED',
+      `${options.service} app upload failed.`,
+      {
+        reason: timedOut ? 'hub_app_upload_timeout' : 'hub_app_upload_transport_failed',
+        ...(timedOut ? { timeoutMs: HUB_APP_UPLOAD_TIMEOUT_MS } : {}),
+        hint: `Check network access to the ${options.service} upload API, then retry.`,
+      },
+      error,
+    );
+  }
+  if (response.status === 401 || response.status === 403) {
+    throw new AppError('UNAUTHORIZED', `${options.service} rejected the app upload credentials.`, {
+      status: response.status,
+      hint: `Check the ${options.service} username and access key.`,
+    });
+  }
   const appReference = options.readAppReference(json)?.trim();
   if (!response.ok || !appReference) {
     throw new AppError('COMMAND_FAILED', `${options.service} app upload failed.`, {
