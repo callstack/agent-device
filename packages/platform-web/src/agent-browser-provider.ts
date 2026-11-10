@@ -205,36 +205,61 @@ function createAgentBrowserSendLedger(runJson: AgentBrowserRunJson): {
  * verdict decides the outcome.
  */
 async function sendTextEntry(send: AgentBrowserRunJson, command: readonly string[]): Promise<void> {
-  const data = await send(['batch'], { stdin: JSON.stringify([command]) });
-  const entry: unknown = Array.isArray(data) && data.length === 1 ? data[0] : undefined;
   const commandName = command[0] ?? 'batch';
+  const label = `agent-browser ${command.slice(0, commandName === 'keyboard' ? 2 : 1).join(' ')}`;
+  let data: unknown;
+  try {
+    data = await send(['batch'], { stdin: JSON.stringify([command]) });
+  } catch (error) {
+    throw textEntryFailure(error, label, commandName);
+  }
+  const entry: unknown = Array.isArray(data) && data.length === 1 ? data[0] : undefined;
   if (!isBatchEntry(entry) || !sameBatchCommand(entry.command, command)) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `agent-browser returned an unusable ${commandName} result`,
-      {
-        cmd: AGENT_BROWSER,
-        args: ['batch'],
-        command: commandName,
-        reason: 'text-entry-result-unusable',
-        hint: AGENT_BROWSER_DOCTOR_HINT,
-      },
-    );
+    throw new AppError('COMMAND_FAILED', `${label} returned an unusable result`, {
+      cmd: AGENT_BROWSER,
+      args: ['batch'],
+      command: commandName,
+      reason: 'text-entry-result-unusable',
+      hint: AGENT_BROWSER_DOCTOR_HINT,
+    });
   }
   if (entry.success === true) return;
   // The backend's own error text is not carried: nothing proves it does not quote the text.
   const target = commandName === 'fill' ? ` for ${command[1]}` : '';
-  throw new AppError(
-    'COMMAND_FAILED',
-    `agent-browser ${command.slice(0, commandName === 'keyboard' ? 2 : 1).join(' ')} failed${target}`,
-    {
-      cmd: AGENT_BROWSER,
-      args: ['batch'],
-      command: commandName,
-      reason: 'text-entry-failed',
-      hint: AGENT_BROWSER_DOCTOR_HINT,
-    },
-  );
+  throw new AppError('COMMAND_FAILED', `${label} failed${target}`, {
+    cmd: AGENT_BROWSER,
+    args: ['batch'],
+    command: commandName,
+    reason: 'text-entry-failed',
+    hint: AGENT_BROWSER_DOCTOR_HINT,
+  });
+}
+
+/**
+ * The details a text-entry failure may carry. Backend output (`stdout`, `stderr`, the envelope's
+ * error and message) and the cause chain are dropped: any of them can quote the typed text.
+ */
+const TEXT_ENTRY_FAILURE_DETAIL_KEYS = [
+  'cmd',
+  'args',
+  'exitCode',
+  'dispatched',
+  'reason',
+  'timeoutMs',
+  'hint',
+] as const;
+
+/**
+ * Rebuilds a failed text-entry backend call without anything the backend printed. A caller's
+ * cancellation is not an `AppError` and passes through unchanged.
+ */
+function textEntryFailure(error: unknown, label: string, commandName: string): unknown {
+  if (!(error instanceof AppError)) return error;
+  const details: Record<string, unknown> = { command: commandName };
+  for (const key of TEXT_ENTRY_FAILURE_DETAIL_KEYS) {
+    if (error.details?.[key] !== undefined) details[key] = error.details[key];
+  }
+  return new AppError(error.code, `${label} failed`, details);
 }
 
 type ScrollStep = {

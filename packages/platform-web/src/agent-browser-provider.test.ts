@@ -170,6 +170,39 @@ test('agent-browser provider keeps typed text out of argv and error details when
   });
 });
 
+test('agent-browser provider keeps typed text out of every backend failure shape', async () => {
+  const secret = 'hunter2-secret';
+  const shapes: Record<string, ExecResult> = {
+    // Not JSON at all: the generic parser would quote stdout and stderr.
+    'non-JSON output': { stdout: `typed ${secret}`, stderr: `echo ${secret}`, exitCode: 1 },
+    // A failure envelope: its error text and message are the backend's.
+    'failure envelope': agentBrowserJsonResult({ success: false, error: `bad ${secret}` }, 1),
+    // A JSON object with a non-zero exit: the generic path would quote stdout and stderr.
+    'object with a non-zero exit': {
+      stdout: JSON.stringify({ data: { typed: secret } }),
+      stderr: `stderr ${secret}`,
+      exitCode: 2,
+    },
+  };
+  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
+    for (const [shape, result] of Object.entries(shapes)) {
+      await withCommandExecutorOverride(
+        async () => result,
+        async () => {
+          await assert.rejects(provider.typeText(secret), (error: unknown) => {
+            assert.ok(error instanceof AppError, shape);
+            assert.equal(error.code, 'COMMAND_FAILED', shape);
+            assert.equal(error.message, 'agent-browser keyboard type failed', shape);
+            assert.equal(error.cause, undefined, shape);
+            assert.equal(JSON.stringify(error.details).includes(secret), false, shape);
+            return true;
+          });
+        },
+      );
+    }
+  });
+});
+
 test('agent-browser provider refuses a text entry answer that echoes another command', async () => {
   await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
     const executor = async (): Promise<ExecResult> =>
