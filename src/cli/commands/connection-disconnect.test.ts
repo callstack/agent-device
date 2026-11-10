@@ -109,6 +109,40 @@ test('disconnect removes a generated profile once no session record uses it', as
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('disconnect keeps a generated profile when the lease release failed', async () => {
+  const { tempRoot, stateDir } = connectionWorkspace('agent-device-disconnect-generated-kept-');
+  const generatedPath = path.join(stateDir, 'remote-connections', 'generated', 'limrun-kept.json');
+  fs.mkdirSync(path.dirname(generatedPath), { recursive: true });
+  fs.writeFileSync(generatedPath, '{}');
+  seedConnectionState({
+    stateDir,
+    state: {
+      session: 'generated-kept',
+      remoteConfigPath: generatedPath,
+      tenant: 'acme',
+      runId: 'run-123',
+      leaseId: 'lease-1',
+      leaseBackend: 'android-instance',
+    },
+  });
+
+  const output = await withCapturedStdoutAsync(async () => {
+    await disconnectCommand({
+      positionals: [],
+      flags: { json: true, help: false, version: false, stateDir, session: 'generated-kept' },
+      client: createTestClient({
+        release: async () => {
+          throw new Error('connect ECONNREFUSED');
+        },
+      }),
+    });
+  });
+
+  assert.equal(JSON.parse(output).data.releaseError, 'connect ECONNREFUSED');
+  assert.equal(fs.existsSync(generatedPath), true, 'a retry of the release needs the profile');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('disconnect treats an already-inactive lease as released without a failure notice', async () => {
   const { tempRoot, stateDir } = seedReleasableConnection(
     'agent-device-disconnect-release-inactive-',

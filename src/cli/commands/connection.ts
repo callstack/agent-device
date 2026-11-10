@@ -368,7 +368,10 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client, h
     }
   }
   removeRemoteConnectionState({ stateDir, session: connectedSession });
-  removeGeneratedRemoteConfigIfUnused({ stateDir, remoteConfigPath: state.remoteConfigPath });
+  // A failed release keeps the profile: retrying that release needs it.
+  if (!releaseError) {
+    removeGeneratedRemoteConfigIfUnused({ stateDir, remoteConfigPath: state.remoteConfigPath });
+  }
   await writeCommandOutput(
     flags,
     {

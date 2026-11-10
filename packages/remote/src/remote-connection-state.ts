@@ -284,7 +284,11 @@ export function removeRemoteConnectionState(options: { stateDir: string; session
   }
 }
 
-/** Whether any stored session record still connects through `remoteConfigPath`. */
+/**
+ * Whether any stored session record still connects through `remoteConfigPath`. A record that cannot
+ * be read or parsed counts as a reference, so a caller deciding whether to delete the profile keeps
+ * it.
+ */
 export function isRemoteConfigReferenced(options: {
   stateDir: string;
   remoteConfigPath: string;
@@ -293,24 +297,31 @@ export function isRemoteConfigReferenced(options: {
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(recordsDir, { withFileTypes: true });
-  } catch {
-    return false;
+  } catch (error) {
+    return !isMissingPathError(error);
   }
   return entries.some((entry) => {
     if (!entry.isFile() || entry.name.startsWith('.') || !entry.name.endsWith('.json')) {
       return false;
     }
+    let text: string;
     try {
-      const record: unknown = JSON.parse(
-        fs.readFileSync(path.join(recordsDir, entry.name), 'utf8'),
-      );
-      return (
-        isRemoteConnectionState(record) && record.remoteConfigPath === options.remoteConfigPath
-      );
-    } catch {
-      return false;
+      text = fs.readFileSync(path.join(recordsDir, entry.name), 'utf8');
+    } catch (error) {
+      return !isMissingPathError(error);
     }
+    let record: unknown;
+    try {
+      record = JSON.parse(text);
+    } catch {
+      return true;
+    }
+    return !isRemoteConnectionState(record) || record.remoteConfigPath === options.remoteConfigPath;
   });
+}
+
+function isMissingPathError(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT';
 }
 
 /**

@@ -78,6 +78,33 @@ test('connect limrun repeated for the same session reuses its connection and pro
   }
 });
 
+test('separate unscoped connect limrun calls get separate run ids', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-limrun-unscoped-');
+  const stateDir = path.join(tempRoot, '.state');
+  vi.stubEnv('LIMRUN_API_KEY', 'lim_test_key');
+  const connect = async () => {
+    await captureConnectStdout(async () => {
+      await connectCommand({
+        host: createTestHostEnvironment(),
+        positionals: ['limrun'],
+        flags: { json: true, help: false, version: false, stateDir, platform: 'android' },
+        client: {} as AgentDeviceClient,
+      });
+    });
+    return readRequiredActiveState(stateDir);
+  };
+
+  try {
+    const first = await connect();
+    const second = await connect();
+
+    assert.notEqual(second.session, first.session);
+    assert.notEqual(second.runId, first.runId);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 async function captureConnectStdout(task: () => Promise<void>): Promise<void> {
   const stdoutCapture = beginStdoutCapture();
   try {
