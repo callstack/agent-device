@@ -67,6 +67,7 @@ export {
   resolveReplayFormat,
   unsupportedReplayBackendMessage,
   type ReplayBackendId,
+  type ReplayFormat,
 } from './internal/format.ts';
 
 export {

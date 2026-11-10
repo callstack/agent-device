@@ -28,8 +28,10 @@ function readReplayFailureError(
 function hasInfrastructureFailureDetails(details: Record<string, unknown> | undefined): boolean {
   if (details?.recovery === 'runner_recycle_budget_exhausted') return true;
   if (isInfrastructureAdbFailure(details?.adbFailure)) return true;
+  // The Apple runner never accepted a connection: it was refused, or xcodebuild exited first.
+  if (typeof details?.runnerConnectFailureReason === 'string') return true;
   const reason = typeof details?.reason === 'string' ? details.reason : '';
-  if (reason === 'timeout_cleanup_pending') return true;
+  if (reason === 'timeout_cleanup_pending' || reason === 'runner_process_exited') return true;
   if (isDeviceClaimConflictReason(reason)) return true;
   return reason ? isInfrastructureBootFailureReason(reason) : false;
 }

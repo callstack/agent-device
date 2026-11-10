@@ -96,6 +96,7 @@ export function recordActionEntry(
       : {}),
     ...(recordedEntry.targetEvidence ? { targetEvidence: recordedEntry.targetEvidence } : {}),
     ...(recordedEntry.targetEvidences ? { targetEvidences: recordedEntry.targetEvidences } : {}),
+    ...(fillLiteral ? { recordedInputVariable: fillLiteral.variableName } : {}),
   };
   session.actions.push(action);
   emitDiagnostic({
@@ -137,7 +138,7 @@ export function recordSessionAction(
   });
 }
 
-type FillLiteral = { literal: string; placeholder: string };
+type FillLiteral = { literal: string; placeholder: string; variableName: string };
 
 /** The (literal, placeholder) pair a `fill --record-as` entry carries, or `undefined` for an ordinary fill/other command. */
 function readRecordedFillLiteral(entry: RecordActionEntry): FillLiteral | undefined {
@@ -150,7 +151,7 @@ function readRecordedFillLiteral(entry: RecordActionEntry): FillLiteral | undefi
     positionals: entry.positionals,
     flags: entry.flags,
   });
-  return { literal, placeholder };
+  return { literal, placeholder, variableName };
 }
 
 /**

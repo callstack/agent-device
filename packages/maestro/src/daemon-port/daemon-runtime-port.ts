@@ -170,8 +170,8 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     launchApp: async (input, context) => {
       const appId = input.appId ?? context.appId;
       const launchArgs = [
-        ...launchArgumentValues(input.arguments),
-        ...launchArgumentValues(input.launchArguments),
+        ...launchArgumentValues(input.arguments, platform),
+        ...launchArgumentValues(input.launchArguments, platform),
       ];
       const clearState = input.clearState === true;
       const relaunch = !clearState && input.stopApp !== false;

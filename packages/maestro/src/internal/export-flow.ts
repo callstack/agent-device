@@ -281,7 +281,7 @@ function convertWaitAction(
       ],
     };
   }
-  if (first === 'stable') return convertStableWait(action.positionals[2]);
+  if (first === 'stable') return convertStableWait(action.positionals.slice(1));
   if (first === 'absent') {
     return {
       kind: 'unsupported',
@@ -302,13 +302,21 @@ function convertWaitAction(
   };
 }
 
-function convertStableWait(timeout: string | undefined): ConvertedAction {
+/** `wait stable [quietMs] [timeoutMs]`: anything else is a malformed recording, not a default. */
+function convertStableWait(args: readonly string[]): ConvertedAction {
+  if (args.length > 2 || !args.every((arg) => isNumber(arg))) {
+    return {
+      kind: 'unsupported',
+      message: 'wait stable takes at most a numeric quietMs and timeoutMs',
+    };
+  }
+  const timeout = args[1];
   return {
     kind: 'commands',
     commands: [
-      timeout !== undefined && isNumber(timeout)
-        ? { waitForAnimationToEnd: { timeout: Number(timeout) } }
-        : 'waitForAnimationToEnd',
+      timeout === undefined
+        ? 'waitForAnimationToEnd'
+        : { waitForAnimationToEnd: { timeout: Number(timeout) } },
     ],
     warnings: [
       'wait stable exports as waitForAnimationToEnd, which uses its own screen-stability threshold instead of the quiet window',

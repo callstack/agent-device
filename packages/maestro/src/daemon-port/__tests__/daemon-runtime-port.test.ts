@@ -61,6 +61,40 @@ test('registers Maestro inputText as sensitive before nested platform work', asy
   expect(diagnostics).toContain('Backend echoed [REDACTED]');
 });
 
+test('iOS map-form launch arguments pass non-boolean keys with a leading dash, like Maestro', async () => {
+  const requests: MaestroDaemonOperationRequest[] = [];
+  const port = createDaemonMaestroRuntimePort({
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      return { ok: true, data: {} };
+    },
+    dependencies: makeDependencies(),
+    platform: 'ios',
+  });
+
+  await port.execute({
+    command: {
+      kind: 'launchApp',
+      source: { line: 2 },
+      appId: 'com.example.app',
+      launchArguments: { kind: 'map', values: { seed: 7, '-mode': 'demo', verbose: true } },
+    },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  expect(requests[0]).toEqual(
+    expect.objectContaining({
+      command: 'open',
+      flags: expect.objectContaining({
+        launchArgs: ['-seed', '7', '-mode', 'demo', 'verbose', 'true'],
+      }),
+    }),
+  );
+});
+
 test('delegates lifecycle and coordinate gestures through public daemon commands', async () => {
   const requests: MaestroDaemonOperationRequest[] = [];
   const invoke: MaestroDaemonOperationInvoke = async (request) => {
@@ -122,7 +156,7 @@ test('delegates lifecycle and coordinate gestures through public daemon commands
       positionals: ['com.example.app'],
       flags: expect.objectContaining({
         clearAppState: true,
-        launchArgs: ['-seed', '7', '-mode', 'demo', 'verbose', 'true'],
+        launchArgs: ['seed', '7', '-mode', 'demo', 'verbose', 'true'],
       }),
     }),
     expect.objectContaining({ command: 'snapshot' }),

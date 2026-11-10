@@ -95,6 +95,9 @@ test('write() escapes recorded literal ${...} text so replay resolves it back un
       flags: { recordAs: 'PASSWORD' },
     },
     { command: 'scroll', positionals: ['down'], flags: { until: 'label="${name}"' } },
+    // Literal placeholder-shaped text stays literal, even with a matching --record-as name.
+    { command: 'type', positionals: ['${PASSWORD}'], flags: {} },
+    { command: 'fill', positionals: ['label="Other"', '${PASSWORD}'], flags: {} },
   ];
   for (const entry of entries) {
     recordActionEntry(session, { ...entry, result: {} }, hostCwd);
@@ -109,6 +112,8 @@ test('write() escapes recorded literal ${...} text so replay resolves it back un
   expect(resolved[0]?.positionals).toEqual(['cost ${amount} \\${raw}']);
   expect(resolved[1]?.positionals).toEqual(['label="Password"', 'secret']);
   expect(resolved[2]?.flags.until).toBe('label="${name}"');
+  expect(resolved[3]?.positionals).toEqual(['${PASSWORD}']);
+  expect(resolved[4]?.positionals).toEqual(['label="Other"', '${PASSWORD}']);
 });
 
 // #3197: the recording half of `scroll --until`. A recorded hunt for an

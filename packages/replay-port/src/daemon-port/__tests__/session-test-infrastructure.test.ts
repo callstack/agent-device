@@ -63,6 +63,27 @@ test('isReplayInfrastructureFailure accepts a replayed step that failed on a typ
   assert.equal(isReplayInfrastructureFailure(notFound), false);
 });
 
+test('isReplayInfrastructureFailure accepts typed runner connect failures through a replay divergence', () => {
+  for (const details of [
+    { reason: 'runner_process_exited' },
+    { reason: 'BOOT_COMMAND_FAILED', runnerConnectFailureReason: 'xcodebuild_exited_early' },
+    { reason: 'UNKNOWN', runnerConnectFailureReason: 'runner_connect_refused' },
+  ]) {
+    const response = buildReplayDivergenceFailureResponseFromDescriptor({
+      error: { code: 'COMMAND_FAILED', message: 'runner failed', details },
+      actionLabel: 'press Continue',
+      action: 'press',
+      positionals: ['Continue'],
+      step: 2,
+      replayPath: '/tmp/flows/login.ad',
+      artifactPaths: [],
+      divergence: {},
+      scrubVars: [],
+    });
+    assert.equal(isReplayInfrastructureFailure(response), true, JSON.stringify(details));
+  }
+});
+
 test('isReplayInfrastructureFailure accepts replay timeout cleanup races', () => {
   const response: DaemonResponse = {
     ok: false,

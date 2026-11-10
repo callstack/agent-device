@@ -93,12 +93,13 @@ export function launchArgumentValues(
     | { kind: 'list'; values: Array<string | number | boolean> }
     | { kind: 'map'; values: Record<string, string | number | boolean> }
     | undefined,
+  platform: string,
 ): string[] {
   if (!value) return [];
   if (value.kind === 'scalar') return [String(value.value)];
   if (value.kind === 'list') return value.values.map(String);
   return Object.entries(value.values).flatMap(([key, entry]) => [
-    iosLaunchArgumentKey(key, entry),
+    platform === 'ios' ? iosLaunchArgumentKey(key, entry) : key,
     String(entry),
   ]);
 }

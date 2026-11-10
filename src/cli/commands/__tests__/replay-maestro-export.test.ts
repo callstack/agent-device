@@ -187,10 +187,14 @@ wait 'id="done"' 4000
       exportReplayScriptToMaestro(`open com.example.app
 wait @e3
 wait text
+wait stable 500 junk
 `);
     expect(run).toThrowError(AppError);
     expect(run).toThrowError('line 2 (wait @e3): wait @ref names a session-local ref');
     expect(run).toThrowError('line 3 (wait text): wait text requires the text to wait for');
+    expect(run).toThrowError(
+      'line 4 (wait stable 500 junk): wait stable takes at most a numeric quietMs and timeoutMs',
+    );
   });
 
   // #3197: `scroll --until` became part of a scroll action, so the export names

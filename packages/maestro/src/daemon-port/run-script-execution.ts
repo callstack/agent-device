@@ -7,6 +7,11 @@ import { assertMaestroScriptsTrusted } from '../internal/engine-flow.ts';
 import type { RunScriptChildOutput, RunScriptRequest } from './run-script-vm.ts';
 
 const RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS = 1_000;
+/** The `vm` budget of one runScript run. */
+export const RUN_SCRIPT_TIMEOUT_MS = 30_000;
+// The `vm` watchdog cannot interrupt a synchronous `http.post`, which has its own 30 s budget, so
+// the child gets the `vm` budget plus one in-flight request and a margin before it is reaped.
+const RUN_SCRIPT_CHILD_TIMEOUT_MS = 2 * RUN_SCRIPT_TIMEOUT_MS + 5_000;
 
 /**
  * Executes a trusted flow-local script in a child process, so its synchronous `vm` run and
@@ -21,6 +26,7 @@ export async function executeRunScriptFile(
   const result = await runCmd(process.execPath, resolveRunScriptChildArgs('run-script-child'), {
     stdin: JSON.stringify(childRequest),
     signal,
+    timeoutMs: RUN_SCRIPT_CHILD_TIMEOUT_MS,
     allowFailure: true,
   });
   const output = readScriptChildOutput(result.stdout);

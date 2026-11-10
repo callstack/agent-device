@@ -15,7 +15,7 @@ import {
   formatTargetAnnotationLines,
   isClickLikeCommand,
   isTouchTargetCommand,
-  readRecordedInputVariableName,
+  recordedInputPlaceholder,
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
 import { expandSessionPath, safeSessionName } from '@agent-device/host-kit/session-paths';
@@ -465,11 +465,10 @@ function formatScript(
     // approach (b): emit the PUBLIC leaf platform (ios/macos), never the internal `apple`.
     `context platform=${publicPlatformString(session.device)} device=${formatScriptStringLiteral(session.device.name)}${kind} theme=${theme}`,
   );
-  const placeholderNames = readRecordedInputVariableNames(actions);
   for (const action of actions) {
     if (action.flags?.noRecord) continue;
     lines.push(...formatTargetAnnotationLines(action));
-    lines.push(formatActionLine(escapeRecordedLiterals(action, placeholderNames)));
+    lines.push(formatActionLine(escapeRecordedLiterals(action)));
   }
   // ADR 0012 decision 6 (Fix 4): only a repair-armed session's healed script
   // carries the completeness sentinel — `write()` already refused to reach
@@ -478,44 +477,35 @@ function formatScript(
   return `${lines.join('\n')}\n`;
 }
 
-/** `--record-as` names whose exact `${NAME}` fill placeholders the recorder put in these actions. */
-function readRecordedInputVariableNames(actions: readonly SessionAction[]): ReadonlySet<string> {
-  const names = new Set<string>();
-  for (const action of actions) {
-    if (action.command !== 'fill') continue;
-    const name = readRecordedInputVariableName(inferFillText(action));
-    if (name) names.add(name);
-  }
-  return names;
-}
-
 /**
  * Replay interpolates every written positional, flag, and runtime string, so recorded literal
- * text gets the `\${` escape. Only `--record-as` placeholders stay interpolated.
+ * text gets the `\${` escape. Only a parameterized fill's own placeholder text stays live.
  */
-function escapeRecordedLiterals(
-  action: SessionAction,
-  placeholderNames: ReadonlySet<string>,
-): SessionAction {
+function escapeRecordedLiterals(action: SessionAction): SessionAction {
   const escape = (value: unknown): unknown => {
-    if (typeof value === 'string') return escapeReplayLiteral(value, placeholderNames);
+    if (typeof value === 'string') return escapeReplayLiteral(value);
     if (Array.isArray(value)) return value.map(escape);
     return value;
   };
+  const placeholder =
+    action.command === 'fill' && action.recordedInputVariable !== undefined
+      ? recordedInputPlaceholder(action.recordedInputVariable)
+      : undefined;
+  const lastIndex = action.positionals.length - 1;
   const escapeRecord = <T extends object>(record: T | undefined): T | undefined =>
     record &&
     (Object.fromEntries(Object.entries(record).map(([key, value]) => [key, escape(value)])) as T);
   const refLabel = action.result?.refLabel;
   return {
     ...action,
-    positionals: (action.positionals ?? []).map((value) =>
-      escapeReplayLiteral(value, placeholderNames),
+    positionals: action.positionals.map((value, index) =>
+      index === lastIndex && value === placeholder ? value : escapeReplayLiteral(value),
     ),
     flags: escapeRecord(action.flags) ?? {},
     runtime: escapeRecord(action.runtime),
     result:
       typeof refLabel === 'string'
-        ? { ...action.result, refLabel: escapeReplayLiteral(refLabel, placeholderNames) }
+        ? { ...action.result, refLabel: escapeReplayLiteral(refLabel) }
         : action.result,
   };
 }

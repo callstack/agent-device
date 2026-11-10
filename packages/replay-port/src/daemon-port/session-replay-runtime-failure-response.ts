@@ -146,6 +146,7 @@ const SAFE_CAUSE_DETAIL_KEYS = [
   'reason',
   'recovery',
   'retriable',
+  'runnerConnectFailureReason',
   'snapshotQuality',
   'supportedOn',
   'systemSurface',

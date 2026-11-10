@@ -29,8 +29,10 @@ const SHELL_PREFIX = 'AD_VAR_';
 const REPLAY_VAR_KEY_GRAMMAR: Record<ReplayFormat, { pattern: RegExp; description: string }> = {
   ad: { pattern: REPLAY_VAR_KEY_RE, description: 'uppercase letters, digits, and underscores' },
   maestro: {
-    pattern: /^[A-Za-z_][A-Za-z0-9_.]*$/,
-    description: 'letters, digits, underscores, and dots, starting with a letter or underscore',
+    // `__proto__` cannot be an own key of the plain-object scopes these values merge into.
+    pattern: /^(?!__proto__$)[A-Za-z_][A-Za-z0-9_.]*$/,
+    description:
+      'letters, digits, underscores, and dots, starting with a letter or underscore (not __proto__)',
   },
 };
 const RESERVED_NAMESPACE_PREFIX = 'AD_';
@@ -195,28 +197,9 @@ function parseInterpolation(
   return { abortEnd: raw.length };
 }
 
-/**
- * The script text that `resolveReplayString` reads back as `literal`. Every `${` gains the `\${`
- * escape, except where an exact `${NAME}` placeholder for a name in `placeholderNames` starts.
- */
-export function escapeReplayLiteral(
-  literal: string,
-  placeholderNames: ReadonlySet<string>,
-): string {
-  let out = '';
-  let i = 0;
-  for (let start = literal.indexOf('${'); start >= 0; start = literal.indexOf('${', i)) {
-    out += literal.slice(i, start);
-    const end = literal.indexOf('}', start + 2);
-    if (end >= 0 && placeholderNames.has(literal.slice(start + 2, end))) {
-      out += literal.slice(start, end + 1);
-      i = end + 1;
-      continue;
-    }
-    out += '\\${';
-    i = start + 2;
-  }
-  return out + literal.slice(i);
+/** The script text that `resolveReplayString` reads back as `literal`: every `${` gains the `\${` escape. */
+export function escapeReplayLiteral(literal: string): string {
+  return literal.replaceAll('${', () => '\\${');
 }
 
 export function resolveReplayString(

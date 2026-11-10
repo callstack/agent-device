@@ -30,6 +30,8 @@ import {
   collectReplayShellEnv,
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
+  resolveReplayFormat,
+  type ReplayFormat,
 } from '@agent-device/ad-script';
 import { loadReplayScriptSourceBundle } from '@agent-device/replay-port/script-source-bundle';
 import { discoverReplaySourcePaths } from '@agent-device/replay-port/source-discovery';
@@ -260,7 +262,11 @@ export const replayDaemonWriter: AsyncDaemonWriter = async (input, host) => {
       inputPath,
       cwd: readReplayClientCwd(input, host.cwd),
       replayBackend,
-      env: readReplayScriptSourceEnv(input, replayShellEnv),
+      env: readReplayScriptSourceEnv(
+        input,
+        replayShellEnv,
+        resolveReplayFormat(inputPath, replayBackend),
+      ),
     }),
     replayFrom: input.resumeFrom,
     replayPlanDigest: input.resumePlanDigest,
@@ -274,7 +280,6 @@ export const testDaemonWriter: AsyncDaemonWriter = async (input, host) => {
   const replayBackend = readReplayBackend(input);
   const cwd = readReplayClientCwd(input, host.cwd);
   const replayShellEnv = collectReplayClientShellEnv(host.env);
-  const env = readReplayScriptSourceEnv(input, replayShellEnv);
   return request(TEST_COMMAND_NAME, inputs, {
     ...stripReplayTestPresentationInput(input),
     replayUpdate: input.update,
@@ -287,7 +292,16 @@ export const testDaemonWriter: AsyncDaemonWriter = async (input, host) => {
     replayScriptSources: await Promise.all(
       discoverReplaySourcePaths({ inputs, cwd, replayBackend }).map(
         async (inputPath) =>
-          await loadReplayScriptSourceBundle({ inputPath, cwd, replayBackend, env }),
+          await loadReplayScriptSourceBundle({
+            inputPath,
+            cwd,
+            replayBackend,
+            env: readReplayScriptSourceEnv(
+              input,
+              replayShellEnv,
+              resolveReplayFormat(inputPath, replayBackend),
+            ),
+          }),
       ),
     ),
   });
@@ -334,10 +348,11 @@ export const replayCommandFamily = defineCommandFamilyFromFacets({
 function readReplayScriptSourceEnv(
   input: CommandInput,
   replayShellEnv: Record<string, string>,
+  format: ReplayFormat,
 ): Record<string, string> {
   return {
-    ...collectReplayShellEnv(replayShellEnv, 'maestro'),
-    ...parseReplayCliEnvEntries(readReplayCliEnvEntries(input.env), 'maestro'),
+    ...collectReplayShellEnv(replayShellEnv, format),
+    ...parseReplayCliEnvEntries(readReplayCliEnvEntries(input.env), format),
   };
 }
 

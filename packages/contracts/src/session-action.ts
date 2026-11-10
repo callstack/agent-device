@@ -38,4 +38,9 @@ export type SessionAction = {
   targetEvidence?: TargetAnnotationV1;
   /** `targets-v1` evidence for dual-endpoint interactions such as drag. */
   targetEvidences?: MultiTargetAnnotationV1;
+  /**
+   * The `--record-as` variable of a parameterized `fill`. The recorder put its `${NAME}`
+   * placeholder in this action's text, the one recorded text that replay interpolates.
+   */
+  recordedInputVariable?: string;
 };

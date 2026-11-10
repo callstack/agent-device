@@ -11,9 +11,8 @@ import {
   type RunScriptHttpRequest,
   type RunScriptHttpResponse,
 } from './run-script-http.ts';
-import { resolveRunScriptChildArgs } from './run-script-execution.ts';
+import { RUN_SCRIPT_TIMEOUT_MS, resolveRunScriptChildArgs } from './run-script-execution.ts';
 
-const RUN_SCRIPT_TIMEOUT_MS = 30_000;
 const RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS = 1_000;
 // JSON escapes a body byte into at most six characters (`\u0000`); headers fit in the remainder.
 const HTTP_CHILD_MAX_STDOUT_BYTES = MAX_RUN_SCRIPT_HTTP_RESPONSE_BYTES * 6 + 1024 * 1024;

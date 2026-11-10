@@ -160,6 +160,8 @@ test('Maestro -e and AD_VAR_ keys accept the mixed-case and dotted names Maestro
     () => parseReplayCliEnvEntries(['AD_FOO=x'], 'maestro'),
     /AD_\* namespace is reserved/,
   );
+  assert.throws(() => parseReplayCliEnvEntries(['__proto__=x'], 'maestro'), /not __proto__/);
+  assert.deepEqual(collectReplayShellEnv({ AD_VAR___proto__: 'x' }, 'maestro'), {});
 });
 
 test('resolveReplayAction walks positionals and string flags', () => {
