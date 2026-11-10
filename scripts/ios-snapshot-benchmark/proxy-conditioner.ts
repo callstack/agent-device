@@ -1,3 +1,4 @@
+import { once } from 'node:events';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -248,14 +249,10 @@ function nextRandom(value: number): number {
   return (value * 1_664_525 + 1_013_904_223) >>> 0;
 }
 
-function listen(server: http.Server): Promise<void> {
-  return new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      server.off('error', reject);
-      resolve();
-    });
-  });
+async function listen(server: http.Server): Promise<void> {
+  const listening = once(server, 'listening');
+  server.listen(0, '127.0.0.1');
+  await listening;
 }
 
 function closeServer(server: http.Server): Promise<void> {

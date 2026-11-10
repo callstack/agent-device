@@ -9,6 +9,11 @@ import { mkdtempForTest } from '@agent-device/test-kit';
 
 const execFileAsync = promisify(execFile);
 
+/** One record type for fixture files, so table rows that name different files share a shape. */
+function fixtureFiles(files: Record<string, string>): Record<string, string> {
+  return files;
+}
+
 async function fixture(files: Record<string, string>): Promise<string> {
   const root = await fs.realpath(await mkdtempForTest('bundled-licenses-'));
   const contents = {
@@ -122,18 +127,20 @@ test.each([
 // The build enumerates the bundled modules itself. A package whose `package.json` names neither a
 // version nor a license, or a module with no `package.json` at all, is still bundled code: beside a
 // licensed neighbor it must stop the build, not drop out of a notices file that names the neighbor.
-test.each<{ name: string; files: Record<string, string>; failure: RegExp }>([
+test.each([
   {
     name: 'package with neither license nor version',
-    files: {
+    files: fixtureFiles({
       'node_modules/omitted/package.json': JSON.stringify({ name: 'omitted', main: 'index.js' }),
       'node_modules/omitted/index.js': 'export const value = process.env.OMITTED;',
-    },
+    }),
     failure: /Bundled dependency omitted is missing its version/,
   },
   {
     name: 'module with no package.json',
-    files: { 'node_modules/omitted/index.js': 'export const value = process.env.OMITTED;' },
+    files: fixtureFiles({
+      'node_modules/omitted/index.js': 'export const value = process.env.OMITTED;',
+    }),
     failure:
       /Bundled module node_modules\/omitted\/index\.js has no package\.json naming its package/,
   },
