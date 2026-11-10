@@ -33,6 +33,7 @@
     "packages/react-native/src/companion/companion-tunnel.ts",
     "src/daemon.ts",
     "packages/capture-kit/src/png-worker.ts",
+    "packages/maestro/src/daemon-port/run-script-child.ts",
     "scripts/patch-xcuitest-runner-icon.ts",
     "scripts/write-xcuitest-cache-metadata.ts",
     "scripts/xcuitest-build-settings.ts",

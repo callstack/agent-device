@@ -269,25 +269,25 @@ function validateNumericScalar(
   context: MaestroProgramParseContext,
   constraints: NumericScalarConstraints,
 ): void {
-  const message = `Maestro ${name} expects ${numericDescription(constraints)} or a variable expression.`;
-  if (!Number.isFinite(value)) {
-    invalidAt(message, node, context);
+  if (!satisfiesNumericConstraints(value, constraints)) {
+    invalidAt(
+      `Maestro ${name} expects ${numericDescription(constraints)} or a variable expression.`,
+      node,
+      context,
+    );
   }
-  if (Math.abs(value) > Number.MAX_SAFE_INTEGER) {
-    invalidAt(message, node, context);
-  }
-  if (constraints.integer && !Number.isSafeInteger(value)) {
-    invalidAt(message, node, context);
-  }
-  if (constraints.nonNegative && value < 0) {
-    invalidAt(message, node, context);
-  }
-  if (constraints.positive && value <= 0) {
-    invalidAt(message, node, context);
-  }
-  if (constraints.max !== undefined && value > constraints.max) {
-    invalidAt(message, node, context);
-  }
+}
+
+/** The one numeric-field check the parser and the runtime resolution both apply. */
+export function satisfiesNumericConstraints(
+  value: number,
+  constraints: NumericScalarConstraints,
+): boolean {
+  if (!Number.isFinite(value) || Math.abs(value) > Number.MAX_SAFE_INTEGER) return false;
+  if (constraints.integer && !Number.isSafeInteger(value)) return false;
+  if (constraints.nonNegative && value < 0) return false;
+  if (constraints.positive && value <= 0) return false;
+  return constraints.max === undefined || value <= constraints.max;
 }
 
 function readNumericScalar(
