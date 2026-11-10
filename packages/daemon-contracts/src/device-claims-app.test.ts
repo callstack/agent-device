@@ -76,55 +76,59 @@ for (const [failure, opener] of [
   ['reading', 'transient'],
   ['decoding', 'transient'],
 ] as const) {
-  test(`whole-Mac ${opener} acquisition refuses an uncertain app device claim after ${failure} fails`, async () => {
-    const root = useClaimsRoot();
-    const file = await seedForeignMacClaim(root, { bundleId: 'com.example.one' });
-    const original = fs.readFileSync(file, 'utf8');
-    const denied = Object.assign(new Error('test access denied'), { code: 'EACCES' });
-    if (failure === 'listing') {
-      vi.spyOn(fs, 'readdirSync').mockImplementationOnce(() => {
-        throw denied;
-      });
-    } else if (failure === 'reading') {
-      fs.chmodSync(file, 0o000);
-    } else {
-      fs.writeFileSync(file, '{');
-    }
+  // Root ignores file modes, so a chmod cannot force the read failure.
+  test.skipIf(failure === 'reading' && process.getuid?.() === 0)(
+    `whole-Mac ${opener} acquisition refuses an uncertain app device claim after ${failure} fails`,
+    async () => {
+      const root = useClaimsRoot();
+      const file = await seedForeignMacClaim(root, { bundleId: 'com.example.one' });
+      const original = fs.readFileSync(file, 'utf8');
+      const denied = Object.assign(new Error('test access denied'), { code: 'EACCES' });
+      if (failure === 'listing') {
+        vi.spyOn(fs, 'readdirSync').mockImplementationOnce(() => {
+          throw denied;
+        });
+      } else if (failure === 'reading') {
+        fs.chmodSync(file, 0o000);
+      } else {
+        fs.writeFileSync(file, '{');
+      }
 
-    const params = { device: mac, workspace: '/whole', stateDir: root };
-    const result =
-      opener === 'session'
-        ? await acquireDeviceClaim({ ...params, session: 'whole' })
-        : await acquireTransientDeviceClaim({
-            ...params,
-            env: process.env,
-            command: 'prepare',
-            coveredBySession: 'whole',
-            coveredClaimIsOwnedByRequest: () => false,
-            reconcileOrphanedDeviceClaim: async () => ({
-              status: 'retained',
-              reason: 'test-no-recovery',
-            }),
-          });
+      const params = { device: mac, workspace: '/whole', stateDir: root };
+      const result =
+        opener === 'session'
+          ? await acquireDeviceClaim({ ...params, session: 'whole' })
+          : await acquireTransientDeviceClaim({
+              ...params,
+              env: process.env,
+              command: 'prepare',
+              coveredBySession: 'whole',
+              coveredClaimIsOwnedByRequest: () => false,
+              reconcileOrphanedDeviceClaim: async () => ({
+                status: 'retained',
+                reason: 'test-no-recovery',
+              }),
+            });
 
-    vi.restoreAllMocks();
-    fs.chmodSync(file, 0o600);
-    assert.equal(result.status, 'conflict');
-    if (result.status !== 'conflict') return;
-    assert.equal(
-      result.conflict.classification,
-      failure === 'decoding' ? 'inconsistent' : 'unknown',
-    );
-    assert.equal(
-      result.conflict.fileName,
-      failure === 'listing' ? path.basename(root) : path.basename(file),
-    );
-    assert.equal(
-      fs.existsSync(resolveDeviceClaimPath(canonicalLocalDeviceKey(mac), process.env)),
-      false,
-    );
-    assert.equal(fs.readFileSync(file, 'utf8'), failure === 'decoding' ? '{' : original);
-  });
+      vi.restoreAllMocks();
+      fs.chmodSync(file, 0o600);
+      assert.equal(result.status, 'conflict');
+      if (result.status !== 'conflict') return;
+      assert.equal(
+        result.conflict.classification,
+        failure === 'decoding' ? 'inconsistent' : 'unknown',
+      );
+      assert.equal(
+        result.conflict.fileName,
+        failure === 'listing' ? path.basename(root) : path.basename(file),
+      );
+      assert.equal(
+        fs.existsSync(resolveDeviceClaimPath(canonicalLocalDeviceKey(mac), process.env)),
+        false,
+      );
+      assert.equal(fs.readFileSync(file, 'utf8'), failure === 'decoding' ? '{' : original);
+    },
+  );
 }
 
 /** Claims `mac` (or one of its apps) for another daemon whose process is alive or `ownerPid`. */

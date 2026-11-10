@@ -169,31 +169,36 @@ test('a confirmed failed-adoption cleanup lifts an earlier block on the device',
   expect(() => context.admissionLedger.assertStartAllowed(context.device)).not.toThrow();
 });
 
-test('an unconfirmed failed-adoption cleanup blocks a replacement start in this process', async () => {
-  const context = makeDurableCaptureContext();
-  const start = makeDurableCaptureStartResult(context, {
-    cleanup: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
-  });
-  const primary = new AppError('CANCELED', 'request canceled');
-  const resourceDir = path.dirname(context.resourcePath);
+test.skipIf(process.getuid?.() === 0)(
+  'an unconfirmed failed-adoption cleanup blocks a replacement start in this process',
+  async () => {
+    const context = makeDurableCaptureContext();
+    const start = makeDurableCaptureStartResult(context, {
+      cleanup: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
+    });
+    const primary = new AppError('CANCELED', 'request canceled');
+    const resourceDir = path.dirname(context.resourcePath);
 
-  try {
-    await expect(
-      testCaptureResource.adoptStarted({
-        ...context,
-        ...start,
-        throwIfCanceled: () => {
-          fs.chmodSync(resourceDir, 0o500);
-          throw primary;
-        },
-      }),
-    ).rejects.toBe(primary);
-  } finally {
-    fs.chmodSync(resourceDir, 0o700);
-  }
+    try {
+      await expect(
+        testCaptureResource.adoptStarted({
+          ...context,
+          ...start,
+          throwIfCanceled: () => {
+            fs.chmodSync(resourceDir, 0o500);
+            throw primary;
+          },
+        }),
+      ).rejects.toBe(primary);
+    } finally {
+      fs.chmodSync(resourceDir, 0o700);
+    }
 
-  expect(() => context.admissionLedger.assertStartAllowed(context.device)).toThrow(/process-local/);
-});
+    expect(() => context.admissionLedger.assertStartAllowed(context.device)).toThrow(
+      /process-local/,
+    );
+  },
+);
 
 function testScope() {
   return {

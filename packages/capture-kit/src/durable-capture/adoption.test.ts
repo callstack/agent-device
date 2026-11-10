@@ -82,38 +82,41 @@ test('canceled adoption terminalizes its manifest when the session retires durin
   expect(context.reportUndurableCleanup).toHaveBeenCalledWith(context.device, { confirmed: true });
 });
 
-test('a failed terminal transition preserves the primary error and reports it unconfirmed', async () => {
-  const context = makeDurableCaptureContext();
-  const start = makeDurableCaptureStartResult(context, {
-    cleanup: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
-  });
-  const primary = new AppError('CANCELED', 'request canceled');
-  const resourceDir = path.dirname(context.resourcePath);
+test.skipIf(process.getuid?.() === 0)(
+  'a failed terminal transition preserves the primary error and reports it unconfirmed',
+  async () => {
+    const context = makeDurableCaptureContext();
+    const start = makeDurableCaptureStartResult(context, {
+      cleanup: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
+    });
+    const primary = new AppError('CANCELED', 'request canceled');
+    const resourceDir = path.dirname(context.resourcePath);
 
-  try {
-    await expect(
-      adoptStartedDurableCapture(
-        testCaptureDefinition,
-        {
-          ...context,
-          ...start,
-          throwIfCanceled: () => {
-            fs.chmodSync(resourceDir, 0o500);
-            throw primary;
+    try {
+      await expect(
+        adoptStartedDurableCapture(
+          testCaptureDefinition,
+          {
+            ...context,
+            ...start,
+            throwIfCanceled: () => {
+              fs.chmodSync(resourceDir, 0o500);
+              throw primary;
+            },
           },
-        },
-        context.resourcePath,
-      ),
-    ).rejects.toBe(primary);
-  } finally {
-    fs.chmodSync(resourceDir, 0o700);
-  }
+          context.resourcePath,
+        ),
+      ).rejects.toBe(primary);
+    } finally {
+      fs.chmodSync(resourceDir, 0o700);
+    }
 
-  expect(context.reportUndurableCleanup).toHaveBeenCalledWith(context.device, {
-    confirmed: false,
-    reason: expect.stringMatching(/./),
-  });
-});
+    expect(context.reportUndurableCleanup).toHaveBeenCalledWith(context.device, {
+      confirmed: false,
+      reason: expect.stringMatching(/./),
+    });
+  },
+);
 
 test('adoption refuses a retired lifetime even when its address has a vacant successor', async () => {
   const context = makeDurableCaptureContext();
