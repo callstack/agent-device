@@ -73,9 +73,10 @@ test('selects the same suffix across read blocks as a whole-file split', async (
   const directory = createTemporaryDirectory();
   const pathname = path.join(directory, 'app.log');
   // About 1 MiB in many 64 KiB blocks, with multi-byte characters that can straddle a block edge.
-  const text = Array.from({ length: 30_000 }, (_, index) => `line ${index} ✓ ${'y'.repeat(20)}`).join(
-    '\n',
-  );
+  const text = Array.from(
+    { length: 30_000 },
+    (_, index) => `line ${index} ✓ ${'y'.repeat(20)}`,
+  ).join('\n');
   fs.writeFileSync(pathname, text);
   const lines = text.split('\n');
 
