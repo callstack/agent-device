@@ -5,9 +5,18 @@ import { AppError, normalizeError, createRequestCanceledError } from '@agent-dev
 import { publishFileSync } from './atomic-file.ts';
 import { emitDiagnostic } from './diagnostics.ts';
 import {
+  isProcessAlive,
+  readHostProcessIdentityObservations,
+  readHostProcessIdentityObservationsAsync,
+  type HostProcessIdentityObservation,
+} from './host-process.ts';
+import {
   classifyOwnerLiveness,
+  classifyOwnerLivenessAsync,
+  classifyOwnerLivenessFromObservation,
   isProcessPid,
   ownerIdentityMatches,
+  readCurrentOwnerIdentity,
   type OwnerLiveness,
 } from './owner-identity.ts';
 import { sleep } from './retry.ts';
@@ -19,6 +28,13 @@ const LOCK_DIRECTORY_SUFFIX = '.lock';
 const RECLAIM_MUTEX_SUFFIX = '.reclaim';
 const RELEASE_GUARD_WAIT_MS = 5_000;
 const RELEASE_GUARD_POLL_MS = 5;
+// A waiter re-reads the owner's process identity at most this often for the same claim. Liveness is
+// still re-proven with `kill(pid, 0)` on every poll, so a reused observation only delays a reclaim.
+const OWNER_OBSERVATION_REUSE_MS = 1_000;
+// A guard is held for a few filesystem calls. One standing longer than this is worth a process-table
+// read of its holder; age only spends that read and never proves the holder gone.
+const GUARD_HOLDER_PROBE_AFTER_MS = 1_000;
+const GUARD_REAP_MARKER_SUFFIX = '.reap';
 
 export type ProcessLockOwner = {
   pid: number;
@@ -111,6 +127,13 @@ type ProcessLockOptions = {
 };
 
 export function inspectProcessLock(lockDirPath: string): ProcessLockInspection {
+  return inspectProcessLockWith(lockDirPath, (owner) => classifyOwnerLiveness({ owner }));
+}
+
+function inspectProcessLockWith(
+  lockDirPath: string,
+  judgeOwner: (owner: ProcessLockOwnerRecord) => OwnerLiveness,
+): ProcessLockInspection {
   let stats: fs.Stats;
   try {
     stats = fs.lstatSync(lockDirPath);
@@ -130,7 +153,7 @@ export function inspectProcessLock(lockDirPath: string): ProcessLockInspection {
   return {
     state: 'held',
     owner: { pid, startTime, acquiredAtMs },
-    liveness: classifyOwnerLiveness({ owner: reading.owner }),
+    liveness: judgeOwner(reading.owner),
   };
 }
 
@@ -141,11 +164,33 @@ export function inspectProcessLock(lockDirPath: string): ProcessLockInspection {
  * See docs/adr/0030-process-lock-exclusion.md for the migration contract.
  */
 export function tryAcquireProcessLock(params: ProcessLockOptions): ProcessLockAttempt {
+  fs.mkdirSync(path.dirname(params.lockDirPath), { recursive: true });
+  const reading = readProcessLockOwner(path.join(params.lockDirPath, OWNER_FILE_NAME));
+  const liveness =
+    reading.kind === 'owner' ? classifyOwnerLiveness({ owner: reading.owner }) : undefined;
+  return attemptProcessLock(params, {
+    standing: judgeStandingClaim(reading, liveness),
+    abandonedGuard: findAbandonedGuard(
+      params.lockDirPath,
+      (holder) => readHostProcessIdentityObservations([holder.pid]).get(holder.pid) ?? null,
+    ),
+  });
+}
+
+/** What a contender judged before it made an attempt, with every process probe already spent. */
+type AttemptEvidence = Readonly<{
+  standing: StandingClaimJudgment;
+  abandonedGuard: AbandonedGuard | undefined;
+}>;
+
+function attemptProcessLock(
+  params: ProcessLockOptions,
+  evidence: AttemptEvidence,
+): ProcessLockAttempt {
   const { lockDirPath } = params;
-  fs.mkdirSync(path.dirname(lockDirPath), { recursive: true });
-  const judgment = judgeStandingClaim(path.join(lockDirPath, OWNER_FILE_NAME));
+  const judgment = evidence.standing;
   if (judgment.kind === 'live') return { status: 'busy', inspection: judgment.inspection };
-  if (!holdReclaimMutex(lockDirPath)) {
+  if (!holdReclaimMutex(lockDirPath, evidence.abandonedGuard)) {
     return { status: 'busy', inspection: inspectProcessLock(lockDirPath) };
   }
   const outcome = withMutationGuardHeld(
@@ -259,10 +304,11 @@ type StandingClaimJudgment =
  * Judges liveness before the guard is taken. The guard then only confirms that the record it
  * would remove is still the one judged here.
  */
-function judgeStandingClaim(ownerFilePath: string): StandingClaimJudgment {
-  const reading = readProcessLockOwner(ownerFilePath);
-  if (reading.kind !== 'owner') return { kind: 'none' };
-  const liveness = classifyOwnerLiveness({ owner: reading.owner });
+function judgeStandingClaim(
+  reading: ProcessLockOwnerReading,
+  liveness: OwnerLiveness | undefined,
+): StandingClaimJudgment {
+  if (reading.kind !== 'owner' || liveness === undefined) return { kind: 'none' };
   if (isLiveOwnerLiveness(liveness) && !isSpentOwnClaim(reading.owner)) {
     const { pid, startTime, acquiredAtMs } = reading.owner;
     return {
@@ -317,27 +363,76 @@ export async function acquireProcessLockAcquisition(
 ): Promise<ProcessLockAcquisition> {
   const deadline = Date.now() + (params.timeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS);
   const pollMs = params.pollMs ?? DEFAULT_LOCK_POLL_MS;
+  const ownerFilePath = path.join(params.lockDirPath, OWNER_FILE_NAME);
+  const observedOwner = createOwnerObservationReuse();
+  fs.mkdirSync(path.dirname(params.lockDirPath), { recursive: true });
   do {
     if (params.signal?.aborted) throw createRequestCanceledError();
-    const attempt = tryAcquireProcessLock(params);
+    // Every process probe a wait spends runs off the event loop, before the synchronous attempt.
+    const reading = readProcessLockOwner(ownerFilePath);
+    const liveness =
+      reading.kind === 'owner' ? await observedOwner.classify(reading.owner) : undefined;
+    const abandonedGuard = await findAbandonedGuardAsync(params.lockDirPath);
+    const attempt = attemptProcessLock(params, {
+      standing: judgeStandingClaim(reading, liveness),
+      abandonedGuard,
+    });
     if (attempt.status === 'acquired') return attempt.acquisition;
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
     await sleep(Math.min(pollMs, remaining), params.signal);
     if (params.signal?.aborted) throw createRequestCanceledError();
   } while (Date.now() < deadline);
-  const reading = readProcessLockOwner(path.join(params.lockDirPath, OWNER_FILE_NAME));
+  const reading = readProcessLockOwner(ownerFilePath);
+  const ownerLiveness =
+    reading.kind === 'owner'
+      ? await classifyOwnerLivenessAsync({ owner: reading.owner })
+      : undefined;
+  const judgeOwner = (owner: ProcessLockOwnerRecord): OwnerLiveness =>
+    reading.kind === 'owner' && ownerLiveness && isSameClaim(owner, reading.owner)
+      ? ownerLiveness
+      : 'unknown';
   throw new AppError(
     'COMMAND_FAILED',
     `Timed out waiting for ${params.description ?? 'process lock'}`,
     {
       lockDirPath: params.lockDirPath,
       reason: 'process_lock_timeout',
-      ...readProcessLockDiagnostics(params.lockDirPath, reading),
-      inspection: inspectProcessLock(params.lockDirPath),
+      ...readProcessLockDiagnostics(params.lockDirPath, reading, ownerLiveness),
+      inspection: inspectProcessLockWith(params.lockDirPath, judgeOwner),
       hint: staleLockHint(params.lockDirPath),
     },
   );
+}
+
+/**
+ * Judges a waited-on owner off the event loop, reading its process identity at most once per
+ * {@link OWNER_OBSERVATION_REUSE_MS} for the same claim. The reused observation can only keep a
+ * live verdict a little longer: death is re-proven by `kill(pid, 0)` on every call, and a zombie or
+ * a contradicted start time stays true of the recorded process however old the observation is.
+ */
+function createOwnerObservationReuse() {
+  let reused:
+    | Readonly<{
+        owner: ProcessLockOwnerRecord;
+        observation: HostProcessIdentityObservation | null;
+        atMs: number;
+      }>
+    | undefined;
+  return {
+    async classify(owner: ProcessLockOwnerRecord): Promise<OwnerLiveness> {
+      const fresh =
+        reused !== undefined &&
+        isSameClaim(reused.owner, owner) &&
+        Date.now() - reused.atMs < OWNER_OBSERVATION_REUSE_MS;
+      if (!fresh && isProcessPid(owner.pid) && isProcessAlive(owner.pid)) {
+        const observations = await readHostProcessIdentityObservationsAsync([owner.pid]);
+        reused = { owner, observation: observations.get(owner.pid) ?? null, atMs: Date.now() };
+      }
+      const observation = reused && isSameClaim(reused.owner, owner) ? reused.observation : null;
+      return classifyOwnerLivenessFromObservation({ owner }, observation);
+    },
+  };
 }
 
 function createProcessLockAcquisition(
@@ -480,17 +575,147 @@ function reclaimMutexPath(lockDirPath: string): string {
   return `${stem}${RECLAIM_MUTEX_SUFFIX}${LOCK_DIRECTORY_SUFFIX}`;
 }
 
-// Legacy age-based rmdir cannot remove this file, so fresh legacy reclaim admission fails.
-function holdReclaimMutex(lockDirPath: string): boolean {
+/**
+ * The guard's holder, written into the guard file itself. A holder that dies inside its guarded
+ * filesystem step would otherwise leave a guard nobody can attribute, and so nobody can remove.
+ */
+type GuardHolder = Readonly<{ pid: number; startTime: string | null; token: string }>;
+
+/** A standing guard whose holder is proven dead or its pid reused, named by the holder's token. */
+type AbandonedGuard = Readonly<{ token: string }>;
+
+const GUARD_TOKEN = /^[0-9a-f-]{36}$/;
+
+/**
+ * Takes the guard. A guard the caller already proved abandoned is reaped first, and only that one:
+ * see {@link reapAbandonedGuard}. Legacy age-based rmdir cannot remove this file, so fresh legacy
+ * reclaim admission fails.
+ */
+function holdReclaimMutex(lockDirPath: string, abandoned: AbandonedGuard | undefined): boolean {
+  if (createReclaimMutex(lockDirPath)) return true;
+  if (!abandoned || !reapAbandonedGuard(lockDirPath, abandoned)) return false;
+  return createReclaimMutex(lockDirPath);
+}
+
+function createReclaimMutex(lockDirPath: string): boolean {
+  const mutexPath = reclaimMutexPath(lockDirPath);
+  const holder: GuardHolder = {
+    pid: process.pid,
+    startTime: readCurrentOwnerIdentity().startTime,
+    token: crypto.randomUUID(),
+  };
   let descriptor: number;
   try {
-    descriptor = fs.openSync(reclaimMutexPath(lockDirPath), 'wx', 0o600);
+    descriptor = fs.openSync(mutexPath, 'wx', 0o600);
   } catch (error) {
     if (errorCode(error) !== 'EEXIST') throw error;
     return false;
   }
+  try {
+    fs.writeSync(descriptor, JSON.stringify(holder));
+  } catch (error) {
+    fs.closeSync(descriptor);
+    fs.unlinkSync(mutexPath);
+    throw error;
+  }
   fs.closeSync(descriptor);
   return true;
+}
+
+/**
+ * Removes a guard whose holder was proven gone, and never a successor's guard. The proof names the
+ * holder's token, and only a reaper of that token may remove that guard: the reap marker for a token
+ * is created exclusively, so two contenders that judged the same holder dead cannot both act, and a
+ * guard re-read under the marker that names another token is left alone. The dead holder cannot
+ * remove or replace its own guard, so the record cannot change between that re-read and the unlink.
+ */
+function reapAbandonedGuard(lockDirPath: string, abandoned: AbandonedGuard): boolean {
+  const mutexPath = reclaimMutexPath(lockDirPath);
+  const markerPath = `${mutexPath}.${abandoned.token}${GUARD_REAP_MARKER_SUFFIX}`;
+  try {
+    fs.closeSync(fs.openSync(markerPath, 'wx', 0o600));
+  } catch (error) {
+    if (errorCode(error) !== 'EEXIST') throw error;
+    return false;
+  }
+  try {
+    const current = readGuardHolder(mutexPath);
+    if (current?.holder.token !== abandoned.token) return false;
+    try {
+      fs.unlinkSync(mutexPath);
+    } catch (error) {
+      if (errorCode(error) !== 'ENOENT') throw error;
+    }
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'process_lock_guard_reclaimed',
+      data: { lockDirPath, holderPid: current.holder.pid },
+    });
+    return true;
+  } finally {
+    fs.rmSync(markerPath, { force: true });
+  }
+}
+
+function readGuardHolder(mutexPath: string): { holder: GuardHolder; ageMs: number } | undefined {
+  let contents: string;
+  let ageMs: number;
+  try {
+    contents = fs.readFileSync(mutexPath, 'utf8');
+    ageMs = Date.now() - fs.statSync(mutexPath).mtimeMs;
+  } catch {
+    // Absent, a legacy directory guard, or unreadable: nothing here names a holder to judge.
+    return undefined;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(contents);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return undefined;
+  const record = parsed as Record<string, unknown>;
+  if (!isProcessPid(record.pid) || typeof record.token !== 'string') return undefined;
+  if (!GUARD_TOKEN.test(record.token)) return undefined;
+  if (record.startTime !== null && typeof record.startTime !== 'string') return undefined;
+  return {
+    holder: { pid: record.pid, startTime: record.startTime, token: record.token },
+    ageMs,
+  };
+}
+
+/**
+ * The standing guard when its holder is provably gone, by the main lock's proof rule: a dead pid, a
+ * zombie, or a start time the host contradicts. A guard this process wrote, an unattributable guard,
+ * and a holder the host will not describe all stay retained. `kill(pid, 0)` answers a dead holder for
+ * free; a live pid is probed only once its guard has stood far longer than any guarded step takes.
+ */
+function findAbandonedGuard(
+  lockDirPath: string,
+  observe: (holder: GuardHolder) => HostProcessIdentityObservation | null,
+): AbandonedGuard | undefined {
+  const standing = readGuardHolder(reclaimMutexPath(lockDirPath));
+  if (!standing || standing.holder.pid === process.pid) return undefined;
+  const { holder, ageMs } = standing;
+  const alive = isProcessAlive(holder.pid);
+  if (alive && ageMs < GUARD_HOLDER_PROBE_AFTER_MS) return undefined;
+  const observation = alive ? observe(holder) : null;
+  return isGoneOwner(classifyOwnerLivenessFromObservation({ owner: holder }, observation))
+    ? { token: holder.token }
+    : undefined;
+}
+
+async function findAbandonedGuardAsync(lockDirPath: string): Promise<AbandonedGuard | undefined> {
+  const standing = readGuardHolder(reclaimMutexPath(lockDirPath));
+  if (!standing) return undefined;
+  const probed =
+    standing.holder.pid !== process.pid &&
+    standing.ageMs >= GUARD_HOLDER_PROBE_AFTER_MS &&
+    isProcessAlive(standing.holder.pid);
+  const observations = probed
+    ? await readHostProcessIdentityObservationsAsync([standing.holder.pid])
+    : new Map<number, HostProcessIdentityObservation>();
+  return findAbandonedGuard(lockDirPath, (holder) => observations.get(holder.pid) ?? null);
 }
 
 /**
@@ -499,7 +724,7 @@ function holdReclaimMutex(lockDirPath: string): boolean {
  */
 async function waitForReclaimMutex(lockDirPath: string): Promise<boolean> {
   const deadline = Date.now() + RELEASE_GUARD_WAIT_MS;
-  while (!holdReclaimMutex(lockDirPath)) {
+  while (!holdReclaimMutex(lockDirPath, await findAbandonedGuardAsync(lockDirPath))) {
     if (Date.now() >= deadline) return false;
     await sleep(RELEASE_GUARD_POLL_MS);
   }
@@ -577,6 +802,7 @@ const PROCESS_LOCK_OWNER_FIELD_SHAPES: Record<keyof ProcessLockOwner, (value: un
 function readProcessLockDiagnostics(
   lockDirPath: string,
   reading: ProcessLockOwnerReading,
+  ownerLiveness: OwnerLiveness | undefined,
 ): Record<string, unknown> {
   const nowMs = Date.now();
   let lockAgeMs: number | undefined;
@@ -590,7 +816,7 @@ function readProcessLockDiagnostics(
           ownerPid: reading.owner.pid,
           ownerStartTime: reading.owner.startTime,
           ownerAgeMs: Math.max(0, Math.round(nowMs - reading.owner.acquiredAtMs)),
-          ownerLiveness: classifyOwnerLiveness({ owner: reading.owner }),
+          ownerLiveness,
         }
       : reading.kind === 'unreadable'
         ? { ownerRecordUnreadable: true }
@@ -599,7 +825,11 @@ function readProcessLockDiagnostics(
 }
 
 function isLiveOwnerLiveness(liveness: OwnerLiveness): boolean {
-  return liveness !== 'owner-process-dead' && liveness !== 'owner-process-reused';
+  return !isGoneOwner(liveness);
+}
+
+function isGoneOwner(liveness: OwnerLiveness): boolean {
+  return liveness === 'owner-process-dead' || liveness === 'owner-process-reused';
 }
 
 /**

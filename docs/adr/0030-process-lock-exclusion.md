@@ -16,8 +16,12 @@ Mixed access with the legacy host-kit protocol is unsupported.
   An unprovable owner record or an unremovable directory also leaves release unverified.
 - A claim identifies an acquisition.
   A PID alone cannot authorize release.
-- Unknown owners and abandoned guards remain retained.
+- Unknown owners remain retained.
   Age never proves abandonment.
+- A guard records its holder's pid, start time, and token.
+  A contender removes a guard only when that holder is proven dead or its pid reused, by the same proof rule as a lock owner.
+  An exclusive per-token reap marker admits one reaper, and the reaper removes the guard only if it still names that token.
+  An unattributable guard, a legacy directory guard, and a live holder remain retained.
 - Before an upgrade, stop every legacy process that uses the shared state or cache paths.
   While hardened users operate those paths, prevent legacy versions from returning.
   Use one deployed version or separate environments.
@@ -32,6 +36,13 @@ A process can pause after directory creation or dead-claim verification.
 Guard expiry admits another process.
 The first process can then resume and overwrite or delete the replacement.
 Retention of an uncertain guard sacrifices automatic crash recovery to preserve exclusion.
+
+A holder proven dead cannot resume, so its guard is not uncertain.
+Without a recorded holder, a holder killed inside its guarded step left a guard that blocked every contender until manual removal.
+A token check alone cannot remove a file conditionally, because a second reaper could remove a successor's guard after the first reaper succeeds.
+The exclusive reap marker closes that race: no other process can change the guard between the reaper's token check and its unlink.
+If a reaper dies while it holds the marker, that guard stays retained.
+A live holder whose guard stands longer than one second gets a process-table read; age only gates that read.
 
 The guard is an exclusive file at the existing guard path.
 Legacy age-based `rmdir` cannot remove it.
@@ -106,3 +117,7 @@ flowchart LR
     O --> L
     L --> F[Protected metadata and reports]
 ```
+
+## Decision history
+
+- 2026-11-10: A guard with a proven-dead holder became recoverable. Before this change, every abandoned guard stayed retained until manual removal, which contradicted automatic reclaim of provably dead owners.
