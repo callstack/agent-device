@@ -114,14 +114,14 @@ test('a clipboard half whose fact admitted but whose interactor cannot serve it 
     (error: unknown) =>
       error instanceof AppError &&
       error.code === 'COMMAND_FAILED' &&
-      error.details?.['reason'] === 'interactor-method-missing' &&
+      error.details?.['reason'] === 'runtime-contract-invalid' &&
       error.message.includes('clipboard write'),
   );
   await expect(bindClipboardRead(signal, missingRead).readClipboard({})).rejects.toSatisfy(
     (error: unknown) =>
       error instanceof AppError &&
       error.code === 'COMMAND_FAILED' &&
-      error.details?.['reason'] === 'interactor-method-missing' &&
+      error.details?.['reason'] === 'runtime-contract-invalid' &&
       error.message.includes('clipboard read'),
   );
 });

@@ -135,6 +135,6 @@ test('binding fails as a runtime-contract error when the resolved interactor has
 
   await expect(operations.keyboardEnter({})).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
-    details: { reason: 'interactor-method-missing' },
+    details: { reason: 'runtime-contract-invalid' },
   });
 });

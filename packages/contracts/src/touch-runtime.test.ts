@@ -331,3 +331,23 @@ test('the fused double-click keeps the interactor as its receiver', async () => 
 
   expect(owner.pressed).toEqual([[20, 30]]);
 });
+
+test('an admitted ref operation whose interactor lacks the member is a runtime contract error', async () => {
+  const operations = bindLocalTouchInteractor({
+    device,
+    signal: new AbortController().signal,
+    resolveInteractor: async () => ({}) as unknown as Interactor,
+    facts,
+    pause: async () => {},
+  });
+
+  for (const run of [
+    () => operations.tapRef!({ ref: '@e4', execution: { requestId: 'tap' } }),
+    () => operations.fillRef!({ ref: '@e4', text: 'x', delayMs: 0, execution: { requestId: 'fill' } }),
+  ]) {
+    await expect(run()).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'runtime-contract-invalid' },
+    });
+  }
+});
