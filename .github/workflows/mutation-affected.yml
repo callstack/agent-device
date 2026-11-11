@@ -154,7 +154,7 @@ jobs:
   report:
     name: Affected decision-kernel mutants
     needs: [select, mutants]
-    if: always() && needs.select.result == 'success'
+    if: ${{ !cancelled() && needs.select.result == 'success' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:

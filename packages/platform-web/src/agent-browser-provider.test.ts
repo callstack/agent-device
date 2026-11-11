@@ -152,7 +152,7 @@ test('agent-browser provider keeps typed text out of argv and error details when
       for (const [attempt, command, hint] of [
         [async () => await provider.fillRef?.('@e9', secret), 'fill', /snapshot -i/],
         [() => provider.typeText(secret), 'keyboard type', /Focus the field again/],
-        [() => provider.fill(11, 22, secret), 'keyboard type', /Focus the field again/],
+        [() => provider.fill(11, 22, secret), 'keyboard type', /snapshot -i/],
       ] as const) {
         await assert.rejects(attempt, (error: unknown) => {
           assert.ok(error instanceof AppError);
