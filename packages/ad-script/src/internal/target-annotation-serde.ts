@@ -177,6 +177,7 @@ function fitsTargetAnnotation(evidence: TargetAnnotationV1): boolean {
     evidence.scrollRegion?.label,
   ];
   return (
+    evidence.ancestry.length <= TARGET_ANNOTATION_MAX_ANCESTRY &&
     fields.every(
       (field) => field === undefined || utf8ByteLength(field) <= TARGET_ANNOTATION_MAX_FIELD_BYTES,
     ) &&
