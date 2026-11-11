@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -38,12 +38,53 @@ if (!tarballs.some((entry) => entry.name === 'agent-device')) {
 
 const publishArgs = ['--tag', distTag, '--access', 'public'];
 for (const { tarball } of tarballs) npm(['publish', tarball, ...publishArgs, '--dry-run']);
+const failures = [];
 for (const { tarball, name } of tarballs) {
-  if (isPublished(name)) {
-    process.stdout.write(`${name}@${version} is already published; skipping.\n`);
-    continue;
+  if (name === 'agent-device' && failures.length > 0) break;
+  try {
+    if (isPublished(name)) {
+      process.stdout.write(`${name}@${version} is already published; skipping.\n`);
+      continue;
+    }
+    await publish(tarball);
+  } catch (error) {
+    if (name === 'agent-device') throw error;
+    failures.push({
+      name,
+      code: readErrorCode(error.stdout) ?? error.code ?? 'UNKNOWN',
+      signal: error.signal,
+    });
   }
-  npm(['publish', tarball, ...publishArgs, '--provenance'], 'inherit');
+}
+if (failures.length > 0) {
+  process.stderr.write(
+    `Plugin publication failed; skipping agent-device:\n${failures.map(({ name, code, signal }) => `  ${name}: ${code}${signal ? ` (signal ${signal})` : ''}`).join('\n')}\n`,
+  );
+  process.exitCode = 1;
+}
+
+function publish(tarball) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('npm', ['publish', tarball, ...publishArgs, '--provenance'], {
+      stdio: ['ignore', 'inherit', 'pipe'],
+    });
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk) => {
+      process.stderr.write(chunk);
+      stderr = (stderr + chunk).slice(-65536);
+    });
+    child.on('error', reject);
+    child.on('close', (status, signal) => {
+      if (status === 0) return resolve();
+      const error = new Error(`npm publish failed with status ${status}`);
+      error.code = signal
+        ? 'UNKNOWN'
+        : (stderr.match(/(?:^|\n)npm error code ([A-Z0-9_]+)/)?.[1] ?? 'UNKNOWN');
+      error.signal = signal;
+      reject(error);
+    });
+  });
 }
 
 function isPublished(name) {
