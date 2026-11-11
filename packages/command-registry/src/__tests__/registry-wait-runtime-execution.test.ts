@@ -1,6 +1,5 @@
 import { expect, test } from 'vitest';
 import { waitSelectorCaptureRuntimePlanUses } from '@agent-device/contracts/platform-runtime-operations';
-import { waitObservesDevice } from '@agent-device/contracts/wait-runtime-plan';
 import { commandDescriptors } from '../registry.ts';
 
 test('wait descriptor declares its complete runtime use', () => {
@@ -23,13 +22,6 @@ test('wait descriptor declares its complete runtime use', () => {
       conditional: ['findText'],
     },
   ]);
-});
-
-test('only the duration shape reaches no device at all', () => {
-  expect(waitObservesDevice('sleep')).toBe(false);
-  for (const target of ['text', 'ref', 'selector', 'stable'] as const) {
-    expect(waitObservesDevice(target)).toBe(true);
-  }
 });
 
 // Native observations are correctness-bearing where owner facts advertise them. They cannot be

@@ -1,7 +1,7 @@
 import { daemonPlatformServicesFixture } from '../__tests__/support/platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import { WAIT_REASONS } from '@agent-device/contracts/wait';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   type DeviceBinding,
   type RuntimeFacts,
@@ -30,6 +30,7 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../core/request-runtime-binding.ts';
 import { handleSnapshotCommands } from '../sessions/handlers/snapshot.ts';
+import { dispatchWaitViaRuntime } from './wait-runtime.ts';
 import { resolveBoundSelectorCapture } from './selector-capture-binding.ts';
 import type { DaemonRequest } from '../index.ts';
 
@@ -284,6 +285,39 @@ test('a duration wait inspects no facts and binds no device', async () => {
     expect(harness.inspectFacts).not.toHaveBeenCalled();
     expect(harness.bindDevice).not.toHaveBeenCalled();
     expect(harness.captureSnapshot).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('canceling a duration wait preserves the request reason without constructing a device runtime', async () => {
+  vi.useFakeTimers();
+  try {
+    const harness = waitRuntimeHarness();
+    const sessionStore = makeSessionStore();
+    sessionStore.publish('wait-runtime', makeSession('wait-runtime', { device: harness.device }));
+    const controller = new AbortController();
+    const reason = createRequestCanceledError();
+    const createCommandSurface = vi.fn(testCreateCommandSurface);
+    const running = dispatchWaitViaRuntime({
+      createCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
+      req: waitRequest(['10000']),
+      sessionName: 'wait-runtime',
+      sessionStore,
+      signal: controller.signal,
+      inspectFacts: harness.inspectFacts,
+      bindDevice: harness.bindDevice,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    controller.abort(reason);
+    expect(await running).toMatchObject({
+      ok: false,
+      error: { code: reason.code, details: reason.details },
+    });
+    expect(createCommandSurface).not.toHaveBeenCalled();
+    expect(harness.inspectFacts).not.toHaveBeenCalled();
+    expect(harness.bindDevice).not.toHaveBeenCalled();
   } finally {
     vi.useRealTimers();
   }

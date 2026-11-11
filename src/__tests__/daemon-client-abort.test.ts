@@ -2,10 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { createAgentDeviceClient } from '@agent-device/client';
+import { startPublicDaemonRuntime } from './test-utils/public-daemon-runtime.ts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
-  createPublicWaitCommandSurface,
-  startPublicDaemonRuntime,
-} from './test-utils/public-daemon-runtime.ts';
+  resolveSessionDir,
+  resolveSessionRequestLogPath,
+} from '@agent-device/daemon-contracts/session-artifact-paths';
+import fs from 'node:fs';
 import { skipWhenLoopbackUnavailable, type SkippableTestContext } from '@agent-device/test-kit';
 
 async function waitFor(condition: () => boolean, what: string): Promise<void> {
@@ -25,20 +29,17 @@ async function runAlreadyAborted(
   daemonTransport: 'socket' | 'http',
 ): Promise<void> {
   if (await skipWhenLoopbackUnavailable(t)) return;
-  let started = false;
-  const daemon = await startPublicDaemonRuntime({
-    createCommandSurface: createPublicWaitCommandSurface({
-      onStarted: () => {
-        started = true;
-      },
-    }),
-  });
+  const requestId = `already-aborted-${daemonTransport}`;
+  const daemon = await startPublicDaemonRuntime();
   try {
+    const client = clientFor(daemon.stateDir, daemonTransport);
     const controller = new AbortController();
     controller.abort();
     await assert.rejects(
-      clientFor(daemon.stateDir, daemonTransport).command.wait({
+      client.command.wait({
         durationMs: 5_000,
+        requestId,
+        debug: true,
         platform: 'macos',
         target: 'desktop',
         signal: controller.signal,
@@ -47,7 +48,23 @@ async function runAlreadyAborted(
         isRequestCanceledError(error) &&
         (error as { details?: Record<string, unknown> }).details?.dispatched === 'no',
     );
-    assert.equal(started, false);
+    const followUpRequestId = `${requestId}-follow-up`;
+    await expectWaitResult(
+      client.command.wait({
+        durationMs: 1,
+        platform: 'macos',
+        target: 'desktop',
+        requestId: followUpRequestId,
+        debug: true,
+      }),
+    );
+    await daemon.runtime.close();
+    const sessionDir = resolveSessionDir(
+      resolveDaemonPaths(daemon.stateDir).sessionsDir,
+      'default',
+    );
+    assert.equal(fs.existsSync(resolveSessionRequestLogPath(sessionDir, followUpRequestId)), true);
+    assert.equal(fs.existsSync(resolveSessionRequestLogPath(sessionDir, requestId)), false);
   } finally {
     await daemon.close();
   }
@@ -58,42 +75,41 @@ async function runAbortedInFlight(
   daemonTransport: 'socket' | 'http',
 ): Promise<void> {
   if (await skipWhenLoopbackUnavailable(t)) return;
-  let requestId: string | undefined;
-  let canceled = false;
-  const daemon = await startPublicDaemonRuntime({
-    createCommandSurface: createPublicWaitCommandSurface({
-      onStarted: (_target, startedRequestId) => {
-        requestId = startedRequestId;
-      },
-      onCanceled: (_target, canceledRequestId) => {
-        assert.equal(canceledRequestId, requestId);
-        canceled = true;
-      },
-    }),
-  });
+  const requestId = `in-flight-${daemonTransport}`;
+  const daemon = await startPublicDaemonRuntime();
   try {
     const client = clientFor(daemon.stateDir, daemonTransport);
     const controller = new AbortController();
     const inFlight = client.command.wait({
       durationMs: 5_000,
+      requestId,
       platform: 'macos',
       target: 'desktop',
       signal: controller.signal,
     });
-    await waitFor(() => requestId !== undefined, 'the daemon to start the request');
-    controller.abort();
-
-    const rejection = await inFlight.then(
+    const settled = inFlight.then(
       () => {
         throw new Error('expected the aborted call to reject');
       },
       (error: unknown) => error,
     );
+    let daemonSignal: AbortSignal | undefined;
+    await waitFor(() => {
+      daemonSignal = daemon.runtime.run(() => getRequestSignal(requestId));
+      return daemonSignal !== undefined;
+    }, 'the daemon to admit the request');
+    controller.abort();
+    const rejection = await settled;
     assert.equal(isRequestCanceledError(rejection), true);
     const details = (rejection as { details?: Record<string, unknown> }).details ?? {};
     assert.equal(details.dispatched, 'unknown');
     assert.equal(details.requestId, requestId);
-    await waitFor(() => canceled, 'the daemon to observe cancellation');
+    await waitFor(() => daemonSignal?.aborted === true, 'the daemon to observe cancellation');
+    assert.equal(isRequestCanceledError(daemonSignal?.reason), true);
+    await waitFor(
+      () => daemon.runtime.run(() => getRequestSignal(requestId)) === undefined,
+      'the daemon to finish the canceled request',
+    );
 
     await expectQuickWait(client);
   } finally {

@@ -555,10 +555,6 @@
     "./wait": {
       "types": "./src/wait.ts",
       "default": "./src/wait.ts"
-    },
-    "./wait-runtime-plan": {
-      "types": "./src/wait-runtime-plan.ts",
-      "default": "./src/wait-runtime-plan.ts"
     }
   },
   "devDependencies": {

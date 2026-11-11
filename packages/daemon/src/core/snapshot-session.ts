@@ -6,7 +6,7 @@ import type { SessionScope } from '@agent-device/contracts/session';
 import { isActiveProviderDevice } from './provider-device-admission.ts';
 import { SessionStore } from './session-store.ts';
 
-export async function resolveSessionDevice(
+export async function resolveSessionAtAddress(
   sessionStore: SessionStore,
   sessionName: string,
   req: DaemonRequest,
@@ -20,6 +20,16 @@ export async function resolveSessionDevice(
     const { requireNamedSessionHoldsDevice } = await import('./explicit-session-resolution.ts');
     requireNamedSessionHoldsDevice({ req, sessionAddress: sessionName, session });
   }
+  return { ref, session };
+}
+
+export async function resolveSessionDevice(
+  sessionStore: SessionStore,
+  sessionName: string,
+  req: DaemonRequest,
+  boundRef?: SessionRef,
+) {
+  const { ref, session } = await resolveSessionAtAddress(sessionStore, sessionName, req, boundRef);
   const device =
     session?.device ?? (await resolveRequestTargetDevice(req, { env: sessionStore.host.env }));
   return { ref, session, device };

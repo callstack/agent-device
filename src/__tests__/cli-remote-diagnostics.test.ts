@@ -9,10 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { runCliCapture, type CapturedCliRun } from './cli-capture.ts';
-import {
-  createPublicWaitCommandSurface,
-  startPublicDaemonRuntime,
-} from './test-utils/public-daemon-runtime.ts';
+import { startPublicDaemonRuntime } from './test-utils/public-daemon-runtime.ts';
 import { mkdtempForTestSync, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 
 const RECORD_SENTINEL = 'REMOTE_RECORD_SENTINEL';
@@ -30,7 +27,6 @@ async function runAgainstRemoteDaemon(argv: string[]): Promise<RemoteRun> {
   const daemon = await startPublicDaemonRuntime({
     stateDir: daemonStateDir,
     serverMode: 'http',
-    createCommandSurface: createPublicWaitCommandSurface({ fail: true }),
   });
 
   try {
@@ -55,11 +51,9 @@ test('a remote failure names a record the caller can actually read', async (t) =
 
   const { run, clientStateDir, daemonLogPath, requestId } = await runAgainstRemoteDaemon([
     'wait',
-    '5000',
-    '--platform',
-    'macos',
-    '--target',
-    'desktop',
+    '1',
+    '--session',
+    RECORD_SENTINEL,
   ]);
   try {
     const localPath = localRecordPath(clientStateDir, daemonLogPath, requestId);
@@ -77,15 +71,14 @@ test('--json carries the caller-local record path, never the daemon-host one', a
 
   const { run, clientStateDir, daemonLogPath } = await runAgainstRemoteDaemon([
     'wait',
-    '5000',
-    '--platform',
-    'macos',
-    '--target',
-    'desktop',
+    '1',
+    '--session',
+    RECORD_SENTINEL,
     '--json',
   ]);
   try {
-    const payload = JSON.parse(run.stdout) as { error: { logPath?: string } };
+    const payload = JSON.parse(run.stdout) as { error: { code: string; logPath?: string } };
+    assert.equal(payload.error.code, 'SESSION_NOT_FOUND');
     assert.equal(payload.error.logPath?.startsWith(clientStateDir), true);
     assert.equal(fs.existsSync(payload.error.logPath ?? ''), true);
     assert.equal(run.stdout.includes(daemonLogPath), false);
@@ -99,11 +92,9 @@ test('--debug prints the fetched record inline and not the local daemon log', as
 
   const { run, clientStateDir } = await runAgainstRemoteDaemon([
     'wait',
-    '5000',
-    '--platform',
-    'macos',
-    '--target',
-    'desktop',
+    '1',
+    '--session',
+    RECORD_SENTINEL,
     '--debug',
   ]);
   try {

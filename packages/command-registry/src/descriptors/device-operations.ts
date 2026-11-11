@@ -82,7 +82,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
       },
       batchable: true,
       compositeResource: 'none',
-      // A duration wait declares no operation and never binds (`waitObservesDevice`); every
+      // A duration wait declares no operation and never binds; every
       // observing shape uses the wait-specific capture plan so its conditional native observations
       // cannot affect capture-only or element-text selector commands.
       //

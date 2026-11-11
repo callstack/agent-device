@@ -63,13 +63,7 @@ export type SelectorRuntimeDeviceParams = SelectorRuntimeParams & {
   ref: SessionRef | undefined;
   session: SessionState | undefined;
   device: SessionState['device'];
-  /**
-   * The request-bound operations this runtime executes through. Required to STATE since find
-   * (R35): every selector command admits before it constructs this runtime, and the only
-   * declared absence is the observation-free duration wait (`wait 400`), which never captures —
-   * its runtime carries no capture backend at all, so an accidental capture fails loudly.
-   */
-  bound: BoundSelectorOperations | undefined;
+  bound: BoundSelectorOperations;
 };
 
 type ResolvedSelectorRuntime =
@@ -184,8 +178,8 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
     params.contextFromFlags ??
     ((flags, appBundleId, traceLogPath) =>
       contextFromFlags(logPath ?? '', flags, appBundleId, traceLogPath));
-  const readTextAtPoint = params.bound?.readText;
-  const boundFindText = params.bound?.findText;
+  const readTextAtPoint = params.bound.readText;
+  const boundFindText = params.bound.findText;
   // The native reading must run in the SAME runner context as the capture it short-circuits:
   // one requestId so diagnostics land in one request file, the session's log/trace paths, and
   // the XCUITest override + runner-lease context the caller configured. Built through the one
@@ -198,48 +192,43 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
     snapshotScope: undefined,
   }).execution;
   const boundOperations = params.bound;
-  const captureRuntime =
-    boundOperations === undefined
-      ? undefined
-      : createSelectorCaptureRuntime({
-          ref: params.ref,
-          device,
-          sessionStore,
-          sessionName,
-          req,
-          consumedSnapshot: params.consumedSnapshot,
-          captureProof: params.captureProof,
-          logPath,
-          capture: boundOperations.capture,
-        });
+  const captureRuntime = createSelectorCaptureRuntime({
+    ref: params.ref,
+    device,
+    sessionStore,
+    sessionName,
+    req,
+    consumedSnapshot: params.consumedSnapshot,
+    captureProof: params.captureProof,
+    logPath,
+    capture: boundOperations.capture,
+  });
   return {
     platform: publicPlatformString(device),
-    captureSnapshot:
-      captureRuntime &&
-      (async (context, options): Promise<BackendSnapshotResult> => {
-        const flags = {
-          ...req.flags,
-          ...snapshotOptionsToFlags(options),
-        };
-        const includeRects = options?.includeRects === true;
-        const snapshotScope = options?.scope ?? req.flags?.snapshotScope;
-        const needsFreshSnapshot =
-          req.command === 'wait' ||
-          req.command === 'find' ||
-          isAbsentPredicateRequest(req) ||
-          (includeRects && device.platform === 'web');
-        return await captureRuntime.capture({
-          flags,
-          signal: context.signal,
-          snapshotScope,
-          includeRects,
-          cache: {
-            forceFresh: needsFreshSnapshot,
-            useSessionSnapshot: true,
-            bypassForPostGestureStabilization: true,
-          },
-        });
-      }),
+    captureSnapshot: async (context, options): Promise<BackendSnapshotResult> => {
+      const flags = {
+        ...req.flags,
+        ...snapshotOptionsToFlags(options),
+      };
+      const includeRects = options?.includeRects === true;
+      const snapshotScope = options?.scope ?? req.flags?.snapshotScope;
+      const needsFreshSnapshot =
+        req.command === 'wait' ||
+        req.command === 'find' ||
+        isAbsentPredicateRequest(req) ||
+        (includeRects && device.platform === 'web');
+      return await captureRuntime.capture({
+        flags,
+        signal: context.signal,
+        snapshotScope,
+        includeRects,
+        cache: {
+          forceFresh: needsFreshSnapshot,
+          useSessionSnapshot: true,
+          bypassForPostGestureStabilization: true,
+        },
+      });
+    },
     readText: async (_context, node: SnapshotNode) => ({
       text: await readTextForNode({
         readTextAtPoint,
