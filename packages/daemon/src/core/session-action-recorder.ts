@@ -235,7 +235,10 @@ function applySessionEchoProtection(
   const literals = session.recordedFillLiterals;
   if (!literals || literals.size === 0) return { entry, echoedNames: [] };
 
-  const result = parameterizeRecordedResultEcho(entry.result, literals);
+  const { payload: result, insertedPlaceholders } = parameterizeRecordedResultEcho(
+    entry.result,
+    literals,
+  );
   const evidenceMode = entry.targetEvidenceMode ?? 'action';
   const targetEvidence =
     evidenceMode === 'landmark'
@@ -250,42 +253,11 @@ function applySessionEchoProtection(
 
   return {
     entry: { ...entry, result, targetEvidence, targetEvidences },
-    echoedNames: readSubstitutedNames(entry.result, result, literals),
+    // Annotations are never interpolated, so only the result's placeholders are live.
+    echoedNames: [...insertedPlaceholders].flatMap(
+      (placeholder) => readRecordedInputVariableName(placeholder) ?? [],
+    ),
   };
-}
-
-/**
- * The variables whose placeholders echo protection wrote into the result: the placeholders that
- * occur more often after it than before. Annotations are never interpolated, so only the result
- * counts toward the live script placeholders.
- */
-function readSubstitutedNames(
-  before: RecordActionEntry['result'],
-  after: RecordActionEntry['result'],
-  literals: ReadonlyMap<string, string>,
-): string[] {
-  const beforeTexts = collectStrings(before);
-  const afterTexts = collectStrings(after);
-  const names: string[] = [];
-  for (const placeholder of new Set(literals.values())) {
-    if (countOccurrences(afterTexts, placeholder) <= countOccurrences(beforeTexts, placeholder)) {
-      continue;
-    }
-    const name = readRecordedInputVariableName(placeholder);
-    if (name) names.push(name);
-  }
-  return names;
-}
-
-function countOccurrences(texts: readonly string[], needle: string): number {
-  return texts.reduce((count, text) => count + text.split(needle).length - 1, 0);
-}
-
-function collectStrings(value: unknown): string[] {
-  if (typeof value === 'string') return [value];
-  if (Array.isArray(value)) return value.flatMap(collectStrings);
-  if (value && typeof value === 'object') return Object.values(value).flatMap(collectStrings);
-  return [];
 }
 
 /**

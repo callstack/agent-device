@@ -149,17 +149,24 @@ export function parameterizeRecordedFillPayload<
  * before anything is rewritten. Delegates to `parameterizeAgainstLiteralMap`
  * for the actual substitution, so redacting one literal can never corrupt a
  * placeholder another literal (or an earlier stage) already inserted.
+ * `insertedPlaceholders` holds each placeholder this pass wrote in place of a
+ * literal; a placeholder the payload already carried is not counted.
  */
 export function parameterizeRecordedResultEcho<
   TPayload extends Record<string, unknown> | undefined,
->(payload: TPayload, literals: ReadonlyMap<string, string>): TPayload {
-  if (!payload) return payload;
+>(
+  payload: TPayload,
+  literals: ReadonlyMap<string, string>,
+): { payload: TPayload; insertedPlaceholders: ReadonlySet<string> } {
+  const insertedPlaceholders = new Set<string>();
+  if (!payload) return { payload, insertedPlaceholders };
   const pairs = sortedLiteralPairs(literals);
-  return parameterizeBackendOutput(
+  const redacted = parameterizeBackendOutput(
     payload,
-    (value) => parameterizeAgainstLiteralMap(value, pairs),
+    (value) => parameterizeAgainstLiteralMap(value, pairs, insertedPlaceholders),
     (candidate) => selectorCandidateCarriesAnyLiteral(candidate, literals),
   ) as TPayload;
+  return { payload: redacted, insertedPlaceholders };
 }
 
 /**
@@ -482,11 +489,13 @@ function sortedLiteralPairs(
  * `pairs` must already be sorted longest-literal-first (`sortedLiteralPairs`)
  * — this is the hot leaf-level primitive, invoked once per string field
  * during a payload/evidence walk, so the sort happens once at the caller
- * rather than being repeated on every leaf.
+ * rather than being repeated on every leaf. When given, `inserted` receives
+ * each placeholder the pass writes in place of a literal.
  */
 function parameterizeAgainstLiteralMap(
   value: string,
   pairs: readonly (readonly [string, string])[],
+  inserted?: Set<string>,
 ): string {
   if (!value || pairs.length === 0) return value;
 
@@ -496,6 +505,7 @@ function parameterizeAgainstLiteralMap(
     for (const [literal, placeholder] of pairs) {
       if (value.startsWith(literal, index)) {
         result += placeholder;
+        inserted?.add(placeholder);
         index += literal.length;
         continue scan;
       }
