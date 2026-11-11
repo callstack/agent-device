@@ -56,6 +56,24 @@ test('serializeTargetAnnotationV1 uses the exact canonical field order from deci
   );
 });
 
+test('writer degrades excessive ancestry for single and multi-target annotations', () => {
+  const ancestry = Array.from({ length: TARGET_ANNOTATION_MAX_ANCESTRY + 1 }, () => ({
+    role: 'group',
+  }));
+  const evidence = baseEvidence({ ancestry, rect: { x: 1, y: 2, width: 3, height: 4 } });
+  const expected = { ...evidence, ancestry: [], verification: 'unverifiable' };
+  delete expected.rect;
+  delete expected.scrollRegion;
+  assert.deepEqual(parseTargetAnnotationV1Payload(serializeTargetAnnotationV1(evidence)), expected);
+  assert.deepEqual(
+    parseMultiTargetAnnotationV1Payload(
+      serializeMultiTargetAnnotationV1({ source: evidence, destination: evidence }),
+    ),
+    { source: expected, destination: expected },
+  );
+  assert.equal(evidence.ancestry.length, TARGET_ANNOTATION_MAX_ANCESTRY + 1);
+});
+
 test('formatTargetAnnotationCommentLine emits the ASCII # agent-device:target-v1 prefix', () => {
   const line = formatTargetAnnotationCommentLine(baseEvidence());
   assert.ok(line.startsWith('# agent-device:target-v1 {'));
