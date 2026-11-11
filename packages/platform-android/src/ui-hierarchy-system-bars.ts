@@ -1,6 +1,6 @@
 import { androidSystemBarMembership } from '@agent-device/contracts/android-system-chrome';
 import type { Rect } from '@agent-device/kernel/snapshot';
-import { isPositiveFiniteRect, rectContains } from '@agent-device/kernel/rect';
+import { intersectRects, isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import { foldSnapshotRect } from './snapshot-presentation-node.ts';
 import type { AndroidNode } from './ui-hierarchy-node.ts';
 import type { AndroidSnapshotPresentationBudget } from './snapshot-presentation.ts';
@@ -14,32 +14,28 @@ export function androidSystemBarContentClips(
   viewport: Rect | undefined,
   budget: AndroidSnapshotPresentationBudget,
 ): ReadonlyMap<AndroidNode, Rect> {
-  const bars: SystemBar[] = [];
-  const barRoots = new Set<AndroidNode>();
-  for (const root of roots) {
-    const pending = [root];
-    while (pending.length > 0) {
-      budget.check('work');
-      const node = pending.pop()!;
-      if (hidden.has(node)) continue;
-      const barRect = foldSnapshotRect(node.rect, node.windowRect ?? root.windowRect, undefined);
-      if (
-        node.visibleToUser !== false &&
-        androidSystemBarMembership(node.packageName, node.identifier) !== undefined &&
-        isPositiveFiniteRect(barRect)
-      ) {
-        bars.push({ root, rect: barRect });
-        barRoots.add(root);
-      }
-      pending.push(...node.children);
-    }
-  }
+  const { bars, barRoots } = collectSystemBars(roots, hidden, budget);
   const clips = new Map<AndroidNode, Rect>();
   for (const root of roots) {
     if (barRoots.has(root)) continue;
     const frame = root.windowRect ?? viewport;
     if (!isPositiveFiniteRect(frame)) continue;
-    let clip = frame;
+    const clip = clipWindowToSystemBars(root, frame, bars, budget);
+    if (clip !== frame) clips.set(root, clip);
+  }
+  return clips;
+}
+
+function clipWindowToSystemBars(
+  root: AndroidNode,
+  frame: Rect,
+  bars: readonly SystemBar[],
+  budget: AndroidSnapshotPresentationBudget,
+): Rect {
+  let clip = frame;
+  let previous: Rect;
+  do {
+    previous = clip;
     for (const bar of bars) {
       budget.check('work');
       if (
@@ -51,31 +47,53 @@ export function androidSystemBarContentClips(
       }
       clip = clipSystemBar(clip, bar.rect);
     }
-    if (clip !== frame) clips.set(root, clip);
+  } while (clip !== previous);
+  return clip;
+}
+
+function collectSystemBars(
+  roots: readonly AndroidNode[],
+  hidden: ReadonlySet<AndroidNode>,
+  budget: AndroidSnapshotPresentationBudget,
+): { bars: SystemBar[]; barRoots: Set<AndroidNode> } {
+  const bars: SystemBar[] = [];
+  const barRoots = new Set<AndroidNode>();
+  const pending = roots.map((root) => ({ root, node: root }));
+  while (pending.length > 0) {
+    budget.check('work');
+    const { root, node } = pending.pop()!;
+    if (hidden.has(node)) continue;
+    const barRect = foldSnapshotRect(node.rect, node.windowRect ?? root.windowRect, undefined);
+    if (
+      node.visibleToUser !== false &&
+      androidSystemBarMembership(node.packageName, node.identifier) !== undefined &&
+      isPositiveFiniteRect(barRect)
+    ) {
+      bars.push({ root, rect: barRect });
+      barRoots.add(root);
+    }
+    pending.push(...node.children.map((child) => ({ root, node: child })));
   }
-  return clips;
+  return { bars, barRoots };
 }
 
 function clipSystemBar(frame: Rect, bar: Rect): Rect {
-  if (rectContains(bar, frame)) return { ...frame, width: 0, height: 0 };
-  const right = frame.x + frame.width;
-  const bottom = frame.y + frame.height;
-  const barRight = bar.x + bar.width;
-  const barBottom = bar.y + bar.height;
-  if (bar.x <= frame.x && barRight >= right && bar.height < frame.height) {
-    if (bar.y <= frame.y && barBottom > frame.y) {
-      return { ...frame, y: barBottom, height: bottom - barBottom };
+  const covered = intersectRects(frame, bar);
+  if (!covered) return frame;
+  if (covered.width === frame.width) {
+    if (covered.y === frame.y) {
+      return { ...frame, y: frame.y + covered.height, height: frame.height - covered.height };
     }
-    if (bar.y < bottom && barBottom >= bottom) {
-      return { ...frame, height: bar.y - frame.y };
+    if (covered.y + covered.height === frame.y + frame.height) {
+      return { ...frame, height: covered.y - frame.y };
     }
   }
-  if (bar.y <= frame.y && barBottom >= bottom && bar.width < frame.width) {
-    if (bar.x <= frame.x && barRight > frame.x) {
-      return { ...frame, x: barRight, width: right - barRight };
+  if (covered.height === frame.height) {
+    if (covered.x === frame.x) {
+      return { ...frame, x: frame.x + covered.width, width: frame.width - covered.width };
     }
-    if (bar.x < right && barRight >= right) {
-      return { ...frame, width: bar.x - frame.x };
+    if (covered.x + covered.width === frame.x + frame.width) {
+      return { ...frame, width: covered.x - frame.x };
     }
   }
   return frame;

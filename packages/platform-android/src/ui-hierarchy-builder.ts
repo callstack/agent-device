@@ -121,21 +121,7 @@ export function buildUiHierarchySnapshot(
   };
 
   try {
-    presentationBudget.check('work');
-    state.viewport = resolveAndroidSnapshotViewport(tree, presentationBudget);
-    state.hidden = options.raw ? new Set() : collectAndroidHiddenNodes(tree, presentationBudget);
-    state.systemBarContentClips = options.raw
-      ? new Map()
-      : androidSystemBarContentClips(
-          tree.children,
-          state.hidden,
-          state.viewport,
-          presentationBudget,
-        );
-    state.composeRoleFolds = options.raw
-      ? new Map()
-      : collectComposeRoleFolds(tree, presentationBudget);
-    state.foldedComposeRoleNodes = new Set(state.composeRoleFolds.values());
+    initializeAndroidSnapshotPresentation(tree, state);
     for (const root of tree.children) {
       walkUiHierarchyNode(state, root, 0);
       if (state.truncated) break;
@@ -197,6 +183,29 @@ export function buildUiHierarchySnapshot(
     }
     throw error;
   }
+}
+
+function initializeAndroidSnapshotPresentation(
+  tree: AndroidUiHierarchy,
+  state: AndroidSnapshotBuildState,
+): void {
+  state.presentationBudget.check('work');
+  state.viewport = resolveAndroidSnapshotViewport(tree, state.presentationBudget);
+  state.hidden = state.options.raw
+    ? new Set()
+    : collectAndroidHiddenNodes(tree, state.presentationBudget);
+  state.systemBarContentClips = state.options.raw
+    ? new Map()
+    : androidSystemBarContentClips(
+        tree.children,
+        state.hidden,
+        state.viewport,
+        state.presentationBudget,
+      );
+  state.composeRoleFolds = state.options.raw
+    ? new Map()
+    : collectComposeRoleFolds(tree, state.presentationBudget);
+  state.foldedComposeRoleNodes = new Set(state.composeRoleFolds.values());
 }
 
 function collectAndroidSiblingOrders(

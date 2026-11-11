@@ -106,6 +106,29 @@ test('a measured status bar clips edge-to-edge app content', () => {
   });
 });
 
+test.each([true, false])(
+  'adjoining status and navigation bars clip both edges regardless of window order: %s',
+  (statusFirst) => {
+    const navigation = hierarchy({
+      appBounds: '[0,0][2400,1080]',
+      barBounds: '[0,0][126,1080]',
+      rowBounds: '[100,40][300,200]',
+    });
+    const status = `<node class="android.widget.FrameLayout" package="com.android.systemui" resource-id="com.android.systemui:id/status_bar" bounds="[126,0][2400,80]" window-bounds="[126,0][2400,80]" window-index="2" window-type="3" window-layer="11" visible-to-user="true" />`;
+    const xml = statusFirst
+      ? navigation.replace('<hierarchy>', `<hierarchy>${status}`)
+      : navigation.replace('</hierarchy>', `${status}</hierarchy>`);
+    const snapshot = parseUiHierarchy(xml, undefined, {});
+
+    expect(snapshot.nodes.find((node) => node.identifier === 'item-137')?.rect).toEqual({
+      x: 126,
+      y: 80,
+      width: 174,
+      height: 120,
+    });
+  },
+);
+
 test.each([
   { packageName: 'dev.e2e.benchmark' },
   { visible: false },
@@ -166,22 +189,33 @@ test('property: visible rectangles avoid measured bars at any device size, origi
       const bottom = y + height;
       const bounds = (left: number, top: number, endX: number, endY: number) =>
         `[${left},${top}][${endX},${endY}]`;
-      const barBounds =
-        side === 'bottom'
-          ? bounds(x, bottom - barSize, right, bottom)
-          : side === 'top'
-            ? bounds(x, y, right, y + barSize)
-            : side === 'left'
-              ? bounds(x, y, x + barSize, bottom)
-              : bounds(right - barSize, y, right, bottom);
-      const rowBounds =
-        side === 'bottom'
-          ? bounds(x, bottom - barSize - visibleSize, right, bottom)
-          : side === 'top'
-            ? bounds(x, y, right, y + barSize + visibleSize)
-            : side === 'left'
-              ? bounds(x, y, x + barSize + visibleSize, bottom)
-              : bounds(right - barSize - visibleSize, y, right, bottom);
+      const cases = {
+        bottom: {
+          barBounds: bounds(x, bottom - barSize, right, bottom),
+          rowBounds: bounds(x, bottom - barSize - visibleSize, right, bottom),
+          expected: { x, y: bottom - barSize - visibleSize, width, height: visibleSize },
+          reportedSize: 'height' as const,
+        },
+        top: {
+          barBounds: bounds(x, y, right, y + barSize),
+          rowBounds: bounds(x, y, right, y + barSize + visibleSize),
+          expected: { x, y: y + barSize, width, height: visibleSize },
+          reportedSize: 'height' as const,
+        },
+        left: {
+          barBounds: bounds(x, y, x + barSize, bottom),
+          rowBounds: bounds(x, y, x + barSize + visibleSize, bottom),
+          expected: { x: x + barSize, y, width: visibleSize, height },
+          reportedSize: 'width' as const,
+        },
+        right: {
+          barBounds: bounds(right - barSize, y, right, bottom),
+          rowBounds: bounds(right - barSize - visibleSize, y, right, bottom),
+          expected: { x: right - barSize - visibleSize, y, width: visibleSize, height },
+          reportedSize: 'width' as const,
+        },
+      };
+      const { barBounds, rowBounds, expected, reportedSize } = cases[side];
       const xml = hierarchy({
         appBounds: bounds(x, y, right, bottom),
         barBounds,
@@ -191,15 +225,9 @@ test('property: visible rectangles avoid measured bars at any device size, origi
       const raw = parseUiHierarchy(xml, undefined, { raw: true });
       const rect = regular.nodes.find((node) => node.identifier === 'item-137')!.rect!;
 
-      if (side === 'bottom') expect(rect.y + rect.height).toBeLessThanOrEqual(bottom - barSize);
-      if (side === 'top') expect(rect.y).toBeGreaterThanOrEqual(y + barSize);
-      if (side === 'left') expect(rect.x).toBeGreaterThanOrEqual(x + barSize);
-      if (side === 'right') expect(rect.x + rect.width).toBeLessThanOrEqual(right - barSize);
+      expect(rect).toEqual(expected);
       const reported = raw.nodes.find((node) => node.identifier === 'item-137')!.rect!;
-      expect(side === 'top' || side === 'bottom' ? rect.height : rect.width).toBe(visibleSize);
-      expect(side === 'top' || side === 'bottom' ? reported.height : reported.width).toBe(
-        barSize + visibleSize,
-      );
+      expect(reported[reportedSize]).toBe(barSize + visibleSize);
     }),
     { numRuns: PROPERTY_RUNS },
   );
