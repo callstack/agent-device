@@ -202,5 +202,10 @@ for (const [platform, identity] of [
     const { client, requests } = recordingClient({ ...PIN, selector: { platform } });
     await runCommand(client, 'snapshot', identity);
     assert.equal(requests.length, 1);
+    if ('udid' in identity) {
+      assert.equal(requests[0]?.flags?.udid, identity.udid);
+    } else {
+      assert.equal(requests[0]?.flags?.serial, identity.serial);
+    }
   });
 }

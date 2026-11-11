@@ -3,8 +3,12 @@ import { expect, test } from 'vitest';
 import { createAgentDeviceClient } from '@agent-device/client';
 import { runCommand } from '@agent-device/command-surface';
 import type { DevicePin } from '@agent-device/contracts/device';
-import { PROVIDER_SCENARIO_ANDROID, PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
-import { assertRpcError } from './assertions.ts';
+import {
+  PROVIDER_SCENARIO_ANDROID,
+  PROVIDER_SCENARIO_IOS_SIMULATOR,
+  PROVIDER_SCENARIO_MACOS,
+} from './fixtures.ts';
+import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 
 for (const platform of ['ios', 'android'] as const) {
@@ -86,6 +90,51 @@ for (const platform of ['ios', 'android'] as const) {
         );
         const error = assertRpcError(batch, 400, 'INVALID_ARGS', /Batch step 1/);
         assert.equal((error.details as { reason: string }).reason, 'device_pin_conflict');
+      },
+    );
+  });
+}
+
+for (const [pinnedPlatform, requestedPlatform, expectedId] of [
+  ['ios', 'apple', PROVIDER_SCENARIO_IOS_SIMULATOR.id],
+  ['macos', 'apple', PROVIDER_SCENARIO_MACOS.id],
+  ['apple', 'ios', PROVIDER_SCENARIO_IOS_SIMULATOR.id],
+  ['apple', 'macos', PROVIDER_SCENARIO_MACOS.id],
+] as const) {
+  test(`Provider-backed integration ${pinnedPlatform} pin intersects ${requestedPlatform} before selection`, async () => {
+    const pin: DevicePin = {
+      selector: { platform: pinnedPlatform },
+      source: { kind: 'project', path: '/project/agent-device.json' },
+    };
+    await withProviderScenarioResource(
+      () =>
+        createProviderScenarioHarness({
+          deviceInventoryProvider: async () => [
+            PROVIDER_SCENARIO_MACOS,
+            PROVIDER_SCENARIO_IOS_SIMULATOR,
+          ],
+        }),
+      async (daemon) => {
+        const flags = { platform: requestedPlatform };
+        const direct = await daemon.callCommand('capabilities', [], flags, {
+          meta: { devicePin: pin },
+        });
+        expect(assertRpcOk(direct)).toMatchObject({ device: { id: expectedId } });
+        const client = createAgentDeviceClient(
+          { daemonBaseUrl: daemon.baseUrl, daemonAuthToken: daemon.token },
+          { devicePin: pin },
+        );
+        const result = await runCommand(client, 'capabilities', flags);
+        assert.equal(result.device?.id, expectedId);
+        const batch = await daemon.callCommand(
+          'batch',
+          [],
+          { batchSteps: [{ command: 'capabilities', flags }] },
+          { meta: { devicePin: pin } },
+        );
+        expect(assertRpcOk(batch)).toMatchObject({
+          results: [{ data: { device: { id: expectedId } } }],
+        });
       },
     );
   });

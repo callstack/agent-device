@@ -25,13 +25,10 @@ export async function resolveRequestTargetDevice(
   options: RequestTargetDeviceOptions,
   flags: RequestTargetDeviceFlags = req.flags ?? {},
 ): ReturnType<typeof resolveTargetDevice> {
-  const device = await resolveTargetDevice(
-    { ...flags, ...resolveLeaseScope(req) },
-    {
-      ...options,
-      webSession: req.internal?.webSession,
-    },
-  );
+  const device = await resolveTargetDevice(resolveRequestDeviceFlags(req, flags), {
+    ...options,
+    webSession: req.internal?.webSession,
+  });
   assertWebSelectionHasIdentity(req, device);
   if (req.meta?.devicePin) {
     const { assertDeviceHonorsPin } =
@@ -46,13 +43,10 @@ export async function resolveRequestTargetDeviceSelection(
   options: RequestTargetDeviceOptions,
   flags: RequestTargetDeviceFlags = req.flags ?? {},
 ): ReturnType<typeof resolveTargetDeviceSelection> {
-  const selection = await resolveTargetDeviceSelection(
-    { ...flags, ...resolveLeaseScope(req) },
-    {
-      ...options,
-      webSession: req.internal?.webSession,
-    },
-  );
+  const selection = await resolveTargetDeviceSelection(resolveRequestDeviceFlags(req, flags), {
+    ...options,
+    webSession: req.internal?.webSession,
+  });
   assertWebSelectionHasIdentity(req, selection.device);
   if (req.meta?.devicePin) {
     const { assertDeviceHonorsPin } =
@@ -60,4 +54,17 @@ export async function resolveRequestTargetDeviceSelection(
     assertDeviceHonorsPin(req.meta.devicePin, selection.device, flags);
   }
   return selection;
+}
+
+function resolveRequestDeviceFlags(
+  req: DaemonRequest,
+  flags: RequestTargetDeviceFlags,
+): RequestTargetDeviceFlags {
+  const pinnedPlatform = req.meta?.devicePin?.selector.platform;
+  const platform = flags.platform;
+  return {
+    ...flags,
+    platform: platform && platform !== 'apple' ? platform : (pinnedPlatform ?? platform),
+    ...resolveLeaseScope(req),
+  };
 }
