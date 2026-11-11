@@ -168,8 +168,9 @@ export async function setAppleFoldableOrientation(
  * so one absolute dispatch of the target lands a quarter-turn away on the inner panel and looks
  * one command late. One bounded loop reads the lit panel and, until it shows the target,
  * dispatches `target - offset`: the offset comes from this command's last dispatch and a fresh
- * reading of the same panel once there is one, and from the measured table before that. A read
- * that names no single lit panel neither confirms nor dispatches; the loop waits for the next.
+ * reading of the same panel that moved since it, and from the measured table before that. A read
+ * that names no single lit panel, or a panel that has not moved since the last dispatch, neither
+ * confirms nor dispatches; the loop waits for the next read.
  * A repeat of the showing orientation is a read-only success. Nothing is kept between commands:
  * a fold in between can light the other panel, and the measured table covers that panel.
  */
@@ -185,11 +186,11 @@ async function setScopedFoldableOrientation(
     signal?.throwIfAborted();
     reading = await readLitPanel(device, helper, signal);
     if (reading?.rotation === rotation) return { orientation: rotation };
-    if (reading) {
+    if (reading && !awaitingDispatchEffect(dispatched, reading)) {
       const panelOffset = scopedPanelOffset(dispatched, reading);
       const value = pickerValueForTarget(rotation, panelOffset);
       await helper.rotate(value, signal);
-      dispatched = { value, displayId: reading.panel.displayId };
+      dispatched = { value, displayId: reading.panel.displayId, before: reading.rotation };
       emitScopedDispatch(device, rotation, attempt, value, panelOffset, reading);
     }
     await settleScopedRotation();
@@ -200,14 +201,32 @@ async function setScopedFoldableOrientation(
   throw scopedUnverifiedError(device, rotation, reading);
 }
 
-/** The picker value this command last dispatched, and the panel that was lit for it. */
-type ScopedDispatch = { value: DeviceRotation; displayId: number };
+/**
+ * The picker value this command last dispatched, the panel that was lit for it, and the
+ * rotation that panel showed before the dispatch.
+ */
+type ScopedDispatch = { value: DeviceRotation; displayId: number; before: DeviceRotation };
 
 type LitPanel = { panel: AppleDeviceDisplay; rotation: DeviceRotation };
 
 /**
- * The lit panel's picker offset. After this command dispatched to the same panel, the fresh
- * reading and that dispatch give the offset this panel really has. Before any dispatch, or when
+ * The same panel still shows what it showed before the last dispatch: the dispatch has not taken
+ * effect yet, or the app in front cannot show that orientation. Such a reading teaches no offset,
+ * so nothing is dispatched on it; the loop re-reads, and a panel that never follows ends the
+ * command unverified after one dispatch instead of cycling through picker values.
+ */
+function awaitingDispatchEffect(
+  dispatched: ScopedDispatch | undefined,
+  reading: LitPanel,
+): boolean {
+  return (
+    dispatched?.displayId === reading.panel.displayId && reading.rotation === dispatched.before
+  );
+}
+
+/**
+ * The lit panel's picker offset. After this command dispatched to the same panel and the panel
+ * moved, the fresh reading and that dispatch give the offset this panel really has. Before any dispatch, or when
  * a fold lit another panel mid-command, the measured offset of the panel now lit applies.
  */
 function scopedPanelOffset(
@@ -275,8 +294,8 @@ function scopedUnverifiedError(
  * The one lit panel and the rotation it shows, from one fresh panel-table read. Anything
  * less decided — an unreadable table, no lit panel, an unrecognized `rotN` — is no reading:
  * the rotation loop must not confirm, compensate or dispatch from a panel that is not showing.
- * On iPhone Duo the table reports both panels lit for a few seconds after a fold to closed, so
- * the first reads after that fold are no reading by design.
+ * On iPhone Duo the table reports both panels lit for a few seconds after a pose change in either
+ * direction, so the first reads after a fold or an unfold are no reading by design.
  */
 async function readLitPanel(
   device: DeviceInfo,

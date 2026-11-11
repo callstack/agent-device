@@ -67,8 +67,9 @@ export const IOS_FOLDABLE_ORIENTATION_READ_TIMEOUT_MS = 2_000;
  * How many read/dispatch rounds a scoped-set foldable rotation gets. A panel at its measured
  * picker offset lands in one dispatch, and a panel that disagrees with the measured offset in
  * two, the second calibrated by the first. The rest of the budget covers reads that name no
- * single lit panel, such as the few seconds after an iPhone Duo folds closed. Verified on
- * iPhone Duo with the settle delay below between a dispatch and the read that confirms it.
+ * single lit panel, such as the few seconds after an iPhone Duo folds or unfolds, and reads taken
+ * before a dispatch has landed. Exercised on an iPhone Duo simulator (iOS 27.3) with this loop and
+ * the settle delay below between a dispatch and the read that confirms it.
  */
 export const IOS_FOLDABLE_SCOPED_ORIENTATION_ATTEMPTS = 6;
 export const IOS_FOLDABLE_SCOPED_ORIENTATION_SETTLE_MS = 600;

@@ -194,6 +194,8 @@ function fakeScopedDuo(
     lastShown?: Partial<Record<DuoPanel, DeviceRotation>>;
     /** From this panel read on (1-based, the routing probe included), both panels report lit. */
     bothLitFromRead?: number;
+    /** How many panel reads after a picker event still show the panel as it was before it. */
+    hidLagReads?: number;
   },
 ) {
   const helpers: string[][] = [];
@@ -201,6 +203,8 @@ function fakeScopedDuo(
   const offsets = options.offsets ?? MEASURED_OFFSETS;
   let lit = options.lit;
   let pickerAngle = PANEL_ANGLE[options.picker];
+  let pendingPicker: number | undefined;
+  let lagReadsLeft = 0;
   let bothLitReads = 0;
   let panelReads = 0;
   const shown: Record<DuoPanel, number> = {
@@ -239,6 +243,12 @@ function fakeScopedDuo(
       helpers.push(mode);
       if (mode[0] === 'panels') {
         panelReads += 1;
+        if (lagReadsLeft > 0) lagReadsLeft -= 1;
+        else if (pendingPicker !== undefined) {
+          pickerAngle = pendingPicker;
+          pendingPicker = undefined;
+          show(lit);
+        }
         const bothLit =
           bothLitReads > 0 ||
           (options.bothLitFromRead !== undefined && panelReads >= options.bothLitFromRead);
@@ -247,7 +257,10 @@ function fakeScopedDuo(
         return { stdout: JSON.stringify({ version: 1, displays }), stderr: '', exitCode: 0 };
       }
       expect(mode[0]).toBe('rotate');
-      if (options.followsHid !== false) {
+      if (options.followsHid !== false && options.hidLagReads) {
+        pendingPicker = PANEL_ANGLE[mode[1]! as DeviceRotation];
+        lagReadsLeft = options.hidLagReads;
+      } else if (options.followsHid !== false) {
         pickerAngle = PANEL_ANGLE[mode[1]! as DeviceRotation];
         show(lit);
       }
@@ -447,7 +460,7 @@ test('an undecided final read does not report an earlier reading as the current 
   });
   expect((outcome as AppError).details).not.toHaveProperty('observedOrientation');
   expect((outcome as AppError).details).not.toHaveProperty('rawPanelOrientation');
-  expect(sim.rotations()).toEqual(['landscape-left', 'portrait-upside-down']);
+  expect(sim.rotations()).toEqual(['landscape-left']);
 });
 
 test('a scoped rotation to the orientation already showing dispatches nothing', async () => {
@@ -459,6 +472,19 @@ test('a scoped rotation to the orientation already showing dispatches nothing', 
   expect(sim.litScreen()).toBe('rot0');
   await expect(rotateScoped(sim, 'portrait')).resolves.toEqual({ orientation: 'portrait' });
   expect(sim.rotations()).toEqual([]);
+});
+
+test('a reading taken before the dispatch lands teaches nothing and is not followed by another dispatch', async () => {
+  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
+  // The first two panel reads after each picker event still show the panel as it was before it.
+  const sim = fakeScopedDuo(scoped, { lit: 'inner', picker: 'portrait', hidLagReads: 2 });
+  expect(sim.litScreen()).toBe('rot90');
+  await expect(rotateScoped(sim, 'landscape-left')).resolves.toEqual({
+    orientation: 'landscape-left',
+  });
+  // One exact dispatch (landscape-left - 90 = portrait-upside-down); the stale reads in between
+  // neither re-learned an offset nor dispatched again.
+  expect(sim.rotations()).toEqual(['portrait-upside-down']);
 });
 
 test('a scoped rotation the lit panel never shows is refused as unverified', async () => {
@@ -478,15 +504,9 @@ test('a scoped rotation the lit panel never shows is refused as unverified', asy
       rawPanelOrientation: 'rot90',
     },
   });
-  // Each dispatch re-derives the offset from the unchanged reading: six rounds, then refusal.
-  expect(sim.rotations()).toEqual([
-    'landscape-left',
-    'portrait-upside-down',
-    'landscape-right',
-    'portrait',
-    'landscape-left',
-    'portrait-upside-down',
-  ]);
+  // The panel never moved after the one dispatch, so it taught no offset and nothing more was
+  // dispatched: the loop re-read until its budget ended, then refused.
+  expect(sim.rotations()).toEqual(['landscape-left']);
   expect(sim.devicectl).toEqual([]);
 });
 
