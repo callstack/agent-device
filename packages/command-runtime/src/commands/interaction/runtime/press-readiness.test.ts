@@ -69,6 +69,7 @@ async function exercise(input: {
   changeTarget?: boolean;
   cancelInRead?: boolean;
   transportFailure?: boolean;
+  callerAbort?: boolean;
   nativeBudgetAbort?: boolean;
   expireInRead?: boolean;
   expireInRecheck?: boolean;
@@ -80,6 +81,12 @@ async function exercise(input: {
   const events: string[] = [];
   const points: Point[] = [];
   const requestId = `readiness:${Math.random()}`;
+  const caller = input.callerAbort ? new AbortController() : undefined;
+  const admittedAt = Date.now();
+  const resultDeadlineMs = admittedAt + (input.timeoutMs ?? 150);
+  const deadlineClock = input.resultDeadline
+    ? vi.spyOn(Date, 'now').mockReturnValue(admittedAt)
+    : undefined;
   const execute = async () => {
     let reads = 0;
     const device = createAgentDevice({
@@ -101,8 +108,19 @@ async function exercise(input: {
         readPressReadiness: async (context) => {
           events.push('read');
           reads++;
+          if (deadlineClock && reads === 1) {
+            context.signal!.addEventListener('abort', () => events.push('readiness-aborted'), {
+              once: true,
+            });
+          }
           if (input.cancelInRead) markRequestCanceled(requestId);
           if (input.transportFailure) throw new Error('native query failed');
+          if (caller && reads > 1) {
+            caller.abort(new Error('caller aborted'));
+            await new Promise<void>((resolve) => setTimeout(resolve, input.timeoutMs ?? 150));
+            events.push('caller-throw-after-budget');
+            context.signal!.throwIfAborted();
+          }
           if (input.nativeBudgetAbort && reads > 1) {
             context.signal!.throwIfAborted();
             await new Promise<void>((_resolve, reject) => {
@@ -113,6 +131,7 @@ async function exercise(input: {
           }
           const state = input.states[Math.min(reads - 1, input.states.length - 1)]!;
           events.push(state);
+          if (deadlineClock && reads === 1) deadlineClock.mockReturnValue(resultDeadlineMs - 1);
           if (input.expireInRead) {
             const realNow = Date.now;
             vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 10_000);
@@ -134,7 +153,7 @@ async function exercise(input: {
         },
       ]),
       policy: localCommandPolicy(),
-      signal: input.nativeBudgetAbort ? undefined : getRequestSignal(requestId),
+      signal: caller?.signal ?? (input.nativeBudgetAbort ? undefined : getRequestSignal(requestId)),
     });
     await device.interactions.press(
       input.kind === 'point'
@@ -148,7 +167,7 @@ async function exercise(input: {
   };
   const registration = input.resultDeadline
     ? registerRequestAbort(requestId, undefined, {
-        resultDeadlineMs: Date.now() + (input.timeoutMs ?? 150),
+        resultDeadlineMs,
       })
     : undefined;
   const run = input.resultDeadline
@@ -218,10 +237,23 @@ test('a replaced canonical target is refused by the one recheck after native rea
   expect(events).toContain('ready');
 });
 
-for (const failure of ['cancelInRead', 'transportFailure'] as const) {
+for (const failure of ['cancelInRead', 'transportFailure', 'callerAbort'] as const) {
   test(`${failure} cannot fall through to dispatch`, async () => {
-    const { run, points } = await exercise({ states: ['ready'], [failure]: true });
-    await expect(run).rejects.toMatchObject({
+    const { run, events, points } = await exercise({
+      states: failure === 'callerAbort' ? ['blocked'] : ['ready'],
+      resultDeadline: failure === 'callerAbort',
+      [failure]: true,
+    });
+    const error = await run.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    if (failure === 'callerAbort') {
+      expect(events).toContain('blocked');
+      expect(events).toContain('caller-throw-after-budget');
+    }
+    expect(points).toEqual([]);
+    expect(error).toMatchObject({
       details: {
         dispatched: 'no',
         ...(failure === 'cancelInRead'
@@ -229,7 +261,6 @@ for (const failure of ['cancelInRead', 'transportFailure'] as const) {
           : { reason: 'target_not_ready', readiness: 'native-read-failed' }),
       },
     });
-    expect(points).toEqual([]);
   });
 }
 
@@ -260,16 +291,22 @@ test('a final canonical recheck that crosses the absolute deadline cannot send i
 });
 
 test('a production result deadline preserves the last blocked native state', async () => {
-  const { run, points } = await exercise({
+  const { run, events, points } = await exercise({
     states: ['blocked'],
     resultDeadline: true,
     nativeBudgetAbort: true,
     timeoutMs: 150,
   });
-  await expect(run).rejects.toMatchObject({
+  const failure = await run.then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  expect(events).toContain('blocked');
+  expect(events.indexOf('readiness-aborted')).toBeGreaterThan(events.indexOf('blocked'));
+  expect(points).toEqual([]);
+  expect(failure).toMatchObject({
     details: { reason: 'target_not_ready', readiness: 'blocked', dispatched: 'no' },
   });
-  expect(points).toEqual([]);
 });
 
 test('a child moving into the old parent point uses the fresh canonically guarded point', async () => {

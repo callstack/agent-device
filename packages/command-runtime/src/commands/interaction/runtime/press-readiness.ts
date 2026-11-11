@@ -29,12 +29,20 @@ export async function guardPressReadiness(
     getRequestResultDeadlineMs(options.requestId) ?? Infinity,
   );
   const context = toBackendContext(runtime, options);
-  if (Number.isFinite(deadline)) {
-    const budget = AbortSignal.timeout(Math.max(0, Math.ceil(deadline - Date.now())));
-    context.signal = context.signal ? AbortSignal.any([context.signal, budget]) : budget;
+  const deadlineSignal = Number.isFinite(deadline)
+    ? AbortSignal.timeout(Math.max(0, Math.ceil(deadline - Date.now())))
+    : undefined;
+  if (deadlineSignal) {
+    context.signal = context.signal
+      ? AbortSignal.any([context.signal, deadlineSignal])
+      : deadlineSignal;
   }
   try {
-    return await awaitReadiness(runtime, options, params, original, { context, deadline });
+    return await awaitReadiness(runtime, options, params, original, {
+      context,
+      deadline,
+      deadlineSignal,
+    });
   } catch (error) {
     if (error instanceof AppError) throw discloseDispatch(error, 'no');
     throw refusal('native-read-failed', error);
@@ -46,9 +54,13 @@ async function awaitReadiness(
   options: CommandContext & { target: InteractionTarget },
   params: ResolveInteractionTargetParams,
   original: Exclude<ResolvedInteractionTarget, { kind: 'point' }>,
-  budget: { context: BackendCommandContext; deadline: number },
+  budget: {
+    context: BackendCommandContext;
+    deadline: number;
+    deadlineSignal: AbortSignal | undefined;
+  },
 ): Promise<ResolvedInteractionTarget> {
-  const { context, deadline } = budget;
+  const { context, deadline, deadlineSignal } = budget;
   let state: NativePressReadiness = 'missing';
   let waited = false;
   try {
@@ -73,7 +85,12 @@ async function awaitReadiness(
     assertBudget(context, deadline, state);
     return ready;
   } catch (error) {
-    if (!(error instanceof AppError) && Date.now() >= deadline) throw refusal(state, error);
+    if (
+      !(error instanceof AppError) &&
+      (Date.now() >= deadline ||
+        (deadlineSignal?.aborted && context.signal?.reason === deadlineSignal.reason))
+    )
+      throw refusal(state, error);
     throw error;
   }
 }
