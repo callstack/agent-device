@@ -180,9 +180,10 @@ test('the record fetch names the held lease and sends no lease header without on
   }
 });
 
-test.each(['.', '..'])(
-  'invalid remote session %s cannot write or remove outside records',
-  async (session) => {
+for (const session of ['.', '..']) {
+  test(`invalid remote session ${session} cannot write or remove outside records`, async (t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+
     const stateDir = mkdtempForTestSync('remote-diagnostics-contained-');
     const outside = path.join(
       stateDir,
@@ -192,12 +193,25 @@ test.each(['.', '..'])(
     );
     fs.mkdirSync(path.dirname(outside), { recursive: true });
     fs.writeFileSync(outside, 'sentinel');
-    const localized = await localizeRemoteDaemonError(
-      { ...remoteError(), diagnosticsRecord: { session, requestId: 'abc123' } },
-      { endpoint: { baseUrl: 'http://127.0.0.1:1', token: 'secret' }, stateDir },
-    );
-    assert.equal(localized.logPath, undefined);
-    assert.equal(typeof localized.logPathUnavailable, 'string');
-    assert.equal(fs.readFileSync(outside, 'utf8'), 'sentinel');
-  },
-);
+    let requests = 0;
+    const server = http.createServer((_req, res) => {
+      requests += 1;
+      res.writeHead(200, { 'content-type': 'application/x-ndjson' });
+      res.end(RECORD);
+    });
+    try {
+      const port = await listenOnLoopback(server);
+      const localized = await localizeRemoteDaemonError(
+        { ...remoteError(), diagnosticsRecord: { session, requestId: 'abc123' } },
+        { endpoint: { baseUrl: `http://127.0.0.1:${port}`, token: 'secret' }, stateDir },
+      );
+      assert.equal(fs.readFileSync(outside, 'utf8'), 'sentinel');
+      assert.equal(localized.logPath, undefined);
+      assert.equal(typeof localized.logPathUnavailable, 'string');
+      assert.equal(requests, 0);
+    } finally {
+      await closeLoopbackServer(server);
+      fs.rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+}
