@@ -59,19 +59,18 @@ async function awaitReadiness(
         original.preAction?.surfaceBundleId,
       );
       assertBudget(context, deadline, state);
-      if (state === 'ready') {
-        const ready = waited
-          ? await revalidate(runtime, { ...options, signal: context.signal }, params, original)
-          : original;
-        assertBudget(context, deadline, state);
-        return ready;
-      }
+      if (state === 'ready') break;
       if (state !== 'blocked' || !Number.isFinite(deadline)) throw refusal(state);
       // This is post-resolution readiness, never a wait for a selector that does not exist.
       if (params.expectedResolvedTarget || params.preresolvedTarget) throw refusal(state);
       await waitForNextRead(context.signal, Math.min(50, deadline - Date.now()));
       waited = true;
     }
+    const ready = waited
+      ? await revalidate(runtime, { ...options, signal: context.signal }, params, original)
+      : original;
+    assertBudget(context, deadline, state);
+    return ready;
   } catch (error) {
     if (!(error instanceof AppError) && Date.now() >= deadline) throw refusal(state, error);
     throw error;
