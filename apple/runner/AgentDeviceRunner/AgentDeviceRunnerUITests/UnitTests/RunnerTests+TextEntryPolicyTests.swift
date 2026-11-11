@@ -141,6 +141,18 @@ extension RunnerTests {
     XCTAssertFalse(Self.textClearContinues(clearedLength: 501, remainingLength: 640))
   }
 
+  // A secure field shows its placeholder when empty and a mask otherwise. A placeholder that is not a
+  // mask proves it empty; one that is itself a mask proves nothing, since text of its length shows it
+  // too (tester-army/e2e#1631).
+  func testMaskedTextShownTellsAnEmptyFieldFromAMaskPlaceholder() {
+    let bullets = { (count: Int) in String(repeating: "\u{2022}", count: count) }
+    XCTAssertEqual(Self.maskedTextShown(value: "", showsPlaceholder: false), .empty)
+    XCTAssertEqual(Self.maskedTextShown(value: "Password", showsPlaceholder: true), .empty)
+    XCTAssertEqual(Self.maskedTextShown(value: bullets(8), showsPlaceholder: true), .maskPlaceholder)
+    XCTAssertEqual(Self.maskedTextShown(value: bullets(3), showsPlaceholder: false), .text)
+    XCTAssertEqual(Self.maskedTextShown(value: "hunter2", showsPlaceholder: false), .text)
+  }
+
   // One read owns readability for every route: a secure field is unreadable whatever it reports,
   // a plain field is unreadable only while its value is a mask, and anything that is not a text
   // input has no text to read.

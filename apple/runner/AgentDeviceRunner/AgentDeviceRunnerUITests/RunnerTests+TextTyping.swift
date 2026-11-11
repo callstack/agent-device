@@ -123,7 +123,7 @@ extension RunnerTests {
         logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
         return TextEntryResult(verified: nil, repaired: false, expectedText: expectedText, observedText: nil)
       }
-      if currentText == nil || currentText?.isEmpty == false {
+      if textValueForClear(initialTarget?.attributes)?.isEmpty != true {
         let clearStartedAt = Date()
         try clearTextInput(app: app, reader: &reader)
         logTextEntryPhase(

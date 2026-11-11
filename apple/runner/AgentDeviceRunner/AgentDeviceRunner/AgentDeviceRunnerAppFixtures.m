@@ -45,6 +45,7 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 @property(nonatomic, strong) UILabel *navigationBackStatus;
 @property(nonatomic, strong) UILabel *maskedToggleStatus;
 @property(nonatomic, strong) UILabel *maskedDeliveryStatus;
+@property(nonatomic, strong) UILabel *maskedTextLengthStatus;
 @property(nonatomic, assign) NSUInteger maskedTogglePresses;
 @property(nonatomic, strong) UILabel *alertActionStatus;
 @property(nonatomic, strong) UILabel *alertActivationBusyAnswer;
@@ -409,6 +410,9 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
   if (self.maskedDeliveryStatus != nil) {
     self.maskedDeliveryStatus.text = [textField.text hasSuffix:@"not-a-secret-123"] ? @"delivered" : @"pending";
   }
+  if (self.maskedTextLengthStatus != nil) {
+    self.maskedTextLengthStatus.text = [NSString stringWithFormat:@"length=%lu", (unsigned long)textField.text.length];
+  }
   // A field whose app owns its value, the way a controlled React Native `TextInput` does. A burst
   // typed faster than the app renders loses the characters that arrived while a render was in
   // flight, and the field settles stable short of the request.
@@ -658,11 +662,19 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-submit-clears"];
     BOOL maskedValue =
         [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-masked-value"];
+    // A native secure field, which iOS clears on the first delete after it takes focus.
+    BOOL secureEntry =
+        [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-secure-entry"];
+    BOOL bulletPlaceholder =
+        [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-bullet-placeholder"];
+    BOOL refusesFirstFocus =
+        [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-refuses-first-focus"];
     BOOL countsValueReads =
         [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-counts-value-reads"];
     BOOL witnessesReplacement =
         [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-witness"];
     UITextField *textField;
+    AgentDeviceSecureEntryField *secureField = nil;
     if (digitCountValue) {
       textField = [[AgentDeviceDigitCountTextField alloc] init];
     } else if (digitGroupingValue) {
@@ -674,6 +686,12 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       textField = [[AgentDeviceSubmitClearingTextField alloc] init];
     } else if (maskedValue) {
       textField = [[AgentDeviceMaskedTextField alloc] init];
+    } else if (secureEntry) {
+      secureField = [[AgentDeviceSecureEntryField alloc] init];
+      secureField.secureTextEntry = YES;
+      secureField.reportsPlaceholderAsValue = bulletPlaceholder;
+      secureField.refusesFirstFocus = refusesFirstFocus;
+      textField = secureField;
     } else if (witnessesReplacement) {
       textField = [[AgentDeviceTextEntryWitnessField alloc] init];
     } else if (countsValueReads) {
@@ -819,9 +837,13 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [neighbour.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
       ]];
     }
-    if (maskedValue) {
+    if (maskedValue || secureEntry) {
       if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-prefilled"]) {
         textField.text = @"stale-secret";
+      }
+      // While empty, the field then reads the same as one holding eight characters.
+      if (bulletPlaceholder) {
+        textField.placeholder = @"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
       }
       // The show/hide toggle sits over the field's right edge, where the runner's caret edge-tap
       // lands. Counting its presses tells the test whether a repair reached for the field again.
@@ -853,6 +875,28 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [self.maskedDeliveryStatus.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [self.maskedDeliveryStatus.topAnchor constraintEqualToAnchor:self.maskedToggleStatus.bottomAnchor constant:8],
       ]];
+      // The text's length, which a mask hides: an empty field can show as many bullets as a full one.
+      self.maskedTextLengthStatus = [[UILabel alloc] init];
+      self.maskedTextLengthStatus.accessibilityIdentifier = @"agent-device-masked-text-length";
+      self.maskedTextLengthStatus.text = [NSString stringWithFormat:@"length=%lu", (unsigned long)textField.text.length];
+      self.maskedTextLengthStatus.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:self.maskedTextLengthStatus];
+      [NSLayoutConstraint activateConstraints:@[
+        [self.maskedTextLengthStatus.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.maskedTextLengthStatus.topAnchor constraintEqualToAnchor:self.maskedDeliveryStatus.bottomAnchor constant:8],
+      ]];
+      if (secureField) {
+        UILabel *counts = [[UILabel alloc] init];
+        counts.accessibilityIdentifier = @"agent-device-secure-entry-counts";
+        counts.text = @"deletes=0 taps=0";
+        counts.translatesAutoresizingMaskIntoConstraints = NO;
+        [self.view addSubview:counts];
+        [NSLayoutConstraint activateConstraints:@[
+          [counts.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+          [counts.topAnchor constraintEqualToAnchor:self.maskedTextLengthStatus.bottomAnchor constant:8],
+        ]];
+        secureField.countLabel = counts;
+      }
       [self updateMaskedToggleStatus];
     }
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-app-owned-value"]) {
