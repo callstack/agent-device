@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { runCmdSync } from '@agent-device/host-kit/command';
+import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 
 test.each(['canonical', 'directory-symlink'])(
   'the HTTP child reports malformed input through a %s path',
