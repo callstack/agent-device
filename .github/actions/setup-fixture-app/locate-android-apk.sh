@@ -3,7 +3,7 @@ set -euo pipefail
 
 DEST="${1:?fixture directory is required}"
 SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-BUILD_TOOLS="$SDK_ROOT/build-tools/36.0.0"
+BUILD_TOOLS="$SDK_ROOT/build-tools/${AGENT_DEVICE_ANDROID_BUILD_TOOLS:?AGENT_DEVICE_ANDROID_BUILD_TOOLS must name the build-tools version setup-android-sdk installed}"
 
 APKS=()
 while IFS= read -r apk; do

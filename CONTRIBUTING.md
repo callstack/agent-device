@@ -84,7 +84,8 @@ when a running daemon needs to pick up a new TypeScript build.
 
 That Android leg needs `AGENT_DEVICE_ANDROID_BUILD_TOOLS` naming the build-tools version to compile
 with. An unpinned build takes the newest version installed on the machine, which CI refuses to do,
-so name the version the CI lanes install and the published helper matches the CI-built one.
+so name the version `.github/actions/setup-android-sdk` installs and the published helper matches
+the CI-built one.
 
 `pnpm package:npm` is a release guard, not a routine development command. Use the specific commands
 above while iterating.

@@ -48,9 +48,7 @@ test('producer, consumers, upload, and concurrency use the canonical platform-sc
   assert.match(fetchStep.run, /"\$\{\{ inputs\.platform \}\}" "\$DEST"/);
   assert.match(fetchArtifact, /resolve-artifact-name\.sh" "\$PLATFORM"/);
   assert.match(fetchArtifact, /find "\$REPOSITORY" "\$NAME" "\$EXPECTED_HEAD_SHA"/);
-  assert.match(androidBuildToolsStep.run, /build-tools;36\.0\.0/);
-  assert.match(androidBuildToolsStep.run, /apksigner/);
-  assert.match(androidBuildToolsStep.run, /set \+o pipefail/);
+  assert.equal(androidBuildToolsStep.uses, './.github/actions/setup-android-sdk');
   assert.match(androidFallbackStep.if, /inputs\.platform == 'android'/);
   assert.match(androidFallbackStep.run, /expo prebuild --platform android --no-install/);
   assert.match(androidFallbackStep.run, /:app:assembleRelease/);
@@ -237,7 +235,7 @@ test('Android APK locator emits an exact APK path and package id, and rejects co
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-android-apk-'));
   t.after(() => fs.rmSync(tempRoot, { force: true, recursive: true }));
   const apkDir = path.join(tempRoot, 'apk');
-  const binDir = path.join(tempRoot, 'build-tools', '36.0.0');
+  const binDir = path.join(tempRoot, 'build-tools', 'test-build-tools');
   const outputPath = path.join(tempRoot, 'output');
   fs.mkdirSync(apkDir);
   fs.mkdirSync(binDir, { recursive: true });
@@ -253,12 +251,13 @@ test('Android APK locator emits an exact APK path and package id, and rejects co
     ].join('\n'),
   );
   fs.chmodSync(path.join(binDir, 'aapt'), 0o755);
-  const runLocator = (packageId, aaptFails = false) =>
+  const runLocator = (packageId, aaptFails = false, buildTools = 'test-build-tools') =>
     spawnSync('bash', ['.github/actions/setup-fixture-app/locate-android-apk.sh', apkDir], {
       cwd: process.cwd(),
       encoding: 'utf8',
       env: {
         ...process.env,
+        AGENT_DEVICE_ANDROID_BUILD_TOOLS: buildTools,
         ANDROID_HOME: tempRoot,
         GITHUB_OUTPUT: outputPath,
         PATH: `${binDir}:${process.env.PATH}`,
@@ -288,12 +287,16 @@ test('Android APK locator emits an exact APK path and package id, and rejects co
   result = runLocator('com.example.fixture', true);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /it may be malformed/);
+
+  result = runLocator('com.example.fixture', false, '');
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /AGENT_DEVICE_ANDROID_BUILD_TOOLS must name/);
 });
 
 test('Android APK repack signs the output and preserves its package id', (t) => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-android-repack-'));
   t.after(() => fs.rmSync(tempRoot, { force: true, recursive: true }));
-  const buildTools = path.join(tempRoot, 'build-tools', '36.0.0');
+  const buildTools = path.join(tempRoot, 'build-tools', 'test-build-tools');
   const binDir = path.join(tempRoot, 'bin');
   const source = path.join(tempRoot, 'source.apk');
   const output = path.join(tempRoot, 'output', 'fixture.apk');
@@ -347,7 +350,7 @@ test('Android APK repack signs the output and preserves its package id', (t) => 
     fs.chmodSync(executable, 0o755);
   }
 
-  const runRepack = (repackOutput, outputDigest = 'source-digest') =>
+  const runRepack = (repackOutput, outputDigest = 'source-digest', buildToolsEnv = {}) =>
     spawnSync(
       'bash',
       ['.github/actions/setup-fixture-app/repack-android-apk.sh', source, repackOutput],
@@ -356,6 +359,9 @@ test('Android APK repack signs the output and preserves its package id', (t) => 
         encoding: 'utf8',
         env: {
           ...process.env,
+          AGENT_DEVICE_ANDROID_BUILD_TOOLS: 'test-build-tools',
+          CI: 'true',
+          ...buildToolsEnv,
           ANDROID_HOME: tempRoot,
           PATH: `${binDir}:${process.env.PATH}`,
           TEST_COMMAND_LOG: commandLog,
@@ -378,6 +384,18 @@ test('Android APK repack signs the output and preserves its package id', (t) => 
   const mismatch = runRepack(mismatchedOutput, 'different-digest');
   assert.notEqual(mismatch.status, 0);
   assert.match(mismatch.stderr, /did not preserve the source signing certificate/);
+
+  const unpinned = runRepack(path.join(tempRoot, 'output', 'unpinned.apk'), 'source-digest', {
+    AGENT_DEVICE_ANDROID_BUILD_TOOLS: '',
+  });
+  assert.notEqual(unpinned.status, 0);
+  assert.match(unpinned.stderr, /AGENT_DEVICE_ANDROID_BUILD_TOOLS must name/);
+
+  const local = runRepack(path.join(tempRoot, 'output', 'local.apk'), 'source-digest', {
+    AGENT_DEVICE_ANDROID_BUILD_TOOLS: '',
+    CI: '',
+  });
+  assert.equal(local.status, 0, local.stderr);
 });
 
 test('producer maps each platform to its resolved lookup and matrix artifact name, and gates has-work when both are cached', (t) => {

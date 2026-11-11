@@ -36,19 +36,15 @@ runs:
       run: |
         VERSION="$(node -p 'require("./package.json").version')"
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-        echo "value=${{ hashFiles('android/snapshot-helper/AndroidManifest.xml', 'android/snapshot-helper/debug.keystore', 'android/snapshot-helper/src/**', 'android/ime-helper/AndroidManifest.xml', 'android/ime-helper/res/**', 'android/ime-helper/src/**', 'scripts/build-android-helper.sh', 'scripts/package-android-helper.sh', '.github/actions/setup-android-replay-host/action.yml') }}" >> "$GITHUB_OUTPUT"
+        echo "value=${{ hashFiles('android/snapshot-helper/AndroidManifest.xml', 'android/snapshot-helper/debug.keystore', 'android/snapshot-helper/src/**', 'android/ime-helper/AndroidManifest.xml', 'android/ime-helper/res/**', 'android/ime-helper/src/**', 'scripts/build-android-helper.sh', 'scripts/package-android-helper.sh', '.github/actions/setup-android-replay-host/action.yml', '.github/actions/setup-android-sdk/action.yml') }}" >> "$GITHUB_OUTPUT"
       shell: bash
 
     # The helper build refuses to guess its build-tools version on CI, and that version decides
-    # the APK bytes, so both cache keys name it as well.
-    - name: Declare the pinned Android build tools
+    # the APK bytes, so both cache keys name it as well. The install is skipped when the runner
+    # already has the pinned packages; the fixture APK steps need them on a cache hit too.
+    - name: Setup Android SDK
       if: inputs.package-helpers == 'true'
-      id: android-build-tools
-      run: |
-        BUILD_TOOLS_VERSION=36.0.0
-        echo "AGENT_DEVICE_ANDROID_BUILD_TOOLS=$BUILD_TOOLS_VERSION" >> "$GITHUB_ENV"
-        echo "version=$BUILD_TOOLS_VERSION" >> "$GITHUB_OUTPUT"
-      shell: bash
+      uses: ./.github/actions/setup-android-sdk
 
     - name: Restore packaged Android helpers
       if: inputs.package-helpers == 'true'
@@ -58,23 +54,7 @@ runs:
         path: |
           android/snapshot-helper/dist
           android/ime-helper/dist
-        key: android-helpers-${{ runner.os }}-${{ runner.arch }}-api36-bt${{ steps.android-build-tools.outputs.version }}-v${{ steps.android-helper-source.outputs.version }}-${{ steps.android-helper-source.outputs.value }}
-
-    - name: Install Android helper SDK packages
-      if: inputs.package-helpers == 'true' && steps.android-helpers-cache.outputs.cache-hit != 'true'
-      run: |
-        SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-        SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-        if [ ! -x "$SDKMANAGER" ]; then
-          SDKMANAGER="$SDK_ROOT/cmdline-tools/bin/sdkmanager"
-        fi
-        if [ ! -x "$SDKMANAGER" ]; then
-          echo "sdkmanager not found under $SDK_ROOT" >&2
-          exit 1
-        fi
-        yes | "$SDKMANAGER" --licenses >/dev/null || true
-        "$SDKMANAGER" "platforms;android-36" "build-tools;$AGENT_DEVICE_ANDROID_BUILD_TOOLS"
-      shell: bash
+        key: android-helpers-${{ runner.os }}-${{ runner.arch }}-api36-bt${{ env.AGENT_DEVICE_ANDROID_BUILD_TOOLS }}-v${{ steps.android-helper-source.outputs.version }}-${{ steps.android-helper-source.outputs.value }}
 
     - name: Package npm-bundled Android helpers
       if: inputs.package-helpers == 'true' && steps.android-helpers-cache.outputs.cache-hit != 'true'
@@ -97,4 +77,4 @@ runs:
         path: |
           android/snapshot-helper/dist
           android/ime-helper/dist
-        key: android-helpers-${{ runner.os }}-${{ runner.arch }}-api36-bt${{ steps.android-build-tools.outputs.version }}-v${{ steps.android-helper-source.outputs.version }}-${{ steps.android-helper-source.outputs.value }}
+        key: android-helpers-${{ runner.os }}-${{ runner.arch }}-api36-bt${{ env.AGENT_DEVICE_ANDROID_BUILD_TOOLS }}-v${{ steps.android-helper-source.outputs.version }}-${{ steps.android-helper-source.outputs.value }}
