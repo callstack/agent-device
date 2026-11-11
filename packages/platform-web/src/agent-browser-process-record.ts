@@ -6,6 +6,7 @@ import { withoutCommandExecutorOverride } from '@agent-device/host-kit/command';
 import {
   expandProcessTree,
   hostProcessId,
+  hostNodeExecutablePath,
   isProcessAlive,
   listHostProcesses,
   readHostProcessIdentityObservationsAsync,
@@ -219,7 +220,8 @@ function isChromeLikeCommand(command: string): boolean {
 type ManagedFleetOwnership = {
   launchMarkers: string[];
   browserHomeRoots: string[];
-  installRoots: string[];
+  daemonEntries: string[];
+  entryScript?: string;
 };
 
 function managedFleetOwnership(status: AgentBrowserToolStatus): ManagedFleetOwnership {
@@ -230,9 +232,22 @@ function managedFleetOwnership(status: AgentBrowserToolStatus): ManagedFleetOwne
   return {
     launchMarkers: installs.map(agentBrowserChromeLaunchMarker),
     browserHomeRoots: uniqueStrings(installs.flatMap(managedBrowserHomeMarkers)),
-    installRoots: installs.map(
-      (install) => `${normalizePathSeparators(path.resolve(install.installDir))}/`,
-    ),
+    entryScript: status.entryScript
+      ? normalizePathSeparators(path.resolve(status.entryScript))
+      : undefined,
+    daemonEntries: installs.flatMap((install) => {
+      const bin = path.join(install.installDir, 'package', 'node_modules', 'agent-browser', 'bin');
+      return [
+        'agent-browser.js',
+        'agent-browser-darwin-arm64',
+        'agent-browser-darwin-x64',
+        'agent-browser-linux-arm64',
+        'agent-browser-linux-x64',
+        'agent-browser-linux-musl-arm64',
+        'agent-browser-linux-musl-x64',
+        'agent-browser-win32-x64.exe',
+      ].map((name) => normalizePathSeparators(path.resolve(bin, name)));
+    }),
   };
 }
 
@@ -258,9 +273,24 @@ function matchDaemonProcess(
   if (processInfo.pid === hostProcessId() || isChromeLikeCommand(processInfo.command))
     return undefined;
   const command = normalizePathSeparators(processInfo.command);
-  return ownership.installRoots.some((root) => command.includes(root))
-    ? { process: processInfo, reason: 'agent-browser-daemon' }
-    : undefined;
+  const node = consumeCommandEntry(command, normalizePathSeparators(hostNodeExecutablePath()));
+  const matched = [
+    ...ownership.daemonEntries,
+    ...(ownership.entryScript ? [ownership.entryScript] : []),
+  ].some((entry) => {
+    const script = entry.endsWith('.js');
+    return consumeCommandEntry(script ? (node ?? '') : command, entry) !== undefined;
+  });
+  return matched ? { process: processInfo, reason: 'agent-browser-daemon' } : undefined;
+}
+
+function consumeCommandEntry(command: string, entry: string): string | undefined {
+  for (const candidate of [entry, `"${entry}"`, `'${entry}'`]) {
+    if (!command.startsWith(candidate)) continue;
+    const rest = command.slice(candidate.length);
+    if (!rest || /^\s/.test(rest)) return rest.trimStart();
+  }
+  return undefined;
 }
 
 function managedBrowserHomeMarkers(

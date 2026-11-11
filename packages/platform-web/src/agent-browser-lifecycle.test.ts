@@ -523,6 +523,44 @@ test('recording the fleet owns the recordable agent-browser daemon', async () =>
   }
 });
 
+test('recording requires a managed executable or the Node wrapper as the entry', async () => {
+  const stateDir = mkdtempForTestSync('agent-device web life-');
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
+    const bin = path.join(status.packageDir, 'bin');
+    const binary = path.join(bin, 'agent-browser-darwin-arm64');
+    const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
+    const commands = [
+      `"${process.execPath}" "${status.entryScript}" open`,
+      `"${binary}"`,
+      `tail -f "${status.entryScript}"`,
+      `vim "${status.entryScript}"`,
+      `grep agent-browser "${status.entryScript}"`,
+      `${process.execPath} /tmp/other.js "${status.entryScript}"`,
+      `pnpm --dir "${status.installDir}" start`,
+      `"${binary}-other"`,
+    ];
+    mockProcessList(commands.map((command, index) => `  ${101 + index}     1 ${command}`));
+    const summary = await recordManagedAgentBrowserProcesses(status, store);
+    expect(summary.pids).toEqual([101, 102]);
+    expect(store.replace).toHaveBeenCalledWith(
+      { kind: 'daemon' },
+      [101, 102].map((pid) => ({
+        pid,
+        startTime: `start-${pid}`,
+        command: `command-${pid}`,
+        purpose: 'managed-web-browser',
+      })),
+    );
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
 function installPreviousVersionFleet(stateDir: string) {
   const previous = managedInstallPaths(stateDir, '0.27.1');
   fs.mkdirSync(previous.installDir, { recursive: true });
