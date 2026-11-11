@@ -163,15 +163,15 @@ export async function setAppleFoldableOrientation(
 
 /**
  * Rotates a foldable simulator in a scoped set, where only the fold helper can dispatch and
- * only its panel table can confirm. Measured on iPhone Duo, the guest applies each
- * `orientation-picker-control` event relatively — the lit panel turns by (new value -
- * previous picker value), i.e. it reads picker + a fixed per-panel offset — so one absolute
- * dispatch lands a quarter-turn away and looks one command late. This loop reads the lit
- * panel, dispatches the picker value {@link nextPickerValue} chooses for the turn still
- * needed, and re-reads until the panel table reports the target: at most two dispatches once
- * the first one calibrates the guest's picker state. A repeat of the showing orientation is
- * a read-only success. The picker state is deliberately not kept between commands: a fold in
- * between can light the other panel, and recalibrating costs one dispatch.
+ * only its panel table can confirm. Measured on iPhone Duo, the lit panel reads the
+ * `orientation-picker-control` value plus a fixed per-panel offset (outer panel 0, inner
+ * panel +90), so one absolute dispatch of the target lands a quarter-turn away on the inner
+ * panel and looks one command late. This loop reads the lit panel, dispatches the picker
+ * value {@link nextPickerValue} chooses, and re-reads until the panel table reports the
+ * target: one dispatch when the lit panel's offset is the measured one, at most two when the
+ * first dispatch has to calibrate it. A repeat of the showing orientation is a read-only
+ * success. The picker state is deliberately not kept between commands: a fold in between can
+ * light the other panel, whose offset differs, and the measured offset covers that case.
  */
 async function setScopedFoldableOrientation(
   device: DeviceInfo,
@@ -291,7 +291,9 @@ function scopedUnverifiedError(
 /**
  * The one lit panel and the rotation it shows, from one fresh panel-table read. Anything
  * less decided — an unreadable table, no lit panel, an unrecognized `rotN` — is no reading:
- * the rotation loop must not confirm or compensate from a panel that is not showing.
+ * the rotation loop must not confirm or compensate from a panel that is not showing. On
+ * iPhone Duo the table reports both panels lit for a few seconds after a fold to closed, so
+ * the first reads after that fold are no reading by design.
  */
 async function readLitPanel(
   device: DeviceInfo,

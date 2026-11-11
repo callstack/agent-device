@@ -153,12 +153,16 @@ test('a physical device keeps the runner rotation without a CoreDevice probe', a
 });
 
 /**
- * A scoped-set Duo as measured on the device: the guest does not treat the
- * `orientation-picker-control` value as absolute. Each picker event rotates the lit panel by
- * (new value - previous picker value), so the lit panel reads `picker + K` for a fixed
- * per-panel offset K. Angles follow CADisplay `rotN`: portrait 0, landscape-right 90,
- * portrait-upside-down 180, landscape-left 270. The dark panel reports a misleading rotation:
- * only the lit panel's `currentOrientation` may confirm a rotation.
+ * A scoped-set Duo as measured on the device (iOS 27.3): the guest keeps one
+ * `orientation-picker-control` value, and the lit panel reads that value plus a fixed
+ * per-panel offset — outer 0, inner +90 — so successive events look relative on the inner
+ * panel. The picker survives a fold: the panel that lights afterwards reads it plus its own
+ * offset. A panel whose foreground UI cannot show `picker + offset` keeps the rotation it last
+ * showed (measured: after a fold left the picker at the upside-down value, the outer panel kept
+ * landscape-left). For `bothLitReads` panel reads after a fold to closed, both panels report
+ * lit, as the Duo's table does for a few seconds. Angles follow CADisplay `rotN`: portrait 0,
+ * landscape-right 90, portrait-upside-down 180, landscape-left 270. A dark panel reports a
+ * misleading rotation: only the lit panel's `currentOrientation` may confirm a rotation.
  */
 const PANEL_ANGLE: Record<DeviceRotation, number> = {
   portrait: 0,
@@ -166,25 +170,52 @@ const PANEL_ANGLE: Record<DeviceRotation, number> = {
   'portrait-upside-down': 180,
   'landscape-left': 270,
 };
+const MEASURED_OFFSETS = { inner: 90, outer: 0 } as const;
+
+type DuoPanel = 'inner' | 'outer';
+
+function rotationAtAngle(angle: number): DeviceRotation {
+  const rotation = (Object.keys(PANEL_ANGLE) as DeviceRotation[]).find(
+    (candidate) => PANEL_ANGLE[candidate] === ((angle % 360) + 360) % 360,
+  );
+  return rotation!;
+}
 
 function fakeScopedDuo(
   device: DeviceInfo,
   options: {
-    lit: 'inner' | 'outer';
+    lit: DuoPanel;
     picker: DeviceRotation;
-    offsets: { inner: number; outer: number };
+    offsets?: { inner: number; outer: number };
     followsHid?: boolean;
+    /** Rotations a panel's foreground UI cannot show; the panel keeps its last rotation. */
+    cannotShow?: Partial<Record<DuoPanel, readonly DeviceRotation[]>>;
+    /** The rotation a dark panel last showed, for the fold that lights it. */
+    lastShown?: Partial<Record<DuoPanel, DeviceRotation>>;
   },
 ) {
   const helpers: string[][] = [];
   const devicectl: string[] = [];
+  const offsets = options.offsets ?? MEASURED_OFFSETS;
+  let lit = options.lit;
   let pickerAngle = PANEL_ANGLE[options.picker];
-  let litScreenAngle = (pickerAngle + options.offsets[options.lit]) % 360;
-  const panel = (kind: 'inner' | 'outer') => {
-    const lit = kind === options.lit;
+  let bothLitReads = 0;
+  let panelReads = 0;
+  const shown: Record<DuoPanel, number> = {
+    inner: PANEL_ANGLE[options.lastShown?.inner ?? 'portrait'],
+    outer: PANEL_ANGLE[options.lastShown?.outer ?? 'portrait'],
+  };
+  /** The panel shows `picker + offset` unless its foreground UI cannot. */
+  const show = (kind: DuoPanel) => {
+    const angle = (pickerAngle + offsets[kind]) % 360;
+    if (!options.cannotShow?.[kind]?.includes(rotationAtAngle(angle))) shown[kind] = angle;
+  };
+  show(lit);
+  const panel = (kind: DuoPanel, bothLit: boolean) => {
+    const isLit = bothLit || kind === lit;
     return {
-      backlightState: lit ? 'activeOn' : 'off',
-      currentOrientation: lit ? `rot${litScreenAngle}` : 'rot180',
+      backlightState: isLit ? 'activeOn' : 'off',
+      currentOrientation: isLit ? `rot${shown[kind]}` : 'rot180',
       displayId: kind === 'outer' ? 1 : 3,
       name: kind === 'outer' ? 'LCD' : 'LCD-1',
       nativeSize: kind === 'outer' ? [1398, 2034] : [2007, 2853],
@@ -205,14 +236,16 @@ function fakeScopedDuo(
       const mode = spawn.slice(3);
       helpers.push(mode);
       if (mode[0] === 'panels') {
-        const displays = [panel('outer'), panel('inner')];
+        panelReads += 1;
+        const bothLit = bothLitReads > 0;
+        if (bothLit) bothLitReads -= 1;
+        const displays = [panel('outer', bothLit), panel('inner', bothLit)];
         return { stdout: JSON.stringify({ version: 1, displays }), stderr: '', exitCode: 0 };
       }
       expect(mode[0]).toBe('rotate');
       if (options.followsHid !== false) {
-        const nextPickerAngle = PANEL_ANGLE[mode[1]! as DeviceRotation];
-        litScreenAngle = (litScreenAngle + nextPickerAngle - pickerAngle + 360) % 360;
-        pickerAngle = nextPickerAngle;
+        pickerAngle = PANEL_ANGLE[mode[1]! as DeviceRotation];
+        show(lit);
       }
       return { stdout: '', stderr: '', exitCode: 0 };
     },
@@ -220,8 +253,16 @@ function fakeScopedDuo(
   return {
     helpers,
     devicectl,
+    panelReads: () => panelReads,
     rotations: () => helpers.filter((mode) => mode[0] === 'rotate').map((mode) => mode[1]!),
-    litScreen: () => `rot${litScreenAngle}`,
+    litScreen: () => `rot${shown[lit]}`,
+    /** A pose change made outside the rotation: the picker stays, the other panel lights. */
+    fold: (kind: DuoPanel, foldOptions: { bothLitReads?: number } = {}) => {
+      lit = kind;
+      bothLitReads = foldOptions.bothLitReads ?? 0;
+      show(kind);
+      helpers.length = 0;
+    },
     rotate: (rotation: DeviceRotation) =>
       withAppleToolProvider(provider, () =>
         createAppleInteractor(device, {}, createLiveTestHostEnvironment()).setOrientation(rotation),
@@ -250,15 +291,12 @@ async function rotateScoped(
 test('a foldable simulator in a scoped set rotates on the first command, confirmed by the panel table', async () => {
   const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
   // The inner panel lights at rot90 while the picker sits at portrait (K = +90, measured).
-  const sim = fakeScopedDuo(scoped, {
-    lit: 'inner',
-    picker: 'portrait',
-    offsets: { inner: 90, outer: 0 },
-  });
+  const sim = fakeScopedDuo(scoped, { lit: 'inner', picker: 'portrait' });
   expect(sim.litScreen()).toBe('rot90');
   await expect(rotateScoped(sim, 'portrait')).resolves.toEqual({ orientation: 'portrait' });
   expect(sim.litScreen()).toBe('rot0');
-  expect(sim.rotations().length).toBeLessThanOrEqual(2);
+  // The measured inner offset makes the first dispatch exact: portrait - 90 is landscape-left.
+  expect(sim.rotations()).toEqual(['landscape-left']);
   expect(sim.devicectl).toEqual([]);
   expect(mockRunner).not.toHaveBeenCalled();
 });
@@ -268,7 +306,6 @@ test('a scoped rotation to landscape-left dispatches the upside-down picker valu
   const sim = fakeScopedDuo(scoped, {
     lit: 'inner',
     picker: 'landscape-left',
-    offsets: { inner: 90, outer: 0 },
   });
   expect(sim.litScreen()).toBe('rot0');
   await expect(rotateScoped(sim, 'landscape-left')).resolves.toEqual({
@@ -279,7 +316,19 @@ test('a scoped rotation to landscape-left dispatches the upside-down picker valu
   expect(sim.devicectl).toEqual([]);
 });
 
-test('a scoped rotation on the outer panel converges with that panel offset', async () => {
+test('the outer panel reads the picker value itself, so its first dispatch is the target', async () => {
+  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
+  const sim = fakeScopedDuo(scoped, { lit: 'outer', picker: 'portrait' });
+  expect(sim.litScreen()).toBe('rot0');
+  for (const rotation of ['landscape-left', 'landscape-right', 'portrait'] as const) {
+    sim.helpers.length = 0;
+    await expect(rotateScoped(sim, rotation)).resolves.toEqual({ orientation: rotation });
+    expect(sim.rotations()).toEqual([rotation]);
+  }
+  expect(sim.devicectl).toEqual([]);
+});
+
+test('a panel whose offset differs from the measured one still converges', async () => {
   const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
   const sim = fakeScopedDuo(scoped, {
     lit: 'outer',
@@ -294,12 +343,62 @@ test('a scoped rotation on the outer panel converges with that panel offset', as
   expect(sim.devicectl).toEqual([]);
 });
 
+test('the picker survives a fold in both directions and each panel adds its own offset', async () => {
+  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
+  // Measured sequence: the inner panel at rot0 with the picker at landscape-left.
+  const sim = fakeScopedDuo(scoped, { lit: 'inner', picker: 'landscape-left' });
+  expect(sim.litScreen()).toBe('rot0');
+
+  sim.fold('outer');
+  expect(sim.litScreen()).toBe('rot270');
+  await expect(rotateScoped(sim, 'portrait')).resolves.toEqual({ orientation: 'portrait' });
+  expect(sim.rotations()).toEqual(['portrait']);
+
+  sim.fold('inner');
+  expect(sim.litScreen()).toBe('rot90');
+  await expect(rotateScoped(sim, 'landscape-left')).resolves.toEqual({
+    orientation: 'landscape-left',
+  });
+  expect(sim.rotations()).toEqual(['portrait-upside-down']);
+});
+
+test('a fold that leaves the picker where the outer panel cannot follow still lands in one dispatch', async () => {
+  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
+  // Measured: the inner panel at landscape-left needs the picker at the upside-down value; the
+  // outer panel's foreground UI has no upside-down, so after the fold it kept landscape-left.
+  const sim = fakeScopedDuo(scoped, {
+    lit: 'inner',
+    picker: 'portrait-upside-down',
+    cannotShow: { outer: ['portrait-upside-down'] },
+    lastShown: { outer: 'landscape-left' },
+  });
+  expect(sim.litScreen()).toBe('rot270');
+  sim.fold('outer');
+  expect(sim.litScreen()).toBe('rot270');
+  await expect(rotateScoped(sim, 'landscape-right')).resolves.toEqual({
+    orientation: 'landscape-right',
+  });
+  expect(sim.rotations()).toEqual(['landscape-right']);
+});
+
+test('reads with both panels lit after a fold to closed confirm nothing', async () => {
+  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
+  const sim = fakeScopedDuo(scoped, { lit: 'inner', picker: 'landscape-left' });
+  // The outer panel already shows the target, but the table names two lit panels for two reads.
+  sim.fold('outer', { bothLitReads: 2 });
+  expect(sim.litScreen()).toBe('rot270');
+  await expect(rotateScoped(sim, 'landscape-left')).resolves.toEqual({
+    orientation: 'landscape-left',
+  });
+  expect(sim.panelReads()).toBeGreaterThanOrEqual(3);
+  expect(sim.rotations()).toEqual(['landscape-left']);
+});
+
 test('a scoped rotation to the orientation already showing dispatches nothing', async () => {
   const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
   const sim = fakeScopedDuo(scoped, {
     lit: 'inner',
     picker: 'landscape-left',
-    offsets: { inner: 90, outer: 0 },
   });
   expect(sim.litScreen()).toBe('rot0');
   await expect(rotateScoped(sim, 'portrait')).resolves.toEqual({ orientation: 'portrait' });
@@ -311,7 +410,6 @@ test('a scoped rotation the panel table never reports is refused as unverified',
   const sim = fakeScopedDuo(scoped, {
     lit: 'inner',
     picker: 'portrait',
-    offsets: { inner: 90, outer: 0 },
     followsHid: false,
   });
   await expect(rotateScoped(sim, 'portrait')).resolves.toMatchObject({
@@ -326,7 +424,6 @@ test('a foldable simulator in a scoped set still refuses portrait-upside-down as
   const sim = fakeScopedDuo(scoped, {
     lit: 'inner',
     picker: 'portrait',
-    offsets: { inner: 90, outer: 0 },
   });
   await expect(sim.rotate('portrait-upside-down')).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',

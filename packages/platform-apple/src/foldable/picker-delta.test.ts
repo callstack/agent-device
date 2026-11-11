@@ -130,7 +130,79 @@ test('without a current rotation there is no dispatch once the picker is known',
   }
 });
 
-test('the measured inner-panel offset is +90 and the outer panel is never guessed', () => {
+test('the measured offsets are 0 on the outer (primary) panel and +90 on the inner panel', () => {
+  expect(measuredPanelPickerOffset({ primary: true })).toBe(0);
   expect(measuredPanelPickerOffset({ primary: false })).toBe(90);
-  expect(measuredPanelPickerOffset({ primary: true })).toBeUndefined();
+});
+
+/**
+ * Raw iPhone Duo readings (iOS 27.3, scoped simulator set, Safari in front), in the order they
+ * were taken: the picker value the guest held and the lit panel's `currentOrientation` that the
+ * panel table reported next. Rows marked `fold` are the first read after a pose change, with
+ * the picker value from before it. Every row gives its panel's measured offset, so the picker
+ * value survives a fold in both directions and only the panel's offset changes.
+ */
+const DUO_READINGS: readonly {
+  panel: 'inner' | 'outer';
+  picker: DeviceRotation;
+  reading: string;
+  fold?: true;
+}[] = [
+  { panel: 'inner', picker: 'portrait', reading: 'rot90' },
+  { panel: 'inner', picker: 'landscape-left', reading: 'rot0' },
+  { panel: 'inner', picker: 'landscape-left', reading: 'rot0' },
+  { panel: 'inner', picker: 'portrait-upside-down', reading: 'rot270' },
+  { panel: 'inner', picker: 'landscape-right', reading: 'rot180' },
+  { panel: 'inner', picker: 'portrait', reading: 'rot90' },
+  { panel: 'inner', picker: 'portrait', reading: 'rot90' },
+  { panel: 'inner', picker: 'landscape-left', reading: 'rot0' },
+  { panel: 'outer', picker: 'landscape-left', reading: 'rot270', fold: true },
+  { panel: 'outer', picker: 'portrait', reading: 'rot0' },
+  { panel: 'outer', picker: 'landscape-left', reading: 'rot270' },
+  { panel: 'outer', picker: 'landscape-right', reading: 'rot90' },
+  { panel: 'outer', picker: 'portrait', reading: 'rot0' },
+  { panel: 'outer', picker: 'landscape-left', reading: 'rot270' },
+  { panel: 'inner', picker: 'landscape-left', reading: 'rot0', fold: true },
+  { panel: 'inner', picker: 'landscape-right', reading: 'rot180' },
+  { panel: 'inner', picker: 'portrait', reading: 'rot90' },
+  { panel: 'inner', picker: 'landscape-left', reading: 'rot0' },
+  { panel: 'inner', picker: 'portrait-upside-down', reading: 'rot270' },
+  // (fold to closed with the picker at portrait-upside-down: see the next test)
+  { panel: 'outer', picker: 'landscape-right', reading: 'rot90' },
+  { panel: 'outer', picker: 'portrait', reading: 'rot0' },
+  { panel: 'outer', picker: 'landscape-right', reading: 'rot90' },
+  { panel: 'inner', picker: 'landscape-right', reading: 'rot180', fold: true },
+  { panel: 'inner', picker: 'portrait', reading: 'rot90' },
+  { panel: 'inner', picker: 'landscape-left', reading: 'rot0' },
+  { panel: 'inner', picker: 'landscape-right', reading: 'rot180' },
+  { panel: 'inner', picker: 'portrait', reading: 'rot90' },
+  { panel: 'outer', picker: 'portrait', reading: 'rot0', fold: true },
+  { panel: 'outer', picker: 'landscape-left', reading: 'rot270' },
+  { panel: 'inner', picker: 'landscape-left', reading: 'rot0', fold: true },
+  { panel: 'inner', picker: 'landscape-right', reading: 'rot180' },
+  { panel: 'inner', picker: 'portrait', reading: 'rot90' },
+];
+
+test('every measured Duo reading gives its panel the measured offset, across folds', () => {
+  for (const [index, row] of DUO_READINGS.entries()) {
+    const reading = panelRotationForOrientation(row.reading);
+    expect(reading, `row ${index}`).toBeDefined();
+    expect(panelPickerOffset(reading!, row.picker), `row ${index}`).toBe(
+      measuredPanelPickerOffset({ primary: row.panel === 'outer' }),
+    );
+  }
+  expect(DUO_READINGS.filter((row) => row.fold)).toHaveLength(5);
+});
+
+test('after a fold that left the picker where the outer panel could not follow, the measured offset still lands the target', () => {
+  // Measured: picker at portrait-upside-down, outer panel lit showing landscape-left (its UI has
+  // no upside-down). One dispatch of landscape-right landed landscape-right. A purely relative
+  // guest would have turned the panel by (90 - 180) to portrait-upside-down instead.
+  const next = nextPickerValue({
+    currentRotation: 'landscape-left',
+    targetRotation: 'landscape-right',
+    panelOffset: measuredPanelPickerOffset({ primary: true }),
+    currentPickerValue: undefined,
+  });
+  expect(next).toBe('landscape-right');
 });
