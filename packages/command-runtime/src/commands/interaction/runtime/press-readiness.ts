@@ -73,9 +73,14 @@ async function awaitReadiness(
       );
       assertBudget(context, deadline, state);
       if (state === 'ready') break;
-      if (state !== 'blocked' || !Number.isFinite(deadline)) throw refusal(state);
       // This is post-resolution readiness, never a wait for a selector that does not exist.
-      if (params.expectedResolvedTarget || params.preresolvedTarget) throw refusal(state);
+      if (
+        state !== 'blocked' ||
+        !Number.isFinite(deadline) ||
+        params.expectedResolvedTarget ||
+        params.preresolvedTarget
+      )
+        throw refusal(state);
       await sleep(Math.min(50, deadline - Date.now()), context.signal);
       waited = true;
     }
