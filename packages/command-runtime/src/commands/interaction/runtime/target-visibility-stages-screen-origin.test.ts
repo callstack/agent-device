@@ -5,6 +5,8 @@ import type { IosViewportEvidence } from '@agent-device/contracts/ios-snapshot';
 import type { Point, RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { attachSnapshotViewportEvidence } from '@agent-device/contracts/capture';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
+import { createIosSnapshotAcquisition } from '@agent-device/capture-kit/ios-snapshot-acquisition';
+import { presentIosSnapshotAcquisition } from '@agent-device/capture-kit/ios-snapshot-runtime';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import { createInteractionDevice } from './__tests__/test-utils/index.ts';
 import { ref, selector } from './selector-read-utils.ts';
@@ -48,6 +50,74 @@ function originRefusal(error: unknown): boolean {
   assert.equal(error.details?.reason, 'window-origin-unknown');
   assert.equal(error.details?.dispatched, 'no');
   return true;
+}
+
+for (const kind of ['reported', 'derived', 'missing'] as const) {
+  for (const route of ['selector', 'ref', 'native-ref'] as const) {
+    test(`provider ${route} preserves ${kind} authority through presentation and memory-session cloning`, async () => {
+      const root = {
+        x: kind === 'reported' ? 241 : 0,
+        y: kind === 'reported' ? 224 : 0,
+        width: 551,
+        height: 813,
+      };
+      const acquired = createIosSnapshotAcquisition({
+        producer: 'appium-source',
+        viewport: kind === 'missing' ? { kind, reason: 'not-provided' } : { kind, rect: root },
+        lineage: { targetId: 'provider-ios' },
+        nodes: [
+          { index: 0, depth: 0, type: 'Application', rect: root },
+          { index: 1, depth: 1, parentIndex: 0, type: 'Group', rect: root },
+          {
+            index: 2,
+            depth: 2,
+            parentIndex: 1,
+            type: 'Button',
+            identifier: 'geometry-action',
+            label: 'Geometry action',
+            rect: { x: root.x + 240, y: root.y + 90, width: 220, height: 42 },
+            hittable: true,
+          },
+        ],
+      });
+      const presented = presentIosSnapshotAcquisition(
+        acquired,
+        kind === 'missing' ? { raw: true } : undefined,
+      );
+      const calls: unknown[] = [];
+      const device = createInteractionDevice(buildSnapshotState(presented, undefined), {
+        tap: async (_context, point) => {
+          calls.push(point);
+        },
+        tapTarget:
+          route === 'native-ref'
+            ? async (_context, target) => {
+                calls.push(target);
+              }
+            : undefined,
+      });
+      const observed = await device.capture.snapshot({ session: 'default' });
+      const target = observed.nodes.find((node) => node.identifier === 'geometry-action');
+      assert.ok(target?.ref);
+      const actionTarget =
+        route === 'selector' ? selector('id=geometry-action') : ref(`@${target.ref}`);
+      const failure = await device.interactions.click(actionTarget, { session: 'default' }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      if (kind === 'reported') {
+        assert.equal(failure, undefined);
+        assert.deepEqual(calls, [
+          route === 'native-ref' ? { kind: 'ref', ref: `@${target.ref}` } : { x: 591, y: 335 },
+        ]);
+        assert.deepEqual(presented.viewport, { width: 551, height: 813 });
+      } else {
+        assert.deepEqual(calls, []);
+        originRefusal(failure);
+        assert.equal(presented.viewport, undefined);
+      }
+    });
+  }
 }
 
 for (const kind of ['derived', 'missing'] as const) {

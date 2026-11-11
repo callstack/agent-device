@@ -64,7 +64,7 @@ export function attachSnapshotViewportEvidence<T extends object>(
   return attachSnapshotPrivateEvidence(owner, { viewport });
 }
 
-export function readSnapshotViewportEvidence(
+function readSnapshotViewportEvidence(
   owner: object | null | undefined,
 ): IosViewportEvidence | undefined {
   return owner ? privateEvidenceBySnapshotObject.get(owner)?.viewport : undefined;

@@ -374,7 +374,7 @@ extension RunnerTests {
   }
 
   func testSnapshotViewportAuthoritySurvivesOutcomeStamping() throws {
-    let box = CGRect(x: 0, y: 0, width: 551, height: 813)
+    let box = CGRect(x: 241, y: 224, width: 551, height: 813)
     let options = PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: true)
     let cases: [(SnapshotViewport, String, String?)] = [
       (.reported(box: box), "reported", nil),
@@ -397,8 +397,15 @@ extension RunnerTests {
       let evidence = try XCTUnwrap(encoded["snapshotViewport"] as? [String: Any])
       XCTAssertEqual(evidence["kind"] as? String, kind)
       XCTAssertEqual(evidence["reason"] as? String, reason)
-      XCTAssertEqual((evidence["rect"] as? [String: Any])?["width"] as? Double,
-                     kind == "missing" ? nil : 551)
+      if kind == "missing" {
+        XCTAssertNil(evidence["rect"])
+      } else {
+        let rect = try XCTUnwrap(evidence["rect"] as? [String: Any])
+        XCTAssertEqual(rect["x"] as? Double, 241)
+        XCTAssertEqual(rect["y"] as? Double, 224)
+        XCTAssertEqual(rect["width"] as? Double, 551)
+        XCTAssertEqual(rect["height"] as? Double, 813)
+      }
     }
   }
 

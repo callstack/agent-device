@@ -6,18 +6,31 @@ import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { IosSystemSurfaceProvenance } from '@agent-device/contracts/ios-system-surface';
 import type { AppleRunnerSnapshotResult } from './snapshot-presentation.ts';
 import { presentAppleRunnerSnapshot, readAppleSnapshotResult } from './snapshot-presentation.ts';
-import { readSnapshotViewportEvidence } from '@agent-device/contracts/capture';
+import { assertSnapshotScreenOrigin } from '@agent-device/contracts/capture';
 
 const NO_VIEWPORT_ROOT = { index: 0, type: 'Application', label: 'App' };
 
 test.each([
-  { kind: 'derived', rect: { x: 0, y: 0, width: 551, height: 813 } },
-  { kind: 'missing', reason: 'not-provided' },
-  { kind: 'reported', rect: { x: 0, y: 0, width: 0, height: 813 } },
-  null,
+  {
+    snapshotViewport: { kind: 'derived', rect: { x: 0, y: 0, width: 551, height: 813 } },
+    expected: { kind: 'derived', rect: { x: 0, y: 0, width: 551, height: 813 } },
+  },
+  {
+    snapshotViewport: { kind: 'missing', reason: 'not-provided' },
+    expected: { kind: 'missing', reason: 'not-provided' },
+  },
+  {
+    snapshotViewport: { kind: 'missing', reason: 'invalid' },
+    expected: { kind: 'missing', reason: 'invalid' },
+  },
+  {
+    snapshotViewport: { kind: 'reported', rect: { x: 0, y: 0, width: 0, height: 813 } },
+    expected: { kind: 'missing', reason: 'invalid' },
+  },
+  { snapshotViewport: null, expected: { kind: 'missing', reason: 'invalid' } },
 ])(
   'explicit unknown viewport stays observable without gaining screen authority: %j',
-  (snapshotViewport) => {
+  async ({ snapshotViewport, expected }) => {
     const read = readAppleSnapshotResult(
       {
         snapshotViewport,
@@ -35,18 +48,27 @@ test.each([
       },
       IOS_SIMULATOR,
     );
+    assert.deepEqual(read.viewportEvidence, expected);
     const presented = presentAppleRunnerSnapshot('device-1', undefined, read);
     assert.equal(
       presented.nodes.some((node) => node.identifier === 'action'),
       true,
     );
     assert.equal(presented.viewport, undefined);
-    assert.deepEqual(readSnapshotViewportEvidence(presented.nodes), read.viewportEvidence);
-    assert.notEqual(readSnapshotViewportEvidence(presented.nodes)?.kind, 'reported');
+    await assert.rejects(
+      assertSnapshotScreenOrigin(presented.nodes, 'Captured action'),
+      (error) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'COMMAND_FAILED');
+        assert.equal(error.details?.reason, 'window-origin-unknown');
+        assert.equal(error.details?.dispatched, 'no');
+        return true;
+      },
+    );
   },
 );
 
-test('reported runner viewport retains screen authority through the wire reader and presenter', () => {
+test('reported runner viewport retains screen authority through the wire reader and presenter', async () => {
   const rect = { x: 241, y: 224, width: 551, height: 813 };
   const read = readAppleSnapshotResult(
     {
@@ -67,7 +89,7 @@ test('reported runner viewport retains screen authority through the wire reader 
   );
   const presented = presentAppleRunnerSnapshot('device-1', undefined, read);
   assert.deepEqual(presented.viewport, { width: 551, height: 813 });
-  assert.deepEqual(readSnapshotViewportEvidence(presented.nodes), { kind: 'reported', rect });
+  await assert.doesNotReject(assertSnapshotScreenOrigin(presented.nodes, 'Captured action'));
 });
 
 function presentSparse(overrides: Partial<AppleRunnerSnapshotResult> = {}) {

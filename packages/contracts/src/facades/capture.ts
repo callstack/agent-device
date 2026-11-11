@@ -66,7 +66,6 @@ export type {
 export {
   assertSnapshotScreenOrigin,
   attachSnapshotViewportEvidence,
-  readSnapshotViewportEvidence,
   copySnapshotViewportEvidence,
   attachSnapshotTextInputGeometry,
   readSnapshotTextInputGeometry,
