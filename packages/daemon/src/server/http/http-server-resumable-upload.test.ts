@@ -11,6 +11,7 @@ import {
 import { createDaemonHttpServer } from './http-server.ts';
 import {
   closeLoopbackServer,
+  createTestRuntimeStateHandle,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
@@ -99,50 +100,72 @@ function chunkedPut(url: string, headers: Record<string, string>, body: Buffer):
 
 test('preflight constrains forwarded protocol to the request authority', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'daemon HTTP resumable upload coverage')) return;
-  const server = await createDaemonHttpServer({
-    token: 'resumable-token',
-    handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
-    env: process.env,
-    cwd: process.cwd(),
-  });
+  const runtime = createTestRuntimeStateHandle();
   try {
-    const port = await listenOnLoopback(server);
-    for (const [forwarded, scheme] of [
-      [undefined, 'http'],
-      ['https', 'https'],
-      ['https, http', 'https'],
-      ['ftp', 'http'],
-      ['http://evil.example/path?', 'http'],
-    ] as const) {
-      const headers: Record<string, string> = {
-        authorization: 'Bearer resumable-token',
-        'content-type': 'application/json',
-      };
-      if (forwarded) headers['x-forwarded-proto'] = forwarded;
-      const response = await fetch(`http://127.0.0.1:${port}/upload/preflight`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          uploadAttemptId: crypto.randomUUID(),
-          sha256: crypto.createHash('sha256').update('a').digest('hex'),
-          fileName: 'demo.apk',
-          sizeBytes: 1,
-          artifactType: 'file',
-          platform: 'android',
-        }),
+    await runtime.run(async () => {
+      const server = await createDaemonHttpServer({
+        token: 'resumable-token',
+        handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
+        env: process.env,
+        cwd: process.cwd(),
       });
-      assert.equal(response.status, 200);
-      const ticket = (await response.json()) as {
-        uploadId: string;
-        upload: { url: string; headers: Record<string, string> };
-      };
-      assert.ok(ticket.uploadId);
-      const url = new URL(ticket.upload.url);
-      assert.equal(url.origin, `${scheme}://127.0.0.1:${port}`);
-      assert.match(url.pathname, /^\/upload\/direct\//);
-      assert.equal(ticket.upload.headers.authorization, 'Bearer resumable-token');
-    }
+      try {
+        const port = await listenOnLoopback(server);
+        for (const [forwarded, scheme, authority, expectedAuthority] of [
+          [undefined, 'http', undefined, undefined],
+          ['https', 'https', undefined, undefined],
+          ['https, http', 'https', undefined, undefined],
+          ['HTTPS', 'https', undefined, undefined],
+          [' hTtPs , http ', 'https', undefined, undefined],
+          ['HTTP', 'http', undefined, undefined],
+          ['ftp', 'http', undefined, undefined],
+          ['http://evil.example/path?', 'http', undefined, undefined],
+          ['HTTPS', 'https', 'Daemon.example:80', 'daemon.example:80'],
+          ['http', 'http', 'Daemon.example:443', 'daemon.example:443'],
+          ['http', 'http', 'Daemon.example:80', 'daemon.example'],
+          ['https', 'https', 'Daemon.example:443', 'daemon.example'],
+        ] as const) {
+          const headers: Record<string, string> = {
+            authorization: 'Bearer resumable-token',
+            'content-type': 'application/json',
+          };
+          if (forwarded) headers['x-forwarded-proto'] = forwarded;
+          if (authority) headers.host = authority;
+          const body = JSON.stringify({
+            uploadAttemptId: crypto.randomUUID(),
+            sha256: crypto.createHash('sha256').update('a').digest('hex'),
+            fileName: 'demo.apk',
+            sizeBytes: 1,
+            artifactType: 'file',
+            platform: 'android',
+          });
+          const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
+            const request = http.request(
+              `http://127.0.0.1:${port}/upload/preflight`,
+              { method: 'POST', headers },
+              resolve,
+            );
+            request.once('error', reject);
+            request.end(body);
+          });
+          assert.equal(response.statusCode, 200);
+          const chunks: Buffer[] = [];
+          for await (const chunk of response) chunks.push(chunk);
+          const ticket = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
+            uploadId: string;
+            upload: { url: string; headers: Record<string, string> };
+          };
+          assert.ok(ticket.uploadId);
+          const url = new URL(ticket.upload.url);
+          assert.equal(url.origin, `${scheme}://${expectedAuthority ?? `127.0.0.1:${port}`}`);
+          assert.match(url.pathname, /^\/upload\/direct\//);
+          assert.equal(ticket.upload.headers.authorization, 'Bearer resumable-token');
+        }
+      } finally {
+        await closeLoopbackServer(server);
+      }
+    });
   } finally {
-    await closeLoopbackServer(server);
+    runtime.dispose();
   }
 });

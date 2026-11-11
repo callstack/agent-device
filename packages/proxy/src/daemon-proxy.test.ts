@@ -676,39 +676,46 @@ test('authenticate returning a tenantId the daemon rejects refuses the request b
 });
 
 test.each([
-  [undefined, 'https'],
-  ['https', 'https'],
-  ['http, https', 'http'],
-  ['ftp', 'https'],
-  ['http://evil.example/path?', 'https'],
-])('upload preflight constrains forwarded protocol %s', async (forwarded, scheme) => {
-  const upstream = recordingUpstream(() =>
-    Response.json({
-      ok: true,
-      upload: {
-        url: 'http://daemon:4310/upload/direct/abc?part=1',
-        headers: { authorization: 'Bearer upstream-secret' },
-      },
-    }),
-  );
-  const headers: Record<string, string> = { authorization: 'Bearer client-secret' };
-  if (forwarded) headers['x-forwarded-proto'] = forwarded;
-  const response = await proxyWith(upstream.fetch).handle(
-    new Request('https://gateway.example.test:8443/agent-device/upload/preflight', {
-      method: 'POST',
-      headers,
-      body: '{}',
-    }),
-  );
-  expect(response.status).toBe(200);
-  const payload = (await response.json()) as {
-    ok: boolean;
-    upload: { url: string; headers: Record<string, string> };
-  };
-  expect(payload.ok).toBe(true);
-  expect(payload.upload.url).toBe(
-    `${scheme}://gateway.example.test:8443/agent-device/upload/direct/abc?part=1`,
-  );
-  expect(payload.upload.headers.authorization).toBe('Bearer client-secret');
-  expect(JSON.stringify(payload.upload.headers)).not.toContain('upstream-secret');
-});
+  [undefined, 'https', 'https'],
+  ['https', 'https', 'https'],
+  ['http, https', 'http', 'https'],
+  ['HTTPS', 'https', 'http'],
+  [' hTtPs , http ', 'https', 'http'],
+  ['HTTP', 'http', 'https'],
+  ['hTtP', 'http', 'https'],
+  ['ftp', 'https', 'https'],
+  ['http://evil.example/path?', 'https', 'https'],
+])(
+  'upload preflight constrains forwarded protocol %s',
+  async (forwarded, scheme, requestScheme) => {
+    const upstream = recordingUpstream(() =>
+      Response.json({
+        ok: true,
+        upload: {
+          url: 'http://daemon:4310/upload/direct/abc?part=1',
+          headers: { authorization: 'Bearer upstream-secret' },
+        },
+      }),
+    );
+    const headers: Record<string, string> = { authorization: 'Bearer client-secret' };
+    if (forwarded) headers['x-forwarded-proto'] = forwarded;
+    const response = await proxyWith(upstream.fetch).handle(
+      new Request(`${requestScheme}://gateway.example.test:8443/agent-device/upload/preflight`, {
+        method: 'POST',
+        headers,
+        body: '{}',
+      }),
+    );
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      ok: boolean;
+      upload: { url: string; headers: Record<string, string> };
+    };
+    expect(payload.ok).toBe(true);
+    expect(payload.upload.url).toBe(
+      `${scheme}://gateway.example.test:8443/agent-device/upload/direct/abc?part=1`,
+    );
+    expect(payload.upload.headers.authorization).toBe('Bearer client-secret');
+    expect(JSON.stringify(payload.upload.headers)).not.toContain('upstream-secret');
+  },
+);

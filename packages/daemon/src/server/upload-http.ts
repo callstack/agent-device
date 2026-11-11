@@ -301,8 +301,8 @@ function resolveHttpRequestBaseUrl(req: http.IncomingMessage): string {
   const forwardedProto = req.headers['x-forwarded-proto'];
   const proto = (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto)
     ?.split(',')[0]
-    ?.trim();
-  const url = new URL(`http://${host}`);
-  if (proto === 'http' || proto === 'https') url.protocol = proto;
-  return url.origin;
+    ?.trim()
+    .toLowerCase();
+  const scheme = proto === 'https' ? 'https' : 'http';
+  return `${scheme}://${host}`;
 }
