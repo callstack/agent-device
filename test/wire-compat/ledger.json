@@ -138,7 +138,7 @@
     "packages/daemon/src/server/upload-http.ts#handleUploadPreflight": "sha256:6d850c477241295d0e8d7e9da3c0dd6abc6f8ea436d52674c3e2ebd77b43f711",
     "packages/daemon/src/server/upload-http.ts#readUploadFinalizeBody": "sha256:076298afa73d7e498a964b6c48d823de1cc8b15e9e971d0a22b7e6c3fd98d685",
     "packages/daemon/src/server/upload-http.ts#readUploadPreflightBody": "sha256:2e56302178b75d9a6f5424f01dfc46551dca2056ba06a43e48ae09ec528956b6",
-    "packages/daemon/src/server/upload-http.ts#resolveHttpRequestBaseUrl": "sha256:3c8f0835eda833c06a4d14a7e0b5036d6b9fa3c1216d84d033f11a4fa0f93c0b",
+    "packages/daemon/src/server/upload-http.ts#resolveHttpRequestBaseUrl": "sha256:72319551fe0adb48ab20a1295e7d07314c328c43208bcfa99f6479854234927f",
     "packages/daemon/src/server/upload-http.ts#resolveUploadHttpRoute": "sha256:8837e62933cf57111a8070454877c5859aed65b4dcdba755f145346e30f82835",
     "packages/daemon/src/server/upload-http.ts#sendJson": "sha256:c2317b4b14a10731684c9160038005965856150f05f8923765a3fa833d2ecae9",
     "packages/daemon/src/server/upload-http.ts#sendUploadedArtifactResponse": "sha256:9e418403448d58a96284fed605762fa71f9349bf2c70ad79df69b2b3e27487d6",
@@ -209,7 +209,7 @@
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#DownloadRemoteArtifactParams",
       "digest": "sha256:ba6d2f6ac51e05ccc5e0c940b355d62374e018b1ae6f6f744becf6e1760cbb63",
-      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state \u2014 never serialized, never sent to the daemon \u2014 that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved."
+      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state — never serialized, never sent to the daemon — that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved."
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact",
@@ -284,7 +284,7 @@
     {
       "declaration": "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest",
       "digest": "sha256:1c323f97c3cefec8f95633b6abd127342bf75494bfb109d1cc6eadf3ceacaeae",
-      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers \u2014 sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added \u2014 an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
+      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
     },
     {
       "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer",
@@ -513,8 +513,8 @@
     },
     {
       "declaration": "packages/daemon/src/server/upload-http.ts#resolveHttpRequestBaseUrl",
-      "digest": "sha256:3c8f0835eda833c06a4d14a7e0b5036d6b9fa3c1216d84d033f11a4fa0f93c0b",
-      "rationale": "#4419 constrains forwarded protocol metadata to http/https before constructing the credentialed upload origin. Valid existing http/https forwarding and the request host/port retain their contracts; comma-separated forwarding uses its first value, and unsupported or URL-shaped values cannot replace the authority. Released clients still parse the same upload ticket fields, credential headers and HTTP(S) URL, with unchanged routes and response shapes. No new field is required and no supported peer payload is removed or reinterpreted; this is an implementation security correction under ADR 0006, not a protocol change."
+      "digest": "sha256:72319551fe0adb48ab20a1295e7d07314c328c43208bcfa99f6479854234927f",
+      "rationale": "#4419 constrains forwarded protocol metadata case-insensitively to HTTP(S) before building the credentialed upload origin. Scheme selection precedes the existing ticket URL parser, preserving explicit ports that are non-default for the selected scheme. The ticket producer already canonicalized host case and scheme-default ports through new URL before this change. Valid forwarding, request authority, credential headers, upload routes and response shapes retain their contracts; comma-separated forwarding uses its first value, and unsupported or URL-shaped values cannot replace authority. Released peers still parse the same HTTP(S) upload ticket without a new required field or removed payload. This implementation-only security correction needs no protocol bump under ADR 0006."
     }
   ]
 }
