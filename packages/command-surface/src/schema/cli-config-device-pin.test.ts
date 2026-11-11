@@ -4,12 +4,12 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { pluginHome } from '@agent-device/test-kit';
 import {
-  assertSelectorHonorsDevicePin,
+  assertRequestHonorsDevicePin,
   DEVICE_PIN_CONFLICT_REASON,
   DEVICE_PIN_WITHOUT_SELECTOR_REASON,
   resolveConfigBackedFlagDefaultsWithProvenance,
   resolveDevicePin,
-  resolveSelectorOrigins,
+  type DevicePin,
 } from './cli-config.ts';
 
 const cliFlags = { help: false, version: false, json: false };
@@ -56,123 +56,134 @@ test('the merge records which layer set each default', () => {
   assert.equal(resolved.provenance.devicePin?.kind, 'project');
 });
 
-test('configured selectors stay overridable defaults until devicePin opts in', () => {
-  const { project, env } = projectWithConfig({ platform: 'ios', device: 'iPad Pro' });
-  const resolved = resolveConfigBackedFlagDefaultsWithProvenance({
+function resolvedDefaults(project: string, env: Record<string, string>) {
+  return resolveConfigBackedFlagDefaultsWithProvenance({
     command: 'open',
     cwd: project,
     cliFlags,
     env,
   });
+}
 
-  assert.equal(resolveDevicePin(resolved.flags, resolved.provenance), undefined);
-  assert.deepEqual(
-    resolveSelectorOrigins({ device: 'iPhone 16' }, new Set(['device']), undefined),
-    {
-      device: 'flag',
-    },
-  );
-  assert.deepEqual(resolveSelectorOrigins(resolved.flags, new Set(), undefined), {
-    platform: 'default',
-    device: 'default',
-  });
+test('configured selectors stay overridable defaults until devicePin opts in', () => {
+  const { project, env } = projectWithConfig({ platform: 'ios', device: 'iPad Pro' });
+
+  assert.equal(resolveDevicePin(resolvedDefaults(project, env)), undefined);
 });
 
-test('devicePin pins every configured selector and names the layer that set it', () => {
+test('devicePin pins every configured selector and names the layer that turned it on', () => {
   const { project, env } = projectWithConfig({
     platform: 'ios',
     device: 'iPad Pro',
+    udid: '00008110-000A1B2C3D4E5F60',
+    serial: 'R5CT1234ABC',
     devicePin: true,
   });
-  const resolved = resolveConfigBackedFlagDefaultsWithProvenance({
-    command: 'open',
-    cwd: project,
-    cliFlags,
-    env,
-  });
-  const pin = resolveDevicePin(resolved.flags, resolved.provenance);
+  const defaults = resolvedDefaults(project, env);
 
-  assert.ok(pin);
-  assert.deepEqual(pin.selector, { platform: 'ios', device: 'iPad Pro' });
-  assert.equal(pin.policySource.kind, 'project');
-  assert.equal(pin.sources.device?.kind, 'project');
-  assert.deepEqual(resolveSelectorOrigins(resolved.flags, new Set(), pin), {
-    platform: 'pin',
-    device: 'pin',
+  for (const key of ['platform', 'device', 'udid', 'serial'] as const) {
+    assert.equal(defaults.provenance[key]?.kind, 'project', key);
+  }
+  assert.deepEqual(resolveDevicePin(defaults), {
+    selector: {
+      platform: 'ios',
+      device: 'iPad Pro',
+      udid: '00008110-000A1B2C3D4E5F60',
+      serial: 'R5CT1234ABC',
+    },
+    policySource: {
+      kind: 'project',
+      label: `project config file ${path.join(project, 'agent-device.json')}`,
+    },
+  });
+});
+
+test('an explicit --device-pin turns the configured defaults into a pin', () => {
+  const { project, env } = projectWithConfig({ platform: 'android', serial: 'emulator-5554' });
+
+  assert.deepEqual(resolveDevicePin(resolvedDefaults(project, env), true), {
+    selector: { platform: 'android', serial: 'emulator-5554' },
+    policySource: { kind: 'flag', label: 'the --device-pin flag' },
   });
 });
 
 test('a pin with nothing to pin fails before any daemon is contacted', () => {
   const { project, env } = projectWithConfig({ devicePin: true });
-  const resolved = resolveConfigBackedFlagDefaultsWithProvenance({
-    command: 'open',
-    cwd: project,
-    cliFlags,
-    env,
-  });
 
   assert.throws(
-    () => resolveDevicePin(resolved.flags, resolved.provenance),
+    () => resolveDevicePin(resolvedDefaults(project, env)),
     failsWithReason(DEVICE_PIN_WITHOUT_SELECTOR_REASON, /no platform, device, udid, or serial/),
   );
 });
 
 test('AGENT_DEVICE_DEVICE_PIN turns the pin on for an operator shell', () => {
   const { project, env } = projectWithConfig({ platform: 'android', serial: 'emulator-5554' });
-  const resolved = resolveConfigBackedFlagDefaultsWithProvenance({
-    command: 'open',
-    cwd: project,
-    cliFlags,
-    env: { ...env, AGENT_DEVICE_DEVICE_PIN: 'true' },
-  });
-  const pin = resolveDevicePin(resolved.flags, resolved.provenance);
+  const pin = resolveDevicePin(
+    resolvedDefaults(project, { ...env, AGENT_DEVICE_DEVICE_PIN: 'true' }),
+  );
 
-  assert.ok(pin);
-  assert.deepEqual(pin.selector, { platform: 'android', serial: 'emulator-5554' });
-  assert.equal(pin.policySource.label, 'environment variable AGENT_DEVICE_DEVICE_PIN');
+  assert.deepEqual(pin, {
+    selector: { platform: 'android', serial: 'emulator-5554' },
+    policySource: { kind: 'env', label: 'environment variable AGENT_DEVICE_DEVICE_PIN' },
+  });
 });
 
-const pin = {
-  selector: { platform: 'ios' as const, device: 'iPad Pro' },
-  sources: {},
-  policySource: { kind: 'project' as const, label: 'project config file /repo/agent-device.json' },
+const pin: DevicePin = {
+  selector: { platform: 'ios', device: 'iPad Pro' },
+  policySource: { kind: 'project', label: 'project config file /repo/agent-device.json' },
 };
 
-test('an explicit selector that contradicts the pin fails with a typed reason naming the source', () => {
+test('a request selector that contradicts the pin fails with a typed reason naming the source', () => {
   assert.throws(
-    () => assertSelectorHonorsDevicePin(pin, { device: 'iPhone 16' }, 'cli'),
+    () => assertRequestHonorsDevicePin(pin, { flags: { device: 'iPhone 16' } }),
     (error: unknown) => {
       assert.ok(error instanceof Error && 'code' in error && 'details' in error);
       assert.equal(error.code, 'INVALID_ARGS');
-      assert.match(error.message, /^--device "iPhone 16" conflicts with the device pin/);
-      assert.match(error.message, /project config file \/repo\/agent-device\.json/);
-      assert.match(error.message, /pins platform "ios", device "iPad Pro"/);
-      assert.match(error.message, /remove "devicePin"/);
+      assert.equal(
+        error.message,
+        'device "iPhone 16" conflicts with the device pin from project config file /repo/agent-device.json, which pins platform "ios", device "iPad Pro". Edit or remove "devicePin" in that config to target another device.',
+      );
       assert.deepEqual(error.details, {
         reason: DEVICE_PIN_CONFLICT_REASON,
         pin: { platform: 'ios', device: 'iPad Pro' },
         pinSource: 'project config file /repo/agent-device.json',
         conflicts: [{ key: 'device', pinned: 'iPad Pro', requested: 'iPhone 16' }],
-        hint: (error.details as { hint: string }).hint,
+        hint: 'This project pins platform "ios", device "iPad Pro" (project config file /repo/agent-device.json). Drop the conflicting selector to use the pinned device, or change the pin in that config.',
       });
       return true;
     },
   );
 });
 
-test('tool input names the bare key instead of a CLI token', () => {
+test('every batch step is held to the pin, and the error names the first conflicting step', () => {
   assert.throws(
-    () => assertSelectorHonorsDevicePin(pin, { platform: 'android' }, 'input'),
-    failsWithReason(
-      DEVICE_PIN_CONFLICT_REASON,
-      /^platform "android" conflicts with the device pin/,
-    ),
+    () =>
+      assertRequestHonorsDevicePin(pin, {
+        flags: {
+          platform: 'ios',
+          batchSteps: [{ flags: {} }, { flags: { platform: 'android', device: 'Pixel 8' } }],
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error && 'details' in error);
+      assert.match(
+        error.message,
+        /^Batch step 2: platform "android" conflicts with the device pin/,
+      );
+      assert.deepEqual((error.details as { conflicts: unknown }).conflicts, [
+        { key: 'platform', pinned: 'ios', requested: 'android', step: 2 },
+        { key: 'device', pinned: 'iPad Pro', requested: 'Pixel 8', step: 2 },
+      ]);
+      return true;
+    },
   );
 });
 
-test('a selector that repeats or refines the pin passes', () => {
-  assertSelectorHonorsDevicePin(pin, {}, 'cli');
-  assertSelectorHonorsDevicePin(pin, { platform: 'ios', device: 'iPad Pro' }, 'cli');
+test('a request that repeats, refines, or omits the pin passes', () => {
+  assertRequestHonorsDevicePin(pin, {});
+  assertRequestHonorsDevicePin(pin, { flags: { platform: 'ios', device: ' iPad Pro ' } });
   // A UDID picks one device among several that share the pinned name; selection has to satisfy both.
-  assertSelectorHonorsDevicePin(pin, { udid: 'ABCDEF' }, 'cli');
+  assertRequestHonorsDevicePin(pin, {
+    flags: { udid: 'ABCDEF', batchSteps: [{ flags: { serial: 'R5CT1234ABC' } }, {}] },
+  });
 });

@@ -25,16 +25,12 @@ type ConfigDefaultsOptions = {
   env: EnvMap;
 };
 
-export function resolveConfigBackedFlagDefaults(options: ConfigDefaultsOptions): Partial<CliFlags> {
-  return resolveConfigBackedFlagDefaultsWithProvenance(options).flags;
-}
-
 /**
  * The layer that set each resolved default: the config file it came from, or the environment
  * variable. Later layers overwrite earlier ones, so an entry names the layer that won.
  */
 export type FlagValueSource = {
-  kind: ConfigFileSource | 'env';
+  kind: ConfigFileSource | 'env' | 'flag';
   /** Human-readable origin, e.g. `project config file /repo/agent-device.json`. */
   label: string;
 };
@@ -369,15 +365,20 @@ function hasConfiguredSession(raw: string | undefined): boolean {
 /**
  * The opt-in device pin (#2161). `agent-device.json` already sets `platform`/`device`/`udid`/`serial`
  * DEFAULTS, and a default stays overridable by design. Setting `devicePin: true` beside them turns
- * those configured selectors into a pin: a selector-less command still inherits them, and a
- * selector that names a different value fails here with a typed reason instead of silently winning.
+ * those configured selectors into a pin: a selector-less command still inherits them, and a request
+ * that names a different value fails with a typed reason instead of silently retargeting.
  * The pin guides selection only; it is not an ownership claim (#1320 device claims are).
+ *
+ * Precedence: the pinned values are the selector defaults the config and environment layers resolve
+ * to (user config, then project config, then `--config`, then `AGENT_DEVICE_*`; a later layer wins).
+ * Everything above those layers (typed flags, batch steps, MCP input, remote config, saved
+ * connection defaults) must repeat the pinned value or leave the key unset.
  */
 const DEVICE_PIN_SELECTOR_KEYS = ['platform', 'device', 'udid', 'serial'] as const;
 
-export type DevicePinSelectorKey = (typeof DEVICE_PIN_SELECTOR_KEYS)[number];
+type DevicePinSelectorKey = (typeof DEVICE_PIN_SELECTOR_KEYS)[number];
 
-export type DevicePinSelector = Partial<Pick<CliFlags, DevicePinSelectorKey>>;
+type DevicePinSelector = Partial<Pick<CliFlags, DevicePinSelectorKey>>;
 
 export const DEVICE_PIN_CONFLICT_REASON = 'device_pin_conflict';
 export const DEVICE_PIN_WITHOUT_SELECTOR_REASON = 'device_pin_without_selector';
@@ -385,44 +386,31 @@ export const DEVICE_PIN_WITHOUT_SELECTOR_REASON = 'device_pin_without_selector';
 export type DevicePin = {
   /** The pinned selector values: every configured selector default while the pin is on. */
   selector: DevicePinSelector;
-  /** Which layer set each pinned value. */
-  sources: Partial<Record<DevicePinSelectorKey, FlagValueSource>>;
-  /** Which layer turned the pin on (`devicePin: true`). */
+  /** Which layer turned the pin on (`devicePin: true` or `--device-pin`). */
   policySource: FlagValueSource;
 };
 
-/** Where a resolved selector value came from once defaults, the pin, and explicit input merged. */
-export type SelectorValueOrigin = 'pin' | 'default' | 'flag';
-
-export type SelectorOrigins = Partial<Record<DevicePinSelectorKey, SelectorValueOrigin>>;
-
-/** The caller surface an explicit selector arrived on; it decides how the conflict names the key. */
-export type DevicePinSurface = 'cli' | 'input';
-
-const ENV_POLICY_SOURCE: FlagValueSource = {
-  kind: 'env',
-  label: 'environment variable AGENT_DEVICE_DEVICE_PIN',
-};
+const DEVICE_PIN_FLAG_SOURCE: FlagValueSource = { kind: 'flag', label: 'the --device-pin flag' };
 
 /**
- * Reads the pin from resolved config/env defaults. Returns `undefined` while `devicePin` is off, so
- * every existing default keeps its overridable behavior. A pin with no selector to pin is a
- * misconfiguration and fails before any daemon is contacted.
+ * Reads the pin from resolved config/env defaults. `explicitDevicePin` is the typed `--device-pin`
+ * value, when the caller has one. Returns `undefined` while the pin is off, so every existing
+ * default keeps its overridable behavior. A pin with no selector to pin is a misconfiguration and
+ * fails before any daemon is contacted.
  */
 export function resolveDevicePin(
-  defaults: Partial<CliFlags>,
-  provenance: FlagProvenance,
+  defaults: ConfigBackedFlagDefaults,
+  explicitDevicePin?: boolean,
 ): DevicePin | undefined {
-  if (defaults.devicePin !== true) return undefined;
-  const policySource = provenance.devicePin ?? ENV_POLICY_SOURCE;
+  const enabled = explicitDevicePin ?? defaults.flags.devicePin;
+  if (enabled !== true) return undefined;
+  const policySource =
+    explicitDevicePin === true ? DEVICE_PIN_FLAG_SOURCE : defaults.provenance.devicePin;
+  if (!policySource) return undefined;
   const selector: DevicePinSelector = {};
-  const sources: DevicePin['sources'] = {};
   for (const key of DEVICE_PIN_SELECTOR_KEYS) {
-    const value = defaults[key];
-    if (value === undefined) continue;
-    (selector as Record<string, unknown>)[key] = value;
-    const source = provenance[key];
-    if (source) sources[key] = source;
+    const value = defaults.flags[key];
+    if (value !== undefined) (selector as Record<string, unknown>)[key] = value;
   }
   if (Object.keys(selector).length === 0) {
     throw new AppError(
@@ -431,31 +419,40 @@ export function resolveDevicePin(
       { reason: DEVICE_PIN_WITHOUT_SELECTOR_REASON, pinSource: policySource.label },
     );
   }
-  return { selector, sources, policySource };
+  return { selector, policySource };
 }
 
+type DevicePinRequest = {
+  flags?: Readonly<Record<string, unknown>> & {
+    batchSteps?: ReadonlyArray<{ flags?: Readonly<Record<string, unknown>> }>;
+  };
+};
+
+type DevicePinConflict = {
+  key: DevicePinSelectorKey;
+  pinned: string;
+  requested: string;
+  /** The 1-based batch step that names the value; absent for the request's own flags. */
+  step?: number;
+};
+
 /**
- * Fails when an explicit selector contradicts the pin. A selector that repeats a pinned value, or
- * names a key the pin leaves open (for example `--udid` under a pinned `device` name), refines the
- * pin and passes; the daemon's selection still has to satisfy both.
+ * Fails when a finished daemon request names a selector the pin contradicts, in its own flags or
+ * in any batch step's flags, whatever layer set the value. A value that repeats the pin, or a key
+ * the pin leaves open (for example `udid` under a pinned `device` name), refines the pin and
+ * passes; the daemon's selection still has to satisfy both.
  */
-export function assertSelectorHonorsDevicePin(
-  pin: DevicePin,
-  explicit: DevicePinSelector,
-  surface: DevicePinSurface,
-): void {
-  const conflicts = DEVICE_PIN_SELECTOR_KEYS.flatMap((key) => {
-    const requested = explicit[key];
-    const pinned = pin.selector[key];
-    if (requested === undefined || pinned === undefined) return [];
-    if (selectorValuesMatch(requested, pinned)) return [];
-    return [{ key, pinned, requested }];
+export function assertRequestHonorsDevicePin(pin: DevicePin, request: DevicePinRequest): void {
+  const conflicts = findDevicePinConflicts(pin, request.flags);
+  request.flags?.batchSteps?.forEach((step, index) => {
+    conflicts.push(...findDevicePinConflicts(pin, step.flags, index + 1));
   });
   if (conflicts.length === 0) return;
   const first = conflicts[0]!;
   const pinnedDescription = describeSelector(pin.selector);
+  const where = first.step === undefined ? '' : `Batch step ${first.step}: `;
   const message =
-    `${describeKey(first.key, surface)} ${JSON.stringify(first.requested)} conflicts with the device pin ` +
+    `${where}${first.key} ${JSON.stringify(first.requested)} conflicts with the device pin ` +
     `from ${pin.policySource.label}, which pins ${pinnedDescription}. ` +
     `Edit or remove "devicePin" in that config to target another device.`;
   throw new AppError('INVALID_ARGS', message, {
@@ -467,44 +464,19 @@ export function assertSelectorHonorsDevicePin(
   });
 }
 
-/**
- * Records where each resolved selector value came from: `flag` for an explicit value, `pin` for a
- * value the pin supplied, `default` for an overridable configured default.
- */
-export function resolveSelectorOrigins(
-  flags: Partial<CliFlags>,
-  explicitKeys: ReadonlySet<FlagKey>,
-  pin: DevicePin | undefined,
-): SelectorOrigins {
-  const origins: SelectorOrigins = {};
-  for (const key of DEVICE_PIN_SELECTOR_KEYS) {
-    if (flags[key] === undefined) continue;
-    if (explicitKeys.has(key)) origins[key] = 'flag';
-    else if (pin?.selector[key] !== undefined) origins[key] = 'pin';
-    else origins[key] = 'default';
-  }
-  return origins;
-}
-
-/** Picks the selector keys an explicit source set, ignoring everything else it carries. */
-export function pickExplicitSelector(
-  values: Partial<CliFlags>,
-  explicitKeys: ReadonlySet<FlagKey>,
-): DevicePinSelector {
-  const explicit: DevicePinSelector = {};
-  for (const key of DEVICE_PIN_SELECTOR_KEYS) {
-    if (!explicitKeys.has(key) || values[key] === undefined) continue;
-    (explicit as Record<string, unknown>)[key] = values[key];
-  }
-  return explicit;
-}
-
-function selectorValuesMatch(requested: string, pinned: string): boolean {
-  return requested.trim() === pinned.trim();
-}
-
-function describeKey(key: DevicePinSelectorKey, surface: DevicePinSurface): string {
-  return surface === 'cli' ? `--${key}` : key;
+function findDevicePinConflicts(
+  pin: DevicePin,
+  flags: Readonly<Record<string, unknown>> | undefined,
+  step?: number,
+): DevicePinConflict[] {
+  if (!flags) return [];
+  return DEVICE_PIN_SELECTOR_KEYS.flatMap((key) => {
+    const requested = flags[key];
+    const pinned = pin.selector[key];
+    if (typeof requested !== 'string' || pinned === undefined) return [];
+    if (requested.trim() === pinned.trim()) return [];
+    return [{ key, pinned, requested, ...(step === undefined ? {} : { step }) }];
+  });
 }
 
 function describeSelector(selector: DevicePinSelector): string {

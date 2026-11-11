@@ -36,6 +36,7 @@ import { tryRunClientBackedCommand } from './cli/commands/router.ts';
 import { runAgentCdpCommand } from './cli/commands/agent-cdp.ts';
 import {
   applyDefaultPlatformBinding,
+  type DevicePin,
   getCommandSchema,
   readCliBatchStepsJson,
   resolveBindingSettings,
@@ -222,6 +223,7 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
         const commandProgress = createCommandProgressState();
         const client = createAgentDeviceClient(buildClientConfig(ctx), {
           host: ctx.host,
+          devicePin: ctx.devicePin,
           transport: createCliDaemonTransport({
             host,
             command,
@@ -368,6 +370,7 @@ type CliRunContext = {
   /** The device a proxy backend granted for the lease's device spec; `open` reports it. */
   leaseDevice?: LeaseDevice;
   parsedBatchSteps: BatchStep[] | undefined;
+  devicePin: DevicePin | undefined;
 };
 
 async function resolveRunContextOrExit(
@@ -432,6 +435,7 @@ async function resolveRunContextOrExit(
       resolvedRuntime: connectionDefaults?.runtime,
       connectionMetadata: connectionDefaults?.connection,
       parsedBatchSteps: undefined,
+      devicePin: parsed.devicePin,
     };
   } catch (error) {
     const appErr = asAppError(error);
@@ -484,6 +488,7 @@ async function resolveRemoteContext(
   if (ctx.effectiveFlags.remoteConfig && shouldMaterializeRemoteConnection(ctx.command)) {
     const materializationClient = createAgentDeviceClient(buildClientConfig(ctx), {
       host: ctx.host,
+      devicePin: ctx.devicePin,
       transport: createClientDaemonTransport(transport),
     });
     const { materializeRemoteConnectionForCommand } =

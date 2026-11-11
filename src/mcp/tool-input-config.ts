@@ -2,48 +2,39 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';
 import {
-  assertSelectorHonorsDevicePin,
   isFlagSupportedForCommand,
   mergeDefinedFlags,
-  pickExplicitSelector,
   resolveBindingSettings,
   resolveConfigBackedFlagDefaultsWithProvenance,
   resolveDevicePin,
   type BindingSettings,
   type CommandName,
+  type DevicePin,
   type JsonSchema,
 } from '@agent-device/command-surface';
 
 /**
  * Merges the operator's env and config-file defaults into one tool call's input, and resolves the
  * session lock from those same defaults. The lock is operator policy: a session or platform the
- * model names never turns it on, as `AGENT_DEVICE_SESSION` does for the CLI.
+ * model names never turns it on, as `AGENT_DEVICE_SESSION` does for the CLI. The device pin is
+ * operator policy the same way: it is read from those defaults only, and the client enforces it on
+ * the finished request, so a selector the model names (flat or in a batch step) cannot retarget a
+ * pinned project (#2161).
  */
 export function resolveMcpConfigDefaults(
   name: CommandName,
   explicitInput: Record<string, unknown>,
   supportedProperties: Readonly<Record<string, JsonSchema>>,
   host: HostEnvironment,
-): { input: Record<string, unknown>; binding: BindingSettings } {
-  const { flags: defaults, provenance } = resolveConfigBackedFlagDefaultsWithProvenance({
+): { input: Record<string, unknown>; binding: BindingSettings; devicePin: DevicePin | undefined } {
+  const configDefaults = resolveConfigBackedFlagDefaultsWithProvenance({
     command: name,
     cwd: host.cwd,
     env: host.env,
     cliFlags: explicitInput as CliFlags,
   });
-  // The pin is operator policy like the lock: a selector the model names must not retarget a
-  // pinned project, so it fails here with the same typed reason the CLI raises (#2161).
-  const devicePin = resolveDevicePin(defaults, provenance);
-  if (devicePin) {
-    assertSelectorHonorsDevicePin(
-      devicePin,
-      pickExplicitSelector(
-        explicitInput as Partial<CliFlags>,
-        new Set(Object.keys(explicitInput) as FlagKey[]),
-      ),
-      'input',
-    );
-  }
+  const defaults = configDefaults.flags;
+  const devicePin = resolveDevicePin(configDefaults);
   const applicableDefaults: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(defaults)) {
     if (
@@ -61,5 +52,6 @@ export function resolveMcpConfigDefaults(
       configuredPlatform: defaults.platform,
       configuredSession: defaults.session,
     }),
+    devicePin,
   };
 }

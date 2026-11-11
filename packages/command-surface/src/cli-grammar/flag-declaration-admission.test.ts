@@ -5,7 +5,7 @@ import { test, vi } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-registry';
 import type { FlagDefinition } from '@agent-device/command-registry/flag-types';
-import { resolveConfigBackedFlagDefaults } from '../schema/cli-config.ts';
+import { resolveConfigBackedFlagDefaultsWithProvenance } from '../schema/cli-config.ts';
 import { makeTempWorkspace } from '@agent-device/test-kit';
 
 /**
@@ -42,7 +42,7 @@ test('project-config admission follows the declaration: an undeclared key is ref
     writeProjectConfig(shipped.project, { daemonBaseUrl: 'https://daemon.example.test' });
     assert.throws(
       () =>
-        resolveConfigBackedFlagDefaults({
+        resolveConfigBackedFlagDefaultsWithProvenance({
           command: 'devices',
           cwd: shipped.project,
           cliFlags: OPERATOR_CLI_FLAGS,
@@ -60,7 +60,7 @@ test('project-config admission follows the declaration: an undeclared key is ref
   const registry = await import('@agent-device/command-registry/flag-registry');
   const planted = getInRegistry(registry, 'daemonBaseUrl');
   Object.assign(planted, { projectConfig: true });
-  const { resolveConfigBackedFlagDefaults: derivePlanted } =
+  const { resolveConfigBackedFlagDefaultsWithProvenance: derivePlanted } =
     await import('../schema/cli-config.ts');
   const workspace = makeTempWorkspace();
   try {
@@ -71,7 +71,7 @@ test('project-config admission follows the declaration: an undeclared key is ref
       cliFlags: OPERATOR_CLI_FLAGS,
       env: { HOME: workspace.home },
     });
-    assert.equal(defaults.daemonBaseUrl, 'https://daemon.example.test');
+    assert.equal(defaults.flags.daemonBaseUrl, 'https://daemon.example.test');
   } finally {
     fs.rmSync(workspace.root, { recursive: true, force: true });
   }

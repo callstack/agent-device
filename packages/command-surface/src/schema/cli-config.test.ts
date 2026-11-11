@@ -3,7 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { pluginHome } from '@agent-device/test-kit';
-import { resolveConfigBackedFlagDefaults } from './cli-config.ts';
+import { resolveConfigBackedFlagDefaultsWithProvenance } from './cli-config.ts';
+
+const resolveConfigBackedFlagDefaults = (
+  options: Parameters<typeof resolveConfigBackedFlagDefaultsWithProvenance>[0],
+) => resolveConfigBackedFlagDefaultsWithProvenance(options).flags;
 
 test('AGENT_DEVICE_HOME relocates user defaults; project and explicit config cannot select plugins', () => {
   const { home, env } = pluginHome();

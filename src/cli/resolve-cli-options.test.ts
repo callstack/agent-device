@@ -169,8 +169,8 @@ test('typed device selectors still reach device status and device release', () =
 
 // #2161: agent-device.json sets platform/device/udid/serial DEFAULTS, and a default stays
 // overridable. `devicePin: true` beside them is the opt-in that turns the configured selector
-// into a pin: selector-less commands inherit it and a contradicting selector fails instead of
-// silently retargeting a client project to the default simulator.
+// into a pin. Option resolution only reads the pin; the client enforces it on the finished request
+// (see src/__tests__/cli-device-pin.test.ts).
 function projectPinnedTo(config: Record<string, unknown>): string {
   const project = mkdtempForTestSync('agent-device-cli-pin-');
   fs.writeFileSync(path.join(project, 'agent-device.json'), JSON.stringify(config));
@@ -186,7 +186,6 @@ test('without devicePin a configured device stays an overridable default', () =>
 
   assert.equal(parsed.flags.device, 'iPhone 16');
   assert.equal(parsed.devicePin, undefined);
-  assert.deepEqual(parsed.selectorOrigins, { platform: 'default', device: 'flag' });
 });
 
 test('a selector-less command inherits the pinned device', () => {
@@ -195,57 +194,24 @@ test('a selector-less command inherits the pinned device', () => {
 
   assert.equal(parsed.flags.platform, 'ios');
   assert.equal(parsed.flags.device, 'iPad Pro');
-  assert.deepEqual(parsed.devicePin?.selector, { platform: 'ios', device: 'iPad Pro' });
-  assert.equal(parsed.devicePin?.policySource.kind, 'project');
-  assert.deepEqual(parsed.selectorOrigins, { platform: 'pin', device: 'pin' });
-});
-
-test('a typed selector that contradicts the pin fails and names the pin source', () => {
-  const cwd = projectPinnedTo({ platform: 'ios', device: 'iPad Pro', devicePin: true });
-  const configPath = path.join(cwd, 'agent-device.json');
-
-  assert.throws(
-    () =>
-      resolveCliOptions(['open', 'com.example.app', '--device', 'iPhone 16'], {
-        cwd,
-        env: isolatedEnv({}),
-      }),
-    (error: unknown) => {
-      assert.ok(error instanceof Error && 'code' in error && 'details' in error);
-      assert.equal(error.code, 'INVALID_ARGS');
-      assert.equal(
-        error.message,
-        `--device "iPhone 16" conflicts with the device pin from project config file ${configPath}, which pins platform "ios", device "iPad Pro". Edit or remove "devicePin" in that config to target another device.`,
-      );
-      const details = error.details as Record<string, unknown>;
-      assert.equal(details.reason, 'device_pin_conflict');
-      assert.equal(details.pinSource, `project config file ${configPath}`);
-      assert.deepEqual(details.conflicts, [
-        { key: 'device', pinned: 'iPad Pro', requested: 'iPhone 16' },
-      ]);
-      return true;
+  assert.deepEqual(parsed.devicePin, {
+    selector: { platform: 'ios', device: 'iPad Pro' },
+    policySource: {
+      kind: 'project',
+      label: `project config file ${path.join(cwd, 'agent-device.json')}`,
     },
-  );
-  // Sessionless mutations are pinned the same way as `open`.
-  assert.throws(
-    () => resolveCliOptions(['boot', '--platform', 'android'], { cwd, env: isolatedEnv({}) }),
-    (error: unknown) =>
-      (error as { details?: { reason?: string } }).details?.reason === 'device_pin_conflict',
-  );
+  });
 });
 
-test('a typed selector that repeats or refines the pin passes', () => {
-  const cwd = projectPinnedTo({ platform: 'ios', device: 'iPad Pro', devicePin: true });
-  const repeated = resolveCliOptions(['open', 'com.example.app', '--platform', 'ios'], {
+test('--device-pin pins the configured defaults for one invocation', () => {
+  const cwd = projectPinnedTo({ platform: 'ios', device: 'iPad Pro' });
+  const parsed = resolveCliOptions(['open', 'com.example.app', '--device-pin'], {
     cwd,
     env: isolatedEnv({}),
   });
-  assert.deepEqual(repeated.selectorOrigins, { platform: 'flag', device: 'pin' });
 
-  const refined = resolveCliOptions(['open', 'com.example.app', '--udid', 'ABCDEF'], {
-    cwd,
-    env: isolatedEnv({}),
+  assert.deepEqual(parsed.devicePin, {
+    selector: { platform: 'ios', device: 'iPad Pro' },
+    policySource: { kind: 'flag', label: 'the --device-pin flag' },
   });
-  assert.equal(refined.flags.udid, 'ABCDEF');
-  assert.deepEqual(refined.selectorOrigins, { platform: 'pin', device: 'pin', udid: 'flag' });
 });

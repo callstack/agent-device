@@ -131,17 +131,24 @@ retargeting:
 ```
 
 With this config, `agent-device open --device "iPhone 16"` fails with `INVALID_ARGS` and
-`details.reason: "device_pin_conflict"`. The message and `details.pinSource` name the file
-that set the pin (`project config file /path/to/agent-device.json`), `details.pin` lists the
-pinned values, and `details.conflicts` lists each `{ key, pinned, requested }` pair. Branch on
-`details.reason`, never on the message.
+`details.reason: "device_pin_conflict"`. The message and `details.pinSource` name the layer
+that turned the pin on (`project config file /path/to/agent-device.json`), `details.pin` lists the
+pinned values, and `details.conflicts` lists each `{ key, pinned, requested }` pair, with `step`
+set when the value came from a batch step. Branch on `details.reason`, never on the message.
+
+The pinned values are the `platform`, `device`, `udid`, and `serial` defaults that the config
+files and environment resolve to, with the usual precedence: user config, then project config,
+then `--config`, then `AGENT_DEVICE_*` variables. Every other source must repeat a pinned value or
+leave that key unset: typed flags, MCP tool input, each batch step, remote config profiles, and
+saved connection defaults. The client checks the finished request, including every batch step,
+before it contacts a daemon, so the CLI, MCP tool calls, and the batch command are held to the
+same rule.
 
 The pin only constrains the keys it sets: here `--udid` still narrows down to one iPad, and a
 selector that repeats the pinned value is accepted. A `devicePin` with no `platform`, `device`,
-`udid`, or `serial` beside it fails with `details.reason: "device_pin_without_selector"`. The
-pin is enforced on the client before a daemon is contacted, for the CLI, MCP tool calls, and
-batch files alike, and `AGENT_DEVICE_DEVICE_PIN=1` opts in from the environment when the
-selector lives in the user config.
+`udid`, or `serial` beside it fails with `details.reason: "device_pin_without_selector"`.
+`AGENT_DEVICE_DEVICE_PIN=1` opts in from the environment when the selector lives in the user
+config, and `--device-pin` opts in for one CLI invocation.
 
 Pinning is separate from [session locks](/docs/sessions#lock-a-named-session-to-a-device): a
 lock protects a named session once it is bound; a pin scopes a whole project before any session

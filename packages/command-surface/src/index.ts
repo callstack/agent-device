@@ -38,12 +38,9 @@ export {
   resolveBindingSettings,
   resolveConfigBackedFlagDefaultsWithProvenance,
   type BindingSettings,
-  assertSelectorHonorsDevicePin,
-  pickExplicitSelector,
+  assertRequestHonorsDevicePin,
   resolveDevicePin,
-  resolveSelectorOrigins,
   type DevicePin,
-  type SelectorOrigins,
 } from './schema/cli-config.ts';
 export { mergeDefinedFlags } from './schema/merge-flags.ts';
 
