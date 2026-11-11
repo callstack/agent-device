@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createTestHostEnvironment, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { runCli } from '../cli.ts';
 import { createAgentDeviceClient } from '@agent-device/client';
@@ -8,19 +8,29 @@ import {
   stateDirAndPaths,
   type RegisteredHttpDaemon,
 } from './test-utils/registered-http-daemon.ts';
+import { planRegisteredDaemonLaunches } from './test-utils/registered-daemon-fixture.ts';
 
 // A client or a CLI run takes the host it is given. These tests run the real client and the real
 // default CLI against a real registered daemon on the host's state directory, while the process
 // names another one: a daemon resolved from the process would be started, so launching is refused.
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
-  runCmdDetachedMonitored: vi.fn(() => {
-    throw new Error('A daemon was launched: the host state directory was not used.');
-  }),
+  runCmdDetachedMonitored: vi.fn(),
 }));
 import { runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 
 let daemon: RegisteredHttpDaemon | undefined;
+
+beforeEach(() => {
+  vi.mocked(runCmdDetachedMonitored).mockImplementation(
+    planRegisteredDaemonLaunches([
+      {
+        kind: 'refuse',
+        error: new Error('A daemon was launched: the host state directory was not used.'),
+      },
+    ]),
+  );
+});
 
 afterEach(async () => {
   vi.restoreAllMocks();
