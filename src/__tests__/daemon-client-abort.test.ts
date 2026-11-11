@@ -5,8 +5,10 @@ import { createAgentDeviceClient } from '@agent-device/client';
 import { startPublicDaemonRuntime } from './test-utils/public-daemon-runtime.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
-import { resolveSessionDir } from '@agent-device/host-kit/session-paths';
+import {
+  resolveSessionDir,
+  resolveSessionRequestLogPath,
+} from '@agent-device/daemon-contracts/session-artifact-paths';
 import fs from 'node:fs';
 import { skipWhenLoopbackUnavailable, type SkippableTestContext } from '@agent-device/test-kit';
 
