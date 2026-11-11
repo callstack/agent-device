@@ -19,7 +19,7 @@ Completed process history is in git history.
 - Multiple mutating selector matches collapse only if they form one ancestor–descendant chain and every member resolves to the same actionable node. Otherwise, the mutation fails with `AMBIGUOUS_MATCH`. Maestro's explicit expected-point/non-hittable compatibility path stays separate.
 - Keep synthesized iOS gesture policy outside the element dispatch-path matrix.
 - On Android, the press/click moving-target guard samples fresh geometry until the target remains on one surface at one position for 100 ms, within a 1,500 ms transition window. A target that cannot establish that evidence is refused. Other platforms retain their existing guard schedule.
-- On `runtime-ref` and `runtime-selector`, ordinary primary iOS `press` and `click` actions wait for native hittability when the request-bound Apple runtime advertises `pressReadiness`. The original request budget bounds the wait; ambiguity or changed target authorization refuses input.
+- On `runtime-ref` and `runtime-selector`, ordinary primary iOS `press` and `click` actions wait for native hittability when the request-bound Apple runtime advertises `pressReadiness`. The original request budget bounds the wait; ambiguity or changed target authorization refuses input. Text-entry contents are not part of press identity.
 
 ## Context
 
@@ -325,15 +325,16 @@ A daemon reset there destroyed every healthy app session that the daemon owned.
 ### Native readiness for ordinary iOS taps
 
 Ordinary resolved `press` and `click` actions wait implicitly when the request-bound Apple owner
-reports that the exact authorized control is not natively hittable. The snapshot `hittable` field records capture-time geometric actionability; it does not establish that an overlay has released input. The native read checks live control hittability separately. The native mutation-read binds numeric element type, identifier, label, value, and rectangle before
+reports that the exact authorized control is not natively hittable. The snapshot `hittable` field records capture-time geometric actionability; it does not establish that an overlay has released input. The native read checks live control hittability separately. The native mutation-read binds numeric element type, identifier, label, and rectangle before
 counting matches; a hittable duplicate cannot replace a blocked target. The binding keeps the capture
 producer's native identity and full rectangle, after required coordinate normalization and before row
 promotion or clipping. This private evidence survives session storage and is omitted from public
-snapshots. Secure field values are omitted before the wire.
-Input values are compared in the capture producer's view: native captures retain raw contents;
-guest AX captures retain their reported accessibility value through private provenance.
-Reauthorization cannot change value views, even when the strings are equal.
-Identical reported AX values cannot prove an underlying content change.
+snapshots. Non-text-entry controls also bind their value.
+TextField, SearchField, TextView, and SecureTextField values are omitted from the private press binding.
+Text-entry contents are state, not press identity; readiness does not prove that contents are unchanged.
+This rule replaces producer-specific input-value binding, which adds live reads and still cannot
+distinguish contents that accessibility reports with the same value.
+Selectors retain their authored value constraints when the canonical target is re-observed.
 A native reply must prove the actual queried app matches the authorized surface. The wait polls only this native binding. After a blocked wait becomes ready, one fresh canonical capture must still authorize the same target on the same surface and its parent/child guards must choose the dispatch point before input. The original request deadline and cancellation signal bound every read and capture.
 Expected-target and already-resolved bindings are checked once and refuse a blocked control
 without recapturing or replacing that binding.

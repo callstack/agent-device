@@ -1,5 +1,6 @@
 import { areCapturedRectsAtSamePosition } from '@agent-device/kernel/rect-center';
 import type { SnapshotNativePressTarget } from '@agent-device/kernel/snapshot';
+import { NATIVE_PRESS_TEXT_ENTRY_TYPES } from '@agent-device/kernel/snapshot';
 
 type TargetBinding = Omit<SnapshotNativePressTarget, 'type'> & { type: string | number };
 
@@ -10,11 +11,9 @@ export function matchesAuthorizedPressTarget(
 ): boolean {
   return (
     expected.type === candidate.type &&
-    (expected.valueSource === undefined || expected.valueSource === 'accessibility') &&
-    expected.valueSource === candidate.valueSource &&
     (['identifier', 'label', 'value'] as const).every(
       (key) =>
-        (key === 'value' && expected.type === 'SecureTextField') ||
+        (key === 'value' && NATIVE_PRESS_TEXT_ENTRY_TYPES.has(expected.type)) ||
         (expected[key] ?? '').trim().normalize('NFC') ===
           (candidate[key] ?? '').trim().normalize('NFC'),
     ) &&

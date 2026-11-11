@@ -139,6 +139,63 @@ test('press refuses a selector miss after one interactive and full capture attem
   );
 });
 
+for (const target of ['label="Input"', 'value="before"']) {
+  test(`text-entry readiness preserves authored ${target} matching after contents change`, async () => {
+    const before = [
+      APPLICATION_ONLY_NODES[0]!,
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'TextField',
+        label: 'Input',
+        identifier: 'input',
+        value: 'before',
+        editable: true,
+        hittable: true,
+        rect: { x: 40, y: 240, width: 100, height: 50 },
+      },
+    ];
+    const changed = before.map((node) => ({
+      ...node,
+      ...('value' in node ? { value: 'after' } : {}),
+    }));
+    await withPressSelectorDaemon(
+      [
+        snapshotEntry(before),
+        {
+          command: 'ios.runner.pressReadiness',
+          result: { pressReadiness: 'blocked', pressReadinessAppBundleId: APP },
+        },
+        {
+          command: 'ios.runner.pressReadiness',
+          result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
+        },
+        { ...snapshotEntry(changed), repeat: true },
+        ...(target.startsWith('label=') ? [tapEntry(90, 265)] : []),
+      ],
+      async (daemon, transcript) => {
+        const press = await daemon.callCommand('press', [target]);
+        if (target.startsWith('label=')) {
+          assertRpcOk(press);
+          assert.equal(
+            transcript.calls.filter((call) => call.command === 'ios.runner.tap').length,
+            1,
+          );
+        } else {
+          const error = assertRpcError(press, 500, 'COMMAND_FAILED', /Selector did not match/);
+          assert.equal((error.details as { reason?: unknown }).reason, 'selector_not_found');
+          assert.equal((error.details as { dispatched?: unknown }).dispatched, 'no');
+          assert.equal(
+            transcript.calls.filter((call) => call.command === 'ios.runner.tap').length,
+            0,
+          );
+        }
+        transcript.assertComplete();
+      },
+    );
+  });
+}
+
 test('native fallback readiness failure cannot corroborate a changed tree', async () => {
   const baseline = snapshotEntry(CONTINUE_BUTTON_NODES);
   const changed = snapshotEntry(

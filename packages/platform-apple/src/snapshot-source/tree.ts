@@ -5,6 +5,7 @@ import {
   isRectVisibleInViewport,
 } from '@agent-device/kernel/rect';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
+import { NATIVE_PRESS_TEXT_ENTRY_TYPES } from '@agent-device/kernel/snapshot';
 import type { IosViewportEvidence } from '@agent-device/contracts/ios-snapshot';
 import { snapshotSourceError } from './errors.ts';
 import { isQuarterTurnedWindowFrame } from './window-coordinate-space.ts';
@@ -299,10 +300,7 @@ function nodeFacts(
             type: nativeType,
             identifier: optionalString(value[ATTRIBUTE.identifier]),
             label: optionalString(value[ATTRIBUTE.label]),
-            ...(['TextField', 'SearchField', 'TextView'].includes(type ?? '')
-              ? { valueSource: 'accessibility' as const }
-              : {}),
-            ...(type === 'SecureTextField'
+            ...(NATIVE_PRESS_TEXT_ENTRY_TYPES.has(nativeType)
               ? {}
               : { value: optionalScalar(value[ATTRIBUTE.value]) }),
             rect: frame,

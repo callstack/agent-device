@@ -1,4 +1,3 @@
-import XCTest
 import AgentDeviceSnapshotPresentation
 
 // MARK: - Wire Models
@@ -245,7 +244,7 @@ extension NativePressTarget {
   func matches(type: UInt, identifier: String?, label: String?, value: String?, rect: SnapshotRect) -> Bool {
     func text(_ value: String?) -> String { (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
     return self.type == type && text(self.identifier) == text(identifier)
-      && text(self.label) == text(label) && (type == XCUIElement.ElementType.secureTextField.rawValue || text(self.value) == text(value))
+      && text(self.label) == text(label) && (Self.textEntryTypes.contains(type) || text(self.value) == text(value))
       && [self.rect.x - rect.x, self.rect.y - rect.y, self.rect.width - rect.width, self.rect.height - rect.height]
         .allSatisfy { $0.isFinite && abs($0) <= 1 }
       && self.rect.width >= 0 && self.rect.height >= 0 && rect.width >= 0 && rect.height >= 0

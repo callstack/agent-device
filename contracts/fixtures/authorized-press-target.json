@@ -376,5 +376,109 @@
       }
     },
     "matches": false
+  },
+  {
+    "name": "search field contents are not press identity",
+    "expected": {
+      "type": 45,
+      "label": "Input",
+      "value": "before",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 45,
+      "label": "Input",
+      "value": "after",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "matches": true
+  },
+  {
+    "name": "text field contents are not press identity",
+    "expected": {
+      "type": 49,
+      "label": "Input",
+      "value": "before",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 49,
+      "label": "Input",
+      "value": "after",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "matches": true
+  },
+  {
+    "name": "secure text field contents are not press identity",
+    "expected": {
+      "type": 50,
+      "label": "Input",
+      "value": "before",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 50,
+      "label": "Input",
+      "value": "after",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "matches": true
+  },
+  {
+    "name": "text view contents are not press identity",
+    "expected": {
+      "type": 52,
+      "label": "Input",
+      "value": "before",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 52,
+      "label": "Input",
+      "value": "after",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "matches": true
   }
 ]

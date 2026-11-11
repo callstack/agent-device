@@ -10,13 +10,6 @@ extension RunnerTests {
 #endif
   }
 
-  /// Read the input value view retained by its producer, never raw-or-display equivalence.
-  func nativePressTargetValue(_ element: XCUIElement, type: XCUIElement.ElementType, accessibilityValue: Bool = false) throws -> String? {
-    if type == .secureTextField { return nil }
-    if !accessibilityValue && Self.placeholderElementTypes.contains(type) { return Self.valueText(try element.snapshot().value) }
-    return Self.valueText(element.value)
-  }
-
   func interactiveRootNode(rect: CGRect) -> RawAXNode {
     RawAXNode(
       index: 0,
@@ -242,7 +235,7 @@ extension RunnerTests {
       nativePressTarget: nativePressTarget(type: snapshot.elementType.rawValue,
         identifier: evaluation.identifier.isEmpty ? nil : evaluation.identifier,
         label: snapshot.label.isEmpty ? nil : snapshot.label,
-        value: snapshot.elementType == .secureTextField ? nil : Self.valueText(snapshot.value),
+        value: evaluation.valueText,
         frame: snapshot.frame)
     )
   }
@@ -697,18 +690,8 @@ extension RunnerTests {
       let valueText = Self.valueText(element.value)
       let elementType = element.elementType
       let enabled = element.isEnabled
-      var target = nativePressTarget(type: elementType.rawValue, identifier: identifier,
+      let target = nativePressTarget(type: elementType.rawValue, identifier: identifier,
         label: label, value: valueText, frame: frame)
-#if os(iOS)
-      if elementType != .secureTextField && Self.placeholderElementTypes.contains(elementType) {
-        target = nil
-        let held = holdingRecordedIssues {
-          target = try? NativePressTarget(type: elementType.rawValue, identifier: identifier,
-            label: label, value: nativePressTargetValue(element, type: elementType), rect: SnapshotRect(frame))
-        }
-        if !held.issues.isEmpty || held.exceptionMessage != nil { target = nil }
-      }
-#endif
 
       node = RawAXNode(
         index: index,

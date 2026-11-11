@@ -559,8 +559,18 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     second.frame = window.windowScene.coordinateSpace.bounds;
     second.accessibilityIdentifier = @"agent-device-second-window";
     second.rootViewController = [UIViewController new];
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-second-window-duplicate"]) {
+      UIButton *duplicate = [UIButton buttonWithType:UIButtonTypeSystem];
+      duplicate.frame = CGRectMake(40, 300, 200, 44);
+      duplicate.accessibilityIdentifier = @"native-window-duplicate";
+      [duplicate setTitle:@"Window duplicate" forState:UIControlStateNormal];
+      [second.rootViewController.view addSubview:duplicate];
+    }
     self.secondWindow = second;
     [second makeKeyAndVisible];
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-second-window-zero-frame"]) {
+      second.frame = CGRectZero;
+    }
   }
 }
 
@@ -649,6 +659,14 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       toggle.on = index == 1;
       [self.view addSubview:toggle];
     }
+  }
+
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-second-window-duplicate"]) {
+    UIButton *duplicate = [UIButton buttonWithType:UIButtonTypeSystem];
+    duplicate.frame = CGRectMake(40, 300, 200, 44);
+    duplicate.accessibilityIdentifier = @"native-window-duplicate";
+    [duplicate setTitle:@"Window duplicate" forState:UIControlStateNormal];
+    [self.view addSubview:duplicate];
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-regression"]) {

@@ -373,50 +373,63 @@ extension RunnerTests {
   /// public selector reads, a hittable sibling can never stand in for the authorized control.
   func queryAuthorizedPressTarget(app: XCUIApplication, target: NativePressTarget, appBundleId: String? = nil) throws -> Response {
     let expected = target.rect
-    guard let type = XCUIElement.ElementType(rawValue: target.type),
-      target.valueSource == nil || target.valueSource == "accessibility",
+    guard XCUIElement.ElementType(rawValue: target.type) != nil,
       expected.width > 0, expected.height > 0,
       [expected.x, expected.y, expected.width, expected.height].allSatisfy({ $0.isFinite }) else {
       return Response(ok: true, data: DataPayload(pressReadiness: "missing", pressReadinessAppBundleId: appBundleId))
     }
     let roots = try elementSearchRoots(root: app, litDisplayID: requestLitPanel?.displayID)
-    let windows = roots.flatMap { root -> [XCUIElement] in
-      var windows: [XCUIElement] = []
-      let held = holdingRecordedIssues {
-        windows = root is XCUIApplication ? root.windows.allElementsBoundByIndex : [root]
+    var windows: [XCUIElement] = []
+    let held = holdingRecordedIssues {
+      windows = roots.flatMap { $0 is XCUIApplication ? $0.windows.allElementsBoundByIndex : [$0] }
+    }
+    guard held.issues.isEmpty, held.exceptionMessage == nil, !windows.isEmpty else {
+      throw RunnerAppScreenCaptureFailure.unresolvedScreen
+    }
+    let orientation = capturedInterfaceOrientation(app: app)
+    let identity = Self.authorizedPressTargetPredicate(target)
+    var matches: [XCUIElement] = []
+    for window in windows {
+      let windowSnapshot = try window.snapshot()
+      var frame = CGRect.null
+      let geometry = holdingRecordedIssues { frame = window.frame }
+      if !geometry.issues.isEmpty || geometry.exceptionMessage != nil
+        || !SnapshotGeometry.isPositiveFinite(frame) || !SnapshotGeometry.isPositiveFinite(windowSnapshot.frame) {
+        var possible: Bool?
+        let probe = holdingRecordedIssues {
+          possible = identity.evaluate(with: windowSnapshot)
+            || window.descendants(matching: .any).matching(identity).count > 0
+        }
+        guard probe.issues.isEmpty, probe.exceptionMessage == nil, possible == false else {
+          throw RunnerAppScreenCaptureFailure.unresolvedScreen
+        }
+        continue
       }
-      return held.issues.isEmpty && held.exceptionMessage == nil ? windows : []
-    }
-    let offsets = windows.compactMap { window -> CGSize? in
-      var offset: CGSize?
-      let held = holdingRecordedIssues {
-        guard window.exists else { return }
-        let frame = window.frame
-        offset = SnapshotContentTranslation.offset(reportedBox: CGRect(origin: .zero, size: frame.size), viewportBox: frame)
+      // A placed app can report origin zero while its window is on screen elsewhere.
+      let space = SnapshotGeometrySpace.space(reportedBySurfaceHost: true,
+        reportedFrame: windowSnapshot.frame, inheritedFrom: .appOrientation,
+        viewport: .reported(box: frame, interfaceOrientation: orientation))
+      if target.matches(type: windowSnapshot.elementType.rawValue, identifier: windowSnapshot.identifier,
+        label: windowSnapshot.label, value: Self.valueText(windowSnapshot.value),
+        rect: SnapshotRect(space.orientedFrame(of: windowSnapshot.frame))) {
+        matches.append(window)
       }
-      return held.issues.isEmpty && held.exceptionMessage == nil ? offset : nil
-    }
-    func matchesBinding(_ attributes: XCUIElementAttributes, rect: CGRect, value: String?) -> Bool {
-      target.matches(type: attributes.elementType.rawValue, identifier: attributes.identifier,
-        label: attributes.label, value: value, rect: SnapshotRect(rect))
-    }
-    // Snapshot frames may be window-local and input values may differ from live accessors.
-    // This only prefilters; the live frame and canonical native value below remain authoritative.
-    let binding = NSPredicate { object, _ in
-      guard let attributes = object as? XCUIElementAttributes else { return false }
-      let frame = attributes.frame
-      return matchesBinding(attributes, rect: frame, value: target.value) || offsets.contains {
-        matchesBinding(attributes, rect: frame.offsetBy(dx: $0.width, dy: $0.height), value: target.value)
+      let binding = NSPredicate { object, _ in
+        guard let attributes = object as? XCUIElementAttributes else { return false }
+        return target.matches(type: attributes.elementType.rawValue, identifier: attributes.identifier,
+          label: attributes.label, value: Self.valueText(attributes.value),
+          rect: SnapshotRect(space.orientedFrame(of: attributes.frame)))
       }
-    }
-    let matches = try roots.flatMap {
-      $0.descendants(matching: .any).matching(Self.authorizedPressTargetPredicate(target)).matching(binding).allElementsBoundByIndex
-    }.filter { element in
-      guard element.exists else { return false }
-      // Index-bound handles re-resolve the retained exact type/id/label predicate.
-      return try target.matches(type: target.type, identifier: target.identifier, label: target.label,
-        value: nativePressTargetValue(element, type: type, accessibilityValue: target.valueSource == "accessibility"),
-        rect: SnapshotRect(element.frame))
+      let candidates = window.descendants(matching: .any)
+        .matching(identity).matching(binding).allElementsBoundByIndex
+      for element in candidates {
+        let snapshot = try element.snapshot()
+        if target.matches(type: snapshot.elementType.rawValue, identifier: snapshot.identifier,
+          label: snapshot.label, value: Self.valueText(snapshot.value),
+          rect: SnapshotRect(space.orientedFrame(of: snapshot.frame))) {
+          matches.append(element)
+        }
+      }
     }
     let state = matches.count > 1 ? "ambiguous" : matches.first.map { $0.isHittable ? "ready" : "blocked" } ?? "missing"
     return Response(ok: true, data: DataPayload(pressReadiness: state, pressReadinessAppBundleId: appBundleId))

@@ -65,29 +65,31 @@ final class ConformanceTests: XCTestCase {
     XCTAssertEqual(result.qualityNotes.first?.clippedNodeCount, 1)
     XCTAssertEqual(result.qualityNotes.first?.droppedNodeCount, 0)
   }
-  func testInputValueViewSurvivesGeometryNormalizationAndCodable() throws {
+  func testTextEntryBindingSurvivesGeometryNormalizationAndCodableWithoutContents() throws {
     let rect = SnapshotRect(x: 10, y: 20, width: 100, height: 40)
-    let target = NativePressTarget(type: 49, identifier: "input", label: nil, value: "Hint",
-      valueSource: "accessibility", rect: rect)
+    let target = NativePressTarget(type: 49, identifier: "input", label: nil, value: "Hint", rect: rect)
     let node = RawAXNode(index: 0, type: "TextField", label: nil, identifier: "input", value: "Hint",
       rect: rect, enabled: true, focused: nil, selected: nil, hittable: true, depth: 0, parentIndex: nil,
       hiddenContentAbove: nil, hiddenContentBelow: nil, nativePressTarget: target)
     let normalized = SnapshotGeometrySpace.normalized(nodes: [node],
       viewport: .reported(box: CGRect(x: 0, y: 0, width: 390, height: 844)))
     XCTAssertEqual(normalized[0].nativePressTarget, target)
+    XCTAssertNil(normalized[0].nativePressTarget?.value)
     XCTAssertEqual(try JSONDecoder().decode(NativePressTarget.self, from: JSONEncoder().encode(target)), target)
   }
 
-  func testSecureValuesAreOmittedBeforeNativeBindingSerialization() throws {
-    let raw = RawAXNode(index: 0, type: "SecureTextField", label: "Password", identifier: "password",
-      value: "private-secret", rect: SnapshotRect(x: 0, y: 0, width: 100, height: 40),
-      enabled: true, focused: nil, selected: nil, hittable: true, depth: 0, parentIndex: nil,
-      hiddenContentAbove: nil, hiddenContentBelow: nil,
-      nativePressTarget: NativePressTarget(type: 50, identifier: "password", label: "Password", value: "private-secret",
-        rect: SnapshotRect(x: 0, y: 0, width: 100, height: 40)))
-    XCTAssertNil(raw.nativePressTarget?.value)
-    let encoded = try JSONEncoder().encode(raw.nativePressTarget)
-    XCTAssertFalse(String(decoding: encoded, as: UTF8.self).contains("private-secret"))
+  func testTextEntryValuesAreOmittedBeforeNativeBindingSerialization() throws {
+    for (type, name) in [(45, "SearchField"), (49, "TextField"), (50, "SecureTextField"), (52, "TextView")] {
+      let raw = RawAXNode(index: 0, type: name, label: "Input", identifier: "input",
+        value: "private-secret", rect: SnapshotRect(x: 0, y: 0, width: 100, height: 40),
+        enabled: true, focused: nil, selected: nil, hittable: true, depth: 0, parentIndex: nil,
+        hiddenContentAbove: nil, hiddenContentBelow: nil,
+        nativePressTarget: NativePressTarget(type: UInt(type), identifier: "input", label: "Input", value: "private-secret",
+          rect: SnapshotRect(x: 0, y: 0, width: 100, height: 40)))
+      XCTAssertNil(raw.nativePressTarget?.value)
+      let encoded = try JSONEncoder().encode(raw.nativePressTarget)
+      XCTAssertFalse(String(decoding: encoded, as: UTF8.self).contains("private-secret"))
+    }
   }
 
 }

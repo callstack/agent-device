@@ -41,10 +41,11 @@ extension RunnerTests {
     }
     let reference = fixtures[0].expected
     let r = reference.rect
-    // Raw native masks are ignored here; captured host descriptors already omit secure values.
-    let secure = NativePressTarget(type: XCUIElement.ElementType.secureTextField.rawValue,
-      identifier: nil, label: nil, value: nil, rect: r)
-    XCTAssertTrue(secure.matches(type: secure.type, identifier: nil, label: nil, value: "redacted", rect: r))
+    for type in [XCUIElement.ElementType.searchField, .textField, .secureTextField, .textView] {
+      let input = NativePressTarget(type: type.rawValue, identifier: nil, label: nil, value: "before", rect: r)
+      XCTAssertNil(input.value)
+      XCTAssertTrue(input.matches(type: type.rawValue, identifier: nil, label: nil, value: "after", rect: r))
+    }
     // JSON cannot encode non-finite numbers; both consumers exercise them natively.
     for invalid in [Double.nan, Double.infinity, -Double.infinity] {
       for rect in [
@@ -145,51 +146,83 @@ extension RunnerTests {
 
 #if os(iOS)
   @MainActor
-  func testReadinessDistinguishesRawInputContentsFromItsPlaceholder() throws {
+  func testReadinessKeepsAControlWithAnEmptyZeroFrameAuxiliaryWindow() throws {
+    app.launchArguments = ["--agent-device-native-states", "--agent-device-second-window", "--agent-device-second-window-zero-frame"]
+    app.launch()
+    defer { app.terminate() }
+    let field = app.textFields["native-field"]
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let auxiliary = app.windows["agent-device-second-window"]
+    XCTAssertTrue(auxiliary.exists)
+    XCTAssertTrue(auxiliary.frame.isEmpty)
+    XCTAssertEqual(auxiliary.descendants(matching: .textField).count, 0)
+    let target = NativePressTarget(type: field.elementType.rawValue, identifier: field.identifier,
+      label: field.label, value: nil, rect: SnapshotRect(field.frame))
+    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: target).data?.pressReadiness,
+      field.isHittable ? "ready" : "blocked")
+  }
+
+  @MainActor
+  func testReadinessCountsOverlappingWindowDuplicatesAndRefusesUnknownGeometry() throws {
+    for zeroFrame in [false, true] {
+      app.launchArguments = ["--agent-device-second-window", "--agent-device-second-window-duplicate"]
+        + (zeroFrame ? ["--agent-device-second-window-zero-frame"] : [])
+      app.launch()
+      defer { app.terminate() }
+      let auxiliary = app.windows["agent-device-second-window"]
+      XCTAssertTrue(auxiliary.waitForFixtureExistence(timeout: appExistenceTimeout))
+      let main = app.windows.matching(NSPredicate(format: "identifier != %@", "agent-device-second-window")).firstMatch
+      let button = main.buttons["native-window-duplicate"]
+      XCTAssertTrue(button.exists)
+      XCTAssertEqual(auxiliary.buttons.matching(identifier: "native-window-duplicate").count, 1)
+      let target = NativePressTarget(type: button.elementType.rawValue, identifier: button.identifier,
+        label: button.label, value: Self.valueText(button.value), rect: SnapshotRect(button.frame))
+      if zeroFrame {
+        XCTAssertTrue(auxiliary.frame.isEmpty)
+        XCTAssertThrowsError(try queryAuthorizedPressTarget(app: app, target: target)) { error in
+          XCTAssertEqual(error as? RunnerAppScreenCaptureFailure, .unresolvedScreen)
+        }
+      } else {
+        XCTAssertEqual(SnapshotRect(auxiliary.buttons["native-window-duplicate"].frame), target.rect)
+        XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: target).data?.pressReadiness, "ambiguous")
+      }
+    }
+  }
+
+  @MainActor
+  func testReadinessKeepsTextInputBindingAcrossContentChanges() throws {
     app.launchArguments = ["--agent-device-native-states"]
     app.launch()
     defer { app.terminate() }
     let field = app.textFields["native-field"]
     XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
-    let emptyHandle = try XCTUnwrap(app.textFields.matching(NSPredicate { object, _ in
-      guard let attributes = object as? XCUIElementAttributes else { return false }
-      return attributes.elementType == .textField && attributes.identifier == "native-field" && Self.valueText(attributes.value) == nil
-    }).allElementsBoundByIndex.first)
-    XCTAssertTrue(emptyHandle.exists)
     let empty = try XCTUnwrap(flatSnapshotNode(element: field, index: 0, parentIndex: nil)?.nativePressTarget)
+    let retained = try XCTUnwrap(app.textFields.matching(Self.authorizedPressTargetPredicate(empty)).allElementsBoundByIndex.first)
+    XCTAssertTrue(retained.exists)
     XCTAssertNil(empty.value)
     XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: empty).data?.pressReadiness, "ready")
-    // XCTest edits are setup: readiness must distinguish actual text equal to the placeholder.
     let text = "Native input"
     XCTAssertEqual(field.placeholderValue, text)
     XCTAssertEqual(Self.valueText(field.value), text)
-    let accessibility = NativePressTarget(type: empty.type, identifier: empty.identifier, label: empty.label,
-      value: text, valueSource: "accessibility", rect: empty.rect)
-    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: accessibility).data?.pressReadiness, "ready")
-    let unknown = NativePressTarget(type: empty.type, identifier: empty.identifier, label: empty.label,
-      value: text, valueSource: "unknown", rect: empty.rect)
-    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: unknown).data?.pressReadiness, "missing")
     field.tap()
     field.typeText(text)
     XCTAssertEqual(try field.snapshot().value as? String, text)
-    XCTAssertFalse(emptyHandle.exists, "index binding must re-evaluate its exact retained predicate")
+    XCTAssertTrue(retained.exists)
     let populated = try XCTUnwrap(flatSnapshotNode(element: field, index: 0, parentIndex: nil)?.nativePressTarget)
-    XCTAssertEqual(populated.value, text)
+    XCTAssertNil(populated.value)
     XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: populated).data?.pressReadiness, "ready")
-    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: empty).data?.pressReadiness, "missing")
-    // Empty and literal-placeholder text report the same AX value; this view cannot distinguish them.
-    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: accessibility).data?.pressReadiness, "ready")
+    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: empty).data?.pressReadiness, "ready")
     field.typeText("!")
-    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: accessibility).data?.pressReadiness, "missing")
+    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: empty).data?.pressReadiness, "ready")
     field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: text.count + 1))
     XCTAssertNil(Self.valueText(try field.snapshot().value))
-    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: populated).data?.pressReadiness, "missing")
+    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: populated).data?.pressReadiness, "ready")
     let cleared = try XCTUnwrap(flatSnapshotNode(element: field, index: 0, parentIndex: nil)?.nativePressTarget)
     XCTAssertNil(cleared.value)
     XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: cleared).data?.pressReadiness, "ready")
-    XCTAssertTrue(emptyHandle.exists)
+    XCTAssertTrue(retained.exists)
     app.terminate()
-    XCTAssertFalse(emptyHandle.exists)
+    XCTAssertFalse(retained.exists)
   }
 
   @MainActor

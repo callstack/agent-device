@@ -35,26 +35,13 @@ for (const field of ['x', 'y', 'width', 'height'] as const) {
   });
 }
 
-test('equal reported values cannot rebind across producer value views', () => {
-  const source = { ...cases[0]!.expected, type: 49, value: 'Hint' };
-  const accessibility = { ...source, valueSource: 'accessibility' as const };
-  expect(matchesAuthorizedPressTarget(source, accessibility)).toBe(false);
-  expect(matchesAuthorizedPressTarget(accessibility, source)).toBe(false);
-  expect(matchesAuthorizedPressTarget(accessibility, accessibility)).toBe(true);
-  const unknown = { ...source, valueSource: 'unknown' } as unknown as SnapshotNativePressTarget;
-  expect(matchesAuthorizedPressTarget(unknown, unknown)).toBe(false);
-});
-
-test('canonical secure input bindings ignore masked value changes', () => {
-  const expected = {
-    type: 'SecureTextField',
-    label: 'Password',
-    value: '••••',
-    rect: cases[0]!.expected.rect,
-  };
-  const candidate = { ...expected, value: '••••••' };
-  expect(matchesAuthorizedPressTarget(expected, candidate)).toBe(true);
-  for (const type of ['TextField', 50]) {
-    expect(matchesAuthorizedPressTarget({ ...expected, type }, { ...candidate, type })).toBe(false);
-  }
-});
+for (const type of ['SearchField', 'TextField', 'SecureTextField', 'TextView']) {
+  test(`canonical ${type} binding excludes mutable contents`, () => {
+    const expected = { type, label: 'Input', value: 'before', rect: cases[0]!.expected.rect };
+    const candidate = { ...expected, value: 'after' };
+    expect(matchesAuthorizedPressTarget(expected, candidate)).toBe(true);
+    expect(matchesAuthorizedPressTarget(expected, { ...candidate, label: 'Replacement' })).toBe(
+      false,
+    );
+  });
+}

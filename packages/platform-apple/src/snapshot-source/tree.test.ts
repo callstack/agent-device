@@ -855,25 +855,8 @@ test('bridge binding carries classified numeric native types, including trait pr
   }
 });
 
-test('bridge binding omits secure values before presentation', () => {
-  const decoded = decodeSnapshotBridgeTree(
-    {
-      [automationType]: 50,
-      [label]: 'Password',
-      XC_kAXXCAttributeValue: 'private-secret',
-      [frame]: { X: 10, Y: 20, Width: 100, Height: 40 },
-      [children]: [],
-    },
-    { truncated: false },
-    limits,
-  );
-  assert.equal(decoded.nodes[0]?.nativePressTarget?.type, 50);
-  assert.equal(decoded.nodes[0]?.nativePressTarget?.value, undefined);
-  assert.equal(decoded.nodes[0]?.nativePressTarget?.valueSource, undefined);
-});
-
-test('guest input bindings retain their reported value view even when no value is present', () => {
-  for (const type of [45, 49, 52]) {
+test('bridge press bindings omit text-entry contents before presentation', () => {
+  for (const type of [45, 49, 50, 52]) {
     for (const value of [undefined, 'Hint']) {
       const node = decodeSnapshotBridgeTree(
         {
@@ -885,8 +868,9 @@ test('guest input bindings retain their reported value view even when no value i
         { truncated: false },
         limits,
       ).nodes[0]!;
-      assert.equal(node.nativePressTarget?.valueSource, 'accessibility');
-      assert.equal(node.nativePressTarget?.value, value);
+      assert.equal(node.nativePressTarget?.type, type);
+      assert.equal(node.nativePressTarget?.value, undefined);
+      assert.equal(node.value, value);
     }
   }
 });
