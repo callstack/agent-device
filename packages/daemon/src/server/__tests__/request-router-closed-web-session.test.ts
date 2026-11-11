@@ -9,6 +9,7 @@ import {
 } from '@agent-device/kernel/device';
 import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 import {
+  ANDROID_EMULATOR,
   WEB_DESKTOP_DEVICE,
   createTestHostEnvironment,
   mkdtempForTestSync,
@@ -85,13 +86,14 @@ function request(
   command: string,
   positionals: string[] = [],
   requestId = command,
+  flags: DaemonRequest['flags'] = { platform: 'web' },
 ): DaemonRequest {
   return {
     token: 'test-token',
     session,
     command,
     positionals,
-    flags: { platform: 'web' },
+    flags,
     meta: { requestId: `req-${requestId}`, sessionExplicit: true },
   };
 }
@@ -223,3 +225,44 @@ test('a named web session that was never opened is not answered as closed', asyn
     fs.rmSync(daemon.claimsDir, { recursive: true, force: true });
   }
 });
+
+test.each([
+  ['named session', 'mixed-platform'],
+  ['default session', 'default'],
+] as const)(
+  'a successful non-web open of a %s supersedes a closed web marker',
+  async (_label, session) => {
+    const daemon = webDaemon();
+    try {
+      expect(
+        await daemon.handler(request(session, 'open', ['about:blank'], 'open-web')),
+      ).toMatchObject({ ok: true });
+      expect(await daemon.handler(request(session, 'close', [], 'close-web'))).toMatchObject({
+        ok: true,
+      });
+      expect(daemon.sessionStore.get(session)).toBeUndefined();
+      expect(daemon.sessionStore.hasClosedBrowserSession(session)).toBe(true);
+
+      mockResolveTargetDevice.mockResolvedValue(ANDROID_EMULATOR);
+      const opened = await daemon.handler(
+        request(session, 'open', ['com.android.settings'], 'open-android', {
+          platform: 'android',
+        }),
+      );
+      expect(opened).toMatchObject({ ok: true });
+      expect(daemon.sessionStore.get(session)?.device.platform).toBe('android');
+
+      const snapshot = await daemon.handler(
+        request(session, 'snapshot', [], 'snapshot-android', { platform: 'android' }),
+      );
+      if (!snapshot.ok) {
+        expect(snapshot.error.details?.reason).not.toBe(
+          PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound,
+        );
+      }
+      expect(daemon.sessionStore.hasClosedBrowserSession(session)).toBe(false);
+    } finally {
+      fs.rmSync(daemon.claimsDir, { recursive: true, force: true });
+    }
+  },
+);

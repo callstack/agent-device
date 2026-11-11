@@ -277,6 +277,45 @@ function attachPerfCapture(
   return finish;
 }
 
+test('daemon session teardown records a closed browser when the platform close succeeds', async () => {
+  const sessionName = 'web-closed-marker-teardown';
+  const sessionStore = makeSessionStore();
+  const device = webSessionDevice(WEB_DESKTOP_DEVICE, { name: sessionName });
+  sessionStore.publish(sessionName, makeSession(sessionName, device));
+  const platformCleanup = platformResourceCleanupFixture({
+    closeManagedBrowser: async () => true,
+  });
+
+  await teardownSessionResources({
+    appLog: 'already-settled',
+    ref: sessionStore.lookup(sessionName)!,
+    sessionStore,
+    platformCleanup,
+  });
+
+  // Shutdown and lease expiry both reach this mark through teardownSessionResources.
+  expect(sessionStore.hasClosedBrowserSession(sessionName)).toBe(true);
+});
+
+test('daemon session teardown does not record a closed browser when the platform close reports none', async () => {
+  const sessionName = 'web-unmarked-teardown';
+  const sessionStore = makeSessionStore();
+  const device = webSessionDevice(WEB_DESKTOP_DEVICE, { name: sessionName });
+  sessionStore.publish(sessionName, makeSession(sessionName, device));
+  const platformCleanup = platformResourceCleanupFixture({
+    closeManagedBrowser: async () => false,
+  });
+
+  await teardownSessionResources({
+    appLog: 'already-settled',
+    ref: sessionStore.lookup(sessionName)!,
+    sessionStore,
+    platformCleanup,
+  });
+
+  expect(sessionStore.hasClosedBrowserSession(sessionName)).toBe(false);
+});
+
 test('daemon session teardown closes an open web session immediately, not on agent-browser idle timeout', async () => {
   const sessionName = 'web-active-teardown';
   const sessionStore = makeSessionStore();

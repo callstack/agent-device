@@ -60,7 +60,8 @@ export class SessionStore {
   /**
    * Addresses whose managed browser close succeeded. The set lives on this store, so it ends when
    * the daemon's store does: a restart starts without it. A failed close never enters it, and a
-   * successful open leaves it.
+   * successful open of any platform leaves it. A marked address is refused only while no session
+   * is held there.
    */
   private readonly closedBrowserSessions = new Set<string>();
   private readonly retainedExecutionHosts = new Map<string, RetainedExecutionHost>();
@@ -172,12 +173,12 @@ export class SessionStore {
     return this.sessions.delete(ref.address);
   }
 
-  /** The managed browser for `address` closed successfully. Later non-open commands refuse it. */
+  /** The managed browser for `address` closed successfully. Commands refuse it while no session is held there. */
   markClosedBrowserSession(address: string): void {
     this.closedBrowserSessions.add(address);
   }
 
-  /** A successful open of `address` may use the browser again. */
+  /** A successful open of `address` leaves the set, whichever platform opened. */
   clearClosedBrowserSession(address: string): void {
     this.closedBrowserSessions.delete(address);
   }

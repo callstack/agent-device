@@ -300,7 +300,7 @@ export async function completeOpenCommand(params: {
       openDispatchSession?.trace?.outPath,
     ),
   });
-  if (device.platform === 'web') sessionStore.clearClosedBrowserSession(sessionName);
+  sessionStore.clearClosedBrowserSession(sessionName);
   sessionAppBundleId = outcome.appBundleId ?? sessionAppBundleId;
   const timing: OpenTiming = { ...outcome.timing };
   const preparedSelection = markSelectionBootOccurred(selection);

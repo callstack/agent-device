@@ -127,8 +127,9 @@ const DAEMON_ROUTE_HANDLERS = {
 export type { DaemonCommandRoute };
 
 /**
- * `batch` and `replay` re-enter this chain per step, so an `open` step can clear a closed web
- * session. Inventory commands do not drive the browser.
+ * A marked address is refused only while the daemon holds no session there. `batch` and `replay`
+ * re-enter this chain per step, so an `open` step can clear the marker. Inventory commands do not
+ * drive the browser.
  */
 function closedWebSessionAllows(command: string): boolean {
   return (
@@ -145,7 +146,8 @@ export async function runRequestHandlerChain(
 ): Promise<DaemonResponse | null> {
   if (
     !closedWebSessionAllows(params.req.command) &&
-    params.sessionStore.hasClosedBrowserSession(params.sessionName)
+    params.sessionStore.hasClosedBrowserSession(params.sessionName) &&
+    params.sessionStore.get(params.sessionName) === undefined
   ) {
     const { namedSessionNotFoundError } = await import('../core/explicit-session-resolution.ts');
     throw namedSessionNotFoundError(params.sessionName);
