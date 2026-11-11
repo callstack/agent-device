@@ -568,13 +568,6 @@ export async function createRequestExecutionScope(params: {
   }
 }
 
-/**
- * The request's device access, gated by the executing command's #1320 claim
- * policy: bindings hand out device operations only after the claim admission
- * derived from that policy allows it, so `transient-exclusive` commands hold an
- * exclusive claim for as long as they can reach a device and every other policy
- * stays out of the claim store.
- */
 function createRequestDeviceAccess(params: {
   env: EnvMap;
   req: DaemonRequest;
