@@ -9,6 +9,7 @@ import { runCmdSync } from '@agent-device/host-kit/command';
 import { isProcessAlive, readProcessStartTime } from '@agent-device/host-kit/process';
 import { stopAndRetireDaemon } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import { waitForDaemonExit } from '@agent-device/daemon-contracts/daemon-process';
 
 import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import { runCliJson } from './test-helpers.ts';
@@ -101,7 +102,7 @@ test('clean daemon script stops a live daemon before removing metadata', async (
       },
     );
     assert.equal(cleanup.exitCode, 0, cleanup.stderr);
-    assert.equal(isProcessAlive(info.pid), false);
+    await assertDaemonLifetimeEnded(info);
     assert.equal(fs.existsSync(path.join(stateDir, 'daemon.json')), false);
     assert.equal(fs.existsSync(path.join(stateDir, 'daemon.lock')), false);
     // #1781 B1: the stopped daemon must take every process it owned with it and
@@ -137,13 +138,26 @@ test('forced retirement waits for a real daemon and reclaims its abandoned regis
     if (result.status !== 'retired') assert.fail('retirement not confirmed');
     assert.equal(result.termination.mode, 'forced');
     assert.equal(result.removedInfo, true);
-    assert.equal(isProcessAlive(info.pid), false);
+    await assertDaemonLifetimeEnded(info);
     assert.equal(fs.existsSync(paths.infoPath), false);
     assert.equal(fs.existsSync(paths.lockPath), false);
   } finally {
     await cleanupDaemonTestState(stateDir, info ?? null);
   }
 });
+
+/**
+ * Checks the daemon lifetime with the exit predicate that retirement confirms. A killed detached
+ * daemon is a zombie until its new parent reaps it, and `kill(pid, 0)` still finds a zombie.
+ */
+async function assertDaemonLifetimeEnded(info: DaemonInfo): Promise<void> {
+  assert.ok(info.processStartTime, 'the daemon record names its process start time');
+  const wait = await waitForDaemonExit(
+    { pid: info.pid, startTime: info.processStartTime },
+    { timeoutMs: 0 },
+  );
+  assert.equal(wait.exited, true, `daemon pid ${info.pid} still runs its recorded lifetime`);
+}
 
 function readDaemonInfo(stateDir: string): DaemonInfo {
   return JSON.parse(fs.readFileSync(path.join(stateDir, 'daemon.json'), 'utf8')) as DaemonInfo;
