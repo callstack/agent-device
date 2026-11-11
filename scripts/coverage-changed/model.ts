@@ -208,9 +208,16 @@ function sum<T>(items: readonly T[], pick: (item: T) => number): number {
 }
 
 // Test code never counts toward the gate or the excluded tally, which exists
-// to surface hidden product logic, not test code.
+// to surface hidden product logic, not test code. Test-kit helpers and
+// fixtures files are test material too — the coverage config excludes them
+// alongside test files — so their added lines stay out of the tally as well.
 function isTestFile(path: string): boolean {
-  return /\.test\.ts$/.test(path) || /(^|\/)__tests__\//.test(path);
+  return (
+    /\.test\.ts$/.test(path) ||
+    /(^|\/)__tests__\//.test(path) ||
+    /\.fixtures\.ts$/.test(path) ||
+    path.startsWith('packages/test-kit/')
+  );
 }
 
 // Code-like added lines of a file the run did not measure, as the non-gating

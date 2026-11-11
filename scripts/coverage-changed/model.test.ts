@@ -7,7 +7,7 @@ import {
   ignoredLineSet,
   parseLcov,
 } from './model.ts';
-import { isInstrumentedPath } from '../coverage-crap/stamp.ts';
+import { isInstrumentedPath, type CoverageConfig } from '../coverage-crap/stamp.ts';
 import { COVERAGE_CONFIG } from './fixtures.ts';
 
 test('parseLcov reads DA hits and BRDA taken, treating "-" as not taken', () => {
@@ -227,6 +227,28 @@ test('a stamp-excluded test file or a path outside every include root is not tal
     diffs: [diff('src/sdk/thing.test.ts', [1, 2, 3]), diff('README.md', [1, 2])],
     coverage,
     stamp: COVERAGE_CONFIG,
+    fileLines: () => ['const kept = 1;', '', '// a comment'],
+  });
+  assert.equal(result.totalLines, 0);
+  assert.equal(result.excluded.totalLines, 0);
+  assert.deepEqual(result.excluded.files, []);
+  assert.equal(result.passed, true);
+});
+
+test('stamp-excluded test-kit helpers and fixtures files are not tallied', () => {
+  // The real stamp excludes these alongside test files (vitest.config.ts), so
+  // they are test material, not product logic hiding under an exclude entry.
+  const stamp: CoverageConfig = {
+    ...COVERAGE_CONFIG,
+    exclude: [...COVERAGE_CONFIG.exclude, 'packages/test-kit/**', '**/*.fixtures.ts'],
+  };
+  const result = computeChangedCoverage({
+    diffs: [
+      diff('packages/test-kit/src/helper.ts', [1, 2, 3]),
+      diff('src/data.fixtures.ts', [1, 2]),
+    ],
+    coverage,
+    stamp,
     fileLines: () => ['const kept = 1;', '', '// a comment'],
   });
   assert.equal(result.totalLines, 0);

@@ -9,6 +9,7 @@ import {
   beginCoverageRun,
   describeStampMismatch,
   finishCoverageRun,
+  isIncludedPath,
   isInstrumentedPath,
   verifyCoverageStamp,
   type CoverageConfig,
@@ -426,4 +427,13 @@ test('eligibility reaches dot-prefixed segments, the way the provider matches th
   // map that omits one is the gap the verdict reports rather than an out-of-scope file.
   assert.equal(isInstrumentedPath('src/.hidden.ts', CONFIG), true);
   assert.equal(isInstrumentedPath('src/.generated/deep.ts', CONFIG), true);
+});
+
+test('include matching is the same check both eligibility predicates use', () => {
+  // `isIncludedPath` is the include half of `isInstrumentedPath`: an excluded
+  // file still counts as include-covered, a path outside every include root
+  // counts as neither.
+  assert.equal(isIncludedPath('src/generated/table.ts', CONFIG), true);
+  assert.equal(isIncludedPath('scripts/tool.ts', CONFIG), false);
+  assert.equal(isIncludedPath('src/.hidden.ts', CONFIG), true);
 });

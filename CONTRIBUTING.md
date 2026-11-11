@@ -306,7 +306,7 @@ coverage run first. The fix is the same — re-run `pnpm test:coverage` on this 
 fires before the `coverage-waiver` label is consulted, because a waiver skips a failure rather than
 blessing a report with no numbers to print. Which files owe coverage comes from the stamp's
 include/exclude: a file the config excludes is out of scope by declaration, but when an include root
-covers it its added lines are still tallied as excluded-path lines, as is a file the stamp instruments
+covers it, its code-like, non-test added lines are still tallied as excluded-path lines, as is a file the stamp instruments
 that lcov omits.
 
 ## Test app and Maestro compatibility

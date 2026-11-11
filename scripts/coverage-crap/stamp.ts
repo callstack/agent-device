@@ -170,14 +170,26 @@ function withHiddenVisible(text: string): string {
 }
 
 /**
+ * Whether any pattern in `patterns` matches `candidate`, after the same
+ * hidden-segment normalization the provider applies. One check, so the
+ * include half of eligibility cannot drift between its two callers.
+ */
+function matchesAnyPattern(candidate: string, patterns: readonly string[]): boolean {
+  return patterns.some((pattern) => path.matchesGlob(candidate, withHiddenVisible(pattern)));
+}
+
+function normalizedCandidate(relativePath: string): string {
+  return withHiddenVisible(relativePath.split('\\').join('/'));
+}
+
+/**
  * Whether the resolved config instruments `relativePath`. Vitest matches these patterns against the
  * path relative to the root, so `src/**` never reaches `packages/x/src/**`.
  */
 export function isInstrumentedPath(relativePath: string, config: CoverageConfig): boolean {
-  const candidate = withHiddenVisible(relativePath.split('\\').join('/'));
+  const candidate = normalizedCandidate(relativePath);
   return (
-    config.include.some((pattern) => path.matchesGlob(candidate, withHiddenVisible(pattern))) &&
-    !config.exclude.some((pattern) => path.matchesGlob(candidate, withHiddenVisible(pattern)))
+    matchesAnyPattern(candidate, config.include) && !matchesAnyPattern(candidate, config.exclude)
   );
 }
 
@@ -187,8 +199,7 @@ export function isInstrumentedPath(relativePath: string, config: CoverageConfig)
  * then took it back out.
  */
 export function isIncludedPath(relativePath: string, config: CoverageConfig): boolean {
-  const candidate = withHiddenVisible(relativePath.split('\\').join('/'));
-  return config.include.some((pattern) => path.matchesGlob(candidate, withHiddenVisible(pattern)));
+  return matchesAnyPattern(normalizedCandidate(relativePath), config.include);
 }
 
 /**
