@@ -93,16 +93,18 @@ function resolveFreshSessionBindingRequest(req: DaemonRequest): DaemonRequest {
   }
 }
 
+type FreshSessionDeviceLock = {
+  flags: NonNullable<DaemonRequest['flags']>;
+  options: ResolveTargetDeviceOptions | undefined;
+};
+
+/** An `open` always resolves its lock device with the open-target options. */
+type OpenDeviceLock = FreshSessionDeviceLock & { options: ResolveTargetDeviceOptions };
+
 async function resolveFreshSessionDeviceLock(
   req: DaemonRequest,
   env: EnvMap,
-): Promise<
-  | {
-      flags: NonNullable<DaemonRequest['flags']>;
-      options: ResolveTargetDeviceOptions | undefined;
-    }
-  | undefined
-> {
+): Promise<FreshSessionDeviceLock | undefined> {
   if (req.command === 'open') return await resolveOpenDeviceLock(req, env);
   if (req.command === 'replay') return await resolveReplayDeviceLock(req, env);
   return resolveExplicitDeviceLock(req, env);
@@ -134,7 +136,7 @@ async function resolveFreshSessionDevice(
   }
 }
 
-async function resolveOpenDeviceLock(req: DaemonRequest, env: EnvMap) {
+async function resolveOpenDeviceLock(req: DaemonRequest, env: EnvMap): Promise<OpenDeviceLock> {
   // Deferred to keep the daemon's eager closure within scripts/__tests__/eager-closure-budgets.ts.
   const { resolveOpenTargetDeviceOptions } =
     await import('../core/open-target-device-resolution.ts');
