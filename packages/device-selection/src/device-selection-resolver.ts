@@ -295,6 +295,19 @@ function devicePinSourceLabel(source: DevicePin['source']): string {
   return `${source.kind === 'project' ? 'project ' : ''}config file ${source.path}`;
 }
 
+export function effectiveDevicePinSelector(
+  pin: DevicePin,
+  requested: DevicePinSelector,
+): DevicePinSelector {
+  const platform = requested.platform;
+  return {
+    platform: platform && platform !== 'apple' ? platform : (pin.selector.platform ?? platform),
+    device: requested.device ?? pin.selector.device,
+    udid: requested.udid ?? pin.selector.udid,
+    serial: requested.serial ?? pin.selector.serial,
+  };
+}
+
 export function assertRequestHonorsDevicePin(
   pin: DevicePin,
   request: {

@@ -139,3 +139,38 @@ for (const [pinnedPlatform, requestedPlatform, expectedId] of [
     );
   });
 }
+
+test('Provider-backed integration proxy allocation narrows a platform pin before binding its key', async () => {
+  await withProviderScenarioResource(
+    () =>
+      createProviderScenarioHarness({
+        deviceInventoryProvider: async () => [
+          PROVIDER_SCENARIO_MACOS,
+          PROVIDER_SCENARIO_IOS_SIMULATOR,
+        ],
+      }),
+    async (daemon) => {
+      const result = await daemon.callCommand(
+        'lease_allocate',
+        [],
+        { platform: 'apple' },
+        {
+          meta: {
+            tenantId: 'team-a',
+            runId: 'run-a',
+            clientId: 'client-a',
+            leaseProvider: 'proxy',
+            leaseBackend: 'ios-instance',
+            devicePin: {
+              selector: { platform: 'ios' },
+              source: { kind: 'project', path: '/project/agent-device.json' },
+            },
+          },
+        },
+      );
+      expect(assertRpcOk(result)).toMatchObject({
+        lease: { deviceKey: 'ios:mobile:sim-1' },
+      });
+    },
+  );
+});

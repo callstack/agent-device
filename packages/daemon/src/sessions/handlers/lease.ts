@@ -223,7 +223,14 @@ async function pickProxyLeaseDeviceKey(
   env: EnvMap,
 ): Promise<string | undefined> {
   if (!isProxyLeaseScope(scope) || scope.deviceKey) return undefined;
-  const flags = req.flags ?? {};
+  const pin = req.meta?.devicePin;
+  const pinPolicy = pin
+    ? await import('@agent-device/device-selection/device-selection-resolver')
+    : undefined;
+  const flags = {
+    ...req.flags,
+    ...(pin && pinPolicy ? pinPolicy.effectiveDevicePinSelector(pin, req.flags ?? {}) : {}),
+  };
   const { hasDeviceSelectionInput } = await import('../../core/device/device-selector-intent.ts');
   if (!hasDeviceSelectionInput(flags)) return undefined;
   const { resolveTargetDevice } = await import('@agent-device/device-selection/dispatch-resolve');
@@ -241,6 +248,7 @@ async function pickProxyLeaseDeviceKey(
     },
     { env },
   );
+  if (pin && pinPolicy) pinPolicy.assertDeviceHonorsPin(pin, device, flags);
   return leaseDeviceKey({
     platform: publicPlatformString(device),
     target: device.target,

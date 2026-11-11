@@ -115,6 +115,13 @@ test('a name alias and overlapping Apple platform selectors are accepted', async
   const { client, requests } = recordingClient(PIN);
   await runCommand(client, 'snapshot', { device: 'ipad_pro', platform: 'apple' });
   assert.equal(requests.length, 1);
+  assert.equal(requests[0]?.flags?.platform, 'ios');
+});
+
+test('an Apple-family pin forwards a requested leaf platform', async () => {
+  const { client, requests } = recordingClient({ ...PIN, selector: { platform: 'apple' } });
+  await runCommand(client, 'snapshot', { platform: 'macos' });
+  assert.equal(requests[0]?.flags?.platform, 'macos');
 });
 
 for (const [selector, input, conflict] of [

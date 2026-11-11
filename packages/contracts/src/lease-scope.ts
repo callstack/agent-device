@@ -590,6 +590,9 @@ export function buildDaemonRpcRequest(
     params: {
       ...buildLeaseRpcParams(req, req.command, options),
       ...(req.command === 'lease_allocate' ? readLeaseAllocateProviderFlags(req.flags) : {}),
+      ...(req.command === 'lease_allocate' && req.meta?.devicePin
+        ? { devicePin: req.meta.devicePin }
+        : {}),
       ...(req.command === 'lease_allocate' && req.meta?.providerCredentialFingerprint
         ? { providerCredentialFingerprint: req.meta.providerCredentialFingerprint }
         : {}),

@@ -54,7 +54,6 @@ import {
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   buildRequestFlags,
-  mergeDefinedFlags,
   type AgentDeviceClient,
   type DevicePin,
   prepareDaemonCommandRequest,
@@ -140,10 +139,7 @@ export function createAgentDeviceClient(
       command,
       positionals,
       ...(input ? { input } : {}),
-      flags: buildRequestFlags(
-        mergeDefinedFlags({ ...deps.devicePin?.selector }, merged),
-        metadataFlags,
-      ),
+      flags: buildRequestFlags(merged, metadataFlags),
       runtime: merged.runtime,
       meta: {
         ...buildMeta(merged),
@@ -152,9 +148,10 @@ export function createAgentDeviceClient(
       },
     };
     if (deps.devicePin) {
-      const { assertRequestHonorsDevicePin } =
+      const { assertRequestHonorsDevicePin, effectiveDevicePinSelector } =
         await import('@agent-device/device-selection/device-selection-resolver');
       assertRequestHonorsDevicePin(deps.devicePin, request);
+      Object.assign(request.flags, effectiveDevicePinSelector(deps.devicePin, request.flags));
     }
     // `signal` rides the transport context (it is a live object, never wire data), and the guard
     // answers for a custom transport that ignores it: the caller's promise settles on abort either
