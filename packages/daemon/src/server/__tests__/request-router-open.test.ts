@@ -185,6 +185,7 @@ test('fresh open uses app-aware device selection for advisory locking and dispat
     [
       { platform: 'ios' },
       {
+        androidAvdSelection: 'running-only',
         appleSimulatorAppTarget: 'com.example.demo',
         appDeviceTarget: 'com.example.demo',
         webSession: { name: 'session-app-aware' },
@@ -194,6 +195,7 @@ test('fresh open uses app-aware device selection for advisory locking and dispat
     [
       { platform: 'ios' },
       {
+        androidAvdSelection: 'running-only',
         appleSimulatorAppTarget: 'com.example.demo',
         appDeviceTarget: 'com.example.demo',
         webSession: { name: 'session-app-aware' },

@@ -29,8 +29,10 @@ export function hasRuntimeTransportHintValues(values: RuntimeHintValues): boolea
 /** Request-scoped runner/diagnostic context, without daemon request types. */
 export type ApplicationLifecycleExecution = Readonly<{
   /**
-   * Absolute time by which a cold Simulator's boot must finish, from `open --timeout`. Absent
-   * means the platform's default boot wait; `prepare` derives its own deadline from `timeoutMs`.
+   * Absolute time by which a cold device's boot must finish. The `open` handler computes it once
+   * from `open --timeout` and passes the same value to a cold AVD boot and to open preparation.
+   * Absent means the platform's default boot wait; `prepare` derives its own deadline from
+   * `timeoutMs`.
    */
   startupDeadlineAtMs?: number;
   /**

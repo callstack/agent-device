@@ -4,7 +4,7 @@ import { resolveDeviceReadinessRuntimePlan } from '@agent-device/contracts/platf
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { asAppError } from '@agent-device/kernel/errors';
 import { errorResponse } from '@agent-device/kernel/contracts';
-import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
+import { resolveDeviceReadinessInput } from '../../core/device-readiness-input.ts';
 import {
   markSelectionBootOccurred,
   type DeviceSelectionResult,
@@ -105,13 +105,6 @@ export async function handleBootCommand(
   );
   if (guard) return guard;
 
-  const resolvedAndroidSerialAllowlist = resolveAndroidSerialAllowlist(
-    flags.androidDeviceAllowlist,
-    params.host.env,
-  );
-  const androidSerialAllowlist = resolvedAndroidSerialAllowlist
-    ? [...resolvedAndroidSerialAllowlist].sort()
-    : undefined;
   const plan = resolveDeviceReadinessRuntimePlan({ headless: flags.headless === true });
 
   const selection = await resolveBootTargetSelection(params, plan.kind === 'boot-target-headless');
@@ -129,11 +122,11 @@ export async function handleBootCommand(
   });
   if (admitted.type === 'response') return admitted.response;
 
-  const input = {
-    serial: flags.serial,
-    androidSerialAllowlist,
+  const input = resolveDeviceReadinessInput({
+    flags,
+    env: params.host.env,
     deadlineAtMs: startupDeadlineAtMs(flags.timeoutMs),
-  };
+  });
   const device =
     plan.kind === 'boot-target-headless'
       ? await (await admitted.bind(target, plan.use)).operations.bootTargetHeadless(input)

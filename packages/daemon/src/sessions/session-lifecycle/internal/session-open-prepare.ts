@@ -5,7 +5,6 @@ import { openApplicationRuntimeUse } from '@agent-device/contracts/application-l
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
-import { startupDeadlineAtMs } from '../../startup-deadline.ts';
 import type { SessionRuntimeHints, SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
@@ -138,6 +137,7 @@ export function resolveOpenRuntimeHintPlan(params: {
 
 export async function prepareOpenCommandDetails(params: {
   req: DaemonRequest;
+  startupDeadlineAtMs: number | undefined;
   logPath: string;
   surface: SessionSurface;
   openTarget: string | undefined;
@@ -166,7 +166,7 @@ export async function prepareOpenCommandDetails(params: {
     prewarmRunnerOnColdBoot:
       surface === 'app' && Boolean(openTarget) && !isDeepLinkTarget(openTarget ?? ''),
     execution: {
-      startupDeadlineAtMs: openStartupDeadlineAtMs(req),
+      startupDeadlineAtMs: params.startupDeadlineAtMs,
       requestId: req.meta?.requestId,
       logPath,
       traceLogPath: existingSession?.trace?.outPath,
@@ -231,9 +231,4 @@ async function resolvePreparedOpenIdentity(params: {
     appBundleId: resolved.appBundleId,
     appName: resolved.appName,
   };
-}
-
-/** `open --timeout` is a startup budget; it becomes the absolute deadline the boot wait honors. */
-function openStartupDeadlineAtMs(req: DaemonRequest): number | undefined {
-  return startupDeadlineAtMs(req.flags?.timeoutMs);
 }

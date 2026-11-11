@@ -76,6 +76,12 @@ import {
   inspectLifecycleRuntimeFacts,
 } from '../../../__tests__/support/application-lifecycle-runtime-harness.ts';
 import { platformResourceCleanupFixture } from '../../../__tests__/support/platform-resource-cleanup-fixture.ts';
+import { localRuntimeOwner, narrowDeviceBinding } from '@agent-device/contracts/platform-runtime';
+import type { BindDeviceRuntime } from '../../../core/request-runtime-binding.ts';
+import {
+  BOOT_TIMEOUT_REASON,
+  type EnsureReadyInput,
+} from '@agent-device/contracts/device-readiness-runtime';
 
 bindTestCommandHost();
 
@@ -144,7 +150,29 @@ const android: DeviceInfo = {
   booted: true,
 };
 
-test('failed local open before device setup rolls its device claim back', async () => {
+/** The lifecycle harness plus a local readiness operation that boots a stopped AVD. */
+function bindBootingLifecycleRuntime(
+  ensureReady: (input: EnsureReadyInput) => Promise<DeviceInfo>,
+): BindDeviceRuntime {
+  return async (device, use) => {
+    if (!(use.required as readonly string[]).includes('ensureReady')) {
+      return await bindLifecycleRuntime(device, use);
+    }
+    const facts = await inspectLifecycleRuntimeFacts(device);
+    return narrowDeviceBinding(
+      {
+        device,
+        owner: localRuntimeOwner(device.platform),
+        facts: { ...facts, operations: { ...facts.operations, ensureReady: { available: true } } },
+        operations: { ensureReady },
+        [Symbol.asyncDispose]: async () => {},
+      },
+      use,
+    );
+  };
+}
+
+test('failed local open of a stopped AVD rolls back the claim on its booted serial', async () => {
   const { store, stateDir } = setup();
   const stoppedAvd = { ...android, id: 'pixel-avd', booted: false };
   mockResolveTargetDevice.mockResolvedValue(stoppedAvd);
@@ -153,7 +181,11 @@ test('failed local open before device setup rolls its device claim back', async 
   // Readiness is package-owned, so the failure is injected at the lifecycle port's prepare
   // step; which devices the real owners run discovery for is pinned in the composition lane.
   const rejectionError = new Error('device not ready');
-  mockPrepareApplicationOpen.mockRejectedValueOnce(rejectionError);
+  let claimsBeforeFailure: ReturnType<typeof inspectDeviceClaims> = [];
+  mockPrepareApplicationOpen.mockImplementationOnce(async () => {
+    claimsBeforeFailure = inspectDeviceClaims({ serial: android.id }, process.env);
+    throw rejectionError;
+  });
 
   await assert.rejects(
     async () =>
@@ -166,15 +198,107 @@ test('failed local open before device setup rolls its device claim back', async 
           token: 'test',
           session: 'claim-rollback',
           positionals: ['Demo'],
-          flags: { platform: 'android' },
+          flags: { platform: 'android', device: stoppedAvd.name },
         },
         sessionName: 'claim-rollback',
         logPath: path.join(stateDir, 'daemon.log'),
         sessionStore: store,
+        bindDevice: bindBootingLifecycleRuntime(async () => android),
       }),
     (error: unknown) => error === rejectionError,
   );
+  assert.equal(claimsBeforeFailure.length, 1);
+  assert.deepEqual(inspectDeviceClaims({ serial: android.id }, process.env), []);
   assert.deepEqual(inspectDeviceClaims({ serial: stoppedAvd.id }, process.env), []);
+});
+
+test('open of a stopped AVD under an allowlist that excludes its booted serial claims nothing', async () => {
+  const { store, stateDir } = setup();
+  const stoppedAvd = { ...android, id: 'pixel-avd', booted: false };
+  mockResolveTargetDevice.mockResolvedValue(stoppedAvd);
+  // Android readiness discovers only allowlisted emulators, so a boot that comes up on another
+  // serial waits out its deadline instead of returning it.
+  const readinessInputs: EnsureReadyInput[] = [];
+  const ensureReady = async (input: EnsureReadyInput): Promise<DeviceInfo> => {
+    readinessInputs.push(input);
+    if (input.androidSerialAllowlist && !input.androidSerialAllowlist.includes(android.id)) {
+      throw new AppError('COMMAND_FAILED', 'Android emulator did not appear in time', {
+        reason: BOOT_TIMEOUT_REASON,
+      });
+    }
+    return android;
+  };
+
+  await assert.rejects(
+    async () =>
+      handleOpenCommand({
+        host: createTestHostEnvironment(),
+        createCommandSurface: fakeCreateCommandSurface,
+        platformServices: daemonPlatformServicesFixture(),
+        req: {
+          command: 'open',
+          token: 'test',
+          session: 'claim-allowlist',
+          positionals: ['Demo'],
+          flags: {
+            platform: 'android',
+            device: stoppedAvd.name,
+            androidDeviceAllowlist: 'emulator-5556',
+          },
+        },
+        sessionName: 'claim-allowlist',
+        logPath: path.join(stateDir, 'daemon.log'),
+        sessionStore: store,
+        bindDevice: bindBootingLifecycleRuntime(ensureReady),
+      }),
+    (error: unknown) => error instanceof AppError && error.details?.reason === BOOT_TIMEOUT_REASON,
+  );
+  assert.deepEqual(
+    readinessInputs.map((input) => input.androidSerialAllowlist),
+    [['emulator-5556']],
+  );
+  assert.deepEqual(inspectDeviceClaims({ serial: android.id }, process.env), []);
+  assert.equal(store.get('claim-allowlist'), undefined);
+});
+
+test('open of a stopped AVD boots the resolved AVD whatever --serial names', async () => {
+  const { store, stateDir } = setup();
+  const stoppedAvd = { ...android, id: 'pixel-avd', booted: false };
+  mockResolveTargetDevice.mockResolvedValue(stoppedAvd);
+  // Android readiness waits for the serial it is given, so a forwarded --serial for another
+  // device would wait for that device instead of the AVD that was resolved.
+  const readinessInputs: EnsureReadyInput[] = [];
+  const ensureReady = async (input: EnsureReadyInput): Promise<DeviceInfo> => {
+    readinessInputs.push(input);
+    if (input.serial && input.serial !== android.id) {
+      throw new AppError('COMMAND_FAILED', 'Android emulator did not appear in time', {
+        reason: BOOT_TIMEOUT_REASON,
+      });
+    }
+    return android;
+  };
+
+  const response = await handleOpenCommand({
+    host: createTestHostEnvironment(),
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      command: 'open',
+      token: 'test',
+      session: 'claim-serial',
+      positionals: ['Demo'],
+      flags: { platform: 'android', device: stoppedAvd.name, serial: 'emulator-5560' },
+    },
+    sessionName: 'claim-serial',
+    logPath: path.join(stateDir, 'daemon.log'),
+    sessionStore: store,
+    bindDevice: bindBootingLifecycleRuntime(ensureReady),
+  });
+
+  assert.equal(response.ok, true);
+  assert.equal(readinessInputs.length, 1);
+  assert.equal(readinessInputs[0]?.serial, undefined);
+  assert.equal(store.get('claim-serial')?.device.id, android.id);
 });
 
 test('failed local open after dispatch retains its device claim for recovery', async () => {

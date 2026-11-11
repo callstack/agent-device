@@ -5,7 +5,7 @@ import {
   normalizeFreshForegroundOpenSelection,
 } from '../core/device/device-selector-intent.ts';
 import { applyRequestLockPolicy } from './request-lock-policy.ts';
-import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
+import type { ResolveTargetDeviceOptions } from '@agent-device/device-selection/dispatch-resolve';
 import { buildReplayTargetDeviceResolution } from './replay-device-selection.ts';
 import type { SessionStore } from '../core/session-store.ts';
 import { hostAndDeviceIds, type DeviceInfo } from '@agent-device/kernel/device';
@@ -93,17 +93,19 @@ function resolveFreshSessionBindingRequest(req: DaemonRequest): DaemonRequest {
   }
 }
 
+type FreshSessionDeviceLock = {
+  flags: NonNullable<DaemonRequest['flags']>;
+  options: ResolveTargetDeviceOptions | undefined;
+};
+
+/** An `open` always resolves its lock device with the open-target options. */
+type OpenDeviceLock = FreshSessionDeviceLock & { options: ResolveTargetDeviceOptions };
+
 async function resolveFreshSessionDeviceLock(
   req: DaemonRequest,
   env: EnvMap,
-): Promise<
-  | {
-      flags: NonNullable<DaemonRequest['flags']>;
-      options: ReturnType<typeof buildOpenTargetDeviceResolutionOptions> | undefined;
-    }
-  | undefined
-> {
-  if (req.command === 'open') return resolveOpenDeviceLock(req, env);
+): Promise<FreshSessionDeviceLock | undefined> {
+  if (req.command === 'open') return await resolveOpenDeviceLock(req, env);
   if (req.command === 'replay') return await resolveReplayDeviceLock(req, env);
   return resolveExplicitDeviceLock(req, env);
 }
@@ -134,13 +136,11 @@ async function resolveFreshSessionDevice(
   }
 }
 
-function resolveOpenDeviceLock(req: DaemonRequest, env: EnvMap) {
-  const options = buildOpenTargetDeviceResolutionOptions(
-    req.positionals?.[0],
-    env,
-    req.flags?.surface,
-  );
-  return options ? { flags: req.flags ?? {}, options } : undefined;
+async function resolveOpenDeviceLock(req: DaemonRequest, env: EnvMap): Promise<OpenDeviceLock> {
+  // Deferred to keep the daemon's eager closure within scripts/__tests__/eager-closure-budgets.ts.
+  const { resolveOpenTargetDeviceOptions } =
+    await import('../core/open-target-device-resolution.ts');
+  return { flags: req.flags ?? {}, options: resolveOpenTargetDeviceOptions(req, env) };
 }
 
 async function resolveReplayDeviceLock(req: DaemonRequest, env: EnvMap) {

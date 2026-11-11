@@ -1,4 +1,3 @@
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { appStateUse } from '@agent-device/contracts/platform-runtime-operations';
 import {
   isIosFamily,
@@ -7,21 +6,13 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
+import { resolveDeviceReadinessInput } from '../../core/device-readiness-input.ts';
 import { admitRuntimeUse } from '../../core/runtime-admission.ts';
 import type { RuntimeCommandHandlerParams } from '../../core/session-runtime-admission.ts';
 import {
   appStateSessionNotFoundResponse,
   appleSessionRequiredRefusal,
 } from './session-appstate-apple-session.ts';
-
-function sortedAndroidSerialAllowlist(
-  value: string | undefined,
-  env: HostEnvironment['env'],
-): string[] | undefined {
-  const allowlist = resolveAndroidSerialAllowlist(value, env);
-  return allowlist ? [...allowlist].sort() : undefined;
-}
 
 /**
  * The foreground app a device runtime reports for a non-session target. Apple devices never
@@ -54,13 +45,9 @@ export async function queryDeviceRuntimeAppState(
   });
   if (admitted.type === 'response') return admitted.response;
   const runtime = admitted.runtime;
-  await runtime.operations.ensureReady({
-    serial: flags.serial,
-    androidSerialAllowlist: sortedAndroidSerialAllowlist(
-      flags.androidDeviceAllowlist,
-      params.host.env,
-    ),
-  });
+  await runtime.operations.ensureReady(
+    resolveDeviceReadinessInput({ flags, env: params.host.env }),
+  );
   const state = await runtime.operations.appState();
   return {
     ok: true,

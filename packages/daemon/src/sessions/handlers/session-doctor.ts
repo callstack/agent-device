@@ -40,7 +40,7 @@ import type {
   HostDiagnostics,
   HostDiagnosticsContext,
 } from '@agent-device/contracts/host-diagnostics';
-import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
+import { resolveDeviceReadinessInput } from '../../core/device-readiness-input.ts';
 import type { InstalledAppInfo } from '@agent-device/contracts/app-inventory-runtime';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import { appsRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
@@ -313,14 +313,10 @@ async function resolveDoctorAppInventory(params: {
     device,
     appsRuntimeUse,
   );
-  const androidSerialAllowlist = resolveAndroidSerialAllowlist(
-    req.flags?.androidDeviceAllowlist,
-    env,
+  const readyDevice = await ensureAppsRuntimeReady(
+    runtime,
+    resolveDeviceReadinessInput({ flags: req.flags ?? {}, env }),
   );
-  const readyDevice = await ensureAppsRuntimeReady(runtime, {
-    serial: req.flags?.serial,
-    androidSerialAllowlist: androidSerialAllowlist ? [...androidSerialAllowlist].sort() : undefined,
-  });
   return async (filter) => await listAppsFromRuntime(runtime, readyDevice, filter);
 }
 

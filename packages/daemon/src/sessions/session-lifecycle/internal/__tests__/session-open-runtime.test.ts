@@ -144,6 +144,7 @@ test('open applies stored runtime launchUrl and reports runtime hints', async ()
   expect(mockResolveTargetDevice).toHaveBeenCalledWith(
     { platform: 'android' },
     {
+      androidAvdSelection: 'running-only',
       appleSimulatorAppTarget: 'Demo',
       appDeviceTarget: 'Demo',
       webSession: { name: 'runtime-open' },

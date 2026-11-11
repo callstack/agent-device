@@ -394,6 +394,7 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
       allowSessionlessDefaultDevice: allowAnyDeviceSessionless,
       saveScriptFlagOwner: true,
       appLease: 'allowed',
+      androidAvdSelection: 'include-stopped',
     },
     // --timeout is a startup budget: it reaches the Simulator boot wait (#2324).
     timeoutPolicy: { ...DEFAULT_TIMEOUT_POLICY, budget: { source: 'flag', envelope: 'margin' } },

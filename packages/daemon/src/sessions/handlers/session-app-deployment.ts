@@ -1,4 +1,5 @@
 import { resolveCommandAndroidAvdSelection } from '../../core/daemon-command-registry.ts';
+import { bootStoppedLocalAndroidDevice } from '../../core/stopped-local-android-device.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
@@ -7,7 +8,6 @@ import fs from 'node:fs';
 import type { AppDeploymentResult } from '@agent-device/contracts/app-deployment-runtime';
 import {
   deployAppUse,
-  readyDeployAppUse,
   readySendPushNotificationUse,
   uninstallAppUse,
 } from '@agent-device/contracts/app-deployment-runtime-plan';
@@ -95,18 +95,19 @@ export async function handleAppDeploymentCommand(params: {
     const unsupported = unavailableRuntimeOperationResponse(command, facts.operations.deployApp);
     if (unsupported) return unsupported;
 
-    let runtime = await requireRuntimeBinding(params.bindDevice)(device, deployAppUse);
-    if (
-      runtime.owner.kind === 'local-family' &&
-      device.platform === 'android' &&
-      device.booted !== true
-    ) {
-      const readyRuntime = await requireRuntimeBinding(params.bindDevice)(
-        device,
-        readyDeployAppUse,
-      );
-      device = await readyRuntime.operations.ensureReady({});
-      runtime = await requireRuntimeBinding(params.bindDevice)(device, deployAppUse);
+    const bindDevice = requireRuntimeBinding(params.bindDevice);
+    let runtime = await bindDevice(device, deployAppUse);
+    const booted = await bootStoppedLocalAndroidDevice({
+      device,
+      owner: runtime.owner,
+      bindDevice,
+      flags,
+      env: sessionStore.host.env,
+      deadlineAtMs: undefined,
+    });
+    if (booted) {
+      device = booted;
+      runtime = await bindDevice(device, deployAppUse);
     }
     // ADR 0014: deployment can replace the visible surface. Do this immediately before the
     // bound operation so an admission failure never discards a still-valid reference frame.

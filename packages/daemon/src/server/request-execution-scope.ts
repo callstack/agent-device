@@ -1,7 +1,6 @@
 import { restrictRemoteHostInputs } from './remote-host-input-policy.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
 import {
   resolveSessionRequestLog,
   resolveSessionRunnerLogPath,
@@ -128,11 +127,10 @@ async function resolveFreshBoundedOpenDevice(req: DaemonRequest, env: EnvMap): P
   const openReq = foreground.type === 'resolved' ? foreground.req : req;
   const { resolveRequestTargetDeviceSelection } =
     await import('../core/request-device-resolution.ts');
+  const { resolveOpenTargetDeviceOptions } =
+    await import('../core/open-target-device-resolution.ts');
   return (
-    await resolveRequestTargetDeviceSelection(
-      openReq,
-      buildOpenTargetDeviceResolutionOptions(openReq.positionals?.[0], env, openReq.flags?.surface),
-    )
+    await resolveRequestTargetDeviceSelection(openReq, resolveOpenTargetDeviceOptions(openReq, env))
   ).device;
 }
 

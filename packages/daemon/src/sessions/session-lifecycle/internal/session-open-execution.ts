@@ -493,6 +493,7 @@ async function acquireDeviceClaimForOwner(params: {
 export async function openNewSessionWithDeviceClaim(params: {
   host: HostEnvironment;
   req: DaemonRequest;
+  startupDeadlineAtMs: number | undefined;
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
@@ -557,6 +558,7 @@ export async function openNewSessionWithDeviceClaim(params: {
     requireOpenSessionAdmission(sessionStore, sessionName, undefined);
     const details = await prepareOpenCommandDetails({
       req,
+      startupDeadlineAtMs: params.startupDeadlineAtMs,
       logPath,
       surface,
       openTarget,
