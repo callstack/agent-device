@@ -1,8 +1,7 @@
-import { iosNativeSnapshotNodes } from './fixtures.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { assertRpcOk } from './assertions.ts';
-import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
+import { iosNativeSnapshotNodes, PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 import {
   createAppleRunnerProviderFromTranscript,
