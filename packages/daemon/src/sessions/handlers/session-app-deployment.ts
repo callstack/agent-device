@@ -101,7 +101,9 @@ export async function handleAppDeploymentCommand(params: {
       device,
       owner: runtime.owner,
       bindDevice,
-      input: {},
+      flags,
+      env: sessionStore.host.env,
+      deadlineAtMs: undefined,
     });
     if (booted) {
       device = booted;

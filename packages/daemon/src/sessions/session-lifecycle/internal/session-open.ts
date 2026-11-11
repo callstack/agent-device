@@ -258,6 +258,8 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
   const req = foregroundResolution.type === 'resolved' ? foregroundResolution.req : params.req;
 
   requireOpenSessionAdmission(sessionStore, sessionName, existingRef);
+  // One `--timeout` budget covers the whole startup: a cold AVD boot and the open preparation.
+  const startupDeadline = startupDeadlineAtMs(req.flags?.timeoutMs);
   if (existingRef) {
     const session = sessionStore.requireCurrent(existingRef);
     // A reopen names its browser by the supplied name too: a blank one is no alias of the default.
@@ -307,6 +309,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     expireRefFrame(preparedSession);
     const details = await prepareOpenCommandDetails({
       req,
+      startupDeadlineAtMs: startupDeadline,
       logPath,
       surface: surfaceResult,
       openTarget,
@@ -408,7 +411,9 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     device: resolved.device,
     owner: runtimePlanAdmission.admission.runtime.owner,
     bindDevice: requireRuntimeBinding(params.bindDevice),
-    input: { deadlineAtMs: startupDeadlineAtMs(req.flags?.timeoutMs) },
+    flags: req.flags ?? {},
+    env: params.host.env,
+    deadlineAtMs: startupDeadline,
   });
   const selection = booted ? { ...resolved, device: booted } : resolved;
   const device = selection.device;
@@ -427,6 +432,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
       await openNewSessionWithDeviceClaim({
         host: params.host,
         req,
+        startupDeadlineAtMs: startupDeadline,
         sessionName,
         logPath,
         sessionStore,

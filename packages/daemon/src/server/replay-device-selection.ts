@@ -10,7 +10,6 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import { readReplayScriptSourceFile } from '@agent-device/replay-port/script-source';
 import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 import type { DaemonRequest } from '../core/daemon-request.ts';
-import { resolveCommandAndroidAvdSelection } from '../core/daemon-command-registry.ts';
 import {
   appTargetResolutionOptions,
   buildMaestroReplayTargetDeviceResolutionOptions,
@@ -105,12 +104,7 @@ function adScriptTargetOptions(
   if (platform === 'ios') return appTargetResolutionOptions(appTarget, env);
   // A macOS replay names an app device, never a web session.
   if (platform === 'macos')
-    return buildOpenTargetDeviceResolutionOptions(
-      appTarget,
-      env,
-      undefined,
-      resolveCommandAndroidAvdSelection('replay'),
-    );
+    return buildOpenTargetDeviceResolutionOptions(appTarget, env, undefined);
   return undefined;
 }
 

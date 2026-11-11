@@ -6,8 +6,10 @@ import { resolveCommandAndroidAvdSelection } from './daemon-command-registry.ts'
 
 /**
  * The device resolution of an `open` request. The request lock, bounded claim recovery, provider
- * context and the open handler all resolve through here, so they select the same device,
- * including a stopped AVD the `open` descriptor admits.
+ * context and the open handler all resolve through here, so they select the same device.
+ * A stopped AVD is a candidate only when `--device` names a device: device ranking prefers a
+ * virtual device over a booted one, so an unnamed open would otherwise boot a stopped AVD over a
+ * running phone.
  */
 export function resolveOpenTargetDeviceOptions(
   req: Pick<DaemonRequest, 'positionals' | 'flags'>,
@@ -17,6 +19,6 @@ export function resolveOpenTargetDeviceOptions(
     req.positionals?.[0],
     env,
     req.flags?.surface,
-    resolveCommandAndroidAvdSelection('open'),
+    req.flags?.device ? resolveCommandAndroidAvdSelection('open') : 'running-only',
   );
 }

@@ -167,3 +167,31 @@ test('open boots a stopped AVD and keys the session and its claim on the booted 
   expect(session?.device).toMatchObject({ id: android.id, booted: true });
   expect(session?.deviceClaim?.deviceKey).toBe(canonicalLocalDeviceKey(android));
 });
+
+test('open without --device selects a running phone over a stopped AVD and boots nothing', async () => {
+  const inventoryRequests: Array<{ platform?: string; androidAvdSelection?: string }> = [];
+  const phone: DeviceInfo = {
+    platform: 'android',
+    id: 'R5CN30',
+    name: 'Galaxy',
+    kind: 'device',
+    target: 'mobile',
+    booted: true,
+  };
+  const stopped = { ...android, id: android.name, booted: false };
+  const { gateway, ensureReady } = bootingLifecycleGateway(android);
+  const { handler, sessionStore } = selectionHandler([phone, stopped], inventoryRequests, gateway);
+
+  const opened = await handler({
+    token: 'test-token',
+    session: 'unnamed-open',
+    command: 'open',
+    positionals: ['com.android.settings'],
+    flags: { platform: 'android' },
+    meta: { requestId: 'open-unnamed' },
+  });
+
+  expect(opened).toMatchObject({ ok: true });
+  expect(sessionStore.get('unnamed-open')?.device.id).toBe(phone.id);
+  expect(ensureReady).not.toHaveBeenCalled();
+});
