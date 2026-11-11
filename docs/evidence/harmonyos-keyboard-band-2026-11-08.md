@@ -1,14 +1,15 @@
 # HarmonyOS keyboard band fact, live, 2026-11-08 (fixed run 2026-11-09)
 
 Evidence for #4285 (report the keyboard band in snapshot responses), re-run at the
-rebased head after the review found the published frame wrong. The window-manager
+z-order-only head after review asked for the frame branch to go. The window-manager
 table on this build never carries the key plane: the panel row reports the whole
-display whether the keyboard shows or hides. The producer therefore publishes
-visibility, and publishes a band frame only when the table proves the rect covers
-under a 0.9 share of the display's area (`DISPLAY_SPANNING_RECT_SHARE`: at or above
-that share the panel is the window manager's full-surface container, not a key
-plane). This run shows that contract live, with the guard regressions
-the old full-screen frame caused now retired. Fix commit: `2878b86e4`.
+display whether the keyboard shows or hides. The producer therefore reads only the
+panel row's z-order and publishes visibility — it never publishes a frame, so the
+0.9-share threshold (`DISPLAY_SPANNING_RECT_SHARE`) and the largest-rect display
+derivation are gone: what they guarded against (a display-sized frame marking every
+on-screen point keyboard-covered) cannot be constructed any more. This run
+re-verifies the same facts at the new head. First fix: `2878b86e4`; simplification
+follows the review question of 2026-11-10.
 
 ## Device
 
@@ -43,11 +44,13 @@ keys-only crop below starts at y 1600); the IME window surface covers the displa
 No public source reports that inner band: the window table carries window-surface
 rects, and `hidumper -s InputMethodService -a '-a'` lists installed IMEs
 (`小艺输入法`) with no geometry. A rect the table cannot prove smaller than the
-display is the container, not a band — publishing it as `visible` made the tap
-guard read every on-screen point as keyboard-covered (the `@e20` refusal in the
-previous revision of this file was that false refusal, presented as a feature).
+display is the container, not a band — publishing one as `visible` made the tap
+guard read every on-screen point as keyboard-covered (the `@e20` refusal in an
+earlier revision of this file was that false refusal, presented as a feature).
+The producer no longer reads the rect column at all: z-order decides visibility,
+and the fact is always `visibility-only`.
 
-## The fact through a raise and a dismiss (branch CLI, head `2878b86e4`)
+## The fact through a raise and a dismiss (branch CLI, z-order-only head)
 
 Settings home, keyboard hidden:
 
@@ -107,10 +110,9 @@ later taps read.
 Not run. The device exposes no public rotation channel — `uitest` has no rotate
 subcommand, and agent-device's own `setHarmonyOrientation` answers
 UNSUPPORTED_OPERATION on HarmonyOS — so the landscape run needs a physical
-rotation this session cannot perform. The rect-share rule is
-orientation-independent: it compares the panel rect against the largest rect in
-the same table, whatever the display's aspect, and the real-row fixtures pin both
-states.
+rotation this session cannot perform. The producer is orientation-independent by
+construction: z-order does not depend on rotation, nothing derives from rect
+geometry, and the real-row fixtures pin both states.
 
 ## Landing order
 
@@ -121,7 +123,7 @@ help conflict resolved.
 ## Reproduce
 
 ```sh
-# head 2878b86e4, built in the PR worktree
+# z-order-only head, built in the PR worktree
 node bin/agent-device.mjs open com.huawei.hmos.settings --activity com.huawei.hmos.settings.MainAbility \
   --platform harmonyos --serial 77TYD26826028730
 node bin/agent-device.mjs snapshot --json --platform harmonyos --serial 77TYD26826028730   # visibility-only false
@@ -136,4 +138,4 @@ hidumper -s WindowManagerService -a -a   # on the device: the raw rows quoted ab
 ```
 
 CI cannot exercise a HarmonyOS device; this file is the device-side proof of the
-parse, the rect-share rule, and the guard behavior.
+z-order parse, the visibility-only fact, and the guard behavior.
