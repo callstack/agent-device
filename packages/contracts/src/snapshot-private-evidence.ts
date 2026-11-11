@@ -41,6 +41,21 @@ type SnapshotPrivateEvidence = {
 
 const privateEvidenceBySnapshotObject = new WeakMap<object, SnapshotPrivateEvidence>();
 
+/** Refuses coordinate-derived input when the capture could not establish its screen origin. */
+export async function assertSnapshotScreenOrigin(owner: object, label: string): Promise<void> {
+  const viewport = readSnapshotViewportEvidence(owner);
+  if (viewport && viewport.kind !== 'reported') {
+    const { AppError, discloseDispatch } = await import('@agent-device/kernel/errors');
+    throw discloseDispatch(
+      new AppError('COMMAND_FAILED', `${label} has no established screen-coordinate origin`, {
+        reason: 'window-origin-unknown',
+        hint: 'Take a fresh snapshot after the accessibility channel recovers, or use screenshot to choose screen coordinates.',
+      }),
+      'no',
+    );
+  }
+}
+
 /** The producer's viewport authority for this exact capture, retained outside public node data. */
 export function attachSnapshotViewportEvidence<T extends object>(
   owner: T,

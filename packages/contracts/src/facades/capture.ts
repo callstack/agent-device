@@ -64,6 +64,7 @@ export type {
   ScreenshotResultData,
 } from '../snapshot-types.ts';
 export {
+  assertSnapshotScreenOrigin,
   attachSnapshotViewportEvidence,
   readSnapshotViewportEvidence,
   copySnapshotViewportEvidence,

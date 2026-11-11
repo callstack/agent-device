@@ -4,26 +4,10 @@ import {
 } from '@agent-device/contracts/scroll-gesture';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
-import { readSnapshotViewportEvidence } from '@agent-device/contracts/capture';
-import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 
 export type TouchReferenceFrame = GestureReferenceFrame;
 
 const snapshotReferenceFrameCache = new WeakMap<SnapshotState, TouchReferenceFrame>();
-
-/** Refuses coordinate-derived input when the capture could not establish its screen origin. */
-export function assertSnapshotScreenOrigin(owner: object, label: string): void {
-  const viewport = readSnapshotViewportEvidence(owner);
-  if (viewport && viewport.kind !== 'reported') {
-    throw discloseDispatch(
-      new AppError('COMMAND_FAILED', `${label} has no established screen-coordinate origin`, {
-        reason: 'window-origin-unknown',
-        hint: 'Take a fresh snapshot after the accessibility channel recovers, or use screenshot to choose screen coordinates.',
-      }),
-      'no',
-    );
-  }
-}
 
 export function getSnapshotReferenceFrame(
   snapshot: SnapshotState | undefined,
