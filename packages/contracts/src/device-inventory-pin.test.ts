@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { parseDevicePinSelector, readDevicePin } from './device-pin.ts';
+import { parseDevicePinSelector, readDevicePin } from './device-inventory.ts';
 
 const source = { kind: 'project', path: '/project/agent-device.json' } as const;
 
