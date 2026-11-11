@@ -21,8 +21,8 @@ extension RunnerTests {
   func testAuthorizedPressTargetMatchesGoldenParityTable() throws {
     struct Fixture: Decodable {
       let name: String
-      let expected: AuthorizedPressTarget
-      let candidate: AuthorizedPressTarget
+      let expected: NativePressTarget
+      let candidate: NativePressTarget
       let matches: Bool
     }
     let root = URL(fileURLWithPath: #filePath)
@@ -30,6 +30,12 @@ extension RunnerTests {
       .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     let fixtures = try JSONDecoder().decode([Fixture].self, from:
       Data(contentsOf: root.appendingPathComponent("contracts/fixtures/authorized-press-target.json")))
+      .map { fixture in
+        (name: fixture.name, expected: AuthorizedPressTarget(type: fixture.expected.type,
+          identifier: fixture.expected.identifier, label: fixture.expected.label, value: fixture.expected.value,
+          rect: fixture.expected.rect, point: PressTargetPoint(x: 0, y: 0)), candidate: fixture.candidate,
+          matches: fixture.matches)
+      }
     XCTAssertFalse(fixtures.isEmpty)
     for fixture in fixtures {
       let candidate = fixture.candidate
