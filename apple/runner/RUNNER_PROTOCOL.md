@@ -166,6 +166,12 @@ Successful and failed responses use the same top-level envelope:
 
 `data` is command-specific. Common fields include snapshot nodes, text lookup results, gesture timing, visibility metadata, and screenshot or recording output details.
 
+Capture-plan snapshots carry `snapshotViewport`, the acquisition's declared viewport evidence.
+Its shape is `{kind: "reported" | "derived", rect: {x, y, width, height}}` or
+`{kind: "missing", reason: "not-provided" | "invalid"}`.
+`derived` and `missing` establish no screen origin.
+A root box used to validate presented nodes does not upgrade this evidence.
+
 ## Maintenance Rules
 
 - Treat the TypeScript and Swift wire models as a single contract.

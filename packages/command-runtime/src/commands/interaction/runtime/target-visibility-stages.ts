@@ -1,4 +1,5 @@
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
+import { assertSnapshotScreenOrigin } from '@agent-device/capture-kit/touch-reference-frame';
 import type {
   Point,
   SnapshotAddressableNode,
@@ -80,6 +81,7 @@ export async function runInteractionPipelineStages<TPoint extends Point | null>(
   hooks: SelectorPipelineHooks;
   resolveTapPoint: (node: SnapshotAddressableNode) => TPoint;
 }): Promise<{ node: SnapshotAddressableNode; tapPoint: TPoint }> {
+  assertSnapshotScreenOrigin(params.nodes, params.label);
   const target = await runNodePipelineStages(
     params.policy,
     params.nodes,

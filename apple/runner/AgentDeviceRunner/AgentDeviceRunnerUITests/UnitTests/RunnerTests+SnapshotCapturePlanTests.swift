@@ -373,6 +373,35 @@ extension RunnerTests {
     XCTAssertNil(payload.snapshotQuality?.timing)
   }
 
+  func testSnapshotViewportAuthoritySurvivesOutcomeStamping() throws {
+    let box = CGRect(x: 0, y: 0, width: 551, height: 813)
+    let options = PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: true)
+    let cases: [(SnapshotViewport, String, String?)] = [
+      (.reported(box: box), "reported", nil),
+      (.derived(box: box), "derived", nil),
+      (.missing(reason: .notProvided), "missing", "not-provided"),
+    ]
+    for (viewport, kind, reason) in cases {
+      let acquisition = SnapshotAcquisition(
+        hint: SnapshotPresentation.captureHint(for: options),
+        nodes: [], truncated: false, effectiveDepth: nil, viewport: viewport
+      )
+      let presented = SnapshotPresentation.presentRaw(acquisition, options: options)
+      let payload = stampedSnapshotPayload(
+        Self.makeSnapshotBackendCapture(from: presented, acquired: acquisition),
+        backend: .privateAX, state: .recovered, reason: nil
+      )
+      let encoded = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: JSONEncoder().encode(payload)) as? [String: Any]
+      )
+      let evidence = try XCTUnwrap(encoded["snapshotViewport"] as? [String: Any])
+      XCTAssertEqual(evidence["kind"] as? String, kind)
+      XCTAssertEqual(evidence["reason"] as? String, reason)
+      XCTAssertEqual((evidence["rect"] as? [String: Any])?["width"] as? Double,
+                     kind == "missing" ? nil : 551)
+    }
+  }
+
   /// The raw plan is derived from what each backend can actually serve, not from a second
   /// hand-maintained list. Non-vacuity: flipping `querySweep.supportsRawProjection` to true adds it
   /// to the plan and fails the first two assertions — which is exactly the shape of #1797 D4, a

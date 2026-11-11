@@ -2,11 +2,13 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
+import { assertSnapshotScreenOrigin } from '@agent-device/capture-kit/touch-reference-frame';
 
 export function resolveVisibleSnapshotViewport(
   nodes: SnapshotState['nodes'],
   action: string,
 ): Rect {
+  assertSnapshotScreenOrigin(nodes, action);
   const visibility = createSnapshotVisibility(nodes);
   const visibleRects = nodes
     .filter(visibility.isVisibleInEffectiveViewport)

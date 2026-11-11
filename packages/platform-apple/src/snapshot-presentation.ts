@@ -28,10 +28,11 @@ import {
   readPresentedSurfaceFact,
   readSnapshotKeyboardBandFact,
 } from '@agent-device/kernel/record';
-import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
+import { isPositiveFiniteRect, snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import type {
   PresentedSurface,
   RawSnapshotNode,
+  Rect,
   SnapshotKeyboardBandFact,
   SnapshotQualityVerdict,
   SnapshotQualityNote,
@@ -44,7 +45,11 @@ import {
   type IosSystemSurfaceProvenance,
 } from '@agent-device/contracts/ios-system-surface';
 import { TARGET_ACTIVATION_WIRE_KEY, readTargetActivationFact } from './target-activation.ts';
-import { readSnapshotObservation, readSnapshotQualityNotes } from '@agent-device/contracts/capture';
+import {
+  attachSnapshotViewportEvidence,
+  readSnapshotObservation,
+  readSnapshotQualityNotes,
+} from '@agent-device/contracts/capture';
 
 export type AppleRunnerSnapshotResult = Readonly<{
   nodes?: RawSnapshotNode[];
@@ -65,6 +70,7 @@ export type AppleRunnerSnapshotResult = Readonly<{
   /** Foreground repair this capture's own command had to perform (#2682). */
   targetActivation?: IosTargetActivation;
   observation?: IosSnapshotObservation;
+  viewportEvidence?: IosViewportEvidence;
 }>;
 
 export function readAppleSnapshotResult(
@@ -100,11 +106,32 @@ export function readAppleSnapshotResult(
     ...(presentedSurface ? { presentedSurface } : {}),
     ...(targetActivation ? { targetActivation } : {}),
     ...(observation ? { observation } : {}),
+    ...(result.snapshotViewport === undefined
+      ? {}
+      : { viewportEvidence: readRunnerViewportEvidence(result.snapshotViewport) }),
     message:
       typeof result.message === 'string' && result.message.trim().length > 0
         ? result.message
         : undefined,
   };
+}
+
+function readRunnerViewportEvidence(value: unknown): IosViewportEvidence {
+  if (isRecord(value)) {
+    if (
+      (value.kind === 'reported' || value.kind === 'derived') &&
+      isPositiveFiniteRect(value.rect as Rect | undefined)
+    ) {
+      return { kind: value.kind, rect: value.rect as Rect };
+    }
+    if (
+      value.kind === 'missing' &&
+      (value.reason === 'not-provided' || value.reason === 'invalid')
+    ) {
+      return { kind: 'missing', reason: value.reason };
+    }
+  }
+  return { kind: 'missing', reason: 'invalid' };
 }
 
 function readSystemSurfaceProvenance(value: unknown): IosSystemSurfaceProvenance | undefined {
@@ -123,9 +150,9 @@ function readSystemSurfaceProvenance(value: unknown): IosSystemSurfaceProvenance
  * on tvOS is the screen every `XCUIApplication` rect is measured on — and it is published through the
  * same guard every other producer passes, so an unusable box stays absent instead of reaching a
  * reader as zero. A raw projection and a runner-declared failure publish no box: neither had a
- * viewport checked against its tree, so the roots alone would be a guess. This is the host-side owner
- * ADR 0004 gives the viewport question; the runner itself never grows a second wire key for a fact
- * the host already derives from the payload's roots.
+ * viewport checked against its tree, so the roots alone would be a guess. The runner's explicit
+ * acquisition evidence owns screen authority. A root-derived validation box cannot upgrade an
+ * unknown screen origin, even when the local tree has valid geometry.
  */
 export type AppleRunnerSnapshotPresentation = Readonly<{
   nodes: RawSnapshotNode[];
@@ -138,7 +165,14 @@ export function presentAppleRunnerSnapshot(
   result: AppleRunnerSnapshotResult,
 ): AppleRunnerSnapshotPresentation {
   const nodes = result.nodes ?? [];
-  const viewportEvidence = runnerViewportEvidence(nodes, result.qualityPayload?.nodes);
+  const viewportEvidence =
+    result.viewportEvidence ?? runnerViewportEvidence(nodes, result.qualityPayload?.nodes);
+  // A missing acquisition viewport still permits the runner's local, already-presented tree to be
+  // validated against its root. This validation box proves no screen origin.
+  const validationViewport =
+    viewportEvidence.kind === 'missing'
+      ? runnerViewportEvidence(nodes, result.qualityPayload?.nodes)
+      : viewportEvidence;
   if (result.runnerFatal === true || (nodes.length === 0 && result.qualityPayload === undefined)) {
     return { nodes };
   }
@@ -166,7 +200,7 @@ export function presentAppleRunnerSnapshot(
     },
     validation: {
       presentationKey: buildIosSnapshotPresentationKey(request),
-      viewport: viewportEvidence,
+      viewport: validationViewport,
       hittability: { kind: 'available' },
       lineage: { targetId: deviceId },
       residue: [],
@@ -177,7 +211,11 @@ export function presentAppleRunnerSnapshot(
     // The engine returns the box its regular projection validated this payload against and no box
     // for raw — deriving it here would only repeat that rule (#3182).
     const presentation = presentIosRunnerSnapshot(input, request);
-    const validatedViewport = snapshotViewportSizeFrom(presentation.validatedViewport);
+    attachSnapshotViewportEvidence(presentation.nodes, viewportEvidence);
+    const validatedViewport =
+      viewportEvidence.kind === 'reported'
+        ? snapshotViewportSizeFrom(presentation.validatedViewport)
+        : undefined;
     return {
       nodes: presentation.nodes,
       ...(validatedViewport ? { viewport: validatedViewport } : {}),

@@ -6,8 +6,69 @@ import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { IosSystemSurfaceProvenance } from '@agent-device/contracts/ios-system-surface';
 import type { AppleRunnerSnapshotResult } from './snapshot-presentation.ts';
 import { presentAppleRunnerSnapshot, readAppleSnapshotResult } from './snapshot-presentation.ts';
+import { readSnapshotViewportEvidence } from '@agent-device/contracts/capture';
 
 const NO_VIEWPORT_ROOT = { index: 0, type: 'Application', label: 'App' };
+
+test.each([
+  { kind: 'derived', rect: { x: 0, y: 0, width: 551, height: 813 } },
+  { kind: 'missing', reason: 'not-provided' },
+  { kind: 'reported', rect: { x: 0, y: 0, width: 0, height: 813 } },
+  null,
+])(
+  'explicit unknown viewport stays observable without gaining screen authority: %j',
+  (snapshotViewport) => {
+    const read = readAppleSnapshotResult(
+      {
+        snapshotViewport,
+        nodes: [
+          { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 551, height: 813 } },
+          {
+            index: 1,
+            parentIndex: 0,
+            type: 'Button',
+            identifier: 'action',
+            rect: { x: 240, y: 90, width: 220, height: 42 },
+            hittable: true,
+          },
+        ],
+      },
+      IOS_SIMULATOR,
+    );
+    const presented = presentAppleRunnerSnapshot('device-1', undefined, read);
+    assert.equal(
+      presented.nodes.some((node) => node.identifier === 'action'),
+      true,
+    );
+    assert.equal(presented.viewport, undefined);
+    assert.deepEqual(readSnapshotViewportEvidence(presented.nodes), read.viewportEvidence);
+    assert.notEqual(readSnapshotViewportEvidence(presented.nodes)?.kind, 'reported');
+  },
+);
+
+test('reported runner viewport retains screen authority through the wire reader and presenter', () => {
+  const rect = { x: 241, y: 224, width: 551, height: 813 };
+  const read = readAppleSnapshotResult(
+    {
+      snapshotViewport: { kind: 'reported', rect },
+      nodes: [
+        { index: 0, type: 'Application', rect },
+        {
+          index: 1,
+          parentIndex: 0,
+          type: 'Button',
+          identifier: 'action',
+          rect: { x: 481, y: 314, width: 220, height: 42 },
+          hittable: true,
+        },
+      ],
+    },
+    IOS_SIMULATOR,
+  );
+  const presented = presentAppleRunnerSnapshot('device-1', undefined, read);
+  assert.deepEqual(presented.viewport, { width: 551, height: 813 });
+  assert.deepEqual(readSnapshotViewportEvidence(presented.nodes), { kind: 'reported', rect });
+});
 
 function presentSparse(overrides: Partial<AppleRunnerSnapshotResult> = {}) {
   return () =>

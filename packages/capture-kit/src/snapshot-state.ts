@@ -1,5 +1,6 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
+  copySnapshotViewportEvidence,
   readSnapshotOcclusionContextEvidence,
   readSnapshotTextInputGeometry,
   attachSnapshotTextInputGeometry,
@@ -108,6 +109,7 @@ export function buildSnapshotState(
   );
   const textInputGeometry = readSnapshotTextInputGeometry(data.nodes);
   if (textInputGeometry) attachSnapshotTextInputGeometry(nodes, textInputGeometry);
+  copySnapshotViewportEvidence(data.nodes, nodes);
   return {
     nodes,
     truncated: data?.truncated,

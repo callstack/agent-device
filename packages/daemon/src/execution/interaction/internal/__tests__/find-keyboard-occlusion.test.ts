@@ -8,6 +8,7 @@ import {
 } from './find-touch-runtime-fixture.ts';
 import { mockTypeText } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { refFrameState } from '../../../../core/ref-frame.ts';
+import { attachSnapshotViewportEvidence } from '@agent-device/contracts/capture';
 
 vi.mock('../../../../core/snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../../../__tests__/support/legacy-snapshot-capture-fixture.ts');
@@ -16,6 +17,72 @@ vi.mock('../../../../core/snapshot-interactor-capture.ts', async () => {
 
 beforeEach(() => {
   resetFindTouchRuntimeFixture();
+});
+
+test.each(['focus', 'type'] as const)(
+  'find %s refuses unanchored capture geometry before focus or typing',
+  async (action) => {
+    const rect = { x: 0, y: 0, width: 551, height: 813 };
+    const nodes = attachSnapshotViewportEvidence(
+      [
+        { index: 0, type: 'Application', rect },
+        {
+          index: 1,
+          parentIndex: 0,
+          type: 'TextField',
+          label: 'Form',
+          rect: { x: 24, y: 90, width: 200, height: 42 },
+          hittable: true,
+          enabled: true,
+        },
+      ],
+      { kind: 'derived', rect },
+    );
+    const { response, session } = await runFindClickScenario({
+      positionals: ['Form', action, ...(action === 'type' ? ['hello'] : [])],
+      nodes,
+    });
+    expect(mockFocusPoint).not.toHaveBeenCalled();
+    expect(mockTypeText).not.toHaveBeenCalled();
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        details: {
+          reason: 'window-origin-unknown',
+          dispatched: 'no',
+        },
+      },
+    });
+    expect(refFrameState(session)).toBe('active');
+  },
+);
+
+test('find focus retains usable reported screen geometry', async () => {
+  const rect = { x: 241, y: 224, width: 551, height: 813 };
+  const nodes = attachSnapshotViewportEvidence(
+    [
+      { index: 0, type: 'Application', rect },
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'TextField',
+        label: 'Form',
+        rect: { x: 265, y: 314, width: 200, height: 42 },
+        hittable: true,
+        enabled: true,
+      },
+    ],
+    { kind: 'reported', rect },
+  );
+  const { response } = await runFindClickScenario({ positionals: ['Form', 'focus'], nodes });
+  expect(response.ok).toBe(true);
+  expect(mockFocusPoint).toHaveBeenCalledTimes(1);
+  expect(mockFocusPoint).toHaveBeenCalledWith(
+    expect.objectContaining({
+      point: { x: 365, y: 335 },
+    }),
+  );
 });
 
 function keyboardTree(targetRect?: SnapshotState['nodes'][number]['rect']): SnapshotState {

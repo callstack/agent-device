@@ -20,6 +20,7 @@ import {
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import {
   getSnapshotReferenceFrame,
+  assertSnapshotScreenOrigin,
   type TouchReferenceFrame,
 } from '@agent-device/capture-kit/touch-reference-frame';
 import { isPositiveFiniteRect, rectContains } from '@agent-device/kernel/rect';
@@ -89,6 +90,7 @@ export function resolveTypedMaestroTarget(params: {
   readonly snapshot: SnapshotState;
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
 }): MaestroTargetMatch {
+  assertSnapshotScreenOrigin(params.snapshot.nodes, 'Maestro selector target');
   return resolveTargetFromSnapshot({
     ...params,
     mode: params.query.purpose === 'swipe' ? 'swipe' : 'tap',

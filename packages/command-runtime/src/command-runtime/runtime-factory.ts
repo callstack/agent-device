@@ -5,6 +5,7 @@ import type {
   CommandSessionStore,
 } from '@agent-device/contracts/runtime-contract';
 import { restrictedCommandPolicy } from '@agent-device/contracts/command-policy';
+import { copySnapshotViewportEvidence } from '@agent-device/contracts/capture';
 
 /**
  * Assembles an in-process runtime from its backend, artifact adapter, session store, policy and
@@ -49,9 +50,11 @@ function cloneSessionRecord(
   record: CommandSessionRecord | undefined,
 ): CommandSessionRecord | undefined {
   if (!record) return undefined;
+  const snapshot = record.snapshot ? structuredClone(record.snapshot) : undefined;
+  if (snapshot) copySnapshotViewportEvidence(record.snapshot?.nodes, snapshot.nodes);
   return {
     ...record,
-    ...(record.snapshot ? { snapshot: structuredClone(record.snapshot) } : {}),
+    ...(snapshot ? { snapshot } : {}),
     ...(record.metadata ? { metadata: cloneMetadata(record.metadata) } : {}),
   };
 }
