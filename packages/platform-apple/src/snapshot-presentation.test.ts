@@ -6,7 +6,11 @@ import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { IosSystemSurfaceProvenance } from '@agent-device/contracts/ios-system-surface';
 import type { AppleRunnerSnapshotResult } from './snapshot-presentation.ts';
 import { presentAppleRunnerSnapshot, readAppleSnapshotResult } from './snapshot-presentation.ts';
-import { assertSnapshotScreenOrigin } from '@agent-device/contracts/capture';
+import {
+  assertSnapshotScreenOrigin,
+  attachSnapshotViewportEvidence,
+  copySnapshotViewportEvidence,
+} from '@agent-device/contracts/capture';
 
 const NO_VIEWPORT_ROOT = { index: 0, type: 'Application', label: 'App' };
 
@@ -87,9 +91,21 @@ test('reported runner viewport retains screen authority through the wire reader 
     },
     IOS_SIMULATOR,
   );
+  assert.deepEqual(read.viewportEvidence, { kind: 'reported', rect });
   const presented = presentAppleRunnerSnapshot('device-1', undefined, read);
   assert.deepEqual(presented.viewport, { width: 551, height: 813 });
-  await assert.doesNotReject(assertSnapshotScreenOrigin(presented.nodes, 'Captured action'));
+  assert.deepEqual(presented.nodes.find((node) => node.identifier === 'action')?.rect, {
+    x: 481,
+    y: 314,
+    width: 220,
+    height: 42,
+  });
+  const priorUnknown = attachSnapshotViewportEvidence([], {
+    kind: 'missing',
+    reason: 'not-provided',
+  });
+  copySnapshotViewportEvidence(presented.nodes, priorUnknown);
+  await assert.doesNotReject(assertSnapshotScreenOrigin(priorUnknown, 'Captured action'));
 });
 
 function presentSparse(overrides: Partial<AppleRunnerSnapshotResult> = {}) {
