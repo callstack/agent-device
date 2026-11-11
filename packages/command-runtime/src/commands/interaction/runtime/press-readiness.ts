@@ -50,21 +50,26 @@ async function awaitReadiness(
   const { context, deadline } = budget;
   let state: NativePressReadiness = 'missing';
   let current = original;
-  while (true) {
-    assertBudget(context, deadline, state);
-    state = await runtime.backend.readPressReadiness!(
-      context,
-      nativeTarget(current),
-      current.preAction?.surfaceBundleId,
-    );
-    assertBudget(context, deadline, state);
-    if (state === 'ready') return current;
-    if (state === 'ambiguous' || state === 'surface-mismatch' || !Number.isFinite(deadline))
-      throw refusal(state);
-    // This is post-resolution readiness, never a wait for a selector that does not exist.
-    if (params.expectedResolvedTarget || params.preresolvedTarget) throw refusal(state);
-    await waitForNextRead(context.signal, Math.min(50, deadline - Date.now()));
-    current = await revalidate(runtime, { ...options, signal: context.signal }, params, original);
+  try {
+    while (true) {
+      assertBudget(context, deadline, state);
+      state = await runtime.backend.readPressReadiness!(
+        context,
+        nativeTarget(current),
+        current.preAction?.surfaceBundleId,
+      );
+      assertBudget(context, deadline, state);
+      if (state === 'ready') return current;
+      if (state === 'ambiguous' || state === 'surface-mismatch' || !Number.isFinite(deadline))
+        throw refusal(state);
+      // This is post-resolution readiness, never a wait for a selector that does not exist.
+      if (params.expectedResolvedTarget || params.preresolvedTarget) throw refusal(state);
+      await waitForNextRead(context.signal, Math.min(50, deadline - Date.now()));
+      current = await revalidate(runtime, { ...options, signal: context.signal }, params, original);
+    }
+  } catch (error) {
+    if (!(error instanceof AppError) && Date.now() >= deadline) throw refusal(state, error);
+    throw error;
   }
 }
 
@@ -125,7 +130,7 @@ function refusal(state: string, cause?: unknown): AppError {
       {
         reason: INTERACTION_ERROR_REASONS.targetNotReady,
         readiness: state,
-        hint: 'Inspect the current surface and retry when the intended control is available.',
+        hint: 'Inspect the current surface and retry when the intended control is available. For an @ref, run snapshot -i and retry with a selector; re-observation can retire the old ref.',
       },
       cause,
     ),

@@ -317,5 +317,233 @@
       }
     },
     "matches": true
+  },
+  {
+    "name": "shared nonempty identifier and value",
+    "expected": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      },
+      "identifier": "continue-control",
+      "value": "Ready"
+    },
+    "candidate": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      },
+      "identifier": "continue-control",
+      "value": "Ready"
+    },
+    "matches": true
+  },
+  {
+    "name": "negative width",
+    "expected": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": -1,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "candidate": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": -1,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "matches": false
+  },
+  {
+    "name": "positive y width height rounding",
+    "expected": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "candidate": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 241,
+        "width": 101,
+        "height": 51
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "matches": true
+  },
+  {
+    "name": "negative y width height rounding",
+    "expected": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "candidate": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 239,
+        "width": 99,
+        "height": 49
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "matches": true
+  },
+  {
+    "name": "y outside capture rounding",
+    "expected": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "candidate": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 242,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "matches": false
+  },
+  {
+    "name": "width outside capture rounding",
+    "expected": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "candidate": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 102,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "matches": false
+  },
+  {
+    "name": "height outside capture rounding",
+    "expected": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "candidate": {
+      "type": "Button",
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 52
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "matches": false
   }
 ]

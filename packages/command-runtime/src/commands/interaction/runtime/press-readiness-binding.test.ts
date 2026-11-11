@@ -20,3 +20,17 @@ for (const fixture of cases) {
     expect(matchesAuthorizedPressTarget(fixture.expected, fixture.candidate)).toBe(fixture.matches);
   });
 }
+
+// JSON cannot encode non-finite numbers; both language consumers exercise them natively.
+for (const field of ['x', 'y', 'width', 'height'] as const) {
+  test(`non-finite native ${field} never establishes a binding`, () => {
+    const { expected, candidate } = cases[0]!;
+    for (const value of [Number.NaN, Infinity, -Infinity]) {
+      const rect = { ...candidate.rect, [field]: value };
+      expect(matchesAuthorizedPressTarget(expected, { ...candidate, rect })).toBe(false);
+      expect(matchesAuthorizedPressTarget({ ...expected, rect }, { ...candidate, rect })).toBe(
+        false,
+      );
+    }
+  });
+}

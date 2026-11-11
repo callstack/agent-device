@@ -45,7 +45,7 @@ public struct NativePressTarget: Codable, Equatable {
 }
 
 public struct RawAXNode: Equatable {
-  public let nativePressTarget: NativePressTarget
+  public private(set) var nativePressTarget: NativePressTarget
   public private(set) var index: Int
   public let type: String
   public let label: String?
@@ -106,10 +106,13 @@ public struct RawAXNode: Equatable {
     self.actions = actions
   }
 
-  func replacing(rect: SnapshotRect, hittable: Bool?) -> RawAXNode {
+  func replacing(rect: SnapshotRect, hittable: Bool?, nativePressTargetRect: SnapshotRect) -> RawAXNode {
     var updated = self
     updated.rect = rect
     updated.hittable = hittable
+    let source = nativePressTarget
+    updated.nativePressTarget = NativePressTarget(type: source.type, identifier: source.identifier,
+      label: source.label, value: source.value, rect: nativePressTargetRect)
     return updated
   }
 

@@ -161,6 +161,7 @@ async function tapCommand(
   }
   let atRest = await admitResolvedTarget(runtime, options, resolutionRequest, resolved);
   if (
+    atRest.kind !== 'point' &&
     runtime.backend.readPressReadiness &&
     (options.count ?? 1) === 1 &&
     (options.intervalMs ?? 0) === 0 &&

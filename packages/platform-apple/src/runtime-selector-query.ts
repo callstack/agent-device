@@ -33,6 +33,9 @@ export function bindAppleQuerySelectorRuntime(
         ? AbortSignal.any([request.signal, input.signal])
         : request.signal;
       signal.throwIfAborted();
+      if (input.authorizedTarget && !input.options?.appBundleId) {
+        throw new AppError('INVALID_ARGS', 'Authorized-target reads require an app bundle ID');
+      }
       // Same projection bindAppleFindTextRuntime builds: the execution context is exactly the
       // runner-call fields, with the composed signal replacing the caller's own.
       const options: RunnerCallOptions = { ...input.execution, signal };

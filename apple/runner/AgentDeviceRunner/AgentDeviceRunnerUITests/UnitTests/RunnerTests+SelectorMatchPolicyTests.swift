@@ -35,6 +35,24 @@ extension RunnerTests {
       XCTAssertEqual(fixture.expected.matches(type: candidate.type, identifier: candidate.identifier,
         label: candidate.label, value: candidate.value, rect: candidate.rect), fixture.matches, fixture.name)
     }
+    // JSON cannot encode non-finite numbers; both consumers exercise them natively.
+    let reference = fixtures[0].expected
+    let r = reference.rect
+    for invalid in [Double.nan, Double.infinity, -Double.infinity] {
+      for rect in [
+        SnapshotRect(x: invalid, y: r.y, width: r.width, height: r.height),
+        SnapshotRect(x: r.x, y: invalid, width: r.width, height: r.height),
+        SnapshotRect(x: r.x, y: r.y, width: invalid, height: r.height),
+        SnapshotRect(x: r.x, y: r.y, width: r.width, height: invalid),
+      ] {
+        XCTAssertFalse(reference.matches(type: reference.type, identifier: reference.identifier,
+          label: reference.label, value: reference.value, rect: rect))
+        let invalidTarget = AuthorizedPressTarget(type: reference.type, identifier: reference.identifier,
+          label: reference.label, value: reference.value, rect: rect, point: reference.point)
+        XCTAssertFalse(invalidTarget.matches(type: reference.type, identifier: reference.identifier,
+          label: reference.label, value: reference.value, rect: rect))
+      }
+    }
   }
 
   func testDirectSelectorRejectsTwoRawMatchesBeforeHittabilityPreference() {
@@ -156,11 +174,14 @@ extension RunnerTests {
     // The same native owner must not use the read preference for a previously resolved target.
     for element in matches {
       let frame = element.frame
-      let target = AuthorizedPressTarget(type: elementTypeName(element.elementType),
-        identifier: element.identifier, label: element.label, value: String(describing: element.value ?? ""),
-        rect: SnapshotRect(frame), point: PressTargetPoint(x: frame.midX, y: frame.midY))
-      let readiness = try queryAuthorizedPressTarget(app: app, target: target)
-      XCTAssertEqual(readiness.data?.pressReadiness, element.isHittable ? "ready" : "blocked")
+      // Canonical presentation coordinates must not filter the source-native identity/frame.
+      for point in [PressTargetPoint(x: frame.midX, y: frame.midY), PressTargetPoint(x: -10_000, y: -10_000)] {
+        let target = AuthorizedPressTarget(type: elementTypeName(element.elementType),
+          identifier: element.identifier, label: element.label, value: String(describing: element.value ?? ""),
+          rect: SnapshotRect(frame), point: point)
+        let readiness = try queryAuthorizedPressTarget(app: app, target: target)
+        XCTAssertEqual(readiness.data?.pressReadiness, element.isHittable ? "ready" : "blocked")
+      }
     }
   }
 #endif

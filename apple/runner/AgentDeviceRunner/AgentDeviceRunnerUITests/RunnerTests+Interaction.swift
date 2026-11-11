@@ -372,9 +372,9 @@ extension RunnerTests {
   /// A mutation-read: count every exact target binding, including blocked duplicates. Unlike
   /// public selector reads, a hittable sibling can never stand in for the authorized control.
   func queryAuthorizedPressTarget(app: XCUIApplication, target: AuthorizedPressTarget, appBundleId: String? = nil) throws -> Response {
-    let expected = target.rect.cgRect
-    let point = CGPoint(x: target.point.x, y: target.point.y)
-    guard !expected.isEmpty, !expected.isInfinite, expected.contains(point) else {
+    let expected = target.rect
+    guard expected.width > 0, expected.height > 0,
+      [expected.x, expected.y, expected.width, expected.height].allSatisfy({ $0.isFinite }) else {
       return Response(ok: true, data: DataPayload(pressReadiness: "missing", pressReadinessAppBundleId: appBundleId))
     }
     func text(_ value: Any?) -> String {
@@ -389,7 +389,7 @@ extension RunnerTests {
       .filter { element in
         guard element.exists, element.elementType.rawValue == type else { return false }
         let frame = element.frame
-        guard frame.contains(point) else { return false }
+        // The canonical point can use a different space; only source identity and the normalized unclipped frame bind this control read.
         return target.matches(type: target.type, identifier: element.identifier,
           label: element.label, value: target.type == "SecureTextField" ? nil : text(element.value), rect: SnapshotRect(frame))
       }

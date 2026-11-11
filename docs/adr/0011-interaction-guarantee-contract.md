@@ -19,6 +19,7 @@ Completed process history is in git history.
 - Multiple mutating selector matches collapse only if they form one ancestor–descendant chain and every member resolves to the same actionable node. Otherwise, the mutation fails with `AMBIGUOUS_MATCH`. Maestro's explicit expected-point/non-hittable compatibility path stays separate.
 - Keep synthesized iOS gesture policy outside the element dispatch-path matrix.
 - On Android, the press/click moving-target guard samples fresh geometry until the target remains on one surface at one position for 100 ms, within a 1,500 ms transition window. A target that cannot establish that evidence is refused. Other platforms retain their existing guard schedule.
+- On `runtime-ref` and `runtime-selector`, ordinary primary iOS presses wait for native hittability when the request-bound Apple runtime advertises the read. The original request budget bounds the wait; ambiguity or changed target authorization refuses input.
 
 ## Context
 
@@ -87,6 +88,7 @@ export const INTERACTION_GUARANTEES = [
   'resolutionDisclosure',  // disclose the source of target resolution
   'outcomeObservation',    // state what the path observes after dispatch
   'targetStability',       // refuse tap positions that change between observations
+  'nativeReadiness',       // wait for admitted native control readiness before ordinary press/click
 ] as const;
 ```
 
@@ -320,6 +322,30 @@ Since #1105, the capture-resolving interaction commands also declare `preserve-d
 Their dominant timeout mode is the same blocked accessibility capture as `snapshot`.
 A daemon reset there destroyed every healthy app session that the daemon owned.
 
+### Native readiness for ordinary iOS taps
+
+Ordinary resolved `press` and `click` actions wait implicitly when the request-bound Apple owner
+reports that the exact authorized control is not natively hittable. Snapshot hittability remains a
+geometric fact. The native mutation-read binds type, identifier, label, value, and rectangle before
+counting matches; a hittable duplicate cannot replace a blocked target. The binding keeps the capture
+producer's native identity and full rectangle, after required coordinate normalization and before row
+promotion or clipping. This private evidence survives session storage and is omitted from public
+snapshots. Secure field values are omitted before the wire.
+A native reply must prove the actual queried app matches the authorized surface. After a blocked
+read, the fresh canonical parent/child guards choose the dispatch point. During polling, canonical resolution must still authorize the same target on the same
+surface. The original request deadline and cancellation signal bound every read and capture.
+Expected-target and already-resolved replay bindings are checked once and refuse a blocked control
+without recapturing or replacing that binding.
+Ambiguity, changed authorization, unsupported native proof, cancellation, and timeout refuse before
+input. Raw coordinates and non-default tap options retain their existing semantics.
+
+The retained rectangle must use the same coordinate space as the live native element frame.
+Control matching does not filter candidates by containment of the canonical tap point.
+Canonical point guards validate that point separately.
+Public selector reads retain their existing matching policy. This guard supplies a necessary condition for fully blocked controls; native
+hittability does not certify the preserved point against partial app-drawn coverage. It does not
+wait for a selector that canonical resolution could not initially find.
+
 ## Consequences
 
 - A new dispatch path or a new guarantee forces a whole-matrix decision.
@@ -442,6 +468,7 @@ Step 3 is not complete:
 
 ## Alternatives considered
 
+- **An explicit transition-wait API or a fixed sleep:** rejected for native readiness. Tree stability and a universal duration cannot establish whether a control can receive input.
 - **Delete the fast paths** (single resolution spine): unacceptable.
   The direct iOS path saves a full snapshot round trip per interaction.
   The ref fast path is the backbone of replay throughput.
@@ -479,23 +506,3 @@ These tests must not seed a snapshot penalty to make the first tap safe.
 The recorder consumes optional-read issues before it forwards issues to XCTest.
 XCTest's expected-failure API must not own this scope.
 The reason: in a long-lived command test, that API can complete the enclosing test even if the command response succeeds.
-
-### Native readiness for ordinary iOS taps
-
-Ordinary resolved `press` and `click` actions wait implicitly when the request-bound Apple owner
-reports that the exact authorized control is not natively hittable. Snapshot hittability remains a
-geometric fact. The native mutation-read binds type, identifier, label, value, and rectangle before
-counting matches; a hittable duplicate cannot replace a blocked target. The binding uses the capture
-producer's native source fields before row promotion or clipping, retained as private evidence through
-session storage and omitted from public snapshots. Secure field values are omitted before the wire.
-A native reply must prove the actual queried app matches the authorized surface. After a blocked
-read, the fresh canonical parent/child guards choose the dispatch point. During polling, canonical resolution must still authorize the same target on the same
-surface. The original request deadline and cancellation signal bound every read and capture.
-Ambiguity, changed authorization, unsupported native proof, cancellation, and timeout refuse before
-input. Raw coordinates and non-default tap options retain their existing semantics.
-
-An explicit transition-wait API and a fixed sleep were rejected because callers cannot infer native
-readiness from tree stability or a universal duration. Public selector reads retain their existing
-matching policy. This guard supplies a necessary condition for fully blocked controls; native
-hittability does not certify the preserved point against partial app-drawn coverage. It does not
-wait for a selector that canonical resolution could not initially find.

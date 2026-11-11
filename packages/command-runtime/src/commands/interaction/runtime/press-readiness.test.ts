@@ -67,6 +67,7 @@ async function exercise(input: {
   changeTarget?: boolean;
   cancelInRead?: boolean;
   transportFailure?: boolean;
+  nativeBudgetAbort?: boolean;
   expireInRead?: boolean;
   missingSource?: boolean;
   movingChild?: boolean;
@@ -89,11 +90,19 @@ async function exercise(input: {
           if (input.missingSource) attachSnapshotNativePressTargets(snapshot.nodes, new Map());
           return { snapshot };
         },
-        readPressReadiness: async () => {
+        readPressReadiness: async (context) => {
           events.push('read');
           reads++;
           if (input.cancelInRead) markRequestCanceled(requestId);
           if (input.transportFailure) throw new Error('native query failed');
+          if (input.nativeBudgetAbort && reads > 1) {
+            context.signal!.throwIfAborted();
+            await new Promise<void>((_resolve, reject) => {
+              context.signal!.addEventListener('abort', () => reject(context.signal!.reason), {
+                once: true,
+              });
+            });
+          }
           const state = input.states[Math.min(reads - 1, input.states.length - 1)]!;
           events.push(state);
           if (input.expireInRead) {
@@ -117,7 +126,7 @@ async function exercise(input: {
         },
       ]),
       policy: localCommandPolicy(),
-      signal: getRequestSignal(requestId),
+      signal: input.nativeBudgetAbort ? undefined : getRequestSignal(requestId),
     });
     await device.interactions.press(
       input.kind === 'point'
@@ -160,6 +169,18 @@ test('permanent native blocking reaches the existing request deadline without se
   expect(points).toEqual([]);
 });
 
+test('a native budget abort preserves the blocked state instead of reporting a read failure', async () => {
+  const { run, points } = await exercise({
+    states: ['blocked'],
+    timeoutMs: 150,
+    nativeBudgetAbort: true,
+  });
+  await expect(run).rejects.toMatchObject({
+    details: { reason: 'daemon_request_timeout', readiness: 'blocked', dispatched: 'no' },
+  });
+  expect(points).toEqual([]);
+});
+
 test('a replaced canonical target is refused before another native query or tap', async () => {
   const { run, points, events } = await exercise({
     kind: 'ref',
@@ -174,7 +195,14 @@ test('a replaced canonical target is refused before another native query or tap'
 for (const failure of ['cancelInRead', 'transportFailure'] as const) {
   test(`${failure} cannot fall through to dispatch`, async () => {
     const { run, points } = await exercise({ states: ['ready'], [failure]: true });
-    await expect(run).rejects.toMatchObject({ details: { dispatched: 'no' } });
+    await expect(run).rejects.toMatchObject({
+      details: {
+        dispatched: 'no',
+        ...(failure === 'cancelInRead'
+          ? { reason: 'request_canceled' }
+          : { reason: 'target_not_ready', readiness: 'native-read-failed' }),
+      },
+    });
     expect(points).toEqual([]);
   });
 }

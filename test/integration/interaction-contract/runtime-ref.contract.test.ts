@@ -1,3 +1,4 @@
+import { AppError } from '@agent-device/kernel/errors';
 import { attachSnapshotNativePressTargets } from '@agent-device/contracts/snapshot-private-evidence';
 import { withRequestDeadline } from '@agent-device/host-kit/request';
 import { ref, createContractClock, createContractDevice } from './runtime-harness.ts';
@@ -329,30 +330,41 @@ test(scenarioNames(RUNTIME_REF_COVERAGE, 'resolutionDisclosure')[1]!, async () =
 });
 
 // A stationary tree cannot prove native readiness: without the guard this sends input while blocked.
-test(scenarioNames(RUNTIME_REF_COVERAGE, 'targetStability')[2]!, async () => {
-  const events: string[] = [];
-  const requestId = 'contract-native-ready-ref';
-  const snapshot = continueButtonSnapshot();
-  const node = snapshot.nodes[0]!;
-  attachSnapshotNativePressTargets(
-    snapshot.nodes,
-    new Map([
-      [node.index, { type: 'Button', label: 'Continue', value: 'Continue', rect: node.rect! }],
-    ]),
-  );
-  const device = createContractDevice(snapshot, {
-    readPressReadiness: async () => {
-      const state = events.includes('blocked') ? 'ready' : 'blocked';
-      events.push(state);
-      return state;
-    },
-    tap: async () => {
-      events.push('tap');
-    },
+for (const [index, finalState] of (['ready', 'ambiguous'] as const).entries()) {
+  test(scenarioNames(RUNTIME_REF_COVERAGE, 'nativeReadiness')[index]!, async () => {
+    const events: string[] = [];
+    const requestId = `contract-native-ready-ref:${finalState}`;
+    const snapshot = continueButtonSnapshot();
+    const node = snapshot.nodes[0]!;
+    attachSnapshotNativePressTargets(
+      snapshot.nodes,
+      new Map([
+        [node.index, { type: 'Button', label: 'Continue', value: 'Continue', rect: node.rect! }],
+      ]),
+    );
+    const device = createContractDevice(snapshot, {
+      readPressReadiness: async () => {
+        const state = events.includes('blocked') ? finalState : 'blocked';
+        events.push(state);
+        return state;
+      },
+      tap: async () => {
+        events.push('tap');
+      },
+    });
+    await withRequestDeadline(requestId, 2_000, async () => {
+      const press = device.interactions.press(ref('@e1'), { requestId });
+      if (finalState === 'ready') await press;
+      else
+        await assert.rejects(press, (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.details?.reason, 'target_not_ready');
+          assert.equal(error.details?.readiness, 'ambiguous');
+          assert.equal(error.details?.dispatched, 'no');
+          return true;
+        });
+      return { ok: true, data: {} };
+    });
+    assert.deepEqual(events, ['blocked', finalState, ...(finalState === 'ready' ? ['tap'] : [])]);
   });
-  await withRequestDeadline(requestId, 2_000, async () => {
-    await device.interactions.press(ref('@e1'), { requestId });
-    return { ok: true, data: {} };
-  });
-  assert.deepEqual(events, ['blocked', 'ready', 'tap']);
-});
+}

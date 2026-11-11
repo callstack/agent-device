@@ -28,7 +28,11 @@ export type QuerySelectorInput = ObservationInput &
         selector: Readonly<{ key: ElementSelectorKey; value: string }>;
         authorizedTarget?: never;
       }>
-    | Readonly<{ authorizedTarget: AuthorizedPressTarget; selector?: never }>
+    | Readonly<{
+        authorizedTarget: AuthorizedPressTarget;
+        selector?: never;
+        options: Readonly<{ appBundleId: string; surface?: SessionSurface }>;
+      }>
   );
 
 /**

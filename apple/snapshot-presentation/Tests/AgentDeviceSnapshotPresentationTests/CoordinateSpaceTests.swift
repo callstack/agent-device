@@ -408,6 +408,7 @@ final class CoordinateSpaceTests: XCTestCase {
       )
       XCTAssertEqual(normalized.count, 4)
       XCTAssertEqual(normalized[3].rect.cgRect, expected.cgRect, testCase.name)
+      XCTAssertEqual(normalized[3].nativePressTarget.rect.cgRect, expected.cgRect, testCase.name)
     }
   }
 

@@ -31,10 +31,13 @@ export const RUNTIME_SELECTOR_COVERAGE = definePathCoverage('runtime-selector', 
     'runtime-selector resolutionDisclosure: a unique match discloses the unique runtime shape',
     'runtime-selector resolutionDisclosure: an equivalent wrapper chain discloses matchCount, winnerDiagnostic, and structural equivalence',
   ],
+  nativeReadiness: [
+    'runtime-selector nativeReadiness: stationary control waits for its native blocker to finish',
+    'runtime-selector nativeReadiness: ambiguous native control refuses before input',
+  ],
   targetStability: [
     'runtime-selector targetStability: a settled slide-in is tapped where it came to rest',
     'runtime-selector targetStability: a target still moving at the end of the window is refused with target_still_moving',
     'runtime-selector targetStability: a target the previous action left in place costs no extra capture',
-    'runtime-selector targetStability: stationary control waits for its native blocker to finish',
   ],
 });

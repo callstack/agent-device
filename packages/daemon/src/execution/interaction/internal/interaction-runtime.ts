@@ -151,9 +151,15 @@ function readNativePressReadiness(
   const querySelector = params.touchExecutor?.querySelector ?? params.gestures?.querySelector;
   if (!querySelector || publicPlatformString(session.device) !== 'ios') return undefined;
   return async (context, authorizedTarget, surfaceBundleId) => {
+    const appBundleId = surfaceBundleId ?? session.appBundleId;
+    if (!appBundleId)
+      throw new KernelAppError(
+        'UNSUPPORTED_OPERATION',
+        'Native press readiness requires an authorized app scope',
+      );
     const result = await querySelector({
       authorizedTarget,
-      options: { appBundleId: surfaceBundleId ?? session.appBundleId },
+      options: { appBundleId },
       execution: runtimeExecutionFromContext(
         params.contextFromFlags(params.req.flags, session.appBundleId, session.trace?.outPath),
       ),

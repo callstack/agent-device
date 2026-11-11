@@ -90,6 +90,21 @@ test('a node without a usable rect answers found without a node (the rescue stay
   });
 });
 
+test('authorized-target reads require an app scope before contacting the runner', async () => {
+  const missingScope = {
+    authorizedTarget: {
+      type: 'Button',
+      rect: { x: 0, y: 0, width: 10, height: 10 },
+      point: { x: 5, y: 5 },
+    },
+  };
+  await expect(
+    // @ts-expect-error An authorized target requires its app scope, including for untyped callers.
+    bind().querySelector(missingScope),
+  ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+  expect(queryAppleRunnerSelector).not.toHaveBeenCalled();
+});
+
 // The proof must be explicit: a stale runner ignoring the new request field cannot authorize input.
 test('authorized target reads reject legacy responses instead of accepting found:true', async () => {
   queryAppleRunnerSelector.mockResolvedValue({
@@ -98,6 +113,7 @@ test('authorized target reads reject legacy responses instead of accepting found
   });
   await expect(
     bind().querySelector({
+      options: { appBundleId: APP },
       authorizedTarget: {
         type: 'Button',
         label: 'Go',
@@ -111,20 +127,24 @@ test('authorized target reads reject legacy responses instead of accepting found
 for (const pressReadiness of ['ready', 'blocked', 'missing', 'ambiguous'] as const) {
   test(`preserves strict native ${pressReadiness} rather than applying read-selector preference`, async () => {
     queryAppleRunnerSelector.mockResolvedValue({ pressReadiness, pressReadinessAppBundleId: APP });
+    const authorizedTarget = {
+      type: 'Button',
+      rect: { x: 0, y: 0, width: 10, height: 10 },
+      point: { x: 5, y: 5 },
+    };
     await expect(
-      bind().querySelector({
-        options: { appBundleId: APP },
-        authorizedTarget: {
-          type: 'Button',
-          rect: { x: 0, y: 0, width: 10, height: 10 },
-          point: { x: 5, y: 5 },
-        },
-      }),
+      bind().querySelector({ options: { appBundleId: APP }, authorizedTarget }),
     ).resolves.toEqual({
       found: pressReadiness === 'ready' || pressReadiness === 'blocked',
       pressReadiness,
       pressReadinessAppBundleId: APP,
     });
+    expect(queryAppleRunnerSelector).toHaveBeenCalledWith(
+      IOS_SIMULATOR,
+      { authorizedTarget },
+      APP,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 }
 
