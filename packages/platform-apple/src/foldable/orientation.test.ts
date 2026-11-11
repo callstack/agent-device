@@ -152,15 +152,187 @@ test('a physical device keeps the runner rotation without a CoreDevice probe', a
   expect(mockRunner).toHaveBeenCalledTimes(1);
 });
 
-test('a foldable simulator in a scoped set refuses rotation before any HID dispatch', async () => {
-  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
-  const sim = fakeSimulator(scoped, DUO_DISPLAYS);
-  await expect(sim.rotate('landscape-left')).rejects.toMatchObject({
-    code: 'UNSUPPORTED_OPERATION',
-    details: { reason: 'unsupported-device-scope' },
+/**
+ * A scoped-set Duo as measured on the device: the guest does not treat the
+ * `orientation-picker-control` value as absolute. Each picker event rotates the lit panel by
+ * (new value - previous picker value), so the lit panel reads `picker + K` for a fixed
+ * per-panel offset K. Angles follow CADisplay `rotN`: portrait 0, landscape-right 90,
+ * portrait-upside-down 180, landscape-left 270. The dark panel reports a misleading rotation:
+ * only the lit panel's `currentOrientation` may confirm a rotation.
+ */
+const PANEL_ANGLE: Record<DeviceRotation, number> = {
+  portrait: 0,
+  'landscape-right': 90,
+  'portrait-upside-down': 180,
+  'landscape-left': 270,
+};
+
+function fakeScopedDuo(
+  device: DeviceInfo,
+  options: {
+    lit: 'inner' | 'outer';
+    picker: DeviceRotation;
+    offsets: { inner: number; outer: number };
+    followsHid?: boolean;
+  },
+) {
+  const helpers: string[][] = [];
+  const devicectl: string[] = [];
+  let pickerAngle = PANEL_ANGLE[options.picker];
+  let litScreenAngle = (pickerAngle + options.offsets[options.lit]) % 360;
+  const panel = (kind: 'inner' | 'outer') => {
+    const lit = kind === options.lit;
+    return {
+      backlightState: lit ? 'activeOn' : 'off',
+      currentOrientation: lit ? `rot${litScreenAngle}` : 'rot180',
+      displayId: kind === 'outer' ? 1 : 3,
+      name: kind === 'outer' ? 'LCD' : 'LCD-1',
+      nativeSize: kind === 'outer' ? [1398, 2034] : [2007, 2853],
+      pointScale: 3,
+      primary: kind === 'outer',
+      type: { integrated: {} },
+    };
+  };
+  const provider = createLocalAppleToolProvider({
+    runCommand: async (_command, args) => {
+      const [tool, ...rest] = args;
+      if (tool !== 'simctl') {
+        devicectl.push(args.join(' '));
+        throw new Error(`unexpected tool call in a scoped set: ${args.join(' ')}`);
+      }
+      const spawn = rest.slice(rest.indexOf('spawn'));
+      expect(spawn.slice(0, 3)).toEqual(['spawn', device.id, '/cache/fold-helper']);
+      const mode = spawn.slice(3);
+      helpers.push(mode);
+      if (mode[0] === 'panels') {
+        const displays = [panel('outer'), panel('inner')];
+        return { stdout: JSON.stringify({ version: 1, displays }), stderr: '', exitCode: 0 };
+      }
+      expect(mode[0]).toBe('rotate');
+      if (options.followsHid !== false) {
+        const nextPickerAngle = PANEL_ANGLE[mode[1]! as DeviceRotation];
+        litScreenAngle = (litScreenAngle + nextPickerAngle - pickerAngle + 360) % 360;
+        pickerAngle = nextPickerAngle;
+      }
+      return { stdout: '', stderr: '', exitCode: 0 };
+    },
   });
-  expect(sim.helpers).toEqual([['panels']]);
+  return {
+    helpers,
+    devicectl,
+    rotations: () => helpers.filter((mode) => mode[0] === 'rotate').map((mode) => mode[1]!),
+    litScreen: () => `rot${litScreenAngle}`,
+    rotate: (rotation: DeviceRotation) =>
+      withAppleToolProvider(provider, () =>
+        createAppleInteractor(device, {}, createLiveTestHostEnvironment()).setOrientation(rotation),
+      ),
+  };
+}
+
+/** Runs one scoped rotation under fake timers: the settle delay must not cost real time. */
+async function rotateScoped(
+  sim: ReturnType<typeof fakeScopedDuo>,
+  rotation: DeviceRotation,
+): Promise<unknown> {
+  vi.useFakeTimers();
+  try {
+    const outcome = sim.rotate(rotation).then(
+      (value) => value,
+      (error: unknown) => error,
+    );
+    await vi.advanceTimersByTimeAsync(30_000);
+    return await outcome;
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
+test('a foldable simulator in a scoped set rotates on the first command, confirmed by the panel table', async () => {
+  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
+  // The inner panel lights at rot90 while the picker sits at portrait (K = +90, measured).
+  const sim = fakeScopedDuo(scoped, {
+    lit: 'inner',
+    picker: 'portrait',
+    offsets: { inner: 90, outer: 0 },
+  });
+  expect(sim.litScreen()).toBe('rot90');
+  await expect(rotateScoped(sim, 'portrait')).resolves.toEqual({ orientation: 'portrait' });
+  expect(sim.litScreen()).toBe('rot0');
+  expect(sim.rotations().length).toBeLessThanOrEqual(2);
   expect(sim.devicectl).toEqual([]);
+  expect(mockRunner).not.toHaveBeenCalled();
+});
+
+test('a scoped rotation to landscape-left dispatches the upside-down picker value when the delta needs it', async () => {
+  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
+  const sim = fakeScopedDuo(scoped, {
+    lit: 'inner',
+    picker: 'landscape-left',
+    offsets: { inner: 90, outer: 0 },
+  });
+  expect(sim.litScreen()).toBe('rot0');
+  await expect(rotateScoped(sim, 'landscape-left')).resolves.toEqual({
+    orientation: 'landscape-left',
+  });
+  expect(sim.litScreen()).toBe('rot270');
+  expect(sim.rotations()).toContain('portrait-upside-down');
+  expect(sim.devicectl).toEqual([]);
+});
+
+test('a scoped rotation on the outer panel converges with that panel offset', async () => {
+  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
+  const sim = fakeScopedDuo(scoped, {
+    lit: 'outer',
+    picker: 'portrait',
+    offsets: { inner: 90, outer: 270 },
+  });
+  await expect(rotateScoped(sim, 'landscape-right')).resolves.toEqual({
+    orientation: 'landscape-right',
+  });
+  expect(sim.litScreen()).toBe('rot90');
+  expect(sim.rotations().length).toBeLessThanOrEqual(2);
+  expect(sim.devicectl).toEqual([]);
+});
+
+test('a scoped rotation to the orientation already showing dispatches nothing', async () => {
+  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
+  const sim = fakeScopedDuo(scoped, {
+    lit: 'inner',
+    picker: 'landscape-left',
+    offsets: { inner: 90, outer: 0 },
+  });
+  expect(sim.litScreen()).toBe('rot0');
+  await expect(rotateScoped(sim, 'portrait')).resolves.toEqual({ orientation: 'portrait' });
+  expect(sim.rotations()).toEqual([]);
+});
+
+test('a scoped rotation the panel table never reports is refused as unverified', async () => {
+  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
+  const sim = fakeScopedDuo(scoped, {
+    lit: 'inner',
+    picker: 'portrait',
+    offsets: { inner: 90, outer: 0 },
+    followsHid: false,
+  });
+  await expect(rotateScoped(sim, 'portrait')).resolves.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'orientation-unverified-scoped-set', requestedOrientation: 'portrait' },
+  });
+  expect(sim.devicectl).toEqual([]);
+});
+
+test('a foldable simulator in a scoped set still refuses portrait-upside-down as a target', async () => {
+  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
+  const sim = fakeScopedDuo(scoped, {
+    lit: 'inner',
+    picker: 'portrait',
+    offsets: { inner: 90, outer: 0 },
+  });
+  await expect(sim.rotate('portrait-upside-down')).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    details: { reason: 'unsupported-foldable-orientation' },
+  });
+  expect(sim.rotations()).toEqual([]);
   expect(mockRunner).not.toHaveBeenCalled();
 });
 

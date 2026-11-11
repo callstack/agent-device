@@ -8,24 +8,34 @@ import {
   IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS,
   IOS_FOLDABLE_ORIENTATION_READ_TIMEOUT_MS,
   IOS_FOLDABLE_ORIENTATION_SETTLE_ATTEMPTS,
+  IOS_FOLDABLE_SCOPED_ORIENTATION_ATTEMPTS,
+  IOS_FOLDABLE_SCOPED_ORIENTATION_SETTLE_MS,
 } from '../core/config.ts';
 import { readAppleDeviceOrientation } from '../core/device-orientation.ts';
 import {
   queryAppleDisplayInventory,
+  type AppleDeviceDisplay,
   type AppleDisplayInventory,
 } from '../core/display-inventory.ts';
 import { simulatorAddressFor } from '../core/simctl.ts';
-import { createFoldHelper } from './fold-helper.ts';
+import { createFoldHelper, type FoldHelper } from './fold-helper.ts';
+import {
+  measuredPanelPickerOffset,
+  nextPickerValue,
+  panelPickerOffset,
+  panelRotationForOrientation,
+  type PanelQuarterTurn,
+} from './picker-delta.ts';
 import { appleFoldableFacts } from './runtime.ts';
 
 const UPSIDE_DOWN_UNSUPPORTED_HINT =
   'A foldable simulator accepts portrait, landscape-left, and landscape-right. Its device-state control has no upside-down orientation.';
 
-const SCOPED_SET_UNSUPPORTED_HINT =
-  'CoreDevice resolves only simulators in the default device set, so the rotation of a foldable simulator in a scoped set cannot be verified. Rotate it in the default device set.';
-
 const ORIENTATION_UNVERIFIED_HINT =
   'The simulator HID command completed, but CoreDevice did not report the new orientation. Read it with xcrun devicectl device orientation get --device <udid>, then retry.';
+
+const SCOPED_ORIENTATION_UNVERIFIED_HINT =
+  'Rotation was dispatched through the fold helper, which needs relative-picker compensation in a scoped simulator set where CoreDevice cannot read orientation, and the lit panel did not settle on the requested orientation. Take a screenshot to see the screen, then retry.';
 
 /** Resolved panel counts are hardware facts, so each simulator is probed once per daemon. */
 const multiPanelByDevice = new Map<string, boolean>();
@@ -101,7 +111,11 @@ export async function readFoldablePanelTable(
   return inventory.multiScreen ? { kind: 'multi-panel', inventory } : { kind: 'single-panel' };
 }
 
-/** Rotates a foldable simulator through guest HID and verifies the rotation through CoreDevice. */
+/**
+ * Rotates a foldable simulator through guest HID. The default device set verifies the rotation
+ * through CoreDevice; a scoped set, which CoreDevice cannot resolve, verifies it from the
+ * fold helper's panel table instead (see {@link setScopedFoldableOrientation}).
+ */
 export async function setAppleFoldableOrientation(
   device: DeviceInfo,
   rotation: DeviceRotation,
@@ -117,15 +131,7 @@ export async function setAppleFoldableOrientation(
     });
   }
   if (simulatorAddressFor(device).simulatorSetPath) {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      `${device.name} cannot rotate in a scoped simulator set`,
-      {
-        deviceId: device.id,
-        reason: 'unsupported-device-scope',
-        hint: SCOPED_SET_UNSUPPORTED_HINT,
-      },
-    );
+    return await setScopedFoldableOrientation(device, rotation, signal);
   }
   await createFoldHelper(device).rotate(rotation, signal);
   emitDiagnostic({
@@ -153,4 +159,118 @@ export async function setAppleFoldableOrientation(
       hint: ORIENTATION_UNVERIFIED_HINT,
     },
   );
+}
+
+/**
+ * Rotates a foldable simulator in a scoped set, where only the fold helper can dispatch and
+ * only its panel table can confirm. Measured on iPhone Duo, the guest applies each
+ * `orientation-picker-control` event relatively — the lit panel turns by (new value -
+ * previous picker value), i.e. it reads picker + a fixed per-panel offset — so one absolute
+ * dispatch lands a quarter-turn away and looks one command late. This loop reads the lit
+ * panel, dispatches the picker value {@link nextPickerValue} chooses for the turn still
+ * needed, and re-reads until the panel table reports the target: at most two dispatches once
+ * the first one calibrates the guest's picker state. A repeat of the showing orientation is
+ * a read-only success. The picker state is deliberately not kept between commands: a fold in
+ * between can light the other panel, and recalibrating costs one dispatch.
+ */
+async function setScopedFoldableOrientation(
+  device: DeviceInfo,
+  rotation: DeviceRotation,
+  signal: AbortSignal | undefined,
+): Promise<{ orientation: DeviceRotation }> {
+  const helper = createFoldHelper(device);
+  let pickerValue: DeviceRotation | undefined;
+  let panelOffset: PanelQuarterTurn | undefined;
+  let litDisplayId: number | undefined;
+  let observed: DeviceRotation | undefined;
+  let rawPanelOrientation: string | undefined;
+  for (let attempt = 1; attempt <= IOS_FOLDABLE_SCOPED_ORIENTATION_ATTEMPTS; attempt += 1) {
+    signal?.throwIfAborted();
+    const lit = await readLitPanel(device, helper, signal);
+    if (lit) {
+      // A different panel lit up mid-command: the picker state and offset were calibrated
+      // against the previous panel, so start that panel's calibration over.
+      if (litDisplayId !== undefined && lit.panel.displayId !== litDisplayId) {
+        pickerValue = undefined;
+        panelOffset = undefined;
+      }
+      litDisplayId = lit.panel.displayId;
+      observed = lit.rotation;
+      rawPanelOrientation = lit.panel.currentOrientation;
+      if (observed === rotation) return { orientation: rotation };
+      panelOffset =
+        pickerValue === undefined
+          ? (panelOffset ?? measuredPanelPickerOffset(lit.panel))
+          : panelPickerOffset(observed, pickerValue);
+    }
+    const next = nextPickerValue({
+      currentRotation: lit?.rotation,
+      targetRotation: rotation,
+      panelOffset,
+      currentPickerValue: pickerValue,
+    });
+    if (next === undefined) {
+      await settleScopedRotation();
+      continue;
+    }
+    await helper.rotate(next, signal);
+    pickerValue = next;
+    emitDiagnostic({
+      level: 'info',
+      phase: 'apple_foldable_orientation_dispatched',
+      data: {
+        deviceId: device.id,
+        orientation: next,
+        requestedOrientation: rotation,
+        scopedSet: true,
+        attempt,
+        ...(observed === undefined ? {} : { observedOrientation: observed }),
+      },
+    });
+    await settleScopedRotation();
+  }
+  throw new AppError(
+    'COMMAND_FAILED',
+    `${device.name} did not confirm rotation to ${rotation}: the panel table reports ${observed ?? 'no orientation'}`,
+    {
+      deviceId: device.id,
+      requestedOrientation: rotation,
+      ...(observed === undefined ? {} : { observedOrientation: observed }),
+      ...(rawPanelOrientation === undefined ? {} : { rawPanelOrientation }),
+      reason: 'orientation-unverified-scoped-set',
+      hint: SCOPED_ORIENTATION_UNVERIFIED_HINT,
+    },
+  );
+}
+
+/**
+ * The one lit panel and the rotation it shows, from one fresh panel-table read. Anything
+ * less decided — an unreadable table, no lit panel, an unrecognized `rotN` — is no reading:
+ * the rotation loop must not confirm or compensate from a panel that is not showing.
+ */
+async function readLitPanel(
+  device: DeviceInfo,
+  helper: FoldHelper,
+  signal: AbortSignal | undefined,
+): Promise<{ panel: AppleDeviceDisplay; rotation: DeviceRotation } | undefined> {
+  let inventory: AppleDisplayInventory;
+  try {
+    inventory = await queryAppleDisplayInventory(device, { signal, foldHelper: helper });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return undefined;
+  }
+  if (inventory.unresolved || !inventory.multiScreen) return undefined;
+  const litPanels = inventory.displays.filter((display) => display.power === 'lit');
+  const panel = litPanels.length === 1 ? litPanels[0]! : undefined;
+  if (!panel) return undefined;
+  const rotation = panelRotationForOrientation(panel.currentOrientation);
+  return rotation === undefined ? undefined : { panel, rotation };
+}
+
+/** The gap a dispatched picker event needs before the panel table shows its effect. */
+async function settleScopedRotation(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, IOS_FOLDABLE_SCOPED_ORIENTATION_SETTLE_MS);
+  });
 }

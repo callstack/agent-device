@@ -106,14 +106,18 @@ static int runSet(NSString *argument) {
   return dispatchEvents(^BOOL(CFTypeRef client) { return runFrames(client, frames); });
 }
 
-// The orientation control has no upside-down value.
+// The upside-down picker value is spelled "pud" on the wire; "portrait-upside-down" is
+// ignored by the guest. It matters because each picker event rotates the display by
+// (new - previous) picker value: without a 180 value, one of the four display orientations
+// can never be landed (measured on iPhone Duo).
 static int runRotate(NSString *orientation) {
-  if (![@[@"portrait", @"landscape-left", @"landscape-right"] containsObject:orientation]) {
-    fprintf(stderr, "Expected orientation portrait, landscape-left or landscape-right\n");
+  NSString *value = [orientation isEqualToString:@"portrait-upside-down"] ? @"pud" : orientation;
+  if (![@[@"portrait", @"landscape-left", @"landscape-right", @"pud"] containsObject:value]) {
+    fprintf(stderr, "Expected orientation portrait, landscape-left, landscape-right or portrait-upside-down\n");
     return 2;
   }
   return dispatchEvents(^BOOL(CFTypeRef client) {
-    return sendControl(client, @"orientation-picker-control", @"enum", orientation);
+    return sendControl(client, @"orientation-picker-control", @"enum", value);
   });
 }
 

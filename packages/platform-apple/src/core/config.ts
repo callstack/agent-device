@@ -63,6 +63,14 @@ export const IOS_FOLD_POSE_STABLE_DEGREES = 0.5;
  */
 export const IOS_FOLDABLE_ORIENTATION_SETTLE_ATTEMPTS = 8;
 export const IOS_FOLDABLE_ORIENTATION_READ_TIMEOUT_MS = 2_000;
+/**
+ * How many read/dispatch rounds a scoped-set foldable rotation gets. The picker delta lands
+ * in at most two dispatches once the first one calibrates the guest's picker state; the rest
+ * of the budget covers panel reads that do not answer yet. Verified on iPhone Duo with the
+ * settle delay below between a dispatch and the panel read that confirms it.
+ */
+export const IOS_FOLDABLE_SCOPED_ORIENTATION_ATTEMPTS = 6;
+export const IOS_FOLDABLE_SCOPED_ORIENTATION_SETTLE_MS = 600;
 
 // CoreSimulator can briefly stall while it services the scale lookup immediately
 // after a keyboard transition. Keep this bounded below the full capture budget.
