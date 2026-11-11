@@ -4,9 +4,7 @@ import {
   measuredPanelPickerOffset,
   nextPickerValue,
   panelPickerOffset,
-  panelRotationAngle,
   panelRotationForOrientation,
-  rotationAtPanelAngle,
   type PanelQuarterTurn,
 } from './picker-delta.ts';
 
@@ -18,26 +16,29 @@ const ROTATIONS: readonly DeviceRotation[] = [
 ];
 const OFFSETS: readonly PanelQuarterTurn[] = [0, 90, 180, 270];
 
+/** The measured guest model in CADisplay `rotN` angles, stated here independently of the code. */
+const ANGLE: Record<DeviceRotation, number> = {
+  portrait: 0,
+  'landscape-right': 90,
+  'portrait-upside-down': 180,
+  'landscape-left': 270,
+};
+const AT_ANGLE: readonly DeviceRotation[] = ROTATIONS;
+
+function atAngle(angle: number): DeviceRotation {
+  return AT_ANGLE[(((angle / 90) % 4) + 4) % 4]!;
+}
+
 /** Applies one picker event the way the guest does: the panel turns by (new - previous). */
 function applyPickerEvent(
   screen: DeviceRotation,
   previousPicker: DeviceRotation,
   nextPicker: DeviceRotation,
 ): DeviceRotation {
-  return rotationAtPanelAngle(
-    panelRotationAngle(screen) +
-      panelRotationAngle(nextPicker) -
-      panelRotationAngle(previousPicker),
-  );
+  return atAngle(ANGLE[screen] + ANGLE[nextPicker] - ANGLE[previousPicker]);
 }
 
-test('panel angles follow CADisplay rotN in both directions', () => {
-  expect(ROTATIONS.map(panelRotationAngle)).toEqual([0, 90, 180, 270]);
-  for (const rotation of ROTATIONS) {
-    expect(rotationAtPanelAngle(panelRotationAngle(rotation))).toBe(rotation);
-    expect(rotationAtPanelAngle(panelRotationAngle(rotation) + 360)).toBe(rotation);
-    expect(rotationAtPanelAngle(panelRotationAngle(rotation) - 360)).toBe(rotation);
-  }
+test('panel table orientations read as panel-frame rotations', () => {
   expect(panelRotationForOrientation('rot0')).toBe('portrait');
   expect(panelRotationForOrientation('rot90')).toBe('landscape-right');
   expect(panelRotationForOrientation('rot180')).toBe('portrait-upside-down');
@@ -58,11 +59,8 @@ test('with the picker known, one dispatch lands every current/target/offset/pick
           });
           expect(next, `${current} -> ${target}, K=${offset}, picker=${picker}`).toBeDefined();
           expect(applyPickerEvent(current, picker, next!)).toBe(target);
-          // The offset observed after the dispatch is still the guest's own relation:
-          // re-deriving it from the landed state must give a consistent quarter turn.
           expect(panelPickerOffset(target, next!)).toBe(
-            ((panelRotationAngle(target) - panelRotationAngle(next!) + 360) %
-              360) as PanelQuarterTurn,
+            ((ANGLE[target] - ANGLE[next!] + 360) % 360) as PanelQuarterTurn,
           );
         }
       }
@@ -75,14 +73,14 @@ test('with only the offset known, one dispatch lands every consistent state', ()
     for (const offset of OFFSETS) {
       for (const picker of ROTATIONS) {
         // A consistent guest state: the panel reads picker + offset.
-        const current = rotationAtPanelAngle(panelRotationAngle(picker) + offset);
+        const current = atAngle(ANGLE[picker] + offset);
         const next = nextPickerValue({
           currentRotation: current,
           targetRotation: target,
           panelOffset: offset,
           currentPickerValue: undefined,
         });
-        expect(next).toBe(rotationAtPanelAngle(panelRotationAngle(target) - offset));
+        expect(next).toBe(atAngle(ANGLE[target] - offset));
         expect(applyPickerEvent(current, picker, next!)).toBe(target);
       }
     }
@@ -93,7 +91,7 @@ test('with neither known, the calibration dispatch plus one delta dispatch lands
   for (const target of ROTATIONS) {
     for (const offset of OFFSETS) {
       for (const picker of ROTATIONS) {
-        const start = rotationAtPanelAngle(panelRotationAngle(picker) + offset);
+        const start = atAngle(ANGLE[picker] + offset);
         const calibration = nextPickerValue({
           currentRotation: start,
           targetRotation: target,

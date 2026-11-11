@@ -30,12 +30,12 @@ const PANEL_ORIENTATIONS: ReadonlyMap<string, DeviceRotation> = new Map([
 ]);
 
 /** The panel-frame angle of one rotation. */
-export function panelRotationAngle(rotation: DeviceRotation): PanelQuarterTurn {
+function panelRotationAngle(rotation: DeviceRotation): PanelQuarterTurn {
   return PANEL_ROTATION_ANGLE[rotation];
 }
 
 /** The rotation at one panel-frame angle. The angle is normalized into one full turn. */
-export function rotationAtPanelAngle(angle: number): DeviceRotation {
+function rotationAtPanelAngle(angle: number): DeviceRotation {
   const quarter = (((Math.round(angle / 90) % 4) + 4) % 4) as 0 | 1 | 2 | 3;
   return ROTATION_BY_QUARTER[quarter]!;
 }

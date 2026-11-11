@@ -29,7 +29,7 @@ import {
 import { appleFoldableFacts } from './runtime.ts';
 
 const UPSIDE_DOWN_UNSUPPORTED_HINT =
-  'A foldable simulator accepts portrait, landscape-left, and landscape-right. Its device-state control has no upside-down orientation.';
+  'A foldable simulator accepts portrait, landscape-left, and landscape-right as rotation targets.';
 
 const ORIENTATION_UNVERIFIED_HINT =
   'The simulator HID command completed, but CoreDevice did not report the new orientation. Read it with xcrun devicectl device orientation get --device <udid>, then retry.';
@@ -228,6 +228,13 @@ async function setScopedFoldableOrientation(
       },
     });
     await settleScopedRotation();
+  }
+  // The last dispatch gets its confirming read too: the loop only reads before dispatching.
+  const settled = await readLitPanel(device, helper, signal);
+  if (settled) {
+    observed = settled.rotation;
+    rawPanelOrientation = settled.panel.currentOrientation;
+    if (observed === rotation) return { orientation: rotation };
   }
   throw new AppError(
     'COMMAND_FAILED',
