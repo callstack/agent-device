@@ -170,15 +170,49 @@ function withHiddenVisible(text: string): string {
 }
 
 /**
+ * Whether any pattern in `patterns` matches `candidate`, after the same
+ * hidden-segment normalization the provider applies. One check, so the
+ * include half of eligibility cannot drift between its two callers.
+ */
+function matchesAnyPattern(candidate: string, patterns: readonly string[]): boolean {
+  return patterns.some((pattern) => path.matchesGlob(candidate, withHiddenVisible(pattern)));
+}
+
+function normalizedCandidate(relativePath: string): string {
+  return withHiddenVisible(relativePath.split('\\').join('/'));
+}
+
+/**
  * Whether the resolved config instruments `relativePath`. Vitest matches these patterns against the
  * path relative to the root, so `src/**` never reaches `packages/x/src/**`.
  */
 export function isInstrumentedPath(relativePath: string, config: CoverageConfig): boolean {
-  const candidate = withHiddenVisible(relativePath.split('\\').join('/'));
+  const candidate = normalizedCandidate(relativePath);
   return (
-    config.include.some((pattern) => path.matchesGlob(candidate, withHiddenVisible(pattern))) &&
-    !config.exclude.some((pattern) => path.matchesGlob(candidate, withHiddenVisible(pattern)))
+    matchesAnyPattern(candidate, config.include) && !matchesAnyPattern(candidate, config.exclude)
   );
+}
+
+/**
+ * Whether the resolved config's include covers `relativePath`, whatever the
+ * exclude says: the run was told to measure it, even when an exclude entry
+ * then took it back out.
+ */
+export function isIncludedPath(relativePath: string, config: CoverageConfig): boolean {
+  return matchesAnyPattern(normalizedCandidate(relativePath), config.include);
+}
+
+/**
+ * The first path in `paths` that names a file outside this checkout, if any.
+ * A report records its paths absolute, so one written in another root
+ * relativizes outside this one — and the stamp cannot catch it, because two
+ * checkouts of one commit carry the same HEAD and the same bytes.
+ */
+export function findOutsideRootPath(paths: Iterable<string>): string | undefined {
+  for (const file of paths) {
+    if (file.startsWith('../')) return file;
+  }
+  return undefined;
 }
 
 // A whole-file ignore comment drops a source from every Istanbul map, so its missing record is not a gap

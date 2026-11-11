@@ -302,6 +302,17 @@ itself out of scope — the config's `exclude`, or a whole-file ignore comment. 
 against 30 too, so a below-bar guess about new code is not reported at all; the stamp is what stops that
 guess from standing in for a measurement of code you changed.
 
+The changed-line gate (`check:coverage-changed`) reads the same stamp: with no stamp, a stamp from
+another commit or working tree, a narrowed run, or an lcov report whose records name files outside this
+checkout, it prints `no trustworthy verdict` and names the reason instead of a PASS/FAIL table — once
+there is an lcov report to read; with no report at all it prints `no lcov report` and asks for a
+coverage run first. The fix is the same — re-run `pnpm test:coverage` on this commit — and the refusal
+fires before the `coverage-waiver` label is consulted, because a waiver skips a failure rather than
+blessing a report with no numbers to print. Which files owe coverage comes from the stamp's
+include/exclude: a file the config excludes is out of scope by declaration, but when an include root
+covers it, its code-like, non-test added lines are still tallied as excluded-path lines, as is a file the stamp instruments
+that lcov omits.
+
 ## Test app and Maestro compatibility
 
 The Expo fixture app owns its setup, simulator/device, Metro, replay, and Maestro instructions in
