@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { assertCatalogComplete, CHECK_CATALOG, resolveCommand } from './checks.ts';
+import { assertCatalogComplete, CHECK_CATALOG, checksRunByUnit, resolveCommand } from './checks.ts';
 import { ALL_CHECKS, selectChecks, type CheckId, type SelectInput } from './model.ts';
 import { packageEntrySources } from '../build-entries.ts';
 
@@ -461,6 +461,30 @@ test('every catalog command resolves against the real package scripts', () => {
     '--base',
     'origin/dev',
   ]);
+  // A full run has no diff, so fallow takes its own merge-base.
+  assert.deepEqual(resolveCommand(fallow, scripts, undefined), ['pnpm', 'run', 'check:fallow']);
+});
+
+test('the checks the unit gate already runs are read off its script and Vitest subsets', () => {
+  const scripts = (
+    JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
+      scripts: Record<string, string>;
+    }
+  ).scripts;
+  assert.deepEqual([...checksRunByUnit(scripts)].sort(), [
+    'adr-citations',
+    'capabilities-matrix',
+    'command-docs',
+    'tmpdir-leaks',
+  ]);
+  // A flag beyond file filters, or a project the unit suite does not run, is not a subset.
+  const narrowed = {
+    ...scripts,
+    'check:command-docs': 'vitest run --project unit-core --coverage test/x.test.ts',
+    'check:adr-citations': 'vitest run --project provider-integration test/x.test.ts',
+    'check:unit': 'pnpm test:unit',
+  };
+  assert.deepEqual([...checksRunByUnit(narrowed)], ['capabilities-matrix']);
 });
 
 test('a missing package script makes command resolution throw', () => {

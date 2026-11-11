@@ -4,12 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { runCmdSync } from '@agent-device/host-kit/command';
+import { CHECK_CATALOG } from './checks.ts';
 import type { ExecutionReceipt } from './execution.ts';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const runner = path.join(import.meta.dirname, 'run.ts');
 
-function fixture(failingScript?: string) {
+function fixture(failingScript?: string, realScripts: readonly string[] = []) {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'validation-cli-'));
   const git = (...args: string[]) => runCmdSync('git', args, { cwd }).stdout.trim();
   git('init', '-q');
@@ -17,7 +18,9 @@ function fixture(failingScript?: string) {
   git('config', 'user.name', 'Test');
   const { scripts } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   const pkg = { name: 'validation-fixture', private: true, scripts };
-  for (const script of Object.keys(pkg.scripts)) pkg.scripts[script] = 'node -e "process.exit(0)"';
+  for (const script of Object.keys(pkg.scripts)) {
+    if (!realScripts.includes(script)) pkg.scripts[script] = 'node -e "process.exit(0)"';
+  }
   if (failingScript) pkg.scripts[failingScript] = 'node -e "process.exit(7)"';
   fs.writeFileSync(path.join(cwd, 'package.json'), JSON.stringify(pkg));
   fs.writeFileSync(
@@ -77,17 +80,26 @@ test(
   'full CLI works without origin/main and still blocks a missing install',
   { skip: process.platform === 'win32' },
   () => {
-    const { cwd } = fixture();
+    // The real unit script and the Vitest subsets it already runs: a full run that executed one
+    // of those subsets would start Vitest in this fixture and fail.
+    const runByUnit = ['tmpdir-leaks', 'command-docs', 'adr-citations', 'capabilities-matrix'];
+    const { cwd } = fixture(undefined, [
+      'check:unit',
+      'check:command-docs',
+      'check:adr-citations',
+      'check:capabilities-matrix',
+    ]);
     try {
       const full = invoke(cwd, ['--full']);
       assert.equal(full.exitCode, 0, full.stderr);
-      const ran = full.receipt.results
-        .filter((result) => result.status === 'passed')
-        .map((result) => result.id);
-      assert.ok(ran.includes('di-seams'), ran.join(', '));
-      assert.ok(ran.includes('unit'), ran.join(', '));
-      assert.ok(!ran.includes('vitest-related'), ran.join(', '));
-      assert.ok(!full.receipt.results.some((result) => result.id === 'android-helpers'));
+      assert.equal(full.receipt.plan?.failOpen, false);
+      assert.deepEqual(
+        full.receipt.results.map((result) => [result.id, result.status]),
+        CHECK_CATALOG.filter(
+          (spec) =>
+            spec.localRunnable && spec.id !== 'vitest-related' && !runByUnit.includes(spec.id),
+        ).map((spec) => [spec.id, 'passed']),
+      );
       fs.writeFileSync(path.join(cwd, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
       const stale = invoke(cwd, ['--full']);
       assert.equal(stale.exitCode, 1);

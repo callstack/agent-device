@@ -25,7 +25,7 @@ With `--run --json`, stdout contains the receipt and stderr contains progress.
 When head is `HEAD`, planning and execution include working-tree changes.
 
 `pnpm check` runs every `localRunnable` catalog check.
-It runs `unit` in place of `vitest-related`.
+It skips `vitest-related` and checks that `unit` already runs.
 
 Only a passed receipt with `exactCommit: true` proves validation at the named commit.
 A dirty-tree pass is local feedback.

@@ -21,6 +21,7 @@ import { runEntrypoint } from '../lib/cli-entrypoint.ts';
 import {
   assertCatalogComplete,
   CHECK_CATALOG,
+  fullCheckPlan,
   getCheckSpec,
   resolveCommand,
   type CheckSpec,
@@ -176,20 +177,6 @@ function printPlanHuman(plan: CheckPlan, args: Args): void {
   }
 }
 
-// `--full` runs every locally runnable catalog check. `unit` runs the whole unit suite, so the
-// related run that only narrows it has nothing to add.
-function fullPlan(): CheckPlan {
-  return {
-    failOpen: true,
-    checks: CHECK_CATALOG.filter((spec) => spec.localRunnable && spec.id !== 'vitest-related').map(
-      (spec) => spec.id,
-    ),
-    reasons: [],
-    failOpenReasons: [],
-    docsOnlyPaths: [],
-  };
-}
-
 // How a resolved command is executed. Injectable so the entrypoint's `--run`
 // propagation (order, skip of GitHub-authoritative checks, stop-on-failure) is
 // testable without spawning real processes.
@@ -304,7 +291,7 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
         return 1;
       }
       if (args.full) {
-        const plan = fullPlan();
+        const plan = fullCheckPlan(currentPackage.scripts);
         receipt.plan = plan;
         receipt.results = plan.checks.map((id) => ({ id, status: 'not-run' }));
         // A full run has no diff, so fallow takes its own merge-base instead of a --base.
