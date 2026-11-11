@@ -151,25 +151,45 @@ extension RunnerTests {
     defer { app.terminate() }
     let field = app.textFields["native-field"]
     XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let emptyHandle = try XCTUnwrap(app.textFields.matching(NSPredicate { object, _ in
+      guard let attributes = object as? XCUIElementAttributes else { return false }
+      return attributes.elementType == .textField && attributes.identifier == "native-field" && Self.valueText(attributes.value) == nil
+    }).allElementsBoundByIndex.first)
+    XCTAssertTrue(emptyHandle.exists)
     let empty = try XCTUnwrap(flatSnapshotNode(element: field, index: 0, parentIndex: nil)?.nativePressTarget)
     XCTAssertNil(empty.value)
     XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: empty).data?.pressReadiness, "ready")
     // XCTest edits are setup: readiness must distinguish actual text equal to the placeholder.
     let text = "Native input"
     XCTAssertEqual(field.placeholderValue, text)
+    XCTAssertEqual(Self.valueText(field.value), text)
+    let accessibility = NativePressTarget(type: empty.type, identifier: empty.identifier, label: empty.label,
+      value: text, valueSource: "accessibility", rect: empty.rect)
+    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: accessibility).data?.pressReadiness, "ready")
+    let unknown = NativePressTarget(type: empty.type, identifier: empty.identifier, label: empty.label,
+      value: text, valueSource: "unknown", rect: empty.rect)
+    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: unknown).data?.pressReadiness, "missing")
     field.tap()
     field.typeText(text)
     XCTAssertEqual(try field.snapshot().value as? String, text)
+    XCTAssertFalse(emptyHandle.exists, "index binding must re-evaluate its exact retained predicate")
     let populated = try XCTUnwrap(flatSnapshotNode(element: field, index: 0, parentIndex: nil)?.nativePressTarget)
     XCTAssertEqual(populated.value, text)
     XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: populated).data?.pressReadiness, "ready")
     XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: empty).data?.pressReadiness, "missing")
-    field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: text.count))
+    // Empty and literal-placeholder text report the same AX value; this view cannot distinguish them.
+    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: accessibility).data?.pressReadiness, "ready")
+    field.typeText("!")
+    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: accessibility).data?.pressReadiness, "missing")
+    field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: text.count + 1))
     XCTAssertNil(Self.valueText(try field.snapshot().value))
     XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: populated).data?.pressReadiness, "missing")
     let cleared = try XCTUnwrap(flatSnapshotNode(element: field, index: 0, parentIndex: nil)?.nativePressTarget)
     XCTAssertNil(cleared.value)
     XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: cleared).data?.pressReadiness, "ready")
+    XCTAssertTrue(emptyHandle.exists)
+    app.terminate()
+    XCTAssertFalse(emptyHandle.exists)
   }
 
   @MainActor
@@ -215,6 +235,12 @@ extension RunnerTests {
         rect: SnapshotRect(frame))
       let readiness = try queryAuthorizedPressTarget(app: app, target: target)
       XCTAssertEqual(readiness.data?.pressReadiness, element.isHittable ? "ready" : "blocked")
+      for (identifier, label) in [(String(element.identifier.dropLast()), element.label),
+        (element.identifier, String(element.label.dropLast()))] {
+        let prefix = NativePressTarget(type: target.type, identifier: identifier, label: label,
+          value: target.value, rect: target.rect)
+        XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: prefix).data?.pressReadiness, "missing")
+      }
       let changedValue = NativePressTarget(type: element.elementType.rawValue,
         identifier: element.identifier, label: element.label, value: "not-the-native-value",
         rect: SnapshotRect(frame))

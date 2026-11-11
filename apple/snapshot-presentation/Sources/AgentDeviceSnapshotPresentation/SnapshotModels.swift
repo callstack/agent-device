@@ -33,14 +33,16 @@ public struct NativePressTarget: Codable, Equatable {
   public let identifier: String?
   public let label: String?
   public let value: String?
+  public let valueSource: String?
   public let rect: SnapshotRect
 
-  public init(type: UInt, identifier: String?, label: String?, value: String?, rect: SnapshotRect) {
+  public init(type: UInt, identifier: String?, label: String?, value: String?, valueSource: String? = nil, rect: SnapshotRect) {
     self.type = type
     self.identifier = identifier
     self.label = label
     // XCUIElement.ElementType.secureTextField.rawValue; this portable package does not import XCTest.
     self.value = type == 50 ? nil : value
+    self.valueSource = valueSource
     self.rect = rect
   }
 }
@@ -112,7 +114,7 @@ public struct RawAXNode: Equatable {
     updated.hittable = hittable
     if let source = nativePressTarget, let nativePressTargetRect {
       updated.nativePressTarget = NativePressTarget(type: source.type, identifier: source.identifier,
-        label: source.label, value: source.value, rect: nativePressTargetRect)
+        label: source.label, value: source.value, valueSource: source.valueSource, rect: nativePressTargetRect)
     }
     return updated
   }

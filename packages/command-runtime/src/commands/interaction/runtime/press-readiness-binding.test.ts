@@ -34,3 +34,13 @@ for (const field of ['x', 'y', 'width', 'height'] as const) {
     }
   });
 }
+
+test('equal reported values cannot rebind across producer value views', () => {
+  const source = { ...cases[0]!.expected, type: 49, value: 'Hint' };
+  const accessibility = { ...source, valueSource: 'accessibility' as const };
+  expect(matchesAuthorizedPressTarget(source, accessibility)).toBe(false);
+  expect(matchesAuthorizedPressTarget(accessibility, source)).toBe(false);
+  expect(matchesAuthorizedPressTarget(accessibility, accessibility)).toBe(true);
+  const unknown = { ...source, valueSource: 'unknown' } as unknown as SnapshotNativePressTarget;
+  expect(matchesAuthorizedPressTarget(unknown, unknown)).toBe(false);
+});

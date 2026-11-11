@@ -290,6 +290,8 @@ export type SnapshotNativePressTarget = {
   identifier?: string;
   label?: string;
   value?: string;
+  /** Guest AX inputs report the accessibility value; absent means the native raw-input view. */
+  valueSource?: 'accessibility';
   rect: Rect;
 };
 

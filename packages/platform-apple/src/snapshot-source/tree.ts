@@ -299,6 +299,9 @@ function nodeFacts(
             type: nativeType,
             identifier: optionalString(value[ATTRIBUTE.identifier]),
             label: optionalString(value[ATTRIBUTE.label]),
+            ...(['TextField', 'SearchField', 'TextView'].includes(type ?? '')
+              ? { valueSource: 'accessibility' as const }
+              : {}),
             ...(type === 'SecureTextField'
               ? {}
               : { value: optionalScalar(value[ATTRIBUTE.value]) }),

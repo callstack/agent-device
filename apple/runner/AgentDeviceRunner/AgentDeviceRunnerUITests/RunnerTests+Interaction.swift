@@ -373,7 +373,9 @@ extension RunnerTests {
   /// public selector reads, a hittable sibling can never stand in for the authorized control.
   func queryAuthorizedPressTarget(app: XCUIApplication, target: NativePressTarget, appBundleId: String? = nil) throws -> Response {
     let expected = target.rect
-    guard expected.width > 0, expected.height > 0,
+    guard let type = XCUIElement.ElementType(rawValue: target.type),
+      target.valueSource == nil || target.valueSource == "accessibility",
+      expected.width > 0, expected.height > 0,
       [expected.x, expected.y, expected.width, expected.height].allSatisfy({ $0.isFinite }) else {
       return Response(ok: true, data: DataPayload(pressReadiness: "missing", pressReadinessAppBundleId: appBundleId))
     }
@@ -381,7 +383,7 @@ extension RunnerTests {
     let windows = roots.flatMap { root -> [XCUIElement] in
       var windows: [XCUIElement] = []
       let held = holdingRecordedIssues {
-        windows = root is XCUIApplication ? root.windows.allElementsBoundByAccessibilityElement : [root]
+        windows = root is XCUIApplication ? root.windows.allElementsBoundByIndex : [root]
       }
       return held.issues.isEmpty && held.exceptionMessage == nil ? windows : []
     }
@@ -408,10 +410,13 @@ extension RunnerTests {
       }
     }
     let matches = try roots.flatMap {
-      $0.descendants(matching: .any).matching(Self.authorizedPressTargetPredicate(target)).matching(binding).allElementsBoundByAccessibilityElement
+      $0.descendants(matching: .any).matching(Self.authorizedPressTargetPredicate(target)).matching(binding).allElementsBoundByIndex
     }.filter { element in
       guard element.exists else { return false }
-      return try matchesBinding(element, rect: element.frame, value: nativePressTargetValue(element))
+      // Index-bound handles re-resolve the retained exact type/id/label predicate.
+      return try target.matches(type: target.type, identifier: target.identifier, label: target.label,
+        value: nativePressTargetValue(element, type: type, accessibilityValue: target.valueSource == "accessibility"),
+        rect: SnapshotRect(element.frame))
     }
     let state = matches.count > 1 ? "ambiguous" : matches.first.map { $0.isHittable ? "ready" : "blocked" } ?? "missing"
     return Response(ok: true, data: DataPayload(pressReadiness: state, pressReadinessAppBundleId: appBundleId))

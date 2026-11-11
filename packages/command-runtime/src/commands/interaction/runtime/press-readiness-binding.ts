@@ -10,6 +10,8 @@ export function matchesAuthorizedPressTarget(
 ): boolean {
   return (
     expected.type === candidate.type &&
+    (expected.valueSource === undefined || expected.valueSource === 'accessibility') &&
+    expected.valueSource === candidate.valueSource &&
     (['identifier', 'label', 'value'] as const).every(
       (key) =>
         (key === 'value' && expected.type === 'SecureTextField') ||

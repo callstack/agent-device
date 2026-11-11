@@ -10,11 +10,10 @@ extension RunnerTests {
 #endif
   }
 
-  /// Inputs bind their raw contents, not the live accessor's synthesized placeholder.
-  func nativePressTargetValue(_ element: XCUIElement) throws -> String? {
-    let type = element.elementType
+  /// Read the input value view retained by its producer, never raw-or-display equivalence.
+  func nativePressTargetValue(_ element: XCUIElement, type: XCUIElement.ElementType, accessibilityValue: Bool = false) throws -> String? {
     if type == .secureTextField { return nil }
-    if Self.placeholderElementTypes.contains(type) { return Self.valueText(try element.snapshot().value) }
+    if !accessibilityValue && Self.placeholderElementTypes.contains(type) { return Self.valueText(try element.snapshot().value) }
     return Self.valueText(element.value)
   }
 
@@ -705,7 +704,7 @@ extension RunnerTests {
         target = nil
         let held = holdingRecordedIssues {
           target = try? NativePressTarget(type: elementType.rawValue, identifier: identifier,
-            label: label, value: nativePressTargetValue(element), rect: SnapshotRect(frame))
+            label: label, value: nativePressTargetValue(element, type: elementType), rect: SnapshotRect(frame))
         }
         if !held.issues.isEmpty || held.exceptionMessage != nil { target = nil }
       }

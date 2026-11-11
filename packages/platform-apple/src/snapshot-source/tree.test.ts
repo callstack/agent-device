@@ -869,4 +869,24 @@ test('bridge binding omits secure values before presentation', () => {
   );
   assert.equal(decoded.nodes[0]?.nativePressTarget?.type, 50);
   assert.equal(decoded.nodes[0]?.nativePressTarget?.value, undefined);
+  assert.equal(decoded.nodes[0]?.nativePressTarget?.valueSource, undefined);
+});
+
+test('guest input bindings retain their reported value view even when no value is present', () => {
+  for (const type of [45, 49, 52]) {
+    for (const value of [undefined, 'Hint']) {
+      const node = decodeSnapshotBridgeTree(
+        {
+          [automationType]: type,
+          ...(value === undefined ? {} : { XC_kAXXCAttributeValue: value }),
+          [frame]: { X: 10, Y: 20, Width: 100, Height: 40 },
+          [children]: [],
+        },
+        { truncated: false },
+        limits,
+      ).nodes[0]!;
+      assert.equal(node.nativePressTarget?.valueSource, 'accessibility');
+      assert.equal(node.nativePressTarget?.value, value);
+    }
+  }
 });

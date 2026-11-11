@@ -1,6 +1,9 @@
 import { expect, test } from 'vitest';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { readSnapshotNativePressTargets } from '@agent-device/contracts/snapshot-private-evidence';
+import {
+  readSnapshotNativePressTargets,
+  copySnapshotNativePressTargets,
+} from '@agent-device/contracts/snapshot-private-evidence';
 import { presentIosSnapshotAcquisition } from '../ios-snapshot-runtime.ts';
 import { buildSnapshotState } from '../../snapshot-state.ts';
 
@@ -26,6 +29,7 @@ const nodes: RawSnapshotNode[] = [
     identifier: 'com.apple.settings.general',
     rect: full,
   },
+  { index: 5, parentIndex: 1, depth: 2, type: 'TextField', value: 'Hint', rect: full },
 ];
 
 // Source/native identity must survive geometric and semantic presentation. Comparing public Cell
@@ -41,7 +45,8 @@ for (const raw of [false, true]) {
           nodes: nodes.map((node, index) => ({
             ...node,
             nativePressTarget: {
-              type: [2, 46, 75, 1, 9][index]!,
+              type: [2, 46, 75, 1, 9, 49][index]!,
+              ...(node.type === 'TextField' ? { valueSource: 'accessibility' as const } : {}),
               label: node.label,
               identifier: node.identifier,
               value: node.value,
@@ -72,7 +77,19 @@ for (const raw of [false, true]) {
       value: undefined,
       rect: full,
     });
+    const field = snapshot.nodes.find((node) => node.type === 'TextField')!;
+    expect(readSnapshotNativePressTargets(snapshot.nodes)?.get(field.index)).toMatchObject({
+      type: 49,
+      value: 'Hint',
+      valueSource: 'accessibility',
+      rect: full,
+    });
+    const cloned = copySnapshotNativePressTargets(snapshot.nodes, structuredClone(snapshot.nodes));
+    expect(readSnapshotNativePressTargets(cloned)?.get(field.index)?.valueSource).toBe(
+      'accessibility',
+    );
     expect(JSON.stringify(snapshot)).not.toContain('nativePressTarget');
+    expect(JSON.stringify(snapshot)).not.toContain('valueSource');
   });
 }
 
