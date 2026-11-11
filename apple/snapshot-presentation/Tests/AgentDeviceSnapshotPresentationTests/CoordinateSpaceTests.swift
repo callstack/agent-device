@@ -384,7 +384,7 @@ final class CoordinateSpaceTests: XCTestCase {
   ) -> RawAXNode {
     RawAXNode(
       index: index, type: type, label: label, identifier: nil, value: nil,
-      rect: SnapshotRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height),
+      rect: SnapshotRect(rect.standardized),
       enabled: true, focused: nil, selected: nil, hittable: false,
       depth: depth, parentIndex: parent, hiddenContentAbove: nil, hiddenContentBelow: nil,
       nativePressTarget: type == "Button" ? NativePressTarget(type: 9, identifier: nil, label: label, value: nil, rect: SnapshotRect(rect)) : nil
