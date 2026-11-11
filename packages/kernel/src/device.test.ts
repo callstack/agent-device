@@ -49,7 +49,10 @@ const browser: DeviceInfo = {
 };
 
 const webDevice = (name: string, tenantId?: string): DeviceInfo =>
-  webSessionDevice(browser, tenantId === undefined ? { name } : { name, tenantId });
+  webSessionDevice(
+    browser,
+    tenantId === undefined ? { name } : { name, namespace: { kind: 'tenant', id: tenantId } },
+  );
 
 test('a host overlaps each of its web session devices, and two of its web session devices do not overlap', () => {
   const one = webDevice('one').id;
@@ -78,10 +81,19 @@ test('web session names that differ only by case drive one browser and are one d
 
 test('the backend key is p_<name>, and t_<hash of the tenant>_<name> under tenant isolation', () => {
   assert.equal(webSessionBackendKey({ name: 'one' }), 'p_one');
-  const first = webSessionBackendKey({ name: 'one', tenantId: 'tenant-1' });
+  const first = webSessionBackendKey({
+    name: 'one',
+    namespace: { kind: 'tenant', id: 'tenant-1' },
+  });
   assert.match(first, /^t_[0-9a-f]{12}_one$/);
-  assert.equal(first, webSessionBackendKey({ name: 'ONE', tenantId: 'tenant-1' }));
-  assert.notEqual(first, webSessionBackendKey({ name: 'one', tenantId: 'tenant-2' }));
+  assert.equal(
+    first,
+    webSessionBackendKey({ name: 'ONE', namespace: { kind: 'tenant', id: 'tenant-1' } }),
+  );
+  assert.notEqual(
+    first,
+    webSessionBackendKey({ name: 'one', namespace: { kind: 'tenant', id: 'tenant-2' } }),
+  );
   assert.notEqual(first, webSessionBackendKey({ name: 'one' }));
 });
 
@@ -97,7 +109,10 @@ test('two tenants using one name hold two devices, and one tenant using it twice
 
 test('the backend key reads back from the device id, and only a web session device carries one', () => {
   assert.equal(webBackendKeyOf(webDevice('one').id), 'p_one');
-  const tenantKey = webSessionBackendKey({ name: 'one', tenantId: 'tenant-1' });
+  const tenantKey = webSessionBackendKey({
+    name: 'one',
+    namespace: { kind: 'tenant', id: 'tenant-1' },
+  });
   assert.equal(webBackendKeyOf(webDevice('one', 'tenant-1').id), tenantKey);
   assert.equal(webBackendKeyOf(browser.id), undefined);
   assert.equal(webBackendKeyOf(hostAppDevice(mac, 'com.example.one').id), undefined);
@@ -135,9 +150,14 @@ test('the longest name leaves a key that fits the socket path, and is shorter un
   // 32 characters of key: agent-browser's 103-byte socket path less a 65-byte socket directory and 6 bytes
   // for `/` and `.sock`.
   assert.equal(webSessionBackendKey({ name: 'a'.repeat(30) }).length, 32);
-  assert.equal(webSessionBackendKey({ name: 'a'.repeat(17), tenantId: 'tenant-1' }).length, 32);
+  assert.equal(
+    webSessionBackendKey({ name: 'a'.repeat(17), namespace: { kind: 'tenant', id: 'tenant-1' } })
+      .length,
+    32,
+  );
   assert.throws(
-    () => webSessionBackendKey({ name: 'a'.repeat(18), tenantId: 'tenant-1' }),
+    () =>
+      webSessionBackendKey({ name: 'a'.repeat(18), namespace: { kind: 'tenant', id: 'tenant-1' } }),
     (error: unknown) =>
       error instanceof AppError && error.details?.reason === 'web_session_name_invalid',
   );

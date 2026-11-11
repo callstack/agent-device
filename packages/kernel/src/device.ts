@@ -138,8 +138,7 @@ const WEB_BACKEND_KEY_MAX_LENGTH =
 /** The public name and its tenant or implicit workspace namespace. */
 export type WebSessionIdentity = Readonly<{
   name: string;
-  tenantId?: string;
-  workspaceScopeId?: string;
+  namespace?: { kind: 'tenant'; id: string } | { kind: 'workspace'; id: string };
 }>;
 
 function webBackendKeyPrefix(tenantId: string | undefined): string {
@@ -148,7 +147,7 @@ function webBackendKeyPrefix(tenantId: string | undefined): string {
   return `t_${hash.slice(0, WEB_TENANT_KEY_HASH_LENGTH)}_`;
 }
 
-/** Validate the backend's name and socket limits, and fold case for case-insensitive filesystems. */
+/** Validate the backend's name and socket limits. Its charset excludes `:` from device-id infixes. */
 function requireWebSessionName(sessionName: string, keyPrefixLength: number): string {
   const name = sessionName.toLowerCase();
   const maxLength = WEB_BACKEND_KEY_MAX_LENGTH - keyPrefixLength;
@@ -173,11 +172,11 @@ function requireWebSessionName(sessionName: string, keyPrefixLength: number): st
  * workspace session.
  */
 export function webSessionBackendKey(session: WebSessionIdentity): string {
-  const prefix = webBackendKeyPrefix(session.tenantId);
+  const prefix = webBackendKeyPrefix(
+    session.namespace?.kind === 'tenant' ? session.namespace.id : undefined,
+  );
   const name = requireWebSessionName(session.name, prefix.length);
-  return session.workspaceScopeId === undefined
-    ? `${prefix}${name}`
-    : `w_${session.workspaceScopeId}`;
+  return session.namespace?.kind === 'workspace' ? `w_${session.namespace.id}` : `${prefix}${name}`;
 }
 
 /**

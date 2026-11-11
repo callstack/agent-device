@@ -53,9 +53,9 @@ export function tenantPublicSessionName(tenant: string, session: string): string
 /**
  * The web session a request runs in: the tenant-relative name as the caller supplied it, and the
  * tenant under tenant isolation, or the implicit workspace scope. A web session device is derived
- * from it alone, so a blank name reaches web validation instead of becoming the default session's browser, and the store key's
- * `<tenant>:` prefix never enters the backend key. `supplied` is the name before
- * `scopeRequestSession` rewrites a blank one to `default`; `scoped` carries the attested tenant.
+ * from it alone, so a blank name reaches web validation instead of becoming the default session's
+ * browser, and the store key's `<tenant>:` prefix never enters the backend key. `supplied` is the
+ * name before `scopeRequestSession` rewrites a blank one to `default`; `scoped` carries the attested tenant.
  * Only the request scope calls this.
  */
 export function deriveWebSessionIdentity(
@@ -64,10 +64,14 @@ export function deriveWebSessionIdentity(
   scope: SessionScope,
 ): WebSessionIdentity {
   const tenantId = scoped.meta?.sessionIsolation === 'tenant' ? scoped.meta.tenantId : undefined;
-  if (scope.kind === 'cwd') return { name: supplied, workspaceScopeId: scope.id };
+  if (scope.kind === 'cwd')
+    return { name: supplied, namespace: { kind: 'workspace', id: scope.id } };
   return tenantId === undefined
     ? { name: supplied }
-    : { name: tenantPublicSessionName(tenantId, supplied), tenantId };
+    : {
+        name: tenantPublicSessionName(tenantId, supplied),
+        namespace: { kind: 'tenant', id: tenantId },
+      };
 }
 
 /** The web session the request scope derived for this request. */
