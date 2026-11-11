@@ -196,6 +196,10 @@ extension RunnerTests {
     defer { app.terminate() }
     let field = app.textFields["native-field"]
     XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let main = app.windows.firstMatch
+    let window = try XCTUnwrap(flatSnapshotNode(element: main, index: 0, parentIndex: nil)?.nativePressTarget)
+    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: window).data?.pressReadiness,
+      main.isHittable ? "ready" : "blocked")
     let empty = try XCTUnwrap(flatSnapshotNode(element: field, index: 0, parentIndex: nil)?.nativePressTarget)
     let retained = try XCTUnwrap(app.textFields.matching(Self.authorizedPressTargetPredicate(empty)).allElementsBoundByIndex.first)
     XCTAssertTrue(retained.exists)

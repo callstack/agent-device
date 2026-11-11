@@ -390,14 +390,22 @@ extension RunnerTests {
     let identity = Self.authorizedPressTargetPredicate(target)
     var matches: [XCUIElement] = []
     for window in windows {
-      let windowSnapshot = try window.snapshot()
       var frame = CGRect.null
       let geometry = holdingRecordedIssues { frame = window.frame }
-      if !geometry.issues.isEmpty || geometry.exceptionMessage != nil
-        || !SnapshotGeometry.isPositiveFinite(frame) || !SnapshotGeometry.isPositiveFinite(windowSnapshot.frame) {
+      let unresolvedGeometry = !geometry.issues.isEmpty || geometry.exceptionMessage != nil
+        || !SnapshotGeometry.isPositiveFinite(frame)
+      let windowSnapshot: XCUIElementSnapshot?
+      // An origin-zero, non-quarter-turn viewport always retains app orientation in the geometry owner.
+      if unresolvedGeometry || frame.origin != .zero || SnapshotGeometrySpace.namesQuarterTurn(orientation)
+        || target.type == XCUIElement.ElementType.window.rawValue {
+        windowSnapshot = try window.snapshot()
+      } else {
+        windowSnapshot = nil
+      }
+      if unresolvedGeometry || windowSnapshot.map({ !SnapshotGeometry.isPositiveFinite($0.frame) }) == true {
         var possible: Bool?
         let probe = holdingRecordedIssues {
-          possible = identity.evaluate(with: windowSnapshot)
+          possible = windowSnapshot.map { identity.evaluate(with: $0) } == true
             || window.descendants(matching: .any).matching(identity).count > 0
         }
         guard probe.issues.isEmpty, probe.exceptionMessage == nil, possible == false else {
@@ -406,10 +414,12 @@ extension RunnerTests {
         continue
       }
       // A placed app can report origin zero while its window is on screen elsewhere.
-      let space = SnapshotGeometrySpace.space(reportedBySurfaceHost: true,
-        reportedFrame: windowSnapshot.frame, inheritedFrom: .appOrientation,
-        viewport: .reported(box: frame, interfaceOrientation: orientation))
-      if target.matches(type: windowSnapshot.elementType.rawValue, identifier: windowSnapshot.identifier,
+      let space = windowSnapshot.map {
+        SnapshotGeometrySpace.space(reportedBySurfaceHost: true,
+          reportedFrame: $0.frame, inheritedFrom: .appOrientation,
+          viewport: .reported(box: frame, interfaceOrientation: orientation))
+      } ?? .appOrientation
+      if let windowSnapshot, target.matches(type: windowSnapshot.elementType.rawValue, identifier: windowSnapshot.identifier,
         label: windowSnapshot.label, value: Self.valueText(windowSnapshot.value),
         rect: SnapshotRect(space.orientedFrame(of: windowSnapshot.frame))) {
         matches.append(window)
