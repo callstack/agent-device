@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { iosNativeSnapshotNodes, PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
@@ -39,13 +40,13 @@ const CONTINUE_BUTTON_NODES = [
   },
 ];
 
-function snapshotEntry(nodes: readonly unknown[]): ProviderScenarioProviderEntry {
+function snapshotEntry(nodes: readonly unknown[]) {
   return {
     command: 'ios.runner.snapshot',
     deviceId: DEVICE_ID,
     platform: 'apple',
     result: { nodes: iosNativeSnapshotNodes(nodes), truncated: false },
-  };
+  } satisfies ProviderScenarioProviderEntry;
 }
 
 function tapEntry(x: number, y: number): ProviderScenarioProviderEntry {
@@ -133,6 +134,39 @@ test('press refuses a selector miss after one interactive and full capture attem
 
       const commands = transcript.calls.slice(callsBeforePress).map((call) => call.command);
       assert.deepEqual(commands, ['ios.runner.snapshot', 'ios.runner.snapshot']);
+      transcript.assertComplete();
+    },
+  );
+});
+
+test('native fallback readiness failure cannot corroborate a changed tree', async () => {
+  const baseline = snapshotEntry(CONTINUE_BUTTON_NODES);
+  const changed = snapshotEntry(
+    CONTINUE_BUTTON_NODES.map((node) => ({ ...node, label: node.label + ' changed' })),
+  );
+  const snapshotQuality = { state: 'healthy', backend: 'tree' } as const;
+  await withPressSelectorDaemon(
+    [
+      { ...baseline, result: { ...baseline.result, snapshotQuality } },
+      {
+        command: 'ios.runner.pressReadiness',
+        error: new AppError('XCTEST_RECORDED_FAILURE', 'XCTest recorded a read failure', {
+          dispatched: 'unknown',
+        }),
+      },
+      { ...changed, result: { ...changed.result, snapshotQuality }, repeat: true },
+    ],
+    async (daemon, transcript) => {
+      const callsBeforePress = transcript.calls.length;
+      const press = await daemon.callCommand('press', ['label=Continue'], {
+        snapshotPreferredBackend: 'tree',
+      });
+      const error = assertRpcError(press, 500, 'XCTEST_RECORDED_FAILURE', /read failure/);
+      assert.equal((error.details as { dispatched?: unknown }).dispatched, 'no');
+      assert.deepEqual(
+        transcript.calls.slice(callsBeforePress).map((call) => call.command),
+        ['ios.runner.snapshot', 'ios.runner.pressReadiness'],
+      );
       transcript.assertComplete();
     },
   );

@@ -6,8 +6,8 @@ extension RunnerTests {
   func testNativeReadPrefilterPreservesNormalizedExactIdentity() {
     for identifier in ["  continue-control\n", "", "caf\u{0065}\u{0301}"] {
       let label = identifier.isEmpty ? "  caf\u{0065}\u{0301}\n" : "Continue"
-      let target = AuthorizedPressTarget(type: 9, identifier: identifier, label: label, value: nil,
-        rect: SnapshotRect(x: 10, y: 20, width: 100, height: 40), point: PressTargetPoint(x: 60, y: 40))
+      let target = NativePressTarget(type: 9, identifier: identifier, label: label, value: nil,
+        rect: SnapshotRect(x: 10, y: 20, width: 100, height: 40))
       let rawIdentifier = identifier.trimmingCharacters(in: .whitespacesAndNewlines).precomposedStringWithCanonicalMapping
       let rawLabel = label.trimmingCharacters(in: .whitespacesAndNewlines).precomposedStringWithCanonicalMapping
       XCTAssertTrue(Self.authorizedPressTargetPredicate(target).evaluate(with: [
@@ -33,21 +33,19 @@ extension RunnerTests {
       .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     let fixtures = try JSONDecoder().decode([Fixture].self, from:
       Data(contentsOf: root.appendingPathComponent("contracts/fixtures/authorized-press-target.json")))
-      .map { fixture in
-        (name: fixture.name, expected: AuthorizedPressTarget(type: fixture.expected.type,
-          identifier: fixture.expected.identifier, label: fixture.expected.label, value: fixture.expected.value,
-          rect: fixture.expected.rect, point: PressTargetPoint(x: 0, y: 0)), candidate: fixture.candidate,
-          matches: fixture.matches)
-      }
     XCTAssertFalse(fixtures.isEmpty)
     for fixture in fixtures {
       let candidate = fixture.candidate
       XCTAssertEqual(fixture.expected.matches(type: candidate.type, identifier: candidate.identifier,
         label: candidate.label, value: candidate.value, rect: candidate.rect), fixture.matches, fixture.name)
     }
-    // JSON cannot encode non-finite numbers; both consumers exercise them natively.
     let reference = fixtures[0].expected
     let r = reference.rect
+    // Raw native masks are ignored here; captured host descriptors already omit secure values.
+    let secure = NativePressTarget(type: XCUIElement.ElementType.secureTextField.rawValue,
+      identifier: nil, label: nil, value: nil, rect: r)
+    XCTAssertTrue(secure.matches(type: secure.type, identifier: nil, label: nil, value: "redacted", rect: r))
+    // JSON cannot encode non-finite numbers; both consumers exercise them natively.
     for invalid in [Double.nan, Double.infinity, -Double.infinity] {
       for rect in [
         SnapshotRect(x: invalid, y: r.y, width: r.width, height: r.height),
@@ -57,8 +55,8 @@ extension RunnerTests {
       ] {
         XCTAssertFalse(reference.matches(type: reference.type, identifier: reference.identifier,
           label: reference.label, value: reference.value, rect: rect))
-        let invalidTarget = AuthorizedPressTarget(type: reference.type, identifier: reference.identifier,
-          label: reference.label, value: reference.value, rect: rect, point: reference.point)
+        let invalidTarget = NativePressTarget(type: reference.type, identifier: reference.identifier,
+          label: reference.label, value: reference.value, rect: rect)
         XCTAssertFalse(invalidTarget.matches(type: reference.type, identifier: reference.identifier,
           label: reference.label, value: reference.value, rect: rect))
       }
@@ -147,6 +145,34 @@ extension RunnerTests {
 
 #if os(iOS)
   @MainActor
+  func testReadinessDistinguishesRawInputContentsFromItsPlaceholder() throws {
+    app.launchArguments = ["--agent-device-native-states"]
+    app.launch()
+    defer { app.terminate() }
+    let field = app.textFields["native-field"]
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let empty = try XCTUnwrap(flatSnapshotNode(element: field, index: 0, parentIndex: nil)?.nativePressTarget)
+    XCTAssertNil(empty.value)
+    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: empty).data?.pressReadiness, "ready")
+    // XCTest edits are setup: readiness must distinguish actual text equal to the placeholder.
+    let text = "Native input"
+    XCTAssertEqual(field.placeholderValue, text)
+    field.tap()
+    field.typeText(text)
+    XCTAssertEqual(try field.snapshot().value as? String, text)
+    let populated = try XCTUnwrap(flatSnapshotNode(element: field, index: 0, parentIndex: nil)?.nativePressTarget)
+    XCTAssertEqual(populated.value, text)
+    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: populated).data?.pressReadiness, "ready")
+    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: empty).data?.pressReadiness, "missing")
+    field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: text.count))
+    XCTAssertNil(Self.valueText(try field.snapshot().value))
+    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: populated).data?.pressReadiness, "missing")
+    let cleared = try XCTUnwrap(flatSnapshotNode(element: field, index: 0, parentIndex: nil)?.nativePressTarget)
+    XCTAssertNil(cleared.value)
+    XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: cleared).data?.pressReadiness, "ready")
+  }
+
+  @MainActor
   func testQuerySelectorPrefersHittableMatchOverNonHittableDuplicate() throws {
     let duplicateIdentifier = "agent-device-selector-read-duplicate"
     app.launchArguments = ["--agent-device-selector-read-regression"]
@@ -184,17 +210,14 @@ extension RunnerTests {
     // The same native owner must not use the read preference for a previously resolved target.
     for element in matches {
       let frame = element.frame
-      // Canonical presentation coordinates must not filter the source-native identity/frame.
-      for point in [PressTargetPoint(x: frame.midX, y: frame.midY), PressTargetPoint(x: -10_000, y: -10_000)] {
-        let target = AuthorizedPressTarget(type: element.elementType.rawValue,
-          identifier: element.identifier, label: element.label, value: String(describing: element.value ?? ""),
-          rect: SnapshotRect(frame), point: point)
-        let readiness = try queryAuthorizedPressTarget(app: app, target: target)
-        XCTAssertEqual(readiness.data?.pressReadiness, element.isHittable ? "ready" : "blocked")
-      }
-      let changedValue = AuthorizedPressTarget(type: element.elementType.rawValue,
+      let target = NativePressTarget(type: element.elementType.rawValue,
+        identifier: element.identifier, label: element.label, value: String(describing: element.value ?? ""),
+        rect: SnapshotRect(frame))
+      let readiness = try queryAuthorizedPressTarget(app: app, target: target)
+      XCTAssertEqual(readiness.data?.pressReadiness, element.isHittable ? "ready" : "blocked")
+      let changedValue = NativePressTarget(type: element.elementType.rawValue,
         identifier: element.identifier, label: element.label, value: "not-the-native-value",
-        rect: SnapshotRect(frame), point: PressTargetPoint(x: frame.midX, y: frame.midY))
+        rect: SnapshotRect(frame))
       XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: changedValue).data?.pressReadiness, "missing")
     }
   }

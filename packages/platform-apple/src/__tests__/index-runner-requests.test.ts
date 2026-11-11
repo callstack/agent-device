@@ -231,7 +231,6 @@ const SCOPED_SITES: Record<string, ScopedDrive> = {
             label: 'Continue',
             value: 'Ready',
             rect: { x: 40, y: 240, width: 100, height: 50 },
-            point: { x: 90, y: 265 },
           },
         },
         APP,

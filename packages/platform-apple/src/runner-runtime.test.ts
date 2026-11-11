@@ -108,7 +108,6 @@ test('runtime observations use the forwarded runner with request and application
     type: 9,
     label: 'Continue',
     rect: { x: 1, y: 2, width: 30, height: 40 },
-    point: { x: 16, y: 22 },
   };
   expect(
     await operations.pressReadiness!({

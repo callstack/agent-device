@@ -1,4 +1,4 @@
-import type { Point, Rect, SnapshotNativePressTarget } from '@agent-device/kernel/snapshot';
+import type { Rect, SnapshotNativePressTarget } from '@agent-device/kernel/snapshot';
 import type { ElementSelectorKey } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SessionSurface } from './session-surface.ts';
@@ -13,7 +13,7 @@ type ObservationInput = Readonly<{
 export type FindTextInput = ObservationInput & Readonly<{ text: string }>;
 
 /** A canonical resolution's target; this read never chooses a substitute by label or hittability. */
-export type AuthorizedPressTarget = Readonly<SnapshotNativePressTarget & { point: Point }>;
+export type AuthorizedPressTarget = Readonly<SnapshotNativePressTarget>;
 
 export type NativePressReadiness =
   | 'ready'

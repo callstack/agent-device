@@ -241,14 +241,7 @@ struct RunnerLitPanelFact: Codable {
   let heightPt: Double
 }
 
-struct AuthorizedPressTarget: Codable {
-  let type: UInt
-  let identifier: String?
-  let label: String?
-  let value: String?
-  let rect: SnapshotRect
-  let point: PressTargetPoint
-
+extension NativePressTarget {
   func matches(type: UInt, identifier: String?, label: String?, value: String?, rect: SnapshotRect) -> Bool {
     func text(_ value: String?) -> String { (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
     return self.type == type && text(self.identifier) == text(identifier)
@@ -259,11 +252,6 @@ struct AuthorizedPressTarget: Codable {
   }
 }
 
-struct PressTargetPoint: Codable {
-  let x: Double
-  let y: Double
-}
-
 struct Command: Codable {
   let command: CommandType
   let commandId: String?
@@ -272,7 +260,7 @@ struct Command: Codable {
   let text: String?
   let selectorKey: String?
   let selectorValue: String?
-  let authorizedTarget: AuthorizedPressTarget?
+  let authorizedTarget: NativePressTarget?
   let allowNonHittableCoordinateFallback: Bool?
   let delayMs: Int?
   let textEntryMode: String?

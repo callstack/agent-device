@@ -214,29 +214,6 @@
     "matches": true
   },
   {
-    "name": "secure value is never required or duplicated",
-    "expected": {
-      "type": 50,
-      "rect": {
-        "x": 40,
-        "y": 240,
-        "width": 100,
-        "height": 50
-      }
-    },
-    "candidate": {
-      "type": 50,
-      "value": "redacted",
-      "rect": {
-        "x": 40,
-        "y": 240,
-        "width": 100,
-        "height": 50
-      }
-    },
-    "matches": true
-  },
-  {
     "name": "shared nonempty identifier and value",
     "expected": {
       "type": 9,

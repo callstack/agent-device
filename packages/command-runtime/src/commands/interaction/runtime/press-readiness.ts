@@ -8,6 +8,7 @@ import type { NativePressReadiness } from '@agent-device/contracts/selector-obse
 import { matchesAuthorizedPressTarget } from './press-readiness-binding.ts';
 import { readSnapshotNativePressTargets } from '@agent-device/contracts/capture';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
+import { sleep } from '@agent-device/host-kit/retry';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import { toBackendContext } from '../../runtime-common.ts';
 import type { ResolveInteractionTargetParams } from './interaction-resolution-request.ts';
@@ -63,7 +64,7 @@ async function awaitReadiness(
       if (state !== 'blocked' || !Number.isFinite(deadline)) throw refusal(state);
       // This is post-resolution readiness, never a wait for a selector that does not exist.
       if (params.expectedResolvedTarget || params.preresolvedTarget) throw refusal(state);
-      await waitForNextRead(context.signal, Math.min(50, deadline - Date.now()));
+      await sleep(Math.min(50, deadline - Date.now()), context.signal);
       waited = true;
     }
     const ready = waited
@@ -83,7 +84,7 @@ function nativeTarget(resolved: Exclude<ResolvedInteractionTarget, { kind: 'poin
     resolved.node &&
     readSnapshotNativePressTargets(resolved.preAction.nodes)?.get(resolved.node.index);
   if (!source || !resolved.point) throw refusal('missing-source-binding');
-  return { ...source, point: resolved.point };
+  return source;
 }
 
 async function revalidate(
@@ -140,20 +141,4 @@ function refusal(state: string, cause?: unknown): AppError {
     ),
     'no',
   );
-}
-
-async function waitForNextRead(signal: AbortSignal | undefined, ms: number): Promise<void> {
-  signal?.throwIfAborted();
-  await new Promise<void>((resolve, reject) => {
-    const abort = () => {
-      clearTimeout(timer);
-      reject(signal?.reason);
-    };
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', abort);
-      resolve();
-    }, ms);
-    signal?.addEventListener('abort', abort, { once: true });
-  });
-  signal?.throwIfAborted();
 }

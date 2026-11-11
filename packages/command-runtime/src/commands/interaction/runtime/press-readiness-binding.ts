@@ -12,7 +12,7 @@ export function matchesAuthorizedPressTarget(
     expected.type === candidate.type &&
     (['identifier', 'label', 'value'] as const).every(
       (key) =>
-        (key === 'value' && (expected.type === 'SecureTextField' || expected.type === 50)) ||
+        (key === 'value' && expected.type === 'SecureTextField') ||
         (expected[key] ?? '').trim().normalize('NFC') ===
           (candidate[key] ?? '').trim().normalize('NFC'),
     ) &&

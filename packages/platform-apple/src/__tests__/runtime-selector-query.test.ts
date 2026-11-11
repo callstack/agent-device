@@ -102,7 +102,6 @@ test('strict readiness requires app scope before contacting the runner', async (
     authorizedTarget: {
       type: 9,
       rect: { x: 0, y: 0, width: 10, height: 10 },
-      point: { x: 5, y: 5 },
     },
     execution: {},
   };
@@ -121,7 +120,6 @@ test('strict readiness cannot accept a public selector response as native proof'
       authorizedTarget: {
         type: 9,
         rect: { x: 0, y: 0, width: 10, height: 10 },
-        point: { x: 5, y: 5 },
       },
     }),
   ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
@@ -136,7 +134,6 @@ for (const readiness of ['ready', 'blocked', 'missing', 'ambiguous'] as const) {
     const authorizedTarget = {
       type: 9,
       rect: { x: 0, y: 0, width: 10, height: 10 },
-      point: { x: 5, y: 5 },
     };
     await expect(
       readinessBinding().pressReadiness({
@@ -177,7 +174,6 @@ test('a ready reply from another surface cannot authorize the app target', async
       authorizedTarget: {
         type: 9,
         rect: { x: 0, y: 0, width: 10, height: 10 },
-        point: { x: 5, y: 5 },
       },
     }),
   ).resolves.toEqual({ readiness: 'surface-mismatch', appBundleId: 'com.apple.springboard' });
@@ -196,7 +192,6 @@ test.each(['binding', 'input'] as const)(
         authorizedTarget: {
           type: 9,
           rect: { x: 0, y: 0, width: 10, height: 10 },
-          point: { x: 5, y: 5 },
         },
       }),
     ).rejects.toMatchObject({ name: 'AbortError' });

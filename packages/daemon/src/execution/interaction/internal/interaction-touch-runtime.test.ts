@@ -147,7 +147,6 @@ test.each([true, false])(
       type: 9,
       label: 'Far item',
       rect: { x: 20, y: 1200, width: 120, height: 44 },
-      point: { x: 80, y: 1222 },
     };
     await expect(read!({}, authorizedTarget, 'com.example.app')).resolves.toBe('ready');
     expect(mockPressReadiness).toHaveBeenCalledWith(
@@ -165,11 +164,7 @@ test('strict readiness refuses a missing app scope before contacting its owner',
   const read = touchSurfaceConfigs.at(-1)?.backend.readPressReadiness;
   expect(read).toBeDefined();
   await expect(
-    read!(
-      {},
-      { type: 9, rect: { x: 1, y: 2, width: 3, height: 4 }, point: { x: 2, y: 3 } },
-      undefined,
-    ),
+    read!({}, { type: 9, rect: { x: 1, y: 2, width: 3, height: 4 } }, undefined),
   ).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
     message: 'Native press readiness requires an authorized app scope',

@@ -12,7 +12,7 @@ extension RunnerTests {
   @MainActor
   func testAuthorizedReadinessRefusesAReplacementPreparedSurfaceBeforeQuerying() throws {
     let command = try JSONDecoder().decode(Command.self, from: Data(
-      #"{"command":"pressReadiness","appBundleId":"com.example.session","authorizedTarget":{"type":9,"label":"Continue","rect":{"x":0,"y":0,"width":100,"height":40},"point":{"x":50,"y":20}}}"#.utf8))
+      #"{"command":"pressReadiness","appBundleId":"com.example.session","authorizedTarget":{"type":9,"label":"Continue","rect":{"x":0,"y":0,"width":100,"height":40}}}"#.utf8))
     let response = try executeOnMainPrepared(command: command, activeApp: app,
       activeAppBundleId: "com.apple.SafariViewService")
     XCTAssertTrue(response.ok)

@@ -371,30 +371,53 @@ extension RunnerTests {
 
   /// A mutation-read: count every exact target binding, including blocked duplicates. Unlike
   /// public selector reads, a hittable sibling can never stand in for the authorized control.
-  func queryAuthorizedPressTarget(app: XCUIApplication, target: AuthorizedPressTarget, appBundleId: String? = nil) throws -> Response {
+  func queryAuthorizedPressTarget(app: XCUIApplication, target: NativePressTarget, appBundleId: String? = nil) throws -> Response {
     let expected = target.rect
     guard expected.width > 0, expected.height > 0,
       [expected.x, expected.y, expected.width, expected.height].allSatisfy({ $0.isFinite }) else {
       return Response(ok: true, data: DataPayload(pressReadiness: "missing", pressReadinessAppBundleId: appBundleId))
     }
-    func text(_ value: Any?) -> String {
-      String(describing: value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    let roots = try elementSearchRoots(root: app, litDisplayID: requestLitPanel?.displayID)
+    let windows = roots.flatMap { root -> [XCUIElement] in
+      var windows: [XCUIElement] = []
+      let held = holdingRecordedIssues {
+        windows = root is XCUIApplication ? root.windows.allElementsBoundByIndex : [root]
+      }
+      return held.issues.isEmpty && held.exceptionMessage == nil ? windows : []
     }
-    let identity = Self.authorizedPressTargetPredicate(target)
-    // Query predicates read snapshot attributes in bulk, rather than resolving every type match.
+    let offsets = windows.compactMap { window -> CGSize? in
+      var offset: CGSize?
+      let held = holdingRecordedIssues {
+        guard window.exists else { return }
+        let frame = window.frame
+        offset = SnapshotContentTranslation.offset(reportedBox: CGRect(origin: .zero, size: frame.size), viewportBox: frame)
+      }
+      return held.issues.isEmpty && held.exceptionMessage == nil ? offset : nil
+    }
+    func matchesBinding(_ attributes: XCUIElementAttributes, rect: CGRect, value: String?) -> Bool {
+      target.matches(type: attributes.elementType.rawValue, identifier: attributes.identifier,
+        label: attributes.label, value: value, rect: SnapshotRect(rect))
+    }
+    // Snapshot frames may be window-local and input values may differ from live accessors.
+    // This only prefilters; the live frame and canonical native value below remain authoritative.
     let binding = NSPredicate { object, _ in
       guard let attributes = object as? XCUIElementAttributes else { return false }
-      return target.matches(type: attributes.elementType.rawValue, identifier: attributes.identifier,
-        label: attributes.label, value: target.type == XCUIElement.ElementType.secureTextField.rawValue ? nil : text(attributes.value),
-        rect: SnapshotRect(attributes.frame))
+      let frame = attributes.frame
+      return matchesBinding(attributes, rect: frame, value: target.value) || offsets.contains {
+        matchesBinding(attributes, rect: frame.offsetBy(dx: $0.width, dy: $0.height), value: target.value)
+      }
     }
-    let matches = try elementQueries(app: app, matching: .any)
-      .flatMap { $0.matching(identity).matching(binding).allElementsBoundByIndex }
-    let state = matches.count > 1 ? "ambiguous" : matches.first.map { $0.exists ? ($0.isHittable ? "ready" : "blocked") : "missing" } ?? "missing"
+    let matches = try roots.flatMap {
+      $0.descendants(matching: .any).matching(Self.authorizedPressTargetPredicate(target)).matching(binding).allElementsBoundByIndex
+    }.filter { element in
+      guard element.exists else { return false }
+      return try matchesBinding(element, rect: element.frame, value: nativePressTargetValue(element))
+    }
+    let state = matches.count > 1 ? "ambiguous" : matches.first.map { $0.isHittable ? "ready" : "blocked" } ?? "missing"
     return Response(ok: true, data: DataPayload(pressReadiness: state, pressReadinessAppBundleId: appBundleId))
   }
 
-  static func authorizedPressTargetPredicate(_ target: AuthorizedPressTarget) -> NSPredicate {
+  static func authorizedPressTargetPredicate(_ target: NativePressTarget) -> NSPredicate {
     var predicates = [NSPredicate(format: "elementType == %@", NSNumber(value: target.type))]
     // Broad prefilters preserve whitespace/canonical-equivalent bindings; the final match stays exact.
     if let identifier = target.identifier?.trimmingCharacters(in: .whitespacesAndNewlines), !identifier.isEmpty {

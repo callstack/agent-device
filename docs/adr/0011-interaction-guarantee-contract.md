@@ -330,8 +330,7 @@ counting matches; a hittable duplicate cannot replace a blocked target. The bind
 producer's native identity and full rectangle, after required coordinate normalization and before row
 promotion or clipping. This private evidence survives session storage and is omitted from public
 snapshots. Secure field values are omitted before the wire.
-A native reply must prove the actual queried app matches the authorized surface. After a blocked
-read, the fresh canonical parent/child guards choose the dispatch point. The wait polls only this native binding. After a blocked wait becomes ready, one fresh canonical capture must still authorize the same target on the same surface before input. The original request deadline and cancellation signal bound every read and capture.
+A native reply must prove the actual queried app matches the authorized surface. The wait polls only this native binding. After a blocked wait becomes ready, one fresh canonical capture must still authorize the same target on the same surface and its parent/child guards must choose the dispatch point before input. The original request deadline and cancellation signal bound every read and capture.
 Expected-target and already-resolved bindings are checked once and refuse a blocked control
 without recapturing or replacing that binding.
 Only `blocked` is waitable. A `missing` native match, ambiguity, changed authorization, unsupported native proof, cancellation, or timeout refuses before input. Raw coordinates and non-default tap options retain their existing semantics.

@@ -10,6 +10,14 @@ extension RunnerTests {
 #endif
   }
 
+  /// Inputs bind their raw contents, not the live accessor's synthesized placeholder.
+  func nativePressTargetValue(_ element: XCUIElement) throws -> String? {
+    let type = element.elementType
+    if type == .secureTextField { return nil }
+    if Self.placeholderElementTypes.contains(type) { return Self.valueText(try element.snapshot().value) }
+    return Self.valueText(element.value)
+  }
+
   func interactiveRootNode(rect: CGRect) -> RawAXNode {
     RawAXNode(
       index: 0,
@@ -690,6 +698,18 @@ extension RunnerTests {
       let valueText = Self.valueText(element.value)
       let elementType = element.elementType
       let enabled = element.isEnabled
+      var target = nativePressTarget(type: elementType.rawValue, identifier: identifier,
+        label: label, value: valueText, frame: frame)
+#if os(iOS)
+      if elementType != .secureTextField && Self.placeholderElementTypes.contains(elementType) {
+        target = nil
+        let held = holdingRecordedIssues {
+          target = try? NativePressTarget(type: elementType.rawValue, identifier: identifier,
+            label: label, value: nativePressTargetValue(element), rect: SnapshotRect(frame))
+        }
+        if !held.issues.isEmpty || held.exceptionMessage != nil { target = nil }
+      }
+#endif
 
       node = RawAXNode(
         index: index,
@@ -707,8 +727,7 @@ extension RunnerTests {
         parentIndex: parentIndex,
         hiddenContentAbove: nil,
         hiddenContentBelow: nil,
-        nativePressTarget: nativePressTarget(type: elementType.rawValue, identifier: identifier,
-          label: label, value: valueText, frame: frame)
+        nativePressTarget: target
       )
     })
     if let exceptionMessage {
