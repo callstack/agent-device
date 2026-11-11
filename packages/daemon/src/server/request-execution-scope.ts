@@ -28,6 +28,7 @@ import { assertSessionSelectorMatches } from '../core/session-selector.ts';
 import {
   resolveCallerScopeRoot,
   resolveEffectiveSessionName,
+  resolveSessionScope,
 } from '../sessions/session-routing.ts';
 import { deriveWebSessionIdentity } from '../core/session-tenant-scope.ts';
 import {
@@ -240,7 +241,11 @@ export async function createRequestExecutionScope(params: {
   // own name is already the store key.
   const webSession =
     params.req.internal?.webSession ??
-    deriveWebSessionIdentity(params.req.session, tenantScopedReq);
+    deriveWebSessionIdentity(
+      params.req.session,
+      tenantScopedReq,
+      resolveSessionScope(tenantScopedReq),
+    );
   let scopedReq = applyRequestCommandDefaults({
     ...tenantScopedReq,
     internal: { ...tenantScopedReq.internal, webSession },

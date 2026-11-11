@@ -8,12 +8,15 @@ conflict check, and the host/scoped-device overlap (`devicesOverlap`).
 
 ## Rules at a glance
 
-1. The web host (`agent-browser-chrome`) holds one web session device per session name, with id
+1. The web host (`agent-browser-chrome`) holds one web session device per backend key, with id
    `<web host id>:session:<backend key>`. Every local web command binds the session device of its
    request; without `--session` the implicit session name (`default`) applies. The web host is never
-   bound: it stays an inventory entry and the parent for `devicesOverlap`. Two sessions with
-   different names run in parallel and two with one name conflict, in one daemon or in daemons that
-   share a claims directory.
+   bound: it stays an inventory entry and the parent for `devicesOverlap`. Different keys run in
+   parallel; separate sessions with the same key conflict in one daemon or across daemons that share
+   a claims directory. Named sessions use one device per name and, under tenant isolation, per
+   tenant. Workspace-scoped implicit sessions use one device per workspace. An implicit request
+   without a workspace scope, such as an RPC call without a `cwd`, uses the `default` name: the
+   `p_default` device, or `t_<tenant hash>_default` under tenant isolation.
 2. A session name matches case-insensitively and must match `[A-Za-z0-9_-]`, be non-empty, and fit
    agent-browser's socket path limit: at most 30 characters, and 17 under tenant isolation. A name
    is never trimmed, so surrounding whitespace is refused. Any other name is refused with
@@ -22,14 +25,15 @@ conflict check, and the host/scoped-device overlap (`devicesOverlap`).
    `default`; only an absent `--session` maps to `default`. Admission does not trim the name:
    trimming there changed the session keys of other platforms, so the web name rule refuses
    padding instead.
-3. The backend key is `p_<name>` with the name in lower case, or `t_<first 12 hex of sha256(tenant
-   id)>_<name>` under tenant isolation, so two tenants using one name hold two devices and two
-   browsers. Two derivations keep these apart. The request scope (`createRequestExecutionScope`)
-   is the only place that derives the web identity, the tenant-relative public name and the
-   tenant id: it reads the name as the caller supplied it, before tenant scoping, and stores it on
-   the request. A batch or replay step carries that identity unchanged. The kernel derives the
-   backend key from that identity, never from the tenant-prefixed store name: device resolution
-   does so when it selects the session device, and the open of an existing web session does so
+3. The backend key is `p_<name>` with the name in lower case, `w_<workspace scope id>` for an
+   implicit workspace session, or `t_<first 12 hex of sha256(tenant id)>_<name>` under tenant
+   isolation, so two workspaces or tenants hold two devices and two browsers. Two derivations keep
+   these apart. The request scope (`createRequestExecutionScope`) is the only place that derives
+   the web identity, the tenant-relative public name and the
+   tenant id or workspace scope: it reads the name as the caller supplied it, before tenant scoping,
+   and stores it on the request. A batch or replay step carries that identity unchanged. The kernel
+   derives the backend key from that identity, never from the tenant-prefixed store name: device
+   resolution does so when it selects the session device, and the open of an existing web session does so
    to refuse an invalid name before reusing the session. Every other reader takes the key from
    the device id and passes it to agent-browser as `--session`.
 4. First opens serialize on the session device itself, not on the host, so web session opens of one
@@ -63,8 +67,6 @@ serialize web opens for no exclusion.
 
 ## Open gaps
 
-- Implicit sessions of different workspaces share the web name `default`, because the key derives
-  from the public name, not the workspace-scoped store key.
 - A web open is admitted under a lease of any other backend, because lease admission never compares
   platform with lease backend.
 - The 32-character key limit assumes the 48-byte macOS temporary directory.

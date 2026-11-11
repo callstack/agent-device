@@ -1,6 +1,7 @@
 import { isTenantOwnedSessionName } from '@agent-device/contracts/daemon-http';
 import { AppError } from '@agent-device/kernel/errors';
 import type { WebSessionIdentity } from '@agent-device/kernel/device';
+import type { SessionScope } from '@agent-device/contracts/session';
 import type { DaemonRequest } from './daemon-request.ts';
 
 /**
@@ -51,20 +52,26 @@ export function tenantPublicSessionName(tenant: string, session: string): string
 
 /**
  * The web session a request runs in: the tenant-relative name as the caller supplied it, and the
- * tenant under tenant isolation. A web session device is derived from it alone, so a blank name
- * reaches web validation instead of becoming the default session's browser, and the store key's
- * `<tenant>:` prefix never enters the backend key. `supplied` is the name before
- * `scopeRequestSession` rewrites a blank one to `default`; `scoped` carries the attested tenant.
- * Only the request scope calls this.
+ * tenant under tenant isolation, or the implicit workspace scope. A workspace identity has no name;
+ * a supplied blank name never takes it, even when session routing treats it as implicit.
+ * A web session device is derived from it alone, so a blank named session reaches web validation
+ * instead of becoming the default session's browser, and the store key's `<tenant>:` prefix never
+ * enters the backend key. `supplied` is the name before `scopeRequestSession` rewrites a blank one to
+ * `default`; `scoped` carries the attested tenant. Only the request scope calls this.
  */
 export function deriveWebSessionIdentity(
   supplied: string,
   scoped: Pick<DaemonRequest, 'meta'>,
+  scope: SessionScope,
 ): WebSessionIdentity {
   const tenantId = scoped.meta?.sessionIsolation === 'tenant' ? scoped.meta.tenantId : undefined;
+  if (scope.kind === 'cwd' && supplied !== '') return { kind: 'workspace', id: scope.id };
   return tenantId === undefined
     ? { name: supplied }
-    : { name: tenantPublicSessionName(tenantId, supplied), tenantId };
+    : {
+        name: tenantPublicSessionName(tenantId, supplied),
+        namespace: { kind: 'tenant', id: tenantId },
+      };
 }
 
 /** The web session the request scope derived for this request. */

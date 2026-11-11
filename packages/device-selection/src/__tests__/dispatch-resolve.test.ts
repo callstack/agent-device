@@ -193,8 +193,8 @@ test('a web request names the device of its session, and a request without one k
       error instanceof AppError && error.details?.reason === 'web_session_name_invalid',
   );
   assert.notEqual(
-    (await resolveWeb({ name: 'one', tenantId: 'tenant-1' })).id,
-    (await resolveWeb({ name: 'one', tenantId: 'tenant-2' })).id,
+    (await resolveWeb({ name: 'one', namespace: { kind: 'tenant', id: 'tenant-1' } })).id,
+    (await resolveWeb({ name: 'one', namespace: { kind: 'tenant', id: 'tenant-2' } })).id,
   );
   await assert.rejects(
     resolveWeb({ name: 'one:app:two' }),
