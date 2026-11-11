@@ -36,6 +36,14 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
   return alert;
 }
 
+static UIButton *AgentDeviceWindowDuplicateButton(void) {
+  UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+  button.frame = CGRectMake(40, 300, 200, 44);
+  button.accessibilityIdentifier = @"native-window-duplicate";
+  [button setTitle:@"Window duplicate" forState:UIControlStateNormal];
+  return button;
+}
+
 @interface AgentDeviceRunnerFixtureViewController : AgentDeviceRunnerViewController
 @end
 
@@ -560,10 +568,7 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     second.accessibilityIdentifier = @"agent-device-second-window";
     second.rootViewController = [UIViewController new];
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-second-window-duplicate"]) {
-      UIButton *duplicate = [UIButton buttonWithType:UIButtonTypeSystem];
-      duplicate.frame = CGRectMake(40, 300, 200, 44);
-      duplicate.accessibilityIdentifier = @"native-window-duplicate";
-      [duplicate setTitle:@"Window duplicate" forState:UIControlStateNormal];
+      UIButton *duplicate = AgentDeviceWindowDuplicateButton();
       [second.rootViewController.view addSubview:duplicate];
     }
     self.secondWindow = second;
@@ -662,10 +667,7 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-second-window-duplicate"]) {
-    UIButton *duplicate = [UIButton buttonWithType:UIButtonTypeSystem];
-    duplicate.frame = CGRectMake(40, 300, 200, 44);
-    duplicate.accessibilityIdentifier = @"native-window-duplicate";
-    [duplicate setTitle:@"Window duplicate" forState:UIControlStateNormal];
+    UIButton *duplicate = AgentDeviceWindowDuplicateButton();
     [self.view addSubview:duplicate];
   }
 
