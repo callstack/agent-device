@@ -25,6 +25,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { parseScriptArgs } from '../lib/cli-args.ts';
+import { runEntrypoint } from '../lib/cli-entrypoint.ts';
 import { parseUnifiedDiff, readChangedLinesDiff } from '../lib/repo-git.ts';
 import { computeChangedCoverage, parseLcov, type ChangedCoverageResult } from './model.ts';
 import {
@@ -134,12 +135,5 @@ function refuse(reason: string): number {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  try {
-    process.exitCode = run(process.argv.slice(2));
-  } catch (error: unknown) {
-    process.stderr.write(
-      `check:coverage-changed: ${error instanceof Error ? error.message : String(error)}\n`,
-    );
-    process.exitCode = 1;
-  }
+  runEntrypoint('check:coverage-changed', async () => run(process.argv.slice(2)));
 }
