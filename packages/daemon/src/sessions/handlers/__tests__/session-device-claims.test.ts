@@ -76,6 +76,8 @@ import {
   inspectLifecycleRuntimeFacts,
 } from '../../../__tests__/support/application-lifecycle-runtime-harness.ts';
 import { platformResourceCleanupFixture } from '../../../__tests__/support/platform-resource-cleanup-fixture.ts';
+import { localRuntimeOwner, narrowDeviceBinding } from '@agent-device/contracts/platform-runtime';
+import type { BindDeviceRuntime } from '../../../core/request-runtime-binding.ts';
 
 bindTestCommandHost();
 
@@ -144,15 +146,40 @@ const android: DeviceInfo = {
   booted: true,
 };
 
-test('failed local open before device setup rolls its device claim back', async () => {
+/** The lifecycle harness plus a local readiness operation that boots a stopped AVD to `booted`. */
+function bindBootingLifecycleRuntime(booted: DeviceInfo): BindDeviceRuntime {
+  return async (device, use) => {
+    if (!(use.required as readonly string[]).includes('ensureReady')) {
+      return await bindLifecycleRuntime(device, use);
+    }
+    const facts = await inspectLifecycleRuntimeFacts(device);
+    return narrowDeviceBinding(
+      {
+        device,
+        owner: localRuntimeOwner(device.platform),
+        facts: { ...facts, operations: { ...facts.operations, ensureReady: { available: true } } },
+        operations: { ensureReady: async () => booted },
+        [Symbol.asyncDispose]: async () => {},
+      },
+      use,
+    );
+  };
+}
+
+test('failed local open of a stopped AVD rolls back the claim on its booted serial', async () => {
   const { store, stateDir } = setup();
-  mockResolveTargetDevice.mockResolvedValue(android);
+  const stoppedAvd = { ...android, id: 'pixel-avd', booted: false };
+  mockResolveTargetDevice.mockResolvedValue(stoppedAvd);
   // The point of this test is claim-rollback behavior around an opaque pre-device-effect
   // failure, not any particular error shape, so assert identity of the propagated error.
   // Readiness is package-owned, so the failure is injected at the lifecycle port's prepare
   // step; which devices the real owners run discovery for is pinned in the composition lane.
   const rejectionError = new Error('device not ready');
-  mockPrepareApplicationOpen.mockRejectedValueOnce(rejectionError);
+  let claimsBeforeFailure: ReturnType<typeof inspectDeviceClaims> = [];
+  mockPrepareApplicationOpen.mockImplementationOnce(async () => {
+    claimsBeforeFailure = inspectDeviceClaims({ serial: android.id }, process.env);
+    throw rejectionError;
+  });
 
   await assert.rejects(
     async () =>
@@ -165,15 +192,18 @@ test('failed local open before device setup rolls its device claim back', async 
           token: 'test',
           session: 'claim-rollback',
           positionals: ['Demo'],
-          flags: { platform: 'android' },
+          flags: { platform: 'android', device: stoppedAvd.name },
         },
         sessionName: 'claim-rollback',
         logPath: path.join(stateDir, 'daemon.log'),
         sessionStore: store,
+        bindDevice: bindBootingLifecycleRuntime(android),
       }),
     (error: unknown) => error === rejectionError,
   );
+  assert.equal(claimsBeforeFailure.length, 1);
   assert.deepEqual(inspectDeviceClaims({ serial: android.id }, process.env), []);
+  assert.deepEqual(inspectDeviceClaims({ serial: stoppedAvd.id }, process.env), []);
 });
 
 test('failed local open after dispatch retains its device claim for recovery', async () => {
