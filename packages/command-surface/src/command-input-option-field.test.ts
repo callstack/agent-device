@@ -121,6 +121,12 @@ test('a value type and bounds planted before the build move the derived field sh
   });
 });
 
+test('retention bounds follow the option declaration when command metadata is built', async () => {
+  const surfaces = await buildWithPlantedOption('retentionMs', { min: 7, max: 13 });
+  const field = surfaces.commandProperty('install-from-source', 'retentionMs');
+  assert.deepEqual({ min: field.minimum, max: field.maximum }, { min: 7, max: 13 });
+});
+
 test('an option with no declared tool audience cannot be derived into a field', () => {
   // `relaunch` still declares its field by hand, so the derivation refuses it
   // rather than publishing an undescribed input.

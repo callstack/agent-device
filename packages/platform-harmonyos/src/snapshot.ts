@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
+import type {
+  RawSnapshotNode,
+  Rect,
+  SnapshotKeyboardBandFact,
+} from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotOptions } from '@agent-device/contracts/interactor-types';
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
@@ -11,6 +15,7 @@ import {
   removeHostDirectory,
 } from '@agent-device/host-kit/host-file';
 import { runHarmonyHdc, runHarmonyShell } from './hdc.ts';
+import { readHarmonyKeyboardBand } from './keyboard-band.ts';
 
 const MAX_NODES = 5_000;
 
@@ -42,6 +47,21 @@ export async function snapshotHarmony(
   nodes: RawSnapshotNode[];
   truncated?: boolean;
   analysis: { rawNodeCount: number; maxDepth: number };
+  keyboard: SnapshotKeyboardBandFact;
+}> {
+  const snapshot = await captureHarmonyLayout(device, options);
+  // Measured after the tree so the band answers for a screen at least as new as the nodes.
+  const keyboard = await readHarmonyKeyboardBand(device);
+  return { ...snapshot, keyboard };
+}
+
+async function captureHarmonyLayout(
+  device: DeviceInfo,
+  options: SnapshotOptions,
+): Promise<{
+  nodes: RawSnapshotNode[];
+  truncated?: boolean;
+  analysis: { rawNodeCount: number; maxDepth: number };
 }> {
   const token = randomUUID();
   const remotePath = `/data/local/tmp/agent-device-layout-${token}.json`;
@@ -65,7 +85,9 @@ export async function readHarmonyGestureViewport(device: DeviceInfo): Promise<Re
   const memoKey = device.id;
   const cached = harmonyGestureViewportMemo.get(memoKey);
   if (cached) return cached;
-  const snapshot = await snapshotHarmony(device);
+  // Gesture planning reads geometry only, so this capture skips the keyboard-band probe the
+  // snapshot command carries.
+  const snapshot = await captureHarmonyLayout(device, {});
   const viewport = snapshot.nodes.find((node) => node.type === 'Application' && node.rect)?.rect;
   if (!viewport || viewport.width <= 0 || viewport.height <= 0) {
     throw new AppError(

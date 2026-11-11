@@ -39,7 +39,6 @@ const UNDESCRIBED_TOOL_INPUTS = new Set([
   'find.value',
   'get.format',
   'install-from-source.retainPaths',
-  'install-from-source.retentionMs',
   'is.predicate',
   'is.selector',
   'is.value',

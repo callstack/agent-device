@@ -12,6 +12,7 @@ import { commandRpcParamsSchema } from '@agent-device/kernel/contracts';
 import { readLeaseAllocateProviderFlags } from '@agent-device/contracts/lease-scope';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { resolveToken } from './http-authorization.ts';
+import { resolveMaterializedPathRetentionMs } from '../../sessions/materialized-path-registry.ts';
 
 type HttpInstallSource = Exclude<DaemonInstallSource, { kind: 'path' }>;
 
@@ -234,7 +235,10 @@ function toInstallFromSourceDaemonRequest(
       requestId: readStringParam(params, 'requestId'),
       installSource: parseInstallSource(params),
       retainMaterializedPaths: readBooleanParam(params, 'retainPaths'),
-      materializedPathRetentionMs: readIntParam(params, 'retentionMs'),
+      materializedPathRetentionMs:
+        params.retentionMs === undefined
+          ? undefined
+          : resolveMaterializedPathRetentionMs(params.retentionMs),
     },
   };
 }

@@ -119,7 +119,7 @@
     "packages/daemon/src/server/http/http-authorization.ts#resolveToken": "sha256:3abcb019e1325317618045b7138e41845990af10953dd937571997cd6ec35981",
     "packages/daemon/src/server/http/http-rpc-envelope.ts#sendJson": "sha256:a1de00da3f1db8c98e69a85dfe2e11b626a4d2ce472840e3b8f519aa8a207a8f",
     "packages/daemon/src/server/http/http-rpc-methods.ts#toDaemonRequest": "sha256:f3861d2d4f67f66e83800616926f6bbb0595de4ecbb0072b5b78971ebeb0705b",
-    "packages/daemon/src/server/http/http-rpc-methods.ts#toInstallFromSourceDaemonRequest": "sha256:dff093758b433043816dfc1e2e9658078875e46b887fdc530fb9380158d629f5",
+    "packages/daemon/src/server/http/http-rpc-methods.ts#toInstallFromSourceDaemonRequest": "sha256:071c53e7bd8e553cb9df820961294ed4d1e2e385053485364d895cb1777e9429",
     "packages/daemon/src/server/http/http-rpc-methods.ts#toLeaseDaemonRequest": "sha256:3018984aeace4054767875f5eb6e6ad5d38bfcb71c15d1a56ccf9b53e0a419ec",
     "packages/daemon/src/server/http/http-rpc-methods.ts#toReleaseMaterializedPathsDaemonRequest": "sha256:708736ca03d6a3fc449bb408382dbd509e490de1f84ecc8771fd77d4adda0154",
     "packages/daemon/src/server/http/http-rpc-envelope.ts#writeProgressEnvelope": "sha256:7be778b3902c72d7aa6282c16dc7106fdd64e99c0b5daf9f413ff5dd3fb044f1",
@@ -143,7 +143,7 @@
     "packages/daemon/src/server/upload-http.ts#sendJson": "sha256:c2317b4b14a10731684c9160038005965856150f05f8923765a3fa833d2ecae9",
     "packages/daemon/src/server/upload-http.ts#sendUploadedArtifactResponse": "sha256:9e418403448d58a96284fed605762fa71f9349bf2c70ad79df69b2b3e27487d6",
     "packages/remote/src/artifact-download.ts#RemoteArtifactDownload": "sha256:f73a888f4f8c9d603701c505bb342787b1ca6559a13b15da2385e60349ecea8e",
-    "packages/remote/src/artifact-download.ts#downloadRemoteArtifactFromUrl": "sha256:cde1ed3649d73da51a0413216aa24a561a2ec57d08ed533ffa985b95b1941cf6",
+    "packages/remote/src/artifact-download.ts#downloadRemoteArtifactFromUrl": "sha256:2e71ca375778c131e99a645a16b1f491d8dd6a10a3198d696e6138e46b601785",
     "packages/remote/src/daemon-artifacts.ts#DaemonArtifactEndpoint": "sha256:45226717ac52c0af2a62f74e91549582d95f4a4abc49be87989e026291a88c82",
     "packages/remote/src/daemon-artifacts.ts#DownloadRemoteArtifactParams": "sha256:ba6d2f6ac51e05ccc5e0c940b355d62374e018b1ae6f6f744becf6e1760cbb63",
     "packages/remote/src/daemon-artifacts.ts#buildDaemonArtifactUrl": "sha256:06dcde057809b507f70f7bb5cdef9bde6515be84b67e45865cf19e70b8636208",
@@ -438,8 +438,8 @@
     },
     {
       "declaration": "packages/remote/src/artifact-download.ts#downloadRemoteArtifactFromUrl",
-      "digest": "sha256:cde1ed3649d73da51a0413216aa24a561a2ec57d08ed533ffa985b95b1941cf6",
-      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006)."
+      "digest": "sha256:2e71ca375778c131e99a645a16b1f491d8dd6a10a3198d696e6138e46b601785",
+      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006). Client-only, implementation-compatible error repair: supported /artifacts downloads still return HTTP 200 with the same bytes, request headers and artifact framing. Redirect/error statuses now fail clearly instead of saving their bodies as artifacts; interrupted error responses settle with the existing COMMAND_FAILED category and numeric statusCode. The bounded body is local diagnostic context, not a new peer payload. Once the diagnostic prefix is full, further chunks are consumed without concatenating or copying that retained prefix; error status and diagnostic contents are unchanged. Released daemons already return 200 for successful artifact downloads, so supported skewed peers parse the same successful framing (ADR 0006)."
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-progress.ts#shouldReadDaemonProgressStream",
@@ -505,6 +505,11 @@
       "declaration": "packages/remote/src/upload-client.ts#finalizeDirectUpload",
       "digest": "sha256:8cd172a169aa5e54695d9185fa259d93c71b82938455398b83e7e4e214578df2",
       "rationale": "The request now uses fetch with redirect: 'error', so no redirect is followed: fetch keeps x-agent-device-token on a cross-origin hop. The request body, headers, and route are unchanged. A released daemon or proxy never redirects this route, so it parses the same requests. A redirected finalize fails with COMMAND_FAILED, and uploadArtifact then takes the legacy /upload route."
+    },
+    {
+      "declaration": "packages/daemon/src/server/http/http-rpc-methods.ts#toInstallFromSourceDaemonRequest",
+      "digest": "sha256:071c53e7bd8e553cb9df820961294ed4d1e2e385053485364d895cb1777e9429",
+      "rationale": "Implementation-only validation repair: a supplied retentionMs is validated before request projection instead of silently dropping fractions or malformed values. Existing integer values in the supported 1..2147483647 range and omitted values keep their request projection, defaults, payload fields and response framing. Unsupported durations now fail clearly with the existing INVALID_ARGS envelope; released clients can parse that normal command error. No route, authentication, method or wire field changes; no protocol bump under ADR 0006."
     }
   ]
 }

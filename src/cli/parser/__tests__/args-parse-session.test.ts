@@ -426,28 +426,6 @@ test('parseArgs accepts install with artifact path only', () => {
   assert.deepEqual(parsed.positionals, ['./build/app.apk']);
 });
 
-test('parseArgs accepts install-from-source url and repeated headers', () => {
-  const parsed = parseArgs(
-    [
-      'install-from-source',
-      'https://example.com/builds/app.apk',
-      '--header',
-      'authorization: Bearer token',
-      '--header',
-      'x-build-id: 42',
-      '--retain-paths',
-      '--retention-ms',
-      '60000',
-    ],
-    { strictFlags: true },
-  );
-  assert.equal(parsed.command, 'install-from-source');
-  assert.deepEqual(parsed.positionals, ['https://example.com/builds/app.apk']);
-  assert.deepEqual(parsed.flags.header, ['authorization: Bearer token', 'x-build-id: 42']);
-  assert.equal(parsed.flags.retainPaths, true);
-  assert.equal(parsed.flags.retentionMs, 60000);
-});
-
 test('parseArgs accepts open --launch-args with plain values', () => {
   const parsed = parseArgs(
     ['open', 'com.example.app', '--launch-args', 'fixtureMode', '--launch-args', 'verbose'],

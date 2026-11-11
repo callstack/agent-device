@@ -52,7 +52,7 @@ export function resolveRemoteRequestDiagnosticsPath(
   ref: DiagnosticsRecordRef,
 ): string {
   return resolveSessionRequestLogPath(
-    path.join(stateDir, 'remote-diagnostics', safeSessionName(ref.session)),
+    resolveSessionDir(path.join(stateDir, 'remote-diagnostics'), ref.session),
     ref.requestId,
   );
 }

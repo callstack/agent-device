@@ -355,3 +355,35 @@ function makeClaim(stateDir: string): DeviceClaim {
     updatedAtMs: 1,
   };
 }
+
+test.each(['.', '..'])(
+  'invalid claim session %s retains evidence without inspecting outside resources',
+  async (session) => {
+    const stateDir = mkdtempForTestSync('claim-contained-');
+    const claim = { ...makeClaim(stateDir), session };
+    const env = { AGENT_DEVICE_CLAIMS_DIR: path.join(stateDir, 'claims') };
+    writeDeviceClaim(claim, env);
+    const claimPath = resolveDeviceClaimPath(claim.deviceKey, env);
+    const claimEvidence = fs.readFileSync(claimPath);
+    const outside = appLogResourceStore.resolvePath(
+      path.join(stateDir, ...(session === '.' ? ['sessions'] : [])),
+    );
+    fs.mkdirSync(path.dirname(outside), { recursive: true });
+    fs.writeFileSync(outside, '{');
+    const bind = vi.fn();
+    const gateway = {
+      bind,
+      shutdown: async () => {},
+    } as unknown as DeviceRuntimeGateway<PlatformRuntimeOperations>;
+    const retained = { status: 'retained', reason: 'durable-resource-reconciliation-failed' };
+    expect(inspectDeviceClaimRecovery(claim)).toEqual(retained);
+    const reconcile = createDeviceClaimReconciler({ gateway, scope });
+    await expect(settleVerifiedOrphanedClaim(claim, reconcile, env)).resolves.toEqual(retained);
+    await expect(
+      reconcile(claim, { status: 'inspectable', recoveryKinds: [], ownedResources: [] }),
+    ).resolves.toEqual(retained);
+    expect(bind).not.toHaveBeenCalled();
+    expect(fs.readFileSync(outside, 'utf8')).toBe('{');
+    expect(fs.readFileSync(claimPath)).toEqual(claimEvidence);
+  },
+);

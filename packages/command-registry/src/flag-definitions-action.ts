@@ -438,8 +438,11 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     names: ['--retention-ms'],
     type: 'int',
     min: 1,
+    max: 2_147_483_647,
     usageLabel: '--retention-ms <ms>',
-    usageDescription: 'install-from-source: retention TTL for materialized artifact paths',
+    usageDescription: 'install-from-source: retain files for 1-2147483647 ms',
+    inputDescription:
+      'When retainPaths is true, keep downloaded and extracted files for this many milliseconds.',
     projectConfig: true,
     recorded: false,
   },

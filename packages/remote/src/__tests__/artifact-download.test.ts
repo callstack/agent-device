@@ -192,3 +192,45 @@ test('downloadRemoteArtifactFromUrl names the held lease and sends no lease head
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 });
+
+test('rejects redirect bodies and interrupted error bodies, and downloads success', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'artifact response coverage')) return;
+  const tempRoot = mkdtempForTestSync('artifact-responses-');
+  let response = 0;
+  const server = http.createServer((_req, res) => {
+    response++;
+    if (response === 1) {
+      res.writeHead(302, { location: '/elsewhere' });
+      res.end('redirect body');
+    } else if (response === 2) {
+      res.writeHead(500, { 'content-length': '100' });
+      res.write('partial');
+      setTimeout(() => res.socket?.destroy(), 10);
+    } else {
+      res.end('artifact bytes');
+    }
+  });
+  const port = await listenOnLoopback(server);
+  const destination = path.join(tempRoot, 'artifacts', 'screen.png');
+  try {
+    for (const status of [302, 500]) {
+      await assert.rejects(
+        () => downloadTo(tempRoot, port, { timeoutMs: 1000 }),
+        (error: unknown) => {
+          assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
+          assert.equal(
+            (error as { details?: { statusCode?: number } }).details?.statusCode,
+            status,
+          );
+          return true;
+        },
+      );
+      assert.equal(fs.existsSync(destination), false);
+    }
+    await downloadTo(tempRoot, port);
+    assert.equal(fs.readFileSync(destination, 'utf8'), 'artifact bytes');
+  } finally {
+    await closeLoopbackServer(server);
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
