@@ -102,12 +102,12 @@ test('lease allocation sends the iOS simulator mode and returns the mode the bac
   assert.deepEqual(lease.device, device);
 });
 
-test('lease allocation sends the baseline and returns the baseline the backend granted', async () => {
+test('lease allocation preserves a padded baseline name in the request and granted device', async () => {
   const device = {
     model: 'iPhone 17 Pro',
     osVersion: '26.2',
     physical: false,
-    baseline: { name: 'logged-in', version: 2 },
+    baseline: { name: ' logged-in ', version: 2 },
   };
   const setup = createClientTransport(async (req) => ({
     ok: true,
@@ -130,9 +130,9 @@ test('lease allocation sends the baseline and returns the baseline the backend g
     leaseBackend: 'ios-instance',
     leaseProvider: 'proxy',
     platform: 'ios',
-    deviceBaseline: 'logged-in',
+    deviceBaseline: ' logged-in ',
   });
 
-  assert.equal(setup.calls[0]?.flags?.deviceBaseline, 'logged-in');
+  assert.equal(setup.calls[0]?.flags?.deviceBaseline, ' logged-in ');
   assert.deepEqual(lease.device, device);
 });

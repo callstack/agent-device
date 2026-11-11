@@ -333,8 +333,8 @@ export type LeaseDeviceSpecReading = {
 /**
  * The one decision on what a device spec names, for the CLI, the SDK, MCP and the daemon alike.
  * Each key is named, not named, or invalid: a non-blank `osVersion`, `imageTag`, `deviceMode` or
- * `deviceBaseline` and
- * `physical: true` are named, with the value as given; an absent key, a blank string and
+ * `deviceBaseline` and `physical: true` are named, with the value as given;
+ * an absent key, a blank string and
  * `physical: false` name nothing; any other type is invalid.
  */
 export function readLeaseDeviceSpec(
@@ -393,7 +393,8 @@ export function readLeaseDevice(value: unknown): LeaseDevice | undefined {
 function readLeaseDeviceBaseline(value: unknown): LeaseDevice['baseline'] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
-  const name = nonEmptyString(record.name);
+  const name =
+    typeof record.name === 'string' && record.name.trim().length > 0 ? record.name : undefined;
   const { version } = record;
   if (!name || typeof version !== 'number' || !Number.isInteger(version) || version < 1) {
     return undefined;

@@ -361,6 +361,8 @@ test('readLeaseDevice reads the granted baseline and drops a malformed one', () 
   const device = { model: 'iPhone 17 Pro', osVersion: '26.0', physical: false };
   const withBaseline = { ...device, baseline: { name: 'logged-in', version: 3 } };
   assert.deepEqual(readLeaseDevice(withBaseline), withBaseline);
+  const paddedBaseline = { ...device, baseline: { name: ' logged-in ', version: 3 } };
+  assert.deepEqual(readLeaseDevice(paddedBaseline), paddedBaseline);
   for (const baseline of [
     { name: 'logged-in', version: 0 },
     { name: 'logged-in', version: 1.5 },

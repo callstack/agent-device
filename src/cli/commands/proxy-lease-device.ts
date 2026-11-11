@@ -111,9 +111,11 @@ async function resolveProxyLeaseStateLocally(options: {
  *
  * A request that names a device spec has no such fallback: a new lease that does not echo the
  * granted device in `lease.device`, that reports a slim simulator for a `full` request, or that
- * does not report the requested baseline in `lease.device.baseline`, did not honour the spec, so it is released and the request fails with `device-spec-unsupported`.
- * A lease that reports no mode is accepted: the mode is then unconfirmed. A renewed lease serves the request only when
- * every spec key the request names equals the one the lease was allocated by. Once a lease is bound,
+ * does not report the requested baseline in `lease.device.baseline`, did not honour the spec,
+ * so it is released and the request fails with `device-spec-unsupported`.
+ * A lease that reports no mode is accepted: the mode is then unconfirmed. A renewed lease serves
+ * the request only when every spec key it names equals the one the lease was allocated by.
+ * Once a lease is bound,
  * the spec leaves the command flags: the device it chose is named by its identity instead.
  */
 export async function bindLeaseNamedDevice(options: {
