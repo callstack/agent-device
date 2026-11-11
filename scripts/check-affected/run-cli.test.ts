@@ -9,7 +9,7 @@ import type { ExecutionReceipt } from './execution.ts';
 const root = path.resolve(import.meta.dirname, '../..');
 const runner = path.join(import.meta.dirname, 'run.ts');
 
-function fixture() {
+function fixture(failingScript?: string) {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'validation-cli-'));
   const git = (...args: string[]) => runCmdSync('git', args, { cwd }).stdout.trim();
   git('init', '-q');
@@ -17,9 +17,8 @@ function fixture() {
   git('config', 'user.name', 'Test');
   const { scripts } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   const pkg = { name: 'validation-fixture', private: true, scripts };
-  pkg.scripts['check:agent-guidance'] = 'node -e "process.exit(7)"';
-  for (const script of ['check:tooling', 'check:fallow', 'check:unit'])
-    pkg.scripts[script] = 'node -e "process.exit(0)"';
+  for (const script of Object.keys(pkg.scripts)) pkg.scripts[script] = 'node -e "process.exit(0)"';
+  if (failingScript) pkg.scripts[failingScript] = 'node -e "process.exit(7)"';
   fs.writeFileSync(path.join(cwd, 'package.json'), JSON.stringify(pkg));
   fs.writeFileSync(
     path.join(cwd, 'pnpm-workspace.yaml'),
@@ -58,7 +57,7 @@ test(
   'CLI JSON contains execution plan and preserves the failing command exit code',
   { skip: process.platform === 'win32' },
   () => {
-    const { cwd, base } = fixture();
+    const { cwd, base } = fixture('check:agent-guidance');
     try {
       const result = invoke(cwd, ['--base', base]);
       assert.equal(result.exitCode, 7, result.stderr);
@@ -82,7 +81,13 @@ test(
     try {
       const full = invoke(cwd, ['--full']);
       assert.equal(full.exitCode, 0, full.stderr);
-      assert.equal(full.receipt.results[0]?.id, 'check:tooling');
+      const ran = full.receipt.results
+        .filter((result) => result.status === 'passed')
+        .map((result) => result.id);
+      assert.ok(ran.includes('di-seams'), ran.join(', '));
+      assert.ok(ran.includes('unit'), ran.join(', '));
+      assert.ok(!ran.includes('vitest-related'), ran.join(', '));
+      assert.ok(!full.receipt.results.some((result) => result.id === 'android-helpers'));
       fs.writeFileSync(path.join(cwd, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
       const stale = invoke(cwd, ['--full']);
       assert.equal(stale.exitCode, 1);

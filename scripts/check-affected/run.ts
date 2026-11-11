@@ -176,6 +176,20 @@ function printPlanHuman(plan: CheckPlan, args: Args): void {
   }
 }
 
+// `--full` runs every locally runnable catalog check. `unit` runs the whole unit suite, so the
+// related run that only narrows it has nothing to add.
+function fullPlan(): CheckPlan {
+  return {
+    failOpen: true,
+    checks: CHECK_CATALOG.filter((spec) => spec.localRunnable && spec.id !== 'vitest-related').map(
+      (spec) => spec.id,
+    ),
+    reasons: [],
+    failOpenReasons: [],
+    docsOnlyPaths: [],
+  };
+}
+
 // How a resolved command is executed. Injectable so the entrypoint's `--run`
 // propagation (order, skip of GitHub-authoritative checks, stop-on-failure) is
 // testable without spawning real processes.
@@ -184,7 +198,7 @@ export type CommandExecutor = (command: string[], cwd: string, id: string) => Pr
 export async function runChecks(
   plan: CheckPlan,
   pkg: PackageJson,
-  args: Args,
+  args: { readonly base: string | undefined },
   options: {
     cwd?: string;
     skip?: ValidationContext['skip'];
@@ -290,13 +304,11 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
         return 1;
       }
       if (args.full) {
-        const scripts = ['check:tooling', 'check:fallow', 'check:unit'];
-        receipt.results = scripts.map((id) => ({ id, status: 'not-run' }));
-        for (const script of scripts) {
-          const code = await execute(['pnpm', 'run', script], repoRoot, script);
-          if (code !== 0) return code;
-        }
-        return 0;
+        const plan = fullPlan();
+        receipt.plan = plan;
+        receipt.results = plan.checks.map((id) => ({ id, status: 'not-run' }));
+        // A full run has no diff, so fallow takes its own merge-base instead of a --base.
+        return await runChecks(plan, currentPackage, { base: undefined }, { execute, skip });
       }
       const { changedFiles, plan } = prepare(receipt.refs.resolvedBase, currentPackage);
       receipt.changedFiles = changedFiles;

@@ -222,11 +222,11 @@ export function getCheckSpec(id: CheckId): CheckSpec {
 
 // Resolve the runnable command for a check. Script-backed checks are validated
 // against package.json so a renamed/removed script fails loudly instead of
-// silently skipping a gate. `fallow` threads the same --base the audit uses.
+// silently skipping a gate. `fallow` threads the same --base the audit uses, when there is one.
 export function resolveCommand(
   spec: CheckSpec,
   scripts: Readonly<Record<string, string>>,
-  base: string,
+  base: string | undefined,
   related: RelatedRunScope = { changedFiles: [], unitSuiteRuns: false },
 ): string[] {
   if (spec.kind.type === 'vitest-related') {
@@ -251,7 +251,7 @@ export function resolveCommand(
     );
   }
   const command = ['pnpm', 'run', script];
-  if (spec.id === 'fallow') command.push('--base', base);
+  if (spec.id === 'fallow' && base !== undefined) command.push('--base', base);
   return command;
 }
 

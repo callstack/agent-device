@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
+import { getCheckSpec } from '../../scripts/check-affected/checks.ts';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
@@ -91,7 +92,10 @@ test('the package gate disables the detached update notifier for its smoke probe
 // be stopped. Publishing runs it; nothing else guarantees the tarball is ever verified.
 test('publishing cannot skip the package gate', () => {
   assert.match(script('package:npm'), /pnpm check:package$/);
-  assert.match(script('check:tooling'), /pnpm check:package$/);
+  // `pnpm check` runs every locally runnable catalog gate, so the package gate must stay one.
+  assert.match(script('check'), /scripts\/check-affected\/run\.ts --run --full$/);
+  assert.deepEqual(getCheckSpec('package').kind, { type: 'script', script: 'check:package' });
+  assert.equal(getCheckSpec('package').localRunnable, true);
   // The minimum-Node job runs the script directly — the repo's pinned pnpm needs a newer Node than
   // the floor that job covers — so it must still name the same entry point the script does.
   assert.match(script('check:package'), /scripts\/check-package\.ts$/);

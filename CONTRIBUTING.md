@@ -217,12 +217,13 @@ pnpm check:affected --run --head "$(git rev-parse HEAD)"
 Only a passed receipt with `exactCommit: true` proves validation at that commit. Without `--head`,
 the run also includes staged, unstaged, and untracked files; treat that result as local feedback.
 Unknown, workflow, lockfile, and selector-owning changes fail open to the full local set. For broad
-refactors or when explicitly requested, run `pnpm check`: formatting, lint, typechecking, layering,
-dependency-graph parity, production exports, MCP metadata, docs prose and links, the build, bundle
-ownership, the package check, Fallow, unit tests, and local smoke tests. Both commands share one host
-lock and need macOS or Linux; on Windows, use the affected plan and direct focused checks. GitHub CI
-stays authoritative for coverage, provider integration, history-backed compatibility, specialized
-toolchains, and live device lanes.
+refactors or when explicitly requested, run `pnpm check`: every gate the catalog in
+`scripts/check-affected/checks.ts` marks `localRunnable`, which is the set a fail-open
+`check:affected` run selects. That covers formatting, lint, typechecking, layering, the guard and
+model self-tests, the build, the package check, Fallow, the unit suite (including the `apple-runner`
+project), provider integration, history-backed compatibility, and local smoke tests. Both commands
+share one host lock and need macOS or Linux; on Windows, use the affected plan and direct focused
+checks. GitHub CI stays authoritative for coverage, specialized toolchains, and live device lanes.
 
 Lint limits `*.test.{ts,tsx,mjs}` files throughout the repository and production `.ts`, `.tsx`,
 and `.mjs` files under `src/` and package `src/` to 1,000 lines, including comments and blank lines.
