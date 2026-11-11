@@ -49,12 +49,16 @@ for (const { tarball, name } of tarballs) {
     await publish(tarball);
   } catch (error) {
     if (name === 'agent-device') throw error;
-    failures.push({ name, code: readErrorCode(error.stdout) ?? error.code ?? 'UNKNOWN' });
+    failures.push({
+      name,
+      code: readErrorCode(error.stdout) ?? error.code ?? 'UNKNOWN',
+      signal: error.signal,
+    });
   }
 }
 if (failures.length > 0) {
   process.stderr.write(
-    `Plugin publication failed; skipping agent-device:\n${failures.map(({ name, code }) => `  ${name}: ${code}`).join('\n')}\n`,
+    `Plugin publication failed; skipping agent-device:\n${failures.map(({ name, code, signal }) => `  ${name}: ${code}${signal ? ` (signal ${signal})` : ''}`).join('\n')}\n`,
   );
   process.exitCode = 1;
 }
@@ -71,10 +75,13 @@ function publish(tarball) {
       stderr = (stderr + chunk).slice(-65536);
     });
     child.on('error', reject);
-    child.on('close', (status) => {
+    child.on('close', (status, signal) => {
       if (status === 0) return resolve();
       const error = new Error(`npm publish failed with status ${status}`);
-      error.code = stderr.match(/(?:^|\n)npm error code ([A-Z0-9_]+)/)?.[1] ?? 'UNKNOWN';
+      error.code = signal
+        ? 'UNKNOWN'
+        : (stderr.match(/(?:^|\n)npm error code ([A-Z0-9_]+)/)?.[1] ?? 'UNKNOWN');
+      error.signal = signal;
       reject(error);
     });
   });

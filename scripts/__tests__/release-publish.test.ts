@@ -37,6 +37,7 @@ const name = args[0] === 'view' ? args[1].replace(/@1\\.2\\.3$/, '') : path.base
 const packageName = name === 'agent-device' || name.startsWith('@') ? name : '@agent-device/' + name;
 fs.appendFileSync(process.env.RELEASE_TEST_LOG, JSON.stringify([args[0], packageName]) + '\\n');
 const failure = JSON.parse(process.env.RELEASE_TEST_FAILURES)[args[0] + ':' + packageName];
+if (failure === 'SIGNAL') { console.error('npm error code ENOENT'); process.kill(process.pid, 'SIGTERM'); }
 if (failure) {
   if (args[0] === 'publish') console.error('npm error code ' + failure);
   else console.log(JSON.stringify({ error: { code: failure } }));
@@ -113,4 +114,12 @@ test('publishes core successfully when publish output exceeds the default buffer
   const { result, calls } = runRelease({ largeOutput: true });
   assert.equal(result.status, 0, result.stderr);
   assert.ok(calls.some(([action, name]) => action === 'publish' && name === 'agent-device'));
+});
+
+test('reports signal-terminated publish as unknown with its signal', () => {
+  const { result, calls } = runRelease({ failures: { 'publish:@agent-device/beta': 'SIGNAL' } });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /@agent-device\/beta: UNKNOWN.*SIGTERM/);
+  assert.ok(calls.some(([action, name]) => action === 'publish' && name === '@agent-device/zeta'));
+  assert.ok(!calls.some(([, name]) => name === 'agent-device'));
 });
