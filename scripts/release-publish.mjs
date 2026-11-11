@@ -38,12 +38,25 @@ if (!tarballs.some((entry) => entry.name === 'agent-device')) {
 
 const publishArgs = ['--tag', distTag, '--access', 'public'];
 for (const { tarball } of tarballs) npm(['publish', tarball, ...publishArgs, '--dry-run']);
+const failures = [];
 for (const { tarball, name } of tarballs) {
-  if (isPublished(name)) {
-    process.stdout.write(`${name}@${version} is already published; skipping.\n`);
-    continue;
+  if (name === 'agent-device' && failures.length > 0) break;
+  try {
+    if (isPublished(name)) {
+      process.stdout.write(`${name}@${version} is already published; skipping.\n`);
+      continue;
+    }
+    process.stdout.write(npm(['publish', tarball, ...publishArgs, '--provenance', '--json']));
+  } catch (error) {
+    if (name === 'agent-device') throw error;
+    failures.push({ name, code: readErrorCode(error.stdout) ?? error.code ?? 'UNKNOWN' });
   }
-  npm(['publish', tarball, ...publishArgs, '--provenance'], 'inherit');
+}
+if (failures.length > 0) {
+  process.stderr.write(
+    `Plugin publication failed; skipping agent-device:\n${failures.map(({ name, code }) => `  ${name}: ${code}`).join('\n')}\n`,
+  );
+  process.exitCode = 1;
 }
 
 function isPublished(name) {
