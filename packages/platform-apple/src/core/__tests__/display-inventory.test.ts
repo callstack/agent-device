@@ -401,6 +401,13 @@ describe('establishedLitPanel', () => {
     assert.equal(appleLitPanel(inventory), undefined);
   });
 
+  test('a lit panel beside a panel of unknown power establishes none', () => {
+    // Unknown power may be showing content, so the lit panel is not the only one that may be lit.
+    const inventory = buildInventory([outerPanel, { ...innerPanel, power: 'unknown' }]);
+    assert.equal(establishedLitPanel(inventory), undefined);
+    assert.equal(appleLitPanel(inventory), undefined);
+  });
+
   test('an incomplete table establishes no panel even when one parsed panel is the only lit one', async () => {
     // Two activeOn integrated entries; the inner one has no geometry and does not parse.
     mockReadHostTextFile.mockResolvedValue(

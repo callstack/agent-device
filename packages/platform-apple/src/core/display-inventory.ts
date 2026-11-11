@@ -413,15 +413,18 @@ function warnWhenPrimaryPanelIsNotTheSmallest(panels: AppleDeviceDisplay[]): voi
 /**
  * The one panel the panel table establishes as lit, or nothing. It takes a resolved multi-panel
  * table that parsed every integrated entry, and so named an active display, with exactly one lit
- * panel, which is that active display. A table with an integrated entry missing its identity or
- * geometry establishes no panel, even when the panels that did parse show a single lit one: the
- * entry that did not parse may be lit too. Runner routing (`appleLitPanel`) and the foldable
+ * panel, which is that active display, and no panel of unknown power. A table with an integrated
+ * entry missing its identity or geometry, or with a panel whose power is unknown, establishes no
+ * panel, even when the others show a single lit one: that entry may be lit too. Runner routing (`appleLitPanel`) and the foldable
  * rotation controller select through this one rule.
  */
 export function establishedLitPanel(
   inventory: AppleDisplayInventory,
 ): AppleDeviceDisplay | undefined {
   if (!inventory.multiScreen || inventory.unresolved || !inventory.activeDisplay) return undefined;
+  // Unknown power may be showing content (see readPanelPower), so beside it no lit panel is the
+  // only one that may be lit.
+  if (inventory.displays.some((display) => display.power === 'unknown')) return undefined;
   const litPanels = inventory.displays.filter((display) => display.power === 'lit');
   if (litPanels.length !== 1 || litPanels[0] !== inventory.activeDisplay) return undefined;
   return litPanels[0];

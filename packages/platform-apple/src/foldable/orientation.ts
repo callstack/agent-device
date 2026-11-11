@@ -294,7 +294,8 @@ function scopedUnverifiedError(
 /**
  * The one lit panel and the rotation it shows, from one fresh panel-table read, selected by the
  * display inventory's {@link establishedLitPanel}. Anything less decided — an unreadable table,
- * an incomplete one, no lit panel or several, an unrecognized `rotN` — is no reading:
+ * an incomplete one, no lit panel or several, a panel of unknown power, an unrecognized `rotN` —
+ * is no reading:
  * the rotation loop must not confirm, compensate or dispatch from a panel that is not showing.
  * On iPhone Duo the table reports both panels lit for a few seconds after a pose change in either
  * direction, so the first reads after a fold or an unfold are no reading by design.

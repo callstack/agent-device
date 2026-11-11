@@ -198,6 +198,8 @@ function fakeScopedDuo(
     hidLagReads?: number;
     /** A panel the table reports lit (activeOn) but without geometry: an incomplete table. */
     incompleteLitPanel?: DuoPanel;
+    /** A panel whose backlight state the table reports in an unrecognized form: power unknown. */
+    unknownPowerPanel?: DuoPanel;
   },
 ) {
   const helpers: string[][] = [];
@@ -221,9 +223,10 @@ function fakeScopedDuo(
   show(lit);
   const panel = (kind: DuoPanel, bothLit: boolean) => {
     const incomplete = options.incompleteLitPanel === kind;
+    const unknownPower = options.unknownPowerPanel === kind;
     const isLit = bothLit || kind === lit || incomplete;
     return {
-      backlightState: isLit ? 'activeOn' : 'off',
+      backlightState: unknownPower ? 'transitioning' : isLit ? 'activeOn' : 'off',
       currentOrientation: isLit ? `rot${shown[kind]}` : 'rot180',
       displayId: kind === 'outer' ? 1 : 3,
       name: kind === 'outer' ? 'LCD' : 'LCD-1',
@@ -490,6 +493,32 @@ test.each([
       lit: 'outer',
       picker: 'landscape-left',
       incompleteLitPanel: 'inner',
+    });
+    expect(sim.litScreen()).toBe('rot270');
+    const outcome = await rotateScoped(sim, target);
+    expect(outcome).toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'orientation-unverified-scoped-set', requestedOrientation: target },
+    });
+    expect((outcome as AppError).details).not.toHaveProperty('observedOrientation');
+    expect(sim.rotations()).toEqual([]);
+    expect(sim.devicectl).toEqual([]);
+  },
+);
+
+test.each([
+  ['the lit panel already shows the target', 'landscape-left'],
+  ['the lit panel shows another rotation', 'landscape-right'],
+] as const)(
+  'a panel of unknown power beside the lit one never confirms or dispatches (%s)',
+  async (_case, target) => {
+    const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
+    // The outer panel reads lit; the inner one reports a backlight state the parser does not
+    // recognize, so its power is unknown and it may be lit too.
+    const sim = fakeScopedDuo(scoped, {
+      lit: 'outer',
+      picker: 'landscape-left',
+      unknownPowerPanel: 'inner',
     });
     expect(sim.litScreen()).toBe('rot270');
     const outcome = await rotateScoped(sim, target);
