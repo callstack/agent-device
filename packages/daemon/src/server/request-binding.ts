@@ -5,7 +5,7 @@ import {
   normalizeFreshForegroundOpenSelection,
 } from '../core/device/device-selector-intent.ts';
 import { applyRequestLockPolicy } from './request-lock-policy.ts';
-import { resolveOpenTargetDeviceOptions } from '../core/open-target-device-resolution.ts';
+import type { ResolveTargetDeviceOptions } from '@agent-device/device-selection/dispatch-resolve';
 import { buildReplayTargetDeviceResolution } from './replay-device-selection.ts';
 import type { SessionStore } from '../core/session-store.ts';
 import { hostAndDeviceIds, type DeviceInfo } from '@agent-device/kernel/device';
@@ -99,11 +99,11 @@ async function resolveFreshSessionDeviceLock(
 ): Promise<
   | {
       flags: NonNullable<DaemonRequest['flags']>;
-      options: ReturnType<typeof resolveOpenTargetDeviceOptions> | undefined;
+      options: ResolveTargetDeviceOptions | undefined;
     }
   | undefined
 > {
-  if (req.command === 'open') return resolveOpenDeviceLock(req, env);
+  if (req.command === 'open') return await resolveOpenDeviceLock(req, env);
   if (req.command === 'replay') return await resolveReplayDeviceLock(req, env);
   return resolveExplicitDeviceLock(req, env);
 }
@@ -134,7 +134,10 @@ async function resolveFreshSessionDevice(
   }
 }
 
-function resolveOpenDeviceLock(req: DaemonRequest, env: EnvMap) {
+async function resolveOpenDeviceLock(req: DaemonRequest, env: EnvMap) {
+  // Deferred to keep the daemon's eager closure within scripts/__tests__/eager-closure-budgets.ts.
+  const { resolveOpenTargetDeviceOptions } =
+    await import('../core/open-target-device-resolution.ts');
   return { flags: req.flags ?? {}, options: resolveOpenTargetDeviceOptions(req, env) };
 }
 
