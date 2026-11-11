@@ -1,6 +1,6 @@
 # Agent Device Domain Language
 
-Use these canonical names in code, tests, issues, and ADRs.
+Use these terms in code, tests, issues, and ADRs.
 
 ## Language
 
@@ -112,9 +112,8 @@ persisted artifacts, and released API consumers get compatibility handling.
 ### Interactions, selectors, and refs
 
 **Interactor**:
-The legacy monolithic interface between dispatch and platform behavior, kept only for unmigrated
-commands.
-_Avoid_: New or migrated command behavior
+A platform mechanics interface for legacy dispatch and bound runtime adapters.
+_Avoid_: New command-facing contracts
 
 **Interaction dispatch path**:
 One route an interaction command takes from a resolved target to device execution.
@@ -131,7 +130,7 @@ descendants at its center.
 One dispatch-path-by-guarantee classification: enforced, delegated, inapplicable, or waived.
 
 **Owned waiver**:
-A guarantee gap with a tracking issue and explicit owner.
+A guarantee exception with an explicit owner: intentional divergence or a `gap:` with a tracking issue.
 
 **Delegation-on-error**:
 A fast path that returns semantic failures to the shared path; it establishes failure-side
@@ -141,7 +140,7 @@ handling, not success-path parity.
 A golden rule table consumed by both TypeScript and native tests.
 
 **Coverage manifest**:
-A contract test's declaration of the guarantee cells it proves.
+A declaration of intended guarantee-cell coverage, distinct from execution evidence.
 
 **Ref frame**:
 The session's authorization namespace for mutating `@ref` targets: a frozen observation epoch and
@@ -293,7 +292,7 @@ Provider-hosted session output: video, automation or device logs, or dashboard l
 An optional semantic category from the owner of a daemon-managed downloadable artifact.
 
 **Provider-backed integration scenario**:
-A device-free test on the real daemon request path that fakes only external device and host tools.
+A device-free test on the real daemon request path, faking only external device and host tools.
 
 **Provider transcript**:
 An exact record of external provider calls, to verify command translation.
@@ -302,7 +301,7 @@ An exact record of external provider calls, to verify command translation.
 A command-level flow of user-visible behavior through daemon commands.
 
 **In-process provider scenario harness**:
-A runner that calls the daemon request handler with no HTTP listener.
+A runner for the daemon handler without HTTP.
 
 **HTTP contract test**:
 A narrow test of JSON-RPC transport, authentication, and response finalization.
