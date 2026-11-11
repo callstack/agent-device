@@ -196,9 +196,9 @@
     "packages/contracts/src/lease-scope.ts#leaseRpcMethodForCommand": "sha256:3613555c6002c23ab5bec4b98bc1b4d6947014b52fa100176177f955cf762881",
     "packages/contracts/src/device-pin.ts#DevicePin": "sha256:896f2b8cdcadea2d0fa7a66c2edc44007d1cf7f88d1043393e4268aacf1a63a9",
     "packages/contracts/src/device-pin.ts#DevicePinSelector": "sha256:c033ae0274d0da7c3cfdcafb2537091ba76e9a1fc4d635357fab9570cc1b223e",
-    "packages/contracts/src/device-pin.ts#DEVICE_PIN_SELECTOR_KEYS": "sha256:02a5f76aff71149e02395b60eaa7702715d4594061d11af4d9fa62224f0cc17d",
-    "packages/contracts/src/device-pin.ts#parseDevicePinSelector": "sha256:d5a5ed1a6cbf88d96e3ce3b82a33af3370c1c82f186774aff536c72278f86fb5",
-    "packages/contracts/src/device-pin.ts#readDevicePin": "sha256:77d4de45926108769dad332196eae5473c82e65224426a2edf6790e4ba7d4f29"
+    "packages/contracts/src/device-inventory.ts#DEVICE_PIN_SELECTOR_KEYS": "sha256:02a5f76aff71149e02395b60eaa7702715d4594061d11af4d9fa62224f0cc17d",
+    "packages/contracts/src/device-inventory.ts#parseDevicePinSelector": "sha256:ba1dbd259567b471b7802d03d711f2c99fab0894a6309cfffe0421f92ae4345f",
+    "packages/contracts/src/device-inventory.ts#readDevicePin": "sha256:bb15ca2a086a881c6cf945c25d432c092be165e58165d229c25df69c4c9fafbd"
   },
   "compatibleChanges": [
     {
