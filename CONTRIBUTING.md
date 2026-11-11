@@ -223,7 +223,7 @@ refactors or when explicitly requested, run `pnpm check`. It walks the whole cat
 `localRunnable` and lists each other gate as skipped, with the CI lane that owns it, in its output
 and receipt. It runs longer than the unit suite, Fallow, and the tooling gates alone. Both
 commands share one host lock and need macOS or Linux; on Windows, use the affected plan and direct
-focused checks. On a host without a Swift toolchain, such as Linux, `packaged-runner-swift` checks
+focused checks. On a host without a Swift toolchain, `packaged-runner-swift` checks
 line numbering and skips its `swiftc -parse` half.
 
 Lint limits `*.test.{ts,tsx,mjs}` files throughout the repository and production `.ts`, `.tsx`,

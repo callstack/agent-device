@@ -273,7 +273,8 @@ export function fullCheckPlan(): CheckPlan {
       check,
       path: 'scripts/check-affected/checks.ts',
       rule: 'full-run',
-      detail: 'pnpm check runs the whole catalog',
+      detail:
+        'pnpm check walks the catalog except vitest-related; non-local gates are skipped with their owning lane',
     })),
     failOpenReasons: [],
     docsOnlyPaths: [],
