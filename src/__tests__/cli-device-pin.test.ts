@@ -60,6 +60,9 @@ test('a selector-less CLI open reaches the daemon with the pinned device', async
     env: { HOME: home },
   });
 
+  assert.equal(result.code, null, result.stdout);
+  assert.equal(JSON.parse(result.stdout).success, true);
+  assert.equal(result.calls.length, 1);
   assert.equal(result.calls[0]?.command, 'open');
   assert.equal(result.calls[0]?.flags?.platform, 'ios');
   assert.equal(result.calls[0]?.flags?.device, 'iPad Pro');

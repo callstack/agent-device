@@ -11,6 +11,10 @@ import { IOS_SIMULATOR, createTestHostEnvironment } from '@agent-device/test-kit
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 
 const SECOND_IOS_SIMULATOR: DeviceInfo = { ...IOS_SIMULATOR, id: 'sim-2', name: 'iPhone 16' };
+const IDENTITY_PIN = {
+  selector: { platform: 'ios', udid: IOS_SIMULATOR.id },
+  source: { kind: 'project', path: '/project/agent-device.json' },
+} as const;
 
 function proxyAllocateRequest(
   flags: DaemonRequest['flags'],
@@ -104,4 +108,65 @@ test('a proxy allocation rejects a selected identity outside the pinned name bef
       error.details?.pinSource === 'project config file /project/agent-device.json',
   );
   assert.deepEqual(registry.listActiveLeases(), []);
+});
+
+test('a proxy allocation admits a matching explicit key and refuses other keys before allocating', async () => {
+  const registry = new LeaseRegistry();
+  for (const [leaseProvider, deviceKey] of [
+    ['proxy', 'ios:mobile:sim-2'],
+    [' proxy ', 'ios:mobile:sim-2'],
+    ['proxy', 'ios:mobile:missing'],
+  ]) {
+    await assert.rejects(
+      allocateAgainstInventory(
+        proxyAllocateRequest({}, { leaseProvider, deviceKey, devicePin: IDENTITY_PIN }),
+        [IOS_SIMULATOR, SECOND_IOS_SIMULATOR],
+        registry,
+      ),
+      (error: AppError) => error.details?.reason === 'device_pin_conflict',
+    );
+    assert.deepEqual(registry.listActiveLeases(), []);
+  }
+  const { lease } = await allocateAgainstInventory(
+    proxyAllocateRequest({}, { deviceKey: ' ios:mobile:sim-1 ', devicePin: IDENTITY_PIN }),
+    [IOS_SIMULATOR, SECOND_IOS_SIMULATOR],
+    registry,
+  );
+  assert.equal(lease.deviceKey, 'ios:mobile:sim-1');
+});
+
+test('a pinned proxy retry validates the existing key before renewing its lease', async () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({ now: () => now });
+  const { lease } = await allocateAgainstInventory(
+    proxyAllocateRequest({}, { deviceKey: 'ios:mobile:sim-2' }),
+    [IOS_SIMULATOR, SECOND_IOS_SIMULATOR],
+    registry,
+  );
+  now += 1_000;
+  await assert.rejects(
+    allocateAgainstInventory(
+      proxyAllocateRequest({}, { leaseId: lease.leaseId, devicePin: IDENTITY_PIN }),
+      [IOS_SIMULATOR, SECOND_IOS_SIMULATOR],
+      registry,
+    ),
+    (error: AppError) => error.details?.reason === 'device_pin_conflict',
+  );
+  assert.deepEqual(registry.listActiveLeases(), [lease]);
+  const { lease: renewed } = await allocateAgainstInventory(
+    proxyAllocateRequest(
+      {},
+      {
+        leaseId: lease.leaseId.toUpperCase(),
+        devicePin: {
+          ...IDENTITY_PIN,
+          selector: { platform: 'ios', udid: SECOND_IOS_SIMULATOR.id },
+        },
+      },
+    ),
+    [IOS_SIMULATOR, SECOND_IOS_SIMULATOR],
+    registry,
+  );
+  assert.equal(renewed.leaseId, lease.leaseId);
+  assert.ok(renewed.expiresAt > lease.expiresAt);
 });

@@ -17,6 +17,9 @@ for (const value of [
   { selector: {}, source },
   { selector: [], source },
   { selector: { platform: 'windows' }, source },
+  { selector: { platform: 'ios', serial: 'emulator-5554' }, source },
+  { selector: { platform: 'android', udid: 'SIM-1' }, source },
+  { selector: { udid: 'SIM-1', serial: 'emulator-5554' }, source },
   { selector: { device: 4 }, source },
   { selector: { udid: ' ' }, source },
   { selector: { target: 'mobile' }, source },
@@ -41,6 +44,19 @@ for (const value of [
 test('an absent pin stays absent', () => {
   assert.equal(readDevicePin(undefined), undefined);
 });
+
+for (const selector of [
+  { platform: 'ios', udid: 'SIM-1' },
+  { platform: 'macos', udid: 'MAC-1' },
+  { platform: 'apple', udid: 'APPLE-1' },
+  { platform: 'android', serial: 'emulator-5554' },
+  { platform: 'harmonyos', serial: 'HARMONY-1' },
+  { platform: 'vega', serial: 'VEGA-1' },
+]) {
+  test(`a compatible ${selector.platform} identity pin is accepted`, () => {
+    assert.deepEqual(readDevicePin({ selector, source }), { selector, source });
+  });
+}
 
 for (const kind of ['user', 'project', 'explicit'] as const) {
   test(`a ${kind} wire pin retains its selector and source`, () => {

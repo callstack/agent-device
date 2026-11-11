@@ -1,8 +1,10 @@
 import type { DevicePin, DevicePinSelector } from './device-pin.ts';
 import {
   PLATFORM_SELECTORS,
+  isApplePlatform,
   isIosFamily,
   isMacOs,
+  isSerialAddressablePlatform,
   matchesPlatformSelector,
   type DeviceInfo,
   type DeviceKind,
@@ -146,6 +148,14 @@ export function parseDevicePinSelector(value: unknown, pinSource: string): Devic
       invalidDevicePin(`Invalid devicePin.${key} in ${pinSource}.`, pinSource);
     }
     Object.assign(selector, { [key]: raw });
+  }
+  if (
+    (selector.udid && selector.serial) ||
+    (selector.platform &&
+      ((selector.udid && !isApplePlatform(selector.platform)) ||
+        (selector.serial && !isSerialAddressablePlatform(selector.platform))))
+  ) {
+    invalidDevicePin(`devicePin in ${pinSource} contains incompatible selectors.`, pinSource);
   }
   return selector;
 }

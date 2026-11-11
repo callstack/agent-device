@@ -175,6 +175,68 @@ test('Provider-backed integration proxy allocation narrows a platform pin before
   );
 });
 
+test('Provider-backed integration proxy keys and lease retries are admitted through the wire pin', async () => {
+  const pin: DevicePin = {
+    selector: { platform: 'ios', udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id },
+    source: { kind: 'project', path: '/project/agent-device.json' },
+  };
+  const other = { ...PROVIDER_SCENARIO_IOS_SIMULATOR, id: 'sim-other' };
+  await withProviderScenarioResource(
+    () =>
+      createProviderScenarioHarness({
+        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR, other],
+      }),
+    async (daemon) => {
+      const allocate = (meta: NonNullable<Parameters<typeof daemon.callCommand>[3]>['meta']) =>
+        daemon.callCommand(
+          'lease_allocate',
+          [],
+          {},
+          {
+            meta: {
+              tenantId: 'pin-key-team',
+              runId: 'pin-key-run',
+              clientId: 'pin-key-client',
+              leaseProvider: 'proxy',
+              leaseBackend: 'ios-instance',
+              ...meta,
+            },
+          },
+        );
+      const refused = await allocate({
+        leaseProvider: ' proxy ',
+        deviceKey: 'ios:mobile:sim-other',
+        devicePin: pin,
+      });
+      expect(
+        assertRpcError(refused, 400, 'INVALID_ARGS', /pinned device|device pin/).details,
+      ).toMatchObject({
+        reason: 'device_pin_conflict',
+        pinSource: 'project config file /project/agent-device.json',
+      });
+      const original = assertRpcOk<{ lease: { leaseId: string } }>(
+        await allocate({ deviceKey: 'ios:mobile:sim-other' }),
+      );
+      const retry = await allocate({ leaseId: original.lease.leaseId, devicePin: pin });
+      expect(
+        assertRpcError(retry, 400, 'INVALID_ARGS', /pinned device|device pin/).details,
+      ).toMatchObject({
+        reason: 'device_pin_conflict',
+      });
+      const matching = assertRpcOk<{ lease: { leaseId: string; deviceKey: string } }>(
+        await allocate({ deviceKey: 'ios:mobile:sim-1', devicePin: pin }),
+      );
+      assert.equal(matching.lease.deviceKey, 'ios:mobile:sim-1');
+      expect(
+        assertRpcOk(await allocate({ leaseId: matching.lease.leaseId, devicePin: pin })),
+      ).toMatchObject({
+        lease: { leaseId: matching.lease.leaseId, deviceKey: matching.lease.deviceKey },
+        reused: true,
+      });
+    },
+  );
+});
+
 for (const command of ['capabilities', 'lease_allocate'] as const) {
   test(`Provider-backed integration ${command} rejects malformed raw wire pins before selection`, async () => {
     let inventoryReads = 0;
@@ -195,6 +257,9 @@ for (const command of ['capabilities', 'lease_allocate'] as const) {
           { selector: { platform: 'ios' } },
           { selector: {}, source },
           { selector: { platform: 'windows' }, source },
+          { selector: { platform: 'ios', serial: 'emulator-5554' }, source },
+          { selector: { platform: 'android', udid: 'SIM-1' }, source },
+          { selector: { udid: 'SIM-1', serial: 'emulator-5554' }, source },
           { selector: { udid: 4 }, source },
           { selector: { platform: 'ios' }, source: { ...source, kind: 'environment' } },
           { selector: { platform: 'ios' }, source: { ...source, path: '' } },

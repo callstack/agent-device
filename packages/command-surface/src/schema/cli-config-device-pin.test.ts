@@ -94,6 +94,9 @@ for (const value of [
   { device: 4 },
   { target: 'mobile' },
   { platform: 'windows' },
+  { platform: 'ios', serial: 'emulator-5554' },
+  { platform: 'android', udid: 'IPAD-001' },
+  { udid: 'IPAD-001', serial: 'emulator-5554' },
 ]) {
   test(`invalid pin ${JSON.stringify(value)} fails with its config source`, () => {
     const { configPath, options } = projectWithConfig({ devicePin: value });
