@@ -8,6 +8,7 @@ import type { AndroidSiblingOrderEvidence } from '@agent-device/contracts/captur
 import { isScrollableType, normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
 import {
   foldSnapshotRect,
+  androidSystemBarContentClips,
   serializeRegularSnapshotPresentationNode,
 } from './snapshot-presentation-node.ts';
 import type {
@@ -24,7 +25,6 @@ import {
   type AndroidUiHierarchy,
 } from './ui-hierarchy-node.ts';
 import { collectAndroidHiddenNodes } from './ui-hierarchy-visibility.ts';
-import { androidSystemBarContentClips } from './snapshot-presentation-node.ts';
 import { scopePresentedAndroidSnapshot } from './ui-hierarchy-scope.ts';
 import { isCollectionContainerType, shouldIncludeAndroidNode } from './ui-hierarchy-inclusion.ts';
 import {

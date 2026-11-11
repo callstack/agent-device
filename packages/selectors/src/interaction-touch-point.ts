@@ -1,4 +1,3 @@
-import { readSnapshotNodeInteractionBounds } from '@agent-device/kernel/rect-center';
 import {
   snapshotRefBodies,
   type Point,
@@ -10,6 +9,7 @@ import {
   areRectsApproximatelyEqual,
   normalizeRect,
   pointInsideRect,
+  readSnapshotNodeInteractionBounds,
 } from '@agent-device/kernel/rect-center';
 import { isSemanticTouchTarget } from './touch-semantics.ts';
 
