@@ -1,9 +1,11 @@
 import type { ScreenshotCaptureFacts } from '@agent-device/contracts/interactor-types';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ShellWord } from '@agent-device/kernel/device-shell';
 import { runAndroidExecOut, runAndroidShell, sleep } from './adb.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';
+import { androidAdbResultError } from './adb-executor.ts';
 import { probeAndroidDisplayRotation } from './input-actions.ts';
 
 // PNG file signature: 0x89 P N G \r \n 0x1A \n
@@ -29,14 +31,50 @@ export async function screenshotAndroid(
     return await captureAndroidScreenshotWithRotation(device, outPath);
   }
 
-  await enableAndroidDemoMode(device);
+  const listing = await runDemoSettingCommand(device, ['settings', 'list', 'global']);
+  const present = listing.stdout
+    .split(/\r?\n/)
+    .some((line) => line.startsWith('sysui_demo_allowed='));
+  const previous = present
+    ? (
+        await runDemoSettingCommand(device, ['settings', 'get', 'global', 'sysui_demo_allowed'])
+      ).stdout.replace(/\n$/, '')
+    : undefined;
+
+  let failed = false;
   try {
-    // Allow transient UI affordances like scrollbars to fade before capture.
+    await enableAndroidDemoMode(device);
     await sleep(ANDROID_SCREENSHOT_SETTLE_DELAY_MS);
     return await captureAndroidScreenshotWithRotation(device, outPath);
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
     await disableAndroidDemoMode(device).catch(() => {});
+    try {
+      await runDemoSettingCommand(
+        device,
+        previous === undefined
+          ? ['settings', 'delete', 'global', 'sysui_demo_allowed']
+          : ['settings', 'put', 'global', 'sysui_demo_allowed', previous],
+      );
+    } catch (error) {
+      if (!failed) throw error;
+      emitDiagnostic({
+        level: 'error',
+        phase: 'android_screenshot_demo_setting_restore_failed',
+        data: { error: normalizeError(error) },
+      });
+    }
   }
+}
+
+async function runDemoSettingCommand(device: DeviceInfo, words: ShellWord[]) {
+  const result = await runAndroidShell(device, words, { allowFailure: true });
+  if (result.exitCode !== 0) {
+    throw androidAdbResultError('Android screenshot demo setting command failed', result);
+  }
+  return result;
 }
 
 /**
@@ -46,7 +84,7 @@ export async function screenshotAndroid(
 async function enableAndroidDemoMode(device: DeviceInfo): Promise<void> {
   const shell = (words: ShellWord[]) => runAndroidShell(device, words, { allowFailure: true });
 
-  await shell(['settings', 'put', 'global', 'sysui_demo_allowed', '1']);
+  await runDemoSettingCommand(device, ['settings', 'put', 'global', 'sysui_demo_allowed', '1']);
 
   const broadcast = (extra: ShellWord[]) =>
     shell(['am', 'broadcast', '-a', 'com.android.systemui.demo', '-e', 'command', ...extra]);

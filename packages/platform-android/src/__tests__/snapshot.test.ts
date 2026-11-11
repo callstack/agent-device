@@ -119,7 +119,16 @@ test('screenshotAndroid waits for transient UI when stabilization is requested',
     await screenshotAndroid(device, outPath, { stabilize: true });
 
     // Demo mode is one setting and two broadcasts, all before the settle.
-    assert.deepEqual(events, ['enable', 'enable', 'enable', 'settle:1000', 'capture', 'disable']);
+    assert.deepEqual(events, [
+      'read',
+      'enable',
+      'enable',
+      'enable',
+      'settle:1000',
+      'capture',
+      'disable',
+      'restore',
+    ]);
   });
 });
 
@@ -221,7 +230,9 @@ function mockScreenshotEvents(events: string[]): void {
       events.push('capture');
       return { exitCode: 0, stdout: '', stderr: '', stdoutBuffer: VALID_PNG };
     }
-    if (!args.includes('dumpsys')) events.push(args.includes('exit') ? 'disable' : 'enable');
+    if (args.includes('list') && args.includes('settings')) events.push('read');
+    else if (args.includes('delete') && args.includes('settings')) events.push('restore');
+    else if (!args.includes('dumpsys')) events.push(args.includes('exit') ? 'disable' : 'enable');
     return { exitCode: 0, stdout: '', stderr: '' };
   });
   mockSleep.mockImplementation(async (ms) => {
