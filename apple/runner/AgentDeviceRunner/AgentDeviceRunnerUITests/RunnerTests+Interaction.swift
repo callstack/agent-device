@@ -381,7 +381,7 @@ extension RunnerTests {
     let windows = roots.flatMap { root -> [XCUIElement] in
       var windows: [XCUIElement] = []
       let held = holdingRecordedIssues {
-        windows = root is XCUIApplication ? root.windows.allElementsBoundByIndex : [root]
+        windows = root is XCUIApplication ? root.windows.allElementsBoundByAccessibilityElement : [root]
       }
       return held.issues.isEmpty && held.exceptionMessage == nil ? windows : []
     }
@@ -408,7 +408,7 @@ extension RunnerTests {
       }
     }
     let matches = try roots.flatMap {
-      $0.descendants(matching: .any).matching(Self.authorizedPressTargetPredicate(target)).matching(binding).allElementsBoundByIndex
+      $0.descendants(matching: .any).matching(Self.authorizedPressTargetPredicate(target)).matching(binding).allElementsBoundByAccessibilityElement
     }.filter { element in
       guard element.exists else { return false }
       return try matchesBinding(element, rect: element.frame, value: nativePressTargetValue(element))
