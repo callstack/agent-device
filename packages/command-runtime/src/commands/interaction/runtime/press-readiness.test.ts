@@ -1,4 +1,5 @@
 import type { Point } from '@agent-device/kernel/snapshot';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { presentIosSnapshotAcquisition } from '@agent-device/capture-kit/ios-snapshot-runtime';
 import { presentIosRunnerSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
@@ -71,6 +72,7 @@ async function exercise(input: {
   transportFailure?: boolean;
   callerAbort?: boolean;
   nativeBudgetAbort?: boolean;
+  nativeAbortError?: 'canceled' | 'transport';
   expireInRead?: boolean;
   expireInRecheck?: boolean;
   resultDeadline?: boolean;
@@ -123,11 +125,21 @@ async function exercise(input: {
             context.signal!.throwIfAborted();
           }
           if (input.nativeBudgetAbort && reads > 1) {
-            context.signal!.throwIfAborted();
             await new Promise<void>((_resolve, reject) => {
+              context.signal!.throwIfAborted();
               context.signal!.addEventListener('abort', () => reject(context.signal!.reason), {
                 once: true,
               });
+            }).catch((error: unknown) => {
+              events.push('native-budget-abort-rejected');
+              if (input.nativeAbortError === 'canceled')
+                throw createRequestCanceledError(undefined, error);
+              if (input.nativeAbortError === 'transport')
+                throw new AppError('COMMAND_FAILED', 'Native transport failed', {
+                  reason: 'native-transport-failed',
+                  backendCode: 1234,
+                });
+              throw error;
             });
           }
           const state = input.states[Math.min(reads - 1, input.states.length - 1)]!;
@@ -292,11 +304,35 @@ test('a final canonical recheck that crosses the absolute deadline cannot send i
   expect(points).toEqual([]);
 });
 
-test('a production result deadline preserves the last blocked native state', async () => {
+for (const nativeAbortError of [undefined, 'canceled'] as const) {
+  test(`a production result deadline preserves the last blocked native state after ${nativeAbortError ?? 'raw'} native abort`, async () => {
+    const { run, events, points } = await exercise({
+      states: ['blocked'],
+      resultDeadline: true,
+      nativeBudgetAbort: true,
+      nativeAbortError,
+      timeoutMs: 150,
+    });
+    const failure = await run.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(events).toContain('blocked');
+    expect(events.indexOf('readiness-aborted')).toBeGreaterThan(events.indexOf('blocked'));
+    expect(events).toContain('native-budget-abort-rejected');
+    expect(points).toEqual([]);
+    expect(failure).toMatchObject({
+      details: { reason: 'target_not_ready', readiness: 'blocked', dispatched: 'no' },
+    });
+  });
+}
+
+test('an unrelated typed native failure survives an owned budget abort', async () => {
   const { run, events, points } = await exercise({
     states: ['blocked'],
     resultDeadline: true,
     nativeBudgetAbort: true,
+    nativeAbortError: 'transport',
     timeoutMs: 150,
   });
   const failure = await run.then(
@@ -305,9 +341,12 @@ test('a production result deadline preserves the last blocked native state', asy
   );
   expect(events).toContain('blocked');
   expect(events.indexOf('readiness-aborted')).toBeGreaterThan(events.indexOf('blocked'));
+  expect(events).toContain('native-budget-abort-rejected');
   expect(points).toEqual([]);
   expect(failure).toMatchObject({
-    details: { reason: 'target_not_ready', readiness: 'blocked', dispatched: 'no' },
+    code: 'COMMAND_FAILED',
+    message: 'Native transport failed',
+    details: { reason: 'native-transport-failed', backendCode: 1234, dispatched: 'no' },
   });
 });
 

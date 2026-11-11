@@ -11,6 +11,7 @@ import {
   AppError,
   createRequestCanceledError,
   discloseDispatch,
+  isRequestCanceledError,
 } from '@agent-device/kernel/errors';
 import { sleep } from '@agent-device/host-kit/retry';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
@@ -94,7 +95,8 @@ async function awaitReadiness(
     assertBudget(context, deadline, state, deadlineSignal);
     return ready;
   } catch (error) {
-    if (!(error instanceof AppError)) assertBudget(context, deadline, state, deadlineSignal, error);
+    if (!(error instanceof AppError) || (context.signal?.aborted && isRequestCanceledError(error)))
+      assertBudget(context, deadline, state, deadlineSignal, error);
     throw error;
   }
 }
