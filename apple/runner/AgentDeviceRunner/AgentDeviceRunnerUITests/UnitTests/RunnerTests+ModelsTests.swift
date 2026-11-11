@@ -308,6 +308,10 @@ extension RunnerTests {
         .querySelector,
         expectation(interaction: false, retry: false, launch: .existingApp, converts: true, retains: true, isReadOnly: true)
       ),
+      (
+        .pressReadiness,
+        expectation(interaction: false, retry: false, launch: .existingApp, converts: true, retains: true, isReadOnly: true)
+      ),
       (.readText, expectation(interaction: false, retry: true, launch: .existingApp, converts: false, retains: true, isReadOnly: true)),
       (.snapshot, expectation(interaction: false, retry: true, launch: .existingApp, converts: false, retains: false, isReadOnly: true)),
       (.screenshot, expectation(interaction: false, retry: true, launch: .noApp, converts: false, retains: false, isReadOnly: true)),

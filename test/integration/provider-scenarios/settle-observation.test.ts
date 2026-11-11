@@ -184,14 +184,14 @@ test(
       // press label=Continue --settle: resolution capture, tap, settle captures
       snapshotEntry(BEFORE_NODES),
       {
-        command: 'ios.runner.querySelector',
+        command: 'ios.runner.pressReadiness',
         result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
       },
       tapEntry(200, 322),
       quietSnapshotEntry(SETTLED_NODES),
       // press @e2 (the Done ref from the settled diff): tap on the stored tree
       {
-        command: 'ios.runner.querySelector',
+        command: 'ios.runner.pressReadiness',
         result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
       },
       tapEntry(200, 522),
@@ -291,7 +291,7 @@ test(
         // serve a stray capture.
         assert.deepEqual(
           runnerTranscript.calls.slice(callsBeforeFollowUp).map((call) => call.command),
-          ['ios.runner.querySelector', 'ios.runner.tap'],
+          ['ios.runner.pressReadiness', 'ios.runner.tap'],
         );
 
         runnerTranscript.assertComplete();
@@ -323,7 +323,7 @@ test('Provider-backed integration never-settled press --settle does not issue di
     snapshotEntry(BEFORE_NODES),
     snapshotEntry(BEFORE_NODES),
     {
-      command: 'ios.runner.querySelector',
+      command: 'ios.runner.pressReadiness',
       result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
     },
     tapEntry(200, 322),
@@ -391,14 +391,14 @@ test('Provider-backed integration modal-dismiss press --settle attaches the unch
     // no added refs, so the tail is the only actionable-target payload.
     snapshotEntry(MODAL_BEFORE_NODES),
     {
-      command: 'ios.runner.querySelector',
+      command: 'ios.runner.pressReadiness',
       result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
     },
     tapEntry(200, 422),
     quietSnapshotEntry(MODAL_DISMISSED_NODES),
     // press @e3 (the Continue ref from the tail): tap on the stored tree.
     {
-      command: 'ios.runner.querySelector',
+      command: 'ios.runner.pressReadiness',
       result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
     },
     tapEntry(200, 322),
@@ -474,7 +474,7 @@ test('Provider-backed integration modal-dismiss press --settle attaches the unch
       assert.equal(followUpData.y, 322);
       assert.deepEqual(
         runnerTranscript.calls.slice(callsBeforeFollowUp).map((call) => call.command),
-        ['ios.runner.querySelector', 'ios.runner.tap'],
+        ['ios.runner.pressReadiness', 'ios.runner.tap'],
       );
 
       runnerTranscript.assertComplete();
@@ -738,7 +738,7 @@ test('Provider-backed integration fill --settle summoning the keyboard still att
     // press @e17 (the "Discard and go back" ref from the tail): tap on the
     // stored settled tree.
     {
-      command: 'ios.runner.querySelector',
+      command: 'ios.runner.pressReadiness',
       result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
     },
     tapEntry(201, 202),
@@ -818,7 +818,7 @@ test('Provider-backed integration fill --settle summoning the keyboard still att
       assert.equal(followUpData.y, 202);
       assert.deepEqual(
         runnerTranscript.calls.slice(callsBeforeFollowUp).map((call) => call.command),
-        ['ios.runner.querySelector', 'ios.runner.tap'],
+        ['ios.runner.pressReadiness', 'ios.runner.tap'],
       );
 
       runnerTranscript.assertComplete();

@@ -11,6 +11,8 @@ import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifac
 import {
   getRequestSignal,
   markRequestCanceled,
+  registerRequestAbort,
+  clearRequestAbortRegistration,
   withRequestDeadline,
 } from '@agent-device/host-kit/request';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
@@ -55,7 +57,7 @@ function tree(label = 'Continue', childPhase?: 'before' | 'after') {
   const node = snapshot.nodes[1]!;
   attachSnapshotNativePressTargets(
     snapshot.nodes,
-    new Map([[node.index, { type: 'Button', label, rect: node.rect! }]]),
+    new Map([[node.index, { type: 9, label, rect: node.rect! }]]),
   );
   return snapshot;
 }
@@ -69,6 +71,8 @@ async function exercise(input: {
   transportFailure?: boolean;
   nativeBudgetAbort?: boolean;
   expireInRead?: boolean;
+  expireInRecheck?: boolean;
+  resultDeadline?: boolean;
   missingSource?: boolean;
   movingChild?: boolean;
   options?: { count?: number; doubleTap?: boolean };
@@ -76,13 +80,17 @@ async function exercise(input: {
   const events: string[] = [];
   const points: Point[] = [];
   const requestId = `readiness:${Math.random()}`;
-  const run = withRequestDeadline(requestId, input.timeoutMs ?? 2_000, async () => {
+  const execute = async () => {
     let reads = 0;
     const device = createAgentDevice({
       backend: {
         platform: 'ios',
         captureSnapshot: async () => {
           events.push('capture');
+          if (input.expireInRecheck && reads > 0) {
+            const realNow = Date.now;
+            vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 10_000);
+          }
           const snapshot = tree(
             input.changeTarget && reads > 0 ? 'Replacement' : 'Continue',
             input.movingChild ? (reads > 0 ? 'after' : 'before') : undefined,
@@ -136,28 +144,44 @@ async function exercise(input: {
           : selector('label="Continue"'),
       { requestId, ...input.options },
     );
-    return { ok: true, data: {} };
-  });
+    return { ok: true as const, data: {} };
+  };
+  const registration = input.resultDeadline
+    ? registerRequestAbort(requestId, undefined, {
+        resultDeadlineMs: Date.now() + (input.timeoutMs ?? 150),
+      })
+    : undefined;
+  const run = input.resultDeadline
+    ? execute().finally(() => clearRequestAbortRegistration(registration))
+    : withRequestDeadline(requestId, input.timeoutMs ?? 2_000, execute);
   return { run, events, points };
 }
 
 for (const kind of ['selector', 'ref'] as const) {
   test(`${kind} press waits for native readiness and sends its original point once`, async () => {
-    const { run, events, points } = await exercise({ kind, states: ['blocked', 'ready'] });
+    const { run, events, points } = await exercise({
+      kind,
+      states: ['blocked', 'blocked', 'ready'],
+    });
     await run;
     expect(events.indexOf('tap')).toBeGreaterThan(events.indexOf('ready'));
-    expect(events.filter((event) => event === 'capture').length).toBeGreaterThanOrEqual(
-      kind === 'ref' ? 1 : 2,
-    );
+    expect(events.slice(events.indexOf('read'), events.indexOf('ready'))).not.toContain('capture');
+    expect(
+      events.slice(events.indexOf('ready')).filter((event) => event === 'capture'),
+    ).toHaveLength(1);
     expect(points).toEqual([{ x: 90, y: 265 }]);
   });
 }
 
 for (const states of [['ambiguous'], ['missing']] as NativePressReadiness[][]) {
   test(`unconfirmed ${states[0]} target never sends input`, async () => {
-    const { run, points } = await exercise({ states, timeoutMs: 100 });
-    await expect(run).rejects.toMatchObject({ details: { dispatched: 'no' } });
+    const { run, points, events } = await exercise({ states, timeoutMs: 2_000 });
+    await expect(run).rejects.toMatchObject({
+      details: { reason: 'target_not_ready', readiness: states[0], dispatched: 'no' },
+    });
     expect(points).toEqual([]);
+    expect(events.filter((event) => event === 'read')).toHaveLength(1);
+    expect(events.slice(events.indexOf('read'))).not.toContain('capture');
   });
 }
 
@@ -181,7 +205,7 @@ test('a native budget abort preserves the blocked state instead of reporting a r
   expect(points).toEqual([]);
 });
 
-test('a replaced canonical target is refused before another native query or tap', async () => {
+test('a replaced canonical target is refused by the one recheck after native readiness', async () => {
   const { run, points, events } = await exercise({
     kind: 'ref',
     states: ['blocked', 'ready'],
@@ -189,7 +213,7 @@ test('a replaced canonical target is refused before another native query or tap'
   });
   await expect(run).rejects.toMatchObject({ details: { dispatched: 'no' } });
   expect(points).toEqual([]);
-  expect(events).not.toContain('ready');
+  expect(events).toContain('ready');
 });
 
 for (const failure of ['cancelInRead', 'transportFailure'] as const) {
@@ -218,6 +242,31 @@ test('explicit coordinates preserve their existing dispatch semantics', async ()
 test('a late native ready reply cannot send input before the deadline timer callback', async () => {
   const { run, points } = await exercise({ states: ['ready'], expireInRead: true });
   await expect(run).rejects.toMatchObject({ details: { dispatched: 'no' } });
+  expect(points).toEqual([]);
+});
+
+test('first-ready input does not add a second canonical capture', async () => {
+  const { run, events } = await exercise({ states: ['ready'] });
+  await run;
+  expect(events.slice(events.indexOf('read'))).toEqual(['read', 'ready', 'tap']);
+});
+
+test('a final canonical recheck that crosses the absolute deadline cannot send input', async () => {
+  const { run, points } = await exercise({ states: ['blocked', 'ready'], expireInRecheck: true });
+  await expect(run).rejects.toMatchObject({ details: { dispatched: 'no' } });
+  expect(points).toEqual([]);
+});
+
+test('a production result deadline preserves the last blocked native state', async () => {
+  const { run, points } = await exercise({
+    states: ['blocked'],
+    resultDeadline: true,
+    nativeBudgetAbort: true,
+    timeoutMs: 150,
+  });
+  await expect(run).rejects.toMatchObject({
+    details: { reason: 'target_not_ready', readiness: 'blocked', dispatched: 'no' },
+  });
   expect(points).toEqual([]);
 });
 
@@ -280,7 +329,15 @@ for (const producer of ['simulator-ax-bridge', 'apple-runner'] as const) {
                 acquisition: {
                   producer,
                   intent: 'full',
-                  nodes: rawNodes,
+                  nodes: rawNodes.map((node, index) => ({
+                    ...node,
+                    nativePressTarget: {
+                      type: [2, 46, 75, 9][index]!,
+                      label: 'label' in node ? node.label : undefined,
+                      identifier: 'identifier' in node ? node.identifier : undefined,
+                      rect: node.rect,
+                    },
+                  })),
                   truncated: false,
                   viewport: { kind: 'reported', rect: screen },
                   lineage: {},
@@ -304,7 +361,7 @@ for (const producer of ['simulator-ax-bridge', 'apple-runner'] as const) {
                         ...node,
                         rect: node.index > 1 ? { ...full, y: 150, height: 50 } : node.rect,
                         nativePressTarget: {
-                          type: node.type,
+                          type: [2, 46, 75, 9][node.index]!,
                           label: 'label' in node ? node.label : undefined,
                           identifier: 'identifier' in node ? node.identifier : undefined,
                           rect: node.rect,
@@ -335,7 +392,7 @@ for (const producer of ['simulator-ax-bridge', 'apple-runner'] as const) {
         captureSnapshot: async () => ({ snapshot }),
         // Independent native facts: the real Cell has no promoted child id and is not clipped.
         readPressReadiness: async (_context, target) =>
-          target.type === 'Cell' &&
+          target.type === 75 &&
           !target.identifier &&
           target.rect.y === 100 &&
           target.rect.height === 100

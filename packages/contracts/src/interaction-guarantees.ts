@@ -300,7 +300,7 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
 export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPathContract> = {
   'runtime-selector': {
     description:
-      'Daemon tree capture, selector chain resolution, guarded coordinate tap. Ordinary primary iOS taps also await strict native readiness when the request-bound backend advertises readPressReadiness through its native querySelector.',
+      'Daemon tree capture, selector chain resolution, guarded coordinate tap. Ordinary primary iOS taps also await strict native readiness when the request-bound backend advertises readPressReadiness through its admitted pressReadiness operation.',
     commands: ['press', 'click', 'fill', 'longpress', 'hover'],
     guarantees: {
       ...RUNTIME_TREE_SHARED_GUARANTEES,
@@ -323,7 +323,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
   },
   'runtime-ref': {
     description:
-      'Session snapshot ref lookup, guarded coordinate tap. Ordinary primary iOS taps await strict native readiness when the request-bound backend advertises readPressReadiness through its native querySelector. #1654: when the caller already resolved the node (a mutating `find`), the lookup is replaced by that node and every guarantee below is enforced against it — the guards are unchanged, only the lookup is skipped.',
+      'Session snapshot ref lookup, guarded coordinate tap. Ordinary primary iOS taps await strict native readiness when the request-bound backend advertises readPressReadiness through its admitted pressReadiness operation. #1654: when the caller already resolved the node (a mutating `find`), the lookup is replaced by that node and every guarantee below is enforced against it — the guards are unchanged, only the lookup is skipped.',
     commands: ['press', 'click', 'fill', 'longpress', 'hover'],
     guarantees: {
       ...RUNTIME_TREE_SHARED_GUARANTEES,

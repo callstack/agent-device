@@ -49,23 +49,28 @@ async function awaitReadiness(
 ): Promise<ResolvedInteractionTarget> {
   const { context, deadline } = budget;
   let state: NativePressReadiness = 'missing';
-  let current = original;
+  let waited = false;
   try {
     while (true) {
       assertBudget(context, deadline, state);
       state = await runtime.backend.readPressReadiness!(
         context,
-        nativeTarget(current),
-        current.preAction?.surfaceBundleId,
+        nativeTarget(original),
+        original.preAction?.surfaceBundleId,
       );
       assertBudget(context, deadline, state);
-      if (state === 'ready') return current;
-      if (state === 'ambiguous' || state === 'surface-mismatch' || !Number.isFinite(deadline))
-        throw refusal(state);
+      if (state === 'ready') {
+        const ready = waited
+          ? await revalidate(runtime, { ...options, signal: context.signal }, params, original)
+          : original;
+        assertBudget(context, deadline, state);
+        return ready;
+      }
+      if (state !== 'blocked' || !Number.isFinite(deadline)) throw refusal(state);
       // This is post-resolution readiness, never a wait for a selector that does not exist.
       if (params.expectedResolvedTarget || params.preresolvedTarget) throw refusal(state);
       await waitForNextRead(context.signal, Math.min(50, deadline - Date.now()));
-      current = await revalidate(runtime, { ...options, signal: context.signal }, params, original);
+      waited = true;
     }
   } catch (error) {
     if (!(error instanceof AppError) && Date.now() >= deadline) throw refusal(state, error);
@@ -102,7 +107,7 @@ async function revalidate(
     throw refusal('changed');
   if (
     !matchesAuthorizedPressTarget(
-      { ...before, type: before.type, rect: before.rect, point: original.point },
+      { ...before, type: before.type, rect: before.rect },
       { ...after, type: after.type, rect: after.rect },
     )
   )

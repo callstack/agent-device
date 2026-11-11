@@ -380,10 +380,8 @@ extension RunnerTests {
     func text(_ value: Any?) -> String {
       String(describing: value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    guard let type = Self.nativePressElementType(target.type) else {
-      return Response(ok: true, data: DataPayload(pressReadiness: "missing", pressReadinessAppBundleId: appBundleId))
-    }
-    let identity = NSPredicate(format: "elementType == %@", NSNumber(value: type))
+    let type = target.type
+    let identity = Self.authorizedPressTargetPredicate(target)
     let matches = try elementQueries(app: app, matching: .any)
       .flatMap { $0.matching(identity).allElementsBoundByIndex }
       .filter { element in
@@ -391,10 +389,21 @@ extension RunnerTests {
         let frame = element.frame
         // The canonical point can use a different space; only source identity and the normalized unclipped frame bind this control read.
         return target.matches(type: target.type, identifier: element.identifier,
-          label: element.label, value: target.type == "SecureTextField" ? nil : text(element.value), rect: SnapshotRect(frame))
+          label: element.label, value: type == XCUIElement.ElementType.secureTextField.rawValue ? nil : text(element.value), rect: SnapshotRect(frame))
       }
     let state = matches.count > 1 ? "ambiguous" : matches.first.map { $0.isHittable ? "ready" : "blocked" } ?? "missing"
     return Response(ok: true, data: DataPayload(pressReadiness: state, pressReadinessAppBundleId: appBundleId))
+  }
+
+  static func authorizedPressTargetPredicate(_ target: AuthorizedPressTarget) -> NSPredicate {
+    var predicates = [NSPredicate(format: "elementType == %@", NSNumber(value: target.type))]
+    // Broad prefilters preserve whitespace/canonical-equivalent bindings; the final match stays exact.
+    if let identifier = target.identifier?.trimmingCharacters(in: .whitespacesAndNewlines), !identifier.isEmpty {
+      predicates.append(NSPredicate(format: "identifier CONTAINS[cd] %@", identifier))
+    } else if let label = target.label?.trimmingCharacters(in: .whitespacesAndNewlines), !label.isEmpty {
+      predicates.append(NSPredicate(format: "label CONTAINS[cd] %@", label))
+    }
+    return NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
   }
 
   func queryElement(app: XCUIApplication, selectorKey: String, selectorValue: String) throws -> Response {

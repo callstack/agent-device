@@ -38,7 +38,16 @@ for (const raw of [false, true]) {
         acquisition: {
           producer: 'simulator-ax-bridge',
           intent: 'full',
-          nodes,
+          nodes: nodes.map((node, index) => ({
+            ...node,
+            nativePressTarget: {
+              type: [2, 46, 75, 1, 9][index]!,
+              label: node.label,
+              identifier: node.identifier,
+              value: node.value,
+              rect: node.rect!,
+            },
+          })),
           truncated: false,
           viewport: { kind: 'reported', rect: screen },
           lineage: { targetId: 'sim-1' },
@@ -57,7 +66,7 @@ for (const raw of [false, true]) {
       expect(cell.rect).toEqual({ x: 16, y: 150, width: 350, height: 50 });
     }
     expect(readSnapshotNativePressTargets(snapshot.nodes)?.get(cell.index)).toEqual({
-      type: 'Cell',
+      type: 75,
       label: 'General',
       identifier: undefined,
       value: undefined,
@@ -67,7 +76,7 @@ for (const raw of [false, true]) {
   });
 }
 
-test('secure source values are never duplicated into native binding metadata', () => {
+test('an acquired provider without native provenance does not gain readiness evidence', () => {
   const captured = presentIosSnapshotAcquisition({
     stage: 'acquired',
     acquisition: {
@@ -90,7 +99,6 @@ test('secure source values are never duplicated into native binding metadata', (
       residue: [],
     },
   });
-  expect(
-    captured.nodes?.find((node) => node.type === 'SecureTextField')?.nativePressTarget,
-  ).not.toHaveProperty('value');
+  const snapshot = buildSnapshotState(captured, {});
+  expect(readSnapshotNativePressTargets(snapshot.nodes)?.size ?? 0).toBe(0);
 });

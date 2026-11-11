@@ -10,6 +10,7 @@
   "desktopScroll": "none",
   "findText": "app-windows",
   "querySelector": "app-windows",
+  "pressReadiness": "app-windows",
   "readText": "app-windows",
   "snapshot": "app-windows",
   "snapshotBridge": "none",

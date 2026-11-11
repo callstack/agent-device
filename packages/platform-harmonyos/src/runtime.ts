@@ -213,6 +213,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         }),
         // No native text reading: every text wait on this owner polls the canonical tree. No live
         // selector read either: the off-screen guard refuses on the capture's verdict unchanged.
+        pressReadiness: unavailableFact('unsupported-platform-leaf'),
         ...selectorObservationRuntimeOperationFacts({
           findText: snapshotKindUnavailable,
           querySelector: snapshotKindUnavailable,

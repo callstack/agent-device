@@ -448,13 +448,15 @@ extension RunnerTests {
       }
       let found = try findElement(app: activeApp, text: text) != nil
       return Response(ok: true, data: DataPayload(found: found))
-    case .querySelector:
+    case .pressReadiness:
       if let target = command.authorizedTarget {
         guard let actualBundleId = activeAppBundleId, actualBundleId == command.appBundleId else {
           return Response(ok: true, data: DataPayload(pressReadiness: "surface-mismatch", pressReadinessAppBundleId: activeAppBundleId))
         }
         return try queryAuthorizedPressTarget(app: activeApp, target: target, appBundleId: activeAppBundleId)
       }
+      return Response(ok: false, error: ErrorPayload(message: "pressReadiness requires an authorized target"))
+    case .querySelector:
       guard let selectorKey = command.selectorKey, let selectorValue = command.selectorValue else {
         return Response(ok: false, error: ErrorPayload(message: "querySelector requires selectorKey and selectorValue"))
       }

@@ -1,7 +1,9 @@
-import { AppError } from '@agent-device/kernel/errors';
-import { attachSnapshotNativePressTargets } from '@agent-device/contracts/snapshot-private-evidence';
-import { withRequestDeadline } from '@agent-device/host-kit/request';
-import { selector, createContractClock, createContractDevice } from './runtime-harness.ts';
+import {
+  selector,
+  createContractClock,
+  createContractDevice,
+  runNativeReadinessScenario,
+} from './runtime-harness.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
@@ -262,7 +264,7 @@ test(
         // A resolves and taps at y=300; B resolves at 360 and its two re-observations disagree.
         runnerSnapshotEntry(runnerNodesAtY(300)),
         {
-          command: 'ios.runner.querySelector',
+          command: 'ios.runner.pressReadiness',
           result: { pressReadiness: 'ready', pressReadinessAppBundleId: 'com.example.app' },
         },
         runnerTapEntry({ x: 200, y: 322 }),
@@ -429,7 +431,7 @@ test(
       [
         runnerSnapshotEntry(RUNNER_CONTINUE_NODES),
         {
-          command: 'ios.runner.querySelector',
+          command: 'ios.runner.pressReadiness',
           result: { pressReadiness: 'ready', pressReadinessAppBundleId: 'com.example.app' },
         },
         runnerTapEntry({ x: 200, y: 322 }),
@@ -485,42 +487,8 @@ test(scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'resolutionDisclosure')[1]!, async
   assert.ok(!resolution.alternatives.some((entry) => entry.diagnosticRef === 'diag-e3'));
 });
 
-// A stationary tree cannot prove native readiness: without the guard this sends input while blocked.
 for (const [index, finalState] of (['ready', 'ambiguous'] as const).entries()) {
   test(scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'nativeReadiness')[index]!, async () => {
-    const events: string[] = [];
-    const requestId = `contract-native-ready-selector:${finalState}`;
-    const snapshot = continueButtonSnapshot();
-    const node = snapshot.nodes[0]!;
-    attachSnapshotNativePressTargets(
-      snapshot.nodes,
-      new Map([
-        [node.index, { type: 'Button', label: 'Continue', value: 'Continue', rect: node.rect! }],
-      ]),
-    );
-    const device = createContractDevice(snapshot, {
-      readPressReadiness: async () => {
-        const state = events.includes('blocked') ? finalState : 'blocked';
-        events.push(state);
-        return state;
-      },
-      tap: async () => {
-        events.push('tap');
-      },
-    });
-    await withRequestDeadline(requestId, 2_000, async () => {
-      const press = device.interactions.press(selector('label="Continue"'), { requestId });
-      if (finalState === 'ready') await press;
-      else
-        await assert.rejects(press, (error: unknown) => {
-          assert.ok(error instanceof AppError);
-          assert.equal(error.details?.reason, 'target_not_ready');
-          assert.equal(error.details?.readiness, 'ambiguous');
-          assert.equal(error.details?.dispatched, 'no');
-          return true;
-        });
-      return { ok: true, data: {} };
-    });
-    assert.deepEqual(events, ['blocked', finalState, ...(finalState === 'ready' ? ['tap'] : [])]);
+    await runNativeReadinessScenario(selector('label="Continue"'), finalState);
   });
 }

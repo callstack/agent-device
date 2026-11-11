@@ -3,18 +3,19 @@ import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
-  func testNativePressTypesMatchBridgeGoldenNamesAndUnnamedRunnerTypes() throws {
-    let root = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    let names = try JSONDecoder().decode([String].self, from:
-      Data(contentsOf: root.appendingPathComponent("contracts/fixtures/ios-element-type-names.json")))
-    XCTAssertEqual(Self.nativePressElementTypeNames, names)
-    XCTAssertEqual(Self.nativePressElementType("PageIndicator"), XCUIElement.ElementType.pageIndicator.rawValue)
-    XCTAssertEqual(Self.nativePressElementType("PickerWheel"), XCUIElement.ElementType.pickerWheel.rawValue)
-    XCTAssertEqual(Self.nativePressElementType("DatePicker"), XCUIElement.ElementType.datePicker.rawValue)
-    XCTAssertEqual(Self.nativePressElementType("Element(123)"), 123)
-    XCTAssertNil(Self.nativePressElementType("Element(0123)"))
+  func testNativeReadPrefilterPreservesNormalizedExactIdentity() {
+    for identifier in ["  continue-control\n", "", "caf\u{0065}\u{0301}"] {
+      let label = identifier.isEmpty ? "  caf\u{0065}\u{0301}\n" : "Continue"
+      let target = AuthorizedPressTarget(type: 9, identifier: identifier, label: label, value: nil,
+        rect: SnapshotRect(x: 10, y: 20, width: 100, height: 40), point: PressTargetPoint(x: 60, y: 40))
+      let rawIdentifier = identifier.trimmingCharacters(in: .whitespacesAndNewlines).precomposedStringWithCanonicalMapping
+      let rawLabel = label.trimmingCharacters(in: .whitespacesAndNewlines).precomposedStringWithCanonicalMapping
+      XCTAssertTrue(Self.authorizedPressTargetPredicate(target).evaluate(with: [
+        "elementType": 9, "identifier": rawIdentifier, "label": rawLabel,
+      ]))
+      XCTAssertTrue(target.matches(type: 9, identifier: rawIdentifier, label: rawLabel, value: nil, rect: target.rect))
+      XCTAssertFalse(target.matches(type: 9, identifier: rawIdentifier + "-other", label: rawLabel, value: nil, rect: target.rect))
+    }
   }
 
   func testAuthorizedPressTargetMatchesGoldenParityTable() throws {
@@ -176,7 +177,7 @@ extension RunnerTests {
       let frame = element.frame
       // Canonical presentation coordinates must not filter the source-native identity/frame.
       for point in [PressTargetPoint(x: frame.midX, y: frame.midY), PressTargetPoint(x: -10_000, y: -10_000)] {
-        let target = AuthorizedPressTarget(type: elementTypeName(element.elementType),
+        let target = AuthorizedPressTarget(type: element.elementType.rawValue,
           identifier: element.identifier, label: element.label, value: String(describing: element.value ?? ""),
           rect: SnapshotRect(frame), point: point)
         let readiness = try queryAuthorizedPressTarget(app: app, target: target)

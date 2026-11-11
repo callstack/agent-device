@@ -102,7 +102,7 @@ test('press resolving on the first capture costs exactly one snapshot call', asy
     [
       snapshotEntry(CONTINUE_BUTTON_NODES),
       {
-        command: 'ios.runner.querySelector',
+        command: 'ios.runner.pressReadiness',
         result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
       },
       tapEntry(200, 322),
@@ -113,7 +113,7 @@ test('press resolving on the first capture costs exactly one snapshot call', asy
       assertRpcOk(press);
       assert.deepEqual(
         transcript.calls.slice(callsBeforePress).map((call) => call.command),
-        ['ios.runner.snapshot', 'ios.runner.querySelector', 'ios.runner.tap'],
+        ['ios.runner.snapshot', 'ios.runner.pressReadiness', 'ios.runner.tap'],
       );
       transcript.assertComplete();
     },

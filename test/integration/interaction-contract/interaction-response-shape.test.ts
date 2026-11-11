@@ -68,7 +68,7 @@ test(
       [
         runnerSnapshotEntry(RUNNER_CONTINUE_NODES),
         {
-          command: 'ios.runner.querySelector',
+          command: 'ios.runner.pressReadiness',
           result: { pressReadiness: 'ready', pressReadinessAppBundleId: CONTRACT_APP },
         },
         runnerTapEntry(NOISY_DEFAULT_TAP_RESULT),
@@ -137,7 +137,7 @@ test('interaction response shape: press selector uses the canonical selector env
     [
       runnerSnapshotEntry(RUNNER_CONTINUE_NODES),
       {
-        command: 'ios.runner.querySelector',
+        command: 'ios.runner.pressReadiness',
         result: { pressReadiness: 'ready', pressReadinessAppBundleId: CONTRACT_APP },
       },
       runnerTapEntry({}),

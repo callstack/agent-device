@@ -105,10 +105,25 @@ export function iosNativeSnapshotNodes(nodes: readonly unknown[]): unknown[] {
     const node = candidate as RawSnapshotNode;
     if (!node?.type || !node.rect) return candidate;
     const type = node.type.replace(/^XCUIElementType/, '');
+    const nativeType = (
+      {
+        Application: 2,
+        Window: 4,
+        Button: 9,
+        Other: 1,
+        ScrollView: 46,
+        StaticText: 48,
+        TextField: 49,
+        SecureTextField: 50,
+        TextView: 52,
+        Cell: 75,
+      } as Record<string, number>
+    )[type];
+    if (nativeType === undefined) return candidate;
     return {
       ...node,
       nativePressTarget: node.nativePressTarget ?? {
-        type,
+        type: nativeType,
         identifier: node.identifier,
         label: node.label,
         ...(type === 'SecureTextField' ? {} : { value: node.value }),

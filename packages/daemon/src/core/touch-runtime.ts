@@ -24,7 +24,10 @@ import { successText } from '@agent-device/kernel/success-text';
 import { requireIntInRange } from '@agent-device/kernel/validation';
 import type { DaemonCommandContext } from './context.ts';
 import type { DirectIosSelectorTarget } from './direct-ios-selector.ts';
-import type { QuerySelectorRuntimeOperations } from '@agent-device/contracts/selector-observation-runtime';
+import type {
+  QuerySelectorRuntimeOperations,
+  PressReadinessRuntimeOperations,
+} from '@agent-device/contracts/selector-observation-runtime';
 import {
   admitRuntimeOperations,
   type RuntimeAdmissionBindings,
@@ -195,6 +198,7 @@ export type BoundTouchExecutor = Readonly<{
    * guard refuses on the capture's verdict unchanged.
    */
   querySelector?: QuerySelectorRuntimeOperations['querySelector'];
+  pressReadiness?: PressReadinessRuntimeOperations['pressReadiness'];
 }>;
 
 export function createBoundTouchExecutor(
@@ -211,7 +215,13 @@ export function createBoundTouchExecutor(
   // declares it CONDITIONAL and only when the exact owner advertised it. The freeze keeps the
   // executor's shape identical to the builders' own.
   const querySelector = bound.captured ? bound.runtime.operations.querySelector : undefined;
-  return querySelector ? Object.freeze({ ...base, querySelector }) : base;
+  const pressReadiness =
+    bound.kind === 'tap' && bound.captured ? bound.runtime.operations.pressReadiness : undefined;
+  return Object.freeze({
+    ...base,
+    ...(querySelector ? { querySelector } : {}),
+    ...(pressReadiness ? { pressReadiness } : {}),
+  });
 }
 
 function createBaseTouchExecutor(

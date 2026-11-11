@@ -49,8 +49,13 @@ extension RunnerTests {
       XCTAssertFalse(evaluation.label.isEmpty, "fixture must exercise synthesized presentation")
       let captured = makeSnapshotNode(snapshot: snapshot, evaluation: evaluation, depth: 1, index: 1, parentIndex: 0)
       XCTAssertEqual(captured.label, evaluation.label)
-      XCTAssertNil(captured.nativePressTarget.label)
-      XCTAssertEqual(captured.nativePressTarget.value, Self.valueText(snapshot.value))
+#if os(iOS)
+      XCTAssertEqual(captured.nativePressTarget?.type, snapshot.elementType.rawValue)
+      XCTAssertNil(captured.nativePressTarget?.label)
+      XCTAssertEqual(captured.nativePressTarget?.value, Self.valueText(snapshot.value))
+#else
+      XCTAssertNil(captured.nativePressTarget)
+#endif
     }
   }
 

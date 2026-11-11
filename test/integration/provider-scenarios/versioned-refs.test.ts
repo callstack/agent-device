@@ -73,7 +73,7 @@ test('Provider-backed integration rejects stale pinned @refs and accepts current
     // press @e2~s{g1}: pinned to the CURRENT frame — admitted, taps Cancel,
     // and crosses the seam so the frame expires
     {
-      command: 'ios.runner.querySelector',
+      command: 'ios.runner.pressReadiness',
       result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
     },
     tapEntry(200, 422),
@@ -83,7 +83,7 @@ test('Provider-backed integration rejects stale pinned @refs and accepts current
     // with a precise generation mismatch before any runner command
     // press @e2~s{g2}: pinned to the current frame — admitted, taps Cancel
     {
-      command: 'ios.runner.querySelector',
+      command: 'ios.runner.pressReadiness',
       result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
     },
     tapEntry(200, 422),

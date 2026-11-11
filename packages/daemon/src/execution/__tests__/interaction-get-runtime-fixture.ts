@@ -28,6 +28,8 @@ import {
 import type {
   QuerySelectorInput,
   QuerySelectorResult,
+  PressReadinessInput,
+  PressReadinessResult,
 } from '@agent-device/contracts/selector-observation-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
@@ -105,6 +107,13 @@ export const mockQuerySelector = vi.fn(
   async (_input: QuerySelectorInput): Promise<QuerySelectorResult> => ({ found: false }),
 );
 
+export const mockPressReadiness = vi.fn(
+  async (input: PressReadinessInput): Promise<PressReadinessResult> => ({
+    readiness: 'ready',
+    appBundleId: input.appBundleId,
+  }),
+);
+
 /**
  * Flip to model an exact owner cell: no live element read (web, HarmonyOS, provider), no capture
  * at all (the watchOS sentinel, an inactive provider), which refuses admission outright, or no
@@ -118,6 +127,7 @@ export const elementReadFixtureState = {
   tapElementSelectorAvailable: true,
   /** Off by default: only the tests pinning the #1542 rescue wiring advertise the live read. */
   querySelectorAvailable: false,
+  pressReadinessAvailable: false,
 };
 
 export function resetGetRuntimeFixture(): void {
@@ -161,6 +171,12 @@ export function resetGetRuntimeFixture(): void {
   elementReadFixtureState.typeTextAvailable = true;
   elementReadFixtureState.tapElementSelectorAvailable = true;
   elementReadFixtureState.querySelectorAvailable = false;
+  elementReadFixtureState.pressReadinessAvailable = false;
+  mockPressReadiness.mockReset();
+  mockPressReadiness.mockImplementation(async (input) => ({
+    readiness: 'ready',
+    appBundleId: input.appBundleId,
+  }));
   mockQuerySelector.mockReset();
   mockQuerySelector.mockResolvedValue({ found: false });
 }
@@ -207,6 +223,7 @@ function fixtureTouchFacts(device: DeviceInfo) {
       ? available
       : unavailable,
     querySelector: elementReadFixtureState.querySelectorAvailable ? available : unavailable,
+    pressReadiness: elementReadFixtureState.pressReadinessAvailable ? available : unavailable,
   };
 }
 
@@ -247,6 +264,9 @@ const mockBindElementReadRuntime: BindDeviceRuntime = vi.fn(async (device: Devic
       ...(device.platform === 'web' ? { fillRef: mockFillRef } : {}),
       ...(elementReadFixtureState.tapElementSelectorAvailable
         ? { tapElementSelector: mockTapElementSelector }
+        : {}),
+      ...(elementReadFixtureState.pressReadinessAvailable
+        ? { pressReadiness: mockPressReadiness }
         : {}),
       ...(elementReadFixtureState.querySelectorAvailable
         ? { querySelector: mockQuerySelector }

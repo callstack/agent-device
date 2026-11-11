@@ -46,27 +46,7 @@ export function presentIosSnapshotAcquisition(
     customActions: options?.customActions,
     acquisitionIntent: acquired.acquisition.intent,
   });
-  const source = {
-    ...acquired,
-    acquisition: {
-      ...acquired.acquisition,
-      nodes: acquired.acquisition.nodes.map((node) => ({
-        ...node,
-        ...(node.type && node.rect
-          ? {
-              nativePressTarget: {
-                type: node.type,
-                identifier: node.identifier,
-                label: node.label,
-                ...(node.type === 'SecureTextField' || node.password ? {} : { value: node.value }),
-                rect: node.rect,
-              },
-            }
-          : {}),
-      })),
-    },
-  };
-  const input = iosSnapshotInput(source, request);
+  const input = iosSnapshotInput(acquired, request);
 
   try {
     const textInputGeometry = acquiredTextInputGeometry(acquired.acquisition);

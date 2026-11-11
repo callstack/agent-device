@@ -89,6 +89,7 @@ export type RunnerCommand = {
     | 'desktopScroll'
     | 'findText'
     | 'querySelector'
+    | 'pressReadiness'
     | 'readText'
     | 'snapshot'
     | 'screenshot'

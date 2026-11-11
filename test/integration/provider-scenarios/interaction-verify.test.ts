@@ -61,7 +61,7 @@ test('Provider-backed integration press --verify returns post-action evidence di
     snapshotEntry(BEFORE_NODES),
     snapshotEntry(BEFORE_NODES),
     {
-      command: 'ios.runner.querySelector',
+      command: 'ios.runner.pressReadiness',
       result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
     },
     {

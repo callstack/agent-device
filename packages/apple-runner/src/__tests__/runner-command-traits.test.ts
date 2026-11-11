@@ -53,6 +53,7 @@ test('runner command trait table pins lifecycle-sensitive command groups', () =>
       'appState',
       'findText',
       'gestureViewport',
+      'pressReadiness',
       'querySelector',
       'readText',
       'screenshot',

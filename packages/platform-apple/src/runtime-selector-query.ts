@@ -4,6 +4,9 @@ import type {
   QuerySelectorNodeReading,
   QuerySelectorResult,
   SelectorObservationRuntimeOperations,
+  PressReadinessInput,
+  PressReadinessResult,
+  PressReadinessRuntimeOperations,
 } from '@agent-device/contracts/selector-observation-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { parseRect } from '@agent-device/kernel/record';
@@ -33,9 +36,6 @@ export function bindAppleQuerySelectorRuntime(
         ? AbortSignal.any([request.signal, input.signal])
         : request.signal;
       signal.throwIfAborted();
-      if (input.authorizedTarget && !input.options?.appBundleId) {
-        throw new AppError('INVALID_ARGS', 'Authorized-target reads require an app bundle ID');
-      }
       // Same projection bindAppleFindTextRuntime builds: the execution context is exactly the
       // runner-call fields, with the composed signal replacing the caller's own.
       const options: RunnerCallOptions = { ...input.execution, signal };
@@ -44,38 +44,58 @@ export function bindAppleQuerySelectorRuntime(
       const { queryAppleRunnerSelector } = await import('./core/runner-selector-query.ts');
       const data = await queryAppleRunnerSelector(
         request.device,
-        input.authorizedTarget ? { authorizedTarget: input.authorizedTarget } : input.selector,
+        input.selector,
         input.options?.appBundleId,
         options,
       );
-      if (input.authorizedTarget) {
-        const readiness = data.pressReadiness;
-        if (
-          readiness !== 'ready' &&
-          readiness !== 'blocked' &&
-          readiness !== 'missing' &&
-          readiness !== 'ambiguous' &&
-          readiness !== 'surface-mismatch'
-        ) {
-          throw new AppError(
-            'UNSUPPORTED_OPERATION',
-            'Runner does not support authorized-target readiness; rebuild the Apple runner',
-          );
-        }
-        const expectedApp = input.options?.appBundleId;
-        if (!expectedApp || data.pressReadinessAppBundleId !== expectedApp) {
-          return Object.freeze({ found: false, pressReadiness: 'surface-mismatch' });
-        }
-        return Object.freeze({
-          found: readiness === 'ready' || readiness === 'blocked',
-          pressReadiness: readiness,
-          pressReadinessAppBundleId: expectedApp,
-        });
-      }
       const node = readQuerySelectorNode(data);
       return Object.freeze({
         found: data.found === true,
         ...(node ? { node } : {}),
+      });
+    },
+  });
+}
+
+/** The owner's strict, app-scoped readiness read, independent of public selector semantics. */
+export function bindApplePressReadinessRuntime(
+  request: AppleSelectorQueryRequest,
+): PressReadinessRuntimeOperations {
+  return Object.freeze({
+    pressReadiness: async (input: PressReadinessInput): Promise<PressReadinessResult> => {
+      const signal = input.signal
+        ? AbortSignal.any([request.signal, input.signal])
+        : request.signal;
+      signal.throwIfAborted();
+      if (!input.appBundleId)
+        throw new AppError('INVALID_ARGS', 'Native press readiness requires an app bundle ID');
+      const { queryAppleRunnerSelector } = await import('./core/runner-selector-query.ts');
+      const data = await queryAppleRunnerSelector(
+        request.device,
+        { authorizedTarget: input.authorizedTarget },
+        input.appBundleId,
+        { ...input.execution, signal },
+      );
+      const readiness = data.pressReadiness;
+      if (
+        readiness !== 'ready' &&
+        readiness !== 'blocked' &&
+        readiness !== 'missing' &&
+        readiness !== 'ambiguous' &&
+        readiness !== 'surface-mismatch'
+      ) {
+        throw new AppError(
+          'UNSUPPORTED_OPERATION',
+          'Runner did not report native press readiness; rebuild the Apple runner',
+        );
+      }
+      const appBundleId =
+        typeof data.pressReadinessAppBundleId === 'string'
+          ? data.pressReadinessAppBundleId
+          : undefined;
+      return Object.freeze({
+        readiness: appBundleId === input.appBundleId ? readiness : 'surface-mismatch',
+        ...(appBundleId ? { appBundleId } : {}),
       });
     },
   });

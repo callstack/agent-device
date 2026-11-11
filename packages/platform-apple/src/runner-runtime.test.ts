@@ -26,6 +26,8 @@ test('runtime observations use the forwarded runner with request and application
           text: 'Continue',
           appBundleId: 'com.example.app',
           state: 'runningForeground',
+          pressReadiness: 'ready',
+          pressReadinessAppBundleId: 'com.example.app',
         };
       },
     },
@@ -101,6 +103,25 @@ test('runtime observations use the forwarded runner with request and application
     text: 'Continue',
   });
   expect(commands.at(-1)).toMatchObject({ command: 'readText', appBundleId: 'com.example.app' });
+  expect(requestIds.at(-1)).toBe('observe-remote');
+  const authorizedTarget = {
+    type: 9,
+    label: 'Continue',
+    rect: { x: 1, y: 2, width: 30, height: 40 },
+    point: { x: 16, y: 22 },
+  };
+  expect(
+    await operations.pressReadiness!({
+      authorizedTarget,
+      appBundleId: options.appBundleId,
+      execution,
+    }),
+  ).toEqual({ readiness: 'ready', appBundleId: options.appBundleId });
+  expect(commands.at(-1)).toMatchObject({
+    command: 'pressReadiness',
+    authorizedTarget,
+    appBundleId: options.appBundleId,
+  });
   expect(requestIds.at(-1)).toBe('observe-remote');
   const beforeCancel = commands.length;
   controller.abort();

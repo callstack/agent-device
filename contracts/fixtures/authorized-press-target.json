@@ -2,7 +2,7 @@
   {
     "name": "same target",
     "expected": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -16,7 +16,7 @@
       }
     },
     "candidate": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -34,7 +34,7 @@
   {
     "name": "one point capture rounding",
     "expected": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -48,7 +48,7 @@
       }
     },
     "candidate": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 41,
@@ -66,7 +66,7 @@
   {
     "name": "target moved",
     "expected": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -80,7 +80,7 @@
       }
     },
     "candidate": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 42,
@@ -98,7 +98,7 @@
   {
     "name": "different control role",
     "expected": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -112,7 +112,7 @@
       }
     },
     "candidate": {
-      "type": "StaticText",
+      "type": 48,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -130,7 +130,7 @@
   {
     "name": "different label same rectangle",
     "expected": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -144,7 +144,7 @@
       }
     },
     "candidate": {
-      "type": "Button",
+      "type": 9,
       "label": "Replacement",
       "rect": {
         "x": 40,
@@ -162,7 +162,7 @@
   {
     "name": "different identifier same rectangle",
     "expected": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -176,7 +176,7 @@
       }
     },
     "candidate": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -195,7 +195,7 @@
   {
     "name": "different native value",
     "expected": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -209,7 +209,7 @@
       }
     },
     "candidate": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -228,7 +228,7 @@
   {
     "name": "label case is identity",
     "expected": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -242,7 +242,7 @@
       }
     },
     "candidate": {
-      "type": "Button",
+      "type": 9,
       "label": "continue",
       "rect": {
         "x": 40,
@@ -260,7 +260,7 @@
   {
     "name": "anonymous exact rectangle",
     "expected": {
-      "type": "Button",
+      "type": 9,
       "rect": {
         "x": 40,
         "y": 240,
@@ -273,7 +273,7 @@
       }
     },
     "candidate": {
-      "type": "Button",
+      "type": 9,
       "rect": {
         "x": 40,
         "y": 240,
@@ -290,7 +290,7 @@
   {
     "name": "secure value is never required or duplicated",
     "expected": {
-      "type": "SecureTextField",
+      "type": 50,
       "rect": {
         "x": 40,
         "y": 240,
@@ -303,7 +303,7 @@
       }
     },
     "candidate": {
-      "type": "SecureTextField",
+      "type": 50,
       "value": "redacted",
       "rect": {
         "x": 40,
@@ -321,7 +321,7 @@
   {
     "name": "shared nonempty identifier and value",
     "expected": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -337,7 +337,7 @@
       "value": "Ready"
     },
     "candidate": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -357,7 +357,7 @@
   {
     "name": "negative width",
     "expected": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -371,7 +371,7 @@
       }
     },
     "candidate": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -389,7 +389,7 @@
   {
     "name": "positive y width height rounding",
     "expected": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -403,7 +403,7 @@
       }
     },
     "candidate": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -421,7 +421,7 @@
   {
     "name": "negative y width height rounding",
     "expected": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -435,7 +435,7 @@
       }
     },
     "candidate": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -453,7 +453,7 @@
   {
     "name": "y outside capture rounding",
     "expected": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -467,7 +467,7 @@
       }
     },
     "candidate": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -485,7 +485,7 @@
   {
     "name": "width outside capture rounding",
     "expected": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -499,7 +499,7 @@
       }
     },
     "candidate": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -517,7 +517,7 @@
   {
     "name": "height outside capture rounding",
     "expected": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,
@@ -531,7 +531,7 @@
       }
     },
     "candidate": {
-      "type": "Button",
+      "type": 9,
       "label": "Continue",
       "rect": {
         "x": 40,

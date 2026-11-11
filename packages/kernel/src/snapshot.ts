@@ -286,7 +286,7 @@ export type IosValueSemantics = {
 
 /** Internal Apple capture wire provenance; removed before public snapshot assembly. */
 export type SnapshotNativePressTarget = {
-  type: string;
+  type: number;
   identifier?: string;
   label?: string;
   value?: string;

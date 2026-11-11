@@ -9,6 +9,7 @@ import { runInteraction } from '../../../__tests__/support/touch-interaction-run
 import {
   elementReadFixtureState,
   mockQuerySelector,
+  mockPressReadiness,
   mockTapPoint,
   resetGetRuntimeFixture,
 } from '../../__tests__/interaction-get-runtime-fixture.ts';
@@ -126,4 +127,52 @@ test('press @ref hands the command surface no rescue hook when the owner does no
   expect(response?.ok).toBe(true);
   expect(touchSurfaceConfigs.at(-1)?.backend.confirmOffscreenTargetVisible).toBeUndefined();
   expect(mockQuerySelector).not.toHaveBeenCalled();
+});
+
+test.each([true, false])(
+  'press route forwards strict readiness only when its own operation is advertised: %s',
+  async (advertised) => {
+    const sessionStore = offscreenRefSessionStore();
+    elementReadFixtureState.querySelectorAvailable = true;
+    elementReadFixtureState.pressReadinessAvailable = advertised;
+    await runInteraction(sessionStore, RESCUE_ROUTE_SESSION, 'press', ['@e2']);
+    const read = touchSurfaceConfigs.at(-1)?.backend.readPressReadiness;
+    if (!advertised) {
+      expect(read).toBeUndefined();
+      expect(mockPressReadiness).not.toHaveBeenCalled();
+      return;
+    }
+    expect(read).toBeDefined();
+    const authorizedTarget = {
+      type: 9,
+      label: 'Far item',
+      rect: { x: 20, y: 1200, width: 120, height: 44 },
+      point: { x: 80, y: 1222 },
+    };
+    await expect(read!({}, authorizedTarget, 'com.example.app')).resolves.toBe('ready');
+    expect(mockPressReadiness).toHaveBeenCalledWith(
+      expect.objectContaining({ authorizedTarget, appBundleId: 'com.example.app' }),
+    );
+    expect(mockQuerySelector).not.toHaveBeenCalled();
+  },
+);
+
+test('strict readiness refuses a missing app scope before contacting its owner', async () => {
+  const sessionStore = offscreenRefSessionStore();
+  sessionStore.get(RESCUE_ROUTE_SESSION)!.appBundleId = undefined;
+  elementReadFixtureState.pressReadinessAvailable = true;
+  await runInteraction(sessionStore, RESCUE_ROUTE_SESSION, 'press', ['@e2']);
+  const read = touchSurfaceConfigs.at(-1)?.backend.readPressReadiness;
+  expect(read).toBeDefined();
+  await expect(
+    read!(
+      {},
+      { type: 9, rect: { x: 1, y: 2, width: 3, height: 4 }, point: { x: 2, y: 3 } },
+      undefined,
+    ),
+  ).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    message: 'Native press readiness requires an authorized app scope',
+  });
+  expect(mockPressReadiness).not.toHaveBeenCalled();
 });

@@ -23,17 +23,23 @@ export type NativePressReadiness =
   | 'surface-mismatch';
 
 export type QuerySelectorInput = ObservationInput &
-  (
-    | Readonly<{
-        selector: Readonly<{ key: ElementSelectorKey; value: string }>;
-        authorizedTarget?: never;
-      }>
-    | Readonly<{
-        authorizedTarget: AuthorizedPressTarget;
-        selector?: never;
-        options: Readonly<{ appBundleId: string; surface?: SessionSurface }>;
-      }>
-  );
+  Readonly<{ selector: Readonly<{ key: ElementSelectorKey; value: string }> }>;
+
+export type PressReadinessInput = Readonly<{
+  authorizedTarget: AuthorizedPressTarget;
+  appBundleId: string;
+  execution: SnapshotRuntimeExecution;
+  signal?: AbortSignal;
+}>;
+
+export type PressReadinessResult = Readonly<{
+  readiness: NativePressReadiness;
+  appBundleId?: string;
+}>;
+
+export type PressReadinessRuntimeOperations = Readonly<{
+  pressReadiness(input: PressReadinessInput): Promise<PressReadinessResult>;
+}>;
 
 /**
  * Positive native observations are authoritative and preserve matches that an advertising owner's
@@ -55,12 +61,7 @@ export type QuerySelectorNodeReading = Readonly<{
 }>;
 
 export type QuerySelectorResult = SelectorObservationResult &
-  Readonly<{
-    node?: QuerySelectorNodeReading;
-    /** Present only for the strict authorized-target variant, including negative answers. */
-    pressReadiness?: NativePressReadiness;
-    pressReadinessAppBundleId?: string;
-  }>;
+  Readonly<{ node?: QuerySelectorNodeReading }>;
 
 export type SelectorObservationRuntimeOperations = Readonly<{
   findText(input: FindTextInput): Promise<FindTextResult>;

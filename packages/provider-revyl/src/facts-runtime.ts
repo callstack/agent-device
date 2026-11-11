@@ -171,6 +171,7 @@ export function revylFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOper
       ...screenshotRuntimeOperationFacts({ capture: available }),
       // A live selector read needs the local reader's rescue hook, which a rented device has none of,
       // so both text readings answer from the captured tree like `elementText` does.
+      pressReadiness: elementTextUnavailable,
       ...selectorObservationRuntimeOperationFacts({
         findText: elementTextUnavailable,
         querySelector: elementTextUnavailable,

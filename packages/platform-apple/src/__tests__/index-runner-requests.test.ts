@@ -219,14 +219,14 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
 type ScopedDrive = readonly [DeviceInfo, (outPath: string) => Promise<unknown>];
 
 const SCOPED_SITES: Record<string, ScopedDrive> = {
-  'ios-simulator.runner-selector-query.authorized-target': [
+  'ios-simulator.runner-press-readiness.authorized-target': [
     IOS_SIMULATOR,
     () =>
       queryAppleRunnerSelector(
         IOS_SIMULATOR,
         {
           authorizedTarget: {
-            type: 'Button',
+            type: 9,
             identifier: 'continue-control',
             label: 'Continue',
             value: 'Ready',

@@ -14,6 +14,7 @@ enum CommandType: String, Codable, CaseIterable {
   case desktopScroll
   case findText
   case querySelector
+  case pressReadiness
   case readText
   case snapshot
   case screenshot
@@ -240,17 +241,17 @@ struct RunnerLitPanelFact: Codable {
 }
 
 struct AuthorizedPressTarget: Codable {
-  let type: String
+  let type: UInt
   let identifier: String?
   let label: String?
   let value: String?
   let rect: SnapshotRect
   let point: PressTargetPoint
 
-  func matches(type: String, identifier: String?, label: String?, value: String?, rect: SnapshotRect) -> Bool {
+  func matches(type: UInt, identifier: String?, label: String?, value: String?, rect: SnapshotRect) -> Bool {
     func text(_ value: String?) -> String { (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
     return self.type == type && text(self.identifier) == text(identifier)
-      && text(self.label) == text(label) && (type == "SecureTextField" || text(self.value) == text(value))
+      && text(self.label) == text(label) && (type == 50 || text(self.value) == text(value))
       && [self.rect.x - rect.x, self.rect.y - rect.y, self.rect.width - rect.width, self.rect.height - rect.height]
         .allSatisfy { $0.isFinite && abs($0) <= 1 }
       && self.rect.width >= 0 && self.rect.height >= 0 && rect.width >= 0 && rect.height >= 0
@@ -356,7 +357,7 @@ extension Command {
     case .actionButton, .volumeUp, .volumeDown:
       return .presentedSurfaceMutation
 
-    case .querySelector:
+    case .querySelector, .pressReadiness:
       return .selectorResolution
 
     case .mouseClick, .home, .recordStart, .activate:

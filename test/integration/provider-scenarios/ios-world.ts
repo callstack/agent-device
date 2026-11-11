@@ -48,7 +48,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
     runnerSnapshot(),
     runnerSnapshot(),
     {
-      command: 'ios.runner.querySelector',
+      command: 'ios.runner.pressReadiness',
       result: { pressReadiness: 'ready', pressReadinessAppBundleId: 'com.apple.Preferences' },
     },
     {
@@ -346,7 +346,7 @@ export async function createIosSettledClickWorld(): Promise<IosSettledClickWorld
     generalCellSnapshot({ y: 406 }),
     generalCellSnapshot({ y: 406 }),
     {
-      command: 'ios.runner.querySelector',
+      command: 'ios.runner.pressReadiness',
       result: { pressReadiness: 'ready', pressReadinessAppBundleId: 'com.apple.Preferences' },
     },
     {

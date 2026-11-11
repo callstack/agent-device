@@ -44,7 +44,9 @@ final class ConformanceTests: XCTestCase {
             depth: 1,
             parentIndex: 0,
             hiddenContentAbove: nil,
-            hiddenContentBelow: nil
+            hiddenContentBelow: nil,
+            nativePressTarget: NativePressTarget(type: 9, identifier: nil, label: "Continue", value: nil,
+              rect: SnapshotRect(x: 80, y: 10, width: 40, height: 20))
           ),
         ],
         truncated: false,
@@ -58,7 +60,7 @@ final class ConformanceTests: XCTestCase {
     XCTAssertEqual(result.nodes.map(\.label), ["App", "Continue"])
     XCTAssertEqual(result.nodes[1].rect, SnapshotRect(x: 80, y: 10, width: 20, height: 20))
     XCTAssertEqual(result.nodes[1].nativePressTarget?.rect, SnapshotRect(x: 80, y: 10, width: 40, height: 20))
-    XCTAssertEqual(result.nodes[1].nativePressTarget?.type, "Button")
+    XCTAssertEqual(result.nodes[1].nativePressTarget?.type, 9)
     XCTAssertEqual(result.qualityNotes.first?.code, .regularGeometryClipped)
     XCTAssertEqual(result.qualityNotes.first?.clippedNodeCount, 1)
     XCTAssertEqual(result.qualityNotes.first?.droppedNodeCount, 0)
@@ -67,8 +69,10 @@ final class ConformanceTests: XCTestCase {
     let raw = RawAXNode(index: 0, type: "SecureTextField", label: "Password", identifier: "password",
       value: "private-secret", rect: SnapshotRect(x: 0, y: 0, width: 100, height: 40),
       enabled: true, focused: nil, selected: nil, hittable: true, depth: 0, parentIndex: nil,
-      hiddenContentAbove: nil, hiddenContentBelow: nil)
-    XCTAssertNil(raw.nativePressTarget.value)
+      hiddenContentAbove: nil, hiddenContentBelow: nil,
+      nativePressTarget: NativePressTarget(type: 50, identifier: "password", label: "Password", value: "private-secret",
+        rect: SnapshotRect(x: 0, y: 0, width: 100, height: 40)))
+    XCTAssertNil(raw.nativePressTarget?.value)
     let encoded = try JSONEncoder().encode(raw.nativePressTarget)
     XCTAssertFalse(String(decoding: encoded, as: UTF8.self).contains("private-secret"))
   }

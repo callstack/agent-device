@@ -8,19 +8,17 @@ import type { AppleRunnerCommandOptions } from '@agent-device/apple-runner';
 import { isHandheldAppleDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { runAppleRunnerCommand } from './runner-client.ts';
 
-/** The single Apple runner `querySelector` command builder shared by bound and safety-probe reads. */
+/** Builds the distinct public selector and strict readiness runner reads. */
 export async function queryAppleRunnerSelector(
   device: DeviceInfo,
-  selector:
-    | NonNullable<QuerySelectorInput['selector']>
-    | Readonly<{ authorizedTarget: AuthorizedPressTarget }>,
+  selector: QuerySelectorInput['selector'] | Readonly<{ authorizedTarget: AuthorizedPressTarget }>,
   appBundleId: string | undefined,
   options: AppleRunnerCommandOptions,
 ): Promise<Record<string, unknown>> {
   const result = await runAppleRunnerCommand(
     device,
     {
-      command: 'querySelector',
+      command: 'authorizedTarget' in selector ? 'pressReadiness' : 'querySelector',
       ...('authorizedTarget' in selector
         ? { authorizedTarget: selector.authorizedTarget }
         : { selectorKey: selector.key, selectorValue: selector.value }),

@@ -19,7 +19,7 @@ Completed process history is in git history.
 - Multiple mutating selector matches collapse only if they form one ancestor–descendant chain and every member resolves to the same actionable node. Otherwise, the mutation fails with `AMBIGUOUS_MATCH`. Maestro's explicit expected-point/non-hittable compatibility path stays separate.
 - Keep synthesized iOS gesture policy outside the element dispatch-path matrix.
 - On Android, the press/click moving-target guard samples fresh geometry until the target remains on one surface at one position for 100 ms, within a 1,500 ms transition window. A target that cannot establish that evidence is refused. Other platforms retain their existing guard schedule.
-- On `runtime-ref` and `runtime-selector`, ordinary primary iOS presses wait for native hittability when the request-bound Apple runtime advertises the read. The original request budget bounds the wait; ambiguity or changed target authorization refuses input.
+- On `runtime-ref` and `runtime-selector`, ordinary primary iOS `press` and `click` actions wait for native hittability when the request-bound Apple runtime advertises `pressReadiness`. The original request budget bounds the wait; ambiguity or changed target authorization refuses input.
 
 ## Context
 
@@ -325,24 +325,21 @@ A daemon reset there destroyed every healthy app session that the daemon owned.
 ### Native readiness for ordinary iOS taps
 
 Ordinary resolved `press` and `click` actions wait implicitly when the request-bound Apple owner
-reports that the exact authorized control is not natively hittable. Snapshot hittability remains a
-geometric fact. The native mutation-read binds type, identifier, label, value, and rectangle before
+reports that the exact authorized control is not natively hittable. The snapshot `hittable` field records capture-time geometric actionability; it does not establish that an overlay has released input. The native read checks live control hittability separately. The native mutation-read binds numeric element type, identifier, label, value, and rectangle before
 counting matches; a hittable duplicate cannot replace a blocked target. The binding keeps the capture
 producer's native identity and full rectangle, after required coordinate normalization and before row
 promotion or clipping. This private evidence survives session storage and is omitted from public
 snapshots. Secure field values are omitted before the wire.
 A native reply must prove the actual queried app matches the authorized surface. After a blocked
-read, the fresh canonical parent/child guards choose the dispatch point. During polling, canonical resolution must still authorize the same target on the same
-surface. The original request deadline and cancellation signal bound every read and capture.
-Expected-target and already-resolved replay bindings are checked once and refuse a blocked control
+read, the fresh canonical parent/child guards choose the dispatch point. The wait polls only this native binding. After a blocked wait becomes ready, one fresh canonical capture must still authorize the same target on the same surface before input. The original request deadline and cancellation signal bound every read and capture.
+Expected-target and already-resolved bindings are checked once and refuse a blocked control
 without recapturing or replacing that binding.
-Ambiguity, changed authorization, unsupported native proof, cancellation, and timeout refuse before
-input. Raw coordinates and non-default tap options retain their existing semantics.
+Only `blocked` is waitable. A `missing` native match, ambiguity, changed authorization, unsupported native proof, cancellation, or timeout refuses before input. Raw coordinates and non-default tap options retain their existing semantics.
 
 The retained rectangle must use the same coordinate space as the live native element frame.
 Control matching does not filter candidates by containment of the canonical tap point.
 Canonical point guards validate that point separately.
-Public selector reads retain their existing matching policy. This guard supplies a necessary condition for fully blocked controls; native
+The request admits the dedicated internal `pressReadiness` operation conditionally. A public `querySelector` operation alone does not authorize this check. Public selector reads retain their existing matching policy. This guard supplies a necessary condition for fully blocked controls; native
 hittability does not certify the preserved point against partial app-drawn coverage. It does not
 wait for a selector that canonical resolution could not initially find.
 

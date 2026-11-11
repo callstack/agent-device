@@ -9,7 +9,10 @@ const { queryAppleRunnerSelector } = vi.hoisted(() => ({
 
 vi.mock('../core/runner-selector-query.ts', () => ({ queryAppleRunnerSelector }));
 
-import { bindAppleQuerySelectorRuntime } from '../runtime-selector-query.ts';
+import {
+  bindAppleQuerySelectorRuntime,
+  bindApplePressReadinessRuntime,
+} from '../runtime-selector-query.ts';
 
 beforeEach(() => {
   queryAppleRunnerSelector.mockReset();
@@ -90,33 +93,33 @@ test('a node without a usable rect answers found without a node (the rescue stay
   });
 });
 
-test('authorized-target reads require an app scope before contacting the runner', async () => {
-  const missingScope = {
+function readinessBinding(signal = new AbortController().signal) {
+  return bindApplePressReadinessRuntime({ device: IOS_SIMULATOR, signal });
+}
+
+test('strict readiness requires app scope before contacting the runner', async () => {
+  const input = {
     authorizedTarget: {
-      type: 'Button',
+      type: 9,
       rect: { x: 0, y: 0, width: 10, height: 10 },
       point: { x: 5, y: 5 },
     },
+    execution: {},
   };
   await expect(
-    // @ts-expect-error An authorized target requires its app scope, including for untyped callers.
-    bind().querySelector(missingScope),
+    // @ts-expect-error Untyped callers cannot omit the authorized app scope.
+    readinessBinding().pressReadiness(input),
   ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
   expect(queryAppleRunnerSelector).not.toHaveBeenCalled();
 });
 
-// The proof must be explicit: a stale runner ignoring the new request field cannot authorize input.
-test('authorized target reads reject legacy responses instead of accepting found:true', async () => {
-  queryAppleRunnerSelector.mockResolvedValue({
-    found: true,
-    nodes: [{ rect: { x: 0, y: 0, width: 10, height: 10 }, hittable: true }],
-  });
+test('strict readiness cannot accept a public selector response as native proof', async () => {
   await expect(
-    bind().querySelector({
-      options: { appBundleId: APP },
+    readinessBinding().pressReadiness({
+      appBundleId: APP,
+      execution: {},
       authorizedTarget: {
-        type: 'Button',
-        label: 'Go',
+        type: 9,
         rect: { x: 0, y: 0, width: 10, height: 10 },
         point: { x: 5, y: 5 },
       },
@@ -124,43 +127,79 @@ test('authorized target reads reject legacy responses instead of accepting found
   ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
 });
 
-for (const pressReadiness of ['ready', 'blocked', 'missing', 'ambiguous'] as const) {
-  test(`preserves strict native ${pressReadiness} rather than applying read-selector preference`, async () => {
-    queryAppleRunnerSelector.mockResolvedValue({ pressReadiness, pressReadinessAppBundleId: APP });
+for (const readiness of ['ready', 'blocked', 'missing', 'ambiguous'] as const) {
+  test(`strict native ${readiness} preserves the proof and request scope`, async () => {
+    queryAppleRunnerSelector.mockResolvedValue({
+      pressReadiness: readiness,
+      pressReadinessAppBundleId: APP,
+    });
     const authorizedTarget = {
-      type: 'Button',
+      type: 9,
       rect: { x: 0, y: 0, width: 10, height: 10 },
       point: { x: 5, y: 5 },
     };
     await expect(
-      bind().querySelector({ options: { appBundleId: APP }, authorizedTarget }),
-    ).resolves.toEqual({
-      found: pressReadiness === 'ready' || pressReadiness === 'blocked',
-      pressReadiness,
-      pressReadinessAppBundleId: APP,
-    });
+      readinessBinding().pressReadiness({
+        appBundleId: APP,
+        execution: {
+          requestId: 'native-read',
+          iosXctestrunFile: '/tmp/native.xctestrun',
+          traceLogPath: '/tmp/native-trace.log',
+          verbose: true,
+        },
+        authorizedTarget,
+      }),
+    ).resolves.toEqual({ readiness, appBundleId: APP });
     expect(queryAppleRunnerSelector).toHaveBeenCalledWith(
       IOS_SIMULATOR,
       { authorizedTarget },
       APP,
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      expect.objectContaining({
+        requestId: 'native-read',
+        iosXctestrunFile: '/tmp/native.xctestrun',
+        traceLogPath: '/tmp/native-trace.log',
+        verbose: true,
+        signal: expect.any(AbortSignal),
+      }),
     );
   });
 }
 
-test('native readiness for a different foreground system surface cannot authorize an app target', async () => {
+test('a ready reply from another surface cannot authorize the app target', async () => {
   queryAppleRunnerSelector.mockResolvedValue({
     pressReadiness: 'ready',
     pressReadinessAppBundleId: 'com.apple.springboard',
   });
   await expect(
-    bind().querySelector({
-      options: { appBundleId: APP },
+    readinessBinding().pressReadiness({
+      appBundleId: APP,
+      execution: {},
       authorizedTarget: {
-        type: 'Button',
+        type: 9,
         rect: { x: 0, y: 0, width: 10, height: 10 },
         point: { x: 5, y: 5 },
       },
     }),
-  ).resolves.toEqual({ found: false, pressReadiness: 'surface-mismatch' });
+  ).resolves.toEqual({ readiness: 'surface-mismatch', appBundleId: 'com.apple.springboard' });
 });
+
+test.each(['binding', 'input'] as const)(
+  'an aborted %s signal prevents a strict runner read',
+  async (source) => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      readinessBinding(source === 'binding' ? controller.signal : undefined).pressReadiness({
+        appBundleId: APP,
+        execution: {},
+        signal: source === 'input' ? controller.signal : undefined,
+        authorizedTarget: {
+          type: 9,
+          rect: { x: 0, y: 0, width: 10, height: 10 },
+          point: { x: 5, y: 5 },
+        },
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(queryAppleRunnerSelector).not.toHaveBeenCalled();
+  },
+);

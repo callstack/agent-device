@@ -47,35 +47,38 @@ test('the bridge tree becomes one depth-first raw snapshot with viewport evidenc
     limits,
   );
 
-  assert.deepEqual(result.nodes, [
-    {
-      index: 0,
-      type: 'Application',
-      role: 'Application',
-      rect: { x: 0, y: 0, width: 390, height: 844 },
-      depth: 0,
-      hittable: false,
-    },
-    {
-      index: 1,
-      parentIndex: 0,
-      type: 'Window',
-      role: 'Window',
-      subrole: 'UIWindow',
-      rect: { x: 0, y: 0, width: 390, height: 844 },
-      depth: 1,
-      hittable: true,
-    },
-    {
-      index: 2,
-      parentIndex: 1,
-      type: 'Button',
-      label: 'Continue',
-      rect: { x: 20, y: 700, width: 120, height: 48 },
-      depth: 2,
-      hittable: true,
-    },
-  ]);
+  assert.deepEqual(
+    result.nodes.map(({ nativePressTarget: _internal, ...node }) => node),
+    [
+      {
+        index: 0,
+        type: 'Application',
+        role: 'Application',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+        depth: 0,
+        hittable: false,
+      },
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'Window',
+        role: 'Window',
+        subrole: 'UIWindow',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+        depth: 1,
+        hittable: true,
+      },
+      {
+        index: 2,
+        parentIndex: 1,
+        type: 'Button',
+        label: 'Continue',
+        rect: { x: 20, y: 700, width: 120, height: 48 },
+        depth: 2,
+        hittable: true,
+      },
+    ],
+  );
   assert.deepEqual(result.viewport, {
     kind: 'reported',
     rect: { x: 0, y: 0, width: 390, height: 844 },
@@ -828,19 +831,19 @@ for (const row of traitClassification.cases) {
   });
 }
 
-// Independent numeric wire vocabulary shared with the runner readiness binder; no source parsing.
-test('bridge native element names match the cross-producer golden type table', () => {
-  const names = JSON.parse(
-    fs.readFileSync(
-      new URL('../../../../contracts/fixtures/ios-element-type-names.json', import.meta.url),
-      'utf8',
-    ),
-  ) as string[];
-  assert.equal(names.length, 83);
-  for (const [code, name] of names.entries()) {
+test('bridge binding carries classified numeric native types, including trait promotion', () => {
+  for (const [fields, expected] of [
+    [{ [automationType]: 0 }, 1],
+    [{ [automationType]: 9 }, 9],
+    [{ [automationType]: 34 }, 34],
+    [{ [automationType]: 39 }, 39],
+    [{ [automationType]: 51 }, 51],
+    [{ [application]: 'UIApplication' }, 2],
+    [{ [automationType]: 1, [traits]: '268435456' }, 9],
+  ] as const) {
     const decoded = decodeSnapshotBridgeTree(
       {
-        [automationType]: code,
+        ...fields,
         [label]: 'Control',
         [frame]: { X: 10, Y: 20, Width: 100, Height: 40 },
         [children]: [],
@@ -848,6 +851,22 @@ test('bridge native element names match the cross-producer golden type table', (
       { truncated: false },
       limits,
     );
-    assert.equal(decoded.nodes[0]?.type, name, `native type ${code}`);
+    assert.equal(decoded.nodes[0]?.nativePressTarget?.type, expected);
   }
+});
+
+test('bridge binding omits secure values before presentation', () => {
+  const decoded = decodeSnapshotBridgeTree(
+    {
+      [automationType]: 50,
+      [label]: 'Password',
+      XC_kAXXCAttributeValue: 'private-secret',
+      [frame]: { X: 10, Y: 20, Width: 100, Height: 40 },
+      [children]: [],
+    },
+    { truncated: false },
+    limits,
+  );
+  assert.equal(decoded.nodes[0]?.nativePressTarget?.type, 50);
+  assert.equal(decoded.nodes[0]?.nativePressTarget?.value, undefined);
 });

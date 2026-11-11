@@ -386,7 +386,8 @@ final class CoordinateSpaceTests: XCTestCase {
       index: index, type: type, label: label, identifier: nil, value: nil,
       rect: SnapshotRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height),
       enabled: true, focused: nil, selected: nil, hittable: false,
-      depth: depth, parentIndex: parent, hiddenContentAbove: nil, hiddenContentBelow: nil
+      depth: depth, parentIndex: parent, hiddenContentAbove: nil, hiddenContentBelow: nil,
+      nativePressTarget: type == "Button" ? NativePressTarget(type: 9, identifier: nil, label: label, value: nil, rect: SnapshotRect(rect)) : nil
     )
   }
 
@@ -408,7 +409,7 @@ final class CoordinateSpaceTests: XCTestCase {
       )
       XCTAssertEqual(normalized.count, 4)
       XCTAssertEqual(normalized[3].rect.cgRect, expected.cgRect, testCase.name)
-      XCTAssertEqual(normalized[3].nativePressTarget.rect.cgRect, expected.cgRect, testCase.name)
+      XCTAssertEqual(normalized[3].nativePressTarget?.rect.cgRect, expected.cgRect, testCase.name)
     }
   }
 

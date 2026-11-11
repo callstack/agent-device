@@ -14,7 +14,7 @@ extension CommandType {
       .actionButton, .volumeUp, .volumeDown, .keyboardReturn, .recordStop, .status, .uptime,
       .appState, .pasteboardWrite, .activate, .terminate, .targetReset, .shutdown:
       return .none
-    case .tap, .longPress, .drag, .type, .swipe, .scroll, .findText, .querySelector, .readText,
+    case .tap, .longPress, .drag, .type, .swipe, .scroll, .findText, .querySelector, .pressReadiness, .readText,
       .snapshot, .backInApp, .backSystem, .gesture, .gestureViewport, .appSwitcher,
       .keyboardDismiss, .sequence:
       return .appWindows

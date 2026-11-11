@@ -30,7 +30,10 @@ import {
   bindLocalScreenshotInteractor,
   screenshotRuntimeOperationFacts,
 } from '@agent-device/contracts/screenshot-runtime';
-import { type SelectorObservationRuntimeOperations } from '@agent-device/contracts/selector-observation-runtime';
+import {
+  type SelectorObservationRuntimeOperations,
+  type PressReadinessRuntimeOperations,
+} from '@agent-device/contracts/selector-observation-runtime';
 import { bindLocalTypeTextInteractor } from '@agent-device/contracts/type-text-runtime';
 import { bindLocalTouchInteractor } from '@agent-device/contracts/touch-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
@@ -62,7 +65,10 @@ import { createAppleNavigationOperations } from './navigation/runtime.ts';
 import { createAppleSystemOperations } from './system/runtime.ts';
 import { appleFoldableFacts, createAppleFoldableOperations } from './foldable/runtime.ts';
 import { bindAppleFindTextRuntime, bindAppleSnapshotRuntime } from './runtime-snapshot.ts';
-import { bindAppleQuerySelectorRuntime } from './runtime-selector-query.ts';
+import {
+  bindAppleQuerySelectorRuntime,
+  bindApplePressReadinessRuntime,
+} from './runtime-selector-query.ts';
 import { macOsHelperSurface, type MacOsAppBackend } from '@agent-device/contracts/session';
 import { hostMacOsAppBackend } from './os/macos/app-backend.ts';
 import { macOsNativeBackendFacts } from './os/macos/native-backend-facts.ts';
@@ -275,9 +281,15 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             signal: request.scope.signal,
           }),
       );
+      const pressReadinessOperations: Partial<PressReadinessRuntimeOperations> = whenAdmitted(
+        facts.operations.pressReadiness,
+        () =>
+          bindApplePressReadinessRuntime({ device: request.device, signal: request.scope.signal }),
+      );
       const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = {
         ...appStateOperations,
         ...selectorQueryOperations,
+        ...pressReadinessOperations,
         ...logs.operations,
         ...createAppleAppDeploymentOperations({
           host,

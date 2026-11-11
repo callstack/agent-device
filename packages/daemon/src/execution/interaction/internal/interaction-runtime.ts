@@ -140,7 +140,7 @@ function readOffscreenTargetRescue(
     });
 }
 
-/** Uses only this request's admitted native query; providers and other platforms keep their path. */
+/** Uses only the strict readiness operation admitted by this request's touch owner. */
 function readNativePressReadiness(
   params: InteractionRouteInput & {
     touchExecutor?: BoundTouchExecutor;
@@ -148,8 +148,8 @@ function readNativePressReadiness(
   },
   session: InteractionRuntimeInput['session'],
 ): InteractionRuntimeInput['readPressReadiness'] {
-  const querySelector = params.touchExecutor?.querySelector ?? params.gestures?.querySelector;
-  if (!querySelector || publicPlatformString(session.device) !== 'ios') return undefined;
+  const pressReadiness = params.touchExecutor?.pressReadiness;
+  if (!pressReadiness) return undefined;
   return async (context, authorizedTarget, surfaceBundleId) => {
     const appBundleId = surfaceBundleId ?? session.appBundleId;
     if (!appBundleId)
@@ -157,17 +157,15 @@ function readNativePressReadiness(
         'UNSUPPORTED_OPERATION',
         'Native press readiness requires an authorized app scope',
       );
-    const result = await querySelector({
+    const result = await pressReadiness({
       authorizedTarget,
-      options: { appBundleId },
+      appBundleId,
       execution: runtimeExecutionFromContext(
         params.contextFromFlags(params.req.flags, session.appBundleId, session.trace?.outPath),
       ),
       signal: context.signal,
     });
-    if (!result.pressReadiness)
-      throw new KernelAppError('UNSUPPORTED_OPERATION', 'Native press readiness was not reported');
-    return result.pressReadiness;
+    return result.appBundleId === appBundleId ? result.readiness : 'surface-mismatch';
   };
 }
 
