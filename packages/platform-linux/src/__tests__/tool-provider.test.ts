@@ -293,7 +293,7 @@ test('local Linux desktop provider reports nothing for a launched app that exits
 // An injected executor owns process execution, so the type refuses one without its own launcher:
 // the host-local detached runner must never stand in beside it. The directive fails typecheck if
 // the refusal goes away.
-test('a Linux provider that injects runCommand must also inject launchDetached', () => {
+function compileTimeInjectedExecutorNeedsLauncherProof(): void {
   const runCommand: LinuxToolCommandExecutor = async () => ({
     exitCode: 0,
     stdout: '',
@@ -302,9 +302,9 @@ test('a Linux provider that injects runCommand must also inject launchDetached',
   // @ts-expect-error runCommand without launchDetached
   const withoutLauncher: LinuxToolProviderOverrides = { runCommand };
   const withLauncher: LinuxToolProviderOverrides = { runCommand, launchDetached: launchesNoApp };
-  assert.equal(withoutLauncher.launchDetached, undefined);
-  assert.equal(withLauncher.launchDetached, launchesNoApp);
-});
+  void [withoutLauncher, withLauncher];
+}
+void compileTimeInjectedExecutorNeedsLauncherProof;
 
 test('local Linux desktop provider falls back to pkill when wmctrl is unavailable', async () => {
   const commands: Array<[string, string[], boolean | undefined]> = [];
