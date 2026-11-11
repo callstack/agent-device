@@ -31,10 +31,11 @@ test('a fully covered raw target refuses even without competing descendants', ()
   assert.deepEqual(resolveInteractionTouchPoint([node], node), { kind: 'invalid' });
 });
 
-test('property: targets without competing descendants honor supplied bounds', () => {
+test('property: targets without competing descendants honor measured input bounds', () => {
   fc.assert(
     fc.property(interactionTouchPointScenarioArb, ({ target, bound }) => {
-      const result = resolveInteractionTouchPoint([target], target, { bounds: [bound] });
+      const measured = attachSnapshotNodeInteractionBounds({ ...target }, bound);
+      const result = resolveInteractionTouchPoint([measured], measured);
       if (result.kind !== 'resolved') return;
       assert.ok(containsPoint(bound, result.point));
       assert.ok(containsPoint(target.rect!, result.point));
@@ -329,7 +330,7 @@ test('keeps a parent-owned point inside the supplied viewport bounds', () => {
   ]).nodes;
 
   const resolution = resolveInteractionTouchPoint(nodes, nodes[0]!, {
-    bounds: [{ x: 0, y: 0, width: 100, height: 120 }],
+    parentOwnedBounds: [{ x: 0, y: 0, width: 100, height: 120 }],
   });
 
   assert.equal(resolution.kind, 'resolved');
@@ -358,7 +359,7 @@ test('keeps rounded parent-owned points inside half-pixel viewport bounds', () =
   ]).nodes;
   const bound = { x: 37.5, y: 0, width: 1, height: 80 };
 
-  const resolution = resolveInteractionTouchPoint(nodes, nodes[0]!, { bounds: [bound] });
+  const resolution = resolveInteractionTouchPoint(nodes, nodes[0]!, { parentOwnedBounds: [bound] });
 
   assert.equal(resolution.kind, 'resolved');
   if (resolution.kind === 'resolved') assert.ok(containsPoint(bound, resolution.point));
@@ -367,7 +368,9 @@ test('keeps rounded parent-owned points inside half-pixel viewport bounds', () =
 test('property: resolved parent-owned points stay inside the target and supplied bounds', () => {
   fc.assert(
     fc.property(interactionTouchPointScenarioArb, ({ nodes, target, bound }) => {
-      const resolution = resolveInteractionTouchPoint(nodes, target, { bounds: [bound] });
+      const resolution = resolveInteractionTouchPoint(nodes, target, {
+        parentOwnedBounds: [bound],
+      });
       if (resolution.kind !== 'resolved') return;
       assert.ok(containsPoint(target.rect!, resolution.point));
       assert.ok(containsPoint(bound, resolution.point));
@@ -379,7 +382,9 @@ test('property: resolved parent-owned points stay inside the target and supplied
 test('property: resolved parent-owned points stay outside every competing descendant', () => {
   fc.assert(
     fc.property(interactionTouchPointScenarioArb, ({ nodes, target, bound, competitorRects }) => {
-      const resolution = resolveInteractionTouchPoint(nodes, target, { bounds: [bound] });
+      const resolution = resolveInteractionTouchPoint(nodes, target, {
+        parentOwnedBounds: [bound],
+      });
       if (resolution.kind !== 'resolved') return;
       for (const competitor of competitorRects) {
         assert.equal(containsPoint(competitor, resolution.point), false);
@@ -393,8 +398,8 @@ test('property: touch-point resolution is invariant to node-array permutations',
   fc.assert(
     fc.property(interactionTouchPointScenarioArb, ({ nodes, permutedNodes, target, bound }) => {
       assert.deepEqual(
-        resolveInteractionTouchPoint(permutedNodes, target, { bounds: [bound] }),
-        resolveInteractionTouchPoint(nodes, target, { bounds: [bound] }),
+        resolveInteractionTouchPoint(permutedNodes, target, { parentOwnedBounds: [bound] }),
+        resolveInteractionTouchPoint(nodes, target, { parentOwnedBounds: [bound] }),
       );
     }),
     { numRuns: PROPERTY_RUNS },

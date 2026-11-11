@@ -32,24 +32,24 @@ type PointClearance = { parentEdge: number; competitor: number };
 export function resolveInteractionTouchPoint(
   nodes: readonly SnapshotNode[],
   node: SnapshotNode,
-  options: { bounds?: readonly Rect[] } = {},
+  options: { parentOwnedBounds?: readonly Rect[] } = {},
 ): InteractionTouchPointResolution {
   const targetRect = normalizeRect(node.rect);
   if (!targetRect || !hasArea(targetRect)) return { kind: 'invalid' };
   const inputBounds = readSnapshotNodeInteractionBounds(node);
-  const bounds = inputBounds ? [inputBounds, ...(options.bounds ?? [])] : (options.bounds ?? []);
-  const searchRect = bounds.reduce<Rect | undefined>(
-    (current, bound) => (current ? intersectRects(current, bound) : undefined),
-    targetRect,
-  );
-  if (!searchRect || !hasArea(searchRect)) return { kind: 'invalid' };
-  const center = pointInsideRect(searchRect);
+  const inputRect = inputBounds ? intersectRects(targetRect, inputBounds) : targetRect;
+  if (!inputRect || !hasArea(inputRect)) return { kind: 'invalid' };
+  const center = pointInsideRect(inputRect);
 
   const competitors = collectInteractiveDescendantRects(nodes, node, targetRect);
   if (competitors.length === 0) {
     return { kind: 'resolved', point: center, strategy: 'center' };
   }
 
+  const searchRect = (options.parentOwnedBounds ?? []).reduce<Rect | undefined>(
+    (current, bound) => (current ? intersectRects(current, bound) : undefined),
+    inputRect,
+  );
   const point = searchRect
     ? findNearestParentOwnedPoint(targetRect, searchRect, center, competitors)
     : null;

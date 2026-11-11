@@ -117,7 +117,7 @@ export function resolveNodeTouchPoint(
   const effectiveViewport = visibility.resolveEffectiveViewport(node);
   const rootViewport = node.rect ? visibility.resolveViewport(node.rect) : null;
   const resolution = resolveInteractionTouchPoint(nodes, node, {
-    bounds: [effectiveViewport, rootViewport].filter((rect) => rect !== null),
+    parentOwnedBounds: [effectiveViewport, rootViewport].filter((rect) => rect !== null),
   });
   if (resolution.kind === 'resolved') return resolution.point;
   if (resolution.kind === 'invalid') {
