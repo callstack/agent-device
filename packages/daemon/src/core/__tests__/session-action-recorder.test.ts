@@ -935,3 +935,66 @@ test('a literal echoed only as an object key does not make its placeholder live'
   expect(echo?.result?.attributes).toEqual({ '${FOO}': 'bar' });
   expect(echo?.livePlaceholders ?? []).toEqual([]);
 });
+test.each(['field', 'payload', 'multi'])(
+  'echo placeholders fit the %s annotation when written',
+  async (scenario) => {
+    const { formatPortableActionLine, formatTargetAnnotationLines, parseReplayScriptDetailed } =
+      await import('@agent-device/ad-script');
+    const session = makeIosSession('default');
+    recordAction(session, {
+      command: 'fill',
+      positionals: ['id="input"', 'bob'],
+      flags: { recordAs: 'USERNAME' },
+      result: {},
+    });
+    const common = {
+      role: 'button',
+      sibling: 0,
+      viewportOrder: 0,
+      verification: 'verified' as const,
+    };
+    const fieldEvidence = { ...common, id: 'field', label: `${'x'.repeat(253)}bob`, ancestry: [] };
+    const payloadEvidence = {
+      ...common,
+      id: 'payload',
+      verification: 'unverifiable' as const,
+      label: 'bob',
+      ancestry: Array.from({ length: 8 }, () => ({ role: 'group', label: '\\'.repeat(220) })),
+      scrollRegion: { role: 'group', label: '\\'.repeat(40) },
+      rect: { x: 0, y: 0, width: 1, height: 1 },
+    };
+    payloadEvidence.scrollRegion.label += 'x'.repeat(
+      4096 - Buffer.byteLength(JSON.stringify(payloadEvidence)),
+    );
+    expect(Buffer.byteLength(fieldEvidence.label)).toBe(256);
+    expect(Buffer.byteLength(JSON.stringify(payloadEvidence))).toBe(4096);
+    const target =
+      scenario === 'multi'
+        ? { targetEvidences: { source: fieldEvidence, destination: payloadEvidence } }
+        : { targetEvidence: scenario === 'field' ? fieldEvidence : payloadEvidence };
+    const selected = recordAction(session, {
+      command: scenario === 'multi' ? 'drag' : 'click',
+      positionals: scenario === 'multi' ? ['id="field"', 'id="payload"'] : ['id="field"'],
+      flags: {},
+      result: {},
+      ...target,
+    })!;
+    const script = [
+      ...formatTargetAnnotationLines(selected),
+      formatPortableActionLine(selected),
+    ].join('\n');
+    const parsed = parseReplayScriptDetailed(script).actions;
+    const evidence =
+      scenario === 'multi' ? parsed[0]?.targetEvidences?.source : parsed[0]?.targetEvidence;
+    if (scenario !== 'payload') {
+      expect(evidence).toMatchObject({ id: 'field', verification: 'unverifiable' });
+      expect(evidence?.label).toBeUndefined();
+    }
+    const payload = scenario === 'multi' ? parsed[0]?.targetEvidences?.destination : evidence;
+    if (scenario !== 'field') {
+      expect(payload).toMatchObject({ id: 'payload', verification: 'unverifiable' });
+      expect(payload?.rect).toBeUndefined();
+      expect(payload?.label).toBe('${USERNAME}');
+    }
+  },
+);

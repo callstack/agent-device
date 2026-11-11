@@ -162,8 +162,49 @@ function buildRectObject(rect: TargetRect): Record<string, unknown> {
   return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
 }
 
-export function serializeTargetAnnotationV1(evidence: TargetAnnotationV1): string {
+export function serializeRawTargetAnnotationV1(evidence: TargetAnnotationV1): string {
   return JSON.stringify(buildCanonicalTargetAnnotationObject(evidence));
+}
+
+function fitsTargetAnnotation(evidence: TargetAnnotationV1): boolean {
+  const fields = [
+    evidence.role,
+    evidence.id,
+    evidence.label,
+    ...evidence.ancestry.flatMap((entry) => [entry.role, entry.label]),
+    evidence.scrollRegion?.role,
+    evidence.scrollRegion?.id,
+    evidence.scrollRegion?.label,
+  ];
+  return (
+    fields.every(
+      (field) => field === undefined || utf8ByteLength(field) <= TARGET_ANNOTATION_MAX_FIELD_BYTES,
+    ) &&
+    utf8ByteLength(serializeRawTargetAnnotationV1(evidence)) <= TARGET_ANNOTATION_MAX_PAYLOAD_BYTES
+  );
+}
+
+function fitTargetAnnotation(evidence: TargetAnnotationV1): TargetAnnotationV1 {
+  if (fitsTargetAnnotation(evidence)) return evidence;
+  const candidate = { ...evidence, verification: 'unverifiable' as const };
+  const degradations: readonly ((target: TargetAnnotationV1) => void)[] = [
+    (target) => delete target.rect,
+    (target) => delete target.scrollRegion,
+    (target) => {
+      target.ancestry = [];
+    },
+    (target) => delete target.label,
+  ];
+  for (const degrade of degradations) {
+    if (fitsTargetAnnotation(candidate)) return candidate;
+    degrade(candidate);
+  }
+  if (fitsTargetAnnotation(candidate)) return candidate;
+  throw new Error('target annotation cannot fit with role and id retained');
+}
+
+export function serializeTargetAnnotationV1(evidence: TargetAnnotationV1): string {
+  return serializeRawTargetAnnotationV1(fitTargetAnnotation(evidence));
 }
 
 export function formatTargetAnnotationCommentLine(evidence: TargetAnnotationV1): string {
@@ -172,8 +213,8 @@ export function formatTargetAnnotationCommentLine(evidence: TargetAnnotationV1):
 
 export function serializeMultiTargetAnnotationV1(evidence: MultiTargetAnnotationV1): string {
   return JSON.stringify({
-    source: buildCanonicalTargetAnnotationObject(evidence.source),
-    destination: buildCanonicalTargetAnnotationObject(evidence.destination),
+    source: buildCanonicalTargetAnnotationObject(fitTargetAnnotation(evidence.source)),
+    destination: buildCanonicalTargetAnnotationObject(fitTargetAnnotation(evidence.destination)),
   });
 }
 

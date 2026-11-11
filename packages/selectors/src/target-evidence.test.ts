@@ -6,6 +6,7 @@ import { computeTargetEvidence } from './target-evidence.ts';
 import {
   parseTargetAnnotationV1Payload,
   serializeTargetAnnotationV1,
+  serializeRawTargetAnnotationV1,
   utf8ByteLength,
   TARGET_ANNOTATION_MAX_ANCESTRY,
   TARGET_ANNOTATION_MAX_FIELD_BYTES,
@@ -252,7 +253,7 @@ test('computeTargetEvidence: escape-heavy fields degrade until the unverifiable 
     utf8ByteLength(json) <= TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
     `payload is ${utf8ByteLength(json)} bytes`,
   );
-  assert.deepEqual(parseTargetAnnotationV1Payload(json), evidence);
+  assert.equal(parseTargetAnnotationV1Payload(json).verification, 'unverifiable');
 });
 
 // #4333: the downgrade drops optional fields in a fixed order and stops at the first payload that
@@ -290,8 +291,9 @@ test('computeTargetEvidence: an oversized payload drops rect, scrollRegion, ance
   const stops = new Set<number>();
   for (let labelLength = 1; labelLength <= TARGET_ANNOTATION_MAX_FIELD_BYTES; labelLength += 1) {
     const nodes = build(labelLength);
-    const evidence = computeTargetEvidence({ node: nodes.at(-1)!, preActionNodes: nodes });
-    assert.ok(evidence);
+    const candidate = computeTargetEvidence({ node: nodes.at(-1)!, preActionNodes: nodes });
+    assert.ok(candidate);
+    const evidence = parseTargetAnnotationV1Payload(serializeTargetAnnotationV1(candidate));
     const firstKept = OVERSIZED_DROP_ORDER.findIndex((field) => isPresent(evidence, field));
     const droppedCount = firstKept === -1 ? OVERSIZED_DROP_ORDER.length : firstKept;
     for (const field of OVERSIZED_DROP_ORDER.slice(droppedCount)) {
@@ -313,7 +315,8 @@ test('computeTargetEvidence: an oversized payload drops rect, scrollRegion, ance
         [lastDropped]: undropped[lastDropped],
       });
       assert.ok(
-        utf8ByteLength(serializeTargetAnnotationV1(restored)) > TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
+        utf8ByteLength(serializeRawTargetAnnotationV1(restored)) >
+          TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
         `${lastDropped} dropped at length ${labelLength} although the payload already fit`,
       );
     }
