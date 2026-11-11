@@ -1,4 +1,5 @@
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
+import type { IosViewportEvidence } from './ios-snapshot.ts';
 
 /**
  * Capture-local clickability facts for consumers that reproduce Maestro's private
@@ -32,12 +33,50 @@ export type SnapshotOcclusionContextEvidence = {
 export type SnapshotTextInputGeometry = Readonly<{ rects: readonly Rect[] }>;
 
 type SnapshotPrivateEvidence = {
+  viewport?: IosViewportEvidence;
   textInputGeometry?: SnapshotTextInputGeometry;
   clickability?: SnapshotClickabilityEvidence;
   occlusionContext?: SnapshotOcclusionContextEvidence;
 };
 
 const privateEvidenceBySnapshotObject = new WeakMap<object, SnapshotPrivateEvidence>();
+
+/** Refuses coordinate-derived input when the capture could not establish its screen origin. */
+export async function assertSnapshotScreenOrigin(owner: object, label: string): Promise<void> {
+  const viewport = readSnapshotViewportEvidence(owner);
+  if (viewport && viewport.kind !== 'reported') {
+    const { AppError, discloseDispatch } = await import('@agent-device/kernel/errors');
+    throw discloseDispatch(
+      new AppError('COMMAND_FAILED', `${label} has no established screen-coordinate origin`, {
+        reason: 'window-origin-unknown',
+        hint: 'Take a fresh snapshot after the accessibility channel recovers, or use screenshot to choose screen coordinates.',
+      }),
+      'no',
+    );
+  }
+}
+
+/** The producer's viewport authority for this exact capture, retained outside public node data. */
+export function attachSnapshotViewportEvidence<T extends object>(
+  owner: T,
+  viewport: IosViewportEvidence,
+): T {
+  return attachSnapshotPrivateEvidence(owner, { viewport });
+}
+
+function readSnapshotViewportEvidence(
+  owner: object | null | undefined,
+): IosViewportEvidence | undefined {
+  return owner ? privateEvidenceBySnapshotObject.get(owner)?.viewport : undefined;
+}
+
+export function copySnapshotViewportEvidence<T extends object>(
+  source: object | null | undefined,
+  target: T,
+): T {
+  const viewport = readSnapshotViewportEvidence(source);
+  return viewport ? attachSnapshotViewportEvidence(target, viewport) : target;
+}
 
 function attachSnapshotPrivateEvidence<T extends object>(
   owner: T,

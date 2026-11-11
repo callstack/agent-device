@@ -51,8 +51,13 @@ The fold cuts screens under a modal only where the producer states containment. 
 **Geometry.** One published capture publishes one space: the app's orientation space.
 The producer settles it in one pass after acquisition, because a merged tree carries no axis that a downstream reader could use.
 A window declares its subtree's space from its own box. Other nodes inherit it from the window above them.
-If no space can be named, the capture publishes reported geometry, and consumers fail open.
+If no rotation can be named, the capture publishes reported geometry, and consumers fail open on rotation.
 A placed iPad window publishes screen space in points, because its viewport, its screenshot, and the digitizer use that space.
+The acquisition's `reported`, `derived`, or `missing` viewport evidence survives the runner boundary and capture transformations.
+Only `reported` establishes the screen origin for capture-derived input.
+A root-derived validation box preserves readable fallback trees but cannot upgrade unknown origin evidence.
+Element mutations, mutating find, Maestro selector geometry, and snapshot-derived gesture bounds refuse an unknown origin with `window-origin-unknown` and `dispatched: no` before input.
+Independent native queries and authored screen coordinates retain their own authorities.
 
 **System surfaces.** `contracts/fixtures/ios-system-surface-hosts.json` is the closed registry of system hosts that present UI out of the app's process.
 Observe and operate a registered host in place. Never activate it. `open` refuses to launch it.

@@ -14,6 +14,7 @@ Completed process history is in git history.
 - Prove every non-waived cell through a tagged contract scenario.
 - Delegation-on-error does not prove success-path parity.
 - On the native-ref path, before `tapTarget`/`fillTarget`, check offscreen, occlusion, and non-hittable against the node from the daemon snapshot.
+- Explicitly unanchored capture geometry cannot authorize input. Check its viewport authority before point resolution, visibility rescue, or native-ref dispatch. Mutating find, Maestro selector coordinates, and snapshot-derived gesture bounds use the same check.
 - The Apple runner does not resend a mutating command whose first send may have run.
 - Multiple mutating selector matches collapse only if they form one ancestor–descendant chain and every member resolves to the same actionable node. Otherwise, the mutation fails with `AMBIGUOUS_MATCH`. Maestro's explicit expected-point/non-hittable compatibility path stays separate.
 - Keep synthesized iOS gesture policy outside the element dispatch-path matrix.

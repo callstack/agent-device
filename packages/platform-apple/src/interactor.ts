@@ -398,6 +398,11 @@ function assertReportedRunnerSnapshotNodes(
  */
 function runnerSnapshotWarnings(result: AppleRunnerSnapshotResult): string[] {
   const warnings: string[] = [];
+  if (result.viewportEvidence && result.viewportEvidence.kind !== 'reported') {
+    warnings.push(
+      'This snapshot cannot establish the window origin on screen. Coordinate-derived element interactions are unavailable until a capture measures the viewport.',
+    );
+  }
   if (!result.quality && result.message) warnings.push(result.message);
   if (result.systemSurface)
     warnings.push(iosSystemSurfaceDisclosure(result.systemSurface.bundleId));

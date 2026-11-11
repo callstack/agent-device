@@ -113,6 +113,13 @@ In the runner, the viewport is a declared fact, not a rectangle.
 - `missing(reason)`.
 
 Only `reported` carries an orientation, so only `reported` can anchor a rotation.
+Only `reported` establishes a screen origin for coordinates derived from this capture.
+The runner carries the acquisition's viewport evidence across the wire.
+The host can validate a locally presented tree against its root when acquisition evidence is missing.
+That validation box does not establish a screen origin or a public screen viewport.
+Capture-private viewport evidence survives compaction, session storage, and session cloning.
+Coordinate-derived mutations refuse `derived` or `missing` authority with `window-origin-unknown` and `dispatched: no`.
+Read-only observations remain available.
 If the viewport has no box, presentation skips the clip.
 If the viewport has no box, a node whose actionability depends on containment has no wire `hittable`.
 Disabled or degenerate nodes stay `false`.
@@ -158,7 +165,8 @@ The capture publishes reported geometry when no space can be named:
 - The platform did not report an interface orientation.
 - The app frame is too close to square to tell it from its own quarter turn.
 
-Consumers fail open on that geometry.
+Consumers fail open on rotation they cannot name.
+An explicitly unknown screen origin does not authorize coordinate-derived input.
 
 `SnapshotCoordinateSpace.swift` holds one rotation table that capture shares with synthesized dispatch.
 Both languages replay it against `contracts/fixtures/window-coordinate-space.json`.

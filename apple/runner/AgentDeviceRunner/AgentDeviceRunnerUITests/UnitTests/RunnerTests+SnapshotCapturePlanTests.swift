@@ -373,6 +373,42 @@ extension RunnerTests {
     XCTAssertNil(payload.snapshotQuality?.timing)
   }
 
+  func testSnapshotViewportAuthoritySurvivesOutcomeStamping() throws {
+    let box = CGRect(x: 241, y: 224, width: 551, height: 813)
+    let options = PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: true)
+    let cases: [(SnapshotViewport, String, String?)] = [
+      (.reported(box: box), "reported", nil),
+      (.derived(box: box), "derived", nil),
+      (.missing(reason: .notProvided), "missing", "not-provided"),
+    ]
+    for (viewport, kind, reason) in cases {
+      let acquisition = SnapshotAcquisition(
+        hint: SnapshotPresentation.captureHint(for: options),
+        nodes: [], truncated: false, effectiveDepth: nil, viewport: viewport
+      )
+      let presented = SnapshotPresentation.presentRaw(acquisition, options: options)
+      let payload = stampedSnapshotPayload(
+        Self.makeSnapshotBackendCapture(from: presented, acquired: acquisition),
+        backend: .privateAX, state: .recovered, reason: nil
+      )
+      let encoded = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: JSONEncoder().encode(payload)) as? [String: Any]
+      )
+      let evidence = try XCTUnwrap(encoded["snapshotViewport"] as? [String: Any])
+      XCTAssertEqual(evidence["kind"] as? String, kind)
+      XCTAssertEqual(evidence["reason"] as? String, reason)
+      if kind == "missing" {
+        XCTAssertNil(evidence["rect"])
+      } else {
+        let rect = try XCTUnwrap(evidence["rect"] as? [String: Any])
+        XCTAssertEqual(rect["x"] as? Double, 241)
+        XCTAssertEqual(rect["y"] as? Double, 224)
+        XCTAssertEqual(rect["width"] as? Double, 551)
+        XCTAssertEqual(rect["height"] as? Double, 813)
+      }
+    }
+  }
+
   /// The raw plan is derived from what each backend can actually serve, not from a second
   /// hand-maintained list. Non-vacuity: flipping `querySweep.supportsRawProjection` to true adds it
   /// to the plan and fails the first two assertions — which is exactly the shape of #1797 D4, a

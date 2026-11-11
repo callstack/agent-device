@@ -10,6 +10,7 @@ import {
 } from '@agent-device/maestro';
 import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
+import { assertSnapshotScreenOrigin } from '@agent-device/contracts/capture';
 import { stripUndefined } from '@agent-device/kernel/record';
 import { executeRunScriptFile } from './run-script-execution.ts';
 import { captureMaestroComparisonScreenshot } from './maestro-comparison-screenshot.ts';
@@ -300,6 +301,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
             input.durationMs,
             platform,
           );
+          if (gesture) await assertSnapshotScreenOrigin(snapshot.nodes, 'Maestro scroll target');
           await invokeMutation(
             gesture
               ? { kind: 'swipe', ...gesture }

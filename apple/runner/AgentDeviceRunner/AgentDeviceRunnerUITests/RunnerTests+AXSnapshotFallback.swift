@@ -274,7 +274,8 @@ extension RunnerTests {
   }
 
   /// The app's reported viewport when XCTest can read it, else the bridge's own root frame declared
-  /// `.derived`, which cannot anchor a rotation: rotated system surfaces then stay as reported (#2612).
+  /// `.derived`, which cannot establish a screen origin or anchor a rotation. The wire retains this
+  /// uncertainty, so local coordinates cannot authorize input (#4399).
   private func privateAXSnapshotViewport(
     app: XCUIApplication,
     bundleId: String?,

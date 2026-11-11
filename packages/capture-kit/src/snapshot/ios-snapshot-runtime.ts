@@ -1,5 +1,6 @@
 import {
   attachSnapshotTextInputGeometry,
+  attachSnapshotViewportEvidence,
   type SnapshotTextInputGeometry,
 } from '@agent-device/contracts/snapshot-private-evidence';
 import { isFillableType, normalizeType } from '@agent-device/contracts/snapshot';
@@ -50,10 +51,13 @@ export function presentIosSnapshotAcquisition(
   try {
     const textInputGeometry = acquiredTextInputGeometry(acquired.acquisition);
     const presentation = publishIosSnapshot(input, request);
-    // The engine returns the box its regular fold validated against and no box for raw; this seam
-    // only passes it through the shared construction guard (#3182).
-    const validatedViewport = snapshotViewportSizeFrom(presentation.validatedViewport);
+    // A local box can validate the fold without establishing a screen-coordinate origin.
+    const validatedViewport =
+      acquired.acquisition.viewport.kind === 'reported'
+        ? snapshotViewportSizeFrom(presentation.validatedViewport)
+        : undefined;
     const nodes = [...presentation.payload.nodes];
+    attachSnapshotViewportEvidence(nodes, acquired.acquisition.viewport);
     if (textInputGeometry) attachSnapshotTextInputGeometry(nodes, textInputGeometry);
     return stampSnapshotIdentity(
       {

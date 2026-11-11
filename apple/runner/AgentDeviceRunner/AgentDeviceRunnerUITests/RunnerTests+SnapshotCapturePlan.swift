@@ -98,7 +98,11 @@ extension RunnerTests {
     acquired acquisition: SnapshotAcquisition
   ) -> SnapshotBackendCapture {
     SnapshotBackendCapture(
-      payload: DataPayload(nodes: result.nodes, truncated: result.truncated),
+      payload: DataPayload(
+        nodes: result.nodes,
+        truncated: result.truncated,
+        snapshotViewport: SnapshotViewportPayload(acquisition.viewport)
+      ),
       effectiveDepth: result.effectiveDepth,
       customActions: result.customActions,
       qualityPayload: result.qualityNodes.map {
@@ -625,6 +629,7 @@ extension RunnerTests {
       },
       snapshotQuality: quality,
       snapshotQualityNotes: capture.qualityNotes.isEmpty ? nil : capture.qualityNotes,
+      snapshotViewport: payload.snapshotViewport,
       presentedSurface: capture.presentedSurface,
       keyboard: capture.keyboardBand,
       runnerFatal: payload.runnerFatal,

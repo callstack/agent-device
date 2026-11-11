@@ -501,6 +501,7 @@ struct DataPayload: Codable {
   var qualityPayload: SnapshotQualityPayload? = nil
   var snapshotQuality: SnapshotQuality?
   var snapshotQualityNotes: [SnapshotQualityNote]? = nil
+  var snapshotViewport: SnapshotViewportPayload?
   /// Set when the capture describes an in-place system surface, not the app itself (#2438).
   var systemSurface: SystemSurfaceProvenancePayload?
   /// Whether this capture read a modal presentation over the app's own content (#3565). The runner's
@@ -642,6 +643,30 @@ struct SnapshotQualityPayload: Codable {
     try container.encode(nodes, forKey: .nodes)
     try container.encode(truncated, forKey: .truncated)
     try container.encodeNil(forKey: .scope)
+  }
+}
+
+/// Preserves the acquisition's viewport authority across the runner boundary.
+struct SnapshotViewportPayload: Codable {
+  let kind: String
+  let rect: SnapshotRect?
+  let reason: String?
+
+  init(_ viewport: SnapshotViewport) {
+    switch viewport {
+    case .reported(let box, _):
+      kind = "reported"
+      rect = SnapshotRect(box.rect)
+      reason = nil
+    case .derived(let box):
+      kind = "derived"
+      rect = SnapshotRect(box.rect)
+      reason = nil
+    case .missing(let missingReason):
+      kind = "missing"
+      rect = nil
+      reason = missingReason == .invalid ? "invalid" : "not-provided"
+    }
   }
 }
 

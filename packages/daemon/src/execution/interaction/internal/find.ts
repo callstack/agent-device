@@ -4,6 +4,7 @@ import type {
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
 import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
+import { assertSnapshotScreenOrigin } from '@agent-device/contracts/capture';
 import {
   isReadOnlyFindAction,
   checkFindArgs,
@@ -436,6 +437,7 @@ async function dispatchFocusForFindMatch(
   // The same touch-point and keyboard decisions the acting paths run (#2589/#2622/#3734): this seam
   // dispatches the point itself instead of re-entering the interaction leaf, so they have to run here.
   try {
+    await assertSnapshotScreenOrigin(match.tree.nodes, `Ref ${targetRef}`);
     coords = resolveNodeTouchPoint(target, match.tree.nodes, {
       invalidMessage: `Ref ${targetRef} has no usable bounds`,
       blockedTargetLabel: `Ref ${targetRef}`,

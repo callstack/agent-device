@@ -6,8 +6,107 @@ import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { IosSystemSurfaceProvenance } from '@agent-device/contracts/ios-system-surface';
 import type { AppleRunnerSnapshotResult } from './snapshot-presentation.ts';
 import { presentAppleRunnerSnapshot, readAppleSnapshotResult } from './snapshot-presentation.ts';
+import {
+  assertSnapshotScreenOrigin,
+  attachSnapshotViewportEvidence,
+  copySnapshotViewportEvidence,
+} from '@agent-device/contracts/capture';
 
 const NO_VIEWPORT_ROOT = { index: 0, type: 'Application', label: 'App' };
+
+test.each([
+  {
+    snapshotViewport: { kind: 'derived', rect: { x: 0, y: 0, width: 551, height: 813 } },
+    expected: { kind: 'derived', rect: { x: 0, y: 0, width: 551, height: 813 } },
+  },
+  {
+    snapshotViewport: { kind: 'missing', reason: 'not-provided' },
+    expected: { kind: 'missing', reason: 'not-provided' },
+  },
+  {
+    snapshotViewport: { kind: 'missing', reason: 'invalid' },
+    expected: { kind: 'missing', reason: 'invalid' },
+  },
+  {
+    snapshotViewport: { kind: 'reported', rect: { x: 0, y: 0, width: 0, height: 813 } },
+    expected: { kind: 'missing', reason: 'invalid' },
+  },
+  { snapshotViewport: null, expected: { kind: 'missing', reason: 'invalid' } },
+])(
+  'explicit unknown viewport stays observable without gaining screen authority: %j',
+  async ({ snapshotViewport, expected }) => {
+    const read = readAppleSnapshotResult(
+      {
+        snapshotViewport,
+        nodes: [
+          { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 551, height: 813 } },
+          {
+            index: 1,
+            parentIndex: 0,
+            type: 'Button',
+            identifier: 'action',
+            rect: { x: 240, y: 90, width: 220, height: 42 },
+            hittable: true,
+          },
+        ],
+      },
+      IOS_SIMULATOR,
+    );
+    assert.deepEqual(read.viewportEvidence, expected);
+    const presented = presentAppleRunnerSnapshot('device-1', undefined, read);
+    assert.equal(
+      presented.nodes.some((node) => node.identifier === 'action'),
+      true,
+    );
+    assert.equal(presented.viewport, undefined);
+    await assert.rejects(
+      assertSnapshotScreenOrigin(presented.nodes, 'Captured action'),
+      (error) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'COMMAND_FAILED');
+        assert.equal(error.details?.reason, 'window-origin-unknown');
+        assert.equal(error.details?.dispatched, 'no');
+        return true;
+      },
+    );
+  },
+);
+
+test('reported runner viewport retains screen authority through the wire reader and presenter', async () => {
+  const rect = { x: 241, y: 224, width: 551, height: 813 };
+  const read = readAppleSnapshotResult(
+    {
+      snapshotViewport: { kind: 'reported', rect },
+      nodes: [
+        { index: 0, type: 'Application', rect },
+        {
+          index: 1,
+          parentIndex: 0,
+          type: 'Button',
+          identifier: 'action',
+          rect: { x: 481, y: 314, width: 220, height: 42 },
+          hittable: true,
+        },
+      ],
+    },
+    IOS_SIMULATOR,
+  );
+  assert.deepEqual(read.viewportEvidence, { kind: 'reported', rect });
+  const presented = presentAppleRunnerSnapshot('device-1', undefined, read);
+  assert.deepEqual(presented.viewport, { width: 551, height: 813 });
+  assert.deepEqual(presented.nodes.find((node) => node.identifier === 'action')?.rect, {
+    x: 481,
+    y: 314,
+    width: 220,
+    height: 42,
+  });
+  const priorUnknown = attachSnapshotViewportEvidence([], {
+    kind: 'missing',
+    reason: 'not-provided',
+  });
+  copySnapshotViewportEvidence(presented.nodes, priorUnknown);
+  await assert.doesNotReject(assertSnapshotScreenOrigin(priorUnknown, 'Captured action'));
+});
 
 function presentSparse(overrides: Partial<AppleRunnerSnapshotResult> = {}) {
   return () =>

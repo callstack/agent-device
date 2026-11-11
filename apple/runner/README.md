@@ -106,6 +106,10 @@ Probe work that outlives its slice belongs to the capture that started it, so th
 Every bounded main-thread dispatch that outlives its slice counts as occupying the main thread.
 Thus, if a viewport read takes too long, the plan skips the sweep instead of queueing it.
 
+Private-AX fallback keeps the viewport authority it acquired.
+When a penalty suppresses the XCTest viewport read, its root-derived box does not establish a screen origin.
+The payload carries that uncertainty without a new probe or a changed channel budget.
+
 A failure that XCTest records ends `testCommand` when the main-thread block that recorded it returns, whatever `continueAfterFailure` says.
 Mute XCTest's AX-server rejection in both fetch wordings, so XCTest does not record it.
 Then the runner session continues and keeps its per-bundle penalty and depth memory.
@@ -114,6 +118,9 @@ Then the runner session continues and keeps its per-bundle penalty and depth mem
 
 `XCUIElement.frame` and the app-anchored `XCUICoordinate` use screen space on a placed iPad window.
 `XCUIElementSnapshot.frame` uses window content space.
+Capture-plan responses retain `reported`, `derived`, or `missing` viewport evidence through outcome stamping.
+Only `reported` establishes the screen origin for capture-derived input.
+An unanchored capture remains readable, but its element mutations refuse with `window-origin-unknown` and `dispatched: no`.
 The text-entry probe owns one screen box, `ResolvedTextEntryInput.frameOnScreen`.
 A command reads the vector from the resolved window's box once, when it builds its target.
 The readiness retap reads the vector again on its own branch.
