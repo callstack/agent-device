@@ -21,6 +21,9 @@ function fixture(failingScript?: string) {
   // The trailing `--` lets a stub take forwarded flags such as fallow's `--base`.
   for (const script of Object.keys(pkg.scripts))
     pkg.scripts[script] = 'node -e "process.exit(0)" --';
+  // Like fallow itself, the stub fails when it is handed a --base ref this clone does not have.
+  pkg.scripts['check:fallow'] =
+    "node -e \"const i = process.argv.indexOf('--base'); if (i > 0) require('child_process').execFileSync('git', ['rev-parse', '--verify', process.argv[i + 1]])\" --";
   if (failingScript) pkg.scripts[failingScript] = 'node -e "process.exit(7)"';
   fs.writeFileSync(path.join(cwd, 'package.json'), JSON.stringify(pkg));
   fs.writeFileSync(

@@ -467,6 +467,7 @@ test('every catalog command resolves against the real package scripts', () => {
     '--base',
     'origin/dev',
   ]);
+  assert.deepEqual(resolveCommand(fallow, scripts, undefined), ['pnpm', 'run', 'check:fallow']);
 });
 
 test('the full plan is the catalog without vitest-related, host-locked suites last', () => {
