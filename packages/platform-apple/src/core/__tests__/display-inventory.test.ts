@@ -39,6 +39,7 @@ import {
   readPanelPower,
   resolveAppleCaptureDisplay,
   queryAppleDisplayInventory,
+  panelContentRotation,
   resolveAppleCaptureTarget,
   type AppleDeviceDisplay,
 } from '../display-inventory.ts';
@@ -359,6 +360,18 @@ describe('resolveAppleCaptureDisplay', () => {
       (options?.timeoutMs ?? 0) > 0 && (options?.timeoutMs ?? 0) < 20_000,
       `probe budget must stay below the 20s screenshot deadline, got ${options?.timeoutMs}`,
     );
+  });
+});
+
+describe('panelContentRotation', () => {
+  test('parses each panel content rotation and nothing else', () => {
+    assert.equal(panelContentRotation('rot0'), 'portrait');
+    assert.equal(panelContentRotation('rot90'), 'landscape-right');
+    assert.equal(panelContentRotation('rot180'), 'portrait-upside-down');
+    assert.equal(panelContentRotation('rot270'), 'landscape-left');
+    for (const value of ['unknown', 'constructor', 'rot45', '']) {
+      assert.equal(panelContentRotation(value), undefined);
+    }
   });
 });
 

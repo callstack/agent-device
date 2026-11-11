@@ -13,6 +13,7 @@ import {
 } from '../core/config.ts';
 import { readAppleDeviceOrientation } from '../core/device-orientation.ts';
 import {
+  panelContentRotation,
   queryAppleDisplayInventory,
   type AppleDeviceDisplay,
   type AppleDisplayInventory,
@@ -21,9 +22,8 @@ import { simulatorAddressFor } from '../core/simctl.ts';
 import { createFoldHelper, type FoldHelper, type FoldableRotation } from './fold-helper.ts';
 import {
   measuredPanelPickerOffset,
-  nextPickerValue,
   panelPickerOffset,
-  panelRotationForOrientation,
+  pickerValueForTarget,
   type PanelQuarterTurn,
 } from './picker-delta.ts';
 import { appleFoldableFacts } from './runtime.ts';
@@ -35,7 +35,7 @@ const ORIENTATION_UNVERIFIED_HINT =
   'The simulator HID command completed, but CoreDevice did not report the new orientation. Read it with xcrun devicectl device orientation get --device <udid>, then retry.';
 
 const SCOPED_ORIENTATION_UNVERIFIED_HINT =
-  'Rotation was dispatched through the fold helper, which needs relative-picker compensation in a scoped simulator set where CoreDevice cannot read orientation, and the lit panel did not settle on the requested orientation. Take a screenshot to see the screen, then retry.';
+  'In a scoped simulator set the rotation goes through the fold helper and only the lit panel can confirm it. The lit panel did not show the requested orientation, or the simulator never reported a single lit panel; the app in front may not support that orientation. Take a screenshot to see the screen, then retry.';
 
 /** Resolved panel counts are hardware facts, so each simulator is probed once per daemon. */
 const multiPanelByDevice = new Map<string, boolean>();
@@ -164,14 +164,14 @@ export async function setAppleFoldableOrientation(
 /**
  * Rotates a foldable simulator in a scoped set, where only the fold helper can dispatch and
  * only its panel table can confirm. Measured on iPhone Duo, the lit panel reads the
- * `orientation-picker-control` value plus a fixed per-panel offset (outer panel 0, inner
- * panel +90), so one absolute dispatch of the target lands a quarter-turn away on the inner
- * panel and looks one command late. This loop reads the lit panel, dispatches the picker
- * value {@link nextPickerValue} chooses, and re-reads until the panel table reports the
- * target: one dispatch when the lit panel's offset is the measured one, at most two when the
- * first dispatch has to calibrate it. A repeat of the showing orientation is a read-only
- * success. The picker state is deliberately not kept between commands: a fold in between can
- * light the other panel, whose offset differs, and the measured offset covers that case.
+ * `orientation-picker-control` value plus a per-panel offset (outer panel 0, inner panel +90),
+ * so one absolute dispatch of the target lands a quarter-turn away on the inner panel and looks
+ * one command late. One bounded loop reads the lit panel and, until it shows the target,
+ * dispatches `target - offset`: the offset comes from this command's last dispatch and a fresh
+ * reading of the same panel once there is one, and from the measured table before that. A read
+ * that names no single lit panel neither confirms nor dispatches; the loop waits for the next.
+ * A repeat of the showing orientation is a read-only success. Nothing is kept between commands:
+ * a fold in between can light the other panel, and the measured table covers that panel.
  */
 async function setScopedFoldableOrientation(
   device: DeviceInfo,
@@ -179,109 +179,92 @@ async function setScopedFoldableOrientation(
   signal: AbortSignal | undefined,
 ): Promise<{ orientation: DeviceRotation }> {
   const helper = createFoldHelper(device);
-  const state: ScopedRotationState = {
-    pickerValue: undefined,
-    panelOffset: undefined,
-    litDisplayId: undefined,
-    observed: undefined,
-    rawPanelOrientation: undefined,
-  };
+  let dispatched: ScopedDispatch | undefined;
+  let reading: LitPanel | undefined;
   for (let attempt = 1; attempt <= IOS_FOLDABLE_SCOPED_ORIENTATION_ATTEMPTS; attempt += 1) {
     signal?.throwIfAborted();
-    const lit = await readLitPanel(device, helper, signal);
-    if (lit) {
-      noteLitPanel(state, lit);
-      if (state.observed === rotation) return { orientation: rotation };
-    }
-    const next = nextPickerValue({
-      currentRotation: lit?.rotation,
-      targetRotation: rotation,
-      panelOffset: state.panelOffset,
-      currentPickerValue: state.pickerValue,
-    });
-    if (next !== undefined) {
-      await dispatchScopedPicker(device, helper, state, next, rotation, attempt, signal);
+    reading = await readLitPanel(device, helper, signal);
+    if (reading?.rotation === rotation) return { orientation: rotation };
+    if (reading) {
+      const panelOffset = scopedPanelOffset(dispatched, reading);
+      const value = pickerValueForTarget(rotation, panelOffset);
+      await helper.rotate(value, signal);
+      dispatched = { value, displayId: reading.panel.displayId };
+      emitScopedDispatch(device, rotation, attempt, value, panelOffset, reading);
     }
     await settleScopedRotation();
   }
   // The last dispatch gets its confirming read too: the loop only reads before dispatching.
-  const settled = await readLitPanel(device, helper, signal);
-  if (settled) noteLitPanel(state, settled);
-  if (state.observed === rotation) return { orientation: rotation };
-  throw scopedUnverifiedError(device, rotation, state);
+  reading = await readLitPanel(device, helper, signal);
+  if (reading?.rotation === rotation) return { orientation: rotation };
+  throw scopedUnverifiedError(device, rotation, reading);
 }
 
-type ScopedRotationState = {
-  pickerValue: DeviceRotation | undefined;
-  panelOffset: PanelQuarterTurn | undefined;
-  litDisplayId: number | undefined;
-  observed: DeviceRotation | undefined;
-  rawPanelOrientation: string | undefined;
-};
+/** The picker value this command last dispatched, and the panel that was lit for it. */
+type ScopedDispatch = { value: DeviceRotation; displayId: number };
 
 type LitPanel = { panel: AppleDeviceDisplay; rotation: DeviceRotation };
 
 /**
- * Folds one lit-panel reading into the rotation state. A different panel lit up mid-command:
- * the picker state and offset were calibrated against the previous panel, so start that
- * panel's calibration over. Otherwise the reading fixes the panel's offset — from the picker
- * value this command dispatched when there is one, else from the measured table.
+ * The lit panel's picker offset. After this command dispatched to the same panel, the fresh
+ * reading and that dispatch give the offset this panel really has. Before any dispatch, or when
+ * a fold lit another panel mid-command, the measured offset of the panel now lit applies.
  */
-function noteLitPanel(state: ScopedRotationState, lit: LitPanel): void {
-  if (state.litDisplayId !== undefined && lit.panel.displayId !== state.litDisplayId) {
-    state.pickerValue = undefined;
-    state.panelOffset = undefined;
-  }
-  state.litDisplayId = lit.panel.displayId;
-  state.observed = lit.rotation;
-  state.rawPanelOrientation = lit.panel.currentOrientation;
-  state.panelOffset =
-    state.pickerValue === undefined
-      ? (state.panelOffset ?? measuredPanelPickerOffset(lit.panel))
-      : panelPickerOffset(lit.rotation, state.pickerValue);
+function scopedPanelOffset(
+  dispatched: ScopedDispatch | undefined,
+  reading: LitPanel,
+): PanelQuarterTurn {
+  return dispatched?.displayId === reading.panel.displayId
+    ? panelPickerOffset(reading.rotation, dispatched.value)
+    : measuredPanelPickerOffset(reading.panel);
 }
 
-/** Dispatches one picker value and records it as the guest's picker state for this command. */
-async function dispatchScopedPicker(
+function emitScopedDispatch(
   device: DeviceInfo,
-  helper: FoldHelper,
-  state: ScopedRotationState,
-  next: DeviceRotation,
   rotation: FoldableRotation,
   attempt: number,
-  signal: AbortSignal | undefined,
-): Promise<void> {
-  await helper.rotate(next, signal);
-  state.pickerValue = next;
+  value: DeviceRotation,
+  panelOffset: PanelQuarterTurn,
+  reading: LitPanel,
+): void {
   emitDiagnostic({
     level: 'info',
     phase: 'apple_foldable_orientation_dispatched',
     data: {
       deviceId: device.id,
-      orientation: next,
+      orientation: value,
       requestedOrientation: rotation,
       scopedSet: true,
       attempt,
-      ...(state.observed === undefined ? {} : { observedOrientation: state.observed }),
+      observedOrientation: reading.rotation,
+      litDisplay: reading.panel.name,
+      panelOffset,
     },
   });
 }
 
+/** The error names only what the final read saw: an undecided final read reports no rotation. */
 function scopedUnverifiedError(
   device: DeviceInfo,
   rotation: FoldableRotation,
-  state: ScopedRotationState,
+  reading: LitPanel | undefined,
 ): AppError {
   return new AppError(
     'COMMAND_FAILED',
-    `${device.name} did not confirm rotation to ${rotation}: the panel table reports ${state.observed ?? 'no orientation'}`,
+    `${device.name} did not confirm rotation to ${rotation}: ${
+      reading
+        ? `the lit panel shows ${reading.rotation}`
+        : 'the last panel table read named no single lit panel'
+    }`,
     {
       deviceId: device.id,
       requestedOrientation: rotation,
-      ...(state.observed === undefined ? {} : { observedOrientation: state.observed }),
-      ...(state.rawPanelOrientation === undefined
-        ? {}
-        : { rawPanelOrientation: state.rawPanelOrientation }),
+      ...(reading
+        ? {
+            observedOrientation: reading.rotation,
+            rawPanelOrientation: reading.panel.currentOrientation,
+          }
+        : {}),
       reason: 'orientation-unverified-scoped-set',
       hint: SCOPED_ORIENTATION_UNVERIFIED_HINT,
     },
@@ -291,8 +274,8 @@ function scopedUnverifiedError(
 /**
  * The one lit panel and the rotation it shows, from one fresh panel-table read. Anything
  * less decided — an unreadable table, no lit panel, an unrecognized `rotN` — is no reading:
- * the rotation loop must not confirm or compensate from a panel that is not showing. On
- * iPhone Duo the table reports both panels lit for a few seconds after a fold to closed, so
+ * the rotation loop must not confirm, compensate or dispatch from a panel that is not showing.
+ * On iPhone Duo the table reports both panels lit for a few seconds after a fold to closed, so
  * the first reads after that fold are no reading by design.
  */
 async function readLitPanel(
@@ -311,7 +294,7 @@ async function readLitPanel(
   const litPanels = inventory.displays.filter((display) => display.power === 'lit');
   const panel = litPanels.length === 1 ? litPanels[0]! : undefined;
   if (!panel) return undefined;
-  const rotation = panelRotationForOrientation(panel.currentOrientation);
+  const rotation = panelContentRotation(panel.currentOrientation);
   return rotation === undefined ? undefined : { panel, rotation };
 }
 

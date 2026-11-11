@@ -64,10 +64,11 @@ export const IOS_FOLD_POSE_STABLE_DEGREES = 0.5;
 export const IOS_FOLDABLE_ORIENTATION_SETTLE_ATTEMPTS = 8;
 export const IOS_FOLDABLE_ORIENTATION_READ_TIMEOUT_MS = 2_000;
 /**
- * How many read/dispatch rounds a scoped-set foldable rotation gets. The picker delta lands
- * in at most two dispatches once the first one calibrates the guest's picker state; the rest
- * of the budget covers panel reads that do not answer yet. Verified on iPhone Duo with the
- * settle delay below between a dispatch and the panel read that confirms it.
+ * How many read/dispatch rounds a scoped-set foldable rotation gets. A panel at its measured
+ * picker offset lands in one dispatch, and a panel that disagrees with the measured offset in
+ * two, the second calibrated by the first. The rest of the budget covers reads that name no
+ * single lit panel, such as the few seconds after an iPhone Duo folds closed. Verified on
+ * iPhone Duo with the settle delay below between a dispatch and the read that confirms it.
  */
 export const IOS_FOLDABLE_SCOPED_ORIENTATION_ATTEMPTS = 6;
 export const IOS_FOLDABLE_SCOPED_ORIENTATION_SETTLE_MS = 600;

@@ -487,15 +487,28 @@ export type AppleCaptureTarget =
  * `rot270` is what the display shows after a rotation to landscape-left. An unrecognized or
  * missing value maps to no rotation.
  */
-const CORE_DEVICE_ROTATIONS: ReadonlyMap<string, DeviceRotation> = new Map<string, DeviceRotation>([
+const PANEL_CONTENT_ROTATIONS: ReadonlyMap<string, DeviceRotation> = new Map<
+  string,
+  DeviceRotation
+>([
   ['rot0', 'portrait'],
   ['rot90', 'landscape-right'],
   ['rot180', 'portrait-upside-down'],
   ['rot270', 'landscape-left'],
 ]);
 
+/**
+ * The content rotation a panel table `currentOrientation` names, in that panel's own frame, or
+ * nothing for an unrecognized value. This is the one parser of the field: a single-panel capture
+ * reads it as the device rotation, and the foldable rotation controller reads it as the lit
+ * panel's rotation before compensating that panel's picker offset.
+ */
+export function panelContentRotation(currentOrientation: string): DeviceRotation | undefined {
+  return PANEL_CONTENT_ROTATIONS.get(currentOrientation);
+}
+
 function appleDisplayRotation(display: AppleDeviceDisplay): DeviceRotation | undefined {
-  return CORE_DEVICE_ROTATIONS.get(display.currentOrientation);
+  return panelContentRotation(display.currentOrientation);
 }
 
 /**

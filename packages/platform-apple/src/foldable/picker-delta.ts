@@ -4,7 +4,9 @@ import type { DeviceRotation } from '@agent-device/contracts/device';
  * Panel-frame quarter turns, following CADisplay `rotN`: portrait 0, landscape-right 90,
  * portrait-upside-down 180, landscape-left 270. This frame is a panel-table fact, not the
  * Android `Surface.ROTATION_*` frame in `DEVICE_ROTATION_SURFACE_INDEX` (which turns the
- * other way), so the two tables must not be shared.
+ * other way), so the two tables must not be shared. Parsing a panel's `currentOrientation`
+ * into a rotation is `panelContentRotation` in the display inventory; this module only does
+ * the picker arithmetic on rotations already parsed.
  */
 export type PanelQuarterTurn = 0 | 90 | 180 | 270;
 
@@ -22,13 +24,6 @@ const ROTATION_BY_QUARTER: readonly DeviceRotation[] = [
   'landscape-left',
 ];
 
-const PANEL_ORIENTATIONS: ReadonlyMap<string, DeviceRotation> = new Map([
-  ['rot0', 'portrait'],
-  ['rot90', 'landscape-right'],
-  ['rot180', 'portrait-upside-down'],
-  ['rot270', 'landscape-left'],
-]);
-
 /** The panel-frame angle of one rotation. */
 function panelRotationAngle(rotation: DeviceRotation): PanelQuarterTurn {
   return PANEL_ROTATION_ANGLE[rotation];
@@ -40,17 +35,10 @@ function rotationAtPanelAngle(angle: number): DeviceRotation {
   return ROTATION_BY_QUARTER[quarter]!;
 }
 
-/** The lit-panel rotation a panel table `currentOrientation` names, or nothing when unread. */
-export function panelRotationForOrientation(
-  currentOrientation: string,
-): DeviceRotation | undefined {
-  return PANEL_ORIENTATIONS.get(currentOrientation);
-}
-
 /**
  * The offset between the orientation picker and the lit panel it drives: the panel reads
- * `picker + offset`. Learning it from one dispatched picker value and the panel rotation
- * that followed it is what calibrates a panel whose offset was never measured.
+ * `picker + offset`. The picker value is the one this command last dispatched, and the
+ * rotation is a fresh reading of the same panel taken after it.
  */
 export function panelPickerOffset(
   currentRotation: DeviceRotation,
@@ -66,55 +54,27 @@ const OUTER_PANEL_PICKER_OFFSET: PanelQuarterTurn = 0;
 const INNER_PANEL_PICKER_OFFSET: PanelQuarterTurn = 90;
 
 /**
- * Measured picker offsets by panel. The `primary` panel is the one that stays lit while the
- * device is closed (the outer panel); the other integrated panel is the inner one (lit open
- * and half-open). Measured on iPhone Duo (iOS 27.3) against the panel table's lit-panel
- * `currentOrientation`: the outer panel reads `picker + 0` and the inner panel `picker + 90`,
- * across fold/unfold in both directions. The guest keeps one picker value through a fold, so
- * the panel that lights afterwards reads that same value plus its own offset.
- *
- * A measured offset only saves the calibration dispatch: the caller still confirms every
- * rotation from the panel table and re-derives the offset from what it observes after each
- * dispatch, so a panel or runtime that disagrees with this table still converges.
+ * Measured picker offsets by panel, used only before a command has calibrated the lit panel
+ * with a dispatch of its own. The `primary` panel is the one that stays lit while the device
+ * is closed (the outer panel); the other integrated panel is the inner one (lit open and
+ * half-open). Measured on iPhone Duo (iOS 27.3) against the lit panel's `currentOrientation`:
+ * the outer panel reads `picker + 0` and the inner panel `picker + 90`, across fold and unfold
+ * in both directions. The guest keeps one picker value through a fold, so the panel that
+ * lights afterwards reads that same value plus its own offset — unless its foreground app
+ * cannot show that orientation, in which case it keeps the rotation it last showed.
  */
 export function measuredPanelPickerOffset(panel: { primary: boolean }): PanelQuarterTurn {
   return panel.primary ? OUTER_PANEL_PICKER_OFFSET : INNER_PANEL_PICKER_OFFSET;
 }
 
 /**
- * The next picker value to dispatch. The guest shows `picker + offset` on the lit panel, with
- * a fixed offset per panel, so an absolute dispatch of the target lands an offset away from
- * it, and successive events look as if each one turned the panel by (new value - previous
- * picker value). The choice is, in order:
- *
- * - Picker known: the value whose delta from the current picker value is exactly the turn
- *   still needed. Needs the current lit-panel rotation; without it there is no safe dispatch,
- *   so the caller re-reads instead (nothing is returned).
- * - Picker unknown, offset known: the value that leaves the panel at the target once the
- *   offset is added back. This holds even when the lit panel is not showing `picker + offset`
- *   yet, for example after a fold left the picker at a value the newly lit panel's
- *   foreground UI does not show.
- * - Both unknown: the target itself, as a calibration dispatch. Wherever it lands, one panel
- *   read afterwards fixes the offset through {@link panelPickerOffset}, and the next dispatch
- *   is exact.
+ * The picker value that leaves the lit panel at `targetRotation` once the panel's offset is
+ * added back: `target - offset`. The guest shows `picker + offset`, so dispatching the target
+ * itself lands an offset away from it, which is what made a rotation look one command late.
  */
-export function nextPickerValue(input: {
-  currentRotation: DeviceRotation | undefined;
-  targetRotation: DeviceRotation;
-  panelOffset: PanelQuarterTurn | undefined;
-  currentPickerValue: DeviceRotation | undefined;
-}): DeviceRotation | undefined {
-  const { currentRotation, targetRotation, panelOffset, currentPickerValue } = input;
-  if (currentPickerValue !== undefined) {
-    if (currentRotation === undefined) return undefined;
-    return rotationAtPanelAngle(
-      panelRotationAngle(currentPickerValue) +
-        panelRotationAngle(targetRotation) -
-        panelRotationAngle(currentRotation),
-    );
-  }
-  if (panelOffset !== undefined) {
-    return rotationAtPanelAngle(panelRotationAngle(targetRotation) - panelOffset);
-  }
-  return targetRotation;
+export function pickerValueForTarget(
+  targetRotation: DeviceRotation,
+  panelOffset: PanelQuarterTurn,
+): DeviceRotation {
+  return rotationAtPanelAngle(panelRotationAngle(targetRotation) - panelOffset);
 }
