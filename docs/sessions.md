@@ -16,6 +16,7 @@ session and `--platform android` in the `android` session.
 A session opened without `--platform` uses the platform-less `default` session, and commands that name a
 platform still join it as long as they match its device. Agents in different worktrees do not attach
 to each other's implicit session; a named session (`--session <name>`) is shared across worktrees.
+Implicit web sessions in different worktrees also use separate browsers, so they can run at the same time.
 
 ## Find a session's logs and artifacts
 
