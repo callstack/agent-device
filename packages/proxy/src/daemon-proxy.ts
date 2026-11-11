@@ -83,7 +83,10 @@ export type DaemonProxy = {
   readonly instanceId: string;
   /**
    * Answers one client request. `request.url` must be the URL the client used, because upload
-   * tickets are rewritten to its origin; an `x-forwarded-proto` header overrides its scheme.
+   * tickets are rewritten to its origin. The first comma-separated `x-forwarded-proto` value
+   * overrides its scheme when it is `http` or `https` (case-insensitive). This value is
+   * client-controlled unless ingress replaces it with the public scheme. Replace rather than
+   * append forwarding metadata, or remove untrusted headers and construct the public request URL.
    * Abort `request.signal` when the client goes away so in-flight daemon work is cancelled.
    * Resolves with an error response rather than rejecting.
    */

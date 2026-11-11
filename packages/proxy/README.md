@@ -67,8 +67,9 @@ the `Response` back. Three things the proxy relies on:
 
 - `request.url` is the URL the client used. Upload tickets point clients at its origin. The first
   comma-separated `x-forwarded-proto` value overrides the scheme when it is `http` or `https`
-  (case-insensitive). Configure your ingress to replace client-supplied values with the public
-  scheme. When you construct `Request` objects, use the public URL and remove untrusted forwarding
+  (case-insensitive). This value is client-controlled unless your ingress replaces it. Configure
+  your ingress to replace client-supplied values with the public scheme rather than append to them.
+  When you construct `Request` objects, use the public URL and remove untrusted forwarding
   headers before calling `handle`.
 - `request.signal` aborts when the client goes away. The proxy then cancels the daemon request, so
   work the client stopped waiting for does not keep running.
