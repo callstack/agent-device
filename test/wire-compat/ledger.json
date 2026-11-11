@@ -118,7 +118,7 @@
     "packages/daemon/src/server/http/http-authorization.ts#resolveToken": "sha256:3abcb019e1325317618045b7138e41845990af10953dd937571997cd6ec35981",
     "packages/daemon/src/server/http/http-rpc-envelope.ts#sendJson": "sha256:a1de00da3f1db8c98e69a85dfe2e11b626a4d2ce472840e3b8f519aa8a207a8f",
     "packages/daemon/src/server/http/http-rpc-methods.ts#toDaemonRequest": "sha256:f3861d2d4f67f66e83800616926f6bbb0595de4ecbb0072b5b78971ebeb0705b",
-    "packages/daemon/src/server/http/http-rpc-methods.ts#toInstallFromSourceDaemonRequest": "sha256:dff093758b433043816dfc1e2e9658078875e46b887fdc530fb9380158d629f5",
+    "packages/daemon/src/server/http/http-rpc-methods.ts#toInstallFromSourceDaemonRequest": "sha256:071c53e7bd8e553cb9df820961294ed4d1e2e385053485364d895cb1777e9429",
     "packages/daemon/src/server/http/http-rpc-methods.ts#toLeaseDaemonRequest": "sha256:3018984aeace4054767875f5eb6e6ad5d38bfcb71c15d1a56ccf9b53e0a419ec",
     "packages/daemon/src/server/http/http-rpc-methods.ts#toReleaseMaterializedPathsDaemonRequest": "sha256:708736ca03d6a3fc449bb408382dbd509e490de1f84ecc8771fd77d4adda0154",
     "packages/daemon/src/server/http/http-rpc-envelope.ts#writeProgressEnvelope": "sha256:7be778b3902c72d7aa6282c16dc7106fdd64e99c0b5daf9f413ff5dd3fb044f1",
@@ -499,6 +499,11 @@
       "declaration": "packages/daemon-client/src/daemon-client-progress.ts#createInvalidDaemonResponseError",
       "digest": "sha256:8e2501995839b50646d554def6d2973667ce080ed1aaf171514158b6d2e681a8",
       "rationale": "The client names its request as DaemonWireRequest (packages/contracts/src/daemon-wire-request.ts, a narrowing of the listed kernel DaemonRequest) and its response as the kernel DaemonResponse, instead of the daemon package's DaemonRequest/DaemonResponse aliases, so the daemon package is no longer a client import. The declaration's serialized fields, method names and framing are unchanged; only the compile-time type names in its signature moved, so a peer on protocol 2 parses exactly what it did. #4302 (client-side only): the invalid-response error also gains details.reason 'daemon_response_invalid', so the client can disclose whether the request reached the device; it is raised locally from a reply this client could not parse, and no daemon reads it."
+    },
+    {
+      "declaration": "packages/daemon/src/server/http/http-rpc-methods.ts#toInstallFromSourceDaemonRequest",
+      "digest": "sha256:071c53e7bd8e553cb9df820961294ed4d1e2e385053485364d895cb1777e9429",
+      "rationale": "Implementation-only validation repair: a supplied retentionMs is validated before request projection instead of silently dropping fractions or malformed values. Existing integer values in the supported 1..2147483647 range and omitted values keep their request projection, defaults, payload fields and response framing. Unsupported durations now fail clearly with the existing INVALID_ARGS envelope; released clients can parse that normal command error. No route, authentication, method or wire field changes; no protocol bump under ADR 0006."
     }
   ]
 }

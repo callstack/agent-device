@@ -1,4 +1,5 @@
 import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
+import { AppError } from '@agent-device/kernel/errors';
 import crypto from 'node:crypto';
 import { rmSync } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -10,6 +11,7 @@ import {
 } from '../core/tenant-owned-entry.ts';
 
 const DEFAULT_MATERIALIZED_PATH_TTL_MS = 15 * 60 * 1000;
+const MAX_MATERIALIZED_PATH_TTL_MS = 2_147_483_647;
 
 const MATERIALIZED_PATHS_RESOURCE: TenantOwnedResourceKind = {
   label: 'Materialized paths',
@@ -59,6 +61,7 @@ export async function retainMaterializedPaths(params: {
   sessionName?: string;
   ttlMs?: number;
 }): Promise<RetainedMaterializedPaths> {
+  const ttlMs = resolveMaterializedPathRetentionMs(params.ttlMs);
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-materialized-'));
   try {
     const retainedInstallablePath = await copyPathInto(
@@ -69,7 +72,6 @@ export async function retainMaterializedPaths(params: {
       ? await copyPathInto(params.archivePath, path.join(rootPath, 'archive'))
       : undefined;
     const materializationId = crypto.randomUUID();
-    const ttlMs = params.ttlMs ?? DEFAULT_MATERIALIZED_PATH_TTL_MS;
     const expiresAt = Date.now() + ttlMs;
     const timer = setTimeout(() => {
       void expireRetainedMaterializedPaths(materializationId);
@@ -93,6 +95,23 @@ export async function retainMaterializedPaths(params: {
     await fs.rm(rootPath, { recursive: true, force: true });
     throw error;
   }
+}
+
+export function resolveMaterializedPathRetentionMs(
+  ttlMs: unknown = DEFAULT_MATERIALIZED_PATH_TTL_MS,
+): number {
+  if (
+    typeof ttlMs !== 'number' ||
+    !Number.isInteger(ttlMs) ||
+    ttlMs <= 0 ||
+    ttlMs > MAX_MATERIALIZED_PATH_TTL_MS
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `retentionMs must be an integer from 1 to ${MAX_MATERIALIZED_PATH_TTL_MS}`,
+    );
+  }
+  return ttlMs;
 }
 
 export async function cleanupRetainedMaterializedPaths(

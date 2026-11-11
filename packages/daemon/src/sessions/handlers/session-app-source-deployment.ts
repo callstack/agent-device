@@ -17,6 +17,7 @@ import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   cleanupRetainedMaterializedPaths,
   retainMaterializedPaths,
+  resolveMaterializedPathRetentionMs,
   type RetainedMaterializedPaths,
 } from '../materialized-path-registry.ts';
 import { expireRefFrame } from '../../core/ref-frame.ts';
@@ -38,7 +39,7 @@ import {
   unavailableRuntimeOperationResponse,
 } from '../../core/session-runtime-admission.ts';
 
-type Retention = Readonly<{ enabled: boolean; ttlMs?: number }>;
+type Retention = Readonly<{ enabled: false } | { enabled: true; ttlMs: number }>;
 type InstallFromSourceResult = Readonly<{
   appName?: string;
   bundleId?: string;
@@ -65,8 +66,8 @@ export async function handleInstallFromSourceDeploymentCommand(params: {
   let materialized: MaterializedAppSource | undefined;
   let retained: RetainedMaterializedPaths | undefined;
   try {
-    resolvedSource = resolveInstallSource(req);
     const retention = resolveRetention(req);
+    resolvedSource = resolveInstallSource(req);
     let device = await resolveInstallDevice(
       session,
       req,
@@ -182,15 +183,11 @@ function normalizePlatform(
 
 function resolveRetention(req: DaemonRequest): Retention {
   const enabled = req.meta?.retainMaterializedPaths === true;
-  const ttlMs = req.meta?.materializedPathRetentionMs;
   if (!enabled) return { enabled: false };
-  if (ttlMs !== undefined && ttlMs <= 0) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'install_from_source retentionMs must be a positive integer',
-    );
-  }
-  return { enabled: true, ...(ttlMs === undefined ? {} : { ttlMs }) };
+  return {
+    enabled: true,
+    ttlMs: resolveMaterializedPathRetentionMs(req.meta?.materializedPathRetentionMs),
+  };
 }
 
 async function retainIfRequested(params: {

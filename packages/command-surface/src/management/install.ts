@@ -11,7 +11,7 @@ import {
   leaseDeviceSpecFields,
   looseObjectSchema,
   requiredField,
-  integerField,
+  optionField,
   stringField,
 } from '../command-input.ts';
 import {
@@ -63,7 +63,7 @@ const installFromSourceCommandMetadata = defineFieldCommandMetadata(
       jsonSchemaField<DaemonInstallSource>(looseObjectSchema('Install source object.')),
     ),
     retainPaths: booleanField(),
-    retentionMs: integerField(),
+    retentionMs: optionField('retentionMs'),
   },
 );
 
