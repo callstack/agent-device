@@ -43,7 +43,7 @@ const appsCommandMetadata = defineFieldCommandMetadata(
 
 const openCommandMetadata = defineFieldCommandMetadata(
   'open',
-  'Boot the selected device when needed, then open an app, deep link, or URL in a session. Use the app or URL inputs to choose what becomes the foreground automation target.',
+  'Boot the selected device when needed, then open an app, deep link, or URL in a session. Use the app or URL inputs to choose what becomes the foreground automation target. Remote daemons refuse file: URLs in open targets and launch URLs with reason REMOTE_HOST_INPUT_DENIED. Serve local web content over HTTP(S) instead.',
   {
     app: stringField('App name, bundle id, package, or URL.'),
     url: stringField('Optional URL passed with an app shell.'),

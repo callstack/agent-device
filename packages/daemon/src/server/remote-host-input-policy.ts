@@ -59,8 +59,16 @@ function assertRemoteHostToolingInputs(
   if (hostPath || request.command === INTERNAL_COMMANDS.sessionSaveScript) {
     throw remoteHostInputDenied(hostPath ?? 'command');
   }
-  const hostArgument = findRemoteHostArgument(request);
+  const hostArgument = findRemoteFileUrlInput(request) ?? findRemoteHostArgument(request);
   if (hostArgument) throw remoteHostInputDenied(hostArgument);
+}
+
+function findRemoteFileUrlInput(request: DaemonRequest): string | undefined {
+  const fields = [request.flags, request.input, request.runtime];
+  if (fields.some((record) => isFileUrl(record?.launchUrl))) return 'launchUrl';
+  if (request.command !== 'open') return undefined;
+  if (request.positionals?.some(isFileUrl)) return 'url';
+  return ['app', 'url'].find((field) => isFileUrl(request.input?.[field]));
 }
 
 /** Positional forms that name a daemon host file. Remote callers upload binaries and inline payloads. */
@@ -83,6 +91,10 @@ function findRemoteHostArgument(request: DaemonRequest): string | undefined {
     }
   }
   return undefined;
+}
+
+function isFileUrl(value: unknown): boolean {
+  return typeof value === 'string' && URL.parse(value)?.protocol === 'file:';
 }
 
 function isInlineJsonPayload(value: string): boolean {
