@@ -1,0 +1,54 @@
+name: 'Setup Android SDK'
+description: 'Install the pinned Android platform and build tools, and export the build-tools version'
+
+# The one owner of the pinned build-tools version. d8 and aapt2 come from build-tools, so the
+# version decides the helper APK bytes. Later steps read it from AGENT_DEVICE_ANDROID_BUILD_TOOLS.
+
+inputs:
+  build-tools:
+    description: 'Android build-tools version to install'
+    required: false
+    default: '36.0.0'
+
+outputs:
+  build-tools-dir:
+    description: 'Absolute path of the installed build-tools directory'
+    value: ${{ steps.install.outputs.build-tools-dir }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Android platform and build tools
+      id: install
+      shell: bash
+      env:
+        BUILD_TOOLS_VERSION: ${{ inputs.build-tools }}
+      run: |
+        set -euo pipefail
+        SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+        BUILD_TOOLS_DIR="$SDK_ROOT/build-tools/$BUILD_TOOLS_VERSION"
+        # Every build-tools binary a caller runs: the helper build (aapt2, d8, zipalign,
+        # apksigner) and the fixture APK scripts (aapt, apksigner).
+        INSTALLED=true
+        for BUILD_TOOL in aapt aapt2 d8 zipalign apksigner; do
+          [ -x "$BUILD_TOOLS_DIR/$BUILD_TOOL" ] || INSTALLED=false
+        done
+        [ -f "$SDK_ROOT/platforms/android-36/android.jar" ] || INSTALLED=false
+        if [ "$INSTALLED" != true ]; then
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$SDK_ROOT/cmdline-tools/bin/sdkmanager"
+          fi
+          if [ ! -x "$SDKMANAGER" ]; then
+            echo "::error::sdkmanager not found under $SDK_ROOT." >&2
+            exit 1
+          fi
+          # `yes` dies of SIGPIPE when sdkmanager stops reading. Without pipefail the pipe
+          # reports sdkmanager's own status, so a real licence failure still stops the step.
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          set -o pipefail
+          "$SDKMANAGER" "platforms;android-36" "build-tools;$BUILD_TOOLS_VERSION"
+        fi
+        echo "AGENT_DEVICE_ANDROID_BUILD_TOOLS=$BUILD_TOOLS_VERSION" >> "$GITHUB_ENV"
+        echo "build-tools-dir=$BUILD_TOOLS_DIR" >> "$GITHUB_OUTPUT"

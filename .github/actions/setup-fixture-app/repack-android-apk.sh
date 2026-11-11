@@ -4,7 +4,19 @@ set -euo pipefail
 APK="${1:?source APK is required}"
 OUT="${2:?output APK is required}"
 SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-BUILD_TOOLS="$SDK_ROOT/build-tools/36.0.0"
+# CI names the version setup-android-sdk installed. A local repack may take the newest installed.
+BUILD_TOOLS_VERSION="${AGENT_DEVICE_ANDROID_BUILD_TOOLS:-}"
+if [ -z "$BUILD_TOOLS_VERSION" ]; then
+  if [ "${CI:-}" = "true" ]; then
+    echo "::error::AGENT_DEVICE_ANDROID_BUILD_TOOLS must name the build-tools version setup-android-sdk installed." >&2
+    exit 1
+  fi
+  NEWEST_BUILD_TOOLS_DIR="$(
+    find "$SDK_ROOT/build-tools" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort -V | tail -n 1
+  )" || true
+  BUILD_TOOLS_VERSION="${NEWEST_BUILD_TOOLS_DIR##*/}"
+fi
+BUILD_TOOLS="$SDK_ROOT/build-tools/$BUILD_TOOLS_VERSION"
 if [ ! -x "$BUILD_TOOLS/aapt" ] || [ ! -x "$BUILD_TOOLS/apksigner" ]; then
   echo "::error::Android build tools were not found at $BUILD_TOOLS." >&2
   exit 1

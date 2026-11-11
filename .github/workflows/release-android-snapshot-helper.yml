@@ -27,9 +27,6 @@ jobs:
     name: Publish Android Snapshot Helper
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
-    env:
-      # The helper build refuses to guess its build-tools version on CI.
-      AGENT_DEVICE_ANDROID_BUILD_TOOLS: 36.0.0
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@2b9fe87d796feea153b455ec2f3125b471a7b0e7 # v1.8.2
@@ -41,19 +38,9 @@ jobs:
         with:
           node-version: '24.13'
 
-      - name: Install Android SDK packages
-        run: |
-          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER="$SDK_ROOT/cmdline-tools/bin/sdkmanager"
-          fi
-          if [ ! -x "$SDKMANAGER" ]; then
-            echo "sdkmanager not found under $SDK_ROOT" >&2
-            exit 1
-          fi
-          yes | "$SDKMANAGER" --licenses >/dev/null
-          "$SDKMANAGER" "platforms;android-36" "build-tools;$AGENT_DEVICE_ANDROID_BUILD_TOOLS"
+      # Exports AGENT_DEVICE_ANDROID_BUILD_TOOLS, which the helper build requires on CI.
+      - name: Setup Android SDK
+        uses: ./.github/actions/setup-android-sdk
 
       - name: Check Java toolchain
         run: |

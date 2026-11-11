@@ -74,8 +74,6 @@ jobs:
     permissions:
       contents: read
     env:
-      # The helper build refuses to guess its build-tools version on CI.
-      AGENT_DEVICE_ANDROID_BUILD_TOOLS: 36.0.0
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
       - name: Checkout
@@ -89,12 +87,9 @@ jobs:
         with:
           cache-store: 'false'
 
-      - name: Install Android helper toolchain
-        run: |
-          set -euo pipefail
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-36" "build-tools;$AGENT_DEVICE_ANDROID_BUILD_TOOLS"
+      # Exports AGENT_DEVICE_ANDROID_BUILD_TOOLS, which the helper build requires on CI.
+      - name: Setup Android SDK
+        uses: ./.github/actions/setup-android-sdk
 
       - name: Stamp release version
         run: node scripts/release-version.mjs stamp "$VERSION"

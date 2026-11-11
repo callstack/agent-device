@@ -162,23 +162,9 @@ jobs:
             --no-bundler \
             --output "${{ github.workspace }}/.tmp/test-app-build"
 
-      # Deliberately no `set -o pipefail`: `yes` is killed by SIGPIPE once
-      # sdkmanager stops reading, and pipefail would report that 141 as the
-      # step's own failure.
-      - name: Install Android SDK packages
+      - name: Setup Android SDK
         if: matrix.platform == 'android' && matrix.build
-        run: |
-          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER="$SDK_ROOT/cmdline-tools/bin/sdkmanager"
-          fi
-          if [ ! -x "$SDKMANAGER" ]; then
-            echo "sdkmanager not found under $SDK_ROOT" >&2
-            exit 1
-          fi
-          yes | "$SDKMANAGER" --licenses >/dev/null
-          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+        uses: ./.github/actions/setup-android-sdk
 
       # CNG's generated Android project exposes the ordinary Gradle Release task;
       # it builds and packages every ABI without device resolution. Installation
