@@ -33,7 +33,7 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
     'Run Maestro compatibility flows with replay <flow.yaml> --maestro',
     '- Flows: launchApp (with clearState, permissions, and Apple-only launch arguments; permissions apply after state clearing but before launch, and a launchApp without permissions touches nothing — there is no silent all: allow default',
     '- Failure diagnostics: resolved targets and runFlow paths are rendered, while inputText payloads remain hidden; do not place secrets in diagnostic identifiers',
-    '- Trust: runScript, evalScript, and JavaScript condition true: fields execute flow scripts in-process via node:vm, which is not a security sandbox',
+    '- Trust: runScript, evalScript, and JavaScript condition true: fields execute flow scripts via node:vm, which is not a security sandbox',
     'Unsupported syntax fails loudly',
   ],
   workflow: [

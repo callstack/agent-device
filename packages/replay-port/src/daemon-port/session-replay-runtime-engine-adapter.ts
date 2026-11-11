@@ -136,7 +136,7 @@ export function createAdReplayStepRuntime(params: {
     recorded: action.targetEvidence!,
     action,
     step: index + 1,
-    sourcePath: ctx.actionSourcePaths?.[index] ?? ctx.resolved,
+    sourcePath: ctx.resolved,
     sourceLine: ctx.actionLines[index] ?? 1,
     replayPath: ctx.resolved,
     artifactPaths: [...stepArtifactPaths],
@@ -228,7 +228,6 @@ export function createAdReplayStepRuntime(params: {
         resolved: resolvedAction,
         filePath: ctx.resolved,
         line: sourceLine,
-        sourcePath: ctx.actionSourcePaths?.[index],
         step: index + 1,
         tracePath: ctx.actionTracePath,
         invoke: ctx.invoke,
@@ -350,7 +349,6 @@ export type ReplayStepContext = {
   resolved: string;
   actions: SessionAction[];
   actionLines: number[];
-  actionSourcePaths: (string | undefined)[] | undefined;
   planDigest: string;
   actionTracePath: string | undefined;
   responseLevel: ResponseLevel | undefined;
@@ -401,7 +399,7 @@ async function buildReplayActionFailure(
       action,
       index,
       replayPath: ctx.resolved,
-      sourcePath: ctx.actionSourcePaths?.[index] ?? ctx.resolved,
+      sourcePath: ctx.resolved,
       sourceLine: ctx.actionLines[index] ?? 1,
       artifactPaths,
       snapshotDiagnosticSamples,

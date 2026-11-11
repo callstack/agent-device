@@ -348,9 +348,7 @@ export type AdReplayRunRequest = Readonly<{
    * `loc`).
    */
   readonly actionLines: readonly number[];
-  /** Per-action resolved source path when it differs from `resolvedPath` (a `runFlow` include's own file), parallel to `actions`. */
-  readonly actionSourcePaths: readonly (string | undefined)[] | undefined;
-  /** The resolved `.ad` file path — the interpolation-location fallback when an action's own `actionSourcePaths` entry is absent. */
+  /** The resolved `.ad` file path every step's interpolation-error location names. */
   readonly resolvedPath: string;
   /**
    * `${VAR}` scope inputs — plain data the daemon reads from the request/

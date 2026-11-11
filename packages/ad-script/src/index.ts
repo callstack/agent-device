@@ -53,6 +53,7 @@ export {
   buildReplayVarScope,
   collectReplayScrubbableVarValues,
   collectReplayShellEnv,
+  escapeReplayAction,
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   readReplayShellEnvSource,
@@ -66,6 +67,7 @@ export {
   resolveReplayFormat,
   unsupportedReplayBackendMessage,
   type ReplayBackendId,
+  type ReplayFormat,
 } from './internal/format.ts';
 
 export {

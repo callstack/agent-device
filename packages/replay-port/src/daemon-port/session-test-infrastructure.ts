@@ -1,16 +1,10 @@
-import { isInfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
+import {
+  isInfrastructureAdbFailure,
+  isInfrastructureBootFailureReason,
+} from '@agent-device/contracts/boot-failure';
 import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 import { isDeviceClaimConflictReason } from '@agent-device/contracts/device';
 import { type DaemonResponse } from '@agent-device/kernel/contracts';
-
-const REPLAY_INFRASTRUCTURE_FAILURE_MESSAGE_PATTERNS = [
-  'failed to start daemon',
-  'runner did not accept connection',
-  'xcodebuild exited early',
-  'device is offline',
-  'device offline',
-  'device unauthorized',
-] as const;
 
 type ReplayFailureError = Extract<DaemonResponse, { ok: false }>['error'];
 
@@ -21,10 +15,7 @@ export function isReplayInfrastructureFailure(
     return true;
   const error = readReplayFailureError(result);
   if (!error) return false;
-  return (
-    hasInfrastructureFailureDetails(error.details) ||
-    hasInfrastructureFailureMessage(error.code, error.message)
-  );
+  return hasInfrastructureFailureDetails(error.details);
 }
 
 function readReplayFailureError(
@@ -36,13 +27,11 @@ function readReplayFailureError(
 
 function hasInfrastructureFailureDetails(details: Record<string, unknown> | undefined): boolean {
   if (details?.recovery === 'runner_recycle_budget_exhausted') return true;
+  if (isInfrastructureAdbFailure(details?.adbFailure)) return true;
+  // The Apple runner never accepted a connection: it was refused, or xcodebuild exited first.
+  if (typeof details?.runnerConnectFailureReason === 'string') return true;
   const reason = typeof details?.reason === 'string' ? details.reason : '';
-  if (reason === 'timeout_cleanup_pending') return true;
+  if (reason === 'timeout_cleanup_pending' || reason === 'runner_process_exited') return true;
   if (isDeviceClaimConflictReason(reason)) return true;
   return reason ? isInfrastructureBootFailureReason(reason) : false;
-}
-
-function hasInfrastructureFailureMessage(code: string, message: string): boolean {
-  const text = `${code}\n${message}`.toLowerCase();
-  return REPLAY_INFRASTRUCTURE_FAILURE_MESSAGE_PATTERNS.some((pattern) => text.includes(pattern));
 }

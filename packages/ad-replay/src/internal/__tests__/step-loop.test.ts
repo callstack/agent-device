@@ -41,7 +41,6 @@ function runRequest(
     entryIndex: overrides.entryIndex ?? 0,
     keepSession: overrides.keepSession,
     actionLines: actions.map(() => 1),
-    actionSourcePaths: undefined,
     resolvedPath: 'fixture.ad',
     varSources: {},
   };

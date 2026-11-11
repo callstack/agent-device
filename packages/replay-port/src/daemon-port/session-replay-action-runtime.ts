@@ -34,8 +34,6 @@ export async function invokeReplayAction(params: {
   filePath: string;
   line: number;
   step: number;
-  /** Resolved source file when it differs from `filePath` (a `runFlow` include's path). */
-  sourcePath?: string;
   tracePath?: string;
   invoke: ReplayInvoke;
   /** The isolation scope the daemon already resolved for the request, when it did. */
@@ -50,7 +48,6 @@ export async function invokeReplayAction(params: {
     filePath,
     line,
     step,
-    sourcePath,
     tracePath,
     invoke,
     resolvedSessionScope,
@@ -61,7 +58,6 @@ export async function invokeReplayAction(params: {
     type: 'replay_action_start',
     ts: new Date(startedAt).toISOString(),
     replayPath: filePath,
-    ...(sourcePath ? { sourcePath } : {}),
     line,
     step,
     command: resolved.command,
@@ -99,7 +95,6 @@ export async function invokeReplayAction(params: {
     type: 'replay_action_stop',
     ts: new Date(finishedAt).toISOString(),
     replayPath: filePath,
-    ...(sourcePath ? { sourcePath } : {}),
     line,
     step,
     command: resolved.command,
@@ -108,7 +103,7 @@ export async function invokeReplayAction(params: {
     resultTiming: response.ok ? readResponseTiming(response.data) : undefined,
     errorCode: response.ok ? undefined : response.error.code,
   });
-  return withReplayFailureSource(response, sourcePath ?? filePath, line);
+  return withReplayFailureSource(response, filePath, line);
 }
 
 /**

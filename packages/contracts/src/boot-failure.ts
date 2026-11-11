@@ -22,3 +22,14 @@ export function isInfrastructureBootFailureReason(
     reason.toUpperCase() as InfrastructureBootFailureReason,
   );
 }
+
+const INFRASTRUCTURE_ADB_FAILURES = ['device_offline', 'device_unauthorized'] as const;
+
+/** The adb refusal families (`details.adbFailure`) that only a device or host change clears. */
+export type InfrastructureAdbFailure = (typeof INFRASTRUCTURE_ADB_FAILURES)[number];
+
+const infrastructureAdbFailures: ReadonlySet<string> = new Set(INFRASTRUCTURE_ADB_FAILURES);
+
+export function isInfrastructureAdbFailure(value: unknown): value is InfrastructureAdbFailure {
+  return typeof value === 'string' && infrastructureAdbFailures.has(value);
+}

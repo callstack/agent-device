@@ -4,6 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   buildReplayVarScope,
   collectReplayShellEnv,
+  escapeReplayAction,
   parseReplayCliEnvEntries,
   resolveReplayAction,
   resolveReplayString,
@@ -98,14 +99,17 @@ test('buildReplayVarScope precedence: cli > shell > file > builtin', () => {
 });
 
 test('collectReplayShellEnv strips AD_VAR_ prefix and ignores other vars', () => {
-  const result = collectReplayShellEnv({
-    AD_VAR_APP_ID: 'settings',
-    PATH: '/bin',
-    AD_VAR_123: 'x',
-    AD_VAR_: 'empty',
-    OTHER_VAR: 'y',
-    AD_APP_ID: 'no-legacy-prefix',
-  });
+  const result = collectReplayShellEnv(
+    {
+      AD_VAR_APP_ID: 'settings',
+      PATH: '/bin',
+      AD_VAR_123: 'x',
+      AD_VAR_: 'empty',
+      OTHER_VAR: 'y',
+      AD_APP_ID: 'no-legacy-prefix',
+    },
+    'ad',
+  );
   assert.equal(result.APP_ID, 'settings');
   assert.equal(result.PATH, undefined);
   assert.equal(result['123'], undefined);
@@ -115,22 +119,50 @@ test('collectReplayShellEnv strips AD_VAR_ prefix and ignores other vars', () =>
 });
 
 test('collectReplayShellEnv skips keys that land in reserved AD_* namespace after strip', () => {
-  const result = collectReplayShellEnv({
-    AD_VAR_AD_SESSION: 'evil',
-    AD_VAR_AD_FOO: 'evil',
-  });
+  const result = collectReplayShellEnv(
+    {
+      AD_VAR_AD_SESSION: 'evil',
+      AD_VAR_AD_FOO: 'evil',
+    },
+    'ad',
+  );
   assert.equal(Object.prototype.hasOwnProperty.call(result, 'AD_SESSION'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(result, 'AD_FOO'), false);
 });
 
 test('parseReplayCliEnvEntries splits KEY=VALUE and rejects invalid keys', () => {
-  assert.deepEqual(parseReplayCliEnvEntries(['APP=settings', 'FOO=bar=baz']), {
+  assert.deepEqual(parseReplayCliEnvEntries(['APP=settings', 'FOO=bar=baz'], 'ad'), {
     APP: 'settings',
     FOO: 'bar=baz',
   });
-  assert.throws(() => parseReplayCliEnvEntries(['NOEQUAL']), AppError);
-  assert.throws(() => parseReplayCliEnvEntries(['lower=x']), AppError);
-  assert.throws(() => parseReplayCliEnvEntries(['=value']), AppError);
+  assert.throws(() => parseReplayCliEnvEntries(['NOEQUAL'], 'ad'), AppError);
+  assert.throws(() => parseReplayCliEnvEntries(['lower=x'], 'ad'), AppError);
+  assert.throws(() => parseReplayCliEnvEntries(['=value'], 'ad'), AppError);
+});
+
+test('Maestro -e and AD_VAR_ keys accept the mixed-case and dotted names Maestro flows look up', () => {
+  assert.deepEqual(parseReplayCliEnvEntries(['username=x', 'api.url=y'], 'maestro'), {
+    username: 'x',
+    'api.url': 'y',
+  });
+  assert.deepEqual(
+    collectReplayShellEnv({ AD_VAR_userName: 'shell', AD_VAR_9lives: 'no' }, 'maestro'),
+    { userName: 'shell' },
+  );
+  assert.deepEqual(collectReplayShellEnv({ AD_VAR_userName: 'shell' }, 'ad'), {});
+  assert.throws(
+    () => parseReplayCliEnvEntries(['9lives=x'], 'maestro'),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      /starting with a letter/.test(error.message),
+  );
+  assert.throws(
+    () => parseReplayCliEnvEntries(['AD_FOO=x'], 'maestro'),
+    /AD_\* namespace is reserved/,
+  );
+  assert.throws(() => parseReplayCliEnvEntries(['__proto__=x'], 'maestro'), /not __proto__/);
+  assert.deepEqual(collectReplayShellEnv({ AD_VAR___proto__: 'x' }, 'maestro'), {});
 });
 
 test('resolveReplayAction walks positionals and string flags', () => {
@@ -150,6 +182,31 @@ test('resolveReplayAction walks positionals and string flags', () => {
   assert.equal(resolved.flags?.snapshotScope, 'app');
   assert.equal(resolved.flags?.snapshotInteractiveOnly, true);
   assert.equal(resolved.flags?.snapshotDepth, 3);
+});
+
+test('escapeReplayAction is the inverse of resolveReplayAction except for its live placeholders', () => {
+  const flags = {
+    snapshotScope: 'cost ${amount} for ${PASSWORD}',
+    nested: { label: '${name}', list: ['${a}', 7, { deep: '${b}' }] },
+    count: 2,
+  };
+  const written = escapeReplayAction(
+    {
+      ts: 0,
+      command: 'fill',
+      positionals: ['label="${name}"', '${PASSWORD}'],
+      flags: flags as SessionAction['flags'],
+      runtime: { metroHost: '${HOST}' },
+    },
+    new Set(['PASSWORD']),
+  );
+  const scope = buildReplayVarScope({
+    fileEnv: { amount: 'X', name: 'X', a: 'X', b: 'X', HOST: 'X', PASSWORD: 'secret' },
+  });
+  const resolved = resolveReplayAction(written, scope, LOC);
+  assert.deepEqual(resolved.positionals, ['label="${name}"', 'secret']);
+  assert.deepEqual(resolved.flags, { ...flags, snapshotScope: 'cost ${amount} for secret' });
+  assert.deepEqual(resolved.runtime, { metroHost: '${HOST}' });
 });
 
 test('resolveReplayAction walks runtime hints', () => {
@@ -208,7 +265,7 @@ test.each([
   },
   {
     name: 'CLI -e via parseReplayCliEnvEntries',
-    run: () => parseReplayCliEnvEntries(['AD_FOO=x']),
+    run: () => parseReplayCliEnvEntries(['AD_FOO=x'], 'ad'),
     keyMatch: /AD_FOO/,
   },
   {
@@ -234,7 +291,7 @@ test.each([
 
 test('parseReplayCliEnvEntries error wording is user-friendly for invalid keys', () => {
   assert.throws(
-    () => parseReplayCliEnvEntries(['lower=x']),
+    () => parseReplayCliEnvEntries(['lower=x'], 'ad'),
     (error: unknown) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&

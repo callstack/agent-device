@@ -24,7 +24,6 @@ export type ReplayPlanDigestMetadata = {
 export function computeReplayPlanDigest(params: {
   actions: SessionAction[];
   actionLines: number[];
-  actionSourcePaths?: (string | undefined)[];
   metadata: ReplayPlanDigestMetadata;
 }): string {
   const canonical = buildCanonicalPlan(params);
@@ -35,24 +34,17 @@ export function computeReplayPlanDigest(params: {
 function buildCanonicalPlan(params: {
   actions: SessionAction[];
   actionLines: number[];
-  actionSourcePaths?: (string | undefined)[];
   metadata: ReplayPlanDigestMetadata;
 }): unknown {
-  const { actions, actionLines, actionSourcePaths, metadata } = params;
+  const { actions, actionLines, metadata } = params;
   return {
     platform: metadata.platform ?? null,
     target: metadata.target ?? null,
-    steps: actions.map((action, index) =>
-      canonicalizeAction(action, actionLines[index] ?? null, actionSourcePaths?.[index] ?? null),
-    ),
+    steps: actions.map((action, index) => canonicalizeAction(action, actionLines[index] ?? null)),
   };
 }
 
-function canonicalizeAction(
-  action: SessionAction,
-  line: number | null,
-  sourcePath: string | null,
-): unknown {
+function canonicalizeAction(action: SessionAction, line: number | null): unknown {
   return {
     command: action.command,
     positionals: action.positionals ?? [],
@@ -60,6 +52,7 @@ function canonicalizeAction(
     runtime: action.runtime ?? null,
     targetEvidence: action.targetEvidence ?? null,
     targetEvidences: action.targetEvidences ?? null,
-    source: { path: sourcePath, line },
+    // Published digests hash `path: null`; dropping the key would invalidate every saved resume digest.
+    source: { path: null, line },
   };
 }

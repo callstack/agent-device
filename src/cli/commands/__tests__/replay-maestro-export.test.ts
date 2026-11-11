@@ -156,6 +156,56 @@ wait 500
     ]);
   });
 
+  test('exports wait stable as waitForAnimationToEnd and text or selector waits with their timeouts', () => {
+    const result = exportReplayScriptToMaestro(`open com.example.app
+wait stable
+wait stable 500 3000
+wait text "Ready" 2000
+wait 'id="done"' 4000
+wait id="save" enabled=true 25000
+wait text Sign in 2000
+`);
+
+    expect(parseYamlDocs(result.yaml)).toEqual([
+      { appId: 'com.example.app' },
+      [
+        { launchApp: { appId: 'com.example.app' } },
+        'waitForAnimationToEnd',
+        { waitForAnimationToEnd: { timeout: 3000 } },
+        { extendedWaitUntil: { visible: 'Ready', timeout: 2000 } },
+        { extendedWaitUntil: { visible: { id: 'done' }, timeout: 4000 } },
+        { extendedWaitUntil: { visible: { id: 'save', enabled: true }, timeout: 25000 } },
+        { extendedWaitUntil: { visible: 'Sign in', timeout: 2000 } },
+      ],
+    ]);
+    const stableWarning =
+      'wait stable exports as waitForAnimationToEnd, which uses its own screen-stability threshold instead of the quiet window';
+    expect(result.warnings).toEqual([
+      { line: 2, action: 'wait stable', message: stableWarning },
+      { line: 3, action: 'wait stable 500 3000', message: stableWarning },
+    ]);
+  });
+
+  test('rejects wait forms that have no on-screen text to wait for', () => {
+    const run = () =>
+      exportReplayScriptToMaestro(`open com.example.app
+wait @e3
+wait text
+wait stable 500 junk
+wait visible label="Save" 25000
+`);
+    expect(run).toThrowError(AppError);
+    expect(run).toThrowError('line 2 (wait @e3): wait @ref names a session-local ref');
+    expect(run).toThrowError('line 3 (wait text): wait text requires the text to wait for');
+    expect(run).toThrowError(
+      'line 4 (wait stable 500 junk): wait stable takes at most a numeric quietMs and timeoutMs',
+    );
+    // The whole selector reaches the projection, which refuses `visible`; it never exports as text.
+    expect(run).toThrowError(
+      'line 5 (wait visible label="Save" 25000): wait selector is not Maestro-compatible',
+    );
+  });
+
   // #3197: `scroll --until` became part of a scroll action, so the export names
   // the stop condition it cannot carry instead of exporting a bare page scroll.
   test('warns when scroll --until exports as a bare Maestro scroll', () => {

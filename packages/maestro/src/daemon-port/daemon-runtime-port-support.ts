@@ -93,11 +93,20 @@ export function launchArgumentValues(
     | { kind: 'list'; values: Array<string | number | boolean> }
     | { kind: 'map'; values: Record<string, string | number | boolean> }
     | undefined,
+  platform: string,
 ): string[] {
   if (!value) return [];
   if (value.kind === 'scalar') return [String(value.value)];
   if (value.kind === 'list') return value.values.map(String);
-  return Object.entries(value.values).flatMap(([key, entry]) => [key, String(entry)]);
+  return Object.entries(value.values).flatMap(([key, entry]) => [
+    platform === 'ios' ? iosLaunchArgumentKey(key, entry) : key,
+    String(entry),
+  ]);
+}
+
+/** Maestro's `toIOSLaunchArguments` prefixes `-` to a non-boolean key, the form `UserDefaults` reads. */
+function iosLaunchArgumentKey(key: string, value: string | number | boolean): string {
+  return typeof value === 'boolean' || key.startsWith('-') ? key : `-${key}`;
 }
 
 export function observationFromMatch(
