@@ -9,6 +9,7 @@ import { isScrollableType, normalizeSnapshotScope } from '@agent-device/contract
 import {
   foldSnapshotRect,
   androidSystemBarContentClips,
+  type AndroidSystemBarContentClip,
   serializeRegularSnapshotPresentationNode,
 } from './snapshot-presentation-node.ts';
 import type {
@@ -74,7 +75,7 @@ type AndroidSnapshotBuildState = {
   interactiveDescendantMemo: Map<AndroidNode, boolean>;
   /** Subtrees the regular projection hides (invisible / stale window). Empty for raw. */
   hidden: ReadonlySet<AndroidNode>;
-  systemBarContentClips: ReadonlyMap<AndroidNode, Rect>;
+  systemBarContentClips: ReadonlyMap<AndroidNode, AndroidSystemBarContentClip>;
   /** Compose containers mapped to the role node whose class they publish. Empty for raw. */
   composeRoleFolds: ReadonlyMap<AndroidNode, AndroidNode>;
   /** The role nodes those containers absorb, which the regular projection omits. */
@@ -253,8 +254,8 @@ function walkUiHierarchyNode(
     node.identifier,
     ancestorSystemBar,
   );
-  ancestorClip =
-    systemBar === undefined ? (ancestorClip ?? state.systemBarContentClips.get(node)) : undefined;
+  const clips = resolveAndroidNodeClips(state, node, ancestorClip, systemBar);
+  ancestorClip = clips.presentationClip;
   const currentWindowRect = node.windowRect ?? ancestorWindowRect ?? state.viewport;
   const effectiveRect = resolveAndroidEffectiveRect(state, node, ancestorClip, currentWindowRect);
   const currentIndex = appendAndroidNodeIfPresented(
@@ -267,7 +268,7 @@ function walkUiHierarchyNode(
     effectiveRect,
     currentWindowRect,
     systemBar,
-    ancestorClip,
+    clips.inputBounds,
   );
   const nextAncestorHittable = ancestorHittable || isAgentTarget(node);
   const nextAncestorCollection = ancestorCollection || isCollectionContainerType(node.type);
@@ -284,6 +285,28 @@ function walkUiHierarchyNode(
     nextAncestorClip,
     { bundleId: node.packageName ?? undefined, systemBar },
   );
+}
+
+function resolveAndroidNodeClips(
+  state: AndroidSnapshotBuildState,
+  node: AndroidNode,
+  ancestorClip: Rect | undefined,
+  systemBar: RawSnapshotNode['systemBar'],
+): { presentationClip?: Rect; inputBounds?: Rect } {
+  if (systemBar !== undefined) return {};
+  const windowClip = state.systemBarContentClips.get(node);
+  const contentBounds = windowClip?.hasBarDescendants ? undefined : windowClip?.inputBounds;
+  const presentationClip = foldSnapshotRect(
+    ancestorClip ?? contentBounds,
+    undefined,
+    contentBounds,
+  );
+  const inputBounds = foldSnapshotRect(
+    windowClip?.inputBounds ?? presentationClip,
+    undefined,
+    presentationClip,
+  );
+  return { presentationClip, inputBounds };
 }
 
 function shouldStopAndroidWalk(

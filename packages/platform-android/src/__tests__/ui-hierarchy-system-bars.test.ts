@@ -74,7 +74,11 @@ test('raw snapshots retain measured input bounds without changing or serializing
   expect(readSnapshotNodeInteractionBounds({ ...target })).toEqual(bounds);
 });
 
-function mixedWindowHierarchy(barFirst: boolean, contentPackage: string): string {
+function mixedWindowHierarchy(
+  barFirst: boolean,
+  contentPackage: string,
+  scrollableRoot: boolean,
+): string {
   const bar = `<node class="android.widget.FrameLayout" package="com.google.android.apps.nexuslauncher" resource-id="com.google.android.apps.nexuslauncher:id/navbuttons_view" bounds="[0,2274][1080,2400]" visible-to-user="true">
     <node class="android.widget.ImageView" package="com.google.android.apps.nexuslauncher" content-desc="Home" bounds="[434,2279][644,2395]" clickable="true" visible-to-user="true" />
     <node class="android.view.ViewGroup" package="dev.e2e.benchmark" resource-id="embedded-content" bounds="[0,2305][1080,2400]" clickable="true" visible-to-user="true" />
@@ -83,14 +87,19 @@ function mixedWindowHierarchy(barFirst: boolean, contentPackage: string): string
     <node class="android.view.ViewGroup" package="${contentPackage}" resource-id="item-137" bounds="[0,2259][1080,2390]" clickable="true" visible-to-user="true" />
     <node class="android.view.ViewGroup" package="${contentPackage}" resource-id="item-138" bounds="[0,2305][1080,2400]" clickable="true" visible-to-user="true" />
   </node>`;
-  return `<hierarchy><node class="android.widget.FrameLayout" package="com.google.android.apps.nexuslauncher" bounds="[0,0][1080,2400]" window-bounds="[0,0][1080,2400]" window-layer="10" visible-to-user="true">${barFirst ? bar + content : content + bar}</node></hierarchy>`;
+  return `<hierarchy><node class="${scrollableRoot ? 'android.widget.ScrollView' : 'android.widget.FrameLayout'}" scrollable="${scrollableRoot}" package="com.google.android.apps.nexuslauncher" bounds="[0,0][1080,2400]" window-bounds="[0,0][1080,2400]" window-layer="10" visible-to-user="true">${barFirst ? bar + content : content + bar}</node></hierarchy>`;
 }
 
-for (const barFirst of [true, false]) {
+for (const [barFirst, scrollableRoot] of [
+  [true, false],
+  [false, false],
+  [true, true],
+  [false, true],
+] as const) {
   test.each(['dev.e2e.benchmark', 'com.google.android.apps.nexuslauncher'])(
-    `mixed window clips content branches and preserves only system-bar descendants: barFirst=${barFirst}, owner=%s`,
+    `mixed window clips content branches and preserves only system-bar descendants: barFirst=${barFirst}, scrollableRoot=${scrollableRoot}, owner=%s`,
     (contentPackage) => {
-      const xml = mixedWindowHierarchy(barFirst, contentPackage);
+      const xml = mixedWindowHierarchy(barFirst, contentPackage, scrollableRoot);
       const regular = parseUiHierarchy(xml, undefined, {});
       const raw = parseUiHierarchy(xml, undefined, { raw: true });
       const bounds = { x: 0, y: 0, width: 1080, height: 2274 };
@@ -121,6 +130,34 @@ for (const barFirst of [true, false]) {
     },
   );
 }
+
+test('shared scroll ancestry preserves both status and navigation branches', () => {
+  const status = `<node class="android.widget.FrameLayout" package="com.android.systemui" resource-id="com.android.systemui:id/status_bar" bounds="[0,0][1080,132]" visible-to-user="true"><node class="android.widget.TextView" package="com.android.systemui" text="Clock" bounds="[42,40][122,80]" visible-to-user="true" /></node>`;
+  const xml = mixedWindowHierarchy(true, 'dev.e2e.benchmark', true).replace(
+    '</node></hierarchy>',
+    `${status}</node></hierarchy>`,
+  );
+  for (const raw of [false, true]) {
+    const snapshot = parseUiHierarchy(xml, undefined, { raw });
+    const row = snapshot.nodes.find((n) => n.identifier === 'item-137')!;
+    expect(readSnapshotNodeInteractionBounds(row)).toEqual({
+      x: 0,
+      y: 132,
+      width: 1080,
+      height: 2142,
+    });
+    const clock = snapshot.nodes.find((n) => n.label === 'Clock')!;
+    expect(clock).toMatchObject({
+      rect: { x: 42, y: 40, width: 80, height: 40 },
+      systemBar: 'status',
+    });
+    expect(readSnapshotNodeInteractionBounds(clock)).toBeUndefined();
+    expect(snapshot.nodes.find((n) => n.label === 'Home')).toMatchObject({
+      rect: { x: 434, y: 2279, width: 210, height: 116 },
+      hittable: true,
+    });
+  }
+});
 
 test('a lower-layer window wholly inside navigation publishes no tappable app content', () => {
   const snapshot = parseUiHierarchy(

@@ -388,7 +388,7 @@ test('keeps rounded parent-owned points inside half-pixel viewport bounds', () =
   const resolution = resolveInteractionTouchPoint(nodes, nodes[0]!, { parentOwnedBounds: [bound] });
 
   assert.equal(resolution.kind, 'resolved');
-  if (resolution.kind === 'resolved') assert.ok(containsPoint(bound, resolution.point));
+  if (resolution.kind === 'resolved') assert.deepEqual(resolution.point, { x: 38, y: 79 });
 });
 
 test('property: resolved parent-owned points stay inside the target and supplied bounds', () => {

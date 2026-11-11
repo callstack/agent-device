@@ -81,25 +81,32 @@ function normalizeRect(rect: Rect): Rect {
 
 type SystemBar = { root: AndroidNode; rect: Rect };
 
+export type AndroidSystemBarContentClip = Readonly<{
+  inputBounds: Rect;
+  hasBarDescendants: boolean;
+}>;
+
 /** The visible window clips left by measured persistent Android bars, including launcher-owned navigation. */
 export function androidSystemBarContentClips(
   roots: readonly AndroidNode[],
   hidden: ReadonlySet<AndroidNode>,
   viewport: Rect | undefined,
   budget: AndroidSnapshotPresentationBudget,
-): ReadonlyMap<AndroidNode, Rect> {
-  const bars = collectSystemBars(roots, hidden, budget);
-  const clips = new Map<AndroidNode, Rect>();
+): ReadonlyMap<AndroidNode, AndroidSystemBarContentClip> {
+  const { bars, barAncestors } = collectSystemBars(roots, hidden, budget);
+  const clips = new Map<AndroidNode, AndroidSystemBarContentClip>();
   for (const root of roots) {
     const frame = root.windowRect ?? viewport;
     if (!isPositiveFiniteRect(frame)) continue;
     const clip = clipWindowToSystemBars(root, frame, bars, budget);
     if (clip === frame) continue;
+    const contentClip = { inputBounds: clip, hasBarDescendants: false };
+    const ancestorClip = { inputBounds: clip, hasBarDescendants: true };
     const pending = [root];
     while (pending.length > 0) {
       budget.check('work');
       const node = pending.pop()!;
-      clips.set(node, clip);
+      clips.set(node, barAncestors.has(node) ? ancestorClip : contentClip);
       pending.push(...node.children);
     }
   }
@@ -136,8 +143,10 @@ function collectSystemBars(
   roots: readonly AndroidNode[],
   hidden: ReadonlySet<AndroidNode>,
   budget: AndroidSnapshotPresentationBudget,
-): SystemBar[] {
+): { bars: SystemBar[]; barAncestors: Set<AndroidNode> } {
   const bars: SystemBar[] = [];
+  const barAncestors = new Set<AndroidNode>();
+  const parents = new Map<AndroidNode, AndroidNode>();
   const pending = roots.map((root) => ({ root, node: root }));
   while (pending.length > 0) {
     budget.check('work');
@@ -150,10 +159,29 @@ function collectSystemBars(
       isPositiveFiniteRect(barRect)
     ) {
       bars.push({ root, rect: barRect });
+      markSystemBarAncestors(parents.get(node), parents, barAncestors, budget);
     }
-    pending.push(...node.children.map((child) => ({ root, node: child })));
+    pending.push(
+      ...node.children.map((child) => {
+        parents.set(child, node);
+        return { root, node: child };
+      }),
+    );
   }
-  return bars;
+  return { bars, barAncestors };
+}
+
+function markSystemBarAncestors(
+  node: AndroidNode | undefined,
+  parents: ReadonlyMap<AndroidNode, AndroidNode>,
+  ancestors: Set<AndroidNode>,
+  budget: AndroidSnapshotPresentationBudget,
+): void {
+  while (node && !ancestors.has(node)) {
+    budget.check('work');
+    ancestors.add(node);
+    node = parents.get(node);
+  }
 }
 
 function clipSystemBar(frame: Rect, bar: Rect): Rect {
