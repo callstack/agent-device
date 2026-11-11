@@ -266,6 +266,9 @@ async function requestUploadPreflight(options: {
 
   const response = await fetch(preflightUrl, {
     method: 'POST',
+    // The daemon never redirects this route. A redirect would carry x-agent-device-token, which
+    // fetch keeps on a cross-origin hop, so any redirect fails the preflight instead.
+    redirect: 'error',
     headers,
     signal: combineUploadSignals(options.signal, UPLOAD_PREFLIGHT_TIMEOUT_MS),
     body: JSON.stringify({
@@ -399,6 +402,8 @@ async function finalizeDirectUpload(options: {
 
   const response = await fetch(finalizeUrl, {
     method: 'POST',
+    // As with preflight: the route never redirects, and a redirect must not carry the token.
+    redirect: 'error',
     headers,
     signal: combineUploadSignals(options.signal, UPLOAD_PREFLIGHT_TIMEOUT_MS),
     body: JSON.stringify({ uploadId: options.uploadId }),

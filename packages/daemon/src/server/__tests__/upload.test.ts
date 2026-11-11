@@ -1,11 +1,13 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import type { IncomingMessage } from 'node:http';
 import { receiveUpload } from '../upload.ts';
 import { streamReadableToFile, validateArtifactContentLength } from '../artifact-download.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
@@ -22,6 +24,50 @@ test('receiveUpload rejects uploads that exceed the configured content-length li
 
   await assert.rejects(async () => await receiveUpload(req), /Upload exceeds maximum size/i);
 });
+
+test('receiveUpload verifies x-artifact-hash and removes its temp dir on mismatch', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-upload-hash-');
+  const previousTmpDir = process.env.TMPDIR;
+  process.env.TMPDIR = tempRoot;
+  try {
+    const body = Buffer.from('apk-bytes');
+    const headers = {
+      'x-artifact-type': 'file',
+      'x-artifact-filename': 'Sample.apk',
+      'x-artifact-hash-algorithm': 'sha256',
+    };
+    await assert.rejects(
+      receiveUpload(
+        makeUploadRequest(body, { ...headers, 'x-artifact-hash': sha256(Buffer.from('other')) }),
+      ),
+      (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
+    );
+    assert.deepEqual(fs.readdirSync(tempRoot), []);
+
+    const upload = await receiveUpload(
+      makeUploadRequest(body, { ...headers, 'x-artifact-hash': sha256(body).toUpperCase() }),
+    );
+    assert.equal(fs.readFileSync(upload.artifactPath, 'utf8'), 'apk-bytes');
+  } finally {
+    if (previousTmpDir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previousTmpDir;
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('receiveUpload refuses a hash algorithm other than sha256', async () => {
+  const req = makeUploadRequest(Buffer.from('apk-bytes'), {
+    'x-artifact-type': 'file',
+    'x-artifact-filename': 'Sample.apk',
+    'x-artifact-hash': 'abc',
+    'x-artifact-hash-algorithm': 'md5',
+  });
+  await assert.rejects(receiveUpload(req), /x-artifact-hash-algorithm/);
+});
+
+function sha256(content: Buffer): string {
+  return createHash('sha256').update(content).digest('hex');
+}
 
 test('artifact content-length accepts decimal integers only', () => {
   for (const value of ['+1', '1e3', '0x10', '1.5', '-1']) {

@@ -16,6 +16,7 @@ import {
   buildDaemonHttpUrl,
   isTenantOwnedSessionName,
   normalizeTenantId,
+  DAEMON_REQUEST_MAX_BYTES,
 } from '@agent-device/contracts/daemon-http';
 import {
   carriesUnbackedHostPathInstallSource,
@@ -55,6 +56,10 @@ export type DaemonProxyOptions = {
   /** Auth token of the upstream daemon. Never leaves the proxy. */
   upstreamToken: string;
   maxRpcBodyBytes?: number;
+  /**
+   * Longest time one daemon request may take, including its body. Unset, an exchange lasts as long
+   * as its client request: the client's command envelope bounds it.
+   */
   upstreamTimeoutMs?: number;
   upstreamFetch?: DaemonProxyUpstreamFetch;
 } & (
@@ -91,7 +96,7 @@ type NormalizedProxyOptions = {
   clientToken: string | undefined;
   authenticate: DaemonProxyAuthenticate | undefined;
   maxRpcBodyBytes: number;
-  upstreamTimeoutMs: number;
+  upstreamTimeoutMs: number | undefined;
   upstreamFetch: DaemonProxyUpstreamFetch;
 };
 
@@ -101,8 +106,9 @@ type ProxyCaller = { tenantId?: string; uploadHeaders: Record<string, string> };
 /** The client request headers an upload ticket repeats when `authenticate` names none. */
 const DEFAULT_UPLOAD_CREDENTIAL_HEADERS = Object.keys(buildDaemonHttpAuthHeaders('client'));
 
-const DEFAULT_MAX_RPC_BODY_BYTES = 1024 * 1024;
-const DEFAULT_UPSTREAM_TIMEOUT_MS = 5 * 60 * 1000;
+const DEFAULT_MAX_RPC_BODY_BYTES = DAEMON_REQUEST_MAX_BYTES;
+/** `/health` answers quickly or not at all; its probe never waits on `upstreamTimeoutMs`. */
+const UPSTREAM_HEALTH_TIMEOUT_MS = 5_000;
 const DAEMON_PROXY_PREFIX = `${DAEMON_HTTP_BASE_PATH}/`;
 const FORWARDED_REQUEST_HEADERS = [
   'content-type',
@@ -166,15 +172,34 @@ async function handleProxyRequest(
     return new Response(new TextEncoder().encode('Not found'), { status: 404 });
   }
 
-  let rpcBody: string | undefined;
-  if (route === '/rpc') {
+  if (route !== '/rpc') return await handleDaemonRoute(request, route, options, instanceId);
+
+  let rpcBody: string;
+  try {
     rpcBody = await readRequestText(
       request,
       options.maxRpcBodyBytes,
       'Proxy request body is too large.',
     );
+  } catch (error) {
+    return rpcErrorResponse(null, error);
   }
+  const envelopeRefusal = refuseInvalidRpcEnvelope(rpcBody);
+  if (envelopeRefusal) return envelopeRefusal;
+  try {
+    return await handleDaemonRoute(request, route, options, instanceId, rpcBody);
+  } catch (error) {
+    return rpcErrorResponse(readJsonRpcId(rpcBody), error);
+  }
+}
 
+async function handleDaemonRoute(
+  request: Request,
+  route: string,
+  options: NormalizedProxyOptions,
+  instanceId: string,
+  rpcBody?: string,
+): Promise<Response> {
   const caller = await authenticateCaller(request, options, rpcBody);
   if (!caller) {
     return unauthorizedResponse(route, readJsonRpcId(rpcBody));
@@ -300,7 +325,7 @@ async function readUpstreamHealth(
     new Request(buildDaemonHttpUrl(options.upstreamBaseUrl, 'health'), {
       method: 'GET',
       headers: buildUpstreamHeaders(new Headers(), options.upstreamToken, '/health'),
-      signal: upstreamSignal(request, options),
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(UPSTREAM_HEALTH_TIMEOUT_MS)]),
     }),
   );
   const text = await response.text();
@@ -346,6 +371,7 @@ async function forwardProxyRequest(params: {
  * turns a dropped upstream request into cancellation of in-flight runner work.
  */
 function upstreamSignal(request: Request, options: NormalizedProxyOptions): AbortSignal {
+  if (options.upstreamTimeoutMs === undefined) return request.signal;
   return AbortSignal.any([request.signal, AbortSignal.timeout(options.upstreamTimeoutMs)]);
 }
 
@@ -465,7 +491,7 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
     clientToken,
     authenticate: options.authenticate,
     maxRpcBodyBytes: options.maxRpcBodyBytes ?? DEFAULT_MAX_RPC_BODY_BYTES,
-    upstreamTimeoutMs: options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS,
+    upstreamTimeoutMs: options.upstreamTimeoutMs,
     upstreamFetch: options.upstreamFetch ?? ((request) => fetch(request)),
   };
 }
@@ -756,6 +782,50 @@ function tenantRpcMethodRefusedResponse(rpcId: unknown): Response {
       error: { code: -32001, message: error.message, data: normalizeError(error) },
     },
     { status: 401 },
+  );
+}
+
+const JSON_RPC_PARSE_ERROR = -32700;
+const JSON_RPC_INVALID_REQUEST = -32600;
+
+/** Refuses an `/rpc` body that is not JSON, or not one object, as the daemon itself does. */
+function refuseInvalidRpcEnvelope(body: string): Response | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return rpcRefusalResponse(JSON_RPC_PARSE_ERROR, 'Parse error');
+  }
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return null;
+  return rpcRefusalResponse(JSON_RPC_INVALID_REQUEST, 'Invalid Request');
+}
+
+function rpcRefusalResponse(code: number, message: string): Response {
+  return Response.json(
+    {
+      jsonrpc: '2.0',
+      id: null,
+      error: {
+        code,
+        message,
+        data: normalizeError(new AppError('INVALID_ARGS', message)),
+      },
+    },
+    { status: 400 },
+  );
+}
+
+/** An `/rpc` failure in the JSON-RPC envelope the client reads its error code and message from. */
+function rpcErrorResponse(rpcId: unknown, error: unknown): Response {
+  const normalized = normalizeError(error);
+  const invalidArgs = normalized.code === 'INVALID_ARGS';
+  return Response.json(
+    {
+      jsonrpc: '2.0',
+      id: rpcId,
+      error: { code: invalidArgs ? -32602 : -32000, message: normalized.message, data: normalized },
+    },
+    { status: invalidArgs ? 400 : 500 },
   );
 }
 

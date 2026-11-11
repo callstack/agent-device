@@ -13,6 +13,7 @@ import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import { materializeRemoteArtifacts } from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
+import { DAEMON_REQUEST_MAX_BYTES } from '@agent-device/contracts/daemon-http';
 import { buildDaemonRpcRequest, leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
 export function handleDaemonHttpResponseBody(
@@ -190,5 +191,19 @@ export function buildHttpRpcPayload(
   return buildDaemonRpcRequest(req, {
     id: req.meta?.requestId ?? createRequestId(),
     includeTokenParam: options.includeTokenParam,
+  });
+}
+
+/** Throws before sending a serialized request that no daemon transport would read. */
+export function refuseOversizedDaemonRequest(payload: string, requestId: string | undefined): void {
+  const requestBytes = Buffer.byteLength(payload, 'utf8');
+  if (requestBytes <= DAEMON_REQUEST_MAX_BYTES) return;
+  throw new AppError('INVALID_ARGS', 'Daemon request exceeds the size limit', {
+    reason: 'daemon_request_too_large',
+    requestBytes,
+    maxBytes: DAEMON_REQUEST_MAX_BYTES,
+    requestId,
+    daemonRequestSent: false,
+    hint: 'Split the replay suite or flow into smaller runs.',
   });
 }

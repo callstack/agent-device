@@ -27,6 +27,7 @@ import {
 import {
   buildDaemonHealthPayload,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
+  DAEMON_REQUEST_MAX_BYTES,
 } from '@agent-device/contracts/daemon-http';
 import { readVersion } from '@agent-device/host-kit/version';
 import { readHostCpuArch } from '@agent-device/host-kit/process';
@@ -68,7 +69,7 @@ import {
 } from './tenant-trust.ts';
 import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
 
-const MAX_HTTP_RPC_BODY_BYTES = 1024 * 1024;
+const MAX_HTTP_RPC_BODY_BYTES = DAEMON_REQUEST_MAX_BYTES;
 
 export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;
@@ -228,10 +229,12 @@ function readRpcRequestBody(
   onBody: (body: string) => void,
 ): void {
   let body = '';
+  let bodyBytes = 0;
   req.setEncoding('utf8');
-  req.on('data', (chunk) => {
+  req.on('data', (chunk: string) => {
     body += chunk;
-    if (body.length > MAX_HTTP_RPC_BODY_BYTES) {
+    bodyBytes += Buffer.byteLength(chunk, 'utf8');
+    if (bodyBytes > MAX_HTTP_RPC_BODY_BYTES) {
       req.destroy(new Error('request too large'));
     }
   });

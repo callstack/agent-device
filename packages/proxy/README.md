@@ -139,8 +139,20 @@ authenticate: async (request) => {
 | `clientToken` | required without `authenticate` | Token clients must send as their daemon auth token. |
 | `authenticate` | none | Authenticates each client and names its tenant; replaces `clientToken`. |
 | `upstreamFetch` | global `fetch` | Sends one request to the daemon. |
-| `maxRpcBodyBytes` | 1 MiB | Larger `/rpc` bodies get a 400 response. |
-| `upstreamTimeoutMs` | 5 minutes | Longest time one daemon request may take, including its body. |
+| `maxRpcBodyBytes` | 64 MiB, the daemon's own request limit | Larger `/rpc` bodies get a 400 response. |
+| `upstreamTimeoutMs` | none | Longest time one daemon request may take, including its body. Without it, a request lasts as long as the client waits, and the client's command timeout bounds it. |
+
+`maxRpcBodyBytes` limits the bytes of one `/rpc` body. The proxy reads the whole body before it
+authenticates the client, then decodes and parses it. One unauthenticated request can therefore
+hold more memory than the limit: the raw bytes plus the decoded string and the parsed request. For
+a proxy that faces the internet, set `maxRpcBodyBytes` lower than the 64 MiB default, to the largest
+request your clients send.
+
+After the limit check, the proxy rewrites the body: it adds the daemon token and, with
+`authenticate`, the tenant fields. The rewritten body can be a few hundred bytes larger than the
+client's. The daemon applies its own 64 MiB limit, so a client body within that margin of 64 MiB
+passes the proxy and the daemon refuses it. Clients refuse requests over 64 MiB before sending them,
+so only a body in that narrow margin is affected.
 
 ## Health and restarts
 

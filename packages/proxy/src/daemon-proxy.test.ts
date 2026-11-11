@@ -1,5 +1,6 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { buildDaemonHttpAuthHeaders } from '@agent-device/contracts/daemon-http';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   createDaemonProxy,
   type DaemonProxyAuthenticatedClient,
@@ -107,6 +108,32 @@ test('aborting the client request aborts the upstream exchange', async () => {
   expect((await response).status).toBe(500);
 });
 
+test.each([
+  { upstreamTimeoutMs: undefined, timeouts: [] },
+  { upstreamTimeoutMs: 1234, timeouts: [[1234]] },
+])(
+  'an rpc exchange with upstreamTimeoutMs $upstreamTimeoutMs gets timeouts $timeouts',
+  async ({ upstreamTimeoutMs, timeouts }) => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    try {
+      const proxy = createDaemonProxy({
+        upstreamBaseUrl: 'http://daemon.internal:4310',
+        upstreamToken: 'daemon-secret',
+        clientToken: 'client-secret',
+        upstreamFetch: async () => Response.json({ jsonrpc: '2.0', id: 4, result: {} }),
+        ...(upstreamTimeoutMs === undefined ? {} : { upstreamTimeoutMs }),
+      });
+      const response = await proxy.handle(
+        rpcRequest({ jsonrpc: '2.0', id: 4, method: 'agent-device.command', params: {} }),
+      );
+      expect(response.status).toBe(200);
+      expect(timeout.mock.calls).toEqual(timeouts);
+    } finally {
+      timeout.mockRestore();
+    }
+  },
+);
+
 test('upload tickets point at the origin the client used, not the daemon', async () => {
   const upstream = recordingUpstream(() =>
     Response.json({
@@ -210,7 +237,75 @@ test('an oversized rpc body resolves with a 400 instead of rejecting', async () 
   );
 
   expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    id: null,
+    error: { data: { code: 'INVALID_ARGS', message: 'Proxy request body is too large.' } },
+  });
   expect(upstream.requests).toHaveLength(0);
+});
+
+test('an rpc whose upstream exchange fails answers a JSON-RPC error that keeps code and message', async () => {
+  const proxy = proxyWith(async () => {
+    throw new AppError('COMMAND_FAILED', 'Daemon is unreachable', { reason: 'upstream_down' });
+  });
+
+  const response = await proxy.handle(
+    rpcRequest({ jsonrpc: '2.0', id: 9, method: 'agent-device.command', params: {} }),
+  );
+
+  expect(response.status).toBe(500);
+  expect(await response.json()).toMatchObject({
+    jsonrpc: '2.0',
+    id: 9,
+    error: {
+      code: -32000,
+      message: 'Daemon is unreachable',
+      data: {
+        code: 'COMMAND_FAILED',
+        message: 'Daemon is unreachable',
+        details: { reason: 'upstream_down' },
+      },
+    },
+  });
+});
+
+test.each([
+  { body: '{not json', code: -32700 },
+  { body: 'null', code: -32600 },
+  { body: '[1]', code: -32600 },
+])('an rpc body $body is refused with $code before the daemon', async ({ body, code }) => {
+  const upstream = recordingUpstream(() => Response.json({}));
+  const proxy = proxyWith(upstream.fetch);
+
+  const response = await proxy.handle(rpcRequest(undefined, { body }));
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ jsonrpc: '2.0', id: null, error: { code } });
+  expect(upstream.requests).toHaveLength(0);
+});
+
+test('the upstream health probe has its own bound without upstreamTimeoutMs', async () => {
+  const healthBound = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(healthBound.signal);
+  const upstreamAborted = signalled();
+  try {
+    const proxy = proxyWith(
+      (request) =>
+        new Promise<Response>((_resolve, reject) => {
+          request.signal.addEventListener('abort', () => {
+            upstreamAborted.resolve();
+            reject(request.signal.reason);
+          });
+        }),
+    );
+    const response = proxy.handle(new Request(`${PROXY_ORIGIN}/agent-device/health`));
+    expect(timeout.mock.calls).toEqual([[5_000]]);
+    healthBound.abort();
+    await upstreamAborted.promise;
+    expect((await response).status).toBe(500);
+  } finally {
+    timeout.mockRestore();
+  }
 });
 
 test('aborting a health request aborts the upstream health probe', async () => {

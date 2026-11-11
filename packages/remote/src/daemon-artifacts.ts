@@ -461,20 +461,46 @@ export async function materializeRemoteArtifacts(
   return { ok: true, data: nextData };
 }
 
+/**
+ * Whether this request finishes a capture whose destination this client named in an EARLIER
+ * request (`record start`, a perf or trace start with an output path). The daemon echoes that
+ * destination, and the paths it derives from it, as `localPath`, because this process kept no
+ * record of it. The finishing actions mirror the daemon's own (`request-finalization.ts`).
+ */
+function finishesEarlierClientCapture(req: DaemonWireRequest): boolean {
+  const [first, second, third] = (req.positionals ?? []).map((value) => value.toLowerCase());
+  switch (req.command) {
+    case 'record':
+    case 'trace':
+      return first === 'stop';
+    case 'perf':
+      return third === 'stop' || third === 'report' || (first === 'trace' && second === 'stop');
+    default:
+      return false;
+  }
+}
+
+/**
+ * Where this client writes one downloaded artifact. The client chooses: a path it registered in
+ * this request wins, and a response `localPath` is accepted only on a stop or report that echoes an
+ * earlier request's destination. Anything else lands in cwd under the response file name's basename.
+ */
 function resolveMaterializedArtifactPath(
   artifact: DaemonArtifact,
   req: DaemonWireRequest,
   host: HostEnvironment,
 ): string {
-  if (artifact.localPath && artifact.localPath.trim().length > 0) {
+  const requestedPath = req.meta?.clientArtifactPaths?.[artifact.field];
+  if (hasNonEmptyString(requestedPath)) return requestedPath;
+  if (hasNonEmptyString(artifact.localPath) && finishesEarlierClientCapture(req)) {
     return artifact.localPath;
   }
-  const requestedPath = req.meta?.clientArtifactPaths?.[artifact.field];
-  if (requestedPath && requestedPath.trim().length > 0) {
-    return requestedPath;
-  }
-  const fallbackName = artifact.fileName?.trim() || `${artifact.field}-${Date.now()}`;
-  return path.resolve(req.meta?.cwd ?? host.cwd, fallbackName);
+  const responseName = path.basename(artifact.fileName?.trim() ?? '');
+  const fileName =
+    responseName && responseName !== '.' && responseName !== '..'
+      ? responseName
+      : `${path.basename(artifact.field)}-${Date.now()}`;
+  return path.resolve(req.meta?.cwd ?? host.cwd, fileName);
 }
 
 type DownloadRemoteArtifactParams = {

@@ -104,7 +104,8 @@
     "packages/daemon/src/server/http/http-rpc-envelope.ts#JsonRpcRequest": "sha256:7c299fe17818993a0bacbb48e12dcd1fd28b3595cf8efcae3484acbec383ce22",
     "packages/daemon/src/server/http/http-rpc-envelope.ts#JsonRpcResponse": "sha256:13b36c1e2b9eae9437fdac982efde142fd4abba947e11011fa22191675b6e4ba",
     "packages/daemon/src/server/http/http-rpc-methods.ts#LEASE_RPC_METHOD_TO_COMMAND": "sha256:ff52d6c6040080973d51c572ea09b0e23eaa07c7f7b813061599d404dfc811ca",
-    "packages/daemon/src/server/http/http-server.ts#MAX_HTTP_RPC_BODY_BYTES": "sha256:3cb06e12b3110fa27e390d5c6473578b3f13c93b9f2b571e0e8e42d7ce29d48a",
+    "packages/daemon/src/server/http/http-server.ts#MAX_HTTP_RPC_BODY_BYTES": "sha256:eed6cb154db2b67ffe5f058ef0570fec247a5d2a43af2d42952dee0b08870a87",
+    "packages/contracts/src/daemon-http.ts#DAEMON_REQUEST_MAX_BYTES": "sha256:4348e1d7a6d025d6d75fddf075e52fe0555ce7c7b69b4dd4d64dc28ce1f73a87",
     "packages/daemon/src/server/http/http-rpc-methods.ts#RELEASE_MATERIALIZED_PATHS_RPC_METHODS": "sha256:75a18d3496894309dd6042b16c4dcc241c16ec6336783e6310eddd6db7437ccb",
     "packages/daemon/src/server/http/http-rpc-methods.ts#SUPPORTED_RPC_METHODS": "sha256:4d5ed730dcb669b0dacca3bb4977f35686bab9b7fb464c0590fd50f838e6c243",
     "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest": "sha256:1c323f97c3cefec8f95633b6abd127342bf75494bfb109d1cc6eadf3ceacaeae",
@@ -149,7 +150,7 @@
     "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:f3ab09ce387577073ecc5bcd2528963e45f91b2c1e4cc57847c3e2732ccbb300",
     "packages/remote/src/daemon-artifacts.ts#isRemoteDaemon": "sha256:0f6a714c5f60ce4e8548d811b516d8b6241eca9f7e5414733732da395b8a00e7",
     "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:fffe8ce578e8bcdea175d6a200bea364ffce0956c2cba65bea48d72c0aaea375",
-    "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:0cb422301edef0545615b0f3acb3d80280213921cab2eb529715260ff0fa3647",
+    "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:660320cd62dfaeb4da80b86d6c072a5bcdbce3399723d43208a22d70b6e4a243",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
     "packages/remote/src/remote-request-diagnostics.ts#buildRemoteRequestDiagnosticsUrl": "sha256:30a1a9bf0df24d3564a616699916a3bb4360c2b4d21c4ad0562fb0c1e738d0a9",
@@ -160,10 +161,10 @@
     "packages/remote/src/upload-client.ts#UploadPreflightResponse": "sha256:196a1d9ef41a1aec192589fa7ccb30cf71d971a005349d5d73eed42e6ab21327",
     "packages/remote/src/upload-client.ts#UploadPreflightResult": "sha256:bd8fc6d617c0630325455fd64d0fe319daaced198ee6745e4673a8ace3df460d",
     "packages/remote/src/upload-client.ts#UploadResponse": "sha256:499e01466b5e0e03413f8d3f1986f5af6bc120704c50a3747d84de422b3f0314",
-    "packages/remote/src/upload-client.ts#finalizeDirectUpload": "sha256:61f2811d571e57dcca41689c7b1dd37db1fd7a982fbf5eaf33a33cf1541f6ee4",
+    "packages/remote/src/upload-client.ts#finalizeDirectUpload": "sha256:8cd172a169aa5e54695d9185fa259d93c71b82938455398b83e7e4e214578df2",
     "packages/remote/src/upload-client.ts#isStringRecord": "sha256:b6d6b571b90baf0976d9c347c4a45a4363a4df5ad184ea1087cb3b9febd4b624",
     "packages/remote/src/upload-client.ts#parseUploadPreflightResult": "sha256:7ce3f43b45c03df8b7f2690432beedc7a537c1bba540961716862f8a632d5623",
-    "packages/remote/src/upload-client.ts#requestUploadPreflight": "sha256:b8caf697f613d9b7e6176007d9cd7f367519338a76f50c1107687bd800ff0a5a",
+    "packages/remote/src/upload-client.ts#requestUploadPreflight": "sha256:ed644d7e59c4703e3b7a05dda769b3f0554dc481598ba01906a131c543d68ffc",
     "packages/remote/src/upload-client.ts#shouldRetryDirectUpload": "sha256:29059f076ff7f2b9540ad15408be48792b2d63a601ef2b9fb2d54f5576d49bbd",
     "packages/remote/src/upload-client.ts#tryDirectUploadWithResume": "sha256:db1042b6b8f6969add9480f30a8649d83eecf60af38e80f00a4e789fcf925f97",
     "packages/remote/src/upload-client.ts#uploadDirectArtifact": "sha256:3edb622eabee720085a544a4d4e6fdd74c19ec25d3e14e7f9f06ea10d550c1c7",
@@ -177,7 +178,7 @@
     "packages/remote/src/upload-stream.ts#parseNonNegativeIntegerHeader": "sha256:5cbe9c6994459d673d988a51407e65556e28175b187ce0a9d27cbb6331962834",
     "packages/remote/src/upload-stream.ts#parseUploadResumeOffset": "sha256:297184ea22a6dc1cda9aee17034122ae0ea2f43d0355647f6fcf02f3f4b5ca0e",
     "packages/remote/src/upload-stream.ts#streamFileToHttpRequest": "sha256:ce07ea33a275e06e4cceaf0c75a079bd0c7938f36df6817407dbb1cc8c4ff900",
-    "packages/remote/src/upload-stream.ts#streamFileToHttpRequestAttempt": "sha256:aa73fb51890ca5e43d4aa80c1d2124b574568380a73b19eae7da0ee3e3e7acf8",
+    "packages/remote/src/upload-stream.ts#streamFileToHttpRequestAttempt": "sha256:b49e17dab9a638f3e547af01717aad52264e20334d62489608bf2c7f9a238838",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_HEADER": "sha256:d2bb3f4846470188a0fc1724271da0f0bcbdf2337bd6bf331508142cadcb65d8",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER": "sha256:4564c2ce437d30d7a823e3326f4375c0750ba8d42bec22b4d02e8eb7f7db2973",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_MISMATCH_HEADER": "sha256:a197edaf7f9fa94a6aab269856aa852da3204cc586f5fd23198689eb11908b61",
@@ -208,7 +209,7 @@
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#DownloadRemoteArtifactParams",
       "digest": "sha256:ba6d2f6ac51e05ccc5e0c940b355d62374e018b1ae6f6f744becf6e1760cbb63",
-      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state — never serialized, never sent to the daemon — that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved."
+      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state \u2014 never serialized, never sent to the daemon \u2014 that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved."
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact",
@@ -283,7 +284,7 @@
     {
       "declaration": "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest",
       "digest": "sha256:1c323f97c3cefec8f95633b6abd127342bf75494bfb109d1cc6eadf3ceacaeae",
-      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
+      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers \u2014 sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added \u2014 an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
     },
     {
       "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer",
@@ -319,11 +320,6 @@
       "declaration": "packages/remote/src/upload-stream.ts#streamFileToHttpRequest",
       "digest": "sha256:ce07ea33a275e06e4cceaf0c75a079bd0c7938f36df6817407dbb1cc8c4ff900",
       "rationale": "#2946 widens the options with an optional abort signal handed to node:http.request. The request line, headers built by buildUploadRequestHeaders, and piped payload are unchanged, so an older daemon's 200/308 handling is unaffected."
-    },
-    {
-      "declaration": "packages/remote/src/upload-stream.ts#streamFileToHttpRequestAttempt",
-      "digest": "sha256:aa73fb51890ca5e43d4aa80c1d2124b574568380a73b19eae7da0ee3e3e7acf8",
-      "rationale": "#2946 passes the optional abort signal to the request and rejects with that signal's reason when it is what ended the stream. The released 308 resume contract is untouched: offset headers, resume start offsets, redirects, and payload bytes are computed exactly as before."
     },
     {
       "declaration": "packages/contracts/src/daemon-http.ts#DaemonHealthPayload",
@@ -426,11 +422,6 @@
       "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006). The signature also names the client request as DaemonWireRequest and the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved."
     },
     {
-      "declaration": "packages/remote/src/upload-client.ts#requestUploadPreflight",
-      "digest": "sha256:b8caf697f613d9b7e6176007d9cd7f367519338a76f50c1107687bd800ff0a5a",
-      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006)."
-    },
-    {
       "declaration": "packages/remote/src/upload-client.ts#uploadDirectArtifact",
       "digest": "sha256:3edb622eabee720085a544a4d4e6fdd74c19ec25d3e14e7f9f06ea10d550c1c7",
       "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006)."
@@ -438,11 +429,6 @@
     {
       "declaration": "packages/remote/src/upload-client.ts#tryDirectUploadWithResume",
       "digest": "sha256:db1042b6b8f6969add9480f30a8649d83eecf60af38e80f00a4e789fcf925f97",
-      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006)."
-    },
-    {
-      "declaration": "packages/remote/src/upload-client.ts#finalizeDirectUpload",
-      "digest": "sha256:61f2811d571e57dcca41689c7b1dd37db1fd7a982fbf5eaf33a33cf1541f6ee4",
       "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006)."
     },
     {
@@ -464,11 +450,6 @@
       "declaration": "packages/contracts/src/lease-scope.ts#buildLeaseRpcParams",
       "digest": "sha256:365490a0fe1833d7ce8b0d3f5425462608a85119b12c1a2c4f16bb83b5d28e06",
       "rationale": "The client names its request as DaemonWireRequest (packages/contracts/src/daemon-wire-request.ts, a narrowing of the listed kernel DaemonRequest) and its response as the kernel DaemonResponse, instead of the daemon package's DaemonRequest/DaemonResponse aliases, so the daemon package is no longer a client import. The declaration's serialized fields, method names and framing are unchanged; only the compile-time type names in its signature moved, so a peer on protocol 2 parses exactly what it did."
-    },
-    {
-      "declaration": "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath",
-      "digest": "sha256:0cb422301edef0545615b0f3acb3d80280213921cab2eb529715260ff0fa3647",
-      "rationale": "The client names its request as DaemonWireRequest (packages/contracts/src/daemon-wire-request.ts, a narrowing of the listed kernel DaemonRequest) and its response as the kernel DaemonResponse, instead of the daemon package's DaemonRequest/DaemonResponse aliases, so the daemon package is no longer a client import. The declaration's serialized fields, method names and framing are unchanged; only the compile-time type names in its signature moved, so a peer on protocol 2 parses exactly what it did. The function now takes the client host as a parameter and resolves a relative local path against its working directory instead of the process's; the client binds the same directory, so nothing a peer parses moves."
     },
     {
       "declaration": "packages/daemon/src/server/http-errors.ts#statusCodeForNormalizedError",
@@ -499,6 +480,31 @@
       "declaration": "packages/daemon-client/src/daemon-client-progress.ts#createInvalidDaemonResponseError",
       "digest": "sha256:8e2501995839b50646d554def6d2973667ce080ed1aaf171514158b6d2e681a8",
       "rationale": "The client names its request as DaemonWireRequest (packages/contracts/src/daemon-wire-request.ts, a narrowing of the listed kernel DaemonRequest) and its response as the kernel DaemonResponse, instead of the daemon package's DaemonRequest/DaemonResponse aliases, so the daemon package is no longer a client import. The declaration's serialized fields, method names and framing are unchanged; only the compile-time type names in its signature moved, so a peer on protocol 2 parses exactly what it did. #4302 (client-side only): the invalid-response error also gains details.reason 'daemon_response_invalid', so the client can disclose whether the request reached the device; it is raised locally from a reply this client could not parse, and no daemon reads it."
+    },
+    {
+      "declaration": "packages/remote/src/upload-stream.ts#streamFileToHttpRequestAttempt",
+      "digest": "sha256:b49e17dab9a638f3e547af01717aad52264e20334d62489608bf2c7f9a238838",
+      "rationale": "The upload client refuses a redirect to another origin, including a 308 that carries a Location, instead of re-sending the daemon token or ticket headers and the artifact there. Same-origin redirects, the Location-less 308 resume contract, and the redirect limit are unchanged. A released daemon or proxy answers its upload routes on its own origin, so it parses the same requests. A direct-upload ticket that redirects cross-origin fails as a non-retryable direct upload, and uploadArtifact then takes the legacy /upload route on the daemon."
+    },
+    {
+      "declaration": "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath",
+      "digest": "sha256:660320cd62dfaeb4da80b86d6c072a5bcdbce3399723d43208a22d70b6e4a243",
+      "rationale": "The client, not the response, chooses the local download path: a destination it registered in this request wins, a response localPath is accepted only on a record or trace stop or a perf stop or report, and any other artifact lands in cwd under the basename of its fileName. A released daemon echoes localPath equal to the registered destination for screenshot and test, and echoes an earlier destination only on those stop and report actions, so its artifacts land where they did before. The wire shape is unchanged."
+    },
+    {
+      "declaration": "packages/daemon/src/server/http/http-server.ts#MAX_HTTP_RPC_BODY_BYTES",
+      "digest": "sha256:eed6cb154db2b67ffe5f058ef0570fec247a5d2a43af2d42952dee0b08870a87",
+      "rationale": "The /rpc body limit is now DAEMON_REQUEST_MAX_BYTES (64 MiB), the one request limit the socket transport, the proxy default, and client writers share, raised from 1 MiB. A larger limit refuses nothing a released client sends; a new client refuses a request over 64 MiB before sending it, and a released daemon still answers anything between 1 MiB and 64 MiB with its own -32700 refusal, as before."
+    },
+    {
+      "declaration": "packages/remote/src/upload-client.ts#requestUploadPreflight",
+      "digest": "sha256:ed644d7e59c4703e3b7a05dda769b3f0554dc481598ba01906a131c543d68ffc",
+      "rationale": "The request now uses fetch with redirect: 'error', so no redirect is followed: fetch keeps x-agent-device-token on a cross-origin hop. The request body, headers, and route are unchanged. A released daemon or proxy never redirects this route, so it parses the same requests. A redirected preflight falls back to the legacy /upload route, as any failed preflight does."
+    },
+    {
+      "declaration": "packages/remote/src/upload-client.ts#finalizeDirectUpload",
+      "digest": "sha256:8cd172a169aa5e54695d9185fa259d93c71b82938455398b83e7e4e214578df2",
+      "rationale": "The request now uses fetch with redirect: 'error', so no redirect is followed: fetch keeps x-agent-device-token on a cross-origin hop. The request body, headers, and route are unchanged. A released daemon or proxy never redirects this route, so it parses the same requests. A redirected finalize fails with COMMAND_FAILED, and uploadArtifact then takes the legacy /upload route."
     },
     {
       "declaration": "packages/daemon/src/server/http/http-rpc-methods.ts#toInstallFromSourceDaemonRequest",

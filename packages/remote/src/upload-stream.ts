@@ -107,6 +107,22 @@ async function streamFileToHttpRequestAttempt(options: {
                 return;
               }
               const redirectedUrl = new URL(location, options.url);
+              // The request headers carry the daemon token or a signed ticket, and the body is the
+              // artifact: neither may follow a hop to an origin the caller did not choose.
+              if (redirectedUrl.origin !== options.url.origin) {
+                reject(
+                  new AppError(
+                    'COMMAND_FAILED',
+                    'Artifact upload refused a cross-origin redirect',
+                    {
+                      reason: 'cross-origin-redirect',
+                      url: options.url.toString(),
+                      redirectOrigin: redirectedUrl.origin,
+                    },
+                  ),
+                );
+                return;
+              }
               void streamFileToHttpRequestAttempt({
                 ...options,
                 url: redirectedUrl,

@@ -5,6 +5,7 @@ import http from 'node:http';
 import net from 'node:net';
 import { test } from 'vitest';
 import { createSocketServer, listenHttpServer, listenNetServer } from './transport.ts';
+import { DAEMON_REQUEST_MAX_BYTES } from '@agent-device/contracts/daemon-http';
 import {
   clearRequestAbortRegistration,
   getRequestSignal,
@@ -78,6 +79,118 @@ test('Provider-backed integration daemon socket transport frames requests and no
     const httpPort = await listenHttpServer(httpServer);
     assert.equal(typeof httpPort, 'number');
     await closeLoopbackServer(httpServer);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+const OVERSIZED_SOCKET_REQUESTS = [
+  { name: 'an unterminated request', request: 'x'.repeat(DAEMON_REQUEST_MAX_BYTES + 1) },
+  {
+    name: 'a framed JSON request',
+    request: `${JSON.stringify({ command: 'session_list', pad: 'x'.repeat(DAEMON_REQUEST_MAX_BYTES) })}\n`,
+  },
+  {
+    // Two bytes per character: under the limit in string length, over it in bytes.
+    name: 'a framed multibyte request',
+    request: `${JSON.stringify({ command: 'session_list', pad: '\u00e9'.repeat(DAEMON_REQUEST_MAX_BYTES / 2) })}\n`,
+  },
+];
+
+test.for(OVERSIZED_SOCKET_REQUESTS)(
+  'socket transport refuses $name past the byte limit and closes',
+  async ({ request }, t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+    let handled = 0;
+    const server = createSocketServer(async (): Promise<DaemonResponse> => {
+      handled += 1;
+      return { ok: true, data: {} };
+    });
+    try {
+      const client = await connectSocket(await listenNetServer(server));
+      client.setEncoding('utf8');
+      let received = '';
+      client.on('data', (chunk) => {
+        received += chunk;
+      });
+      const closed = new Promise<void>((resolve) => client.once('close', () => resolve()));
+      client.on('error', () => {});
+      client.write(request);
+      await closed;
+      const response = JSON.parse(received.trim()) as DaemonResponse;
+      assert.equal(response.ok, false);
+      assert.equal(response.ok ? undefined : response.error.code, 'INVALID_ARGS');
+      assert.equal(handled, 0);
+    } finally {
+      await closeLoopbackServer(server);
+    }
+  },
+);
+
+test('socket transport answers a framed request larger than 1 MiB and under the request limit', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const server = createSocketServer(async (req): Promise<DaemonResponse> => ({
+    ok: true,
+    data: { bytes: req.flags?.replayScriptSource?.files['flow.ad']?.length },
+  }));
+  try {
+    const client = await connectSocket(await listenNetServer(server));
+    // A replay bundle may reach 2 MiB; the old 1 MiB socket cap refused it.
+    const flow = 'x'.repeat(2 * 1024 * 1024);
+    const replayScriptSource = { entry: 'flow.ad', files: { 'flow.ad': flow } };
+    const [response] = await writeSocketRequests(
+      client,
+      [JSON.stringify({ command: 'replay', positionals: [], flags: { replayScriptSource } })],
+      1,
+    );
+    client.destroy();
+    assert.deepEqual(response, { ok: true, data: { bytes: flow.length } });
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+test('socket transport answers the complete requests framed before an oversized one, then refuses it', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const handled: string[] = [];
+  const firstRequest = `${JSON.stringify({ command: 'session_list', positionals: [] })}\n`;
+  let oversizedReceived = () => {};
+  const oversizedArrived = new Promise<void>((resolve) => {
+    oversizedReceived = resolve;
+  });
+  // The first request is still in flight when the transport has read past the limit.
+  const server = createSocketServer(async (req): Promise<DaemonResponse> => {
+    handled.push(req.command);
+    await oversizedArrived;
+    return { ok: true, data: { command: req.command } };
+  });
+  server.on('connection', (socket: net.Socket) => {
+    let receivedBytes = 0;
+    socket.on('data', (chunk: string) => {
+      receivedBytes += Buffer.byteLength(chunk);
+      if (receivedBytes >= firstRequest.length + DAEMON_REQUEST_MAX_BYTES + 1) oversizedReceived();
+    });
+  });
+  try {
+    const client = await connectSocket(await listenNetServer(server));
+    client.setEncoding('utf8');
+    let received = '';
+    client.on('data', (chunk) => {
+      received += chunk;
+    });
+    const closed = new Promise<void>((resolve) => client.once('close', () => resolve()));
+    client.on('error', () => {});
+    client.write(firstRequest);
+    client.write('x'.repeat(DAEMON_REQUEST_MAX_BYTES + 1));
+    await closed;
+    const responses = received
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as DaemonResponse);
+    assert.deepEqual(handled, ['session_list']);
+    assert.equal(responses.length, 2);
+    assert.deepEqual(responses[0], { ok: true, data: { command: 'session_list' } });
+    assert.equal(responses[1]?.ok ? undefined : responses[1]?.error.code, 'INVALID_ARGS');
   } finally {
     await closeLoopbackServer(server);
   }
