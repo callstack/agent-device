@@ -26,12 +26,15 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  smoke-apple:
-    name: Smoke Tests
+  smoke-apple-platform:
+    name: Smoke Tests (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ios, macos]
     if: ${{ !github.event.pull_request.draft }}
     runs-on: blacksmith-6vcpu-macos-26
-    # Keep each platform's former 80-minute ceiling, plus shared setup and cleanup.
-    timeout-minutes: 170
+    timeout-minutes: 90
     env:
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
       IOS_STATE_DIR: ${{ github.workspace }}/.tmp/ios-agent-device-state
@@ -55,18 +58,31 @@ jobs:
       - name: Select iOS smoke tests
         id: ios-impact
         shell: bash
-        run: node --experimental-strip-types scripts/apple-ci-impact.ts smoke
+        env:
+          APPLE_PLATFORM: ${{ matrix.platform }}
+        run: |
+          if [ "$APPLE_PLATFORM" = ios ]; then
+            node --experimental-strip-types scripts/apple-ci-impact.ts smoke
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Select macOS smoke tests
         id: macos-impact
         shell: bash
-        run: node --experimental-strip-types scripts/apple-ci-impact.ts macos
+        env:
+          APPLE_PLATFORM: ${{ matrix.platform }}
+        run: |
+          if [ "$APPLE_PLATFORM" = macos ]; then
+            node --experimental-strip-types scripts/apple-ci-impact.ts macos
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build the shared CLI
         id: build
         if: steps.ios-impact.outputs.run != 'false' || steps.macos-impact.outputs.run != 'false'
         uses: ./.github/actions/run-gate
         with:
           gate: build
-      # The macOS clean-install proof may raise permission UI. Run the iOS focus proof first.
       - name: iOS smoke tests
         id: ios
         uses: ./.github/actions/smoke-ios-run
@@ -82,9 +98,9 @@ jobs:
           AGENT_DEVICE_XCUITEST_ARCHS: arm64
           AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE: agent-device-test-app:///automation?event={event}&payload={payload}
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.ios-impact.outputs.run != 'false' }}
-      - name: Restore the Apple host after iOS
+      - name: Clean the iOS host
         id: ios-cleanup
-        if: ${{ always() && steps.build.outcome == 'success' }}
+        if: ${{ always() && steps.build.outcome == 'success' && steps.ios-impact.outputs.run != 'false' }}
         continue-on-error: true
         env:
           AGENT_DEVICE_STATE_DIR: ${{ env.IOS_STATE_DIR }}
@@ -102,7 +118,7 @@ jobs:
           RESULT_BUNDLE_PATH: ${{ github.workspace }}/.tmp/xctest-host/RunnerTests.xcresult
           RESULT_SUMMARY_PATH: ${{ github.workspace }}/.tmp/xctest-host/test-results-summary.json
           XCTEST_LANE: host
-        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.ios-cleanup.outcome == 'success' && steps.macos-impact.outputs.run != 'false' }}
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.macos-impact.outputs.run != 'false' }}
       - name: Diagnose the Apple host after a phase failure
         if: ${{ always() && (steps.ios.outcome == 'failure' || steps.macos.outcome == 'failure' || steps.ios-cleanup.outcome == 'failure') }}
         continue-on-error: true
@@ -113,7 +129,7 @@ jobs:
           osascript scripts/decline-hosted-compute-local-network.applescript diagnose
       - name: Clean macOS daemon and retained runners
         id: macos-cleanup
-        if: ${{ always() && steps.build.outcome == 'success' }}
+        if: ${{ always() && steps.build.outcome == 'success' && steps.macos-impact.outputs.run != 'false' }}
         continue-on-error: true
         env:
           AGENT_DEVICE_STATE_DIR: ${{ env.MACOS_STATE_DIR }}
@@ -135,26 +151,23 @@ jobs:
           printf "### Apple smoke phases\n\n| Phase | Outcome |\n| --- | --- |\n| iOS | %s |\n| macOS | %s |\n" "$IOS_OUTCOME" "$MACOS_OUTCOME" >> "$GITHUB_STEP_SUMMARY"
           if [ "$IOS_SELECTED" = false ]; then
             test "$IOS_OUTCOME" = skipped
+            test "$IOS_CLEANUP_OUTCOME" = skipped
           else
             test "$IOS_OUTCOME" = success
+            test "$IOS_CLEANUP_OUTCOME" = success
           fi
           if [ "$MACOS_SELECTED" = false ]; then
             test "$MACOS_OUTCOME" = skipped
-          else
-            test "$MACOS_OUTCOME" = success
-          fi
-          if [ "$IOS_SELECTED" = false ] && [ "$MACOS_SELECTED" = false ]; then
-            test "$IOS_CLEANUP_OUTCOME" = skipped
             test "$MACOS_CLEANUP_OUTCOME" = skipped
           else
-            test "$IOS_CLEANUP_OUTCOME" = success
+            test "$MACOS_OUTCOME" = success
             test "$MACOS_CLEANUP_OUTCOME" = success
           fi
       - name: Upload Apple artifacts
         if: always()
         uses: ./.github/actions/upload-agent-device-artifacts
         with:
-          artifact-name: apple-artifacts
+          artifact-name: apple-artifacts-${{ matrix.platform }}
           agent-state-dir: ${{ env.IOS_STATE_DIR }}
           runner-derived-path: ${{ env.IOS_DERIVED_PATH }}
           additional-paths: |
@@ -162,3 +175,14 @@ jobs:
             ${{ env.MACOS_STATE_DIR }}/sessions/**
             ${{ env.MACOS_DERIVED_PATH }}/.agent-device-runner-cache.json
             ${{ env.MACOS_DERIVED_PATH }}/Logs/**
+
+  smoke-apple:
+    name: Smoke Tests
+    if: ${{ always() && !github.event.pull_request.draft }}
+    needs: smoke-apple-platform
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Require both Apple jobs to succeed
+        env:
+          RESULT: ${{ needs.smoke-apple-platform.result }}
+        run: test "$RESULT" = success

@@ -25,18 +25,31 @@ type AppleStep = {
   'continue-on-error'?: boolean;
 };
 
-function appleJob() {
+function appleWorkflow() {
   const doc = parse(
     fs.readFileSync(path.join(repoRoot, '.github/workflows/apple.yml'), 'utf8'),
   ) as {
-    jobs: Record<string, { steps: AppleStep[] }>;
+    jobs: Record<
+      string,
+      {
+        steps: AppleStep[];
+        strategy?: { matrix: { platform: string[] }; 'fail-fast': boolean };
+        needs?: string;
+        if?: string;
+      }
+    >;
   };
-  expect(Object.keys(doc.jobs)).toHaveLength(1);
-  return Object.values(doc.jobs)[0]!;
+  expect(Object.keys(doc.jobs)).toHaveLength(2);
+  return doc;
 }
 
-test('Apple smoke shares setup and build while keeping platform state and native products separate', () => {
-  const { steps } = appleJob();
+function appleJob() {
+  return appleWorkflow().jobs['smoke-apple-platform']!;
+}
+
+test('Apple smoke gives each platform an independent runner and cleanup', () => {
+  const { steps, strategy } = appleJob();
+  expect(strategy).toEqual({ 'fail-fast': false, matrix: { platform: ['ios', 'macos'] } });
   expect(steps.filter((step) => step.uses?.startsWith('actions/checkout@'))).toHaveLength(1);
   expect(steps.filter((step) => step.uses === './.github/actions/setup-node-pnpm')).toHaveLength(1);
   expect(steps.filter((step) => step.with?.gate === 'build')).toHaveLength(1);
@@ -44,8 +57,7 @@ test('Apple smoke shares setup and build while keeping platform state and native
   const macos = steps.find((step) => step.id === 'macos')!;
   expect(ios.uses).toBe('./.github/actions/smoke-ios-run');
   expect(macos.uses).toBe('./.github/actions/smoke-macos');
-  expect(steps.indexOf(ios)).toBeLessThan(steps.indexOf(macos));
-  expect(macos.if).toContain("steps.ios-cleanup.outcome == 'success'");
+  expect(macos.if).not.toContain('steps.ios-cleanup');
   for (const variable of ['AGENT_DEVICE_STATE_DIR', 'AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH']) {
     expect(ios.env?.[variable]).toBeTruthy();
     expect(macos.env?.[variable]).toBeTruthy();
@@ -55,7 +67,7 @@ test('Apple smoke shares setup and build while keeping platform state and native
     expect(phase['continue-on-error']).toBe(true);
     const cleanup = steps.find((step) => step.id === `${phase.id}-cleanup`)!;
     expect(steps.indexOf(cleanup)).toBeGreaterThan(steps.indexOf(phase));
-    if (phase === ios) expect(steps.indexOf(cleanup)).toBeLessThan(steps.indexOf(macos));
+    expect(cleanup.if).toContain(`steps.${phase.id}-impact.outputs.run != 'false'`);
     expect(cleanup.if).toContain('always()');
     expect(cleanup['continue-on-error']).toBe(true);
     expect(cleanup.env?.AGENT_DEVICE_STATE_DIR).toBe(phase.env?.AGENT_DEVICE_STATE_DIR);
@@ -63,6 +75,49 @@ test('Apple smoke shares setup and build while keeping platform state and native
       phase === ios ? 'bash scripts/teardown-ios-smoke.sh' : 'pnpm clean:daemon',
     );
   }
+});
+
+test.each(['ios', 'macos'] as const)('the %s job selects only its own platform', (platform) => {
+  for (const target of ['ios', 'macos']) {
+    const step = appleJob().steps.find((step) => step.id === `${target}-impact`)!;
+    expect(step.env?.APPLE_PLATFORM).toBe('${{ matrix.platform }}');
+    const output = path.join(mkdtempForTestSync('apple-platform-selection-'), 'output');
+    const result = spawnSync(
+      '/bin/bash',
+      [
+        '-c',
+        `
+      set -euo pipefail
+      node() { echo 'run=true' >> "$GITHUB_OUTPUT"; }
+      ${step.run}
+    `,
+      ],
+      {
+        env: { ...process.env, APPLE_PLATFORM: platform, GITHUB_OUTPUT: output },
+        encoding: 'utf8',
+      },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(fs.readFileSync(output, 'utf8').trim()).toBe(`run=${target === platform}`);
+  }
+});
+
+test.each([
+  ['success', 0],
+  ['failure', 1],
+  ['cancelled', 1],
+  ['skipped', 1],
+])('the stable Apple status requires matrix success: %s', (outcome, expected) => {
+  const job = appleWorkflow().jobs['smoke-apple']!;
+  expect(job.needs).toBe('smoke-apple-platform');
+  expect(job.if).toBe('${{ always() && !github.event.pull_request.draft }}');
+  const step = job.steps[0]!;
+  expect(step.env?.RESULT).toBe('${{ needs.smoke-apple-platform.result }}');
+  const result = spawnSync('/bin/bash', ['-c', step.run!], {
+    env: { ...process.env, RESULT: outcome },
+    encoding: 'utf8',
+  });
+  expect(result.status, result.stderr).toBe(expected);
 });
 
 test.runIf(process.platform === 'darwin')(
@@ -222,7 +277,11 @@ test('Apple uploads shared diagnostics once and retains both platform logs after
 
 test.each([
   ['all successful', {}, 0],
-  ['iOS not selected', { IOS_SELECTED: 'false', IOS_OUTCOME: 'skipped' }, 0],
+  [
+    'iOS not selected',
+    { IOS_SELECTED: 'false', IOS_OUTCOME: 'skipped', IOS_CLEANUP_OUTCOME: 'skipped' },
+    0,
+  ],
   ['unselected iOS unexpectedly ran', { IOS_SELECTED: 'false' }, 1],
   ['selected iOS fails', { IOS_SELECTED: 'true', IOS_OUTCOME: 'failure' }, 1],
   ['iOS fails', { IOS_OUTCOME: 'failure' }, 1],
@@ -231,7 +290,11 @@ test.each([
   ['macOS silently skipped', { MACOS_OUTCOME: 'skipped' }, 1],
   ['iOS cleanup fails', { IOS_CLEANUP_OUTCOME: 'failure' }, 1],
   ['macOS cleanup fails', { MACOS_CLEANUP_OUTCOME: 'failure' }, 1],
-  ['macOS not selected', { MACOS_SELECTED: 'false', MACOS_OUTCOME: 'skipped' }, 0],
+  [
+    'macOS not selected',
+    { MACOS_SELECTED: 'false', MACOS_OUTCOME: 'skipped', MACOS_CLEANUP_OUTCOME: 'skipped' },
+    0,
+  ],
   ['unselected macOS unexpectedly ran', { MACOS_SELECTED: 'false' }, 1],
   [
     'no phase selected',
