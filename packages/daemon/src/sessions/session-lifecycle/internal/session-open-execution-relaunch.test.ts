@@ -2,6 +2,8 @@ import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
+import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
 import {
   acquireDeviceClaim,
   inspectDeviceClaims,
@@ -111,6 +113,7 @@ async function openRelaunch(params: {
   flags?: Record<string, unknown>;
   onOpenApplication?: (input: OpenApplicationInput) => Promise<void> | void;
   openOutcome?: LaunchConfirmationOutcome | LaunchConfirmationAbsent;
+  requestId?: string;
 }) {
   const opened: OpenApplicationInput[] = [];
   const boundDevices: DeviceInfo[] = [];
@@ -142,6 +145,7 @@ async function openRelaunch(params: {
       command: 'open',
       positionals: params.positionals ?? [],
       flags: { relaunch: true, ...params.flags },
+      ...(params.requestId ? { meta: { requestId: params.requestId } } : {}),
     },
     sessionName: params.sessionName,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
@@ -225,10 +229,12 @@ test('failed relaunch retains the claim for close while allowing daemon idle rea
         sessionStore,
         sessionName,
         onOpenApplication: () => {
-          throw new Error('lifecycle dispatch failed');
+          throw new AppError('COMMAND_FAILED', 'cleanup timeout', {
+            reason: 'android-app-close-timeout',
+          });
         },
       }),
-    ).rejects.toThrow('lifecycle dispatch failed');
+    ).rejects.toThrow('cleanup timeout');
     expect(sessionStore.get(sessionName)).toMatchObject({
       name: sessionName,
       deviceClaim: acquired.ownership,
@@ -247,6 +253,7 @@ test('failed relaunch retains the claim for close while allowing daemon idle rea
         },
       }),
     ).rejects.toThrow('lifecycle dispatch failed again');
+    expect(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 })).toBe(true);
 
     const { loader } = lifecycleOperationsSpy();
     const closed = await handleSessionCommands({
@@ -275,6 +282,42 @@ test('failed relaunch retains the claim for close while allowing daemon idle rea
   } finally {
     if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
     else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+  }
+});
+
+test.each([{ dispatched: 'no' as const }, { reason: 'runtime-hints-operation-missing' }])(
+  'a known relaunch refusal leaves the daemon active: %o',
+  async (details) => {
+    const sessionStore = makeSessionStore();
+    publishSession(sessionStore, 'android-session', ANDROID_EMULATOR);
+    await expect(
+      openRelaunch({
+        sessionStore,
+        sessionName: 'android-session',
+        onOpenApplication: () => {
+          throw new AppError('COMMAND_FAILED', 'hint refused', details);
+        },
+      }),
+    ).rejects.toThrow('hint refused');
+    expect(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 })).toBe(false);
+  },
+);
+
+test('a canceled relaunch after lifecycle completion allows daemon idle reap', async () => {
+  const sessionStore = makeSessionStore();
+  const requestId = 'relaunch-canceled-after-dispatch';
+  publishSession(sessionStore, 'android-session', ANDROID_EMULATOR);
+  try {
+    const { response } = await openRelaunch({
+      sessionStore,
+      sessionName: 'android-session',
+      requestId,
+      onOpenApplication: () => markRequestCanceled(requestId),
+    });
+    expect(response?.ok).toBe(false);
+    expect(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 })).toBe(true);
+  } finally {
+    clearRequestCanceled(requestId);
   }
 });
 
