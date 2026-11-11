@@ -82,3 +82,4 @@ export type {
 export type { TargetShutdownResult } from '../target-shutdown-contract.ts';
 
 export type { DevicePin, DevicePinSelector } from '../device-pin.ts';
+export { parseDevicePinSelector, readDevicePin } from '../device-pin.ts';

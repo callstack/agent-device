@@ -1,6 +1,3 @@
-import type { DevicePin, DevicePinSelector } from '@agent-device/contracts/device';
-import { AppError } from '@agent-device/kernel/errors';
-import { isRecord } from '@agent-device/kernel/record';
 import { buildPrimaryEnvVarName, parseSourceValue } from '@agent-device/kernel/source-value';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { GLOBAL_FLAG_KEYS } from '@agent-device/command-registry/flag-groups';
@@ -146,59 +143,4 @@ export function resolveSourceValueDefinition(spec: OptionSpec): FlagDefinition {
     };
   }
   return baseDefinition;
-}
-
-const DEVICE_PIN_SELECTOR_KEYS = ['platform', 'device', 'udid', 'serial'] as const;
-
-export function parseDevicePin(
-  value: unknown,
-  source: DevicePin['source'],
-  label: string,
-): DevicePin {
-  if (!isRecord(value) || Object.keys(value).length === 0) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `devicePin in ${label} must be a non-empty selector object.`,
-      {
-        reason: 'invalid_device_pin',
-        pinSource: label,
-      },
-    );
-  }
-  const selector: DevicePinSelector = {};
-  for (const [key, raw] of Object.entries(value)) {
-    if (
-      !DEVICE_PIN_SELECTOR_KEYS.includes(key as keyof DevicePinSelector) ||
-      typeof raw !== 'string' ||
-      !raw.trim()
-    ) {
-      throw new AppError(
-        'INVALID_ARGS',
-        `Invalid devicePin.${key} in ${label}. Use platform, device, udid, or serial with non-empty string values.`,
-        {
-          reason: 'invalid_device_pin',
-          pinSource: label,
-        },
-      );
-    }
-    const spec = getOptionSpec(key as keyof DevicePinSelector)!;
-    try {
-      Object.assign(selector, {
-        [key]: parseOptionValueFromSource(spec, raw, label, `devicePin.${key}`),
-      });
-    } catch (error) {
-      if (!(error instanceof AppError) || error.code !== 'INVALID_ARGS') throw error;
-      throw new AppError(
-        error.code,
-        error.message,
-        {
-          ...error.details,
-          reason: 'invalid_device_pin',
-          pinSource: label,
-        },
-        error,
-      );
-    }
-  }
-  return { selector, source };
 }

@@ -174,3 +174,65 @@ test('Provider-backed integration proxy allocation narrows a platform pin before
     },
   );
 });
+
+for (const command of ['capabilities', 'lease_allocate'] as const) {
+  test(`Provider-backed integration ${command} rejects malformed raw wire pins before selection`, async () => {
+    let inventoryReads = 0;
+    await withProviderScenarioResource(
+      () =>
+        createProviderScenarioHarness({
+          deviceInventoryProvider: async () => {
+            inventoryReads += 1;
+            return [PROVIDER_SCENARIO_IOS_SIMULATOR];
+          },
+        }),
+      async (daemon) => {
+        const source = { kind: 'project', path: '/project/agent-device.json' };
+        for (const devicePin of [
+          {},
+          null,
+          false,
+          { selector: { platform: 'ios' } },
+          { selector: {}, source },
+          { selector: { platform: 'windows' }, source },
+          { selector: { udid: 4 }, source },
+          { selector: { platform: 'ios' }, source: { ...source, kind: 'environment' } },
+          { selector: { platform: 'ios' }, source: { ...source, path: '' } },
+        ]) {
+          const allocation = command === 'lease_allocate';
+          const response = await fetch(`${daemon.baseUrl}/rpc`, {
+            method: 'POST',
+            headers: {
+              authorization: `Bearer ${daemon.token}`,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 'invalid-pin',
+              method: allocation ? 'agent_device.lease.allocate' : 'agent_device.command',
+              params: allocation
+                ? {
+                    tenantId: 'pin-test',
+                    runId: 'pin-test',
+                    leaseProvider: 'proxy',
+                    backend: 'ios-instance',
+                    clientId: 'pin-test',
+                    platform: 'ios',
+                    devicePin,
+                  }
+                : { command, positionals: [], meta: { devicePin } },
+            }),
+          });
+          const error = assertRpcError(
+            { statusCode: response.status, json: await response.json() },
+            400,
+            'INVALID_ARGS',
+            /devicePin/,
+          );
+          expect(error.details).toMatchObject({ reason: 'invalid_device_pin' });
+        }
+        assert.equal(inventoryReads, 0);
+      },
+    );
+  });
+}

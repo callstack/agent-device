@@ -2,7 +2,7 @@
 // DaemonRequest the router dispatches. Malformed wire input is rejected here as
 // INVALID_ARGS before the request reaches a handler.
 import type { IncomingHttpHeaders } from 'node:http';
-import type { DevicePin } from '@agent-device/contracts/device';
+import { readDevicePin } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
   CommandRpcParams,
@@ -55,7 +55,12 @@ function toDaemonRequest(params: CommandRpcParams, headers: IncomingHttpHeaders)
     // validated in the session open handler downstream.
     flags: params.flags as DaemonRequest['flags'],
     runtime: params.runtime,
-    meta: params.meta as DaemonRequest['meta'],
+    meta: params.meta
+      ? {
+          ...(params.meta as DaemonRequest['meta']),
+          devicePin: readDevicePin((params.meta as Record<string, unknown>).devicePin),
+        }
+      : undefined,
   };
 }
 
@@ -165,8 +170,7 @@ function toLeaseDaemonRequest(
         readStringParam(params, 'leaseProvider') ?? readStringParam(params, 'provider'),
       deviceKey: readStringParam(params, 'deviceKey'),
       clientId: readStringParam(params, 'clientId'),
-      devicePin:
-        command === 'lease_allocate' ? (params.devicePin as DevicePin | undefined) : undefined,
+      devicePin: command === 'lease_allocate' ? readDevicePin(params.devicePin) : undefined,
       providerCredentialFingerprint:
         command === 'lease_allocate'
           ? readStringParam(params, 'providerCredentialFingerprint')

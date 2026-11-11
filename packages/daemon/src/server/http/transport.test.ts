@@ -42,7 +42,13 @@ test('Provider-backed integration daemon socket transport frames requests and no
         session: 'default',
         command: 'session_list',
         positionals: [],
-        meta: { requestId: 'req-socket-1' },
+        meta: {
+          requestId: 'req-socket-1',
+          devicePin: {
+            selector: { platform: 'ios', udid: 'SIM-1' },
+            source: { kind: 'project', path: '/project/agent-device.json' },
+          },
+        },
         internal: {
           observationOnly: true,
           replayPlanStep: true,
@@ -53,6 +59,10 @@ test('Provider-backed integration daemon socket transport frames requests and no
 
     assert.equal(observedRequests.length, 1);
     assert.equal(observedRequests[0]?.meta?.requestId, 'req-socket-1');
+    assert.deepEqual(observedRequests[0]?.meta?.devicePin, {
+      selector: { platform: 'ios', udid: 'SIM-1' },
+      source: { kind: 'project', path: '/project/agent-device.json' },
+    });
     assert.equal(
       observedRequests[0]?.internal,
       undefined,
@@ -450,3 +460,33 @@ async function writeSocketRequests(
     socket.write(`${lines.join('\n')}\n`);
   });
 }
+
+test('Provider-backed integration socket rejects malformed device pins before invoking the handler', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const observed: DaemonRequest[] = [];
+  const server = createSocketServer(async (req) => {
+    observed.push(req);
+    return { ok: true, data: {} };
+  });
+  try {
+    const port = await listenNetServer(server);
+    const client = await connectSocket(port);
+    const responses = await writeSocketRequests(
+      client,
+      [null, false, {}, { selector: {} }].map((devicePin) =>
+        JSON.stringify({ command: 'capabilities', positionals: [], meta: { devicePin } }),
+      ),
+      4,
+    );
+    assert.equal(responses.length, 4);
+    assert.equal(observed.length, 0);
+    for (const response of responses) {
+      assert.equal(response.error?.code, 'INVALID_ARGS');
+      assert.equal(response.error?.details?.reason, 'invalid_device_pin');
+    }
+    client.end();
+  } finally {
+    server.destroyConnections?.();
+    await closeLoopbackServer(server);
+  }
+});
