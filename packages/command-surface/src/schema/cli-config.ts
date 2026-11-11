@@ -1,6 +1,5 @@
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { DevicePin } from '@agent-device/contracts/device';
-import { parseDevicePin } from './device-pin.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
@@ -13,6 +12,7 @@ import {
   getConfigurableOptionSpecs,
   getOptionSpec,
   parseOptionValueFromSource,
+  parseDevicePin,
 } from './option-schema.ts';
 import { parseInstallSourceConfig } from '@agent-device/provision-kit/install-source-config';
 import { RETIRED_SCREENSHOT_MAX_SIZE } from '@agent-device/contracts/capture';
@@ -108,7 +108,11 @@ function loadSingleConfigFile(entry: ConfigPath): ConfigDefaults {
     flags: parseConfigObject(flagDefaults, { source: entry.source, label: configFileLabel(entry) }),
   };
   if (devicePin !== undefined) {
-    defaults.devicePin = parseDevicePin(devicePin, { kind: entry.source, path: entry.path });
+    defaults.devicePin = parseDevicePin(
+      devicePin,
+      { kind: entry.source, path: entry.path },
+      configFileLabel(entry),
+    );
   }
   return defaults;
 }

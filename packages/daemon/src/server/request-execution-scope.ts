@@ -1,7 +1,3 @@
-import {
-  assertDeviceHonorsPin,
-  assertRequestHonorsDevicePin,
-} from '@agent-device/contracts/device';
 import { restrictRemoteHostInputs } from './remote-host-input-policy.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -305,8 +301,11 @@ export async function createRequestExecutionScope(params: {
     );
   }
   try {
-    if (scopedReq.meta?.devicePin)
-      assertRequestHonorsDevicePin(scopedReq.meta.devicePin, scopedReq);
+    const devicePin = scopedReq.meta?.devicePin;
+    const pinPolicy = devicePin
+      ? await import('@agent-device/device-selection/device-selection-resolver')
+      : undefined;
+    if (devicePin && pinPolicy) pinPolicy.assertRequestHonorsDevicePin(devicePin, scopedReq);
     if (params.daemonPolicy) assertDaemonPolicyAdmitsRequest(params.daemonPolicy, scopedReq);
     assertRequestLeaseAdmissionPreflight(scopedReq);
     // Parse the budget once, before resolving the target device or taking any lock. The lock plan
@@ -346,6 +345,10 @@ export async function createRequestExecutionScope(params: {
       deviceRuntimeGateway: params.deviceRuntimeGateway,
       platformRequestScope: params.platformRequestScope,
       daemonPolicy: params.daemonPolicy,
+      admitDevicePin:
+        devicePin && pinPolicy
+          ? (device) => pinPolicy.assertDeviceHonorsPin(devicePin, device, scopedReq.flags)
+          : undefined,
       claimRecoveryGateway: params.claimRecoveryGateway,
       sessionStore,
     });
@@ -584,6 +587,7 @@ function createRequestDeviceAccess(params: {
   deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   platformRequestScope: PlatformRequestScope;
   daemonPolicy: DaemonPolicy | undefined;
+  admitDevicePin: ((device: DeviceInfo) => void) | undefined;
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
   sessionStore: SessionStore;
 }): {
@@ -619,10 +623,9 @@ function createRequestDeviceAccess(params: {
       dispatchLedger: params.dispatchLedger,
       admitDeviceClaim: claimAdmission.admit,
       admitDevice:
-        params.req.meta?.devicePin || daemonPolicy || claimPolicy === 'require-owner'
+        params.admitDevicePin || daemonPolicy || claimPolicy === 'require-owner'
           ? (device) => {
-              if (params.req.meta?.devicePin)
-                assertDeviceHonorsPin(params.req.meta.devicePin, device, params.req.flags);
+              params.admitDevicePin?.(device);
               if (daemonPolicy) {
                 assertDaemonPolicyAdmitsDevice(daemonPolicy, device);
               }

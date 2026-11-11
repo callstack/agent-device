@@ -108,4 +108,4 @@ async function prepareRequestWithMetadataFlags(
   };
 }
 
-export { assertRequestHonorsDevicePin, type DevicePin } from '@agent-device/contracts/device';
+export type { DevicePin } from '@agent-device/contracts/device';

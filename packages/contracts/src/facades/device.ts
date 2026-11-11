@@ -81,10 +81,4 @@ export type {
 } from '../provider-device-runtime.ts';
 export type { TargetShutdownResult } from '../target-shutdown-contract.ts';
 
-export {
-  DEVICE_PIN_SELECTOR_KEYS,
-  assertDeviceHonorsPin,
-  assertRequestHonorsDevicePin,
-  devicePinSourceLabel,
-} from '../device-pin.ts';
 export type { DevicePin, DevicePinSelector } from '../device-pin.ts';

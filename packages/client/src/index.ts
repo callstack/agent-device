@@ -53,7 +53,6 @@ import {
 } from './client-normalizers.ts';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
-  assertRequestHonorsDevicePin,
   buildRequestFlags,
   mergeDefinedFlags,
   type AgentDeviceClient,
@@ -152,7 +151,11 @@ export function createAgentDeviceClient(
         ...(deps.devicePin ? { devicePin: deps.devicePin } : {}),
       },
     };
-    if (deps.devicePin) assertRequestHonorsDevicePin(deps.devicePin, request);
+    if (deps.devicePin) {
+      const { assertRequestHonorsDevicePin } =
+        await import('@agent-device/device-selection/device-selection-resolver');
+      assertRequestHonorsDevicePin(deps.devicePin, request);
+    }
     // `signal` rides the transport context (it is a live object, never wire data), and the guard
     // answers for a custom transport that ignores it: the caller's promise settles on abort either
     // way. The built-in transport closes the request's connection, which is what makes the daemon

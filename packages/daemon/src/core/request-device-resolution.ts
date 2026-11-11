@@ -1,4 +1,3 @@
-import { assertDeviceHonorsPin } from '@agent-device/contracts/device';
 import {
   resolveTargetDevice,
   resolveTargetDeviceSelection,
@@ -34,7 +33,11 @@ export async function resolveRequestTargetDevice(
     },
   );
   assertWebSelectionHasIdentity(req, device);
-  if (req.meta?.devicePin) assertDeviceHonorsPin(req.meta.devicePin, device, flags);
+  if (req.meta?.devicePin) {
+    const { assertDeviceHonorsPin } =
+      await import('@agent-device/device-selection/device-selection-resolver');
+    assertDeviceHonorsPin(req.meta.devicePin, device, flags);
+  }
   return device;
 }
 
@@ -51,6 +54,10 @@ export async function resolveRequestTargetDeviceSelection(
     },
   );
   assertWebSelectionHasIdentity(req, selection.device);
-  if (req.meta?.devicePin) assertDeviceHonorsPin(req.meta.devicePin, selection.device, flags);
+  if (req.meta?.devicePin) {
+    const { assertDeviceHonorsPin } =
+      await import('@agent-device/device-selection/device-selection-resolver');
+    assertDeviceHonorsPin(req.meta.devicePin, selection.device, flags);
+  }
   return selection;
 }
