@@ -2,6 +2,10 @@ import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import {
+  acquireDeviceClaim,
+  inspectDeviceClaims,
+} from '@agent-device/daemon-contracts/device-claims';
 import type {
   LaunchConfirmationAbsent,
   LaunchConfirmationOutcome,
@@ -18,7 +22,9 @@ import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { refFrameState } from '../../../core/ref-frame.ts';
 import { installProviderDeviceAdmission } from '../../../core/provider-device-admission.ts';
+import { isDaemonIdle } from '../../server/daemon-idle-reap.ts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
+import { lifecycleOperationsSpy } from '../../../__tests__/support/lifecycle-operations-spy.ts';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 import {
   handleSessionCommands,
@@ -187,6 +193,98 @@ test('open --relaunch leaves the old frame expired when the lifecycle fails (ADR
   expect(response?.ok ?? false).toBe(false);
   expect(frameWhenLifecycleRan).toBe('expired');
   expect(refFrameState(sessionStore.get('android-session')!)).toBe('expired');
+});
+
+test('failed relaunch retains the claim for close while allowing daemon idle reap', async () => {
+  const claimsDir = mkdtempForTestSync('relaunch-claims-');
+  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
+  try {
+    const sessionStore = makeSessionStore();
+    const sessionName = 'android-session';
+    const acquired = await acquireDeviceClaim({
+      env: process.env,
+      device: ANDROID_EMULATOR,
+      session: sessionName,
+      workspace: process.cwd(),
+      stateDir: sessionStore.resolveDaemonStateDir(),
+      reconcileOrphanedDeviceClaim: async () => ({
+        status: 'retained',
+        reason: 'test-no-recovery',
+      }),
+    });
+    if (acquired.status !== 'acquired') throw new Error('claim was not acquired');
+    publishSession(sessionStore, sessionName, ANDROID_EMULATOR, {
+      deviceClaim: acquired.ownership,
+    });
+    const claims = () => inspectDeviceClaims({ serial: ANDROID_EMULATOR.id }, process.env);
+    expect(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 })).toBe(false);
+
+    await expect(
+      openRelaunch({
+        sessionStore,
+        sessionName,
+        onOpenApplication: () => {
+          throw new Error('lifecycle dispatch failed');
+        },
+      }),
+    ).rejects.toThrow('lifecycle dispatch failed');
+    expect(sessionStore.get(sessionName)).toMatchObject({
+      name: sessionName,
+      deviceClaim: acquired.ownership,
+    });
+    expect(claims()[0]?.claim?.session).toBe(sessionName);
+    expect(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 })).toBe(true);
+
+    expect((await openRelaunch({ sessionStore, sessionName })).response?.ok).toBe(true);
+    expect(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 })).toBe(false);
+    await expect(
+      openRelaunch({
+        sessionStore,
+        sessionName,
+        onOpenApplication: () => {
+          throw new Error('lifecycle dispatch failed again');
+        },
+      }),
+    ).rejects.toThrow('lifecycle dispatch failed again');
+
+    const { loader } = lifecycleOperationsSpy();
+    const closed = await handleSessionCommands({
+      host: createTestHostEnvironment(),
+      createCommandSurface: fakeCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
+      lifecycleOperationsLoader: loader,
+      req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },
+      sessionName,
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+      sessionStore,
+      invoke: noopInvoke,
+    });
+    expect(closed?.ok).toBe(true);
+    expect(sessionStore.get(sessionName)).toBeUndefined();
+    expect(claims()).toEqual([]);
+    mockResolveTargetDevice.mockResolvedValue(ANDROID_EMULATOR);
+    const reopened = await openRelaunch({
+      sessionStore,
+      sessionName,
+      positionals: ['com.example.app'],
+      flags: { platform: 'android' },
+    });
+    expect(reopened.response?.ok).toBe(true);
+    expect(claims()[0]?.claim?.session).toBe(sessionName);
+  } finally {
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+  }
+});
+
+test('relaunch rejected before dispatch still keeps the daemon active', async () => {
+  const sessionStore = makeSessionStore();
+  publishSession(sessionStore, 'android-session', ANDROID_EMULATOR, { appName: undefined });
+  const { response, opened } = await openRelaunch({ sessionStore, sessionName: 'android-session' });
+  expect(response?.ok).toBe(false);
+  expect(opened).toEqual([]);
+  expect(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 })).toBe(false);
 });
 
 test('open --relaunch does not let an ambient provider claim suppress the relaunch', async () => {
