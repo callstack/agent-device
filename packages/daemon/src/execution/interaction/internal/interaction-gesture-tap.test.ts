@@ -413,10 +413,10 @@ for (const command of ['gesture', 'swipe'] as const) {
       expect(perform).toHaveBeenCalledTimes(3);
       expect(gestures.bindDevice).toHaveBeenCalledTimes(1);
       if (command === 'swipe') {
-        expect(events.map(({ x, y, x2, y2 }) => ({ x, y, x2, y2 }))).toEqual([
-          { x: 80, y: 300, x2: 200, y2: 450 },
-          { x: 200, y: 450, x2: 80, y2: 300 },
-          { x: 80, y: 300, x2: 200, y2: 450 },
+        expect(events).toMatchObject([
+          { kind: 'swipe', x: 80, y: 300, x2: 200, y2: 450 },
+          { kind: 'swipe', x: 200, y: 450, x2: 80, y2: 300 },
+          { kind: 'swipe', x: 80, y: 300, x2: 200, y2: 450 },
         ]);
       }
     });
