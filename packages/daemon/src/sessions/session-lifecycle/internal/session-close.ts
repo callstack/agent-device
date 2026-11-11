@@ -87,9 +87,11 @@ async function prepareRepairClose(params: {
   const repairArmed = isRepairArmedSession(session);
   const closeReceipt = JSON.stringify(req.positionals ?? []);
   if (repairArmed && !hasRepairPlatformCloseReceipt(session, closeReceipt)) {
-    const platformCloseError = await dispatchTargetedPlatformClose({
+    const platformCloseError = await closePlatformObservingWebSession({
       req,
       session,
+      sessionName: ref.address,
+      sessionStore,
       logPath,
       lifecycle,
     });
@@ -181,6 +183,27 @@ async function releaseProviderLeaseForClose(params: {
       },
     };
   }
+}
+
+async function closePlatformObservingWebSession(params: {
+  req: DaemonRequest;
+  session: SessionState;
+  sessionName: string;
+  sessionStore: SessionStore;
+  logPath: string;
+  lifecycle: CloseRuntime | CloseRuntimeWithRuntimeHintClear;
+}): Promise<unknown> {
+  if (
+    isWebSession(params.session) &&
+    params.sessionStore.hasClosedBrowserSession(params.sessionName)
+  ) {
+    return undefined;
+  }
+  const error = await dispatchTargetedPlatformClose(params);
+  if (!error && isWebSession(params.session)) {
+    params.sessionStore.markClosedBrowserSession(params.sessionName);
+  }
+  return error;
 }
 
 async function dispatchTargetedPlatformClose(params: {
@@ -278,6 +301,7 @@ export async function handleSessionCloseCommands(
     return await closeWithoutSession({
       req,
       sessionName,
+      sessionStore,
       logPath,
       env: params.host.env,
       inspectFacts: params.inspectFacts,
@@ -325,6 +349,8 @@ export async function handleSessionCloseCommands(
     return await closeAppWithoutEndingSession({
       req,
       session,
+      sessionName,
+      sessionStore,
       logPath,
       lifecycle: admission.runtime,
       app,
@@ -435,7 +461,12 @@ async function runCloseTeardownAndRelease(params: {
     clearRuntimeHints,
     cleanupFailures,
     repairArmed: params.repairArmed,
-    dispatchTargetedPlatformClose,
+    dispatchTargetedPlatformClose: (closeParams) =>
+      closePlatformObservingWebSession({
+        ...closeParams,
+        sessionName: ref.address,
+        sessionStore,
+      }),
     finalizeOrdinaryCloseScript,
     platformResourceCleanup: params.platformResourceCleanup,
   });
@@ -529,14 +560,18 @@ function buildCloseSuccessResponse(params: {
 async function closeAppWithoutEndingSession(params: {
   req: DaemonRequest;
   session: SessionState;
+  sessionName: string;
+  sessionStore: SessionStore;
   logPath: string;
   lifecycle: CloseRuntime | CloseRuntimeWithRuntimeHintClear;
   app: string;
 }): Promise<DaemonResponse> {
-  const { req, session, logPath, lifecycle, app } = params;
-  const platformCloseError = await dispatchTargetedPlatformClose({
+  const { req, session, sessionName, sessionStore, logPath, lifecycle, app } = params;
+  const platformCloseError = await closePlatformObservingWebSession({
     req,
     session,
+    sessionName,
+    sessionStore,
     logPath,
     lifecycle,
   });
@@ -553,13 +588,32 @@ async function closeAppWithoutEndingSession(params: {
 async function closeWithoutSession(params: {
   req: DaemonRequest;
   sessionName: string;
+  sessionStore: SessionStore;
   logPath: string;
   env: EnvMap;
   inspectFacts?: InspectDeviceRuntimeFacts;
   platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, logPath, env, inspectFacts, bindDevice, platformServices } = params;
+  const {
+    req,
+    sessionName,
+    sessionStore,
+    logPath,
+    env,
+    inspectFacts,
+    bindDevice,
+    platformServices,
+  } = params;
+  if (sessionStore.hasClosedBrowserSession(sessionName)) {
+    return {
+      ok: true,
+      data: {
+        session: sessionName,
+        ...successText(`Closed: ${sessionName}`),
+      },
+    };
+  }
   const { requireNamedSessionHoldsDevice } =
     await import('../../../core/explicit-session-resolution.ts');
   requireNamedSessionHoldsDevice({ req, sessionAddress: sessionName, session: undefined });

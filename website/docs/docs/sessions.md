@@ -57,6 +57,11 @@ agent-device close --session my-session
 Don't run commands that change state in parallel on the same session. Run actions such as `open`,
 `press`, `fill`, `type`, `scroll`, `back`, `alert`, `replay`, `batch`, and `close` one at a time.
 
+After you close a web session, later browser commands refuse with `SESSION_NOT_FOUND`
+(`named_session_not_found`), even when you pass `--platform web`. The closed session stays out of
+`session list`. That closed state lasts until the daemon restarts. Use `open` to start it again. A
+failed reopen keeps the closed session unavailable.
+
 ## Lock a named session to a device
 
 A lock keeps a named session's commands on its device: per-call selectors that conflict with the

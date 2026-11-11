@@ -49,11 +49,13 @@ async function stopSessionWebBrowser(params: {
 }): Promise<void> {
   const { ref, sessionStore, platformCleanup } = params;
   const session = sessionStore.resolveCurrent(ref) ?? ref.session;
-  await platformCleanup.closeManagedBrowser({
+  if (sessionStore.hasClosedBrowserSession(ref.address)) return;
+  const closed = await platformCleanup.closeManagedBrowser({
     device: session.device,
     stateDir: sessionStore.resolveDaemonStateDir(),
     openSessionNames: () => openWebSessionNames(sessionStore),
   });
+  if (closed) sessionStore.markClosedBrowserSession(ref.address);
 }
 
 export type SessionCleanupStep = { step: string; run: () => Promise<void> };

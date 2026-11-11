@@ -127,7 +127,7 @@ test.each(['rebuild', 'retire'] as const)(
       leaseRegistry: leases,
       platformResourceCleanup: {
         stopSnapshotHelper,
-        closeManagedBrowser: async () => {},
+        closeManagedBrowser: async () => false,
         cleanupSessionlessExecutionHost: async () => {},
         retainExecutionHostAfterClose: () => false,
       },
