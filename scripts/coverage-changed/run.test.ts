@@ -5,12 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { run } from './run.ts';
-import {
-  beginCoverageRun,
-  finishCoverageRun,
-  type CoverageConfig,
-  type RunSelection,
-} from '../coverage-crap/stamp.ts';
+import { beginCoverageRun, finishCoverageRun, type RunSelection } from '../coverage-crap/stamp.ts';
+import { COVERAGE_CONFIG } from './fixtures.ts';
 import { beginStderrCapture, beginStdoutCapture } from '@agent-device/test-kit';
 
 let repo: string;
@@ -28,23 +24,6 @@ function write(rel: string, content: string): void {
 function writeLcov(records: string): void {
   write('coverage/lcov.info', records);
 }
-
-/**
- * What the fixture's coverage pass was told to instrument. Mirrors the
- * `test.coverage` include/exclude in `vitest.config.ts` for the paths these
- * tests exercise: both coverage roots, test files out, `src/sdk/**` out.
- */
-const COVERAGE_CONFIG: CoverageConfig = {
-  include: ['src/**/*.ts', 'packages/*/src/**/*.ts'],
-  exclude: [
-    '**/*.test.ts',
-    '**/__tests__/**',
-    '**/*-types.ts',
-    '**/types.ts',
-    'src/sdk/**',
-    'src/bin.ts',
-  ],
-};
 
 /** What `pnpm test:coverage` leaves beside its reports: the stamp naming the run that wrote them. */
 function writeStamp(runSelection: RunSelection = 'full'): void {
@@ -252,6 +231,27 @@ test('refuses a report with no stamp beside it instead of scoring it', () => {
   assert.doesNotMatch(out, /Changed-line coverage gate:/);
 });
 
+test('refusal fires before the waiver when the report has no stamp', () => {
+  write('src/feature.ts', 'export const covered = 1;\nexport const uncovered = 2;\n');
+  git('add', '-A');
+  git('commit', '-q', '-m', 'feature');
+  writeLcov('SF:src/feature.ts\nDA:1,3\nDA:2,0\nend_of_record\n');
+  // No stamp beside the report: the numbers are unattributable, so the waiver
+  // has nothing to waive — it skips a failure, it does not bless a report.
+  const previous = process.env.AGENT_DEVICE_COVERAGE_WAIVER;
+  process.env.AGENT_DEVICE_COVERAGE_WAIVER = 'true';
+  try {
+    const { code, out } = capture(() => run(['--base', 'main'], repo));
+    assert.equal(code, 1);
+    assert.match(out, /no trustworthy verdict/);
+    assert.match(out, /carries no coverage-run-stamp\.json/);
+    assert.doesNotMatch(out, /Changed-line coverage gate:/);
+  } finally {
+    if (previous === undefined) delete process.env.AGENT_DEVICE_COVERAGE_WAIVER;
+    else process.env.AGENT_DEVICE_COVERAGE_WAIVER = previous;
+  }
+});
+
 test('refuses a report whose stamp names an earlier commit', () => {
   write('src/feature.ts', 'export const covered = 1;\nexport const uncovered = 2;\n');
   git('add', '-A');
@@ -305,10 +305,12 @@ test('refuses a report written in another checkout instead of passing it as clea
   git('commit', '-q', '-m', 'feature');
   // Two checkouts of one commit share HEAD and bytes, so no stamp can tell them apart: the lcov
   // paths themselves must name the foreign root. A map like this joins none of this checkout's
-  // files, which without the check reads as "no file was measured" and passes 0/0.
+  // files, which without the check reads as "no file was measured" and passes 0/0. The stamp here
+  // is valid for this tree, so the foreign paths are the only defect the run can see.
   const foreign = fs.mkdtempSync(path.join(os.tmpdir(), 'cov-changed-foreign-'));
   try {
     writeLcov(`SF:${foreign}/src/feature.ts\nDA:1,3\nDA:2,0\nend_of_record\n`);
+    writeStamp();
     const { code, out } = capture(() => run(['--base', 'main'], repo));
     assert.equal(code, 1);
     assert.match(out, /no trustworthy verdict/);
@@ -319,17 +321,19 @@ test('refuses a report written in another checkout instead of passing it as clea
   }
 });
 
-test('a file the stamp excludes is out of scope, not tallied as excluded', () => {
+test('a file the stamp excludes is tallied as excluded, not gated', () => {
   write('src/sdk/thing.ts', 'export const kept = 1;\n');
   git('add', '-A');
   git('commit', '-q', '-m', 'sdk change');
   // No record for it in lcov: the run never measured it, by declaration. The
-  // gate owes nothing for it — neither a denominator line nor a tally entry.
+  // gate owes nothing for it — but the added line still shows in the
+  // non-gating excluded tally, so new logic under an exclude entry is visible.
   writeLcov('SF:src/base.ts\nDA:1,1\nend_of_record\n');
   writeStamp();
   const { code, out } = capture(() => run(['--base', 'main'], repo));
   assert.equal(code, 0);
   assert.match(out, /Changed-line coverage gate: PASS/);
   assert.match(out, /0\/0 \(n\/a\)/);
-  assert.match(out, /Changed executable lines excluded \(non-gating\) \| 0 \|/);
+  assert.match(out, /Changed executable lines excluded \(non-gating\) \| 1 \|/);
+  assert.match(out, /excluded `src\/sdk\/thing\.ts` \[excluded-path\]: 1/);
 });

@@ -27,7 +27,11 @@ import { runCmdSync } from '@agent-device/host-kit/command';
 import { parseScriptArgs } from '../lib/cli-args.ts';
 import { parseUnifiedDiff, readChangedLinesDiff } from '../lib/repo-git.ts';
 import { computeChangedCoverage, parseLcov, type ChangedCoverageResult } from './model.ts';
-import { describeStampMismatch, verifyCoverageStamp } from '../coverage-crap/stamp.ts';
+import {
+  describeStampMismatch,
+  findOutsideRootPath,
+  verifyCoverageStamp,
+} from '../coverage-crap/stamp.ts';
 
 const USAGE = 'Usage: pnpm check:coverage-changed [--base <ref>]\n';
 const COVERAGE_DIR = 'coverage';
@@ -86,7 +90,7 @@ export function run(argv: readonly string[], cwd?: string): number {
   // outside this one and can join none of its files. That must not read as "no
   // file was measured", and the stamp cannot catch it: two checkouts of one
   // commit carry the same HEAD and the same bytes.
-  const outside = [...coverage.keys()].find((file) => file.startsWith('../'));
+  const outside = findOutsideRootPath(coverage.keys());
   if (outside !== undefined) {
     return refuse(
       `${lcovPath} records files outside this checkout, for example ${outside}. ` +

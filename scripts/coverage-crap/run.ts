@@ -40,6 +40,7 @@ import {
 import {
   declaresWholeFileIgnore,
   describeStampMismatch,
+  findOutsideRootPath,
   isInstrumentedPath,
   verifyCoverageStamp,
   type CoverageConfig,
@@ -161,7 +162,7 @@ function gatherCrapInputs(
   // Vitest writes the map's keys absolute, so a report from another root relativizes outside this one
   // and can join none of its files. That must not read as "no file was measured", and the stamp cannot
   // catch it: two checkouts of one commit carry the same HEAD and the same bytes.
-  const outside = [...mapPaths].find((file) => file.startsWith('../'));
+  const outside = findOutsideRootPath(mapPaths);
   if (outside !== undefined) {
     return {
       refusal:

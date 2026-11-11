@@ -7,7 +7,8 @@ import {
   ignoredLineSet,
   parseLcov,
 } from './model.ts';
-import { isInstrumentedPath, type CoverageConfig } from '../coverage-crap/stamp.ts';
+import { isInstrumentedPath } from '../coverage-crap/stamp.ts';
+import { COVERAGE_CONFIG } from './fixtures.ts';
 
 test('parseLcov reads DA hits and BRDA taken, treating "-" as not taken', () => {
   const lcov = [
@@ -32,21 +33,6 @@ test('parseLcov reads DA hits and BRDA taken, treating "-" as not taken', () => 
   ]);
   assert.equal(index.get('src/b.ts')?.lineHits.get(10), 1);
 });
-
-// The stamp's include/exclude, mirroring `test.coverage` in `vitest.config.ts`
-// for the paths these tests exercise: both coverage roots, test files and the
-// config's named exclusions out.
-const COVERAGE_CONFIG: CoverageConfig = {
-  include: ['src/**/*.ts', 'packages/*/src/**/*.ts'],
-  exclude: [
-    '**/*.test.ts',
-    '**/__tests__/**',
-    '**/*-types.ts',
-    '**/types.ts',
-    'src/sdk/**',
-    'src/bin.ts',
-  ],
-};
 
 test('source/test classification matches the verified stamp selection', () => {
   assert.equal(isInstrumentedPath('src/core/x.ts', COVERAGE_CONFIG), true);
@@ -222,9 +208,23 @@ test('instrumented source absent from lcov counts as excluded-path code lines', 
   assert.deepEqual(result.excluded.files[0]?.lines, [1]);
 });
 
-test('a path the stamp excludes is out of scope, not tallied', () => {
+test('a path the stamp excludes is tallied as excluded-path, not gated', () => {
   const result = computeChangedCoverage({
     diffs: [diff('src/sdk/thing.ts', [1, 2, 3])],
+    coverage,
+    stamp: COVERAGE_CONFIG,
+    fileLines: () => ['const kept = 1;', '', '// a comment'],
+  });
+  assert.equal(result.totalLines, 0);
+  assert.equal(result.excluded.totalLines, 1);
+  assert.equal(result.excluded.files[0]?.reason, 'excluded-path');
+  assert.deepEqual(result.excluded.files[0]?.lines, [1]);
+  assert.equal(result.passed, true);
+});
+
+test('a stamp-excluded test file or a path outside every include root is not tallied', () => {
+  const result = computeChangedCoverage({
+    diffs: [diff('src/sdk/thing.test.ts', [1, 2, 3]), diff('README.md', [1, 2])],
     coverage,
     stamp: COVERAGE_CONFIG,
     fileLines: () => ['const kept = 1;', '', '// a comment'],

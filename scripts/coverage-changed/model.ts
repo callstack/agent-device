@@ -9,11 +9,13 @@
 // gate reads from the same stamp. A changed instrumented file ABSENT from
 // lcov was dropped by the run — reported (non-gating) so the gap cannot
 // silently absorb new logic. A changed file the stamp excludes is out of scope
-// by declaration and owes nothing, not even a tally entry.
+// by declaration and owes no gating line — but when an include root covers it,
+// its code-like added lines still show in the non-gating excluded tally, so
+// new logic under an exclude entry cannot hide from the job summary either.
 
 import type { ChangedFileDiff } from '../lib/repo-git.ts';
 import { normalizePath } from '../lib/repo-path.ts';
-import { isInstrumentedPath, type CoverageConfig } from '../coverage-crap/stamp.ts';
+import { isIncludedPath, isInstrumentedPath, type CoverageConfig } from '../coverage-crap/stamp.ts';
 
 // Single source of truth for the gate. Changed-line coverage below this
 // percentage fails the Coverage CI job (unless waived).
@@ -205,6 +207,22 @@ function sum<T>(items: readonly T[], pick: (item: T) => number): number {
   return items.reduce((acc, item) => acc + pick(item), 0);
 }
 
+// Test code never counts toward the gate or the excluded tally, which exists
+// to surface hidden product logic, not test code.
+function isTestFile(path: string): boolean {
+  return /\.test\.ts$/.test(path) || /(^|\/)__tests__\//.test(path);
+}
+
+// Code-like added lines of a file the run did not measure, as the non-gating
+// excluded tally entry: a gap the summary must show, never a denominator line.
+function excludedPathReport(
+  diff: ChangedFileDiff,
+  lines: readonly string[] | null,
+): ExcludedFileReport | null {
+  const excluded = diff.added.filter((n) => isCodeLike(lines?.[n - 1]));
+  return excluded.length > 0 ? { path: diff.path, reason: 'excluded-path', lines: excluded } : null;
+}
+
 export function computeChangedCoverage(input: ComputeInput): ChangedCoverageResult {
   const files: FileCoverageReport[] = [];
   const excludedFiles: ExcludedFileReport[] = [];
@@ -212,23 +230,26 @@ export function computeChangedCoverage(input: ComputeInput): ChangedCoverageResu
   for (const diff of input.diffs) {
     // A non-blob side (symlink, gitlink) is not source: its working-tree entry can
     // resolve to a directory, which no content read may attempt.
-    if (
-      diff.deleted ||
-      !diff.regularFile ||
-      diff.added.length === 0 ||
-      !isInstrumentedPath(diff.path, input.stamp)
-    )
+    if (diff.deleted || !diff.regularFile || diff.added.length === 0) continue;
+
+    if (!isInstrumentedPath(diff.path, input.stamp)) {
+      // Out of scope by declaration — but a file an include root covers still
+      // shows its added lines in the non-gating excluded tally, the way the
+      // gate did before the stamp owned selection. A test file or a path
+      // outside every include root owes not even that.
+      if (isIncludedPath(diff.path, input.stamp) && !isTestFile(diff.path)) {
+        const report = excludedPathReport(diff, input.fileLines(diff.path));
+        if (report) excludedFiles.push(report);
+      }
       continue;
+    }
 
     const cov = input.coverage.get(diff.path);
     if (!cov) {
       // Instrumented source absent from the lcov report: the run recorded no
       // counters for it. Count its code-like added lines so the gap is visible.
-      const lines = input.fileLines(diff.path);
-      const excluded = diff.added.filter((n) => isCodeLike(lines?.[n - 1]));
-      if (excluded.length > 0) {
-        excludedFiles.push({ path: diff.path, reason: 'excluded-path', lines: excluded });
-      }
+      const report = excludedPathReport(diff, input.fileLines(diff.path));
+      if (report) excludedFiles.push(report);
       continue;
     }
 
