@@ -221,8 +221,8 @@ refactors or when explicitly requested, run `pnpm check`. It walks the whole cat
 `scripts/check-affected/checks.ts` except `vitest-related`, which the full unit suite (including the
 `apple-runner` project) replaces, and runs the host-locked suites last. It runs every gate marked
 `localRunnable` and lists each other gate as skipped, with the CI lane that owns it, in its output
-and receipt. Expect it to take about 4.5 minutes longer than the earlier tooling, Fallow, and unit
-chain. Both commands share one host lock and need macOS or Linux; on Windows, use the affected plan
+and receipt. On a 4-CPU Linux host it takes about 12 minutes, about 3.5 minutes more than the
+unit suite, Fallow, and the tooling gates alone. Both commands share one host lock and need macOS or Linux; on Windows, use the affected plan
 and direct focused checks. On a host without a Swift toolchain, such as Linux,
 `packaged-runner-swift` checks line numbering and skips its `swiftc -parse` half.
 
