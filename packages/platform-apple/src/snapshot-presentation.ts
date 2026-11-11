@@ -165,14 +165,8 @@ export function presentAppleRunnerSnapshot(
   result: AppleRunnerSnapshotResult,
 ): AppleRunnerSnapshotPresentation {
   const nodes = result.nodes ?? [];
-  const viewportEvidence =
-    result.viewportEvidence ?? runnerViewportEvidence(nodes, result.qualityPayload?.nodes);
-  // A missing acquisition viewport still permits the runner's local, already-presented tree to be
-  // validated against its root. This validation box proves no screen origin.
-  const validationViewport =
-    viewportEvidence.kind === 'missing'
-      ? runnerViewportEvidence(nodes, result.qualityPayload?.nodes)
-      : viewportEvidence;
+  const { authority: viewportEvidence, validation: validationViewport } =
+    runnerViewportEvidence(result);
   if (result.runnerFatal === true || (nodes.length === 0 && result.qualityPayload === undefined)) {
     return { nodes };
   }
@@ -297,19 +291,22 @@ function readQualityPayload(
   return { nodes: value.nodes as RawSnapshotNode[], truncated: value.truncated, scope: null };
 }
 
-function runnerViewportEvidence(
-  nodes: readonly RawSnapshotNode[],
-  qualityNodes: readonly RawSnapshotNode[] | undefined,
-): IosViewportEvidence {
-  return (
-    resolveIosViewportEvidenceFromRoots(rootNodes(qualityNodes), {
+function runnerViewportEvidence(result: AppleRunnerSnapshotResult): {
+  authority: IosViewportEvidence;
+  validation: IosViewportEvidence;
+} {
+  const roots = resolveIosViewportEvidenceFromRoots(rootNodes(result.qualityPayload?.nodes), {
+    fallbackToLargestRoot: true,
+  }) ??
+    resolveIosViewportEvidenceFromRoots(rootNodes(result.nodes), {
       fallbackToLargestRoot: true,
-    }) ??
-    resolveIosViewportEvidenceFromRoots(rootNodes(nodes), { fallbackToLargestRoot: true }) ?? {
+    }) ?? {
       kind: 'missing',
       reason: 'not-provided',
-    }
-  );
+    };
+  const authority = result.viewportEvidence ?? roots;
+  // A local root can validate a readable tree, but cannot establish a missing screen origin.
+  return { authority, validation: authority.kind === 'missing' ? roots : authority };
 }
 
 function rootNodes(nodes: readonly RawSnapshotNode[] | undefined): readonly RawSnapshotNode[] {
