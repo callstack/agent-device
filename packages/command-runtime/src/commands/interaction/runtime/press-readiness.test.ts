@@ -118,6 +118,7 @@ async function exercise(input: {
           if (caller && reads > 1) {
             caller.abort(new Error('caller aborted'));
             await new Promise<void>((resolve) => setTimeout(resolve, input.timeoutMs ?? 150));
+            deadlineClock!.mockReturnValue(resultDeadlineMs + 1);
             events.push('caller-throw-after-budget');
             context.signal!.throwIfAborted();
           }
@@ -250,13 +251,14 @@ for (const failure of ['cancelInRead', 'transportFailure', 'callerAbort'] as con
     );
     if (failure === 'callerAbort') {
       expect(events).toContain('blocked');
+      expect(events.indexOf('readiness-aborted')).toBeGreaterThan(events.indexOf('blocked'));
       expect(events).toContain('caller-throw-after-budget');
     }
     expect(points).toEqual([]);
     expect(error).toMatchObject({
       details: {
         dispatched: 'no',
-        ...(failure === 'cancelInRead'
+        ...(failure !== 'transportFailure'
           ? { reason: 'request_canceled' }
           : { reason: 'target_not_ready', readiness: 'native-read-failed' }),
       },

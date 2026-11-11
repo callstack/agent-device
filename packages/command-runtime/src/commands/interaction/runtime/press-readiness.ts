@@ -7,7 +7,11 @@ import type { BackendCommandContext } from '@agent-device/contracts/backend';
 import type { NativePressReadiness } from '@agent-device/contracts/selector-observation-runtime';
 import { matchesAuthorizedPressTarget } from './press-readiness-binding.ts';
 import { readSnapshotNativePressTargets } from '@agent-device/contracts/capture';
-import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  discloseDispatch,
+} from '@agent-device/kernel/errors';
 import { sleep } from '@agent-device/host-kit/retry';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import { toBackendContext } from '../../runtime-common.ts';
@@ -65,13 +69,13 @@ async function awaitReadiness(
   let waited = false;
   try {
     while (true) {
-      assertBudget(context, deadline, state);
+      assertBudget(context, deadline, state, deadlineSignal);
       state = await runtime.backend.readPressReadiness!(
         context,
         nativeTarget(original),
         original.preAction?.surfaceBundleId,
       );
-      assertBudget(context, deadline, state);
+      assertBudget(context, deadline, state, deadlineSignal);
       if (state === 'ready') break;
       // This is post-resolution readiness, never a wait for a selector that does not exist.
       if (
@@ -87,15 +91,10 @@ async function awaitReadiness(
     const ready = waited
       ? await revalidate(runtime, { ...options, signal: context.signal }, params, original)
       : original;
-    assertBudget(context, deadline, state);
+    assertBudget(context, deadline, state, deadlineSignal);
     return ready;
   } catch (error) {
-    if (
-      !(error instanceof AppError) &&
-      (Date.now() >= deadline ||
-        (deadlineSignal?.aborted && context.signal?.reason === deadlineSignal.reason))
-    )
-      throw refusal(state, error);
+    if (!(error instanceof AppError)) assertBudget(context, deadline, state, deadlineSignal, error);
     throw error;
   }
 }
@@ -144,9 +143,17 @@ function assertBudget(
   context: BackendCommandContext,
   deadline: number,
   state: NativePressReadiness,
+  deadlineSignal?: AbortSignal,
+  cause?: unknown,
 ): void {
-  context.signal?.throwIfAborted();
-  if (Date.now() >= deadline) throw refusal(state);
+  if (context.signal?.aborted) {
+    const reason: unknown = context.signal.reason;
+    if (reason instanceof AppError) throw reason;
+    if (reason !== deadlineSignal?.reason)
+      throw createRequestCanceledError(undefined, cause ?? reason);
+    throw refusal(state, cause ?? reason);
+  }
+  if (Date.now() >= deadline) throw refusal(state, cause);
 }
 
 function refusal(state: string, cause?: unknown): AppError {
