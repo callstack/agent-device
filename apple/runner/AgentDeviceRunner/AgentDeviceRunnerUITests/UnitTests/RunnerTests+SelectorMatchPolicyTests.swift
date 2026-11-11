@@ -13,6 +13,9 @@ extension RunnerTests {
       XCTAssertTrue(Self.authorizedPressTargetPredicate(target).evaluate(with: [
         "elementType": 9, "identifier": rawIdentifier, "label": rawLabel,
       ]))
+      XCTAssertFalse(Self.authorizedPressTargetPredicate(target).evaluate(with: [
+        "elementType": 9, "identifier": rawIdentifier, "label": "Unrelated",
+      ]))
       XCTAssertTrue(target.matches(type: 9, identifier: rawIdentifier, label: rawLabel, value: nil, rect: target.rect))
       XCTAssertFalse(target.matches(type: 9, identifier: rawIdentifier + "-other", label: rawLabel, value: nil, rect: target.rect))
     }
@@ -189,6 +192,10 @@ extension RunnerTests {
         let readiness = try queryAuthorizedPressTarget(app: app, target: target)
         XCTAssertEqual(readiness.data?.pressReadiness, element.isHittable ? "ready" : "blocked")
       }
+      let changedValue = AuthorizedPressTarget(type: element.elementType.rawValue,
+        identifier: element.identifier, label: element.label, value: "not-the-native-value",
+        rect: SnapshotRect(frame), point: PressTargetPoint(x: frame.midX, y: frame.midY))
+      XCTAssertEqual(try queryAuthorizedPressTarget(app: app, target: changedValue).data?.pressReadiness, "missing")
     }
   }
 #endif

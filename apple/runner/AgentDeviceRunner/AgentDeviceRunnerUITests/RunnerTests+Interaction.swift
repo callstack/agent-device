@@ -380,18 +380,17 @@ extension RunnerTests {
     func text(_ value: Any?) -> String {
       String(describing: value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    let type = target.type
     let identity = Self.authorizedPressTargetPredicate(target)
+    // Query predicates read snapshot attributes in bulk, rather than resolving every type match.
+    let binding = NSPredicate { object, _ in
+      guard let attributes = object as? XCUIElementAttributes else { return false }
+      return target.matches(type: attributes.elementType.rawValue, identifier: attributes.identifier,
+        label: attributes.label, value: target.type == XCUIElement.ElementType.secureTextField.rawValue ? nil : text(attributes.value),
+        rect: SnapshotRect(attributes.frame))
+    }
     let matches = try elementQueries(app: app, matching: .any)
-      .flatMap { $0.matching(identity).allElementsBoundByIndex }
-      .filter { element in
-        guard element.exists, element.elementType.rawValue == type else { return false }
-        let frame = element.frame
-        // The canonical point can use a different space; only source identity and the normalized unclipped frame bind this control read.
-        return target.matches(type: target.type, identifier: element.identifier,
-          label: element.label, value: type == XCUIElement.ElementType.secureTextField.rawValue ? nil : text(element.value), rect: SnapshotRect(frame))
-      }
-    let state = matches.count > 1 ? "ambiguous" : matches.first.map { $0.isHittable ? "ready" : "blocked" } ?? "missing"
+      .flatMap { $0.matching(identity).matching(binding).allElementsBoundByIndex }
+    let state = matches.count > 1 ? "ambiguous" : matches.first.map { $0.exists ? ($0.isHittable ? "ready" : "blocked") : "missing" } ?? "missing"
     return Response(ok: true, data: DataPayload(pressReadiness: state, pressReadinessAppBundleId: appBundleId))
   }
 
@@ -400,7 +399,8 @@ extension RunnerTests {
     // Broad prefilters preserve whitespace/canonical-equivalent bindings; the final match stays exact.
     if let identifier = target.identifier?.trimmingCharacters(in: .whitespacesAndNewlines), !identifier.isEmpty {
       predicates.append(NSPredicate(format: "identifier CONTAINS[cd] %@", identifier))
-    } else if let label = target.label?.trimmingCharacters(in: .whitespacesAndNewlines), !label.isEmpty {
+    }
+    if let label = target.label?.trimmingCharacters(in: .whitespacesAndNewlines), !label.isEmpty {
       predicates.append(NSPredicate(format: "label CONTAINS[cd] %@", label))
     }
     return NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
