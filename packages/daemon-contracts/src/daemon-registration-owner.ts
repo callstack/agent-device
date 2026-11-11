@@ -277,8 +277,9 @@ export function createOwnedReplayStateDir(): OwnedReplayStateDir {
 }
 
 /**
- * Tightens a state path an older launcher left at the umask default. The repair never decides
- * whether the daemon starts: a path another user owns, or a mount without chmod, keeps its mode.
+ * Forces a pre-existing state path to the private mode, whatever mode it had. The repair never
+ * decides whether the daemon starts: a path another user owns, or a mount without chmod, keeps
+ * its mode.
  */
 function repairStateMode(target: string, mode: number): void {
   try {
