@@ -2,24 +2,15 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { AppError } from '@agent-device/kernel/errors';
 import {
+  assertSafeDerivedCleanup,
+  shouldDeleteRunnerDerivedRootEntry,
   resolveRunnerDerivedOverride,
   resolveRunnerScriptDefaultDerivedPath,
 } from '@agent-device/platform-apple/runner/operations';
 
 const DERIVED_OVERRIDE = resolveRunnerDerivedOverride(process.env);
-const ROOT_TRANSIENT_ENTRY_NAMES = new Set([
-  '.agent-device-runner-cache.json',
-  'Build',
-  'BuildCache.noindex',
-  'Index.noindex',
-  'Logs',
-  'ModuleCache.noindex',
-  'SDKStatCaches.noindex',
-  'SourcePackages',
-  'TextBasedInstallAPI',
-  'info.plist',
-]);
 const platforms = process.argv.slice(2);
 const requested = platforms.length > 0 ? platforms : ['ios', 'macos', 'tvos', 'visionos'];
 const supported = new Set(['ios', 'macos', 'tvos', 'visionos']);
@@ -47,6 +38,7 @@ for (const platform of requested) {
   }
   const targetPath = resolveDerivedPath(platform);
   try {
+    assertSafeDerivedCleanup(targetPath, process.env);
     const result = cleanDerivedPath(platform, targetPath);
     console.log(formatCleanupResult(platform, targetPath, result));
   } catch (error) {
@@ -67,7 +59,7 @@ function cleanDerivedPath(platform, targetPath) {
   const removedEntries = [];
   const preservedEntries = [];
   for (const entry of fs.readdirSync(targetPath, { withFileTypes: true })) {
-    if (!ROOT_TRANSIENT_ENTRY_NAMES.has(entry.name)) {
+    if (!shouldDeleteRunnerDerivedRootEntry(entry.name)) {
       preservedEntries.push(entry.name);
       continue;
     }
@@ -124,7 +116,8 @@ function formatKeptEntriesSuffix(preservedEntries) {
 
 function formatCleanupError(platform, targetPath, error) {
   const detail = error instanceof Error ? error.message : String(error);
-  return `Failed to clean ${resolvePlatformLabel(platform)} XCTest derived data under ${targetPath}: ${detail}`;
+  const hint = error instanceof AppError ? error.details?.hint : undefined;
+  return `Failed to clean ${resolvePlatformLabel(platform)} XCTest derived data under ${targetPath}: ${detail}${typeof hint === 'string' ? `\n${hint}` : ''}`;
 }
 
 function resolvePlatformLabel(platform) {

@@ -1,4 +1,5 @@
 export {
+  assertSafeDerivedCleanup,
   RUNNER_STARTUP_TIMEOUT_MS,
   createLaunchedAppleRunnerProvider,
   mintRunnerToken,
@@ -28,6 +29,7 @@ export {
   requireCertifiedRunnerCacheArtifacts,
   requireRunnerBuildSettingsMatchBuildLog,
   runAppleRunnerCommand,
+  shouldDeleteRunnerDerivedRootEntry,
   stopAllIosRunnerSessions,
   stopIosRunnerSession,
   verifyLeaseRunnerPidIdentity,

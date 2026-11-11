@@ -299,23 +299,32 @@ export function assertSafeDerivedCleanup(
   if (!resolveRunnerDerivedOverride(env)) {
     return;
   }
-  if (isPathInsideProjectTmp(derivedPath)) {
+  if (isPathInsideProjectTmp(derivedPath, findProjectRoot())) {
     return;
   }
-  throw new AppError(
-    'COMMAND_FAILED',
-    'Refusing to clean AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH automatically',
-    {
-      derivedPath,
-      hint: `Unset AGENT_DEVICE_IOS_CLEAN_DERIVED, or move AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH under a subdirectory of ${path.join(findProjectRoot(), '.tmp')}.`,
-    },
-  );
+  throw new AppError('COMMAND_FAILED', 'Refusing to clean AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH', {
+    derivedPath,
+    hint: `Move AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH to a non-symlinked subdirectory of ${path.join(findProjectRoot(), '.tmp')}. Unset AGENT_DEVICE_IOS_CLEAN_DERIVED to disable cleanup requested by that variable. Explicit cleanup, forced rebuilds, and cache repair still require a contained override.`,
+  });
 }
 
-function isPathInsideProjectTmp(targetPath: string): boolean {
-  const projectTmpRoot = path.resolve(findProjectRoot(), '.tmp');
+function isPathInsideProjectTmp(targetPath: string, projectRoot: string): boolean {
+  const projectTmpRoot = path.resolve(projectRoot, '.tmp');
   const relativePath = path.relative(projectTmpRoot, path.resolve(targetPath));
-  return relativePath !== '' && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
+  if (
+    relativePath === '' ||
+    relativePath === '..' ||
+    relativePath.startsWith('..' + path.sep) ||
+    path.isAbsolute(relativePath)
+  ) {
+    return false;
+  }
+  let candidate = projectTmpRoot;
+  for (const segment of ['', ...relativePath.split(path.sep)]) {
+    candidate = path.join(candidate, segment);
+    if (fs.lstatSync(candidate, { throwIfNoEntry: false })?.isSymbolicLink()) return false;
+  }
+  return true;
 }
 
 export async function evaluateExistingXctestrun(options: {
