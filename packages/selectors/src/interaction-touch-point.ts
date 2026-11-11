@@ -4,7 +4,7 @@ import {
   type Rect,
   type SnapshotNode,
 } from '@agent-device/kernel/snapshot';
-import { containsPoint, intersectRects } from '@agent-device/kernel/rect';
+import { intersectRects } from '@agent-device/kernel/rect';
 import {
   areRectsApproximatelyEqual,
   normalizeRect,
@@ -140,7 +140,13 @@ function findNearestParentOwnedPoint(
   const rankedPoints = xCandidates.flatMap((x) =>
     yCandidates.flatMap((y) => {
       const point = { x: Math.round(x), y: Math.round(y) };
-      if (!containsPoint(searchRect, point.x, point.y)) return [];
+      if (
+        point.x < searchRect.x ||
+        point.x >= searchRect.x + searchRect.width ||
+        point.y < searchRect.y ||
+        point.y >= searchRect.y + searchRect.height
+      )
+        return [];
       const ranked = rankParentOwnedPoint(
         point,
         targetRect,
@@ -193,7 +199,7 @@ function candidateAxisCoordinates(
   parentEdgeClearance: number,
 ): number[] {
   const min = origin + parentEdgeClearance;
-  const max = origin + size - parentEdgeClearance;
+  const max = Math.min(origin + size - parentEdgeClearance, Math.ceil(origin + size) - 1);
   if (min > max) return [];
   const boundaries = [...new Set([origin, origin + size, ...obstacleEdges])].sort((a, b) => a - b);
   const candidates = new Set<number>([center, min, max]);

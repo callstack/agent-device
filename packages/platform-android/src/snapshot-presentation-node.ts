@@ -88,14 +88,20 @@ export function androidSystemBarContentClips(
   viewport: Rect | undefined,
   budget: AndroidSnapshotPresentationBudget,
 ): ReadonlyMap<AndroidNode, Rect> {
-  const { bars, barRoots } = collectSystemBars(roots, hidden, budget);
+  const bars = collectSystemBars(roots, hidden, budget);
   const clips = new Map<AndroidNode, Rect>();
   for (const root of roots) {
-    if (barRoots.has(root)) continue;
     const frame = root.windowRect ?? viewport;
     if (!isPositiveFiniteRect(frame)) continue;
     const clip = clipWindowToSystemBars(root, frame, bars, budget);
-    if (clip !== frame) clips.set(root, clip);
+    if (clip === frame) continue;
+    const pending = [root];
+    while (pending.length > 0) {
+      budget.check('work');
+      const node = pending.pop()!;
+      clips.set(node, clip);
+      pending.push(...node.children);
+    }
   }
   return clips;
 }
@@ -113,6 +119,7 @@ function clipWindowToSystemBars(
     for (const bar of bars) {
       budget.check('work');
       if (
+        bar.root !== root &&
         root.windowLayer !== undefined &&
         bar.root.windowLayer !== undefined &&
         bar.root.windowLayer <= root.windowLayer
@@ -129,9 +136,8 @@ function collectSystemBars(
   roots: readonly AndroidNode[],
   hidden: ReadonlySet<AndroidNode>,
   budget: AndroidSnapshotPresentationBudget,
-): { bars: SystemBar[]; barRoots: Set<AndroidNode> } {
+): SystemBar[] {
   const bars: SystemBar[] = [];
-  const barRoots = new Set<AndroidNode>();
   const pending = roots.map((root) => ({ root, node: root }));
   while (pending.length > 0) {
     budget.check('work');
@@ -144,11 +150,10 @@ function collectSystemBars(
       isPositiveFiniteRect(barRect)
     ) {
       bars.push({ root, rect: barRect });
-      barRoots.add(root);
     }
     pending.push(...node.children.map((child) => ({ root, node: child })));
   }
-  return { bars, barRoots };
+  return bars;
 }
 
 function clipSystemBar(frame: Rect, bar: Rect): Rect {

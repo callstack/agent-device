@@ -248,12 +248,13 @@ function walkUiHierarchyNode(
 ): void {
   state.presentationBudget.check('work');
   if (shouldStopAndroidWalk(state, node, depth)) return;
-  ancestorClip ??= state.systemBarContentClips.get(node);
   const systemBar = androidSystemBarMembership(
     node.packageName,
     node.identifier,
     ancestorSystemBar,
   );
+  ancestorClip =
+    systemBar === undefined ? (ancestorClip ?? state.systemBarContentClips.get(node)) : undefined;
   const currentWindowRect = node.windowRect ?? ancestorWindowRect ?? state.viewport;
   const effectiveRect = resolveAndroidEffectiveRect(state, node, ancestorClip, currentWindowRect);
   const currentIndex = appendAndroidNodeIfPresented(

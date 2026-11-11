@@ -44,6 +44,32 @@ test('property: targets without competing descendants honor measured input bound
   );
 });
 
+for (const axis of ['horizontal', 'vertical'] as const) {
+  test.each([1, 2, 3])(
+    `parent-owned ${axis} taps refuse when clearance exists only on the exclusive edge: %s px`,
+    (thickness) => {
+      const targetRect =
+        axis === 'horizontal'
+          ? { x: 5, y: 10, width: 150, height: thickness }
+          : { x: 5, y: 10, width: thickness, height: 150 };
+      const bounds =
+        axis === 'horizontal' ? { ...targetRect, width: 100 } : { ...targetRect, height: 100 };
+      const childRect =
+        axis === 'horizontal' ? { ...targetRect, width: 88 } : { ...targetRect, height: 88 };
+      const parent = attachSnapshotNodeInteractionBounds(
+        { index: 0, type: 'Link', rect: targetRect },
+        bounds,
+      );
+      const child = { index: 1, parentIndex: 0, type: 'Button', ref: 'e2', rect: childRect };
+      assert.deepEqual(resolveInteractionTouchPoint([parent, child], parent), {
+        kind: 'blocked',
+        competitorCount: 1,
+        competitorRefs: ['e2'],
+      });
+    },
+  );
+}
+
 test('a one-pixel visible strip resolves inside the strip instead of rounding into navigation', () => {
   const node = { index: 0, rect: { x: 0, y: 2273, width: 1080, height: 1 } };
   assert.deepEqual(resolveInteractionTouchPoint([node], node), {
@@ -71,9 +97,9 @@ test('property: emitted integer tap points stay inside positive pixel rectangles
 function containsPoint(rect: Rect, point: Point): boolean {
   return (
     point.x >= rect.x &&
-    point.x <= rect.x + rect.width &&
+    point.x < rect.x + rect.width &&
     point.y >= rect.y &&
-    point.y <= rect.y + rect.height
+    point.y < rect.y + rect.height
   );
 }
 

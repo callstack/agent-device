@@ -1,3 +1,5 @@
+import { attachRefs } from '@agent-device/kernel/snapshot';
+import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { readSnapshotNodeInteractionBounds } from '@agent-device/kernel/rect-center';
 import { expect, test } from 'vitest';
 import fc from 'fast-check';
@@ -71,6 +73,54 @@ test('raw snapshots retain measured input bounds without changing or serializing
   });
   expect(readSnapshotNodeInteractionBounds({ ...target })).toEqual(bounds);
 });
+
+function mixedWindowHierarchy(barFirst: boolean, contentPackage: string): string {
+  const bar = `<node class="android.widget.FrameLayout" package="com.google.android.apps.nexuslauncher" resource-id="com.google.android.apps.nexuslauncher:id/navbuttons_view" bounds="[0,2274][1080,2400]" visible-to-user="true">
+    <node class="android.widget.ImageView" package="com.google.android.apps.nexuslauncher" content-desc="Home" bounds="[434,2279][644,2395]" clickable="true" visible-to-user="true" />
+    <node class="android.view.ViewGroup" package="dev.e2e.benchmark" resource-id="embedded-content" bounds="[0,2305][1080,2400]" clickable="true" visible-to-user="true" />
+  </node>`;
+  const content = `<node class="android.widget.ScrollView" package="${contentPackage}" bounds="[0,0][1080,2400]" scrollable="true" visible-to-user="true">
+    <node class="android.view.ViewGroup" package="${contentPackage}" resource-id="item-137" bounds="[0,2259][1080,2390]" clickable="true" visible-to-user="true" />
+    <node class="android.view.ViewGroup" package="${contentPackage}" resource-id="item-138" bounds="[0,2305][1080,2400]" clickable="true" visible-to-user="true" />
+  </node>`;
+  return `<hierarchy><node class="android.widget.FrameLayout" package="com.google.android.apps.nexuslauncher" bounds="[0,0][1080,2400]" window-bounds="[0,0][1080,2400]" window-layer="10" visible-to-user="true">${barFirst ? bar + content : content + bar}</node></hierarchy>`;
+}
+
+for (const barFirst of [true, false]) {
+  test.each(['dev.e2e.benchmark', 'com.google.android.apps.nexuslauncher'])(
+    `mixed window clips content branches and preserves only system-bar descendants: barFirst=${barFirst}, owner=%s`,
+    (contentPackage) => {
+      const xml = mixedWindowHierarchy(barFirst, contentPackage);
+      const regular = parseUiHierarchy(xml, undefined, {});
+      const raw = parseUiHierarchy(xml, undefined, { raw: true });
+      const bounds = { x: 0, y: 0, width: 1080, height: 2274 };
+      expect(regular.nodes.find((n) => n.identifier === 'item-137')?.rect).toEqual({
+        x: 0,
+        y: 2259,
+        width: 1080,
+        height: 15,
+      });
+      expect(regular.nodes.find((n) => n.identifier === 'item-138')).toBeUndefined();
+      expect(regular.nodes.find((n) => n.identifier === 'embedded-content')).toBeUndefined();
+      for (const identifier of ['item-137', 'item-138', 'embedded-content']) {
+        const node = raw.nodes.find((n) => n.identifier === identifier)!;
+        expect(readSnapshotNodeInteractionBounds(node)).toEqual(bounds);
+      }
+      for (const snapshot of [regular, raw]) {
+        const home = snapshot.nodes.find((n) => n.label === 'Home')!;
+        expect(home).toMatchObject({
+          rect: { x: 434, y: 2279, width: 210, height: 116 },
+          hittable: true,
+          systemBar: 'navigation',
+        });
+        expect(readSnapshotNodeInteractionBounds(home)).toBeUndefined();
+        const addressable = attachRefs(snapshot.nodes);
+        const barControl = addressable.find((n) => n.label === 'Home')!;
+        expect(createSnapshotVisibility(addressable).isVisibleOnScreen(barControl)).toBe(true);
+      }
+    },
+  );
+}
 
 test('a lower-layer window wholly inside navigation publishes no tappable app content', () => {
   const snapshot = parseUiHierarchy(
