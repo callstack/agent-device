@@ -8,12 +8,13 @@ conflict check, and the host/scoped-device overlap (`devicesOverlap`).
 
 ## Rules at a glance
 
-1. The web host (`agent-browser-chrome`) holds one web session device per session name, with id
+1. The web host (`agent-browser-chrome`) holds one web session device per backend key, with id
    `<web host id>:session:<backend key>`. Every local web command binds the session device of its
    request; without `--session` the implicit session name (`default`) applies. The web host is never
-   bound: it stays an inventory entry and the parent for `devicesOverlap`. Two sessions with
-   different names run in parallel and two with one name conflict, in one daemon or in daemons that
-   share a claims directory.
+   bound: it stays an inventory entry and the parent for `devicesOverlap`. Different keys run in
+   parallel; separate sessions with the same key conflict in one daemon or across daemons that share
+   a claims directory. Workspace-scoped implicit sessions in different workspaces use different
+   keys; the same workspace uses one key.
 2. A session name matches case-insensitively and must match `[A-Za-z0-9_-]`, be non-empty, and fit
    agent-browser's socket path limit: at most 30 characters, and 17 under tenant isolation. A name
    is never trimmed, so surrounding whitespace is refused. Any other name is refused with
