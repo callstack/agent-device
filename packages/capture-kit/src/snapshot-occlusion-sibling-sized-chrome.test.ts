@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import { annotateCoveredSnapshotNodes } from './snapshot-occlusion.ts';
@@ -134,10 +135,6 @@ function targetVerdict(nodes: RawSnapshotNode[]): RawSnapshotNode | undefined {
 }
 
 test("a chrome container sized to its content sibling branch does not cover that branch's targets (#2996)", () => {
-  // The reporter's capture: the container is 791pt tall, matching the content branch beside it and
-  // stopping 83pt short of the 874pt viewport the existing exemption keys on. The four publications
-  // of the chrome kind are pinned by the table below, so this pins the geometry and the target's own
-  // readback.
   const annotated = targetVerdict(
     chromeHostTree({ branchRect: BRANCH, chromeRole: '_UIFloatingBarContainerView' }),
   );
@@ -147,9 +144,6 @@ test("a chrome container sized to its content sibling branch does not cover that
 });
 
 test('a control the exempt container really hosts still covers what it overlaps (#2996)', () => {
-  // The exemption excuses the container's OWN box, not its subtree: a hosted strip with its own
-  // smaller rect is unrelated to the target and differs from the branch frame, so it keeps covering
-  // the content beneath it — the fix cannot trade false refusals for missed real occlusion.
   const nodes = chromeHostTree({
     targetRect: { x: 151, y: 700, width: 100, height: 32 },
     chromeRole: '_UIFloatingBarContainerView',
@@ -171,9 +165,6 @@ test('a control the exempt container really hosts still covers what it overlaps 
 });
 
 test('a chrome candidate whose frame differs from the content branch beside it still covers (#2996 non-vacuity)', () => {
-  // Isolates frame-EQUALITY from mere overlap: the container stops 60pt short of the branch, so it
-  // matches neither the branch nor the viewport, and its box is real covering evidence over the
-  // target in the region they share.
   const nodes = chromeHostTree({
     branchRect: BRANCH,
     chromeRect: { x: 0, y: 0, width: 402, height: 731 },
@@ -184,9 +175,6 @@ test('a chrome candidate whose frame differs from the content branch beside it s
 });
 
 test('a chrome candidate taller than the content branch beside it still covers, so equality is not overlap (#2996 containment)', () => {
-  // The mirror must be the SAME frame, not merely containing it. The container reaches 91pt below
-  // the branch while stopping short of the viewport, so it paints over the branch's lower edge and
-  // keeps covering the target inside that edge.
   const nodes = chromeHostTree({
     branchRect: { x: 0, y: 0, width: 402, height: 700 },
     chromeRect: BRANCH,
@@ -198,8 +186,6 @@ test('a chrome candidate taller than the content branch beside it still covers, 
 });
 
 test('a full-screen dialog sized to the content branch beside it still covers, because only chrome kinds are exempt (#2996 kind gate)', () => {
-  // A `Dialog` sibling that fills the branch is a real modal presentation over that branch. Reading
-  // the exemption from geometry alone would let it through, so it stays kind-gated.
   const nodes = chromeHostTree({
     chromeType: 'Dialog',
     chromeRole: 'UIAlertControllerView',
@@ -210,9 +196,6 @@ test('a full-screen dialog sized to the content branch beside it still covers, b
 });
 
 test('a chrome candidate in another window keeps covering content sized like its own frame (#2996 sibling scope)', () => {
-  // The exemption compares a candidate against the siblings listed under ITS OWN parent. This
-  // container's only sibling is its own full-window host, so nothing matches and it keeps covering
-  // — a same-size rect elsewhere in the tree cannot excuse it.
   const nodes: RawSnapshotNode[] = [
     node({ index: 0, depth: 0, type: 'Application', role: 'UIApplication', rect: VIEWPORT }),
     node({
@@ -924,4 +907,76 @@ test('a control the exempt toolbar host really hosts still covers the row it ove
   ]);
 
   assert.deepEqual(coveredLabels(nodes), ['Barless row 12']);
+});
+
+function projectedTabsTree(): RawSnapshotNode[] {
+  return JSON.parse(
+    readFileSync(new URL('./snapshot-occlusion-bottom-tabs.fixture.json', import.meta.url), 'utf8'),
+  ) as RawSnapshotNode[];
+}
+
+test('projected tab content remains uncovered above the adjoining bottom tab buttons (#4365)', () => {
+  for (const type of ['Button', 'TabItem']) {
+    const nodes = projectedTabsTree();
+    for (const index of [5, 6, 7]) nodes[index]!.type = type;
+    const annotated = annotateCoveredSnapshotNodes(nodes);
+    for (const index of [1, 2, 3, 5, 6, 7]) {
+      assert.equal(
+        annotated.find((candidate) => candidate.index === index)?.interactionBlocked,
+        undefined,
+      );
+    }
+  }
+});
+
+test('a real toolbar over content remains covering despite an adjoining control (#4365)', () => {
+  const nodes = projectedTabsTree();
+  nodes[4]!.rect = { x: 0, y: 0, width: 402, height: 300 };
+  nodes[5]!.rect = { x: 0, y: 300, width: 134, height: 49 };
+  assert.equal(annotateCoveredSnapshotNodes(nodes)[1]?.interactionBlocked, 'covered');
+});
+
+test('a control hosted by the projected floating container still covers content (#4365)', () => {
+  const nodes = projectedTabsTree();
+  nodes.splice(
+    5,
+    0,
+    node({
+      index: 9,
+      parentIndex: 4,
+      depth: 2,
+      type: 'Toolbar',
+      label: 'Action',
+      rect: { x: 160, y: 60, width: 100, height: 50 },
+      hittable: true,
+    }),
+  );
+  const target = annotateCoveredSnapshotNodes(nodes).find((candidate) => candidate.index === 1);
+  assert.equal(target?.interactionBlocked, 'covered');
+  assert.equal(target?.coveredBy?.label, 'Action');
+});
+
+test('a sheet with the same footprint and adjoining tab buttons still covers content (#4365)', () => {
+  const nodes = projectedTabsTree();
+  nodes[4]!.type = 'Sheet';
+  assert.equal(annotateCoveredSnapshotNodes(nodes)[1]?.interactionBlocked, 'covered');
+});
+
+test('a single bottom CTA does not exempt a covering toolbar (#4365)', () => {
+  const nodes = projectedTabsTree();
+  nodes.splice(6, 2);
+  nodes[5]!.label = 'Continue';
+  nodes[5]!.rect = { x: 0, y: 791, width: 402, height: 49 };
+  assert.equal(annotateCoveredSnapshotNodes(nodes)[1]?.interactionBlocked, 'covered');
+});
+
+test('an ordinary toolbar above a two-button action row still covers content (#4365)', () => {
+  const nodes = projectedTabsTree();
+  nodes[4]!.role = '';
+  nodes.splice(7, 1);
+  nodes[5]!.rect = { x: 0, y: 791, width: 201, height: 49 };
+  nodes[6]!.rect = { x: 201, y: 791, width: 201, height: 49 };
+  nodes[5]!.label = 'Cancel';
+  nodes[6]!.label = 'Confirm';
+  assert.equal(annotateCoveredSnapshotNodes(nodes)[1]?.interactionBlocked, 'covered');
 });
