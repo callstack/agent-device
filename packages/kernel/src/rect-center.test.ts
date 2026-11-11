@@ -9,6 +9,20 @@ test('interiorCoordinate preserves one-pixel edge controls', () => {
   expect(interiorCoordinate(0, 1)).toBe(0);
 });
 
+test.each([
+  { origin: 0.5, size: 1, expected: 1 },
+  { origin: -1.5, size: 1, expected: -1 },
+  { origin: 0.75, size: 0.5, expected: 1 },
+  { origin: 0.1, size: 0.2, expected: 0.2 },
+])(
+  'interior coordinates preserve fractional bounds: $origin + $size',
+  ({ origin, size, expected }) => {
+    expect(interiorCoordinate(origin, size)).toBeCloseTo(expected);
+    expect(interiorCoordinate(origin, size)).toBeGreaterThanOrEqual(origin);
+    expect(interiorCoordinate(origin, size)).toBeLessThan(origin + size);
+  },
+);
+
 test('pointInsideRect clamps center point inside the rect bounds', () => {
   expect(pointInsideRect({ x: 0.2, y: 10.2, width: 10, height: 5 })).toEqual({
     x: 5,

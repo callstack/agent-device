@@ -1,6 +1,7 @@
 import { androidSystemBarMembership } from '@agent-device/contracts/android-system-chrome';
 import type { Rect } from '@agent-device/kernel/snapshot';
-import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
+import { isPositiveFiniteRect, rectContains } from '@agent-device/kernel/rect';
+import { foldSnapshotRect } from './snapshot-presentation-node.ts';
 import type { AndroidNode } from './ui-hierarchy-node.ts';
 import type { AndroidSnapshotPresentationBudget } from './snapshot-presentation.ts';
 
@@ -21,12 +22,13 @@ export function androidSystemBarContentClips(
       budget.check('work');
       const node = pending.pop()!;
       if (hidden.has(node)) continue;
+      const barRect = foldSnapshotRect(node.rect, node.windowRect ?? root.windowRect, undefined);
       if (
         node.visibleToUser !== false &&
         androidSystemBarMembership(node.packageName, node.identifier) !== undefined &&
-        isPositiveFiniteRect(node.rect)
+        isPositiveFiniteRect(barRect)
       ) {
-        bars.push({ root, rect: node.rect });
+        bars.push({ root, rect: barRect });
         barRoots.add(root);
       }
       pending.push(...node.children);
@@ -55,6 +57,7 @@ export function androidSystemBarContentClips(
 }
 
 function clipSystemBar(frame: Rect, bar: Rect): Rect {
+  if (rectContains(bar, frame)) return { ...frame, width: 0, height: 0 };
   const right = frame.x + frame.width;
   const bottom = frame.y + frame.height;
   const barRight = bar.x + bar.width;

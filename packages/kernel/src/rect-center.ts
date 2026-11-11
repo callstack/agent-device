@@ -75,10 +75,8 @@ export function pointInsideRect(rect: Rect): Point {
 }
 
 export function interiorCoordinate(origin: number, size: number): number {
-  // Preserve one-pixel edge controls instead of nudging coordinates outside
-  // tiny rects through normal center/bounds clamping.
-  if (size <= 1) return Math.floor(origin);
   const min = Math.ceil(origin);
-  const max = Math.floor(origin + size - 1);
+  const max = Math.ceil(origin + size) - 1;
+  if (min > max) return origin + size / 2;
   return Math.round(Math.min(max, Math.max(min, origin + size / 2)));
 }

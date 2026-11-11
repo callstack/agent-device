@@ -23,6 +23,13 @@ export const scrollingContainerTypeArb = fc.constantFrom(
   'androidx.recyclerview.widget.RecyclerView',
 );
 
+export const pixelRectArb: fc.Arbitrary<Rect> = fc.record({
+  x: fc.integer({ min: -4000, max: 4000 }),
+  y: fc.integer({ min: -4000, max: 4000 }),
+  width: fc.integer({ min: 1, max: 8000 }),
+  height: fc.integer({ min: 1, max: 8000 }),
+});
+
 export const distinctRectPairArb: fc.Arbitrary<{ ancestor: Rect; target: Rect }> = fc
   .record({
     x: fc.integer({ min: -200, max: 200 }),

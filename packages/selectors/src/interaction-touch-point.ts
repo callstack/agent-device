@@ -8,7 +8,7 @@ import { containsPoint, intersectRects } from '@agent-device/kernel/rect';
 import {
   areRectsApproximatelyEqual,
   normalizeRect,
-  resolveRectCenter,
+  pointInsideRect,
 } from '@agent-device/kernel/rect-center';
 import { isSemanticTouchTarget } from './touch-semantics.ts';
 
@@ -34,8 +34,8 @@ export function resolveInteractionTouchPoint(
   options: { bounds?: readonly Rect[] } = {},
 ): InteractionTouchPointResolution {
   const targetRect = normalizeRect(node.rect);
-  const center = resolveRectCenter(targetRect ?? undefined);
-  if (!targetRect || !center || !hasArea(targetRect)) return { kind: 'invalid' };
+  if (!targetRect || !hasArea(targetRect)) return { kind: 'invalid' };
+  const center = pointInsideRect(targetRect);
 
   const competitors = collectInteractiveDescendantRects(nodes, node, targetRect);
   if (competitors.length === 0) {

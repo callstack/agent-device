@@ -11,6 +11,7 @@ function hierarchy(
     appBounds?: string;
     rowBounds?: string;
     resourceId?: string;
+    barReportedBounds?: string;
   } = {},
 ): string {
   const packageName = options.packageName ?? 'com.google.android.apps.nexuslauncher';
@@ -18,7 +19,7 @@ function hierarchy(
   const barBounds = options.barBounds ?? '[0,2274][1080,2400]';
   return `<hierarchy>
     <node class="android.widget.FrameLayout" package="${packageName}" bounds="${barBounds}" window-bounds="${barBounds}" window-index="0" window-type="3" window-layer="${options.layer ?? 10}" visible-to-user="${options.visible ?? true}">
-      <node class="android.widget.FrameLayout" package="${packageName}" resource-id="${options.resourceId ?? `${packageName}:id/navbuttons_view`}" bounds="${barBounds}" visible-to-user="true">
+      <node class="android.widget.FrameLayout" package="${packageName}" resource-id="${options.resourceId ?? `${packageName}:id/navbuttons_view`}" bounds="${options.barReportedBounds ?? barBounds}" visible-to-user="true">
         <node class="android.widget.ImageView" package="${packageName}" content-desc="Home" bounds="[434,2279][644,2395]" clickable="true" visible-to-user="true" />
       </node>
     </node>
@@ -52,6 +53,37 @@ test('raw Android snapshots retain bounds behind system navigation', () => {
     rect: { x: 0, y: 2259, width: 1080, height: 131 },
   });
   expect(snapshot.nodes.find((node) => node.identifier === 'item-138')).toBeDefined();
+});
+
+test('a lower-layer window wholly inside navigation publishes no tappable app content', () => {
+  const snapshot = parseUiHierarchy(
+    hierarchy({
+      appBounds: '[0,2300][1080,2380]',
+      rowBounds: '[0,2310][1080,2370]',
+    }),
+    undefined,
+    {},
+  );
+
+  expect(snapshot.nodes.find((node) => node.identifier === 'item-137')).toBeUndefined();
+  expect(
+    snapshot.nodes.filter((node) => node.bundleId === 'dev.e2e.benchmark' && node.hittable),
+  ).toEqual([]);
+});
+
+test('an oversized bar wrapper is clipped to the bar window before it clips app content', () => {
+  const snapshot = parseUiHierarchy(
+    hierarchy({ barReportedBounds: '[0,0][1080,2400]' }),
+    undefined,
+    {},
+  );
+
+  expect(snapshot.nodes.find((node) => node.identifier === 'item-137')?.rect).toEqual({
+    x: 0,
+    y: 2259,
+    width: 1080,
+    height: 15,
+  });
 });
 
 test('a measured status bar clips edge-to-edge app content', () => {
@@ -117,34 +149,57 @@ test.each([
 );
 
 const PROPERTY_RUNS = 100;
-const bottomBarOverlapArb = fc.record({
-  width: fc.integer({ min: 200, max: 2000 }),
-  height: fc.integer({ min: 400, max: 3000 }),
-  barHeight: fc.integer({ min: 20, max: 120 }),
-  visibleHeight: fc.integer({ min: 1, max: 19 }),
+const systemBarOverlapArb = fc.record({
+  x: fc.integer({ min: 0, max: 500 }),
+  y: fc.integer({ min: 0, max: 500 }),
+  width: fc.integer({ min: 200, max: 8000 }),
+  height: fc.integer({ min: 200, max: 8000 }),
+  barSize: fc.integer({ min: 1, max: 120 }),
+  visibleSize: fc.integer({ min: 1, max: 19 }),
+  side: fc.constantFrom('top', 'bottom', 'left', 'right'),
 });
 
-test('property: a partially visible row center stays above navigation and raw bounds stay intact', () => {
+test('property: visible rectangles avoid measured bars at any device size, origin, and edge', () => {
   fc.assert(
-    fc.property(bottomBarOverlapArb, ({ width, height, barHeight, visibleHeight }) => {
-      const edge = height - barHeight;
-      const top = edge - visibleHeight;
+    fc.property(systemBarOverlapArb, ({ x, y, width, height, barSize, visibleSize, side }) => {
+      const right = x + width;
+      const bottom = y + height;
+      const bounds = (left: number, top: number, endX: number, endY: number) =>
+        `[${left},${top}][${endX},${endY}]`;
+      const barBounds =
+        side === 'bottom'
+          ? bounds(x, bottom - barSize, right, bottom)
+          : side === 'top'
+            ? bounds(x, y, right, y + barSize)
+            : side === 'left'
+              ? bounds(x, y, x + barSize, bottom)
+              : bounds(right - barSize, y, right, bottom);
+      const rowBounds =
+        side === 'bottom'
+          ? bounds(x, bottom - barSize - visibleSize, right, bottom)
+          : side === 'top'
+            ? bounds(x, y, right, y + barSize + visibleSize)
+            : side === 'left'
+              ? bounds(x, y, x + barSize + visibleSize, bottom)
+              : bounds(right - barSize - visibleSize, y, right, bottom);
       const xml = hierarchy({
-        appBounds: `[0,0][${width},${height}]`,
-        barBounds: `[0,${edge}][${width},${height}]`,
-        rowBounds: `[0,${top}][${width},${height}]`,
+        appBounds: bounds(x, y, right, bottom),
+        barBounds,
+        rowBounds,
       });
       const regular = parseUiHierarchy(xml, undefined, {});
       const raw = parseUiHierarchy(xml, undefined, { raw: true });
       const rect = regular.nodes.find((node) => node.identifier === 'item-137')!.rect!;
 
-      expect(rect.y + rect.height / 2).toBeLessThan(edge);
-      expect(raw.nodes.find((node) => node.identifier === 'item-137')?.rect).toEqual({
-        x: 0,
-        y: top,
-        width,
-        height: height - top,
-      });
+      if (side === 'bottom') expect(rect.y + rect.height).toBeLessThanOrEqual(bottom - barSize);
+      if (side === 'top') expect(rect.y).toBeGreaterThanOrEqual(y + barSize);
+      if (side === 'left') expect(rect.x).toBeGreaterThanOrEqual(x + barSize);
+      if (side === 'right') expect(rect.x + rect.width).toBeLessThanOrEqual(right - barSize);
+      const reported = raw.nodes.find((node) => node.identifier === 'item-137')!.rect!;
+      expect(side === 'top' || side === 'bottom' ? rect.height : rect.width).toBe(visibleSize);
+      expect(side === 'top' || side === 'bottom' ? reported.height : reported.width).toBe(
+        barSize + visibleSize,
+      );
     }),
     { numRuns: PROPERTY_RUNS },
   );

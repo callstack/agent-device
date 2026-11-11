@@ -6,8 +6,33 @@ import {
   interactionTouchPointScenarioArb,
   makeSnapshotState,
   PROPERTY_RUNS,
+  pixelRectArb,
 } from './snapshot-geometry.fixtures.ts';
 import { resolveInteractionTouchPoint } from './interaction-touch-point.ts';
+
+test('a one-pixel visible strip resolves inside the strip instead of rounding into navigation', () => {
+  const node = { index: 0, rect: { x: 0, y: 2273, width: 1080, height: 1 } };
+  assert.deepEqual(resolveInteractionTouchPoint([node], node), {
+    kind: 'resolved',
+    point: { x: 540, y: 2273 },
+    strategy: 'center',
+  });
+});
+
+test('property: emitted integer tap points stay inside positive pixel rectangles at any size and origin', () => {
+  fc.assert(
+    fc.property(pixelRectArb, (rect) => {
+      const node = { index: 0, rect };
+      const result = resolveInteractionTouchPoint([node], node);
+      assert.equal(result.kind, 'resolved');
+      if (result.kind !== 'resolved') return;
+      assert.ok(result.point.x >= rect.x && result.point.x < rect.x + rect.width);
+      assert.ok(result.point.y >= rect.y && result.point.y < rect.y + rect.height);
+      assert.ok(Number.isInteger(result.point.x) && Number.isInteger(result.point.y));
+    }),
+    { numRuns: PROPERTY_RUNS },
+  );
+});
 
 function containsPoint(rect: Rect, point: Point): boolean {
   return (
@@ -141,7 +166,7 @@ test('still resolves the smallest positive-area target', () => {
 
   assert.deepEqual(resolveInteractionTouchPoint(nodes, nodes[0]!), {
     kind: 'resolved',
-    point: { x: 41, y: 121 },
+    point: { x: 40, y: 120 },
     strategy: 'center',
   });
 });
