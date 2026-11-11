@@ -169,7 +169,7 @@ for (const [version, tag] of [
   ['1.2.3', 'v1.2.3'],
   ['1.2.3-dev', 'v1.2.3-dev'],
   ['1.2.3-rc.1+build.42', 'v1.2.3-rc.1+build.42'],
-]) {
+] as const) {
   for (const helper of ['ios', 'snapshot', 'ime']) {
     for (const repository of ['', 'owner/repo']) {
       test(`${helper} ${version} manifest encodes ${repository ? 'URL' : 'null URL'} metadata`, () => {
