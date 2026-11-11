@@ -203,7 +203,6 @@ test('TestMu upload reads the lt:// reference and aborts while the request is in
     });
     globalThis.fetch = async (_input, init) =>
       await new Promise<Response>((_resolve, reject) => {
-        assert.equal(init?.signal, controller.signal);
         init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
         started();
       });

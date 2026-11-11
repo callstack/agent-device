@@ -25,13 +25,17 @@ function installPin(hostProcess: HostProcessModule): void {
   vi.spyOn(hostProcess, 'readProcessStartTime').mockImplementation((pid: number) =>
     pid === process.pid ? ownStartTime : null,
   );
+  const observeOwnProcess = (pids: Iterable<number>) => {
+    const observations = new Map<number, HostProcessIdentityObservation>();
+    if ([...pids].includes(process.pid)) {
+      observations.set(process.pid, { state: 'S', startTime: ownStartTime });
+    }
+    return observations;
+  };
   vi.spyOn(hostProcess, 'readHostProcessIdentityObservations').mockImplementation(
-    (pids: Iterable<number>) => {
-      const observations = new Map<number, HostProcessIdentityObservation>();
-      if ([...pids].includes(process.pid)) {
-        observations.set(process.pid, { state: 'S', startTime: ownStartTime });
-      }
-      return observations;
-    },
+    observeOwnProcess,
+  );
+  vi.spyOn(hostProcess, 'readHostProcessIdentityObservationsAsync').mockImplementation(
+    async (pids: Iterable<number>) => observeOwnProcess(pids),
   );
 }

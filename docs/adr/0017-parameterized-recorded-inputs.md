@@ -139,6 +139,7 @@ The map gets one entry for each parameterized fill, added only after the entry o
 The map is never serialized: not to the script, the session event log, or diagnostics.
 The map has no read API beyond the recorder that owns it.
 The map disappears with the session.
+A placeholder that echo protection writes into a recorded result is a live script placeholder: the recorder lists its name in `SessionAction.livePlaceholders`, and the script writer escapes every other recorded `${`.
 
 This is not a reversal of the "no secret-to-name table" rule in the Mapping contract above.
 That rule rejects the retention of state to influence a *naming* decision.

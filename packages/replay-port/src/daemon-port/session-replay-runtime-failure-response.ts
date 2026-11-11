@@ -142,9 +142,11 @@ function readStringDetail(
 }
 
 const SAFE_CAUSE_DETAIL_KEYS = [
+  'adbFailure',
   'reason',
   'recovery',
   'retriable',
+  'runnerConnectFailureReason',
   'snapshotQuality',
   'supportedOn',
   'systemSurface',

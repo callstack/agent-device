@@ -56,8 +56,9 @@ Append `:clean` to any platform build when DerivedData may be stale, for example
 changes that affect both runners; it is not an all-platform build.
 
 `pnpm clean:xcuitest[:ios|:macos|:tvos|:visionos]` cleans the runner derived-data directory and prints
-it. When `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` is set, the scripts clean only that directory, for
-every platform, and keep entries that are not build output. Otherwise they clean the default
+it. If you set `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH`, use a non-symlinked subdirectory of the
+project's `.tmp/`. The scripts refuse other override paths. They clean build output in that
+directory for every platform and keep other entries. Without an override, they clean the default
 directory under `~/.agent-device/apple-runner/derived`.
 
 Android and macOS helper builds remain separate because they require their native toolchains:

@@ -75,7 +75,6 @@ export type PreparedReplayPlan = {
   replayReq: ReplayDispatchRequest;
   actions: SessionAction[];
   actionLines: number[];
-  actionSourcePaths: (string | undefined)[] | undefined;
   planDigest: string;
   preEntrySession: ReplaySessionState | undefined;
   entryIndex: number;
@@ -118,7 +117,7 @@ export function prepareReplayPlan(params: {
   if (backendRejection) return { ok: false, response: backendRejection };
 
   const { manifest, replayReq } = inspectReplayPlanManifest(req, script, dispatch);
-  const { metadata, actions, actionLines, actionSourcePaths, planDigest } = manifest;
+  const { metadata, actions, actionLines, planDigest } = manifest;
   const preEntrySession = sessionStore.get();
   const entryIndexResult = resolveReplayPlanEntryIndex({
     req,
@@ -134,7 +133,6 @@ export function prepareReplayPlan(params: {
       replayReq,
       actions,
       actionLines,
-      actionSourcePaths,
       planDigest,
       preEntrySession,
       entryIndex: entryIndexResult.value,
@@ -250,8 +248,11 @@ function buildPreparedReplayVarSources(params: {
       hostCwd: host.cwd,
     }),
     fileEnv: metadata.env,
-    shellEnv: collectReplayShellEnv(readReplayShellEnvSource(req.flags?.replayShellEnv, host.env)),
-    cliEnv: parseReplayCliEnvEntries(readReplayCliEnvEntries(req.flags?.replayEnv)),
+    shellEnv: collectReplayShellEnv(
+      readReplayShellEnvSource(req.flags?.replayShellEnv, host.env),
+      'ad',
+    ),
+    cliEnv: parseReplayCliEnvEntries(readReplayCliEnvEntries(req.flags?.replayEnv), 'ad'),
   };
 }
 

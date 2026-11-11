@@ -46,6 +46,7 @@ export async function runAppleRunnerCommand(
 }
 
 export {
+  assertSafeDerivedCleanup,
   RUNNER_STARTUP_TIMEOUT_MS,
   createLaunchedAppleRunnerProvider,
   mintRunnerToken,
@@ -77,6 +78,7 @@ export {
   resolveRunnerSandboxBuildArgs,
   resolveRunnerSigningBuildSettings,
   runApplePressSeries,
+  shouldDeleteRunnerDerivedRootEntry,
   stopAllIosRunnerSessions,
   stopIosRunnerSession,
   verifyLeaseRunnerPidIdentity,

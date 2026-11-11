@@ -1,9 +1,14 @@
 import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/device-readiness-runtime';
 import { listLocalDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
-import { runCmd, runCmdDetached } from '@agent-device/host-kit/command';
-import { stopPidsWithEscalation } from '@agent-device/host-kit/process';
+import { runCmd, runCmdDetached, runCmdDetachedMonitored } from '@agent-device/host-kit/command';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import {
+  readProcessIdentityFacts,
+  stopProcessAndConfirmExit,
+} from '@agent-device/host-kit/process';
 
 const LSAPPINFO_PID = /"pid"=(\d+)/;
+const EMULATOR_STOP_BUDGET = { termTimeoutMs: 1_500, killTimeoutMs: 1_500 } as const;
 
 // The macOS emulator has no flag to open its window without activating, so this JXA script waits
 // for the emulator to become frontmost and reactivates the app that was frontmost before it.
@@ -31,6 +36,33 @@ function run(argv) {
 export function createAndroidEmulatorHost(
   hostPlatform: NodeJS.Platform = process.platform,
 ): DeviceReadinessRuntimeHost['androidEmulator'] {
+  // What each launch recorded about its emulator, so terminate signals only that process.
+  const launched = new Map<number, { avdName: string; startTime: Promise<string | null> }>();
+  const terminate = async (pid: number): Promise<void> => {
+    const record = launched.get(pid);
+    if (!record) {
+      // Nothing names this pid as an emulator this host started, so nothing is signaled.
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'android_emulator_terminate_unrecorded_pid',
+        data: { pid },
+      });
+      return;
+    }
+    const startTime = await record.startTime;
+    const stop = await stopProcessAndConfirmExit(
+      {
+        pid,
+        identity: {
+          ...(startTime ? { startTime } : {}),
+          matches: (command) => isEmulatorCommandFor(command, record.avdName),
+        },
+      },
+      EMULATOR_STOP_BUDGET,
+    );
+    // A stop that could not prove the exit keeps the record, so a later terminate can retry.
+    if (stop.status === 'stopped') launched.delete(pid);
+  };
   return Object.freeze({
     discover: async (request, signal) => {
       signal.throwIfAborted();
@@ -46,23 +78,52 @@ export function createAndroidEmulatorHost(
           ? await readFrontmostAppPid().catch(() => undefined)
           : undefined;
       const pid = runCmdDetached('emulator', args);
-      if (frontmostPid !== undefined) {
-        runCmdDetached('osascript', [
-          '-l',
-          'JavaScript',
-          '-e',
-          RETURN_FOCUS_SCRIPT,
-          String(pid),
-          String(frontmostPid),
-          String(bootBudgetMs),
-        ]);
-      }
+      launched.set(pid, {
+        avdName,
+        startTime: readProcessIdentityFacts(pid).then((facts) => facts.startTime),
+      });
+      if (frontmostPid !== undefined) returnFocusAfterLaunch(pid, frontmostPid, bootBudgetMs);
       return pid;
     },
-    terminate: async (pid) => {
-      await stopPidsWithEscalation({ pids: [pid], termTimeoutMs: 1_500, killTimeoutMs: 1_500 });
-    },
+    terminate,
   });
+}
+
+/**
+ * Hands focus back to the app that was frontmost before a windowed launch. This is best effort: a
+ * focus helper that fails to start never fails the launch or stops the booting emulator, and only
+ * leaves a diagnostic.
+ */
+function returnFocusAfterLaunch(pid: number, frontmostPid: number, bootBudgetMs: number): void {
+  const reportFailure = (error: string): void => {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'android_emulator_focus_return_failed',
+      data: { pid, error },
+    });
+  };
+  try {
+    const helper = runCmdDetachedMonitored('osascript', [
+      '-l',
+      'JavaScript',
+      '-e',
+      RETURN_FOCUS_SCRIPT,
+      String(pid),
+      String(frontmostPid),
+      String(bootBudgetMs),
+    ]);
+    void helper.exited.then((exit) => {
+      if (exit.error !== undefined) reportFailure(exit.error);
+    });
+  } catch (error) {
+    reportFailure(error instanceof Error ? error.message : String(error));
+  }
+}
+
+function isEmulatorCommandFor(command: string, avdName: string): boolean {
+  const args = command.split(/\s+/);
+  const avdFlag = args.indexOf('-avd');
+  return avdFlag >= 0 && args[avdFlag + 1] === avdName;
 }
 
 async function readFrontmostAppPid(): Promise<number | undefined> {

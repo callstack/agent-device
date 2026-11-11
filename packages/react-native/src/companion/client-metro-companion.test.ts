@@ -580,3 +580,56 @@ test('legacy state without bridge scope is stopped before respawn', async () => 
     fs.rmSync(projectRoot, { recursive: true, force: true });
   }
 });
+
+test('concurrent ensures for one profile spawn one companion and track both consumers', async () => {
+  const projectRoot = mkdtempForTestSync('agent-device-metro-companion-concurrent-');
+  const statePath = path.join(projectRoot, '.agent-device', 'metro-companion.json');
+  // A stale record sends each caller through the awaited stop, where the second caller used to
+  // read the same stale record and spawn a second companion.
+  fs.mkdirSync(path.dirname(statePath), { recursive: true });
+  fs.writeFileSync(
+    statePath,
+    `${JSON.stringify({
+      pid: 555,
+      startTime: 'start-555',
+      serverBaseUrl: 'https://bridge.example.test',
+      localBaseUrl: 'http://127.0.0.1:8081',
+      tokenHash: 'legacy-token-hash',
+      consumers: [],
+    })}\n`,
+  );
+  vi.mocked(runCmdDetached).mockReturnValueOnce(666).mockReturnValueOnce(777);
+  vi.mocked(isProcessAlive).mockReturnValue(true);
+  vi.mocked(readProcessStartTime).mockImplementation((pid) => `start-${pid}`);
+  vi.mocked(readProcessCommand).mockReturnValue(COMPANION_TUNNEL_COMMAND);
+  vi.mocked(stopProcessAndConfirmExit).mockResolvedValue(STOPPED);
+  const ensure = (consumerKey: string) =>
+    ensureMetroCompanion({
+      cwd: process.cwd(),
+      env: process.env,
+      projectRoot,
+      serverBaseUrl: 'https://bridge.example.test',
+      bearerToken: 'token',
+      localBaseUrl: 'http://127.0.0.1:8081',
+      bridgeScope: TEST_BRIDGE_SCOPE,
+      consumerKey,
+    });
+
+  const results = await Promise.all([ensure('session-a'), ensure('session-b')]);
+
+  assert.equal(vi.mocked(runCmdDetached).mock.calls.length, 1);
+  assert.deepEqual(
+    results.map((result) => [result.pid, result.spawned]),
+    [
+      [666, true],
+      [666, false],
+    ],
+  );
+  assert.deepEqual(stopRequests(), [companionStop(555, 'start-555')]);
+  const state = JSON.parse(fs.readFileSync(statePath, 'utf8')) as {
+    pid: number;
+    consumers: string[];
+  };
+  assert.equal(state.pid, 666);
+  assert.deepEqual(state.consumers.sort(), ['session-a', 'session-b']);
+});

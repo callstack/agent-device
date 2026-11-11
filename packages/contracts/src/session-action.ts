@@ -38,4 +38,10 @@ export type SessionAction = {
   targetEvidence?: TargetAnnotationV1;
   /** `targets-v1` evidence for dual-endpoint interactions such as drag. */
   targetEvidences?: MultiTargetAnnotationV1;
+  /**
+   * The variable names whose `${NAME}` placeholders the recorder inserted in this action: a
+   * `--record-as` fill's own text, and session echo protection (ADR 0017). A written script keeps
+   * exactly these placeholders live and escapes every other recorded `${`.
+   */
+  livePlaceholders?: string[];
 };

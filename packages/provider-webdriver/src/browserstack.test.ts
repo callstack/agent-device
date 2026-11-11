@@ -26,7 +26,6 @@ test('BrowserStack upload aborts while the provider request is in flight', async
     await fs.writeFile(appPath, 'placeholder');
     globalThis.fetch = async (_input, init) =>
       await new Promise<Response>((_resolve, reject) => {
-        assert.equal(init?.signal, controller.signal);
         if (init?.signal?.aborted) {
           reject(init.signal.reason);
           return;

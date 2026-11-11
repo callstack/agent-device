@@ -78,3 +78,26 @@ test('the buffer keeps only the most recent lines', () => {
   assert.equal(lines.length, 5000);
   assert.match(lines[0]!, /line 5$/);
 });
+
+// An old TV Chromium can send an event without the field the handler reads.
+test('events missing their payload fields do not throw', () => {
+  const log = createPageLog(fixedClock);
+
+  log.record('Runtime.exceptionThrown', {});
+  log.record('Log.entryAdded', {});
+  log.record('Runtime.consoleAPICalled', { type: 'log', args: 'not a list' });
+  log.record('Runtime.consoleAPICalled', {
+    type: 'log',
+    args: [null, { type: 'string', value: 'kept' }],
+  });
+
+  assert.equal(
+    log.tail(10),
+    [
+      '2026-10-30T12:00:00.000Z exception unknown',
+      '2026-10-30T12:00:00.000Z console.log ',
+      '2026-10-30T12:00:00.000Z console.log kept',
+      '',
+    ].join('\n'),
+  );
+});

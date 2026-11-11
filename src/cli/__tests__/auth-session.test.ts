@@ -169,6 +169,54 @@ test('remote auth refreshes a stored CLI session into an agent token', async () 
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('remote auth does not fall back to login when session refresh gets 503', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-auth-refresh-503-');
+  const session = {
+    version: 1 as const,
+    id: 'session-503',
+    cloudBaseUrl: 'https://cloud.example',
+    refreshCredential: 'adc_refresh_503',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  };
+  writeCliSession({ stateDir: tempRoot, session });
+  let fetchCalls = 0;
+  let browserOpened = false;
+  try {
+    await assert.rejects(
+      resolveRemoteAuth({
+        command: 'connect',
+        flags: { ...baseFlags, daemonBaseUrl: 'https://bridge.agent-device.dev' },
+        stateDir: tempRoot,
+        allowInteractiveLogin: true,
+        env: {},
+        io: {
+          stdinIsTTY: true,
+          stdoutIsTTY: true,
+          openBrowser: async () => {
+            browserOpened = true;
+          },
+          fetch: async () => {
+            fetchCalls += 1;
+            return new Response('<html>private-body-secret</html>', { status: 503 });
+          },
+        },
+      }),
+      (error: unknown) => {
+        const normalized = normalizeError(error);
+        assert.equal(normalized.code, 'COMMAND_FAILED');
+        assert.equal(normalized.details?.status, 503);
+        assert.equal(normalized.retriable, true);
+        return true;
+      },
+    );
+    assert.equal(fetchCalls, 1);
+    assert.equal(browserOpened, false);
+    assert.equal(readCliSession({ stateDir: tempRoot })?.id, session.id);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('remote auth fails immediately when stored CLI session is revoked', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-auth-revoked-');
   writeCliSession({

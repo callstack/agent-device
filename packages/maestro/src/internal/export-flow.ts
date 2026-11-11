@@ -1,7 +1,7 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { GESTURE_FLING_DURATION_MS } from '@agent-device/contracts/gesture-plan';
 import { AppError } from '@agent-device/kernel/errors';
-import { selectorContainsKey } from '@agent-device/selectors';
+import { selectorContainsKey, splitSelectorFromArgs } from '@agent-device/selectors';
 import { formatMaestroPoint } from './export-points.ts';
 import { DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY } from './compatibility-policy.ts';
 import type { ConvertedAction, MaestroExportCommand, MaestroExportConfig } from './export-types.ts';
@@ -258,12 +258,20 @@ function convertTypeAction(action: SessionAction): ConvertedAction {
   return { kind: 'commands', commands: [{ inputText: text }] };
 }
 
+// The `wait` keyword forms follow `@agent-device/command-registry/wait-positionals`. That module
+// stays off this package's eager closure, so the keywords that are not selectors are named here.
 function convertWaitAction(
   action: SessionAction,
   resolveSelector: MaestroExportOptions['resolveSelector'],
 ): ConvertedAction {
-  const [first, second] = action.positionals;
+  const [first] = action.positionals;
   if (!first) return { kind: 'unsupported', message: 'wait requires a target or duration' };
+  if (first.startsWith('@')) {
+    return {
+      kind: 'unsupported',
+      message: 'wait @ref names a session-local ref; record a selector wait to export it',
+    };
+  }
   if (isNumber(first)) {
     return {
       kind: 'commands',
@@ -273,44 +281,71 @@ function convertWaitAction(
       ],
     };
   }
+  if (first === 'stable') return convertStableWait(action.positionals.slice(1));
   if (first === 'absent') {
     return {
       kind: 'unsupported',
       message: 'strict wait absent requires zero selector matches and is unsupported by Maestro',
     };
   }
-  if (first === 'text' && second) {
+  // Like the shared grammar: a trailing number is the timeout, and the tokens before it are the
+  // whole selector expression or text.
+  const last = action.positionals.at(-1);
+  const timeoutMs = action.positionals.length > 1 && isNumber(last) ? Number(last) : null;
+  const target = timeoutMs === null ? action.positionals : action.positionals.slice(0, -1);
+  if (first === 'text') {
+    const text = target.slice(1).join(' ').trim();
+    if (!text) return { kind: 'unsupported', message: 'wait text requires the text to wait for' };
+    return extendedWaitUntilVisible(text, timeoutMs);
+  }
+  const split = splitSelectorFromArgs(target);
+  const expression =
+    split && split.rest.length === 0 ? split.selectorExpression : target.join(' ').trim();
+  const selector = resolveSelector(expression);
+  if (!selector) return { kind: 'unsupported', message: 'wait selector is not Maestro-compatible' };
+  return {
+    ...extendedWaitUntilVisible(selector, timeoutMs),
+    warnings: readLabelSelectorWarnings(expression),
+  };
+}
+
+/** `wait stable [quietMs] [timeoutMs]`: anything else is a malformed recording, not a default. */
+function convertStableWait(args: readonly string[]): ConvertedAction {
+  if (args.length > 2 || !args.every((arg) => isNumber(arg))) {
     return {
-      kind: 'commands',
-      commands: [
-        {
-          extendedWaitUntil: {
-            visible: second,
-            timeout: readTimeout(
-              action,
-              DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY.extendedWaitUntilTimeoutMs,
-            ),
-          },
-        },
-      ],
+      kind: 'unsupported',
+      message: 'wait stable takes at most a numeric quietMs and timeoutMs',
     };
   }
-  const selector = resolveSelector(first);
-  if (!selector) return { kind: 'unsupported', message: 'wait selector is not Maestro-compatible' };
+  const timeout = args[1];
+  return {
+    kind: 'commands',
+    commands: [
+      timeout === undefined
+        ? 'waitForAnimationToEnd'
+        : { waitForAnimationToEnd: { timeout: Number(timeout) } },
+    ],
+    warnings: [
+      'wait stable exports as waitForAnimationToEnd, which uses its own screen-stability threshold instead of the quiet window',
+    ],
+  };
+}
+
+function extendedWaitUntilVisible(
+  visible: NonNullable<MaestroSelectorProjection>,
+  timeoutMs: number | null,
+): Extract<ConvertedAction, { kind: 'commands' }> {
   return {
     kind: 'commands',
     commands: [
       {
         extendedWaitUntil: {
-          visible: selector,
-          timeout: readTimeout(
-            action,
-            DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY.extendedWaitUntilTimeoutMs,
-          ),
+          visible,
+          timeout:
+            timeoutMs ?? DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY.extendedWaitUntilTimeoutMs,
         },
       },
     ],
-    warnings: readLabelSelectorWarnings(first),
   };
 }
 
@@ -465,11 +500,6 @@ function appendWarnings(
       message,
     });
   }
-}
-
-function readTimeout(action: SessionAction, fallback: number): number {
-  const candidate = action.positionals.at(-1);
-  return candidate && isNumber(candidate) ? Number(candidate) : fallback;
 }
 
 function formatMaestroYaml(config: MaestroExportConfig, commands: MaestroExportCommand[]): string {

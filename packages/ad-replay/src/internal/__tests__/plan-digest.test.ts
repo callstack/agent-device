@@ -20,7 +20,6 @@ function digestFor(
   return computeReplayPlanDigest({
     actions,
     actionLines: actions.map((_, i) => i + 1),
-    actionSourcePaths: undefined,
     metadata: {},
     ...overrides,
   });
@@ -29,6 +28,15 @@ function digestFor(
 test('computeReplayPlanDigest is a 64-char lowercase hex SHA-256', () => {
   const digest = digestFor([action()]);
   assert.match(digest, /^[0-9a-f]{64}$/);
+});
+
+test('computeReplayPlanDigest keeps the published digest for an unchanged plan', () => {
+  const digest = computeReplayPlanDigest({
+    actions: [action({ command: 'open', positionals: ['Demo'] }), action()],
+    actionLines: [2, 3],
+    metadata: { platform: 'ios' },
+  });
+  assert.equal(digest, '0641236777b11822d90d446022965629ec99ac2ba1af2d5c637f06dd684fe695');
 });
 
 test('computeReplayPlanDigest is stable across repeated computation of the same plan', () => {
@@ -54,15 +62,11 @@ test('computeReplayPlanDigest changes when the command changes', () => {
   assert.notEqual(original, edited);
 });
 
-test('computeReplayPlanDigest changes when source provenance (path/line) changes', () => {
+test('computeReplayPlanDigest changes when the source line changes', () => {
   const actions = [action()];
   const original = digestFor(actions, { actionLines: [1] });
   const movedLine = digestFor(actions, { actionLines: [5] });
   assert.notEqual(original, movedLine);
-
-  const noSourcePath = digestFor(actions, { actionSourcePaths: undefined });
-  const withSourcePath = digestFor(actions, { actionSourcePaths: ['/tmp/include.ad'] });
-  assert.notEqual(noSourcePath, withSourcePath);
 });
 
 test('computeReplayPlanDigest changes when platform-conditioned metadata changes', () => {

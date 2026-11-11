@@ -13,7 +13,7 @@ import {
 } from '@agent-device/remote/remote-connection-state';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
 import { resolveConnectProviderProfile } from '../cli/connection/connect-provider-adapters.ts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { verifyLimrunConnection } from '@agent-device/provider-limrun';
 import {
   verifyAwsDeviceFarmConnection,
@@ -366,37 +366,39 @@ test('connect without remote config rejects legacy remoteConfig string profile r
   }
 });
 
-test('connect without remote config reports cloud profile authorization failures', async () => {
-  const tempRoot = mkdtempForTestSync('agent-device-connect-cloud-denied-');
-  const stateDir = path.join(tempRoot, '.state');
-  mockedResolveCloudAccessForConnect.mockResolvedValue({
-    accessToken: 'adc_agent_cloud',
-    cloudBaseUrl: 'https://cloud.example',
-  });
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(
-      async () =>
-        new Response(JSON.stringify({ error: 'forbidden' }), {
-          status: 403,
-          headers: { 'content-type': 'application/json' },
-        }),
-    ),
-  );
-
-  try {
-    await assert.rejects(connectWithGeneratedCloudProfile(stateDir), (error: unknown) => {
-      assert.equal((error as { code?: string }).code, 'UNAUTHORIZED');
-      assert.match(
-        (error as Error).message,
-        /Cloud connection profile endpoint rejected the request/,
-      );
-      return true;
+for (const [status, code] of [
+  [403, 'UNAUTHORIZED'],
+  [429, 'COMMAND_FAILED'],
+  [503, 'COMMAND_FAILED'],
+] as const) {
+  test(`connect without remote config preserves cloud profile ${status} failures`, async () => {
+    const tempRoot = mkdtempForTestSync(`agent-device-connect-cloud-${status}-`);
+    const stateDir = path.join(tempRoot, '.state');
+    mockedResolveCloudAccessForConnect.mockResolvedValue({
+      accessToken: 'adc_agent_cloud',
+      cloudBaseUrl: 'https://cloud.example',
     });
-  } finally {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
-  }
-});
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('<html>private-body-secret</html>', { status })),
+    );
+    try {
+      await assert.rejects(connectWithGeneratedCloudProfile(stateDir), (error: unknown) => {
+        const normalized = normalizeError(error);
+        assert.equal(normalized.code, code);
+        assert.equal(normalized.details?.status, status);
+        if (code === 'COMMAND_FAILED') assert.equal(normalized.retriable, true);
+        assert.match(normalized.message, /Cloud connection profile endpoint rejected the request/);
+        assert.doesNotMatch(JSON.stringify(normalized), /private-body-secret/);
+        return true;
+      });
+      assert.equal(readActiveConnectionState({ stateDir }), null);
+      assert.equal(fs.existsSync(path.join(stateDir, 'remote-connections')), false);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+}
 
 test('connect without remote config reports unsupported cloud profile keys', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-cloud-invalid-');

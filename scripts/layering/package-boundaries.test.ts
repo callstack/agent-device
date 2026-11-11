@@ -695,8 +695,7 @@ test('the real tree parses, declares, and passes R11', () => {
   ]);
   const adScriptPackage = packages.find((pkg) => pkg.name === '@agent-device/ad-script');
   assert.ok(adScriptPackage, 'ad-script package must exist');
-  // Locks the "exports only `.`" boundary: a future `/codec` (or any other)
-  // subpath widens this key list and fails the assertion (#1478 P5 dossier).
+  // Locks the "exports only `.`" boundary: any other subpath fails this (#1478 P5 dossier).
   assert.deepEqual([...adScriptPackage.exportTargets.keys()], ['@agent-device/ad-script']);
   assert.deepEqual([...adScriptPackage.workspaceDependencies].sort(), [
     '@agent-device/contracts',

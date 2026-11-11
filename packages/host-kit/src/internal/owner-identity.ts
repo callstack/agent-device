@@ -3,6 +3,8 @@ import {
   isProcessAlive,
   isProcessZombie,
   readHostProcessIdentityObservations,
+  readHostProcessIdentityObservationsAsync,
+  readProcessIdentityFacts,
   readProcessStartTime,
   type HostProcessIdentityObservation,
 } from './host-process.ts';
@@ -24,8 +26,33 @@ export type OwnerLiveness =
   | 'owner-state-dir-gone'
   | 'unknown';
 
+let currentOwnerIdentity: Readonly<OwnerIdentity> | undefined;
+
+/**
+ * This process's identity. A process's own start time never changes, so the first readable answer
+ * is kept for the life of the process and every later call is free. An unreadable start time is
+ * not kept: the next call asks the host again rather than recording an owner without one.
+ */
 export function readCurrentOwnerIdentity(): OwnerIdentity {
-  return { pid: process.pid, startTime: readProcessStartTime(process.pid) };
+  return rememberedOwnerIdentity() ?? rememberOwnerIdentity(readProcessStartTime(process.pid));
+}
+
+/** {@link readCurrentOwnerIdentity} for a caller that is already waiting: no blocking `ps`. */
+export async function readCurrentOwnerIdentityAsync(): Promise<OwnerIdentity> {
+  return (
+    rememberedOwnerIdentity() ??
+    rememberOwnerIdentity((await readProcessIdentityFacts(process.pid)).startTime)
+  );
+}
+
+function rememberedOwnerIdentity(): OwnerIdentity | undefined {
+  return currentOwnerIdentity?.pid === process.pid ? { ...currentOwnerIdentity } : undefined;
+}
+
+function rememberOwnerIdentity(startTime: string | null): OwnerIdentity {
+  const identity = { pid: process.pid, startTime };
+  if (startTime !== null) currentOwnerIdentity = Object.freeze({ ...identity });
+  return identity;
 }
 
 export function ownerIdentityMatches(
@@ -79,6 +106,20 @@ export function classifyOwnerLiveness(params: {
   const observation =
     readHostProcessIdentityObservations([params.owner.pid]).get(params.owner.pid) ?? null;
   return classifyLiveOwnerFromObservation(params, observation);
+}
+
+/**
+ * {@link classifyOwnerLiveness} off the event loop, for a caller that is already waiting. A pid
+ * that `kill(pid, 0)` already proves dead is judged without running the process tool at all.
+ */
+export async function classifyOwnerLivenessAsync(params: {
+  owner: Pick<OwnerIdentity, 'pid' | 'startTime'>;
+  stateDir?: string;
+}): Promise<OwnerLiveness> {
+  const guarded = guardOwnerPid(params.owner);
+  if (guarded) return guarded;
+  const observations = await readHostProcessIdentityObservationsAsync([params.owner.pid]);
+  return classifyOwnerLivenessFromObservation(params, observations.get(params.owner.pid) ?? null);
 }
 
 export function classifyOwnerLivenessFromObservation(

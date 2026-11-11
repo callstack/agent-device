@@ -222,15 +222,23 @@ export type NumericScalarConstraints = {
   integer?: boolean;
   nonNegative?: boolean;
   positive?: boolean;
+  max?: number;
 };
+
+/** Upstream Maestro has no ceiling; the erase string is built in the daemon, so it needs one. */
+const MAESTRO_ERASE_TEXT_MAX_CHARACTERS = 10_000;
 
 export const MAESTRO_NUMERIC_FIELD_CONSTRAINTS: Record<string, NumericScalarConstraints> = {
   'tapOn.index': { integer: true, nonNegative: true },
   'tapOn.repeat': { integer: true, positive: true },
   'tapOn.delay': { integer: true, nonNegative: true },
   'doubleTapOn.delay': { integer: true, nonNegative: true },
-  eraseText: { integer: true, positive: true },
-  'eraseText.charactersToErase': { integer: true, positive: true },
+  eraseText: { integer: true, positive: true, max: MAESTRO_ERASE_TEXT_MAX_CHARACTERS },
+  'eraseText.charactersToErase': {
+    integer: true,
+    positive: true,
+    max: MAESTRO_ERASE_TEXT_MAX_CHARACTERS,
+  },
   'extendedWaitUntil.timeout': { nonNegative: true },
   'scrollUntilVisible.timeout': { nonNegative: true },
   waitForAnimationToEnd: { nonNegative: true },
@@ -241,6 +249,11 @@ export const MAESTRO_NUMERIC_FIELD_CONSTRAINTS: Record<string, NumericScalarCons
 };
 
 export function numericDescription(constraints: NumericScalarConstraints): string {
+  const description = baseNumericDescription(constraints);
+  return constraints.max === undefined ? description : `${description} up to ${constraints.max}`;
+}
+
+function baseNumericDescription(constraints: NumericScalarConstraints): string {
   if (constraints.positive && constraints.integer) return 'a positive integer';
   if (constraints.positive) return 'a positive number';
   if (constraints.nonNegative && constraints.integer) return 'a non-negative integer';
@@ -256,22 +269,25 @@ function validateNumericScalar(
   context: MaestroProgramParseContext,
   constraints: NumericScalarConstraints,
 ): void {
-  const message = `Maestro ${name} expects ${numericDescription(constraints)} or a variable expression.`;
-  if (!Number.isFinite(value)) {
-    invalidAt(message, node, context);
+  if (!satisfiesNumericConstraints(value, constraints)) {
+    invalidAt(
+      `Maestro ${name} expects ${numericDescription(constraints)} or a variable expression.`,
+      node,
+      context,
+    );
   }
-  if (Math.abs(value) > Number.MAX_SAFE_INTEGER) {
-    invalidAt(message, node, context);
-  }
-  if (constraints.integer && !Number.isSafeInteger(value)) {
-    invalidAt(message, node, context);
-  }
-  if (constraints.nonNegative && value < 0) {
-    invalidAt(message, node, context);
-  }
-  if (constraints.positive && value <= 0) {
-    invalidAt(message, node, context);
-  }
+}
+
+/** The one numeric-field check the parser and the runtime resolution both apply. */
+export function satisfiesNumericConstraints(
+  value: number,
+  constraints: NumericScalarConstraints,
+): boolean {
+  if (!Number.isFinite(value) || Math.abs(value) > Number.MAX_SAFE_INTEGER) return false;
+  if (constraints.integer && !Number.isSafeInteger(value)) return false;
+  if (constraints.nonNegative && value < 0) return false;
+  if (constraints.positive && value <= 0) return false;
+  return constraints.max === undefined || value <= constraints.max;
 }
 
 function readNumericScalar(

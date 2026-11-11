@@ -107,7 +107,13 @@ describe('scanRunnerBuildLog', () => {
 function runBuildScript(
   output: string,
   status: number,
-  options: { reuseDerivedData?: boolean } = {},
+  options: {
+    reuseDerivedData?: boolean;
+    clean?: boolean;
+    platform?: string;
+    useDefault?: boolean;
+    derived?: string;
+  } = {},
 ) {
   const root = mkdtempForTestSync('runner-isolation-scan-');
   const bin = path.join(root, 'bin');
@@ -120,7 +126,15 @@ function runBuildScript(
     `#!/bin/sh\nprintf '%s\\n' "$@" > ${JSON.stringify(xcodebuildArgs)}\ncat ${JSON.stringify(path.join(root, 'xcodebuild-output.txt'))}\nexit ${status}\n`,
   );
   fs.chmodSync(fakeXcodebuild, 0o755);
-  const derived = path.join(root, 'derived');
+  const derived =
+    options.derived ??
+    (options.useDefault
+      ? path.join(root, '.agent-device', 'apple-runner', 'derived')
+      : path.join(root, 'derived'));
+  if (options.clean) {
+    fs.mkdirSync(path.join(derived, 'Build'), { recursive: true });
+    fs.writeFileSync(path.join(derived, 'Build', 'sentinel'), 'keep');
+  }
   if (options.reuseDerivedData) {
     fs.mkdirSync(path.join(derived, 'Build', 'Intermediates.noindex'), { recursive: true });
   }
@@ -130,9 +144,12 @@ function runBuildScript(
     env: {
       ...process.env,
       PATH: `${bin}${path.delimiter}${process.env.PATH ?? ''}`,
-      AGENT_DEVICE_XCUITEST_PLATFORM: 'macos',
+      HOME:
+        options.useDefault && options.derived ? path.resolve(options.derived, '../../../') : root,
+      AGENT_DEVICE_IOS_CLEAN_DERIVED: options.clean ? '1' : '',
+      AGENT_DEVICE_XCUITEST_PLATFORM: options.platform ?? 'macos',
       AGENT_DEVICE_XCUITEST_DESTINATION: 'platform=macOS',
-      AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: derived,
+      AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: options.useDefault ? '' : derived,
     },
   });
   return { ...result, derived, xcodebuildArgs };
@@ -200,3 +217,64 @@ describe('scripts/build-xcuitest-apple.sh build location', () => {
     );
   });
 });
+
+describe('scripts/build-xcuitest-apple.sh cleanup', () => {
+  test('refuses an outside override before touching its output', () => {
+    const result = runBuildScript('', 65, { clean: true });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Refusing to clean AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH');
+    expect(result.stderr).toContain('to a non-symlinked subdirectory of');
+    expect(result.stderr).toContain('AGENT_DEVICE_IOS_CLEAN_DERIVED');
+    expect(fs.readFileSync(path.join(result.derived, 'Build', 'sentinel'), 'utf8')).toBe('keep');
+    expect(fs.existsSync(result.xcodebuildArgs)).toBe(false);
+  });
+
+  test('cleans default iOS build output and preserves sibling platforms', () => {
+    const root = mkdtempForTestSync('runner-clean-home-');
+    const derived = path.join(root, '.agent-device', 'apple-runner', 'derived');
+    fs.mkdirSync(path.join(derived, 'macos'), { recursive: true });
+    fs.writeFileSync(path.join(derived, 'macos', 'sentinel'), 'keep');
+    const result = runBuildScript('', 65, {
+      clean: true,
+      platform: 'ios',
+      useDefault: true,
+      derived,
+    });
+    expect(result.status).toBe(65);
+    expect(fs.existsSync(path.join(derived, 'Build', 'sentinel'))).toBe(false);
+    expect(fs.readFileSync(path.join(derived, 'macos', 'sentinel'), 'utf8')).toBe('keep');
+  });
+
+  test('cleans a supported project override whose name starts with dots', () => {
+    fs.mkdirSync(path.join(repoRoot, '.tmp'), { recursive: true });
+    const derived = fs.mkdtempSync(path.join(repoRoot, '.tmp', '..runner-clean-test-'));
+    try {
+      const result = runBuildScript('', 65, { clean: true, derived });
+      expect(result.status).toBe(65);
+      expect(fs.existsSync(path.join(derived, 'Build', 'sentinel'))).toBe(false);
+    } finally {
+      fs.rmSync(derived, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const [name, suffix] of [
+  ['derived root', ''],
+  ['ancestor', 'nested'],
+] as const) {
+  test(`cleanup refuses a symlink at the ${name} and preserves its target`, () => {
+    const outside = mkdtempForTestSync('runner-clean-outside-');
+    fs.mkdirSync(path.join(repoRoot, '.tmp'), { recursive: true });
+    const scratch = fs.mkdtempSync(path.join(repoRoot, '.tmp', 'runner-clean-link-'));
+    const link = path.join(scratch, 'link');
+    fs.symlinkSync(outside, link, 'dir');
+    try {
+      const result = runBuildScript('', 65, { clean: true, derived: path.join(link, suffix) });
+      expect(fs.readFileSync(path.join(outside, suffix, 'Build', 'sentinel'), 'utf8')).toBe('keep');
+      expect(result.status).toBe(1);
+      expect(fs.existsSync(result.xcodebuildArgs)).toBe(false);
+    } finally {
+      fs.rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+}

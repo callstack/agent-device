@@ -33,7 +33,7 @@ import {
 import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import {
   deviceClaimOwnerCannotRelease,
-  inspectDeviceClaims,
+  inspectDeviceClaimsAsync,
   canonicalLocalDeviceKey,
   deviceClaimIdentity,
   isClaimOfHostScopedDevice,
@@ -157,7 +157,7 @@ async function devicesInventoryResponse(
   env: HostEnvironment['env'],
 ): Promise<DaemonResponse> {
   try {
-    const claims = blockingClaims(env);
+    const claims = await blockingClaims(env);
     return {
       ok: true,
       data: {
@@ -180,8 +180,8 @@ async function devicesInventoryResponse(
   }
 }
 
-function blockingClaims(env: HostEnvironment['env']): DeviceClaim[] {
-  return inspectDeviceClaims({}, env).flatMap((entry) =>
+async function blockingClaims(env: HostEnvironment['env']): Promise<DeviceClaim[]> {
+  return (await inspectDeviceClaimsAsync({}, env)).flatMap((entry) =>
     entry.claim && !deviceClaimOwnerCannotRelease(entry.classification) ? [entry.claim] : [],
   );
 }

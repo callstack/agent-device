@@ -3,6 +3,7 @@ import { AppError, createRequestCanceledError } from '@agent-device/kernel/error
 import {
   MAESTRO_NUMERIC_FIELD_CONSTRAINTS,
   numericDescription,
+  satisfiesNumericConstraints,
   type NumericScalarConstraints,
 } from './program-ir-values.ts';
 import type {
@@ -44,16 +45,7 @@ export function resolveNumeric(
     }
     num = Number(trimmed);
   }
-  if (!Number.isFinite(num) || Math.abs(num) > Number.MAX_SAFE_INTEGER) {
-    throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
-  }
-  if (effectiveConstraints.integer && !Number.isSafeInteger(num)) {
-    throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
-  }
-  if (effectiveConstraints.nonNegative && num < 0) {
-    throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
-  }
-  if (effectiveConstraints.positive && num <= 0) {
+  if (!satisfiesNumericConstraints(num, effectiveConstraints)) {
     throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
   }
   return num;

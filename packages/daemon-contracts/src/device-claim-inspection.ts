@@ -8,8 +8,10 @@ import {
 } from '@agent-device/kernel/device';
 import {
   classifyOwnerLivenessFromObservation,
+  type HostProcessIdentityObservation,
   type OwnerLiveness,
   readHostProcessIdentityObservations,
+  readHostProcessIdentityObservationsAsync,
 } from '@agent-device/host-kit/process';
 
 import { isSupersededDaemonOwner } from './daemon-registration.ts';
@@ -34,22 +36,61 @@ export type DeviceClaimSelectors = {
   serial?: string;
 };
 
+type OwnerObservations = ReadonlyMap<number, HostProcessIdentityObservation>;
+
+/**
+ * Every matching claim, judged from one process-table snapshot. This one blocks for that snapshot,
+ * which suits a one-shot CLI; a daemon path uses {@link inspectDeviceClaimsAsync}.
+ */
 export function inspectDeviceClaims(
   selectors: DeviceClaimSelectors,
   env: EnvMap,
 ): InspectedDeviceClaim[] {
+  const listed = readMatchingClaimFiles(selectors, env);
+  if ('claims' in listed) return listed.claims;
+  return classifyInspectedClaims(
+    listed.parsed,
+    readHostProcessIdentityObservations(claimOwnerPids(listed.parsed)),
+  );
+}
+
+/** {@link inspectDeviceClaims} with the snapshot taken off the event loop. */
+export async function inspectDeviceClaimsAsync(
+  selectors: DeviceClaimSelectors,
+  env: EnvMap,
+): Promise<InspectedDeviceClaim[]> {
+  const listed = readMatchingClaimFiles(selectors, env);
+  if ('claims' in listed) return listed.claims;
+  return classifyInspectedClaims(
+    listed.parsed,
+    await readHostProcessIdentityObservationsAsync(claimOwnerPids(listed.parsed)),
+  );
+}
+
+function readMatchingClaimFiles(
+  selectors: DeviceClaimSelectors,
+  env: EnvMap,
+): { parsed: InspectedDeviceClaim[] } | { claims: InspectedDeviceClaim[] } {
   const root = resolveDeviceClaimRoot(env);
   const listed = readClaimEntries(root);
-  if ('claims' in listed) return listed.claims;
+  if ('claims' in listed) return listed;
   const parsed = listed.entries
     .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
-    .map((entry) => readDeviceClaimFile(path.join(root, entry.name)))
+    .map((entry) => readDeviceClaimEntry(path.join(root, entry.name)))
     .filter((entry): entry is InspectedDeviceClaim => entry !== null)
     .filter((entry) => matchesClaimSelectors(entry.claim, selectors));
-  const observations = readHostProcessIdentityObservations(
-    parsed.flatMap((entry) => (entry.claim ? [entry.claim.ownerPid] : [])),
-  );
-  return parsed.map((entry) =>
+  return { parsed };
+}
+
+function claimOwnerPids(entries: readonly InspectedDeviceClaim[]): number[] {
+  return entries.flatMap((entry) => (entry.claim ? [entry.claim.ownerPid] : []));
+}
+
+function classifyInspectedClaims(
+  entries: readonly InspectedDeviceClaim[],
+  observations: OwnerObservations,
+): InspectedDeviceClaim[] {
+  return entries.map((entry) =>
     entry.claim
       ? classifyInspectedClaim(entry, observations.get(entry.claim.ownerPid) ?? null)
       : entry,
@@ -98,14 +139,28 @@ function matchesClaimPlatform(claim: DeviceClaim, platform: PlatformSelector | u
   );
 }
 
-export function inspectDeviceClaimFile(filePath: string): InspectedDeviceClaim | null {
-  const entry = readDeviceClaimFile(filePath);
+/** One claim file, judged off the event loop. */
+export async function inspectDeviceClaimFile(
+  filePath: string,
+): Promise<InspectedDeviceClaim | null> {
+  return await classifyDeviceClaimEntry(readDeviceClaimEntry(filePath));
+}
+
+/** Judges the owner of a claim file already read by {@link readDeviceClaimEntry}. */
+export async function classifyDeviceClaimEntry(
+  entry: InspectedDeviceClaim | null,
+): Promise<InspectedDeviceClaim | null> {
   if (!entry?.claim) return entry;
-  const observations = readHostProcessIdentityObservations([entry.claim.ownerPid]);
+  const observations = await readHostProcessIdentityObservationsAsync([entry.claim.ownerPid]);
   return classifyInspectedClaim(entry, observations.get(entry.claim.ownerPid) ?? null);
 }
 
-function readDeviceClaimFile(filePath: string): InspectedDeviceClaim | null {
+/**
+ * One claim file, decoded and not judged: its `classification` is `unknown` until
+ * {@link classifyDeviceClaimEntry} asks the host about the owner. A caller that compares only the
+ * recorded owner token, pid, and start time needs no process-table read at all.
+ */
+export function readDeviceClaimEntry(filePath: string): InspectedDeviceClaim | null {
   const fileName = path.basename(filePath);
   try {
     return inspectClaimContents(fileName, fs.readFileSync(filePath, 'utf8'));

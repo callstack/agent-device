@@ -13,7 +13,7 @@ import {
 } from '../../__tests__/support/session-factories.ts';
 import { markRepairTransactionComplete } from '../session-replay-transaction.ts';
 import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../session-script-publication-state.ts';
-import { parseReplayScriptDetailed } from '@agent-device/ad-script';
+import { parseReplayScriptDetailed, resolveReplayAction } from '@agent-device/ad-script';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 
 const hostCwd = createLiveTestHostEnvironment().cwd;
@@ -81,6 +81,62 @@ test('write() round-trips wait absent positionals without adding an annotation',
   const { script, parsed } = writeAndParse(writer, session);
   expect(script).not.toContain('target-v1');
   expect(parsed.actions[0]?.positionals).toEqual(['absent', 'label="Removed"', '2500']);
+});
+
+test('write() escapes recorded literal ${...} text and keeps only recorder-inserted placeholders live', () => {
+  const root = mkdtempForTestSync('agent-device-script-writer-literal-interpolation-');
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
+  const session = makeAuthoringSession('default');
+  const targetEvidence = {
+    role: 'button',
+    label: 'Pay ${amount}',
+    sibling: 0,
+    viewportOrder: 0,
+    ancestry: [{ role: 'form', label: 'Checkout ${step}' }],
+    verification: 'verified' as const,
+  };
+  const entries = [
+    { command: 'type', positionals: ['cost ${amount} \\${raw}'], flags: {} },
+    {
+      command: 'fill',
+      positionals: ['label="Password"', 'hunter2'],
+      flags: { recordAs: 'PASSWORD' },
+    },
+    { command: 'scroll', positionals: ['down'], flags: { until: 'label="${name}"' } },
+    // Literal placeholder-shaped text stays literal, even with a matching --record-as name.
+    { command: 'type', positionals: ['${PASSWORD}'], flags: {} },
+    { command: 'fill', positionals: ['label="Other"', '${PASSWORD}'], flags: {} },
+    // Session echo protection (ADR 0017) inserts live placeholders for later echoes of the secret.
+    {
+      command: 'fill',
+      positionals: ['@e2', 'hunter2'],
+      flags: {},
+      result: { text: 'hunter2', selectorChain: ['label="Confirm"'] },
+    },
+    { command: 'click', positionals: ['@e3'], flags: {}, result: { refLabel: 'Hi hunter2' } },
+    // Ref labels and annotations are matched literally and never interpolated.
+    { command: 'click', positionals: ['@e4'], flags: {}, result: { refLabel: 'Pay ${amount}' } },
+    { command: 'click', positionals: ['label="Pay ${amount}"'], flags: {}, targetEvidence },
+  ];
+  for (const entry of entries) recordActionEntry(session, { result: {}, ...entry }, hostCwd);
+
+  const { script, parsed } = writeAndParse(writer, session);
+  expect(script).not.toContain('hunter2');
+  const scope = { values: { PASSWORD: 'secret', amount: 'WRONG', name: 'WRONG', step: 'WRONG' } };
+  const resolved = parsed.actions.map((entry, index) =>
+    resolveReplayAction(entry, scope, { file: 'test.ad', line: index + 2 }),
+  );
+  expect(resolved[0]?.positionals).toEqual(['cost ${amount} \\${raw}']);
+  expect(resolved[1]?.positionals).toEqual(['label="Password"', 'secret']);
+  expect(resolved[2]?.flags.until).toBe('label="${name}"');
+  expect(resolved[3]?.positionals).toEqual(['${PASSWORD}']);
+  expect(resolved[4]?.positionals).toEqual(['label="Other"', '${PASSWORD}']);
+  expect(resolved[5]?.positionals).toEqual(['label="Confirm"', 'secret']);
+  expect(resolved[6]?.flags.snapshotScope).toBe('Hi secret');
+  expect(resolved[8]?.flags.snapshotScope).toBe('Pay ${amount}');
+  expect(resolved[9]?.result?.refLabel).toBe('Pay ${amount}');
+  expect(resolved[10]?.positionals).toEqual(['label="Pay ${amount}"']);
+  expect(resolved[10]?.targetEvidence).toEqual(targetEvidence);
 });
 
 // #3197: the recording half of `scroll --until`. A recorded hunt for an

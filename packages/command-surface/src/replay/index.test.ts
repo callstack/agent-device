@@ -159,6 +159,20 @@ describe('replay command interface', () => {
     }
   });
 
+  test('validates -e keys with the grammar of the resolved replay format', async () => {
+    fs.writeFileSync(path.join(SCRIPT_ROOT, 'flow.yaml'), 'appId: demo.app\n---\n- back\n');
+    const host = { env: {}, cwd: SCRIPT_ROOT };
+    await expect(
+      replayDaemonWriter({ path: './checkout.ad', backend: 'maestro', env: ['user=x'] }, host),
+    ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+    await expect(
+      testDaemonWriter({ paths: ['./suite.ad'], env: ['user=x'] }, host),
+    ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+    await expect(
+      replayDaemonWriter({ path: './flow.yaml', backend: 'maestro', env: ['user=x'] }, host),
+    ).resolves.toMatchObject({ options: { replayEnv: ['user=x'] } });
+  });
+
   test('writes daemon replay and test requests with replay flags', async () => {
     process.env.AD_VAR_REPLAY_TEST = 'enabled';
     expect(

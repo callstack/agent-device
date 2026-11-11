@@ -13,7 +13,9 @@ import type {
 /**
  * Daemon-owned replay projection and publication boundary. The response or
  * overflow artifact is projected first; ref authority is then activated
- * synchronously from that exact successful projection.
+ * synchronously from that exact successful projection. A suggestion or
+ * target-binding candidate keeps its ref only when that ref is in the
+ * published scope.
  */
 export function boundReplayDivergenceForSession(params: {
   sessionStore: ReplaySessionStore;
@@ -30,7 +32,10 @@ export function boundReplayDivergenceForSession(params: {
     divergence,
     level: responseLevel,
     writeOverflowArtifact: (payload) => {
-      const artifactProjection = redactDiagnosticData(payload);
+      const artifactProjection = withRefsInScope(
+        redactDiagnosticData(payload),
+        screenRefScope(payload.screen),
+      );
       const result = writeReplayDivergenceArtifact(sessionStore, artifactProjection);
       if ('artifactPath' in result) {
         overflowProjection = artifactProjection;
@@ -48,7 +53,7 @@ export function boundReplayDivergenceForSession(params: {
         refs: [],
       });
     }
-    return bounded;
+    return withRefsInScope(bounded, new Set());
   }
   if (!params.evidence) {
     removeUnpublishedOverflowArtifact(overflowArtifactPath);
@@ -56,11 +61,12 @@ export function boundReplayDivergenceForSession(params: {
   }
 
   const observationAuthority = observationStore.bindAuthority(params.signal);
+  const publishedRefs = screenRefScope(screen);
   const publication = observationAuthority.finalize(params.evidence, {
     refsGeneration: screen.refsGeneration,
-    refs: screen.refs.map((entry) => entry.ref),
+    refs: [...publishedRefs],
   });
-  if (publication.published === true) return bounded;
+  if (publication.published === true) return withRefsInScope(bounded, publishedRefs);
 
   removeUnpublishedOverflowArtifact(overflowArtifactPath);
   return suppressUnpublishedDivergenceRefs(bounded, publication.reason);
@@ -70,7 +76,7 @@ function suppressUnpublishedDivergenceRefs(
   divergence: ReplayDivergence,
   reason: 'missing-evidence' | 'empty' | 'cancelled' | 'stale-capture' | 'invalid-projection',
 ): ReplayDivergence {
-  const { overflow: _overflow, ...withoutOverflow } = divergence;
+  const { overflow: _overflow, ...withoutOverflow } = withRefsInScope(divergence, new Set());
   return {
     ...withoutOverflow,
     screen: {
@@ -78,18 +84,37 @@ function suppressUnpublishedDivergenceRefs(
       reason: `ref-publication-${reason}`,
       hint: 'The replay observation changed before its refs could be published. Take a new snapshot before targeting an element.',
     },
-    suggestions: divergence.suggestions.map(({ ref: _ref, ...suggestion }) => suggestion),
+  };
+}
+
+function screenRefScope(screen: ReplayDivergence['screen']): ReadonlySet<string> {
+  return new Set(screen.state === 'available' ? screen.refs.map((entry) => entry.ref) : []);
+}
+
+function withRefsInScope(
+  divergence: ReplayDivergence,
+  scope: ReadonlySet<string>,
+): ReplayDivergence {
+  return {
+    ...divergence,
+    suggestions: divergence.suggestions.map((suggestion) => keepRefInScope(suggestion, scope)),
     ...(divergence.targetBinding
       ? {
           targetBinding: {
             ...divergence.targetBinding,
-            candidates: divergence.targetBinding.candidates.map(
-              ({ ref: _ref, ...candidate }) => candidate,
+            candidates: divergence.targetBinding.candidates.map((candidate) =>
+              keepRefInScope(candidate, scope),
             ),
           },
         }
       : {}),
   };
+}
+
+function keepRefInScope<T extends { ref?: string }>(entry: T, scope: ReadonlySet<string>): T {
+  if (entry.ref === undefined || scope.has(entry.ref)) return entry;
+  const { ref: _ref, ...withoutRef } = entry;
+  return withoutRef as T;
 }
 
 function removeUnpublishedOverflowArtifact(artifactPath: string | undefined): void {

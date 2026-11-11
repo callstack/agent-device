@@ -3,7 +3,9 @@ import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   runCmd,
+  runCmdDetachedMonitored,
   whichCmd,
+  type ExecDetachedExit,
   type ExecOptions,
   type ExecResult,
   commandHostEnvironment,
@@ -32,6 +34,15 @@ export type LinuxToolCommandExecutor = (
 ) => Promise<ExecResult>;
 
 export type LinuxToolAvailabilityChecker = (cmd: string) => Promise<boolean>;
+
+/**
+ * Starts a process that outlives the call, with its output discarded, and settles `exited` when it
+ * ends: with `error` when it could not start, else with its exit code or signal.
+ */
+export type LinuxToolDetachedLauncher = (
+  cmd: string,
+  args: string[],
+) => { exited: Promise<ExecDetachedExit> };
 
 export type LinuxDesktopProvider = {
   openTarget(target: string): Promise<void>;
@@ -80,6 +91,7 @@ export type LinuxToolProvider = {
   display: LinuxDisplayConfig;
   runCommand: LinuxToolCommandExecutor;
   whichCommand: LinuxToolAvailabilityChecker;
+  launchDetached: LinuxToolDetachedLauncher;
   desktop: LinuxDesktopProvider;
   clipboard?: LinuxClipboardProvider;
   screenshot?: LinuxScreenshotProvider;
@@ -91,18 +103,34 @@ const whichOnPath = async (cmd: string): Promise<boolean> =>
   await whichCmd(cmd, commandHostEnvironment().env);
 
 /** A provider under construction; only the display decision is required up front. */
-type LinuxToolProviderParts = { display: LinuxDisplayConfig } & Partial<LinuxToolProvider>;
+/**
+ * The parts a caller may supply. A caller that injects `runCommand` owns process execution, so it
+ * also supplies `launchDetached`: the host-local detached runner never stands in beside an
+ * injected executor.
+ */
+export type LinuxToolProviderOverrides = Partial<
+  Omit<LinuxToolProvider, 'runCommand' | 'launchDetached'>
+> &
+  (
+    | { runCommand?: undefined; launchDetached?: LinuxToolDetachedLauncher }
+    | { runCommand: LinuxToolCommandExecutor; launchDetached: LinuxToolDetachedLauncher }
+  );
+
+type LinuxToolProviderParts = { display: LinuxDisplayConfig } & LinuxToolProviderOverrides;
 
 /** Adds the local parts a partial provider omits; every part then belongs to this instance. */
 function completeLocalLinuxToolProvider(provider: LinuxToolProviderParts): LinuxToolProvider {
   const runCommand = provider.runCommand ?? runCmd;
   const whichCommand = provider.whichCommand ?? whichOnPath;
+  const launchDetached = provider.launchDetached ?? runCmdDetachedMonitored;
   const display = provider.display;
   return {
     runCommand,
     whichCommand,
+    launchDetached,
     display,
-    desktop: provider.desktop ?? createLocalLinuxDesktopProvider(runCommand, whichCommand),
+    desktop:
+      provider.desktop ?? createLocalLinuxDesktopProvider(runCommand, whichCommand, launchDetached),
     clipboard:
       provider.clipboard ?? createLocalLinuxClipboardProvider(runCommand, whichCommand, display),
     screenshot:
@@ -117,7 +145,7 @@ function completeLocalLinuxToolProvider(provider: LinuxToolProviderParts): Linux
  * one provider instance per composing runtime, owning its display decision (#3794).
  */
 export function createLocalLinuxToolProvider(
-  options: { host: HostEnvironment } & Partial<LinuxToolProvider>,
+  options: { host: HostEnvironment } & LinuxToolProviderOverrides,
 ): LinuxToolProvider {
   const { host, ...provider } = options;
   return completeLocalLinuxToolProvider({
@@ -132,9 +160,8 @@ export function createLocalLinuxToolProvider(
  * ambient read it replaces. A composed runtime binds its own host at `createLinuxInteractor`, so
  * its display decision never comes from here (#3794).
  */
+// Names no executor, so the host-local defaults apply, including the detached app launcher.
 const localLinuxToolProvider = completeLocalLinuxToolProvider({
-  runCommand: runCmd,
-  whichCommand: whichOnPath,
   display: {
     detectDisplayServer: () => detectLinuxDisplayServer(commandHostEnvironment().env),
   },
@@ -168,9 +195,18 @@ export async function runLinuxToolCommand(
   return await resolveLinuxToolProvider().runCommand(cmd, args, options);
 }
 
+/** What a launched app's exit says went wrong: a start failure, a non-zero exit, or a signal. */
+function describeLaunchExit(exit: ExecDetachedExit): Record<string, unknown> | undefined {
+  if (exit.error !== undefined) return { error: exit.error };
+  if (exit.signal !== undefined) return { signal: exit.signal };
+  if (exit.exitCode !== undefined && exit.exitCode !== 0) return { exitCode: exit.exitCode };
+  return undefined;
+}
+
 function createLocalLinuxDesktopProvider(
   runCommand: LinuxToolCommandExecutor,
   whichCommand: LinuxToolAvailabilityChecker,
+  launchDetached: LinuxToolDetachedLauncher,
 ): LinuxDesktopProvider {
   return {
     async openTarget(target) {
@@ -180,11 +216,15 @@ function createLocalLinuxDesktopProvider(
       }
 
       if (await whichCommand(target)) {
-        runCommand(target, [], { allowFailure: true }).catch((error) => {
+        // A desktop app outlives the command that opened it. Run detached with its output
+        // discarded: a piped child would keep everything it prints in daemon memory until it exits.
+        void launchDetached(target, []).exited.then((exit) => {
+          const failure = describeLaunchExit(exit);
+          if (failure === undefined) return;
           emitDiagnostic({
             level: 'warn',
             phase: 'linux_app_launch',
-            data: { app: target, error: String(error) },
+            data: { app: target, ...failure },
           });
         });
         await sleep(500);

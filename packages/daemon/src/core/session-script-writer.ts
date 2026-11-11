@@ -8,6 +8,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   inferFillText,
   appendScriptSeriesFlags,
+  escapeReplayAction,
   formatPortableActionLine,
   formatScriptArg,
   formatScriptStringLiteral,
@@ -453,6 +454,7 @@ function buildScopedSnapshotAction(
       snapshotScope: scope,
     },
     result: { scope },
+    ...(action.livePlaceholders ? { livePlaceholders: action.livePlaceholders } : {}),
   };
 }
 
@@ -471,7 +473,9 @@ function formatScript(
   for (const action of actions) {
     if (action.flags?.noRecord) continue;
     lines.push(...formatTargetAnnotationLines(action));
-    lines.push(formatActionLine(action));
+    // Replay interpolates the written positionals, flags, and runtime hints; only the
+    // placeholders the recorder inserted stay live.
+    lines.push(formatActionLine(escapeReplayAction(action, new Set(action.livePlaceholders))));
   }
   // ADR 0012 decision 6 (Fix 4): only a repair-armed session's healed script
   // carries the completeness sentinel — `write()` already refused to reach

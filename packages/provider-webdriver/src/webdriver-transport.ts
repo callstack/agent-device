@@ -210,8 +210,11 @@ export class WebDriverTransport {
       timeoutMs,
       requestSignal,
     );
-    const payload = text ? parseJsonResponse(text) : {};
-    if (ok) return { status, value: readWebDriverValue(payload) };
+    if (ok)
+      return { status, value: readWebDriverValue(text ? parseJsonResponse(text, status) : {}) };
+    const parsed = text ? parseJsonBody(text) : { json: {} };
+    if (parsed === undefined) throw nonJsonAnswerError(status, text);
+    const payload = parsed.json;
     const error = webdriverError(status, payload);
     if (isWebDriverRouteUnsupported(error)) {
       emitWebDriverDiagnostic(WEBDRIVER_ROUTE_UNSUPPORTED_REASON, {
@@ -322,12 +325,36 @@ function readWebDriverValue(payload: unknown): unknown {
   return payload;
 }
 
-function parseJsonResponse(text: string): unknown {
+/** The longest raw response body an error carries as evidence. */
+const RESPONSE_BODY_EVIDENCE_LIMIT = 500;
+
+function parseJsonResponse(text: string, status: number): unknown {
   try {
     return JSON.parse(text) as unknown;
   } catch (error) {
-    throw new AppError('COMMAND_FAILED', 'WebDriver response was not valid JSON.', { text }, error);
+    throw new AppError(
+      'COMMAND_FAILED',
+      'WebDriver response was not valid JSON.',
+      // A 2xx means the driver ran the request; only its answer is unreadable.
+      { status, text: truncateBody(text), ...dispatchDisclosure('unknown') },
+      error,
+    );
   }
+}
+
+/** The parsed body, boxed so a JSON `null` stays distinct from a body that is not JSON. */
+function parseJsonBody(text: string): { json: unknown } | undefined {
+  try {
+    return { json: JSON.parse(text) as unknown };
+  } catch {
+    return undefined;
+  }
+}
+
+function truncateBody(text: string): string {
+  return text.length > RESPONSE_BODY_EVIDENCE_LIMIT
+    ? `${text.slice(0, RESPONSE_BODY_EVIDENCE_LIMIT)}…`
+    : text;
 }
 
 function webdriverError(status: number, payload: unknown): AppError {
@@ -357,8 +384,34 @@ function webdriverError(status: number, payload: unknown): AppError {
   });
 }
 
+/**
+ * A non-JSON error answer comes from something in front of the driver (a gateway's `502 <html>`
+ * or a proxy's `404` page), not from the driver. Its status still decides retry, but it is never
+ * the driver's refusal of a route, so no sibling route is tried, and it cannot say whether the
+ * driver received the request. The raw body is truncated evidence only.
+ */
+function nonJsonAnswerError(status: number, text: string): AppError {
+  return new AppError('COMMAND_FAILED', `WebDriver request failed with HTTP ${status}.`, {
+    status,
+    response: truncateBody(text),
+    ...dispatchDisclosure('unknown'),
+  });
+}
+
 /** Machine-readable `details.reason` of a driver answer that it does not implement the route. */
 const WEBDRIVER_ROUTE_UNSUPPORTED_REASON = 'webdriver_route_unsupported';
+
+/**
+ * The driver answered with the W3C `invalid session id` error: the session it was asked about does
+ * not exist (never did, was deleted, or timed out on the driver).
+ */
+export function isWebDriverInvalidSession(error: unknown): error is AppError {
+  return (
+    error instanceof AppError &&
+    error.details?.status === 404 &&
+    w3cErrorCode(error.details.response)?.toLowerCase() === 'invalid session id'
+  );
+}
 
 /**
  * The details of a refusal the driver answered before running anything: it does not implement

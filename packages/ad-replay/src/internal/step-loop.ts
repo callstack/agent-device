@@ -208,13 +208,13 @@ function mergeArtifactPaths(
   return [...new Set([...ledger, ...failureArtifactPaths])];
 }
 
-/** `resolveReplayAction`'s `loc` for one step — `actionSourcePaths[index]` when the step came from a `runFlow` include, else the top-level plan's own resolved path. */
+/** `resolveReplayAction`'s `loc` for one step of the `.ad` plan. */
 function resolveActionLoc(
   request: AdReplayRunRequest,
   index: number,
 ): { file: string; line: number } {
   return {
-    file: request.actionSourcePaths?.[index] ?? request.resolvedPath,
+    file: request.resolvedPath,
     line: request.actionLines[index] ?? 1,
   };
 }

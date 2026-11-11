@@ -1,10 +1,11 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type AppErrorCode, type AppErrorDetails } from '@agent-device/kernel/errors';
 import { resolveProxyForUrl } from '@agent-device/provision-kit/install-source-network-transport';
 import net from 'node:net';
 import { Agent, Dispatcher, ProxyAgent, fetch as undiciFetch } from 'undici';
 import { approveDownloadSourceUrl } from '@agent-device/provision-kit/install-source-network';
 
 export const MAX_RUN_SCRIPT_HTTP_RESPONSE_BYTES = 8 * 1024 * 1024;
+export const RUN_SCRIPT_HTTP_TIMEOUT_MS = 30_000;
 
 export type RunScriptHttpRequest = {
   method: 'GET' | 'POST';
@@ -20,6 +21,35 @@ export type RunScriptHttpResponse = {
   headers: Record<string, string>;
 };
 
+/** The typed error a runScript child process reports on stdout. */
+export type RunScriptChildError = {
+  code: AppErrorCode;
+  message: string;
+  details?: AppErrorDetails;
+};
+
+/** What the HTTP child writes to stdout: the response, or the typed error that ended the request. */
+export type RunScriptHttpChildOutput =
+  | { response: RunScriptHttpResponse }
+  | { error: RunScriptChildError };
+
+/**
+ * The HTTP child's whole job: run the request read from `input` and report the response or the
+ * typed error that ended it. Any other failure rejects, and the child reports it on stderr.
+ */
+export async function runScriptHttpChildOutput(
+  input: string,
+  environment: NodeJS.ProcessEnv,
+): Promise<RunScriptHttpChildOutput> {
+  try {
+    const request = JSON.parse(input) as RunScriptHttpRequest;
+    return { response: await executeRunScriptHttpRequest(request, environment) };
+  } catch (error) {
+    if (!(error instanceof AppError)) throw error;
+    return { error: { code: error.code, message: error.message, details: error.details } };
+  }
+}
+
 export async function executeRunScriptHttpRequest(
   input: RunScriptHttpRequest,
   environment: NodeJS.ProcessEnv,
@@ -32,8 +62,11 @@ async function executeLocalRequest(input: RunScriptHttpRequest): Promise<RunScri
   if (typeof fetch !== 'function') {
     throw new Error('global fetch is required for Maestro runScript http helpers');
   }
-  const response = await fetch(input.url, fetchInit(input));
-  return await serializeResponse(response);
+  const response = await fetch(input.url, {
+    ...fetchInit(input),
+    signal: AbortSignal.timeout(RUN_SCRIPT_HTTP_TIMEOUT_MS),
+  });
+  return await serializeResponse(response, MAX_RUN_SCRIPT_HTTP_RESPONSE_BYTES);
 }
 
 async function executePublicRequest(
@@ -41,7 +74,7 @@ async function executePublicRequest(
   environment: NodeJS.ProcessEnv,
 ): Promise<RunScriptHttpResponse> {
   const initialUrl = parsePublicUrl(input.url);
-  const signal = AbortSignal.timeout(30_000);
+  const signal = AbortSignal.timeout(RUN_SCRIPT_HTTP_TIMEOUT_MS);
   const dispatcher = new PublicFetchDispatcher(
     initialUrl.protocol === 'https:',
     signal,
@@ -181,7 +214,7 @@ function parsePublicUrl(value: string): URL {
 
 async function serializeResponse(
   response: Response,
-  maxBodyBytes?: number,
+  maxBodyBytes: number,
 ): Promise<RunScriptHttpResponse> {
   return {
     status: response.status,
@@ -190,8 +223,7 @@ async function serializeResponse(
   };
 }
 
-async function readResponseBody(response: Response, maxBodyBytes?: number): Promise<string> {
-  if (maxBodyBytes === undefined) return await response.text();
+async function readResponseBody(response: Response, maxBodyBytes: number): Promise<string> {
   const chunks: Uint8Array[] = [];
   let bytesSeen = 0;
   const reader = response.body?.getReader();

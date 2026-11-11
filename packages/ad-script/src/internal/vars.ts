@@ -5,6 +5,7 @@ import type { SessionAction } from '@agent-device/contracts/session';
 // "genuinely shared recording vocabulary" relocated to its owner) — the key
 // shape comes from the sibling script grammar module.
 import { REPLAY_VAR_KEY_RE } from './script.ts';
+import type { ReplayFormat } from './format.ts';
 
 export type ReplayVarScope = {
   values: Readonly<Record<string, string>>;
@@ -20,6 +21,20 @@ export type ReplayVarSources = {
 };
 
 const SHELL_PREFIX = 'AD_VAR_';
+
+/**
+ * The variable names each replay format accepts from `-e KEY=VALUE` and `AD_VAR_<KEY>`: the
+ * names its `${...}` lookup can read. Maestro flows look up mixed-case and dotted names.
+ */
+const REPLAY_VAR_KEY_GRAMMAR: Record<ReplayFormat, { pattern: RegExp; description: string }> = {
+  ad: { pattern: REPLAY_VAR_KEY_RE, description: 'uppercase letters, digits, and underscores' },
+  maestro: {
+    // `__proto__` cannot be an own key of the plain-object scopes these values merge into.
+    pattern: /^(?!__proto__$)[A-Za-z_][A-Za-z0-9_.]*$/,
+    description:
+      'letters, digits, underscores, and dots, starting with a letter or underscore (not __proto__)',
+  },
+};
 const RESERVED_NAMESPACE_PREFIX = 'AD_';
 
 function isReservedNamespaceKey(key: string): boolean {
@@ -58,14 +73,17 @@ export function buildReplayVarScope(sources: ReplayVarSources): ReplayVarScope {
   return { values: merged, expandedBuiltinNames: new Set() };
 }
 
-export function collectReplayShellEnv(processEnv: NodeJS.ProcessEnv): Record<string, string> {
+export function collectReplayShellEnv(
+  processEnv: NodeJS.ProcessEnv,
+  format: ReplayFormat,
+): Record<string, string> {
   const result: Record<string, string> = {};
   for (const [rawKey, value] of Object.entries(processEnv)) {
     if (typeof value !== 'string') continue;
     if (!rawKey.startsWith(SHELL_PREFIX)) continue;
     const key = rawKey.slice(SHELL_PREFIX.length);
     if (key.length === 0) continue;
-    if (!REPLAY_VAR_KEY_RE.test(key)) continue;
+    if (!REPLAY_VAR_KEY_GRAMMAR[format].pattern.test(key)) continue;
     // Belt-and-suspenders: never let the stripped key land back in the reserved
     // AD_* namespace (e.g. shell `AD_VAR_AD_SESSION=evil` would become `AD_SESSION`).
     if (isReservedNamespaceKey(key)) continue;
@@ -74,7 +92,10 @@ export function collectReplayShellEnv(processEnv: NodeJS.ProcessEnv): Record<str
   return result;
 }
 
-export function parseReplayCliEnvEntries(entries: readonly string[]): Record<string, string> {
+export function parseReplayCliEnvEntries(
+  entries: readonly string[],
+  format: ReplayFormat,
+): Record<string, string> {
   const result: Record<string, string> = {};
   for (const entry of entries) {
     const eqIndex = entry.indexOf('=');
@@ -82,10 +103,11 @@ export function parseReplayCliEnvEntries(entries: readonly string[]): Record<str
       throw new AppError('INVALID_ARGS', `Invalid -e entry "${entry}": expected KEY=VALUE.`);
     }
     const key = entry.slice(0, eqIndex);
-    if (!REPLAY_VAR_KEY_RE.test(key)) {
+    const grammar = REPLAY_VAR_KEY_GRAMMAR[format];
+    if (!grammar.pattern.test(key)) {
       throw new AppError(
         'INVALID_ARGS',
-        `Invalid -e key "${key}": keys must be uppercase letters, digits, and underscores (e.g. APP_ID).`,
+        `Invalid -e key "${key}": keys must be ${grammar.description} (e.g. APP_ID).`,
       );
     }
     if (isReservedNamespaceKey(key)) {
@@ -149,30 +171,66 @@ function parseInterpolation(
   raw: string,
   start: number,
 ): ParsedInterpolation | FailedInterpolation | null {
-  let i = start + 2;
-  if (i >= raw.length || !isInterpolationNameStart(raw[i]!)) return null;
-  i += 1;
-  while (i < raw.length && isInterpolationNameChar(raw[i]!)) i += 1;
-  const key = raw.slice(start + 2, i);
-  if (raw[i] === '}') return { key, fallback: undefined, end: i + 1 };
-  if (raw[i] !== ':' || raw[i + 1] !== '-') return null;
-  i += 2;
+  const nameEnd = readInterpolationNameEnd(raw, start + 2);
+  if (nameEnd === null) return null;
+  const key = raw.slice(start + 2, nameEnd);
+  if (raw[nameEnd] === '}') return { key, fallback: undefined, end: nameEnd + 1 };
+  if (raw[nameEnd] !== ':' || raw[nameEnd + 1] !== '-') return null;
+  return readInterpolationFallback(raw, key, nameEnd + 2);
+}
+
+/** The index just past a variable name starting at `start`, or `null` when none starts there. */
+function readInterpolationNameEnd(raw: string, start: number): number | null {
+  if (start >= raw.length || !isInterpolationNameStart(raw[start]!)) return null;
+  let end = start + 1;
+  while (end < raw.length && isInterpolationNameChar(raw[end]!)) end += 1;
+  return end;
+}
+
+/** The `:-fallback}` text from `start`, with `\` escapes applied. */
+function readInterpolationFallback(
+  raw: string,
+  key: string,
+  start: number,
+): ParsedInterpolation | FailedInterpolation {
   let fallback = '';
+  let i = start;
   while (i < raw.length) {
     const ch = raw[i]!;
     if (ch === '}') return { key, fallback, end: i + 1 };
-    if (ch === '\\') {
-      const next = raw[i + 1];
-      if (next === undefined) return { abortEnd: raw.length };
-      if (isLineTerminator(next)) return { abortEnd: i + 2 };
-      fallback += next;
-      i += 2;
+    if (ch !== '\\') {
+      fallback += ch;
+      i += 1;
       continue;
     }
-    fallback += ch;
-    i += 1;
+    const next = raw[i + 1];
+    if (next === undefined) return { abortEnd: raw.length };
+    if (isLineTerminator(next)) return { abortEnd: i + 2 };
+    fallback += next;
+    i += 2;
   }
   return { abortEnd: raw.length };
+}
+
+/**
+ * The script text that `resolveReplayString` reads back as `literal`. Every `${` gains the `\${`
+ * escape, except where an exact `${NAME}` placeholder for a name in `livePlaceholders` starts.
+ */
+function escapeReplayLiteral(literal: string, livePlaceholders: ReadonlySet<string>): string {
+  let out = '';
+  let i = 0;
+  for (let start = literal.indexOf('${'); start >= 0; start = literal.indexOf('${', i)) {
+    out += literal.slice(i, start);
+    const end = literal.indexOf('}', start + 2);
+    if (end >= 0 && livePlaceholders.has(literal.slice(start + 2, end))) {
+      out += literal.slice(start, end + 1);
+      i = end + 1;
+      continue;
+    }
+    out += '\\${';
+    i = start + 2;
+  }
+  return out + literal.slice(i);
 }
 
 export function resolveReplayString(
@@ -183,42 +241,39 @@ export function resolveReplayString(
   let out = '';
   let i = 0;
   while (i < raw.length) {
-    const ch = raw[i]!;
-    if (ch === '\\' && raw.startsWith('${', i + 1)) {
-      out += '${';
-      i += 3;
-      continue;
-    }
-    if (ch === '$' && raw[i + 1] === '{') {
-      const parsed = parseInterpolation(raw, i);
-      if (parsed !== null && 'abortEnd' in parsed) {
-        out += raw.slice(i, parsed.abortEnd);
-        i = parsed.abortEnd;
-        continue;
-      }
-      if (parsed !== null) {
-        const { key, fallback } = parsed;
-        if (Object.prototype.hasOwnProperty.call(scope.values, key)) {
-          if (isReservedNamespaceKey(key)) {
-            (scope.expandedBuiltinNames ??= new Set()).add(key);
-          }
-          out += String(scope.values[key]);
-        } else if (fallback !== undefined) {
-          out += fallback;
-        } else {
-          throw new AppError(
-            'INVALID_ARGS',
-            `Unresolved variable \${${key}} at ${loc.file}:${loc.line}.`,
-          );
-        }
-        i = parsed.end;
-        continue;
-      }
-    }
-    out += ch;
-    i += 1;
+    const step = readReplayStringStep(raw, i, scope, loc);
+    out += step.text;
+    i = step.next;
   }
   return out;
+}
+
+/** The resolved text of the token at `i`: an escape, an interpolation, or one literal character. */
+function readReplayStringStep(
+  raw: string,
+  i: number,
+  scope: ReplayVarScope,
+  loc: { file: string; line: number },
+): { text: string; next: number } {
+  if (raw[i] === '\\' && raw.startsWith('${', i + 1)) return { text: '${', next: i + 3 };
+  if (raw[i] !== '$' || raw[i + 1] !== '{') return { text: raw[i]!, next: i + 1 };
+  const parsed = parseInterpolation(raw, i);
+  if (parsed === null) return { text: '$', next: i + 1 };
+  if ('abortEnd' in parsed) return { text: raw.slice(i, parsed.abortEnd), next: parsed.abortEnd };
+  return { text: resolveInterpolationValue(parsed, scope, loc), next: parsed.end };
+}
+
+function resolveInterpolationValue(
+  { key, fallback }: ParsedInterpolation,
+  scope: ReplayVarScope,
+  loc: { file: string; line: number },
+): string {
+  if (Object.prototype.hasOwnProperty.call(scope.values, key)) {
+    if (isReservedNamespaceKey(key)) (scope.expandedBuiltinNames ??= new Set()).add(key);
+    return String(scope.values[key]);
+  }
+  if (fallback !== undefined) return fallback;
+  throw new AppError('INVALID_ARGS', `Unresolved variable \${${key}} at ${loc.file}:${loc.line}.`);
 }
 
 export function resolveReplayAction(
@@ -241,6 +296,39 @@ function resolveStringProps<T extends object>(
 ): T | undefined {
   if (!obj) return obj;
   return resolveStringValue(obj, scope, loc) as T;
+}
+
+/**
+ * The inverse of `resolveReplayAction`, over exactly the fields it interpolates: every `${` in the
+ * written action is escaped, except the `${NAME}` placeholders named in `livePlaceholders`.
+ */
+export function escapeReplayAction(
+  action: SessionAction,
+  livePlaceholders: ReadonlySet<string>,
+): SessionAction {
+  const escape = (value: unknown): unknown => escapeStringValue(value, livePlaceholders);
+  return {
+    ...action,
+    positionals: (action.positionals ?? []).map((token) =>
+      escapeReplayLiteral(token, livePlaceholders),
+    ),
+    flags: (escape(action.flags) as SessionAction['flags'] | undefined) ?? {},
+    runtime: escape(action.runtime) as SessionAction['runtime'],
+  };
+}
+
+function escapeStringValue(value: unknown, livePlaceholders: ReadonlySet<string>): unknown {
+  if (typeof value === 'string') return escapeReplayLiteral(value, livePlaceholders);
+  if (Array.isArray(value)) return value.map((entry) => escapeStringValue(entry, livePlaceholders));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        key,
+        escapeStringValue(entry, livePlaceholders),
+      ]),
+    );
+  }
+  return value;
 }
 
 function resolveStringValue(

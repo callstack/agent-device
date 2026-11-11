@@ -21,6 +21,7 @@ import {
   executeRunScriptHttpRequest,
   MAX_RUN_SCRIPT_HTTP_RESPONSE_BYTES,
   PublicFetchDispatcher,
+  runScriptHttpChildOutput,
 } from '../run-script-http.ts';
 
 beforeEach(() => {
@@ -56,10 +57,10 @@ test('keeps local requests on the existing Fetch path', async () => {
     body: 'created',
     headers: { 'content-type': 'text/plain;charset=UTF-8', 'x-result': 'ok' },
   });
-  assert.deepEqual(fetchMock.mock.calls[0], [
-    'http://127.0.0.1:8080/local',
-    { method: 'POST', headers: { authorization: 'secret' }, body: '{}' },
-  ]);
+  const [url, { signal, ...init }] = fetchMock.mock.calls[0] as [string, RequestInit];
+  assert.equal(url, 'http://127.0.0.1:8080/local');
+  assert.deepEqual(init, { method: 'POST', headers: { authorization: 'secret' }, body: '{}' });
+  assert.ok(signal instanceof AbortSignal);
 });
 
 test('preserves Fetch decompression for public requests', async (t) => {
@@ -271,6 +272,38 @@ test('caps the decoded public response body', async (t) => {
       ),
       new RegExp(`response exceeded ${MAX_RUN_SCRIPT_HTTP_RESPONSE_BYTES} bytes`),
     );
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+test('the HTTP child output carries the response or the typed error that ended the request', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const server = http.createServer((req, res) => {
+    res.end(req.url === '/big' ? Buffer.alloc(MAX_RUN_SCRIPT_HTTP_RESPONSE_BYTES + 1, 'a') : 'ok');
+  });
+  try {
+    const port = await listenOnLoopback(server);
+    const input = (pathname: string) =>
+      JSON.stringify({
+        method: 'POST',
+        url: `http://127.0.0.1:${port}${pathname}`,
+        headers: {},
+        body: '',
+        publicNetworkOnly: false,
+      });
+
+    const ok = await runScriptHttpChildOutput(input('/ok'), {});
+    assert.ok('response' in ok);
+    assert.equal(ok.response.body, 'ok');
+    assert.deepEqual(await runScriptHttpChildOutput(input('/big'), {}), {
+      error: {
+        code: 'COMMAND_FAILED',
+        message: `Maestro runScript HTTP response exceeded ${MAX_RUN_SCRIPT_HTTP_RESPONSE_BYTES} bytes`,
+        details: { limitBytes: MAX_RUN_SCRIPT_HTTP_RESPONSE_BYTES, status: 200 },
+      },
+    });
+    await assert.rejects(runScriptHttpChildOutput('{', {}), SyntaxError);
   } finally {
     await closeLoopbackServer(server);
   }

@@ -97,34 +97,13 @@ resolve_default_derived_path() {
   esac
 }
 
-resolve_clean_path() {
-  if [ -n "$DERIVED_OVERRIDE" ]; then
-    printf '%s\n' "$DERIVED_PATH"
-    return
-  fi
-
-  case "$PLATFORM" in
-    ios)
-      printf '%s\n' "$DERIVED_PATH/device"
-      ;;
-    macos|tvos|visionos)
-      printf '%s\n' "$DERIVED_PATH"
-      ;;
-    *)
-      echo "Unsupported AGENT_DEVICE_XCUITEST_PLATFORM: $PLATFORM" >&2
-      exit 1
-      ;;
-  esac
-}
-
 DESTINATION="${AGENT_DEVICE_XCUITEST_DESTINATION:-$(resolve_default_destination)}"
 # Trimmed like resolveRunnerDerivedOverride, so a blank value means "not set" everywhere.
 DERIVED_OVERRIDE="$(printf '%s' "${AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH:-}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 DERIVED_PATH="${DERIVED_OVERRIDE:-$(resolve_default_derived_path)}"
-CLEAN_PATH="$(resolve_clean_path)"
 
 if is_truthy "${AGENT_DEVICE_IOS_CLEAN_DERIVED:-}"; then
-  rm -rf "$CLEAN_PATH"
+  node --experimental-strip-types scripts/clean-xcuitest-derived.mjs "$PLATFORM"
 fi
 
 # The compiler recipe and the cache identity come from one owner: this build passes exactly the

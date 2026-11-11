@@ -325,8 +325,11 @@ function buildTypedMaestroDefaults(params: {
 
 function buildTypedMaestroEnv(req: DaemonWireRequest, hostEnv: EnvMap): Record<string, string> {
   return {
-    ...collectReplayShellEnv(readReplayShellEnvSource(req.flags?.replayShellEnv, hostEnv)),
-    ...parseReplayCliEnvEntries(readReplayCliEnvEntries(req.flags?.replayEnv)),
+    ...collectReplayShellEnv(
+      readReplayShellEnvSource(req.flags?.replayShellEnv, hostEnv),
+      'maestro',
+    ),
+    ...parseReplayCliEnvEntries(readReplayCliEnvEntries(req.flags?.replayEnv), 'maestro'),
   };
 }
 

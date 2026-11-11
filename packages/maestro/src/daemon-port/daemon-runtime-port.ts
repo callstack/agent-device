@@ -170,8 +170,8 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     launchApp: async (input, context) => {
       const appId = input.appId ?? context.appId;
       const launchArgs = [
-        ...launchArgumentValues(input.arguments),
-        ...launchArgumentValues(input.launchArguments),
+        ...launchArgumentValues(input.arguments, platform),
+        ...launchArgumentValues(input.launchArguments, platform),
       ];
       const clearState = input.clearState === true;
       const relaunch = !clearState && input.stopApp !== false;
@@ -354,13 +354,14 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       artifactPaths: artifactPathsFromData(await invoke({ kind: 'screenshot', path: input.path })),
     }),
     runScript: async (input, context) => ({
-      outputEnv: executeRunScriptFile({
+      outputEnv: await executeRunScriptFile({
         scriptPath: resolveScriptPath(input.file, context, options.sourcePath),
         publicNetworkOnly: options.publicNetworkOnly,
         env: {
           ...context.env,
           ...(input.env ? stringifyEnvironment(input.env) : {}),
         },
+        signal: context.signal,
       }),
     }),
   };

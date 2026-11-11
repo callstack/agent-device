@@ -170,8 +170,8 @@ export type ReplaySuiteResult = {
  * local run and a remote run read exactly the same bytes.
  *
  * `entry` is the caller-resolved absolute path of the script that was invoked —
- * it is also the display path every error, line reference, and
- * `actionSourcePaths` entry is stated in, and it is always a key of `files`.
+ * it is also the display path every error and line reference is stated in,
+ * and it is always a key of `files`.
  * `files` maps each caller-resolved absolute path to that file's text: one
  * entry for a native `.ad` script, plus one per transitively included flow for
  * Maestro YAML `runFlow`.

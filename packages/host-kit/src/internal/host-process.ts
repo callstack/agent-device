@@ -93,12 +93,6 @@ export type ListHostProcessesOptions = {
   runCommand?: HostProcessRunCommand;
 };
 
-export type StopPidsWithEscalationOptions = {
-  pids: readonly number[];
-  termTimeoutMs: number;
-  killTimeoutMs: number;
-};
-
 export function isProcessAlive(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
@@ -120,25 +114,108 @@ export function isProcessGroupAlive(pid: number): boolean {
 }
 
 /**
- * Reads who owns a pid, off the event loop, with a budget the caller names. The three fields
- * are read concurrently so a loaded host pays one budget for the set rather than one per
- * field; on Windows one CIM query answers the whole set. Use this rather than the synchronous
- * probes when the answer decides whether a process is signaled: waiting is reversible and
- * signaling the wrong process is not.
+ * Reads who owns a pid, off the event loop, with a budget the caller names. Use this rather than
+ * the synchronous probes when the answer decides whether a process is signaled: waiting is
+ * reversible and signaling the wrong process is not. See {@link readProcessIdentities}.
  */
 export async function readProcessIdentityFacts(
   pid: number,
   timeoutMs = PS_TIMEOUT_MS,
 ): Promise<HostProcessIdentityFacts> {
+  return (await readProcessIdentities([pid], timeoutMs)).get(pid) ?? UNANSWERED_IDENTITY;
+}
+
+const UNANSWERED_IDENTITY: HostProcessIdentityFacts = Object.freeze({
+  startTime: null,
+  command: null,
+  zombie: null,
+});
+
+/**
+ * What the host says about each pid named, off the event loop. Every pid shares the same process
+ * table reads: on POSIX one `ps` for state and start time and one for the command, run
+ * concurrently so a loaded host pays one budget for the set; on Windows one CIM query. A pid the
+ * host did not answer for maps to all-`null` facts, which is unknown evidence, never absence.
+ *
+ * Nothing about another process is cached: its identity is the fact a caller is about to act on,
+ * and a pid can change hands between two reads. Only this process's own identity is reused, by
+ * `readCurrentOwnerIdentity`, because a process's own start time never changes.
+ */
+export async function readProcessIdentities(
+  pids: Iterable<number>,
+  timeoutMs = PS_TIMEOUT_MS,
+): Promise<ReadonlyMap<number, HostProcessIdentityFacts>> {
+  const selected = uniquePositivePids(pids);
+  const facts = new Map<number, HostProcessIdentityFacts>();
+  if (selected.length === 0) return facts;
+  // What a host says about a pid is never a toolchain command to route elsewhere.
+  const rows = await withoutCommandExecutorOverride(() =>
+    readProcessIdentityRows(selected, timeoutMs),
+  );
+  for (const pid of selected) facts.set(pid, rows.get(pid) ?? UNANSWERED_IDENTITY);
+  return facts;
+}
+
+async function readProcessIdentityRows(
+  pids: readonly number[],
+  timeoutMs: number,
+): Promise<ReadonlyMap<number, HostProcessIdentityFacts>> {
   if (isWindowsHostPlatform()) {
-    return await readWindowsProcessIdentityFacts(pid, timeoutMs);
+    const rows = await readWindowsProcessRowsAsync(pids, windowsBudgetMs(timeoutMs));
+    // A terminated Windows process leaves the CIM table rather than lingering unreaped.
+    return new Map(
+      rows.map((row) => [
+        row.pid,
+        { startTime: row.startTime, command: row.command, zombie: false },
+      ]),
+    );
   }
-  const [startTime, command, state] = await Promise.all([
-    readProcessFieldAsync(pid, 'lstart=', timeoutMs),
-    readProcessFieldAsync(pid, 'command=', timeoutMs),
-    readProcessFieldAsync(pid, 'state=', timeoutMs),
+  const [identityRows, commandRows] = await Promise.all([
+    runHostPsAsync(HOST_PROCESS_IDENTITY_PS_ARGS(pids), timeoutMs, parseHostProcessIdentityRows),
+    runHostPsAsync(HOST_PROCESS_COMMAND_PS_ARGS(pids), timeoutMs, parseHostProcessCommandRows),
   ]);
-  return { startTime, command, zombie: state === null ? null : state.startsWith('Z') };
+  const identities = new Map(identityRows.map((row) => [row.pid, row]));
+  const commands = new Map(commandRows.map((row) => [row.pid, row.command]));
+  const facts = new Map<number, HostProcessIdentityFacts>();
+  for (const pid of pids) {
+    const identity = identities.get(pid);
+    const command = commands.get(pid) ?? null;
+    if (!identity && command === null) continue;
+    facts.set(pid, {
+      startTime: identity?.startTime ?? null,
+      command,
+      zombie: identity ? identity.state.startsWith('Z') : null,
+    });
+  }
+  return facts;
+}
+
+async function runHostPsAsync<Row>(
+  args: string[],
+  timeoutMs: number,
+  parse: (stdout: string) => Row[],
+): Promise<Row[]> {
+  try {
+    const result = await runCmd(hostPsCommand(), args, { allowFailure: true, timeoutMs });
+    return result.exitCode !== 0 ? [] : parse(result.stdout);
+  } catch {
+    // A failed ps read is unknown evidence; callers remain fail-closed.
+    return [];
+  }
+}
+
+const HOST_PROCESS_COMMAND_PS_ARGS = (pids: readonly number[]): string[] => [
+  '-p',
+  pids.join(','),
+  '-o',
+  'pid=,command=',
+];
+
+function parseHostProcessCommandRows(stdout: string): Array<{ pid: number; command: string }> {
+  return parseProcessTableRows(stdout, /^\s*(\d+)()\s+(.+?)\s*$/, (match, pid) => ({
+    pid,
+    command: match[3]!,
+  }));
 }
 
 export function readProcessStartTime(pid: number): string | null {
@@ -235,24 +312,18 @@ function readHostProcessIdentityRowsSync(
 }
 
 async function readHostProcessIdentityRowsAsync(
-  pids: Iterable<number>,
+  pids: readonly number[],
 ): Promise<readonly HostProcessIdentityRow[]> {
-  const selected = uniquePositivePids(pids);
-  if (selected.length === 0) return [];
   if (isWindowsHostPlatform()) {
     return windowsProcessIdentityRows(
-      await readWindowsProcessRowsAsync(selected, WINDOWS_PS_TIMEOUT_MS),
+      await readWindowsProcessRowsAsync(pids, WINDOWS_PS_TIMEOUT_MS),
     );
   }
-  try {
-    const result = await runCmd(hostPsCommand(), HOST_PROCESS_IDENTITY_PS_ARGS(selected), {
-      allowFailure: true,
-      timeoutMs: PS_TIMEOUT_MS,
-    });
-    return result.exitCode !== 0 ? [] : parseHostProcessIdentityRows(result.stdout);
-  } catch {
-    return [];
-  }
+  return await runHostPsAsync(
+    HOST_PROCESS_IDENTITY_PS_ARGS(pids),
+    PS_TIMEOUT_MS,
+    parseHostProcessIdentityRows,
+  );
 }
 
 function parseHostProcessIdentityRows(stdout: string): HostProcessIdentityRow[] {
@@ -286,23 +357,6 @@ function readProcessField(pid: number, field: HostProcessField): string | null {
     const result = runCmdSync(hostPsCommand(), ['-p', String(pid), '-o', field], {
       allowFailure: true,
       timeoutMs: PS_TIMEOUT_MS,
-    });
-    return processFieldValue(result);
-  } catch {
-    return null;
-  }
-}
-
-async function readProcessFieldAsync(
-  pid: number,
-  field: HostProcessField,
-  timeoutMs: number,
-): Promise<string | null> {
-  if (!Number.isInteger(pid) || pid <= 0) return null;
-  try {
-    const result = await runCmd(hostPsCommand(), ['-p', String(pid), '-o', field], {
-      allowFailure: true,
-      timeoutMs,
     });
     return processFieldValue(result);
   } catch {
@@ -460,25 +514,6 @@ function windowsBudgetMs(timeoutMs: number): number {
   return Math.max(timeoutMs, WINDOWS_PS_TIMEOUT_MS);
 }
 
-async function readWindowsProcessIdentityFacts(
-  pid: number,
-  timeoutMs: number,
-): Promise<HostProcessIdentityFacts> {
-  if (!Number.isInteger(pid) || pid <= 0) return { startTime: null, command: null, zombie: null };
-  try {
-    const result = await runCmd(WINDOWS_PROCESS_TOOL, windowsProcessQueryArgs([pid]), {
-      allowFailure: true,
-      timeoutMs: windowsBudgetMs(timeoutMs),
-    });
-    if (result.exitCode !== 0) return { startTime: null, command: null, zombie: null };
-    const row = parseWindowsProcessRows(result.stdout).find((candidate) => candidate.pid === pid);
-    if (!row) return { startTime: null, command: null, zombie: null };
-    return { startTime: row.startTime, command: row.command, zombie: false };
-  } catch {
-    return { startTime: null, command: null, zombie: null };
-  }
-}
-
 async function listWindowsHostProcesses(
   options: ListHostProcessesOptions,
 ): Promise<HostProcessInfo[]> {
@@ -568,13 +603,19 @@ export async function waitForProcessExit(pid: number, timeoutMs: number): Promis
   return !isProcessAlive(pid);
 }
 
-type StopSignal = 'SIGTERM' | 'SIGKILL';
+/** The signal a stop opens with, before it escalates to SIGKILL. */
+export type GracefulStopSignal = 'SIGTERM' | 'SIGINT';
+
+type StopSignal = GracefulStopSignal | 'SIGKILL';
 
 /**
  * The outcome of a stop that a caller may act on. A process tracked elsewhere (a state file, a
  * registration) may be forgotten only on `stopped`.
  *
  * - `stopped`: the host released the pid, or proved the pid now names a different process.
+ *   `signal` is the last signal this stop sent before that proof, and is absent when the recorded
+ *   process was already gone before anything was signaled. `reassigned` says the proof was a pid
+ *   that now names a different process: the recorded process is gone, but nobody watched it leave.
  * - `retained` + `signal-failed`: `signal` was refused by `errno` while the process was there.
  *   `EPERM` usually means another owner holds it, and later signals are refused by the same check.
  * - `retained` + `exit-timeout`: SIGKILL was accepted and the process outlived its budget.
@@ -582,7 +623,7 @@ type StopSignal = 'SIGTERM' | 'SIGKILL';
  *   so nothing proves which process a signal would reach.
  */
 export type ConfirmedProcessStop =
-  | Readonly<{ status: 'stopped' }>
+  | Readonly<{ status: 'stopped'; signal?: StopSignal; reassigned?: true }>
   | Readonly<{ status: 'retained'; reason: 'signal-failed'; signal: StopSignal; errno: string }>
   | Readonly<{ status: 'retained'; reason: 'exit-timeout'; signal: 'SIGKILL' }>
   | Readonly<{ status: 'retained'; reason: 'identity-unverified' }>;
@@ -646,7 +687,8 @@ export function readConfirmedProcessStopDetails(
   const errno = details?.errno;
   return {
     reason,
-    signal: signal === 'SIGTERM' || signal === 'SIGKILL' ? signal : undefined,
+    signal:
+      signal === 'SIGTERM' || signal === 'SIGINT' || signal === 'SIGKILL' ? signal : undefined,
     errno: reason === 'signal-failed' && typeof errno === 'string' ? errno : undefined,
     pid,
   };
@@ -669,17 +711,54 @@ export type ProcessStopIdentity = Readonly<{
   matches?: (command: string) => boolean;
 }>;
 
-/** How long each signal stage may wait for the exit, on the same keys `stopPidsWithEscalation` takes. */
-export type ProcessStopBudget = Pick<
-  StopPidsWithEscalationOptions,
-  'termTimeoutMs' | 'killTimeoutMs'
->;
+/**
+ * How long each signal stage may wait for the exit. `termTimeoutMs` is the grace the opening
+ * signal gets, SIGTERM unless `gracefulSignal` names SIGINT for a process that finalizes its output
+ * on an interrupt; `killTimeoutMs` is how long SIGKILL may take to be confirmed.
+ */
+export type ProcessStopBudget = Readonly<{
+  termTimeoutMs: number;
+  killTimeoutMs: number;
+  gracefulSignal?: GracefulStopSignal;
+}>;
 
 /**
- * Signals one process TERM then KILL and proves which way the recorded process ended, so a caller
- * only forgets one it watched leave. Identity settles it both ways: unreadable identity retains
- * rather than signaling a process this caller cannot name, while a released pid, a zombie, or a
- * start time the host contradicts proves it gone. A refusal is not absence, so each stage waits.
+ * What the host's facts say about the process a caller recorded. One rule answers every identity
+ * question before a signal:
+ *
+ * - `exited`: the host shows the pid as a zombie, so the recorded process already terminated.
+ * - `reassigned`: a readable start time contradicts the record, or, when no start time was
+ *   recorded, a readable command does: the pid now names a different process and the recorded one
+ *   is gone.
+ * - `ours`: every recorded claim was read and matches. One confirmed claim beside an unread one is
+ *   not enough, because the start-time and command reads can fail independently.
+ * - `unverified`: everything else. A claim the host did not answer, no claim at all, or a recorded
+ *   start time beside a command that does not match (the same lifetime may have exec'd or rewritten
+ *   its argv) is neither proof the recorded process is gone nor permission to signal.
+ */
+export type ProcessIdentityVerdict = 'ours' | 'exited' | 'reassigned' | 'unverified';
+
+export function judgeProcessIdentity(
+  expected: ProcessStopIdentity,
+  facts: HostProcessIdentityFacts,
+): ProcessIdentityVerdict {
+  if (facts.zombie) return 'exited';
+  const { startTime, matches } = expected;
+  if (startTime && facts.startTime && facts.startTime !== startTime) return 'reassigned';
+  const commandMatches = facts.command === null || !matches ? undefined : matches(facts.command);
+  if (!startTime && commandMatches === false) return 'reassigned';
+  if (!startTime && !matches) return 'unverified';
+  const startTimeConfirmed = !startTime || facts.startTime === startTime;
+  const commandConfirmed = !matches || commandMatches === true;
+  return startTimeConfirmed && commandConfirmed ? 'ours' : 'unverified';
+}
+
+/**
+ * The one TERM-then-KILL escalation in host-kit. Signals one process gracefully, waits the grace
+ * period, re-proves identity, then sends SIGKILL, and proves which way the recorded process ended
+ * so a caller only forgets one it watched leave. Every signal needs a host-confirmed identity
+ * ({@link judgeProcessIdentity}): an unreadable identity before either signal retains rather than
+ * signaling a process this caller cannot name. A refusal is not absence, so each stage waits.
  */
 export async function stopProcessAndConfirmExit(
   target: ProcessStopTarget,
@@ -688,38 +767,41 @@ export async function stopProcessAndConfirmExit(
   // Stale or malformed process state must never aim a signal at the caller itself.
   if (target.pid === process.pid) throw new RangeError('Cannot stop the current process');
   const identity = await proveStopTargetIdentity(target);
-  if (identity === 'gone') return { status: 'stopped' };
+  if (identity === 'released' || identity === 'exited') return { status: 'stopped' };
+  if (identity === 'reassigned') return { status: 'stopped', reassigned: true };
   if (identity === 'unverified') return { status: 'retained', reason: 'identity-unverified' };
-  const term = await proveSignalStage(target, 'SIGTERM', budget.termTimeoutMs);
-  if (term.proof === 'exited') return { status: 'stopped' };
-  // A refused SIGTERM is the whole verdict: the host refuses SIGKILL by the same permission check,
-  // so escalating would spend a second budget repeating it.
-  if (term.proof === 'refused') return retainedSignalFailure('SIGTERM', term.errno);
+  const graceful = budget.gracefulSignal ?? 'SIGTERM';
+  const term = await proveSignalStage(target, graceful, budget.termTimeoutMs);
+  if (term.proof !== 'survived') return stageVerdict(term, graceful);
   const kill = await proveSignalStage(target, 'SIGKILL', budget.killTimeoutMs);
-  if (kill.proof === 'exited') return { status: 'stopped' };
-  if (kill.proof === 'refused') return retainedSignalFailure('SIGKILL', kill.errno);
+  if (kill.proof !== 'survived' && kill.proof !== 'unverified')
+    return stageVerdict(kill, 'SIGKILL');
   return { status: 'retained', reason: 'exit-timeout', signal: 'SIGKILL' };
+}
+
+/** The verdict a signal stage settles on its own, before any further signal. */
+function stageVerdict(
+  stage: Exclude<SignalStageProof, { proof: 'survived' }>,
+  signal: StopSignal,
+): ConfirmedProcessStop {
+  if (stage.proof === 'exited') return { status: 'stopped', signal };
+  if (stage.proof === 'reassigned') return { status: 'stopped', signal, reassigned: true };
+  // A refused graceful signal is the whole verdict: the host refuses SIGKILL by the same
+  // permission check, so escalating would spend a second budget repeating it.
+  if (stage.proof === 'refused') return retainedSignalFailure(signal, stage.errno);
+  // The pid outlived the grace period and the host will not say what it is now.
+  return { status: 'retained', reason: 'identity-unverified' };
 }
 
 /**
  * Whether the live pid still names the process the caller recorded, read once before anything is
- * signaled. `ours` needs a claim the host confirmed: two recorded facts that no readable fact
- * contradicts only prove the host is silent, and silence about a pid this caller may not own is
- * exactly what must not become permission to signal it.
+ * signaled. `released` is a pid `kill(pid, 0)` no longer finds; the rest is {@link judgeProcessIdentity}.
  */
 async function proveStopTargetIdentity(
   target: ProcessStopTarget,
-): Promise<'ours' | 'gone' | 'unverified'> {
-  if (!isStopPidLive(target.pid)) return 'gone';
-  const facts = await readProcessIdentityFacts(target.pid);
-  if (facts.zombie) return 'gone';
-  if (target.identity.startTime && facts.startTime && facts.startTime !== target.identity.startTime)
-    return 'gone';
-  if (target.identity.matches && facts.command && !target.identity.matches(facts.command))
-    return 'gone';
-  const confirmedStartTime = Boolean(target.identity.startTime && facts.startTime);
-  const confirmedCommand = Boolean(target.identity.matches && facts.command);
-  return confirmedStartTime || confirmedCommand ? 'ours' : 'unverified';
+): Promise<ProcessIdentityVerdict | 'released'> {
+  if (!isStopPidLive(target.pid)) return 'released';
+  return judgeProcessIdentity(target.identity, await readProcessIdentityFacts(target.pid));
 }
 
 function retainedSignalFailure(signal: StopSignal, errno: string): ConfirmedProcessStop {
@@ -728,10 +810,15 @@ function retainedSignalFailure(signal: StopSignal, errno: string): ConfirmedProc
 
 /** What one signal stage proved, within the budget that stage was given. */
 type SignalStageProof =
-  | Readonly<{ proof: 'exited' }>
-  | Readonly<{ proof: 'refused'; errno: string }>
-  | Readonly<{ proof: 'survived' }>;
+  | Readonly<{ proof: 'exited' | 'reassigned' | 'unverified' | 'survived' }>
+  | Readonly<{ proof: 'refused'; errno: string }>;
 
+/**
+ * Sends one signal and waits its budget. A pid that outlives the budget is judged again, which is
+ * also the identity proof the next signal needs: `kill(pid, 0)` cannot tell, because `EPERM` also
+ * comes back for a zombie awaiting its parent, and on Windows for a process that exited while its
+ * object still had handles.
+ */
 async function proveSignalStage(
   target: ProcessStopTarget,
   signal: StopSignal,
@@ -742,8 +829,11 @@ async function proveSignalStage(
   // owner may release it inside this budget, and a released pid is what the caller may forget.
   if (errno === 'ESRCH') return { proof: 'exited' };
   if (await waitForStopPidRelease(target.pid, timeoutMs)) return { proof: 'exited' };
-  if (await proveRecordedProcessGone(target)) return { proof: 'exited' };
-  return errno === undefined ? { proof: 'survived' } : { proof: 'refused', errno };
+  const verdict = await proveStopTargetIdentity(target);
+  if (verdict === 'released' || verdict === 'exited') return { proof: 'exited' };
+  if (verdict === 'reassigned') return { proof: 'reassigned' };
+  if (errno !== undefined) return { proof: 'refused', errno };
+  return { proof: verdict === 'unverified' ? 'unverified' : 'survived' };
 }
 
 const STOP_LIVENESS_POLL_MS = 50;
@@ -775,20 +865,6 @@ async function waitForStopPidRelease(pid: number, timeoutMs: number): Promise<bo
   }
 }
 
-/**
- * Whether the pid outliving its budget still proves the recorded process is gone, which the answer to
- * `kill(pid, 0)` cannot: `EPERM` also comes back for a zombie awaiting its parent, and on Windows for
- * a process that exited while its object still had handles. A start time the host contradicts proves
- * the pid changed hands; the process table holding no row does not, because a hidden or unreadable
- * process is missing from it too.
- */
-async function proveRecordedProcessGone(target: ProcessStopTarget): Promise<boolean> {
-  const facts = await readProcessIdentityFacts(target.pid);
-  if (facts.zombie) return true;
-  const startTime = target.identity.startTime;
-  return Boolean(startTime && facts.startTime && facts.startTime !== startTime);
-}
-
 /** The errno that refused the signal, or `undefined` when the host accepted it. */
 function signalProcessForStop(pid: number, signal: StopSignal): string | undefined {
   // A non-positive pid is no process at all: `kill(0, …)` would address our own process group.
@@ -806,18 +882,6 @@ function signalProcessForStop(pid: number, signal: StopSignal): string | undefin
 }
 
 const ERRNO_CODE = /^E[A-Z0-9]+$/;
-
-export async function stopPidsWithEscalation(
-  options: StopPidsWithEscalationOptions,
-): Promise<void> {
-  const pids = uniquePositivePids(options.pids, { excludePid: process.pid });
-  if (pids.length === 0) return;
-  signalPidsBestEffort(pids, 'SIGTERM');
-  await Promise.all(pids.map(async (pid) => await waitForProcessExit(pid, options.termTimeoutMs)));
-  const livePids = pids.filter((pid) => isProcessAlive(pid));
-  signalPidsBestEffort(livePids, 'SIGKILL');
-  await Promise.all(pids.map(async (pid) => await waitForProcessExit(pid, options.killTimeoutMs)));
-}
 
 const SYSCTL_TIMEOUT_MS = 1_000;
 const APPLE_SILICON_SYSCTL = ['-n', 'hw.optional.arm64'] as const;

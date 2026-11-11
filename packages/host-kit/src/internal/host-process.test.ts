@@ -5,12 +5,12 @@ import {
   expandProcessTree,
   isProcessAlive,
   isProcessGroupAlive,
+  judgeProcessIdentity,
   listHostProcesses,
   parseHostProcessList,
   readProcessCommand,
   readProcessStartTime,
   signalPidsBestEffort,
-  stopPidsWithEscalation,
   uniquePositivePids,
 } from './host-process.ts';
 
@@ -123,64 +123,6 @@ test('best-effort signaling ignores invalid, current, and failed pids', () => {
   }
 });
 
-test('pid escalation sends TERM, then KILL only to live pids', async () => {
-  vi.useFakeTimers();
-  const alivePids = new Set([101, 202, 303]);
-  const calls: Array<{ pid: number; signal: string | number | undefined }> = [];
-  const killSpy = vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
-    const numericPid = Number(pid);
-    calls.push({ pid: numericPid, signal });
-    if (signal === 'SIGTERM' && numericPid === 202) alivePids.delete(numericPid);
-    if (signal === 'SIGKILL') alivePids.delete(numericPid);
-    if (signal === 0 && !alivePids.has(numericPid)) {
-      const error = new Error('not found') as NodeJS.ErrnoException;
-      error.code = 'ESRCH';
-      throw error;
-    }
-    return true;
-  });
-
-  try {
-    const stopped = stopPidsWithEscalation({
-      pids: [101, 202, 101, -1, process.pid, 303],
-      termTimeoutMs: 1_500,
-      killTimeoutMs: 1_000,
-    });
-    await vi.advanceTimersByTimeAsync(1_500);
-    await stopped;
-
-    assert.deepEqual(
-      calls.filter((call) => call.signal === 'SIGTERM').map((call) => call.pid),
-      [101, 202, 303],
-    );
-    assert.deepEqual(
-      calls.filter((call) => call.signal === 'SIGKILL').map((call) => call.pid),
-      [101, 303],
-    );
-  } finally {
-    killSpy.mockRestore();
-    vi.useRealTimers();
-  }
-});
-
-test('pid escalation returns immediately for an empty pid set', async () => {
-  vi.useFakeTimers();
-  const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
-
-  try {
-    await stopPidsWithEscalation({
-      pids: [-1, 0, process.pid],
-      termTimeoutMs: 1_500,
-      killTimeoutMs: 1_000,
-    });
-
-    assert.equal(killSpy.mock.calls.length, 0);
-  } finally {
-    killSpy.mockRestore();
-    vi.useRealTimers();
-  }
-});
-
 test('captureHostEnvironment copies the environment and reads the working directory once', () => {
   const source = {
     env: { HOME: '/home/a', EMPTY: undefined } as Record<string, string | undefined>,
@@ -194,4 +136,62 @@ test('captureHostEnvironment copies the environment and reads the working direct
   assert.deepEqual(host, { env: { HOME: '/home/a', EMPTY: undefined }, cwd: '/work' });
   assert.notEqual(host.env, source.env);
   assert.equal(source.cwd.mock.calls.length, 1);
+});
+
+// One row per verdict rule: `ours` needs every recorded claim read and matching.
+test.each([
+  ['both claims read and matching', { startTime: 'S1', matches: true }, ['S1', 'recorded'], 'ours'],
+  ['only a start time recorded, read and matching', { startTime: 'S1' }, ['S1', null], 'ours'],
+  ['only a command recorded, read and matching', { matches: true }, [null, 'recorded'], 'ours'],
+  [
+    'a matching command beside an unread start time',
+    { startTime: 'S1', matches: true },
+    [null, 'recorded'],
+    'unverified',
+  ],
+  [
+    'a matching start time beside an unread command',
+    { startTime: 'S1', matches: true },
+    ['S1', null],
+    'unverified',
+  ],
+  ['nothing read', { startTime: 'S1', matches: true }, [null, null], 'unverified'],
+  ['nothing recorded', {}, ['S1', 'recorded'], 'unverified'],
+  [
+    'a recorded start time beside a mismatching command',
+    { startTime: 'S1', matches: true },
+    ['S1', 'other'],
+    'unverified',
+  ],
+  [
+    'an unread recorded start time beside a mismatching command',
+    { startTime: 'S1', matches: true },
+    [null, 'other'],
+    'unverified',
+  ],
+  [
+    'a contradicted start time',
+    { startTime: 'S1', matches: true },
+    ['S2', 'recorded'],
+    'reassigned',
+  ],
+  [
+    'a mismatching command with no start time recorded',
+    { matches: true },
+    ['S1', 'other'],
+    'reassigned',
+  ],
+] as const)('judgeProcessIdentity: %s', (_name, recorded, [startTime, command], verdict) => {
+  const expected = {
+    ...('startTime' in recorded ? { startTime: recorded.startTime } : {}),
+    ...('matches' in recorded ? { matches: (observed: string) => observed === 'recorded' } : {}),
+  };
+  assert.equal(judgeProcessIdentity(expected, { startTime, command, zombie: false }), verdict);
+});
+
+test('judgeProcessIdentity reads a zombie as exited whatever else the host says', () => {
+  assert.equal(
+    judgeProcessIdentity({ startTime: 'S1' }, { startTime: 'S2', command: null, zombie: true }),
+    'exited',
+  );
 });
