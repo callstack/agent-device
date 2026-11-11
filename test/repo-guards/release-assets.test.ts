@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test } from 'vitest';
+import { test as vitestTest } from 'vitest';
 import { parse } from 'yaml';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const repo = path.resolve(import.meta.dirname, '../..');
 const workflows = ['release-ios-runner.yml', 'release-android-snapshot-helper.yml'];
+const test = vitestTest.skipIf(process.platform === 'win32');
 
 type Step = {
   name: string;
@@ -41,6 +42,7 @@ function fixture() {
     'mktemp',
     'sh',
     'touch',
+    'cp',
   ]) {
     const executable = (process.env.PATH ?? '')
       .split(path.delimiter)
@@ -91,7 +93,71 @@ printf 'apk=%s\\nversion_code=123\\n' "$apk"
     GITHUB_SERVER_URL: 'https://example.invalid/"quoted"\\path',
     GITHUB_REPOSITORY: 'owner/repo',
   };
-  return { root, scripts, env, marker: path.join(root, 'marker') };
+  return { root, scripts, env, marker: path.join(root, 'marker'), tool };
+}
+
+function androidBuildFixture(helper: 'snapshot' | 'ime') {
+  const f = fixture();
+  fs.copyFileSync(
+    path.join(repo, 'scripts/build-android-helper.sh'),
+    path.join(f.scripts, 'build-android-helper.sh'),
+  );
+  f.tool('javac', ':');
+  f.tool('java', ':');
+  f.tool('zip', ':');
+  f.tool(
+    'd8',
+    `while [ "$#" -gt 0 ]; do
+  case "$1" in --output) shift; printf dex > "$1/classes.dex" ;; esac
+  shift
+done`,
+  );
+  f.tool(
+    'aapt2',
+    String.raw`if [ "$1" = compile ]; then exit 0; fi
+printf '%s\n' "$@" > "$FIXTURE_AAPT_ARGS"
+while [ "$#" -gt 0 ]; do
+  case "$1" in -o) shift; printf apk > "$1" ;; esac
+  shift
+done`,
+  );
+  f.tool('zipalign', 'cp "$3" "$4"');
+  f.tool(
+    'apksigner',
+    `if [ "$1" = verify ]; then exit 0; fi
+while [ "$#" -gt 0 ]; do
+  case "$1" in --out) shift; output="$1" ;; esac
+  shift
+done
+printf signed > "$output"`,
+  );
+  const sdk = path.join(f.root, 'sdk');
+  const buildTools = path.join(sdk, 'build-tools', '36.0.0');
+  const platform = path.join(sdk, 'platforms', 'android-36');
+  fs.mkdirSync(buildTools, { recursive: true });
+  fs.mkdirSync(platform, { recursive: true });
+  fs.writeFileSync(path.join(platform, 'android.jar'), '');
+  for (const name of ['aapt2', 'd8', 'zipalign', 'apksigner']) {
+    fs.symlinkSync(path.join(f.env.PATH, name), path.join(buildTools, name));
+  }
+  const snapshot = path.join(f.root, 'android', 'snapshot-helper');
+  fs.mkdirSync(snapshot, { recursive: true });
+  fs.writeFileSync(path.join(snapshot, 'debug.keystore'), '');
+  for (const sourceSet of ['main', 'test']) {
+    fs.mkdirSync(path.join(f.root, 'android', `${helper}-helper`, 'src', sourceSet, 'java'), {
+      recursive: true,
+    });
+  }
+  return {
+    ...f,
+    env: {
+      ...f.env,
+      ANDROID_HOME: sdk,
+      AGENT_DEVICE_ANDROID_BUILD_TOOLS: '36.0.0',
+      AGENT_DEVICE_ANDROID_HELPER: helper,
+      FIXTURE_AAPT_ARGS: path.join(f.root, 'aapt-args'),
+    },
+  };
 }
 
 function run(root: string, env: Record<string, string>, script: string, args: string[] = []) {
@@ -128,14 +194,21 @@ for (const workflow of workflows) {
       const f = fixture();
       const historical = path.join(f.root, 'historical.mjs');
       fs.writeFileSync(historical, "console.error('unknown command'); process.exit(1);\n");
-      const refs: Record<string, string> = {
-        '${{ inputs.checkout_ref || github.ref }}': historical,
-        '${{ github.workflow_sha }}': path.join(repo, 'scripts/release-version.mjs'),
+      const repositories: Record<string, Record<string, string>> = {
+        caller: {
+          '${{ inputs.checkout_ref || github.ref }}': historical,
+          '${{ github.workflow_sha }}': historical,
+          '${{ job.workflow_sha }}': historical,
+        },
+        '${{ job.workflow_repository }}': {
+          '${{ job.workflow_sha }}': path.join(repo, 'scripts/release-version.mjs'),
+        },
       };
       for (const checkout of workflowSteps(workflow).filter((step) =>
         step.name.startsWith('Checkout'),
       )) {
-        const source = refs[checkout.with?.ref ?? ''];
+        const revisions = repositories[checkout.with?.repository ?? 'caller'];
+        const source = revisions?.[checkout.with?.ref ?? ''];
         assert.ok(source, `unexpected checkout ref: ${checkout.with?.ref}`);
         const destination = path.join(
           f.root,
@@ -250,5 +323,22 @@ for (const [version, tag] of [
         }
       });
     }
+  }
+}
+
+for (const helper of ['snapshot', 'ime'] as const) {
+  for (const version of ['1.2.3', '1.2.3-dev', '1.2.3+build.42', '1.2.3-rc.1+build.42']) {
+    test(`${helper} ${version} preserves the base release version code`, () => {
+      const f = androidBuildFixture(helper);
+      const result = run(f.root, f.env, path.join(f.scripts, 'build-android-helper.sh'), [
+        version,
+        path.join(f.root, 'output'),
+      ]);
+      assert.equal(result.status, 0, result.stderr);
+      assert.ok(result.stdout.includes('version_code=1002003\n'));
+      const args = fs.readFileSync(f.env.FIXTURE_AAPT_ARGS, 'utf8').trimEnd().split('\n');
+      assert.equal(args[args.indexOf('--version-code') + 1], '1002003');
+      assert.equal(args[args.indexOf('--version-name') + 1], version);
+    });
   }
 }
