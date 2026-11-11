@@ -1,4 +1,3 @@
-import { areCapturedRectsAtSamePosition } from '@agent-device/kernel/rect-center';
 import type { Point, Rect, SnapshotNativePressTarget } from '@agent-device/kernel/snapshot';
 import type { ElementSelectorKey } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
@@ -22,23 +21,6 @@ export type NativePressReadiness =
   | 'missing'
   | 'ambiguous'
   | 'surface-mismatch';
-
-/** Exact native identity plus the existing capture-rounding band, shared with canonical rechecks. */
-export function matchesAuthorizedPressTarget(
-  expected: AuthorizedPressTarget,
-  candidate: Omit<AuthorizedPressTarget, 'point'>,
-): boolean {
-  return (
-    expected.type === candidate.type &&
-    (['identifier', 'label', 'value'] as const).every(
-      (key) =>
-        (key === 'value' && expected.type === 'SecureTextField') ||
-        (expected[key] ?? '').trim().normalize('NFC') ===
-          (candidate[key] ?? '').trim().normalize('NFC'),
-    ) &&
-    areCapturedRectsAtSamePosition(expected.rect, candidate.rect)
-  );
-}
 
 export type QuerySelectorInput = ObservationInput &
   (

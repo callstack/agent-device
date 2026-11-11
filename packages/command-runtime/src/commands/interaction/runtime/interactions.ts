@@ -21,7 +21,6 @@ import {
 } from './post-action-observation.ts';
 import { resolveInteractionTarget, type InteractionTarget } from './resolution.ts';
 import { admitResolvedTarget } from './pre-dispatch-admission.ts';
-import { guardPressReadiness } from './press-readiness.ts';
 import { pointObservationOf } from './target-visibility-stages.ts';
 import { dispatchNativeRefInteraction } from './native-ref-interaction.ts';
 import type {
@@ -162,6 +161,7 @@ async function tapCommand(
   }
   let atRest = await admitResolvedTarget(runtime, options, resolutionRequest, resolved);
   if (
+    runtime.backend.readPressReadiness &&
     (options.count ?? 1) === 1 &&
     (options.intervalMs ?? 0) === 0 &&
     (options.holdMs ?? 0) === 0 &&
@@ -169,6 +169,7 @@ async function tapCommand(
     options.doubleTap !== true &&
     (options.button ?? 'primary') === 'primary'
   ) {
+    const { guardPressReadiness } = await import('./press-readiness.ts');
     atRest = await guardPressReadiness(runtime, options, resolutionRequest, atRest);
   }
   const point = requireResolvedPoint(atRest);

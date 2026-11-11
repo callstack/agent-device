@@ -1,14 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
-import {
-  matchesAuthorizedPressTarget,
-  type AuthorizedPressTarget,
-} from './selector-observation-runtime.ts';
+import { matchesAuthorizedPressTarget } from './press-readiness-binding.ts';
+import type { AuthorizedPressTarget } from '@agent-device/contracts/selector-observation-runtime';
 
 // Shared with the native mutation-read: identity or capture geometry changes must never rebind input.
 const cases = JSON.parse(
   readFileSync(
-    new URL('../../../contracts/fixtures/authorized-press-target.json', import.meta.url),
+    new URL('../../../../../../contracts/fixtures/authorized-press-target.json', import.meta.url),
     'utf8',
   ),
 ) as {

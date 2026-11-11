@@ -4,15 +4,9 @@ import type {
 } from '@agent-device/contracts/interaction';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import type { BackendCommandContext } from '@agent-device/contracts/backend';
-import {
-  matchesAuthorizedPressTarget,
-  type NativePressReadiness,
-} from '@agent-device/contracts/selector-observation-runtime';
+import type { NativePressReadiness } from '@agent-device/contracts/selector-observation-runtime';
+import { matchesAuthorizedPressTarget } from './press-readiness-binding.ts';
 import { readSnapshotNativePressTargets } from '@agent-device/contracts/capture';
-import {
-  getRequestExecutionDeadlineMs,
-  getRequestResultDeadlineMs,
-} from '@agent-device/host-kit/request';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import { toBackendContext } from '../../runtime-common.ts';
@@ -27,6 +21,8 @@ export async function guardPressReadiness(
   original: ResolvedInteractionTarget,
 ): Promise<ResolvedInteractionTarget> {
   if (!runtime.backend.readPressReadiness || original.kind === 'point') return original;
+  const { getRequestExecutionDeadlineMs, getRequestResultDeadlineMs } =
+    await import('@agent-device/host-kit/request');
   const deadline = Math.min(
     getRequestExecutionDeadlineMs(options.requestId) ?? Infinity,
     getRequestResultDeadlineMs(options.requestId) ?? Infinity,
