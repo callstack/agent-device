@@ -167,6 +167,80 @@ function openWebRequest(session: string): DaemonRequest {
   };
 }
 
+test('implicit web sessions isolate workspaces and retain their device on follow-up requests', async () => {
+  mockResolveTargetDevice.mockImplementation(webSessionResolution);
+  const claimsDir = mkdtempForTestSync('agent-device-web-workspace-claims-');
+  vi.stubEnv('AGENT_DEVICE_CLAIMS_DIR', claimsDir);
+  const roots = [mkdtempForTestSync('web-workspace-a-'), mkdtempForTestSync('web-workspace-b-')];
+  const store = makeSessionStore('agent-device-web-workspace-');
+  const bound: string[] = [];
+  const handler = createOpenHandler(store, new LeaseRegistry(), {
+    ...lifecycleDeviceRuntimeGateway,
+    bind: async (request) => {
+      bound.push(request.device.id);
+      return lifecycleDeviceRuntimeGateway.bind(request);
+    },
+  });
+  const request = (cwd: string) => ({
+    ...openWebRequest('default'),
+    meta: { cwd, requestId: `web-${cwd}` },
+  });
+  try {
+    const responses = await Promise.all(roots.map((root) => handler(request(root))));
+    expect(responses).toEqual([
+      expect.objectContaining({ ok: true }),
+      expect.objectContaining({ ok: true }),
+    ]);
+    expect(new Set(bound).size).toBe(2);
+    for (const id of bound) {
+      expect(id).toMatch(/^agent-browser-chrome:session:w_[0-9a-f]{16}$/);
+      expect(Buffer.byteLength(id.split(':session:')[1]!)).toBeLessThanOrEqual(32);
+    }
+    const first = responses[0]!;
+    if (!first.ok) throw new Error('First workspace open failed');
+    expect(await handler(request(roots[0]!))).toMatchObject({
+      ok: true,
+      data: { id: (first.data as DeviceInfo).id },
+    });
+    const foreign = createOpenHandler(makeSessionStore('agent-device-web-workspace-foreign-'));
+    expect(await foreign(request(roots[0]!))).toMatchObject({
+      ok: false,
+      error: { code: 'DEVICE_IN_USE' },
+    });
+  } finally {
+    vi.unstubAllEnvs();
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});
+
+test.each(['batch', 'replay'] as const)(
+  'an implicit web %s carries its workspace identity into nested steps',
+  async (command) => {
+    mockResolveTargetDevice.mockImplementation(webSessionResolution);
+    const root = mkdtempForTestSync('web-workspace-nested-');
+    const replayPath = path.join(root, 'flow.ad');
+    fs.writeFileSync(replayPath, 'context platform=web\nopen about:blank\n');
+    const bound: string[] = [];
+    const handler = createOpenHandler(
+      makeSessionStore('web-workspace-nested-store-'),
+      new LeaseRegistry(),
+      {
+        ...lifecycleDeviceRuntimeGateway,
+        bind: async (request) => {
+          bound.push(request.device.id);
+          return lifecycleDeviceRuntimeGateway.bind(request);
+        },
+      },
+    );
+    const req = freshWebRequest(command, 'default', replayPath);
+    const response = await handler({ ...req, meta: { cwd: root, requestId: `nested-${command}` } });
+    expect(response).toMatchObject({ ok: true });
+    expect(bound.length).toBeGreaterThan(0);
+    expect(new Set(bound).size).toBe(1);
+    expect(bound[0]).toMatch(/^agent-browser-chrome:session:w_[0-9a-f]{16}$/);
+  },
+);
+
 test.each(['', '   '])(
   'a fresh web open with the blank session name %j is refused and opens no browser',
   async (session) => {

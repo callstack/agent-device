@@ -135,11 +135,12 @@ const SOCKET_FILE_OVERHEAD_BYTES = '/'.length + '.sock'.length;
 const WEB_BACKEND_KEY_MAX_LENGTH =
   SOCKET_PATH_MAX_BYTES - SOCKET_DIR_BYTES - SOCKET_FILE_OVERHEAD_BYTES;
 
-/**
- * A web session as the caller names it. `name` is the tenant-relative public name, never the
- * tenant-prefixed key the session store holds it under; `tenantId` is set under tenant isolation.
- */
-export type WebSessionIdentity = Readonly<{ name: string; tenantId?: string }>;
+/** The public name and its tenant or implicit workspace namespace. */
+export type WebSessionIdentity = Readonly<{
+  name: string;
+  tenantId?: string;
+  workspaceScopeId?: string;
+}>;
 
 function webBackendKeyPrefix(tenantId: string | undefined): string {
   if (tenantId === undefined) return WEB_BACKEND_KEY_PREFIX;
@@ -147,15 +148,7 @@ function webBackendKeyPrefix(tenantId: string | undefined): string {
   return `t_${hash.slice(0, WEB_TENANT_KEY_HASH_LENGTH)}_`;
 }
 
-/**
- * The name of a web session in lower case, so names that differ only by case are one session on a
- * case-insensitive filesystem. It is refused with `web_session_name_invalid`, never trimmed, unless
- * it is non-empty, holds only letters, digits, `_` and `-` (the characters the backend accepts in
- * a session name, so surrounding whitespace is refused and the stored session address equals the
- * validated name), and leaves room for `keyPrefixLength` characters of the backend key within the
- * socket path limit. That also keeps `:` out of the name, which would parse as the `:session:` or
- * `:app:` infix of another device id.
- */
+/** Validate the backend's name and socket limits, and fold case for case-insensitive filesystems. */
 function requireWebSessionName(sessionName: string, keyPrefixLength: number): string {
   const name = sessionName.toLowerCase();
   const maxLength = WEB_BACKEND_KEY_MAX_LENGTH - keyPrefixLength;
@@ -176,11 +169,15 @@ function requireWebSessionName(sessionName: string, keyPrefixLength: number): st
 
 /**
  * The key agent-browser isolates a browser on, derived once from the session: `p_<name>`, or
- * `t_<hash12 of the tenant>_<name>` under tenant isolation so two tenants never share a browser.
+ * `t_<hash12 of the tenant>_<name>` under tenant isolation, or `w_<scope id>` for an implicit
+ * workspace session.
  */
 export function webSessionBackendKey(session: WebSessionIdentity): string {
   const prefix = webBackendKeyPrefix(session.tenantId);
-  return `${prefix}${requireWebSessionName(session.name, prefix.length)}`;
+  const name = requireWebSessionName(session.name, prefix.length);
+  return session.workspaceScopeId === undefined
+    ? `${prefix}${name}`
+    : `w_${session.workspaceScopeId}`;
 }
 
 /**

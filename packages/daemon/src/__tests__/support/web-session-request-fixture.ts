@@ -1,6 +1,7 @@
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { deriveWebSessionIdentity } from '../../core/session-tenant-scope.ts';
 import { scopeRequestSession } from '../../sessions/request-admission.ts';
+import { resolveSessionScope } from '../../sessions/session-routing.ts';
 
 /**
  * A hand-built request with the one private fact the request scope always adds:
@@ -20,7 +21,12 @@ export function seedWebSessionIdentity<Request extends DaemonRequest>(req: Reque
     internal: {
       ...req.internal,
       webSession:
-        req.internal?.webSession ?? deriveWebSessionIdentity(req.session, tenantScopedReq),
+        req.internal?.webSession ??
+        deriveWebSessionIdentity(
+          req.session,
+          tenantScopedReq,
+          resolveSessionScope(tenantScopedReq),
+        ),
     },
   };
 }

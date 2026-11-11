@@ -22,12 +22,13 @@ conflict check, and the host/scoped-device overlap (`devicesOverlap`).
    `default`; only an absent `--session` maps to `default`. Admission does not trim the name:
    trimming there changed the session keys of other platforms, so the web name rule refuses
    padding instead.
-3. The backend key is `p_<name>` with the name in lower case, or `t_<first 12 hex of sha256(tenant
-   id)>_<name>` under tenant isolation, so two tenants using one name hold two devices and two
-   browsers. Two derivations keep these apart. The request scope (`createRequestExecutionScope`)
+3. The backend key is `p_<name>` with the name in lower case, `w_<workspace scope id>` for an
+   implicit workspace session, or `t_<first 12 hex of sha256(tenant id)>_<name>` under tenant
+   isolation, so two workspaces or tenants hold two devices and two browsers. Two derivations keep
+   these apart. The request scope (`createRequestExecutionScope`)
    is the only place that derives the web identity, the tenant-relative public name and the
-   tenant id: it reads the name as the caller supplied it, before tenant scoping, and stores it on
-   the request. A batch or replay step carries that identity unchanged. The kernel derives the
+   tenant id or workspace scope: it reads the name as the caller supplied it, before tenant scoping,
+   and stores it on the request. A batch or replay step carries that identity unchanged. The kernel derives the
    backend key from that identity, never from the tenant-prefixed store name: device resolution
    does so when it selects the session device, and the open of an existing web session does so
    to refuse an invalid name before reusing the session. Every other reader takes the key from
@@ -63,8 +64,6 @@ serialize web opens for no exclusion.
 
 ## Open gaps
 
-- Implicit sessions of different workspaces share the web name `default`, because the key derives
-  from the public name, not the workspace-scoped store key.
 - A web open is admitted under a lease of any other backend, because lease admission never compares
   platform with lease backend.
 - The 32-character key limit assumes the 48-byte macOS temporary directory.
