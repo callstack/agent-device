@@ -983,7 +983,7 @@ function appleTargetSelectionRank(
     tv: tvRank,
     desktop: fallbackRank,
   };
-  return targetRanks[device.target ?? 'mobile'];
+  return device.appleOs === 'visionos' ? fallbackRank : targetRanks[device.target ?? 'mobile'];
 }
 
 function isAppleDeviceCandidateSet(devices: DeviceInfo[]): boolean {
