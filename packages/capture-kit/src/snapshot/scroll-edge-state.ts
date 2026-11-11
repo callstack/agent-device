@@ -18,7 +18,6 @@ export function verticalEdgeFor(direction: ScrollDirection): ScrollEdge | undefi
 export type ScrollEdgeState = {
   canScroll: boolean;
   emptySnapshot: boolean;
-  edgeObserved?: boolean;
   scope?: string;
   /**
    * The frame of the container every other field on this record describes, absent when the tree

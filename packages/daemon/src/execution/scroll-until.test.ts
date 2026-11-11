@@ -237,28 +237,6 @@ test('an unchanged collection without a scroll marker reports no progress', asyn
   );
 });
 
-test('an explicit edge stops before a gesture', async () => {
-  const nodes = tree(200, 'Other');
-  nodes[1]!.hiddenContentBelow = false;
-  let scrolls = 0;
-  await assert.rejects(
-    () => run({ captures: [capture({ nodes })], onScroll: () => (scrolls += 1) }),
-    (error: unknown) =>
-      error instanceof AppError && error.details?.reason === 'scroll_until_edge_reached',
-  );
-  assert.equal(scrolls, 0);
-});
-
-test('visible hidden content overrides a contradictory explicit edge', async () => {
-  const nodes = tree(2400);
-  nodes[1]!.hiddenContentBelow = false;
-  await assert.rejects(
-    () => run({ captures: [capture({ nodes })], passLimit: 1 }),
-    (error: unknown) =>
-      error instanceof AppError && error.details?.reason === 'scroll_until_pass_limit',
-  );
-});
-
 test('content that moved and then stops reports the end of content', async () => {
   const frames = [tree(400, 'Other'), tree(200, 'Other')].map((nodes) => capture({ nodes }));
   await assert.rejects(
@@ -282,6 +260,29 @@ test('a non-scrollable screen stops after repeated unchanged observations', asyn
       error instanceof AppError && error.details?.reason === 'scroll_until_no_progress',
   );
   assert.equal(scrolls, 3);
+});
+
+test('changes outside a stuck scroll container do not imply scrolling', async () => {
+  const frame = (label: string) =>
+    capture({ nodes: [...tree(200, 'Other'), { ...row(3, 100, label), parentIndex: 0 }] });
+  await assert.rejects(
+    () => run({ captures: [frame('Clock 1'), frame('Clock 2')] }),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'scroll_until_no_progress',
+  );
+});
+
+test('changes in a tree without a scroll container do not imply scrolling', async () => {
+  const frame = (label: string) => {
+    const nodes = tree(200, label).filter((node) => node.index !== 1);
+    nodes[1]!.parentIndex = 0;
+    return capture({ nodes });
+  };
+  await assert.rejects(
+    () => run({ captures: [frame('Clock 1'), frame('Clock 2')] }),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'scroll_until_no_progress',
+  );
 });
 
 test('a horizontal scroll has no edge signal and is bounded by the budget alone', async () => {

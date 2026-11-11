@@ -40,11 +40,6 @@ export function analyzeScrollEdgeState(
   return {
     canScroll,
     emptySnapshot: false,
-    edgeObserved:
-      !canScroll &&
-      (edge === 'bottom'
-        ? container.hiddenContentBelow === false
-        : container.hiddenContentAbove === false),
     // Every selection path admits only `isUsableRect` containers, so a resolved container always
     // has a frame to report and its absence always means no container was resolved.
     ...(container.rect ? { containerRect: container.rect } : {}),

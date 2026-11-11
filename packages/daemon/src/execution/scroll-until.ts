@@ -56,6 +56,7 @@ export async function runScrollUntilVisible<TResult>(params: {
   const edge = verticalEdgeFor(direction);
   let scrolled = false;
   let previousFingerprint: string | undefined;
+  let previousContainer: string | undefined;
   let observedMovement = false;
   try {
     const { passes, result } = await runScrollPasses({
@@ -66,16 +67,24 @@ export async function runScrollUntilVisible<TResult>(params: {
         if (refusal) throw scrollUntilCaptureError(direction, selector, refusal);
         return captured.nodes as SnapshotNode[];
       },
-      decide: async (nodes, passes) => {
+      decide: async (nodes) => {
         if (await isSelectorVisible(nodes, selector, platform)) return { stop: true };
         // Horizontal scrolling has no edge analyzer and uses only the pass budget.
         if (!edge) return { stop: false };
         const state = await readScrollEdgeState(nodes, edge);
-        if (state.edgeObserved) throw scrollUntilEdgeError(direction, selector, passes);
-        if (state.fingerprint && previousFingerprint && state.fingerprint !== previousFingerprint) {
+        const container = state.containerRect && JSON.stringify([state.containerRect, state.scope]);
+        if (container !== previousContainer) observedMovement = false;
+        if (
+          container &&
+          container === previousContainer &&
+          state.fingerprint &&
+          previousFingerprint &&
+          state.fingerprint !== previousFingerprint
+        ) {
           observedMovement = true;
         }
-        previousFingerprint = state.fingerprint;
+        previousContainer = container;
+        previousFingerprint = container ? state.fingerprint : undefined;
         return { stop: false, fingerprint: state.fingerprint };
       },
       passLimit: params.passLimit ?? DEFAULT_SCROLL_UNTIL_PASSES,
@@ -192,7 +201,7 @@ function scrollUntilEdgeError(
 ): AppError {
   return new AppError(
     'COMMAND_FAILED',
-    `scroll ${direction} reached the end of the scrollable content after ${passes} passes without ${selector} becoming visible`,
+    `scroll ${direction} reached the end of the scrollable content after ${passes} ${passes === 1 ? 'pass' : 'passes'} without ${selector} becoming visible`,
     {
       reason: 'scroll_until_edge_reached',
       selector,
