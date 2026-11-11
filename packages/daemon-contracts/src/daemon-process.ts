@@ -80,9 +80,11 @@ export async function waitForDaemonExit(
   const hasExited = (): boolean => {
     if (!isProcessAlive(identity.pid)) return true;
     const observed = readHostProcessIdentityObservations([identity.pid]).get(identity.pid);
-    return Boolean(
-      observed?.state.startsWith('Z') ||
-      (observed?.startTime && observed.startTime !== identity.startTime),
+    return (
+      Boolean(
+        observed?.state.startsWith('Z') ||
+        (observed?.startTime && observed.startTime !== identity.startTime),
+      ) || !isProcessAlive(identity.pid)
     );
   };
   let exited = hasExited();
