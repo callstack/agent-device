@@ -26,6 +26,7 @@ const OVERLAY_KIND_FRAGMENTS = [
   'menu',
 ];
 const VIEWPORT_CHROME_KIND_FRAGMENTS = ['tabbar', 'toolbar', 'navigationbar'];
+const FLOATING_BAR_CONTAINER_ROLE = '_UIFloatingBarContainerView';
 /**
  * How far below the viewport top a full-viewport chrome container may start, before the 0.5pt rect
  * tolerance. On iOS 27 an app that draws a 2pt bar at the top gets a `_UIFloatingBarContainerView`
@@ -533,11 +534,10 @@ function isViewportAboveBottomBar(
   viewport: Rect,
   neighbourhood: NeighbourhoodIndex,
 ): boolean {
-  if (node.role !== '_UIFloatingBarContainerView' || typeof node.parentIndex !== 'number')
+  if (node.role !== FLOATING_BAR_CONTAINER_ROLE || typeof node.parentIndex !== 'number')
     return false;
   const bottom = rect.y + rect.height;
-  if (bottom <= viewport.y + viewport.height / 2 || bottom >= viewport.y + viewport.height)
-    return false;
+  if (bottom >= viewport.y + viewport.height) return false;
   if (!isViewportFootprint(rect, { ...viewport, height: bottom - viewport.y })) return false;
   const siblings = neighbourhood.childrenByParent.get(node.parentIndex) ?? [];
   const buttons = siblings.flatMap((sibling) => {

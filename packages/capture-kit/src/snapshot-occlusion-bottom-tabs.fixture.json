@@ -1,0 +1,158 @@
+[
+  {
+    "index": 0,
+    "type": "Application",
+    "role": "UIApplication",
+    "label": "e2e Benchmark",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "width": 402,
+      "height": 874
+    },
+    "enabled": true,
+    "depth": 0,
+    "hittable": false
+  },
+  {
+    "index": 1,
+    "parentIndex": 0,
+    "type": "StaticText",
+    "role": "RCTParagraphComponentView",
+    "subrole": "UIView",
+    "label": "Home",
+    "rect": {
+      "x": 177.3333282470703,
+      "y": 71,
+      "width": 47.333343505859375,
+      "height": 20.333335876464844
+    },
+    "enabled": true,
+    "depth": 1,
+    "hittable": true
+  },
+  {
+    "index": 2,
+    "parentIndex": 0,
+    "type": "StaticText",
+    "role": "RCTParagraphComponentView",
+    "subrole": "UIView",
+    "label": "Home",
+    "identifier": "home-tab-content",
+    "rect": {
+      "x": 173.3333282470703,
+      "y": 422.00000762939453,
+      "width": 55,
+      "height": 24
+    },
+    "enabled": true,
+    "depth": 1,
+    "hittable": true
+  },
+  {
+    "index": 3,
+    "parentIndex": 0,
+    "type": "StaticText",
+    "role": "RCTParagraphComponentView",
+    "subrole": "UIView",
+    "label": "Go to the Actions tab and press the button there.",
+    "rect": {
+      "x": 52.66666793823242,
+      "y": 454.00000762939453,
+      "width": 296.66668701171875,
+      "height": 15.666656494140625
+    },
+    "enabled": true,
+    "depth": 1,
+    "hittable": true
+  },
+  {
+    "index": 4,
+    "parentIndex": 0,
+    "type": "Toolbar",
+    "role": "_UIFloatingBarContainerView",
+    "label": "Toolbar",
+    "identifier": "Toolbar",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "width": 402,
+      "height": 791
+    },
+    "enabled": true,
+    "depth": 1,
+    "hittable": true
+  },
+  {
+    "index": 5,
+    "parentIndex": 0,
+    "type": "Button",
+    "role": "RCTViewComponentView",
+    "subrole": "UIView",
+    "label": "Home, tab, 1 of 3",
+    "identifier": "tab-home",
+    "rect": {
+      "x": 0,
+      "y": 791.3333333432674,
+      "width": 134,
+      "height": 48.66668701171875
+    },
+    "enabled": true,
+    "selected": true,
+    "depth": 1,
+    "hittable": true
+  },
+  {
+    "index": 6,
+    "parentIndex": 0,
+    "type": "Button",
+    "role": "RCTViewComponentView",
+    "subrole": "UIView",
+    "label": "Feed, tab, 2 of 3",
+    "identifier": "tab-feed",
+    "rect": {
+      "x": 134,
+      "y": 791.3333333432674,
+      "width": 134,
+      "height": 48.66668701171875
+    },
+    "enabled": true,
+    "depth": 1,
+    "hittable": true
+  },
+  {
+    "index": 7,
+    "parentIndex": 0,
+    "type": "Button",
+    "role": "RCTViewComponentView",
+    "subrole": "UIView",
+    "label": "Actions, tab, 3 of 3",
+    "identifier": "tab-actions",
+    "rect": {
+      "x": 268,
+      "y": 791.3333333432674,
+      "width": 134,
+      "height": 48.66668701171875
+    },
+    "enabled": true,
+    "depth": 1,
+    "hittable": true
+  },
+  {
+    "index": 8,
+    "parentIndex": 0,
+    "type": "Toolbar",
+    "role": "_UIFloatingBarContainerView",
+    "label": "Toolbar",
+    "identifier": "Toolbar",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "width": 402,
+      "height": 874
+    },
+    "enabled": true,
+    "depth": 1,
+    "hittable": true
+  }
+]
