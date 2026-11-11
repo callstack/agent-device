@@ -93,6 +93,7 @@ test.each([
             assert.ok(error instanceof AppError);
             assert.equal(error.details?.reason, 'scroll_until_pass_limit');
             assert.equal(error.details?.passes, maxPasses);
+            assert.match(String(error.message), /without text=Terms becoming visible/);
             return true;
           });
         } else {
@@ -105,7 +106,7 @@ test.each([
   },
 );
 
-test('Provider-backed integration scroll --until reports the end of the content as a typed failure', async () => {
+test('Provider-backed integration scroll --until reports unchanged content as no progress', async () => {
   await withProviderScenarioResource(
     async () =>
       await createAndroidSettingsWorld({
@@ -125,7 +126,9 @@ test('Provider-backed integration scroll --until reports the end of the content 
           }),
         (error: unknown) => {
           assert.ok(error instanceof AppError);
-          assert.match(String(error.message), /without text=NeverPresent becoming visible/);
+          assert.equal(error.details?.reason, 'scroll_until_no_progress');
+          assert.equal(error.details?.passes, 3);
+          assert.match(String(error.message), /moved nothing across 3 passes/);
           return true;
         },
       );
