@@ -2,6 +2,9 @@ import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import { canonicalLocalDeviceKey } from '@agent-device/daemon-contracts/device-claims';
 import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
@@ -33,9 +36,10 @@ const android: DeviceInfo = {
 function selectionHandler(
   devices: readonly DeviceInfo[],
   inventoryRequests: Array<{ platform?: string; androidAvdSelection?: string }>,
+  deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = lifecycleDeviceRuntimeGateway,
 ) {
   const sessionStore = makeSessionStore('agent-device-router-selection-');
-  const inspectFacts = vi.fn(lifecycleDeviceRuntimeGateway.inspectFacts);
+  const inspectFacts = vi.fn(deviceRuntimeGateway.inspectFacts);
   const handler = createRequestHandler({
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
@@ -51,7 +55,7 @@ function selectionHandler(
           : devices;
       },
     }),
-    deviceRuntimeGateway: { ...lifecycleDeviceRuntimeGateway, inspectFacts },
+    deviceRuntimeGateway: { ...deviceRuntimeGateway, inspectFacts },
     platformServices: daemonPlatformServicesFixture({
       appleSessionObservation: {
         observeRunnerSession: async () => undefined,
@@ -82,7 +86,7 @@ test('fresh no-app foreground open selects iOS from mixed Android and iOS invent
   expect(sessionStore.get('foreground')?.device.id).toBe(ios.id);
 });
 
-test.each(['boot', 'shutdown', 'capabilities', 'apps'] as const)(
+test.each(['boot', 'shutdown', 'capabilities', 'apps', 'open'] as const)(
   '%s keeps stopped-AVD selection consistent through request admission',
   async (command) => {
     const inventoryRequests: Array<{ platform?: string; androidAvdSelection?: string }> = [];
@@ -116,3 +120,50 @@ test.each(['boot', 'shutdown', 'capabilities', 'apps'] as const)(
     expect(inspectFacts).toHaveBeenCalledTimes(factsBeforeInvalid);
   },
 );
+
+/** The lifecycle gateway plus a local readiness operation that boots a stopped AVD to `booted`. */
+function bootingLifecycleGateway(booted: DeviceInfo) {
+  const ensureReady = vi.fn(async () => booted);
+  const ready = Object.freeze({ available: true as const });
+  const gateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
+    inspectFacts: async (device) => {
+      const facts = await lifecycleDeviceRuntimeGateway.inspectFacts(device);
+      return { ...facts, operations: { ...facts.operations, ensureReady: ready } };
+    },
+    bind: async (request) => {
+      const binding = await lifecycleDeviceRuntimeGateway.bind(request);
+      return {
+        ...binding,
+        facts: {
+          ...binding.facts,
+          operations: { ...binding.facts.operations, ensureReady: ready },
+        },
+        operations: { ...binding.operations, ensureReady },
+      };
+    },
+    shutdown: async () => {},
+  };
+  return { gateway, ensureReady };
+}
+
+test('open boots a stopped AVD and keys the session and its claim on the booted serial', async () => {
+  const inventoryRequests: Array<{ platform?: string; androidAvdSelection?: string }> = [];
+  const stopped = { ...android, id: android.name, booted: false };
+  const { gateway, ensureReady } = bootingLifecycleGateway(android);
+  const { handler, sessionStore } = selectionHandler([stopped], inventoryRequests, gateway);
+
+  const opened = await handler({
+    token: 'test-token',
+    session: 'cold-avd',
+    command: 'open',
+    positionals: ['com.android.settings'],
+    flags: { platform: 'android', device: stopped.name },
+    meta: { requestId: 'open-cold-avd' },
+  });
+
+  expect(opened).toMatchObject({ ok: true });
+  expect(ensureReady).toHaveBeenCalledTimes(1);
+  const session = sessionStore.get('cold-avd');
+  expect(session?.device).toMatchObject({ id: android.id, booted: true });
+  expect(session?.deviceClaim?.deviceKey).toBe(canonicalLocalDeviceKey(android));
+});

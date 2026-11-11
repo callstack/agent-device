@@ -5,7 +5,7 @@ import {
   normalizeFreshForegroundOpenSelection,
 } from '../core/device/device-selector-intent.ts';
 import { applyRequestLockPolicy } from './request-lock-policy.ts';
-import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
+import { resolveOpenTargetDeviceOptions } from '../core/open-target-device-resolution.ts';
 import { buildReplayTargetDeviceResolution } from './replay-device-selection.ts';
 import type { SessionStore } from '../core/session-store.ts';
 import { hostAndDeviceIds, type DeviceInfo } from '@agent-device/kernel/device';
@@ -99,7 +99,7 @@ async function resolveFreshSessionDeviceLock(
 ): Promise<
   | {
       flags: NonNullable<DaemonRequest['flags']>;
-      options: ReturnType<typeof buildOpenTargetDeviceResolutionOptions> | undefined;
+      options: ReturnType<typeof resolveOpenTargetDeviceOptions> | undefined;
     }
   | undefined
 > {
@@ -135,12 +135,7 @@ async function resolveFreshSessionDevice(
 }
 
 function resolveOpenDeviceLock(req: DaemonRequest, env: EnvMap) {
-  const options = buildOpenTargetDeviceResolutionOptions(
-    req.positionals?.[0],
-    env,
-    req.flags?.surface,
-  );
-  return options ? { flags: req.flags ?? {}, options } : undefined;
+  return { flags: req.flags ?? {}, options: resolveOpenTargetDeviceOptions(req, env) };
 }
 
 async function resolveReplayDeviceLock(req: DaemonRequest, env: EnvMap) {

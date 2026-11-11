@@ -4,7 +4,7 @@ import {
   hasDeviceSelectionInput,
   hasExplicitDeviceSelector,
 } from '../core/device/device-selector-intent.ts';
-import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
+import { resolveOpenTargetDeviceOptions } from '../core/open-target-device-resolution.ts';
 import {
   resolveCommandAndroidAvdSelection,
   resolveProviderDeviceResolutionIntent,
@@ -83,7 +83,7 @@ async function resolveProviderTargetDevice(
 ): Promise<SessionState['device']> {
   const options =
     req.command === 'open'
-      ? buildOpenTargetDeviceResolutionOptions(req.positionals?.[0], env, req.flags?.surface)
+      ? resolveOpenTargetDeviceOptions(req, env)
       : { env, androidAvdSelection: resolveCommandAndroidAvdSelection(req.command) };
   // Deferred to keep the daemon's eager closure within scripts/__tests__/eager-closure-budgets.ts.
   const { resolveRequestTargetDevice } = await import('../core/request-device-resolution.ts');

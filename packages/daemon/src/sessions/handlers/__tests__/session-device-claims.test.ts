@@ -146,8 +146,7 @@ const android: DeviceInfo = {
 
 test('failed local open before device setup rolls its device claim back', async () => {
   const { store, stateDir } = setup();
-  const stoppedAvd = { ...android, id: 'pixel-avd', booted: false };
-  mockResolveTargetDevice.mockResolvedValue(stoppedAvd);
+  mockResolveTargetDevice.mockResolvedValue(android);
   // The point of this test is claim-rollback behavior around an opaque pre-device-effect
   // failure, not any particular error shape, so assert identity of the propagated error.
   // Readiness is package-owned, so the failure is injected at the lifecycle port's prepare
@@ -174,7 +173,7 @@ test('failed local open before device setup rolls its device claim back', async 
       }),
     (error: unknown) => error === rejectionError,
   );
-  assert.deepEqual(inspectDeviceClaims({ serial: stoppedAvd.id }, process.env), []);
+  assert.deepEqual(inspectDeviceClaims({ serial: android.id }, process.env), []);
 });
 
 test('failed local open after dispatch retains its device claim for recovery', async () => {

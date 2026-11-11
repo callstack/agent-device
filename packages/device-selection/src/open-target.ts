@@ -6,10 +6,12 @@ export function buildOpenTargetDeviceResolutionOptions(
   openTarget: string | undefined,
   env: EnvMap,
   surfaceFlag: string | undefined,
+  androidAvdSelection: ResolveTargetDeviceOptions['androidAvdSelection'],
 ): ResolveTargetDeviceOptions {
   const appTarget = appleSimulatorAppTargetForOpenTarget(openTarget);
   return {
     env,
+    androidAvdSelection,
     appleSimulatorAppTarget: appTarget,
     // An app named on any other surface stays on the host: those surfaces reach past one app.
     ...(appTarget && (surfaceFlag === undefined || surfaceFlag === 'app')

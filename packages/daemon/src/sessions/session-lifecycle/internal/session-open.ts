@@ -18,7 +18,9 @@ import { refreshSessionDeviceIfNeeded } from '../../../resources/session-device-
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
 import { requestWebSession } from '../../../core/session-tenant-scope.ts';
 import { isWebSession } from '../../web-session-names.ts';
-import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
+import { resolveOpenTargetDeviceOptions } from '../../../core/open-target-device-resolution.ts';
+import { bootStoppedLocalAndroidDevice } from '../../../core/stopped-local-android-device.ts';
+import { startupDeadlineAtMs } from '../../startup-deadline.ts';
 import {
   invalidOpenArgs,
   prepareOpenCommandDetails,
@@ -365,15 +367,14 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
   });
   if (preResolvedValidation) return { type: 'response', response: preResolvedValidation };
 
-  const selection = await resolveRequestTargetDeviceSelection(
+  const resolved = await resolveRequestTargetDeviceSelection(
     req,
-    buildOpenTargetDeviceResolutionOptions(openTarget, params.host.env, req.flags?.surface),
+    resolveOpenTargetDeviceOptions(req, params.host.env),
   );
-  const device = selection.device;
-  await req.internal?.retainDeviceExecutionLock?.(device.id);
+  await req.internal?.retainDeviceExecutionLock?.(resolved.device.id);
   const surfaceResult = resolveOpenSurfaceResponse(
     params.platformServices,
-    device,
+    resolved.device,
     req.flags?.surface,
     openTarget,
   );
@@ -383,22 +384,40 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     shouldRelaunch,
     openTarget,
     surface: surfaceResult,
-    device,
+    device: resolved.device,
     platformServices: params.platformServices,
   });
   if (validation) return { type: 'response', response: validation };
 
-  const runtimePlanAdmission = await resolveOpenRuntimePlanAdmission({
-    req,
-    sessionStore,
-    sessionName,
-    device,
-    inspectFacts: params.inspectFacts,
-    platformServices: params.platformServices,
-    bindDevice: params.bindDevice,
-  });
+  const admitDevice = async (device: DeviceInfo) =>
+    await resolveOpenRuntimePlanAdmission({
+      req,
+      sessionStore,
+      sessionName,
+      device,
+      inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
+      bindDevice: params.bindDevice,
+    });
+  let runtimePlanAdmission = await admitDevice(resolved.device);
   if (runtimePlanAdmission.type === 'response')
     return { type: 'response', response: runtimePlanAdmission.response };
+  // A stopped AVD boots before the session claim and the open locks, so the session, its claim
+  // and its locks all key on the booted serial rather than the AVD name.
+  const booted = await bootStoppedLocalAndroidDevice({
+    device: resolved.device,
+    owner: runtimePlanAdmission.admission.runtime.owner,
+    bindDevice: requireRuntimeBinding(params.bindDevice),
+    input: { deadlineAtMs: startupDeadlineAtMs(req.flags?.timeoutMs) },
+  });
+  const selection = booted ? { ...resolved, device: booted } : resolved;
+  const device = selection.device;
+  if (booted) {
+    await req.internal?.retainDeviceExecutionLock?.(device.id);
+    runtimePlanAdmission = await admitDevice(device);
+    if (runtimePlanAdmission.type === 'response')
+      return { type: 'response', response: runtimePlanAdmission.response };
+  }
   const { admission, runtimeHintPlan } = runtimePlanAdmission;
 
   return await withKeyedLock(

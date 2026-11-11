@@ -103,6 +103,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
 export const defineUse = runtimeUse<PlatformRuntimeOperations>();
 
 export const bootTargetUse = defineUse({ required: ['bootTarget'] });
+export const ensureReadyUse = defineUse({ required: ['ensureReady'] });
 export const bootTargetHeadlessUse = defineUse({
   required: ['bootTargetHeadless'],
 });
