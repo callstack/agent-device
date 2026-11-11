@@ -17,48 +17,76 @@ import {
   type PullCall,
 } from './android-recording-provider-fixtures.ts';
 
-test('Provider-backed integration Android record start and stop use the composed scoped runtime', async () => {
-  await withAndroidRecordingScenario(
-    'agent-device-provider-scenario-android-record-',
-    async (tmpDir) => {
-      const calls: string[][] = [];
-      const pulls: PullCall[] = [];
-      const outputPath = path.join(tmpDir, 'sessionless.mp4');
-      const daemon = await createAndroidRecordingScenarioHarness(
-        {
-          androidAdbProvider: () => createAndroidRecordingProvider({ calls, pulls }),
-          deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
-        },
-        tmpDir,
-      );
-      try {
-        const started = await daemon.callCommand('record', ['start', outputPath], {
-          platform: 'android',
-          serial: PROVIDER_SCENARIO_ANDROID.id,
-          recordingScope: 'device',
-          quality: 'high',
-        });
-        assert.equal(assertRpcOk<{ recording?: unknown }>(started).recording, 'started');
-        const stopped = await stopAndroidRecording(daemon, outputPath);
-        assert.equal(
-          assertRpcOk<{ recording?: unknown; outPath?: unknown }>(stopped).recording,
-          'stopped',
+test.each(['running', 'zombie'] as const)(
+  'Provider-backed integration Android record start and stop with a %s recorder',
+  async (state) => {
+    await withAndroidRecordingScenario(
+      'agent-device-provider-scenario-android-record-',
+      async (tmpDir) => {
+        const calls: string[][] = [];
+        const pulls: PullCall[] = [];
+        const outputPath = path.join(tmpDir, 'sessionless.mp4');
+        const provider = createAndroidRecordingProvider({ calls, pulls });
+        let exited = false;
+        const daemon = await createAndroidRecordingScenarioHarness(
+          {
+            androidAdbProvider: () => ({
+              exec: async (args, options) => {
+                const command = args.join(' ');
+                if (
+                  exited &&
+                  (command === 'shell cat /proc/4321/stat' ||
+                    command === 'shell cat /proc/4321/cmdline')
+                ) {
+                  calls.push([...args]);
+                  return {
+                    stdout: command.endsWith('/stat')
+                      ? '4321 (screenrecord) Z 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 101'
+                      : '',
+                    stderr: '',
+                    exitCode: 0,
+                  };
+                }
+                return await provider.exec(args, options);
+              },
+            }),
+            deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+          },
+          tmpDir,
         );
-        assert.equal(assertRpcOk<{ outPath?: unknown }>(stopped).outPath, outputPath);
-        assert.ok(calls.some((args) => args[1]?.startsWith('screenrecord --bit-rate 20000000 ')));
-        assert.ok(calls.some((args) => args.join(' ') === 'shell kill -2 4321'));
-        assert.equal(pulls.length, 1);
-        // The recorder's chunks land on a collected sibling and the caller's path is written from a
-        // copy of them, which is what lets a failed stop leave the export absent (ADR 0024 2.3).
-        assert.equal(pulls[0]?.localPath, collectedRecordingPath(outputPath));
-        assert.equal(fs.existsSync(outputPath), true);
-        assert.equal(fs.existsSync(collectedRecordingPath(outputPath)), false);
-      } finally {
-        await daemon.close();
-      }
-    },
-  );
-});
+        try {
+          const started = await daemon.callCommand('record', ['start', outputPath], {
+            platform: 'android',
+            serial: PROVIDER_SCENARIO_ANDROID.id,
+            recordingScope: 'device',
+            quality: 'high',
+          });
+          assert.equal(assertRpcOk<{ recording?: unknown }>(started).recording, 'started');
+          exited = state === 'zombie';
+          const stopped = await stopAndroidRecording(daemon, outputPath);
+          assert.equal(
+            assertRpcOk<{ recording?: unknown; outPath?: unknown }>(stopped).recording,
+            'stopped',
+          );
+          assert.equal(assertRpcOk<{ outPath?: unknown }>(stopped).outPath, outputPath);
+          assert.ok(calls.some((args) => args[1]?.startsWith('screenrecord --bit-rate 20000000 ')));
+          assert.equal(
+            calls.some((args) => args.join(' ') === 'shell kill -2 4321'),
+            state === 'running',
+          );
+          assert.equal(pulls.length, 1);
+          // The recorder's chunks land on a collected sibling and the caller's path is written from a
+          // copy of them, which is what lets a failed stop leave the export absent (ADR 0024 2.3).
+          assert.equal(pulls[0]?.localPath, collectedRecordingPath(outputPath));
+          assert.equal(fs.existsSync(outputPath), true);
+          assert.equal(fs.existsSync(collectedRecordingPath(outputPath)), false);
+        } finally {
+          await daemon.close();
+        }
+      },
+    );
+  },
+);
 
 test('Provider-backed integration Android record stop reattaches a matching durable descriptor', async () => {
   await withAndroidRecordingScenario(

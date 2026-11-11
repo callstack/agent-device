@@ -167,21 +167,32 @@ async function inspectAndroidScreenRecordingProcess(
 > {
   const presence = await probeAndroidProcessPresence(shell, expected.pid, signal);
   if (presence !== 'present') return { status: presence };
-  const stat = await shell(['cat', `/proc/${expected.pid}/stat`], signal);
-  if (stat.exitCode !== 0) return { status: 'uncertain' };
-  const startTime = parseProcStartTime(stat.stdout);
-  if (!startTime) return { status: 'uncertain' };
   const command = await shell(['cat', `/proc/${expected.pid}/cmdline`], signal);
-  if (command.exitCode !== 0) return { status: 'uncertain' };
+  const stat = await shell(['cat', `/proc/${expected.pid}/stat`], signal);
+  if (stat.exitCode !== 0 || command.exitCode !== 0) {
+    return {
+      status:
+        (await probeAndroidProcessPresence(shell, expected.pid, signal)) === 'missing'
+          ? 'missing'
+          : 'uncertain',
+    };
+  }
+  const identity = parseProcIdentity(stat.stdout);
+  if (!identity) return { status: 'uncertain' };
+  if (identity.state === 'Z') return { status: 'missing' };
   if (!matchesScreenRecordingCommand(command.stdout, expected.remotePath)) {
     return { status: 'ownership-lost' };
   }
-  if (expected.startTime.length > 0 && expected.startTime !== startTime) {
+  if (expected.startTime.length > 0 && expected.startTime !== identity.startTime) {
     return { status: 'foreign-writer' };
   }
   return {
     status: 'owned-alive',
-    process: Object.freeze({ pid: expected.pid, remotePath: expected.remotePath, startTime }),
+    process: Object.freeze({
+      pid: expected.pid,
+      remotePath: expected.remotePath,
+      startTime: identity.startTime,
+    }),
   };
 }
 
@@ -205,7 +216,7 @@ function matchesScreenRecordingCommand(commandLine: string, remotePath: string):
   );
 }
 
-function parseProcStartTime(stat: string): string | undefined {
+function parseProcIdentity(stat: string) {
   const close = stat.lastIndexOf(')');
   if (close < 0) return undefined;
   const fieldsAfterCommand = stat
@@ -213,5 +224,7 @@ function parseProcStartTime(stat: string): string | undefined {
     .trim()
     .split(/\s+/);
   const startTime = fieldsAfterCommand[19];
-  return startTime && /^\d+$/.test(startTime) ? startTime : undefined;
+  return startTime && /^\d+$/.test(startTime)
+    ? { startTime, state: fieldsAfterCommand[0] }
+    : undefined;
 }
