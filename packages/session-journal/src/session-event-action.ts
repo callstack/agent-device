@@ -323,6 +323,7 @@ const SAFE_ACTION_FLAG_SPECS: Record<string, SafeFlagSpec> = {
     booleans: [
       { source: 'overlayRefs' },
       { source: 'screenshotFullscreen', output: 'fullscreen' },
+      { source: 'screenshotNativeDensity', output: 'nativeDensity' },
       { source: 'screenshotNoStabilize', output: 'noStabilize' },
       { source: 'screenshotNormalizeStatusBar', output: 'normalizeStatusBar' },
     ],

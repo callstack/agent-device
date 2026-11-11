@@ -176,3 +176,30 @@ test.each([undefined, 'black'] as const)(
     );
   },
 );
+
+test('native density keeps captured pixels and reports the measured scale', async () => {
+  const tmpDir = await mkdtempForTest('agent-device-native-density-');
+  const outPath = path.join(tmpDir, 'screen.png');
+  const sourcePng = PNG.sync.write(new PNG({ width: 126, height: 273 }));
+  await withFakeAppleTool(
+    (args) => {
+      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
+      if (isSimctlMainScreenScale(args)) return '3\n';
+      if (isSimctlScreenshot(args)) {
+        writeFileSync(args.at(-1) ?? '', sourcePng);
+        return '';
+      }
+      return unexpectedArgs(args);
+    },
+    async () => {
+      const facts = await screenshotIos(IOS_TEST_SIMULATOR, outPath, {
+        env: {},
+        nativeDensity: true,
+      });
+      const png = PNG.sync.read(await fs.readFile(outPath));
+      assert.equal(png.width, 126);
+      assert.equal(png.height, 273);
+      assert.equal(facts.sourcePixelDensity, 3);
+    },
+  );
+});

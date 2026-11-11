@@ -99,6 +99,7 @@ export const SCREENSHOT_COMMAND_FLAG_KEYS = [
   'screenshotCropOn',
   'screenshotPixelDensity',
   'screenshotScreenMask',
+  'screenshotNativeDensity',
   'screenshotFullscreen',
   'screenshotScale',
   'screenshotNoStabilize',
@@ -110,6 +111,7 @@ export const SCREENSHOT_ACTION_FLAG_KEYS = [
   'screenshotCropOn',
   'screenshotPixelDensity',
   'screenshotScreenMask',
+  'screenshotNativeDensity',
   'screenshotFullscreen',
   'screenshotScale',
   'screenshotNoStabilize',
@@ -166,6 +168,16 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     recorded: true,
   },
   {
+    key: 'screenshotNativeDensity',
+    names: ['--native-density'],
+    type: 'boolean',
+    usageLabel: '--native-density',
+    usageDescription:
+      "Screenshot: keep the display's own pixels instead of 1x points (currently supported on iOS simulators)",
+    projectConfig: true,
+    recorded: true,
+  },
+  {
     key: 'screenshotFullscreen',
     names: ['--fullscreen', '--full', '-f'],
     type: 'boolean',
@@ -214,7 +226,7 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     enumValues: SCREENSHOT_CAPTURE_BACKENDS,
     usageLabel: '--capture-backend runner',
     usageDescription:
-      'Screenshot: on Apple targets capture through the XCTest runner (XCUIScreen), which leaves out the simulator-drawn Dynamic Island, instead of simctl; refused on other platforms, provider sessions and macOS surfaces the helper captures, and with --pixel-density, --screen-mask and --normalize-status-bar',
+      'Screenshot: on Apple targets capture through the XCTest runner (XCUIScreen), which leaves out the simulator-drawn Dynamic Island, instead of simctl; refused on other platforms, provider sessions and macOS surfaces the helper captures, and with --pixel-density, --native-density, --screen-mask and --normalize-status-bar',
     projectConfig: true,
     recorded: false,
   },
@@ -224,6 +236,7 @@ const SCREENSHOT_SCRIPT_BOOLEAN_FLAGS = [
   { tokens: ['--fullscreen', '--full', '-f'], key: 'screenshotFullscreen' },
   { tokens: ['--no-stabilize'], key: 'screenshotNoStabilize' },
   { tokens: ['--normalize-status-bar'], key: 'screenshotNormalizeStatusBar' },
+  { tokens: ['--native-density'], key: 'screenshotNativeDensity' },
 ] as const;
 
 const SCREENSHOT_SCRIPT_INT_FLAGS = [
@@ -258,6 +271,7 @@ export type ScreenshotRequestFlags = {
   screenshotCropOn?: string;
   screenshotPixelDensity?: number;
   screenshotScreenMask?: ScreenshotScreenMask;
+  screenshotNativeDensity?: boolean;
   screenshotFullscreen?: boolean;
   screenshotScale?: number;
   screenshotNoStabilize?: boolean;
@@ -269,6 +283,7 @@ export type ScreenshotDispatchFlags = Pick<
   ScreenshotRequestFlags,
   | 'screenshotPixelDensity'
   | 'screenshotScreenMask'
+  | 'screenshotNativeDensity'
   | 'screenshotFullscreen'
   | 'screenshotNoStabilize'
   | 'screenshotNormalizeStatusBar'
@@ -280,6 +295,7 @@ export type ScreenshotRuntimeFlags = Pick<
   | 'screenshotCropOn'
   | 'screenshotPixelDensity'
   | 'screenshotScreenMask'
+  | 'screenshotNativeDensity'
   | 'screenshotFullscreen'
   | 'screenshotScale'
   | 'screenshotNoStabilize'
@@ -291,6 +307,7 @@ export type ScreenshotPublicOptions = {
   overlayRefs?: boolean;
   cropOn?: string;
   pixelDensity?: number;
+  nativeDensity?: boolean;
   screenMask?: ScreenshotScreenMask;
   fullscreen?: boolean;
   scale?: number;
@@ -303,6 +320,7 @@ export type ScreenshotRuntimeOptions = {
   overlayRefs?: boolean;
   cropOn?: string;
   pixelDensity?: number;
+  nativeDensity?: boolean;
   screenMask?: ScreenshotScreenMask;
   fullscreen?: boolean;
   scale?: number;
@@ -318,6 +336,7 @@ export function screenshotOptionsFromFlags(
     overlayRefs: flags?.overlayRefs,
     cropOn: flags?.screenshotCropOn,
     pixelDensity: flags?.screenshotPixelDensity,
+    nativeDensity: flags?.screenshotNativeDensity,
     screenMask: readScreenshotScreenMask(flags?.screenshotScreenMask),
     fullscreen: flags?.screenshotFullscreen,
     scale: flags?.screenshotScale,
@@ -335,6 +354,7 @@ export function screenshotFlagsFromOptions(
     overlayRefs: options.overlayRefs,
     screenshotCropOn: options.screenshotCropOn ?? options.cropOn,
     screenshotPixelDensity: options.screenshotPixelDensity ?? options.pixelDensity,
+    screenshotNativeDensity: options.screenshotNativeDensity ?? options.nativeDensity,
     screenshotScreenMask: readScreenshotScreenMask(
       options.screenshotScreenMask ?? options.screenMask,
     ),
@@ -383,6 +403,7 @@ export function appendScreenshotScriptFlags(
   if (flags?.screenshotScreenMask !== undefined) {
     parts.push('--screen-mask', readScreenshotScreenMask(flags.screenshotScreenMask)!);
   }
+  if (flags?.screenshotNativeDensity) parts.push('--native-density');
   if (flags?.screenshotFullscreen) parts.push('--fullscreen');
   if (typeof flags?.screenshotScale === 'number') {
     parts.push('--scale', String(flags.screenshotScale));

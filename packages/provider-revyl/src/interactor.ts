@@ -306,6 +306,7 @@ class RevylInteractor implements Interactor {
         png,
         this.signal === undefined ? {} : { signal: this.signal },
       );
+      // A native capture keeps the pixels Revyl returned, so only a numeric density resamples.
       if (this.session.platform === 'ios') {
         await normalizeRevylIosDensity(temporaryPath, this.session.screen, options?.pixelDensity);
       }

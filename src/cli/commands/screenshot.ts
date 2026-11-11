@@ -124,6 +124,7 @@ function createClientScreenshotBackend(
         session: context.session,
         overlayRefs: options?.overlayRefs,
         pixelDensity: options?.pixelDensity,
+        nativeDensity: options?.nativeDensity,
         fullscreen: options?.fullscreen,
         normalizeStatusBar: options?.normalizeStatusBar,
         screenMask: options?.screenMask,

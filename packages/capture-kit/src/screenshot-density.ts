@@ -15,11 +15,17 @@ const DEFAULT_SCREENSHOT_PIXEL_DENSITY = 1;
 export function assertSupportedScreenshotPixelDensity(
   device: ScreenshotDensityDevice,
   pixelDensity: number | undefined,
+  nativeDensity?: boolean,
 ): void {
-  if (pixelDensity === undefined || supportsScreenshotPixelDensity(device)) return;
+  if (nativeDensity && pixelDensity !== undefined) {
+    throw new AppError('INVALID_ARGS', 'Use either --pixel-density or --native-density');
+  }
+  if ((pixelDensity === undefined && !nativeDensity) || supportsScreenshotPixelDensity(device)) {
+    return;
+  }
   throw new AppError(
     'UNSUPPORTED_OPERATION',
-    '--pixel-density is currently supported only on iOS-family simulators',
+    '--pixel-density and --native-density are currently supported only on iOS-family simulators',
   );
 }
 
@@ -41,6 +47,8 @@ export async function readScreenshotResultMetadata(params: {
   device: ScreenshotDensityDevice;
   path: string;
   requestedPixelDensity: number | undefined;
+  nativeDensity?: boolean;
+  sourcePixelDensity?: number;
   scale: number | undefined;
 }): Promise<ScreenshotResultData> {
   const requiresDensityMetadata = supportsScreenshotPixelDensity(params.device);
@@ -59,7 +67,10 @@ export async function readScreenshotResultMetadata(params: {
     return result;
   }
 
-  const pixelDensity = resolveScreenshotPixelDensity(params.requestedPixelDensity);
+  const pixelDensity = params.nativeDensity
+    ? params.sourcePixelDensity
+    : resolveScreenshotPixelDensity(params.requestedPixelDensity);
+  if (pixelDensity === undefined) return result;
   return {
     ...result,
     logicalWidth: Math.round(size.width / pixelDensity),

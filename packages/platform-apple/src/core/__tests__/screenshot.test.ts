@@ -978,3 +978,22 @@ test('screenshotIos rejects a screen mask before a provider-owned runner capture
   assert.equal(mockRunCmd.mock.calls.length, 0);
   assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });
+
+test('native density rejects a runner fallback that did not measure its scale', async () => {
+  await assert.rejects(
+    captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
+      env: process.env,
+      nativeDensity: true,
+      skipIosSimulatorBootCheck: true,
+      deps: {
+        resolveCaptureTarget: async () => ({}),
+        captureWithRetry: async () => {
+          throw new Error('capture failed');
+        },
+        shouldFallbackToRunner: () => true,
+        captureWithRunner: async () => undefined,
+      },
+    }),
+    { code: 'UNSUPPORTED_OPERATION', details: { reason: 'screenshot-native-density-unsupported' } },
+  );
+});

@@ -37,6 +37,7 @@ export type ScreenshotRuntimeOperations = Readonly<{
 
 export type ScreenshotCaptureCapabilities = Readonly<{
   screenMask?: boolean;
+  nativeDensity?: boolean;
   /** The backends a request can select on this owner; an absent list selects none. */
   captureBackends?: readonly ScreenshotCaptureBackend[];
   /** Why this owner cannot serve a selected backend. */
@@ -65,6 +66,13 @@ export async function assertScreenshotCaptureSupport(
       'UNSUPPORTED_OPERATION',
       `--capture-backend ${backend} is not supported: ${capabilities.captureBackendRefusal ?? 'this capture owner declares no such backend'}`,
       { reason: 'screenshot-capture-backend-unsupported' },
+    );
+  }
+  if (options?.nativeDensity && capabilities.nativeDensity !== true) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      '--native-density requires a capture that reports its pixel density',
+      { reason: 'screenshot-native-density-unsupported' },
     );
   }
   if (options?.screenMask === undefined) return;

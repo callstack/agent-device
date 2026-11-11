@@ -140,3 +140,38 @@ test('the shape the daemon passes for a Maestro preference selects the runner on
 
   expect(screenshot.mock.lastCall?.[1]).toEqual({ captureBackend: 'runner' });
 });
+
+test.each([
+  [simulator, {}, true],
+  [simulator, { captureBackend: 'runner' }, false],
+  [{ ...simulator, kind: 'device' }, {}, false],
+  [{ ...simulator, appleOs: 'tvos', target: 'tv' }, {}, false],
+] satisfies [DeviceInfo, Partial<ScreenshotOptions>, boolean][])(
+  'native density is admitted only for a reporting Apple capture: %j %j',
+  async (device, options, supported) => {
+    const screenshot = vi.fn(async () => ({ sourcePixelDensity: 3 }));
+    const host = {
+      ...platformRuntimeHostFixture(),
+      localInteractors: { resolve: async () => ({ screenshot }) as unknown as Interactor },
+    };
+    const binding = await createApplePlatformRuntime(host).bind({
+      device,
+      intent: { kind: 'ordinary' },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+    const result = binding.operations.captureScreenshot!({
+      outPath: '/tmp/native.png',
+      options: { ...options, nativeDensity: true },
+    });
+    if (supported) await expect(result).resolves.toEqual({ sourcePixelDensity: 3 });
+    else
+      await expect(result).rejects.toMatchObject({
+        code: 'UNSUPPORTED_OPERATION',
+        details: { reason: 'screenshot-native-density-unsupported' },
+      });
+  },
+);

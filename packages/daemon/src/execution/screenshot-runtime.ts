@@ -64,7 +64,11 @@ export async function resolveScreenshotGenericExecution(
   const { req, session } = params;
   const retiredMaxSize = retiredScreenshotMaxSizeFlagError('screenshot', req.flags);
   if (retiredMaxSize) throw new AppError('INVALID_ARGS', retiredMaxSize);
-  assertSupportedScreenshotPixelDensity(session.device, req.flags?.screenshotPixelDensity);
+  assertSupportedScreenshotPixelDensity(
+    session.device,
+    req.flags?.screenshotPixelDensity,
+    req.flags?.screenshotNativeDensity,
+  );
   assertSupportedScreenshotCaptureBackend(req.flags);
 
   const request = readScreenshotRequest(req, params.hostCwd);
@@ -156,6 +160,7 @@ export async function captureScreenshotArtifact(
 type CapturedScreenshot = Readonly<{
   path: string;
   displayRotation?: DeviceRotation;
+  sourcePixelDensity?: number;
   message?: string;
   warnings?: string[];
 }>;
@@ -230,6 +235,8 @@ async function executeScreenshot(
       device: session.device,
       path: captured.path,
       requestedPixelDensity: flags?.screenshotPixelDensity,
+      nativeDensity: flags?.screenshotNativeDensity,
+      sourcePixelDensity: captured.sourcePixelDensity,
       scale: flags?.screenshotScale,
     })),
   };
@@ -329,10 +336,14 @@ function assertSupportedScreenshotCaptureBackend(flags: DaemonRequest['flags']):
       `--capture-backend takes ${SCREENSHOT_CAPTURE_BACKENDS.join(', ')}`,
     );
   }
-  if (flags?.screenshotPixelDensity !== undefined || flags?.screenshotNormalizeStatusBar) {
+  if (
+    flags?.screenshotPixelDensity !== undefined ||
+    flags?.screenshotNativeDensity ||
+    flags?.screenshotNormalizeStatusBar
+  ) {
     throw new AppError(
       'INVALID_ARGS',
-      '--pixel-density and --normalize-status-bar cannot be combined with --capture-backend runner: they belong to the simctl capture',
+      '--pixel-density, --native-density and --normalize-status-bar cannot be combined with --capture-backend runner: they belong to the simctl capture',
     );
   }
 }
@@ -375,13 +386,14 @@ function createBoundScreenshotBackend(
     captureScreenshot: async (_context, outPath, options) => {
       const resolved = screenshotOptionsFromFlags({
         ...dispatchContext,
-        ...screenshotFlagsFromOptions(options),
+        ...screenshotFlagsFromOptions(options ?? {}),
       });
       const facts = await captureScreenshot({
         outPath,
         options: {
           appBundleId: dispatchContext.appBundleId,
           pixelDensity: resolved.pixelDensity,
+          nativeDensity: resolved.nativeDensity,
           screenMask: resolved.screenMask,
           fullscreen: resolved.fullscreen,
           normalizeStatusBar: resolved.normalizeStatusBar,
@@ -411,7 +423,14 @@ function createBoundScreenshotBackend(
         });
         crop.run.warnings.push(...buildScreenshotCropWarnings(outcome));
       }
-      return facts.displayRotation ? { displayRotation: facts.displayRotation } : undefined;
+      return facts.displayRotation || facts.sourcePixelDensity !== undefined
+        ? {
+            ...(facts.displayRotation ? { displayRotation: facts.displayRotation } : {}),
+            ...(facts.sourcePixelDensity !== undefined
+              ? { pixelDensity: facts.sourcePixelDensity }
+              : {}),
+          }
+        : undefined;
     },
   };
 }

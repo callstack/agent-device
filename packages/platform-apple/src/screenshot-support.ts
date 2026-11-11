@@ -12,6 +12,10 @@ export function appleScreenshotCaptureCapabilities(
   helper?: MacOsHelperSurface,
 ): ScreenshotCaptureCapabilities {
   return {
+    nativeDensity:
+      isHandheldAppleSimulator(device) &&
+      helper === undefined &&
+      options.captureBackend !== 'runner',
     screenMask:
       isHandheldAppleSimulator(device) &&
       options.captureBackend !== 'runner' &&

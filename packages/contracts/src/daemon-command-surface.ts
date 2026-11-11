@@ -67,6 +67,7 @@ export type DaemonScreenshotResult = Readonly<{
   path: string;
   artifacts?: ArtifactDescriptor[];
   displayRotation?: DeviceRotation;
+  sourcePixelDensity?: number;
   message?: string;
   warnings?: string[];
 }>;
@@ -91,6 +92,7 @@ export type DaemonScreenshotCommandOptions = CommandContext &
     fullscreen?: boolean;
     overlayRefs?: boolean;
     pixelDensity?: number;
+    nativeDensity?: boolean;
     scale?: number;
     stabilize?: boolean;
     normalizeStatusBar?: boolean;

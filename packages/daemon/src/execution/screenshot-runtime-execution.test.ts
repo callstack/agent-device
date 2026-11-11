@@ -292,6 +292,11 @@ test('refuses --capture-backend runner with --pixel-density or --normalize-statu
     { screenshotCaptureBackend: 'runner', screenshotNormalizeStatusBar: true },
     'INVALID_ARGS',
   );
+  await refused(
+    IOS_SIMULATOR,
+    { screenshotCaptureBackend: 'runner', screenshotNativeDensity: true },
+    'INVALID_ARGS',
+  );
   await refused(IOS_SIMULATOR, { screenshotCaptureBackend: 'simctl' }, 'INVALID_ARGS');
 });
 
@@ -647,4 +652,37 @@ test('a request screen mask reaches the bound simulator capture without changing
     await executeResult(resolved, session, req, req.flags);
     expect(fixture.captureScreenshot.mock.lastCall?.[0].options?.screenMask).toBe(screenMask);
   }
+});
+
+test('native density travels from request to capture and result metadata', async () => {
+  const fixture = screenshotRuntimeFixture({
+    onCapture: (input) => {
+      writeSolidPng(input.outPath, 126, 273);
+      return input.options?.nativeDensity ? { sourcePixelDensity: 3 } : {};
+    },
+  });
+  const session = makeSession('ios', { device: IOS_SIMULATOR });
+  const req = screenshotRequest({ flags: { screenshotNativeDensity: true } });
+  const resolved = await resolveScreenshotGenericExecution({
+    hostCwd: process.cwd(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req,
+    session,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+  const result = await executeResult(
+    resolved,
+    session,
+    req,
+    contextFromFlags('/tmp/daemon.log', req.flags),
+  );
+  expect(result).toMatchObject({
+    width: 126,
+    height: 273,
+    pixelDensity: 3,
+    logicalWidth: 42,
+    logicalHeight: 91,
+  });
 });

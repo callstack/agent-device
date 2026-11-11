@@ -395,21 +395,21 @@ test('a busy contender that exits sweeps its own pre-lock marker before the retr
   if (claim.status !== 'acquired') throw new Error('fixture claim refused');
   let released = false;
   spawn.mockImplementation((_command, _args, options) => {
+    if (spawn.mock.calls.length !== 1) {
+      throw new Error('no second launch: the retry boundary must be observable without a sweeper');
+    }
     const child = spawnRegisteredDaemonFixture(paths, fields(http.port), options, undefined, {
       emitStartupMarkerBeforeAcquisition: true,
     });
-    if (spawn.mock.calls.length === 1) {
-      void child.exited.then((exit) => {
-        assert.equal(exit.exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
-        if (!released) {
-          void claim.acquisition.release().then(() => {
-            released = true;
-          });
-        }
-      });
-      return child;
-    }
-    throw new Error('no second launch: the retry boundary must be observable without a sweeper');
+    void child.exited.then((exit) => {
+      assert.equal(exit.exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
+      if (!released) {
+        void claim.acquisition.release().then(() => {
+          released = true;
+        });
+      }
+    });
+    return child;
   });
   pause.mockImplementation((ms) => actualRetry.sleep(Math.min(Number(ms), 50)));
   try {

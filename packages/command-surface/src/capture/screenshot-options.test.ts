@@ -152,6 +152,7 @@ test('screenshot script flags use the shared recorded flag contract', () => {
     'screenshotCropOn',
     'screenshotPixelDensity',
     'screenshotScreenMask',
+    'screenshotNativeDensity',
     'screenshotFullscreen',
     'screenshotScale',
     'screenshotNoStabilize',
@@ -168,6 +169,7 @@ test('screenshot script flags use the shared recorded flag contract', () => {
     'screenshotCropOn',
     'screenshotPixelDensity',
     'screenshotScreenMask',
+    'screenshotNativeDensity',
     'screenshotFullscreen',
     'screenshotScale',
     'screenshotNoStabilize',
@@ -199,4 +201,17 @@ test('explicit screenshot stabilization survives SDK projection and script recor
     nextIndex: 0,
   });
   assert.deepEqual(screenshotOptionsFromFlags(recorded), { stabilize: true });
+});
+
+test('native density survives script recording and replay', () => {
+  const projected = screenshotFlagsFromOptions({ nativeDensity: true });
+  const parts: string[] = [];
+  appendScreenshotScriptFlags(parts, projected);
+  assert.deepEqual(parts, ['--native-density']);
+  const recorded: Partial<ScreenshotRequestFlags> = {};
+  assert.deepEqual(readScreenshotScriptFlag({ args: parts, index: 0, flags: recorded }), {
+    handled: true,
+    nextIndex: 0,
+  });
+  assert.deepEqual(screenshotOptionsFromFlags(recorded), { nativeDensity: true });
 });
