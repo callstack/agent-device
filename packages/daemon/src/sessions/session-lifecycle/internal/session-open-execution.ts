@@ -32,7 +32,11 @@ import {
   isAuthoringArmedSession,
 } from '../../../core/session-script-publication-capability.ts';
 import { isRequestCanceled } from '@agent-device/host-kit/request';
-import { createRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  readDispatchDisclosure,
+} from '@agent-device/kernel/errors';
 import { SessionStore } from '../../../core/session-store.ts';
 import {
   countConfiguredRuntimeHints,
@@ -281,26 +285,42 @@ export async function completeOpenCommand(params: {
     ? sessionStore.requireCurrent(openDispatchRef)
     : undefined;
   const openStartedAtMs = Date.now();
-  const outcome = await lifecycle.operations.openApplication({
-    target: openTarget,
-    positionals: openPositionals,
-    outPath: req.flags?.out,
-    runtimeLaunchUrl: runtimeHints?.launchUrl,
-    appBundleId: sessionAppBundleId,
-    surface,
-    hasExistingSession: existingSession !== undefined,
-    relaunch: shouldRelaunch,
-    prewarmRunnerBeforeOpen: req.flags?.maestro?.prewarmRunnerBeforeOpen === true,
-    enableTestIme: shouldActivateAndroidTestIme(device, req),
-    stateDir: sessionStore.resolveDaemonStateDir(),
-    runtimeHints: runtimeHintValues(runtimeHints),
-    applyRuntimeHints,
-    execution: applicationLifecycleExecutionFromRequest(
-      req,
-      logPath,
-      openDispatchSession?.trace?.outPath,
-    ),
-  });
+  const outcome = await lifecycle.operations
+    .openApplication({
+      target: openTarget,
+      positionals: openPositionals,
+      outPath: req.flags?.out,
+      runtimeLaunchUrl: runtimeHints?.launchUrl,
+      appBundleId: sessionAppBundleId,
+      surface,
+      hasExistingSession: existingSession !== undefined,
+      relaunch: shouldRelaunch,
+      prewarmRunnerBeforeOpen: req.flags?.maestro?.prewarmRunnerBeforeOpen === true,
+      enableTestIme: shouldActivateAndroidTestIme(device, req),
+      stateDir: sessionStore.resolveDaemonStateDir(),
+      runtimeHints: runtimeHintValues(runtimeHints),
+      applyRuntimeHints,
+      execution: applicationLifecycleExecutionFromRequest(
+        req,
+        logPath,
+        openDispatchSession?.trace?.outPath,
+      ),
+    })
+    .catch((error: unknown) => {
+      if (
+        existingRef &&
+        shouldRelaunch &&
+        !(
+          error instanceof AppError &&
+          (readDispatchDisclosure(error.details) === 'no' ||
+            error.details?.reason === 'runtime-hints-operation-missing')
+        ) &&
+        sessionStore.resolveCurrent(existingRef)
+      ) {
+        sessionStore.markCloseEffectsUnconfirmed(existingRef);
+      }
+      throw error;
+    });
   sessionAppBundleId = outcome.appBundleId ?? sessionAppBundleId;
   const timing: OpenTiming = { ...outcome.timing };
   const preparedSelection = markSelectionBootOccurred(selection);
@@ -308,6 +328,9 @@ export async function completeOpenCommand(params: {
     ? buildStartupPerfSample(openStartedAtMs, openTarget, sessionAppBundleId)
     : undefined;
   if (isRequestCanceled(req.meta?.requestId)) {
+    if (existingRef && shouldRelaunch && sessionStore.resolveCurrent(existingRef)) {
+      sessionStore.markCloseEffectsUnconfirmed(existingRef);
+    }
     const canceled = createRequestCanceledError();
     return {
       type: 'response',
