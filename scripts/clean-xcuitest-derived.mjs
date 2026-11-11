@@ -12,37 +12,31 @@ import {
 
 const DERIVED_OVERRIDE = resolveRunnerDerivedOverride(process.env);
 const platforms = process.argv.slice(2);
-const requested = platforms.length > 0 ? platforms : ['ios', 'macos', 'tvos', 'visionos'];
-const supported = new Set(['ios', 'macos', 'tvos', 'visionos']);
-// An override pins one directory for every platform, as it does for the runner build.
-const DERIVED_PATHS = new Map(
-  [...supported].map((platform) => [
-    platform,
-    DERIVED_OVERRIDE ?? resolveRunnerScriptDefaultDerivedPath(platform, os.homedir()),
-  ]),
-);
 const PLATFORM_LABELS = new Map([
   ['ios', 'iOS'],
   ['macos', 'macOS'],
   ['tvos', 'tvOS'],
   ['visionos', 'visionOS'],
 ]);
+const requested = platforms.length > 0 ? platforms : [...PLATFORM_LABELS.keys()];
 const MAX_SUMMARY_ENTRY_NAMES = 3;
 
 for (const platform of requested) {
-  if (!supported.has(platform)) {
+  const platformLabel = PLATFORM_LABELS.get(platform);
+  if (!platformLabel) {
     console.error(`Unsupported XCTest cache platform: ${platform}`);
-    console.error('Supported platforms: ios, macos, tvos, visionos');
+    console.error(`Supported platforms: ${[...PLATFORM_LABELS.keys()].join(', ')}`);
     process.exitCode = 1;
     continue;
   }
-  const targetPath = resolveDerivedPath(platform);
+  const targetPath =
+    DERIVED_OVERRIDE ?? resolveRunnerScriptDefaultDerivedPath(platform, os.homedir());
   try {
     assertSafeDerivedCleanup(targetPath, process.env);
     const result = cleanDerivedPath(platform, targetPath);
-    console.log(formatCleanupResult(platform, targetPath, result));
+    console.log(formatCleanupResult(platform, platformLabel, targetPath, result));
   } catch (error) {
-    console.error(formatCleanupError(platform, targetPath, error));
+    console.error(formatCleanupError(platformLabel, targetPath, error));
     process.exitCode = 1;
   }
 }
@@ -80,8 +74,7 @@ function cleanDerivedPath(platform, targetPath) {
   };
 }
 
-function formatCleanupResult(platform, targetPath, result) {
-  const platformLabel = resolvePlatformLabel(platform);
+function formatCleanupResult(platform, platformLabel, targetPath, result) {
   if (wholeDirectoryClean(platform))
     return formatWholeDerivedCleanupResult(platformLabel, targetPath, result);
   return formatIosCleanupResult(platformLabel, targetPath, result);
@@ -114,16 +107,10 @@ function formatKeptEntriesSuffix(preservedEntries) {
   return preservedEntries.length > 0 ? `; kept ${summarizeEntryNames(preservedEntries)}` : '';
 }
 
-function formatCleanupError(platform, targetPath, error) {
+function formatCleanupError(platformLabel, targetPath, error) {
   const detail = error instanceof Error ? error.message : String(error);
   const hint = error instanceof AppError ? error.details?.hint : undefined;
-  return `Failed to clean ${resolvePlatformLabel(platform)} XCTest derived data under ${targetPath}: ${detail}${typeof hint === 'string' ? `\n${hint}` : ''}`;
-}
-
-function resolvePlatformLabel(platform) {
-  const platformLabel = PLATFORM_LABELS.get(platform);
-  if (platformLabel) return platformLabel;
-  throw new Error(`Unsupported platform: ${platform}`);
+  return `Failed to clean ${platformLabel} XCTest derived data under ${targetPath}: ${detail}${typeof hint === 'string' ? `\n${hint}` : ''}`;
 }
 
 function summarizeEntryNames(entryNames) {
@@ -132,10 +119,4 @@ function summarizeEntryNames(entryNames) {
     return names.join(', ');
   }
   return `${names.slice(0, MAX_SUMMARY_ENTRY_NAMES).join(', ')} (+${names.length - MAX_SUMMARY_ENTRY_NAMES} more)`;
-}
-
-function resolveDerivedPath(platform) {
-  const targetPath = DERIVED_PATHS.get(platform);
-  if (targetPath) return targetPath;
-  throw new Error(`Unsupported platform: ${platform}`);
 }
