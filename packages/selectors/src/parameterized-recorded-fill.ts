@@ -150,7 +150,8 @@ export function parameterizeRecordedFillPayload<
  * for the actual substitution, so redacting one literal can never corrupt a
  * placeholder another literal (or an earlier stage) already inserted.
  * `insertedPlaceholders` holds each placeholder this pass wrote in place of a
- * literal; a placeholder the payload already carried is not counted.
+ * literal in a value; a key rewrite and a placeholder the payload already
+ * carried are not counted.
  */
 export function parameterizeRecordedResultEcho<
   TPayload extends Record<string, unknown> | undefined,
@@ -163,7 +164,14 @@ export function parameterizeRecordedResultEcho<
   const pairs = sortedLiteralPairs(literals);
   const redacted = parameterizeBackendOutput(
     payload,
-    (value) => parameterizeAgainstLiteralMap(value, pairs, insertedPlaceholders),
+    // Only a value rewrite makes its placeholder live: a key-only match must not stop the writer
+    // from escaping a user-typed `${NAME}` elsewhere in the action.
+    (value, position) =>
+      parameterizeAgainstLiteralMap(
+        value,
+        pairs,
+        position === 'value' ? insertedPlaceholders : undefined,
+      ),
     (candidate) => selectorCandidateCarriesAnyLiteral(candidate, literals),
   ) as TPayload;
   return { payload: redacted, insertedPlaceholders };
@@ -300,7 +308,8 @@ function selectorCandidateCarriesFillValue(candidate: string, literal: string): 
 }
 
 /** A leaf string rewrite rule injected into the shared structural walk below. */
-type LeafTransform = (value: string) => string;
+/** `position` tells an object key apart from a value, so a caller can treat key rewrites differently. */
+type LeafTransform = (value: string, position: 'key' | 'value') => string;
 /** Whether a selector-chain candidate carries whatever this call's leaf transform redacts. */
 type CarriesSensitiveValue = (candidate: string) => boolean;
 
@@ -311,7 +320,7 @@ function parameterizeBackendOutput(
 ): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(value).map(([key, entry]) => {
-      const outputKey = STRUCTURAL_ROOT_OUTPUT_KEYS.has(key) ? key : transform(key);
+      const outputKey = STRUCTURAL_ROOT_OUTPUT_KEYS.has(key) ? key : transform(key, 'key');
       return [outputKey, parameterizeRootOutputValue(entry, key, transform, carries)];
     }),
   );
@@ -345,7 +354,7 @@ function parameterizeBackendOutputValue(
 ): unknown {
   if (typeof value === 'string') {
     if (structuralPath && STABLE_STRUCTURAL_STRING_PATHS.has(structuralPath)) return value;
-    return transform(value);
+    return transform(value, 'value');
   }
   if (Array.isArray(value)) {
     return value.map((entry) =>
@@ -357,7 +366,7 @@ function parameterizeBackendOutputValue(
   return Object.fromEntries(
     Object.entries(value).map(([nestedKey, entry]) => {
       const isStructural = structuralKeys?.has(nestedKey) === true;
-      const outputKey = isStructural ? nestedKey : transform(nestedKey);
+      const outputKey = isStructural ? nestedKey : transform(nestedKey, 'key');
       return [
         outputKey,
         parameterizeBackendOutputValue(
