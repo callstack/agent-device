@@ -20,7 +20,7 @@ import { type EnvMap } from '@agent-device/kernel/source-value';
 import type { DaemonLockPolicy } from '@agent-device/kernel/contracts';
 import { PLATFORM_SELECTORS, type PlatformSelector } from '@agent-device/kernel/device';
 
-export type ConfigDefaults = {
+type ConfigDefaults = {
   flags: Partial<CliFlags>;
   devicePin?: DevicePin;
 };
@@ -42,7 +42,7 @@ export function resolveConfigDefaults(options: {
   return defaults;
 }
 
-type ConfigFileSource = 'user' | 'project' | 'explicit';
+type ConfigFileSource = DevicePin['source']['kind'];
 
 type ConfigPath = { path: string; required: boolean; source: ConfigFileSource };
 

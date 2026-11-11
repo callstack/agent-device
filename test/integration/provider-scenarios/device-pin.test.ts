@@ -49,6 +49,18 @@ for (const platform of ['ios', 'android'] as const) {
             return true;
           },
         );
+        const identityPin = createAgentDeviceClient(
+          { daemonBaseUrl: daemon.baseUrl, daemonAuthToken: daemon.token },
+          { devicePin: { ...pin, selector: { platform, [identity]: pinned.id } } },
+        );
+        await assert.rejects(
+          runCommand(identityPin, 'capabilities', { device: other.name }),
+          (error: unknown) => {
+            assert.ok(error instanceof Error && 'details' in error);
+            expect(error.details).toMatchObject({ reason: 'device_pin_conflict' });
+            return true;
+          },
+        );
         const batch = await daemon.callCommand(
           'batch',
           [],

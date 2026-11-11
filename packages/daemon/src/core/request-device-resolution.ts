@@ -34,7 +34,7 @@ export async function resolveRequestTargetDevice(
     },
   );
   assertWebSelectionHasIdentity(req, device);
-  if (req.meta?.devicePin) assertDeviceHonorsPin(req.meta.devicePin, device);
+  if (req.meta?.devicePin) assertDeviceHonorsPin(req.meta.devicePin, device, flags);
   return device;
 }
 
@@ -51,6 +51,6 @@ export async function resolveRequestTargetDeviceSelection(
     },
   );
   assertWebSelectionHasIdentity(req, selection.device);
-  if (req.meta?.devicePin) assertDeviceHonorsPin(req.meta.devicePin, selection.device);
+  if (req.meta?.devicePin) assertDeviceHonorsPin(req.meta.devicePin, selection.device, flags);
   return selection;
 }

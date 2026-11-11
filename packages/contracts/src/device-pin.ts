@@ -60,15 +60,18 @@ export function assertRequestHonorsDevicePin(
   if (conflicts.length) throwPinConflict(pin, conflicts);
 }
 
-export function assertDeviceHonorsPin(pin: DevicePin, device: DeviceInfo): void {
-  if (
+export function assertDeviceHonorsPin(
+  pin: DevicePin,
+  device: DeviceInfo,
+  requested: DevicePinSelector = {},
+): void {
+  const matches = (selector: DevicePinSelector) =>
     matchesDeviceSelector(
       device,
-      { ...pin.selector, deviceName: pin.selector.device },
+      { ...selector, deviceName: selector.device },
       { includeExplicitSelectors: true },
-    )
-  )
-    return;
+    );
+  if (matches(pin.selector) && matches(requested)) return;
   throwPinConflict(pin, [], { id: device.id, name: device.name });
 }
 
@@ -81,7 +84,7 @@ function throwPinConflict(
   const where = first?.step === undefined ? '' : `Batch step ${first.step}: `;
   const requested = first
     ? `${first.key} ${JSON.stringify(first.requested)}`
-    : `Device ${JSON.stringify(device?.name)} (${device?.id})`;
+    : `Device selection ${JSON.stringify(device?.name)} (${device?.id})`;
   const source = devicePinSourceLabel(pin.source);
   throw new AppError(
     'INVALID_ARGS',

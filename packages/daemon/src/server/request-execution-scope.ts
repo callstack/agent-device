@@ -622,7 +622,7 @@ function createRequestDeviceAccess(params: {
         params.req.meta?.devicePin || daemonPolicy || claimPolicy === 'require-owner'
           ? (device) => {
               if (params.req.meta?.devicePin)
-                assertDeviceHonorsPin(params.req.meta.devicePin, device);
+                assertDeviceHonorsPin(params.req.meta.devicePin, device, params.req.flags);
               if (daemonPolicy) {
                 assertDaemonPolicyAdmitsDevice(daemonPolicy, device);
               }
