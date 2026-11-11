@@ -103,11 +103,14 @@ function loadSingleConfigFile(entry: ConfigPath): ConfigDefaults {
     throw new AppError('INVALID_ARGS', `Config file must contain a JSON object: ${filePath}`);
   }
 
-  return parseConfigObject(parsed as Record<string, unknown>, {
-    source: entry.source,
-    label: configFileLabel(entry),
-    path: entry.path,
-  });
+  const { devicePin, ...flagDefaults } = parsed;
+  const defaults: ConfigDefaults = {
+    flags: parseConfigObject(flagDefaults, { source: entry.source, label: configFileLabel(entry) }),
+  };
+  if (devicePin !== undefined) {
+    defaults.devicePin = parseDevicePin(devicePin, { kind: entry.source, path: entry.path });
+  }
+  return defaults;
 }
 
 function configFileLabel(entry: ConfigPath): string {
@@ -128,18 +131,13 @@ const RETIRED_RECORD_CONFIG_KEY = {
 
 function parseConfigObject(
   source: Record<string, unknown>,
-  origin: { source: ConfigFileSource; label: string; path: string },
-): ConfigDefaults {
+  origin: { source: ConfigFileSource; label: string },
+): Partial<CliFlags> {
   const flags: Partial<CliFlags> = {};
-  let devicePin: DevicePin | undefined;
   const entries = Object.entries(source).filter(
     ([key]) => key !== 'plugins' || origin.source !== 'user',
   );
   for (const [rawKey, rawValue] of entries) {
-    if (rawKey === 'devicePin') {
-      devicePin = parseDevicePin(rawValue, { kind: origin.source, path: origin.path });
-      continue;
-    }
     if (rawKey === RETIRED_RECORD_CONFIG_KEY.flagKey) {
       throw new AppError(
         'INVALID_ARGS',
@@ -180,7 +178,7 @@ function parseConfigObject(
       rawKey,
     );
   }
-  return { flags, ...(devicePin ? { devicePin } : {}) };
+  return flags;
 }
 
 // Commands that honored AGENT_DEVICE_SCREENSHOT_MAX_SIZE in released versions.
