@@ -11,6 +11,7 @@ test('recent native boot observation avoids a duplicate simulator listing', asyn
     exitCode: 0,
   }));
   const markBooted = vi.fn();
+  const keepHot = vi.fn();
   const host = platformRuntimeHostFixture();
 
   await ensureAppleReady(
@@ -20,7 +21,7 @@ test('recent native boot observation avoids a duplicate simulator listing', asyn
       deviceReadiness: {
         ...host.deviceReadiness,
         appleAutomation: {
-          keepHot: vi.fn(),
+          keepHot,
           markBooted,
           wasRecentlyObservedBooted: vi.fn(async () => true),
         },
@@ -32,6 +33,7 @@ test('recent native boot observation avoids a duplicate simulator listing', asyn
 
   expect(run).not.toHaveBeenCalled();
   expect(markBooted).not.toHaveBeenCalled();
+  expect(keepHot).toHaveBeenCalledOnce();
 });
 
 test('plain device boot state does not bypass native readiness observation', async () => {
