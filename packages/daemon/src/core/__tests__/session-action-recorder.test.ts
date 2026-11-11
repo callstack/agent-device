@@ -916,3 +916,22 @@ test('an action lists only the placeholders echo protection actually wrote as li
   expect(echo?.result?.refLabel).toBe('Hello ${FOOBAR} ${FOO}');
   expect(echo?.livePlaceholders).toEqual(['FOOBAR']);
 });
+
+test('a literal echoed only as an object key does not make its placeholder live', () => {
+  const session = makeIosSession('default', { scriptPublication: authoringPublication('armed') });
+  recordAction(session, {
+    command: 'fill',
+    positionals: ['id="field"', 'foo'],
+    flags: { recordAs: 'FOO' },
+    result: { text: 'foo' },
+  });
+  const echo = recordAction(session, {
+    command: 'click',
+    positionals: ['@e3'],
+    flags: {},
+    result: { attributes: { foo: 'bar' } },
+  });
+
+  expect(echo?.result?.attributes).toEqual({ '${FOO}': 'bar' });
+  expect(echo?.livePlaceholders ?? []).toEqual([]);
+});
