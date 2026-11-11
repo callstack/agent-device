@@ -12,6 +12,13 @@ const RELEASE = new RegExp(`^${N}\\.${N}\\.${N}$`);
 const DEVELOPMENT = new RegExp(`^${N}\\.${N}\\.${N}-dev$`);
 const NIGHTLY = new RegExp(`^${N}\\.${N}\\.${N}-nightly\\.(\\d{8})\\.([1-9]\\d*)$`);
 
+const ASSET_TAG =
+  /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?![\s\S])/;
+
+function isAssetReleaseTag(tag) {
+  return ASSET_TAG.test(tag);
+}
+
 export function isReleaseVersion(version) {
   return RELEASE.test(version);
 }
@@ -112,7 +119,9 @@ function readRootVersion(root) {
 
 function main([command, ...args]) {
   const root = process.cwd();
-  if (command === 'nightly' && args.length === 2) {
+  if (command === 'asset-tag' && args.length === 1) {
+    if (!isAssetReleaseTag(args[0])) throw new Error('Invalid asset release tag');
+  } else if (command === 'nightly' && args.length === 2) {
     process.stdout.write(`${nightlyVersion(readRootVersion(root), args[0], args[1])}\n`);
   } else if (command === 'stamp' && args.length === 1) {
     stampVersion(root, args[0]);
@@ -122,7 +131,7 @@ function main([command, ...args]) {
     process.stdout.write(`${next}\n`);
   } else {
     throw new Error(
-      'Usage: node scripts/release-version.mjs <nightly <YYYYMMDD> <run>|stamp <version>|advance <released>>',
+      'Usage: node scripts/release-version.mjs <asset-tag <tag>|nightly <YYYYMMDD> <run>|stamp <version>|advance <released>>',
     );
   }
 }

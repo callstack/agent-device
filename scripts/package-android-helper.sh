@@ -40,6 +40,12 @@ fi
 
 PROJECT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+node "$SCRIPT_DIR/release-version.mjs" asset-tag "v$VERSION"
+if [ "$HAS_RELEASE_TAG" = 1 ]; then
+  node "$SCRIPT_DIR/release-version.mjs" asset-tag "$RELEASE_TAG"
+fi
+
 case "$HELPER" in
   snapshot) PACKAGE_NAME="com.callstack.agentdevice.snapshothelper" ;;
   ime) PACKAGE_NAME="com.callstack.agentdevice.imehelper" ;;
@@ -83,42 +89,16 @@ case "$HELPER" in
       APK_URL=""
     fi
 
-    {
-      printf '{\n'
-      printf '  "name": "android-snapshot-helper",\n'
-      printf '  "version": "%s",\n' "$VERSION"
-      printf '  "releaseTag": "%s",\n' "$RELEASE_TAG"
-      printf '  "assetName": "%s",\n' "$APK_BASENAME"
-      if [ -n "$APK_URL" ]; then
-        printf '  "apkUrl": "%s",\n' "$APK_URL"
-      else
-        printf '  "apkUrl": null,\n'
-      fi
-      printf '  "sha256": "%s",\n' "$SHA256"
-      printf '  "checksumName": "%s",\n' "$CHECKSUM_BASENAME"
-      printf '  "packageName": "%s",\n' "$PACKAGE_NAME"
-      printf '  "versionCode": %s,\n' "$VERSION_CODE"
-      printf '  "instrumentationRunner": "%s/.SnapshotInstrumentation",\n' "$PACKAGE_NAME"
-      printf '  "minSdk": %s,\n' "$MIN_SDK"
-      printf '  "targetSdk": %s,\n' "$TARGET_SDK"
-      printf '  "outputFormat": "uiautomator-xml",\n'
-      printf '  "statusProtocol": "android-snapshot-helper-v1"\n'
-      printf '}\n'
-    } > "$MANIFEST_PATH"
+    node - "$VERSION" "$RELEASE_TAG" "$APK_BASENAME" "$APK_URL" "$SHA256" "$CHECKSUM_BASENAME" "$PACKAGE_NAME" "$VERSION_CODE" "$MIN_SDK" "$TARGET_SDK" > "$MANIFEST_PATH" <<'NODE'
+const [version, releaseTag, assetName, apkUrl, sha256, checksumName, packageName, versionCode, minSdk, targetSdk] = process.argv.slice(2);
+console.log(JSON.stringify({ name: 'android-snapshot-helper', version, releaseTag, assetName, apkUrl: apkUrl || null, sha256, checksumName, packageName, versionCode: Number(versionCode), instrumentationRunner: `${packageName}/.SnapshotInstrumentation`, minSdk: Number(minSdk), targetSdk: Number(targetSdk), outputFormat: 'uiautomator-xml', statusProtocol: 'android-snapshot-helper-v1' }, null, 2));
+NODE
     ;;
   ime)
-    {
-      printf '{\n'
-      printf '  "name": "android-ime-helper",\n'
-      printf '  "version": "%s",\n' "$VERSION"
-      printf '  "assetName": "%s",\n' "$APK_BASENAME"
-      printf '  "sha256": "%s",\n' "$SHA256"
-      printf '  "packageName": "%s",\n' "$PACKAGE_NAME"
-      printf '  "versionCode": %s,\n' "$VERSION_CODE"
-      printf '  "serviceComponent": "%s/.TestInputMethodService",\n' "$PACKAGE_NAME"
-      printf '  "broadcastProtocol": "android-ime-helper-v1"\n'
-      printf '}\n'
-    } > "$MANIFEST_PATH"
+    node - "$VERSION" "$APK_BASENAME" "$SHA256" "$PACKAGE_NAME" "$VERSION_CODE" > "$MANIFEST_PATH" <<'NODE'
+const [version, assetName, sha256, packageName, versionCode] = process.argv.slice(2);
+console.log(JSON.stringify({ name: 'android-ime-helper', version, assetName, sha256, packageName, versionCode: Number(versionCode), serviceComponent: `${packageName}/.TestInputMethodService`, broadcastProtocol: 'android-ime-helper-v1' }, null, 2));
+NODE
     ;;
 esac
 

@@ -33,10 +33,32 @@ jobs:
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
+      - name: Checkout release validator
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .release-validator
+          sparse-checkout: scripts/release-version.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       - name: Setup Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
         with:
           node-version: '24.13'
+
+      - name: Resolve release metadata
+        id: meta
+        env:
+          TAG_NAME: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          node .release-validator/scripts/release-version.mjs asset-tag "$TAG_NAME"
+          VERSION="${TAG_NAME#v}"
+          echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        shell: bash
 
       # Exports AGENT_DEVICE_ANDROID_BUILD_TOOLS, which the helper build requires on CI.
       - name: Setup Android SDK
@@ -47,38 +69,34 @@ jobs:
           javac --version
           java --version
 
-      - name: Resolve release metadata
-        id: meta
-        run: |
-          set -euo pipefail
-          TAG_NAME="${{ inputs.release_tag }}"
-          VERSION="${TAG_NAME#v}"
-          echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-        shell: bash
-
       - name: Package Android snapshot helper
         id: package
         env:
           RELEASE_ASSET_DIR: ${{ github.workspace }}/.tmp/release-assets
+          RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
           AGENT_DEVICE_ANDROID_HELPER: snapshot
         run: |
           set -euo pipefail
           mkdir -p "${RELEASE_ASSET_DIR}"
           sh ./scripts/package-android-helper.sh \
-            "${{ steps.meta.outputs.version }}" \
-            "${{ steps.meta.outputs.tag }}" \
+            "$RELEASE_VERSION" \
+            "$RELEASE_TAG" \
             "${RELEASE_ASSET_DIR}"
         shell: bash
 
       - name: Upload helper assets to GitHub Release
         env:
+          APK_PATH: ${{ steps.package.outputs.apk_path }}
+          CHECKSUM_PATH: ${{ steps.package.outputs.checksum_path }}
+          MANIFEST_PATH: ${{ steps.package.outputs.manifest_path }}
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
         run: |
           set -euo pipefail
-          gh release upload "${{ steps.meta.outputs.tag }}" \
-            "${{ steps.package.outputs.apk_path }}" \
-            "${{ steps.package.outputs.checksum_path }}" \
-            "${{ steps.package.outputs.manifest_path }}" \
+          gh release upload "$RELEASE_TAG" \
+            "$APK_PATH" \
+            "$CHECKSUM_PATH" \
+            "$MANIFEST_PATH" \
             --clobber
         shell: bash

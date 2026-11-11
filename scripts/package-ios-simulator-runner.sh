@@ -10,6 +10,10 @@ VERSION="$1"
 RELEASE_TAG="$2"
 OUTPUT_DIR="$3"
 
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+node "$SCRIPT_DIR/release-version.mjs" asset-tag "v$VERSION"
+node "$SCRIPT_DIR/release-version.mjs" asset-tag "$RELEASE_TAG"
+
 DERIVED_PATH="${AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH:-$HOME/.agent-device/apple-runner/derived}"
 PRODUCTS_DIR="$DERIVED_PATH/Build/Products"
 EXPECTED_RUNNER_BUNDLE_ID="${AGENT_DEVICE_IOS_RUNNER_RELEASE_BUNDLE_ID:-}"
@@ -113,24 +117,10 @@ else
   ARCHIVE_URL=""
 fi
 
-{
-  printf '{\n'
-  printf '  "version": "%s",\n' "$VERSION"
-  printf '  "release_tag": "%s",\n' "$RELEASE_TAG"
-  printf '  "asset_name": "%s",\n' "$ARCHIVE_BASENAME"
-  if [ -n "$ARCHIVE_URL" ]; then
-    printf '  "asset_url": "%s",\n' "$ARCHIVE_URL"
-  else
-    printf '  "asset_url": null,\n'
-  fi
-  printf '  "sha256": "%s",\n' "$SHA256"
-  printf '  "checksum_name": "%s",\n' "$CHECKSUM_BASENAME"
-  printf '  "bundle_id": "%s",\n' "$RUNNER_BUNDLE_ID"
-  printf '  "bundle_name": "%s",\n' "$APP_NAME"
-  printf '  "platform_target": "iphonesimulator",\n'
-  printf '  "archive_format": "tar.gz"\n'
-  printf '}\n'
-} > "$MANIFEST_PATH"
+node - "$VERSION" "$RELEASE_TAG" "$ARCHIVE_BASENAME" "$ARCHIVE_URL" "$SHA256" "$CHECKSUM_BASENAME" "$RUNNER_BUNDLE_ID" "$APP_NAME" > "$MANIFEST_PATH" <<'NODE'
+const [version, release_tag, asset_name, assetUrl, sha256, checksum_name, bundle_id, bundle_name] = process.argv.slice(2);
+console.log(JSON.stringify({ version, release_tag, asset_name, asset_url: assetUrl || null, sha256, checksum_name, bundle_id, bundle_name, platform_target: 'iphonesimulator', archive_format: 'tar.gz' }, null, 2));
+NODE
 
 write_github_output "runner_app_path=$RUNNER_APP_PATH"
 write_github_output "xctestrun_path=$RUNNER_XCTESTRUN_PATH"
