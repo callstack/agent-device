@@ -23,6 +23,7 @@ import {
   type AndroidUiHierarchy,
 } from './ui-hierarchy-node.ts';
 import { collectAndroidHiddenNodes } from './ui-hierarchy-visibility.ts';
+import { androidSystemBarContentClips } from './ui-hierarchy-system-bars.ts';
 import { scopePresentedAndroidSnapshot } from './ui-hierarchy-scope.ts';
 import { isCollectionContainerType, shouldIncludeAndroidNode } from './ui-hierarchy-inclusion.ts';
 import {
@@ -72,6 +73,7 @@ type AndroidSnapshotBuildState = {
   interactiveDescendantMemo: Map<AndroidNode, boolean>;
   /** Subtrees the regular projection hides (invisible / stale window). Empty for raw. */
   hidden: ReadonlySet<AndroidNode>;
+  systemBarContentClips: ReadonlyMap<AndroidNode, Rect>;
   /** Compose containers mapped to the role node whose class they publish. Empty for raw. */
   composeRoleFolds: ReadonlyMap<AndroidNode, AndroidNode>;
   /** The role nodes those containers absorb, which the regular projection omits. */
@@ -110,6 +112,7 @@ export function buildUiHierarchySnapshot(
     // C3: raw is the acquired tree (normalization only); regular additionally hides what Android
     // marks invisible and stale application windows. Daemon publication alone owns occlusion.
     hidden: new Set(),
+    systemBarContentClips: new Map(),
     composeRoleFolds: new Map(),
     foldedComposeRoleNodes: new Set(),
     presentationBudget,
@@ -121,6 +124,14 @@ export function buildUiHierarchySnapshot(
     presentationBudget.check('work');
     state.viewport = resolveAndroidSnapshotViewport(tree, presentationBudget);
     state.hidden = options.raw ? new Set() : collectAndroidHiddenNodes(tree, presentationBudget);
+    state.systemBarContentClips = options.raw
+      ? new Map()
+      : androidSystemBarContentClips(
+          tree.children,
+          state.hidden,
+          state.viewport,
+          presentationBudget,
+        );
     state.composeRoleFolds = options.raw
       ? new Map()
       : collectComposeRoleFolds(tree, presentationBudget);
@@ -230,6 +241,7 @@ function walkUiHierarchyNode(
 ): void {
   state.presentationBudget.check('work');
   if (shouldStopAndroidWalk(state, node, depth)) return;
+  ancestorClip ??= state.systemBarContentClips.get(node);
   const systemBar = androidSystemBarMembership(
     node.packageName,
     node.identifier,

@@ -292,6 +292,9 @@ decides which backends it tries.
 - When Android exposes them, the helper captures every interactive window, so keyboard and system
   overlay nodes can appear next to the app's own tree. `androidSnapshot.captureMode` and
   `androidSnapshot.windowCount` describe what was captured.
+- Regular ADB snapshots clip app rectangles to the visible area outside measured status and navigation
+  bars, including launcher-owned navigation. A partially covered row uses its visible rectangle
+  for taps; content wholly behind a bar is omitted. `--raw` keeps the reported bounds.
 - Default and `-i` snapshots keep covered surfaces in the same window visible for diagnosis, and
   mark controls whose drawing order shows they are covered with `interactionBlocked: "covered"`, so
   selectors can't act on a stale React Native screen underneath. Such a node also carries a
