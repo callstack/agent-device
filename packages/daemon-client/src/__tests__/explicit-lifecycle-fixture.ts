@@ -14,6 +14,7 @@ import type { runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 import { readVersion } from '@agent-device/host-kit/version';
 import {
   spawnRegisteredDaemonFixture,
+  planRegisteredDaemonLaunches,
   waitForRegisteredDaemonFixture,
 } from './registered-daemon-fixture.ts';
 import { currentDaemonCodeSignature } from './code-signature-fixture.ts';
@@ -172,18 +173,20 @@ export function launchesFreshDaemonAt(
   paths: DaemonPaths,
   httpPort: number,
 ): void {
-  spawn.mockImplementation((_command, _args, options) =>
-    spawnRegisteredDaemonFixture(
-      paths,
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
       {
-        httpPort,
-        token: 'local-secret',
-        version: readVersion(),
-        codeOrigin: 'checkout',
-        codeSignature: currentDaemonCodeSignature(),
-        capabilities: ['quiesce'],
+        kind: 'registered',
+        paths,
+        fields: {
+          httpPort,
+          token: 'local-secret',
+          version: readVersion(),
+          codeOrigin: 'checkout',
+          codeSignature: currentDaemonCodeSignature(),
+          capabilities: ['quiesce'],
+        },
       },
-      options,
-    ),
+    ]),
   );
 }

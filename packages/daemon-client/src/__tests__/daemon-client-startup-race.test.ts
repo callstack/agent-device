@@ -19,6 +19,7 @@ import {
 } from '@agent-device/test-kit';
 import {
   spawnRegisteredDaemonFixture,
+  planRegisteredDaemonLaunches,
   finishRegisteredDaemonFixtures,
 } from './registered-daemon-fixture.ts';
 import { currentDaemonCodeSignature } from './code-signature-fixture.ts';
@@ -149,9 +150,11 @@ test.for([
       }),
     );
     const originalInfo = fs.readFileSync(paths.infoPath, 'utf8');
-    spawn.mockImplementation(() => {
-      throw new Error('fixture refuses a replacement launch');
-    });
+    spawn.mockImplementation(
+      planRegisteredDaemonLaunches([
+        { kind: 'refuse', error: new Error('fixture refuses a replacement launch') },
+      ]),
+    );
     try {
       if (expectedAllowed) {
         assert.equal((await sendToDaemon(request(paths))).ok, true);
@@ -176,10 +179,14 @@ test.for([
 
 test('a synchronous private startup failure removes its never-started owned directory', async () => {
   let paths: DaemonPaths | undefined;
-  spawn.mockImplementation((_command, _args, options) => {
-    paths = resolveDaemonPaths(String(options?.env?.AGENT_DEVICE_STATE_DIR));
-    throw new Error('cannot launch fixture');
-  });
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      (options) => {
+        paths = resolveDaemonPaths(String(options?.env?.AGENT_DEVICE_STATE_DIR));
+        return { kind: 'refuse', error: new Error('cannot launch fixture') };
+      },
+    ]),
+  );
   await assert.rejects(
     sendToDaemon({ session: 'default', command: 'test', positionals: [], flags: {} }),
     (error: unknown) => {
@@ -205,12 +212,22 @@ test.for(['early exit', 'timeout'] as const)(
     let advanced = false;
     vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '15000');
     vi.spyOn(Date, 'now').mockImplementation(() => now);
-    spawn.mockImplementation((_command, _args, options) => {
-      paths = resolveDaemonPaths(String(options?.env?.AGENT_DEVICE_STATE_DIR));
-      fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');
-      child = spawnRegisteredDaemonFixture(paths, fields(1), options);
-      return child;
-    });
+    spawn.mockImplementation(
+      planRegisteredDaemonLaunches([
+        (options) => {
+          paths = resolveDaemonPaths(String(options?.env?.AGENT_DEVICE_STATE_DIR));
+          fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');
+          return {
+            kind: 'registered',
+            paths,
+            fields: fields(1),
+            observe(launched) {
+              child = launched;
+            },
+          };
+        },
+      ]),
+    );
     pause.mockImplementation(async (ms) => {
       if (advanced) {
         now += ms;
@@ -264,20 +281,27 @@ for (const command of ['devices', 'test']) {
     let genuineExit: ExecDetachedExit | undefined;
     let contender: ReturnType<typeof runCmdDetachedMonitored> | undefined;
     let releaseJoin: (exit: ExecDetachedExit) => void = () => {};
-    let pauses = 0;
-    spawn.mockImplementation((_command, _args, options) => {
-      contender = spawnRegisteredDaemonFixture(paths, fields(http.port), options);
-      void contender.exited.then((exit) => {
-        assert.equal(exit.exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
-        genuineExit = exit;
-      });
-      return {
-        ...contender,
-        exited: new Promise((resolve) => {
-          releaseJoin = resolve;
-        }),
-      };
+    const exitGate = new Promise<void>((resolve) => {
+      releaseJoin = () => resolve();
     });
+    let pauses = 0;
+    spawn.mockImplementation(
+      planRegisteredDaemonLaunches([
+        {
+          kind: 'registered',
+          paths,
+          fields: fields(http.port),
+          exitGate,
+          observe(child) {
+            contender = child;
+            void child.exited.then((exit) => {
+              assert.equal(exit.exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
+              genuineExit = exit;
+            });
+          },
+        },
+      ]),
+    );
     pause.mockImplementation(async (ms) => {
       pauses += 1;
       fs.rmSync(deferred, { force: true });
@@ -317,16 +341,25 @@ test('a client-held claim is waited out before a fresh daemon attempt', async (t
   if (claim.status !== 'acquired') throw new Error('fixture claim refused');
   let loserJoined = false;
   let released = false;
-  spawn.mockImplementation((_command, _args, options) => {
-    const child = spawnRegisteredDaemonFixture(paths, fields(http.port), options);
-    if (spawn.mock.calls.length === 1)
-      void child.exited.then((exit) => {
-        assert.equal(exit.exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
-        loserJoined = true;
-      });
-    else assert.equal(loserJoined, true);
-    return child;
-  });
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      {
+        kind: 'registered',
+        paths,
+        fields: fields(http.port),
+        observe(child) {
+          void child.exited.then((exit) => {
+            assert.equal(exit.exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
+            loserJoined = true;
+          });
+        },
+      },
+      () => {
+        assert.equal(loserJoined, true);
+        return { kind: 'registered', paths, fields: fields(http.port) };
+      },
+    ]),
+  );
   pause.mockImplementation(async (ms) => {
     if (loserJoined && !released) {
       await claim.acquisition.release();
@@ -359,10 +392,9 @@ for (const exit of [
     fs.writeFileSync(deferred, 'wait');
     const winner = spawnRegisteredDaemonFixture(paths, fields(http.port), { stdio: 'ignore' });
     await awaitFile(path.join(paths.baseDir, 'registration-held'));
-    spawn.mockImplementation(() => ({
-      pid: 999_999,
-      exited: Promise.resolve({ pid: 999_999, ...exit }),
-    }));
+    spawn.mockImplementation(
+      planRegisteredDaemonLaunches([{ kind: 'exit', exit: { pid: 999_999, ...exit } }]),
+    );
     pause.mockImplementation(async (ms) => {
       fs.rmSync(deferred, { force: true });
       await actualRetry.sleep(ms);
@@ -394,22 +426,32 @@ test('a busy contender that exits sweeps its own pre-lock marker before the retr
   assert.equal(claim.status, 'acquired');
   if (claim.status !== 'acquired') throw new Error('fixture claim refused');
   let released = false;
-  spawn.mockImplementation((_command, _args, options) => {
-    if (spawn.mock.calls.length !== 1)
-      throw new Error('no second launch: the retry boundary must be observable without a sweeper');
-    const child = spawnRegisteredDaemonFixture(paths, fields(http.port), options, undefined, {
-      emitStartupMarkerBeforeAcquisition: true,
-    });
-    void child.exited.then((exit) => {
-      assert.equal(exit.exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
-      if (!released) {
-        void claim.acquisition.release().then(() => {
-          released = true;
-        });
-      }
-    });
-    return child;
-  });
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      {
+        kind: 'registered',
+        paths,
+        fields: fields(http.port),
+        fixtureOptions: { emitStartupMarkerBeforeAcquisition: true },
+        observe(child) {
+          void child.exited.then((exit) => {
+            assert.equal(exit.exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
+            if (!released) {
+              void claim.acquisition.release().then(() => {
+                released = true;
+              });
+            }
+          });
+        },
+      },
+      {
+        kind: 'refuse',
+        error: new Error(
+          'no second launch: the retry boundary must be observable without a sweeper',
+        ),
+      },
+    ]),
+  );
   pause.mockImplementation((ms) => actualRetry.sleep(Math.min(Number(ms), 50)));
   try {
     await assert.rejects(
@@ -445,15 +487,21 @@ test('a joined busy contender waits for a published winner to become ready witho
   const winner = spawnRegisteredDaemonFixture(paths, fields(http.port), { stdio: 'ignore' });
   await awaitFile(path.join(paths.baseDir, 'registration-held'));
   let contenderExit: ExecDetachedExit | undefined;
-  spawn.mockImplementation((_command, _args, options) => {
-    const child = spawnRegisteredDaemonFixture(paths, fields(http.port), options, undefined, {
-      emitStartupMarkerBeforeAcquisition: true,
-    });
-    void child.exited.then((exit) => {
-      contenderExit = exit;
-    });
-    return child;
-  });
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      {
+        kind: 'registered',
+        paths,
+        fields: fields(http.port),
+        fixtureOptions: { emitStartupMarkerBeforeAcquisition: true },
+        observe(child) {
+          void child.exited.then((exit) => {
+            contenderExit = exit;
+          });
+        },
+      },
+    ]),
+  );
   pause.mockImplementation(async () => {
     if (contenderExit) fs.rmSync(deferred, { force: true });
     await actualRetry.sleep(10);
@@ -501,15 +549,18 @@ for (const held of [true, false]) {
       nativeTimeout(handler, ms === 1_000 ? 0 : ms, ...args),
     );
     vi.spyOn(Date, 'now').mockImplementation(() => now);
-    spawn.mockImplementation(() => ({
-      pid: 999_999,
-      exited:
-        spawn.mock.calls.length === 1
-          ? Promise.resolve({ pid: 999_999, exitCode: DAEMON_STARTUP_EXIT_CODES.busy })
-          : new Promise<ExecDetachedExit>((resolve) => {
-              finishPending = () => resolve({ pid: 999_999, exitCode: 1 });
-            }),
-    }));
+    spawn.mockImplementation(
+      planRegisteredDaemonLaunches([
+        { kind: 'exit', exit: { pid: 999_999, exitCode: DAEMON_STARTUP_EXIT_CODES.busy } },
+        {
+          kind: 'exit',
+          exit: { pid: 999_999, exitCode: 1 },
+          exitGate: new Promise<void>((resolve) => {
+            finishPending = resolve;
+          }),
+        },
+      ]),
+    );
     pause.mockImplementation(async (ms) => {
       if (!advanced) {
         if (!held) {
@@ -556,16 +607,25 @@ test.for([
   let offset = 0;
   const clock = vi.spyOn(Date, 'now').mockImplementation(() => wallTime() + offset);
   let joined = false;
-  spawn.mockImplementation((_command, _args, options) => {
-    if (spawn.mock.calls.length > 1) assert.equal(joined, true);
-    const child = spawnRegisteredDaemonFixture(paths, fields(http.port), options);
-    if (spawn.mock.calls.length === 1)
-      void child.exited.then((exit) => {
-        assert.equal(exit.exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
-        joined = true;
-      });
-    return child;
-  });
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      {
+        kind: 'registered',
+        paths,
+        fields: fields(http.port),
+        observe(child) {
+          void child.exited.then((exit) => {
+            assert.equal(exit.exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
+            joined = true;
+          });
+        },
+      },
+      () => {
+        assert.equal(joined, true);
+        return { kind: 'registered', paths, fields: fields(http.port) };
+      },
+    ]),
+  );
   pause.mockImplementation(async (ms) => {
     if (joined) {
       fs.rmSync(deferred, { force: true });
@@ -609,11 +669,21 @@ test('a failed own transport probe retires and joins the private startup before 
   let paths: DaemonPaths | undefined;
   let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
   let failure: AppError | undefined;
-  spawn.mockImplementation((_command, _args, options) => {
-    paths = resolveDaemonPaths(String(options?.env?.AGENT_DEVICE_STATE_DIR));
-    child = spawnRegisteredDaemonFixture(paths, fields(http.port), options);
-    return child;
-  });
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      (options) => {
+        paths = resolveDaemonPaths(String(options?.env?.AGENT_DEVICE_STATE_DIR));
+        return {
+          kind: 'registered',
+          paths,
+          fields: fields(http.port),
+          observe(launched) {
+            child = launched;
+          },
+        };
+      },
+    ]),
+  );
   pause.mockImplementation(actualRetry.sleep);
   try {
     await assert.rejects(
@@ -660,12 +730,22 @@ test.for(['default', 'private replay'] as const)(
     let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
     let now = Date.now();
     vi.spyOn(Date, 'now').mockImplementation(() => now);
-    spawn.mockImplementation((_command, _args, options) => {
-      paths = resolveDaemonPaths(String(options?.env?.AGENT_DEVICE_STATE_DIR));
-      child = spawnRegisteredDaemonFixture(paths, fields(http.port), options);
-      vi.mocked(readProcessStartTime).mockReturnValueOnce(null);
-      return child;
-    });
+    spawn.mockImplementation(
+      planRegisteredDaemonLaunches([
+        (options) => {
+          paths = resolveDaemonPaths(String(options?.env?.AGENT_DEVICE_STATE_DIR));
+          return {
+            kind: 'registered',
+            paths,
+            fields: fields(http.port),
+            observe(launched) {
+              child = launched;
+              vi.mocked(readProcessStartTime).mockReturnValueOnce(null);
+            },
+          };
+        },
+      ]),
+    );
     pause.mockImplementation(async () => {
       assert.ok(paths);
       if (http.rpcRequests.length === 0) {

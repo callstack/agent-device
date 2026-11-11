@@ -166,6 +166,10 @@ export {
   type RegisteredDaemonComposition,
   type RegisteredDaemonFixtures,
 } from './registered-daemon-fixture.ts';
+export type {
+  DaemonFixtureLaunch,
+  DaemonFixtureLaunchStep,
+} from './registered-daemon-launch-plan.ts';
 export {
   beginStderrCapture,
   beginStdoutCapture,

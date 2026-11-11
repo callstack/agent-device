@@ -39,6 +39,7 @@ Spy on that seam in place.
 Use `mkdtempForTest` or `mkdtempForTestSync`.
 After workers exit, global setup removes the run directory.
 Mock the seam the subject consumes.
+For daemon fixture launch mocks, use `planRegisteredDaemonLaunches`.
 Daemon handlers receive fake runtime facts and facets, not generic dispatch mocks.
 When you migrate an ADR 0019 command, move its tests to the runtime seam.
 

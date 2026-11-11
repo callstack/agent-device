@@ -21,6 +21,7 @@ function readPublishedDaemonRecord(infoPath: string): PublishedDaemonRecord | nu
 }
 
 export const {
+  planRegisteredDaemonLaunches,
   registeredDaemonFixtureArgs,
   launchRegisteredDaemonFixtureArgs,
   spawnRegisteredDaemonFixture,
