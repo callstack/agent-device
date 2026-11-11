@@ -82,7 +82,7 @@ test('an admitted button whose interactor lacks the member fails closed instead 
   await expect(operations.actionButton({})).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     message: 'action-button was admitted but its bound interactor has no implementation.',
-    details: { reason: 'interactor-method-missing' },
+    details: { reason: 'runtime-contract-invalid' },
   });
 });
 

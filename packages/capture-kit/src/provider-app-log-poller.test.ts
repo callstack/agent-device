@@ -30,9 +30,6 @@ describe('provider app-log poller', () => {
     await vi.waitFor(() => expect(writes).toEqual(['new line\n']));
 
     const finishing = handle.finish();
-    expect(readerDisposed).toBe(false);
-    expect(outputDisposed).toBe(false);
-    sleeps.resolveNext(1_000);
     await expect(finishing).resolves.toEqual({
       status: 'completed',
       result: { backend: 'ios-simulator', outputPath: '/sessions/one/app.log', completedAt: 100 },
@@ -65,7 +62,6 @@ describe('provider app-log poller', () => {
     );
     await vi.waitFor(() => expect(writes[0]?.length).toBe(240_001));
     const finishing = handle.finish();
-    sleeps.resolveNext(1_000);
     await finishing;
   });
 
@@ -95,7 +91,6 @@ describe('provider app-log poller', () => {
     await vi.waitFor(() => expect(writes).toEqual(['first\n']));
     expect(handle.inspect().state).toBe('active');
     const finishing = handle.finish();
-    sleeps.resolveNext(1_000);
     await finishing;
   });
 
@@ -115,7 +110,6 @@ describe('provider app-log poller', () => {
     await vi.waitFor(() => expect(writes).toEqual(['line\n']));
     expect(handle.inspect().state).toBe('active');
     const finishing = handle.finish();
-    sleeps.resolveNext(1_000);
     await finishing;
   });
 
@@ -138,7 +132,6 @@ describe('provider app-log poller', () => {
     );
     await vi.waitFor(() => expect(sleeps.hasPending(1_000)).toBe(true));
     const finishing = handle.finish();
-    sleeps.resolveNext(1_000);
     await expect(finishing).resolves.toEqual({
       status: 'cleanup-pending',
       reason: 'transport-failed',
@@ -152,14 +145,17 @@ describe('provider app-log poller', () => {
     expect(onOutputDispose).toHaveBeenCalledOnce();
   });
 
-  test('abandons a read that ignores its signal once the budget elapses', async () => {
+  test('finish keeps a reader whose read ignores its signal until that read settles', async () => {
     const sleeps = deferredSleeps();
     let readerDisposed = false;
     let readSignal: AbortSignal | undefined;
+    let settleRead!: (text: string) => void;
     const reader = providerReader({
       readLogs: vi.fn(async (_appBundleId, _lineLimit, signal) => {
         readSignal = signal;
-        return await new Promise<string>(() => {});
+        return await new Promise<string>((resolve) => {
+          settleRead = resolve;
+        });
       }),
       [Symbol.asyncDispose]: async () => {
         readerDisposed = true;
@@ -168,13 +164,20 @@ describe('provider app-log poller', () => {
     const handle = await startProviderAppLogPoller(
       pollerOptions(reader, { writes: [], sleeps, backend: 'android' }),
     );
+    await vi.waitFor(() => expect(sleeps.hasPending(5_000)).toBe(true));
     const finishing = handle.finish();
-    expect(readerDisposed).toBe(false);
+    // finish aborts the read and waits one read budget for the provider call to end.
+    await vi.waitFor(() => expect(readSignal?.aborted).toBe(true));
+    await vi.waitFor(() => expect(sleeps.hasPending(5_000)).toBe(true));
     sleeps.resolveNext(5_000);
-    await finishing;
+    await expect(finishing).resolves.toMatchObject({ status: 'cleanup-pending' });
+    expect(readerDisposed).toBe(false);
+
+    settleRead('late\n');
+    // The retryable cleanup reruns the finish transaction once the read has settled.
+    await handle[Symbol.asyncDispose]();
     expect(reader.readLogs).toHaveBeenCalledTimes(1);
     expect(reader.readLogs).toHaveBeenCalledWith('com.example.app', 1_000, expect.any(AbortSignal));
-    expect(readSignal?.aborted).toBe(true);
     expect(readerDisposed).toBe(true);
   });
 
@@ -190,9 +193,47 @@ describe('provider app-log poller', () => {
     const handle = await startProviderAppLogPoller(pollerOptions(reader, { writes: [], sleeps }));
     await vi.waitFor(() => expect(sleeps.hasPending(5_000)).toBe(true));
     sleeps.resolveNext(5_000);
-    await vi.waitFor(() => expect(handle.inspect().state).toBe('failed'));
+    await vi.waitFor(() => expect(handle.inspect().state).toBe('recovering'));
     rejectRead(new Error('late provider failure'));
     await expect(handle.finish()).resolves.toMatchObject({ status: 'completed' });
+  });
+
+  test('a read that outlives its budget blocks the next read until it settles', async () => {
+    const sleeps = deferredSleeps();
+    const writes: string[] = [];
+    let settleSlowRead!: (text: string) => void;
+    const readLogs = vi
+      .fn<ProviderAppLogReader['readLogs']>()
+      .mockImplementationOnce(
+        async () =>
+          await new Promise<string>((resolve) => {
+            settleSlowRead = resolve;
+          }),
+      )
+      .mockResolvedValue('line\n');
+    const handle = await startProviderAppLogPoller(
+      pollerOptions(providerReader({ readLogs }), { writes, sleeps }),
+    );
+    await vi.waitFor(() => expect(sleeps.hasPending(5_000)).toBe(true));
+    sleeps.resolveNext(5_000);
+    await vi.waitFor(() => expect(handle.inspect().state).toBe('recovering'));
+
+    // The abandoned call is still running, so the next tick starts no second read.
+    await vi.waitFor(() => expect(sleeps.hasPending(1_000)).toBe(true));
+    sleeps.resolveNext(1_000);
+    await vi.waitFor(() => expect(sleeps.hasPending(1_000)).toBe(true));
+    expect(readLogs).toHaveBeenCalledTimes(1);
+
+    settleSlowRead('ignored\n');
+    // The read's settlement and the released tick race through microtasks. A tick that runs first
+    // only reports recovering and sleeps again, so release ticks until the second read lands.
+    await vi.waitFor(() => {
+      if (sleeps.hasPending(1_000)) sleeps.resolveNext(1_000);
+      expect(writes).toEqual(['line\n']);
+    });
+    expect(readLogs).toHaveBeenCalledTimes(2);
+    expect(handle.inspect().state).toBe('active');
+    await handle.finish();
   });
 
   test('memoizes finish so resources are disposed once', async () => {
@@ -204,7 +245,6 @@ describe('provider app-log poller', () => {
     await vi.waitFor(() => expect(sleeps.hasPending(1_000)).toBe(true));
     const first = handle.finish();
     const second = handle.finish();
-    sleeps.resolveNext(1_000);
     expect(await second).toEqual(await first);
     expect(dispose).toHaveBeenCalledOnce();
   });
@@ -250,7 +290,7 @@ function pollerOptions(
       },
       clock: {
         now: () => 100,
-        sleep: async (milliseconds) => await options.sleeps.wait(milliseconds),
+        sleep: async (milliseconds, signal) => await options.sleeps.wait(milliseconds, signal),
       },
     },
     provider: 'Example',
@@ -264,8 +304,20 @@ function pollerOptions(
 function deferredSleeps() {
   const pending: Array<{ milliseconds: number; resolve: () => void }> = [];
   return {
-    wait: async (milliseconds: number) =>
-      await new Promise<void>((resolve) => pending.push({ milliseconds, resolve })),
+    wait: async (milliseconds: number, signal?: AbortSignal) =>
+      await new Promise<void>((resolve, reject) => {
+        signal?.throwIfAborted();
+        const entry = { milliseconds, resolve };
+        pending.push(entry);
+        signal?.addEventListener(
+          'abort',
+          () => {
+            pending.splice(pending.indexOf(entry), 1);
+            reject(signal.reason);
+          },
+          { once: true },
+        );
+      }),
     resolveNext: (milliseconds: number) => {
       const index = pending.findIndex((entry) => entry.milliseconds === milliseconds);
       if (index < 0) throw new Error(`No ${milliseconds}ms sleep is pending`);

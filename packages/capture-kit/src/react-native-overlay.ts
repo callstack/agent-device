@@ -7,6 +7,7 @@ import {
 import { rectArea } from '@agent-device/kernel/rect';
 import {
   isReactNativeCollapsedWarningBanner,
+  isReactNativeCollapsedWarningEvidenceLabel,
   isReactNativeCollapsedWarningLabel,
   isReactNativeOverlayDismissLabel,
   isReactNativeOverlayMinimizeLabel,
@@ -94,6 +95,10 @@ function collectReactNativeOverlayFacts(nodes: SnapshotNode[]): ReactNativeOverl
       hasOverlayControl,
       hasControllessRedBoxText,
       collapsedNodes,
+      collapsedEvidenceNodes: collectOverlayNodes(
+        collapsedNodes,
+        isReactNativeCollapsedWarningEvidenceLabel,
+      ),
       openDebuggerWarningNodes,
     }),
   };
@@ -150,10 +155,14 @@ function isReactNativeOverlayDetected(params: {
   hasOverlayControl: boolean;
   hasControllessRedBoxText: boolean;
   collapsedNodes: SnapshotNode[];
+  collapsedEvidenceNodes: SnapshotNode[];
   openDebuggerWarningNodes: SnapshotNode[];
 }): boolean {
+  const hasOverlayContext =
+    params.hasReactNativeStackFrame || hasKnownReactNativeOverlayText(params.text);
   return (
-    params.collapsedNodes.length > 0 ||
+    params.collapsedEvidenceNodes.length > 0 ||
+    (params.collapsedNodes.length > 0 && hasOverlayContext) ||
     params.openDebuggerWarningNodes.length > 0 ||
     params.hasControllessRedBoxText ||
     (params.hasOverlayControl &&

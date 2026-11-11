@@ -374,6 +374,19 @@ export function sessionOrDeviceSelectorRequiredDetails(): RefusalDetails<
  */
 const REQUEST_CANCELED_REASON = 'request_canceled';
 const REQUEST_CANCELED_MESSAGE = 'request canceled';
+/**
+ * A runtime owner whose facts advertised an operation it cannot actually perform: a contract bug,
+ * never a legitimate refusal. Built here, beside the other typed error factories, so every binder
+ * that reaches it already has it in its closure; `contracts/runtime-contract-error` is its public
+ * subpath for platform packages.
+ */
+export function createRuntimeContractInvalidError(message: string): AppError {
+  return new AppError('COMMAND_FAILED', message, {
+    reason: 'runtime-contract-invalid',
+    hint: 'This is an agent-device runtime contract bug; report the selected device and command.',
+  });
+}
+
 const REQUEST_CANCELED_HINT =
   'The request was canceled intentionally (explicit cancel or client disconnect) — no retry is needed unless the cancellation was unintended.';
 

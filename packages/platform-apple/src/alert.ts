@@ -2,6 +2,7 @@ import {
   ALERT_ACTION_RETRY_MS,
   ALERT_MIN_READ_BUDGET_MS,
   ALERT_NOT_FOUND_REASON,
+  ALERT_WAIT_TIMEOUT_REASON,
   ALERT_NOT_FOUND_RUNNER_CODE,
   ALERT_POLL_INTERVAL_MS,
   ALERT_UNRESOLVED_RUNNER_CODE,
@@ -121,7 +122,10 @@ export async function awaitAppleAlert(
     }
   }
   if (isAlertUnresolvedError(lastRetriable)) throw lastRetriable;
-  throw new AppError('COMMAND_FAILED', 'alert wait timed out', lastRetriable?.details);
+  throw new AppError('COMMAND_FAILED', 'alert wait timed out', {
+    ...lastRetriable?.details,
+    reason: ALERT_WAIT_TIMEOUT_REASON,
+  });
 }
 
 /**

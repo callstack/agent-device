@@ -24,14 +24,16 @@ export function presentIosRunnerSnapshot(
     hittabilityAvailable,
   );
   const compacted = compactRunnerPayload(input.presentation.payload.nodes, projection, request);
-  const validationStats = validateRunnerOutput(
-    compacted.nodes,
-    projection,
-    viewport,
-    foldPolicy,
-    hittabilityAvailable,
-    payloadValidation,
-  );
+  const validationStats = compacted.compacted
+    ? validateRunnerOutput(
+        compacted.nodes,
+        projection,
+        viewport,
+        foldPolicy,
+        hittabilityAvailable,
+        payloadValidation,
+      )
+    : payloadValidation;
   return {
     nodes: compacted.nodes,
     ...(viewport ? { validatedViewport: viewport } : {}),
@@ -107,13 +109,15 @@ function compactRunnerPayload(
   nodes: readonly RawSnapshotNode[],
   projection: 'regular' | 'raw',
   request: IosSnapshotRequest,
-): ReturnType<typeof buildIosInteractiveSnapshotPresentation> {
+): ReturnType<typeof buildIosInteractiveSnapshotPresentation> & { compacted: boolean } {
   if (projection === 'regular' && request.interactiveOnly) {
-    return buildIosInteractiveSnapshotPresentation([...nodes]);
+    return { ...buildIosInteractiveSnapshotPresentation([...nodes]), compacted: true };
   }
+  // The identity copy holds exactly the payload `validateRunnerPayloads` already checked.
   return {
     nodes: [...nodes],
     presentedIndexesBySourceIndex: identityMapping(nodes),
+    compacted: false,
   };
 }
 

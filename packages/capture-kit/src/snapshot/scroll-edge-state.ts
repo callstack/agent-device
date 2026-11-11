@@ -76,17 +76,20 @@ export async function captureScrollEdgeState(params: {
   captureNodes: (scope?: string) => Promise<readonly (RawSnapshotNode | SnapshotNode)[]>;
 }): Promise<ScrollEdgeState> {
   const { edge, target = {}, scope, captureNodes } = params;
+  let state: ScrollEdgeState;
   try {
     const nodes = await captureNodes(scope);
     const { analyzeScrollEdgeState } = await import('./scroll-edge-state/selection.ts');
-    const state = analyzeScrollEdgeState(nodes, edge, target);
-    if (scope && state.emptySnapshot) {
-      return await captureScrollEdgeState({ edge, target, captureNodes });
-    }
-    return state;
+    state = analyzeScrollEdgeState(nodes, edge, target);
   } catch (error) {
+    // A typed failure (request cancel, device loss, runner refusal) already names its reason.
+    if (error instanceof AppError) throw error;
     throw buildScrollEdgeVerificationError(edge, scope, error);
   }
+  if (scope && state.emptySnapshot) {
+    return await captureScrollEdgeState({ edge, target, captureNodes });
+  }
+  return state;
 }
 
 /**

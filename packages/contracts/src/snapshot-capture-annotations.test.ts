@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { SNAPSHOT_QUALITY_STATES } from '@agent-device/kernel/snapshot';
+import {
+  IOS_TARGET_ACTIVATION_PRIOR_STATES,
+  IOS_TARGET_ACTIVATION_REASONS,
+  SNAPSHOT_QUALITY_STATES,
+} from '@agent-device/kernel/snapshot';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import {
   readSerializedSnapshotCaptureAnnotations,
@@ -120,4 +124,44 @@ test('serialized clipping notes are bounded and independent of verdicts', () => 
       undefined,
     );
   }
+});
+
+test('every declared activation reason and prior state survives; an undeclared one drops the fact', () => {
+  for (const reason of IOS_TARGET_ACTIVATION_REASONS) {
+    for (const priorState of IOS_TARGET_ACTIVATION_PRIOR_STATES) {
+      const targetActivation = { reason, priorState, otherActiveApplicationPid: 42 };
+      assert.deepEqual(
+        readSerializedSnapshotCaptureAnnotations({ targetActivation }).targetActivation,
+        targetActivation,
+      );
+    }
+  }
+  for (const otherActiveApplicationPid of [0, -4, 1.5]) {
+    assert.deepEqual(
+      readSerializedSnapshotCaptureAnnotations({
+        targetActivation: {
+          reason: 'stale_target',
+          priorState: 'notRunning',
+          otherActiveApplicationPid,
+        },
+      }).targetActivation,
+      { reason: 'stale_target', priorState: 'notRunning' },
+    );
+  }
+  for (const targetActivation of [
+    { reason: 'bogus', priorState: 'notRunning' },
+    { reason: 'stale_target', priorState: 'runningForeground' },
+  ]) {
+    assert.equal(
+      readSerializedSnapshotCaptureAnnotations({ targetActivation }).targetActivation,
+      undefined,
+    );
+  }
+});
+
+test('an array is not Android snapshot metadata', () => {
+  assert.equal(
+    readSerializedSnapshotCaptureAnnotations({ androidSnapshot: ['helper'] }).androidSnapshot,
+    undefined,
+  );
 });

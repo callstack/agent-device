@@ -13,7 +13,8 @@ import {
 } from './snapshot-rect-projection.ts';
 import { analyzeReactNativeOverlay } from './react-native-overlay.ts';
 import {
-  findNearestAncestor,
+  buildSnapshotNodeMap,
+  findSnapshotAncestor,
   isMeaningfulSignal,
   isViewportRootNode,
   normalizeType,
@@ -72,14 +73,16 @@ export function buildScreenshotOverlayRefs(
   options: { maxRefs?: number } = {},
 ): ScreenshotOverlayRef[] {
   const snapshotBounds = resolveSnapshotBounds(snapshot.nodes);
+  const nodeByIndex = buildSnapshotNodeMap(snapshot.nodes);
+  const descendantLabels = buildDescendantOverlayLabels(snapshot.nodes, nodeByIndex);
   const candidatesByRef = new Map<string, OverlayCandidate>();
   for (const node of snapshot.nodes) {
     if (!isOverlaySourceNode(snapshot, snapshotBounds, node)) continue;
-    const target = resolveOverlayTarget(snapshot.nodes, node);
+    const target = resolveOverlayTarget(snapshot.nodes, nodeByIndex, node);
     // The overlay labels each box with the ref an agent would act on, so a target the capture
     // issued no ref for gets no box: nothing can be addressed by it.
     if (!target?.ref || !target.rect || !hasPositiveRect(target.rect)) continue;
-    const label = resolveOverlayLabel(node, target, snapshot.nodes);
+    const label = resolveOverlayLabel(node, target, descendantLabels);
     const score = scoreOverlayCandidate(node, target, label);
     const overlaySourceRect = resolveOverlaySourceRect(snapshot, target, snapshot.nodes);
     const overlayRect = projectRectToScreenshot(
@@ -189,14 +192,19 @@ function isOverlaySourceNode(
 
 function resolveOverlayTarget(
   nodes: SnapshotState['nodes'],
+  nodeByIndex: ReadonlyMap<number, SnapshotNode>,
   node: SnapshotNode,
 ): SnapshotNode | null {
+  const nearest = (predicate: (ancestor: SnapshotNode) => boolean) =>
+    findSnapshotAncestor(nodes, node, nodeByIndex, (ancestor) =>
+      predicate(ancestor) ? ancestor : null,
+    );
   return (
     [
       isOverlayActionableNode(node) ? node : null,
-      findNearestAncestor(nodes, node, isOverlayActionableNode),
+      nearest(isOverlayActionableNode),
       node.hittable ? node : null,
-      findNearestAncestor(nodes, node, (parent) => parent.hittable === true),
+      nearest((parent) => parent.hittable === true),
     ].find(isUsableOverlayTarget) ?? null
   );
 }
@@ -204,11 +212,11 @@ function resolveOverlayTarget(
 function resolveOverlayLabel(
   source: SnapshotNode,
   target: SnapshotNode,
-  nodes: SnapshotState['nodes'],
+  descendantLabels: ReadonlyMap<string, string>,
 ): string | undefined {
   const sourceLabel = resolveNodeOverlayLabel(source);
   if (source.ref !== target.ref && sourceLabel) return sourceLabel;
-  const descendantLabel = findDescendantOverlayLabel(target, nodes);
+  const descendantLabel = target.ref ? descendantLabels.get(target.ref) : undefined;
   if (descendantLabel) return descendantLabel;
   return resolveNodeOverlayLabel(target);
 }
@@ -311,36 +319,92 @@ function resolveNodeOverlayLabel(node: SnapshotNode): string | undefined {
   return undefined;
 }
 
-function findDescendantOverlayLabel(
-  target: SnapshotNode,
+type DescendantLabel = Readonly<{ label: string; score: number; position: number }>;
+
+/**
+ * The best-scoring labelled descendant of every ref'd node, folded bottom-up in one post-order pass
+ * (O(nodes)). Ties keep the earlier node, as a per-target scan in node order would. A node whose
+ * parent chain never reaches a root (a parent cycle) contributes to no ancestor.
+ */
+function buildDescendantOverlayLabels(
   nodes: SnapshotState['nodes'],
-): string | undefined {
-  let best: { label: string; score: number } | null = null;
-  for (const node of nodes) {
-    if (node.ref === target.ref || !isDescendantOf(node, target, nodes)) continue;
-    const label = resolveNodeOverlayLabel(node);
-    if (!label) continue;
-    const score = scoreDescendantLabelCandidate(node);
-    if (!best || score > best.score) {
-      best = { label, score };
+  nodeByIndex: ReadonlyMap<number, SnapshotNode>,
+): Map<string, string> {
+  const children = collectOverlayChildren(nodes, nodeByIndex);
+  const best: Array<DescendantLabel | undefined> = [];
+  const visited = new Set<number>();
+  const pending: Array<{ position: number; expanded: boolean }> = children.roots.map(
+    (position) => ({ position, expanded: false }),
+  );
+  while (pending.length > 0) {
+    const entry = pending.pop()!;
+    if (entry.expanded) {
+      best[entry.position] = foldChildLabels(nodes, children.byParent.get(entry.position), best);
+      continue;
+    }
+    if (visited.has(entry.position)) continue;
+    visited.add(entry.position);
+    pending.push({ position: entry.position, expanded: true });
+    for (const child of children.byParent.get(entry.position) ?? []) {
+      pending.push({ position: child, expanded: false });
     }
   }
-  return best?.label;
+  const labels = new Map<string, string>();
+  nodes.forEach((node, position) => {
+    const label = best[position]?.label;
+    if (node.ref && label !== undefined && !labels.has(node.ref)) labels.set(node.ref, label);
+  });
+  return labels;
 }
 
-function isDescendantOf(
-  node: SnapshotNode,
-  ancestor: SnapshotNode,
+function collectOverlayChildren(
   nodes: SnapshotState['nodes'],
-): boolean {
-  let current = node;
-  while (current.parentIndex !== undefined) {
-    const parent = nodes[current.parentIndex];
-    if (!parent) return false;
-    if (parent.ref === ancestor.ref) return true;
-    current = parent;
+  nodeByIndex: ReadonlyMap<number, SnapshotNode>,
+): { roots: number[]; byParent: Map<number, number[]> } {
+  const positions = new Map(nodes.map((node, position) => [node, position]));
+  const roots: number[] = [];
+  const byParent = new Map<number, number[]>();
+  nodes.forEach((node, position) => {
+    const { parentIndex } = node;
+    const parent =
+      parentIndex === undefined ? undefined : (nodeByIndex.get(parentIndex) ?? nodes[parentIndex]);
+    const parentPosition = parent && parent !== node ? positions.get(parent) : undefined;
+    if (parentPosition === undefined) {
+      roots.push(position);
+      return;
+    }
+    const siblings = byParent.get(parentPosition);
+    if (siblings) siblings.push(position);
+    else byParent.set(parentPosition, [position]);
+  });
+  return { roots, byParent };
+}
+
+function foldChildLabels(
+  nodes: SnapshotState['nodes'],
+  childPositions: readonly number[] | undefined,
+  best: ReadonlyArray<DescendantLabel | undefined>,
+): DescendantLabel | undefined {
+  let winner: DescendantLabel | undefined;
+  for (const position of childPositions ?? []) {
+    const child = nodes[position]!;
+    const label = resolveNodeOverlayLabel(child);
+    const own = label
+      ? { label, score: scoreDescendantLabelCandidate(child), position }
+      : undefined;
+    winner = betterDescendantLabel(betterDescendantLabel(winner, own), best[position]);
   }
-  return false;
+  return winner;
+}
+
+function betterDescendantLabel(
+  current: DescendantLabel | undefined,
+  candidate: DescendantLabel | undefined,
+): DescendantLabel | undefined {
+  if (!current || !candidate) return current ?? candidate;
+  if (candidate.score !== current.score)
+    return candidate.score > current.score ? candidate : current;
+  return candidate.position < current.position ? candidate : current;
 }
 
 function scoreDescendantLabelCandidate(node: SnapshotNode): number {

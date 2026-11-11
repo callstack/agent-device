@@ -471,3 +471,66 @@ test('annotateScreenshotWithRefs draws the overlay onto the saved PNG', async ()
     [255, 255, 255, 255],
   );
 });
+
+test('buildScreenshotOverlayRefs returns for a node that names itself as its parent', () => {
+  const snapshot = makeSnapshotState([
+    {
+      index: 0,
+      type: 'XCUIElementTypeButton',
+      label: 'Save',
+      hittable: true,
+      rect: { x: 0, y: 0, width: 40, height: 20 },
+    },
+    {
+      index: 1,
+      parentIndex: 1,
+      type: 'XCUIElementTypeStaticText',
+      label: 'Detached',
+      rect: { x: 2, y: 2, width: 30, height: 12 },
+    },
+  ]);
+
+  assert.deepEqual(
+    buildScreenshotOverlayRefs(snapshot, 200, 100).map((ref) => ref.label),
+    ['Save'],
+  );
+});
+
+test('buildScreenshotOverlayRefs reads each parent link a bounded number of times on a deep chain', () => {
+  // Every labelled control is its own target and takes its best descendant label. Walking up from
+  // every labelled node reads nodes^2 / 2 parent links (about 1.1e6 here); folding labels
+  // bottom-up reads each link a constant number of times.
+  const depth = 1_500;
+  let parentReads = 0;
+  const snapshot = makeSnapshotState(
+    Array.from({ length: depth }, (_, index) => ({
+      index,
+      ...(index > 0 ? { parentIndex: index - 1 } : {}),
+      type: 'XCUIElementTypeButton',
+      label: `Control ${index}`,
+      hittable: true,
+      rect: { x: 0, y: 0, width: 200, height: 100 },
+    })),
+  );
+  const countedNodes = snapshot.nodes.map(
+    (node) =>
+      new Proxy(node, {
+        get(target, key, receiver) {
+          if (key === 'parentIndex') parentReads += 1;
+          return Reflect.get(target, key, receiver);
+        },
+      }),
+  );
+
+  const overlayRefs = buildScreenshotOverlayRefs({ ...snapshot, nodes: countedNodes }, 200, 100);
+
+  // Each control's best descendant is its direct child: same score, earliest position.
+  assert.deepEqual(
+    overlayRefs.slice(0, 2).map((ref) => [ref.ref, ref.label]),
+    [
+      ['e1', 'Control 1'],
+      ['e2', 'Control 2'],
+    ],
+  );
+  assert.ok(parentReads < 20 * depth, `read ${parentReads} parent links for ${depth} nodes`);
+});

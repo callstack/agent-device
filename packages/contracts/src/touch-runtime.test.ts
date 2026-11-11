@@ -331,3 +331,64 @@ test('the fused double-click keeps the interactor as its receiver', async () => 
 
   expect(owner.pressed).toEqual([[20, 30]]);
 });
+
+test('an admitted ref operation whose interactor lacks the member is a runtime contract error', async () => {
+  const operations = bindLocalTouchInteractor({
+    device,
+    signal: new AbortController().signal,
+    resolveInteractor: async () => ({}) as unknown as Interactor,
+    facts,
+    pause: async () => {},
+  });
+
+  for (const run of [
+    () => operations.tapRef!({ ref: '@e4', execution: { requestId: 'tap' } }),
+    () =>
+      operations.fillRef!({ ref: '@e4', text: 'x', delayMs: 0, execution: { requestId: 'fill' } }),
+  ]) {
+    await expect(run()).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'runtime-contract-invalid' },
+    });
+  }
+});
+
+test('hover follows the touch rule: unadvertised is not bound, advertised without a member is a contract error', async () => {
+  // Without facts for hover, neither leg is bound: the command layer refuses from the fact
+  // (UNSUPPORTED_OPERATION with the longpress hint), and no interactor is consulted.
+  const unadvertised = bindLocalTouchInteractor({
+    device,
+    signal: new AbortController().signal,
+    resolveInteractor: async () => ({}) as unknown as Interactor,
+    facts,
+    pause: async () => {},
+  });
+  expect(unadvertised.hoverPoint).toBeUndefined();
+  expect(unadvertised.hoverRef).toBeUndefined();
+
+  const advertised = bindLocalTouchInteractor({
+    device,
+    signal: new AbortController().signal,
+    resolveInteractor: async () => ({}) as unknown as Interactor,
+    facts: touchRuntimeOperationFacts({
+      unsupported: unavailable,
+      tap: available,
+      tapRef: available,
+      longPress: available,
+      fill: available,
+      fillRef: available,
+      hover: available,
+      hoverRef: available,
+    }),
+    pause: async () => {},
+  });
+  for (const run of [
+    () => advertised.hoverPoint!({ point: { x: 1, y: 2 }, execution: { requestId: 'hover' } }),
+    () => advertised.hoverRef!({ ref: '@e4', execution: { requestId: 'hover-ref' } }),
+  ]) {
+    await expect(run()).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'runtime-contract-invalid' },
+    });
+  }
+});

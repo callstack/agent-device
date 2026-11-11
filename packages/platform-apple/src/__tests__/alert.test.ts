@@ -8,6 +8,7 @@ import {
   ALERT_MIN_READ_BUDGET_MS,
   ALERT_NOT_FOUND_REASON,
   ALERT_NOT_FOUND_RUNNER_CODE,
+  ALERT_WAIT_TIMEOUT_REASON,
   ALERT_POLL_INTERVAL_MS,
   ALERT_UNRESOLVED_RUNNER_CODE,
 } from '@agent-device/contracts/alert-contract';
@@ -104,7 +105,7 @@ test('a wait that never sees an alert reports the timeout rather than the last a
   );
   await vi.advanceTimersByTimeAsync(2_000);
 
-  assert.match(String(((await outcome) as Error).message), /alert wait timed out/);
+  assert.equal(((await outcome) as AppError).details?.reason, ALERT_WAIT_TIMEOUT_REASON);
 });
 
 test('an accept retries only while the backend says the alert is not there yet', async () => {
@@ -521,7 +522,7 @@ test.each([
       assert.equal(error, observed);
       assert.equal(error.details?.dispatched, 'no');
     } else {
-      assert.equal(error.message, 'alert wait timed out');
+      assert.equal(error.details?.reason, ALERT_WAIT_TIMEOUT_REASON);
       assert.equal(error.details?.runnerErrorCode, ALERT_NOT_FOUND_RUNNER_CODE);
     }
   },

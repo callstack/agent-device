@@ -12,7 +12,7 @@ import type { GesturePlan } from './gesture-plan-types.ts';
 import type { ReadSettingResult, SettingOptions } from './settings.ts';
 import type { ReadableSetting } from './settings-catalog.ts';
 import type { SessionSurface } from './session-surface.ts';
-import type { BackendSnapshotResult } from './snapshot-types.ts';
+import type { InteractorSnapshotCapture } from './snapshot-types.ts';
 import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
 import type {
   IosAcquisitionProducer,
@@ -269,7 +269,7 @@ export type KeyboardEnterResult =
  * (`@agent-device/kernel/snapshot`) makes a cross-channel `backend`/`producer` combination
  * fail to compile.
  */
-export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & {
+export type SnapshotResult = Omit<InteractorSnapshotCapture, 'backend' | 'nodes'> & {
   nodes?: RawSnapshotNode[];
   comparisonIdentity?: IosSnapshotComparisonIdentity;
   /**

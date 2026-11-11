@@ -23,7 +23,8 @@ export type ScreenshotResultData = {
   overlayRefs?: ScreenshotOverlayRef[];
   warnings?: string[];
 };
-export type BackendSnapshotResult = {
+/** What a platform interactor's snapshot capture returns, before the daemon builds `SnapshotState`. */
+export type InteractorSnapshotCapture = {
   nodes?: SnapshotNode[];
   truncated?: boolean;
   backend?: string;

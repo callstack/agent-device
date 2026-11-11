@@ -10,7 +10,11 @@ const REDACTED_STDERR_MAX_LENGTH = 8192;
 const TRUNCATION_SUFFIX = '...<truncated>';
 
 export function redactDiagnosticData<T>(input: T): T {
-  return redactValue(input, new WeakSet<object>()) as T;
+  return redactValue(input, {
+    ancestors: new WeakSet(),
+    clones: new WeakMap(),
+    circularMarks: 0,
+  }) as T;
 }
 
 /** Sanitizes an untrusted structured cause before it crosses a process or client boundary. */
@@ -26,25 +30,44 @@ export function sanitizeErrorCause(cause: unknown): { message: string; code?: st
   });
 }
 
-function redactValue(value: unknown, seen: WeakSet<object>, keyHint?: string): unknown {
+/**
+ * `ancestors` holds only the current path, so a shared non-cyclic reference is copied, not marked.
+ * An object's redacted clone never depends on the key it sits under (`keyHint` only bounds strings),
+ * so `clones` reuses a finished clone instead of redacting a shared subtree once per path. A clone
+ * that contains a `[Circular]` mark depends on the path it was reached by and is not reused.
+ */
+type RedactionTraversal = {
+  ancestors: WeakSet<object>;
+  clones: WeakMap<object, unknown>;
+  circularMarks: number;
+};
+
+function redactValue(value: unknown, traversal: RedactionTraversal, keyHint?: string): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value === 'string') return redactString(value, keyHint);
   if (typeof value !== 'object') return value;
 
-  if (seen.has(value as object)) return '[Circular]';
-  seen.add(value as object);
-
-  if (Array.isArray(value)) {
-    return value.map((entry) => redactValue(entry, seen));
+  if (traversal.clones.has(value)) return traversal.clones.get(value);
+  if (traversal.ancestors.has(value)) {
+    traversal.circularMarks += 1;
+    return '[Circular]';
   }
+  const marksBefore = traversal.circularMarks;
+  traversal.ancestors.add(value);
+  try {
+    const clone = redactObject(value, traversal);
+    if (traversal.circularMarks === marksBefore) traversal.clones.set(value, clone);
+    return clone;
+  } finally {
+    traversal.ancestors.delete(value);
+  }
+}
 
+function redactObject(value: object, traversal: RedactionTraversal): unknown {
+  if (Array.isArray(value)) return value.map((entry) => redactValue(entry, traversal));
   const output: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (SENSITIVE_KEY_RE.test(key)) {
-      output[key] = '[REDACTED]';
-      continue;
-    }
-    output[key] = redactValue(entry, seen, key);
+    output[key] = SENSITIVE_KEY_RE.test(key) ? '[REDACTED]' : redactValue(entry, traversal, key);
   }
   return output;
 }

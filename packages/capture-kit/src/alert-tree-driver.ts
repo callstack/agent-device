@@ -8,6 +8,7 @@ import {
   type AlertPlatform,
   ALERT_NOT_FOUND_REASON,
   ALERT_POLL_INTERVAL_MS,
+  ALERT_WAIT_TIMEOUT_REASON,
   ALERT_WINDOW_EXPIRED_REASON,
   type AlertStatusKind,
   DEFAULT_ALERT_TIMEOUT_MS,
@@ -18,7 +19,8 @@ import { AppError, createRequestCanceledError } from '@agent-device/kernel/error
 import { successText } from '@agent-device/kernel/success-text';
 
 /**
- * The one driver for every backend that reads alerts from a capture tree (Android ADB). A
+ * The shared driver for backends that read alerts from a capture tree (today Android ADB; the
+ * Apple backends ask their runner or helper instead). A
  * backend supplies only its observation (`capture` + `findCandidate`), its acting policy
  * (`choose`), and its press seam (`press`). It lives in the capture kit: an iOS provider
  * must not depend on the Android package to poll a tree.
@@ -144,7 +146,9 @@ export async function runTreeAlertAction<
       // Both a quiet capture and one that stayed alert-shaped yet unresolvable mean no
       // actionable alert ever resolved within the window; the timeout phrasing is the honest
       // answer for either.
-      throw new AppError('COMMAND_FAILED', 'alert wait timed out');
+      throw new AppError('COMMAND_FAILED', 'alert wait timed out', {
+        reason: ALERT_WAIT_TIMEOUT_REASON,
+      });
     }
     return {
       kind: 'alertWait',

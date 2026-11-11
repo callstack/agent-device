@@ -59,8 +59,8 @@ export type {
 export type {
   AndroidSnapshotBackendMetadata,
   BackendSnapshotOptions,
-  BackendSnapshotResult,
   FindLocator,
+  InteractorSnapshotCapture,
   ScreenshotResultData,
 } from '../snapshot-types.ts';
 export {

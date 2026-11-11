@@ -67,26 +67,35 @@ function createPollerHandle(
   const { backend, host } = options;
   const startedAt = host.clock.now();
   let state: AppLogLiveSnapshot['state'] = 'active';
-  let stopped = false;
+  const stop = new AbortController();
   let previous = existingTail;
+  // A read abandoned at its budget may still be running in the provider. No second read starts,
+  // and the reader is not disposed, until it settles.
+  let inFlight: Promise<void> | undefined;
+  const startRead = () => {
+    const attempt = boundedRead(options, stop.signal);
+    const settled: Promise<void> = attempt.settled.then(() => {
+      if (inFlight === settled) inFlight = undefined;
+    });
+    inFlight = settled;
+    return attempt.outcome;
+  };
+  const pollOnce = async (): Promise<AppLogLiveSnapshot['state']> => {
+    if (inFlight) return 'recovering';
+    const read = await startRead();
+    // A slow provider read is transient like a failed one: retry on the next tick.
+    if (read.status === 'timeout' || stop.signal.aborted) return 'recovering';
+    const delta = appendedTail(previous, read.text);
+    if (delta) await output.write(delta.endsWith('\n') ? delta : `${delta}\n`);
+    previous = read.text;
+    return 'active';
+  };
   const polling = (async () => {
-    while (!stopped) {
-      try {
-        const read = await boundedRead(options);
-        if (read.status === 'timeout') {
-          state = 'failed';
-          return;
-        }
-        if (stopped) return;
-        const delta = appendedTail(previous, read.text);
-        if (delta) await output.write(delta.endsWith('\n') ? delta : `${delta}\n`);
-        previous = read.text;
-        state = 'active';
-      } catch {
-        if (stopped) return;
-        state = 'recovering';
-      }
-      await host.clock.sleep(POLL_INTERVAL_MS);
+    while (!stop.signal.aborted) {
+      const next = await pollOnce().catch(() => 'recovering' as const);
+      if (stop.signal.aborted) return;
+      state = next;
+      await host.clock.sleep(POLL_INTERVAL_MS, stop.signal).catch(() => undefined);
     }
   })();
   const pendingDisposals = new Set<AsyncDisposable>([options.reader, output]);
@@ -95,9 +104,12 @@ function createPollerHandle(
     | undefined;
   const finish = async () =>
     (finishPromise ??= (async () => {
-      stopped = true;
+      stop.abort();
       await polling;
-      const failures = await disposeAll(pendingDisposals);
+      const readSettled = await settledWithin(inFlight, host, READ_TIMEOUT_MS);
+      // A reader whose read never settled stays owned; a later finish or dispose retries it.
+      const failures = await disposeAll(pendingDisposals, readSettled ? undefined : options.reader);
+      if (!readSettled) failures.push(new Error('provider read still in flight'));
       if (failures.length > 0) {
         finishPromise = undefined;
         state = 'failed';
@@ -119,21 +131,48 @@ function createPollerHandle(
   });
 }
 
-async function boundedRead(
-  options: ProviderAppLogPollerOptions,
-): Promise<Readonly<{ status: 'read'; text: string }> | Readonly<{ status: 'timeout' }>> {
-  const controller = new AbortController();
-  const read = options.reader.readLogs(options.appBundleId, READ_LINE_LIMIT, controller.signal);
+async function settledWithin(
+  pending: Promise<void> | undefined,
+  host: ProviderAppLogPollerOptions['host'],
+  budgetMs: number,
+): Promise<boolean> {
+  if (!pending) return true;
+  const grace = new AbortController();
   try {
     return await Promise.race([
-      read.then((text) => ({ status: 'read' as const, text })),
-      options.host.clock
-        .sleep(READ_TIMEOUT_MS, controller.signal)
-        .then(() => ({ status: 'timeout' as const })),
+      pending.then(() => true),
+      host.clock.sleep(budgetMs, grace.signal).then(() => false),
     ]);
   } finally {
-    controller.abort();
+    grace.abort();
   }
+}
+
+/**
+ * `outcome` settles at the read, its budget, or `stopSignal`, whichever comes first. `settled`
+ * settles only when the provider call itself does, so a caller can wait out an abandoned read.
+ */
+function boundedRead(
+  options: ProviderAppLogPollerOptions,
+  stopSignal: AbortSignal,
+): Readonly<{
+  outcome: Promise<Readonly<{ status: 'read'; text: string }> | Readonly<{ status: 'timeout' }>>;
+  settled: Promise<void>;
+}> {
+  const controller = new AbortController();
+  const signal = AbortSignal.any([controller.signal, stopSignal]);
+  const read = options.reader
+    .readLogs(options.appBundleId, READ_LINE_LIMIT, signal)
+    .then((text) => ({ status: 'read' as const, text }));
+  const settled = read.then(
+    () => undefined,
+    () => undefined,
+  );
+  const outcome = Promise.race([
+    read,
+    options.host.clock.sleep(READ_TIMEOUT_MS, signal).then(() => ({ status: 'timeout' as const })),
+  ]).finally(() => controller.abort());
+  return { outcome, settled };
 }
 
 /** The new tail minus its longest overlap with the previous tail's suffix. */
@@ -173,12 +212,17 @@ function remoteOnlyTail(tail: string): string {
     .join('\n');
 }
 
-async function disposeAll(resources: Set<AsyncDisposable>): Promise<unknown[]> {
+async function disposeAll(
+  resources: Set<AsyncDisposable>,
+  retained?: AsyncDisposable,
+): Promise<unknown[]> {
   const results = await Promise.allSettled(
-    [...resources].map(async (resource) => {
-      await resource[Symbol.asyncDispose]();
-      resources.delete(resource);
-    }),
+    [...resources]
+      .filter((resource) => resource !== retained)
+      .map(async (resource) => {
+        await resource[Symbol.asyncDispose]();
+        resources.delete(resource);
+      }),
   );
   return results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
 }

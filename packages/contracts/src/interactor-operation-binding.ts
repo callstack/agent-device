@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRuntimeContractInvalidError } from '@agent-device/kernel/errors';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 
 /**
@@ -27,10 +27,8 @@ export function requireInteractorMethod<Method>(
   operation: string,
 ): NonNullable<Method> {
   if (method) return method as NonNullable<Method>;
-  throw new AppError(
-    'COMMAND_FAILED',
+  throw createRuntimeContractInvalidError(
     `${operation} was admitted but its bound interactor has no implementation.`,
-    { reason: 'interactor-method-missing' },
   );
 }
 

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { readSnapshotKeyboardBandFact } from './record.ts';
+import { isPositiveFiniteRect } from './rect.ts';
 
 // Every seam that receives a producer-declared keyboard band reads it through this one function
 // (#2660): the Apple runner's wire reader and the Node client's snapshot reader. These cases own the
@@ -133,4 +134,25 @@ test('a tree binding survives only as the literal true on the kinds that carry i
     readSnapshotKeyboardBandFact({ kind: 'visibility-only', visible: false, treeBound: true }),
     { kind: 'visibility-only', visible: false },
   );
+});
+
+test('a keyboard frame is measured exactly when the shared rect guard admits it', () => {
+  const rects = [
+    FRAME,
+    { x: 0, y: 0, width: 0, height: 10 },
+    { x: 0, y: 0, width: 10, height: -1 },
+    { x: Number.NaN, y: 0, width: 10, height: 10 },
+    { x: Number.MAX_VALUE, y: 0, width: Number.MAX_VALUE, height: 10 },
+    { x: 0, y: Number.MAX_VALUE, width: 10, height: Number.MAX_VALUE },
+    {
+      x: -Number.MAX_VALUE / 2,
+      y: -Number.MAX_VALUE / 2,
+      width: Number.MAX_VALUE,
+      height: Number.MAX_VALUE,
+    },
+  ];
+  for (const frame of rects) {
+    const fact = readSnapshotKeyboardBandFact({ kind: 'visible', frame });
+    assert.equal(fact?.kind === 'visible', isPositiveFiniteRect(frame), JSON.stringify(frame));
+  }
 });

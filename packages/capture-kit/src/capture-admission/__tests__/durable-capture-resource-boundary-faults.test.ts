@@ -138,7 +138,7 @@ test('retains recording evidence when exact-owner recovery resolves after its de
     const recovery = resource.recoverAll({
       sessionsDir: path.dirname(context.sessionStore.resolveSessionDir(context.sessionName)),
       scope,
-      perRecordDeadlineMs: 25,
+      acquisitionDeadlineMs: 25,
       onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
       acquireControl: async (_envelope, recoveryScope) => {
         expect(recoveryScope.signal.aborted).toBe(false);

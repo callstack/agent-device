@@ -23,14 +23,14 @@ export function recoverAudioProbeResourceAfterDaemonLock(params: {
   resourcePath: string;
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
-  perRecordDeadlineMs?: number;
+  acquisitionDeadlineMs?: number;
   onDiagnostic?: (diagnostic: ResourceDiagnostic) => void;
 }) {
   return audioProbeDurableResource.recoverOne(
     {
       sessionsDir: params.sessionsDir,
       scope: params.scope,
-      perRecordDeadlineMs: params.perRecordDeadlineMs,
+      acquisitionDeadlineMs: params.acquisitionDeadlineMs,
       onDiagnostic: params.onDiagnostic,
       acquireControl: async (envelope, scope) =>
         await acquireAudioProbeRecoveryControl(params.gateway, envelope, scope),

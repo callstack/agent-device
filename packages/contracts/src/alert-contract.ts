@@ -55,6 +55,14 @@ export const ALERT_UNRESOLVED_RUNNER_CODE = 'ALERT_UNRESOLVED';
  */
 export const ALERT_WINDOW_EXPIRED_REASON = 'alert-window-expired';
 
+/**
+ * `alert wait` saw no actionable alert within its window and no stronger typed failure applies. A
+ * backend that ends the window on a typed refusal, such as the Apple runner's `ALERT_UNRESOLVED`
+ * for an unreadable prompt, reports that refusal instead. A caller tells a timed-out wait from a
+ * transport failure by reason, not by message.
+ */
+export const ALERT_WAIT_TIMEOUT_REASON = 'alert-wait-timeout';
+
 /** What an `alert get` capture resolved to, typed so clients switch on states, not messages. */
 export type AlertStatusKind = 'visible' | 'none' | 'undecided';
 

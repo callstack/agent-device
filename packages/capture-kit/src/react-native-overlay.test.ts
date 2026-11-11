@@ -103,3 +103,52 @@ describe('React Native collapsed warning dismissal', () => {
     );
   });
 });
+
+describe('React Native overlay evidence', () => {
+  test('app text with a generic severity prefix is not an overlay', () => {
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        type: 'StaticText',
+        label: 'Error: invalid email',
+        rect: { x: 16, y: 300, width: 300, height: 44 },
+      }),
+      node({ index: 1, ref: 'e2', type: 'Button', label: 'Close', hittable: true }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes).detected).toBe(false);
+    expect(formatReactNativeOverlayWarning(nodes)).toBe(undefined);
+  });
+
+  test('iOS app error text in a two-line banner-sized StaticText is not an overlay', () => {
+    // iOS reports `hittable` from geometry, so every visible StaticText is hittable: neither that
+    // flag nor the banner shape is evidence for a bare severity prefix.
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        type: 'StaticText',
+        label: 'Error: password must contain at least 8 characters and one number',
+        rect: { x: 16, y: 412, width: 370, height: 40 },
+        hittable: true,
+      }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes).detected).toBe(false);
+    expect(formatReactNativeOverlayWarning(nodes)).toBe(undefined);
+  });
+
+  test('a generic severity banner counts once a React Native stack frame is on screen', () => {
+    const nodes = [
+      node({ index: 0, ref: 'e1', label: 'Warning: state update on unmounted component' }),
+      node({ index: 1, ref: 'e2', label: 'App.tsx:42:7', rect: collapsedBannerRect }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes).detected).toBe(true);
+  });
+
+  test('a collapsed LogBox summary banner is an overlay by itself', () => {
+    const nodes = [
+      node({ index: 0, ref: 'e1', label: '!, Warning: x', rect: collapsedBannerRect }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes).detected).toBe(true);
+  });
+});

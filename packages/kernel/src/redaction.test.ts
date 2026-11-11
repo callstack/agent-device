@@ -46,3 +46,28 @@ test('other diagnostic strings retain the 400-character limit', () => {
   assert.ok(result.message.endsWith('...<truncated>'));
   assert.ok(result.stdout.endsWith('...<truncated>'));
 });
+
+test('a diamond chain redacts each shared node once, not once per path', () => {
+  // 40 levels where both keys of a level point at the next one: 2^40 paths to the leaf.
+  let reads = 0;
+  const leaf = new Proxy(
+    { token: 'leaf-secret', note: 'leaf' },
+    {
+      ownKeys(target) {
+        reads += 1;
+        return Reflect.ownKeys(target);
+      },
+    },
+  );
+  let counted: Record<string, unknown> = leaf;
+  for (let depth = 0; depth < 40; depth += 1) counted = { left: counted, right: counted };
+
+  const result = redactDiagnosticData({ root: counted }) as { root: Record<string, unknown> };
+  let node = result.root;
+  for (let depth = 0; depth < 40; depth += 1) {
+    assert.equal(node.left, node.right);
+    node = node.left as Record<string, unknown>;
+  }
+  assert.deepEqual(node, { token: '[REDACTED]', note: 'leaf' });
+  assert.equal(reads, 1);
+});

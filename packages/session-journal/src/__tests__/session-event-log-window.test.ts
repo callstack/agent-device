@@ -96,6 +96,16 @@ test('rotation caps events.ndjson while cursors stay absolute across the retaine
     ['event 38'],
   );
   assert.equal(tail.nextCursor, '39');
+  // endCursor is absolute like nextCursor, whichever retained file the scan stopped in.
+  assert.equal(tail.endCursor, '39');
+  assert.equal(
+    readSessionEventLog(eventLogPath, { cursor: String(earliest), limit: 2 }).endCursor,
+    String(earliest + 2),
+  );
+  assert.equal(
+    readSessionEventLog(eventLogPath, { cursor: String(earliest), limit: 500 }).endCursor,
+    '40',
+  );
   assert.deepEqual(summaries(eventLogPath, tail.nextCursor, 1), ['event 39']);
 
   const expired = readError(eventLogPath, '0');
@@ -236,4 +246,38 @@ test('the default cap leaves an ordinary session log unrotated, and a non-intege
 
   assert.deepEqual(fs.readdirSync(dir), [path.basename(eventLogPath)]);
   assert.deepEqual(summaries(eventLogPath), ['event 0', 'event 1', 'event 2']);
+});
+
+test('a tailing reader resumes from endCursor past unparsable lines without replaying events', async () => {
+  delete process.env.AGENT_DEVICE_EVENT_LOG_MAX_BYTES;
+  const eventLogPath = resolveSessionEventLogPath(
+    mkdtempForTestSync('agent-device-event-log-tail-'),
+  );
+  await appendEvents(eventLogPath, 0, 2);
+  fs.appendFileSync(eventLogPath, '{"version":999,"kind":"future"}\n');
+  await appendEvents(eventLogPath, 2, 3);
+
+  const caughtUp = readSessionEventLog(eventLogPath, { cursor: '0', limit: 4 });
+  assert.deepEqual(
+    caughtUp.events.map((event) => event.summary),
+    ['event 0', 'event 1', 'event 2'],
+  );
+  assert.equal(caughtUp.nextCursor, undefined);
+  assert.equal(caughtUp.endCursor, '4');
+
+  await appendEvents(eventLogPath, 3, 4);
+  const resumed = readSessionEventLog(eventLogPath, { cursor: caughtUp.endCursor, limit: 4 });
+  assert.deepEqual(
+    resumed.events.map((event) => event.summary),
+    ['event 3'],
+  );
+  assert.equal(resumed.endCursor, '5');
+
+  const pastEnd = readSessionEventLog(eventLogPath, { cursor: '9', limit: 4 });
+  assert.deepEqual(pastEnd.events, []);
+  assert.equal(pastEnd.endCursor, '9');
+
+  const partial = readSessionEventLog(eventLogPath, { cursor: '1', limit: 2 });
+  assert.equal(partial.nextCursor, '3');
+  assert.equal(partial.endCursor, '3');
 });

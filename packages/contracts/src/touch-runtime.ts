@@ -4,6 +4,7 @@ import type { Point } from '@agent-device/kernel/snapshot';
 import {
   localInteractorSource,
   providerInteractorSource,
+  requireInteractorMethod,
   type LocalInteractorOperationResolver,
   type ProviderInteractorOperationResolver,
 } from './interactor-operation-binding.ts';
@@ -149,13 +150,11 @@ function bindTouch(
   };
   const hoverPoint = async (input: HoverPointInput) => {
     const interactor = await interactorFor(input);
-    if (!interactor.hover) {
-      throw new AppError(
-        'UNSUPPORTED_OPERATION',
-        'Bound runtime advertised hover without an interactor.',
-      );
-    }
-    return await interactor.hover(input.point.x, input.point.y);
+    return await requireInteractorMethod(interactor.hover, 'hoverPoint').call(
+      interactor,
+      input.point.x,
+      input.point.y,
+    );
   };
   const fillPoint = async (input: FillPointInput) => {
     const interactor = await interactorFor(input);
@@ -169,8 +168,10 @@ function bindTouch(
       ? {
           tapRef: async (input: TapRefInput) => {
             const interactor = await interactorFor(input);
-            if (interactor.tapRef) return await interactor.tapRef(input.ref);
-            return missingAdvertisedOperation('tapRef');
+            return await requireInteractorMethod(interactor.tapRef, 'tapRef').call(
+              interactor,
+              input.ref,
+            );
           },
         }
       : {}),
@@ -187,8 +188,10 @@ function bindTouch(
       ? {
           hoverRef: async (input: HoverRefInput) => {
             const interactor = await interactorFor(input);
-            if (interactor.hoverRef) return await interactor.hoverRef(input.ref);
-            return missingAdvertisedOperation('hoverRef');
+            return await requireInteractorMethod(interactor.hoverRef, 'hoverRef').call(
+              interactor,
+              input.ref,
+            );
           },
         }
       : {}),
@@ -197,9 +200,12 @@ function bindTouch(
       ? {
           fillRef: async (input: FillRefInput) => {
             const interactor = await interactorFor(input);
-            if (interactor.fillRef)
-              return await interactor.fillRef(input.ref, input.text, input.delayMs);
-            return missingAdvertisedOperation('fillRef');
+            return await requireInteractorMethod(interactor.fillRef, 'fillRef').call(
+              interactor,
+              input.ref,
+              input.text,
+              input.delayMs,
+            );
           },
         }
       : {}),
@@ -207,20 +213,14 @@ function bindTouch(
       ? {
           tapElementSelector: async (input: TapElementSelectorInput) => {
             const interactor = await interactorFor(input);
-            if (interactor.tapElementSelector)
-              return await interactor.tapElementSelector(input.selector);
-            return missingAdvertisedOperation('tapElementSelector');
+            return await requireInteractorMethod(
+              interactor.tapElementSelector,
+              'tapElementSelector',
+            ).call(interactor, input.selector);
           },
         }
       : {}),
   });
-}
-
-function missingAdvertisedOperation(name: string): never {
-  throw new AppError(
-    'UNSUPPORTED_OPERATION',
-    `Bound runtime advertised ${name} without an interactor.`,
-  );
 }
 
 /**

@@ -5,9 +5,11 @@ export type ReactNativeOverlayNode = Pick<
   'index' | 'type' | 'role' | 'subrole' | 'label' | 'value' | 'identifier' | 'rect' | 'hittable'
 >;
 
+/** App text such as "Error: invalid email" also starts this way, so it is not overlay evidence alone. */
+const GENERIC_SEVERITY_PREFIX_PATTERN = /^(warn|warning|error):\s+/;
 const COLLAPSED_WARNING_PREFIX_PATTERNS = [
   /^!,\s+/,
-  /^(warn|warning|error):\s+/,
+  GENERIC_SEVERITY_PREFIX_PATTERN,
   /\b(?:possible\s+)?unhandled (?:promise )?rejection\b/,
 ] as const;
 const COLLAPSED_WARNING_TEXT_MARKERS = [
@@ -45,6 +47,21 @@ export function isReactNativeCollapsedWarningLabel(rawLabel: string | undefined)
   return (
     COLLAPSED_WARNING_TEXT_MARKERS.some((marker) => label.includes(marker)) ||
     COLLAPSED_WARNING_PREFIX_PATTERNS.some((pattern) => pattern.test(label))
+  );
+}
+
+/**
+ * A collapsed-warning label that names React Native by itself: every collapsed match except one
+ * that only carries the generic `warn:`/`warning:`/`error:` prefix.
+ */
+export function isReactNativeCollapsedWarningEvidenceLabel(rawLabel: string | undefined): boolean {
+  const label = rawLabel?.trim().toLowerCase();
+  if (!label || !isReactNativeCollapsedWarningLabel(label)) return false;
+  return (
+    COLLAPSED_WARNING_TEXT_MARKERS.some((marker) => label.includes(marker)) ||
+    COLLAPSED_WARNING_PREFIX_PATTERNS.some(
+      (pattern) => pattern !== GENERIC_SEVERITY_PREFIX_PATTERN && pattern.test(label),
+    )
   );
 }
 

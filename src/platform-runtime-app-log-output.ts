@@ -1,3 +1,4 @@
+import { AppError } from '@agent-device/kernel/errors';
 import {
   ensureAppLogPath,
   resolveAppLogRotationConfig,
@@ -15,10 +16,10 @@ export async function openAppLogOutput(
   host: HostEnvironment,
 ): Promise<AppLogOutputSink> {
   pathname = requireManagedOutputPath(sessionsDir, pathname);
+  const patterns = redactionPatterns(host.env);
   ensureAppLogPath(pathname, host.env);
   const rotation = resolveAppLogRotationConfig(host.env);
   let output = openAppendOutput(pathname);
-  const patterns = redactionPatterns(host.env);
   let pending = '';
   let writes = Promise.resolve();
   let disposal: Promise<void> | undefined;
@@ -144,18 +145,48 @@ function requireManagedOutputPath(sessionsDir: string, pathname: string): string
   });
 }
 
+/**
+ * Splits `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS` on commas outside groups, character classes, and
+ * `{m,n}` quantifiers. Write `\,` for any other literal comma.
+ */
 function redactionPatterns(env: NodeJS.ProcessEnv): RegExp[] {
-  return (env.AGENT_DEVICE_APP_LOG_REDACT_PATTERNS ?? '')
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .flatMap((pattern) => {
+  // `patternIndex` is the field's position in the variable, empty fields included.
+  return splitTopLevelPatternList(env.AGENT_DEVICE_APP_LOG_REDACT_PATTERNS ?? '')
+    .map((part, patternIndex) => ({ pattern: part.trim(), patternIndex }))
+    .filter(({ pattern }) => pattern.length > 0)
+    .map(({ pattern, patternIndex }) => {
       try {
-        return [new RegExp(pattern, 'gi')];
+        return new RegExp(pattern, 'gi');
       } catch {
-        return [];
+        // The pattern text and the engine's message can quote the secret the rule protects.
+        throw new AppError(
+          'INVALID_ARGS',
+          `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS entry ${patternIndex + 1} is not a valid regular expression`,
+          { reason: 'app_log_redact_pattern_invalid', patternIndex },
+        );
       }
     });
+}
+
+/**
+ * One regex token: an escape, a whole character class, a `{m}`/`{m,}`/`{m,n}` quantifier, or one
+ * other character. Only parentheses nest; a brace that is not a quantifier is a literal.
+ */
+const PATTERN_TOKEN_RE = /\\[\s\S]?|\[(?:\\[\s\S]|[^\]\\])*\]?|\{\d+(?:,\d*)?\}|[\s\S]/g;
+
+function splitTopLevelPatternList(value: string): string[] {
+  const parts: string[] = [''];
+  let depth = 0;
+  for (const [token] of value.matchAll(PATTERN_TOKEN_RE)) {
+    if (token === ',' && depth === 0) {
+      parts.push('');
+      continue;
+    }
+    if (token === '(') depth += 1;
+    else if (token === ')') depth = Math.max(0, depth - 1);
+    parts[parts.length - 1] += token;
+  }
+  return parts;
 }
 
 function redact(chunk: string, patterns: readonly RegExp[]): string {

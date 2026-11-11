@@ -102,9 +102,10 @@ async function pollActiveProcessPid(
 ): Promise<void> {
   while (!input.stopped() && !wait.settled()) {
     if (!(await waitForPidPoll(input, wait))) return;
-    const observedPid = await input.resolvePid();
+    const observedPid = await resolvePidOrUnknown(input);
     if (input.stopped()) return;
-    if (observedPid === scopedProcess.pid) continue;
+    // An unanswered poll is inconclusive, so retain the stream and retry on the next tick.
+    if (observedPid === undefined || observedPid === scopedProcess.pid) continue;
     await scopedProcess.process.terminate();
     return;
   }
@@ -146,7 +147,7 @@ async function pauseBeforeProcessRestart(input: PidScopedProcessMonitor): Promis
 async function startAndAdoptSubsequentProcess(
   input: PidScopedProcessMonitor,
 ): Promise<SubsequentProcessStart> {
-  const pid = await input.resolvePid();
+  const pid = await resolvePidOrUnknown(input);
   if (input.stopped()) return { status: 'stopped' };
   if (!pid) {
     input.setState('recovering');
@@ -158,6 +159,18 @@ async function startAndAdoptSubsequentProcess(
   if (!input.stopped()) return { status: 'started', process: { pid, process } };
   await stopAdoptedProcess(input, process);
   return { status: 'stopped' };
+}
+
+/**
+ * A PID poll is a best-effort probe (one `pidof` under its own timeout). A failed poll is retried on
+ * the next tick instead of ending capture for the rest of the session.
+ */
+async function resolvePidOrUnknown(input: PidScopedProcessMonitor): Promise<string | undefined> {
+  try {
+    return await input.resolvePid();
+  } catch {
+    return undefined;
+  }
 }
 
 async function stopAdoptedProcess(

@@ -15,13 +15,28 @@ export function findAncestor(
   return null;
 }
 
-export function collectDescendants(nodes: SnapshotNode[], rootIndex: number): SnapshotNode[] {
+/** Children in node-array order, keyed by `parentIndex`; roots sit under `undefined`. */
+export type ChildrenByParent = ReadonlyMap<number | undefined, readonly SnapshotNode[]>;
+
+export function buildChildrenByParent(nodes: readonly SnapshotNode[]): ChildrenByParent {
+  const children = new Map<number | undefined, SnapshotNode[]>();
+  for (const node of nodes) {
+    const siblings = children.get(node.parentIndex);
+    if (siblings) siblings.push(node);
+    else children.set(node.parentIndex, [node]);
+  }
+  return children;
+}
+
+export function collectDescendants(children: ChildrenByParent, rootIndex: number): SnapshotNode[] {
   const descendants: SnapshotNode[] = [];
+  const visited = new Set<number>([rootIndex]);
   const pending = [rootIndex];
   while (pending.length > 0) {
-    const current = pending.pop();
-    for (const node of nodes) {
-      if (node.parentIndex !== current) continue;
+    const current = pending.pop()!;
+    for (const node of children.get(current) ?? []) {
+      if (visited.has(node.index)) continue;
+      visited.add(node.index);
       descendants.push(node);
       pending.push(node.index);
     }
@@ -30,7 +45,7 @@ export function collectDescendants(nodes: SnapshotNode[], rootIndex: number): Sn
 }
 
 export function markNodeAndDescendantsForRemoval(
-  nodes: SnapshotNode[],
+  children: ChildrenByParent,
   rootIndex: number,
   removed: Set<number>,
 ): void {
@@ -39,9 +54,8 @@ export function markNodeAndDescendantsForRemoval(
     const current = pending.pop()!;
     if (removed.has(current)) continue;
     removed.add(current);
-    for (const node of nodes) {
-      if (node.parentIndex !== current || removed.has(node.index)) continue;
-      pending.push(node.index);
+    for (const node of children.get(current) ?? []) {
+      if (!removed.has(node.index)) pending.push(node.index);
     }
   }
 }

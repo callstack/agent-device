@@ -24,14 +24,14 @@ export function recoverPerfCaptureResourceAfterDaemonLock(params: {
   resourcePath: string;
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
-  perRecordDeadlineMs?: number;
+  acquisitionDeadlineMs?: number;
   onDiagnostic?: (diagnostic: ResourceDiagnostic) => void;
 }) {
   return perfCaptureDurableResource.recoverOne(
     {
       sessionsDir: params.sessionsDir,
       scope: params.scope,
-      perRecordDeadlineMs: params.perRecordDeadlineMs,
+      acquisitionDeadlineMs: params.acquisitionDeadlineMs,
       onDiagnostic: params.onDiagnostic,
       acquireControl: async (envelope, scope) =>
         await acquirePerfCaptureRecoveryControl(params.gateway, envelope, scope),

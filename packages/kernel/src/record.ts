@@ -151,19 +151,29 @@ function readKeyboardFrameFact(
   binding: { treeBound?: true },
 ): SnapshotKeyboardBandFact {
   const frame = parseRect(value);
-  // Same rule as `isPositiveFiniteRect` in kernel/rect, inlined: this module is a leaf that
-  // many facades evaluate, and a rect import here would land in every one of their closures.
-  // The viewport re-read (#3182) is the other side of that seam and lives in kernel/rect as
-  // `readSnapshotViewportSize`, because a viewport IS a rect; readers take the rect module there.
-  const plottable =
-    frame !== undefined &&
-    [frame.x, frame.y, frame.width, frame.height].every(Number.isFinite) &&
-    frame.width > 0 &&
-    frame.height > 0;
-  if (!plottable) return { kind: 'unmeasurable', reason: `invalid-${kind}-frame` };
+  if (!isPlottableKeyboardFrame(frame)) {
+    return { kind: 'unmeasurable', reason: `invalid-${kind}-frame` };
+  }
   return kind === 'derived'
     ? { kind: 'derived', derivation: 'docked-tree', frame, ...binding }
     : { kind: 'visible', frame, ...binding };
+}
+
+// Same three refusals as `isPositiveFiniteRect` in kernel/rect, inlined: this module is a leaf that
+// many facades evaluate, and a rect import here would land in every one of their closures.
+// `record.test.ts` pins the parity on one rect table.
+function isPlottableKeyboardFrame(frame: Rect | undefined): frame is Rect {
+  if (!frame) return false;
+  const { x, y, width, height } = frame;
+  if (![x, y, width, height].every(Number.isFinite)) return false;
+  if (!Number.isFinite(x + width) || !Number.isFinite(y + height)) return false;
+  if (width <= 0 || height <= 0) return false;
+  const isCGRectInfinite =
+    x === -Number.MAX_VALUE / 2 &&
+    y === -Number.MAX_VALUE / 2 &&
+    width === Number.MAX_VALUE &&
+    height === Number.MAX_VALUE;
+  return !isCGRectInfinite;
 }
 
 /**

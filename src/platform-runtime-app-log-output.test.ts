@@ -136,6 +136,58 @@ test('redacts with the patterns of the command host, not the process', async () 
   expect(fs.readFileSync(outputPath, 'utf8')).toBe('token [REDACTED] leaked\n');
 });
 
+test('keeps commas inside quantifiers and classes in one redaction pattern', async () => {
+  const root = mkdtempForTestSync('agent-device-app-log-redact-comma-');
+  const sessionsDir = path.join(root, 'sessions');
+  const outputPath = path.join(sessionsDir, 'one', 'app.log');
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+
+  const sink = await openAppLogOutput(sessionsDir, outputPath, {
+    env: { AGENT_DEVICE_APP_LOG_REDACT_PATTERNS: String.raw`token=\w{8,32}, pin=[0-9,]+,a\,b` },
+    cwd: root,
+  });
+  await sink.write('token=abcdefghij pin=1,2,3 a,b x{8\n');
+  await sink[Symbol.asyncDispose]();
+
+  expect(fs.readFileSync(outputPath, 'utf8')).toBe('[REDACTED] [REDACTED] [REDACTED] x{8\n');
+});
+
+test('refuses an invalid redaction pattern before it opens app.log', async () => {
+  const root = mkdtempForTestSync('agent-device-app-log-redact-invalid-');
+  const sessionsDir = path.join(root, 'sessions');
+  const outputPath = path.join(sessionsDir, 'one', 'app.log');
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+
+  await expect(
+    openAppLogOutput(sessionsDir, outputPath, {
+      env: { AGENT_DEVICE_APP_LOG_REDACT_PATTERNS: 'secret-\\d+,,(' },
+      cwd: root,
+    }),
+  ).rejects.toMatchObject({
+    code: 'INVALID_ARGS',
+    details: { reason: 'app_log_redact_pattern_invalid', patternIndex: 2 },
+  });
+  expect(fs.existsSync(outputPath)).toBe(false);
+});
+
+test('a brace that is not a quantifier does not hide the next redaction pattern', async () => {
+  const root = mkdtempForTestSync('agent-device-app-log-redact-brace-');
+  const sessionsDir = path.join(root, 'sessions');
+  const outputPath = path.join(sessionsDir, 'one', 'app.log');
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+
+  const sink = await openAppLogOutput(sessionsDir, outputPath, {
+    env: { AGENT_DEVICE_APP_LOG_REDACT_PATTERNS: '(1{,2),33,(4},5),66' },
+    cwd: root,
+  });
+  await sink.write('1{,2 4},5 33 66 kept\n');
+  await sink[Symbol.asyncDispose]();
+
+  expect(fs.readFileSync(outputPath, 'utf8')).toBe(
+    '[REDACTED] [REDACTED] [REDACTED] [REDACTED] kept\n',
+  );
+});
+
 test('rotates app.log when an open sink crosses the size cap', async () => {
   const root = mkdtempForTestSync('agent-device-app-log-rotate-');
   roots.push(root);

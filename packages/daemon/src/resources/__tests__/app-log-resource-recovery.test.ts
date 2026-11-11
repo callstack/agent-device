@@ -127,7 +127,7 @@ test('startup recovery bounds a never-settling owner and retains its durable evi
       sessionsDir,
       gateway: runtime.gateway,
       scope,
-      perRecordDeadlineMs: 25,
+      acquisitionDeadlineMs: 25,
       onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
     });
     await vi.advanceTimersByTimeAsync(25);
@@ -170,7 +170,7 @@ test('a late active reattach is disposed exactly once without escaping recovery 
       sessionsDir,
       gateway: runtime.gateway,
       scope,
-      perRecordDeadlineMs: 25,
+      acquisitionDeadlineMs: 25,
     });
     await vi.advanceTimersByTimeAsync(25);
     await expect(recovery).resolves.toEqual({ scanned: 1, recovered: 0, retained: 1 });
@@ -209,7 +209,7 @@ test('late handle cleanup failure is secondary evidence and preserves the deadli
       sessionsDir,
       gateway: runtime.gateway,
       scope,
-      perRecordDeadlineMs: 25,
+      acquisitionDeadlineMs: 25,
       onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
     });
     await vi.advanceTimersByTimeAsync(25);
@@ -253,7 +253,7 @@ test('once exact-owner cleanup starts, recovery holds the daemon lock path until
       sessionsDir,
       gateway: runtime.gateway,
       scope,
-      perRecordDeadlineMs: 25,
+      acquisitionDeadlineMs: 25,
     }).finally(() => {
       settled = true;
     });

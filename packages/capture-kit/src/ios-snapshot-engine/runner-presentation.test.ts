@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
+import { validateIosPayload } from './invariants.ts';
+
+vi.mock('./invariants.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./invariants.ts')>();
+  return { ...actual, validateIosPayload: vi.fn(actual.validateIosPayload) };
+});
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type {
   IosSnapshotInput,
@@ -151,6 +157,19 @@ test('a WKWebView page whose web hosts fill the scroller clips to the page band'
   assert.deepEqual(scrollView?.rect, { x: 0, y: 62, width: 402, height: 750 });
   assert.equal(scrollView?.hiddenContentBelow, true);
   assert.equal(labels.includes('History'), false);
+});
+
+test('a regular capture validates the runner payload once unless compaction changed it', () => {
+  const validations = vi.mocked(validateIosPayload);
+  const full = createIosSnapshotRequest({ interactiveOnly: false });
+  validations.mockClear();
+  presentIosSnapshot(runnerInput(full, runnerNodes()), full);
+  assert.equal(validations.mock.calls.length, 1);
+
+  const interactive = createIosSnapshotRequest({ interactiveOnly: true });
+  validations.mockClear();
+  presentIosSnapshot(runnerInput(interactive, runnerNodes()), interactive);
+  assert.equal(validations.mock.calls.length, 2);
 });
 
 function runnerInput(request: IosSnapshotRequest, nodes: RawSnapshotNode[]): IosSnapshotInput {
