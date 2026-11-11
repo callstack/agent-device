@@ -277,9 +277,9 @@ export function createOwnedReplayStateDir(): OwnedReplayStateDir {
 }
 
 /**
- * Forces a pre-existing state path to the private mode, whatever mode it had. The repair never
- * decides whether the daemon starts: a path another user owns, or a mount without chmod, keeps
- * its mode.
+ * Forces a pre-existing state path to the private mode, whatever mode it had. On Windows, chmod
+ * only toggles the read-only bit, so it cannot make the path private. The repair never decides
+ * whether the daemon starts: a path another user owns, or a mount without chmod, keeps its mode.
  */
 function repairStateMode(target: string, mode: number): void {
   try {
