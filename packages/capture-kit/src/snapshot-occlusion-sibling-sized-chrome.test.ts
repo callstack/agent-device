@@ -925,3 +925,62 @@ test('a control the exempt toolbar host really hosts still covers the row it ove
 
   assert.deepEqual(coveredLabels(nodes), ['Barless row 12']);
 });
+
+function projectedTabsTree(): RawSnapshotNode[] {
+  return capturedTree([
+    [0, undefined, 'Application', '', undefined, [0, 0, 402, 874]],
+    [1, 0, 'StaticText', '', 'Home', [177, 71, 47, 20]],
+    [2, 0, 'StaticText', '', 'home-tab-content', [173, 422, 55, 24]],
+    [3, 0, 'StaticText', '', 'Go to the Actions tab', [53, 454, 297, 16]],
+    [4, 0, 'Toolbar', '', 'Toolbar', [0, 0, 402, 791]],
+    [5, 0, 'Button', '', 'Home, tab, 1 of 3', [0, 791, 134, 49]],
+    [6, 0, 'Button', '', 'Feed, tab, 2 of 3', [134, 791, 134, 49]],
+    [7, 0, 'Button', '', 'Actions, tab, 3 of 3', [268, 791, 134, 49]],
+    [8, 0, 'Toolbar', '', 'Toolbar', [0, 0, 402, 874]],
+  ]);
+}
+
+test('projected tab content remains uncovered above the adjoining bottom tab buttons (#4365)', () => {
+  const annotated = annotateCoveredSnapshotNodes(projectedTabsTree());
+  for (const index of [1, 2, 3, 5, 6, 7]) {
+    assert.equal(
+      annotated.find((candidate) => candidate.index === index)?.interactionBlocked,
+      undefined,
+    );
+  }
+});
+
+test('a real toolbar over content remains covering despite an adjoining control (#4365)', () => {
+  const nodes = projectedTabsTree();
+  nodes[4]!.rect = { x: 0, y: 0, width: 402, height: 300 };
+  nodes[5]!.rect = { x: 0, y: 300, width: 134, height: 49 };
+  assert.equal(annotateCoveredSnapshotNodes(nodes)[1]?.interactionBlocked, 'covered');
+});
+
+test('a control hosted by the projected floating container still covers content (#4365)', () => {
+  const nodes = projectedTabsTree();
+  nodes.splice(
+    5,
+    0,
+    node({
+      index: 9,
+      parentIndex: 4,
+      depth: 2,
+      type: 'Toolbar',
+      label: 'Action',
+      rect: { x: 160, y: 60, width: 100, height: 50 },
+      hittable: true,
+    }),
+  );
+  assert.equal(
+    annotateCoveredSnapshotNodes(nodes).find((candidate) => candidate.index === 1)
+      ?.interactionBlocked,
+    'covered',
+  );
+});
+
+test('a sheet with the same footprint and adjoining tab buttons still covers content (#4365)', () => {
+  const nodes = projectedTabsTree();
+  nodes[4]!.type = 'Sheet';
+  assert.equal(annotateCoveredSnapshotNodes(nodes)[1]?.interactionBlocked, 'covered');
+});

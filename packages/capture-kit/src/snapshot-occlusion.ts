@@ -334,7 +334,7 @@ function isOverlayLikeNode(
 ): boolean {
   if (!positiveRect(node.rect)) return false;
   if (isViewportRootNode(node)) return false;
-  if (isFullViewportChromeContainer(node, neighbourhood.byIndex)) return false;
+  if (isFullViewportChromeContainer(node, neighbourhood)) return false;
   if (isSiblingSizedChromeContainer(node, neighbourhood)) return false;
   if (isOwnPresentationToolbarHost(node, neighbourhood)) return false;
   // This is a presentation-order heuristic: only known floating UI chrome should cover
@@ -501,24 +501,55 @@ function isEnclosedHostedRegion(rect: Rect, node: RawSnapshotNode): boolean {
 
 function isFullViewportChromeContainer(
   node: RawSnapshotNode,
-  byIndex: Map<number, RawSnapshotNode>,
+  neighbourhood: NeighbourhoodIndex,
 ): boolean {
   if (!nodeKindIncludesAny(node, VIEWPORT_CHROME_KIND_FRAGMENTS)) return false;
   const rect = positiveRect(node.rect);
   if (!rect) return false;
 
+  const byIndex = neighbourhood.byIndex;
   let current = typeof node.parentIndex === 'number' ? byIndex.get(node.parentIndex) : undefined;
   const visited = new Set<number>();
   while (current && !visited.has(current.index)) {
     if (isViewportRootNode(current)) {
       const viewportRect = positiveRect(current.rect);
-      return Boolean(viewportRect && isViewportFootprint(rect, viewportRect));
+      return Boolean(
+        viewportRect &&
+        (isViewportFootprint(rect, viewportRect) ||
+          isViewportAboveBottomBar(node, rect, viewportRect, neighbourhood)),
+      );
     }
     visited.add(current.index);
     current =
       typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
   }
   return false;
+}
+
+function isViewportAboveBottomBar(
+  node: RawSnapshotNode,
+  rect: Rect,
+  viewport: Rect,
+  neighbourhood: NeighbourhoodIndex,
+): boolean {
+  const bottom = rect.y + rect.height;
+  if (bottom <= viewport.y + viewport.height / 2 || bottom >= viewport.y + viewport.height)
+    return false;
+  if (!isViewportFootprint(rect, { ...viewport, height: bottom - viewport.y })) return false;
+  const siblings = neighbourhood.childrenByParent.get(node.parentIndex ?? -1) ?? [];
+  return siblings.some((sibling) => {
+    if (!nodeKindIncludesAny(sibling, ['button', 'tabitem', 'tabbar'])) return false;
+    const bar = positiveRect(sibling.rect);
+    if (!bar) return false;
+    return (
+      Math.abs(bar.y - bottom) <= 0.5 &&
+      bar.x >= viewport.x &&
+      bar.x + bar.width <= viewport.x + viewport.width &&
+      bar.height <= viewport.height / 4 &&
+      bar.y + bar.height >= viewport.y + viewport.height * 0.9 &&
+      bar.y + bar.height <= viewport.y + viewport.height + 0.5
+    );
+  });
 }
 
 function isAdditionalOverlayRootNode(
