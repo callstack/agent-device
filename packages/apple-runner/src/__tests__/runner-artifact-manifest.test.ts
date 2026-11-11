@@ -313,29 +313,33 @@ test('a build holding an escaping symlink publishes no manifest at all', async (
   assert.equal(published.artifacts, undefined);
 });
 
-test('an unreadable product subtree is refused and reported, not silently uncertified', async () => {
-  const { derived, runnerAppPath, expected, xctestrunPath } = await makeCachedRunnerBuild();
-  const sealed = path.join(runnerAppPath, 'Sealed.framework');
-  fs.mkdirSync(sealed, { recursive: true });
-  fs.writeFileSync(path.join(sealed, 'Binary'), 'binary');
-  fs.chmodSync(sealed, 0o000);
-  onTestFinished(() => {
-    fs.chmodSync(sealed, 0o755);
-  });
+// Root reads a mode-000 path, so the unreadable case cannot exist under uid 0.
+test.skipIf(process.getuid?.() === 0)(
+  'an unreadable product subtree is refused and reported, not silently uncertified',
+  async () => {
+    const { derived, runnerAppPath, expected, xctestrunPath } = await makeCachedRunnerBuild();
+    const sealed = path.join(runnerAppPath, 'Sealed.framework');
+    fs.mkdirSync(sealed, { recursive: true });
+    fs.writeFileSync(path.join(sealed, 'Binary'), 'binary');
+    fs.chmodSync(sealed, 0o000);
+    onTestFinished(() => {
+      fs.chmodSync(sealed, 0o755);
+    });
 
-  const refusal = await writeRunnerCacheMetadataForArtifacts(derived, expected, xctestrunPath, [
-    runnerAppPath,
-  ]);
+    const refusal = await writeRunnerCacheMetadataForArtifacts(derived, expected, xctestrunPath, [
+      runnerAppPath,
+    ]);
 
-  assert.deepEqual(refusal, {
-    reason: 'root_unusable',
-    path: path.relative(derived, sealed),
-  });
-  const published = JSON.parse(
-    fs.readFileSync(resolveRunnerCacheMetadataPath(derived), 'utf8'),
-  ) as { artifacts?: unknown };
-  assert.equal(published.artifacts, undefined);
-});
+    assert.deepEqual(refusal, {
+      reason: 'root_unusable',
+      path: path.relative(derived, sealed),
+    });
+    const published = JSON.parse(
+      fs.readFileSync(resolveRunnerCacheMetadataPath(derived), 'utf8'),
+    ) as { artifacts?: unknown };
+    assert.equal(published.artifacts, undefined);
+  },
+);
 
 test('a manifest whose .xctestrun was replaced by a symlink refuses reuse', async () => {
   const outside = mkdtempForTestSync('agent-device-runner-cache-outside-');

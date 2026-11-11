@@ -21,6 +21,7 @@ import { runEntrypoint } from '../lib/cli-entrypoint.ts';
 import {
   assertCatalogComplete,
   CHECK_CATALOG,
+  fullCheckPlan,
   getCheckSpec,
   resolveCommand,
   type CheckSpec,
@@ -184,7 +185,7 @@ export type CommandExecutor = (command: string[], cwd: string, id: string) => Pr
 export async function runChecks(
   plan: CheckPlan,
   pkg: PackageJson,
-  args: Args,
+  args: { readonly base: string | undefined },
   options: {
     cwd?: string;
     skip?: ValidationContext['skip'];
@@ -290,13 +291,10 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
         return 1;
       }
       if (args.full) {
-        const scripts = ['check:tooling', 'check:fallow', 'check:unit'];
-        receipt.results = scripts.map((id) => ({ id, status: 'not-run' }));
-        for (const script of scripts) {
-          const code = await execute(['pnpm', 'run', script], repoRoot, script);
-          if (code !== 0) return code;
-        }
-        return 0;
+        const plan = fullCheckPlan();
+        receipt.plan = plan;
+        receipt.results = plan.checks.map((id) => ({ id, status: 'not-run' }));
+        return await runChecks(plan, currentPackage, { base: undefined }, { execute, skip });
       }
       const { changedFiles, plan } = prepare(receipt.refs.resolvedBase, currentPackage);
       receipt.changedFiles = changedFiles;

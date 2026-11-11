@@ -163,14 +163,20 @@ async function runPassing(changedFiles: string[]): Promise<string[][]> {
 
 const RELATED = ['pnpm', 'exec', 'vitest', 'related', '--run', '--passWithNoTests'];
 
-// check:unit runs every unit-core and fuzz-worker test, so the related run must not repeat them.
+// check:unit runs every test of UNIT_TEST_PROJECTS, so the related run must not repeat them.
 test('a production source change leaves the unit projects to the unit suite it runs', async () => {
   const changedFiles = ['packages/selectors/src/index.ts', 'packages/selectors/src/index.test.ts'];
   const executed = await runPassing(changedFiles);
   assert.ok(executed.some((command) => command.includes('check:unit')));
   assert.deepEqual(
     executed.find((command) => command.includes('related')),
-    [...RELATED, '--project=!unit-core', '--project=!fuzz-worker', ...changedFiles],
+    [
+      ...RELATED,
+      '--project=!unit-core',
+      '--project=!apple-runner',
+      '--project=!fuzz-worker',
+      ...changedFiles,
+    ],
   );
 });
 
@@ -218,7 +224,7 @@ test('runChecks skips CI checks, runs every local check of a fail-open plan, and
   // check:unit runs in this plan too, so the related run leaves the unit projects to it.
   assert.deepEqual(
     related[0]?.filter((arg) => arg.startsWith('--project')),
-    ['--project=!unit-core', '--project=!fuzz-worker'],
+    ['--project=!unit-core', '--project=!apple-runner', '--project=!fuzz-worker'],
   );
   assert.ok(
     !related[0]?.includes('--coverage'),

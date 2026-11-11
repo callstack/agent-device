@@ -10,7 +10,7 @@
 // agent reads before skipping a check locally cannot go stale.
 
 import { UNIT_TEST_PROJECTS } from '../lib/vitest-projects.ts';
-import { ALL_CHECKS, type CheckId } from './model.ts';
+import { ALL_CHECKS, type CheckId, type CheckPlan } from './model.ts';
 
 export type CheckKind =
   | { readonly type: 'script'; readonly script: string }
@@ -222,11 +222,12 @@ export function getCheckSpec(id: CheckId): CheckSpec {
 
 // Resolve the runnable command for a check. Script-backed checks are validated
 // against package.json so a renamed/removed script fails loudly instead of
-// silently skipping a gate. `fallow` threads the same --base the audit uses.
+// silently skipping a gate. `fallow` threads the same --base the audit uses; with no base (a
+// full run has no diff), fallow takes its own merge-base, so a clone without origin/main works.
 export function resolveCommand(
   spec: CheckSpec,
   scripts: Readonly<Record<string, string>>,
-  base: string,
+  base: string | undefined,
   related: RelatedRunScope = { changedFiles: [], unitSuiteRuns: false },
 ): string[] {
   if (spec.kind.type === 'vitest-related') {
@@ -251,8 +252,33 @@ export function resolveCommand(
     );
   }
   const command = ['pnpm', 'run', script];
-  if (spec.id === 'fallow') command.push('--base', base);
+  if (spec.id === 'fallow' && base !== undefined) command.push('--base', base);
   return command;
+}
+
+// The plan `pnpm check` runs: the whole catalog except `vitest-related`, which the full `unit`
+// suite replaces. Host-locked suites run last so a cheap failure shows first. `runChecks` skips
+// the checks that are not locally runnable and records each skip with its owning lane. The plan
+// is deliberate, not a fail-open fallback, so each check carries a `full-run` reason.
+export function fullCheckPlan(): CheckPlan {
+  const catalog = CHECK_CATALOG.filter((spec) => spec.id !== 'vitest-related');
+  const checks = [
+    ...catalog.filter((spec) => !spec.hostLocked),
+    ...catalog.filter((spec) => spec.hostLocked),
+  ].map((spec) => spec.id);
+  return {
+    failOpen: false,
+    checks,
+    reasons: checks.map((check) => ({
+      check,
+      path: 'scripts/check-affected/checks.ts',
+      rule: 'full-run',
+      detail:
+        'pnpm check walks the catalog except vitest-related; non-local gates are skipped with their owning lane',
+    })),
+    failOpenReasons: [],
+    docsOnlyPaths: [],
+  };
 }
 
 // Guard: the catalog must cover exactly the CheckId universe. The self-test

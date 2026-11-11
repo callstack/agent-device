@@ -3,7 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { assertCatalogComplete, CHECK_CATALOG, resolveCommand } from './checks.ts';
+import {
+  assertCatalogComplete,
+  CHECK_CATALOG,
+  fullCheckPlan,
+  getCheckSpec,
+  resolveCommand,
+} from './checks.ts';
 import { ALL_CHECKS, selectChecks, type CheckId, type SelectInput } from './model.ts';
 import { packageEntrySources } from '../build-entries.ts';
 
@@ -461,6 +467,21 @@ test('every catalog command resolves against the real package scripts', () => {
     '--base',
     'origin/dev',
   ]);
+  assert.deepEqual(resolveCommand(fallow, scripts, undefined), ['pnpm', 'run', 'check:fallow']);
+});
+
+test('the full plan is the catalog without vitest-related, host-locked suites last', () => {
+  const { checks, failOpen } = fullCheckPlan();
+  assert.equal(failOpen, false);
+  assert.deepEqual(
+    [...checks].sort(),
+    CHECK_CATALOG.map((spec) => spec.id)
+      .filter((id) => id !== 'vitest-related')
+      .sort(),
+  );
+  const firstLocked = checks.findIndex((id) => getCheckSpec(id).hostLocked);
+  assert.ok(firstLocked > 0);
+  assert.ok(checks.slice(firstLocked).every((id) => getCheckSpec(id).hostLocked));
 });
 
 test('a missing package script makes command resolution throw', () => {
