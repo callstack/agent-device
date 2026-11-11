@@ -360,9 +360,9 @@ test('Android APK repack signs the output and preserves its package id', (t) => 
         env: {
           ...process.env,
           AGENT_DEVICE_ANDROID_BUILD_TOOLS: 'test-build-tools',
+          ANDROID_HOME: tempRoot,
           CI: 'true',
           ...buildToolsEnv,
-          ANDROID_HOME: tempRoot,
           PATH: `${binDir}:${process.env.PATH}`,
           TEST_COMMAND_LOG: commandLog,
           TEST_REPACK_OUTPUT: repackOutput,
@@ -391,11 +391,33 @@ test('Android APK repack signs the output and preserves its package id', (t) => 
   assert.notEqual(unpinned.status, 0);
   assert.match(unpinned.stderr, /AGENT_DEVICE_ANDROID_BUILD_TOOLS must name/);
 
+  // A local repack takes the newest installed version by version order, not by name: plain
+  // `sort` would pick 9.0.0. Only the newest directory holds working tools.
+  const localSdk = path.join(tempRoot, 'local-sdk');
+  for (const version of ['9.0.0', '35.0.1']) {
+    const dir = path.join(localSdk, 'build-tools', version);
+    fs.mkdirSync(dir, { recursive: true });
+    for (const tool of ['aapt', 'apksigner']) {
+      fs.writeFileSync(path.join(dir, tool), '#!/bin/sh\nexit 9\n');
+      fs.chmodSync(path.join(dir, tool), 0o755);
+    }
+  }
+  fs.cpSync(buildTools, path.join(localSdk, 'build-tools', '36.0.0'), { recursive: true });
   const local = runRepack(path.join(tempRoot, 'output', 'local.apk'), 'source-digest', {
     AGENT_DEVICE_ANDROID_BUILD_TOOLS: '',
+    ANDROID_HOME: localSdk,
     CI: '',
   });
   assert.equal(local.status, 0, local.stderr);
+  assert.match(fs.readFileSync(commandLog, 'utf8'), /build-tools\/36\.0\.0 --js-bundle-only/);
+
+  const missing = runRepack(path.join(tempRoot, 'output', 'missing.apk'), 'source-digest', {
+    AGENT_DEVICE_ANDROID_BUILD_TOOLS: '',
+    ANDROID_HOME: path.join(tempRoot, 'empty-sdk'),
+    CI: '',
+  });
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /Android build tools were not found/);
 });
 
 test('producer maps each platform to its resolved lookup and matrix artifact name, and gates has-work when both are cached', (t) => {

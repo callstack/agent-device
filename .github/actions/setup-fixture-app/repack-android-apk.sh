@@ -13,7 +13,7 @@ if [ -z "$BUILD_TOOLS_VERSION" ]; then
   fi
   NEWEST_BUILD_TOOLS_DIR="$(
     find "$SDK_ROOT/build-tools" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort -V | tail -n 1
-  )"
+  )" || true
   BUILD_TOOLS_VERSION="${NEWEST_BUILD_TOOLS_DIR##*/}"
 fi
 BUILD_TOOLS="$SDK_ROOT/build-tools/$BUILD_TOOLS_VERSION"

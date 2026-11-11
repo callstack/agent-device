@@ -27,8 +27,14 @@ runs:
         set -euo pipefail
         SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
         BUILD_TOOLS_DIR="$SDK_ROOT/build-tools/$BUILD_TOOLS_VERSION"
-        if [ ! -x "$BUILD_TOOLS_DIR/aapt" ] || [ ! -x "$BUILD_TOOLS_DIR/apksigner" ] ||
-          [ ! -f "$SDK_ROOT/platforms/android-36/android.jar" ]; then
+        # Every build-tools binary a caller runs: the helper build (aapt2, d8, zipalign,
+        # apksigner) and the fixture APK scripts (aapt, apksigner).
+        INSTALLED=true
+        for BUILD_TOOL in aapt aapt2 d8 zipalign apksigner; do
+          [ -x "$BUILD_TOOLS_DIR/$BUILD_TOOL" ] || INSTALLED=false
+        done
+        [ -f "$SDK_ROOT/platforms/android-36/android.jar" ] || INSTALLED=false
+        if [ "$INSTALLED" != true ]; then
           SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMANAGER" ]; then
             SDKMANAGER="$SDK_ROOT/cmdline-tools/bin/sdkmanager"
