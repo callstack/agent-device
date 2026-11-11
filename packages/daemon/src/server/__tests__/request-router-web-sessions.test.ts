@@ -241,9 +241,13 @@ test.each(['batch', 'replay'] as const)(
   },
 );
 
-test.each(['', '   '])(
-  'a fresh web open with the blank session name %j is refused and opens no browser',
-  async (session) => {
+test.each([
+  ['', true],
+  ['   ', true],
+  ['', false],
+])(
+  'a fresh web open with the blank session name %j (explicit: %s) is refused and opens no browser',
+  async (session, sessionExplicit) => {
     mockResolveTargetDevice.mockImplementation(webSessionResolution);
     const sessionStore = makeSessionStore('agent-device-router-web-blank-');
     const bind = vi.fn<(typeof lifecycleDeviceRuntimeGateway)['bind']>((request) =>
@@ -255,7 +259,7 @@ test.each(['', '   '])(
       bind,
     })({
       ...openWebRequest(session),
-      meta: { cwd: mkdtempForTestSync('web-blank-workspace-'), sessionExplicit: true },
+      meta: { cwd: mkdtempForTestSync('web-blank-workspace-'), sessionExplicit },
     });
 
     expect(response).toMatchObject({
