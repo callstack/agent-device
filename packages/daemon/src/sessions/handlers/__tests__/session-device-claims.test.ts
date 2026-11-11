@@ -261,6 +261,46 @@ test('open of a stopped AVD under an allowlist that excludes its booted serial c
   assert.equal(store.get('claim-allowlist'), undefined);
 });
 
+test('open of a stopped AVD boots the resolved AVD whatever --serial names', async () => {
+  const { store, stateDir } = setup();
+  const stoppedAvd = { ...android, id: 'pixel-avd', booted: false };
+  mockResolveTargetDevice.mockResolvedValue(stoppedAvd);
+  // Android readiness waits for the serial it is given, so a forwarded --serial for another
+  // device would wait for that device instead of the AVD that was resolved.
+  const readinessInputs: EnsureReadyInput[] = [];
+  const ensureReady = async (input: EnsureReadyInput): Promise<DeviceInfo> => {
+    readinessInputs.push(input);
+    if (input.serial && input.serial !== android.id) {
+      throw new AppError('COMMAND_FAILED', 'Android emulator did not appear in time', {
+        reason: BOOT_TIMEOUT_REASON,
+      });
+    }
+    return android;
+  };
+
+  const response = await handleOpenCommand({
+    host: createTestHostEnvironment(),
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      command: 'open',
+      token: 'test',
+      session: 'claim-serial',
+      positionals: ['Demo'],
+      flags: { platform: 'android', device: stoppedAvd.name, serial: 'emulator-5560' },
+    },
+    sessionName: 'claim-serial',
+    logPath: path.join(stateDir, 'daemon.log'),
+    sessionStore: store,
+    bindDevice: bindBootingLifecycleRuntime(ensureReady),
+  });
+
+  assert.equal(response.ok, true);
+  assert.equal(readinessInputs.length, 1);
+  assert.equal(readinessInputs[0]?.serial, undefined);
+  assert.equal(store.get('claim-serial')?.device.id, android.id);
+});
+
 test('failed local open after dispatch retains its device claim for recovery', async () => {
   const { store, stateDir } = setup();
   mockResolveTargetDevice.mockResolvedValue(android);
