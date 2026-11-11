@@ -322,18 +322,19 @@ test('device smoke lanes skip drafts and start when a draft is marked ready', ()
   type Workflow = {
     name: string;
     on: { pull_request?: { types?: string[] } };
-    jobs: Record<string, { name?: string; if?: string }>;
+    jobs: Record<string, { name?: string; if?: string; needs?: string }>;
   };
   const smokeLanes = fs
     .readdirSync(directory)
     .map((file) => parse(fs.readFileSync(path.join(directory, file), 'utf8')) as Workflow)
     .flatMap((workflow) =>
       Object.values(workflow.jobs)
-        .filter((job) => job.name === 'Smoke Tests' && workflow.on.pull_request)
+        .filter((job) => job.name?.startsWith('Smoke Tests') && workflow.on.pull_request)
         .map((job) => ({ workflow, job })),
     );
   assert.deepEqual(smokeLanes.map(({ workflow }) => workflow.name).sort(), [
     'Android',
+    'Apple',
     'Apple',
     'Linux',
   ]);
@@ -343,6 +344,11 @@ test('device smoke lanes skip drafts and start when a draft is marked ready', ()
       ['opened', 'synchronize', 'reopened', 'ready_for_review', 'converted_to_draft'],
       workflow.name,
     );
-    assert.equal(job.if, '${{ !github.event.pull_request.draft }}', workflow.name);
+    if (workflow.name === 'Apple' && job.name === 'Smoke Tests') {
+      assert.equal(job.needs, 'smoke-apple-platform');
+      assert.equal(job.if, '${{ always() && !github.event.pull_request.draft }}');
+    } else {
+      assert.equal(job.if, '${{ !github.event.pull_request.draft }}', workflow.name);
+    }
   }
 });
