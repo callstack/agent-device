@@ -21,8 +21,6 @@ import {
 import { buildCanonicalGestureEvents, buildSwipeTravelEvent } from './recording-gesture-events.ts';
 import { readRecordingNumber, resolveRecordingDurationMs } from './recording-values.ts';
 
-export const gestureRepetitionTiming = Symbol('gestureRepetitionTiming');
-
 export type GestureRepetitionTiming = {
   startedAt: number;
   finishedAt: number;
@@ -45,14 +43,12 @@ export function recordTouchVisualizationEvent(
   fallback: Record<string, unknown> = {},
   startedAtMs = Date.now(),
   finishedAtMs = Date.now(),
+  repetitions?: readonly GestureRepetitionTiming[],
 ): void {
   const handle = session.screenRecording?.handle;
   if (!handle) return;
   const recording = handle.inspect();
 
-  const repetitions = (result as Record<string | symbol, unknown> | undefined)?.[
-    gestureRepetitionTiming
-  ] as GestureRepetitionTiming[] | undefined;
   if (repetitions) {
     repetitions.forEach((timing, index) => {
       const perGesture: Record<string, unknown> = {

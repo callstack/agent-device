@@ -50,10 +50,7 @@ import type {
 } from '../../../core/interaction/internal/types.ts';
 import type { RecordedTargetCapture } from '@agent-device/selectors/target-evidence';
 import { gestureResponseData } from './interaction-gesture-response.ts';
-import {
-  gestureRepetitionTiming,
-  type GestureRepetitionTiming,
-} from '../../../core/recording-gestures.ts';
+import type { GestureRepetitionTiming } from '../../../core/recording-gestures.ts';
 import { noActiveSessionError } from '@agent-device/kernel/contracts';
 
 type GestureHandlerParams = InteractionRouteInput & {
@@ -300,12 +297,6 @@ async function dispatchGestureInteraction(
       responseData.warning = `${existingWarning}${readiness.warning}`;
     }
     getRequestSignal(params.req.meta?.requestId)?.throwIfAborted();
-    const recordingResult = { ...responseData, ...(outcome.recordingResultExtra ?? {}) };
-    if (outcome.repetitionTiming && outcome.repetitionTiming.length > 1) {
-      Object.defineProperty(recordingResult, gestureRepetitionTiming, {
-        value: outcome.repetitionTiming,
-      });
-    }
     return finalizeTouchInteraction({
       ref: params.sessionRef!,
       sessionStore: params.sessionStore,
@@ -313,7 +304,11 @@ async function dispatchGestureInteraction(
       actionCommand: command,
       positionals: outcome.positionals,
       flags: outcome.flags,
-      result: recordingResult,
+      result: { ...responseData, ...(outcome.recordingResultExtra ?? {}) },
+      repetitionTiming:
+        outcome.repetitionTiming && outcome.repetitionTiming.length > 1
+          ? outcome.repetitionTiming
+          : undefined,
       responseData,
       recordedTargets: outcome.recordedTargets,
       actionStartedAt,
