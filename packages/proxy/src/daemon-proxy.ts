@@ -83,7 +83,10 @@ export type DaemonProxy = {
   readonly instanceId: string;
   /**
    * Answers one client request. `request.url` must be the URL the client used, because upload
-   * tickets are rewritten to its origin; an `x-forwarded-proto` header overrides its scheme.
+   * tickets are rewritten to its origin. The first comma-separated `x-forwarded-proto` value
+   * overrides its scheme when it is `http` or `https` (case-insensitive). This value is
+   * client-controlled unless ingress replaces it with the public scheme. Replace rather than
+   * append forwarding metadata, or remove untrusted headers and construct the public request URL.
    * Abort `request.signal` when the client goes away so in-flight daemon work is cancelled.
    * Resolves with an error response rather than rejecting.
    */
@@ -470,10 +473,13 @@ function rewriteUploadDirectUrl(upstreamUrl: string, request: Request): string |
   const requestUrl = new URL(request.url);
   const uploadIndex = requestUrl.pathname.lastIndexOf('/upload/preflight');
   const uploadPrefix = uploadIndex >= 0 ? requestUrl.pathname.slice(0, uploadIndex) : '';
-  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
-  const rewritten = new URL(
-    `${forwardedProto || requestUrl.protocol.replace(/:$/, '')}://${requestUrl.host}`,
-  );
+  const forwardedProto = request.headers
+    .get('x-forwarded-proto')
+    ?.split(',')[0]
+    ?.trim()
+    .toLowerCase();
+  const rewritten = new URL(requestUrl.origin);
+  if (forwardedProto === 'http' || forwardedProto === 'https') rewritten.protocol = forwardedProto;
   rewritten.pathname = `${uploadPrefix}${parsed.pathname}`;
   rewritten.search = parsed.search;
   return rewritten.toString();
