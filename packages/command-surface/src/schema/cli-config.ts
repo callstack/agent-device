@@ -33,6 +33,8 @@ export type FlagValueSource = {
   kind: ConfigFileSource | 'env' | 'flag';
   /** Human-readable origin, e.g. `project config file /repo/agent-device.json`. */
   label: string;
+  /** For `env`: the variable that supplied the value, e.g. `AGENT_DEVICE_DEVICE_PIN`. */
+  envName?: string;
 };
 
 export type FlagProvenance = Partial<Record<FlagKey, FlagValueSource>>;
@@ -56,7 +58,11 @@ export function resolveConfigBackedFlagDefaultsWithProvenance(
   const envDefaults = readEnvFlagDefaults(env, options.command);
   mergeDefinedFlags(flags, envDefaults.flags);
   for (const [key, envName] of Object.entries(envDefaults.envNames)) {
-    provenance[key as FlagKey] = { kind: 'env', label: `environment variable ${envName}` };
+    provenance[key as FlagKey] = {
+      kind: 'env',
+      label: `environment variable ${envName}`,
+      envName,
+    };
   }
   return { flags, provenance };
 }
@@ -390,6 +396,11 @@ export type DevicePin = {
   selector: DevicePinSelector;
   /** Which layer turned the pin on (`devicePin: true` or `--device-pin`). */
   policySource: FlagValueSource;
+  /**
+   * The config or env layer that also sets `devicePin: true` when `--device-pin` turned the pin
+   * on. Dropping the flag leaves this layer's pin in force, so the remedy names both.
+   */
+  underlyingPolicySource?: FlagValueSource;
 };
 
 const DEVICE_PIN_FLAG_SOURCE: FlagValueSource = { kind: 'flag', label: 'the --device-pin flag' };
@@ -421,7 +432,13 @@ export function resolveDevicePin(
       { reason: DEVICE_PIN_WITHOUT_SELECTOR_REASON, pinSource: policySource.label },
     );
   }
-  return { selector, policySource };
+  const underlyingPolicySource =
+    explicitDevicePin === true && defaults.flags.devicePin === true
+      ? defaults.provenance.devicePin
+      : undefined;
+  return underlyingPolicySource
+    ? { selector, policySource, underlyingPolicySource }
+    : { selector, policySource };
 }
 
 type DevicePinRequest = {
@@ -453,7 +470,7 @@ export function assertRequestHonorsDevicePin(pin: DevicePin, request: DevicePinR
   const first = conflicts[0]!;
   const pinnedDescription = describeSelector(pin.selector);
   const where = first.step === undefined ? '' : `Batch step ${first.step}: `;
-  const remedy = describePinRemedy(pin.policySource);
+  const remedy = describePinRemedy(pin.policySource, pin.underlyingPolicySource);
   const message =
     `${where}${first.key} ${JSON.stringify(first.requested)} conflicts with the device pin ` +
     `from ${pin.policySource.label}, which pins ${pinnedDescription}. ` +
@@ -467,20 +484,39 @@ export function assertRequestHonorsDevicePin(pin: DevicePin, request: DevicePinR
   });
 }
 
-/** How to lift the pin, phrased for the layer that turned it on: a config file, a variable or the flag. */
-function describePinRemedy(source: FlagValueSource): { message: string; hint: string } {
-  if (source.kind === 'flag') {
+/**
+ * How to lift the pin, phrased for the layer that turned it on. A config file or variable is told
+ * to turn it off rather than to drop it, because a lower layer may set `devicePin: true` too and
+ * would keep the pin in force. `--device-pin` has no false form, so under a lower pinning layer the
+ * remedy names that layer as well.
+ */
+function describePinRemedy(
+  source: FlagValueSource,
+  underlying?: FlagValueSource,
+): { message: string; hint: string } {
+  if (source.kind !== 'flag') return describeLayerRemedy(source, 'that config');
+  if (!underlying || underlying.kind === 'flag') {
     return { message: 'Drop --device-pin', hint: 'drop --device-pin' };
   }
+  const lower = describeLayerRemedy(underlying, underlying.label);
+  return {
+    message: `Drop --device-pin and ${lower.hint}`,
+    hint: `drop --device-pin and ${lower.hint}`,
+  };
+}
+
+/** Turns the pin off at a config file or variable; `where` names the config file. */
+function describeLayerRemedy(
+  source: FlagValueSource,
+  where: string,
+): { message: string; hint: string } {
   if (source.kind === 'env') {
-    return {
-      message: 'Unset AGENT_DEVICE_DEVICE_PIN',
-      hint: 'unset AGENT_DEVICE_DEVICE_PIN',
-    };
+    const name = source.envName ?? 'AGENT_DEVICE_DEVICE_PIN';
+    return { message: `Set ${name}=0`, hint: `set ${name}=0` };
   }
   return {
-    message: 'Edit or remove "devicePin" in that config',
-    hint: 'change the pin in that config',
+    message: `Set "devicePin": false in ${where}`,
+    hint: `set "devicePin": false in ${where}`,
   };
 }
 

@@ -150,7 +150,10 @@ The pin only constrains the keys it sets: here `--udid` still narrows down to on
 selector that repeats the pinned value is accepted. A `devicePin` with no `platform`, `device`,
 `udid`, or `serial` beside it fails with `details.reason: "device_pin_without_selector"`.
 `AGENT_DEVICE_DEVICE_PIN=1` opts in from the environment when the selector lives in the user
-config, and `--device-pin` opts in for one CLI invocation.
+config, and `--device-pin` opts in for one CLI invocation. To lift a pin, turn it off at the layer
+that set it: `"devicePin": false` in a config file or `AGENT_DEVICE_DEVICE_PIN=0` overrides a
+`devicePin: true` in a lower layer, while dropping `--device-pin` leaves any config or variable pin
+in force. The conflict message names the layer to change.
 
 Pinning is separate from [session locks](/docs/sessions#lock-a-named-session-to-a-device): a
 lock protects a named session once it is bound; a pin scopes a whole project before any session

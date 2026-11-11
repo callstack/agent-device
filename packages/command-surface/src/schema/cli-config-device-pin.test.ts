@@ -124,8 +124,56 @@ test('AGENT_DEVICE_DEVICE_PIN turns the pin on for an operator shell', () => {
 
   assert.deepEqual(pin, {
     selector: { platform: 'android', serial: 'emulator-5554' },
-    policySource: { kind: 'env', label: 'environment variable AGENT_DEVICE_DEVICE_PIN' },
+    policySource: {
+      kind: 'env',
+      label: 'environment variable AGENT_DEVICE_DEVICE_PIN',
+      envName: 'AGENT_DEVICE_DEVICE_PIN',
+    },
   });
+});
+
+test('--device-pin over a config that also pins keeps that layer for the remedy', () => {
+  const { project, env } = projectWithConfig({
+    platform: 'ios',
+    device: 'iPad Pro',
+    devicePin: true,
+  });
+  const flagPin = resolveDevicePin(resolvedDefaults(project, env), true);
+
+  assert.deepEqual(flagPin, {
+    selector: { platform: 'ios', device: 'iPad Pro' },
+    policySource: { kind: 'flag', label: 'the --device-pin flag' },
+    underlyingPolicySource: {
+      kind: 'project',
+      label: `project config file ${path.join(project, 'agent-device.json')}`,
+    },
+  });
+  assert.throws(
+    () => assertRequestHonorsDevicePin(flagPin!, { flags: { device: 'iPhone 16' } }),
+    (error: unknown) => {
+      assert.ok(failsWithReason(DEVICE_PIN_CONFLICT_REASON)(error));
+      assert.ok(
+        (error as Error).message.endsWith(
+          `. Drop --device-pin and set "devicePin": false in project config file ${path.join(project, 'agent-device.json')} to target another device.`,
+        ),
+        (error as Error).message,
+      );
+      return true;
+    },
+  );
+});
+
+test('AGENT_DEVICE_DEVICE_PIN=0 turns off a pin a config file sets', () => {
+  const { project, env } = projectWithConfig({
+    platform: 'ios',
+    device: 'iPad Pro',
+    devicePin: true,
+  });
+
+  assert.equal(
+    resolveDevicePin(resolvedDefaults(project, { ...env, AGENT_DEVICE_DEVICE_PIN: '0' })),
+    undefined,
+  );
 });
 
 const pin: DevicePin = {
@@ -141,14 +189,14 @@ test('a request selector that contradicts the pin fails with a typed reason nami
       assert.equal(error.code, 'INVALID_ARGS');
       assert.equal(
         error.message,
-        'device "iPhone 16" conflicts with the device pin from project config file /repo/agent-device.json, which pins platform "ios", device "iPad Pro". Edit or remove "devicePin" in that config to target another device.',
+        'device "iPhone 16" conflicts with the device pin from project config file /repo/agent-device.json, which pins platform "ios", device "iPad Pro". Set "devicePin": false in that config to target another device.',
       );
       assert.deepEqual(error.details, {
         reason: DEVICE_PIN_CONFLICT_REASON,
         pin: { platform: 'ios', device: 'iPad Pro' },
         pinSource: 'project config file /repo/agent-device.json',
         conflicts: [{ key: 'device', pinned: 'iPad Pro', requested: 'iPhone 16' }],
-        hint: 'This project pins platform "ios", device "iPad Pro" (project config file /repo/agent-device.json). Drop the conflicting selector to use the pinned device, or change the pin in that config.',
+        hint: 'This project pins platform "ios", device "iPad Pro" (project config file /repo/agent-device.json). Drop the conflicting selector to use the pinned device, or set "devicePin": false in that config.',
       });
       return true;
     },
@@ -183,14 +231,18 @@ test('the conflict tells the user how to lift the pin for the layer that set it'
   const remedies = [
     [{ kind: 'flag', label: 'the --device-pin flag' }, 'Drop --device-pin', 'drop --device-pin'],
     [
-      { kind: 'env', label: 'environment variable AGENT_DEVICE_DEVICE_PIN' },
-      'Unset AGENT_DEVICE_DEVICE_PIN',
-      'unset AGENT_DEVICE_DEVICE_PIN',
+      {
+        kind: 'env',
+        label: 'environment variable AGENT_DEVICE_DEVICE_PIN',
+        envName: 'AGENT_DEVICE_DEVICE_PIN',
+      },
+      'Set AGENT_DEVICE_DEVICE_PIN=0',
+      'set AGENT_DEVICE_DEVICE_PIN=0',
     ],
     [
       { kind: 'explicit', label: 'config file /tmp/pin.json' },
-      'Edit or remove "devicePin" in that config',
-      'change the pin in that config',
+      'Set "devicePin": false in that config',
+      'set "devicePin": false in that config',
     ],
   ] as const;
   for (const [policySource, message, hint] of remedies) {
@@ -198,6 +250,7 @@ test('the conflict tells the user how to lift the pin for the layer that set it'
       () =>
         assertRequestHonorsDevicePin({ ...pin, policySource }, { flags: { device: 'iPhone 16' } }),
       (error: unknown) => {
+        assert.ok(failsWithReason(DEVICE_PIN_CONFLICT_REASON)(error));
         assert.ok(error instanceof Error && 'details' in error);
         assert.ok(error.message.endsWith(`. ${message} to target another device.`), error.message);
         assert.ok(

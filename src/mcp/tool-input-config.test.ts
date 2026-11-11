@@ -67,7 +67,7 @@ test('a nested batch step naming another device fails before any daemon request'
   const error = result.structuredContent as Record<string, unknown>;
   assert.equal(
     error.message,
-    `Batch step 1: device "iPhone 16" conflicts with the device pin from config file ${configPath}, which pins platform "ios", device "iPad Pro". Edit or remove "devicePin" in that config to target another device.`,
+    `Batch step 1: device "iPhone 16" conflicts with the device pin from config file ${configPath}, which pins platform "ios", device "iPad Pro". Set "devicePin": false in that config to target another device.`,
   );
   assert.equal((error.details as { reason?: string }).reason, 'device_pin_conflict');
 });

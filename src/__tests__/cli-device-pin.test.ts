@@ -43,7 +43,7 @@ test('a CLI batch step that names another device fails before any daemon request
   const error = readJsonError(result.stdout);
   assert.equal(
     error.message,
-    `Batch step 1: device "iPhone 16" conflicts with the device pin from project config file ${configPath}, which pins platform "ios", device "iPad Pro". Edit or remove "devicePin" in that config to target another device.`,
+    `Batch step 1: device "iPhone 16" conflicts with the device pin from project config file ${configPath}, which pins platform "ios", device "iPad Pro". Set "devicePin": false in that config to target another device.`,
   );
   assert.equal(error.details.reason, 'device_pin_conflict');
   assert.deepEqual(error.details.conflicts, [
