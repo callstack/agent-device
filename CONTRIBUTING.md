@@ -218,8 +218,9 @@ Only a passed receipt with `exactCommit: true` proves validation at that commit.
 the run also includes staged, unstaged, and untracked files; treat that result as local feedback.
 Unknown, workflow, lockfile, and selector-owning changes fail open to the full local set. For broad
 refactors or when explicitly requested, run `pnpm check`. It runs every gate that the catalog in
-`scripts/check-affected/checks.ts` marks `localRunnable`; the catalog, not this page, is the list.
-The unit suite it runs includes the `apple-runner` project. Both commands share one host lock and
+`scripts/check-affected/checks.ts` marks `localRunnable`, except `vitest-related`, which the full
+unit suite replaces, and the checks that suite already runs. The catalog, not this page, is the
+list. The unit suite includes the `apple-runner` project. Both commands share one host lock and
 need macOS or Linux; on Windows, use the affected plan and direct focused checks. Checks marked
 `localRunnable: false` stay GitHub-authoritative: coverage, specialized toolchains, long scheduled
 sweeps, and live device lanes.

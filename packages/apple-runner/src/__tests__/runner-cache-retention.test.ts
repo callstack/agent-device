@@ -234,27 +234,34 @@ test.skipIf(process.getuid?.() === 0)(
   },
 );
 
-test('owner cleanup still stops a readable lease next to an unreadable lease file', async () => {
-  const owned = leaseFor(seedKey(key(1), 0), { ownerPid: 4242, ownerStartTime: null });
-  writeRunnerLease(owned);
-  const unreadable = path.join(process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR!, 'a-unreadable.json');
-  fs.writeFileSync(unreadable, '{}');
-  fs.chmodSync(unreadable, 0o000);
-  const cleanupTempFile = vi.fn(async () => {});
+// Root reads a mode-000 path, so the unreadable case cannot exist under uid 0.
+test.skipIf(process.getuid?.() === 0)(
+  'owner cleanup still stops a readable lease next to an unreadable lease file',
+  async () => {
+    const owned = leaseFor(seedKey(key(1), 0), { ownerPid: 4242, ownerStartTime: null });
+    writeRunnerLease(owned);
+    const unreadable = path.join(
+      process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR!,
+      'a-unreadable.json',
+    );
+    fs.writeFileSync(unreadable, '{}');
+    fs.chmodSync(unreadable, 0o000);
+    const cleanupTempFile = vi.fn(async () => {});
 
-  await cleanupRunnerLeasesForOwner(
-    { pid: 4242, startTime: null },
-    {
-      confirmRunnerTermination: async () => true,
-      enableIosSimulatorAppAccessibility: async () => {},
-      cleanupRunnerProcessTree: async () => {},
-      cleanupRunnerXcodebuildProcesses: async () => {},
-      cleanupTempFile,
-    },
-  );
+    await cleanupRunnerLeasesForOwner(
+      { pid: 4242, startTime: null },
+      {
+        confirmRunnerTermination: async () => true,
+        enableIosSimulatorAppAccessibility: async () => {},
+        cleanupRunnerProcessTree: async () => {},
+        cleanupRunnerXcodebuildProcesses: async () => {},
+        cleanupTempFile,
+      },
+    );
 
-  assert.deepEqual(cleanupTempFile.mock.calls, [[owned.xctestrunPath], [owned.jsonPath]]);
-});
+    assert.deepEqual(cleanupTempFile.mock.calls, [[owned.xctestrunPath], [owned.jsonPath]]);
+  },
+);
 
 test('a keep count of 0 turns eviction off', async () => {
   process.env.AGENT_DEVICE_IOS_RUNNER_CACHE_KEEP = '0';
