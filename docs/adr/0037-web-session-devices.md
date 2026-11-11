@@ -13,8 +13,8 @@ conflict check, and the host/scoped-device overlap (`devicesOverlap`).
    request; without `--session` the implicit session name (`default`) applies. The web host is never
    bound: it stays an inventory entry and the parent for `devicesOverlap`. Different keys run in
    parallel; separate sessions with the same key conflict in one daemon or across daemons that share
-   a claims directory. Workspace-scoped implicit sessions in different workspaces use different
-   keys; the same workspace uses one key.
+   a claims directory. Named sessions use one device per name and, under tenant isolation, per
+   tenant. Workspace-scoped implicit sessions use one device per workspace.
 2. A session name matches case-insensitively and must match `[A-Za-z0-9_-]`, be non-empty, and fit
    agent-browser's socket path limit: at most 30 characters, and 17 under tenant isolation. A name
    is never trimmed, so surrounding whitespace is refused. Any other name is refused with
