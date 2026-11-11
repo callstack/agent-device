@@ -3,21 +3,6 @@ import { test } from 'vitest';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import { annotateCoveredSnapshotNodes } from './snapshot-occlusion.ts';
 
-// The sibling-sized-chrome family of `snapshot-occlusion.test.ts`: every test here drives the rule
-// through `annotateCoveredSnapshotNodes`, which owns it as a private classification step. The rule
-// stays inside that module because the eager-closure gate (#1739, ADR-0019) forbids a new module in
-// the closure of a published entry surface, and `snapshot-occlusion.ts` is one.
-//
-// #2996: on iOS 26/27 UIKit hosts a bottom tab bar in a `_UIFloatingBarContainerView` (published as
-// `type: 'Toolbar'`) that is a SIBLING of the tab screen's content branch under the same layout
-// container, sized to that branch's frame. The reporter's capture shows `0,0,402,791` beside a
-// `0,0,402,791` content branch with the 83pt tab bar at y=791 outside both; the two "live shape"
-// tests carry trees captured on an iPhone 18 Pro (iOS 27.0). The container reports `hittable: true`
-// and passes touches through, so `press`/`fill` refused every element above the tab bar while a
-// coordinate press at the same point worked. The existing `isFullViewportChromeContainer` exemption
-// compares the candidate against the viewport root, and such a container deliberately stops short
-// of it, so the sibling-level rule owns this case.
-
 type NodeSpec = {
   index: number;
   parentIndex?: number;
@@ -932,7 +917,7 @@ function projectedTabsTree(): RawSnapshotNode[] {
     [1, 0, 'StaticText', '', 'Home', [177, 71, 47, 20]],
     [2, 0, 'StaticText', '', 'home-tab-content', [173, 422, 55, 24]],
     [3, 0, 'StaticText', '', 'Go to the Actions tab', [53, 454, 297, 16]],
-    [4, 0, 'Toolbar', '', 'Toolbar', [0, 0, 402, 791]],
+    [4, 0, 'Toolbar', '_UIFloatingBarContainerView', 'Toolbar', [0, 0, 402, 791]],
     [5, 0, 'Button', '', 'Home, tab, 1 of 3', [0, 791, 134, 49]],
     [6, 0, 'Button', '', 'Feed, tab, 2 of 3', [134, 791, 134, 49]],
     [7, 0, 'Button', '', 'Actions, tab, 3 of 3', [268, 791, 134, 49]],
@@ -994,5 +979,16 @@ test('a single bottom CTA does not exempt a covering toolbar (#4365)', () => {
   nodes.splice(6, 2);
   nodes[5]!.label = 'Continue';
   nodes[5]!.rect = { x: 0, y: 791, width: 402, height: 49 };
+  assert.equal(annotateCoveredSnapshotNodes(nodes)[1]?.interactionBlocked, 'covered');
+});
+
+test('an ordinary toolbar above a two-button action row still covers content (#4365)', () => {
+  const nodes = projectedTabsTree();
+  nodes[4]!.role = '';
+  nodes.splice(7, 1);
+  nodes[5]!.rect = { x: 0, y: 791, width: 201, height: 49 };
+  nodes[6]!.rect = { x: 201, y: 791, width: 201, height: 49 };
+  nodes[5]!.label = 'Cancel';
+  nodes[6]!.label = 'Confirm';
   assert.equal(annotateCoveredSnapshotNodes(nodes)[1]?.interactionBlocked, 'covered');
 });

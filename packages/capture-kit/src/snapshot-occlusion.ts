@@ -526,17 +526,20 @@ function isFullViewportChromeContainer(
   return false;
 }
 
+// The floating host can end at a complete bottom tab row after projection removes its content sibling.
 function isViewportAboveBottomBar(
   node: RawSnapshotNode,
   rect: Rect,
   viewport: Rect,
   neighbourhood: NeighbourhoodIndex,
 ): boolean {
+  if (node.role !== '_UIFloatingBarContainerView' || typeof node.parentIndex !== 'number')
+    return false;
   const bottom = rect.y + rect.height;
   if (bottom <= viewport.y + viewport.height / 2 || bottom >= viewport.y + viewport.height)
     return false;
   if (!isViewportFootprint(rect, { ...viewport, height: bottom - viewport.y })) return false;
-  const siblings = neighbourhood.childrenByParent.get(node.parentIndex ?? -1) ?? [];
+  const siblings = neighbourhood.childrenByParent.get(node.parentIndex) ?? [];
   const buttons = siblings.flatMap((sibling) => {
     if (!nodeKindIncludesAny(sibling, ['button', 'tabitem'])) return [];
     const bar = positiveRect(sibling.rect);
