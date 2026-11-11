@@ -113,6 +113,68 @@ test('the allocation deadline lets startup run past the standalone 120s default'
   assert.deepEqual(client.stopped, []);
 });
 
+test.each(['RUNNING', 'ERRORED', 'PENDING'] as const)(
+  'decides the final %s observation at the deadline',
+  async (status) => {
+    let now = 1_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    let polls = 0;
+    const client = fakeClient({ status: 'PENDING' }, () => {
+      polls += 1;
+      if (polls === 2) {
+        now = 2_000;
+        client.session.status = status;
+      }
+    });
+    client.session.endpoints = { appium: 'https://appium.example/wd/hub' };
+    const prepare = createAwsDeviceFarmPrepareSession({
+      ...baseOptions(client),
+      startupTimeoutMs: 1_000,
+      pollIntervalMs: 1,
+    });
+    const result = prepare({ lease: makeLease(), base: baseSession() });
+    if (status === 'RUNNING') {
+      assert.equal((await result).providerSessionId, ARN);
+      assert.deepEqual(client.stopped, []);
+    } else {
+      await assert.rejects(result, (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.status, status);
+        assert.equal(error.details?.timeoutMs, status === 'PENDING' ? 1_000 : undefined);
+        return true;
+      });
+      assert.deepEqual(client.stopped, [ARN]);
+    }
+    assert.equal(polls, 2);
+  },
+);
+
+test('cancellation takes priority over a final RUNNING observation', async () => {
+  let now = 1_000;
+  vi.spyOn(Date, 'now').mockImplementation(() => now);
+  const controller = new AbortController();
+  const client = fakeClient({ status: 'RUNNING' }, () => {
+    now = 2_000;
+    controller.abort(createRequestCanceledError());
+  });
+  const prepare = createAwsDeviceFarmPrepareSession({
+    ...baseOptions(client),
+    startupTimeoutMs: 1_000,
+  });
+  await assert.rejects(
+    prepare({ lease: makeLease(), req: { signal: controller.signal }, base: baseSession() }),
+    isRequestCanceledError,
+  );
+  assert.deepEqual(client.stopped, [ARN]);
+});
+
+test('a running session without an endpoint is stopped', async () => {
+  const client = fakeClient({ status: 'RUNNING' });
+  const prepare = createAwsDeviceFarmPrepareSession(baseOptions(client));
+  await assert.rejects(prepare({ lease: makeLease(), base: baseSession() }), AppError);
+  assert.deepEqual(client.stopped, [ARN]);
+});
+
 test('a session that reaches RUNNING is handed on and not stopped', async () => {
   const client = fakeClient({
     status: 'RUNNING',

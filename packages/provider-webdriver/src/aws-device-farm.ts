@@ -289,10 +289,11 @@ async function waitForRunningRemoteAccessSession(
   const deadline = req?.deadline ?? startedAt + (options.startupTimeoutMs ?? 120_000);
   const signal = req?.signal;
   let last = await options.client.getRemoteAccessSession(arn);
-  while (Date.now() < deadline) {
+  while (true) {
     signal?.throwIfAborted();
     if (last.status === 'RUNNING') return last;
     throwIfRemoteAccessSessionEnded(last);
+    if (Date.now() >= deadline) break;
     // Wake early on cancellation; the typed reason is rethrown at the loop top.
     await sleep(pollIntervalMs, undefined, { signal }).catch(() => signal?.throwIfAborted());
     last = await options.client.getRemoteAccessSession(arn);
