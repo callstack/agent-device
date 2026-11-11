@@ -48,7 +48,7 @@ function fixture() {
   const tool = (name: string, body: string) => {
     fs.writeFileSync(path.join(bin, name), `#!/bin/sh\nset -eu\n${body}\n`, { mode: 0o755 });
   };
-  tool('shasum', "printf 'abc123  file\\n'");
+  tool('shasum', String.raw`printf 'abc123  file\n'`);
   tool('ditto', 'mkdir -p "$2"');
   tool('tar', 'printf archive > "$2"');
   tool(
@@ -191,7 +191,7 @@ for (const [version, tag] of [
         assert.equal(manifest.version, version);
         if (helper === 'ios') {
           assert.equal(manifest.release_tag, tag);
-          assert.equal(manifest.bundle_name, 'Runner "quoted" \\ path');
+          assert.equal(manifest.bundle_name, String.raw`Runner "quoted" \ path`);
           assert.equal(manifest.bundle_id, 'com.example.runner');
           assert.equal(manifest.asset_name, `agent-device-ios-runner-${version}.app.tar.gz`);
           assert.equal(
