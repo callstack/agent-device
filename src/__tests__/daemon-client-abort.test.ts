@@ -4,6 +4,10 @@ import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { createAgentDeviceClient } from '@agent-device/client';
 import { startPublicDaemonRuntime } from './test-utils/public-daemon-runtime.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
+import { resolveSessionDir } from '@agent-device/host-kit/session-paths';
+import fs from 'node:fs';
 import { skipWhenLoopbackUnavailable, type SkippableTestContext } from '@agent-device/test-kit';
 
 async function waitFor(condition: () => boolean, what: string): Promise<void> {
@@ -26,12 +30,14 @@ async function runAlreadyAborted(
   const requestId = `already-aborted-${daemonTransport}`;
   const daemon = await startPublicDaemonRuntime();
   try {
+    const client = clientFor(daemon.stateDir, daemonTransport);
     const controller = new AbortController();
     controller.abort();
     await assert.rejects(
-      clientFor(daemon.stateDir, daemonTransport).command.wait({
+      client.command.wait({
         durationMs: 5_000,
         requestId,
+        debug: true,
         platform: 'macos',
         target: 'desktop',
         signal: controller.signal,
@@ -40,10 +46,23 @@ async function runAlreadyAborted(
         isRequestCanceledError(error) &&
         (error as { details?: Record<string, unknown> }).details?.dispatched === 'no',
     );
-    assert.equal(
-      daemon.runtime.run(() => getRequestSignal(requestId)),
-      undefined,
+    const followUpRequestId = `${requestId}-follow-up`;
+    await expectWaitResult(
+      client.command.wait({
+        durationMs: 1,
+        platform: 'macos',
+        target: 'desktop',
+        requestId: followUpRequestId,
+        debug: true,
+      }),
     );
+    await daemon.runtime.close();
+    const sessionDir = resolveSessionDir(
+      resolveDaemonPaths(daemon.stateDir).sessionsDir,
+      'default',
+    );
+    assert.equal(fs.existsSync(resolveSessionRequestLogPath(sessionDir, followUpRequestId)), true);
+    assert.equal(fs.existsSync(resolveSessionRequestLogPath(sessionDir, requestId)), false);
   } finally {
     await daemon.close();
   }
