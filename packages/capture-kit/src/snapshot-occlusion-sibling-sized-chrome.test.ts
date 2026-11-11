@@ -941,12 +941,16 @@ function projectedTabsTree(): RawSnapshotNode[] {
 }
 
 test('projected tab content remains uncovered above the adjoining bottom tab buttons (#4365)', () => {
-  const annotated = annotateCoveredSnapshotNodes(projectedTabsTree());
-  for (const index of [1, 2, 3, 5, 6, 7]) {
-    assert.equal(
-      annotated.find((candidate) => candidate.index === index)?.interactionBlocked,
-      undefined,
-    );
+  for (const type of ['Button', 'TabItem']) {
+    const nodes = projectedTabsTree();
+    for (const index of [5, 6, 7]) nodes[index]!.type = type;
+    const annotated = annotateCoveredSnapshotNodes(nodes);
+    for (const index of [1, 2, 3, 5, 6, 7]) {
+      assert.equal(
+        annotated.find((candidate) => candidate.index === index)?.interactionBlocked,
+        undefined,
+      );
+    }
   }
 });
 

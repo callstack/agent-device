@@ -538,7 +538,7 @@ function isViewportAboveBottomBar(
   if (!isViewportFootprint(rect, { ...viewport, height: bottom - viewport.y })) return false;
   const siblings = neighbourhood.childrenByParent.get(node.parentIndex ?? -1) ?? [];
   const buttons = siblings.flatMap((sibling) => {
-    if (!nodeKindIncludesAny(sibling, ['button'])) return [];
+    if (!nodeKindIncludesAny(sibling, ['button', 'tabitem'])) return [];
     const bar = positiveRect(sibling.rect);
     if (!bar) return [];
     return Math.abs(bar.y - bottom) <= 0.5 &&
