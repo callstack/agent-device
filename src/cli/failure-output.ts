@@ -81,27 +81,24 @@ function failedParseCommand(argv: string[]): string | null {
  * a second round trip (#1801).
  */
 function failureLogTail(options: FailureLogSource): string | undefined {
-  if (!options.daemonBaseUrl) {
-    return logFileTail('daemon log', options.daemonPaths.logPath);
-  }
-  if (!options.record) return undefined;
-  // Recomputed from the locator through the same helper that wrote the copy, so
-  // the tail can only ever come from the fetched record (absent when the fetch
-  // failed, since nothing was written).
-  return logFileTail(
-    'remote diagnostics',
-    resolveRemoteRequestDiagnosticsPath(options.daemonPaths.baseDir, options.record),
-  );
-}
-
-function logFileTail(label: string, logPath: string): string | undefined {
   try {
-    if (!fs.existsSync(logPath)) return undefined;
-    const tail = readTrailingLines(logPath, DAEMON_LOG_TAIL_MAX_BYTES, 200);
-    return tail.trim().length > 0 ? `\n[${label}]\n${tail.trimEnd()}` : undefined;
+    if (!options.daemonBaseUrl) {
+      return logFileTail('daemon log', options.daemonPaths.logPath);
+    }
+    if (!options.record) return undefined;
+    return logFileTail(
+      'remote diagnostics',
+      resolveRemoteRequestDiagnosticsPath(options.daemonPaths.baseDir, options.record),
+    );
   } catch {
     return undefined;
   }
+}
+
+function logFileTail(label: string, logPath: string): string | undefined {
+  if (!fs.existsSync(logPath)) return undefined;
+  const tail = readTrailingLines(logPath, DAEMON_LOG_TAIL_MAX_BYTES, 200);
+  return tail.trim().length > 0 ? `\n[${label}]\n${tail.trimEnd()}` : undefined;
 }
 
 /** The last `maxLines` lines within the file's last `maxBytes` bytes; the daemon log grows unbounded. */
