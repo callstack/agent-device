@@ -64,7 +64,9 @@ export {
   resolveRunnerDerivedOverride,
 } from './apple-runner-platform.ts';
 export {
+  assertSafeDerivedCleanup,
   requireCertifiedRunnerCacheArtifacts,
+  shouldDeleteRunnerDerivedRootEntry,
   writeRunnerCacheMetadataForArtifacts,
 } from './runner-cache.ts';
 export { findXctestrun as findRunnerXctestrun } from './runner-artifact.ts';

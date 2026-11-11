@@ -295,17 +295,16 @@ function shouldCleanDerived(): boolean {
 export function assertSafeDerivedCleanup(
   derivedPath: string,
   env: NodeJS.ProcessEnv = hostEnvironment().env,
-  projectRoot: () => string = findProjectRoot,
 ): void {
   if (!resolveRunnerDerivedOverride(env)) {
     return;
   }
-  if (isPathInsideProjectTmp(derivedPath, projectRoot())) {
+  if (isPathInsideProjectTmp(derivedPath, findProjectRoot())) {
     return;
   }
   throw new AppError('COMMAND_FAILED', 'Refusing to clean AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH', {
     derivedPath,
-    hint: `Move AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH to a non-symlinked subdirectory of ${path.join(projectRoot(), '.tmp')}. Unset AGENT_DEVICE_IOS_CLEAN_DERIVED to disable cleanup requested by that variable. Explicit cleanup, forced rebuilds, and cache repair still require a contained override.`,
+    hint: `Move AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH to a non-symlinked subdirectory of ${path.join(findProjectRoot(), '.tmp')}. Unset AGENT_DEVICE_IOS_CLEAN_DERIVED to disable cleanup requested by that variable. Explicit cleanup, forced rebuilds, and cache repair still require a contained override.`,
   });
 }
 
