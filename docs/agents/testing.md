@@ -24,8 +24,8 @@ For JSON, run `pnpm --silent check:affected --json`.
 With `--run --json`, stdout contains the receipt and stderr contains progress.
 When head is `HEAD`, planning and execution include working-tree changes.
 
-`pnpm check` runs every `localRunnable` catalog check.
-It skips `vitest-related` and checks that `unit` already runs.
+`pnpm check` runs every `localRunnable` catalog check except `vitest-related`.
+It records each other check as skipped.
 
 Only a passed receipt with `exactCommit: true` proves validation at the named commit.
 A dirty-tree pass is local feedback.

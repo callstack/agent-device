@@ -222,11 +222,11 @@ export function getCheckSpec(id: CheckId): CheckSpec {
 
 // Resolve the runnable command for a check. Script-backed checks are validated
 // against package.json so a renamed/removed script fails loudly instead of
-// silently skipping a gate. `fallow` threads the same --base the audit uses, when there is one.
+// silently skipping a gate. `fallow` threads the same --base the audit uses.
 export function resolveCommand(
   spec: CheckSpec,
   scripts: Readonly<Record<string, string>>,
-  base: string | undefined,
+  base: string,
   related: RelatedRunScope = { changedFiles: [], unitSuiteRuns: false },
 ): string[] {
   if (spec.kind.type === 'vitest-related') {
@@ -251,50 +251,20 @@ export function resolveCommand(
     );
   }
   const command = ['pnpm', 'run', script];
-  if (spec.id === 'fallow' && base !== undefined) command.push('--base', base);
+  if (spec.id === 'fallow') command.push('--base', base);
   return command;
 }
 
-// The checks the `unit` gate already executes, read off package.json: a `pnpm <script>` step of
-// the unit script, or a Vitest run of one UNIT_TEST_PROJECTS project narrowed only by file
-// filters while the unit script runs `test:unit`. A full run leaves them to `unit`.
-export function checksRunByUnit(scripts: Readonly<Record<string, string>>): Set<CheckId> {
-  const unit = getCheckSpec('unit');
-  if (unit.kind.type !== 'script') return new Set();
-  const steps = new Set(
-    (scripts[unit.kind.script] ?? '')
-      .split('&&')
-      .map((step) => /^pnpm (?:run )?(\S+)$/.exec(step.trim())?.[1])
-      .filter((name): name is string => name !== undefined),
-  );
-  const unitProjects: readonly string[] = UNIT_TEST_PROJECTS;
-  const covered = new Set<CheckId>();
-  for (const spec of CHECK_CATALOG) {
-    if (spec.id === 'unit' || spec.kind.type !== 'script') continue;
-    const [runner, mode, flag, project, ...files] = (scripts[spec.kind.script] ?? '')
-      .trim()
-      .split(/\s+/);
-    const vitestSubset =
-      steps.has('test:unit') &&
-      runner === 'vitest' &&
-      mode === 'run' &&
-      flag === '--project' &&
-      unitProjects.includes(project ?? '') &&
-      files.length > 0 &&
-      files.every((file) => !file.startsWith('-'));
-    if (steps.has(spec.kind.script) || vitestSubset) covered.add(spec.id);
-  }
-  return covered;
-}
-
-// The plan `pnpm check` runs: every locally runnable catalog check. `unit` runs the whole unit
-// suite, so neither the related run that narrows it nor a check it already executes runs again.
-// The plan is deliberate, not a fail-open fallback, so each check carries a `full-run` reason.
-export function fullCheckPlan(scripts: Readonly<Record<string, string>>): CheckPlan {
-  const runByUnit = checksRunByUnit(scripts);
-  const checks = CHECK_CATALOG.filter(
-    (spec) => spec.localRunnable && spec.id !== 'vitest-related' && !runByUnit.has(spec.id),
-  ).map((spec) => spec.id);
+// The plan `pnpm check` runs: the whole catalog except `vitest-related`, which the full `unit`
+// suite replaces. Host-locked suites run last so a cheap failure shows first. `runChecks` skips
+// the checks that are not locally runnable and records each skip with its owning lane. The plan
+// is deliberate, not a fail-open fallback, so each check carries a `full-run` reason.
+export function fullCheckPlan(): CheckPlan {
+  const catalog = CHECK_CATALOG.filter((spec) => spec.id !== 'vitest-related');
+  const checks = [
+    ...catalog.filter((spec) => !spec.hostLocked),
+    ...catalog.filter((spec) => spec.hostLocked),
+  ].map((spec) => spec.id);
   return {
     failOpen: false,
     checks,
@@ -302,7 +272,7 @@ export function fullCheckPlan(scripts: Readonly<Record<string, string>>): CheckP
       check,
       path: 'scripts/check-affected/checks.ts',
       rule: 'full-run',
-      detail: 'pnpm check runs every localRunnable catalog check',
+      detail: 'pnpm check runs the whole catalog',
     })),
     failOpenReasons: [],
     docsOnlyPaths: [],

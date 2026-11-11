@@ -185,7 +185,7 @@ export type CommandExecutor = (command: string[], cwd: string, id: string) => Pr
 export async function runChecks(
   plan: CheckPlan,
   pkg: PackageJson,
-  args: { readonly base: string | undefined },
+  args: Args,
   options: {
     cwd?: string;
     skip?: ValidationContext['skip'];
@@ -291,11 +291,10 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
         return 1;
       }
       if (args.full) {
-        const plan = fullCheckPlan(currentPackage.scripts);
+        const plan = fullCheckPlan();
         receipt.plan = plan;
         receipt.results = plan.checks.map((id) => ({ id, status: 'not-run' }));
-        // A full run has no diff, so fallow takes its own merge-base instead of a --base.
-        return await runChecks(plan, currentPackage, { base: undefined }, { execute, skip });
+        return await runChecks(plan, currentPackage, args, { execute, skip });
       }
       const { changedFiles, plan } = prepare(receipt.refs.resolvedBase, currentPackage);
       receipt.changedFiles = changedFiles;

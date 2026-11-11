@@ -4,13 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { runCmdSync } from '@agent-device/host-kit/command';
-import { CHECK_CATALOG } from './checks.ts';
+import { fullCheckPlan } from './checks.ts';
 import type { ExecutionReceipt } from './execution.ts';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const runner = path.join(import.meta.dirname, 'run.ts');
 
-function fixture(failingScript?: string, realScripts: readonly string[] = []) {
+function fixture(failingScript?: string) {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'validation-cli-'));
   const git = (...args: string[]) => runCmdSync('git', args, { cwd }).stdout.trim();
   git('init', '-q');
@@ -18,9 +18,9 @@ function fixture(failingScript?: string, realScripts: readonly string[] = []) {
   git('config', 'user.name', 'Test');
   const { scripts } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   const pkg = { name: 'validation-fixture', private: true, scripts };
-  for (const script of Object.keys(pkg.scripts)) {
-    if (!realScripts.includes(script)) pkg.scripts[script] = 'node -e "process.exit(0)"';
-  }
+  // The trailing `--` lets a stub take forwarded flags such as fallow's `--base`.
+  for (const script of Object.keys(pkg.scripts))
+    pkg.scripts[script] = 'node -e "process.exit(0)" --';
   if (failingScript) pkg.scripts[failingScript] = 'node -e "process.exit(7)"';
   fs.writeFileSync(path.join(cwd, 'package.json'), JSON.stringify(pkg));
   fs.writeFileSync(
@@ -28,6 +28,9 @@ function fixture(failingScript?: string, realScripts: readonly string[] = []) {
     'packages: []\npmOnFail: warn\nverifyDepsBeforeRun: warn\n',
   );
   fs.writeFileSync(path.join(cwd, '.gitignore'), '.tmp\n.cache\n');
+  // A skipped check names its owning CI lanes, which the gate model reads from these files.
+  fs.copyFileSync(path.join(root, 'vitest.config.ts'), path.join(cwd, 'vitest.config.ts'));
+  fs.cpSync(path.join(root, '.github'), path.join(cwd, '.github'), { recursive: true });
   fs.writeFileSync(path.join(cwd, 'AGENTS.md'), 'base');
   git('add', '.');
   git('commit', '-qm', 'base');
@@ -80,26 +83,22 @@ test(
   'full CLI works without origin/main and still blocks a missing install',
   { skip: process.platform === 'win32' },
   () => {
-    // The real unit script and the Vitest subsets it already runs: a full run that executed one
-    // of those subsets would start Vitest in this fixture and fail.
-    const runByUnit = ['tmpdir-leaks', 'command-docs', 'adr-citations', 'capabilities-matrix'];
-    const { cwd } = fixture(undefined, [
-      'check:unit',
-      'check:command-docs',
-      'check:adr-citations',
-      'check:capabilities-matrix',
-    ]);
+    const { cwd } = fixture();
     try {
       const full = invoke(cwd, ['--full']);
       assert.equal(full.exitCode, 0, full.stderr);
       assert.equal(full.receipt.plan?.failOpen, false);
       assert.deepEqual(
-        full.receipt.results.map((result) => [result.id, result.status]),
-        CHECK_CATALOG.filter(
-          (spec) =>
-            spec.localRunnable && spec.id !== 'vitest-related' && !runByUnit.includes(spec.id),
-        ).map((spec) => [spec.id, 'passed']),
+        full.receipt.results.map((result) => result.id),
+        fullCheckPlan().checks,
       );
+      // Every check either ran or left a reason naming where it is authoritative.
+      for (const result of full.receipt.results) {
+        if (result.status === 'passed') continue;
+        assert.equal(result.status, 'skipped', result.id);
+        assert.match(result.reason ?? '', /GitHub-authoritative|workflow_dispatch only/, result.id);
+      }
+      assert.ok(full.receipt.results.some((result) => result.status === 'skipped'));
       fs.writeFileSync(path.join(cwd, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
       const stale = invoke(cwd, ['--full']);
       assert.equal(stale.exitCode, 1);
