@@ -80,6 +80,73 @@ test('the hub upload helper fails typed with the status on an error page or a mi
   }
 });
 
+test('the hub upload helper types a rejected credential and keeps a transport failure as the cause', async () => {
+  for (const status of [401, 403]) {
+    globalThis.fetch = async () => new Response('{"message":"bad key"}', { status });
+    await assert.rejects(postHubAppUpload(new FormData(), hub), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'UNAUTHORIZED');
+      assert.equal(error.details?.status, status);
+      return true;
+    });
+  }
+
+  const networkFailure = new TypeError('fetch failed');
+  globalThis.fetch = async () => {
+    throw networkFailure;
+  };
+  await assert.rejects(postHubAppUpload(new FormData(), hub), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'COMMAND_FAILED');
+    assert.equal(error.details?.reason, 'hub_app_upload_transport_failed');
+    assert.equal(error.cause, networkFailure);
+    return true;
+  });
+});
+
+test('the hub upload helper fails typed when its deadline ends a stalled upload', async () => {
+  // Only the deadline the upload arms can end this fetch; without it the spy is never called.
+  const deadline = new AbortController();
+  const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => deadline.signal);
+  globalThis.fetch = async (_input, init) =>
+    await new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason as Error));
+    });
+  try {
+    const pending = postHubAppUpload(new FormData(), hub);
+    assert.deepEqual(timeoutSpy.mock.calls, [[15 * 60_000]]);
+    const timeout = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    deadline.abort(timeout);
+    await assert.rejects(pending, (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.reason, 'hub_app_upload_timeout');
+      assert.equal(error.cause, timeout);
+      return true;
+    });
+  } finally {
+    timeoutSpy.mockRestore();
+  }
+});
+
+test('the hub upload helper bounds the request and keeps a caller cancellation as is', async () => {
+  let requestSignal: AbortSignal | undefined;
+  globalThis.fetch = async (_input, init) => {
+    requestSignal = init?.signal ?? undefined;
+    return await new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason as Error));
+    });
+  };
+  const controller = new AbortController();
+  const pending = postHubAppUpload(new FormData(), hub, controller.signal);
+  await vi.waitFor(() => assert.ok(requestSignal));
+  // The request carries a deadline even when the caller gave a signal of its own.
+  assert.notEqual(requestSignal, controller.signal);
+  const canceled = new Error('client disconnected');
+  controller.abort(canceled);
+  await assert.rejects(pending, (error: unknown) => error === canceled);
+});
+
 test('the hub install adapter uploads the build and launches the hinted app', async () => {
   const upload = vi.fn(async () => 'hub://APP2');
   const signal = new AbortController().signal;

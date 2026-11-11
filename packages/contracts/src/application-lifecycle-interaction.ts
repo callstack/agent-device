@@ -268,8 +268,12 @@ export type DirectApplicationLifecycleParams = Readonly<{
   /** Names the owner in the failure reported for an operation it does not implement. */
   owner: string;
   openTargetIdentity: DirectOpenTargetIdentity;
-  /** Owners whose native open does not replace a running application close it first. */
-  closeBeforeRelaunch?: boolean;
+  /**
+   * How `open --relaunch` restarts a running application. `true`: the binding closes it before the
+   * open, for owners whose native open does not replace a running application. `false`: the
+   * interactor's open receives `terminateRunningApp` and owns the restart.
+   */
+  closeBeforeRelaunch: boolean;
   /** Port reverse is the one non-direct operation a provider owner may still implement. */
   configureProviderPortReverse?: ApplicationLifecycleRuntimeOperations['configureProviderPortReverse'];
 }>;
@@ -327,6 +331,7 @@ async function openDirectApplication(
     positionals: input.positionals,
     appBundleId: input.appBundleId,
     execution: input.execution,
+    ...(params.closeBeforeRelaunch ? {} : { terminateRunningApp: input.relaunch }),
   });
   const followUpUrl = followUpRuntimeLaunchUrl(input);
   if (followUpUrl) {
@@ -405,6 +410,8 @@ export function bindLocalDirectApplicationLifecycle(
   return bindDirectApplicationLifecycle({
     owner: params.owner,
     openTargetIdentity: params.openTargetIdentity,
+    // No local direct owner (Linux, web, HarmonyOS, Vega) replaces a running app on open.
+    closeBeforeRelaunch: true,
     binding: bindLocalApplicationLifecycleInteractor({
       device: params.device,
       signal: params.signal,

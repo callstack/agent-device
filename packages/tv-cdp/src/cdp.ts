@@ -22,11 +22,40 @@ export type CdpSession = Readonly<{
 
 type CdpMessage = {
   id?: number;
-  method?: string;
+  method?: unknown;
   params?: Record<string, unknown>;
   result?: unknown;
   error?: { message: string; code: number };
 };
+
+function parseCdpMessage(data: unknown): CdpMessage | undefined {
+  try {
+    const message: unknown = JSON.parse(String(data));
+    return isRecord(message) ? (message as CdpMessage) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Records a debug event in the request diagnostics. The emitter loads on demand because these
+ * events are rare and this module sits in the package's eager import closure.
+ */
+function emitCdpDiagnostic(phase: string, data: Record<string, unknown>): void {
+  void import('@agent-device/host-kit/diagnostics')
+    .then(({ emitDiagnostic }) => emitDiagnostic({ level: 'debug', phase, data }))
+    .catch(() => undefined);
+}
+
+/** Never throws: a listener can throw a value that `String()` cannot convert. */
+function describeThrown(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return typeof error === 'string' ? error : 'non-error thrown value';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 /** Keeps the error that ended an operation and names a page tunnel removal that failed with it. */
 export function withTunnelRemoval(primary: unknown, removal: unknown): AppError {
@@ -75,10 +104,29 @@ export async function connectCdp(target: CdpTarget): Promise<CdpSession> {
   const replies = createReplyWaiters<CdpMessage>();
   const listeners: ((method: string, params: Record<string, unknown>) => void)[] = [];
   const closeListeners: (() => void)[] = [];
+  // A throw from a WebSocket listener is an uncaught exception that ends the process, so a frame
+  // this session cannot read is dropped with a diagnostic and the session keeps serving requests.
   socket.onmessage = (event) => {
-    const message = JSON.parse(String(event.data)) as CdpMessage;
-    if (message.method) {
-      for (const listener of listeners) listener(message.method, message.params ?? {});
+    const message = parseCdpMessage(event.data);
+    if (message === undefined) {
+      emitCdpDiagnostic('tv_cdp_frame_unreadable', { target: target.url });
+      return;
+    }
+    if (message.method !== undefined) {
+      // A frame that names a method is an event; one whose method is not a name is unreadable,
+      // and never a reply, even when it carries an id.
+      if (typeof message.method !== 'string') return;
+      const params = isRecord(message.params) ? message.params : {};
+      for (const listener of listeners) {
+        try {
+          listener(message.method, params);
+        } catch (error) {
+          emitCdpDiagnostic('tv_cdp_event_listener_failed', {
+            method: message.method,
+            error: describeThrown(error),
+          });
+        }
+      }
     } else if (message.id !== undefined) {
       replies.deliver(String(message.id), message);
     }

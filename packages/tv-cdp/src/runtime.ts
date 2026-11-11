@@ -350,6 +350,8 @@ function createTvPlatformRuntime(
       const lifecycle = bindDirectApplicationLifecycle({
         owner: label,
         openTargetIdentity: 'bundle-id',
+        // The page interactor relaunches the TV app itself when asked to terminate it.
+        closeBeforeRelaunch: false,
         binding: bindProviderApplicationLifecycleInteractor({ device, signal, resolveInteractor }),
       });
       const appOperations: Pick<PlatformRuntimeOperations, 'listApps' | 'appState'> = {

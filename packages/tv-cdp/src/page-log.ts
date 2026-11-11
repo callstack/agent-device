@@ -52,16 +52,24 @@ export function createPageLog(now = () => new Date()): PageLog {
 
   const handlers: Readonly<Record<string, (params: Record<string, unknown>) => void>> = {
     'Runtime.consoleAPICalled': (params) => {
-      const args = (params.args as RemoteObject[] | undefined) ?? [];
-      push(`console.${params.type} ${args.map(describe).join(' ')}`);
+      const args = Array.isArray(params.args)
+        ? params.args.filter(
+            (argument): argument is RemoteObject =>
+              typeof argument === 'object' && argument !== null,
+          )
+        : [];
+      push(`console.${String(params.type)} ${args.map(describe).join(' ')}`);
     },
     'Runtime.exceptionThrown': (params) => {
-      const details = params.exceptionDetails as { text: string; exception?: RemoteObject };
-      push(`exception ${details.exception?.description ?? details.text}`);
+      const details = params.exceptionDetails as
+        | { text?: string; exception?: RemoteObject }
+        | undefined;
+      push(`exception ${details?.exception?.description ?? details?.text ?? 'unknown'}`);
     },
     'Log.entryAdded': (params) => {
-      const entry = params.entry as { level: string; text: string; url?: string };
-      push(`log.${entry.level} ${entry.text}${entry.url ? ` ${entry.url}` : ''}`);
+      const entry = params.entry as { level?: string; text?: string; url?: string } | undefined;
+      if (!entry) return;
+      push(`log.${String(entry.level)} ${String(entry.text)}${entry.url ? ` ${entry.url}` : ''}`);
     },
   };
 

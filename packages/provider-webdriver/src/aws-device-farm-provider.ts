@@ -44,9 +44,11 @@ function createAwsDeviceFarmProvider(
       await listAwsDeviceFarmCloudArtifacts(
         provider,
         providerSessionId,
+        // The session ARN names the region the session ran in, which `--aws-region` may have chosen
+        // over the environment's region.
         client(
-          readAwsDeviceFarmSelectorFromEnv(env, 'awsRegion') ??
-            readAwsDeviceFarmRegionFromArn(providerSessionId ?? ''),
+          readAwsDeviceFarmRegionFromArn(providerSessionId ?? '') ??
+            readAwsDeviceFarmSelectorFromEnv(env, 'awsRegion'),
         ),
       ),
     prepareSession: async ({ req, lease, base }) => {

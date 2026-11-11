@@ -62,6 +62,11 @@ type AgentBrowserProviderOptions = {
 type AgentBrowserRunOptions = {
   signal?: AbortSignal;
   stdin?: string;
+  /**
+   * Set when stdin carries caller text: names the command in a failure whose backend output
+   * (stdout, stderr, the envelope's error) is dropped, because that output can quote the text.
+   */
+  textEntryLabel?: string;
 };
 
 export function createAgentBrowserWebProvider(options: AgentBrowserProviderOptions): WebProvider {
@@ -127,16 +132,16 @@ export function createAgentBrowserWebProvider(options: AgentBrowserProviderOptio
           await sends.send(['press', 'Backspace']);
           return;
         }
-        await sends.send(['keyboard', 'type', text]);
+        await sendTextEntry(sends.send, ['keyboard', 'type', text]);
       } catch (error) {
         throw sends.discloseDispatch(error);
       }
     },
     async fillRef(ref, text) {
-      await runJson(['fill', browserRefSelector(ref), text]);
+      await sendTextEntry(runJson, ['fill', browserRefSelector(ref), text]);
     },
     async typeText(text) {
-      await runJson(['keyboard', 'type', text]);
+      await sendTextEntry(runJson, ['keyboard', 'type', text]);
     },
     async scroll(direction, scrollOptions) {
       await runPacedScroll(runJson, direction, scrollOptions);
@@ -173,21 +178,21 @@ async function runPacedScroll(
 }
 
 /** One backend send for a compound operation, counted by {@link createAgentBrowserSendLedger}. */
-type AgentBrowserSend = (args: string[]) => Promise<unknown>;
+type AgentBrowserSend = AgentBrowserRunJson;
 
 /**
  * Counts the backend sends of one compound web operation that returned, and discloses them on
  * its failure through the shared rule: `no` survives only while nothing was sent, so a counted
  * send makes the failure `unknown` with `details.dispatchedSteps`.
  */
-function createAgentBrowserSendLedger(runJson: (args: string[]) => Promise<unknown>): {
+function createAgentBrowserSendLedger(runJson: AgentBrowserRunJson): {
   send: AgentBrowserSend;
   discloseDispatch(error: unknown): unknown;
 } {
   let dispatchedSteps = 0;
   return {
-    send: async (args) => {
-      const data = await runJson(args);
+    send: async (args, run) => {
+      const data = await runJson(args, run);
       dispatchedSteps += 1;
       return data;
     },
@@ -195,6 +200,46 @@ function createAgentBrowserSendLedger(runJson: (args: string[]) => Promise<unkno
       return discloseDispatchAfterSteps(error, dispatchedSteps);
     },
   };
+}
+
+/**
+ * Sends one command that carries caller text (`fill`, `keyboard type`) as a one-entry `batch` read
+ * from stdin. The text is often a password, so it must stay out of the backend's argv, which every
+ * host user can read from the process table, and out of `details.args` on a failure. The backend
+ * exits non-zero for a failed entry and still prints the entry list, so the entry's own `success`
+ * verdict decides the outcome.
+ */
+async function sendTextEntry(send: AgentBrowserRunJson, command: readonly string[]): Promise<void> {
+  const commandName = command[0] ?? 'batch';
+  const label = `agent-browser ${command.slice(0, commandName === 'keyboard' ? 2 : 1).join(' ')}`;
+  const data = await send(['batch'], {
+    stdin: JSON.stringify([command]),
+    textEntryLabel: label,
+  });
+  const entry: unknown = Array.isArray(data) && data.length === 1 ? data[0] : undefined;
+  if (!isBatchEntry(entry) || !sameBatchCommand(entry.command, command)) {
+    throw new AppError('COMMAND_FAILED', `${label} returned an unusable result`, {
+      cmd: AGENT_BROWSER,
+      args: ['batch'],
+      command: commandName,
+      reason: 'text-entry-result-unusable',
+      hint: AGENT_BROWSER_DOCTOR_HINT,
+    });
+  }
+  if (entry.success === true) return;
+  // The backend's own error text is not carried: nothing proves it does not quote the text.
+  const target = commandName === 'fill' ? ` for ${command[1]}` : '';
+  throw new AppError('COMMAND_FAILED', `${label} failed${target}`, {
+    cmd: AGENT_BROWSER,
+    args: ['batch'],
+    command: commandName,
+    reason: 'text-entry-failed',
+    // The backend ran and refused this entry, so its install is not the suspect.
+    hint:
+      commandName === 'fill'
+        ? 'The page refused this text entry: the field may have changed or gone. Run snapshot -i again and retry fill with the ref it reports.'
+        : 'The page refused this text entry: the focused field may have changed or gone. Focus the field again (click it) and retry type.',
+  });
 }
 
 type ScrollStep = {
@@ -485,17 +530,68 @@ async function runAgentBrowserJson(
     options: AgentBrowserProviderOptions;
   } & AgentBrowserRunOptions,
 ): Promise<unknown> {
-  const { session, options, signal, stdin } = params;
+  const { session, options, signal, stdin, textEntryLabel } = params;
   const cliArgs = [...args, '--json', ...(session ? ['--session', session] : [])];
-  return await runAgentBrowserCommand(
-    cliArgs,
-    options,
-    (result) => {
-      const parsed = parseAgentBrowserJson(result.stdout, result.stderr, cliArgs, result.exitCode);
-      return unwrapAgentBrowserJson(parsed, result, cliArgs);
-    },
-    { signal, stdin },
+  const interpret = (result: { stdout: string; stderr: string; exitCode: number }) => {
+    const parsed = parseAgentBrowserJson(result.stdout, result.stderr, cliArgs, result.exitCode);
+    return unwrapAgentBrowserJson(parsed, result, cliArgs);
+  };
+  if (textEntryLabel === undefined) {
+    return await runAgentBrowserCommand(cliArgs, options, interpret, { signal, stdin });
+  }
+  try {
+    return await runAgentBrowserCommand(
+      cliArgs,
+      options,
+      (result) => {
+        try {
+          return interpret(result);
+        } catch (error) {
+          throw withoutBackendAnswer(error, textEntryLabel);
+        }
+      },
+      { signal, stdin },
+    );
+  } catch (error) {
+    throw withoutBackendOutput(error);
+  }
+}
+
+/** Detail keys that hold what an executed backend command printed. */
+const BACKEND_OUTPUT_DETAIL_KEYS: ReadonlySet<string> = new Set([
+  'stdout',
+  'stderr',
+  'agentBrowserError',
+]);
+
+function hasBackendOutput(error: AppError): boolean {
+  return Object.keys(error.details ?? {}).some((key) => BACKEND_OUTPUT_DETAIL_KEYS.has(key));
+}
+
+function detailsWithoutBackendOutput(error: AppError): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(error.details ?? {}).filter(([key]) => !BACKEND_OUTPUT_DETAIL_KEYS.has(key)),
   );
+}
+
+/**
+ * A failure read from the answer of a text-entry command that ran: its message and cause come
+ * from that answer (the envelope's message, a JSON parser's quote of stdout), so both are replaced
+ * along with the output details. The code, hint, and dispatch disclosure stay.
+ */
+function withoutBackendAnswer(error: unknown, label: string): unknown {
+  if (!(error instanceof AppError)) return error;
+  return new AppError(error.code, `${label} failed`, detailsWithoutBackendOutput(error));
+}
+
+/**
+ * A text-entry run failure keeps its code, message, and guidance; only the output an executed
+ * command printed (and the cause that repeats it) is dropped. A failure from before the command
+ * ran (the backend missing, a cancellation) carries no output and passes through unchanged.
+ */
+function withoutBackendOutput(error: unknown): unknown {
+  if (!(error instanceof AppError) || !hasBackendOutput(error)) return error;
+  return new AppError(error.code, error.message, detailsWithoutBackendOutput(error));
 }
 
 async function runAgentBrowserCommand(
