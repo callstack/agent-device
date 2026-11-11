@@ -27,6 +27,7 @@
     "name": "one point capture rounding",
     "expected": {
       "type": 9,
+      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 240,
@@ -36,6 +37,7 @@
     },
     "candidate": {
       "type": 9,
+      "label": "Continue",
       "rect": {
         "x": 41,
         "y": 240,
@@ -288,6 +290,7 @@
     "name": "positive y width height rounding",
     "expected": {
       "type": 9,
+      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 240,
@@ -297,6 +300,7 @@
     },
     "candidate": {
       "type": 9,
+      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 241,
@@ -310,6 +314,7 @@
     "name": "negative y width height rounding",
     "expected": {
       "type": 9,
+      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 240,
@@ -319,6 +324,7 @@
     },
     "candidate": {
       "type": 9,
+      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 239,
