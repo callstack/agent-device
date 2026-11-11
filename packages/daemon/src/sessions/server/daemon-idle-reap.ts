@@ -228,9 +228,6 @@ export function createDaemonLifecycleAdmission(params: {
   });
 
   const leave = (req: DaemonRequest): DaemonResponse => {
-    if (typeof req.token !== 'string' || !timingSafeStringEqual(req.token, params.token)) {
-      return refuse(new AppError('UNAUTHORIZED', 'Invalid daemon token.'));
-    }
     // A remote client reaches this daemon through the proxy with the shared token, and only the
     // host that owns the state directory may retire the daemon on it.
     if (req.internal?.publicNetworkOnly) {
@@ -278,6 +275,9 @@ export function createDaemonLifecycleAdmission(params: {
       admitting = false;
     },
     admit: (handler) => async (req) => {
+      if (typeof req.token !== 'string' || !timingSafeStringEqual(req.token, params.token)) {
+        return refuse(new AppError('UNAUTHORIZED', 'Invalid daemon token.'));
+      }
       if (req.command === DAEMON_QUIESCE_COMMAND) return leave(req);
       return admitting ? await handler(req) : daemonShuttingDownResponse();
     },

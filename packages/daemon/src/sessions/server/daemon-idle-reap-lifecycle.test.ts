@@ -211,3 +211,17 @@ test('every request that is not a lifecycle one is refused once a drain was acce
   assert.deepEqual(await admit(served)(ordinaryRequest()), daemonShuttingDownResponse());
   assert.equal(served.mock.calls.length, 0);
 });
+
+test('invalid ordinary requests never enter the admitted handler, including while draining', async () => {
+  const { admit, served } = makeSeam();
+  const handle = admit(served);
+  for (const token of ['wrong', undefined]) {
+    const response = await handle({ ...ordinaryRequest(), token } as DaemonRequest);
+    assert.equal(!response.ok && response.error.code, 'UNAUTHORIZED');
+  }
+  assert.equal(served.mock.calls.length, 0);
+  await handle(lifecycleRequest());
+  const response = await handle({ ...ordinaryRequest(), token: 'wrong' });
+  assert.equal(!response.ok && response.error.code, 'UNAUTHORIZED');
+  assert.equal(served.mock.calls.length, 0);
+});
