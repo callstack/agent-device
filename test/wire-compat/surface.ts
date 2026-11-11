@@ -219,7 +219,14 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'ResponseLevel',
       ),
       ...from(KERNEL_DEVICE, 'PLATFORM_SELECTORS', 'PlatformSelector'),
-      ...from('packages/contracts/src/device-pin.ts', 'DevicePin', 'DevicePinSelector'),
+      ...from(
+        'packages/contracts/src/device-pin.ts',
+        'DevicePin',
+        'DevicePinSelector',
+        'DEVICE_PIN_SELECTOR_KEYS',
+        'parseDevicePinSelector',
+        'readDevicePin',
+      ),
       // The CLI's projection of a command into the request the daemon receives.
       // Its embedded flag/option vocabulary is waived rather than listed — see
       // closure-policy.ts: those reach the peer inside DaemonRequest's untyped

@@ -118,9 +118,9 @@
     "packages/daemon/src/server/http/http-authorization.ts#readHeaderValue": "sha256:0ec16993e5d9b460ba02deb4a43bbc4c248f9697eaed9aa64003eec7d5dce6bf",
     "packages/daemon/src/server/http/http-authorization.ts#resolveToken": "sha256:3abcb019e1325317618045b7138e41845990af10953dd937571997cd6ec35981",
     "packages/daemon/src/server/http/http-rpc-envelope.ts#sendJson": "sha256:a1de00da3f1db8c98e69a85dfe2e11b626a4d2ce472840e3b8f519aa8a207a8f",
-    "packages/daemon/src/server/http/http-rpc-methods.ts#toDaemonRequest": "sha256:f3861d2d4f67f66e83800616926f6bbb0595de4ecbb0072b5b78971ebeb0705b",
+    "packages/daemon/src/server/http/http-rpc-methods.ts#toDaemonRequest": "sha256:d6afa5f8f1219e519e72bbd6fddd7de7763818f1ed7ae2a1e2a12001bd66bd52",
     "packages/daemon/src/server/http/http-rpc-methods.ts#toInstallFromSourceDaemonRequest": "sha256:071c53e7bd8e553cb9df820961294ed4d1e2e385053485364d895cb1777e9429",
-    "packages/daemon/src/server/http/http-rpc-methods.ts#toLeaseDaemonRequest": "sha256:b98bb0624ff0ca6fb849ccc2529dd595042125b2f376283e3b9fc43e805aa556",
+    "packages/daemon/src/server/http/http-rpc-methods.ts#toLeaseDaemonRequest": "sha256:e017795c86534feb8a7e6e53ffbd614db893aad20c5406b2bc53c771ee646948",
     "packages/daemon/src/server/http/http-rpc-methods.ts#toReleaseMaterializedPathsDaemonRequest": "sha256:708736ca03d6a3fc449bb408382dbd509e490de1f84ecc8771fd77d4adda0154",
     "packages/daemon/src/server/http/http-rpc-envelope.ts#writeProgressEnvelope": "sha256:7be778b3902c72d7aa6282c16dc7106fdd64e99c0b5daf9f413ff5dd3fb044f1",
     "packages/daemon/src/server/http/http-rpc-envelope.ts#writeRpcResponseEnvelope": "sha256:7a8155e9fcbb53485489728250a85109b5dab0d96cdd4aa8b7e7eb87a4898ddb",
@@ -195,7 +195,10 @@
     "packages/contracts/src/lease-scope.ts#isLeaseRpcCommand": "sha256:955dc1b73462d40593e5728dbcbaeec1307944b08262a22627e84cc5dc507e8f",
     "packages/contracts/src/lease-scope.ts#leaseRpcMethodForCommand": "sha256:3613555c6002c23ab5bec4b98bc1b4d6947014b52fa100176177f955cf762881",
     "packages/contracts/src/device-pin.ts#DevicePin": "sha256:896f2b8cdcadea2d0fa7a66c2edc44007d1cf7f88d1043393e4268aacf1a63a9",
-    "packages/contracts/src/device-pin.ts#DevicePinSelector": "sha256:c033ae0274d0da7c3cfdcafb2537091ba76e9a1fc4d635357fab9570cc1b223e"
+    "packages/contracts/src/device-pin.ts#DevicePinSelector": "sha256:c033ae0274d0da7c3cfdcafb2537091ba76e9a1fc4d635357fab9570cc1b223e",
+    "packages/contracts/src/device-pin.ts#DEVICE_PIN_SELECTOR_KEYS": "sha256:02a5f76aff71149e02395b60eaa7702715d4594061d11af4d9fa62224f0cc17d",
+    "packages/contracts/src/device-pin.ts#parseDevicePinSelector": "sha256:d5a5ed1a6cbf88d96e3ce3b82a33af3370c1c82f186774aff536c72278f86fb5",
+    "packages/contracts/src/device-pin.ts#readDevicePin": "sha256:77d4de45926108769dad332196eae5473c82e65224426a2edf6790e4ba7d4f29"
   },
   "compatibleChanges": [
     {
@@ -230,8 +233,8 @@
     },
     {
       "declaration": "packages/daemon/src/server/http/http-rpc-methods.ts#toLeaseDaemonRequest",
-      "digest": "sha256:b98bb0624ff0ca6fb849ccc2529dd595042125b2f376283e3b9fc43e805aa556",
-      "rationale": "#2110 read the optional providerApp lease-allocation parameter into the existing flags bag; #2494 reads the full provider-allocation flag set into that same bag through the shared readLeaseAllocateProviderFlags projection, so the reconstructed req.flags handed to prepareSession match what the line transport forwards for free. Released protocol-2 clients omit these and follow the unchanged allocation path; no existing field is required or reinterpreted. The optional retainOnClose boolean parameter is read into meta.leaseRetainOnClose; a released daemon ignores it and keeps releasing on session close. Reads the optional providerCredentialFingerprint lease-allocation parameter into request meta, so a local caller over HTTP gets the same credential check as over the socket. A daemon with an auth hook treats every HTTP caller as remote and strips it, as it does developerDir. Released protocol-2 clients omit it and follow the unchanged allocation path; no existing field is required or reinterpreted. Reads or forwards the optional devicePin allocation parameter. Released clients omit it; older daemons ignore it. Existing fields keep their meanings under ADR 0006."
+      "digest": "sha256:e017795c86534feb8a7e6e53ffbd614db893aad20c5406b2bc53c771ee646948",
+      "rationale": "#2110 read the optional providerApp lease-allocation parameter into the existing flags bag; #2494 reads the full provider-allocation flag set into that same bag through the shared readLeaseAllocateProviderFlags projection, so the reconstructed req.flags handed to prepareSession match what the line transport forwards for free. Released protocol-2 clients omit these and follow the unchanged allocation path; no existing field is required or reinterpreted. The optional retainOnClose boolean parameter is read into meta.leaseRetainOnClose; a released daemon ignores it and keeps releasing on session close. Reads the optional providerCredentialFingerprint lease-allocation parameter into request meta, so a local caller over HTTP gets the same credential check as over the socket. A daemon with an auth hook treats every HTTP caller as remote and strips it, as it does developerDir. Released protocol-2 clients omit it and follow the unchanged allocation path; no existing field is required or reinterpreted. Reads or forwards the optional devicePin allocation parameter. Released clients omit it; older daemons ignore it. Existing fields keep their meanings under ADR 0006. Validates the optional devicePin metadata through the shared parser before dispatch. Existing valid pins and requests that omit a pin keep their request projection. Malformed pin objects now fail clearly with the existing INVALID_ARGS envelope and invalid_device_pin reason instead of a later TypeError. This repairs validation of an unreleased optional field; routes, authentication, framing, and existing fields are unchanged under ADR 0006."
     },
     {
       "declaration": "packages/kernel/src/errors.ts#DaemonError",
@@ -522,6 +525,11 @@
       "declaration": "packages/contracts/src/lease-scope.ts#buildDaemonRpcRequest",
       "digest": "sha256:b3d03bb08f8f332b04dea6d2ea30abca2faf83a10f11cb874df2344b3f54c2b6",
       "rationale": "Adds the optional devicePin parameter to lease allocation RPC requests. Older daemons ignore this new parameter and continue to parse the existing lease scope and selector parameters unchanged. Clients without a pin send the same allocation payload as before. This is an additive optional request field under ADR 0006."
+    },
+    {
+      "declaration": "packages/daemon/src/server/http/http-rpc-methods.ts#toDaemonRequest",
+      "digest": "sha256:d6afa5f8f1219e519e72bbd6fddd7de7763818f1ed7ae2a1e2a12001bd66bd52",
+      "rationale": "Validates the optional devicePin metadata through the shared parser before dispatch. Existing valid pins and requests that omit a pin keep their request projection. Malformed pin objects now fail clearly with the existing INVALID_ARGS envelope and invalid_device_pin reason instead of a later TypeError. This repairs validation of an unreleased optional field; routes, authentication, framing, and existing fields are unchanged under ADR 0006."
     }
   ]
 }
