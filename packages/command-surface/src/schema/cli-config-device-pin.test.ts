@@ -93,6 +93,7 @@ for (const value of [
   { device: '' },
   { device: 4 },
   { target: 'mobile' },
+  { platform: 'windows' },
 ]) {
   test(`invalid pin ${JSON.stringify(value)} fails with its config source`, () => {
     const { configPath, options } = projectWithConfig({ devicePin: value });

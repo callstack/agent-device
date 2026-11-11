@@ -89,7 +89,9 @@ test('a remote-config device that contradicts the pin fails before any daemon re
 
   assert.equal(result.code, 1);
   assert.equal(result.calls.length, 0);
-  assert.deepEqual(readJsonError(result.stdout).details.conflicts, [
+  const error = readJsonError(result.stdout);
+  assert.equal(error.details.reason, 'device_pin_conflict');
+  assert.deepEqual(error.details.conflicts, [
     { key: 'device', pinned: 'iPad Pro', requested: 'iPhone 16' },
   ]);
   fs.rmSync(root, { recursive: true, force: true });

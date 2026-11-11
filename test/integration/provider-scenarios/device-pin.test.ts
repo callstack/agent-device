@@ -22,6 +22,16 @@ for (const platform of ['ios', 'android'] as const) {
     await withProviderScenarioResource(
       () => createProviderScenarioHarness({ deviceInventoryProvider: async () => [pinned, other] }),
       async (daemon) => {
+        const incompatibleIdentity =
+          platform === 'ios' ? { serial: 'ANDROID-001' } : { udid: 'IPAD-001' };
+        const incompatible = await daemon.callCommand('capabilities', [], incompatibleIdentity, {
+          meta: { devicePin: pin },
+        });
+        const refusal = assertRpcError(incompatible, 400, 'INVALID_ARGS', /device pin/);
+        expect(refusal.details).toMatchObject({
+          reason: 'device_pin_conflict',
+          pinSource: 'project config file /project/agent-device.json',
+        });
         const client = createAgentDeviceClient(
           {
             daemonBaseUrl: daemon.baseUrl,

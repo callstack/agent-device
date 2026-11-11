@@ -116,3 +116,91 @@ test('a name alias and overlapping Apple platform selectors are accepted', async
   await runCommand(client, 'snapshot', { device: 'ipad_pro', platform: 'apple' });
   assert.equal(requests.length, 1);
 });
+
+for (const [selector, input, conflict] of [
+  [
+    { platform: 'ios' },
+    { serial: 'emulator-5554' },
+    { key: 'serial', pinnedKey: 'platform', pinned: 'ios', requested: 'emulator-5554' },
+  ],
+  [
+    { platform: 'android' },
+    { udid: 'IPAD-001' },
+    { key: 'udid', pinnedKey: 'platform', pinned: 'android', requested: 'IPAD-001' },
+  ],
+  [
+    { udid: 'IPAD-001' },
+    { serial: 'emulator-5554' },
+    { key: 'serial', pinnedKey: 'udid', pinned: 'IPAD-001', requested: 'emulator-5554' },
+  ],
+  [
+    { serial: 'emulator-5554' },
+    { udid: 'IPAD-001' },
+    { key: 'udid', pinnedKey: 'serial', pinned: 'emulator-5554', requested: 'IPAD-001' },
+  ],
+  [
+    { udid: 'IPAD-001' },
+    { platform: 'android' },
+    { key: 'platform', pinnedKey: 'udid', pinned: 'IPAD-001', requested: 'android' },
+  ],
+  [
+    { serial: 'emulator-5554' },
+    { platform: 'ios' },
+    { key: 'platform', pinnedKey: 'serial', pinned: 'emulator-5554', requested: 'ios' },
+  ],
+  [
+    { platform: 'linux' },
+    { udid: 'IPAD-001' },
+    { key: 'udid', pinnedKey: 'platform', pinned: 'linux', requested: 'IPAD-001' },
+  ],
+  [
+    { platform: 'web' },
+    { serial: 'emulator-5554' },
+    { key: 'serial', pinnedKey: 'platform', pinned: 'web', requested: 'emulator-5554' },
+  ],
+] as const) {
+  test(`a pin ${JSON.stringify(selector)} rejects incompatible selector ${JSON.stringify(input)} before transport`, async () => {
+    const { client, requests } = recordingClient({ ...PIN, selector });
+    await assert.rejects(
+      runCommand(client, 'snapshot', input),
+      failsWithPinConflict({ message: /conflicts with the device pin/, conflicts: [conflict] }),
+    );
+    assert.equal(requests.length, 0);
+  });
+}
+
+test('an incompatible selector in a batch step is rejected before any request is sent', async () => {
+  const { client, requests } = recordingClient(PIN);
+  await assert.rejects(
+    runCommand(client, 'batch', {
+      steps: [{ command: 'snapshot', input: { serial: 'emulator-5554' } }],
+    }),
+    failsWithPinConflict({
+      message: /^Batch step 1: serial/,
+      conflicts: [
+        {
+          key: 'serial',
+          pinnedKey: 'platform',
+          pinned: 'ios',
+          requested: 'emulator-5554',
+          step: 1,
+        },
+      ],
+    }),
+  );
+  assert.equal(requests.length, 0);
+});
+
+for (const [platform, identity] of [
+  ['ios', { udid: 'IPAD-001' }],
+  ['macos', { udid: 'MAC-001' }],
+  ['android', { serial: 'emulator-5554' }],
+  ['harmonyos', { serial: 'HARMONY-001' }],
+  ['vega', { serial: 'VEGA-001' }],
+] as const) {
+  test(`a ${platform} pin accepts a compatible identity selector`, async () => {
+    const { client, requests } = recordingClient({ ...PIN, selector: { platform } });
+    await runCommand(client, 'snapshot', identity);
+    assert.equal(requests.length, 1);
+  });
+}

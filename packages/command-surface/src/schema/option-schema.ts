@@ -182,9 +182,23 @@ export function parseDevicePin(
       );
     }
     const spec = getOptionSpec(key as keyof DevicePinSelector)!;
-    Object.assign(selector, {
-      [key]: parseOptionValueFromSource(spec, raw, label, `devicePin.${key}`),
-    });
+    try {
+      Object.assign(selector, {
+        [key]: parseOptionValueFromSource(spec, raw, label, `devicePin.${key}`),
+      });
+    } catch (error) {
+      if (!(error instanceof AppError) || error.code !== 'INVALID_ARGS') throw error;
+      throw new AppError(
+        error.code,
+        error.message,
+        {
+          ...error.details,
+          reason: 'invalid_device_pin',
+          pinSource: label,
+        },
+        error,
+      );
+    }
   }
   return { selector, source };
 }

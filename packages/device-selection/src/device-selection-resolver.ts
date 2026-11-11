@@ -6,6 +6,7 @@ import type {
 } from '@agent-device/contracts/client';
 import {
   hasExplicitDeviceIdentitySelector,
+  isApplePlatform,
   isIosFamily,
   isSerialAddressablePlatform,
   matchesDeviceSelector,
@@ -284,6 +285,7 @@ function retrySelectorsFor(devices: readonly DeviceInfo[]) {
 
 type PinConflict = {
   key: keyof DevicePinSelector;
+  pinnedKey?: keyof DevicePinSelector;
   pinned: string;
   requested: string;
   step?: number;
@@ -303,22 +305,57 @@ export function assertRequestHonorsDevicePin(
 ): void {
   const conflicts: PinConflict[] = [];
   const collect = (flags: Readonly<Record<string, unknown>> | undefined, step?: number) => {
-    for (const key of Object.keys(pin.selector) as Array<keyof DevicePinSelector>) {
-      const pinned = pin.selector[key];
-      const requested = flags?.[key];
-      if (pinned === undefined || typeof requested !== 'string') continue;
-      const matches =
-        key === 'device'
-          ? matchesDeviceNameSelector({ name: pinned }, requested)
-          : key === 'platform'
-            ? !platformSelectorsConflict(requested as PlatformSelector, pin.selector.platform)
-            : requested === pinned;
-      if (!matches) conflicts.push({ key, pinned, requested, ...(step ? { step } : {}) });
+    const location = step === undefined ? {} : { step };
+    for (const pinnedKey of Object.keys(pin.selector) as Array<keyof DevicePinSelector>) {
+      const pinned = pin.selector[pinnedKey];
+      if (pinned === undefined) continue;
+      for (const key of ['platform', 'device', 'udid', 'serial'] as const) {
+        const requested = flags?.[key];
+        if (
+          typeof requested === 'string' &&
+          pinSelectorsConflict(pinnedKey, pinned, key, requested)
+        ) {
+          conflicts.push({
+            key,
+            pinned,
+            requested,
+            ...(key === pinnedKey ? {} : { pinnedKey }),
+            ...location,
+          });
+        }
+      }
     }
   };
   collect(request.flags);
   request.flags?.batchSteps?.forEach((step, index) => collect(step.flags, index + 1));
   if (conflicts.length) throwPinConflict(pin, conflicts);
+}
+
+function pinSelectorsConflict(
+  pinnedKey: keyof DevicePinSelector,
+  pinned: string,
+  key: keyof DevicePinSelector,
+  requested: string,
+): boolean {
+  if (pinnedKey === key) {
+    if (key === 'device') return !matchesDeviceNameSelector({ name: pinned }, requested);
+    if (key === 'platform')
+      return platformSelectorsConflict(requested as PlatformSelector, pinned as PlatformSelector);
+    return requested !== pinned;
+  }
+  if (pinnedKey === 'platform') return !selectorSupportsPlatform(key, pinned as PlatformSelector);
+  if (key === 'platform')
+    return !selectorSupportsPlatform(pinnedKey, requested as PlatformSelector);
+  return (pinnedKey === 'udid' && key === 'serial') || (pinnedKey === 'serial' && key === 'udid');
+}
+
+function selectorSupportsPlatform(
+  key: keyof DevicePinSelector,
+  platform: PlatformSelector,
+): boolean {
+  if (key === 'udid') return isApplePlatform(platform);
+  if (key === 'serial') return isSerialAddressablePlatform(platform);
+  return true;
 }
 
 export function assertDeviceHonorsPin(
