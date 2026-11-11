@@ -1,7 +1,7 @@
-import { attachSnapshotNativePressTargets } from '@agent-device/contracts/snapshot-private-evidence';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   copySnapshotViewportEvidence,
+  attachSnapshotNativePressTargets,
   readSnapshotOcclusionContextEvidence,
   readSnapshotTextInputGeometry,
   attachSnapshotTextInputGeometry,

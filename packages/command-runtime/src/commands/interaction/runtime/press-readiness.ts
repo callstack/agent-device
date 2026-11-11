@@ -8,7 +8,7 @@ import {
   matchesAuthorizedPressTarget,
   type NativePressReadiness,
 } from '@agent-device/contracts/selector-observation-runtime';
-import { readSnapshotNativePressTargets } from '@agent-device/contracts/snapshot-private-evidence';
+import { readSnapshotNativePressTargets } from '@agent-device/contracts/capture';
 import {
   getRequestExecutionDeadlineMs,
   getRequestResultDeadlineMs,

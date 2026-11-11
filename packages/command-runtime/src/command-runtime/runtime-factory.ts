@@ -1,4 +1,7 @@
-import { copySnapshotNativePressTargets } from '@agent-device/contracts/snapshot-private-evidence';
+import {
+  copySnapshotNativePressTargets,
+  copySnapshotViewportEvidence,
+} from '@agent-device/contracts/capture';
 import type {
   AgentDeviceRuntime,
   AgentDeviceRuntimeConfig,
@@ -6,7 +9,6 @@ import type {
   CommandSessionStore,
 } from '@agent-device/contracts/runtime-contract';
 import { restrictedCommandPolicy } from '@agent-device/contracts/command-policy';
-import { copySnapshotViewportEvidence } from '@agent-device/contracts/capture';
 import { copySnapshotNodeInteractionBounds } from '@agent-device/kernel/rect-center';
 
 /**
