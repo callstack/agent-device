@@ -1,3 +1,4 @@
+import { iosNativeSnapshotNodes } from './fixtures.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { assertRpcOk } from './assertions.ts';
@@ -51,7 +52,7 @@ function snapshotEntry(nodes: unknown[]): ProviderScenarioProviderEntry {
     command: 'ios.runner.snapshot',
     deviceId: DEVICE_ID,
     platform: 'apple',
-    result: { nodes, truncated: false },
+    result: { nodes: iosNativeSnapshotNodes(nodes), truncated: false },
   };
 }
 
@@ -60,6 +61,10 @@ test('Provider-backed integration press --verify returns post-action evidence di
     // snapshot -i to obtain refs; the first capture after open settles: one extra read
     snapshotEntry(BEFORE_NODES),
     snapshotEntry(BEFORE_NODES),
+    {
+      command: 'ios.runner.querySelector',
+      result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
+    },
     {
       command: 'ios.runner.tap',
       deviceId: DEVICE_ID,

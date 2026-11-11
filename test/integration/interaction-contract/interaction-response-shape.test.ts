@@ -65,7 +65,14 @@ test(
   'interaction response shape: press @ref uses the canonical ref envelope',
   async () => {
     await withIosContractDaemon(
-      [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTapEntry(NOISY_DEFAULT_TAP_RESULT)],
+      [
+        runnerSnapshotEntry(RUNNER_CONTINUE_NODES),
+        {
+          command: 'ios.runner.querySelector',
+          result: { pressReadiness: 'ready', pressReadinessAppBundleId: CONTRACT_APP },
+        },
+        runnerTapEntry(NOISY_DEFAULT_TAP_RESULT),
+      ],
       async (daemon, transcript) => {
         assertRpcOk(await daemon.callCommand('snapshot', [], { snapshotInteractiveOnly: true }));
 
@@ -127,7 +134,14 @@ test('interaction response shape: longpress @ref uses the canonical ref envelope
 
 test('interaction response shape: press selector uses the canonical selector envelope', async () => {
   await withIosContractDaemon(
-    [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTapEntry({})],
+    [
+      runnerSnapshotEntry(RUNNER_CONTINUE_NODES),
+      {
+        command: 'ios.runner.querySelector',
+        result: { pressReadiness: 'ready', pressReadinessAppBundleId: CONTRACT_APP },
+      },
+      runnerTapEntry({}),
+    ],
     async (daemon, transcript) => {
       const data = assertRpcOk(await daemon.callCommand('press', ['label=Continue']));
       assertRunnerRequest(transcript, 'ios.runner.tap', tapRequest(200, 322));

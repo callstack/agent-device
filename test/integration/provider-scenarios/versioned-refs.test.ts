@@ -1,3 +1,4 @@
+import { iosNativeSnapshotNodes } from './fixtures.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
@@ -51,7 +52,7 @@ function snapshotEntry(): ProviderScenarioProviderEntry {
     command: 'ios.runner.snapshot',
     deviceId: DEVICE_ID,
     platform: 'apple',
-    result: { nodes: NODES, truncated: false },
+    result: { nodes: iosNativeSnapshotNodes(NODES), truncated: false },
   };
 }
 
@@ -72,12 +73,20 @@ test('Provider-backed integration rejects stale pinned @refs and accepts current
     snapshotEntry(),
     // press @e2~s{g1}: pinned to the CURRENT frame — admitted, taps Cancel,
     // and crosses the seam so the frame expires
+    {
+      command: 'ios.runner.querySelector',
+      result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
+    },
     tapEntry(200, 422),
     // snapshot -i: re-issues a fresh complete frame at g2 (= g1+1)
     snapshotEntry(),
     // press @e2~s{g1}: an outlived pin against the active g2 frame — rejected
     // with a precise generation mismatch before any runner command
     // press @e2~s{g2}: pinned to the current frame — admitted, taps Cancel
+    {
+      command: 'ios.runner.querySelector',
+      result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
+    },
     tapEntry(200, 422),
   ]);
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(

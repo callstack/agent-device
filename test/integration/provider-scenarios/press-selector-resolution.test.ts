@@ -1,3 +1,4 @@
+import { iosNativeSnapshotNodes } from './fixtures.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
@@ -44,7 +45,7 @@ function snapshotEntry(nodes: readonly unknown[]): ProviderScenarioProviderEntry
     command: 'ios.runner.snapshot',
     deviceId: DEVICE_ID,
     platform: 'apple',
-    result: { nodes, truncated: false },
+    result: { nodes: iosNativeSnapshotNodes(nodes), truncated: false },
   };
 }
 
@@ -99,14 +100,21 @@ async function withPressSelectorDaemon(
 
 test('press resolving on the first capture costs exactly one snapshot call', async () => {
   await withPressSelectorDaemon(
-    [snapshotEntry(CONTINUE_BUTTON_NODES), tapEntry(200, 322)],
+    [
+      snapshotEntry(CONTINUE_BUTTON_NODES),
+      {
+        command: 'ios.runner.querySelector',
+        result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
+      },
+      tapEntry(200, 322),
+    ],
     async (daemon, transcript) => {
       const callsBeforePress = transcript.calls.length;
       const press = await daemon.callCommand('press', ['label=Continue']);
       assertRpcOk(press);
       assert.deepEqual(
         transcript.calls.slice(callsBeforePress).map((call) => call.command),
-        ['ios.runner.snapshot', 'ios.runner.tap'],
+        ['ios.runner.snapshot', 'ios.runner.querySelector', 'ios.runner.tap'],
       );
       transcript.assertComplete();
     },

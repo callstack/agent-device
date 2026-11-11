@@ -1,3 +1,4 @@
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -96,4 +97,23 @@ export function createDemoIosApp(prefix: string): { tempRoot: string; appPath: s
     'utf8',
   );
   return { tempRoot, appPath };
+}
+
+/** Scripted runner captures retain the native source before the host presents their nodes. */
+export function iosNativeSnapshotNodes(nodes: readonly unknown[]): unknown[] {
+  return nodes.map((candidate) => {
+    const node = candidate as RawSnapshotNode;
+    if (!node?.type || !node.rect) return candidate;
+    const type = node.type.replace(/^XCUIElementType/, '');
+    return {
+      ...node,
+      nativePressTarget: node.nativePressTarget ?? {
+        type,
+        identifier: node.identifier,
+        label: node.label,
+        ...(type === 'SecureTextField' ? {} : { value: node.value }),
+        rect: node.rect,
+      },
+    };
+  });
 }

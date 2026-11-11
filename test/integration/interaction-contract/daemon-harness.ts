@@ -1,5 +1,8 @@
 import { assertRpcOk } from '../provider-scenarios/assertions.ts';
-import { PROVIDER_SCENARIO_IOS_SIMULATOR } from '../provider-scenarios/fixtures.ts';
+import {
+  iosNativeSnapshotNodes,
+  PROVIDER_SCENARIO_IOS_SIMULATOR,
+} from '../provider-scenarios/fixtures.ts';
 import {
   createProviderScenarioHarness,
   withProviderScenarioResource,
@@ -98,21 +101,7 @@ export function runnerSnapshotEntry(
     deviceId: CONTRACT_DEVICE_ID,
     platform: 'apple',
     result: {
-      nodes: nodes.map((node) => {
-        const raw = node as import('@agent-device/kernel/snapshot').RawSnapshotNode;
-        return raw.type && raw.rect
-          ? {
-              ...raw,
-              nativePressTarget: {
-                type: raw.type,
-                identifier: raw.identifier,
-                label: raw.label,
-                ...(raw.type === 'SecureTextField' ? {} : { value: raw.value }),
-                rect: raw.rect,
-              },
-            }
-          : raw;
-      }),
+      nodes: iosNativeSnapshotNodes(nodes),
       truncated: false,
       ...result,
     },

@@ -1,3 +1,4 @@
+import { iosNativeSnapshotNodes } from './fixtures.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
@@ -67,7 +68,7 @@ function snapshotEntry(nodes = NODES): ProviderScenarioProviderEntry {
     command: 'ios.runner.snapshot',
     deviceId: DEVICE_ID,
     platform: 'apple',
-    result: { nodes, truncated: false },
+    result: { nodes: iosNativeSnapshotNodes(nodes), truncated: false },
   };
 }
 
@@ -87,11 +88,19 @@ test('Provider-backed integration iOS @refs reject after a selector press replac
     snapshotEntry(),
     // press label=Continue: selector resolution capture replaces the stored tree
     snapshotEntry(),
+    {
+      command: 'ios.runner.querySelector',
+      result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
+    },
     tapEntry(200, 322),
     // press @e2 while stale: rejects before any runner command
     // snapshot: re-issues refs
     snapshotEntry(),
     // press @e2 after refresh: no warning
+    {
+      command: 'ios.runner.querySelector',
+      result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
+    },
     tapEntry(200, 422),
   ]);
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
@@ -156,6 +165,10 @@ test('Provider-backed iOS press rejects a stale ref after navigation', async () 
     snapshotEntry(MAGIC_CODE_NODES),
     // press label=Back: the pre-action capture still sees that screen.
     snapshotEntry(MAGIC_CODE_NODES),
+    {
+      command: 'ios.runner.querySelector',
+      result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
+    },
     tapEntry(28, 98),
     // The stale press rejects before any runner command.
   ]);
