@@ -16,7 +16,6 @@ import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pip
 import {
   readScrollEdgeState,
   runScrollPasses,
-  scrollNoProgressHint,
   verticalEdgeFor,
   type ScrollCaptureRefusal,
 } from '@agent-device/capture-kit/scroll-edge-state';
@@ -39,8 +38,9 @@ import {
  * first is what keeps a failed read from being reported as end-of-content — coercing it to an empty
  * tree makes the edge analyzer say "no room below".
  *
- * The end-of-content signal is the one `scroll top`/`scroll bottom` already trust, so both stop in
- * the same place. Horizontal scrolls have no such analyzer and are bounded by the pass budget alone.
+ * Vertical scrolling uses the surface fingerprint to detect a lack of progress. Hidden-content
+ * hints alone cannot establish an edge because virtualized content may not be in the tree.
+ * Horizontal scrolls are bounded by the pass budget alone.
  * The first capture happens before the first gesture, so an already-visible target costs no scroll.
  */
 export async function runScrollUntilVisible<TResult>(params: {
@@ -64,19 +64,15 @@ export async function runScrollUntilVisible<TResult>(params: {
         if (refusal) throw scrollUntilCaptureError(direction, selector, refusal);
         return captured.nodes as SnapshotNode[];
       },
-      decide: async (nodes, passes) => {
+      decide: async (nodes) => {
         if (await isSelectorVisible(nodes, selector, platform)) return { stop: true };
         // Horizontal scrolling has no edge analyzer and uses only the pass budget.
         if (!edge) return { stop: false };
         const state = await readScrollEdgeState(nodes, edge);
-        if (!state.canScroll) {
-          throw scrollUntilNotFoundError(direction, selector, 'edge-reached', passes);
-        }
         return { stop: false, fingerprint: state.fingerprint };
       },
       passLimit: params.passLimit ?? DEFAULT_SCROLL_UNTIL_PASSES,
-      passLimitError: (passes) =>
-        scrollUntilNotFoundError(direction, selector, 'pass-limit', passes),
+      passLimitError: (passes) => scrollUntilNotFoundError(direction, selector, passes),
       noProgressError: (passes) => scrollUntilNoProgressError(direction, selector, passes),
       scroll: async () => {
         scrolled = true;
@@ -161,27 +157,11 @@ export function scrollCaptureRefusal(result: SnapshotResult): ScrollCaptureRefus
   return undefined;
 }
 
-/** The content ran out, or the budget did. Separate messages: the corrective action differs. */
 function scrollUntilNotFoundError(
   direction: ScrollDirection,
   selector: string,
-  outcome: 'edge-reached' | 'pass-limit',
   passes: number,
 ): AppError {
-  const spent = `${passes} ${passes === 1 ? 'pass' : 'passes'}`;
-  if (outcome === 'edge-reached') {
-    return new AppError(
-      'COMMAND_FAILED',
-      `scroll ${direction} reached the end of the scrollable content after ${spent} without ${selector} becoming visible`,
-      {
-        reason: 'scroll_until_edge_reached',
-        selector,
-        direction,
-        passes,
-        hint: `The content ends here, so no further ${direction} scroll can reveal it. Run snapshot -i to see what is on screen, scroll the opposite direction, or check the selector — the element may be on another screen.`,
-      },
-    );
-  }
   return new AppError(
     'COMMAND_FAILED',
     `scroll ${direction} spent its ${passes}-pass budget without ${selector} becoming visible`,
@@ -195,7 +175,6 @@ function scrollUntilNotFoundError(
   );
 }
 
-/** The scroll was not reaching the container, not just falling short of a budget — the fix differs. */
 function scrollUntilNoProgressError(
   direction: ScrollDirection,
   selector: string,
@@ -210,7 +189,7 @@ function scrollUntilNoProgressError(
       selector,
       direction,
       passes,
-      hint: scrollNoProgressHint(),
+      hint: 'The content may have ended, or the scroll may not be reaching this container. Check the selector and run snapshot -i to inspect the screen. If a field is focused, dismiss the keyboard; if the container is nested, target it directly. Some lists respond to a raw drag: swipe x1 y1 x2 y2 started inside the list.',
     },
   );
 }

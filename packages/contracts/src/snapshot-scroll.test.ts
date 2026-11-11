@@ -12,6 +12,8 @@ test('snapshot scroll semantics classify scrollable types and node-like roles', 
   const scrollView = node({ index: 1, type: 'ScrollView', parentIndex: 0 });
 
   assert.equal(isScrollableType('android.widget.RecyclerView'), true);
+  assert.equal(isScrollableType('collection'), true);
+  assert.equal(isScrollableType('collectionitem'), false);
   assert.equal(isScrollableNodeLike(scrollView), true);
   assert.equal(isScrollableNodeLike({ role: 'scrollbar' }), true);
 });
