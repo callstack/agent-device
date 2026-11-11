@@ -1,5 +1,6 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { waitObservesDevice } from '@agent-device/contracts/wait-runtime-plan';
+import { sleep } from '@agent-device/host-kit/retry';
+import { getRequestSignal } from '@agent-device/host-kit/request';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { AppError } from '@agent-device/kernel/errors';
 import { checkWaitText } from '@agent-device/selectors';
@@ -9,7 +10,11 @@ import { absenceCaptureOptionError } from '@agent-device/selectors/absence-obser
 import { absenceCaptureOptionRefusal } from '@agent-device/selectors/absence-observation';
 import { parseVersionedRefPositional } from './ref-positionals.ts';
 import { resolveRefStalenessWarning } from './session-snapshot.ts';
-import { resolveSessionDevice, withSessionlessRunnerCleanup } from '../core/snapshot-session.ts';
+import {
+  resolveSessionAtAddress,
+  resolveSessionDevice,
+  withSessionlessRunnerCleanup,
+} from '../core/snapshot-session.ts';
 import {
   recordIfSession,
   stripResolutionPayload,
@@ -42,18 +47,25 @@ import { errorResponse } from '@agent-device/kernel/contracts';
 type DispatchWaitParams = SelectorRuntimeParams &
   Readonly<{ inspectFacts?: InspectDeviceRuntimeFacts; bindDevice?: BindDeviceRuntime }>;
 
+type ObservingWait = Exclude<WaitParsed, { kind: 'invalid' | 'sleep' }>;
+
 export async function dispatchWaitViaRuntime(params: DispatchWaitParams): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
   const parsedOrResponse = parseWaitRequest(req);
   if ('ok' in parsedOrResponse) return parsedOrResponse;
   const parsed = parsedOrResponse;
+  if (parsed.kind === 'sleep') return await executeDurationWait(params, parsed.durationMs);
   const { ref, session, device } = await resolveSessionDevice(sessionStore, sessionName, req);
-  // ADR 0019: facts are the only support authority, through the selector family's one
-  // admit-then-bind entry. A duration wait observes nothing, so it never asks for a binding —
-  // exactly the cell legacy admission skipped by testing `parsed.kind !== 'sleep'`.
-  const boundOrResponse = await bindWaitOperations(params, parsed, session, device);
-  if (boundOrResponse && 'ok' in boundOrResponse) return boundOrResponse;
-  const waitOperations = boundOrResponse;
+  const bound = await resolveBoundSelectorCapture({
+    command: 'wait',
+    device,
+    session,
+    inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
+    bindDevice: params.bindDevice,
+  });
+  if (!bound.ok) return bound.response;
+  const waitOperations = bound.operations;
   // ADR 0012 / #1349, replay-only: the recorded landmark identity this wait must observe.
   const recordedLandmark = req.internal?.replayLandmarkGuard;
   const normalized = normalizeWaitPositionals(parsed, session);
@@ -63,18 +75,6 @@ export async function dispatchWaitViaRuntime(params: DispatchWaitParams): Promis
   // must be initialized here too or sessionless waits have nowhere to report the capture from.
   params.consumedSnapshot ??= {};
   params.captureProof ??= {};
-  // A pure sleep consumes no capture, so it never earns the system-surface disclosure below.
-  if (parsed.kind === 'sleep') {
-    return await executeWaitRequest(
-      { ...params, ref },
-      waitParsed,
-      session,
-      device,
-      waitOperations,
-      staleRefsWarning,
-      recordedLandmark,
-    );
-  }
   // Both a satisfied wait and a timeout consumed the polled capture stored on the session:
   // when it is an occluding system surface, the outcome must disclose the occlusion.
   return withCaptureDisclosures({
@@ -114,31 +114,30 @@ function parseWaitRequest(
   return errorResponse(error.code, error.message, error.details);
 }
 
-async function bindWaitOperations(
+async function executeDurationWait(
   params: DispatchWaitParams,
-  parsed: Exclude<WaitParsed, { kind: 'invalid' }>,
-  session: SessionState | undefined,
-  device: SessionState['device'],
-): Promise<BoundSelectorOperations | DaemonResponse | undefined> {
-  if (!waitObservesDevice(parsed.kind)) return undefined;
-  const bound = await resolveBoundSelectorCapture({
-    command: 'wait',
-    device,
-    session,
-    inspectFacts: params.inspectFacts,
-    platformServices: params.platformServices,
-    bindDevice: params.bindDevice,
+  durationMs: number,
+): Promise<DaemonResponse> {
+  const { req, sessionName, sessionStore } = params;
+  const { ref } = await resolveSessionAtAddress(sessionStore, sessionName, req);
+  return await toDaemonResponse(async () => {
+    const signal = params.signal ?? getRequestSignal(req.meta?.requestId);
+    signal?.throwIfAborted();
+    if (durationMs > 0) await sleep(durationMs, signal);
+    signal?.throwIfAborted();
+    const result = { kind: 'sleep', waitedMs: durationMs };
+    recordIfSession(sessionStore, ref, req, result, undefined, 'landmark');
+    return toDaemonWaitData(result);
   });
-  return bound.ok ? bound.operations : bound.response;
 }
 
 type NormalizedWaitPositionals = {
-  waitParsed: Exclude<WaitParsed, { kind: 'invalid' }>;
+  waitParsed: ObservingWait;
   staleRefsWarning?: string;
 };
 
 function normalizeWaitPositionals(
-  parsed: Exclude<WaitParsed, { kind: 'invalid' }>,
+  parsed: ObservingWait,
   session: SessionState | undefined,
 ): NormalizedWaitPositionals | DaemonResponse {
   if (parsed.kind !== 'ref') return { waitParsed: parsed };
@@ -156,10 +155,10 @@ function normalizeWaitPositionals(
 
 async function executeWaitRequest(
   params: DispatchWaitParams & { ref: SessionRef | undefined },
-  parsed: Exclude<WaitParsed, { kind: 'invalid' }>,
+  parsed: ObservingWait,
   session: SessionState | undefined,
   device: SessionState['device'],
-  waitOperations: BoundSelectorOperations | undefined,
+  waitOperations: BoundSelectorOperations,
   staleRefsWarning: string | undefined,
   recordedLandmark: TargetAnnotationV1 | undefined,
 ): Promise<DaemonResponse> {
@@ -189,32 +188,26 @@ async function executeWaitRequest(
     const data = toDaemonWaitData(result);
     return staleRefsWarning ? { ...data, warning: staleRefsWarning } : data;
   });
-  const enrichedResponse = waitOperations
-    ? await maybeWaitTimeoutSurfaceResponse(
-        {
-          req,
-          logPath: params.logPath,
-          session,
-          device,
-          capture: waitOperations.capture,
-          captureProof: params.captureProof,
-        },
-        response,
-      )
-    : response;
+  const enrichedResponse = await maybeWaitTimeoutSurfaceResponse(
+    {
+      req,
+      logPath: params.logPath,
+      session,
+      device,
+      capture: waitOperations.capture,
+      captureProof: params.captureProof,
+    },
+    response,
+  );
   return await maybeAndroidForegroundBlockerResponse(params, enrichedResponse, 'wait');
 }
 
 function toWaitTarget(
-  // 'invalid' is rejected by the caller before this point; excluding it here makes the
-  // kind-by-kind narrowing below exhaustive without a runtime fallback branch (#1800).
-  parsed: Exclude<WaitParsed, { kind: 'invalid' }>,
+  parsed: ObservingWait,
   session: SessionState | undefined,
   recordedLandmark?: TargetAnnotationV1,
 ) {
   switch (parsed.kind) {
-    case 'sleep':
-      return { kind: 'sleep' as const, durationMs: parsed.durationMs };
     case 'selector':
       return {
         kind: 'selector' as const,
