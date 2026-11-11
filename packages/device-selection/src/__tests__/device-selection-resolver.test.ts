@@ -234,6 +234,83 @@ test('boot --pick newest orders OS versions numerically before names', async () 
   assert.equal(selection.device.id, 'newer');
 });
 
+test.each(['26.5', '27.0'])(
+  'boot --pick newest prefers iPhones to visionOS at runtime %s',
+  async (visionVersion) => {
+    const vision = {
+      ...shutDownSimulator('vision', 'Apple Vision Pro', visionVersion),
+      appleOs: 'visionos' as const,
+    };
+    const selection = await resolveInventoryDeviceSelection({
+      devices: [
+        vision,
+        shutDownSimulator('iphone', 'iPhone 17', '26.5'),
+        shutDownSimulator('iphone-2', 'iPhone 18', '26.5'),
+      ],
+      selector: { platform: 'ios' },
+      source: 'local',
+      boot: { pick: 'newest' },
+    });
+
+    assert.equal(selection.device.id, 'iphone');
+    assert.equal(selection.reason, 'newest-bootable-local');
+  },
+);
+
+test('boot --pick newest prefers iPads to visionOS when no iPhone is available', async () => {
+  const selection = await resolveInventoryDeviceSelection({
+    devices: [
+      { ...shutDownSimulator('vision', 'Apple Vision Pro', '27.0'), appleOs: 'visionos' },
+      { ...shutDownSimulator('ipad', 'iPad Air', '26.5'), appleOs: 'ipados' },
+      { ...shutDownSimulator('ipad-2', 'iPad Pro', '26.5'), appleOs: 'ipados' },
+    ],
+    selector: { platform: 'ios' },
+    source: 'local',
+    boot: { pick: 'newest' },
+  });
+
+  assert.equal(selection.device.id, 'ipad');
+  assert.equal(selection.reason, 'newest-bootable-local');
+});
+
+test('ordinary selection remains ambiguous between equally preferred iPhones alongside visionOS', async () => {
+  await assert.rejects(
+    () =>
+      resolveInventoryDeviceSelection({
+        devices: [
+          { ...shutDownSimulator('vision', 'Apple Vision Pro', '27.0'), appleOs: 'visionos' },
+          shutDownSimulator('iphone', 'iPhone 17', '26.5'),
+          shutDownSimulator('iphone-2', 'iPhone 18', '26.5'),
+        ],
+        selector: { platform: 'ios' },
+        source: 'local',
+        boot: {},
+      }),
+    (error: unknown) => error instanceof AppError && error.code === 'AMBIGUOUS_MATCH',
+  );
+});
+
+test('visionOS remains selectable alone and by explicit name or UDID', async () => {
+  const vision = {
+    ...shutDownSimulator('vision', 'Apple Vision Pro', '27.0'),
+    appleOs: 'visionos' as const,
+  };
+  const phone = shutDownSimulator('iphone', 'iPhone 17', '26.5');
+  for (const [devices, selector] of [
+    [[vision], { platform: 'ios' as const }],
+    [[phone, vision], { platform: 'ios' as const, deviceName: vision.name }],
+    [[phone, vision], { platform: 'ios' as const, udid: vision.id }],
+  ] as const) {
+    const selection = await resolveInventoryDeviceSelection({
+      devices: [...devices],
+      selector,
+      source: 'local',
+      boot: { pick: 'newest' },
+    });
+    assert.equal(selection.device.id, vision.id);
+  }
+});
+
 test('boot --pick newest never overrides an already booted preferred device', async () => {
   const booted = { ...shutDownSimulator('booted-older', 'iPhone 16', '18.6'), booted: true };
   const selection = await resolveInventoryDeviceSelection({
