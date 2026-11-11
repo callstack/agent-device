@@ -15,8 +15,8 @@ conflict check, and the host/scoped-device overlap (`devicesOverlap`).
    parallel; separate sessions with the same key conflict in one daemon or across daemons that share
    a claims directory. Named sessions use one device per name and, under tenant isolation, per
    tenant. Workspace-scoped implicit sessions use one device per workspace. An implicit request
-   without a workspace scope, such as an RPC call without a `cwd`, uses the `default` name and so
-   shares the `p_default` device.
+   without a workspace scope, such as an RPC call without a `cwd`, uses the `default` name: the
+   `p_default` device, or `t_<tenant hash>_default` under tenant isolation.
 2. A session name matches case-insensitively and must match `[A-Za-z0-9_-]`, be non-empty, and fit
    agent-browser's socket path limit: at most 30 characters, and 17 under tenant isolation. A name
    is never trimmed, so surrounding whitespace is refused. Any other name is refused with
