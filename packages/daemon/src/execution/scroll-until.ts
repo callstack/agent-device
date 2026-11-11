@@ -55,6 +55,8 @@ export async function runScrollUntilVisible<TResult>(params: {
   const { selector, direction, platform, capture, scroll } = params;
   const edge = verticalEdgeFor(direction);
   let scrolled = false;
+  let previousFingerprint: string | undefined;
+  let observedMovement = false;
   try {
     const { passes, result } = await runScrollPasses({
       signal: params.signal,
@@ -64,16 +66,24 @@ export async function runScrollUntilVisible<TResult>(params: {
         if (refusal) throw scrollUntilCaptureError(direction, selector, refusal);
         return captured.nodes as SnapshotNode[];
       },
-      decide: async (nodes) => {
+      decide: async (nodes, passes) => {
         if (await isSelectorVisible(nodes, selector, platform)) return { stop: true };
         // Horizontal scrolling has no edge analyzer and uses only the pass budget.
         if (!edge) return { stop: false };
         const state = await readScrollEdgeState(nodes, edge);
+        if (state.edgeObserved) throw scrollUntilEdgeError(direction, selector, passes);
+        if (state.fingerprint && previousFingerprint && state.fingerprint !== previousFingerprint) {
+          observedMovement = true;
+        }
+        previousFingerprint = state.fingerprint;
         return { stop: false, fingerprint: state.fingerprint };
       },
       passLimit: params.passLimit ?? DEFAULT_SCROLL_UNTIL_PASSES,
       passLimitError: (passes) => scrollUntilNotFoundError(direction, selector, passes),
-      noProgressError: (passes) => scrollUntilNoProgressError(direction, selector, passes),
+      noProgressError: (passes) =>
+        observedMovement
+          ? scrollUntilEdgeError(direction, selector, passes)
+          : scrollUntilNoProgressError(direction, selector, passes),
       scroll: async () => {
         scrolled = true;
         return await scroll();
@@ -171,6 +181,24 @@ function scrollUntilNotFoundError(
       direction,
       passes,
       hint: `Allow more gestures with --max-passes <n> (up to ${SCROLL_UNTIL_MAX_PASSES}), raise the step with an amount (scroll ${direction} 0.8 --until <selector>), or run snapshot -i to inspect the current screen.`,
+    },
+  );
+}
+
+function scrollUntilEdgeError(
+  direction: ScrollDirection,
+  selector: string,
+  passes: number,
+): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `scroll ${direction} reached the end of the scrollable content after ${passes} passes without ${selector} becoming visible`,
+    {
+      reason: 'scroll_until_edge_reached',
+      selector,
+      direction,
+      passes,
+      hint: 'The content may end here. Run snapshot -i to inspect the screen, scroll the opposite direction, or check the selector; the element may be on another screen.',
     },
   );
 }
