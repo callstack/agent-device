@@ -28,6 +28,7 @@ import { providerPluginHelp } from '../provider-plugin-catalog.ts';
 const CONFIGURATION_LINES = [
   'Default config files: ~/.agent-device/config.json (or <AGENT_DEVICE_HOME>/config.json), ./agent-device.json (project-safe defaults only).',
   'Use --config <path> or AGENT_DEVICE_CONFIG for explicit connection/provider defaults; project config cannot select endpoints or credentials.',
+  'Pin device selection with devicePin: { platform, device, udid, serial } in config. Set at least one selector; conflicts name the config file. Edit or remove the pin there to target another device.',
 ] as const;
 
 const ENVIRONMENT_LINES = [
@@ -38,7 +39,6 @@ const ENVIRONMENT_LINES = [
     description: 'Default screenshot scale factor',
   },
   { label: 'AGENT_DEVICE_SESSION_LOCK', description: 'Bound-session conflict mode' },
-  { label: 'AGENT_DEVICE_DEVICE_PIN', description: 'Pin the configured device selector' },
   { label: 'AGENT_DEVICE_DAEMON_BASE_URL', description: 'Connect to remote daemon' },
   {
     label: 'AGENT_DEVICE_DAEMON_AUTH_TOKEN',

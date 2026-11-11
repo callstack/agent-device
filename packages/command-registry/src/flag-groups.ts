@@ -57,12 +57,12 @@ export const REPLAY_FLAGS = flagKeys('replayUpdate', 'replayEnv');
 
 // Which flags the CLI PARSER accepts on every command — a different axis from
 // the common input keys in `commands/common-input-fields.ts`, which #2027
-// unified into one table. Neither list contains the other: many keys below
-// (`remoteConfig`, `stateDir`, `daemonTransport`, `sessionIsolation`,
-// `leaseBackend`, `sessionLock`, `devicePin`, every `provider*` and `aws*`) never become
+// unified into one table. Neither list contains the other: 25 of the 42 keys
+// below (`remoteConfig`, `stateDir`, `daemonTransport`, `sessionIsolation`,
+// `leaseBackend`, `sessionLock`, every `provider*` and `aws*`) never become
 // structured command input, while the table's `cwd` and `debug` are not flags
 // and its `deviceTarget` row is spelled `target` here. Deriving this list from
-// that table would mean rows carrying no schema, reader, or projection, so
+// that table would mean 25 rows carrying no schema, reader, or projection, so
 // the two stay separate; the table declares `envFlagKeys` (which environment
 // variable an operator-owned input comes from) and `flagKey`/`flagIn` (which
 // `CliFlags` property a row reads and which reader projections it joins) —
@@ -81,7 +81,6 @@ export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
   'leaseId',
   'leaseBackend',
   'sessionLock',
-  'devicePin',
   'platform',
   'target',
   'device',

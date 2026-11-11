@@ -167,10 +167,6 @@ test('typed device selectors still reach device status and device release', () =
   assert.equal(parsed.flags.udid, '01234567-89AB-CDEF-0123-456789ABCDEF');
 });
 
-// #2161: agent-device.json sets platform/device/udid/serial DEFAULTS, and a default stays
-// overridable. `devicePin: true` beside them is the opt-in that turns the configured selector
-// into a pin. Option resolution only reads the pin; the client enforces it on the finished request
-// (see src/__tests__/cli-device-pin.test.ts).
 function projectPinnedTo(config: Record<string, unknown>): string {
   const project = mkdtempForTestSync('agent-device-cli-pin-');
   fs.writeFileSync(path.join(project, 'agent-device.json'), JSON.stringify(config));
@@ -189,29 +185,13 @@ test('without devicePin a configured device stays an overridable default', () =>
 });
 
 test('a selector-less command inherits the pinned device', () => {
-  const cwd = projectPinnedTo({ platform: 'ios', device: 'iPad Pro', devicePin: true });
+  const cwd = projectPinnedTo({ devicePin: { platform: 'ios', device: 'iPad Pro' } });
   const parsed = resolveCliOptions(['open', 'com.example.app'], { cwd, env: isolatedEnv({}) });
 
   assert.equal(parsed.flags.platform, 'ios');
   assert.equal(parsed.flags.device, 'iPad Pro');
   assert.deepEqual(parsed.devicePin, {
     selector: { platform: 'ios', device: 'iPad Pro' },
-    policySource: {
-      kind: 'project',
-      label: `project config file ${path.join(cwd, 'agent-device.json')}`,
-    },
-  });
-});
-
-test('--device-pin pins the configured defaults for one invocation', () => {
-  const cwd = projectPinnedTo({ platform: 'ios', device: 'iPad Pro' });
-  const parsed = resolveCliOptions(['open', 'com.example.app', '--device-pin'], {
-    cwd,
-    env: isolatedEnv({}),
-  });
-
-  assert.deepEqual(parsed.devicePin, {
-    selector: { platform: 'ios', device: 'iPad Pro' },
-    policySource: { kind: 'flag', label: 'the --device-pin flag' },
+    source: { kind: 'project', path: path.join(cwd, 'agent-device.json') },
   });
 });

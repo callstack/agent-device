@@ -117,47 +117,40 @@ Project config can set a default lock mode for named sessions with `sessionLock`
 
 ## Pin a project to one device
 
-By default the `platform`, `device`, `udid`, and `serial` keys in `agent-device.json` are
-defaults: a `--device` flag or an MCP `device` input overrides them. Set `devicePin` to turn
-those defaults into a pin so a selector that names a different value fails instead of
-retargeting:
+Set `devicePin` in `agent-device.json` to keep commands on the device you choose:
 
 ```json
 {
-  "platform": "ios",
-  "device": "iPad Pro",
-  "devicePin": true
+  "devicePin": {
+    "platform": "ios",
+    "device": "iPad Pro"
+  }
 }
 ```
 
-With this config, `agent-device open --device "iPhone 16"` fails with `INVALID_ARGS` and
-`details.reason: "device_pin_conflict"`. The message and `details.pinSource` name the layer
-that turned the pin on (`project config file /path/to/agent-device.json`), `details.pin` lists the
-pinned values, and `details.conflicts` lists each `{ key, pinned, requested }` pair, with `step`
-set when the value came from a batch step. Branch on `details.reason`, never on the message.
+Commands without selectors use the pin. A conflicting CLI selector or MCP input fails
+with `INVALID_ARGS` and `details.reason: "device_pin_conflict"`. The error names the
+config file and pinned selector. Edit or remove `devicePin` in that file to change the pin.
 
-The pinned values are the `platform`, `device`, `udid`, and `serial` defaults that the config
-files and environment resolve to, with the usual precedence: user config, then project config,
-then `AGENT_DEVICE_*` variables. An explicit `--config` file (or `AGENT_DEVICE_CONFIG`) replaces
-the user and project config files instead of layering on top of them, so with it only that file and
-the `AGENT_DEVICE_*` variables supply the pinned values. Every other source must repeat a pinned value or
-leave that key unset: typed flags, MCP tool input, each batch step, remote config profiles, and
-saved connection defaults. The client checks the finished request, including every batch step,
-before it contacts a daemon, so the CLI, MCP tool calls, and the batch command are held to the
-same rule.
+A pin accepts `platform`, `device`, `udid`, and `serial`. Set at least one key. Use a UDID
+or serial to pin one device when several devices share the same name. You can add selectors
+to narrow a pin, such as `--udid` with a pinned device name, but the selected device must
+match every pinned value. Device names use the same matching rules as `--device`.
 
-The pin only constrains the keys it sets: here `--udid` still narrows down to one iPad, and a
-selector that repeats the pinned value is accepted. A `devicePin` with no `platform`, `device`,
-`udid`, or `serial` beside it fails with `details.reason: "device_pin_without_selector"`.
-`AGENT_DEVICE_DEVICE_PIN=1` opts in from the environment when the selector lives in the user
-config, and `--device-pin` opts in for one CLI invocation. To lift a pin, turn it off at the layer
-that set it: `"devicePin": false` in a config file or `AGENT_DEVICE_DEVICE_PIN=0` overrides a
-`devicePin: true` in a lower layer, while dropping `--device-pin` leaves any config or variable pin
-in force. The conflict message names the layer to change.
+The pin takes precedence over ordinary config and environment defaults. Explicit selectors,
+remote connection defaults, and batch steps must agree with it. The CLI and MCP read the
+pin from configuration; tool input cannot replace or disable it. The daemon also checks the
+selected device before giving a command access to it, including commands in batch and replay.
 
-Pinning is separate from [session locks](/docs/sessions#lock-a-named-session-to-a-device): a
-lock protects a named session once it is bound; a pin scopes a whole project before any session
-exists.
+You can also set a pin in your user config or a file selected with `--config` or
+`AGENT_DEVICE_CONFIG`. A project pin replaces the entire user pin; their selector fields
+are not merged. An explicit config file replaces both user and project files. Other
+`AGENT_DEVICE_*` defaults do not change the pin. There is no `--device-pin` flag or pin
+environment variable.
+
+Without `devicePin`, top-level `platform`, `device`, `udid`, and `serial` values remain
+overridable defaults. A [session lock](/docs/sessions#lock-a-named-session-to-a-device)
+protects a named session after it is bound; a pin also applies before a session exists.
 
 ## Supported environment variables
 
@@ -165,7 +158,7 @@ Only the variables below, and those documented on command pages, are supported. 
 
 | Category | Env vars | Decision |
 | --- | --- | --- |
-| CLI defaults and config | `AGENT_DEVICE_HOME`, `AGENT_DEVICE_CONFIG`, `AGENT_DEVICE_SESSION`, `AGENT_DEVICE_PLATFORM`, `AGENT_DEVICE_SCREENSHOT_SCALE`, `AGENT_DEVICE_SESSION_LOCK`, `AGENT_DEVICE_DEVICE_PIN`, `AGENT_DEVICE_DAEMON_BASE_URL`, `AGENT_DEVICE_DAEMON_AUTH_TOKEN`, `AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS`, `AGENT_DEVICE_CLOUD_BASE_URL` | Public. `AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS` is the ceiling (a positive integer number of milliseconds, default `120000`; any other value fails with `INVALID_ARGS` before a daemon spawns, and only when the client must start a daemon — a client that attaches to or reuses a running daemon never reads it) a client waits for a local daemon it starts to register; CLI, MCP, and Node clients share it. A live daemon is waited for while it records startup progress, so an overloaded host slows startup instead of failing it. A failed startup names the outcome in `details.reason`: `startup-exited` (the process ended before registering), `startup-stalled` (alive, no startup progress for a fixed 60 s window this variable does not change), or `startup-ceiling` (a startup was still live when the ceiling passed — this client's daemon or another client's; the client stops its own launch and never signals another client's live daemon. Only a progressing own launch outlasts the fixed stall window). Branch on `details.reason`, never on the message. |
+| CLI defaults and config | `AGENT_DEVICE_HOME`, `AGENT_DEVICE_CONFIG`, `AGENT_DEVICE_SESSION`, `AGENT_DEVICE_PLATFORM`, `AGENT_DEVICE_SCREENSHOT_SCALE`, `AGENT_DEVICE_SESSION_LOCK`, `AGENT_DEVICE_DAEMON_BASE_URL`, `AGENT_DEVICE_DAEMON_AUTH_TOKEN`, `AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS`, `AGENT_DEVICE_CLOUD_BASE_URL` | Public. `AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS` is the ceiling (a positive integer number of milliseconds, default `120000`; any other value fails with `INVALID_ARGS` before a daemon spawns, and only when the client must start a daemon — a client that attaches to or reuses a running daemon never reads it) a client waits for a local daemon it starts to register; CLI, MCP, and Node clients share it. A live daemon is waited for while it records startup progress, so an overloaded host slows startup instead of failing it. A failed startup names the outcome in `details.reason`: `startup-exited` (the process ended before registering), `startup-stalled` (alive, no startup progress for a fixed 60 s window this variable does not change), or `startup-ceiling` (a startup was still live when the ceiling passed — this client's daemon or another client's; the client stops its own launch and never signals another client's live daemon. Only a progressing own launch outlasts the fixed stall window). Branch on `details.reason`, never on the message. |
 | Device scoping | `AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST`, `AGENT_DEVICE_IOS_SIMULATOR_DEVICE_SET` | Public. `AGENT_DEVICE_IOS_SIMULATOR_DEVICE_SET` is read by the daemon: every iOS simulator request that names no `--ios-simulator-device-set` uses that set, so iOS physical devices are not listed, and a request naming a different path string fails with `INVALID_ARGS` (`details.reason: "ios_simulator_device_set_outside_daemon_set"`). macOS and non-iOS requests ignore it. A daemon started by the CLI inherits the CLI's value; restart the daemon after changing it. |
 | Android test IME | `AGENT_DEVICE_TEST_IME` | Public. Same setting as `--test-ime` / `--no-test-ime` on `open`, `test`, and `replay`; see known limitations. |
 | Local daemon storage | `AGENT_DEVICE_STATE_DIR` | Public |

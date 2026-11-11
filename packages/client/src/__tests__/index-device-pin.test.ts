@@ -5,12 +5,9 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import { runCommand, type DevicePin } from '@agent-device/command-surface';
 import { createAgentDeviceClient } from '../index.ts';
 
-// #2161: the client enforces the workspace device pin on the finished request, so every surface
-// (CLI argv, CLI batch, MCP flat and nested input, remote config) is held to it in one place.
-
 const PIN: DevicePin = {
   selector: { platform: 'ios', device: 'iPad Pro' },
-  policySource: { kind: 'project', label: 'project config file /repo/agent-device.json' },
+  source: { kind: 'project', path: '/repo/agent-device.json' },
 };
 
 function recordingClient(devicePin: DevicePin | undefined) {
@@ -76,13 +73,15 @@ test('a batch whose steps repeat, refine, or omit the pin is sent', async () => 
     steps: [
       { command: 'snapshot', input: {} },
       { command: 'open', input: { app: 'com.example.app', device: 'iPad Pro' } },
-      // A UDID picks one device among several that share the pinned name.
+      // The daemon checks that this identity still matches the pinned name.
       { command: 'snapshot', input: { udid: 'ABCDEF' } },
     ],
   });
 
   assert.equal(requests.length, 1);
   const flags = requests[0]?.flags as CommandFlags | undefined;
+  assert.ok(requests[0]?.meta && 'devicePin' in requests[0].meta);
+  assert.deepEqual(requests[0].meta.devicePin, PIN);
   assert.equal(flags?.platform, 'ios');
   assert.equal(flags?.device, 'iPad Pro');
   const steps = flags?.batchSteps;
@@ -101,4 +100,19 @@ test('without a pin the client sends a batch step that names another device', as
 
   const steps = (requests[0]?.flags as CommandFlags | undefined)?.batchSteps;
   assert.equal(steps?.[0]?.flags?.device, 'iPhone 16');
+});
+
+test('the client supplies pin selectors even when request options contain undefined defaults', async () => {
+  const { client, requests } = recordingClient(PIN);
+  await runCommand(client, 'snapshot', { platform: undefined, device: undefined });
+  assert.equal(requests[0]?.flags?.platform, 'ios');
+  assert.equal(requests[0]?.flags?.device, 'iPad Pro');
+  assert.ok(requests[0]?.meta && 'devicePin' in requests[0].meta);
+  assert.deepEqual(requests[0].meta.devicePin, PIN);
+});
+
+test('a name alias and overlapping Apple platform selectors are accepted', async () => {
+  const { client, requests } = recordingClient(PIN);
+  await runCommand(client, 'snapshot', { device: 'ipad_pro', platform: 'apple' });
+  assert.equal(requests.length, 1);
 });

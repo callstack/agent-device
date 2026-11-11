@@ -5,36 +5,28 @@ import {
   isFlagSupportedForCommand,
   mergeDefinedFlags,
   resolveBindingSettings,
-  resolveConfigBackedFlagDefaultsWithProvenance,
-  resolveDevicePin,
+  resolveConfigDefaults,
   type BindingSettings,
   type CommandName,
   type DevicePin,
   type JsonSchema,
 } from '@agent-device/command-surface';
 
-/**
- * Merges the operator's env and config-file defaults into one tool call's input, and resolves the
- * session lock from those same defaults. The lock is operator policy: a session or platform the
- * model names never turns it on, as `AGENT_DEVICE_SESSION` does for the CLI. The device pin is
- * operator policy the same way: it is read from those defaults only, and the client enforces it on
- * the finished request, so a selector the model names (flat or in a batch step) cannot retarget a
- * pinned project (#2161).
- */
+/** Applies operator config to a tool call without admitting policy settings from tool input. */
 export function resolveMcpConfigDefaults(
   name: CommandName,
   explicitInput: Record<string, unknown>,
   supportedProperties: Readonly<Record<string, JsonSchema>>,
   host: HostEnvironment,
 ): { input: Record<string, unknown>; binding: BindingSettings; devicePin: DevicePin | undefined } {
-  const configDefaults = resolveConfigBackedFlagDefaultsWithProvenance({
+  const configDefaults = resolveConfigDefaults({
     command: name,
     cwd: host.cwd,
     env: host.env,
     cliFlags: explicitInput as CliFlags,
   });
   const defaults = configDefaults.flags;
-  const devicePin = resolveDevicePin(configDefaults);
+  const devicePin = configDefaults.devicePin;
   const applicableDefaults: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(defaults)) {
     if (

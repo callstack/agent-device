@@ -55,6 +55,7 @@ import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   assertRequestHonorsDevicePin,
   buildRequestFlags,
+  mergeDefinedFlags,
   type AgentDeviceClient,
   type DevicePin,
   prepareDaemonCommandRequest,
@@ -83,7 +84,7 @@ export function createAgentDeviceClient(
   deps: {
     transport?: AgentDeviceDaemonTransport;
     host?: HostEnvironment;
-    /** The workspace device pin (#2161), checked against every request this client sends. */
+    /** The operator-configured device selector enforced on every request. */
     devicePin?: DevicePin;
   } = {},
 ): AgentDeviceClient {
@@ -140,12 +141,17 @@ export function createAgentDeviceClient(
       command,
       positionals,
       ...(input ? { input } : {}),
-      flags: buildRequestFlags(merged, metadataFlags),
+      flags: buildRequestFlags(
+        mergeDefinedFlags({ ...deps.devicePin?.selector }, merged),
+        metadataFlags,
+      ),
       runtime: merged.runtime,
-      meta: { ...buildMeta(merged), requestId },
+      meta: {
+        ...buildMeta(merged),
+        requestId,
+        ...(deps.devicePin ? { devicePin: deps.devicePin } : {}),
+      },
     };
-    // The one place the pin is enforced: the finished request, after every default layer merged,
-    // including each batch step, so no surface or layer can retarget a pinned project.
     if (deps.devicePin) assertRequestHonorsDevicePin(deps.devicePin, request);
     // `signal` rides the transport context (it is a live object, never wire data), and the guard
     // answers for a custom transport that ignores it: the caller's promise settles on abort either

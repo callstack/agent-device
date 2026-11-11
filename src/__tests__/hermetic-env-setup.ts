@@ -9,7 +9,7 @@ import { afterEach } from 'vitest';
 // own remote dev containers — exports AGENT_DEVICE_DAEMON_BASE_URL and
 // AGENT_DEVICE_DAEMON_AUTH_TOKEN pointing at a live daemon. Production
 // flag-default resolution folds those into every command's input and connection
-// config (resolveConfigBackedFlagDefaultsWithProvenance -> readEnvFlagDefaults, and the daemon
+// config (resolveConfigDefaults -> readEnvFlagDefaults, and the daemon
 // client's own env fallbacks), so a configured host silently diverges from CI:
 // tests that assert an exact command input/config shape gain phantom
 // daemonBaseUrl/daemonAuthToken keys, and daemon-client tests take the remote

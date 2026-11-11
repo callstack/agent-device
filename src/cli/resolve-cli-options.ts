@@ -2,8 +2,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import {
   type DevicePin,
   mergeDefinedFlags,
-  resolveConfigBackedFlagDefaultsWithProvenance,
-  resolveDevicePin,
+  resolveConfigDefaults,
 } from '@agent-device/command-surface';
 import { finalizeParsedArgs, parseRawArgs } from './parser/args.ts';
 import { resolveRemoteConfigDefaults } from './remote-config-flags.ts';
@@ -33,13 +32,13 @@ export function resolveCliOptions(
         env,
       })
     : { flags: {} };
-  const configDefaults = resolveConfigBackedFlagDefaultsWithProvenance({
+  const configDefaults = resolveConfigDefaults({
     command: rawParsed.command,
     cwd,
     cliFlags: rawParsed.flags as CliFlags,
     env,
   });
-  const devicePin = resolveDevicePin(configDefaults, rawParsed.flags.devicePin);
+  const devicePin = configDefaults.devicePin;
   const defaultFlags = mergeDefinedFlags(configDefaults.flags, remoteConfig.flags);
   const finalized = finalizeParsedArgs(rawParsed, {
     strictFlags: options?.strictFlags,

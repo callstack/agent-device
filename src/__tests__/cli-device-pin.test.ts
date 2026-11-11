@@ -25,9 +25,7 @@ function readJsonError(stdout: string): { message: string; details: Record<strin
 
 test('a CLI batch step that names another device fails before any daemon request', async () => {
   const { root, home, project, configPath } = pinnedProject({
-    platform: 'ios',
-    device: 'iPad Pro',
-    devicePin: true,
+    devicePin: { platform: 'ios', device: 'iPad Pro' },
   });
   const steps = JSON.stringify([
     { command: 'open', input: { app: 'com.example.app', device: 'iPhone 16' } },
@@ -43,7 +41,7 @@ test('a CLI batch step that names another device fails before any daemon request
   const error = readJsonError(result.stdout);
   assert.equal(
     error.message,
-    `Batch step 1: device "iPhone 16" conflicts with the device pin from project config file ${configPath}, which pins platform "ios", device "iPad Pro". Set "devicePin": false in that config to target another device.`,
+    `Batch step 1: device "iPhone 16" conflicts with the device pin from project config file ${configPath}.`,
   );
   assert.equal(error.details.reason, 'device_pin_conflict');
   assert.deepEqual(error.details.conflicts, [
@@ -54,9 +52,7 @@ test('a CLI batch step that names another device fails before any daemon request
 
 test('a selector-less CLI open reaches the daemon with the pinned device', async () => {
   const { root, home, project } = pinnedProject({
-    platform: 'ios',
-    device: 'iPad Pro',
-    devicePin: true,
+    devicePin: { platform: 'ios', device: 'iPad Pro' },
   });
 
   const result = await runCliCapture(['open', 'com.example.app', '--json'], {
@@ -70,27 +66,9 @@ test('a selector-less CLI open reaches the daemon with the pinned device', async
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('--device-pin turns the configured defaults into a pin for one invocation', async () => {
-  const { root, home, project } = pinnedProject({ platform: 'ios', device: 'iPad Pro' });
-
-  const result = await runCliCapture(
-    ['open', 'com.example.app', '--device-pin', '--device', 'iPhone 16', '--json'],
-    { cwd: project, env: { HOME: home } },
-  );
-
-  assert.equal(result.code, 1);
-  assert.equal(result.calls.length, 0);
-  const error = readJsonError(result.stdout);
-  assert.equal(error.details.reason, 'device_pin_conflict');
-  assert.equal(error.details.pinSource, 'the --device-pin flag');
-  fs.rmSync(root, { recursive: true, force: true });
-});
-
 test('a remote-config device that contradicts the pin fails before any daemon request', async () => {
   const { root, home, project } = pinnedProject({
-    platform: 'ios',
-    device: 'iPad Pro',
-    devicePin: true,
+    devicePin: { platform: 'ios', device: 'iPad Pro' },
   });
   const remoteConfig = path.join(project, 'device.remote.json');
   fs.writeFileSync(

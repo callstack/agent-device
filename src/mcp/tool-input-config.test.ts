@@ -24,10 +24,8 @@ function hostPinnedTo(config: Record<string, unknown>) {
   return { cwd, configPath, env: { HOME: home, USERPROFILE: home, AGENT_DEVICE_HOME: home } };
 }
 
-// #2161: the pin is operator policy, like the session lock. It is read from config and env only, and
-// the client checks it on the finished request, so a model can neither turn it on nor get around it.
 test('a tool call reads the pin from operator config, never from tool input', () => {
-  const pinned = hostPinnedTo({ platform: 'ios', device: 'iPad Pro', devicePin: true });
+  const pinned = hostPinnedTo({ devicePin: { platform: 'ios', device: 'iPad Pro' } });
   const resolved = resolveMcpConfigDefaults(
     'open',
     { target: 'com.example.app' },
@@ -47,7 +45,7 @@ test('a tool call reads the pin from operator config, never from tool input', ()
 });
 
 test('a nested batch step naming another device fails before any daemon request', async () => {
-  const { configPath } = hostPinnedTo({ platform: 'ios', device: 'iPad Pro', devicePin: true });
+  const { configPath } = hostPinnedTo({ devicePin: { platform: 'ios', device: 'iPad Pro' } });
   vi.stubEnv('AGENT_DEVICE_CONFIG', configPath);
   const requests: unknown[] = [];
   const transport: AgentDeviceDaemonTransport = async (request) => {
@@ -67,7 +65,7 @@ test('a nested batch step naming another device fails before any daemon request'
   const error = result.structuredContent as Record<string, unknown>;
   assert.equal(
     error.message,
-    `Batch step 1: device "iPhone 16" conflicts with the device pin from config file ${configPath}, which pins platform "ios", device "iPad Pro". Set "devicePin": false in that config to target another device.`,
+    `Batch step 1: device "iPhone 16" conflicts with the device pin from config file ${configPath}.`,
   );
   assert.equal((error.details as { reason?: string }).reason, 'device_pin_conflict');
 });
@@ -89,16 +87,19 @@ test('a devicePin in tool input is rejected before a client exists, and the conf
   // Unpinned host: the model cannot turn the pin on.
   const unpinned = hostPinnedTo({ platform: 'ios', device: 'iPad Pro' });
   vi.stubEnv('AGENT_DEVICE_CONFIG', unpinned.configPath);
-  const enable = await executor.execute('open', { app: 'com.example.app', devicePin: true });
+  const enable = await executor.execute('open', {
+    app: 'com.example.app',
+    devicePin: { device: 'iPhone 16' },
+  });
   assert.equal(enable.isError, true);
 
   // Pinned host: the model cannot turn the pin off to retarget.
-  const pinned = hostPinnedTo({ platform: 'ios', device: 'iPad Pro', devicePin: true });
+  const pinned = hostPinnedTo({ devicePin: { platform: 'ios', device: 'iPad Pro' } });
   vi.stubEnv('AGENT_DEVICE_CONFIG', pinned.configPath);
   const disable = await executor.execute('open', {
     app: 'com.example.app',
     device: 'iPhone 16',
-    devicePin: false,
+    devicePin: { device: 'iPhone 16' },
   });
   assert.equal(disable.isError, true);
 

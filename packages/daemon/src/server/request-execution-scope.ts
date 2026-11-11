@@ -1,3 +1,7 @@
+import {
+  assertDeviceHonorsPin,
+  assertRequestHonorsDevicePin,
+} from '@agent-device/contracts/device';
 import { restrictRemoteHostInputs } from './remote-host-input-policy.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -301,6 +305,8 @@ export async function createRequestExecutionScope(params: {
     );
   }
   try {
+    if (scopedReq.meta?.devicePin)
+      assertRequestHonorsDevicePin(scopedReq.meta.devicePin, scopedReq);
     if (params.daemonPolicy) assertDaemonPolicyAdmitsRequest(params.daemonPolicy, scopedReq);
     assertRequestLeaseAdmissionPreflight(scopedReq);
     // Parse the budget once, before resolving the target device or taking any lock. The lock plan
@@ -613,8 +619,10 @@ function createRequestDeviceAccess(params: {
       dispatchLedger: params.dispatchLedger,
       admitDeviceClaim: claimAdmission.admit,
       admitDevice:
-        daemonPolicy || claimPolicy === 'require-owner'
+        params.req.meta?.devicePin || daemonPolicy || claimPolicy === 'require-owner'
           ? (device) => {
+              if (params.req.meta?.devicePin)
+                assertDeviceHonorsPin(params.req.meta.devicePin, device);
               if (daemonPolicy) {
                 assertDaemonPolicyAdmitsDevice(daemonPolicy, device);
               }

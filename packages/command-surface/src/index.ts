@@ -36,11 +36,8 @@ export { isFlagSupportedForCommand } from './schema/option-schema.ts';
 export {
   applyDefaultPlatformBinding,
   resolveBindingSettings,
-  resolveConfigBackedFlagDefaultsWithProvenance,
+  resolveConfigDefaults,
   type BindingSettings,
-  assertRequestHonorsDevicePin,
-  resolveDevicePin,
-  type DevicePin,
 } from './schema/cli-config.ts';
 export { mergeDefinedFlags } from './schema/merge-flags.ts';
 
@@ -110,3 +107,5 @@ async function prepareRequestWithMetadataFlags(
     ...(metadata ? { metadataFlags: readMetadataCommandFlags(metadata, request.options) } : {}),
   };
 }
+
+export { assertRequestHonorsDevicePin, type DevicePin } from '@agent-device/contracts/device';

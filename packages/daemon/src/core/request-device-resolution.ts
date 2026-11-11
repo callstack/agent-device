@@ -1,3 +1,4 @@
+import { assertDeviceHonorsPin } from '@agent-device/contracts/device';
 import {
   resolveTargetDevice,
   resolveTargetDeviceSelection,
@@ -33,6 +34,7 @@ export async function resolveRequestTargetDevice(
     },
   );
   assertWebSelectionHasIdentity(req, device);
+  if (req.meta?.devicePin) assertDeviceHonorsPin(req.meta.devicePin, device);
   return device;
 }
 
@@ -49,5 +51,6 @@ export async function resolveRequestTargetDeviceSelection(
     },
   );
   assertWebSelectionHasIdentity(req, selection.device);
+  if (req.meta?.devicePin) assertDeviceHonorsPin(req.meta.devicePin, selection.device);
   return selection;
 }

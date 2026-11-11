@@ -1,4 +1,6 @@
 import type { CliFlags } from '@agent-device/contracts/command';
+import type { DevicePin } from '@agent-device/contracts/device';
+import { parseDevicePin } from './device-pin.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
@@ -18,63 +20,26 @@ import { type EnvMap } from '@agent-device/kernel/source-value';
 import type { DaemonLockPolicy } from '@agent-device/kernel/contracts';
 import { PLATFORM_SELECTORS, type PlatformSelector } from '@agent-device/kernel/device';
 
-type ConfigDefaultsOptions = {
+export type ConfigDefaults = {
+  flags: Partial<CliFlags>;
+  devicePin?: DevicePin;
+};
+
+export function resolveConfigDefaults(options: {
   command: string | null;
   cwd: string;
   cliFlags: CliFlags;
   env: EnvMap;
-};
-
-/**
- * The layer that set each resolved default: the config file it came from, or the environment
- * variable. Later layers overwrite earlier ones, so an entry names the layer that won.
- */
-export type FlagValueSource = {
-  kind: ConfigFileSource | 'env' | 'flag';
-  /** Human-readable origin, e.g. `project config file /repo/agent-device.json`. */
-  label: string;
-  /** For `env`: the variable that supplied the value, e.g. `AGENT_DEVICE_DEVICE_PIN`. */
-  envName?: string;
-};
-
-export type FlagProvenance = Partial<Record<FlagKey, FlagValueSource>>;
-
-export type ConfigBackedFlagDefaults = {
-  flags: Partial<CliFlags>;
-  provenance: FlagProvenance;
-};
-
-export function resolveConfigBackedFlagDefaultsWithProvenance(
-  options: ConfigDefaultsOptions,
-): ConfigBackedFlagDefaults {
-  const env = options.env;
-  const provenance: FlagProvenance = {};
-  const flags: Partial<CliFlags> = {};
-  for (const entry of resolveConfigPaths(options.cwd, options.cliFlags.config, env)) {
+}): ConfigDefaults {
+  const defaults: ConfigDefaults = { flags: {} };
+  for (const entry of resolveConfigPaths(options.cwd, options.cliFlags.config, options.env)) {
     const parsed = loadSingleConfigFile(entry);
-    mergeDefinedFlags(flags, parsed);
-    recordProvenance(provenance, parsed, { kind: entry.source, label: configFileLabel(entry) });
+    mergeDefinedFlags(defaults.flags, parsed.flags);
+    if (parsed.devicePin) defaults.devicePin = parsed.devicePin;
   }
-  const envDefaults = readEnvFlagDefaults(env, options.command);
-  mergeDefinedFlags(flags, envDefaults.flags);
-  for (const [key, envName] of Object.entries(envDefaults.envNames)) {
-    provenance[key as FlagKey] = {
-      kind: 'env',
-      label: `environment variable ${envName}`,
-      envName,
-    };
-  }
-  return { flags, provenance };
-}
-
-function recordProvenance(
-  provenance: FlagProvenance,
-  flags: Partial<CliFlags>,
-  source: FlagValueSource,
-): void {
-  for (const [key, value] of Object.entries(flags)) {
-    if (value !== undefined) provenance[key as FlagKey] = source;
-  }
+  mergeDefinedFlags(defaults.flags, readEnvFlagDefaults(options.env, options.command));
+  if (defaults.devicePin) mergeDefinedFlags(defaults.flags, defaults.devicePin.selector);
+  return defaults;
 }
 
 type ConfigFileSource = 'user' | 'project' | 'explicit';
@@ -107,13 +72,13 @@ function resolveInputPath(inputPath: string, cwd: string, env: EnvMap): string {
   return resolveUserPath(inputPath, { cwd, env });
 }
 
-function loadSingleConfigFile(entry: ConfigPath): Partial<CliFlags> {
+function loadSingleConfigFile(entry: ConfigPath): ConfigDefaults {
   const { path: filePath, required } = entry;
   if (!fs.existsSync(filePath)) {
     if (required) {
       throw new AppError('INVALID_ARGS', `Config file not found: ${filePath}`);
     }
-    return {};
+    return { flags: {} };
   }
 
   let raw: string;
@@ -141,6 +106,7 @@ function loadSingleConfigFile(entry: ConfigPath): Partial<CliFlags> {
   return parseConfigObject(parsed as Record<string, unknown>, {
     source: entry.source,
     label: configFileLabel(entry),
+    path: entry.path,
   });
 }
 
@@ -162,13 +128,18 @@ const RETIRED_RECORD_CONFIG_KEY = {
 
 function parseConfigObject(
   source: Record<string, unknown>,
-  origin: { source: ConfigFileSource; label: string },
-): Partial<CliFlags> {
+  origin: { source: ConfigFileSource; label: string; path: string },
+): ConfigDefaults {
   const flags: Partial<CliFlags> = {};
+  let devicePin: DevicePin | undefined;
   const entries = Object.entries(source).filter(
     ([key]) => key !== 'plugins' || origin.source !== 'user',
   );
   for (const [rawKey, rawValue] of entries) {
+    if (rawKey === 'devicePin') {
+      devicePin = parseDevicePin(rawValue, { kind: origin.source, path: origin.path });
+      continue;
+    }
     if (rawKey === RETIRED_RECORD_CONFIG_KEY.flagKey) {
       throw new AppError(
         'INVALID_ARGS',
@@ -209,7 +180,7 @@ function parseConfigObject(
       rawKey,
     );
   }
-  return flags;
+  return { flags, ...(devicePin ? { devicePin } : {}) };
 }
 
 // Commands that honored AGENT_DEVICE_SCREENSHOT_MAX_SIZE in released versions.
@@ -217,10 +188,7 @@ function parseConfigObject(
 // while every other command keeps working.
 const RETIRED_MAX_SIZE_ENV_COMMANDS = new Set(['screenshot', 'record']);
 
-function readEnvFlagDefaults(
-  env: EnvMap,
-  command: string | null,
-): { flags: Partial<CliFlags>; envNames: Partial<Record<FlagKey, string>> } {
+function readEnvFlagDefaults(env: EnvMap, command: string | null): Partial<CliFlags> {
   if (
     command !== null &&
     getOptionSpec(RETIRED_RECORD_CONFIG_KEY.flagKey)?.supportsCommand(command) === true &&
@@ -245,7 +213,6 @@ function readEnvFlagDefaults(
     );
   }
   const flags: Partial<CliFlags> = {};
-  const envNames: Partial<Record<FlagKey, string>> = {};
   for (const spec of getConfigurableOptionSpecs(command)) {
     if (spec.key === 'installSource') continue;
     const envValue = spec.env.names
@@ -258,9 +225,8 @@ function readEnvFlagDefaults(
       `environment variable ${envValue.name}`,
       envValue.name,
     );
-    envNames[spec.key] = envValue.name;
   }
-  return { flags, envNames };
+  return flags;
 }
 
 /**
@@ -366,177 +332,4 @@ function readConflictMode(raw: string | undefined): DaemonLockPolicy | undefined
 
 function hasConfiguredSession(raw: string | undefined): boolean {
   return typeof raw === 'string' && raw.trim().length > 0;
-}
-
-/**
- * The opt-in device pin (#2161). `agent-device.json` already sets `platform`/`device`/`udid`/`serial`
- * DEFAULTS, and a default stays overridable by design. Setting `devicePin: true` beside them turns
- * those configured selectors into a pin: a selector-less command still inherits them, and a request
- * that names a different value fails with a typed reason instead of silently retargeting.
- * The pin guides selection only; it is not an ownership claim (#1320 device claims are).
- *
- * Precedence: the pinned values are the selector defaults the config and environment layers resolve
- * to (user config, then project config, then `AGENT_DEVICE_*`; a later layer wins). An explicit
- * `--config` / `AGENT_DEVICE_CONFIG` file replaces the user and project files rather than layering
- * over them, so it is then the only file layer below the environment.
- * Everything above those layers (typed flags, batch steps, MCP input, remote config, saved
- * connection defaults) must repeat the pinned value or leave the key unset.
- */
-const DEVICE_PIN_SELECTOR_KEYS = ['platform', 'device', 'udid', 'serial'] as const;
-
-type DevicePinSelectorKey = (typeof DEVICE_PIN_SELECTOR_KEYS)[number];
-
-type DevicePinSelector = Partial<Pick<CliFlags, DevicePinSelectorKey>>;
-
-export const DEVICE_PIN_CONFLICT_REASON = 'device_pin_conflict';
-export const DEVICE_PIN_WITHOUT_SELECTOR_REASON = 'device_pin_without_selector';
-
-export type DevicePin = {
-  /** The pinned selector values: every configured selector default while the pin is on. */
-  selector: DevicePinSelector;
-  /** Which layer turned the pin on (`devicePin: true` or `--device-pin`). */
-  policySource: FlagValueSource;
-  /**
-   * The config or env layer that also sets `devicePin: true` when `--device-pin` turned the pin
-   * on. Dropping the flag leaves this layer's pin in force, so the remedy names both.
-   */
-  underlyingPolicySource?: FlagValueSource;
-};
-
-const DEVICE_PIN_FLAG_SOURCE: FlagValueSource = { kind: 'flag', label: 'the --device-pin flag' };
-
-/**
- * Reads the pin from resolved config/env defaults. `explicitDevicePin` is the typed `--device-pin`
- * value, when the caller has one. Returns `undefined` while the pin is off, so every existing
- * default keeps its overridable behavior. A pin with no selector to pin is a misconfiguration and
- * fails before any daemon is contacted.
- */
-export function resolveDevicePin(
-  defaults: ConfigBackedFlagDefaults,
-  explicitDevicePin?: boolean,
-): DevicePin | undefined {
-  const enabled = explicitDevicePin ?? defaults.flags.devicePin;
-  if (enabled !== true) return undefined;
-  const policySource =
-    explicitDevicePin === true ? DEVICE_PIN_FLAG_SOURCE : defaults.provenance.devicePin;
-  if (!policySource) return undefined;
-  const selector: DevicePinSelector = {};
-  for (const key of DEVICE_PIN_SELECTOR_KEYS) {
-    const value = defaults.flags[key];
-    if (value !== undefined) (selector as Record<string, unknown>)[key] = value;
-  }
-  if (Object.keys(selector).length === 0) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `devicePin is set by ${policySource.label} but no platform, device, udid, or serial default is configured to pin. Add the selector beside it, or remove devicePin.`,
-      { reason: DEVICE_PIN_WITHOUT_SELECTOR_REASON, pinSource: policySource.label },
-    );
-  }
-  const underlyingPolicySource =
-    explicitDevicePin === true && defaults.flags.devicePin === true
-      ? defaults.provenance.devicePin
-      : undefined;
-  return underlyingPolicySource
-    ? { selector, policySource, underlyingPolicySource }
-    : { selector, policySource };
-}
-
-type DevicePinRequest = {
-  flags?: Readonly<Record<string, unknown>> & {
-    batchSteps?: ReadonlyArray<{ flags?: Readonly<Record<string, unknown>> }>;
-  };
-};
-
-type DevicePinConflict = {
-  key: DevicePinSelectorKey;
-  pinned: string;
-  requested: string;
-  /** The 1-based batch step that names the value; absent for the request's own flags. */
-  step?: number;
-};
-
-/**
- * Fails when a finished daemon request names a selector the pin contradicts, in its own flags or
- * in any batch step's flags, whatever layer set the value. A value that repeats the pin, or a key
- * the pin leaves open (for example `udid` under a pinned `device` name), refines the pin and
- * passes; the daemon's selection still has to satisfy both.
- */
-export function assertRequestHonorsDevicePin(pin: DevicePin, request: DevicePinRequest): void {
-  const conflicts = findDevicePinConflicts(pin, request.flags);
-  request.flags?.batchSteps?.forEach((step, index) => {
-    conflicts.push(...findDevicePinConflicts(pin, step.flags, index + 1));
-  });
-  if (conflicts.length === 0) return;
-  const first = conflicts[0]!;
-  const pinnedDescription = describeSelector(pin.selector);
-  const where = first.step === undefined ? '' : `Batch step ${first.step}: `;
-  const remedy = describePinRemedy(pin.policySource, pin.underlyingPolicySource);
-  const message =
-    `${where}${first.key} ${JSON.stringify(first.requested)} conflicts with the device pin ` +
-    `from ${pin.policySource.label}, which pins ${pinnedDescription}. ` +
-    `${remedy.message} to target another device.`;
-  throw new AppError('INVALID_ARGS', message, {
-    reason: DEVICE_PIN_CONFLICT_REASON,
-    pin: { ...pin.selector },
-    pinSource: pin.policySource.label,
-    conflicts,
-    hint: `This project pins ${pinnedDescription} (${pin.policySource.label}). Drop the conflicting selector to use the pinned device, or ${remedy.hint}.`,
-  });
-}
-
-/**
- * How to lift the pin, phrased for the layer that turned it on. A config file or variable is told
- * to turn it off rather than to drop it, because a lower layer may set `devicePin: true` too and
- * would keep the pin in force. `--device-pin` has no false form, so under a lower pinning layer the
- * remedy names that layer as well.
- */
-function describePinRemedy(
-  source: FlagValueSource,
-  underlying?: FlagValueSource,
-): { message: string; hint: string } {
-  if (source.kind !== 'flag') return describeLayerRemedy(source, 'that config');
-  if (!underlying || underlying.kind === 'flag') {
-    return { message: 'Drop --device-pin', hint: 'drop --device-pin' };
-  }
-  const lower = describeLayerRemedy(underlying, underlying.label);
-  return {
-    message: `Drop --device-pin and ${lower.hint}`,
-    hint: `drop --device-pin and ${lower.hint}`,
-  };
-}
-
-/** Turns the pin off at a config file or variable; `where` names the config file. */
-function describeLayerRemedy(
-  source: FlagValueSource,
-  where: string,
-): { message: string; hint: string } {
-  if (source.kind === 'env') {
-    const name = source.envName ?? 'AGENT_DEVICE_DEVICE_PIN';
-    return { message: `Set ${name}=0`, hint: `set ${name}=0` };
-  }
-  return {
-    message: `Set "devicePin": false in ${where}`,
-    hint: `set "devicePin": false in ${where}`,
-  };
-}
-
-function findDevicePinConflicts(
-  pin: DevicePin,
-  flags: Readonly<Record<string, unknown>> | undefined,
-  step?: number,
-): DevicePinConflict[] {
-  if (!flags) return [];
-  return DEVICE_PIN_SELECTOR_KEYS.flatMap((key) => {
-    const requested = flags[key];
-    const pinned = pin.selector[key];
-    if (typeof requested !== 'string' || pinned === undefined) return [];
-    if (requested.trim() === pinned.trim()) return [];
-    return [{ key, pinned, requested, ...(step === undefined ? {} : { step }) }];
-  });
-}
-
-function describeSelector(selector: DevicePinSelector): string {
-  return DEVICE_PIN_SELECTOR_KEYS.filter((key) => selector[key] !== undefined)
-    .map((key) => `${key} ${JSON.stringify(selector[key])}`)
-    .join(', ');
 }
