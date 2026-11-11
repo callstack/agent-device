@@ -201,6 +201,7 @@ for (const workflow of workflows) {
           '${{ job.workflow_sha }}': historical,
         },
         '${{ job.workflow_repository }}': {
+          '${{ github.workflow_sha }}': historical,
           '${{ job.workflow_sha }}': path.join(repo, 'scripts/release-version.mjs'),
         },
       };
