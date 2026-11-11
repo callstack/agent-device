@@ -272,22 +272,25 @@ test('a daemon with a request in flight refuses to quiesce and keeps serving', a
   }
 });
 
-test('socket credentials gate idle activity and the in-flight census', async () => {
+test('invalid socket credentials cannot postpone the original idle deadline', async () => {
   vi.useFakeTimers();
   const daemon = await bootDaemon({ idleTimeoutMs: 80 });
   const request = { session: 'default', command: 'session_list', positionals: [] };
+  const responses: Awaited<ReturnType<typeof sendSocketRequest>>[] = [];
   try {
     await vi.advanceTimersByTimeAsync(40);
     for (const token of ['wrong', undefined]) {
-      const response = await sendSocketRequest(daemon.runtime.socketPort!, { ...request, token });
-      expect(!response.ok && response.error.code).toBe('UNAUTHORIZED');
+      responses.push(await sendSocketRequest(daemon.runtime.socketPort!, { ...request, token }));
     }
     await vi.advanceTimersByTimeAsync(39);
     expect(probe.idleReaps).toBe(0);
     await vi.advanceTimersByTimeAsync(1);
+    expect(probe.idleReaps).toBe(1);
+    for (const response of responses) {
+      expect(!response.ok && response.error.code).toBe('UNAUTHORIZED');
+    }
     await vi.runOnlyPendingTimersAsync();
     await daemon.exit;
-    expect(probe.idleReaps).toBe(1);
   } finally {
     await daemon.runtime.close();
   }
@@ -302,9 +305,9 @@ test('valid socket activity restarts the idle window', async () => {
     await vi.advanceTimersByTimeAsync(40);
     expect(probe.idleReaps).toBe(0);
     await vi.advanceTimersByTimeAsync(40);
+    expect(probe.idleReaps).toBe(1);
     await vi.runOnlyPendingTimersAsync();
     await daemon.exit;
-    expect(probe.idleReaps).toBe(1);
   } finally {
     await daemon.runtime.close();
   }
