@@ -370,7 +370,9 @@ function hasConfiguredSession(raw: string | undefined): boolean {
  * The pin guides selection only; it is not an ownership claim (#1320 device claims are).
  *
  * Precedence: the pinned values are the selector defaults the config and environment layers resolve
- * to (user config, then project config, then `--config`, then `AGENT_DEVICE_*`; a later layer wins).
+ * to (user config, then project config, then `AGENT_DEVICE_*`; a later layer wins). An explicit
+ * `--config` / `AGENT_DEVICE_CONFIG` file replaces the user and project files rather than layering
+ * over them, so it is then the only file layer below the environment.
  * Everything above those layers (typed flags, batch steps, MCP input, remote config, saved
  * connection defaults) must repeat the pinned value or leave the key unset.
  */
@@ -451,17 +453,35 @@ export function assertRequestHonorsDevicePin(pin: DevicePin, request: DevicePinR
   const first = conflicts[0]!;
   const pinnedDescription = describeSelector(pin.selector);
   const where = first.step === undefined ? '' : `Batch step ${first.step}: `;
+  const remedy = describePinRemedy(pin.policySource);
   const message =
     `${where}${first.key} ${JSON.stringify(first.requested)} conflicts with the device pin ` +
     `from ${pin.policySource.label}, which pins ${pinnedDescription}. ` +
-    `Edit or remove "devicePin" in that config to target another device.`;
+    `${remedy.message} to target another device.`;
   throw new AppError('INVALID_ARGS', message, {
     reason: DEVICE_PIN_CONFLICT_REASON,
     pin: { ...pin.selector },
     pinSource: pin.policySource.label,
     conflicts,
-    hint: `This project pins ${pinnedDescription} (${pin.policySource.label}). Drop the conflicting selector to use the pinned device, or change the pin in that config.`,
+    hint: `This project pins ${pinnedDescription} (${pin.policySource.label}). Drop the conflicting selector to use the pinned device, or ${remedy.hint}.`,
   });
+}
+
+/** How to lift the pin, phrased for the layer that turned it on: a config file, a variable or the flag. */
+function describePinRemedy(source: FlagValueSource): { message: string; hint: string } {
+  if (source.kind === 'flag') {
+    return { message: 'Drop --device-pin', hint: 'drop --device-pin' };
+  }
+  if (source.kind === 'env') {
+    return {
+      message: 'Unset AGENT_DEVICE_DEVICE_PIN',
+      hint: 'unset AGENT_DEVICE_DEVICE_PIN',
+    };
+  }
+  return {
+    message: 'Edit or remove "devicePin" in that config',
+    hint: 'change the pin in that config',
+  };
 }
 
 function findDevicePinConflicts(

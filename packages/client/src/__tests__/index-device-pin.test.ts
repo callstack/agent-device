@@ -82,7 +82,14 @@ test('a batch whose steps repeat, refine, or omit the pin is sent', async () => 
   });
 
   assert.equal(requests.length, 1);
-  assert.equal((requests[0]?.flags as CommandFlags | undefined)?.batchSteps?.length, 3);
+  const flags = requests[0]?.flags as CommandFlags | undefined;
+  assert.equal(flags?.platform, 'ios');
+  assert.equal(flags?.device, 'iPad Pro');
+  const steps = flags?.batchSteps;
+  assert.equal(steps?.length, 3);
+  assert.equal(steps?.[0]?.flags?.device, undefined);
+  assert.equal(steps?.[1]?.flags?.device, 'iPad Pro');
+  assert.equal(steps?.[2]?.flags?.udid, 'ABCDEF');
 });
 
 test('without a pin the client sends a batch step that names another device', async () => {

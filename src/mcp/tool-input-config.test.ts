@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
+import type { DevicePin } from '@agent-device/command-surface';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createAgentDeviceClient } from '@agent-device/client';
 import { createCommandToolExecutor } from './command-tools.ts';
@@ -69,4 +70,52 @@ test('a nested batch step naming another device fails before any daemon request'
     `Batch step 1: device "iPhone 16" conflicts with the device pin from config file ${configPath}, which pins platform "ios", device "iPad Pro". Edit or remove "devicePin" in that config to target another device.`,
   );
   assert.equal((error.details as { reason?: string }).reason, 'device_pin_conflict');
+});
+
+test('a devicePin in tool input is rejected before a client exists, and the config pin stays in force', async () => {
+  const createdWith: Array<unknown> = [];
+  const requests: unknown[] = [];
+  const transport: AgentDeviceDaemonTransport = async (request) => {
+    requests.push(request);
+    return { ok: true, data: {} };
+  };
+  const executor = createCommandToolExecutor({
+    createClient: (config, devicePin) => {
+      createdWith.push(devicePin);
+      return createAgentDeviceClient(config, { transport, devicePin });
+    },
+  });
+
+  // Unpinned host: the model cannot turn the pin on.
+  const unpinned = hostPinnedTo({ platform: 'ios', device: 'iPad Pro' });
+  vi.stubEnv('AGENT_DEVICE_CONFIG', unpinned.configPath);
+  const enable = await executor.execute('open', { app: 'com.example.app', devicePin: true });
+  assert.equal(enable.isError, true);
+
+  // Pinned host: the model cannot turn the pin off to retarget.
+  const pinned = hostPinnedTo({ platform: 'ios', device: 'iPad Pro', devicePin: true });
+  vi.stubEnv('AGENT_DEVICE_CONFIG', pinned.configPath);
+  const disable = await executor.execute('open', {
+    app: 'com.example.app',
+    device: 'iPhone 16',
+    devicePin: false,
+  });
+  assert.equal(disable.isError, true);
+
+  assert.deepEqual(createdWith, []);
+  assert.equal(requests.length, 0);
+
+  // Without the stray key, the operator pin is the one the client is built with.
+  const blocked = await executor.execute('open', { app: 'com.example.app', device: 'iPhone 16' });
+  assert.equal(blocked.isError, true);
+  assert.equal(
+    ((blocked.structuredContent as { details?: { reason?: string } }).details ?? {}).reason,
+    'device_pin_conflict',
+  );
+  assert.equal(createdWith.length, 1);
+  assert.deepEqual((createdWith[0] as DevicePin | undefined)?.selector, {
+    platform: 'ios',
+    device: 'iPad Pro',
+  });
+  assert.equal(requests.length, 0);
 });

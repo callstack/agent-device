@@ -179,6 +179,38 @@ test('every batch step is held to the pin, and the error names the first conflic
   );
 });
 
+test('the conflict tells the user how to lift the pin for the layer that set it', () => {
+  const remedies = [
+    [{ kind: 'flag', label: 'the --device-pin flag' }, 'Drop --device-pin', 'drop --device-pin'],
+    [
+      { kind: 'env', label: 'environment variable AGENT_DEVICE_DEVICE_PIN' },
+      'Unset AGENT_DEVICE_DEVICE_PIN',
+      'unset AGENT_DEVICE_DEVICE_PIN',
+    ],
+    [
+      { kind: 'explicit', label: 'config file /tmp/pin.json' },
+      'Edit or remove "devicePin" in that config',
+      'change the pin in that config',
+    ],
+  ] as const;
+  for (const [policySource, message, hint] of remedies) {
+    assert.throws(
+      () =>
+        assertRequestHonorsDevicePin({ ...pin, policySource }, { flags: { device: 'iPhone 16' } }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error && 'details' in error);
+        assert.ok(error.message.endsWith(`. ${message} to target another device.`), error.message);
+        assert.ok(
+          (error.details as { hint: string }).hint.endsWith(
+            `Drop the conflicting selector to use the pinned device, or ${hint}.`,
+          ),
+        );
+        return true;
+      },
+    );
+  }
+});
+
 test('a request that repeats, refines, or omits the pin passes', () => {
   assertRequestHonorsDevicePin(pin, {});
   assertRequestHonorsDevicePin(pin, { flags: { platform: 'ios', device: ' iPad Pro ' } });

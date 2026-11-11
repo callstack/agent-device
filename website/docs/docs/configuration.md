@@ -138,7 +138,9 @@ set when the value came from a batch step. Branch on `details.reason`, never on 
 
 The pinned values are the `platform`, `device`, `udid`, and `serial` defaults that the config
 files and environment resolve to, with the usual precedence: user config, then project config,
-then `--config`, then `AGENT_DEVICE_*` variables. Every other source must repeat a pinned value or
+then `AGENT_DEVICE_*` variables. An explicit `--config` file (or `AGENT_DEVICE_CONFIG`) replaces
+the user and project config files instead of layering on top of them, so with it only that file and
+the `AGENT_DEVICE_*` variables supply the pinned values. Every other source must repeat a pinned value or
 leave that key unset: typed flags, MCP tool input, each batch step, remote config profiles, and
 saved connection defaults. The client checks the finished request, including every batch step,
 before it contacts a daemon, so the CLI, MCP tool calls, and the batch command are held to the
