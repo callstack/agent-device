@@ -18,7 +18,6 @@ import {
   redactFillReadBack,
 } from '@agent-device/selectors/parameterized-recorded-fill';
 import type { InteractionFinalizationOperations } from '../../../core/interaction/internal/types.ts';
-import type { GestureRepetitionTiming } from '../../../core/recording-gestures.ts';
 
 export function finalizeTouchInteraction(params: {
   operations: InteractionFinalizationOperations;
@@ -32,7 +31,7 @@ export function finalizeTouchInteraction(params: {
   recordedTargets?: { source: RecordedTargetCapture; destination: RecordedTargetCapture };
   actionStartedAt: number;
   actionFinishedAt: number;
-  repetitionTiming?: readonly GestureRepetitionTiming[];
+  visualization?: 'recorded-during-execution';
   androidFreshnessBaseline?: SnapshotState | undefined;
   /**
    * The tree this action resolved its target against, plus its own `--settle` observation when it ran
@@ -54,7 +53,7 @@ export function finalizeTouchInteraction(params: {
     recordedTargets,
     actionStartedAt,
     actionFinishedAt,
-    repetitionTiming,
+    visualization,
     androidFreshnessBaseline,
     preActionTree,
     settle,
@@ -92,15 +91,16 @@ export function finalizeTouchInteraction(params: {
     preActionTree,
     settle,
   });
-  operations.recordGestureVisualization(
-    actionCommand,
-    positionals,
-    parameterizedResult,
-    (actionFlags ?? {}) as Record<string, unknown>,
-    actionStartedAt,
-    actionFinishedAt,
-    repetitionTiming,
-  );
+  if (visualization !== 'recorded-during-execution') {
+    operations.recordGestureVisualization(
+      actionCommand,
+      positionals,
+      parameterizedResult,
+      (actionFlags ?? {}) as Record<string, unknown>,
+      actionStartedAt,
+      actionFinishedAt,
+    );
+  }
   return { ok: true, data: parameterizedResponseData };
 }
 

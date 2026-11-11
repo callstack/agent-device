@@ -12,6 +12,7 @@ import {
   markRequestCanceled,
   clearRequestCanceled,
 } from '@agent-device/host-kit/request';
+import { AppError } from '@agent-device/kernel/errors';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import { clearAndroidObservationFixture } from '../../../__tests__/support/android-observation-fixture.ts';
 import { handleInteractionCommands } from '../index.ts';
@@ -154,19 +155,22 @@ test('a tap without series inputs records no series flags', async () => {
   expect(action?.flags).not.toHaveProperty('pauseMs');
 });
 
+function seriesInput(command: 'gesture' | 'swipe') {
+  return command === 'gesture'
+    ? {
+        kind: 'tap',
+        points: [
+          { x: 80, y: 300 },
+          { x: 200, y: 450 },
+        ],
+      }
+    : { from: { x: 80, y: 300 }, to: { x: 200, y: 450 } };
+}
+
 for (const command of ['gesture', 'swipe'] as const) {
   test(`${command} cancellation interrupts a pause with its typed reason and records no action`, async () => {
     vi.useFakeTimers();
-    const input =
-      command === 'gesture'
-        ? {
-            kind: 'tap',
-            points: [
-              { x: 80, y: 300 },
-              { x: 200, y: 450 },
-            ],
-          }
-        : { from: { x: 80, y: 300 }, to: { x: 200, y: 450 } };
+    const input = seriesInput(command);
     let outcome: Awaited<ReturnType<typeof runGesture>> | undefined;
     const pending = runGesture({ ...input, count: 3, pauseMs: 1000 }, command).then((result) => {
       outcome = result;
@@ -182,6 +186,7 @@ for (const command of ['gesture', 'swipe'] as const) {
         error: { code: 'COMMAND_FAILED', details: { reason: 'request_canceled' } },
       });
       expect(outcome?.actions).toEqual([]);
+      expect(outcome?.events).toHaveLength(command === 'gesture' ? 2 : 1);
       expect(perform).toHaveBeenCalledTimes(1);
       expect(vi.getTimerCount()).toBe(0);
     } finally {
@@ -191,34 +196,67 @@ for (const command of ['gesture', 'swipe'] as const) {
   });
 }
 
-test('cancellation during the last tap records no completed action', async () => {
-  let performed = 0;
-  perform.mockImplementation(async () => {
-    if (++performed === 3) markRequestCanceled(requestId);
-    return {
-      kind: 'tap',
-      pointerCount: 2,
-      durationMs: 40,
-      from: { x: 140, y: 375 },
-      to: { x: 140, y: 375 },
-      message: 'Tapped 2 points',
-    };
+for (const command of ['gesture', 'swipe'] as const) {
+  test(`${command} keeps every completed overlay when the last execution cancels finalization`, async () => {
+    const completed = await perform();
+    perform.mockClear();
+    perform.mockImplementation(async () => {
+      if (perform.mock.calls.length === 3) markRequestCanceled(requestId);
+      return completed;
+    });
+    const { response, actions, events } = await runGesture(
+      { ...seriesInput(command), count: 3 },
+      command,
+    );
+    expect(response).toMatchObject({
+      ok: false,
+      error: { code: 'COMMAND_FAILED', details: { reason: 'request_canceled' } },
+    });
+    expect(actions).toEqual([]);
+    expect(perform).toHaveBeenCalledTimes(3);
+    expect(events).toHaveLength(command === 'gesture' ? 6 : 3);
   });
-  const { response, actions } = await runGesture({
-    kind: 'tap',
-    points: [
-      { x: 80, y: 300 },
-      { x: 200, y: 450 },
-    ],
-    count: 3,
+
+  test(`${command} records only completed executions when a later execution fails`, async () => {
+    const completed = await perform();
+    perform.mockClear();
+    perform
+      .mockResolvedValueOnce(completed)
+      .mockRejectedValueOnce(
+        new AppError('COMMAND_FAILED', 'Later execution failed', { reason: 'execution-failed' }),
+      );
+    const { response, actions, events } = await runGesture(
+      { ...seriesInput(command), count: 3 },
+      command,
+    );
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'Later execution failed',
+        details: { reason: 'execution-failed' },
+      },
+    });
+    expect(actions).toEqual([]);
+    expect(perform).toHaveBeenCalledTimes(2);
+    expect(events).toHaveLength(command === 'gesture' ? 2 : 1);
   });
-  expect(response).toMatchObject({
-    ok: false,
-    error: { code: 'COMMAND_FAILED', details: { reason: 'request_canceled' } },
+
+  test(`${command} records nothing when cancellation precedes dispatch`, async () => {
+    markRequestCanceled(requestId);
+    const { response, actions, events } = await runGesture(
+      { ...seriesInput(command), count: 3 },
+      command,
+    );
+    expect(response).toMatchObject({
+      ok: false,
+      error: { code: 'COMMAND_FAILED', details: { reason: 'request_canceled' } },
+    });
+    expect(actions).toEqual([]);
+    expect(events).toEqual([]);
+    expect(perform).not.toHaveBeenCalled();
   });
-  expect(actions).toEqual([]);
-  expect(performed).toBe(3);
-});
+}
 
 for (const canceled of [false, true]) {
   test(`Android post-tap ANR recovery is ${canceled ? 'skipped after cancellation' : 'performed without cancellation'}`, async () => {
@@ -289,71 +327,98 @@ for (const canceled of [false, true]) {
   });
 }
 
-test('cancellation during the post-command dialog read prevents recording', async () => {
-  let reads = 0;
-  const androidObservation: AndroidObservationAdapter = {
-    ...clearAndroidObservationFixture,
-    readBlockingDialog: async () => {
-      if (++reads === 2) markRequestCanceled(requestId);
-      return { status: 'clear' };
-    },
-  };
-  const { response, actions } = await runGesture(
-    {
-      kind: 'tap',
-      points: [
-        { x: 80, y: 300 },
-        { x: 200, y: 450 },
-      ],
-    },
-    'gesture',
-    androidObservation,
-  );
-  expect(reads).toBe(2);
-  expect(response).toMatchObject({
-    ok: false,
-    error: { code: 'COMMAND_FAILED', details: { reason: 'request_canceled' } },
-  });
-  expect(actions).toEqual([]);
-});
-
-for (const native of [false, true]) {
-  test(`repeated swipe records individual ${native ? 'native' : 'wall clock'} timing`, async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1100);
-    let index = 0;
-    perform.mockImplementation(async () => {
-      const start = Date.now();
-      const duration = [40, 60, 80][index++]!;
-      await new Promise((resolve) => setTimeout(resolve, duration));
-      return {
-        kind: 'tap',
-        pointerCount: 2,
-        durationMs: duration,
-        from: { x: 140, y: 375 },
-        to: { x: 140, y: 375 },
-        message: 'done',
-        ...(native
-          ? {
-              backendResult: {
-                gestureStartUptimeMs: start - 900,
-                gestureEndUptimeMs: start - 900 + duration,
-              },
-            }
-          : {}),
-      };
-    });
-    const pending = runGesture(
-      { from: { x: 80, y: 300 }, to: { x: 200, y: 450 }, count: 3, pauseMs: 100 },
-      'swipe',
+for (const command of ['gesture', 'swipe'] as const) {
+  test(`${command} retains completed overlays when post-command cancellation prevents action recording`, async () => {
+    let reads = 0;
+    const androidObservation: AndroidObservationAdapter = {
+      ...clearAndroidObservationFixture,
+      readBlockingDialog: async () => {
+        if (++reads === 2) markRequestCanceled(requestId);
+        return { status: 'clear' };
+      },
+    };
+    const { response, actions, events } = await runGesture(
+      { ...seriesInput(command), count: 3 },
+      command,
+      androidObservation,
     );
-    await vi.runAllTimersAsync();
-    const { response, events } = await pending;
-    expect(response).toMatchObject({ ok: true, data: { durationMs: 80 } });
-    expect(events.map(({ tMs, durationMs }) => ({ tMs, durationMs }))).toEqual([
-      { tMs: 100, durationMs: 40 },
-      { tMs: 240, durationMs: 60 },
-      { tMs: 400, durationMs: 80 },
-    ]);
+    expect(reads).toBe(2);
+    expect(response).toMatchObject({
+      ok: false,
+      error: { code: 'COMMAND_FAILED', details: { reason: 'request_canceled' } },
+    });
+    expect(actions).toEqual([]);
+    expect(perform).toHaveBeenCalledTimes(3);
+    expect(events).toHaveLength(command === 'gesture' ? 6 : 3);
   });
+}
+
+for (const command of ['gesture', 'swipe'] as const) {
+  for (const native of [false, true]) {
+    test(`repeated ${command} records individual ${native ? 'native' : 'wall clock'} timing`, async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(1100);
+      let index = 0;
+      perform.mockImplementation(async () => {
+        const start = Date.now();
+        const duration = [40, 60, 80][index++]!;
+        await new Promise((resolve) => setTimeout(resolve, duration));
+        return {
+          kind: 'tap',
+          pointerCount: 2,
+          durationMs: native ? duration + 10 : duration,
+          from: { x: 140, y: 375 },
+          to: { x: 140, y: 375 },
+          message: 'done',
+          ...(native
+            ? {
+                backendResult: {
+                  gestureStartUptimeMs: start - 900,
+                  gestureEndUptimeMs: start - 900 + duration,
+                },
+              }
+            : {}),
+        };
+      });
+      const pending = runGesture(
+        {
+          ...seriesInput(command),
+          count: 3,
+          pauseMs: 100,
+          ...(command === 'swipe' ? { pattern: 'ping-pong' } : {}),
+        },
+        command,
+      );
+      await vi.runAllTimersAsync();
+      const { response, events, actions } = await pending;
+      expect(response).toMatchObject({ ok: true, data: { durationMs: native ? 90 : 80 } });
+      expect(actions).toHaveLength(1);
+      expect(actions[0]).toMatchObject({ command });
+      expect(events.map(({ tMs, durationMs }) => ({ tMs, durationMs }))).toEqual(
+        command === 'swipe'
+          ? [
+              { tMs: 100, durationMs: 40 },
+              { tMs: 240, durationMs: 60 },
+              { tMs: 400, durationMs: 80 },
+            ]
+          : [
+              { tMs: 100, durationMs: 40 },
+              { tMs: 100, durationMs: 40 },
+              { tMs: 240, durationMs: 60 },
+              { tMs: 240, durationMs: 60 },
+              { tMs: 400, durationMs: 80 },
+              { tMs: 400, durationMs: 80 },
+            ],
+      );
+      expect(perform).toHaveBeenCalledTimes(3);
+      expect(gestures.bindDevice).toHaveBeenCalledTimes(1);
+      if (command === 'swipe') {
+        expect(events.map(({ x, y, x2, y2 }) => ({ x, y, x2, y2 }))).toEqual([
+          { x: 80, y: 300, x2: 200, y2: 450 },
+          { x: 200, y: 450, x2: 80, y2: 300 },
+          { x: 80, y: 300, x2: 200, y2: 450 },
+        ]);
+      }
+    });
+  }
 }

@@ -50,7 +50,7 @@ import type {
 } from '../../../core/interaction/internal/types.ts';
 import type { RecordedTargetCapture } from '@agent-device/selectors/target-evidence';
 import { gestureResponseData } from './interaction-gesture-response.ts';
-import type { GestureRepetitionTiming } from '../../../core/recording-gestures.ts';
+import { recordTouchVisualizationEvent } from '../../../core/recording-gestures.ts';
 import { noActiveSessionError } from '@agent-device/kernel/contracts';
 
 type GestureHandlerParams = InteractionRouteInput & {
@@ -65,7 +65,6 @@ type GestureInteractionOutcome = {
   flags: InteractionRouteInput['req']['flags'];
   responseData: Record<string, unknown>;
   recordingResultExtra?: Record<string, unknown>;
-  repetitionTiming?: GestureRepetitionTiming[];
   recordedTargets?: { source: RecordedTargetCapture; destination: RecordedTargetCapture };
 };
 
@@ -112,24 +111,31 @@ async function runGestureInteraction(
   });
   if (!bound.ok) return { refused: bound.response };
   const runtime = await createGestureRuntime(params, bound.gestures);
-  const context = { session: params.sessionName, requestId: params.req.meta?.requestId };
-  const repetitions =
-    input.kind === 'tap'
-      ? await runGestureRepetitions(
-          runtime,
-          params,
-          input.count ?? 1,
-          input.pauseMs ?? 0,
-          () => gesture,
-        )
-      : undefined;
-  const result =
-    repetitions?.result ??
-    (await runPreparedGesture(runtime, context, gesture, params.req.internal));
-  return {
-    ...buildGestureOutcome(input, gesture, result, params.req.flags),
-    repetitionTiming: repetitions?.timing,
-  };
+  const result = await runGestureRepetitions(
+    runtime,
+    params,
+    input.kind === 'tap' ? (input.count ?? 1) : 1,
+    input.kind === 'tap' ? (input.pauseMs ?? 0) : 0,
+    () => gesture,
+    (completed, _index, startedAt, finishedAt) => {
+      const outcome = buildGestureOutcome(
+        input.kind === 'tap' ? { ...input, count: 1 } : input,
+        gesture,
+        completed,
+        params.req.flags,
+      );
+      recordTouchVisualizationEvent(
+        session,
+        'gesture',
+        outcome.positionals,
+        { ...outcome.responseData, ...outcome.recordingResultExtra },
+        {},
+        startedAt,
+        finishedAt,
+      );
+    },
+  );
+  return buildGestureOutcome(input, gesture, result, params.req.flags);
 }
 
 async function runPreparedGesture(
@@ -217,33 +223,50 @@ export async function dispatchSwipeViaRuntime(
     const pauseMs = input.pauseMs ?? 0;
     const pattern = input.pattern ?? 'one-way';
     const runtime = await createGestureRuntime(params, bound.gestures);
-    const repetitions = await runGestureRepetitions(
+    const result = await runGestureRepetitions(
       runtime,
       params,
       count,
       pauseMs,
       (index) => normalizePublicSwipeMotion(swipeMotionAtIndex(input, pattern, index)).gesture,
+      (completed, index, startedAt, finishedAt) => {
+        const executedInput = { ...swipeMotionAtIndex(input, pattern, index), count: 1 };
+        recordTouchVisualizationEvent(
+          session,
+          'swipe',
+          swipeReplayPositionals(executedInput),
+          swipeResponseData(executedInput, completed),
+          {},
+          startedAt,
+          finishedAt,
+        );
+      },
     );
-    const { result, timing } = repetitions;
     return {
-      repetitionTiming: timing,
       positionals: swipeReplayPositionals(input),
       flags: params.req.flags,
-      responseData: gestureResponseData(result, {
-        from: input.from,
-        to: input.to,
-        x1: input.from.x,
-        y1: input.from.y,
-        x2: input.to.x,
-        y2: input.to.y,
-        effectiveDurationMs: result.durationMs,
-        timingMode: 'direct',
-        executionProfile: 'endpoint-hold',
-        count,
-        pauseMs,
-        pattern,
-      }),
+      responseData: swipeResponseData(input, result),
     };
+  });
+}
+
+function swipeResponseData(
+  input: SwipePayload,
+  result: GestureRuntimeResult,
+): Record<string, unknown> {
+  return gestureResponseData(result, {
+    from: input.from,
+    to: input.to,
+    x1: input.from.x,
+    y1: input.from.y,
+    x2: input.to.x,
+    y2: input.to.y,
+    effectiveDurationMs: result.durationMs,
+    timingMode: 'direct',
+    executionProfile: 'endpoint-hold',
+    count: input.count ?? 1,
+    pauseMs: input.pauseMs ?? 0,
+    pattern: input.pattern ?? 'one-way',
   });
 }
 
@@ -305,10 +328,7 @@ async function dispatchGestureInteraction(
       positionals: outcome.positionals,
       flags: outcome.flags,
       result: { ...responseData, ...(outcome.recordingResultExtra ?? {}) },
-      repetitionTiming:
-        outcome.repetitionTiming && outcome.repetitionTiming.length > 1
-          ? outcome.repetitionTiming
-          : undefined,
+      visualization: 'recorded-during-execution',
       responseData,
       recordedTargets: outcome.recordedTargets,
       actionStartedAt,
@@ -449,9 +469,14 @@ async function runGestureRepetitions(
   count: number,
   pauseMs: number,
   gestureAtIndex: (index: number) => GestureCommandInput,
-): Promise<{ result: GestureRuntimeResult; timing: GestureRepetitionTiming[] }> {
+  recordCompleted: (
+    result: GestureRuntimeResult,
+    index: number,
+    startedAt: number,
+    finishedAt: number,
+  ) => void,
+): Promise<GestureRuntimeResult> {
   const signal = getRequestSignal(params.req.meta?.requestId);
-  const timing: GestureRepetitionTiming[] = [];
   let result: GestureRuntimeResult | undefined;
   for (let index = 0; index < count; index += 1) {
     signal?.throwIfAborted();
@@ -462,16 +487,11 @@ async function runGestureRepetitions(
       gestureAtIndex(index),
       params.req.internal,
     );
-    timing.push({
-      startedAt,
-      finishedAt: Date.now(),
-      backendResult: result.backendResult,
-      durationMs: result.durationMs,
-    });
+    recordCompleted(result, index, startedAt, Date.now());
     if (pauseMs > 0 && index + 1 < count) await sleep(pauseMs, signal);
   }
   if (!result) throw new Error('Gesture orchestration did not execute a gesture.');
-  return { result, timing };
+  return result;
 }
 
 function swipeMotionAtIndex(
