@@ -1,3 +1,4 @@
+import { readSnapshotNodeInteractionBounds } from '@agent-device/kernel/rect-center';
 import { expect, test } from 'vitest';
 import fc from 'fast-check';
 import { parseUiHierarchy } from './ui-hierarchy-fixtures.ts';
@@ -53,6 +54,22 @@ test('raw Android snapshots retain bounds behind system navigation', () => {
     rect: { x: 0, y: 2259, width: 1080, height: 131 },
   });
   expect(snapshot.nodes.find((node) => node.identifier === 'item-138')).toBeDefined();
+});
+
+test('raw snapshots retain measured input bounds without changing or serializing reported rectangles', () => {
+  const snapshot = parseUiHierarchy(hierarchy(), undefined, { raw: true });
+  const target = snapshot.nodes.find((node) => node.identifier === 'item-137')!;
+  const covered = snapshot.nodes.find((node) => node.identifier === 'item-138')!;
+  const bounds = { x: 0, y: 0, width: 1080, height: 2274 };
+  expect(readSnapshotNodeInteractionBounds(target)).toEqual(bounds);
+  expect(readSnapshotNodeInteractionBounds(covered)).toEqual(bounds);
+  expect(JSON.parse(JSON.stringify(target)).rect).toEqual({
+    x: 0,
+    y: 2259,
+    width: 1080,
+    height: 131,
+  });
+  expect(readSnapshotNodeInteractionBounds({ ...target })).toEqual(bounds);
 });
 
 test('a lower-layer window wholly inside navigation publishes no tappable app content', () => {

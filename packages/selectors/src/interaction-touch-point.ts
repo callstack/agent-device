@@ -1,3 +1,4 @@
+import { readSnapshotNodeInteractionBounds } from '@agent-device/kernel/rect-center';
 import {
   snapshotRefBodies,
   type Point,
@@ -35,17 +36,20 @@ export function resolveInteractionTouchPoint(
 ): InteractionTouchPointResolution {
   const targetRect = normalizeRect(node.rect);
   if (!targetRect || !hasArea(targetRect)) return { kind: 'invalid' };
-  const center = pointInsideRect(targetRect);
+  const inputBounds = readSnapshotNodeInteractionBounds(node);
+  const bounds = inputBounds ? [inputBounds, ...(options.bounds ?? [])] : (options.bounds ?? []);
+  const searchRect = bounds.reduce<Rect | undefined>(
+    (current, bound) => (current ? intersectRects(current, bound) : undefined),
+    targetRect,
+  );
+  if (!searchRect || !hasArea(searchRect)) return { kind: 'invalid' };
+  const center = pointInsideRect(searchRect);
 
   const competitors = collectInteractiveDescendantRects(nodes, node, targetRect);
   if (competitors.length === 0) {
     return { kind: 'resolved', point: center, strategy: 'center' };
   }
 
-  const searchRect = (options.bounds ?? []).reduce<Rect | undefined>(
-    (current, bound) => (current ? intersectRects(current, bound) : undefined),
-    targetRect,
-  );
   const point = searchRect
     ? findNearestParentOwnedPoint(targetRect, searchRect, center, competitors)
     : null;

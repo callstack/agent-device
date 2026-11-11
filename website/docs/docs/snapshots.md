@@ -295,6 +295,7 @@ decides which backends it tries.
 - Regular ADB snapshots clip app rectangles to the visible area outside measured status and navigation
   bars, including launcher-owned navigation. A partially covered row uses its visible rectangle
   for taps; content wholly behind a bar is omitted. `--raw` keeps the reported bounds.
+  Ref and selector taps still use the measured visible area when the ref came from a raw snapshot.
 - Default and `-i` snapshots keep covered surfaces in the same window visible for diagnosis, and
   mark controls whose drawing order shows they are covered with `interactionBlocked: "covered"`, so
   selectors can't act on a stale React Native screen underneath. Such a node also carries a

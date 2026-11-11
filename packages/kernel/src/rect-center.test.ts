@@ -1,6 +1,10 @@
+import assert from 'node:assert/strict';
 import { expect, test } from 'vitest';
 import {
   areCapturedRectsAtSamePosition,
+  attachSnapshotNodeInteractionBounds,
+  readSnapshotNodeInteractionBounds,
+  copySnapshotNodeInteractionBounds,
   interiorCoordinate,
   pointInsideRect,
 } from './rect-center.ts';
@@ -77,4 +81,21 @@ test('the comparison is symmetric', () => {
   expect(areCapturedRectsAtSamePosition(shifted({ y: 202 }), CAPTURED)).toBe(
     areCapturedRectsAtSamePosition(CAPTURED, shifted({ y: 202 })),
   );
+});
+
+test('input bounds survive node spreads and explicit clone restoration without changing JSON', () => {
+  const bounds = { x: 0, y: 0, width: 100, height: 80 };
+  const source = [
+    attachSnapshotNodeInteractionBounds(
+      { index: 0, rect: { x: 0, y: 70, width: 100, height: 30 } },
+      bounds,
+    ),
+  ];
+  assert.deepEqual(readSnapshotNodeInteractionBounds({ ...source[0] }), bounds);
+  const cloned = structuredClone(source);
+  copySnapshotNodeInteractionBounds(source, cloned);
+  assert.deepEqual(readSnapshotNodeInteractionBounds(cloned[0]!), bounds);
+  assert.deepEqual(JSON.parse(JSON.stringify(source)), [
+    { index: 0, rect: { x: 0, y: 70, width: 100, height: 30 } },
+  ]);
 });

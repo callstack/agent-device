@@ -1,3 +1,4 @@
+import { attachSnapshotNodeInteractionBounds } from '@agent-device/kernel/rect-center';
 import {
   type AndroidSystemChromeProvenance,
   androidSystemBarMembership,
@@ -23,7 +24,7 @@ import {
   type AndroidUiHierarchy,
 } from './ui-hierarchy-node.ts';
 import { collectAndroidHiddenNodes } from './ui-hierarchy-visibility.ts';
-import { androidSystemBarContentClips } from './ui-hierarchy-system-bars.ts';
+import { androidSystemBarContentClips } from './snapshot-presentation-node.ts';
 import { scopePresentedAndroidSnapshot } from './ui-hierarchy-scope.ts';
 import { isCollectionContainerType, shouldIncludeAndroidNode } from './ui-hierarchy-inclusion.ts';
 import {
@@ -191,17 +192,14 @@ function initializeAndroidSnapshotPresentation(
 ): void {
   state.presentationBudget.check('work');
   state.viewport = resolveAndroidSnapshotViewport(tree, state.presentationBudget);
-  state.hidden = state.options.raw
-    ? new Set()
-    : collectAndroidHiddenNodes(tree, state.presentationBudget);
-  state.systemBarContentClips = state.options.raw
-    ? new Map()
-    : androidSystemBarContentClips(
-        tree.children,
-        state.hidden,
-        state.viewport,
-        state.presentationBudget,
-      );
+  const hidden = collectAndroidHiddenNodes(tree, state.presentationBudget);
+  state.hidden = state.options.raw ? new Set() : hidden;
+  state.systemBarContentClips = androidSystemBarContentClips(
+    tree.children,
+    hidden,
+    state.viewport,
+    state.presentationBudget,
+  );
   state.composeRoleFolds = state.options.raw
     ? new Map()
     : collectComposeRoleFolds(tree, state.presentationBudget);
@@ -268,6 +266,7 @@ function walkUiHierarchyNode(
     effectiveRect,
     currentWindowRect,
     systemBar,
+    ancestorClip,
   );
   const nextAncestorHittable = ancestorHittable || isAgentTarget(node);
   const nextAncestorCollection = ancestorCollection || isCollectionContainerType(node.type);
@@ -317,6 +316,7 @@ function appendAndroidNodeIfPresented(
   effectiveRect: Rect | undefined,
   windowRect: Rect | undefined,
   systemBar: RawSnapshotNode['systemBar'],
+  interactionBounds: Rect | undefined,
 ): number | undefined {
   if (state.foldedComposeRoleNodes.has(node)) return parentIndex;
   if (
@@ -360,6 +360,7 @@ function appendAndroidNodeIfPresented(
     effectiveRect,
     windowRect,
     systemBar,
+    interactionBounds,
   );
 }
 
@@ -410,6 +411,7 @@ function appendAndroidSnapshotNode(
   effectiveRect: Rect | undefined,
   windowRect: Rect | undefined,
   systemBar: RawSnapshotNode['systemBar'],
+  interactionBounds: Rect | undefined,
 ): number {
   const currentIndex = state.nodes.length;
   // Snapshot filtering removes Compose layout wrappers. Keep depth aligned with
@@ -418,6 +420,7 @@ function appendAndroidSnapshotNode(
   // retained row by normalizeSnapshotTree's depth fallback (#1377).
   state.sourceNodes.push(node);
   const rawNode = createAndroidRawSnapshotNode(state, node, parentIndex, systemChrome, systemBar);
+  if (interactionBounds) attachSnapshotNodeInteractionBounds(rawNode, interactionBounds);
   publishAndroidPresentationNode(state, node, rawNode, effectiveRect, windowRect);
   return currentIndex;
 }

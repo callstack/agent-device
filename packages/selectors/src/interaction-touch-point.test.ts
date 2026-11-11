@@ -1,3 +1,4 @@
+import { attachSnapshotNodeInteractionBounds } from '@agent-device/kernel/rect-center';
 import assert from 'node:assert/strict';
 import fc from 'fast-check';
 import type { Point, Rect } from '@agent-device/kernel/snapshot';
@@ -9,6 +10,38 @@ import {
   pixelRectArb,
 } from './snapshot-geometry.fixtures.ts';
 import { resolveInteractionTouchPoint } from './interaction-touch-point.ts';
+
+test('a raw target without competing descendants uses its measured input region', () => {
+  const node = attachSnapshotNodeInteractionBounds(
+    { index: 0, rect: { x: 0, y: 2259, width: 1080, height: 131 } },
+    { x: 0, y: 0, width: 1080, height: 2274 },
+  );
+  assert.deepEqual(resolveInteractionTouchPoint([node], node), {
+    kind: 'resolved',
+    point: { x: 540, y: 2267 },
+    strategy: 'center',
+  });
+});
+
+test('a fully covered raw target refuses even without competing descendants', () => {
+  const node = attachSnapshotNodeInteractionBounds(
+    { index: 0, rect: { x: 0, y: 2305, width: 1080, height: 95 } },
+    { x: 0, y: 0, width: 1080, height: 2274 },
+  );
+  assert.deepEqual(resolveInteractionTouchPoint([node], node), { kind: 'invalid' });
+});
+
+test('property: targets without competing descendants honor supplied bounds', () => {
+  fc.assert(
+    fc.property(interactionTouchPointScenarioArb, ({ target, bound }) => {
+      const result = resolveInteractionTouchPoint([target], target, { bounds: [bound] });
+      if (result.kind !== 'resolved') return;
+      assert.ok(containsPoint(bound, result.point));
+      assert.ok(containsPoint(target.rect!, result.point));
+    }),
+    { numRuns: PROPERTY_RUNS },
+  );
+});
 
 test('a one-pixel visible strip resolves inside the strip instead of rounding into navigation', () => {
   const node = { index: 0, rect: { x: 0, y: 2273, width: 1080, height: 1 } };
