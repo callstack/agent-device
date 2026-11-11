@@ -30,7 +30,10 @@ import {
   type DeviceInfo,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
-import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
+import {
+  resolveDeviceReadinessInput,
+  resolveSortedAndroidSerialAllowlist,
+} from '../../../core/device-readiness-input.ts';
 import {
   deviceClaimOwnerCannotRelease,
   inspectDeviceClaimsAsync,
@@ -233,7 +236,7 @@ function inventoryDeviceQuery(
       flags?.target,
       env,
     ),
-    androidSerialAllowlist: inventoryAndroidSerialAllowlist(flags?.androidDeviceAllowlist, env),
+    androidSerialAllowlist: resolveSortedAndroidSerialAllowlist(flags ?? {}, env),
   };
 }
 
@@ -249,14 +252,6 @@ function inventoryIosSimulatorSetPath(
     target,
     env,
   });
-}
-
-function inventoryAndroidSerialAllowlist(
-  configuredAllowlist: string | undefined,
-  env: HostEnvironment['env'],
-) {
-  const allowlist = resolveAndroidSerialAllowlist(configuredAllowlist, env);
-  return allowlist ? Array.from(allowlist).sort() : undefined;
 }
 
 function filterInventoryDevices(
@@ -376,10 +371,6 @@ async function handleAppsInventory(params: {
   const { device } = resolution;
   const appsFilter = assertResolvedAppsFilter(req.flags?.appsFilter);
 
-  const resolvedAndroidSerialAllowlist = resolveAndroidSerialAllowlist(
-    req.flags?.androidDeviceAllowlist,
-    params.env,
-  );
   const runtimeResolution = await resolveAppsRuntime({
     device,
     inspectFacts,
@@ -388,12 +379,10 @@ async function handleAppsInventory(params: {
   });
   if ('response' in runtimeResolution) return runtimeResolution.response;
   const runtime = runtimeResolution.runtime;
-  const readyDevice = await ensureAppsRuntimeReady(runtime, {
-    serial: req.flags?.serial,
-    androidSerialAllowlist: resolvedAndroidSerialAllowlist
-      ? [...resolvedAndroidSerialAllowlist].sort()
-      : undefined,
-  });
+  const readyDevice = await ensureAppsRuntimeReady(
+    runtime,
+    resolveDeviceReadinessInput({ flags: req.flags ?? {}, env: params.env }),
+  );
   const apps = await listAppsFromRuntime(runtime, readyDevice, appsFilter);
   return appsInventoryResponse(apps);
 }

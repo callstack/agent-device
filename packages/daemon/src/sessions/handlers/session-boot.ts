@@ -4,7 +4,7 @@ import { resolveDeviceReadinessRuntimePlan } from '@agent-device/contracts/platf
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { asAppError } from '@agent-device/kernel/errors';
 import { errorResponse } from '@agent-device/kernel/contracts';
-import { resolveDeviceReadinessInput } from '../../core/stopped-local-android-device.ts';
+import { resolveDeviceReadinessInput } from '../../core/device-readiness-input.ts';
 import {
   markSelectionBootOccurred,
   type DeviceSelectionResult,

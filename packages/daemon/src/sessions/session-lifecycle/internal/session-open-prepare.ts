@@ -232,5 +232,3 @@ async function resolvePreparedOpenIdentity(params: {
     appName: resolved.appName,
   };
 }
-
-/** `open --timeout` is a startup budget; it becomes the absolute deadline the boot wait honors. */

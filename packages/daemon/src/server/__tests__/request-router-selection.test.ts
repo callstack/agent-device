@@ -195,3 +195,37 @@ test('open without --device selects a running phone over a stopped AVD and boots
   expect(sessionStore.get('unnamed-open')?.device.id).toBe(phone.id);
   expect(ensureReady).not.toHaveBeenCalled();
 });
+
+test('open of a stopped AVD under a serial allowlist asks inventory for both and boots within it', async () => {
+  const inventoryRequests: Array<{
+    platform?: string;
+    androidAvdSelection?: string;
+    androidSerialAllowlist?: readonly string[];
+  }> = [];
+  const stopped = { ...android, id: android.name, booted: false };
+  const { gateway, ensureReady } = bootingLifecycleGateway(android);
+  const { handler, sessionStore } = selectionHandler([stopped], inventoryRequests, gateway);
+
+  const opened = await handler({
+    token: 'test-token',
+    session: 'allowlisted-avd',
+    command: 'open',
+    positionals: ['com.android.settings'],
+    flags: { platform: 'android', device: stopped.name, androidDeviceAllowlist: android.id },
+    meta: { requestId: 'open-allowlisted-avd' },
+  });
+
+  expect(opened).toMatchObject({ ok: true });
+  expect(inventoryRequests.length).toBeGreaterThan(0);
+  expect(
+    inventoryRequests.every(
+      (request) =>
+        request.androidAvdSelection === 'include-stopped' &&
+        request.androidSerialAllowlist?.join(',') === android.id,
+    ),
+  ).toBe(true);
+  expect(ensureReady).toHaveBeenCalledWith(
+    expect.objectContaining({ androidSerialAllowlist: [android.id] }),
+  );
+  expect(sessionStore.get('allowlisted-avd')?.device.id).toBe(android.id);
+});
