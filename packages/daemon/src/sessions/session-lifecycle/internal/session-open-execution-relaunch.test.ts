@@ -234,7 +234,10 @@ test('failed relaunch retains the claim for close while allowing daemon idle rea
           });
         },
       }),
-    ).rejects.toThrow('cleanup timeout');
+    ).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'android-app-close-timeout' },
+    });
     expect(sessionStore.get(sessionName)).toMatchObject({
       name: sessionName,
       deviceClaim: acquired.ownership,
@@ -286,7 +289,7 @@ test('failed relaunch retains the claim for close while allowing daemon idle rea
 });
 
 test.each([{ dispatched: 'no' as const }, { reason: 'runtime-hints-operation-missing' }])(
-  'a known relaunch refusal leaves the daemon active: %o',
+  'a relaunch refusal with confirmed or undispatched effects leaves the daemon active: %o',
   async (details) => {
     const sessionStore = makeSessionStore();
     publishSession(sessionStore, 'android-session', ANDROID_EMULATOR);
@@ -298,7 +301,7 @@ test.each([{ dispatched: 'no' as const }, { reason: 'runtime-hints-operation-mis
           throw new AppError('COMMAND_FAILED', 'hint refused', details);
         },
       }),
-    ).rejects.toThrow('hint refused');
+    ).rejects.toMatchObject({ code: 'COMMAND_FAILED', details });
     expect(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 })).toBe(false);
   },
 );

@@ -285,6 +285,11 @@ export async function completeOpenCommand(params: {
     ? sessionStore.requireCurrent(openDispatchRef)
     : undefined;
   const openStartedAtMs = Date.now();
+  const markUnconfirmedRelaunch = () => {
+    if (existingRef && shouldRelaunch && sessionStore.resolveCurrent(existingRef)) {
+      sessionStore.markCloseEffectsUnconfirmed(existingRef);
+    }
+  };
   const outcome = await lifecycle.operations
     .openApplication({
       target: openTarget,
@@ -307,18 +312,11 @@ export async function completeOpenCommand(params: {
       ),
     })
     .catch((error: unknown) => {
-      if (
-        existingRef &&
-        shouldRelaunch &&
-        !(
-          error instanceof AppError &&
-          (readDispatchDisclosure(error.details) === 'no' ||
-            error.details?.reason === 'runtime-hints-operation-missing')
-        ) &&
-        sessionStore.resolveCurrent(existingRef)
-      ) {
-        sessionStore.markCloseEffectsUnconfirmed(existingRef);
-      }
+      const effectsConfirmedOrUndispatched =
+        error instanceof AppError &&
+        (readDispatchDisclosure(error.details) === 'no' ||
+          error.details?.reason === 'runtime-hints-operation-missing');
+      if (!effectsConfirmedOrUndispatched) markUnconfirmedRelaunch();
       throw error;
     });
   sessionAppBundleId = outcome.appBundleId ?? sessionAppBundleId;
@@ -328,9 +326,7 @@ export async function completeOpenCommand(params: {
     ? buildStartupPerfSample(openStartedAtMs, openTarget, sessionAppBundleId)
     : undefined;
   if (isRequestCanceled(req.meta?.requestId)) {
-    if (existingRef && shouldRelaunch && sessionStore.resolveCurrent(existingRef)) {
-      sessionStore.markCloseEffectsUnconfirmed(existingRef);
-    }
+    markUnconfirmedRelaunch();
     const canceled = createRequestCanceledError();
     return {
       type: 'response',

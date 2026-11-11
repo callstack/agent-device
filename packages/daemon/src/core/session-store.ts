@@ -410,15 +410,15 @@ export class SessionStore {
   }
 
   /**
-   * #4237: marks a session that `close` kept after running its teardown (a failed platform close,
-   * cleanup, or provider lease release), so daemon idle reap no longer waits on it. A successful reopen clears the mark;
+   * Marks a session kept after unconfirmed close effects or a relaunch that failed or was canceled
+   * after dispatch, so daemon idle reap no longer waits on it. A successful reopen clears the mark;
    * otherwise it lasts until `retire` removes the session.
    */
   markCloseEffectsUnconfirmed(ref: SessionRef): void {
     this.update(ref, { closeEffectsUnconfirmed: true });
   }
 
-  /** #4237: a successful reopen makes a session kept by a failed `close` an ordinary session again. */
+  /** A successful reopen clears unconfirmed close or relaunch effects. */
   clearCloseEffectsUnconfirmed(ref: SessionRef): void {
     delete this.requireCurrent(ref).closeEffectsUnconfirmed;
   }
