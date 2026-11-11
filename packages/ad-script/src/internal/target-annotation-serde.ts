@@ -201,7 +201,7 @@ function fitTargetAnnotation(evidence: TargetAnnotationV1): TargetAnnotationV1 {
     degrade(candidate);
   }
   if (fitsTargetAnnotation(candidate)) return candidate;
-  throw new Error('target annotation cannot fit with role and id retained');
+  throw new AppError('INVALID_ARGS', 'target annotation cannot fit with role and id retained');
 }
 
 export function serializeTargetAnnotationV1(evidence: TargetAnnotationV1): string {

@@ -14,7 +14,7 @@ import {
   TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
 } from '@agent-device/ad-script';
 
-function serializeTargetAnnotationV1(evidence: TargetAnnotationV1): string {
+function serializeRecordedTargetAnnotation(evidence: TargetAnnotationV1): string {
   const [line] = formatTargetAnnotationLines({
     ts: 0,
     command: 'click',
@@ -226,7 +226,7 @@ test('computeTargetEvidence: max-size labels across K=8 ancestors reduce ancestr
   // Nearest-ancestor-first: the first (kept) entries are the leaf-side ones.
   assert.equal(evidence.ancestry[0]?.label, maxLabel);
 
-  const json = serializeTargetAnnotationV1(evidence);
+  const json = serializeRecordedTargetAnnotation(evidence);
   assert.ok(utf8ByteLength(json) <= TARGET_ANNOTATION_MAX_PAYLOAD_BYTES);
   // The writer-parser invariant: the writer's own output must never be
   // rejected by its own parser.
@@ -260,7 +260,7 @@ test('computeTargetEvidence: escape-heavy fields degrade until the unverifiable 
 
   assert.ok(evidence);
   assert.equal(evidence.verification, 'unverifiable');
-  const json = serializeTargetAnnotationV1(evidence);
+  const json = serializeRecordedTargetAnnotation(evidence);
   assert.ok(
     utf8ByteLength(json) <= TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
     `payload is ${utf8ByteLength(json)} bytes`,
@@ -309,7 +309,7 @@ test('computeTargetEvidence: an oversized payload drops rect, scrollRegion, ance
     assert.deepEqual(candidate.scrollRegion, SCROLL_CONTAINER);
     assert.equal(candidate.label, '\u0001'.repeat(labelLength));
     assert.deepEqual(candidate.ancestry[0], SCROLL_CONTAINER);
-    const evidence = parseTargetAnnotationV1Payload(serializeTargetAnnotationV1(candidate));
+    const evidence = parseTargetAnnotationV1Payload(serializeRecordedTargetAnnotation(candidate));
     const firstKept = OVERSIZED_DROP_ORDER.findIndex((field) => isPresent(evidence, field));
     const droppedCount = firstKept === -1 ? OVERSIZED_DROP_ORDER.length : firstKept;
     for (const field of OVERSIZED_DROP_ORDER.slice(droppedCount)) {
@@ -336,7 +336,7 @@ test('computeTargetEvidence: an oversized payload drops rect, scrollRegion, ance
         `${lastDropped} dropped at length ${labelLength} although the payload already fit`,
       );
     }
-    const json = serializeTargetAnnotationV1(evidence);
+    const json = serializeRecordedTargetAnnotation(evidence);
     assert.ok(utf8ByteLength(json) <= TARGET_ANNOTATION_MAX_PAYLOAD_BYTES);
     assert.deepEqual(parseTargetAnnotationV1Payload(json), evidence);
     stops.add(droppedCount);
@@ -351,7 +351,7 @@ test('computeTargetEvidence: an oversized payload drops rect, scrollRegion, ance
 // The downgrade never drops `role` or `id`, so it relies on the two fitting even fully escaped. A
 // larger field cap breaks this, and the writer would again emit a payload its parser rejects.
 test('computeTargetEvidence: a downgrade with every optional field dropped fits at the worst-case escape ratio', () => {
-  const skeleton = serializeTargetAnnotationV1({
+  const skeleton = serializeRecordedTargetAnnotation({
     id: '',
     role: '',
     ancestry: [],
@@ -488,7 +488,7 @@ test('computeTargetEvidence: real-capture-shaped tree (undefined hittable, anony
   assert.equal(evidence.sibling, 0); // first child of the "Other" tab-bar row
   assert.equal(evidence.verification, 'verified');
 
-  const json = serializeTargetAnnotationV1(evidence);
+  const json = serializeRecordedTargetAnnotation(evidence);
   assert.deepEqual(parseTargetAnnotationV1Payload(json), evidence);
 });
 
@@ -563,13 +563,13 @@ test('computeTargetEvidence: reduction sizes against the worst-case verification
     else sawReducedAncestry = true;
     // The emitted payload must fit even re-serialized with the longer
     // verification value — the invariant the worst-case sizing guarantees.
-    const worstCase = serializeTargetAnnotationV1({ ...evidence, verification: 'unverifiable' });
+    const worstCase = serializeRawTargetAnnotationV1({ ...evidence, verification: 'unverifiable' });
     assert.ok(
       utf8ByteLength(worstCase) <= TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
       `worst-case payload overflows at tunable label length ${tunable}`,
     );
     // And the parser accepts the writer's actual output, as always.
-    parseTargetAnnotationV1Payload(serializeTargetAnnotationV1(evidence));
+    parseTargetAnnotationV1Payload(serializeRecordedTargetAnnotation(evidence));
   }
   // The sweep must actually cross the reduction boundary for the window to
   // have been exercised.

@@ -957,7 +957,6 @@ test.each(['field', 'payload', 'multi'])(
     const payloadEvidence = {
       ...common,
       id: 'payload',
-      verification: 'unverifiable' as const,
       label: 'bob',
       ancestry: Array.from({ length: 8 }, () => ({ role: 'group', label: '\\'.repeat(220) })),
       scrollRegion: { role: 'group', label: '\\'.repeat(40) },

@@ -74,6 +74,47 @@ test('writer degrades excessive ancestry for single and multi-target annotations
   assert.equal(evidence.ancestry.length, TARGET_ANNOTATION_MAX_ANCESTRY + 1);
 });
 
+test('writer drops optional fields in order and retains role and id when fitting', () => {
+  const fields = ['rect', 'scrollRegion', 'ancestry', 'label'] as const;
+  const stops = new Set<number>();
+  for (let length = 1; length <= TARGET_ANNOTATION_MAX_FIELD_BYTES; length += 1) {
+    const evidence = baseEvidence({
+      id: '\u0001'.repeat(256),
+      role: '\u0001'.repeat(256),
+      label: '\u0001'.repeat(length),
+      ancestry: [{ role: 'scrollview', label: '\u0001'.repeat(50) }],
+      scrollRegion: { role: 'scrollview', label: '\u0001'.repeat(50) },
+      rect: { x: 0, y: 0, width: 10, height: 10 },
+    });
+    const fitted = parseTargetAnnotationV1Payload(serializeTargetAnnotationV1(evidence));
+    assert.equal(fitted.id, evidence.id);
+    assert.equal(fitted.role, evidence.role);
+    const present = fields.map((field) =>
+      field === 'ancestry' ? fitted.ancestry.length > 0 : fitted[field] !== undefined,
+    );
+    const firstKept = present.indexOf(true);
+    const dropped = firstKept === -1 ? fields.length : firstKept;
+    assert.deepEqual(
+      present,
+      fields.map((_, index) => index >= dropped),
+    );
+    if (dropped > 0) assert.equal(fitted.verification, 'unverifiable');
+    stops.add(dropped);
+  }
+  assert.deepEqual(
+    [...stops].sort((a, b) => a - b),
+    [0, 1, 2, 3, 4],
+  );
+});
+
+test('writer reports invalid arguments when role cannot fit', () => {
+  assertInvalidArgs(() =>
+    serializeTargetAnnotationV1(
+      baseEvidence({ role: 'x'.repeat(TARGET_ANNOTATION_MAX_FIELD_BYTES + 1) }),
+    ),
+  );
+});
+
 test('formatTargetAnnotationCommentLine emits the ASCII # agent-device:target-v1 prefix', () => {
   const line = formatTargetAnnotationCommentLine(baseEvidence());
   assert.ok(line.startsWith('# agent-device:target-v1 {'));

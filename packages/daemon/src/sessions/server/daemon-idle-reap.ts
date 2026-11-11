@@ -64,7 +64,8 @@ export function resolveDaemonIdleReapMs(
  * the idle timer on every command while an ABANDONED one is reaped after the
  * idle window and leaves a `REPAIR_SESSION_EXPIRED` tombstone
  * (`teardownDaemonSession`) rather than leaking the daemon/lease indefinitely.
- * A session that `close` kept after unconfirmed cleanup (#4237) does not block it either: reaping the
+ * A session kept after unconfirmed close cleanup (#4237) or a relaunch that failed or was canceled
+ * after dispatch does not block it either: reaping the
  * daemon retries that cleanup in shutdown teardown, and a claim still unconfirmed goes stale with the
  * daemon, as it did before `close` kept such sessions. Every other open session (and a repair that
  * already committed) blocks idle-reap as before.
