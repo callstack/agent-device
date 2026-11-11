@@ -16,13 +16,31 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
   runCmdBackground: exec.run,
 }));
-vi.mock('@agent-device/host-kit/process', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/host-kit/process')>()),
-  isProcessAlive: () => processIdentity.alive,
-  readProcessCommand: () => processIdentity.command,
-  readProcessStartTime: () => processIdentity.startTime,
-  waitForProcessExit: async () => true,
-}));
+vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
+  const facts = () => ({
+    startTime: processIdentity.startTime,
+    command: processIdentity.command,
+    zombie: processIdentity.alive ? false : null,
+  });
+  return {
+    ...actual,
+    isProcessAlive: () => processIdentity.alive,
+    readProcessIdentityFacts: async () => facts(),
+    // The escalation's signal ladder is host-kit's to prove; here it answers from the fixture
+    // identity through the same identity rule.
+    stopProcessAndConfirmExit: async (
+      target: Parameters<typeof actual.stopProcessAndConfirmExit>[0],
+    ) => {
+      if (!processIdentity.alive) return { status: 'stopped' };
+      const verdict = actual.judgeProcessIdentity(target.identity, facts());
+      if (verdict === 'reassigned') return { status: 'stopped', reassigned: true };
+      if (verdict !== 'ours') return { status: 'retained', reason: 'identity-unverified' };
+      process.kill(target.pid, 'SIGTERM');
+      return { status: 'stopped', signal: 'SIGTERM' };
+    },
+  };
+});
 
 import {
   createManagedAppLogProcesses,

@@ -7,13 +7,13 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { errorMessage } from '@agent-device/kernel/errors';
 import {
   expandProcessTree,
+  type HostProcessIdentityFacts,
   type HostProcessInfo,
   isProcessAlive,
-  isProcessZombie,
+  judgeProcessIdentity,
   listHostProcesses,
-  readProcessCommand,
+  readProcessIdentities,
   readProcessIdentityFacts,
-  readProcessStartTime,
   signalPidsBestEffort,
   waitForProcessExit,
 } from '@agent-device/host-kit/process';
@@ -22,10 +22,10 @@ const STOP_TIMEOUT_MS = 5_000;
 const FORCE_STOP_TIMEOUT_MS = 2_000;
 const PROCESS_TREE_TIMEOUT_MS = 5_000;
 /**
- * Budget for the identity reads that decide whether a process may be signaled. They run off
- * the event loop and concurrently across the set, so a loaded host costs this much wall time
- * per stop instead of blocking every other session on it, and a refused stop is recoverable
- * while a signal to the wrong process is not.
+ * Budget for every identity read here, including the ones that decide whether a process may be
+ * signaled. They run off the event loop and concurrently across the set, so a loaded host costs
+ * this much wall time per stop instead of blocking every other session on it, and a refused stop
+ * is recoverable while a signal to the wrong process is not.
  */
 const OWNERSHIP_PROBE_TIMEOUT_MS = 5_000;
 
@@ -49,10 +49,15 @@ export async function resolveManagedProcessIdentity(
   pid: number | undefined,
 ): Promise<ManagedProcessIdentity | undefined> {
   if (pid === undefined) return undefined;
-  const [startTime, command] = await Promise.all([
-    Promise.resolve(readProcessStartTime(pid)),
-    Promise.resolve(readProcessCommand(pid)),
-  ]);
+  return markerOf(pid, await readProcessIdentityFacts(pid, OWNERSHIP_PROBE_TIMEOUT_MS));
+}
+
+function markerOf(
+  pid: number,
+  facts: HostProcessIdentityFacts | undefined,
+): ManagedProcessIdentity | undefined {
+  const startTime = facts?.startTime;
+  const command = facts?.command;
   return startTime && command ? Object.freeze({ pid, startTime, command }) : undefined;
 }
 
@@ -60,14 +65,16 @@ export async function resolveManagedProcessTree(
   root: ManagedProcessIdentity,
 ): Promise<readonly ManagedProcessIdentity[]> {
   const processes = await readHostProcessTree(root.pid);
-  const tree = expandProcessTree([root.pid], processes);
-  const markers = await Promise.all(
-    tree.map(async (processInfo) => await resolveManagedProcessIdentity(processInfo.pid)),
-  );
-  const complete = markers.filter(
-    (marker): marker is ManagedProcessIdentity => marker !== undefined,
-  );
-  return Object.freeze([root, ...complete.filter((marker) => marker.pid !== root.pid)]);
+  const descendants = expandProcessTree([root.pid], processes)
+    .map(({ pid }) => pid)
+    .filter((pid) => pid !== root.pid);
+  // One identity read answers the whole tree.
+  const facts = await readProcessIdentities(descendants, OWNERSHIP_PROBE_TIMEOUT_MS);
+  const complete = descendants.flatMap((pid) => {
+    const marker = markerOf(pid, facts.get(pid));
+    return marker ? [marker] : [];
+  });
+  return Object.freeze([root, ...complete]);
 }
 
 /**
@@ -88,12 +95,13 @@ async function readHostProcessTree(rootPid: number): Promise<readonly HostProces
   }
 }
 
-export function inspectManagedProcess(
+export async function inspectManagedProcess(
   marker: ManagedProcessIdentity,
   commandMatches: ManagedProcessCommandMatcher = exactCommandMatch,
-): ManagedProcessOwnership {
-  if (!isProcessAlive(marker.pid) || isProcessZombie(marker.pid)) return 'missing';
-  return markerMatches(marker, commandMatches) ? 'owned-alive' : 'ownership-lost';
+): Promise<ManagedProcessOwnership> {
+  const evidence = await readOwnershipEvidence(marker, commandMatches);
+  if (evidence === 'gone') return 'missing';
+  return evidence === 'ours' ? 'owned-alive' : 'ownership-lost';
 }
 
 /**
@@ -115,11 +123,20 @@ async function readOwnershipEvidence(
 ): Promise<OwnershipEvidence> {
   if (!isProcessAlive(marker.pid)) return 'gone';
   const facts = await readProcessIdentityFacts(marker.pid, OWNERSHIP_PROBE_TIMEOUT_MS);
-  if (facts.zombie === true) return 'gone';
+  const verdict = judgeProcessIdentity(
+    {
+      startTime: marker.startTime,
+      matches: (observed) => commandMatches(marker.command, observed),
+    },
+    facts,
+  );
+  if (verdict === 'exited') return 'gone';
   if (marker.startTime.length === 0 || marker.command.length === 0) return 'not-ours';
-  if (facts.startTime === null || facts.command === null) return 'unprovable';
-  if (facts.startTime !== marker.startTime) return 'not-ours';
-  return commandMatches(marker.command, facts.command) ? 'ours' : 'not-ours';
+  if (verdict === 'reassigned') return 'not-ours';
+  if (verdict === 'ours') return 'ours';
+  // The host answered both facts and they do not name the marker: a refusal that also holds the
+  // spawned child's handle back, unlike a host that did not answer at all.
+  return facts.startTime !== null && facts.command !== null ? 'not-ours' : 'unprovable';
 }
 
 export async function terminateManagedProcessSet(
@@ -160,15 +177,18 @@ export async function terminateManagedProcessSet(
   const leftBehind = set.filter(
     ({ marker, evidence }) => !signaledPids.has(marker.pid) && evidence !== 'gone',
   );
+  let targets: readonly ManagedProcessIdentity[] = signalTargets;
+  let lost = leftBehind.length > 0;
   for (const [signal, timeoutMs] of [
     ['SIGINT', STOP_TIMEOUT_MS],
     ['SIGTERM', FORCE_STOP_TIMEOUT_MS],
     ['SIGKILL', FORCE_STOP_TIMEOUT_MS],
   ] as const) {
-    signalMarkerSet(signalTargets, signal, background);
-    if (await markerSetExits(signalTargets, timeoutMs, background, commandMatches)) {
-      return leftBehind.length === 0 ? 'terminated' : 'ownership-lost';
-    }
+    signalMarkerSet(targets, signal, background);
+    const settled = await settleMarkerSet(targets, timeoutMs, background, commandMatches);
+    lost ||= settled.lost;
+    targets = settled.running;
+    if (targets.length === 0) return lost ? 'ownership-lost' : 'terminated';
   }
   return 'ownership-lost';
 }
@@ -194,38 +214,38 @@ function signalMarkerSet(
   }
 }
 
-async function markerSetExits(
+/**
+ * Waits one rung's grace period, then re-proves every signaled marker before the next rung may
+ * signal it again. A marker that left is done; one the host now shows as another process, or
+ * cannot describe, is dropped from the set and reported as lost rather than signaled blind. The
+ * spawned child stays a target until Node reports it settled, since its handle reaches only it.
+ */
+async function settleMarkerSet(
   markers: readonly ManagedProcessIdentity[],
   timeoutMs: number,
   background: ManagedScreenRecordingProcess | undefined,
   commandMatches: ManagedProcessCommandMatcher,
-): Promise<boolean> {
+): Promise<{ running: ManagedProcessIdentity[]; lost: boolean }> {
   const directPid = background?.child.pid;
   const directSettled = background ? await settlesWithin(background.wait, timeoutMs) : false;
-  await Promise.all(
-    markers
-      .filter(({ pid }) => !directSettled || pid !== directPid)
-      .map(async ({ pid }) => await waitForProcessExit(pid, timeoutMs)),
+  const pending = markers.filter(({ pid }) => !directSettled || pid !== directPid);
+  const evidence = await Promise.all(
+    pending.map(async (marker) => {
+      await waitForProcessExit(marker.pid, timeoutMs);
+      return { marker, evidence: await readOwnershipEvidence(marker, commandMatches) };
+    }),
   );
-  return markers.every(
-    (marker) =>
-      (directSettled && marker.pid === directPid) ||
-      inspectManagedProcess(marker, commandMatches) === 'missing',
-  );
-}
-
-function markerMatches(
-  marker: ManagedProcessIdentity,
-  commandMatches: ManagedProcessCommandMatcher,
-): boolean {
-  const observedCommand = readProcessCommand(marker.pid);
-  return (
-    marker.startTime.length > 0 &&
-    marker.command.length > 0 &&
-    readProcessStartTime(marker.pid) === marker.startTime &&
-    observedCommand !== null &&
-    commandMatches(marker.command, observedCommand)
-  );
+  const running: ManagedProcessIdentity[] = [];
+  let lost = false;
+  for (const inspected of evidence) {
+    if (inspected.evidence === 'gone') continue;
+    if (inspected.evidence === 'ours' || inspected.marker.pid === directPid) {
+      running.push(inspected.marker);
+    } else {
+      lost = true;
+    }
+  }
+  return { running, lost };
 }
 
 async function settlesWithin(wait: Promise<unknown>, timeoutMs: number): Promise<boolean> {

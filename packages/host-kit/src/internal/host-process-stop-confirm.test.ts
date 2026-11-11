@@ -18,7 +18,7 @@ import {
 
 const PID = 4242;
 const BUDGET = { termTimeoutMs: 1_000, killTimeoutMs: 500 };
-type Signal = 'SIGTERM' | 'SIGKILL';
+type Signal = 'SIGTERM' | 'SIGINT' | 'SIGKILL';
 
 const START = 'Mon Oct 12 00:00:00 2026';
 const OTHER_START = 'Tue Oct 13 09:00:00 2026';
@@ -28,7 +28,11 @@ const STOPPED: ConfirmedProcessStop = { status: 'stopped' };
 /** `ps` found the row and told nothing for that column, which is unknown rather than absent. */
 const EMPTY = { stdout: '', stderr: '', exitCode: 0 };
 const PS_REFUSED = { stdout: '', stderr: 'ps: not permitted', exitCode: 1 };
-const psAnswer = (value: string) => ({ stdout: `${value}\n`, stderr: '', exitCode: 0 });
+const psRow = (...columns: string[]) => ({
+  stdout: `${[PID, ...columns].join(' ')}\n`,
+  stderr: '',
+  exitCode: 0,
+});
 const refused = (signal: Signal): ConfirmedProcessStop => ({
   status: 'retained',
   reason: 'signal-failed',
@@ -60,6 +64,12 @@ type HostCase = Readonly<{
   identity?: HostIdentity;
   /** A `ps` the host refuses outright, so identity cannot be read at all. */
   psFails?: boolean;
+  /** The command line the process shows once it has received this signal, as after an `exec`. */
+  commandAfterSignal?: Readonly<{ signal: Signal; command: string }>;
+  /** The signal after which the host refuses every `ps`, as one too loaded to answer. */
+  psFailsAfterSignal?: Signal;
+  /** The opening signal the caller names for its stop. */
+  gracefulSignal?: 'SIGTERM' | 'SIGINT';
   /** The signals the stop must spend, in order, and the verdict each host answer earns. */
   expect: { outcome: ConfirmedProcessStop; signals: Signal[] };
 }>;
@@ -72,9 +82,17 @@ const UNREADABLE = { identity: { startTime: null, command: null } } satisfies Ho
 /** The process has run its course: liveness stops answering for it before anything is signaled. */
 const GONE = { exitsAfterProbes: 0 } satisfies HostModel;
 const ZOMBIE = { ...GONE, afterExit: 'zombie' } satisfies HostModel;
-const STOPPED_BY_TERM: Expect = { outcome: STOPPED, signals: ['SIGTERM'] };
-const STOPPED_BY_KILL: Expect = { outcome: STOPPED, signals: ['SIGTERM', 'SIGKILL'] };
+const STOPPED_BY_TERM: Expect = {
+  outcome: { status: 'stopped', signal: 'SIGTERM' },
+  signals: ['SIGTERM'],
+};
+const STOPPED_BY_KILL: Expect = {
+  outcome: { status: 'stopped', signal: 'SIGKILL' },
+  signals: ['SIGTERM', 'SIGKILL'],
+};
 const NEVER_SIGNALED: Expect = { outcome: STOPPED, signals: [] };
+/** The pid was proven to name another process before anything was signaled. */
+const REASSIGNED: Expect = { outcome: { status: 'stopped', reassigned: true }, signals: [] };
 const REFUSED_ON_TERM: Expect = { outcome: refused('SIGTERM'), signals: ['SIGTERM'] };
 const REFUSED_ON_KILL: Expect = { outcome: refused('SIGKILL'), signals: STOPPED_BY_KILL.signals };
 const EXIT_TIMED_OUT: Expect = {
@@ -152,19 +170,21 @@ const STOP_CASES: HostCase[] = [
   },
   {
     // Windows hides only the command line of an elevated or other-user process, and that is the #3540
-    // companion: it must be signaled and retained, never reported stopped.
+    // companion. With one recorded claim unread its lifetime is unconfirmed: it is retained, never
+    // signaled, and never reported stopped.
     name: 'recorded process hides its command line, as an elevated one does',
     identity: { command: null },
     ...DENIED_ON_TERM,
     ...HELD,
-    expect: REFUSED_ON_TERM,
+    expect: UNVERIFIED,
   },
   {
+    // The start-time and command reads fail independently: a matching command beside a start time
+    // the host did not answer is not a confirmed lifetime.
     name: 'recorded process hides its start time',
     identity: { startTime: null },
-    ...DENIED_ON_TERM,
     ...HELD,
-    expect: REFUSED_ON_TERM,
+    expect: UNVERIFIED,
   },
   {
     // POSIX `hidepid`, a `ps` that times out, or a Windows process that exited while its object still
@@ -181,19 +201,63 @@ const STOP_CASES: HostCase[] = [
     expect: UNVERIFIED,
   },
   {
-    name: 'pid the host has handed to another lifetime',
-    identity: { startTime: OTHER_START },
-    expect: NEVER_SIGNALED,
+    // The grace period ends with the same lifetime running another program, as after an `exec`:
+    // that is neither proof it is gone nor permission for SIGKILL, so it is retained.
+    name: 'execs another program while it is given its grace period',
+    commandAfterSignal: { signal: 'SIGTERM', command: '/usr/bin/other --serve' },
+    ...HELD,
+    expect: { outcome: UNVERIFIED.outcome, signals: ['SIGTERM'] },
   },
   {
-    name: 'pid whose command line names a different program',
+    name: 'finalizes on the interrupt its caller opens with',
+    gracefulSignal: 'SIGINT',
+    exitsOnSignal: 'SIGINT',
+    expect: { outcome: { status: 'stopped', signal: 'SIGINT' }, signals: ['SIGINT'] },
+  },
+  {
+    name: 'ignores the interrupt its caller opens with and takes SIGKILL',
+    gracefulSignal: 'SIGINT',
+    exitsOnSignal: 'SIGKILL',
+    expect: { outcome: STOPPED_BY_KILL.outcome, signals: ['SIGINT', 'SIGKILL'] },
+  },
+  {
+    name: 'pid the host has handed to another lifetime',
+    identity: { startTime: OTHER_START },
+    expect: REASSIGNED,
+  },
+  {
+    // A confirmed start time with another command line is the same lifetime, as after an argv
+    // rewrite: never signaled, and never reported gone.
+    name: 'pid whose command line names a different program under its recorded lifetime',
     identity: { command: '/usr/bin/other --serve' },
-    expect: NEVER_SIGNALED,
+    expect: UNVERIFIED,
+  },
+  {
+    // A recorded start time the host withholds cannot rule out an `exec`, so a command mismatch is
+    // not proof the pid changed hands.
+    name: 'pid whose command line differs while its recorded start time is withheld',
+    identity: { startTime: null, command: '/usr/bin/other --serve' },
+    expect: UNVERIFIED,
+  },
+  {
+    name: 'pid whose command line names a different program, with only a command recorded',
+    claims: 'matches',
+    identity: { command: '/usr/bin/other --serve' },
+    expect: REASSIGNED,
+  },
+  {
+    // A `ps` that stops answering under load after the grace period is not permission for SIGKILL:
+    // every signal needs a host-confirmed identity.
+    name: 'stops being described by the host during its grace period',
+    psFailsAfterSignal: 'SIGTERM',
+    ...HELD,
+    expect: { outcome: UNVERIFIED.outcome, signals: ['SIGTERM'] },
   },
 ];
 
 function driveHost(model: HostCase): { signals: Signal[] } {
   const signals: Signal[] = [];
+  let psRefused = false;
   let ended = false;
   let probes = 0;
   const hasEnded = () =>
@@ -211,6 +275,9 @@ function driveHost(model: HostCase): { signals: Signal[] } {
     }
     const name = signal as Signal;
     signals.push(name);
+    if (model.psFailsAfterSignal === name) psRefused = true;
+    if (model.commandAfterSignal?.signal === name)
+      identity.command = model.commandAfterSignal.command;
     const errno = model.answers?.[name];
     if (errno) throw Object.assign(new Error(`kill refused: ${errno}`), { code: errno });
     if (model.exitsOnSignal === name) ended = true;
@@ -219,20 +286,22 @@ function driveHost(model: HostCase): { signals: Signal[] } {
 
   // Absent means the recorded process, `null` means the host withholds the column, and a string is
   // what it says instead.
-  const identity = {
+  const identity: { startTime: string | null; command: string | null } = {
     startTime: model.identity?.startTime === undefined ? START : model.identity.startTime,
     command: model.identity?.command === undefined ? COMMAND : model.identity.command,
   };
   mockRunCmd.mockImplementation(async (_command: string, args: readonly string[]) => {
-    if (model.psFails) return PS_REFUSED;
+    if (model.psFails || psRefused) return PS_REFUSED;
     // A process the host has fully released, and one that left no row, both answer no fields.
     if (hasEnded() && model.afterExit !== 'zombie') return EMPTY;
     const field = String(args[3]);
-    if (field === 'state=') return psAnswer(hasEnded() && model.afterExit === 'zombie' ? 'Z' : 'S');
+    const state = hasEnded() && model.afterExit === 'zombie' ? 'Z' : 'S';
     // Withheld is its own answer: `ps` finds the row and reports nothing for that column, which is
     // how Windows answers `CommandLine` for another user's process.
-    const column = field === 'lstart=' ? identity.startTime : identity.command;
-    return column === null ? EMPTY : psAnswer(column);
+    if (field === 'pid=,state=,lstart=') {
+      return identity.startTime === null ? psRow(state) : psRow(state, identity.startTime);
+    }
+    return identity.command === null ? EMPTY : psRow(identity.command);
   });
   return { signals };
 }
@@ -262,7 +331,10 @@ test.skipIf(process.platform === 'win32').each(STOP_CASES)(
     const host = driveHost(testCase);
     // Both stage budgets, advanced on a fake clock: a retained outcome must not cost real time.
     vi.useFakeTimers();
-    const stop = stopProcessAndConfirmExit(targetOf(testCase), BUDGET);
+    const budget = testCase.gracefulSignal
+      ? { ...BUDGET, gracefulSignal: testCase.gracefulSignal }
+      : BUDGET;
+    const stop = stopProcessAndConfirmExit(targetOf(testCase), budget);
     await vi.advanceTimersByTimeAsync(BUDGET.termTimeoutMs + BUDGET.killTimeoutMs);
 
     assert.deepEqual(await stop, testCase.expect.outcome);

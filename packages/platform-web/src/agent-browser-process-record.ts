@@ -9,8 +9,7 @@ import {
   isProcessAlive,
   listHostProcesses,
   readHostProcessIdentityObservationsAsync,
-  readProcessCommand,
-  readProcessStartTime,
+  readProcessIdentities,
   type HostProcessInfo,
   type OwnedProcessRecordStore,
 } from '@agent-device/host-kit/process';
@@ -98,11 +97,12 @@ export async function recordManagedAgentBrowserProcesses(
       reason: matchManagedAgentBrowserProcess(process, ownership)?.reason ?? 'descendant',
     })),
   };
-  const records: OwnedProcessRecord[] = summary.processes.flatMap(({ process: processInfo }) => {
-    const startTime = readProcessStartTime(processInfo.pid);
-    const command = readProcessCommand(processInfo.pid);
+  // One off-loop identity read answers the whole fleet.
+  const identities = await readProcessIdentities(summary.pids);
+  const records: OwnedProcessRecord[] = summary.pids.flatMap((pid) => {
+    const { startTime, command } = identities.get(pid) ?? {};
     return startTime && command
-      ? [{ pid: processInfo.pid, startTime, command, purpose: MANAGED_WEB_BROWSER_PROCESS_PURPOSE }]
+      ? [{ pid, startTime, command, purpose: MANAGED_WEB_BROWSER_PROCESS_PURPOSE }]
       : [];
   });
   if (records.length > 0) store.replace({ kind: 'daemon' }, records);

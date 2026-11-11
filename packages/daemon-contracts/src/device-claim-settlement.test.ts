@@ -8,6 +8,7 @@ import {
   acquireDeviceClaim as acquireProductionDeviceClaim,
   acquireTransientDeviceClaim,
   canonicalLocalDeviceKey,
+  clearDeviceClaim,
   inspectDeviceClaims,
   inspectDeviceClaimAcquisition,
   renewDeviceClaim,
@@ -795,4 +796,25 @@ test('an owner that reopened its app after the reboot keeps the device', async (
   if (foreign.status !== 'conflict') return;
   assert.equal(foreign.conflict.classification, 'live');
   assert.equal(storedClaim().session, 'cwd:/w:default');
+});
+
+// Claim writes run on the daemon event loop every session shares. Acquiring a free device and
+// clearing it again compares recorded owners only, so no owner is ever asked about.
+test('acquiring and clearing a free device never blocks on the process table', async () => {
+  const root = useClaimsRoot();
+  const syncReads = vi.spyOn(hostProcess, 'readHostProcessIdentityObservations');
+  const asyncReads = vi.spyOn(hostProcess, 'readHostProcessIdentityObservationsAsync');
+
+  const acquired = await acquireDeviceClaim({
+    env: process.env,
+    device,
+    session: 'counted',
+    workspace: '/worktrees/counted',
+    stateDir: root,
+  });
+  if (acquired.status !== 'acquired') throw new Error('acquisition was refused');
+  assert.equal(await clearDeviceClaim(acquired.ownership, process.env), 'deleted');
+
+  assert.equal(syncReads.mock.calls.length, 0);
+  assert.equal(asyncReads.mock.calls.length, 0);
 });

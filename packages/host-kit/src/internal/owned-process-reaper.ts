@@ -1,10 +1,5 @@
 import type { OwnedProcessRecord } from '@agent-device/contracts/platform-runtime-host';
-import {
-  isProcessAlive,
-  readProcessIdentityFacts,
-  waitForProcessExit,
-  type HostProcessIdentityFacts,
-} from './host-process.ts';
+import { stopProcessAndConfirmExit, type ConfirmedProcessStop } from './host-process.ts';
 import type { OwnedProcessRecordRead, OwnedProcessRecordStore } from './owned-process-record.ts';
 
 const DEFAULT_TERM_TIMEOUT_MS = 1_500;
@@ -17,8 +12,12 @@ export type OwnedProcessReapSummary = Readonly<{
   terminatedPids: readonly number[];
   missing: number;
   missingPids: readonly number[];
-  ownershipLost: number;
-  ownershipLostPids: readonly number[];
+  /** Records kept because the host would not confirm the pid still runs the recorded process. */
+  unconfirmed: number;
+  unconfirmedPids: readonly number[];
+  /** Records kept because the confirmed process outlived SIGKILL or refused the signal. */
+  survived: number;
+  survivedPids: readonly number[];
   skippedForOpenWebSession: boolean;
 }>;
 
@@ -55,8 +54,10 @@ type MutableReapSummary = {
   terminatedPids: number[];
   missing: number;
   missingPids: number[];
-  ownershipLost: number;
-  ownershipLostPids: number[];
+  unconfirmed: number;
+  unconfirmedPids: number[];
+  survived: number;
+  survivedPids: number[];
   skippedForOpenWebSession: boolean;
 };
 
@@ -75,8 +76,10 @@ function createReapSummary(): MutableReapSummary {
     terminatedPids: [],
     missing: 0,
     missingPids: [],
-    ownershipLost: 0,
-    ownershipLostPids: [],
+    unconfirmed: 0,
+    unconfirmedPids: [],
+    survived: 0,
+    survivedPids: [],
     skippedForOpenWebSession: false,
   };
 }
@@ -137,84 +140,48 @@ function isOpenWebSessionSkip(
   return scope === 'daemon' && record.purpose === 'managed-web-browser' && policy.openWebSession;
 }
 
+type ReapOutcome = 'terminated' | 'missing' | 'unconfirmed' | 'survived';
+
 function appendReapOutcome(
   summary: MutableReapSummary,
   record: OwnedProcessRecord,
-  outcome: Awaited<ReturnType<typeof reapOwnedProcess>>,
+  outcome: ReapOutcome,
   retained: OwnedProcessRecord[],
 ): void {
-  if (outcome === 'terminated') {
-    summary.terminated += 1;
-    summary.terminatedPids.push(record.pid);
-    return;
-  }
-  if (outcome === 'missing') {
-    summary.missing += 1;
-    summary.missingPids.push(record.pid);
-    return;
-  }
-  summary.ownershipLost += 1;
-  summary.ownershipLostPids.push(record.pid);
-  retained.push(record);
+  summary[outcome] += 1;
+  summary[`${outcome}Pids`].push(record.pid);
+  if (outcome === 'unconfirmed' || outcome === 'survived') retained.push(record);
 }
 
+/**
+ * Stops one recorded process through the shared escalation. The record names the process by start
+ * time and exact command, and both must be read and match before any signal. A pid the host shows
+ * in another lifetime is proven gone and never signaled; one the host will not fully describe, or
+ * that shows the recorded lifetime running another command, is kept rather than guessed at.
+ */
 async function reapOwnedProcess(
   record: OwnedProcessRecord,
   policy: Pick<ReapPolicy, 'termTimeoutMs' | 'killTimeoutMs'>,
-): Promise<'terminated' | 'missing' | 'ownership-lost'> {
-  const initial = await inspectOwnedProcess(record);
-  if (initial !== undefined) return initial;
-  signalBestEffort(record.pid, initialSignalFor(record));
-  return await escalateOwnedProcess(record, policy);
+): Promise<ReapOutcome> {
+  if (record.pid === process.pid) return 'missing';
+  const stop = await stopProcessAndConfirmExit(
+    {
+      pid: record.pid,
+      identity: { startTime: record.startTime, matches: (command) => command === record.command },
+    },
+    { ...policy, gracefulSignal: gracefulSignalFor(record) },
+  );
+  return reapOutcomeOf(stop);
 }
 
-async function inspectOwnedProcess(
-  record: OwnedProcessRecord,
-): Promise<'missing' | 'ownership-lost' | undefined> {
-  if (record.pid === process.pid || !isProcessAlive(record.pid)) return 'missing';
-  // One off-loop identity read answers the whole decision. Per-field probes
-  // would spend a fresh process-tool startup on every record on hosts where
-  // each read spawns a query tool rather than one cheap `ps`.
-  const facts = await readProcessIdentityFacts(record.pid);
-  if (facts.zombie) return 'missing';
-  return matchesFacts(record, facts) ? undefined : 'ownership-lost';
+function reapOutcomeOf(stop: ConfirmedProcessStop): ReapOutcome {
+  // A pid proven to name another process is forgotten as missing, whether or not it was signaled
+  // first: nobody watched the recorded process leave.
+  if (stop.status === 'stopped') return stop.signal && !stop.reassigned ? 'terminated' : 'missing';
+  return stop.reason === 'identity-unverified' ? 'unconfirmed' : 'survived';
 }
 
-function initialSignalFor(record: OwnedProcessRecord): NodeJS.Signals {
+// simctl finalizes a recording only on SIGINT; SIGTERM leaves an unplayable file.
+function gracefulSignalFor(record: OwnedProcessRecord): 'SIGINT' | 'SIGTERM' {
   return record.purpose === 'simctl-screen-recording' ? 'SIGINT' : 'SIGTERM';
-}
-
-async function escalateOwnedProcess(
-  record: OwnedProcessRecord,
-  policy: Pick<ReapPolicy, 'termTimeoutMs' | 'killTimeoutMs'>,
-): Promise<'terminated' | 'ownership-lost'> {
-  const termOutcome = await waitForOwnedProcessExit(record, policy.termTimeoutMs);
-  if (termOutcome === 'exited') return 'terminated';
-  if (termOutcome === 'ownership-lost') return 'ownership-lost';
-  signalBestEffort(record.pid, 'SIGKILL');
-  const killOutcome = await waitForOwnedProcessExit(record, policy.killTimeoutMs);
-  return killOutcome === 'exited' ? 'terminated' : 'ownership-lost';
-}
-
-async function waitForOwnedProcessExit(
-  record: OwnedProcessRecord,
-  timeoutMs: number,
-): Promise<'exited' | 'owned-alive' | 'ownership-lost'> {
-  await waitForProcessExit(record.pid, timeoutMs);
-  if (!isProcessAlive(record.pid)) return 'exited';
-  const facts = await readProcessIdentityFacts(record.pid);
-  if (facts.zombie) return 'exited';
-  return matchesFacts(record, facts) ? 'owned-alive' : 'ownership-lost';
-}
-
-function matchesFacts(record: OwnedProcessRecord, facts: HostProcessIdentityFacts): boolean {
-  return facts.startTime === record.startTime && facts.command === record.command;
-}
-
-function signalBestEffort(pid: number, signal: NodeJS.Signals): void {
-  try {
-    process.kill(pid, signal);
-  } catch {
-    // The process may have exited between the identity read and the signal.
-  }
 }

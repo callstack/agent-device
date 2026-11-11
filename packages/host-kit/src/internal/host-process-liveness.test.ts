@@ -16,6 +16,7 @@ import {
   isProcessZombie,
   readHostProcessIdentityObservations,
   readHostProcessIdentityObservationsAsync,
+  readProcessIdentities,
   readProcessIdentityFacts,
 } from './host-process.ts';
 
@@ -23,9 +24,10 @@ function psReturns(stdout: string, exitCode = 0): void {
   mockRunCmdSync.mockReturnValue({ stdout, stderr: '', exitCode });
 }
 
-function psAnswersEachField(fields: Record<string, string>): void {
+/** Answers the two batched identity reads: state and start time, and the command line. */
+function psAnswersIdentity(rows: { identity?: string; command?: string }): void {
   mockRunCmd.mockImplementation(async (_cmd: string, args: string[]) => {
-    const value = fields[args[3]!];
+    const value = args[3] === 'pid=,command=' ? rows.command : rows.identity;
     return { stdout: value ?? '', stderr: '', exitCode: value === undefined ? 1 : 0 };
   });
 }
@@ -133,11 +135,10 @@ test('no pid to ask about means no process tool runs at all', async () => {
   assert.equal(mockRunCmdSync.mock.calls.length, 0);
 });
 
-test('the ownership read spends the budget its caller names on every field', async () => {
-  psAnswersEachField({
-    'lstart=': 'Mon Aug 10 20:00:00 2026',
-    'command=': '/bin/simctl io recordVideo out.mp4',
-    'state=': 'Ss',
+test('the ownership read spends the budget its caller names on both batched reads', async () => {
+  psAnswersIdentity({
+    identity: '4242 Ss   Mon Aug 10 20:00:00 2026\n',
+    command: '4242 /bin/simctl io recordVideo out.mp4\n',
   });
 
   const facts = await readProcessIdentityFacts(4242, 5_000);
@@ -147,10 +148,59 @@ test('the ownership read spends the budget its caller names on every field', asy
     command: '/bin/simctl io recordVideo out.mp4',
     zombie: false,
   });
-  assert.equal(mockRunCmd.mock.calls.length, 3);
+  assert.deepEqual(
+    mockRunCmd.mock.calls.map((call) => call[1]),
+    [
+      ['-p', '4242', '-o', 'pid=,state=,lstart='],
+      ['-p', '4242', '-o', 'pid=,command='],
+    ],
+  );
   for (const call of mockRunCmd.mock.calls) {
     assert.equal(call[2]?.timeoutMs, 5_000);
   }
+});
+
+test('one identity read answers a whole fleet from two ps runs, on Linux and macOS output', async () => {
+  // procps pads a one-digit day with a space; BSD ps on macOS prints the same lstart layout. The
+  // command keeps its own spaces, and a pid the host did not list stays unknown.
+  psAnswersIdentity({
+    identity: [
+      '  101 Ss   Mon Nov  9 10:00:00 2026',
+      '  202 Z+   Tue Nov 10 08:30:00 2026',
+      '',
+    ].join('\n'),
+    command: [
+      '  101 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --headless',
+      '  202 [chrome] <defunct>',
+      '',
+    ].join('\n'),
+  });
+
+  const facts = await readProcessIdentities([101, 202, 303, 101]);
+
+  assert.deepEqual(
+    [...facts.entries()],
+    [
+      [
+        101,
+        {
+          startTime: 'Mon Nov  9 10:00:00 2026',
+          command: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --headless',
+          zombie: false,
+        },
+      ],
+      [202, { startTime: 'Tue Nov 10 08:30:00 2026', command: '[chrome] <defunct>', zombie: true }],
+      [303, { startTime: null, command: null, zombie: null }],
+    ],
+  );
+  assert.deepEqual(
+    mockRunCmd.mock.calls.map((call) => call[1]),
+    [
+      ['-p', '101,202,303', '-o', 'pid=,state=,lstart='],
+      ['-p', '101,202,303', '-o', 'pid=,command='],
+    ],
+  );
+  assert.equal(mockRunCmdSync.mock.calls.length, 0, 'the identity read never blocks the loop');
 });
 
 test('the ownership read reports an unanswered host as unknown, not as absence', async () => {
@@ -164,20 +214,17 @@ test('the ownership read reports an unanswered host as unknown, not as absence',
 });
 
 test('the ownership read leaves the zombie question open when only the state is unreadable', async () => {
-  psAnswersEachField({
-    'lstart=': 'Mon Aug 10 20:00:00 2026',
-    'command=': '/bin/simctl io recordVideo out.mp4',
-  });
+  psAnswersIdentity({ command: '4242 /bin/simctl io recordVideo out.mp4\n' });
 
   assert.deepEqual(await readProcessIdentityFacts(4242, 5_000), {
-    startTime: 'Mon Aug 10 20:00:00 2026',
+    startTime: null,
     command: '/bin/simctl io recordVideo out.mp4',
     zombie: null,
   });
 });
 
 test('the ownership read answers the zombie question from the state field', async () => {
-  psAnswersEachField({ 'lstart=': 'x', 'command=': 'y', 'state=': 'ZN' });
+  psAnswersIdentity({ identity: '4242 ZN x\n', command: '4242 y\n' });
 
   assert.deepEqual(await readProcessIdentityFacts(4242), {
     startTime: 'x',
@@ -191,7 +238,7 @@ test('the ownership read answers the zombie question from the state field', asyn
 test('a host without /bin/ps reads identity through the NixOS system profile procps', async () => {
   psInstalledAt(['/run/current-system/sw/bin/ps']);
   psReturns('4242 Ss   Mon Aug 10 20:00:00 2026\n');
-  psAnswersEachField({ 'lstart=': 'x', 'command=': 'y', 'state=': 'Ss' });
+  psAnswersIdentity({ identity: '4242 Ss x\n', command: '4242 y\n' });
 
   assert.equal(
     readHostProcessIdentityObservations([4242]).get(4242)?.startTime,
