@@ -537,19 +537,33 @@ function isViewportAboveBottomBar(
     return false;
   if (!isViewportFootprint(rect, { ...viewport, height: bottom - viewport.y })) return false;
   const siblings = neighbourhood.childrenByParent.get(node.parentIndex ?? -1) ?? [];
-  return siblings.some((sibling) => {
-    if (!nodeKindIncludesAny(sibling, ['button', 'tabitem', 'tabbar'])) return false;
+  const buttons = siblings.flatMap((sibling) => {
+    if (!nodeKindIncludesAny(sibling, ['button'])) return [];
     const bar = positiveRect(sibling.rect);
-    if (!bar) return false;
-    return (
-      Math.abs(bar.y - bottom) <= 0.5 &&
+    if (!bar) return [];
+    return Math.abs(bar.y - bottom) <= 0.5 &&
       bar.x >= viewport.x &&
       bar.x + bar.width <= viewport.x + viewport.width &&
       bar.height <= viewport.height / 4 &&
       bar.y + bar.height >= viewport.y + viewport.height * 0.9 &&
       bar.y + bar.height <= viewport.y + viewport.height + 0.5
-    );
+      ? [bar]
+      : [];
   });
+  buttons.sort((a, b) => a.x - b.x);
+  if (buttons.length < 2 || Math.abs(buttons[0]!.x - viewport.x) > 0.5) return false;
+  let edge = viewport.x;
+  const first = buttons[0]!;
+  for (const button of buttons) {
+    if (
+      Math.abs(button.x - edge) > 0.5 ||
+      Math.abs(button.y - first.y) > 0.5 ||
+      Math.abs(button.height - first.height) > 0.5
+    )
+      return false;
+    edge = button.x + button.width;
+  }
+  return Math.abs(edge - (viewport.x + viewport.width)) <= 0.5;
 }
 
 function isAdditionalOverlayRootNode(

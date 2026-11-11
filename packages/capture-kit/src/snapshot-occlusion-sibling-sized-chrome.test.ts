@@ -984,3 +984,11 @@ test('a sheet with the same footprint and adjoining tab buttons still covers con
   nodes[4]!.type = 'Sheet';
   assert.equal(annotateCoveredSnapshotNodes(nodes)[1]?.interactionBlocked, 'covered');
 });
+
+test('a single bottom CTA does not exempt a covering toolbar (#4365)', () => {
+  const nodes = projectedTabsTree();
+  nodes.splice(6, 2);
+  nodes[5]!.label = 'Continue';
+  nodes[5]!.rect = { x: 0, y: 791, width: 402, height: 49 };
+  assert.equal(annotateCoveredSnapshotNodes(nodes)[1]?.interactionBlocked, 'covered');
+});
