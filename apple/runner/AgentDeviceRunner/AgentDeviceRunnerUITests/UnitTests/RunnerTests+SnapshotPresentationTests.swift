@@ -55,7 +55,7 @@ extension RunnerTests {
 
     XCTAssertEqual(
       String(decoding: encoded, as: UTF8.self),
-      #"[{"actions":["Open menu"],"depth":2,"enabled":true,"focused":true,"hiddenContentAbove":true,"hiddenContentBelow":true,"hittable":true,"identifier":"continue-button","index":3,"label":"Continue","parentIndex":1,"placeholder":"Type here","rect":{"height":44,"width":100,"x":10,"y":20},"selected":true,"type":"Button","value":"Ready"}]"#
+      #"[{"actions":["Open menu"],"depth":2,"enabled":true,"focused":true,"hiddenContentAbove":true,"hiddenContentBelow":true,"hittable":true,"identifier":"continue-button","index":3,"label":"Continue","nativePressTarget":{"identifier":"continue-button","label":"Continue","rect":{"height":44,"width":100,"x":10,"y":20},"type":"Button","value":"Ready"},"parentIndex":1,"placeholder":"Type here","rect":{"height":44,"width":100,"x":10,"y":20},"selected":true,"type":"Button","value":"Ready"}]"#
     )
     XCTAssertEqual(capture.truncated, true)
     XCTAssertEqual(capture.effectiveDepth, 4)

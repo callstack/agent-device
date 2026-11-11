@@ -380,17 +380,17 @@ extension RunnerTests {
     func text(_ value: Any?) -> String {
       String(describing: value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    guard let type = Self.elementTypeNamesByRawValue.first(where: { $0.value == target.type })?.key else {
+    guard let type = Self.nativePressElementType(target.type) else {
       return Response(ok: true, data: DataPayload(pressReadiness: "missing", pressReadinessAppBundleId: appBundleId))
     }
     let identity = NSPredicate(format: "elementType == %@", NSNumber(value: type))
     let matches = try elementQueries(app: app, matching: .any)
       .flatMap { $0.matching(identity).allElementsBoundByIndex }
       .filter { element in
-        guard element.exists else { return false }
+        guard element.exists, element.elementType.rawValue == type else { return false }
         let frame = element.frame
         guard frame.contains(point) else { return false }
-        return target.matches(type: elementTypeName(element.elementType), identifier: element.identifier,
+        return target.matches(type: target.type, identifier: element.identifier,
           label: element.label, value: target.type == "SecureTextField" ? nil : text(element.value), rect: SnapshotRect(frame))
       }
     let state = matches.count > 1 ? "ambiguous" : matches.first.map { $0.isHittable ? "ready" : "blocked" } ?? "missing"

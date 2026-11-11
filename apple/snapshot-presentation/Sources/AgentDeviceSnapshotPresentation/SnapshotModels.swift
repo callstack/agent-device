@@ -34,6 +34,14 @@ public struct NativePressTarget: Codable, Equatable {
   public let label: String?
   public let value: String?
   public let rect: SnapshotRect
+
+  public init(type: String, identifier: String?, label: String?, value: String?, rect: SnapshotRect) {
+    self.type = type
+    self.identifier = identifier
+    self.label = label
+    self.value = type == "SecureTextField" ? nil : value
+    self.rect = rect
+  }
 }
 
 public struct RawAXNode: Equatable {
@@ -75,9 +83,10 @@ public struct RawAXNode: Equatable {
     parentIndex: Int?,
     hiddenContentAbove: Bool?,
     hiddenContentBelow: Bool?,
-    actions: [String]? = nil
+    actions: [String]? = nil,
+    nativePressTarget: NativePressTarget? = nil
   ) {
-    self.nativePressTarget = NativePressTarget(type: type, identifier: identifier, label: label,
+    self.nativePressTarget = nativePressTarget ?? NativePressTarget(type: type, identifier: identifier, label: label,
       value: type == "SecureTextField" ? nil : value, rect: rect)
     self.index = index
     self.type = type

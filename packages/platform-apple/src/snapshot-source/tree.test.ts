@@ -827,3 +827,27 @@ for (const row of traitClassification.cases) {
     assert.deepEqual(actual, row.bridge.expected, row.name);
   });
 }
+
+// Independent numeric wire vocabulary shared with the runner readiness binder; no source parsing.
+test('bridge native element names match the cross-producer golden type table', () => {
+  const names = JSON.parse(
+    fs.readFileSync(
+      new URL('../../../../contracts/fixtures/ios-element-type-names.json', import.meta.url),
+      'utf8',
+    ),
+  ) as string[];
+  assert.equal(names.length, 83);
+  for (const [code, name] of names.entries()) {
+    const decoded = decodeSnapshotBridgeTree(
+      {
+        [automationType]: code,
+        [label]: 'Control',
+        [frame]: { X: 10, Y: 20, Width: 100, Height: 40 },
+        [children]: [],
+      },
+      { truncated: false },
+      limits,
+    );
+    assert.equal(decoded.nodes[0]?.type, name, `native type ${code}`);
+  }
+});

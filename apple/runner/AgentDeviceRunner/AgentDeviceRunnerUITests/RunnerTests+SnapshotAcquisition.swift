@@ -223,7 +223,12 @@ extension RunnerTests {
       depth: depth,
       parentIndex: parentIndex,
       hiddenContentAbove: nil,
-      hiddenContentBelow: nil
+      hiddenContentBelow: nil,
+      nativePressTarget: NativePressTarget(type: elementTypeName(snapshot.elementType),
+        identifier: evaluation.identifier.isEmpty ? nil : evaluation.identifier,
+        label: snapshot.label.isEmpty ? nil : snapshot.label,
+        value: snapshot.elementType == .secureTextField ? nil : Self.valueText(snapshot.value),
+        rect: SnapshotRect(snapshot.frame))
     )
   }
 

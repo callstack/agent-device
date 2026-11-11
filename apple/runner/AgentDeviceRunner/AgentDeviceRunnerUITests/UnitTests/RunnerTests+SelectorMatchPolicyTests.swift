@@ -3,6 +3,20 @@ import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+  func testNativePressTypesMatchBridgeGoldenNamesAndUnnamedRunnerTypes() throws {
+    let root = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let names = try JSONDecoder().decode([String].self, from:
+      Data(contentsOf: root.appendingPathComponent("contracts/fixtures/ios-element-type-names.json")))
+    XCTAssertEqual(Self.nativePressElementTypeNames, names)
+    XCTAssertEqual(Self.nativePressElementType("PageIndicator"), XCUIElement.ElementType.pageIndicator.rawValue)
+    XCTAssertEqual(Self.nativePressElementType("PickerWheel"), XCUIElement.ElementType.pickerWheel.rawValue)
+    XCTAssertEqual(Self.nativePressElementType("DatePicker"), XCUIElement.ElementType.datePicker.rawValue)
+    XCTAssertEqual(Self.nativePressElementType("Element(123)"), 123)
+    XCTAssertNil(Self.nativePressElementType("Element(0123)"))
+  }
+
   func testAuthorizedPressTargetMatchesGoldenParityTable() throws {
     struct Fixture: Decodable {
       let name: String
