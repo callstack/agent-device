@@ -276,6 +276,25 @@ export function createOwnedReplayStateDir(): OwnedReplayStateDir {
   return owned;
 }
 
+/**
+ * Tightens a state path an older launcher left at the umask default. The repair never decides
+ * whether the daemon starts: a path another user owns, or a mount without chmod, keeps its mode.
+ */
+function repairStateMode(target: string, mode: number): void {
+  try {
+    fs.chmodSync(target, mode);
+  } catch (error) {
+    if (!MODE_REPAIR_SKIPPED_CODES.has((error as NodeJS.ErrnoException).code ?? '')) throw error;
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'daemon_state_mode_repair_skipped',
+      data: { path: target, error: normalizeError(error) },
+    });
+  }
+}
+
+const MODE_REPAIR_SKIPPED_CODES = new Set(['EPERM', 'EROFS', 'ENOTSUP', 'EOPNOTSUPP']);
+
 /** Launches and monitors the actual child before recording its private-directory authority. */
 export function launchDaemonProcess(
   input: Readonly<{
@@ -294,9 +313,11 @@ export function launchDaemonProcess(
     throw new AppError('COMMAND_FAILED', 'Replay daemon startup admission is closed.', {
       reason: 'daemon_startup_admission_closed',
     });
-  fs.mkdirSync(input.paths.baseDir, { recursive: true });
-  const logFd = fs.openSync(input.paths.logPath, 'a');
+  fs.mkdirSync(input.paths.baseDir, { recursive: true, mode: 0o700 });
+  repairStateMode(input.paths.baseDir, 0o700);
+  const logFd = fs.openSync(input.paths.logPath, 'a', 0o600);
   try {
+    repairStateMode(input.paths.logPath, 0o600);
     const monitored = runCmdDetachedMonitored(process.execPath, input.args, {
       cwd: input.cwd,
       env: {
