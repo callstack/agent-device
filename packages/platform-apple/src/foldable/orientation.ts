@@ -18,7 +18,7 @@ import {
   type AppleDisplayInventory,
 } from '../core/display-inventory.ts';
 import { simulatorAddressFor } from '../core/simctl.ts';
-import { createFoldHelper, type FoldHelper } from './fold-helper.ts';
+import { createFoldHelper, type FoldHelper, type FoldableRotation } from './fold-helper.ts';
 import {
   measuredPanelPickerOffset,
   nextPickerValue,
@@ -175,75 +175,113 @@ export async function setAppleFoldableOrientation(
  */
 async function setScopedFoldableOrientation(
   device: DeviceInfo,
-  rotation: DeviceRotation,
+  rotation: FoldableRotation,
   signal: AbortSignal | undefined,
 ): Promise<{ orientation: DeviceRotation }> {
   const helper = createFoldHelper(device);
-  let pickerValue: DeviceRotation | undefined;
-  let panelOffset: PanelQuarterTurn | undefined;
-  let litDisplayId: number | undefined;
-  let observed: DeviceRotation | undefined;
-  let rawPanelOrientation: string | undefined;
+  const state: ScopedRotationState = {
+    pickerValue: undefined,
+    panelOffset: undefined,
+    litDisplayId: undefined,
+    observed: undefined,
+    rawPanelOrientation: undefined,
+  };
   for (let attempt = 1; attempt <= IOS_FOLDABLE_SCOPED_ORIENTATION_ATTEMPTS; attempt += 1) {
     signal?.throwIfAborted();
     const lit = await readLitPanel(device, helper, signal);
     if (lit) {
-      // A different panel lit up mid-command: the picker state and offset were calibrated
-      // against the previous panel, so start that panel's calibration over.
-      if (litDisplayId !== undefined && lit.panel.displayId !== litDisplayId) {
-        pickerValue = undefined;
-        panelOffset = undefined;
-      }
-      litDisplayId = lit.panel.displayId;
-      observed = lit.rotation;
-      rawPanelOrientation = lit.panel.currentOrientation;
-      if (observed === rotation) return { orientation: rotation };
-      panelOffset =
-        pickerValue === undefined
-          ? (panelOffset ?? measuredPanelPickerOffset(lit.panel))
-          : panelPickerOffset(observed, pickerValue);
+      noteLitPanel(state, lit);
+      if (state.observed === rotation) return { orientation: rotation };
     }
     const next = nextPickerValue({
       currentRotation: lit?.rotation,
       targetRotation: rotation,
-      panelOffset,
-      currentPickerValue: pickerValue,
+      panelOffset: state.panelOffset,
+      currentPickerValue: state.pickerValue,
     });
-    if (next === undefined) {
-      await settleScopedRotation();
-      continue;
+    if (next !== undefined) {
+      await dispatchScopedPicker(device, helper, state, next, rotation, attempt, signal);
     }
-    await helper.rotate(next, signal);
-    pickerValue = next;
-    emitDiagnostic({
-      level: 'info',
-      phase: 'apple_foldable_orientation_dispatched',
-      data: {
-        deviceId: device.id,
-        orientation: next,
-        requestedOrientation: rotation,
-        scopedSet: true,
-        attempt,
-        ...(observed === undefined ? {} : { observedOrientation: observed }),
-      },
-    });
     await settleScopedRotation();
   }
   // The last dispatch gets its confirming read too: the loop only reads before dispatching.
   const settled = await readLitPanel(device, helper, signal);
-  if (settled) {
-    observed = settled.rotation;
-    rawPanelOrientation = settled.panel.currentOrientation;
-    if (observed === rotation) return { orientation: rotation };
+  if (settled) noteLitPanel(state, settled);
+  if (state.observed === rotation) return { orientation: rotation };
+  throw scopedUnverifiedError(device, rotation, state);
+}
+
+type ScopedRotationState = {
+  pickerValue: DeviceRotation | undefined;
+  panelOffset: PanelQuarterTurn | undefined;
+  litDisplayId: number | undefined;
+  observed: DeviceRotation | undefined;
+  rawPanelOrientation: string | undefined;
+};
+
+type LitPanel = { panel: AppleDeviceDisplay; rotation: DeviceRotation };
+
+/**
+ * Folds one lit-panel reading into the rotation state. A different panel lit up mid-command:
+ * the picker state and offset were calibrated against the previous panel, so start that
+ * panel's calibration over. Otherwise the reading fixes the panel's offset — from the picker
+ * value this command dispatched when there is one, else from the measured table.
+ */
+function noteLitPanel(state: ScopedRotationState, lit: LitPanel): void {
+  if (state.litDisplayId !== undefined && lit.panel.displayId !== state.litDisplayId) {
+    state.pickerValue = undefined;
+    state.panelOffset = undefined;
   }
-  throw new AppError(
+  state.litDisplayId = lit.panel.displayId;
+  state.observed = lit.rotation;
+  state.rawPanelOrientation = lit.panel.currentOrientation;
+  state.panelOffset =
+    state.pickerValue === undefined
+      ? (state.panelOffset ?? measuredPanelPickerOffset(lit.panel))
+      : panelPickerOffset(lit.rotation, state.pickerValue);
+}
+
+/** Dispatches one picker value and records it as the guest's picker state for this command. */
+async function dispatchScopedPicker(
+  device: DeviceInfo,
+  helper: FoldHelper,
+  state: ScopedRotationState,
+  next: DeviceRotation,
+  rotation: FoldableRotation,
+  attempt: number,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  await helper.rotate(next, signal);
+  state.pickerValue = next;
+  emitDiagnostic({
+    level: 'info',
+    phase: 'apple_foldable_orientation_dispatched',
+    data: {
+      deviceId: device.id,
+      orientation: next,
+      requestedOrientation: rotation,
+      scopedSet: true,
+      attempt,
+      ...(state.observed === undefined ? {} : { observedOrientation: state.observed }),
+    },
+  });
+}
+
+function scopedUnverifiedError(
+  device: DeviceInfo,
+  rotation: FoldableRotation,
+  state: ScopedRotationState,
+): AppError {
+  return new AppError(
     'COMMAND_FAILED',
-    `${device.name} did not confirm rotation to ${rotation}: the panel table reports ${observed ?? 'no orientation'}`,
+    `${device.name} did not confirm rotation to ${rotation}: the panel table reports ${state.observed ?? 'no orientation'}`,
     {
       deviceId: device.id,
       requestedOrientation: rotation,
-      ...(observed === undefined ? {} : { observedOrientation: observed }),
-      ...(rawPanelOrientation === undefined ? {} : { rawPanelOrientation }),
+      ...(state.observed === undefined ? {} : { observedOrientation: state.observed }),
+      ...(state.rawPanelOrientation === undefined
+        ? {}
+        : { rawPanelOrientation: state.rawPanelOrientation }),
       reason: 'orientation-unverified-scoped-set',
       hint: SCOPED_ORIENTATION_UNVERIFIED_HINT,
     },
@@ -259,7 +297,7 @@ async function readLitPanel(
   device: DeviceInfo,
   helper: FoldHelper,
   signal: AbortSignal | undefined,
-): Promise<{ panel: AppleDeviceDisplay; rotation: DeviceRotation } | undefined> {
+): Promise<LitPanel | undefined> {
   let inventory: AppleDisplayInventory;
   try {
     inventory = await queryAppleDisplayInventory(device, { signal, foldHelper: helper });
