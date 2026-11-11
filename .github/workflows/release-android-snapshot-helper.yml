@@ -33,6 +33,15 @@ jobs:
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
+      - name: Checkout release validator
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .release-validator
+          sparse-checkout: scripts/release-version.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       - name: Setup Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
         with:
@@ -44,7 +53,7 @@ jobs:
           TAG_NAME: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          node scripts/release-version.mjs asset-tag "$TAG_NAME"
+          node .release-validator/scripts/release-version.mjs asset-tag "$TAG_NAME"
           VERSION="${TAG_NAME#v}"
           echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"

@@ -9,7 +9,12 @@ import { mkdtempForTestSync } from '@agent-device/test-kit';
 const repo = path.resolve(import.meta.dirname, '../..');
 const workflows = ['release-ios-runner.yml', 'release-android-snapshot-helper.yml'];
 
-type Step = { name: string; run?: string; env?: Record<string, string> };
+type Step = {
+  name: string;
+  run?: string;
+  env?: Record<string, string>;
+  with?: Record<string, string>;
+};
 
 function fixture() {
   const root = fs.realpathSync(mkdtempForTestSync('release-assets-'));
@@ -93,13 +98,17 @@ function run(root: string, env: Record<string, string>, script: string, args: st
   return spawnSync('/bin/sh', [script, ...args], { cwd: root, env, encoding: 'utf8' });
 }
 
-function metadataStep(workflow: string): Step {
+function workflowSteps(workflow: string): Step[] {
   const doc = parse(fs.readFileSync(path.join(repo, '.github/workflows', workflow), 'utf8')) as {
     jobs: Record<string, { steps: Step[] }>;
   };
-  const step = Object.values(doc.jobs)
-    .flatMap((job) => job.steps)
-    .find((candidate) => candidate.name === 'Resolve release metadata');
+  return Object.values(doc.jobs).flatMap((job) => job.steps);
+}
+
+function metadataStep(workflow: string): Step {
+  const step = workflowSteps(workflow).find(
+    (candidate) => candidate.name === 'Resolve release metadata',
+  );
   assert.ok(step?.run);
   return step;
 }
@@ -117,6 +126,25 @@ for (const workflow of workflows) {
   ] as const) {
     test(`${workflow} handles ${label} as data`, () => {
       const f = fixture();
+      const historical = path.join(f.root, 'historical.mjs');
+      fs.writeFileSync(historical, "console.error('unknown command'); process.exit(1);\n");
+      const refs: Record<string, string> = {
+        '${{ inputs.checkout_ref || github.ref }}': historical,
+        '${{ github.workflow_sha }}': path.join(repo, 'scripts/release-version.mjs'),
+      };
+      for (const checkout of workflowSteps(workflow).filter((step) =>
+        step.name.startsWith('Checkout'),
+      )) {
+        const source = refs[checkout.with?.ref ?? ''];
+        assert.ok(source, `unexpected checkout ref: ${checkout.with?.ref}`);
+        const destination = path.join(
+          f.root,
+          checkout.with?.path ?? '',
+          'scripts/release-version.mjs',
+        );
+        fs.mkdirSync(path.dirname(destination), { recursive: true });
+        fs.copyFileSync(source, destination);
+      }
       const tag = makeTag(f.marker);
       const step = metadataStep(workflow);
       const inputExpression = '${{ inputs.release_tag }}';
