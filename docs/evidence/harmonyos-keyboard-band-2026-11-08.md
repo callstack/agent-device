@@ -1,4 +1,4 @@
-# HarmonyOS keyboard band fact, live, 2026-11-08 (fixed run 2026-11-09)
+# HarmonyOS keyboard band fact, live, 2026-11-08 (fixed run 2026-11-09; z-order-only re-run 2026-11-10, head 2878b86e4)
 
 Evidence for #4285 (report the keyboard band in snapshot responses), re-run at the
 z-order-only head after review asked for the frame branch to go. The window-manager
