@@ -395,21 +395,20 @@ test('a busy contender that exits sweeps its own pre-lock marker before the retr
   if (claim.status !== 'acquired') throw new Error('fixture claim refused');
   let released = false;
   spawn.mockImplementation((_command, _args, options) => {
+    if (spawn.mock.calls.length !== 1)
+      throw new Error('no second launch: the retry boundary must be observable without a sweeper');
     const child = spawnRegisteredDaemonFixture(paths, fields(http.port), options, undefined, {
       emitStartupMarkerBeforeAcquisition: true,
     });
-    if (spawn.mock.calls.length === 1) {
-      void child.exited.then((exit) => {
-        assert.equal(exit.exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
-        if (!released) {
-          void claim.acquisition.release().then(() => {
-            released = true;
-          });
-        }
-      });
-      return child;
-    }
-    throw new Error('no second launch: the retry boundary must be observable without a sweeper');
+    void child.exited.then((exit) => {
+      assert.equal(exit.exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
+      if (!released) {
+        void claim.acquisition.release().then(() => {
+          released = true;
+        });
+      }
+    });
+    return child;
   });
   pause.mockImplementation((ms) => actualRetry.sleep(Math.min(Number(ms), 50)));
   try {
@@ -417,6 +416,11 @@ test('a busy contender that exits sweeps its own pre-lock marker before the retr
       sendToDaemon(request(paths)),
       (error: unknown) =>
         error instanceof AppError && error.details?.kind === 'daemon_startup_failed',
+    );
+    assert.equal(
+      fs.readdirSync(path.join(paths.baseDir, 'fixture-entries')).length,
+      1,
+      'the refused retry must not launch another marker writer',
     );
     assert.deepEqual(
       fs.readdirSync(paths.baseDir).filter((e) => e.startsWith('daemon-startup-phases')),
