@@ -26,6 +26,12 @@ function geometrySnapshot(kind: IosViewportEvidence['kind']) {
       label: 'Geometry action',
       rect: { x: root.x + 240, y: root.y + 90, width: 220, height: 42 },
       hittable: true,
+      nativePressTarget: {
+        type: 9,
+        identifier: 'geometry-action',
+        label: 'Geometry action',
+        rect: { x: root.x + 240, y: root.y + 90, width: 220, height: 42 },
+      },
     },
   ];
   attachSnapshotViewportEvidence(
@@ -126,6 +132,10 @@ for (const kind of ['derived', 'missing'] as const) {
       const calls: unknown[] = [];
       const snapshot = geometrySnapshot(kind);
       const device = createInteractionDevice(snapshot, {
+        readPressReadiness: async () => {
+          calls.push('readiness');
+          return 'ready';
+        },
         tap: async (_context, point) => {
           calls.push(point);
         },
@@ -158,7 +168,12 @@ for (const kind of ['derived', 'missing'] as const) {
 
 test('reported screen geometry still activates the resolved selector and saved ref', async () => {
   const taps: Point[] = [];
+  const readinessTargets: unknown[] = [];
   const device = createInteractionDevice(geometrySnapshot('reported'), {
+    readPressReadiness: async (_context, target) => {
+      readinessTargets.push(target);
+      return 'ready';
+    },
     tap: async (_context, point) => {
       taps.push(point);
     },
@@ -166,12 +181,22 @@ test('reported screen geometry still activates the resolved selector and saved r
   const observed = await device.capture.snapshot({ session: 'default' });
   const target = observed.nodes.find((node) => node.identifier === 'geometry-action');
   assert.ok(target?.ref);
+  assert.equal('nativePressTarget' in target, false);
   await device.interactions.press(selector('id=geometry-action'), { session: 'default' });
   await device.interactions.press(ref(`@${target.ref}`), { session: 'default' });
   assert.deepEqual(taps, [
     { x: 591, y: 335 },
     { x: 591, y: 335 },
   ]);
+  assert.equal(readinessTargets.length, 2);
+  for (const binding of readinessTargets) {
+    assert.deepEqual(binding, {
+      type: 9,
+      identifier: 'geometry-action',
+      label: 'Geometry action',
+      rect: { x: 481, y: 314, width: 220, height: 42 },
+    });
+  }
 });
 
 test('unknown capture authority refuses before an offscreen rescue can replace geometry', async () => {

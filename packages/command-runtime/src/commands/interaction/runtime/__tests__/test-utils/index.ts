@@ -352,6 +352,7 @@ export function createInteractionDevice(
       | 'longPress'
       | 'scroll'
       | 'performGesture'
+      | 'readPressReadiness'
       | 'confirmOffscreenTargetVisible'
     >
   > & {
@@ -383,6 +384,7 @@ export function createInteractionDevice(
         : undefined,
       scroll: overrides.scroll ? async (...args) => await overrides.scroll?.(...args) : undefined,
       performGesture: overrides.performGesture,
+      readPressReadiness: overrides.readPressReadiness,
       // #1542: undefined by default, so every existing test keeps proving the
       // fail-closed refusal unchanged; only tests that opt in exercise the
       // rescue/agreement paths.
