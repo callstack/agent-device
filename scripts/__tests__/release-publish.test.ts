@@ -5,7 +5,9 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
-function runRelease(options: { published?: string[]; failures?: Record<string, string> } = {}) {
+function runRelease(
+  options: { published?: string[]; failures?: Record<string, string>; largeOutput?: boolean } = {},
+) {
   const root = mkdtempForTestSync('release-publish-');
   const bin = path.join(root, 'bin');
   const tarballs = path.join(root, 'tarballs');
@@ -35,10 +37,15 @@ const name = args[0] === 'view' ? args[1].replace(/@1\\.2\\.3$/, '') : path.base
 const packageName = name === 'agent-device' || name.startsWith('@') ? name : '@agent-device/' + name;
 fs.appendFileSync(process.env.RELEASE_TEST_LOG, JSON.stringify([args[0], packageName]) + '\\n');
 const failure = JSON.parse(process.env.RELEASE_TEST_FAILURES)[args[0] + ':' + packageName];
-if (failure) { console.log(JSON.stringify({ error: { code: failure } })); process.exit(1); }
+if (failure) {
+  if (args[0] === 'publish') console.error('npm error code ' + failure);
+  else console.log(JSON.stringify({ error: { code: failure } }));
+  process.exit(1);
+}
 if (args[0] === 'view' && !JSON.parse(process.env.RELEASE_TEST_PUBLISHED).includes(packageName)) {
   console.log(JSON.stringify({ error: { code: 'E404' } })); process.exit(1);
 }
+if (args[0] === 'publish' && process.env.RELEASE_TEST_LARGE_OUTPUT === '1') process.stdout.write('x'.repeat(2 * 1024 * 1024));
 console.log(JSON.stringify('1.2.3'));
 `,
     { mode: 0o755 },
@@ -48,10 +55,12 @@ console.log(JSON.stringify('1.2.3'));
     ['scripts/release-publish.mjs', tarballs, '1.2.3', 'next'],
     {
       encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
       env: {
         ...process.env,
         PATH: `${bin}${path.delimiter}${process.env.PATH}`,
         RELEASE_TEST_LOG: log,
+        RELEASE_TEST_LARGE_OUTPUT: options.largeOutput ? '1' : '0',
         RELEASE_TEST_FAILURES: JSON.stringify(options.failures ?? {}),
         RELEASE_TEST_PUBLISHED: JSON.stringify(options.published ?? []),
       },
@@ -98,4 +107,10 @@ test('skips published versions and publishes core after the remaining plugins', 
     calls.filter(([action]) => action === 'publish').map(([, name]) => name),
     ['@agent-device/alpha', '@agent-device/gamma', 'agent-device'],
   );
+});
+
+test('publishes core successfully when publish output exceeds the default buffer', () => {
+  const { result, calls } = runRelease({ largeOutput: true });
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(calls.some(([action, name]) => action === 'publish' && name === 'agent-device'));
 });

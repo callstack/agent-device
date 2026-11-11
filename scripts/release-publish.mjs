@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -46,7 +46,7 @@ for (const { tarball, name } of tarballs) {
       process.stdout.write(`${name}@${version} is already published; skipping.\n`);
       continue;
     }
-    process.stdout.write(npm(['publish', tarball, ...publishArgs, '--provenance', '--json']));
+    await publish(tarball);
   } catch (error) {
     if (name === 'agent-device') throw error;
     failures.push({ name, code: readErrorCode(error.stdout) ?? error.code ?? 'UNKNOWN' });
@@ -57,6 +57,27 @@ if (failures.length > 0) {
     `Plugin publication failed; skipping agent-device:\n${failures.map(({ name, code }) => `  ${name}: ${code}`).join('\n')}\n`,
   );
   process.exitCode = 1;
+}
+
+function publish(tarball) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('npm', ['publish', tarball, ...publishArgs, '--provenance'], {
+      stdio: ['ignore', 'inherit', 'pipe'],
+    });
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk) => {
+      process.stderr.write(chunk);
+      stderr = (stderr + chunk).slice(-65536);
+    });
+    child.on('error', reject);
+    child.on('close', (status) => {
+      if (status === 0) return resolve();
+      const error = new Error(`npm publish failed with status ${status}`);
+      error.code = stderr.match(/(?:^|\n)npm error code ([A-Z0-9_]+)/)?.[1] ?? 'UNKNOWN';
+      reject(error);
+    });
+  });
 }
 
 function isPublished(name) {
