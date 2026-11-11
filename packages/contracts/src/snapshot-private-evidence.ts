@@ -1,4 +1,8 @@
-import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
+import type {
+  RawSnapshotNode,
+  Rect,
+  SnapshotNativePressTarget,
+} from '@agent-device/kernel/snapshot';
 import type { IosViewportEvidence } from './ios-snapshot.ts';
 
 /**
@@ -32,8 +36,11 @@ export type SnapshotOcclusionContextEvidence = {
 /** Complete text-input geometry measured before iOS semantic projection; absent means unknown. */
 export type SnapshotTextInputGeometry = Readonly<{ rects: readonly Rect[] }>;
 
+export type SnapshotNativePressTargets = ReadonlyMap<number, SnapshotNativePressTarget>;
+
 type SnapshotPrivateEvidence = {
   viewport?: IosViewportEvidence;
+  nativePressTargets?: SnapshotNativePressTargets;
   textInputGeometry?: SnapshotTextInputGeometry;
   clickability?: SnapshotClickabilityEvidence;
   occlusionContext?: SnapshotOcclusionContextEvidence;
@@ -134,4 +141,22 @@ export function readSnapshotTextInputGeometry(
   owner: object | null | undefined,
 ): SnapshotTextInputGeometry | undefined {
   return owner ? privateEvidenceBySnapshotObject.get(owner)?.textInputGeometry : undefined;
+}
+
+export function attachSnapshotNativePressTargets<T extends object>(
+  owner: T,
+  targets: SnapshotNativePressTargets,
+): T {
+  return attachSnapshotPrivateEvidence(owner, { nativePressTargets: targets });
+}
+
+export function readSnapshotNativePressTargets(
+  owner: object,
+): SnapshotNativePressTargets | undefined {
+  return privateEvidenceBySnapshotObject.get(owner)?.nativePressTargets;
+}
+
+export function copySnapshotNativePressTargets<T extends object>(source: object, target: T): T {
+  const targets = readSnapshotNativePressTargets(source);
+  return targets ? attachSnapshotNativePressTargets(target, targets) : target;
 }

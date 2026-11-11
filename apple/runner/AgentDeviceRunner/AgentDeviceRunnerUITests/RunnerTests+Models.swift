@@ -250,7 +250,7 @@ struct AuthorizedPressTarget: Codable {
   func matches(type: String, identifier: String?, label: String?, value: String?, rect: SnapshotRect) -> Bool {
     func text(_ value: String?) -> String { (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
     return self.type == type && text(self.identifier) == text(identifier)
-      && text(self.label) == text(label) && text(self.value) == text(value)
+      && text(self.label) == text(label) && (type == "SecureTextField" || text(self.value) == text(value))
       && [self.rect.x - rect.x, self.rect.y - rect.y, self.rect.width - rect.width, self.rect.height - rect.height]
         .allSatisfy { $0.isFinite && abs($0) <= 1 }
       && self.rect.width >= 0 && self.rect.height >= 0 && rect.width >= 0 && rect.height >= 0
@@ -517,6 +517,7 @@ struct DataPayload: Codable {
   var text: String?
   var found: Bool?
   var pressReadiness: String?
+  var pressReadinessAppBundleId: String?
   var items: [String]?
   /// Set on an alert read that is SpringBoard's `Open in “<App>”?` launch confirmation, in the
   /// device's language; absent otherwise.

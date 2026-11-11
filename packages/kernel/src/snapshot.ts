@@ -284,7 +284,17 @@ export type IosValueSemantics = {
   busy?: true;
 };
 
+/** Internal Apple capture wire provenance; removed before public snapshot assembly. */
+export type SnapshotNativePressTarget = {
+  type: string;
+  identifier?: string;
+  label?: string;
+  value?: string;
+  rect: Rect;
+};
+
 export type RawSnapshotNode = {
+  nativePressTarget?: SnapshotNativePressTarget;
   index: number;
   type?: string;
   role?: string;

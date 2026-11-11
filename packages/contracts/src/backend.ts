@@ -442,7 +442,7 @@ export type AgentDeviceBackend = {
     node: Pick<SnapshotNode, 'identifier' | 'label'>,
     rootViewport: Rect | null,
   ): Promise<Rect | null>;
-  /** Strict native necessary-condition read; never authorizes a different target or input point. */
+  /** Strict native necessary-condition read; never substitutes a target or bypasses its canonical point guards. */
   readPressReadiness?(
     context: BackendCommandContext,
     target: AuthorizedPressTarget,

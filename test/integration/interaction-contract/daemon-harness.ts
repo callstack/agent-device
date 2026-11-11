@@ -97,7 +97,25 @@ export function runnerSnapshotEntry(
     command: 'ios.runner.snapshot',
     deviceId: CONTRACT_DEVICE_ID,
     platform: 'apple',
-    result: { nodes, truncated: false, ...result },
+    result: {
+      nodes: nodes.map((node) => {
+        const raw = node as import('@agent-device/kernel/snapshot').RawSnapshotNode;
+        return raw.type && raw.rect
+          ? {
+              ...raw,
+              nativePressTarget: {
+                type: raw.type,
+                identifier: raw.identifier,
+                label: raw.label,
+                ...(raw.type === 'SecureTextField' ? {} : { value: raw.value }),
+                rect: raw.rect,
+              },
+            }
+          : raw;
+      }),
+      truncated: false,
+      ...result,
+    },
   };
 }
 

@@ -450,7 +450,10 @@ extension RunnerTests {
       return Response(ok: true, data: DataPayload(found: found))
     case .querySelector:
       if let target = command.authorizedTarget {
-        return try queryAuthorizedPressTarget(app: activeApp, target: target)
+        guard let actualBundleId = activeAppBundleId, actualBundleId == command.appBundleId else {
+          return Response(ok: true, data: DataPayload(pressReadiness: "surface-mismatch", pressReadinessAppBundleId: activeAppBundleId))
+        }
+        return try queryAuthorizedPressTarget(app: activeApp, target: target, appBundleId: activeAppBundleId)
       }
       guard let selectorKey = command.selectorKey, let selectorValue = command.selectorValue else {
         return Response(ok: false, error: ErrorPayload(message: "querySelector requires selectorKey and selectorValue"))

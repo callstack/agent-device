@@ -167,7 +167,7 @@ const FIND_FOCUS_DISPATCH_GAPS_ISSUE = 'https://github.com/callstack/agent-devic
  * declaration plus one scenario per added command.
  */
 // Ordinary iOS taps additionally use press-readiness.ts#guardPressReadiness when the request
-// owns native querySelector. It preserves the authorized point and waits only while that exact
+// owns native querySelector. It reuses the fresh canonically guarded point and waits only while that exact
 // canonical binding remains valid. Native hittability is necessary, not proof of no partial cover.
 const RUNTIME_TREE_TARGET_STABILITY: GuaranteeEnforcement = {
   kind: 'runtime',

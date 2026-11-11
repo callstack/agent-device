@@ -51,16 +51,22 @@ export function bindAppleQuerySelectorRuntime(
           readiness !== 'ready' &&
           readiness !== 'blocked' &&
           readiness !== 'missing' &&
-          readiness !== 'ambiguous'
+          readiness !== 'ambiguous' &&
+          readiness !== 'surface-mismatch'
         ) {
           throw new AppError(
             'UNSUPPORTED_OPERATION',
             'Runner does not support authorized-target readiness; rebuild the Apple runner',
           );
         }
+        const expectedApp = input.options?.appBundleId;
+        if (!expectedApp || data.pressReadinessAppBundleId !== expectedApp) {
+          return Object.freeze({ found: false, pressReadiness: 'surface-mismatch' });
+        }
         return Object.freeze({
           found: readiness === 'ready' || readiness === 'blocked',
           pressReadiness: readiness,
+          pressReadinessAppBundleId: expectedApp,
         });
       }
       const node = readQuerySelectorNode(data);

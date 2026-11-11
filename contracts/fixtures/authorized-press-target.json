@@ -286,5 +286,36 @@
       }
     },
     "matches": true
+  },
+  {
+    "name": "secure value is never required or duplicated",
+    "expected": {
+      "type": "SecureTextField",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "candidate": {
+      "type": "SecureTextField",
+      "value": "redacted",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "point": {
+        "x": 90,
+        "y": 265
+      }
+    },
+    "matches": true
   }
 ]

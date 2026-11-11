@@ -28,7 +28,16 @@ public struct SnapshotRect: Codable, Equatable {
   }
 }
 
+public struct NativePressTarget: Codable, Equatable {
+  public let type: String
+  public let identifier: String?
+  public let label: String?
+  public let value: String?
+  public let rect: SnapshotRect
+}
+
 public struct RawAXNode: Equatable {
+  public let nativePressTarget: NativePressTarget
   public private(set) var index: Int
   public let type: String
   public let label: String?
@@ -68,6 +77,8 @@ public struct RawAXNode: Equatable {
     hiddenContentBelow: Bool?,
     actions: [String]? = nil
   ) {
+    self.nativePressTarget = NativePressTarget(type: type, identifier: identifier, label: label,
+      value: type == "SecureTextField" ? nil : value, rect: rect)
     self.index = index
     self.type = type
     self.label = label
@@ -299,6 +310,7 @@ public struct SnapshotPresentationNode {
 }
 
 public struct PresentedNode: Codable, Equatable {
+  public let nativePressTarget: NativePressTarget?
   public let index: Int
   public let type: String
   public let label: String?
@@ -324,6 +336,7 @@ public struct PresentedNode: Codable, Equatable {
     depth: Int? = nil,
     parentIndex: Int?? = nil
   ) {
+    self.nativePressTarget = raw.nativePressTarget
     self.index = index ?? raw.index
     self.type = raw.type
     self.label = raw.label

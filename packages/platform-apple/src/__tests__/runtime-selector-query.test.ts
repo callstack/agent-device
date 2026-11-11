@@ -110,9 +110,10 @@ test('authorized target reads reject legacy responses instead of accepting found
 
 for (const pressReadiness of ['ready', 'blocked', 'missing', 'ambiguous'] as const) {
   test(`preserves strict native ${pressReadiness} rather than applying read-selector preference`, async () => {
-    queryAppleRunnerSelector.mockResolvedValue({ pressReadiness });
+    queryAppleRunnerSelector.mockResolvedValue({ pressReadiness, pressReadinessAppBundleId: APP });
     await expect(
       bind().querySelector({
+        options: { appBundleId: APP },
         authorizedTarget: {
           type: 'Button',
           rect: { x: 0, y: 0, width: 10, height: 10 },
@@ -122,6 +123,24 @@ for (const pressReadiness of ['ready', 'blocked', 'missing', 'ambiguous'] as con
     ).resolves.toEqual({
       found: pressReadiness === 'ready' || pressReadiness === 'blocked',
       pressReadiness,
+      pressReadinessAppBundleId: APP,
     });
   });
 }
+
+test('native readiness for a different foreground system surface cannot authorize an app target', async () => {
+  queryAppleRunnerSelector.mockResolvedValue({
+    pressReadiness: 'ready',
+    pressReadinessAppBundleId: 'com.apple.springboard',
+  });
+  await expect(
+    bind().querySelector({
+      options: { appBundleId: APP },
+      authorizedTarget: {
+        type: 'Button',
+        rect: { x: 0, y: 0, width: 10, height: 10 },
+        point: { x: 5, y: 5 },
+      },
+    }),
+  ).resolves.toEqual({ found: false, pressReadiness: 'surface-mismatch' });
+});

@@ -1,5 +1,5 @@
 import { areCapturedRectsAtSamePosition } from '@agent-device/kernel/rect-center';
-import type { Point, Rect } from '@agent-device/kernel/snapshot';
+import type { Point, Rect, SnapshotNativePressTarget } from '@agent-device/kernel/snapshot';
 import type { ElementSelectorKey } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SessionSurface } from './session-surface.ts';
@@ -14,16 +14,14 @@ type ObservationInput = Readonly<{
 export type FindTextInput = ObservationInput & Readonly<{ text: string }>;
 
 /** A canonical resolution's target; this read never chooses a substitute by label or hittability. */
-export type AuthorizedPressTarget = Readonly<{
-  type: string;
-  identifier?: string;
-  label?: string;
-  value?: string;
-  rect: Rect;
-  point: Point;
-}>;
+export type AuthorizedPressTarget = Readonly<SnapshotNativePressTarget & { point: Point }>;
 
-export type NativePressReadiness = 'ready' | 'blocked' | 'missing' | 'ambiguous';
+export type NativePressReadiness =
+  | 'ready'
+  | 'blocked'
+  | 'missing'
+  | 'ambiguous'
+  | 'surface-mismatch';
 
 /** Exact native identity plus the existing capture-rounding band, shared with canonical rechecks. */
 export function matchesAuthorizedPressTarget(
@@ -34,8 +32,9 @@ export function matchesAuthorizedPressTarget(
     expected.type === candidate.type &&
     (['identifier', 'label', 'value'] as const).every(
       (key) =>
+        (key === 'value' && expected.type === 'SecureTextField') ||
         (expected[key] ?? '').trim().normalize('NFC') ===
-        (candidate[key] ?? '').trim().normalize('NFC'),
+          (candidate[key] ?? '').trim().normalize('NFC'),
     ) &&
     areCapturedRectsAtSamePosition(expected.rect, candidate.rect)
   );
@@ -74,6 +73,7 @@ export type QuerySelectorResult = SelectorObservationResult &
     node?: QuerySelectorNodeReading;
     /** Present only for the strict authorized-target variant, including negative answers. */
     pressReadiness?: NativePressReadiness;
+    pressReadinessAppBundleId?: string;
   }>;
 
 export type SelectorObservationRuntimeOperations = Readonly<{

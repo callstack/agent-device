@@ -485,8 +485,11 @@ The reason: in a long-lived command test, that API can complete the enclosing te
 Ordinary resolved `press` and `click` actions wait implicitly when the request-bound Apple owner
 reports that the exact authorized control is not natively hittable. Snapshot hittability remains a
 geometric fact. The native mutation-read binds type, identifier, label, value, and rectangle before
-counting matches; a hittable duplicate cannot replace a blocked target. It preserves the original
-input point. During polling, canonical resolution must still authorize the same target on the same
+counting matches; a hittable duplicate cannot replace a blocked target. The binding uses the capture
+producer's native source fields before row promotion or clipping, retained as private evidence through
+session storage and omitted from public snapshots. Secure field values are omitted before the wire.
+A native reply must prove the actual queried app matches the authorized surface. After a blocked
+read, the fresh canonical parent/child guards choose the dispatch point. During polling, canonical resolution must still authorize the same target on the same
 surface. The original request deadline and cancellation signal bound every read and capture.
 Ambiguity, changed authorization, unsupported native proof, cancellation, and timeout refuse before
 input. Raw coordinates and non-default tap options retain their existing semantics.

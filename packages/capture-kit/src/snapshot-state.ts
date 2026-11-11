@@ -1,3 +1,4 @@
+import { attachSnapshotNativePressTargets } from '@agent-device/contracts/snapshot-private-evidence';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   copySnapshotViewportEvidence,
@@ -101,11 +102,13 @@ export function buildSnapshotState(
       : normalizedNodes;
   const annotations = snapshotCaptureAnnotationsFrom(data);
   const presentation = snapshotPresentationOptionsFromFlags(flags);
-  const nodes = attachRefs(
-    snapshotRaw
-      ? scopedNodes
-      : annotateCoveredSnapshotNodes(scopedNodes, overlayOptionsForBackend(data?.backend)),
-    snapshotRefMinting(data),
+  const nodes = stripNativePressTargets(
+    attachRefs(
+      snapshotRaw
+        ? scopedNodes
+        : annotateCoveredSnapshotNodes(scopedNodes, overlayOptionsForBackend(data?.backend)),
+      snapshotRefMinting(data),
+    ),
   );
   const textInputGeometry = readSnapshotTextInputGeometry(data.nodes);
   if (textInputGeometry) attachSnapshotTextInputGeometry(nodes, textInputGeometry);
@@ -134,6 +137,17 @@ export function buildSnapshotState(
     // route-level comparisons on the next capture.
     comparisonSafe: isAndroidComparisonSafeSnapshot(data?.backend, flags),
   };
+}
+
+function stripNativePressTargets(nodes: import('@agent-device/kernel/snapshot').SnapshotNode[]) {
+  const targets = new Map(
+    nodes.flatMap((node) =>
+      node.nativePressTarget ? [[node.index, node.nativePressTarget] as const] : [],
+    ),
+  );
+  if (!targets.size) return nodes;
+  const published = nodes.map(({ nativePressTarget: _private, ...node }) => node);
+  return attachSnapshotNativePressTargets(published, targets);
 }
 
 function annotateBackendReplacementSurfaces(

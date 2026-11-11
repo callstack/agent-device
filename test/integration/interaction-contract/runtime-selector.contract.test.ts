@@ -1,3 +1,4 @@
+import { attachSnapshotNativePressTargets } from '@agent-device/contracts/snapshot-private-evidence';
 import { withRequestDeadline } from '@agent-device/host-kit/request';
 import { selector, createContractClock, createContractDevice } from './runtime-harness.ts';
 import assert from 'node:assert/strict';
@@ -259,7 +260,10 @@ test(
       [
         // A resolves and taps at y=300; B resolves at 360 and its two re-observations disagree.
         runnerSnapshotEntry(runnerNodesAtY(300)),
-        { command: 'ios.runner.querySelector', result: { pressReadiness: 'ready' } },
+        {
+          command: 'ios.runner.querySelector',
+          result: { pressReadiness: 'ready', pressReadinessAppBundleId: 'com.example.app' },
+        },
         runnerTapEntry({ x: 200, y: 322 }),
         runnerSnapshotEntry(runnerNodesAtY(360)),
         runnerSnapshotEntry(runnerNodesAtY(420)),
@@ -423,7 +427,10 @@ test(
     await withIosContractDaemon(
       [
         runnerSnapshotEntry(RUNNER_CONTINUE_NODES),
-        { command: 'ios.runner.querySelector', result: { pressReadiness: 'ready' } },
+        {
+          command: 'ios.runner.querySelector',
+          result: { pressReadiness: 'ready', pressReadinessAppBundleId: 'com.example.app' },
+        },
         runnerTapEntry({ x: 200, y: 322 }),
       ],
       async (daemon) => {
@@ -481,7 +488,15 @@ test(scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'resolutionDisclosure')[1]!, async
 test(scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'targetStability')[3]!, async () => {
   const events: string[] = [];
   const requestId = 'contract-native-ready-selector';
-  const device = createContractDevice(continueButtonSnapshot(), {
+  const snapshot = continueButtonSnapshot();
+  const node = snapshot.nodes[0]!;
+  attachSnapshotNativePressTargets(
+    snapshot.nodes,
+    new Map([
+      [node.index, { type: 'Button', label: 'Continue', value: 'Continue', rect: node.rect! }],
+    ]),
+  );
+  const device = createContractDevice(snapshot, {
     readPressReadiness: async () => {
       const state = events.includes('blocked') ? 'ready' : 'blocked';
       events.push(state);

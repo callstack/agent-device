@@ -1,3 +1,4 @@
+import { copySnapshotNativePressTargets } from '@agent-device/contracts/snapshot-private-evidence';
 import type {
   AgentDeviceRuntime,
   AgentDeviceRuntimeConfig,
@@ -51,14 +52,9 @@ function cloneSessionRecord(
   record: CommandSessionRecord | undefined,
 ): CommandSessionRecord | undefined {
   if (!record) return undefined;
-  const snapshot = record.snapshot ? structuredClone(record.snapshot) : undefined;
-  if (snapshot && record.snapshot) {
-    copySnapshotViewportEvidence(record.snapshot.nodes, snapshot.nodes);
-    copySnapshotNodeInteractionBounds(record.snapshot.nodes, snapshot.nodes);
-  }
   return {
     ...record,
-    ...(snapshot ? { snapshot } : {}),
+    ...(record.snapshot ? { snapshot: cloneSnapshot(record.snapshot) } : {}),
     ...(record.metadata ? { metadata: cloneMetadata(record.metadata) } : {}),
   };
 }
@@ -69,4 +65,12 @@ function cloneMetadata(metadata: Record<string, unknown>): Record<string, unknow
   } catch {
     return { ...metadata };
   }
+}
+
+function cloneSnapshot(snapshot: NonNullable<CommandSessionRecord['snapshot']>) {
+  const cloned = structuredClone(snapshot);
+  copySnapshotNativePressTargets(snapshot.nodes, cloned.nodes);
+  copySnapshotViewportEvidence(snapshot.nodes, cloned.nodes);
+  copySnapshotNodeInteractionBounds(snapshot.nodes, cloned.nodes);
+  return cloned;
 }
