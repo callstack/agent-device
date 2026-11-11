@@ -119,14 +119,18 @@ test.each(['RUNNING', 'ERRORED', 'PENDING'] as const)(
     let now = 1_000;
     vi.spyOn(Date, 'now').mockImplementation(() => now);
     let polls = 0;
-    const client = fakeClient({ status }, () => {
+    const client = fakeClient({ status: 'PENDING' }, () => {
       polls += 1;
-      now = 2_000;
+      if (polls === 2) {
+        now = 2_000;
+        client.session.status = status;
+      }
     });
     client.session.endpoints = { appium: 'https://appium.example/wd/hub' };
     const prepare = createAwsDeviceFarmPrepareSession({
       ...baseOptions(client),
       startupTimeoutMs: 1_000,
+      pollIntervalMs: 1,
     });
     const result = prepare({ lease: makeLease(), base: baseSession() });
     if (status === 'RUNNING') {
@@ -136,12 +140,12 @@ test.each(['RUNNING', 'ERRORED', 'PENDING'] as const)(
       await assert.rejects(result, (error: unknown) => {
         assert.ok(error instanceof AppError);
         assert.equal(error.details?.status, status);
-        assert.equal(error.message.includes('did not start'), status === 'ERRORED');
+        assert.equal(error.details?.timeoutMs, status === 'PENDING' ? 1_000 : undefined);
         return true;
       });
       assert.deepEqual(client.stopped, [ARN]);
     }
-    assert.equal(polls, 1);
+    assert.equal(polls, 2);
   },
 );
 
