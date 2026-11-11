@@ -21,6 +21,15 @@ import {
 import { buildCanonicalGestureEvents, buildSwipeTravelEvent } from './recording-gesture-events.ts';
 import { readRecordingNumber, resolveRecordingDurationMs } from './recording-values.ts';
 
+export const gestureRepetitionTiming = Symbol('gestureRepetitionTiming');
+
+export type GestureRepetitionTiming = {
+  startedAt: number;
+  finishedAt: number;
+  backendResult?: Record<string, unknown>;
+  durationMs: number;
+};
+
 const DEFAULT_TAP_GAP_MS = 90;
 const DEFAULT_SWIPE_DURATION_MS = 250;
 const DEFAULT_SCROLL_REFERENCE_FRAME: ReferenceFrame = {
@@ -40,6 +49,42 @@ export function recordTouchVisualizationEvent(
   const handle = session.screenRecording?.handle;
   if (!handle) return;
   const recording = handle.inspect();
+
+  const repetitions = (result as Record<string | symbol, unknown> | undefined)?.[
+    gestureRepetitionTiming
+  ] as GestureRepetitionTiming[] | undefined;
+  if (repetitions) {
+    repetitions.forEach((timing, index) => {
+      const perGesture: Record<string, unknown> = {
+        ...result,
+        ...timing.backendResult,
+        durationMs: timing.durationMs,
+        effectiveDurationMs: timing.durationMs,
+        holdMs: timing.durationMs,
+        count: 1,
+      };
+      delete perGesture.gestureStartUptimeMs;
+      delete perGesture.gestureEndUptimeMs;
+      Object.assign(perGesture, timing.backendResult);
+      const start = readRecordingNumber(perGesture.gestureStartUptimeMs);
+      const end = readRecordingNumber(perGesture.gestureEndUptimeMs);
+      if (start !== undefined && end !== undefined) perGesture.holdMs = Math.max(0, end - start);
+      if (command === 'swipe' && perGesture.pattern === 'ping-pong' && index % 2 === 1) {
+        [perGesture.x1, perGesture.x2] = [perGesture.x2, perGesture.x1];
+        [perGesture.y1, perGesture.y2] = [perGesture.y2, perGesture.y1];
+      }
+      recordTouchVisualizationEvent(
+        session,
+        command,
+        positionals,
+        perGesture,
+        fallback,
+        timing.startedAt,
+        timing.finishedAt,
+      );
+    });
+    return;
+  }
 
   const merged = { ...fallback, ...(result ?? {}) };
   const reportedDurationMs =

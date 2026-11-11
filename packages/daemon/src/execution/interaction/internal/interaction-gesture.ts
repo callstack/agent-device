@@ -50,6 +50,10 @@ import type {
 } from '../../../core/interaction/internal/types.ts';
 import type { RecordedTargetCapture } from '@agent-device/selectors/target-evidence';
 import { gestureResponseData } from './interaction-gesture-response.ts';
+import {
+  gestureRepetitionTiming,
+  type GestureRepetitionTiming,
+} from '../../../core/recording-gestures.ts';
 import { noActiveSessionError } from '@agent-device/kernel/contracts';
 
 type GestureHandlerParams = InteractionRouteInput & {
@@ -64,6 +68,7 @@ type GestureInteractionOutcome = {
   flags: InteractionRouteInput['req']['flags'];
   responseData: Record<string, unknown>;
   recordingResultExtra?: Record<string, unknown>;
+  repetitionTiming?: GestureRepetitionTiming[];
   recordedTargets?: { source: RecordedTargetCapture; destination: RecordedTargetCapture };
 };
 
@@ -111,7 +116,7 @@ async function runGestureInteraction(
   if (!bound.ok) return { refused: bound.response };
   const runtime = await createGestureRuntime(params, bound.gestures);
   const context = { session: params.sessionName, requestId: params.req.meta?.requestId };
-  const result =
+  const repetitions =
     input.kind === 'tap'
       ? await runGestureRepetitions(
           runtime,
@@ -120,8 +125,14 @@ async function runGestureInteraction(
           input.pauseMs ?? 0,
           () => gesture,
         )
-      : await runPreparedGesture(runtime, context, gesture, params.req.internal);
-  return buildGestureOutcome(input, gesture, result, params.req.flags);
+      : undefined;
+  const result =
+    repetitions?.result ??
+    (await runPreparedGesture(runtime, context, gesture, params.req.internal));
+  return {
+    ...buildGestureOutcome(input, gesture, result, params.req.flags),
+    repetitionTiming: repetitions?.timing,
+  };
 }
 
 async function runPreparedGesture(
@@ -209,14 +220,16 @@ export async function dispatchSwipeViaRuntime(
     const pauseMs = input.pauseMs ?? 0;
     const pattern = input.pattern ?? 'one-way';
     const runtime = await createGestureRuntime(params, bound.gestures);
-    const result = await runGestureRepetitions(
+    const repetitions = await runGestureRepetitions(
       runtime,
       params,
       count,
       pauseMs,
       (index) => normalizePublicSwipeMotion(swipeMotionAtIndex(input, pattern, index)).gesture,
     );
+    const { result, timing } = repetitions;
     return {
+      repetitionTiming: timing,
       positionals: swipeReplayPositionals(input),
       flags: params.req.flags,
       responseData: gestureResponseData(result, {
@@ -287,6 +300,12 @@ async function dispatchGestureInteraction(
       responseData.warning = `${existingWarning}${readiness.warning}`;
     }
     getRequestSignal(params.req.meta?.requestId)?.throwIfAborted();
+    const recordingResult = { ...responseData, ...(outcome.recordingResultExtra ?? {}) };
+    if (outcome.repetitionTiming && outcome.repetitionTiming.length > 1) {
+      Object.defineProperty(recordingResult, gestureRepetitionTiming, {
+        value: outcome.repetitionTiming,
+      });
+    }
     return finalizeTouchInteraction({
       ref: params.sessionRef!,
       sessionStore: params.sessionStore,
@@ -294,7 +313,7 @@ async function dispatchGestureInteraction(
       actionCommand: command,
       positionals: outcome.positionals,
       flags: outcome.flags,
-      result: { ...responseData, ...(outcome.recordingResultExtra ?? {}) },
+      result: recordingResult,
       responseData,
       recordedTargets: outcome.recordedTargets,
       actionStartedAt,
@@ -435,21 +454,29 @@ async function runGestureRepetitions(
   count: number,
   pauseMs: number,
   gestureAtIndex: (index: number) => GestureCommandInput,
-): Promise<GestureRuntimeResult> {
+): Promise<{ result: GestureRuntimeResult; timing: GestureRepetitionTiming[] }> {
   const signal = getRequestSignal(params.req.meta?.requestId);
+  const timing: GestureRepetitionTiming[] = [];
   let result: GestureRuntimeResult | undefined;
   for (let index = 0; index < count; index += 1) {
     signal?.throwIfAborted();
+    const startedAt = Date.now();
     result = await runPreparedGesture(
       runtime,
       { session: params.sessionName, requestId: params.req.meta?.requestId },
       gestureAtIndex(index),
       params.req.internal,
     );
+    timing.push({
+      startedAt,
+      finishedAt: Date.now(),
+      backendResult: result.backendResult,
+      durationMs: result.durationMs,
+    });
     if (pauseMs > 0 && index + 1 < count) await sleep(pauseMs, signal);
   }
   if (!result) throw new Error('Gesture orchestration did not execute a gesture.');
-  return result;
+  return { result, timing };
 }
 
 function swipeMotionAtIndex(

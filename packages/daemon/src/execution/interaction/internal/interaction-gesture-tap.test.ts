@@ -15,6 +15,7 @@ import {
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import { clearAndroidObservationFixture } from '../../../__tests__/support/android-observation-fixture.ts';
 import { handleInteractionCommands } from '../index.ts';
+import { makeTestScreenRecordingResource } from '../../../__tests__/support/screen-recording-live-handle.ts';
 import { gestureRuntimeBindingsFixture } from './__tests__/gesture-runtime-bindings.fixtures.ts';
 
 let gestures = gestureRuntimeBindingsFixture();
@@ -49,6 +50,13 @@ async function runGesture(
     appBundleId: 'com.example.tap',
     scriptPublication: authoringPublication('armed'),
   });
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'simctl recordVideo',
+    outPath: '/tmp/demo.mp4',
+    startedAt: 1000,
+    gestureClockOriginAtMs: 1000,
+    gestureClockOriginUptimeMs: 100,
+  });
   sessionStore.publish('tap', session);
   const response = await handleInteractionCommands({
     createCommandSurface: async (config) => {
@@ -73,7 +81,12 @@ async function runGesture(
     inspectFacts: gestures.inspectFacts,
     bindDevice: gestures.bindDevice,
   });
-  return { response, action: session.actions[0], actions: session.actions };
+  return {
+    response,
+    action: session.actions[0],
+    actions: session.actions,
+    events: session.screenRecording.handle.inspect().gestureEvents,
+  };
 }
 
 test('a structured tap series records its contacts and series flags for .ad replay', async () => {
@@ -303,3 +316,44 @@ test('cancellation during the post-command dialog read prevents recording', asyn
   });
   expect(actions).toEqual([]);
 });
+
+for (const native of [false, true]) {
+  test(`repeated swipe records individual ${native ? 'native' : 'wall clock'} timing`, async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1100);
+    let index = 0;
+    perform.mockImplementation(async () => {
+      const start = Date.now();
+      const duration = [40, 60, 80][index++]!;
+      await new Promise((resolve) => setTimeout(resolve, duration));
+      return {
+        kind: 'tap',
+        pointerCount: 2,
+        durationMs: duration,
+        from: { x: 140, y: 375 },
+        to: { x: 140, y: 375 },
+        message: 'done',
+        ...(native
+          ? {
+              backendResult: {
+                gestureStartUptimeMs: start - 900,
+                gestureEndUptimeMs: start - 900 + duration,
+              },
+            }
+          : {}),
+      };
+    });
+    const pending = runGesture(
+      { from: { x: 80, y: 300 }, to: { x: 200, y: 450 }, count: 3, pauseMs: 100 },
+      'swipe',
+    );
+    await vi.runAllTimersAsync();
+    const { response, events } = await pending;
+    expect(response).toMatchObject({ ok: true, data: { durationMs: 80 } });
+    expect(events.map(({ tMs, durationMs }) => ({ tMs, durationMs }))).toEqual([
+      { tMs: 100, durationMs: 40 },
+      { tMs: 240, durationMs: 60 },
+      { tMs: 400, durationMs: 80 },
+    ]);
+  });
+}
