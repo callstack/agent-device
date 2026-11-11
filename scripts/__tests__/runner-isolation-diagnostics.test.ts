@@ -224,9 +224,7 @@ describe('scripts/build-xcuitest-apple.sh cleanup', () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('Refusing to clean AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH');
     expect(result.stderr).toContain('to a non-symlinked subdirectory of');
-    expect(result.stderr).toContain(
-      'To skip automatic cleanup, unset AGENT_DEVICE_IOS_CLEAN_DERIVED.',
-    );
+    expect(result.stderr).toContain('AGENT_DEVICE_IOS_CLEAN_DERIVED');
     expect(fs.readFileSync(path.join(result.derived, 'Build', 'sentinel'), 'utf8')).toBe('keep');
     expect(fs.existsSync(result.xcodebuildArgs)).toBe(false);
   });

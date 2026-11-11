@@ -305,7 +305,7 @@ export function assertSafeDerivedCleanup(
   }
   throw new AppError('COMMAND_FAILED', 'Refusing to clean AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH', {
     derivedPath,
-    hint: `Move AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH to a non-symlinked subdirectory of ${path.join(projectRoot(), '.tmp')}. To skip automatic cleanup, unset AGENT_DEVICE_IOS_CLEAN_DERIVED.`,
+    hint: `Move AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH to a non-symlinked subdirectory of ${path.join(projectRoot(), '.tmp')}. Unset AGENT_DEVICE_IOS_CLEAN_DERIVED to disable cleanup requested by that variable. Explicit cleanup, forced rebuilds, and cache repair still require a contained override.`,
   });
 }
 
