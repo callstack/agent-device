@@ -471,9 +471,8 @@ function rewriteUploadDirectUrl(upstreamUrl: string, request: Request): string |
   const uploadIndex = requestUrl.pathname.lastIndexOf('/upload/preflight');
   const uploadPrefix = uploadIndex >= 0 ? requestUrl.pathname.slice(0, uploadIndex) : '';
   const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
-  const rewritten = new URL(
-    `${forwardedProto || requestUrl.protocol.replace(/:$/, '')}://${requestUrl.host}`,
-  );
+  const rewritten = new URL(requestUrl.origin);
+  if (forwardedProto === 'http' || forwardedProto === 'https') rewritten.protocol = forwardedProto;
   rewritten.pathname = `${uploadPrefix}${parsed.pathname}`;
   rewritten.search = parsed.search;
   return rewritten.toString();

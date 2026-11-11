@@ -299,6 +299,10 @@ function resolveHttpRequestBaseUrl(req: http.IncomingMessage): string {
   const host = typeof req.headers.host === 'string' ? req.headers.host : '';
   if (!host) throw new AppError('INVALID_ARGS', 'Missing host header');
   const forwardedProto = req.headers['x-forwarded-proto'];
-  const proto = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto;
-  return `${proto || 'http'}://${host}`;
+  const proto = (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto)
+    ?.split(',')[0]
+    ?.trim();
+  const url = new URL(`http://${host}`);
+  if (proto === 'http' || proto === 'https') url.protocol = proto;
+  return url.origin;
 }
