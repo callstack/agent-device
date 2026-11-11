@@ -44,3 +44,17 @@ test('equal reported values cannot rebind across producer value views', () => {
   const unknown = { ...source, valueSource: 'unknown' } as unknown as SnapshotNativePressTarget;
   expect(matchesAuthorizedPressTarget(unknown, unknown)).toBe(false);
 });
+
+test('canonical secure input bindings ignore masked value changes', () => {
+  const expected = {
+    type: 'SecureTextField',
+    label: 'Password',
+    value: '••••',
+    rect: cases[0]!.expected.rect,
+  };
+  const candidate = { ...expected, value: '••••••' };
+  expect(matchesAuthorizedPressTarget(expected, candidate)).toBe(true);
+  for (const type of ['TextField', 50]) {
+    expect(matchesAuthorizedPressTarget({ ...expected, type }, { ...candidate, type })).toBe(false);
+  }
+});

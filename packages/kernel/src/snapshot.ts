@@ -290,7 +290,7 @@ export type SnapshotNativePressTarget = {
   identifier?: string;
   label?: string;
   value?: string;
-  /** Guest AX inputs report the accessibility value; absent means the native raw-input view. */
+  /** Set when TextField, SearchField or TextView values come from accessibility instead of raw input. */
   valueSource?: 'accessibility';
   rect: Rect;
 };
