@@ -32,6 +32,7 @@ export function analyzeScrollEdgeState(
     return {
       canScroll: false,
       emptySnapshot: false,
+      fingerprint: buildVisibleTreeFingerprint(nodes),
     };
   }
 
@@ -300,6 +301,18 @@ function buildSurfaceFingerprint(container: SnapshotNode, nodes: SnapshotNode[])
   if (descendants.length === 0) return '';
   descendants.sort();
   return descendants.join(';');
+}
+
+function buildVisibleTreeFingerprint(nodes: SnapshotNode[]): string {
+  const visibility = createSnapshotVisibility(nodes);
+  return nodes
+    .filter((node) => isUsableRect(node.rect) && visibility.isVisibleInEffectiveViewport(node))
+    .map(
+      (node) =>
+        `${node.type}#${surfaceIdentity(node)}@${Math.round(node.rect!.x)},${Math.round(node.rect!.y)}`,
+    )
+    .sort()
+    .join(';');
 }
 
 function surfaceIdentity(node: SnapshotNode): string {

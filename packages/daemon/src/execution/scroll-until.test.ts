@@ -110,6 +110,24 @@ test('passes repeat until the selector is on screen, and the last gesture is rep
   assert.deepEqual(result.result, { pixels: 480 });
 });
 
+test.each(['collection', 'ScrollView'])(
+  'virtualized %s reaches rows that appear only after scrolling',
+  async (type) => {
+    const frame = (label: string) => {
+      const nodes = tree(200, label);
+      nodes[1]!.type = type;
+      return capture({ nodes });
+    };
+    let scrolls = 0;
+    const result = await run({
+      captures: [frame('Row 1'), frame('Row 30'), frame('Email')],
+      onScroll: () => (scrolls += 1),
+    });
+    assert.equal(result.passes, 2);
+    assert.equal(scrolls, 2);
+  },
+);
+
 /**
  * A target below the fold is present but not visible. Stopping on presence would leave the caller
  * with a row it cannot act on, which is the whole reason the check asks about the viewport.
@@ -181,14 +199,14 @@ test('a vertical scroll that moves nothing gives up early instead of spending th
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.reason, 'scroll_until_no_progress');
       assert.equal(error.details?.passes, 3);
-      assert.match(String(error.details?.hint), /not reaching this container/);
+      assert.match(String(error.details?.hint), /may not be reaching this container/);
       return true;
     },
   );
   assert.equal(scrolls, 3);
 });
 
-test('running out of content stops before the pass budget does', async () => {
+test('unchanged visible content stops after gestures show no progress', async () => {
   let scrolls = 0;
   await assert.rejects(
     () =>
@@ -199,12 +217,72 @@ test('running out of content stops before the pass budget does', async () => {
       }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
-      assert.equal(error.details?.reason, 'scroll_until_edge_reached');
-      assert.match(String(error.details?.hint), /scroll the opposite direction/);
+      assert.equal(error.details?.reason, 'scroll_until_no_progress');
+      assert.equal(error.details?.passes, 3);
       return true;
     },
   );
-  assert.equal(scrolls, 0);
+  assert.equal(scrolls, 3);
+});
+
+test('an unchanged collection without a scroll marker reports no progress', async () => {
+  const nodes = tree(200, 'Other');
+  nodes[1]!.type = 'collection';
+  await assert.rejects(
+    () => run({ captures: [capture({ nodes })] }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'scroll_until_no_progress' &&
+      error.details?.passes === 3,
+  );
+});
+
+test('content that moved and then stops reports the end of content', async () => {
+  const frames = [tree(400, 'Other'), tree(200, 'Other')].map((nodes) => capture({ nodes }));
+  await assert.rejects(
+    () => run({ captures: frames }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'scroll_until_edge_reached');
+      assert.match(String(error.details?.hint), /another screen/);
+      return true;
+    },
+  );
+});
+
+test('a non-scrollable screen stops after repeated unchanged observations', async () => {
+  const nodes = tree(200, 'Other').filter((node) => node.index !== 1);
+  nodes[1]!.parentIndex = 0;
+  let scrolls = 0;
+  await assert.rejects(
+    () => run({ captures: [capture({ nodes })], onScroll: () => (scrolls += 1) }),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'scroll_until_no_progress',
+  );
+  assert.equal(scrolls, 3);
+});
+
+test('changes outside a stuck scroll container do not imply scrolling', async () => {
+  const frame = (label: string) =>
+    capture({ nodes: [...tree(200, 'Other'), { ...row(3, 100, label), parentIndex: 0 }] });
+  await assert.rejects(
+    () => run({ captures: [frame('Clock 1'), frame('Clock 2')] }),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'scroll_until_no_progress',
+  );
+});
+
+test('changes in a tree without a scroll container do not imply scrolling', async () => {
+  const frame = (label: string) => {
+    const nodes = tree(200, label).filter((node) => node.index !== 1);
+    nodes[1]!.parentIndex = 0;
+    return capture({ nodes });
+  };
+  await assert.rejects(
+    () => run({ captures: [frame('Clock 1'), frame('Clock 2')] }),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'scroll_until_no_progress',
+  );
 });
 
 test('a horizontal scroll has no edge signal and is bounded by the budget alone', async () => {

@@ -6,6 +6,7 @@ export function isScrollableType(type: string | null | undefined): boolean {
     value.includes('listview') ||
     value.includes('gridview') ||
     value.includes('collectionview') ||
+    value === 'collection' ||
     value === 'table'
   );
 }
