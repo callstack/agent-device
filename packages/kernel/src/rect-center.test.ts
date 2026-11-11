@@ -91,7 +91,7 @@ test('input bounds survive node spreads and explicit clone restoration without c
       bounds,
     ),
   ];
-  assert.deepEqual(readSnapshotNodeInteractionBounds({ ...source[0] }), bounds);
+  assert.deepEqual(readSnapshotNodeInteractionBounds({ ...source[0]! }), bounds);
   const cloned = structuredClone(source);
   copySnapshotNodeInteractionBounds(source, cloned);
   assert.deepEqual(readSnapshotNodeInteractionBounds(cloned[0]!), bounds);
