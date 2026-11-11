@@ -219,6 +219,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'ResponseLevel',
       ),
       ...from(KERNEL_DEVICE, 'PLATFORM_SELECTORS', 'PlatformSelector'),
+      ...from('packages/contracts/src/daemon-wire-request.ts', 'DaemonWireRequestMeta'),
       ...from('packages/contracts/src/device-pin.ts', 'DevicePin', 'DevicePinSelector'),
       ...from(
         'packages/contracts/src/device-inventory.ts',

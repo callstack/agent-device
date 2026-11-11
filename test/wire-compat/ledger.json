@@ -194,10 +194,11 @@
     "packages/contracts/src/lease-scope.ts#buildLeaseRpcParams": "sha256:365490a0fe1833d7ce8b0d3f5425462608a85119b12c1a2c4f16bb83b5d28e06",
     "packages/contracts/src/lease-scope.ts#isLeaseRpcCommand": "sha256:955dc1b73462d40593e5728dbcbaeec1307944b08262a22627e84cc5dc507e8f",
     "packages/contracts/src/lease-scope.ts#leaseRpcMethodForCommand": "sha256:3613555c6002c23ab5bec4b98bc1b4d6947014b52fa100176177f955cf762881",
+    "packages/contracts/src/daemon-wire-request.ts#DaemonWireRequestMeta": "sha256:369be6aca9cfe20d221b40f5f6ab287ff11e148cc3f7e04fbbfa78be5df31e52",
     "packages/contracts/src/device-pin.ts#DevicePin": "sha256:896f2b8cdcadea2d0fa7a66c2edc44007d1cf7f88d1043393e4268aacf1a63a9",
     "packages/contracts/src/device-pin.ts#DevicePinSelector": "sha256:c033ae0274d0da7c3cfdcafb2537091ba76e9a1fc4d635357fab9570cc1b223e",
     "packages/contracts/src/device-inventory.ts#DEVICE_PIN_SELECTOR_KEYS": "sha256:02a5f76aff71149e02395b60eaa7702715d4594061d11af4d9fa62224f0cc17d",
-    "packages/contracts/src/device-inventory.ts#parseDevicePinSelector": "sha256:ba1dbd259567b471b7802d03d711f2c99fab0894a6309cfffe0421f92ae4345f",
+    "packages/contracts/src/device-inventory.ts#parseDevicePinSelector": "sha256:6b3b9ac32efcc8e7859cc0e8ceef5a85e9cec7082d92901e0c1ee8c0555381da",
     "packages/contracts/src/device-inventory.ts#readDevicePin": "sha256:bb15ca2a086a881c6cf945c25d432c092be165e58165d229c25df69c4c9fafbd"
   },
   "compatibleChanges": [
@@ -530,6 +531,16 @@
       "declaration": "packages/daemon/src/server/http/http-rpc-methods.ts#toDaemonRequest",
       "digest": "sha256:d6afa5f8f1219e519e72bbd6fddd7de7763818f1ed7ae2a1e2a12001bd66bd52",
       "rationale": "Validates the optional devicePin metadata through the shared parser before dispatch. Existing valid pins and requests that omit a pin keep their request projection. Malformed pin objects now fail clearly with the existing INVALID_ARGS envelope and invalid_device_pin reason instead of a later TypeError. This repairs validation of an unreleased optional field; routes, authentication, framing, and existing fields are unchanged under ADR 0006."
+    },
+    {
+      "declaration": "packages/contracts/src/device-inventory.ts#parseDevicePinSelector",
+      "digest": "sha256:6b3b9ac32efcc8e7859cc0e8ceef5a85e9cec7082d92901e0c1ee8c0555381da",
+      "rationale": "Rejects internally incompatible selectors in the unreleased optional devicePin field. Valid pins and omitted pins retain their projection; impossible identity/platform combinations now return the existing INVALID_ARGS envelope with invalid_device_pin. This is validation of malformed input, with no protocol bump under ADR 0006."
+    },
+    {
+      "declaration": "packages/contracts/src/daemon-wire-request.ts#DaemonWireRequestMeta",
+      "digest": "sha256:369be6aca9cfe20d221b40f5f6ab287ff11e148cc3f7e04fbbfa78be5df31e52",
+      "rationale": "Tracks the actual metadata declaration instead of its obsolete narrowing waiver. devicePin is an additive optional request field: released clients omit it, older daemons ignore it, and existing metadata fields keep their meanings under ADR 0006."
     }
   ]
 }
