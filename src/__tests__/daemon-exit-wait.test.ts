@@ -149,6 +149,22 @@ test('an unreadable process start time does not prove exit', async () => {
   });
 });
 
+test.each([
+  ['missing', undefined],
+  ['same-lifetime', OURS],
+] as const)(
+  'a daemon reaped during a %s snapshot proves exit without a polling budget',
+  async (_label, startTime) => {
+    vi.spyOn(state.starts, 'get').mockImplementationOnce(() => {
+      state.alive.set(PID, false);
+      return startTime;
+    });
+    expect(await waitForDaemonExit({ pid: PID, startTime: OURS }, { timeoutMs: 0 })).toMatchObject({
+      exited: true,
+    });
+  },
+);
+
 test('a recycled pid proves the original exit even when its successor is a zombie', async () => {
   state.starts.set(PID, RECYCLED);
   state.states.set(PID, 'Z');
