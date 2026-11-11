@@ -88,30 +88,31 @@ function linkRuntimeDependencies(installedPackageRoot: string, consumerRoot: str
  * are found from the bundled chunk that holds the resolver, so this proves the shipped layout.
  */
 async function assertPackagedRunScriptChild(installedPackageRoot: string, root: string) {
-  const childPath = path.join(
-    installedPackageRoot,
-    'dist',
-    'src',
-    'internal',
-    'run-script-child.js',
+  const childPath = fs.realpathSync(
+    path.join(installedPackageRoot, 'dist', 'src', 'internal', 'run-script-child.js'),
   );
   assert.equal(fs.existsSync(childPath), true);
+  const aliasRoot = path.join(root, 'run-script-entry-alias');
+  fs.symlinkSync(installedPackageRoot, aliasRoot, 'junction');
+  const aliasChildPath = path.join(aliasRoot, 'dist', 'src', 'internal', 'run-script-child.js');
   const server = http.createServer((_req, res) => res.end('x'.repeat(2 * 1024 * 1024)));
   try {
     const port = await listenOnLoopback(server);
     const scriptPath = path.join(root, 'run-script-setup.js');
     fs.writeFileSync(scriptPath, 'output.size = http.post(SERVER_URL).body.length');
-    const result = await runCmd(process.execPath, [childPath], {
-      stdin: JSON.stringify({
-        scriptPath,
-        env: { SERVER_URL: `http://127.0.0.1:${port}/` },
-        publicNetworkOnly: false,
-      }),
-      timeoutMs: SUBPROCESS_TIMEOUT_MS,
-    });
-    assert.deepEqual(readJson(result.stdout), {
-      outputEnv: { 'output.size': String(2 * 1024 * 1024) },
-    });
+    for (const entryPath of [childPath, aliasChildPath]) {
+      const result = await runCmd(process.execPath, [entryPath], {
+        stdin: JSON.stringify({
+          scriptPath,
+          env: { SERVER_URL: `http://127.0.0.1:${port}/` },
+          publicNetworkOnly: false,
+        }),
+        timeoutMs: SUBPROCESS_TIMEOUT_MS,
+      });
+      assert.deepEqual(readJson(result.stdout), {
+        outputEnv: { 'output.size': String(2 * 1024 * 1024) },
+      });
+    }
   } finally {
     await closeLoopbackServer(server);
   }
