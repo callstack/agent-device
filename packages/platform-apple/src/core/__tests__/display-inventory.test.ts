@@ -33,7 +33,9 @@ vi.mock('@agent-device/host-kit/host-file', async (importOriginal) => {
 });
 
 import {
+  appleLitPanel,
   appleSimulatorDisplayArgvFragment,
+  establishedLitPanel,
   buildInventory,
   parseCoreDeviceDisplays,
   readPanelPower,
@@ -372,6 +374,56 @@ describe('panelContentRotation', () => {
     for (const value of ['unknown', 'constructor', 'rot45', '']) {
       assert.equal(panelContentRotation(value), undefined);
     }
+  });
+});
+
+describe('establishedLitPanel', () => {
+  beforeEach(() => {
+    mockReadHostTextFile.mockReset();
+    mockReadHostTextFile.mockResolvedValue('');
+  });
+
+  function duoTable(mapEntry: (entry: Record<string, unknown>) => Record<string, unknown>) {
+    return JSON.stringify({
+      result: { displays: IPHONE_DUO_CLOSED.result.displays.map(mapEntry) },
+    });
+  }
+
+  test('a complete table with one lit panel establishes that panel for both selectors', () => {
+    const inventory = buildInventory([outerPanel, innerPanel]);
+    assert.equal(establishedLitPanel(inventory), outerPanel);
+    assert.deepEqual(appleLitPanel(inventory), { displayId: 1, widthPt: 466, heightPt: 678 });
+  });
+
+  test('two lit panels establish none', () => {
+    const inventory = buildInventory([outerPanel, { ...innerPanel, power: 'lit' }]);
+    assert.equal(establishedLitPanel(inventory), undefined);
+    assert.equal(appleLitPanel(inventory), undefined);
+  });
+
+  test('an incomplete table establishes no panel even when one parsed panel is the only lit one', async () => {
+    // Two activeOn integrated entries; the inner one has no geometry and does not parse.
+    mockReadHostTextFile.mockResolvedValue(
+      duoTable((entry) => {
+        const lit: Record<string, unknown> = { ...entry, backlightState: 'activeOn' };
+        if (entry.name !== 'LCD-1') return lit;
+        const { nativeSize: _nativeSize, ...withoutGeometry } = lit;
+        return withoutGeometry;
+      }),
+    );
+    const inventory = await queryAppleDisplayInventory(IOS_TEST_SIMULATOR, {});
+    assert.equal(inventory.multiScreen, true);
+    assert.equal(inventory.displays.filter((display) => display.power === 'lit').length, 1);
+    assert.equal(establishedLitPanel(inventory), undefined);
+    assert.equal(appleLitPanel(inventory), undefined);
+  });
+
+  test('a single-panel or unresolved table establishes no foldable panel', () => {
+    assert.equal(establishedLitPanel(buildInventory([outerPanel])), undefined);
+    assert.equal(
+      establishedLitPanel({ displays: [], multiScreen: false, ambiguous: false, unresolved: true }),
+      undefined,
+    );
   });
 });
 

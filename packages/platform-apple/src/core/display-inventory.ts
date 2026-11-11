@@ -411,14 +411,30 @@ function warnWhenPrimaryPanelIsNotTheSmallest(panels: AppleDeviceDisplay[]): voi
 }
 
 /**
- * The panel a runner request names, only when panel power decided exactly one panel. Unlike a
- * capture, a surface request does not fall back to the `primary` panel: it can keep the runner's
- * historic route instead of guessing. Display 0 is the runtime's "no display" identity.
+ * The one panel the panel table establishes as lit, or nothing. It takes a resolved multi-panel
+ * table that parsed every integrated entry, and so named an active display, with exactly one lit
+ * panel, which is that active display. A table with an integrated entry missing its identity or
+ * geometry establishes no panel, even when the panels that did parse show a single lit one: the
+ * entry that did not parse may be lit too. Runner routing (`appleLitPanel`) and the foldable
+ * rotation controller select through this one rule.
  */
-export function appleLitPanel(inventory: AppleDisplayInventory): RunnerCommand['litPanel'] {
+export function establishedLitPanel(
+  inventory: AppleDisplayInventory,
+): AppleDeviceDisplay | undefined {
   if (!inventory.multiScreen || inventory.unresolved || !inventory.activeDisplay) return undefined;
   const litPanels = inventory.displays.filter((display) => display.power === 'lit');
-  const panel = litPanels.length === 1 ? litPanels[0]! : undefined;
+  if (litPanels.length !== 1 || litPanels[0] !== inventory.activeDisplay) return undefined;
+  return litPanels[0];
+}
+
+/**
+ * The panel a runner request names, only when the panel table establishes one lit panel (see
+ * {@link establishedLitPanel}). Unlike a capture, a surface request does not fall back to the
+ * `primary` panel: it can keep the runner's historic route instead of guessing. Display 0 is the
+ * runtime's "no display" identity.
+ */
+export function appleLitPanel(inventory: AppleDisplayInventory): RunnerCommand['litPanel'] {
+  const panel = establishedLitPanel(inventory);
   if (!panel || panel.displayId <= 0) return undefined;
   return {
     displayId: panel.displayId,

@@ -13,6 +13,7 @@ import {
 } from '../core/config.ts';
 import { readAppleDeviceOrientation } from '../core/device-orientation.ts';
 import {
+  establishedLitPanel,
   panelContentRotation,
   queryAppleDisplayInventory,
   type AppleDeviceDisplay,
@@ -291,8 +292,9 @@ function scopedUnverifiedError(
 }
 
 /**
- * The one lit panel and the rotation it shows, from one fresh panel-table read. Anything
- * less decided — an unreadable table, no lit panel, an unrecognized `rotN` — is no reading:
+ * The one lit panel and the rotation it shows, from one fresh panel-table read, selected by the
+ * display inventory's {@link establishedLitPanel}. Anything less decided — an unreadable table,
+ * an incomplete one, no lit panel or several, an unrecognized `rotN` — is no reading:
  * the rotation loop must not confirm, compensate or dispatch from a panel that is not showing.
  * On iPhone Duo the table reports both panels lit for a few seconds after a pose change in either
  * direction, so the first reads after a fold or an unfold are no reading by design.
@@ -309,9 +311,7 @@ async function readLitPanel(
     if (signal?.aborted) throw error;
     return undefined;
   }
-  if (inventory.unresolved || !inventory.multiScreen) return undefined;
-  const litPanels = inventory.displays.filter((display) => display.power === 'lit');
-  const panel = litPanels.length === 1 ? litPanels[0]! : undefined;
+  const panel = establishedLitPanel(inventory);
   if (!panel) return undefined;
   const rotation = panelContentRotation(panel.currentOrientation);
   return rotation === undefined ? undefined : { panel, rotation };

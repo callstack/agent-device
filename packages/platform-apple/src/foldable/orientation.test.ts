@@ -196,6 +196,8 @@ function fakeScopedDuo(
     bothLitFromRead?: number;
     /** How many panel reads after a picker event still show the panel as it was before it. */
     hidLagReads?: number;
+    /** A panel the table reports lit (activeOn) but without geometry: an incomplete table. */
+    incompleteLitPanel?: DuoPanel;
   },
 ) {
   const helpers: string[][] = [];
@@ -218,13 +220,14 @@ function fakeScopedDuo(
   };
   show(lit);
   const panel = (kind: DuoPanel, bothLit: boolean) => {
-    const isLit = bothLit || kind === lit;
+    const incomplete = options.incompleteLitPanel === kind;
+    const isLit = bothLit || kind === lit || incomplete;
     return {
       backlightState: isLit ? 'activeOn' : 'off',
       currentOrientation: isLit ? `rot${shown[kind]}` : 'rot180',
       displayId: kind === 'outer' ? 1 : 3,
       name: kind === 'outer' ? 'LCD' : 'LCD-1',
-      nativeSize: kind === 'outer' ? [1398, 2034] : [2007, 2853],
+      ...(incomplete ? {} : { nativeSize: kind === 'outer' ? [1398, 2034] : [2007, 2853] }),
       pointScale: 3,
       primary: kind === 'outer',
       type: { integrated: {} },
@@ -473,6 +476,32 @@ test('a scoped rotation to the orientation already showing dispatches nothing', 
   await expect(rotateScoped(sim, 'portrait')).resolves.toEqual({ orientation: 'portrait' });
   expect(sim.rotations()).toEqual([]);
 });
+
+test.each([
+  ['the parsed panel already shows the target', 'landscape-left'],
+  ['the parsed panel shows another rotation', 'landscape-right'],
+] as const)(
+  'an incomplete panel table never confirms or dispatches (%s)',
+  async (_case, target) => {
+    const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
+    // Two activeOn integrated entries; the inner one has no geometry, so it does not parse. The
+    // outer panel that did parse is the only lit one left, but no single lit panel is established.
+    const sim = fakeScopedDuo(scoped, {
+      lit: 'outer',
+      picker: 'landscape-left',
+      incompleteLitPanel: 'inner',
+    });
+    expect(sim.litScreen()).toBe('rot270');
+    const outcome = await rotateScoped(sim, target);
+    expect(outcome).toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'orientation-unverified-scoped-set', requestedOrientation: target },
+    });
+    expect((outcome as AppError).details).not.toHaveProperty('observedOrientation');
+    expect(sim.rotations()).toEqual([]);
+    expect(sim.devicectl).toEqual([]);
+  },
+);
 
 test('a reading taken before the dispatch lands teaches nothing and is not followed by another dispatch', async () => {
   const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
