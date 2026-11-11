@@ -87,15 +87,15 @@ function parseKeyboardPanelRows(raw: string): KeyboardPanelRow[] {
   return rows;
 }
 
+function readableZOrder(z: number | undefined): z is number {
+  return z !== undefined;
+}
+
 /**
  * The z-order column sits between the flag columns and the orientation column, ahead of the
  * rect group. The name, six id/flag columns, z-order, and orientation precede the rect, so the
  * eighth token is the z-order; anything else reads as unknown.
  */
-function readableZOrder(z: number | undefined): z is number {
-  return z !== undefined;
-}
-
 function zOrderFromWindowRow(line: string): number | undefined {
   const beforeRect = line.slice(0, line.indexOf('['));
   const columns = beforeRect.trim().split(/\s+/);

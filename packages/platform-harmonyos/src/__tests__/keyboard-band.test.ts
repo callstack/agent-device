@@ -152,6 +152,18 @@ test('a panel row without a readable z-order answers unmeasurable', () => {
   });
 });
 
+test('a rect-less panel row still reads through its z-order', () => {
+  // The rect column is never read, so a row that ends before the rect group still measures
+  // visibility from its eighth token; the truncated row above fails only because its eighth
+  // token is missing, not because the rect is.
+  const rectlessShownRow = 'SCBKeyboardPanel     0         5714    17    2134 1    0    102  0';
+  const dump = `${WINDOW_TABLE_HEADER}\n${rectlessShownRow}`;
+  assert.deepEqual(harmonyKeyboardBandFromWindowDump(dump), {
+    kind: 'visibility-only',
+    visible: true,
+  });
+});
+
 test('a failed window probe answers unmeasurable and never throws', async () => {
   runHarmonyShell.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'dump failed' });
   assert.deepEqual(await readHarmonyKeyboardBand(DEVICE), {
