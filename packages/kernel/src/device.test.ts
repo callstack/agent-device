@@ -79,8 +79,12 @@ test('web session names that differ only by case drive one browser and are one d
   assert.equal(devicesOverlap(webDevice('One').id, one), true);
 });
 
-test('the backend key is p_<name>, and t_<hash of the tenant>_<name> under tenant isolation', () => {
+test('the backend key separates named, tenant, and workspace sessions', () => {
   assert.equal(webSessionBackendKey({ name: 'one' }), 'p_one');
+  assert.equal(
+    webSessionBackendKey({ kind: 'workspace', id: '0123456789abcdef' }),
+    'w_0123456789abcdef',
+  );
   const first = webSessionBackendKey({
     name: 'one',
     namespace: { kind: 'tenant', id: 'tenant-1' },

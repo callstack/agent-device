@@ -49,7 +49,7 @@ const requestWith = (
   identity: WebSessionIdentity = webSession,
 ): DaemonRequest => ({
   token: 'test-token',
-  session: identity.name,
+  session: 'name' in identity ? identity.name : 'default',
   command: 'snapshot',
   positionals: [],
   flags,

@@ -253,7 +253,10 @@ test.each(['', '   '])(
     const response = await createOpenHandler(sessionStore, new LeaseRegistry(), {
       ...lifecycleDeviceRuntimeGateway,
       bind,
-    })(openWebRequest(session));
+    })({
+      ...openWebRequest(session),
+      meta: { cwd: mkdtempForTestSync('web-blank-workspace-'), sessionExplicit: true },
+    });
 
     expect(response).toMatchObject({
       ok: false,

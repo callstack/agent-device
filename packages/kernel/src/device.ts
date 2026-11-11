@@ -135,11 +135,10 @@ const SOCKET_FILE_OVERHEAD_BYTES = '/'.length + '.sock'.length;
 const WEB_BACKEND_KEY_MAX_LENGTH =
   SOCKET_PATH_MAX_BYTES - SOCKET_DIR_BYTES - SOCKET_FILE_OVERHEAD_BYTES;
 
-/** The public name and its tenant or implicit workspace namespace. */
-export type WebSessionIdentity = Readonly<{
-  name: string;
-  namespace?: { kind: 'tenant'; id: string } | { kind: 'workspace'; id: string };
-}>;
+/** A named session with an optional tenant, or an implicit workspace session without a name. */
+export type WebSessionIdentity =
+  | Readonly<{ name: string; namespace?: { kind: 'tenant'; id: string } }>
+  | Readonly<{ kind: 'workspace'; id: string }>;
 
 function webBackendKeyPrefix(tenantId: string | undefined): string {
   if (tenantId === undefined) return WEB_BACKEND_KEY_PREFIX;
@@ -172,11 +171,9 @@ function requireWebSessionName(sessionName: string, keyPrefixLength: number): st
  * workspace session.
  */
 export function webSessionBackendKey(session: WebSessionIdentity): string {
-  const prefix = webBackendKeyPrefix(
-    session.namespace?.kind === 'tenant' ? session.namespace.id : undefined,
-  );
-  const name = requireWebSessionName(session.name, prefix.length);
-  return session.namespace?.kind === 'workspace' ? `w_${session.namespace.id}` : `${prefix}${name}`;
+  if ('kind' in session) return `w_${session.id}`;
+  const prefix = webBackendKeyPrefix(session.namespace?.id);
+  return `${prefix}${requireWebSessionName(session.name, prefix.length)}`;
 }
 
 /**
