@@ -211,7 +211,9 @@ test('a replaced canonical target is refused by the one recheck after native rea
     states: ['blocked', 'ready'],
     changeTarget: true,
   });
-  await expect(run).rejects.toMatchObject({ details: { dispatched: 'no' } });
+  await expect(run).rejects.toMatchObject({
+    details: { reason: 'target_not_ready', readiness: 'changed', dispatched: 'no' },
+  });
   expect(points).toEqual([]);
   expect(events).toContain('ready');
 });

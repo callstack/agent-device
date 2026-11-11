@@ -108,8 +108,8 @@ beforeEach(() => {
   });
 });
 
-// A changed overlay cannot corroborate a tap the native readiness read proved was not dispatched.
-test.each([undefined, 'unknown', 'no'] as const)('unsent means failure (%s)', async (delivery) => {
+// For no delivery, an unrelated overlay change cannot corroborate a tap proved not dispatched.
+test.each([undefined, 'unknown', 'no'] as const)('dispatch disclosure (%s)', async (delivery) => {
   const sessionName = 'ios-tap-corroboration';
   const sessionStore = makeSessionStore();
   const session = makeIosSession(sessionName, {

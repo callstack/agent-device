@@ -27,7 +27,6 @@
     "name": "one point capture rounding",
     "expected": {
       "type": 9,
-      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 240,
@@ -37,7 +36,6 @@
     },
     "candidate": {
       "type": 9,
-      "label": "Continue",
       "rect": {
         "x": 41,
         "y": 240,
@@ -51,7 +49,6 @@
     "name": "target moved",
     "expected": {
       "type": 9,
-      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 240,
@@ -61,7 +58,6 @@
     },
     "candidate": {
       "type": 9,
-      "label": "Continue",
       "rect": {
         "x": 42,
         "y": 240,
@@ -270,7 +266,6 @@
     "name": "negative width",
     "expected": {
       "type": 9,
-      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 240,
@@ -280,7 +275,6 @@
     },
     "candidate": {
       "type": 9,
-      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 240,
@@ -294,7 +288,6 @@
     "name": "positive y width height rounding",
     "expected": {
       "type": 9,
-      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 240,
@@ -304,7 +297,6 @@
     },
     "candidate": {
       "type": 9,
-      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 241,
@@ -318,7 +310,6 @@
     "name": "negative y width height rounding",
     "expected": {
       "type": 9,
-      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 240,
@@ -328,7 +319,6 @@
     },
     "candidate": {
       "type": 9,
-      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 239,
@@ -342,7 +332,6 @@
     "name": "y outside capture rounding",
     "expected": {
       "type": 9,
-      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 240,
@@ -352,7 +341,6 @@
     },
     "candidate": {
       "type": 9,
-      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 242,
@@ -366,7 +354,6 @@
     "name": "width outside capture rounding",
     "expected": {
       "type": 9,
-      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 240,
@@ -376,7 +363,6 @@
     },
     "candidate": {
       "type": 9,
-      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 240,
@@ -390,7 +376,6 @@
     "name": "height outside capture rounding",
     "expected": {
       "type": 9,
-      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 240,
@@ -400,7 +385,6 @@
     },
     "candidate": {
       "type": 9,
-      "label": "Continue",
       "rect": {
         "x": 40,
         "y": 240,

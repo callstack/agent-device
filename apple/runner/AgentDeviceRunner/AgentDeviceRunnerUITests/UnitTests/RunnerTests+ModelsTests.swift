@@ -248,7 +248,7 @@ extension RunnerTests {
   /// theirs. `appState` arrived with #2929, `pasteboardWrite` with the runner-written simulator
   /// clipboard, `snapshotBridge` with the runner-served Simulator AX bridge.
   private static let commandsNewerThanTheMergeBase: Set<CommandType> = [
-    .appState, .pasteboardWrite, .volumeUp, .volumeDown, .snapshotBridge,
+    .appState, .pasteboardWrite, .volumeUp, .volumeDown, .snapshotBridge, .pressReadiness,
   ]
 
   /// The commands production never runs through the prepared path's body: `executeOnMain` answers
