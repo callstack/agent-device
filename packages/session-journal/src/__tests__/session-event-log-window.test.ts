@@ -500,3 +500,93 @@ test('the active cap admits an exact UTF-8 line and refuses a larger line', asyn
   await flushSessionEventLogWrites(eventLogPath);
   assert.equal(fs.readFileSync(eventLogPath, 'utf8'), line);
 });
+
+test('a single serialized line at 16 MiB persists and one byte more is refused', async () => {
+  const dir = mkdtempForTestSync('event-single-byte-limit-');
+  const eventLogPath = resolveSessionEventLogPath(dir);
+  const logPath = path.join(dir, 'diagnostics.ndjson');
+  const max = 16 * 1024 * 1024;
+  const env = { AGENT_DEVICE_EVENT_LOG_MAX_BYTES: String(max * 2) };
+  const makeEvent = (keySize: number) => ({
+    kind: 'request.started' as const,
+    ts: 'fixed',
+    details: { ['x'.repeat(keySize)]: 1 },
+  });
+  const serialize = (event: ReturnType<typeof makeEvent>) =>
+    `${JSON.stringify(Object.assign({ version: 1, ts: 'fixed', session: 'default' }, event))}\n`;
+  const overhead = Buffer.byteLength(serialize(makeEvent(1))) - 1;
+  const exact = makeEvent(max - overhead);
+  const line = serialize(exact);
+  assert.equal(Buffer.byteLength(line), max);
+  await withDiagnosticsScope({ debug: true, logPath }, async () => {
+    appendSessionEvent(eventLogPath, 'default', exact, env);
+    await flushSessionEventLogWrites(eventLogPath);
+    appendSessionEvent(eventLogPath, 'default', makeEvent(max - overhead + 1), env);
+    await flushSessionEventLogWrites(eventLogPath);
+  });
+  assert.equal(fs.readFileSync(eventLogPath, 'utf8'), line);
+  const diagnostics = fs
+    .readFileSync(logPath, 'utf8')
+    .trim()
+    .split('\n')
+    .map((entry) => JSON.parse(entry));
+  assert.deepEqual(
+    diagnostics
+      .filter((event) => event.phase === 'session_event_log_write_failed')
+      .map((event) => [event.data.reason, event.data.operation]),
+    [['entry-too-large', 'admission']],
+  );
+});
+
+test('an active-file rename failure preserves bytes and a later event recovers the window', async () => {
+  const dir = mkdtempForTestSync('event-active-rename-');
+  const eventLogPath = resolveSessionEventLogPath(dir);
+  const logPath = path.join(dir, 'diagnostics.ndjson');
+  const env = { AGENT_DEVICE_EVENT_LOG_MAX_BYTES: '200' };
+  const send = (summary: string) =>
+    appendSessionEvent(
+      eventLogPath,
+      'default',
+      {
+        kind: 'request.started',
+        ts: 'fixed',
+        summary,
+      },
+      env,
+    );
+  send('first');
+  send('second');
+  await flushSessionEventLogWrites(eventLogPath);
+  const before = fs.readFileSync(eventLogPath);
+  const rename = fs.promises.rename.bind(fs.promises);
+  const fault = vi.spyOn(fs.promises, 'rename').mockImplementation(async (source, destination) => {
+    if (String(source) === eventLogPath)
+      throw Object.assign(new Error('denied'), { code: 'EACCES' });
+    return rename(source, destination);
+  });
+  await withDiagnosticsScope({ debug: true, logPath }, async () => {
+    send('failed');
+    await flushSessionEventLogWrites(eventLogPath);
+  });
+  assert.deepEqual(fs.readFileSync(eventLogPath), before);
+  assert.ok(before.length <= 200);
+  assert.equal(fs.existsSync(resolveRotatedSessionEventLogPath(eventLogPath)), false);
+  const diagnostics = fs
+    .readFileSync(logPath, 'utf8')
+    .trim()
+    .split('\n')
+    .map((entry) => JSON.parse(entry));
+  assert.deepEqual(
+    diagnostics
+      .filter((event) => event.phase === 'session_event_log_write_failed')
+      .map((event) => [event.data.reason, event.data.operation, event.data.errno]),
+    [['maintenance-failed', 'rotation', 'EACCES']],
+  );
+  fault.mockRestore();
+  send('recovered');
+  await flushSessionEventLogWrites(eventLogPath);
+  assert.deepEqual(fs.readFileSync(resolveRotatedSessionEventLogPath(eventLogPath)), before);
+  assert.ok(fs.statSync(eventLogPath).size <= 200);
+  assert.deepEqual(summaries(eventLogPath, '0', 10), ['first', 'second', 'recovered']);
+  assert.equal(readSessionEventLog(eventLogPath, { cursor: '2' }).endCursor, '3');
+});
