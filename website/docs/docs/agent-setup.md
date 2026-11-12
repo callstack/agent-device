@@ -53,7 +53,7 @@ Capture screenshots, logs, network, audio, perf, traces, recordings, and `.ad` r
 
 `agent-device mcp` starts the stdio MCP server. It exposes installed CLI commands as structured tools. Some local workflows are CLI-only and have no MCP tool.
 
-`agent-device mcp` accepts no flags or arguments other than `--help` and `--version`; any other argument fails with `INVALID_ARGS`. To configure the server, such as its state directory, set `AGENT_DEVICE_*` environment variables or `AGENT_DEVICE_CONFIG` in the client's server entry.
+`agent-device mcp` accepts no flags or arguments other than `--help` and `--version`; any other argument fails with `INVALID_ARGS`. To configure the server, set `AGENT_DEVICE_*` environment variables or `AGENT_DEVICE_CONFIG` in the client's server entry. For example, set the state directory with `AGENT_DEVICE_STATE_DIR`, and the remote `tenant`, `runId`, and `leaseId` with `AGENT_DEVICE_TENANT`, `AGENT_DEVICE_RUN_ID`, and `AGENT_DEVICE_LEASE_ID` (or the same keys in `~/.agent-device/config.json`). Tool calls cannot pass these values.
 
 For web automation, MCP tools can target `platform: "web"` once the managed browser backend is set up, but `agent-device web setup` and `agent-device web doctor` are CLI-only. Run setup from a terminal that uses the same state directory as the MCP server before you ask an MCP client to drive a browser session.
 
