@@ -372,21 +372,22 @@ Rejected alternatives:
 
 `XCUIDevice.orientation` has no effect on an iPhone Duo simulator, and the runner readback repeats the requested value.
 `devicectl device orientation set` reports success and has no effect on a simulator that `simctl boot` started.
-`orientation` therefore rotates a multi-panel iPhone Duo simulator through the guest device-state control: the HID event that Device Hub's orientation menu sends (`orientation-picker-control`, type `enum`).
+`orientation` therefore rotates a multi-panel simulator through the guest device-state control: the HID event that Device Hub's orientation menu sends (`orientation-picker-control`, type `enum`).
 The picker accepts `pud` for upside-down dispatch, which the inner panel needs to show landscape-left.
 The user target `portrait-upside-down` remains refused with `unsupported-foldable-orientation`.
 Routing uses the `fold` admission and the set-based panel-count source. A resolved panel count is a hardware fact, so the daemon probes each simulator once.
 A supplied helper is a reuse handle; only an explicit guest-source request changes the default-set source.
 Thus, classifying a single-panel default-set simulator does not prepare the fold helper.
 
-The picker mapping requires the discovered model to be iPhone Duo; other multi-panel models are refused.
+The picker offsets were measured on iPhone Duo; a new multi-panel model needs its own mapping.
 In both simulator sets, the helper reads the guest panel table and dispatches the fixed picker value for the established lit panel.
 The table maps the outer panel at zero offset and the inner panel at +90 degrees.
 Only a fresh `currentOrientation` from an established lit panel confirms the requested visible orientation.
 An incomplete table, unknown-power sibling, or multiple lit panels cannot confirm or dispatch.
 A repeated visible target dispatches nothing; delayed reads wait without resending to the same panel.
 A target that never appears is refused with `orientation-unverified` in either set.
-An unreadable guest table reports `orientation-panel-table-unavailable` and points to the inventory diagnostic.
+An unresolved guest read inside the settle loop neither confirms nor dispatches; the loop retries it.
+An unresolved final read reports `orientation-panel-table-unavailable` and points to the inventory diagnostic.
 
 Rejected alternatives:
 

@@ -125,13 +125,6 @@ export async function setAppleFoldableOrientation(
   options: { signal?: AbortSignal } = {},
 ): Promise<{ orientation: DeviceRotation }> {
   const { signal } = options;
-  if (device.model !== 'iPhone Duo') {
-    throw new AppError('UNSUPPORTED_OPERATION', 'Guest rotation requires an iPhone Duo model', {
-      deviceId: device.id,
-      reason: 'unsupported-foldable-model',
-      hint: 'The guest orientation picker mapping is verified only for iPhone Duo. Use a simulator whose discovered model is iPhone Duo.',
-    });
-  }
   if (rotation === 'portrait-upside-down') {
     throw new AppError('UNSUPPORTED_OPERATION', `${device.name} cannot rotate to ${rotation}`, {
       deviceId: device.id,
@@ -145,7 +138,7 @@ export async function setAppleFoldableOrientation(
   let reading: LitPanel | undefined;
   for (let attempt = 1; attempt <= IOS_FOLDABLE_ORIENTATION_SETTLE_ATTEMPTS; attempt += 1) {
     signal?.throwIfAborted();
-    reading = await readLitPanel(device, helper, signal);
+    reading = await readLitPanel(device, helper, { signal });
     if (reading?.rotation === rotation) return { orientation: rotation };
     if (reading && reading.panel.displayId !== dispatchedDisplayId) {
       const mapping = reading.panel.primary ? PANEL_PICKERS.outer : PANEL_PICKERS.inner;
@@ -168,7 +161,7 @@ export async function setAppleFoldableOrientation(
     }
     await settleRotation();
   }
-  reading = await readLitPanel(device, helper, signal);
+  reading = await readLitPanel(device, helper, { signal, requireTable: true });
   if (reading?.rotation === rotation) return { orientation: rotation };
   throw unverifiedError(device, rotation, reading);
 }
@@ -213,14 +206,14 @@ function unverifiedError(
 async function readLitPanel(
   device: DeviceInfo,
   helper: FoldHelper,
-  signal: AbortSignal | undefined,
+  options: { signal?: AbortSignal; requireTable?: boolean },
 ): Promise<LitPanel | undefined> {
   const inventory = await queryAppleDisplayInventory(device, {
-    signal,
+    signal: options.signal,
     source: 'guest',
     foldHelper: helper,
   });
-  if (inventory.unresolved) {
+  if (inventory.unresolved && options.requireTable) {
     throw new AppError('COMMAND_FAILED', 'The guest panel table could not be read', {
       deviceId: device.id,
       reason: 'orientation-panel-table-unavailable',

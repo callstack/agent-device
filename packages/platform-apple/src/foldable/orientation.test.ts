@@ -17,6 +17,7 @@ import { createLocalAppleToolProvider, withAppleToolProvider } from '../core/too
 import { createAppleInteractor } from '../interactor.ts';
 import { isAppleFoldableSimulator, readFoldablePanelTable } from './orientation.ts';
 import { ensureFoldHelperBinary } from './fold-helper-cache.ts';
+import { IOS_FOLDABLE_ORIENTATION_SETTLE_ATTEMPTS } from '../core/config.ts';
 import { IOS_DEVICE, IOS_SIMULATOR } from '../__tests__/device-fixtures.ts';
 import { IPHONE_17_SINGLE_PANEL, IPHONE_DUO_CLOSED } from '../__tests__/display-fixtures.ts';
 
@@ -35,7 +36,6 @@ function simulator(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
   simulatorCount += 1;
   return {
     ...IOS_SIMULATOR,
-    model: 'iPhone Duo',
     id: `${IOS_SIMULATOR.id}-${simulatorCount}`,
     ...overrides,
   };
@@ -184,6 +184,7 @@ function fakeDuo(
     picker: DeviceRotation;
     offsets?: { inner: number; outer: number };
     followsHid?: boolean;
+    unresolvedGuestReads?: readonly number[] | 'all';
     /** Rotations a panel's foreground UI cannot show; the panel keeps its last rotation. */
     cannotShow?: Partial<Record<DuoPanel, readonly DeviceRotation[]>>;
     /** The rotation a dark panel last showed, for the fold that lights it. */
@@ -208,6 +209,7 @@ function fakeDuo(
   let lagReadsLeft = 0;
   let bothLitReads = 0;
   let panelReads = 0;
+  let guestReads = 0;
   const shown: Record<DuoPanel, number> = {
     inner: PANEL_ANGLE[options.lastShown?.inner ?? 'portrait'],
     outer: PANEL_ANGLE[options.lastShown?.outer ?? 'portrait'],
@@ -264,6 +266,13 @@ function fakeDuo(
       const mode = spawn.slice(3);
       helpers.push(mode);
       if (mode[0] === 'panels') {
+        guestReads += 1;
+        if (
+          options.unresolvedGuestReads === 'all' ||
+          options.unresolvedGuestReads?.includes(guestReads)
+        ) {
+          return { stdout: '', stderr: 'transient guest panel read failure', exitCode: 1 };
+        }
         const displays = readPanels();
         return { stdout: JSON.stringify({ version: 1, displays }), stderr: '', exitCode: 0 };
       }
@@ -353,6 +362,50 @@ describe.each([undefined, '/tmp/scoped-set'])('foldable rotation, set %s', (simu
       expect(mockRunner).not.toHaveBeenCalled();
     },
   );
+
+  test.each([1, 2])('retries unresolved guest read %s before confirming', async (failedRead) => {
+    const device = simulator({ simulatorSetPath });
+    const classification = fakeDuo(device, { lit: 'outer', picker: 'portrait' });
+    await expect(rotateDuo(classification, 'portrait')).resolves.toEqual({
+      orientation: 'portrait',
+    });
+    const sim = fakeDuo(device, {
+      lit: 'outer',
+      picker: 'portrait',
+      unresolvedGuestReads: [failedRead],
+    });
+    await expect(rotateDuo(sim, 'landscape-left')).resolves.toEqual({
+      orientation: 'landscape-left',
+    });
+    expect(sim.helpers.map((mode) => mode[0])).toEqual(
+      failedRead === 1
+        ? ['panels', 'panels', 'rotate', 'panels']
+        : ['panels', 'rotate', 'panels', 'panels'],
+    );
+    expect(sim.rotations()).toEqual(['landscape-left']);
+    expect(mockRunner).not.toHaveBeenCalled();
+  });
+
+  test('always unresolved guest reads exhaust the loop without dispatch', async () => {
+    const device = simulator({ simulatorSetPath });
+    const sim = fakeDuo(device, {
+      lit: 'outer',
+      picker: 'portrait',
+      unresolvedGuestReads: 'all',
+    });
+    // Classify before injecting guest failures, including in a scoped set.
+    const classification = fakeDuo(device, { lit: 'outer', picker: 'portrait' });
+    await expect(rotateDuo(classification, 'portrait')).resolves.toEqual({
+      orientation: 'portrait',
+    });
+    await expect(rotateDuo(sim, 'landscape-left')).resolves.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'orientation-panel-table-unavailable' },
+    });
+    expect(sim.helpers).toHaveLength(IOS_FOLDABLE_ORIENTATION_SETTLE_ATTEMPTS + 1);
+    expect(sim.rotations()).toEqual([]);
+    expect(mockRunner).not.toHaveBeenCalled();
+  });
 
   test('a foldable rotates on the first command, confirmed by the panel table', async () => {
     const scoped = simulator({ simulatorSetPath });
@@ -661,20 +714,3 @@ test('a rotation is not routed by a pending panel-table retry', async () => {
   expect(sim.rotations()).toEqual(['landscape-left']);
   expect(mockRunner).not.toHaveBeenCalled();
 });
-
-test.each(['iPad Pro', 'Another Foldable', undefined])(
-  'an unverified multi-panel model %s cannot use the Duo picker mapping',
-  async (model) => {
-    const sim = fakeDuo(simulator({ model, name: 'iPhone Duo' }), {
-      lit: 'outer',
-      picker: 'portrait',
-    });
-    await expect(sim.rotate('landscape-left')).rejects.toMatchObject({
-      code: 'UNSUPPORTED_OPERATION',
-      details: { reason: 'unsupported-foldable-model' },
-    });
-    expect(ensureFoldHelperBinary).not.toHaveBeenCalled();
-    expect(sim.rotations()).toEqual([]);
-    expect(mockRunner).not.toHaveBeenCalled();
-  },
-);
