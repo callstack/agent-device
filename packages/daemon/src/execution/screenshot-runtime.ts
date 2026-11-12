@@ -1,3 +1,4 @@
+import { publishFileSync } from '@agent-device/host-kit/file';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
@@ -377,41 +378,55 @@ function createBoundScreenshotBackend(
         ...dispatchContext,
         ...screenshotFlagsFromOptions(options),
       });
-      const facts = await captureScreenshot({
-        outPath,
-        options: {
-          appBundleId: dispatchContext.appBundleId,
-          pixelDensity: resolved.pixelDensity,
-          screenMask: resolved.screenMask,
-          fullscreen: resolved.fullscreen,
-          normalizeStatusBar: resolved.normalizeStatusBar,
-          stabilize: resolved.stabilize,
-          surface: options?.surface,
-          // An open session already proved the simulator is booted, so the per-capture recheck is
-          // the daemon's own knowledge rather than something the caller has to assert.
-          skipIosSimulatorBootCheck:
-            dispatchContext.skipIosSimulatorBootCheck ??
-            (isIosFamily(session.device) && session.device.kind === 'simulator'),
-          captureBackend: resolved.captureBackend,
-          preferredCaptureBackend: dispatchContext.preferredScreenshotCaptureBackend,
-        },
-        execution: screenshotExecutionFromContext(dispatchContext),
-      });
-      if (crop) {
-        assertScreenshotCropCapture(session.device, facts);
-        const outcome = await cropScreenshotToSelector({
-          device: session.device,
-          session,
-          surface: session.surface,
-          cropOn: crop.cropOn,
-          screenshotPath: outPath,
-          logPath: crop.logPath,
-          dispatchContext,
-          captureSnapshot: crop.captureSnapshot,
+      const tempRoot = crop
+        ? await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-crop-'))
+        : undefined;
+      const capturePath = tempRoot
+        ? path.join(tempRoot, `screenshot${path.extname(outPath) || '.png'}`)
+        : outPath;
+      try {
+        const facts = await captureScreenshot({
+          outPath: capturePath,
+          options: {
+            appBundleId: dispatchContext.appBundleId,
+            pixelDensity: resolved.pixelDensity,
+            screenMask: resolved.screenMask,
+            fullscreen: resolved.fullscreen,
+            normalizeStatusBar: resolved.normalizeStatusBar,
+            stabilize: resolved.stabilize,
+            surface: options?.surface,
+            // An open session already proved the simulator is booted, so the per-capture recheck is
+            // the daemon's own knowledge rather than something the caller has to assert.
+            skipIosSimulatorBootCheck:
+              dispatchContext.skipIosSimulatorBootCheck ??
+              (isIosFamily(session.device) && session.device.kind === 'simulator'),
+            captureBackend: resolved.captureBackend,
+            preferredCaptureBackend: dispatchContext.preferredScreenshotCaptureBackend,
+          },
+          execution: screenshotExecutionFromContext(dispatchContext),
         });
-        crop.run.warnings.push(...buildScreenshotCropWarnings(outcome));
+        if (crop) {
+          assertScreenshotCropCapture(session.device, facts);
+          const outcome = await cropScreenshotToSelector({
+            device: session.device,
+            session,
+            surface: session.surface,
+            cropOn: crop.cropOn,
+            screenshotPath: capturePath,
+            logPath: crop.logPath,
+            dispatchContext,
+            captureSnapshot: crop.captureSnapshot,
+          });
+          const contents = await fs.readFile(capturePath);
+          dispatchContext.signal?.throwIfAborted();
+          _context.signal?.throwIfAborted();
+          publishFileSync({ destination: outPath, contents });
+          crop.run.warnings.push(...buildScreenshotCropWarnings(outcome));
+        }
+        return facts.displayRotation ? { displayRotation: facts.displayRotation } : undefined;
+      } finally {
+        if (tempRoot) await fs.rm(tempRoot, { recursive: true, force: true });
       }
-      return facts.displayRotation ? { displayRotation: facts.displayRotation } : undefined;
     },
   };
 }
