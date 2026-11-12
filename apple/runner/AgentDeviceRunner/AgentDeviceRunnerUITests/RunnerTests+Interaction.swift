@@ -12,6 +12,14 @@ struct RunnerCoordinateRefusal: Error {
   let hint: String?
 }
 
+/// A synthesized gesture that failed after its events reached XCTest, so it may have run. Thrown
+/// rather than returned so that no XCTest fallback repeats it: a fallback would press a second time.
+/// `executeOnMainPrepared` answers it as `SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN`.
+struct RunnerGestureOutcomeUnknown: Error {
+  let message: String
+  let hint: String?
+}
+
 private struct RunnerUnsupportedOperationError: LocalizedError {
   let message: String
 
@@ -564,8 +572,11 @@ extension RunnerTests {
     switch try performSynthesizedTapGesture(app: app, x: x, y: y, context: context) {
     case .performed:
       return .performed
-    case .xctestFallback(let message, let hint), .refused(_, let message, let hint):
+    case .xctestFallback(let message, let hint):
       throw RunnerCoordinateRefusal(message: message, hint: hint)
+    case .refused(_, let refusal):
+      let text = refusal.refusalText
+      throw RunnerCoordinateRefusal(message: text?.message ?? "synthesized tap refused", hint: text?.hint)
     }
   }
 

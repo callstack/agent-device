@@ -4,15 +4,19 @@ import AgentDeviceSnapshotPresentation
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
 import ObjectiveC.runtime
 
+/// Fails every synthesized drag, before handing its record to XCTest unless told otherwise.
 private final class RunnerSynthesizedSwipeFailureStub: NSObject {
-  @objc(synthesizeDragWithApplication:resolvedWindow:interfaceOrientation:drag:)
+  static var dispatchedBeforeFailing = false
+  @objc(synthesizeDragWithApplication:resolvedWindow:interfaceOrientation:drag:dispatched:)
   class func synthesizeSwipe(
     application: XCUIApplication,
     resolvedWindow: Any?,
     interfaceOrientation: Int,
-    drag: RunnerSynthesizedDrag
+    drag: RunnerSynthesizedDrag,
+    dispatched: UnsafeMutablePointer<ObjCBool>?
   ) -> String? {
-    "forced private synthesis failure"
+    dispatched?.pointee = ObjCBool(dispatchedBeforeFailing)
+    return "forced private synthesis failure"
   }
 }
 #endif
@@ -52,8 +56,9 @@ extension RunnerTests {
 
   @MainActor
   func testSinglePointerFlingFallsBackToXCTestCoordinateDragWhenPrivateSynthesisFails() throws {
+    RunnerSynthesizedSwipeFailureStub.dispatchedBeforeFailing = false
     let selector = NSSelectorFromString(
-      "synthesizeDragWithApplication:resolvedWindow:interfaceOrientation:drag:"
+      "synthesizeDragWithApplication:resolvedWindow:interfaceOrientation:drag:dispatched:"
     )
     guard
       let synthesizedSwipeMethod = class_getClassMethod(RunnerSynthesizedGesture.self, selector),
@@ -94,6 +99,67 @@ extension RunnerTests {
     XCTAssertNil(response.data?.y)
     XCTAssertNil(response.data?.x2)
     XCTAssertNil(response.data?.y2)
+  }
+
+  /// A fast-swipe planned gesture refused before its record reached XCTest sent nothing: with no
+  /// XCTest fallback allowed it reports the typed not-dispatched code.
+  @MainActor
+  func testFastSwipePlannedGestureRefusedBeforeDispatchIsNotDispatched() throws {
+    let response = try flingWithFailingSynthesis(dispatchedBeforeFailing: false, health: .unavailable)
+
+    XCTAssertEqual(response.error?.code, RunnerWireErrorCode.synthesizedGestureNotDispatched)
+  }
+
+  /// One that failed after its record reached XCTest may have run: it reports the unknown outcome
+  /// and no XCTest drag repeats it.
+  @MainActor
+  func testFastSwipePlannedGestureFailingAfterDispatchIsUnknownAndNeverFallsBack() throws {
+    let response = try flingWithFailingSynthesis(dispatchedBeforeFailing: true, health: .healthy)
+
+    XCTAssertEqual(response.error?.code, RunnerWireErrorCode.synthesizedGestureOutcomeUnknown)
+    XCTAssertNil(response.data?.gestureFallback, "no XCTest drag repeats a fling that may have run")
+  }
+
+  /// A scroll whose synthesized drag was refused before hand-off (RunnerCreateEventRecord) sent
+  /// nothing: scroll never falls back to an XCTest drag, so it answers the not-dispatched code.
+  @MainActor
+  func testScrollDragRefusedBeforeHandOffIsNotDispatched() throws {
+    let response = try flingWithFailingSynthesis(
+      dispatchedBeforeFailing: false,
+      health: .healthy,
+      command: #"{"command":"scroll","commandId":"scroll-refused-synthesis","direction":"down"}"#
+    )
+
+    XCTAssertEqual(response.error?.code, RunnerWireErrorCode.synthesizedGestureNotDispatched)
+  }
+
+  @MainActor
+  private func flingWithFailingSynthesis(
+    dispatchedBeforeFailing: Bool,
+    health: RunnerAccessibilityHealth,
+    command json: String? = nil
+  ) throws -> Response {
+    RunnerSynthesizedSwipeFailureStub.dispatchedBeforeFailing = dispatchedBeforeFailing
+    let selector = NSSelectorFromString(
+      "synthesizeDragWithApplication:resolvedWindow:interfaceOrientation:drag:dispatched:"
+    )
+    let target = try XCTUnwrap(class_getClassMethod(RunnerSynthesizedGesture.self, selector))
+    let stub = try XCTUnwrap(class_getClassMethod(RunnerSynthesizedSwipeFailureStub.self, selector))
+    let original = method_setImplementation(target, method_getImplementation(stub))
+    app.launch()
+    mainOwned.app = app
+    mainOwned.accessibilityHealth = health
+    defer {
+      method_setImplementation(target, original)
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let command = try runnerCommandFixture(json ??
+      """
+      {"command":"gesture","commandId":"gesture-fling-failing-synthesis","gesturePlan":{"topology":"single","intent":"fling","executionProfile":"endpoint-hold","durationMs":100,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":160,"y":150}},{"offsetMs":100,"point":{"x":40,"y":150}}]}]}}
+      """
+    )
+    return try executeOnMainPrepared(command: command, activeApp: app)
   }
 #endif
 }

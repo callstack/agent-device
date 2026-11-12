@@ -18,6 +18,8 @@ extension RunnerTests {
     let outcome: RunnerInteractionOutcome
     let gestureStartUptimeMs: Double
     let gestureEndUptimeMs: Double
+    /// The code a failed step reports.
+    var errorCode = "UNSUPPORTED_OPERATION"
   }
 
   @MainActor
@@ -122,12 +124,12 @@ extension RunnerTests {
           )
         )
         completedSteps += 1
-      case .unsupported(let message, let hint):
+      case .unsupported(let message, let hint), .notDispatched(let message, let hint):
         results.append(
           SequenceStepResult(
             ok: false,
             kind: step.kind,
-            errorCode: "UNSUPPORTED_OPERATION",
+            errorCode: stepOutcome.errorCode,
             errorMessage: message,
             errorHint: hint,
             gestureStartUptimeMs: stepOutcome.gestureStartUptimeMs,
@@ -186,24 +188,41 @@ extension RunnerTests {
     let y = step.y ?? 0
     let longPressDurationMs = min(max(step.durationMs ?? 800, 16), 10000)
     if let policyKind = synthesizedPolicyKind(forSequenceStep: step) {
-      switch try performSynthesizedGesture(activeApp, kind: policyKind, context: synthesizedContext, synthesize: {
-        try synthesizedSequenceStep(
-          policyKind,
-          app: activeApp,
-          x: x,
-          y: y,
-          longPressDurationMs: longPressDurationMs,
-          context: synthesizedContext
+      let attempt: SynthesizedGestureAttempt
+      let attemptStartUptimeMs = currentUptimeMs()
+      do {
+        attempt = try performSynthesizedGesture(activeApp, kind: policyKind, context: synthesizedContext, synthesize: {
+          try synthesizedSequenceStep(
+            policyKind,
+            app: activeApp,
+            x: x,
+            y: y,
+            longPressDurationMs: longPressDurationMs,
+            context: synthesizedContext
+          )
+        })
+      } catch let unknown as RunnerGestureOutcomeUnknown {
+        // The step may have run, so the sequence stops on it instead of falling back and repeating it.
+        // Its window runs from before dispatch to the failure, covering whatever part of it ran.
+        var failed = finishedSequenceStep(
+          step,
+          timing: (attemptStartUptimeMs, currentUptimeMs()),
+          outcome: .unsupported(message: unknown.message, hint: unknown.hint)
         )
-      }) {
+        failed.errorCode = RunnerWireErrorCode.synthesizedGestureOutcomeUnknown
+        return failed
+      }
+      switch attempt {
       case .performed(let timing):
         return finishedSequenceStep(step, timing: timing, outcome: .performed)
-      case .refused(let timing, let message, let hint):
-        return finishedSequenceStep(
-          step,
-          timing: timing,
-          outcome: .unsupported(message: message, hint: hint)
-        )
+      case .refused(let timing, let refusal):
+        var refused = finishedSequenceStep(step, timing: timing, outcome: refusal)
+        // As on the standalone command, only the synthesis's own pre-hand-off refusal sent nothing.
+        // The host still reports the sequence as unknown when an earlier step ran.
+        if case .notDispatched = refusal {
+          refused.errorCode = RunnerWireErrorCode.synthesizedGestureNotDispatched
+        }
+        return refused
       case .xctestFallback:
         break
       }

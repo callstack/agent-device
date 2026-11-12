@@ -24,10 +24,12 @@ typedef struct {
 // frame, so the record's display ID is read from that same window. Pass nil for the sole-screen
 // route: the app's tree could not name its window and the screen is proven instead.
 // `interfaceOrientation` is the orientation used to convert the supplied points.
+// `dispatched`, when given, turns YES once the record is handed to XCTest to run.
 + (NSString * _Nullable)synthesizeDragWithApplication:(id)application
                                       resolvedWindow:(id _Nullable)resolvedWindow
                                 interfaceOrientation:(NSInteger)interfaceOrientation
-                                                drag:(RunnerSynthesizedDrag)drag;
+                                                drag:(RunnerSynthesizedDrag)drag
+                                          dispatched:(BOOL * _Nullable)dispatched;
 
 + (RunnerTapSynthesisStatus)synthesizeTapWithApplication:(id)application
                                       resolvedWindow:(id _Nullable)resolvedWindow
@@ -38,10 +40,13 @@ typedef struct {
 
 // Each pointer is an ordered array of { x, y, offsetMs } samples. The first sample
 // starts contact; subsequent samples move it; all pointers lift at their final offset.
+// `dispatched`, when given, turns YES once the record is handed to XCTest to run, so a failure with
+// it NO (record, pointer path, or display setup) touched nothing.
 + (NSString * _Nullable)synthesizeGestureWithApplication:(id)application
                                           resolvedWindow:(id _Nullable)resolvedWindow
                                     interfaceOrientation:(NSInteger)interfaceOrientation
-                                          pointerSamples:(NSArray<NSArray<NSDictionary<NSString *, NSNumber *> *> *> *)pointerSamples;
+                                          pointerSamples:(NSArray<NSArray<NSDictionary<NSString *, NSNumber *> *> *> *)pointerSamples
+                                              dispatched:(BOOL * _Nullable)dispatched;
 
 // UIInterfaceOrientation of the app (1 portrait, 2 upsideDown, 3 landscapeRight,
 // 4 landscapeLeft), or 0 if unreadable.

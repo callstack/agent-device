@@ -188,6 +188,10 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
   'ios-runner.reply.AMBIGUOUS_MATCH': () => replyFailure('AMBIGUOUS_MATCH'),
   'ios-runner.reply.MAIN_THREAD_TIMEOUT': () => replyFailure('MAIN_THREAD_TIMEOUT'),
   'ios-runner.reply.COMMAND_ALREADY_FINISHED': () => replyFailure('COMMAND_ALREADY_FINISHED'),
+  'ios-runner.reply.SYNTHESIZED_GESTURE_NOT_DISPATCHED': () =>
+    replyFailure('SYNTHESIZED_GESTURE_NOT_DISPATCHED'),
+  'ios-runner.reply.SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN': () =>
+    replyFailure('SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN'),
   'ios-runner.reply.unlisted-code': () => replyFailure('XCTEST_RECORDED_FAILURE'),
   'ios-runner.series.later-chunk-refused': pressSeriesRefusedOnSecondChunk,
   'ios-runner.series.invalid-step-before-send': pressSeriesWithInvalidStep,

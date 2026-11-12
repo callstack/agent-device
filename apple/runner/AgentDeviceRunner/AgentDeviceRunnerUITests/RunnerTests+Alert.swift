@@ -245,7 +245,7 @@ extension RunnerTests {
           )
           waitForQuiescence(alert.ownerApp, postEventWaitSelector, false)
           outcome = .performed
-        case .unsupported(let message, _)?:
+        case .unsupported(let message, _)?, .notDispatched(let message, _)?:
           outcome = .unsupported(
             message: message,
             hint: "Inspect the current alert before deciding whether to act again."

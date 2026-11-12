@@ -20,14 +20,19 @@ extension RunnerTests {
         hint: "Retry with finite x, y, x2, and y2 values."
       )
     }
+    // The window and display refusals come before the synthesis is handed anything: nothing was sent.
     guard let context = try context ?? synthesizedCoordinateContext(app: app) else {
-      return .unsupported(
+      return .notDispatched(
         message: "synthesized coordinate drag could not resolve an app window with a finite screen frame",
         hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
       )
     }
     guard let geometry = digitizerGeometry(app: app, surface: context.geometry) else {
-      return Self.unmeasuredSoleDisplayOutcome(gesture: "drag")
+      let unmeasured = Self.unmeasuredSoleDisplayOutcome(gesture: "drag").refusalText
+      return .notDispatched(
+        message: unmeasured?.message ?? "drag could not measure the display",
+        hint: unmeasured?.hint
+      )
     }
     let frame = context.geometry.windowOnScreen.rect
     let start = geometry.digitizerPoint(from: SurfacePoint(CGPoint(x: x, y: y))).point
@@ -39,20 +44,20 @@ extension RunnerTests {
       referenceFrame: frame,
       orientation: context.geometry.orientation
     )
-    let message = RunnerSynthesizedGesture.synthesizeDrag(
+    var dispatched: ObjCBool = false
+    let failure = RunnerSynthesizedGesture.synthesizeDrag(
       withApplication: app,
       resolvedWindow: context.resolvedWindow,
       interfaceOrientation: geometry.orientation,
       drag: RunnerSynthesizedDrag(start: start, end: end, durationMs: durationMs,
-                                  controlledScroll: ObjCBool(profile == .controlledScroll))
+                                  controlledScroll: ObjCBool(profile == .controlledScroll)),
+      dispatched: &dispatched
     )
-    if let message {
-      return .unsupported(
-        message: message,
-        hint: "Private XCTest event synthesis is required for AX-free coordinate drag on iOS; update Xcode if this persists."
-      )
-    }
-    return .performed
+    return try Self.synthesizedGestureOutcome(
+      failure: failure,
+      dispatched: dispatched.boolValue,
+      refusalHint: "Private XCTest event synthesis is required for AX-free coordinate drag on iOS; update Xcode if this persists."
+    )
 #elseif os(tvOS)
     return .unsupported(
       message: "coordinate drag is not supported on tvOS",
@@ -178,18 +183,19 @@ extension RunnerTests {
         "offsetMs": NSNumber(value: offsetMs),
       ]
     }
-    if let message = RunnerSynthesizedGesture.synthesizeGesture(
+    var dispatched: ObjCBool = false
+    let failure = RunnerSynthesizedGesture.synthesizeGesture(
       withApplication: app,
       resolvedWindow: resolvedWindow,
       interfaceOrientation: orientation,
-      pointerSamples: [samples]
-    ) {
-      return .unsupported(
-        message: message,
-        hint: "Private XCTest event synthesis is required for an AX-free long press on iOS; update Xcode if this persists."
-      )
-    }
-    return .performed
+      pointerSamples: [samples],
+      dispatched: &dispatched
+    )
+    return try Self.synthesizedGestureOutcome(
+      failure: failure,
+      dispatched: dispatched.boolValue,
+      refusalHint: "Private XCTest event synthesis is required for an AX-free long press on iOS; update Xcode if this persists."
+    )
   }
 #endif
 
@@ -800,11 +806,16 @@ extension RunnerTests {
     plan: RunnerGesturePlan,
     gesture: String
   ) throws -> NativePlannedGestureResolution {
+    // Both refusals come before the synthesis is handed anything, so the gesture sent nothing.
     guard let context = try synthesizedCoordinateContext(app: app) else {
-      return .refused(.unsupported(message: "\(gesture) could not resolve a surface", hint: nil))
+      return .refused(.notDispatched(message: "\(gesture) could not resolve a surface", hint: nil))
     }
     guard let geometry = digitizerGeometry(app: app, surface: context.geometry) else {
-      return .refused(Self.unmeasuredSoleDisplayOutcome(gesture: gesture))
+      let unmeasured = Self.unmeasuredSoleDisplayOutcome(gesture: gesture).refusalText
+      return .refused(.notDispatched(
+        message: unmeasured?.message ?? "\(gesture) could not measure the display",
+        hint: unmeasured?.hint
+      ))
     }
     let pointerSamples: [[[String: NSNumber]]] = plan.pointers.map { pointer in
       pointer.samples.map { sample in
@@ -822,6 +833,22 @@ extension RunnerTests {
   }
 #endif
 
+  /// A synthesized gesture's result. A failure before its events reached XCTest sent nothing, so it
+  /// is a `.notDispatched` refusal, which a policy may still answer with an XCTest fallback. A failure
+  /// after may have run, so it throws `RunnerGestureOutcomeUnknown`, which no fallback repeats.
+  static func synthesizedGestureOutcome(
+    failure: String?,
+    dispatched: Bool,
+    refusalHint: String
+  ) throws -> RunnerInteractionOutcome {
+    guard let failure else { return .performed }
+    guard dispatched else { return .notDispatched(message: failure, hint: refusalHint) }
+    throw RunnerGestureOutcomeUnknown(
+      message: failure,
+      hint: "Check the screen with snapshot before you retry; the gesture may already have run."
+    )
+  }
+
   @MainActor
   func sampledPlannedGesture(
     app: XCUIApplication,
@@ -833,18 +860,19 @@ extension RunnerTests {
     case .resolved(let resolved): planned = resolved
     case .refused(let outcome): return outcome
     }
-    if let message = RunnerSynthesizedGesture.synthesizeGesture(
+    var dispatched: ObjCBool = false
+    let failure = RunnerSynthesizedGesture.synthesizeGesture(
       withApplication: app,
       resolvedWindow: planned.context.resolvedWindow,
       interfaceOrientation: planned.orientation,
-      pointerSamples: planned.pointerSamples
-    ) {
-      return .unsupported(
-        message: message,
-        hint: "This gesture uses private XCTest event-synthesis APIs; rebuild the runner with a supported Xcode if this persists."
-      )
-    }
-    return .performed
+      pointerSamples: planned.pointerSamples,
+      dispatched: &dispatched
+    )
+    return try Self.synthesizedGestureOutcome(
+      failure: failure,
+      dispatched: dispatched.boolValue,
+      refusalHint: "This gesture uses private XCTest event-synthesis APIs; rebuild the runner with a supported Xcode if this persists."
+    )
 #elseif os(tvOS)
     return .unsupported(
       message: "multi-touch gestures are not supported on tvOS",

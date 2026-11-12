@@ -334,6 +334,17 @@ export const NO_TEXT_INPUT_AT_POINT_RUNNER_CODE = 'NO_TEXT_INPUT_AT_POINT';
 export const TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE = 'TEXT_INPUT_PROBE_UNAVAILABLE';
 
 /**
+ * The runner codes for a synthesized long press, scroll, or planned gesture on iOS; the CLI `swipe` is
+ * a planned fling gesture.
+ * NOT_DISPATCHED: the event synthesis refused before any of its events reached XCTest, so the
+ * command sent nothing. OUTCOME_UNKNOWN: failed after its events reached XCTest, so it may have run;
+ * the runner never falls back to repeat it. Any other refusal, a platform one included, keeps
+ * UNSUPPORTED_OPERATION.
+ */
+const SYNTHESIZED_GESTURE_NOT_DISPATCHED_RUNNER_CODE = 'SYNTHESIZED_GESTURE_NOT_DISPATCHED';
+const SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN_RUNNER_CODE = 'SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN';
+
+/**
  * Runner codes that classify a failure for the host without renaming it on the wire. They stay
  * `COMMAND_FAILED` and survive as `details.runnerErrorCode`, which is what family policy reads:
  * `RUNNER_BUSY` for retriable contention, `ALERT_NOT_FOUND` for an alert that is not there yet,
@@ -346,6 +357,8 @@ const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<string, { retriable?: true
   [APP_NOT_RUNNING_RUNNER_CODE, { retriable: true }],
   [ALERT_NOT_FOUND_RUNNER_CODE, {}],
   [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, {}],
+  [SYNTHESIZED_GESTURE_NOT_DISPATCHED_RUNNER_CODE, {}],
+  [SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN_RUNNER_CODE, {}],
   ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, {}] as const),
 ]);
 
@@ -359,6 +372,8 @@ const RUNNER_REPORTED_ERROR_REASONS: ReadonlyMap<string, RunnerReportedErrorReas
   [MAIN_THREAD_TIMEOUT_RUNNER_CODE, 'runner_main_thread_timeout'],
   [NO_TEXT_INPUT_AT_POINT_RUNNER_CODE, 'no_text_input_at_point'],
   [TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE, 'text_input_probe_unavailable'],
+  [SYNTHESIZED_GESTURE_NOT_DISPATCHED_RUNNER_CODE, 'synthesized_gesture_not_dispatched'],
+  [SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN_RUNNER_CODE, 'synthesized_gesture_outcome_unknown'],
 ]);
 
 /**
@@ -366,7 +381,7 @@ const RUNNER_REPORTED_ERROR_REASONS: ReadonlyMap<string, RunnerReportedErrorReas
  * the command runs, the selector refusals included: the runner resolves the element and refuses
  * before any gesture. `INVALID_ARGS` comes only from request decoding and argument validation,
  * each ahead of any gesture. Every other code, and a reply without one, is `unknown`:
- * `UNSUPPORTED_OPERATION` is also what a synthesized gesture or element tap reports after it ran.
+ * `UNSUPPORTED_OPERATION` is also what an element or coordinate tap reports after it ran.
  */
 const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new Map([
   ['INVALID_ARGS', 'no'],
@@ -383,6 +398,7 @@ const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new 
   [TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE, 'no'],
   [ALERT_BUTTON_NOT_FOUND_RUNNER_CODE, 'no'],
   [ALERT_UNRESOLVED_RUNNER_CODE, 'no'],
+  [SYNTHESIZED_GESTURE_NOT_DISPATCHED_RUNNER_CODE, 'no'],
   ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, 'no'] as const),
 ]);
 
@@ -394,7 +410,9 @@ type RunnerReportedErrorReason =
   | 'runner_busy'
   | 'runner_main_thread_timeout'
   | 'no_text_input_at_point'
-  | 'text_input_probe_unavailable';
+  | 'text_input_probe_unavailable'
+  | 'synthesized_gesture_not_dispatched'
+  | 'synthesized_gesture_outcome_unknown';
 
 /** Wire code plus the details every path must publish for one runner-reported error code. */
 export type RunnerReportedErrorClass = Readonly<{
@@ -756,7 +774,26 @@ function buildSequenceStepError(
   const failed = results[failedStepIndex];
   const kind = failed?.kind ?? 'step';
   const message = failed?.errorMessage ?? `sequence step ${failedStepIndex} (${kind}) failed`;
-  return new AppError(toAppErrorCode(failed?.errorCode), message, {
+  // A step code the runner keeps off the wire (such as SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN) reads as
+  // it does on a standalone command: COMMAND_FAILED with its runner code, reason, and dispatch.
+  // `runApplePressSeries` turns it into `unknown` once an earlier step ran.
+  const stepCode = toAppErrorCode(failed?.errorCode);
+  const classification = classifyRunnerReportedError(failed?.errorCode);
+  const diagnosticOnly = classification.code !== stepCode;
+  return new AppError(diagnosticOnly ? classification.code : stepCode, message, {
+    ...(diagnosticOnly
+      ? {
+          runnerErrorCode: failed?.errorCode,
+          ...(classification.details.reason === undefined
+            ? {}
+            : { reason: classification.details.reason }),
+        }
+      : {}),
+    // Only a step code that classifies a dispatch publishes one; a plain refusal or a code-less step
+    // leaves it unset, as a sequence failure always did.
+    ...(sequenceStepClassifiesDispatch(failed?.errorCode)
+      ? { dispatched: classification.details.dispatched }
+      : {}),
     failedStepIndex,
     failedStepKind: kind,
     completedSteps,
@@ -765,6 +802,14 @@ function buildSequenceStepError(
       failed?.errorHint ??
       'Run snapshot -i to inspect the current UI, then continue from the observed state.',
   });
+}
+
+function sequenceStepClassifiesDispatch(code: string | undefined): boolean {
+  return (
+    code !== undefined &&
+    (RUNNER_ERROR_CODE_DISPATCH.has(code) ||
+      code === SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN_RUNNER_CODE)
+  );
 }
 
 function readSequenceResults(value: unknown): RunnerSequenceStepResult[] {

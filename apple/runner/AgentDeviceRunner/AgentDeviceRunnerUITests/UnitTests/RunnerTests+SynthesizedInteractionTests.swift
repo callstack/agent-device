@@ -47,6 +47,24 @@ private final class RunnerWindowlessQueryStub: NSObject {
   }
 }
 
+/// Fails every synthesized gesture, after or before handing its events to XCTest.
+private final class RunnerSynthesisFailureStub: NSObject {
+  static var dispatchedBeforeFailing = true
+  static var calls = 0
+  @objc(synthesizeGestureWithApplication:resolvedWindow:interfaceOrientation:pointerSamples:dispatched:)
+  class func synthesizeGesture(
+    _ app: AnyObject,
+    resolvedWindow: AnyObject?,
+    interfaceOrientation: Int,
+    pointerSamples: [[[String: NSNumber]]],
+    dispatched: UnsafeMutablePointer<ObjCBool>?
+  ) -> String? {
+    calls += 1
+    dispatched?.pointee = ObjCBool(dispatchedBeforeFailing)
+    return "stubbed synthesis failure"
+  }
+}
+
 /// Counts XCTest coordinate taps without performing them.
 final class RunnerCoordinateTapCounter: NSObject {
   static var taps = 0
@@ -222,6 +240,175 @@ extension RunnerTests {
       RunnerUnserializableTreeStub.recordingTest = nil
       for (method, original) in originals.reversed() { method_setImplementation(method, original) }
     }
+  }
+
+  /// A long press whose synthesis failed after its events reached XCTest may have run, so it reports
+  /// an unknown outcome and no XCTest fallback presses a second time.
+  @MainActor
+  func testLongPressSynthesisFailingAfterDispatchIsUnknownAndNeverFallsBack() throws {
+    let (response, presses) = try longPressWithFailingSynthesis(dispatchedBeforeFailing: true, health: .healthy)
+
+    XCTAssertEqual(response.error?.code, RunnerWireErrorCode.synthesizedGestureOutcomeUnknown)
+    XCTAssertEqual(presses, 0, "no XCTest fallback repeats a gesture that may have run")
+  }
+
+  /// A sequence step whose synthesis failed after hand-off reports the same unknown code as the
+  /// standalone command, keeps its gesture window, and stops the sequence: no XCTest fallback press,
+  /// and the next step never runs.
+  @MainActor
+  func testSequenceLongPressFailingAfterDispatchReportsTheUnknownCodeAndStops() throws {
+    let (response, presses) = try longPressWithFailingSynthesis(
+      dispatchedBeforeFailing: true,
+      health: .healthy,
+      command: #"{"command":"sequence","commandId":"failing-synthesis-sequence","steps":[{"kind":"longPress","x":40,"y":200,"durationMs":300},{"kind":"longPress","x":80,"y":200,"durationMs":300}]}"#
+    )
+
+    XCTAssertEqual(response.data?.completedSteps, 0)
+    XCTAssertEqual(response.data?.failedStepIndex, 0)
+    let steps = response.data?.sequenceResults ?? []
+    XCTAssertEqual(steps.count, 1, "the step after the failure has no result")
+    let step = try XCTUnwrap(steps.first)
+    XCTAssertFalse(step.ok)
+    XCTAssertEqual(step.errorCode, RunnerWireErrorCode.synthesizedGestureOutcomeUnknown)
+    let start = try XCTUnwrap(step.gestureStartUptimeMs)
+    let end = try XCTUnwrap(step.gestureEndUptimeMs)
+    XCTAssertLessThanOrEqual(start, end)
+    XCTAssertEqual(RunnerSynthesisFailureStub.calls, 1, "the second step is never synthesized")
+    XCTAssertEqual(presses, 0, "and never pressed through XCTest")
+  }
+
+  /// A sequence long-press step refused before its events reached XCTest reports the same
+  /// not-dispatched code as the standalone command, whether or not an earlier step ran. The host
+  /// reads the sequence as sent nothing only when no earlier step ran.
+  @MainActor
+  func testSequenceLongPressRefusedBeforeDispatchIsNotDispatched() throws {
+    for (steps, failedIndex) in [
+      (#"[{"kind":"longPress","x":40,"y":200,"durationMs":300}]"#, 0),
+      (#"[{"kind":"tap","x":40,"y":200},{"kind":"longPress","x":40,"y":200,"durationMs":300}]"#, 1),
+    ] {
+      let (response, presses) = try longPressWithFailingSynthesis(
+        dispatchedBeforeFailing: false,
+        health: .unavailable,
+        command: #"{"command":"sequence","commandId":"refused-synthesis-sequence-\#(failedIndex)","steps":\#(steps)}"#
+      )
+
+      XCTAssertEqual(response.data?.completedSteps, failedIndex)
+      XCTAssertEqual(response.data?.failedStepIndex, failedIndex)
+      let step = try XCTUnwrap(response.data?.sequenceResults?.last)
+      XCTAssertEqual(step.errorCode, RunnerWireErrorCode.synthesizedGestureNotDispatched)
+      XCTAssertEqual(presses, 0)
+    }
+  }
+
+  /// One refused before its events reached XCTest sent nothing, and says so.
+  @MainActor
+  func testLongPressSynthesisRefusedBeforeDispatchIsNotDispatched() throws {
+    let (response, presses) = try longPressWithFailingSynthesis(dispatchedBeforeFailing: false, health: .unavailable)
+
+    XCTAssertEqual(response.error?.code, RunnerWireErrorCode.synthesizedGestureNotDispatched)
+    XCTAssertEqual(presses, 0)
+  }
+
+  /// A sampled planned gesture that the synthesis refused before hand-off sent nothing, and says so.
+  @MainActor
+  func testSampledPlannedGestureRefusedBeforeHandOffIsNotDispatched() throws {
+    let (response, presses) = try longPressWithFailingSynthesis(
+      dispatchedBeforeFailing: false,
+      health: .unavailable,
+      command: #"{"command":"gesture","commandId":"sampled-pan-refused","gesturePlan":{"topology":"single","intent":"pan","executionProfile":"timed-pan","durationMs":500,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":160,"y":150}},{"offsetMs":250,"point":{"x":100,"y":150}},{"offsetMs":500,"point":{"x":40,"y":150}}]}]}}"#
+    )
+
+    XCTAssertEqual(response.error?.code, RunnerWireErrorCode.synthesizedGestureNotDispatched)
+    XCTAssertEqual(presses, 0)
+  }
+
+  /// The sampled arm maps only the synthesis's own pre-hand-off refusal to the not-dispatched code.
+  /// A platform refusal, such as tvOS and macOS answer for a sampled plan, keeps
+  /// UNSUPPORTED_OPERATION.
+  func testSampledPlannedGestureResponseKeepsEachRefusalsCode() throws {
+    let plan = try XCTUnwrap(try runnerCommandFixture(#"{"command":"gesture","commandId":"sampled-pan-refused","gesturePlan":{"topology":"single","intent":"pan","executionProfile":"timed-pan","durationMs":500,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":160,"y":150}},{"offsetMs":250,"point":{"x":100,"y":150}},{"offsetMs":500,"point":{"x":40,"y":150}}]}]}}"#).gesturePlan)
+    let timing = (gestureStartUptimeMs: 0.0, gestureEndUptimeMs: 1.0)
+
+    let platform = plannedGestureResponse(
+      plan: plan,
+      timing: timing,
+      outcome: .unsupported(message: "multi-touch gestures are not supported on tvOS", hint: "tvOS has no touch input")
+    )
+    XCTAssertEqual(platform.error?.code, "UNSUPPORTED_OPERATION")
+    let notDispatched = plannedGestureResponse(
+      plan: plan,
+      timing: timing,
+      outcome: .notDispatched(message: "synthesis refused", hint: nil)
+    )
+    XCTAssertEqual(notDispatched.error?.code, RunnerWireErrorCode.synthesizedGestureNotDispatched)
+  }
+
+  /// The real synthesis reports nothing dispatched when it fails while building its record.
+  @MainActor
+  func testSynthesizedGestureWithAnEmptyPointerPathDispatchesNothing() throws {
+    app.launch()
+    defer { app.terminate() }
+    var dispatched: ObjCBool = true
+
+    let failure = RunnerSynthesizedGesture.synthesizeGesture(
+      withApplication: app,
+      resolvedWindow: nil,
+      interfaceOrientation: 1,
+      pointerSamples: [[]],
+      dispatched: &dispatched
+    )
+
+    XCTAssertNotNil(failure)
+    XCTAssertFalse(dispatched.boolValue)
+  }
+
+  func testSynthesizedGestureOutcomeThrowsOnlyAfterDispatch() throws {
+    guard case .performed = try Self.synthesizedGestureOutcome(failure: nil, dispatched: true, refusalHint: "") else {
+      return XCTFail("no failure is performed")
+    }
+    guard case .notDispatched = try Self.synthesizedGestureOutcome(failure: "x", dispatched: false, refusalHint: "") else {
+      return XCTFail("a failure before dispatch is a refusal a fallback may answer")
+    }
+    XCTAssertThrowsError(try Self.synthesizedGestureOutcome(failure: "x", dispatched: true, refusalHint: "")) {
+      XCTAssertTrue($0 is RunnerGestureOutcomeUnknown)
+    }
+  }
+
+  @MainActor
+  private func longPressWithFailingSynthesis(
+    dispatchedBeforeFailing: Bool,
+    health: RunnerAccessibilityHealth,
+    command: String = #"{"command":"longPress","commandId":"failing-synthesis-long-press","x":40,"y":200,"durationMs":300}"#
+  ) throws -> (Response, presses: Int) {
+    app.launch()
+    mainOwned.app = app
+    mainOwned.accessibilityHealth = health
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    RunnerSynthesisFailureStub.dispatchedBeforeFailing = dispatchedBeforeFailing
+    RunnerSynthesisFailureStub.calls = 0
+    let swaps: [(Method, Method)] = [
+      (try XCTUnwrap(class_getClassMethod(
+        RunnerSynthesizedGesture.self,
+        NSSelectorFromString("synthesizeGestureWithApplication:resolvedWindow:interfaceOrientation:pointerSamples:dispatched:")
+      )), try XCTUnwrap(class_getClassMethod(
+        RunnerSynthesisFailureStub.self,
+        #selector(RunnerSynthesisFailureStub.synthesizeGesture(_:resolvedWindow:interfaceOrientation:pointerSamples:dispatched:))
+      ))),
+      (try XCTUnwrap(class_getInstanceMethod(XCUICoordinate.self, #selector(XCUICoordinate.press(forDuration:)))),
+       try XCTUnwrap(class_getInstanceMethod(
+         RunnerCoordinatePressCounter.self,
+         #selector(RunnerCoordinatePressCounter.press(forDuration:))
+       ))),
+    ]
+    let originals = swaps.map { target, stub in (target, method_setImplementation(target, method_getImplementation(stub))) }
+    defer { for (method, original) in originals.reversed() { method_setImplementation(method, original) } }
+    RunnerCoordinatePressCounter.presses = 0
+
+    let response = try executeOnMainPrepared(command: try runnerCommandFixture(command), activeApp: app)
+    return (response, RunnerCoordinatePressCounter.presses)
   }
 
   /// On a tree XCTest cannot serialize, XCTest's coordinate press reads an infinite app frame and
@@ -769,6 +956,21 @@ extension RunnerTests {
       return XCTFail("expected a refusal before dispatch, got \(String(describing: outcome))")
     }
     XCTAssertEqual(message, "synthesized coordinate tap could not resolve an app window with a finite screen frame")
+  }
+
+  /// A synthesized drag whose app window cannot be named is refused before any synthesis, so it
+  /// reports that nothing was sent, unlike a tap, whose refusal keeps UNSUPPORTED_OPERATION.
+  @MainActor
+  func testWindowlessLandscapeDragRefusesAsNotDispatched() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
+    let (_, cleanup) = try launchWithUnreadableDisplay(landscape: true, windowQueryRejected: true)
+    defer { cleanup() }
+
+    let outcome = try synthesizedDragAt(app: app, x: 40, y: 40, x2: 120, y2: 40, durationMs: 100, profile: .fastSwipe)
+    guard case .notDispatched(let message, _) = outcome else {
+      return XCTFail("expected a not-dispatched refusal before synthesis, got \(outcome)")
+    }
+    XCTAssertEqual(message, "synthesized coordinate drag could not resolve an app window with a finite screen frame")
   }
 
   /// #4091: when the device's only screen will not report its size, an app the sole-screen rule

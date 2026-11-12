@@ -113,3 +113,35 @@ test('a step failure in a later chunk counts the taps every chunk completed', as
     },
   );
 });
+
+test('a long-press step refused before dispatch after an earlier step ran leaves the series unknown', async () => {
+  let sends = 0;
+  await assert.rejects(
+    runApplePressSeries(
+      IOS_SIMULATOR,
+      { x: 10, y: 20 },
+      { button: 'primary', count: 2, intervalMs: 0, holdMs: 600, jitterPx: 0, doubleTap: false },
+      undefined,
+      async () => {
+        sends += 1;
+        return {
+          sequenceOrientation: 1,
+          completedSteps: 1,
+          failedStepIndex: 1,
+          sequenceResults: [
+            { ok: true, kind: 'longPress' },
+            { ok: false, kind: 'longPress', errorCode: 'SYNTHESIZED_GESTURE_NOT_DISPATCHED' },
+          ],
+        };
+      },
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.runnerErrorCode, 'SYNTHESIZED_GESTURE_NOT_DISPATCHED');
+      assert.equal(error.details?.dispatched, 'unknown');
+      assert.equal(error.details?.dispatchedSteps, 1);
+      return true;
+    },
+  );
+  assert.equal(sends, 1, 'the refused step is not resent');
+});
