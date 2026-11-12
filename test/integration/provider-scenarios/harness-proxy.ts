@@ -180,20 +180,27 @@ function allowlistedUpstreamTarget(
   }
 
   const route = target.pathname;
-  const method = request.method;
-  const isRpc = method === 'POST' && route === '/rpc';
-  const isDiagnostics =
-    method === 'GET' &&
-    /^\/sessions\/(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+\/requests\/(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+\/diagnostics$/.test(
-      route,
-    );
-  const isArtifactList = method === 'GET' && (route === '/artifacts' || route === '/artifacts/');
-  const isArtifact = method === 'GET' && /^\/artifacts\/[0-9a-f-]+$/i.test(route);
-  const isUpload =
-    (method === 'POST' && ['/upload/preflight', '/upload/finalize'].includes(route)) ||
-    (method === 'PUT' && /^\/upload\/direct\/[0-9a-f-]+$/i.test(route));
-  if (!isRpc && !isDiagnostics && !isArtifactList && !isArtifact && !isUpload) return undefined;
+  if (!isAllowedUpstreamRoute(request.method, route)) return undefined;
   return { path: route, route };
+}
+
+function isAllowedUpstreamRoute(method: string | undefined, route: string): boolean {
+  switch (method) {
+    case 'POST':
+      return ['/rpc', '/upload/preflight', '/upload/finalize'].includes(route);
+    case 'PUT':
+      return /^\/upload\/direct\/[0-9a-f-]+$/i.test(route);
+    case 'GET':
+      return (
+        ['/artifacts', '/artifacts/'].includes(route) ||
+        /^\/artifacts\/[0-9a-f-]+$/i.test(route) ||
+        /^\/sessions\/(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+\/requests\/(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+\/diagnostics$/.test(
+          route,
+        )
+      );
+    default:
+      return false;
+  }
 }
 
 async function readRequestBody(request: http.IncomingMessage): Promise<Buffer> {
