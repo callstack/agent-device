@@ -26,5 +26,7 @@ function isPnpmScript(command, script) {
  */
 export function findExistsSource(subject = '') {
   const unquoted = subject ? String.raw`[^\s"']*${subject}[^\s"']*` : String.raw`[^\s"']+`;
-  return String.raw`\bfind\s+(?:(?:text|label|value|role|id)\s+)?(?:"[^"\n]*${subject}[^"\n]*"|'[^'\n]*${subject}[^'\n]*'|${unquoted})\s+exists(?:\s|$)`;
+  // A double-quoted query may hold escaped quotes, as the plan canonicalizer emits them.
+  const doubleQuoted = String.raw`"(?:[^"\\\n]|\\.)*${subject}(?:[^"\\\n]|\\.)*"`;
+  return String.raw`\bfind\s+(?:(?:text|label|value|role|id)\s+)?(?:${doubleQuoted}|'[^'\n]*${subject}[^'\n]*'|${unquoted})\s+exists(?:\s|$)`;
 }
