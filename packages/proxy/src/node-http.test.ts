@@ -156,6 +156,7 @@ test.each([undefined, 'https://public.example:8443'])(
       upstreamFetch: async () => {
         calls++;
         return Response.json({
+          uploadId: 'id',
           upload: {
             url: 'http://daemon/upload/direct/id?part=1',
             headers: { authorization: 'Bearer daemon-secret' },

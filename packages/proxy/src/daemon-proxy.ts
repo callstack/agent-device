@@ -433,23 +433,30 @@ function rewriteUploadPreflightResponse(
   }
 
   if (!parsed || typeof parsed !== 'object') throw new Error('Invalid upstream upload ticket');
-  const record = parsed as { upload?: { url?: unknown; headers?: unknown } };
-  if (!record.upload || typeof record.upload !== 'object')
+  const record = parsed as { uploadId?: unknown; upload?: { url?: unknown; headers?: unknown } };
+  if (
+    typeof record.uploadId !== 'string' ||
+    !record.uploadId ||
+    record.uploadId.trim() !== record.uploadId ||
+    record.uploadId.includes('/') ||
+    !record.upload ||
+    typeof record.upload !== 'object'
+  )
     throw new Error('Invalid upstream upload ticket');
 
   const rewrittenUrl =
     typeof record.upload.url === 'string'
-      ? rewriteUploadDirectUrl(record.upload.url, request, publicOrigin)
+      ? rewriteUploadDirectUrl(record.upload.url, record.uploadId, request, publicOrigin)
       : null;
   if (!rewrittenUrl) throw new Error('Invalid upstream upload ticket');
   return JSON.stringify({
     ...(parsed as Record<string, unknown>),
     upload: {
       ...record.upload,
-      ...(rewrittenUrl ? { url: rewrittenUrl } : {}),
+      url: rewrittenUrl,
       headers: {
         ...upstreamTicketContentType(record.upload.headers),
-        ...(rewrittenUrl ? uploadHeaders : {}),
+        ...uploadHeaders,
       },
     },
   });
@@ -468,6 +475,7 @@ function upstreamTicketContentType(headers: unknown): Record<string, string> {
 
 function rewriteUploadDirectUrl(
   upstreamUrl: string,
+  uploadId: string,
   request: Request,
   publicOrigin: string | undefined,
 ): string | null {
@@ -483,7 +491,7 @@ function rewriteUploadDirectUrl(
     parsed.username ||
     parsed.password ||
     parsed.hash ||
-    !parsed.pathname.startsWith('/upload/')
+    parsed.pathname !== `/upload/direct/${uploadId}`
   ) {
     return null;
   }

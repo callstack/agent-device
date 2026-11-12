@@ -203,6 +203,7 @@ test('proxy flag selects the public origin for an authenticated upload ticket', 
     res.setHeader('content-type', 'application/json');
     res.end(
       JSON.stringify({
+        uploadId: 'id',
         upload: {
           url: 'http://127.0.0.1/upload/direct/id?part=1',
           headers: { authorization: 'Bearer daemon-secret' },

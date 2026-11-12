@@ -138,6 +138,7 @@ test('upload tickets point at the origin the client used, not the daemon', async
   const upstream = recordingUpstream(() =>
     Response.json({
       ok: true,
+      uploadId: 'abc',
       upload: { url: 'http://127.0.0.1:4310/upload/direct/abc?part=1', headers: {} },
     }),
   );
@@ -204,6 +205,7 @@ test('an artifact download keeps the upstream content-length', async () => {
 test('a rewritten upload ticket drops the upstream content-length', async () => {
   const upstreamBody = JSON.stringify({
     ok: true,
+    uploadId: 'abc',
     upload: { url: 'http://127.0.0.1:4310/upload/direct/abc', headers: {} },
   });
   const upstream = recordingUpstream(
@@ -600,24 +602,28 @@ test('with a client token, the ticket carries the client token, never the daemon
   });
 });
 
-test('a ticket whose url the proxy cannot rewrite carries no credentials', async () => {
+test('a ticket whose URL is not a direct upload is refused without credentials', async () => {
   const upstream = recordingUpstream(() =>
     Response.json({
       ok: true,
+      uploadId: 'abc',
       upload: {
         url: 'https://elsewhere.example/put/abc',
-        headers: {
-          ...buildDaemonHttpAuthHeaders(DAEMON_TOKEN),
-          'content-type': 'application/octet-stream',
-        },
+        headers: buildDaemonHttpAuthHeaders(DAEMON_TOKEN),
       },
     }),
   );
-  const proxy = proxyWith(upstream.fetch);
-
-  const ticketHeaders = await requestTicket(proxy, { authorization: 'Bearer client-secret' });
-
-  expect(ticketHeaders).toEqual({ 'content-type': 'application/octet-stream' });
+  const response = await proxyWith(upstream.fetch).handle(
+    new Request(`${PROXY_ORIGIN}/upload/preflight`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer client-secret' },
+      body: '{}',
+    }),
+  );
+  expect(response.status).toBe(500);
+  const body = await response.text();
+  expect(body).not.toContain(DAEMON_TOKEN);
+  expect(body).not.toContain('client-secret');
 });
 
 test('with authenticate, request diagnostics are served only for the caller tenant sessions', async () => {
@@ -681,6 +687,7 @@ test.each(['http, https', 'HTTPS', 'http://evil.example/path?'])(
     const upstream = recordingUpstream(() =>
       Response.json({
         ok: true,
+        uploadId: 'abc',
         upload: {
           url: 'http://daemon:4310/upload/direct/abc?part=1',
           headers: { authorization: 'Bearer upstream-secret', 'content-type': 'application/zip' },
@@ -715,7 +722,10 @@ test.each(['http, https', 'HTTPS', 'http://evil.example/path?'])(
 
 test('fixed public origin rewrites a prefixed ticket and preserves its query', async () => {
   const upstream = recordingUpstream(() =>
-    Response.json({ upload: { url: 'http://daemon/upload/direct/abc?part=1', headers: {} } }),
+    Response.json({
+      uploadId: 'abc',
+      upload: { url: 'http://daemon/upload/direct/abc?part=1', headers: {} },
+    }),
   );
   const proxy = createDaemonProxy({
     upstreamBaseUrl: 'http://daemon',
@@ -773,6 +783,35 @@ test('malformed successful tickets fail without exposing upstream credentials', 
   );
   expect(response.status).toBe(500);
   expect(await response.text()).not.toContain('secret');
+});
+
+test.each([
+  { name: 'missing ID', uploadId: undefined, path: '/upload/direct/abc' },
+  { name: 'non-string ID', uploadId: 123, path: '/upload/direct/123' },
+  { name: 'empty ID', uploadId: '', path: '/upload/direct/' },
+  { name: 'whitespace ID', uploadId: ' abc ', path: '/upload/direct/abc' },
+  { name: 'finalize route', uploadId: 'abc', path: '/upload/finalize' },
+  { name: 'different direct ID', uploadId: 'abc', path: '/upload/direct/other' },
+  { name: 'nested direct route', uploadId: 'abc/extra', path: '/upload/direct/abc/extra' },
+])('refuses malformed successful ticket: $name', async ({ uploadId, path }) => {
+  const upstream = recordingUpstream(() =>
+    Response.json({
+      ok: true,
+      uploadId,
+      upload: { url: `http://daemon${path}`, headers: buildDaemonHttpAuthHeaders(DAEMON_TOKEN) },
+    }),
+  );
+  const response = await proxyWith(upstream.fetch).handle(
+    new Request(`${PROXY_ORIGIN}/upload/preflight`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer client-secret' },
+      body: '{}',
+    }),
+  );
+  expect(response.status).toBe(500);
+  const body = await response.text();
+  expect(body).not.toContain(DAEMON_TOKEN);
+  expect(body).not.toContain('client-secret');
 });
 
 test('unsuccessful preflight responses pass through', async () => {
