@@ -210,12 +210,14 @@ function sequenceRecordingGuardResponse(
     return errorResponse(
       'INVALID_ARGS',
       'A multi-ref press sequence cannot be recorded: the recorder binds one target per step, so the recorded step would press only the first key. Record one press per key, or pass --no-record on this step.',
+      { reason: 'sequence-recording-unsupported' },
     );
   }
   if (req.internal?.replayTargetGuard !== undefined) {
     return errorResponse(
       'INVALID_ARGS',
       'A multi-ref press sequence cannot carry a replay target guard: the guard binds one target, so the replayed step would press only the first key. Re-record the journey as one press per key.',
+      { reason: 'sequence-replay-guard-unsupported' },
     );
   }
   return undefined;

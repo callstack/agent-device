@@ -170,17 +170,6 @@ function parseTouchRefSequence(positionals: string[]): ParsedTouchTarget {
     });
   }
   const bodies = parsed.map((member) => member.ref);
-  if (new Set(bodies).size !== bodies.length) {
-    return {
-      ok: false,
-      response: errorResponse(
-        'INVALID_ARGS',
-        `Ref sequence "${positionals[0]}" names the same ref more than once.`,
-        undefined,
-        { hint: REF_SEQUENCE_HINT },
-      ),
-    };
-  }
   return {
     ok: true,
     target: { kind: 'ref', ref: `@${bodies[0]}` },
@@ -190,7 +179,7 @@ function parseTouchRefSequence(positionals: string[]): ParsedTouchTarget {
 }
 
 const REF_SEQUENCE_HINT =
-  'List each snapshot ref in press order, for example press @e13,@e14,@e15,@e16. Every key is admitted against the current frame before the first press; after each press the next key is re-found by identity on a fresh capture and refused with sequence_ref_unmatched when its element is gone.';
+  'List each snapshot ref in press order, for example press @e13,@e14,@e15,@e16; a repeated ref presses the same key twice (a PIN digit). Every key is admitted against the current frame before the first press, and every press runs the ordinary press path: when a later key refuses, the failure names that key in details.refPlanKey, the keys already sent in details.dispatchedSteps, and the keys that did not run in details.refPlanPending.';
 
 export type ParsedLongPressTarget =
   | (ParsedTouchTargetOk & { ok: true; durationMs?: number })

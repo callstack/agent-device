@@ -12,7 +12,7 @@ import type { Point } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import { isFillableType } from '@agent-device/contracts/snapshot';
 import { attachResolvedInteractionTarget } from '@agent-device/host-kit/interaction-outcome';
-import { toBackendContext } from '../../runtime-common.ts';
+import { sleep, toBackendContext } from '../../runtime-common.ts';
 import { toBackendResult, type RuntimeCommand } from '../../runtime-types.ts';
 import {
   applyPostActionObservation,
@@ -21,7 +21,6 @@ import {
 } from './post-action-observation.ts';
 import { resolveInteractionTarget, type InteractionTarget } from './resolution.ts';
 import { admitResolvedTarget } from './pre-dispatch-admission.ts';
-import { isPressSequencePlan, tapRefSequenceCommand } from './press-sequence.ts';
 import { pointObservationOf } from './target-visibility-stages.ts';
 import { dispatchNativeRefInteraction } from './native-ref-interaction.ts';
 import type {
@@ -29,10 +28,8 @@ import type {
   ResolveInteractionTargetParams,
 } from './interaction-resolution-request.ts';
 
-export { focusCommand, hoverCommand, longPressCommand } from './gestures.ts';
+export { hoverCommand, longPressCommand } from './gestures.ts';
 export type {
-  FocusCommandOptions,
-  FocusCommandResult,
   HoverCommandOptions,
   HoverCommandResult,
   LongPressCommandOptions,
@@ -45,9 +42,11 @@ export type PressCommandOptions = CommandContext &
     target: InteractionTarget;
     button?: ClickButton;
     /**
-     * Multi-ref press plan (`press @e13,@e14,...`): the members in dispatch
-     * order, bare ref bodies. `target` stays the first member; see
-     * press-sequence.ts for the admission and per-key re-verification contract.
+     * Multi-ref press plan (`press @e13,@e14,...`): every member in dispatch
+     * order, bare ref bodies; `target` repeats member 0 for the response's
+     * ref identity. Absent for a single-ref press. Each member lowers to an
+     * ordinary press through the same resolution and admission as any other;
+     * see tapRefPlanCommand.
      */
     refs?: readonly string[];
     /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
@@ -148,8 +147,8 @@ async function tapCommand(
   options: PressCommandOptions,
   action: 'click' | 'press',
 ): Promise<PressCommandResult> {
-  if (isPressSequencePlan(options)) {
-    return await tapRefSequenceCommand(runtime, options, action);
+  if (options.refs?.length) {
+    return await tapRefPlanCommand(runtime, options, action);
   }
   const observation = planPostActionObservation(options);
   const nativeRefTap = observation.needsPreActionBaseline
@@ -210,6 +209,65 @@ function requireResolvedPoint(result: { point?: Point }): Point {
     throw new AppError('COMMAND_FAILED', 'Interaction target resolved without coordinates');
   }
   return result.point;
+}
+
+/**
+ * A multi-ref plan lowers to ordinary presses: every member re-resolves against the current
+ * frame and passes the same admission as any press, so a member fails with the ordinary press
+ * reasons and the kernel's dispatched-steps disclosure counts the keys already sent. Later
+ * members follow selector semantics — each names whatever the fresh frame shows — which is how
+ * a repeated digit presses the same key twice.
+ */
+async function tapRefPlanCommand(
+  runtime: AgentDeviceRuntime,
+  options: PressCommandOptions,
+  action: 'click' | 'press',
+): Promise<PressCommandResult> {
+  if (options.target.kind !== 'ref') {
+    throw new AppError('INVALID_ARGS', 'A multi-ref press plan requires ref targets.');
+  }
+  // The parser emits the full plan in `refs` with `target` kept as member 0's
+  // response identity, so the plan iterates `refs` alone.
+  const plannedRefs = (options.refs ?? []).map((ref) => (ref.startsWith('@') ? ref : `@${ref}`));
+  const points: Point[] = [];
+  let last: PressCommandResult | undefined;
+  for (let index = 0; index < plannedRefs.length; index += 1) {
+    if (index > 0 && options.intervalMs !== undefined && options.intervalMs > 0) {
+      await sleep(runtime, options.intervalMs, options.signal);
+    }
+    const member: PressCommandOptions = {
+      ...options,
+      target: { kind: 'ref', ref: plannedRefs[index]! },
+      refs: undefined,
+    };
+    try {
+      last = await tapCommand(runtime, member, action);
+    } catch (error) {
+      // The request dispatch ledger counts the keys already sent and owns the
+      // kernel's dispatched-steps disclosure at the request boundary; these
+      // details only name the key that refused and the keys that did not run.
+      throw attachRefPlanContext(error, plannedRefs, index);
+    }
+    points.push(requireResolvedPoint(last));
+  }
+  return {
+    ...last!,
+    sequence: { pressed: points.length, refs: plannedRefs, points },
+  };
+}
+
+function attachRefPlanContext(
+  error: unknown,
+  refs: readonly string[],
+  failedIndex: number,
+): unknown {
+  if (!(error instanceof AppError)) return error;
+  error.details = {
+    ...error.details,
+    refPlanKey: refs[failedIndex],
+    refPlanPending: refs.slice(failedIndex + 1),
+  };
+  return error;
 }
 
 async function maybeTapRefTarget(
