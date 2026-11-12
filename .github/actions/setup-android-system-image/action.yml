@@ -12,7 +12,7 @@ runs:
         echo "path=${ANDROID_HOME:?}/system-images/android-36/google_apis_playstore/x86_64" >> "$GITHUB_OUTPUT"
         echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
 
-    # sdkmanager still checks for upstream revisions. Rotate weekly so an immutable cache
+    # The SDK installer still checks for upstream revisions. Rotate weekly so an immutable cache
     # does not require downloading the same updated image on every run until eviction.
     - name: Restore Android system image
       id: restore
@@ -22,11 +22,9 @@ runs:
         key: android-system-image-${{ runner.os }}-${{ runner.arch }}-api36-google_apis_playstore-x86_64-${{ steps.image.outputs.week }}-${{ hashFiles('.github/actions/setup-android-system-image/action.yml') }}
 
     - name: Install Android system image
-      shell: bash
-      run: |
-        set -euo pipefail
-        "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-          --install 'system-images;android-36;google_apis_playstore;x86_64' --channel=0
+      uses: ./.github/actions/setup-android-sdk
+      with:
+        system-image: 'true'
 
     - name: Save Android system image
       if: steps.restore.outputs.cache-hit != 'true'

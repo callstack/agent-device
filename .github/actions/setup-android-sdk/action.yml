@@ -9,6 +9,10 @@ inputs:
     description: 'Android build-tools version to install'
     required: false
     default: '36.0.0'
+  system-image:
+    description: 'Install the API 36 x86_64 Play Store emulator image'
+    required: false
+    default: 'false'
 
 outputs:
   build-tools-dir:
@@ -23,6 +27,7 @@ runs:
       shell: bash
       env:
         BUILD_TOOLS_VERSION: ${{ inputs.build-tools }}
+        INSTALL_SYSTEM_IMAGE: ${{ inputs.system-image }}
       run: |
         set -euo pipefail
         SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
@@ -34,7 +39,7 @@ runs:
           [ -x "$BUILD_TOOLS_DIR/$BUILD_TOOL" ] || INSTALLED=false
         done
         [ -f "$SDK_ROOT/platforms/android-36/android.jar" ] || INSTALLED=false
-        if [ "$INSTALLED" != true ]; then
+        if [ "$INSTALLED" != true ] || [ "$INSTALL_SYSTEM_IMAGE" = true ]; then
           SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMANAGER" ]; then
             SDKMANAGER="$SDK_ROOT/cmdline-tools/bin/sdkmanager"
@@ -48,7 +53,12 @@ runs:
           set +o pipefail
           yes | "$SDKMANAGER" --licenses >/dev/null
           set -o pipefail
-          "$SDKMANAGER" "platforms;android-36" "build-tools;$BUILD_TOOLS_VERSION"
+          if [ "$INSTALLED" != true ]; then
+            "$SDKMANAGER" "platforms;android-36" "build-tools;$BUILD_TOOLS_VERSION"
+          fi
+          if [ "$INSTALL_SYSTEM_IMAGE" = true ]; then
+            "$SDKMANAGER" --install 'system-images;android-36;google_apis_playstore;x86_64' --channel=0
+          fi
         fi
         echo "AGENT_DEVICE_ANDROID_BUILD_TOOLS=$BUILD_TOOLS_VERSION" >> "$GITHUB_ENV"
         echo "build-tools-dir=$BUILD_TOOLS_DIR" >> "$GITHUB_OUTPUT"
