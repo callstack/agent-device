@@ -1,6 +1,12 @@
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import http from 'node:http';
-import { createDaemonProxyServer, type DaemonProxyAuthenticate } from '@agent-device/proxy';
+import https from 'node:https';
+import {
+  createDaemonProxy,
+  createDaemonProxyRequestListener,
+  createDaemonProxyServer,
+  type DaemonProxyAuthenticate,
+} from '@agent-device/proxy';
 import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.fixtures.ts';
 import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit';
 import {
@@ -51,15 +57,19 @@ export type ProviderScenarioProxyOptions =
 
 export async function createProviderScenarioProxy(
   daemon: ProviderScenarioHarness,
-  options: ProviderScenarioProxyOptions,
+  options: ProviderScenarioProxyOptions & { tls?: https.ServerOptions },
 ): Promise<ProviderScenarioProxy> {
   const upstream = createRecordingUpstreamServer(daemon.httpPort);
   const upstreamPort = await listenOnLoopback(upstream.server);
-  const proxy = createDaemonProxyServer({
+  const { tls, ...authOptions } = options;
+  const proxyOptions = {
     upstreamBaseUrl: `http://127.0.0.1:${upstreamPort}`,
     upstreamToken: daemon.token,
-    ...options,
-  });
+    ...authOptions,
+  };
+  const proxy = tls
+    ? https.createServer(tls, createDaemonProxyRequestListener(createDaemonProxy(proxyOptions)))
+    : createDaemonProxyServer(proxyOptions);
   let proxyPort: number;
   try {
     proxyPort = await listenOnLoopback(proxy);
@@ -69,7 +79,7 @@ export async function createProviderScenarioProxy(
     throw error;
   }
 
-  const baseUrl = `http://127.0.0.1:${proxyPort}/agent-device`;
+  const baseUrl = `${tls ? 'https' : 'http'}://127.0.0.1:${proxyPort}/agent-device`;
   let closed = false;
   const requestRpc: ProviderScenarioProxy['requestRpc'] = async (authToken, payload) => {
     const response = await fetch(`${baseUrl}/rpc`, {
