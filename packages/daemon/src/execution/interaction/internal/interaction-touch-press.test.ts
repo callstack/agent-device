@@ -4,6 +4,7 @@ import { attachRefs } from '@agent-device/kernel/snapshot';
 import {
   clearRequestAbortRegistration,
   registerRequestAbort,
+  withRequestDeadline,
 } from '@agent-device/host-kit/request';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
@@ -229,7 +230,7 @@ test('press and click hand the earliest request deadline to pre-dispatch admissi
       makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
     );
 
-    for (const command of ['press', 'click']) {
+    const dispatch = async (command: string) =>
       await handleInteractionCommands({
         createCommandSurface,
         req: {
@@ -245,9 +246,20 @@ test('press and click hand the earliest request deadline to pre-dispatch admissi
         contextFromFlags,
         ...getRuntimeBindings(),
       });
-    }
 
+    for (const command of ['press', 'click']) await dispatch(command);
     expect(handedOff).toEqual([resultDeadlineMs, resultDeadlineMs]);
+
+    // An execution deadline earlier than the result deadline is the one handed off.
+    const before = Date.now();
+    await withRequestDeadline(requestId, 1_000, async () => {
+      await dispatch('press');
+      return { ok: true };
+    });
+    const executionDeadlineMs = handedOff[2]!;
+    expect(executionDeadlineMs).toBeLessThan(resultDeadlineMs);
+    expect(executionDeadlineMs).toBeGreaterThanOrEqual(before + 1_000);
+    expect(executionDeadlineMs).toBeLessThanOrEqual(Date.now() + 1_000);
   } finally {
     clearRequestAbortRegistration(registration);
   }

@@ -131,26 +131,29 @@ for (const history of [
 ] as const) {
   test(`an idle press after ${history.name} pays no extra capture, sleep or timer`, async () => {
     const timers = vi.spyOn(AbortSignal, 'timeout');
-    for (const target of ['selector', 'ref'] as const) {
-      const harness = createAdmissionDevice({
-        platform: 'android',
-        trees: [slideTree(10)],
-        baselineAgeMs: history.baselineAgeMs,
-        ...('stationary' in history ? { baselineTree: slideTree(10) } : {}),
-      });
+    try {
+      for (const target of ['selector', 'ref'] as const) {
+        const harness = createAdmissionDevice({
+          platform: 'android',
+          trees: [slideTree(10)],
+          baselineAgeMs: history.baselineAgeMs,
+          ...('stationary' in history ? { baselineTree: slideTree(10) } : {}),
+        });
 
-      await harness.device.interactions.press(
-        target === 'selector' ? selector('label="Slide target"') : ref('@e2'),
-        { session: 'default', deadlineAtMs: Date.now() + 60_000 },
-      );
+        await harness.device.interactions.press(
+          target === 'selector' ? selector('label="Slide target"') : ref('@e2'),
+          { session: 'default', deadlineAtMs: Date.now() + 60_000 },
+        );
 
-      assert.deepEqual(harness.taps, [{ x: 70, y: BUTTON_Y + 25 }], target);
-      // A selector spends its resolution capture; a ref resolves against its stored tree.
-      assert.equal(harness.captureStarts.length, target === 'selector' ? 1 : 0, target);
-      assert.deepEqual(harness.sleeps, [], target);
+        assert.deepEqual(harness.taps, [{ x: 70, y: BUTTON_Y + 25 }], target);
+        // A selector spends its resolution capture; a ref resolves against its stored tree.
+        assert.equal(harness.captureStarts.length, target === 'selector' ? 1 : 0, target);
+        assert.deepEqual(harness.sleeps, [], target);
+      }
+      assert.equal(timers.mock.calls.length, 0, 'no deadline timer on the accept path');
+    } finally {
+      timers.mockRestore();
     }
-    assert.equal(timers.mock.calls.length, 0, 'no deadline timer on the accept path');
-    timers.mockRestore();
   });
 }
 

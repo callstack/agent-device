@@ -117,7 +117,7 @@ function requestBudget(runtime: AgentDeviceRuntime, options: CommandContext): Ad
         createRequestDeadlineError({
           ...(options.requestId ? { requestId: options.requestId } : {}),
           remainingMs,
-          hint: `The request had ${remainingMs} ms left, which cannot cover the wait for the target to come to rest, so nothing was dispatched. Retry once the UI is idle, or allow the request more time.`,
+          hint: `The request had ${remainingMs} ms left when pre-dispatch admission stopped, so nothing was dispatched. Retry once the UI is idle, or allow the request more time.`,
         }),
         'no',
       );
