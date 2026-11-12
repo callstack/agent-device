@@ -106,7 +106,14 @@ const installedDump: HostCommandResult = {
 };
 
 test('uninstall removes an installed HarmonyOS bundle through bm uninstall', async () => {
-  const run = vi.fn(async () => installedDump);
+  const uninstallAnswer: HostCommandResult = {
+    stdout: 'uninstall bundle successfully.',
+    stderr: '',
+    exitCode: 0,
+  };
+  const run = vi.fn(
+    scriptAnswers([installedDump, uninstallAnswer, absentBundleAnswer, emptyAnswer]),
+  );
   const commands = { which: async () => undefined, run } as HostCommandRunner;
   const signal = new AbortController().signal;
   const operations = createHarmonyAppDeploymentOperations({ commands, device, signal });
@@ -115,7 +122,7 @@ test('uninstall removes an installed HarmonyOS bundle through bm uninstall', asy
     wasInstalled: true,
     packageName: 'com.example.app',
   });
-  expect(run).toHaveBeenCalledTimes(2);
+  expect(run).toHaveBeenCalledTimes(4);
   expect(run).toHaveBeenNthCalledWith(
     1,
     expect.objectContaining({
@@ -132,7 +139,49 @@ test('uninstall removes an installed HarmonyOS bundle through bm uninstall', asy
     }),
     signal,
   );
+  expect(run).toHaveBeenNthCalledWith(
+    3,
+    expect.objectContaining({
+      executable: 'hdc',
+      args: ['-t', device.id, 'shell', 'bm', 'dump', '-n', 'com.example.app'],
+    }),
+    signal,
+  );
+  expect(run).toHaveBeenNthCalledWith(
+    4,
+    expect.objectContaining({ args: ['-t', device.id, 'shell', 'true'] }),
+    signal,
+  );
 });
+
+test('uninstall refuses to claim removal when the bundle record survives bm uninstall', async () => {
+  const lyingUninstallAnswer: HostCommandResult = {
+    stdout: 'uninstall bundle successfully.',
+    stderr: '',
+    exitCode: 0,
+  };
+  const run = vi.fn(scriptAnswers([installedDump, lyingUninstallAnswer, installedDump]));
+  const commands = { which: async () => undefined, run } as HostCommandRunner;
+  const signal = new AbortController().signal;
+  const operations = createHarmonyAppDeploymentOperations({ commands, device, signal });
+
+  await expect(operations.uninstallApp?.({ app: 'com.example.app' })).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'com.example.app is still installed after bm uninstall',
+    details: { stdout: 'uninstall bundle successfully.' },
+  });
+  expect(run).toHaveBeenCalledTimes(3);
+  expect(run).not.toHaveBeenCalledWith(
+    expect.objectContaining({ args: ['-t', device.id, 'shell', 'true'] }),
+    signal,
+  );
+});
+
+/** Answers each call in order; the last answer repeats when a script runs past its end. */
+function scriptAnswers(answers: readonly HostCommandResult[]) {
+  let next = 0;
+  return async (): Promise<HostCommandResult> => answers[Math.min(next++, answers.length - 1)]!;
+}
 
 const emptyAnswer: HostCommandResult = { stdout: '', stderr: '', exitCode: 0 };
 

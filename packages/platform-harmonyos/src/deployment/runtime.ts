@@ -90,7 +90,33 @@ async function uninstallHarmonyApp(
     }
     return { wasInstalled: false };
   }
-  await runHdcShell(commands, device, ['bm', 'uninstall', '-n', bundleId], signal);
+  const uninstall = await runHdcShell(
+    commands,
+    device,
+    ['bm', 'uninstall', '-n', bundleId],
+    signal,
+  );
+  const after = await runHdcShell(commands, device, ['bm', 'dump', '-n', bundleId], signal, {
+    allowFailure: true,
+  });
+  if (parseBundleDump(after.stdout)) {
+    // bm prints its verdict into stdout at exit code 0, so only a second dump that no
+    // longer finds the record proves the removal.
+    throw new AppError('COMMAND_FAILED', `${bundleId} is still installed after bm uninstall`, {
+      exitCode: uninstall.exitCode,
+      stdout: uninstall.stdout,
+      stderr: uninstall.stderr,
+      hint: 'Read the bm uninstall output above for the bm reason; system and shared bundles refuse removal.',
+    });
+  }
+  if (after.exitCode === null || !(await isHarmonyShellTransportAlive(commands, device, signal))) {
+    throw new AppError('COMMAND_FAILED', `Could not verify the uninstall of ${bundleId}`, {
+      exitCode: after.exitCode,
+      stdout: after.stdout,
+      stderr: after.stderr,
+      hint: 'Confirm the device connection, then check the bundle name through bm dump -a.',
+    });
+  }
   return { wasInstalled: true, packageName: bundleId };
 }
 
