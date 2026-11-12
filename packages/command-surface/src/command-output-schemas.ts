@@ -44,7 +44,9 @@ import { SYSTEM_COMMAND_OUTPUT_SCHEMAS } from './system/index.ts';
  *    `cost` object (opted in via `--cost` / `includeCost`) and any other additive
  *    fields ride into `structuredContent` and still validate.
  *  - Accurate, never invented: required-vs-optional, enums, `const` discriminants
- *    and discriminated-union branches mirror the source contract types.
+ *    and discriminated-union branches mirror the source contract types. One schema
+ *    serves every response level, so a field a digest view drops is optional here
+ *    even when the contract type requires it at the default level.
  *
  * The opt-in `--settle` observation (#1101) is not hand-listed per entry: the
  * base map carries none and `deriveSettleObservationSchemas` grafts it onto
