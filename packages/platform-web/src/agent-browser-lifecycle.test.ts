@@ -750,7 +750,7 @@ test('recording and reaping require executable provenance and matching identity'
       resolveSessionDir: (id) => path.join(stateDir, 'sessions', id),
     });
     await recordManagedAgentBrowserProcesses(status, store);
-    expect(store.read()[0]?.records.map(({ pid }) => pid)).toEqual([11001, 11002, 11003]);
+    const recordedPids = store.read()[0]?.records.map(({ pid }) => pid);
     const alive = new Set(rows.map(({ pid }) => pid));
     const signals: number[] = [];
     vi.spyOn(process, 'kill').mockImplementation(((pid: number, signal: string | number) => {
@@ -778,6 +778,7 @@ test('recording and reaping require executable provenance and matching identity'
     expect(signals).toEqual([11001, 11002]);
     expect(result.terminatedPids).toEqual([11001, 11002]);
     expect(result.missingPids).toEqual([11003]);
+    expect(recordedPids).toEqual([11001, 11002, 11003]);
   } finally {
     hostRunCmdMock.mockReset();
     fs.rmSync(stateDir, { recursive: true, force: true });
