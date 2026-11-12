@@ -61,11 +61,14 @@ async function expectBootFailure(
   return await startedBootFailure(timeoutMs);
 }
 
-test('an offline observation retries until booted', async () => {
-  mockRunCmd.mockImplementationOnce(bootPropFailure('', 'error: device offline'));
-  await waitForAndroidBoot('emulator-5554', 500);
-  assert.equal(mockRunCmd.mock.calls.length, 2);
-});
+test.each(['error: device offline', 'device offline'])(
+  'the real adb producer makes %s retry until booted',
+  async (stderr) => {
+    mockRunCmd.mockImplementationOnce(bootPropFailure('', stderr));
+    await waitForAndroidBoot('emulator-5554', 500);
+    assert.equal(mockRunCmd.mock.calls.length, 2);
+  },
+);
 
 test('unauthorized is terminal', async () => {
   mockRunCmd.mockImplementation(bootPropFailure('', 'error: device unauthorized'));
@@ -78,7 +81,7 @@ test('typed reason controls retry independently of wording', async () => {
   mockRunCmd.mockRejectedValueOnce(
     new AppError('COMMAND_FAILED', 'changed wording', {
       adbFailure: 'device_offline',
-      adbHostRefusal: true,
+      retriable: true,
     }),
   );
   await waitForAndroidBoot('emulator-5554', 500);
@@ -92,6 +95,24 @@ test('typed reason controls retry independently of wording', async () => {
   );
   const failure = await expectBootFailure(500);
   assert.equal(failure.details.reason, 'ADB_TRANSPORT_UNAVAILABLE');
+  assert.equal(mockRunCmd.mock.calls.length, 1);
+});
+
+test('a curated terminal offline verdict is not overridden by its host-refusal shape', async () => {
+  mockRunCmd.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'changed wording', {
+      adbFailure: 'device_offline',
+      adbHostRefusal: true,
+      retriable: false,
+    }),
+  );
+  await expectBootFailure(500);
+  assert.equal(mockRunCmd.mock.calls.length, 1);
+});
+
+test('offline wording without a typed failure reason does not trigger retry', async () => {
+  mockRunCmd.mockRejectedValue(new AppError('COMMAND_FAILED', 'device offline'));
+  await expectBootFailure(500);
   assert.equal(mockRunCmd.mock.calls.length, 1);
 });
 

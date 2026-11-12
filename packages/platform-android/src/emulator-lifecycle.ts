@@ -89,7 +89,7 @@ function isTransientAndroidBootFailure(error: unknown): boolean {
   const details = asAppError(error).details;
   return (
     details?.bootObservation === 'not_ready' ||
-    (details?.adbFailure === 'device_offline' && details.adbHostRefusal === true)
+    (details?.adbFailure === 'device_offline' && details.retriable === true)
   );
 }
 
