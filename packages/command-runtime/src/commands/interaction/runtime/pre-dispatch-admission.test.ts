@@ -246,6 +246,29 @@ test('the request deadline interrupts a look still in flight and sends no input'
   assert.deepEqual(harness.taps, []);
 });
 
+test('a deadline beyond the timer range, infinite or fractional still admits a settled target', async () => {
+  for (const deadlineAtMs of [
+    Date.now() + 2 ** 32,
+    Number.POSITIVE_INFINITY,
+    Date.now() + 60_000.5,
+  ]) {
+    const harness = createAdmissionDevice({
+      platform: 'android',
+      trees: [slideTree(240), slideTree(10)],
+      baselineAgeMs: 0,
+      // Real time passes during each look, so a timer that misfires early would abort it.
+      onCapture: () => new Promise<void>((resolve) => setTimeout(resolve, 5)),
+    });
+
+    await harness.device.interactions.press(selector('label="Slide target"'), {
+      session: 'default',
+      deadlineAtMs,
+    });
+
+    assert.deepEqual(harness.taps, [{ x: 70, y: BUTTON_Y + 25 }], String(deadlineAtMs));
+  }
+});
+
 test('the request deadline ends a motion wait that the window would continue', async () => {
   const deadlineAtMs = Date.now() + 1_000;
   const harness = createAdmissionDevice({

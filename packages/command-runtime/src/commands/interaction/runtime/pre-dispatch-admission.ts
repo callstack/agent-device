@@ -71,10 +71,11 @@ type AdmissionBudget = Readonly<{
 
 function requestBudget(runtime: AgentDeviceRuntime, options: CommandContext): AdmissionBudget {
   const signal = options.signal ?? runtime.signal;
+  // A timer arms only within its 32-bit range; a later, infinite or absent deadline is still held
+  // by the clock checks.
+  const timerRemainingMs = Math.max(0, Math.ceil((options.deadlineAtMs ?? Infinity) - Date.now()));
   const deadlineSignal =
-    options.deadlineAtMs === undefined
-      ? undefined
-      : AbortSignal.timeout(Math.max(0, options.deadlineAtMs - Date.now()));
+    timerRemainingMs <= 2 ** 31 - 1 ? AbortSignal.timeout(timerRemainingMs) : undefined;
   const readSignal =
     signal && deadlineSignal
       ? AbortSignal.any([signal, deadlineSignal])
