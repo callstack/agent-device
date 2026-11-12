@@ -33,15 +33,6 @@ Protocol and maintenance references:
 
 ## UITest Runner File Map
 
-### Busy keyboard regression tests
-
-Run the two `testKeyboard*WhileTheAppIsBusy` tests with the simulator software keyboard enabled.
-Before you boot a throwaway simulator, run `defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO`.
-Restore the previous preference after the run.
-If the software keyboard does not appear, the tests fail instead of skipping.
-The tests assert command success and the fixture's `Done while busy` or `Return while busy` label.
-The Return test also asserts the keyboard visibility reported after submission.
-
 `AgentDeviceRunnerUITests/RunnerTests` is split into focused files to reduce context size for contributors and LLM agents.
 
 - `RunnerTests.swift`: shared state/constants, `setUp()`, and `testCommand()` entry flow.
@@ -64,6 +55,31 @@ The Return test also asserts the keyboard visibility reported after submission.
 - `RunnerTests+ScreenRecorder.swift`: nested `ScreenRecorder` implementation.
 - `UnitTests/RunnerTests+<Source>Tests.swift`: the `AGENT_DEVICE_RUNNER_UNIT_TESTS` tests for each
   source file. The packaged runner source omits this directory.
+
+### Busy keyboard regression tests
+
+Run the two `testKeyboard*WhileTheAppIsBusy` tests with the simulator software keyboard enabled.
+Before you boot a throwaway simulator, save the current hardware-keyboard preference:
+
+```sh
+keyboard_preference=$(defaults read com.apple.iphonesimulator ConnectHardwareKeyboard 2>/dev/null) || keyboard_preference=absent
+defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
+```
+
+After the tests, restore the preference in the same shell, including when the tests fail.
+If the key was absent, delete it:
+
+```sh
+if [ "$keyboard_preference" = absent ]; then
+  defaults delete com.apple.iphonesimulator ConnectHardwareKeyboard
+else
+  defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool "$keyboard_preference"
+fi
+```
+
+If the software keyboard does not appear, the tests fail instead of skipping.
+The tests assert command success and the fixture's `Done while busy` or `Return while busy` label.
+The Return test also asserts the keyboard visibility reported after submission.
 
 ## Snapshot Strategy
 
