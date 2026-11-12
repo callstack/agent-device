@@ -22,6 +22,7 @@ import type {
   GestureExecutionProfile,
   GestureSemanticInput,
   PointerTrajectory,
+  PointerTrajectorySample,
   SinglePointerGesturePlan,
   SinglePointerTrajectory,
   TapGesturePlan,
@@ -465,6 +466,54 @@ export function sampleGestureOffsets(
   return Array.from({ length: frameCount + 1 }, (_, index) =>
     Math.round((durationMs * index) / frameCount),
   );
+}
+
+/** One timed sample of a densified gesture path: the plan's own sample shape. */
+export type DensifiedGestureSample = PointerTrajectorySample;
+
+/**
+ * Densifies a plan's own timed path onto one merged sampling grid: the profile grid and the
+ * canonical offsets merge, every merged offset interpolates inside its canonical segment, and the
+ * endpoints and duration stay the plan's. This is the one owner of the sampled-path rule; every
+ * transport lowering calls it instead of keeping its own merge-and-interpolate loop. The optional
+ * progress hook lets a transport reshape within-segment pacing (Android's controlled scroll) while
+ * the segment walk and the endpoint rule stay shared.
+ */
+export function densifyGesturePath(
+  canonical: readonly PointerTrajectorySample[],
+  durationMs: number,
+  profile: GestureSamplingProfile,
+  progress: (baseProgress: number, segmentDurationMs: number) => number = (p) => p,
+): PointerTrajectorySample[] {
+  const offsets = [
+    ...new Set([
+      ...sampleGestureOffsets(durationMs, profile),
+      ...canonical.map(({ offsetMs }) => offsetMs),
+    ]),
+  ].sort((left, right) => left - right);
+  let segmentIndex = 0;
+  return offsets.map((offsetMs) => {
+    while (
+      segmentIndex < canonical.length - 2 &&
+      offsetMs > canonical[segmentIndex + 1]!.offsetMs
+    ) {
+      segmentIndex += 1;
+    }
+    const start = canonical[segmentIndex]!;
+    const end = canonical[segmentIndex + 1]!;
+    const segmentDurationMs = end.offsetMs - start.offsetMs;
+    return {
+      offsetMs,
+      point:
+        offsetMs === end.offsetMs || segmentDurationMs === 0
+          ? end.point
+          : interpolateGesturePoint(
+              start.point,
+              end.point,
+              progress((offsetMs - start.offsetMs) / segmentDurationMs, segmentDurationMs),
+            ),
+    };
+  });
 }
 
 function assertSamplesInViewport(

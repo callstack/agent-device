@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { buildDragGesturePlan, singlePointerPlanEndpoints } from './gesture-plan.ts';
+import {
+  buildDragGesturePlan,
+  densifyGesturePath,
+  singlePointerPlanEndpoints,
+} from './gesture-plan.ts';
 
 const DRAG_PROPERTY_RUNS = 100;
 
@@ -78,4 +82,48 @@ test('every drag plan preserves ordered samples and exact hold/move endpoints', 
       assert.ok(samples[index]!.offsetMs >= samples[index - 1]!.offsetMs);
     }
   }
+});
+
+test('densifyGesturePath merges the profile grid into the canonical path and keeps its endpoints', () => {
+  const canonical = [
+    { offsetMs: 0, point: { x: 0, y: 0 } },
+    { offsetMs: 100, point: { x: 100, y: 0 } },
+    { offsetMs: 200, point: { x: 100, y: 100 } },
+  ];
+  const dense = densifyGesturePath(canonical, 200, 'default');
+
+  // The 16 ms grid and the canonical offsets merge into one ascending timeline.
+  const offsets = dense.map(({ offsetMs }) => offsetMs);
+  assert.equal(offsets[0], 0);
+  assert.equal(offsets.at(-1), 200);
+  assert.ok([...offsets].sort((left, right) => left - right).every((o, i) => o === offsets[i]));
+  assert.deepEqual(dense[0]?.point, { x: 0, y: 0 });
+  assert.deepEqual(dense.at(-1)?.point, { x: 100, y: 100 });
+  // A merged grid offset inside the first segment interpolates on that segment's line.
+  const at50 = dense.find(({ offsetMs }) => offsetMs === 50);
+  assert.deepEqual(at50?.point, { x: 50, y: 0 });
+  // Canonical offsets survive verbatim.
+  const at100 = dense.find(({ offsetMs }) => offsetMs === 100);
+  assert.deepEqual(at100?.point, { x: 100, y: 0 });
+});
+
+test('densifyGesturePath hands within-segment pacing to the progress hook and keeps its endpoint rule', () => {
+  const canonical = [
+    { offsetMs: 0, point: { x: 0, y: 0 } },
+    { offsetMs: 100, point: { x: 100, y: 0 } },
+  ];
+  const seen: Array<[number, number]> = [];
+  const dense = densifyGesturePath(canonical, 100, 'default', (progress, segmentDurationMs) => {
+    seen.push([progress, segmentDurationMs]);
+    return progress * progress;
+  });
+
+  const at50 = dense.find(({ offsetMs }) => offsetMs === 50);
+  assert.deepEqual(at50?.point, { x: 25, y: 0 });
+  assert.ok(
+    seen.some(([progress, segmentDurationMs]) => progress === 0.5 && segmentDurationMs === 100),
+  );
+  // Endpoints never pass through the hook.
+  assert.deepEqual(dense[0]?.point, { x: 0, y: 0 });
+  assert.deepEqual(dense.at(-1)?.point, { x: 100, y: 0 });
 });
