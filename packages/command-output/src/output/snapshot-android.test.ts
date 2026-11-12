@@ -643,3 +643,46 @@ test('formatSnapshotText hides Android helper rectless offscreen rows and derive
   assert.match(text, /@e4 \[button\] "View details"/);
   assert.doesNotMatch(text, /@e5 \[text\] "View details"/);
 });
+
+function androidTextFieldSnapshot(field: Record<string, unknown>): string {
+  return withNoColor(() =>
+    formatSnapshotText({
+      nodes: [
+        {
+          ref: 'e1',
+          index: 0,
+          depth: 0,
+          type: 'android.widget.EditText',
+          editable: true,
+          rect: { x: 16, y: 120, width: 358, height: 56 },
+          hittable: true,
+          ...field,
+        },
+      ],
+      truncated: false,
+      androidSnapshot: { backend: 'android-helper' },
+    }),
+  );
+}
+
+test('formatSnapshotText prints the placeholder of an Android text field with no label or value', () => {
+  assert.match(
+    androidTextFieldSnapshot({ placeholder: 'Search', hintShowing: false }),
+    /^@e1 \[text-field\] \[editable\] \[placeholder:"Search"\]$/m,
+  );
+  assert.match(
+    androidTextFieldSnapshot({ identifier: 'search_field', placeholder: 'Search' }),
+    /^@e1 \[text-field\] "search_field" \[editable\] \[placeholder:"Search"\]$/m,
+  );
+});
+
+test('formatSnapshotText omits the placeholder of an Android text field with a label or value', () => {
+  assert.match(
+    androidTextFieldSnapshot({ value: 'coffee', placeholder: 'Search' }),
+    /^@e1 \[text-field\] "coffee" \[editable\]$/m,
+  );
+  assert.match(
+    androidTextFieldSnapshot({ label: 'Search', placeholder: 'Search', hintShowing: true }),
+    /^@e1 \[text-field\] "Search" \[editable\]$/m,
+  );
+});
