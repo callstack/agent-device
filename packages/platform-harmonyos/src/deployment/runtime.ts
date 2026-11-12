@@ -11,7 +11,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
-import { parseHarmonyBundleList } from '../app-lifecycle.ts';
+import { parseHarmonyBundleDump, parseHarmonyBundleList } from '../app-lifecycle.ts';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const available = Object.freeze({ available: true } as const);
@@ -140,20 +140,6 @@ async function readBundleInventory(
   return bundles;
 }
 
-/** Parses the JSON bundle record out of one `bm dump -n` output. */
-function parseBundleDump(rawOutput: string): Record<string, unknown> | undefined {
-  const jsonStart = rawOutput.indexOf('{');
-  if (jsonStart === -1) return undefined;
-  try {
-    const dump = JSON.parse(rawOutput.slice(jsonStart)) as unknown;
-    return typeof dump === 'object' && dump !== null
-      ? (dump as Record<string, unknown>)
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 async function deployHarmonyApp(
   commands: HostCommandRunner,
   device: DeviceInfo,
@@ -232,11 +218,9 @@ async function openHarmonyApp(
 }
 
 function parseLaunchTarget(rawOutput: string): { ability: string; module?: string } | undefined {
-  const modules = parseBundleDump(rawOutput)?.hapModuleInfos;
+  const modules = parseHarmonyBundleDump(rawOutput)?.hapModuleInfos;
   if (!Array.isArray(modules)) return undefined;
-  const module = (modules as Array<{ mainElementName?: string; moduleName?: string }>).find(
-    (item) => item.mainElementName,
-  );
+  const module = modules.find((item) => item.mainElementName);
   return module?.mainElementName
     ? {
         ability: module.mainElementName,

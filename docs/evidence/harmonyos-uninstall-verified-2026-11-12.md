@@ -1,10 +1,13 @@
 # HarmonyOS uninstall route with post-uninstall verification, 2026-11-12
 
-Evidence for #4292: the public `uninstall` command runs the fixed route end to
-end on hardware. The fix at 31dfcd012 keys removal success on a second
-`bm dump` that no longer finds the bundle record, not on the `bm uninstall`
-answer, because `bm` prints its verdict into stdout at host exit code 0 on
-this build (see `harmonyos-uninstall-2026-11-08.md` for the recorded shapes).
+Evidence for #4292: the public `uninstall` command runs the route end to end
+on hardware. The route at e36de175b answers bundle state twice from the
+`bm dump -a` inventory through the shared `parseHarmonyBundleList` (one owner
+with the app-lifecycle list), and removal counts only when a non-empty
+inventory no longer lists the bundle; the `bm uninstall` answer and any
+unparseable read are never proofs, because `bm` prints its verdict into stdout
+at host exit code 0 on this build (see `harmonyos-uninstall-2026-11-08.md`
+for the recorded shapes).
 
 ## Device and build
 
@@ -92,10 +95,11 @@ A second uninstall answers honestly that nothing was removed:
   test `uninstall refuses to claim removal when the inventory still lists the
   bundle` pins the behavior with the recorded output shapes, alongside the
   unknown-read and failed-exit refusals the inventory read now carries.
-- Local `check:affected --run --head 31dfcd012 --base old-origin/main` passes
+- Local `check:affected --run --base old-origin/main` at e36de175b passes
   every stage except `unit`; `unit` fails only
   `scripts/__tests__/eager-closure-budgets.test.ts` because this clone's
   `origin` names a private fork, so the gate reads the wrong merge base. With
   `refs/remotes/origin/main` pointed at the upstream head for the duration of
-  one `pnpm run check:unit`, that chain exits 0. Both receipts are local; CI on
-  the pushed head is the authoritative run.
+  one `pnpm run check:unit`, that chain exits 0. Both receipts are local; the
+  authoritative run is CI at a1787af (16 checks, none failing), a commit that
+  changes only comments after this run's sources.
