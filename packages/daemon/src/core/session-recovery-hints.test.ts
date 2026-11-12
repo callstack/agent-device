@@ -1,6 +1,9 @@
 import { makeStoredSessionRef } from '../__tests__/support/store-factory.ts';
 import { test, expect } from 'vitest';
-import { buildSessionRecoveryHint } from './session-recovery-hints.ts';
+import {
+  buildForeignWorkspaceSessionConflict,
+  buildSessionRecoveryHint,
+} from './session-recovery-hints.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
 import { IOS_SIMULATOR } from '@agent-device/test-kit';
 
@@ -30,8 +33,25 @@ test('device-in-use recovery names the address --session accepts, not the public
   const hint = buildSessionRecoveryHint(scopedRef(), 'device-in-use');
 
   expect(hint).toContain(`agent-device close --session ${SCOPED_ADDRESS}`);
-  expect(hint).toContain(`rerun the command with --session ${SCOPED_ADDRESS}`);
+  expect(hint).toContain(`reuse --session ${SCOPED_ADDRESS}`);
   expect(hint).not.toMatch(/--session default\b/);
+});
+
+// A device-in-use hint is read by agents sharing a host: it must offer the moves that leave the
+// holding session alone before any that would take it over.
+test('device-in-use recovery lists non-takeover options before reusing or closing the holder', () => {
+  const hint = buildSessionRecoveryHint(scopedRef(), 'device-in-use', { offersDeviceWait: true });
+
+  const firstTakeover = Math.min(
+    hint.indexOf(`--session ${SCOPED_ADDRESS}`),
+    hint.indexOf('close --session'),
+  );
+  expect(firstTakeover).toBeGreaterThan(-1);
+  expect(hint.indexOf('agent-device devices')).toBeGreaterThan(-1);
+  expect(hint.indexOf('agent-device devices')).toBeLessThan(firstTakeover);
+  expect(hint.indexOf('--wait <ms>')).toBeGreaterThan(-1);
+  expect(hint.indexOf('--wait <ms>')).toBeLessThan(firstTakeover);
+  expect(hint.slice(0, firstTakeover)).toMatch(/only if that session is yours/i);
 });
 
 test('selector-conflict recovery uses the same address', () => {
@@ -84,4 +104,25 @@ test('selector-conflict recovery offers no platform session to a hand-named sess
   );
 
   expect(hint).not.toContain('--platform');
+});
+
+// Diagnostic redaction cuts any string over 400 characters, which would drop the trailing
+// commands of a hint built for a long scoped address.
+test('every recovery variant fits the redaction cap with a scoped address', () => {
+  const recording = scopedRef({
+    screenRecording: {} as NonNullable<SessionState['screenRecording']>,
+  });
+  const hints = [
+    buildSessionRecoveryHint(scopedRef(), 'device-in-use', { offersDeviceWait: true }),
+    buildSessionRecoveryHint(scopedRef(), 'device-in-use', { waitedMs: 30_000 }),
+    buildSessionRecoveryHint(scopedRef(), 'selector-conflict', { offersPlatformSession: true }),
+    buildSessionRecoveryHint(recording, 'device-in-use'),
+    buildSessionRecoveryHint(recording, 'selector-conflict'),
+    String(
+      buildForeignWorkspaceSessionConflict(scopedRef(), IOS_SIMULATOR, { offersDeviceWait: true })
+        .error.details?.hint,
+    ),
+  ];
+
+  for (const hint of hints) expect(hint.length).toBeLessThanOrEqual(400);
 });

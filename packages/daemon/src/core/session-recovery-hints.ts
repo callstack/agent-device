@@ -98,14 +98,12 @@ function buildRecordingSessionRecoveryHint(
   const recordStopCommand = `agent-device record stop --session ${sessionArg}`;
   const reuseText =
     context === 'selector-conflict'
-      ? `To keep using this device, rerun the command with --session ${sessionArg} and remove conflicting device selectors.`
-      : `To keep using this device, reuse --session ${sessionArg} for commands that should attach to the recording session.`;
+      ? `rerun with --session ${sessionArg} without device selectors`
+      : `reuse --session ${sessionArg}`;
 
   return (
-    `Recording session "${sessionAddress}" owns this device. ` +
-    `Run ${recordStopCommand}; if the session still appears in agent-device session list, run ${closeCommand}. ` +
-    `${reuseText} ` +
-    `Run agent-device session list to inspect active sessions.`
+    `A recording session, possibly another agent's or user's, holds this device. ${CHOOSE_ANOTHER_DEVICE}` +
+    `Only if that session is yours: run ${recordStopCommand}, then ${closeCommand}; or ${reuseText}.`
   );
 }
 
@@ -114,8 +112,8 @@ function buildRecordingSessionRecoveryHint(
  * holder is another workspace's implicit session. The address is still the whole point — it is
  * what `close --session` and `--session` take, and for an implicit session it is the store key
  * rather than the `default` name `session list` shows (#2031) — but reusing it would run this
- * workspace's commands inside the other workspace's session, so closing it, switching device, and
- * waiting are the moves offered.
+ * workspace's commands inside the other workspace's session, so switching device and waiting are
+ * offered first, and closing it only to a caller that owns it.
  */
 function buildForeignWorkspaceSessionRecoveryHint(
   sessionAddress: string,
@@ -123,10 +121,9 @@ function buildForeignWorkspaceSessionRecoveryHint(
 ): string {
   const sessionArg = shellQuoteIfNeeded(sessionAddress);
   return (
-    `${describeOpenWaitAttempt(options)}Session "${sessionAddress}" belongs to another workspace. ` +
-    `Run agent-device close --session ${sessionArg} to release this device from that workspace, ` +
-    `agent-device devices to choose another device. ` +
-    `${waitForDeviceHint(options)}Run agent-device session list to inspect active sessions.`
+    `${describeOpenWaitAttempt(options)}The holding session is another workspace's, possibly another agent's or user's. ` +
+    `${CHOOSE_ANOTHER_DEVICE}${waitForDeviceHint(options)}` +
+    `Run agent-device close --session ${sessionArg} only if that session is yours.`
   );
 }
 
@@ -140,20 +137,26 @@ function buildOpenSessionRecoveryHint(
   const closeCommand = `agent-device close --session ${sessionArg}`;
   if (context === 'selector-conflict') {
     return (
-      `Run agent-device session list to inspect active sessions. ` +
-      `To reuse this device, rerun the command with --session ${sessionArg} and remove conflicting device selectors. ` +
-      `To switch devices, first run ${closeCommand}, then open the desired device with a different --session name.` +
-      implicitPlatformSessionHint(ref, options)
+      `To use the selected device, open it with a different --session name.` +
+      implicitPlatformSessionHint(ref, options) +
+      ` Only if session "${sessionAddress}" is yours: rerun with --session ${sessionArg} without device selectors, or run ${closeCommand}.`
     );
   }
 
   return (
-    `${describeOpenWaitAttempt(options)}Run agent-device session list to inspect active sessions. ` +
-    `To reuse this device, rerun the command with --session ${sessionArg}. ` +
-    `To open a new session on this device, first run ${closeCommand}. ` +
-    `${waitForDeviceHint(options)}`.trimEnd()
+    `${describeOpenWaitAttempt(options)}${HOLDER_MAY_BE_FOREIGN}${CHOOSE_ANOTHER_DEVICE}${waitForDeviceHint(options)}` +
+    `Only if that session is yours: reuse --session ${sessionArg}, or run ${closeCommand} first.`
   );
 }
+
+/**
+ * A device-in-use hint is read by an agent that may share the host with other agents, so the moves
+ * that leave the holding session alone come before any that reuse or close it. Diagnostic
+ * redaction caps a hint at 400 characters, so the text stays within that with a scoped address.
+ */
+const HOLDER_MAY_BE_FOREIGN = 'The holding session may belong to another agent or user. ';
+const CHOOSE_ANOTHER_DEVICE =
+  'Run agent-device devices and open another device with a device selector. ';
 
 /**
  * The record of a spent `--wait` budget, phrased so a caller that already waited is not told to

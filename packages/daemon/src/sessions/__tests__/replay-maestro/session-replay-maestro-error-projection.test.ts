@@ -53,7 +53,7 @@ test('a typed Maestro replay error keeps its recovery hint', async () => {
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(response.error.code).toBe('INVALID_ARGS');
-  expect(response.error.hint).toContain('agent-device session list');
+  expect(response.error.hint).toContain('open it with a different --session name');
   expect(response.error.hint).toContain('--session default');
   // The throw site's own details survive beside the projected hint.
   expect(response.error.details?.session).toBe('default');

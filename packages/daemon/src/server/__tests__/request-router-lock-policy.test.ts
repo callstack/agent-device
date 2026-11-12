@@ -156,7 +156,7 @@ test('direct daemon requests cannot bypass reject lock policy for existing sessi
   if (!response.ok) {
     expect(response.error.code).toBe('INVALID_ARGS');
     expect(response.error.message).toMatch(/--udid=SIM-999/i);
-    expect(response.error.hint).toMatch(/agent-device session list/i);
+    expect(response.error.hint).toMatch(/open it with a different --session name/i);
     expect(response.error.hint).toMatch(/agent-device close --session qa-ios/i);
   }
 });
@@ -505,7 +505,7 @@ test('batch steps cannot bypass reject lock policy on nested direct requests', a
     expect(response.error.code).toBe('INVALID_ARGS');
     expect(response.error.message).toMatch(/Batch failed at step 1/i);
     expect(response.error.message).toMatch(/--serial=emulator-5554/i);
-    expect(response.error.hint).toMatch(/agent-device session list/i);
+    expect(response.error.hint).toMatch(/open it with a different --session name/i);
     expect(response.error.hint).toMatch(/agent-device close --session qa-ios/i);
   }
 });

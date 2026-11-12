@@ -130,7 +130,7 @@ export function sessionChecks(
           : `Active session ${session.name} targets ${session.device.name}`,
       hint:
         sameDeviceSessions.length > 0
-          ? 'Close stale sessions before a QA run if they belong to old attempts.'
+          ? 'Before a QA run, close a stale session only if it is yours and left from an old attempt.'
           : undefined,
       command:
         sameDeviceSessions.length > 0
