@@ -26,9 +26,7 @@ next device command loads the plugin.
 ```bash
 export REVYL_API_KEY=...
 export AGENT_DEVICE_SESSION=checkout-ios
-agent-device connect revyl \
-  --platform ios \
-  --provider-app https://apps.example.com/MyApp-simulator.zip
+agent-device connect revyl --platform ios
 ```
 
 `connect` authenticates against the Revyl backend with one cheap request and saves the profile. It
@@ -42,9 +40,18 @@ that is already running. A session can take longer to start when Revyl also inst
 device. Start the session early and keep it open between steps. To relaunch the app, run `open` again on
 the same session instead of `disconnect` and `connect`.
 
-`--provider-app` is required and must be a public HTTPS URL. Revyl downloads and installs the build
-when it starts the device, so a local path or a provider-specific app reference has no meaning
-there. Pass the zipped `.app` for iOS the way Revyl expects it, and the `.apk` URL for Android.
+Without `--provider-app`, the device starts with no app. Run `install` to put a local build on it:
+
+```bash
+agent-device install com.example.app ./build/Example.app
+```
+
+`install` uploads the build to the session's storage, and Revyl installs it from there. For iOS, pass
+a simulator `.app` directory, or the directory zipped or tarred. A device `.ipa` does not run on a
+simulator. For Android, pass the `.apk`.
+
+`--provider-app` installs a hosted build when the device starts instead. It must be a public HTTPS URL
+that Revyl can download: the zipped `.app` for iOS, or the `.apk` for Android.
 
 `open` takes the app's installed bundle identifier or package name, not the file name in that URL.
 Run these commands in the same shell, so they use the `AGENT_DEVICE_SESSION` you exported:
@@ -73,7 +80,8 @@ A Revyl session runs the commands that reach a device through Revyl's device act
   the drag takes, from 1 to 10000 ms, when Revyl's worker supports it. An older worker picks the
   speed itself, so there the flag refuses rather than running the drag at a speed nobody chose.
   `fill --delay-ms` is paced by typing one character per pause.
-- `open` (the session's app), `open` with a deep link or URL, and `close` for the app the session opened.
+- `install` of a local build, `open` with the app's bundle identifier or package name, `open` with a
+  deep link or URL, and `close` for the app the session opened.
 - `home`, and `back` on Android. iOS has no system back button; click the app's own back control.
 
 The plugin refuses every other command with a reason that names the substitute. It does not
@@ -84,9 +92,8 @@ report a refused command as a success:
 - `swipe` and `gesture` refuse. Use `scroll`, which plans the path itself and sends one drag.
 - `keyboard`, `clipboard`, `settings`, `orientation`, `alert`, `fold`, `telephony`, and `tv-remote`
   are not supported.
-- `install`, `apps`, `push`, `logs`, `network dump`, `artifacts`, and `recordings` are not supported
-  by this version of the plugin. Use `--provider-app` to put the build on the device when the
-  session starts.
+- `uninstall`, `apps`, `push`, `logs`, `network dump`, `artifacts`, and `recordings` are not
+  supported by this version of the plugin.
 - `port reverse` is unavailable. Publish your app server at a public HTTPS URL instead of pointing
   Metro at `localhost`.
 

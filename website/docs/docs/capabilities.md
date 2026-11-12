@@ -179,9 +179,9 @@ What a **Yes** does not claim:
 | Capability and reference | BrowserStack Android / TestMu AI Android | BrowserStack iOS / TestMu AI iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android | Revyl iOS | Revyl Android |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [Open and close apps, URLs, and deep links](/docs/commands#navigation) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| [Install and reinstall an app](/docs/commands#app-install-in-place) | Yes | Yes | No | No | Yes | Yes | No | No |
+| [Install and reinstall an app](/docs/commands#app-install-in-place) | Yes | Yes | No | No | Yes | Yes | Yes | Yes |
 | [Uninstall an app](/docs/commands#app-uninstall) | No | No | No | No | Yes | Yes | No | No |
-| [Install from a source URL](/docs/commands#app-install-from-source-url) | Yes | Yes | No | No | Yes | Yes | No | No |
+| [Install from a source URL](/docs/commands#app-install-from-source-url) | Yes | Yes | No | No | Yes | Yes | Yes | Yes |
 | [Installed app list](/docs/commands#app-state-and-app-lists) | No | No | No | No | Yes | Yes | No | No |
 | [Foreground app state](/docs/commands#app-state-and-app-lists) | No | No | No | No | XCTest foreground state; without runner state, checks the instance and returns session identity only | Yes | No | No |
 | [App switcher](/docs/commands#navigation) | Yes | Yes | Yes | Yes | Yes | Yes | No | No |

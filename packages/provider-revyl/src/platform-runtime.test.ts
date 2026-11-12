@@ -8,7 +8,13 @@ import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { mkdtempForTest } from '@agent-device/test-kit';
+import type { MaterializedAppSource } from '@agent-device/contracts/app-deployment-runtime';
 import { createRevylPlatformRuntimeOwner } from './platform-runtime.ts';
+import type { RevylDeploymentSession } from './deployment.ts';
+import type { RevylClient } from './revyl-client.ts';
 
 const IOS_DEVICE: DeviceInfo = {
   platform: 'apple',
@@ -30,13 +36,16 @@ const HOST = {
 function owner(options: {
   hasLiveSession: boolean;
   interactor?: Interactor;
+  host?: PlatformRuntimeHost;
+  deploymentSession?: RevylDeploymentSession;
 }): PlatformRuntimeOwner {
   return createRevylPlatformRuntimeOwner({
-    host: HOST,
+    host: options.host ?? HOST,
     runtimeInstance: OWNER.instance,
     ownsDevice: () => true,
     hasLiveSession: () => options.hasLiveSession,
     getInteractor: () => options.interactor,
+    getDeploymentSession: () => options.deploymentSession,
   });
 }
 
@@ -120,4 +129,83 @@ test('a facts inspection of an unowned device reports the target refusal, not a 
   const facts = await owner({ hasLiveSession: true }).inspectFacts(foreign);
   assert.equal(facts?.operations.openApplication.available, false);
   assert.equal(facts?.operations.openApplication.reason, 'unsupported-provider-mode');
+});
+
+/** A session whose installs succeed without naming the app, so the materializer's reading shows. */
+function installingSession(installs: string[]): RevylDeploymentSession {
+  const client = {
+    createSessionArtifactUpload: async () => ({
+      upload_url: 'https://storage.test/put',
+      download_url: 'https://storage.test/get',
+    }),
+    uploadSessionArtifact: async () => undefined,
+    startInstall: async (_runId: string, body: { app_url: string }) => {
+      installs.push(body.app_url);
+      return { install_id: 'install-1', status: 'accepted' };
+    },
+    getInstallStatus: async () => ({ status: 'completed', result: { success: true } }),
+  } as unknown as RevylClient;
+  return {
+    runId: 'run-1',
+    sessionId: 'session-1',
+    platform: 'ios',
+    client,
+  };
+}
+
+test('a live session installs a build through its deployment operations', async () => {
+  const dir = await mkdtempForTest('revyl-platform-deploy-');
+  const build = path.join(dir, 'Example.zip');
+  await fs.writeFile(build, 'zip');
+  const artifact: MaterializedAppSource = {
+    installablePath: build,
+    bundleId: 'com.example.app',
+    appName: 'Example',
+    cleanup: async () => undefined,
+  };
+  const installs: string[] = [];
+  const binding = await bind(
+    owner({
+      hasLiveSession: true,
+      deploymentSession: installingSession(installs),
+      host: {
+        ...HOST,
+        hostEnvironment: { env: {}, cwd: dir },
+        appleDeployment: { prepareArtifact: async () => artifact },
+      } as unknown as PlatformRuntimeHost,
+    }),
+  );
+
+  const materialized = await binding.operations.materializeAppSource!({
+    source: { kind: 'url', url: 'https://apps.test/Example.zip' },
+  });
+  assert.equal(materialized, artifact);
+  assert.deepEqual(await binding.operations.deployMaterializedApp!({ artifact }), {
+    bundleId: 'com.example.app',
+    appName: 'Example',
+    launchTarget: 'com.example.app',
+  });
+  assert.deepEqual(
+    await binding.operations.deployApp!({
+      app: 'com.example.app',
+      appPath: build,
+      replaceExisting: false,
+    }),
+    {},
+  );
+  assert.deepEqual(installs, ['https://storage.test/get', 'https://storage.test/get']);
+});
+
+test('a deployment operation whose session ended refuses rather than installing', async () => {
+  const binding = await bind(owner({ hasLiveSession: true }));
+  await assert.rejects(
+    () =>
+      binding.operations.deployApp!({
+        app: 'com.example.app',
+        appPath: '/tmp/x.zip',
+        replaceExisting: false,
+      }),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'provider-session-unavailable',
+  );
 });

@@ -77,6 +77,18 @@ test('verify reports a profile that names no device or OS version', async () => 
   });
 });
 
+test('verify reports a profile without an app as one the device starts without', async () => {
+  const fixture = await backend();
+  const result = await verifyRevylProfile(
+    { apiKey: 'test-key', apiUrl: fixture.backendUrl },
+    '0.0.0-test',
+    'ios',
+    {},
+  );
+  assert.equal(result.app.status, 'deferred');
+  assert.equal(result.app.reference, undefined);
+});
+
 test('verify reports a rejected key as an unauthorized error before checking the app', async () => {
   const fixture = await backend({
     respond: { 'GET /api/v1/entity/users/get_user_uuid': { status: 401, body: { error: 'nope' } } },
@@ -201,10 +213,19 @@ test('resolve keeps the device, OS version and app URL and refuses a non-mobile 
   );
 });
 
+test('resolve keeps a profile without an app, so the device starts with none', () => {
+  const connection = createRevylConnection(HOST);
+  const resolved = connection.resolve({
+    flags: { platform: 'android' } as CliFlags,
+    cwd: '/tmp',
+  } as never);
+  assert.equal('providerApp' in resolved.profile, false);
+  assert.equal('extraFlags' in resolved, false);
+});
+
 test('resolve refuses an app that is not an https URL', () => {
   const connection = createRevylConnection(HOST);
   for (const providerApp of [
-    undefined,
     './build/app.ipa',
     'https://user@apps.test/app.zip',
     'http://apps.test/app.zip',
