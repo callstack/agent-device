@@ -14,7 +14,7 @@ vi.mock('./exec.ts', async (original) => ({
   runCmd: runCmdMock,
   withoutCommandExecutorOverride: async (fn: () => Promise<unknown>) => await fn(),
 }));
-import { readProcessExecutablePaths } from './process-executable-path.ts';
+import { readProcessExecutablePaths } from '../process.ts';
 
 const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
 afterEach(() => {
