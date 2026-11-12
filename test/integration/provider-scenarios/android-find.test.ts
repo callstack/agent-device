@@ -3,7 +3,8 @@ import { test } from 'vitest';
 import { ANDROID_IME_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/android-ime-helper.ts';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/android-snapshot-helper.ts';
 import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanics';
-import { arrayEqual, assertCommandCall } from './assertions.ts';
+import { WAIT_REASONS } from '@agent-device/contracts/wait';
+import { arrayEqual, assertCommandCall, assertRpcOk } from './assertions.ts';
 import { androidSettingsXml, androidSnapshotHelperOutput } from './android-world.ts';
 import {
   androidImeClearTextBroadcast,
@@ -113,6 +114,14 @@ test('Provider-backed integration Android find flow covers refs, wait, ambiguity
       ...selection,
     });
     assert.equal(filled.text, 'Network');
+
+    // The field's own typed value is not app text: only its identifier satisfies `wait text`.
+    const typedWait = await daemon.callCommand('wait', ['text', 'Network', '100'], selection);
+    assert.equal(typedWait.json?.error?.data?.details?.reason, WAIT_REASONS.targetAbsent);
+    assert.equal(
+      assertRpcOk(await daemon.callCommand('wait', ['text', 'id/search', '100'], selection)).text,
+      'id/search',
+    );
 
     const waitForApps = await client.interactions.find({
       locator: 'label',

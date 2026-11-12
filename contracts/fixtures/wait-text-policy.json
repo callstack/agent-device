@@ -1,0 +1,60 @@
+[
+  {
+    "name": "static text matches by label, case-insensitively",
+    "text": "saved",
+    "node": { "label": "Name Saved" },
+    "expected": true
+  },
+  {
+    "name": "a non-editable value still matches",
+    "text": "bench-ad",
+    "node": { "label": "Device name", "value": "bench-ad" },
+    "expected": true
+  },
+  {
+    "name": "an editable field's typed value does not match",
+    "text": "benchad",
+    "node": { "editable": true, "label": "First name", "value": "benchad" },
+    "expected": false
+  },
+  {
+    "name": "part of an editable field's typed value does not match",
+    "text": "bench",
+    "node": { "editable": true, "label": "First name", "value": "benchad" },
+    "expected": false
+  },
+  {
+    "name": "an editable field still matches by its label",
+    "text": "first name",
+    "node": { "editable": true, "label": "First name", "value": "benchad" },
+    "expected": true
+  },
+  {
+    "name": "an editable field whose label repeats its typed value does not match",
+    "text": "bench-ad",
+    "node": {
+      "editable": true,
+      "label": "bench-ad",
+      "value": "bench-ad",
+      "identifier": "android:id/edit"
+    },
+    "expected": false
+  },
+  {
+    "name": "an editable field still matches by its identifier",
+    "text": "id/edit",
+    "node": {
+      "editable": true,
+      "label": "bench-ad",
+      "value": "bench-ad",
+      "identifier": "android:id/edit"
+    },
+    "expected": true
+  },
+  {
+    "name": "an empty editable field matches by its hint label",
+    "text": "device name",
+    "node": { "editable": true, "label": "Device name", "value": "" },
+    "expected": true
+  }
+]

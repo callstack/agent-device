@@ -23,6 +23,46 @@ extension RunnerTests {
     XCTAssertEqual(events.count, 1)
     XCTAssertEqual(events.first?.vertical, -200)
   }
+
+  func testFindTextPredicateMatchesWaitTextGoldenTable() throws {
+    struct Case: Decodable {
+      struct Node: Decodable {
+        let editable: Bool?
+        let label: String?
+        let value: String?
+        let identifier: String?
+      }
+      let name: String
+      let text: String
+      let node: Node
+      let expected: Bool
+    }
+    let fixtureURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent() // UnitTests
+      .deletingLastPathComponent() // AgentDeviceRunnerUITests
+      .deletingLastPathComponent() // AgentDeviceRunner
+      .deletingLastPathComponent() // runner
+      .deletingLastPathComponent() // apple
+      .deletingLastPathComponent() // repo root
+      .appendingPathComponent("contracts/fixtures/wait-text-policy.json")
+    let cases = try JSONDecoder().decode([Case].self, from: Data(contentsOf: fixtureURL))
+    XCTAssertFalse(cases.isEmpty, "wait text policy table must not be empty")
+
+    let editableTypes: [XCUIElement.ElementType] = [.textField, .secureTextField, .searchField, .textView]
+    for fixture in cases {
+      for type in fixture.node.editable == true ? editableTypes : [.staticText, .other] {
+        var attributes: [String: Any] = ["elementType": type.rawValue]
+        attributes["label"] = fixture.node.label
+        attributes["value"] = fixture.node.value
+        attributes["identifier"] = fixture.node.identifier
+        XCTAssertEqual(
+          Self.findTextPredicate(fixture.text).evaluate(with: attributes),
+          fixture.expected,
+          "\(fixture.name) (elementType \(type.rawValue))"
+        )
+      }
+    }
+  }
 }
 #endif
 
