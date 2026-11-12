@@ -25,7 +25,7 @@ test('formatToolErrorText lists AMBIGUOUS_MATCH candidates capped with a "+N mor
   const text = formatToolErrorText(normalizeToolError(err));
 
   assert.match(text, /^Error \(AMBIGUOUS_MATCH\): find matched 6 elements/);
-  assert.match(text, /Hint: Multiple candidates matched\./);
+  assert.match(text, /Next: Multiple candidates matched\./);
   assert.match(text, /Candidates:\n {2}@e2 \[button\] "Follow"/);
   assert.match(text, /@e6 \[button\] "Follow"\n {2}\+1 more/);
 });
@@ -89,4 +89,16 @@ test('formatToolErrorText lists device-domain candidates udid-first', () => {
 
   assert.match(text, /Devices:\n {2}SIM-001 {2}iPhone 17 Pro\n {2}SIM-002 {2}iPhone 17/);
   assert.equal(text.includes('[object Object]'), false);
+});
+
+test('formatToolErrorText preserves an unavailable remote log without inventing a local path', () => {
+  const error = new AppError('COMMAND_FAILED', 'press reply was lost', {
+    dispatched: 'no',
+    logPathUnavailable: 'remote record could not be fetched',
+  });
+
+  const text = formatToolErrorText(normalizeToolError(error));
+
+  assert.match(text, /Not dispatched\./);
+  assert.match(text, /Log: unavailable \(remote record could not be fetched\)/);
 });

@@ -12,6 +12,7 @@ test('MCP command tool executor hides client creation behind an execution adapte
   const createdConfigs: unknown[] = [];
   const calls: unknown[] = [];
   const executor = createCommandToolExecutor({
+    structuredContent: 'declared',
     createClient: (config) => {
       createdConfigs.push(config);
       return client;
@@ -36,7 +37,8 @@ test('MCP command tool executor hides client creation behind an execution adapte
     },
   ]);
   assert.deepEqual(result.structuredContent, { message: 'Ran wait', ok: true });
-  assert.equal(result.content[0]?.text, 'Ran wait');
+  // The cost rides only on the data, so includeCost renders the result as JSON text.
+  assert.deepEqual(JSON.parse(result.content[0]?.text ?? ''), { message: 'Ran wait', ok: true });
 });
 
 test('MCP command tool executor renders optimized snapshot text by default', async () => {
@@ -70,6 +72,7 @@ test('MCP renders a non-default response level as JSON text, not misleading opti
   // be the digest payload verbatim (JSON), even though mcpOutputFormat is optimized.
   const digest = { nodeCount: 3, refs: [{ ref: 'e1', label: 'Continue' }], truncated: false };
   const executor = createCommandToolExecutor({
+    structuredContent: 'declared',
     createClient: () => ({}) as AgentDeviceClient,
     runCommand: async () => digest,
   });
@@ -85,35 +88,10 @@ test('MCP renders a non-default response level as JSON text, not misleading opti
   assert.doesNotMatch(result.content[0]?.text ?? '', /Snapshot: 0 nodes/);
 });
 
-test('MCP command tool executor renders JSON text when requested', async () => {
-  const executor = createCommandToolExecutor({
-    createClient: () => ({}) as AgentDeviceClient,
-    runCommand: async (_client, _name, input) => {
-      assert.deepEqual(input, {});
-      return {
-        nodes: [
-          {
-            ref: 'e1',
-            index: 0,
-            depth: 0,
-            type: 'Button',
-            label: 'Continue',
-            enabled: true,
-          },
-        ],
-        truncated: false,
-      };
-    },
-  });
-
-  const result = await executor.execute('snapshot', { mcpOutputFormat: 'json' });
-
-  assert.match(result.content[0]?.text ?? '', /^\{\n {2}"nodes": \[/);
-  assert.match(result.content[0]?.text ?? '', /"label": "Continue"/);
-});
-
 test('MCP tool schemas add MCP client config fields at the MCP boundary', () => {
-  const devicesTool = listCommandTools().find((tool) => tool.name === 'devices');
+  const devicesTool = listCommandTools({ outputSchemas: true }).find(
+    (tool) => tool.name === 'devices',
+  );
 
   assert.ok(devicesTool);
   assert.equal('stateDir' in (devicesTool.inputSchema.properties ?? {}), false);
@@ -134,7 +112,7 @@ test('MCP tool schemas add MCP client config fields at the MCP boundary', () => 
 // #1625: `list` must be accepted by the MCP input surface, not only the CLI
 // parser — the enum here is what the MCP server validates tool calls against.
 test('MCP find tool schema accepts the read-only list action', () => {
-  const findTool = listCommandTools().find((tool) => tool.name === 'find');
+  const findTool = listCommandTools({ outputSchemas: true }).find((tool) => tool.name === 'find');
 
   assert.ok(findTool);
   const actionEnum = (findTool.inputSchema.properties?.action as { enum?: unknown[] } | undefined)
@@ -188,7 +166,7 @@ test('MCP pins every find-list ref so a plain follow-up press forwards pinned', 
 });
 
 test('MCP gesture tool exposes and forwards two-finger pan topology', async () => {
-  const gesture = listCommandTools().find((tool) => tool.name === 'gesture');
+  const gesture = listCommandTools({ outputSchemas: true }).find((tool) => tool.name === 'gesture');
   assert.ok(gesture);
   assert.deepEqual(gesture.inputSchema.properties?.pointerCount, {
     type: 'integer',
@@ -226,7 +204,7 @@ test('MCP gesture tool exposes and forwards two-finger pan topology', async () =
 });
 
 test('MCP gesture metadata exposes pan/transform duration', () => {
-  const gesture = listCommandTools().find((tool) => tool.name === 'gesture');
+  const gesture = listCommandTools({ outputSchemas: true }).find((tool) => tool.name === 'gesture');
   assert.ok(gesture);
   assert.equal(gesture.inputSchema.properties?.velocity, undefined);
   assert.deepEqual(gesture.inputSchema.properties?.durationMs, {
@@ -238,7 +216,7 @@ test('MCP gesture metadata exposes pan/transform duration', () => {
 });
 
 test('MCP gesture tool exposes generic drag endpoints and bounded timing phases', () => {
-  const gesture = listCommandTools().find((tool) => tool.name === 'gesture');
+  const gesture = listCommandTools({ outputSchemas: true }).find((tool) => tool.name === 'gesture');
   assert.ok(gesture);
   assert.deepEqual(gesture.inputSchema.properties?.kind, {
     type: 'string',
@@ -274,7 +252,7 @@ test('MCP gesture tool exposes generic drag endpoints and bounded timing phases'
 });
 
 test('MCP swipe tool exposes bounded repetition inputs', () => {
-  const swipe = listCommandTools().find((tool) => tool.name === 'swipe');
+  const swipe = listCommandTools({ outputSchemas: true }).find((tool) => tool.name === 'swipe');
   assert.ok(swipe);
   assert.deepEqual(swipe.inputSchema.properties?.count, {
     type: 'integer',
@@ -294,6 +272,7 @@ test('MCP includeCost:true opts into agent-cost: sets client.cost, strips the ar
   const createdConfigs: unknown[] = [];
   const calls: unknown[] = [];
   const executor = createCommandToolExecutor({
+    structuredContent: 'declared',
     createClient: (config) => {
       createdConfigs.push(config);
       return {} as AgentDeviceClient;
@@ -320,6 +299,7 @@ test('MCP includeCost:true opts into agent-cost: sets client.cost, strips the ar
 test('MCP includeCost absent/false leaves the request shape untouched (no cost config)', async () => {
   const createdConfigs: unknown[] = [];
   const executor = createCommandToolExecutor({
+    structuredContent: 'declared',
     createClient: (config) => {
       createdConfigs.push(config);
       return {} as AgentDeviceClient;
@@ -352,6 +332,7 @@ test('MCP responseLevel:digest opts into a verbosity level: sets client.response
   const createdConfigs: unknown[] = [];
   const calls: unknown[] = [];
   const executor = createCommandToolExecutor({
+    structuredContent: 'declared',
     createClient: (config) => {
       createdConfigs.push(config);
       return {} as AgentDeviceClient;
@@ -374,6 +355,7 @@ test('MCP responseLevel:digest opts into a verbosity level: sets client.response
 test('MCP responseLevel absent leaves the request shape untouched (no responseLevel config)', async () => {
   const createdConfigs: unknown[] = [];
   const executor = createCommandToolExecutor({
+    structuredContent: 'declared',
     createClient: (config) => {
       createdConfigs.push(config);
       return {} as AgentDeviceClient;
@@ -401,7 +383,7 @@ test('MCP responseLevel rejects unknown values at the boundary', async () => {
 });
 
 test('MCP keyboard outputSchema advertises flat contract discriminants', () => {
-  const tools = listCommandTools();
+  const tools = listCommandTools({ outputSchemas: true });
 
   const keyboard = tools.find((tool) => tool.name === 'keyboard');
   assert.ok(keyboard);
@@ -418,7 +400,7 @@ test('MCP keyboard outputSchema advertises flat contract discriminants', () => {
 });
 
 test('MCP clipboard outputSchema advertises action union branches', () => {
-  const tools = listCommandTools();
+  const tools = listCommandTools({ outputSchemas: true });
 
   const clipboard = tools.find((tool) => tool.name === 'clipboard');
   assert.ok(clipboard);
@@ -430,7 +412,7 @@ test('MCP clipboard outputSchema advertises action union branches', () => {
 });
 
 test('MCP newly typed outputSchemas advertise public contract keys', () => {
-  const tools = listCommandTools();
+  const tools = listCommandTools({ outputSchemas: true });
 
   const wait = tools.find((tool) => tool.name === 'wait');
   assert.ok(wait);
@@ -447,7 +429,7 @@ test('MCP newly typed outputSchemas advertise public contract keys', () => {
 });
 
 test('MCP click outputSchema validates default and digest resolution disclosures', () => {
-  const click = listCommandTools().find((tool) => tool.name === 'click');
+  const click = listCommandTools({ outputSchemas: true }).find((tool) => tool.name === 'click');
   assert.ok(click?.outputSchema);
   assert.equal(click.outputSchema, COMMAND_OUTPUT_SCHEMAS.click);
 
@@ -508,7 +490,7 @@ test('MCP stopped trace schema advertises its downloadable trace artifact', () =
 });
 
 test('MCP untyped object tools stay byte-identical: no outputSchema key', () => {
-  const tools = listCommandTools();
+  const tools = listCommandTools({ outputSchemas: true });
 
   // snapshot is intentionally absent from the typed registry (dynamic shape).
   const snapshot = tools.find((tool) => tool.name === 'snapshot');
@@ -526,11 +508,12 @@ test('MCP boot structuredContent is consistent with its advertised outputSchema'
     booted: true,
   };
   const executor = createCommandToolExecutor({
+    structuredContent: 'declared',
     createClient: () => ({}) as AgentDeviceClient,
     runCommand: async () => bootResult,
   });
 
-  const bootTool = listCommandTools().find((tool) => tool.name === 'boot');
+  const bootTool = listCommandTools({ outputSchemas: true }).find((tool) => tool.name === 'boot');
   assert.ok(bootTool?.outputSchema);
   const required = bootTool.outputSchema.required ?? [];
   for (const key of required) {
@@ -672,7 +655,9 @@ test('MCP prepare schema mirrors its PublicPlatform contract', () => {
 });
 
 test('MCP session tool exposes publication and resolves state-dir without a daemon round-trip', async () => {
-  const sessionTool = listCommandTools().find((tool) => tool.name === 'session');
+  const sessionTool = listCommandTools({ outputSchemas: true }).find(
+    (tool) => tool.name === 'session',
+  );
   assert.ok(sessionTool);
   assert.deepEqual(
     (sessionTool.inputSchema.properties?.action as { enum?: unknown[] } | undefined)?.enum,
@@ -763,6 +748,7 @@ function replayDivergenceError(): AppError {
 test('MCP tool error is a ref-issuing result: isError, structuredContent, and pinned screen refs', async () => {
   const runCalls: Array<{ name: string; input: unknown }> = [];
   const executor = createCommandToolExecutor({
+    structuredContent: 'declared',
     createClient: () => ({}) as AgentDeviceClient,
     runCommand: async (_client, name, input) => {
       runCalls.push({ name, input });
@@ -843,6 +829,7 @@ test('ambiguous interaction errors pin their candidate refs for the next mutatio
 // command), and the MCP text carries BOTH concrete commands. ---
 test("MCP projections carry a caution divergence's alternateFrom (structuredContent) and both --from commands (text)", async () => {
   const executor = createCommandToolExecutor({
+    structuredContent: 'declared',
     createClient: () => ({}) as AgentDeviceClient,
     runCommand: async (_client, name) => {
       if (name === 'replay') {
@@ -890,7 +877,9 @@ test("MCP projections carry a caution divergence's alternateFrom (structuredCont
 
 test('MCP get/is/find/snapshot tools expose record and noRecord in their input schema', () => {
   for (const name of ['get', 'is', 'find', 'snapshot']) {
-    const tool = listCommandTools().find((candidate) => candidate.name === name);
+    const tool = listCommandTools({ outputSchemas: true }).find(
+      (candidate) => candidate.name === name,
+    );
     assert.ok(tool, `expected an MCP tool named ${name}`);
     const properties = tool.inputSchema.properties ?? {};
     assert.equal(
@@ -931,7 +920,7 @@ test('MCP forwards record/noRecord from a get tool call through to the executed 
 // --- #1310: `noRecord` on every recordable command's MCP tool schema ---
 
 test('MCP tool schemas advertise noRecord for every recordable command', () => {
-  for (const tool of listCommandTools()) {
+  for (const tool of listCommandTools({ outputSchemas: true })) {
     const properties = tool.inputSchema.properties ?? {};
     if (resolveCommandRecordsSessionAction(tool.name)) {
       assert.equal(
@@ -1007,7 +996,9 @@ test('MCP record refuses the removed maxSize input with migration guidance', asy
 
 test('MCP screenshot and record schemas do not advertise the retired maxSize input', () => {
   for (const name of ['screenshot', 'record']) {
-    const tool = listCommandTools().find((candidate) => candidate.name === name);
+    const tool = listCommandTools({ outputSchemas: true }).find(
+      (candidate) => candidate.name === name,
+    );
     assert.ok(tool);
     assert.equal('maxSize' in (tool.inputSchema.properties ?? {}), false);
   }

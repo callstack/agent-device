@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers/promises';
 import { test } from 'vitest';
-import { createMcpStdioSession, handleMcpPayload } from '../server.ts';
+import { createMcpPayloadHandler, createMcpStdioSession } from '../server.ts';
+
+const handleMcpPayload = createMcpPayloadHandler({ structured: false });
 
 type JsonRpcResponse = {
   jsonrpc: '2.0';
@@ -90,6 +92,7 @@ test('a batch rejects only its malformed element while routing the valid ones', 
 test('a malformed payload received on stdio is written as a -32600 error response', async () => {
   const writes: JsonRpcResponse[] = [];
   const session = createMcpStdioSession({
+    handlePayload: handleMcpPayload,
     write: (message) => {
       writes.push(message as JsonRpcResponse);
     },
@@ -106,6 +109,7 @@ test('a malformed payload received on stdio is written as a -32600 error respons
 test('a blank line does not hold back the request after it in the same chunk', async () => {
   const writes: JsonRpcResponse[] = [];
   const session = createMcpStdioSession({
+    handlePayload: handleMcpPayload,
     write: (message) => writes.push(message as JsonRpcResponse),
   });
 
@@ -119,6 +123,7 @@ test('a blank line does not hold back the request after it in the same chunk', a
 test('a malformed line answers -32700 and the next line in the chunk is still served', async () => {
   const writes: JsonRpcResponse[] = [];
   const session = createMcpStdioSession({
+    handlePayload: handleMcpPayload,
     write: (message) => writes.push(message as JsonRpcResponse),
   });
 
@@ -133,6 +138,7 @@ test('a malformed line answers -32700 and the next line in the chunk is still se
 test('a final request without a trailing newline is served at end of input', async () => {
   const writes: JsonRpcResponse[] = [];
   const session = createMcpStdioSession({
+    handlePayload: handleMcpPayload,
     write: (message) => writes.push(message as JsonRpcResponse),
   });
 

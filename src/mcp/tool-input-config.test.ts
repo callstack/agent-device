@@ -53,6 +53,7 @@ test('a nested batch step naming another device fails before any daemon request'
     return { ok: true, data: {} };
   };
   const executor = createCommandToolExecutor({
+    structuredContent: 'declared',
     createClient: (config, devicePin) => createAgentDeviceClient(config, { transport, devicePin }),
   });
 
@@ -78,6 +79,7 @@ test('a devicePin in tool input is rejected before a client exists, and the conf
     return { ok: true, data: {} };
   };
   const executor = createCommandToolExecutor({
+    structuredContent: 'declared',
     createClient: (config, devicePin) => {
       createdWith.push(devicePin);
       return createAgentDeviceClient(config, { transport, devicePin });

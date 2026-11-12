@@ -1,13 +1,14 @@
-import { handleMcpMessage, type JsonRpcMessage } from './router.ts';
+import { createMcpMessageHandler, type JsonRpcMessage, type McpMessageHandler } from './router.ts';
 import { jsonRpcRequestSchema, type JsonRpcId } from '@agent-device/kernel/contracts';
 
-type JsonRpcResponse = Awaited<NonNullable<ReturnType<typeof handleMcpMessage>>>;
+type JsonRpcResponse = NonNullable<Awaited<ReturnType<McpMessageHandler>>>;
 type PayloadContext = { signal?: AbortSignal };
 type PayloadHandler = (payload: unknown, context: PayloadContext) => Promise<unknown | null>;
 type MessageWriter = (message: unknown) => void;
 
-export async function runAgentDeviceMcpServer(): Promise<void> {
-  const session = createMcpStdioSession();
+/** `structured`: `agent-device mcp --structured`; see `createMcpMessageHandler`. */
+export async function runAgentDeviceMcpServer(options: { structured: boolean }): Promise<void> {
+  const session = createMcpStdioSession({ handlePayload: createMcpPayloadHandler(options) });
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', (chunk: string) => {
     session.receive(chunk);
@@ -29,16 +30,14 @@ export async function runAgentDeviceMcpServer(): Promise<void> {
  * `tools/call`, queued or running, and the server sends no response for it. A batch never carries
  * a `tools/call`: see `handleMcpBatch`.
  */
-export function createMcpStdioSession(
-  options: {
-    handlePayload?: PayloadHandler;
-    write?: MessageWriter;
-  } = {},
-): {
+export function createMcpStdioSession(options: {
+  handlePayload: PayloadHandler;
+  write?: MessageWriter;
+}): {
   receive: (chunk: string) => void;
   end: () => Promise<void>;
 } {
-  const handlePayload = options.handlePayload ?? handleMcpPayload;
+  const handlePayload = options.handlePayload;
   const write = options.write ?? writeMessage;
   const inFlight = new Set<Promise<void>>();
   const toolCalls = new Map<JsonRpcId, AbortController>();
@@ -97,7 +96,7 @@ export function createMcpStdioSession(
     if (line.length === 0) return;
     let payload: unknown;
     try {
-      // The decoded value stays untyped here; handleMcpPayload validates it at the boundary.
+      // The decoded value stays untyped here; the payload handler validates it at the boundary.
       payload = JSON.parse(line) as unknown;
     } catch (error) {
       write({
@@ -128,14 +127,13 @@ export function createMcpStdioSession(
   };
 }
 
-export function handleMcpPayload(
-  payload: unknown,
-  context: PayloadContext = {},
-): Promise<unknown | null> {
-  if (Array.isArray(payload)) {
-    return handleMcpBatch(payload);
-  }
-  return handleInboundMessage(payload, context);
+/** One server's JSON-RPC payload boundary: single messages and legacy batches. */
+export function createMcpPayloadHandler(options: { structured: boolean }) {
+  const handleMessage = createMcpMessageHandler(options);
+  return async (payload: unknown, context: PayloadContext = {}): Promise<unknown | null> =>
+    Array.isArray(payload)
+      ? await handleMcpBatch(handleMessage, payload)
+      : await handleInboundMessage(handleMessage, payload, context);
 }
 
 /**
@@ -143,14 +141,17 @@ export function handleMcpPayload(
  * batch is refused with -32600: it could not be cancelled on its own or queued behind other tool
  * calls, so it is accepted only as its own message.
  */
-async function handleMcpBatch(messages: unknown[]): Promise<JsonRpcResponse[] | null> {
+async function handleMcpBatch(
+  handleMessage: McpMessageHandler,
+  messages: unknown[],
+): Promise<JsonRpcResponse[] | null> {
   const responses: JsonRpcResponse[] = [];
   for (const message of messages) {
     const parsed = singleMessage(message);
     const response =
       parsed?.jsonrpc === '2.0' && parsed.method === 'tools/call'
         ? batchedToolCallResponse(parsed.id)
-        : await handleInboundMessage(message);
+        : await handleInboundMessage(handleMessage, message);
     responses.push(...responseArray(response));
   }
   return responses.length > 0 ? responses : null;
@@ -175,6 +176,7 @@ function batchedToolCallResponse(id: JsonRpcId | undefined): JsonRpcResponse | n
 // genuinely malformed payloads (non-object, or wrong-typed jsonrpc/method/id) are
 // rejected with the standard -32600 Invalid Request error.
 async function handleInboundMessage(
+  handleMessage: McpMessageHandler,
   raw: unknown,
   context: PayloadContext = {},
 ): Promise<JsonRpcResponse | null> {
@@ -184,7 +186,7 @@ async function handleInboundMessage(
   } catch {
     return invalidRequestResponse(bestEffortId(raw));
   }
-  return handleMcpMessage(message, context);
+  return handleMessage(message, context);
 }
 
 function invalidRequestResponse(id: JsonRpcId): JsonRpcResponse {

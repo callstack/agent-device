@@ -5,7 +5,7 @@ export type EntryModules = Readonly<{
     resolveHelpTargetUsageText(target: string): string | null;
   }>;
   cli: () => Promise<{ runCliProcess(argv: string[]): Promise<unknown> }>;
-  mcp: () => Promise<{ runAgentDeviceMcpServer(): Promise<void> }>;
+  mcp: () => Promise<{ runAgentDeviceMcpServer(options: { structured: boolean }): Promise<void> }>;
   version: () => Promise<{ readVersion(): string }>;
   processExit: () => Promise<{ exitAfterFlush(code: number): Promise<void> }>;
 }>;
@@ -33,7 +33,8 @@ async function dispatch(argv: string[], modules: EntryModules, io: EntryIo): Pro
   if (isVersionRequest(argv)) return await printVersion(modules, io);
   const helpTarget = simpleHelpTarget(argv);
   if (helpTarget !== undefined) return await printHelp(helpTarget, argv, modules, io);
-  if (isMcpServerRequest(argv)) return await (await modules.mcp()).runAgentDeviceMcpServer();
+  const mcpServer = mcpServerRequest(argv);
+  if (mcpServer) return await (await modules.mcp()).runAgentDeviceMcpServer(mcpServer);
   await runCli(argv, modules);
 }
 
@@ -68,9 +69,16 @@ function isVersionRequest(argv: string[]): boolean {
   return argv.length === 1 && (argv[0] === '--version' || argv[0] === '-V');
 }
 
-/** Only a bare `mcp` starts the server; the full CLI rejects any flag or argument beside it. */
-function isMcpServerRequest(argv: string[]): boolean {
-  return argv.length === 1 && argv[0] === 'mcp';
+/**
+ * Only `mcp` and `mcp --structured` start the server; the full CLI rejects any other argument.
+ * This is the one runtime read of `--structured`: its `mcpStructured` flag declaration serves help
+ * and that rejection only, so the server starts without loading the CLI module.
+ */
+function mcpServerRequest(argv: string[]): { structured: boolean } | undefined {
+  if (argv[0] !== 'mcp') return undefined;
+  if (argv.length === 1) return { structured: false };
+  if (argv.length === 2 && argv[1] === '--structured') return { structured: true };
+  return undefined;
 }
 
 /** `null` = general usage, a string = one command's help, `undefined` = not a help request. */

@@ -35,6 +35,7 @@ test('MCP collection results use object envelopes without changing object result
     wait: { waitedMs: 10 },
   } satisfies Record<'devices' | 'apps' | 'wait', CommandExecutionResult>;
   const executor = createCommandToolExecutor({
+    structuredContent: 'declared',
     createClient: () => ({}) as AgentDeviceClient,
     runCommand: async (_client, name) => results[name as keyof typeof results],
   });
@@ -57,7 +58,9 @@ test('MCP collection results use object envelopes without changing object result
     ['devices', devices],
     ['apps', apps],
   ] as const) {
-    const schema = listCommandTools().find((tool) => tool.name === name)?.outputSchema;
+    const schema = listCommandTools({ outputSchemas: true }).find(
+      (tool) => tool.name === name,
+    )?.outputSchema;
     assert.ok(schema, `${name} advertises an output schema`);
     assert.deepEqual(validateAgainstSchema(result.structuredContent, schema), []);
   }
@@ -74,6 +77,7 @@ test('MCP open keeps device-selection evidence in structured content and JSON te
     },
   };
   const executor = createCommandToolExecutor({
+    structuredContent: 'declared',
     createClient: () => ({}) as AgentDeviceClient,
     runCommand: async () => openResult,
   });
@@ -93,7 +97,7 @@ test('MCP advertises and round-trips the strict wait absent field', async () => 
       return { waitedMs: 0 };
     },
   });
-  const waitTool = listCommandTools().find((tool) => tool.name === 'wait');
+  const waitTool = listCommandTools({ outputSchemas: true }).find((tool) => tool.name === 'wait');
   assert.equal(
     (waitTool?.inputSchema.properties?.absent as { type?: string } | undefined)?.type,
     'string',
@@ -126,11 +130,12 @@ test('MCP fill projects target-bound unconfirmed verification through its advert
     },
   } satisfies CommandExecutionResult<'fill'>;
   const executor = createCommandToolExecutor({
+    structuredContent: 'declared',
     createClient: () => ({}) as AgentDeviceClient,
     runCommand: async () => fillResult,
   });
 
-  const fillTool = listCommandTools().find((tool) => tool.name === 'fill');
+  const fillTool = listCommandTools({ outputSchemas: true }).find((tool) => tool.name === 'fill');
   assert.ok(fillTool?.outputSchema);
   assert.equal(fillTool.outputSchema, COMMAND_OUTPUT_SCHEMAS.fill);
   const unconfirmedBranch = fillTool.outputSchema.oneOf?.find(
@@ -175,11 +180,12 @@ test('MCP fold advertises the native-panel discriminator and rejects a screen mi
       'Folded to open (hinge 180°, LCD-1 native panel 669x951pt, not snapshot coordinates); refs from before the pose change are stale',
   } satisfies CommandExecutionResult<'fold'>;
   const executor = createCommandToolExecutor({
+    structuredContent: 'declared',
     createClient: () => ({}) as AgentDeviceClient,
     runCommand: async () => foldResult,
   });
 
-  const foldTool = listCommandTools().find((tool) => tool.name === 'fold');
+  const foldTool = listCommandTools({ outputSchemas: true }).find((tool) => tool.name === 'fold');
   assert.ok(foldTool?.outputSchema);
   assert.equal(foldTool.outputSchema, COMMAND_OUTPUT_SCHEMAS.fold);
 

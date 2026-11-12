@@ -91,7 +91,8 @@ The report carries a bounded `screen`, ranked `suggestions`, one `repairHint` en
 - Capture failure never replaces or conceals the original replay cause.
 - Serialized ceilings are 8/24/64 KiB for the compact, default, and full response levels. Overflow goes to a redacted session-scoped artifact.
 - Entered text is never serialized. Native `.ad` replay replaces expanded variable values with `<var:NAME>` in human-readable divergence fields.
-- Every surface (daemon text, JSON, Node client `AppError`, MCP `structuredContent`) preserves the structured error. No surface may reduce divergence to text and discard repair data.
+- Every surface (daemon text, JSON, Node client `AppError`, MCP text, and MCP `structuredContent` on a structured server) preserves the repair data. No surface may reduce divergence to text that discards it. The default MCP server returns text only, so its error text carries the step, the repair hint (with the concrete resume command when `resume.allowed` is true), the screen, and the suggestions.
+  Why: clients that receive `structuredContent` show the model that JSON and drop the text, so a default `structuredContent` error replaced the compact report with the larger JSON. A client that reads errors as data opts in with `agent-device mcp --structured`.
 
 Resume is `replay --from N --plan-digest <sha>`.
 `N` is a 1-based index into the fully expanded executable plan.
@@ -183,6 +184,7 @@ The [divergence construction contract](../../packages/replay-port/docs/replay-di
 - **An absolute rect tolerance in identity.** No measured drift distribution justifies any constant.
 - **A publish lock that protects only complete healed files.** It adds lock, lease, and reclaim races for a partial file. Exclusive `linkSync` decides the winner instead.
 - **Infer a corrective read from its position relative to the later `--from`.** The daemon records actions immediately and cannot know their future resume role, so the inference would retrospectively reinterpret intent. `--record` marks the corrective read explicitly.
+- **Keep `structuredContent` on default MCP errors.** Clients that receive it show the model the JSON instead of the compact repair report; data clients opt in with `agent-device mcp --structured`.
 - **One flag helper with an `allowRecord` policy argument.** A changed literal could let a mutating reader forward `--record` with no schema change. Two named helpers make the capability the helper's name.
 
 ## Consequences

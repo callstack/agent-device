@@ -15,6 +15,7 @@ function harness(options: { bundledVersion?: string; cli?: EntryModules['cli'] }
   const stderr: string[] = [];
   const cliArgv: string[][] = [];
   const exits: number[] = [];
+  const mcpServers: Array<{ structured: boolean }> = [];
   const modules: EntryModules = {
     help: async () => {
       loaded.push('help');
@@ -32,7 +33,11 @@ function harness(options: { bundledVersion?: string; cli?: EntryModules['cli'] }
       }),
     mcp: async () => {
       loaded.push('mcp');
-      return { runAgentDeviceMcpServer: async () => {} };
+      return {
+        runAgentDeviceMcpServer: async (options) => {
+          mcpServers.push(options);
+        },
+      };
     },
     version: async () => {
       loaded.push('version');
@@ -50,7 +55,7 @@ function harness(options: { bundledVersion?: string; cli?: EntryModules['cli'] }
       stdout: (text) => stdout.push(text),
       stderr: (text) => stderr.push(text),
     });
-  return { run, loaded, stdout, stderr, cliArgv, exits };
+  return { run, loaded, stdout, stderr, cliArgv, exits, mcpServers };
 }
 
 test('every registered alias prints its canonical help without loading the CLI', async () => {
@@ -88,13 +93,16 @@ test('no command prints usage and exits 1 after flushing', async () => {
   assert.deepEqual(entry.exits, [1]);
 });
 
-test('only a bare mcp starts the server; help prints usage and other arguments reach the CLI', async () => {
+test('mcp and mcp --structured start the server; help prints usage and other arguments reach the CLI', async () => {
   const server = harness();
   await server.run(['mcp']);
-  assert.deepEqual(server.loaded, ['mcp']);
+  await server.run(['mcp', '--structured']);
+  assert.deepEqual(server.loaded, ['mcp', 'mcp']);
+  assert.deepEqual(server.mcpServers, [{ structured: false }, { structured: true }]);
 
   for (const argv of [
     ['mcp', '--state-dir', './sd'],
+    ['mcp', '--structured', '--json'],
     ['mcp', 'extra'],
     ['--json', 'mcp'],
   ]) {

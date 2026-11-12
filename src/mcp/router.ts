@@ -1,4 +1,9 @@
-import { listCommandTools, commandToolExecutor, type ToolResult } from './command-tools.ts';
+import {
+  createCommandToolExecutor,
+  listCommandTools,
+  type CommandToolExecutor,
+  type ToolResult,
+} from './command-tools.ts';
 import type { JsonRpcId, JsonRpcRequestEnvelope } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -7,7 +12,6 @@ import {
   HELP_TOOL,
   MCP_SERVER_INSTRUCTIONS,
 } from './server-guide.ts';
-import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
 import {
   cacheFields,
   finalizeResult,
@@ -29,10 +33,36 @@ type JsonRpcResponse =
   | { jsonrpc: '2.0'; id: JsonRpcId; result: unknown }
   | { jsonrpc: '2.0'; id: JsonRpcId; error: { code: number; message: string; data?: unknown } };
 
-/** `signal` aborts a `tools/call` the client cancelled; other methods finish too fast to need it. */
-export async function handleMcpMessage(
+type McpMessageContext = { signal?: AbortSignal };
+
+export type McpMessageHandler = (
   message: JsonRpcMessage,
-  context: { signal?: AbortSignal } = {},
+  context?: McpMessageContext,
+) => Promise<JsonRpcResponse | null>;
+
+/**
+ * One server's tools and results. Results are text only by default: no tool advertises an
+ * outputSchema and no result carries `structuredContent`, because clients that show the model
+ * `structuredContent` would replace the compact text with JSON. `structured` (`agent-device mcp
+ * --structured`) advertises outputSchemas and returns the `structuredContent` that matches them.
+ */
+export function createMcpMessageHandler(options: { structured: boolean }): McpMessageHandler {
+  const server: McpServer = {
+    structured: options.structured,
+    executor: createCommandToolExecutor(
+      options.structured ? { structuredContent: 'declared' } : {},
+    ),
+  };
+  return async (message, context = {}) => await handleServerMessage(server, message, context);
+}
+
+type McpServer = { structured: boolean; executor: CommandToolExecutor };
+
+/** `signal` aborts a `tools/call` the client cancelled; other methods finish too fast to need it. */
+async function handleServerMessage(
+  server: McpServer,
+  message: JsonRpcMessage,
+  context: McpMessageContext,
 ): Promise<JsonRpcResponse | null> {
   if (message.jsonrpc !== '2.0' || typeof message.method !== 'string') {
     return errorResponse(message.id ?? null, -32600, 'Invalid JSON-RPC request.');
@@ -42,7 +72,7 @@ export async function handleMcpMessage(
 
   try {
     const era = resolveProtocolEra(message.method, message.params);
-    const result = await handleRequest(message.method, message.params, era, context.signal);
+    const result = await handleRequest(server, message.method, message.params, era, context.signal);
     return successResponse(message.id, finalizeResult(result, era));
   } catch (error) {
     if (error instanceof UnsupportedProtocolVersionError) {
@@ -65,6 +95,7 @@ export async function handleMcpMessage(
 }
 
 async function handleRequest(
+  server: McpServer,
   method: string,
   params: unknown,
   era: ProtocolEra,
@@ -106,21 +137,25 @@ async function handleRequest(
     case 'ping':
       return {};
     case 'tools/list':
-      // Descriptor tools plus the MCP-only guide tool. `listCommandTools()` stays
+      // Descriptor tools plus the MCP-only guide tool. `listCommandTools({ outputSchemas })` stays
       // descriptor-only because the AI SDK surface reuses it; the composition is the
       // router's.
       return {
-        tools: [...listCommandTools(), HELP_TOOL],
+        tools: [...listCommandTools({ outputSchemas: server.structured }), HELP_TOOL],
         ...cacheFields(era, STATIC_RESULT_CACHE_TTL_MS),
       };
     case 'tools/call':
-      return await callTool(params, signal);
+      return await callTool(server.executor, params, signal);
     default:
       throw new JsonRpcMethodNotFoundError(`Unsupported MCP method: ${method}`);
   }
 }
 
-async function callTool(params: unknown, signal: AbortSignal | undefined): Promise<ToolResult> {
+async function callTool(
+  executor: CommandToolExecutor,
+  params: unknown,
+  signal: AbortSignal | undefined,
+): Promise<ToolResult> {
   const record = asRecord(params);
   const name = stringField(record, 'name');
   try {
@@ -128,17 +163,10 @@ async function callTool(params: unknown, signal: AbortSignal | undefined): Promi
     // Command-level failures are handled (and ref-pinned) by the executor's
     // own catch; this one covers failures outside a resolved command call
     // (unknown tool name, malformed params).
-    return await commandToolExecutor.execute(name, optionalArguments(record.arguments), { signal });
+    return await executor.execute(name, optionalArguments(record.arguments), { signal });
   } catch (error) {
-    return textToolResult(formatToolErrorText(normalizeToolError(error)), true);
+    return await executor.errorResult(error);
   }
-}
-
-function textToolResult(text: string, isError = false): ToolResult {
-  return {
-    isError,
-    content: [{ type: 'text', text }],
-  };
 }
 
 function successResponse(id: JsonRpcId, result: unknown): JsonRpcResponse {

@@ -5,7 +5,9 @@ import { createClientTransport } from '@agent-device/test-kit';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
 
 test('MCP gesture tool exposes tap contacts bounded to 2 to 5 points', () => {
-  const gesture = listCommandTools().find((tool) => tool.name === 'gesture');
+  const gesture = listCommandTools({ outputSchemas: false }).find(
+    (tool) => tool.name === 'gesture',
+  );
   assert.ok(gesture);
   assert.deepEqual(gesture.inputSchema.properties?.points, {
     type: 'array',

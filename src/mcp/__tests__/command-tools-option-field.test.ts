@@ -25,7 +25,9 @@ async function toolPropertyWithPlantedOption(
   Object.assign(declaration, plant);
 
   const { listCommandTools } = await import('../command-tools.ts');
-  const entry = listCommandTools().find((candidate) => candidate.name === tool);
+  const entry = listCommandTools({ outputSchemas: false }).find(
+    (candidate) => candidate.name === tool,
+  );
   assert.ok(entry, `expected an MCP tool for ${tool}`);
   const found = entry.inputSchema.properties?.[property];
   assert.ok(found, `expected the ${tool} tool to publish the ${property} input`);

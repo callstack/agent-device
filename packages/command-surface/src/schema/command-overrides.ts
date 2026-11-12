@@ -152,8 +152,9 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     text: {
       summary: 'Start MCP server',
       description:
-        'Start the official stdio MCP server. It exposes structured command tools backed by the agent-device client. It accepts no flags or arguments other than --help and --version; configure it with AGENT_DEVICE_* environment variables or AGENT_DEVICE_CONFIG.',
+        'Start the official stdio MCP server. It exposes command tools backed by the agent-device client. Tool results are compact text by default; mcpOutputFormat: "json", a non-default responseLevel, or includeCost returns JSON text. With --structured, tools also advertise output schemas and return structuredContent, including errors, for clients that read results as data. It accepts no other flags or arguments besides --structured, --help, and --version; configure it with AGENT_DEVICE_* environment variables or AGENT_DEVICE_CONFIG.',
     },
+    allowedFlags: ['mcpStructured'],
   },
   proxy: {
     text: {

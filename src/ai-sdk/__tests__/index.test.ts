@@ -204,6 +204,16 @@ test('asks the executor for structuredContent from every tool, because execute r
   assert.deepEqual(executorDeps, [{ structuredContent: 'always' }]);
 });
 
+test('typed tools keep their output schema for the data host; untyped tools declare none', async () => {
+  const { tools } = await createAgentDeviceTools({ session: 'my-session', set: 'all' });
+  const outputSchemaOf = (name: string) =>
+    (tools[name] as unknown as { outputSchema?: { jsonSchema: { required?: string[] } } })
+      .outputSchema;
+
+  assert.deepEqual(outputSchemaOf('devices')?.jsonSchema.required, ['devices']);
+  assert.equal(outputSchemaOf('snapshot'), undefined);
+});
+
 test("the AI SDK call's abortSignal reaches the executor", async () => {
   const { tools } = await createAgentDeviceTools({ session: 'my-session' });
   const controller = new AbortController();

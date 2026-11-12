@@ -170,7 +170,7 @@ function withFullStop(text: string): string {
   return /[.!?…]$/.test(text) ? text : `${text}.`;
 }
 
-export function formatErrorCandidateViews(views: ErrorCandidateView[]): string[] {
+function formatErrorCandidateViews(views: ErrorCandidateView[]): string[] {
   return views.flatMap((view) => {
     if (view.kind === 'element-match') {
       const remaining = view.matches - view.candidates.length;

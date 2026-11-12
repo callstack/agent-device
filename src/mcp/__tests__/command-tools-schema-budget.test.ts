@@ -9,7 +9,7 @@ import { CONFIG_LOADER_AUDIENCE, MCP_TOOL_CONFIG_AUDIENCE } from '../tool-contro
 const INPUT_SCHEMA_BUDGET_BYTES = 5 * 1024;
 
 test('every MCP tool input schema stays within the byte budget', () => {
-  const oversized = listCommandTools()
+  const oversized = listCommandTools({ outputSchemas: false })
     .map((tool) => ({
       name: tool.name,
       bytes: Buffer.byteLength(JSON.stringify(tool.inputSchema)),
@@ -33,7 +33,7 @@ test('no MCP tool advertises an operator-owned input', () => {
   for (const key of ['tenant', 'config', 'remoteConfig']) {
     assert.ok(operatorKeys.has(key), `expected ${key} to be operator-owned`);
   }
-  for (const tool of listCommandTools()) {
+  for (const tool of listCommandTools({ outputSchemas: false })) {
     const properties = tool.inputSchema.properties ?? {};
     const advertised = [...operatorKeys].filter((key) => Object.hasOwn(properties, key));
     assert.deepEqual(advertised, [], `${tool.name} advertises operator-owned inputs`);

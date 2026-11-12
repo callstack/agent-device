@@ -141,7 +141,7 @@ const UNDESCRIBED_TOOL_INPUTS = new Set([
 
 test('MCP tool inputs do not add undocumented properties', () => {
   const undescribed: string[] = [];
-  for (const tool of listCommandTools()) {
+  for (const tool of listCommandTools({ outputSchemas: false })) {
     for (const [key, schema] of Object.entries(tool.inputSchema.properties ?? {})) {
       if (!schema.description) undescribed.push(`${tool.name}.${key}`);
     }

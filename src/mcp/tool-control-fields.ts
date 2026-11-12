@@ -38,7 +38,7 @@ const MCP_TOOL_CONFIG_FIELDS = {
   includeCost: {
     schema: {
       type: 'boolean',
-      description: 'Add agent cost (cost.wallClockMs, …) to the result.',
+      description: 'Add agent cost (cost.wallClockMs, …) to the result, returned as JSON text.',
     },
   },
   responseLevel: {

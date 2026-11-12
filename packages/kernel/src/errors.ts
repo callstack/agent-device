@@ -700,7 +700,7 @@ function codeRecoveryHint(code: string): string | undefined {
     case 'DEVICE_IN_USE':
       return 'The device is busy with another agent-device request; retry once it frees up.';
     case 'REPLAY_DIVERGENCE':
-      return 'Read the divergence report (details.divergence) for the screen and selector suggestions to repair the step.';
+      return 'Repair the step from the divergence report: its screen and selector suggestions.';
     case 'REPAIR_SESSION_EXPIRED':
       return 'The --save-script repair session was reaped before it was finalized; re-run replay <script> --save-script from the start.';
     case 'REPAIR_COMMIT_FAILED':
