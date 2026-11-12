@@ -99,3 +99,28 @@ test(
     expect(countSimctlListCalls()).toBe(1);
   },
 );
+
+test('repeated memo hits expire and recover an externally stopped simulator', async () => {
+  let state = 'Booted';
+  mockRunXcrun.mockImplementation(async (args) => {
+    if (args.includes('list'))
+      return {
+        stdout: JSON.stringify({ devices: { ios: [{ udid: 'sim-1', state }] } }),
+        stderr: '',
+        exitCode: 0,
+      };
+    if (args.includes('boot')) state = 'Booted';
+    return { stdout: '', stderr: '', exitCode: 0 };
+  });
+  await ensureBootedSimulator(simulator);
+  state = 'Shutdown';
+  for (let i = 0; i < 4; i++) {
+    vi.advanceTimersByTime(SIMULATOR_BOOTED_MEMO_TTL_MS / 4);
+    await ensureBootedSimulator(simulator);
+  }
+  expect(countSimctlListCalls()).toBeGreaterThan(1);
+  expect(mockRunXcrun.mock.calls.some(([args]) => args.includes('boot'))).toBe(true);
+  const reads = countSimctlListCalls();
+  await ensureBootedSimulator(simulator);
+  expect(countSimctlListCalls()).toBe(reads);
+});

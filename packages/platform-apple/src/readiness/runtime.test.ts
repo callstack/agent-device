@@ -11,6 +11,7 @@ test('recent native boot observation avoids a duplicate simulator listing', asyn
     exitCode: 0,
   }));
   const markBooted = vi.fn();
+  const keepHot = vi.fn();
   const host = platformRuntimeHostFixture();
 
   await ensureAppleReady(
@@ -20,7 +21,7 @@ test('recent native boot observation avoids a duplicate simulator listing', asyn
       deviceReadiness: {
         ...host.deviceReadiness,
         appleAutomation: {
-          keepHot: vi.fn(),
+          keepHot,
           markBooted,
           wasRecentlyObservedBooted: vi.fn(async () => true),
         },
@@ -31,7 +32,8 @@ test('recent native boot observation avoids a duplicate simulator listing', asyn
   );
 
   expect(run).not.toHaveBeenCalled();
-  expect(markBooted).toHaveBeenCalledOnce();
+  expect(markBooted).not.toHaveBeenCalled();
+  expect(keepHot).toHaveBeenCalledOnce();
 });
 
 test('plain device boot state does not bypass native readiness observation', async () => {
@@ -360,3 +362,55 @@ function simulator(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
     ...overrides,
   };
 }
+
+test('repeated readiness hits expire and boot an externally stopped simulator', async () => {
+  vi.useFakeTimers({ now: 1000 });
+  try {
+    const {
+      markSimulatorBooted,
+      wasSimulatorRecentlyObservedBooted,
+      SIMULATOR_BOOTED_MEMO_TTL_MS,
+    } = await import('../core/simulator.ts');
+    let state = 'Booted';
+    const calls: string[] = [];
+    const base = platformRuntimeHostFixture();
+    const host = {
+      ...base,
+      appleTools: {
+        ...base.appleTools,
+        run: vi.fn(async (request) => {
+          const verb = simctlVerb(request.args);
+          calls.push(verb);
+          if (verb === 'list')
+            return {
+              stdout: JSON.stringify({ devices: { ios: [{ udid: 'sim-1', state }] } }),
+              stderr: '',
+              exitCode: 0,
+            };
+          if (verb === 'boot') state = 'Booted';
+          return { stdout: '', stderr: '', exitCode: 0 };
+        }),
+      },
+      deviceReadiness: {
+        ...base.deviceReadiness,
+        appleAutomation: {
+          keepHot: vi.fn(),
+          markBooted: markSimulatorBooted,
+          wasRecentlyObservedBooted: async (device) => wasSimulatorRecentlyObservedBooted(device),
+        },
+      },
+    } satisfies PlatformRuntimeHost;
+    const ready = () => ensureAppleReady(host, simulator(), new AbortController().signal);
+    await ready();
+    state = 'Shutdown';
+    for (let i = 0; i < 4; i++) {
+      vi.advanceTimersByTime(SIMULATOR_BOOTED_MEMO_TTL_MS / 4);
+      await ready();
+    }
+    expect(calls).toEqual(['list', 'list', 'boot', 'bootstatus']);
+    await ready();
+    expect(calls).toHaveLength(4);
+  } finally {
+    vi.useRealTimers();
+  }
+});

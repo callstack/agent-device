@@ -64,9 +64,8 @@ export async function ensureBootedSimulator(
 ): Promise<void> {
   if (device.kind !== 'simulator') return;
   options.signal?.throwIfAborted();
-  const state = wasSimulatorRecentlyObservedBooted(device)
-    ? 'Booted'
-    : await getSimulatorState(device, options.signal);
+  if (wasSimulatorRecentlyObservedBooted(device)) return;
+  const state = await getSimulatorState(device, options.signal);
   if (state === 'Booted') {
     markSimulatorBooted(device);
     return;

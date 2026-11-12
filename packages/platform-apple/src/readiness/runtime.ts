@@ -45,7 +45,11 @@ export async function ensureAppleReady(
   if (device.kind !== 'simulator') return { ...device, booted: true };
 
   const recentlyObservedBooted = await readRecentBootObservation(host, device);
-  const state = recentlyObservedBooted ? 'Booted' : await simulatorState(host, device, signal);
+  if (recentlyObservedBooted) {
+    host.deviceReadiness.appleAutomation.keepHot(device);
+    return { ...device, booted: true };
+  }
+  const state = await simulatorState(host, device, signal);
   if (state !== 'Booted') {
     options.onColdBootStart?.();
     host.deviceReadiness.appleAutomation.keepHot(device);
