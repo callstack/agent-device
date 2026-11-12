@@ -131,11 +131,14 @@ export async function recordManagedAgentBrowserProcesses(
   const summary: AgentBrowserProcessSummary = {
     count: ownedProcesses.length,
     pids: ownedProcesses.map(({ pid }) => pid),
-    processes: ownedProcesses.map((process) => ({
-      process,
+    processes: ownedProcesses.map((processInfo) => ({
+      process: processInfo,
       reason:
-        matchManagedAgentBrowserProcess(process, ownership, executablePaths.get(process.pid))
-          ?.reason ?? 'descendant',
+        matchManagedAgentBrowserProcess(
+          processInfo,
+          ownership,
+          executablePaths.get(processInfo.pid),
+        )?.reason ?? 'descendant',
     })),
   };
   const records: OwnedProcessRecord[] = ownedProcesses.map(({ pid, command }) => ({
