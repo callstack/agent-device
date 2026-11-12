@@ -36,6 +36,7 @@ const FLOATING_BAR_CONTAINER_ROLE = '_UIFloatingBarContainerView';
 const VIEWPORT_CHROME_TOP_INSET_PT = 4;
 const TOOLBAR_HOST_KIND_FRAGMENTS = ['toolbar'];
 const TAB_BAR_KIND_FRAGMENTS = ['tabbar'];
+const NAVIGATION_BAR_KIND_FRAGMENTS = ['navigationbar'];
 const SCROLL_INDICATOR_KIND_FRAGMENTS = ['scrollbar', 'scrollindicator'];
 const SEMANTIC_TOUCH_KIND_FRAGMENTS = [
   'button',
@@ -309,6 +310,8 @@ function visibleCoverRect(
   const candidateRect = positiveRect(candidate.rect);
   if (!candidateRect || areRectsApproximatelyEqual(targetRect, candidateRect)) return null;
   if (isInToolbarHostOwnPresentation(candidate, target, scan)) return null;
+  if (isToolbarInsideTargetNavigationBar(candidate, candidateRect, target, scan.byIndex))
+    return null;
   if (findCoveringNode(scan, candidatePosition, candidate, options)) return null;
   return candidateRect;
 }
@@ -404,12 +407,12 @@ function toolbarHostReach(
 
 /**
  * Toolbar hosts draw their descendants, not their enclosing frame. A host that encloses bars or
- * scroll containers of its own presentation, the siblings after the previous toolbar and before
- * this host, covers nothing of it. A host that encloses the presentation beneath it, which an
- * undimmed sheet keeps in the capture, covers only that presentation, including enclosed tab bars
- * listed first after the previous toolbar. A host that encloses nothing, or a presentation stacked
- * over it, keeps covering. Like the sibling-sized exemption, this cannot tell an opaque toolbar
- * from a host.
+ * scroll containers of its own presentation, the siblings after the previous toolbar host and
+ * before this host, covers nothing of it. A host that encloses the presentation beneath it, which
+ * an undimmed sheet keeps in the capture, covers only that presentation, including enclosed tab
+ * bars listed first after the previous toolbar host. A host that encloses nothing, or a
+ * presentation stacked over it, keeps covering. Like the sibling-sized exemption, this cannot tell
+ * an opaque toolbar from a host.
  */
 function classifyToolbarHostReach(
   node: RawSnapshotNode,
@@ -467,6 +470,31 @@ function isInToolbarHostOwnPresentation(
   return branch !== undefined && reach.ownBranchIndexes.has(branch.index);
 }
 
+/**
+ * A toolbar drawn inside the navigation bar that holds the target backs that bar, not covers it.
+ * Accepted limit: a stacked presentation whose top bar is a toolbar inside the frame of the
+ * navigation bar beneath it does not cover that bar.
+ */
+function isToolbarInsideTargetNavigationBar(
+  candidate: RawSnapshotNode,
+  candidateRect: Rect,
+  target: RawSnapshotNode,
+  byIndex: Map<number, RawSnapshotNode>,
+): boolean {
+  if (!nodeKindIncludesAny(candidate, TOOLBAR_HOST_KIND_FRAGMENTS)) return false;
+  let current: RawSnapshotNode | undefined = target;
+  const visited = new Set<number>();
+  while (current && !visited.has(current.index)) {
+    if (nodeKindIncludesAny(current, NAVIGATION_BAR_KIND_FRAGMENTS)) {
+      return isNavigationBarAround(current, candidateRect);
+    }
+    visited.add(current.index);
+    current =
+      typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
+  }
+  return false;
+}
+
 /** The target itself or its ancestor that is a direct child of `parentIndex`. */
 function branchUnderParent(
   node: RawSnapshotNode,
@@ -484,11 +512,28 @@ function branchUnderParent(
   return undefined;
 }
 
+/** After the previous toolbar host; a toolbar drawn inside a sibling navigation bar is not one. */
 function ownPresentationStart(siblings: readonly RawSnapshotNode[], position: number): number {
   for (let previous = position - 1; previous >= 0; previous--) {
-    if (nodeKindIncludesAny(siblings[previous]!, TOOLBAR_HOST_KIND_FRAGMENTS)) return previous + 1;
+    if (isToolbarHostSibling(siblings, previous)) return previous + 1;
   }
   return 0;
+}
+
+function isToolbarHostSibling(siblings: readonly RawSnapshotNode[], position: number): boolean {
+  const node = siblings[position]!;
+  if (!nodeKindIncludesAny(node, TOOLBAR_HOST_KIND_FRAGMENTS)) return false;
+  const rect = positiveRect(node.rect);
+  return !rect || !siblings.some((sibling) => isNavigationBarAround(sibling, rect));
+}
+
+function isNavigationBarAround(bar: RawSnapshotNode, rect: Rect): boolean {
+  const barRect = positiveRect(bar.rect);
+  return Boolean(
+    barRect &&
+    nodeKindIncludesAny(bar, NAVIGATION_BAR_KIND_FRAGMENTS) &&
+    rectContains(barRect, rect),
+  );
 }
 
 /** A bar or a scroll container inside `rect`; a scroll indicator is not a container. */
