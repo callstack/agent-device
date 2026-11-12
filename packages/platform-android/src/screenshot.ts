@@ -1,10 +1,9 @@
 import type { ScreenshotCaptureFacts } from '@agent-device/contracts/interactor-types';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ShellWord } from '@agent-device/kernel/device-shell';
 import { runAndroidExecOut, runAndroidShell, sleep } from './adb.ts';
-import { requireAndroidAdbHost } from './adb-host.ts';
+import { emitAndroidAdbDiagnostic, requireAndroidAdbHost } from './adb-host.ts';
 import { androidAdbResultError } from './adb-executor.ts';
 import { probeAndroidDisplayRotation } from './input-actions.ts';
 
@@ -32,23 +31,21 @@ export async function screenshotAndroid(
   }
 
   const listing = await runDemoSettingCommand(device, ['settings', 'list', 'global']);
-  const present = listing.stdout
+  const settingPrefix = 'sysui_demo_allowed=';
+  const previous = listing.stdout
     .split(/\r?\n/)
-    .some((line) => line.startsWith('sysui_demo_allowed='));
-  const previous = present
-    ? (
-        await runDemoSettingCommand(device, ['settings', 'get', 'global', 'sysui_demo_allowed'])
-      ).stdout.replace(/\n$/, '')
-    : undefined;
+    .find((line) => line.startsWith(settingPrefix))
+    ?.slice(settingPrefix.length);
 
   let capture: ScreenshotCaptureFacts;
   try {
     await enableAndroidDemoMode(device);
+    // Allow transient UI affordances like scrollbars to fade before capture.
     await sleep(ANDROID_SCREENSHOT_SETTLE_DELAY_MS);
     capture = await captureAndroidScreenshotWithRotation(device, outPath);
   } catch (error) {
     await restoreAndroidDemoSetting(device, previous).catch((restoreError: unknown) => {
-      emitDiagnostic({
+      emitAndroidAdbDiagnostic({
         level: 'error',
         phase: 'android_screenshot_demo_setting_restore_failed',
         data: { error: normalizeError(restoreError) },
