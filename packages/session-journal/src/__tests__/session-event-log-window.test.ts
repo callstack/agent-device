@@ -351,6 +351,8 @@ test('an unreadable window sidecar refuses required rotation and preserves the t
   const failure = diagnostics.find((record) => record.phase === 'session_event_log_write_failed');
   assert.equal(failure?.data.reason, 'maintenance-failed');
   assert.equal(failure?.data.operation, 'rotation');
+  assert.equal(failure?.data.errno, undefined);
+  assert.equal(failure?.data.error?.code, 'COMMAND_FAILED');
   assert.equal(failure?.data.error?.details?.reason, EVENT_LOG_WINDOW_UNVERIFIED_REASON);
   assert.equal(readError(eventLogPath, '0').details?.reason, EVENT_LOG_WINDOW_UNVERIFIED_REASON);
 });
