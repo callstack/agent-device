@@ -4,6 +4,8 @@ import {
   createRequestDeadlineError,
   isRequestCanceledDetails,
   isRequestCanceledError,
+  isRequestDeadlineDetails,
+  REQUEST_DEADLINE_REASON,
 } from '@agent-device/kernel/errors';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { runtimeSlot } from '../runtime-slots.ts';
@@ -181,7 +183,7 @@ function deadlineFailure(error: unknown, timeoutMs: number, requestId: string): 
   return createRequestDeadlineError(
     {
       ...prior,
-      ...(typeof prior.reason === 'string' && prior.reason !== 'daemon_request_timeout'
+      ...(typeof prior.reason === 'string' && !isRequestDeadlineDetails(prior)
         ? { causeReason: prior.reason }
         : {}),
       timeoutMs,
@@ -205,10 +207,10 @@ function projectDeadlineResponse(result: DaemonResponse, timeoutMs: number): Dae
         : {}),
       details: {
         ...result.error.details,
-        ...(typeof priorReason === 'string' && priorReason !== 'daemon_request_timeout'
+        ...(typeof priorReason === 'string' && !isRequestDeadlineDetails(result.error.details)
           ? { causeReason: priorReason }
           : {}),
-        reason: 'daemon_request_timeout',
+        reason: REQUEST_DEADLINE_REASON,
         timeoutMs,
       },
     },

@@ -50,8 +50,10 @@ function createAdmissionDevice(params: {
   baselineAgeMs?: number;
   baselineTree?: SnapshotState;
   captureMs?: number;
-  onSleep?: () => void;
-  onCapture?: (capture: number) => void;
+  /** Runs inside each scenario-clock sleep; a returned promise holds the sleep open. */
+  onSleep?: () => void | Promise<void>;
+  /** Runs inside each capture with the signal it received; a returned promise holds it open. */
+  onCapture?: (capture: number, signal: AbortSignal | undefined) => void | Promise<void>;
 }) {
   let nowMs = 0;
   const sleeps: number[] = [];
@@ -62,16 +64,16 @@ function createAdmissionDevice(params: {
     sleep: async (ms: number) => {
       sleeps.push(ms);
       nowMs += ms;
-      params.onSleep?.();
+      await params.onSleep?.();
     },
   };
   const backend: AgentDeviceBackend = {
     platform: params.platform,
-    captureSnapshot: async () => {
+    captureSnapshot: async (context) => {
       captureStarts.push(nowMs);
       nowMs += params.captureMs ?? 0;
       const snapshot = params.trees[Math.min(captureStarts.length - 1, params.trees.length - 1)]!;
-      params.onCapture?.(captureStarts.length);
+      await params.onCapture?.(captureStarts.length, context.signal);
       return { snapshot };
     },
     tap: async (_context, point) => {
@@ -191,6 +193,55 @@ test('a cancellation during a look sends no input, even when the look shows rest
     assertCanceledBeforeDispatch,
   );
   assert.equal(harness.captureStarts.length, 3, 'the look in flight is the last one');
+  assert.deepEqual(harness.taps, []);
+});
+
+test('a cancellation ends a scenario-clock sleep that would not return on its own', async () => {
+  const controller = new AbortController();
+  const harness = createAdmissionDevice({
+    platform: 'ios',
+    trees: [slideTree(240), slideTree(10)],
+    baselineAgeMs: 100,
+    onSleep: () => {
+      setTimeout(() => controller.abort(), 0);
+      return new Promise<void>(() => {});
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      harness.device.interactions.press(selector('label="Slide target"'), {
+        session: 'default',
+        signal: controller.signal,
+      }),
+    assertCanceledBeforeDispatch,
+  );
+  assert.deepEqual(harness.taps, []);
+});
+
+test('the request deadline interrupts a look still in flight and sends no input', async () => {
+  const harness = createAdmissionDevice({
+    platform: 'android',
+    trees: [slideTree(240), slideTree(10)],
+    baselineAgeMs: 0,
+    // The first look never answers on its own; only an abort of the signal it carries ends it.
+    onCapture: (capture, signal) =>
+      capture === 2
+        ? new Promise<void>((_resolve, reject) => {
+            signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+          })
+        : undefined,
+  });
+
+  await assert.rejects(
+    () =>
+      harness.device.interactions.press(selector('label="Slide target"'), {
+        session: 'default',
+        deadlineAtMs: Date.now() + 30,
+      }),
+    assertDeadlineBeforeDispatch,
+  );
+  assert.equal(harness.captureStarts.length, 2);
   assert.deepEqual(harness.taps, []);
 });
 

@@ -17,21 +17,28 @@ export function now(runtime: Pick<AgentDeviceRuntime, 'clock'>): number {
   return runtime.clock?.now() ?? Date.now();
 }
 
-/** Sleeps on the runtime clock; without one, a timer that an abort of `signal` ends early. */
+/** Sleeps on the runtime clock, or a timer without one; an abort of `signal` ends either early. */
 export async function sleep(
   runtime: Pick<AgentDeviceRuntime, 'clock'>,
   ms: number,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (runtime.clock) return await runtime.clock.sleep(ms);
   if (signal?.aborted) return;
-  await new Promise<void>((resolve) => {
-    const finish = () => {
-      clearTimeout(timer);
-      signal?.removeEventListener('abort', finish);
-      resolve();
-    };
-    const timer = setTimeout(finish, ms);
-    signal?.addEventListener('abort', finish, { once: true });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort = () => {};
+  const aborted = new Promise<void>((resolve) => {
+    onAbort = resolve;
+    signal?.addEventListener('abort', onAbort, { once: true });
   });
+  const slept = runtime.clock
+    ? runtime.clock.sleep(ms)
+    : new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, ms);
+      });
+  try {
+    await Promise.race([slept, aborted]);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
+  }
 }

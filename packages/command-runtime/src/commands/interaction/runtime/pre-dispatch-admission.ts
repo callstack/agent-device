@@ -62,12 +62,23 @@ type AdmissionBudget = Readonly<{
   signal: AbortSignal | undefined;
   deadlineMs: number;
   clock: ObservationClock;
-  /** Runs one awaited read with the budget checked before and after it. */
-  read<T>(read: () => Promise<T>): Promise<T>;
+  /**
+   * Runs one awaited read with the budget checked before and after it. The read receives a signal
+   * that also aborts at the request deadline, so a read in flight ends there and refuses.
+   */
+  read<T>(read: (signal: AbortSignal | undefined) => Promise<T>): Promise<T>;
 }>;
 
 function requestBudget(runtime: AgentDeviceRuntime, options: CommandContext): AdmissionBudget {
   const signal = options.signal ?? runtime.signal;
+  const deadlineSignal =
+    options.deadlineAtMs === undefined
+      ? undefined
+      : AbortSignal.timeout(Math.max(0, options.deadlineAtMs - Date.now()));
+  const readSignal =
+    signal && deadlineSignal
+      ? AbortSignal.any([signal, deadlineSignal])
+      : (signal ?? deadlineSignal);
   const budget: AdmissionBudget = {
     signal,
     deadlineMs: now(runtime) + ((options.deadlineAtMs ?? Infinity) - Date.now()),
@@ -80,8 +91,14 @@ function requestBudget(runtime: AgentDeviceRuntime, options: CommandContext): Ad
     },
     read: async (read) => {
       assertWithinBudget(budget);
-      const value = await read();
-      assertWithinBudget(budget);
+      let value;
+      try {
+        value = await read(readSignal);
+      } catch (error) {
+        if (readSignal?.aborted) assertWithinBudget(budget, deadlineSignal?.aborted || undefined);
+        throw error;
+      }
+      assertWithinBudget(budget, deadlineSignal?.aborted || undefined);
       return value;
     },
   };
@@ -126,7 +143,8 @@ async function awaitRest(
     MovingTargetObservation,
     Exclude<ReturnType<typeof judgeMotionLook>, { kind: 'wait' }>
   >({
-    capture: () => budget.read(() => reObserveTarget(runtime, options, params)),
+    capture: () =>
+      budget.read((signal) => reObserveTarget(runtime, { ...options, signal }, params)),
     verdict: (look, previous) => {
       const verdict = judgeMotionLook(look, previous, restingSinceMs, wait.policy);
       if (verdict.kind !== 'wait') return { kind: 'done', result: verdict };

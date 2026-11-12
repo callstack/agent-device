@@ -220,24 +220,18 @@ export type MovingTargetObservation = MovingTargetMeasurement & {
 
 /** Whether a look produced a position of its own, or nothing to compare against. */
 type MovingTargetMeasurement =
-  /** The position this observation's own capture reported for the target, on that capture's surface. */
-  | MovingTargetMeasured
+  /**
+   * The position this observation's own capture reported for the target, and on which surface. The
+   * surface rides along because a rect is only comparable to one measured on the same presentation
+   * (#2438).
+   */
+  | { measured: true; rect: Rect; surfaceBundleId: string | undefined }
   /**
    * No position of its own. Two of these would "agree" trivially — rest certified by a
    * non-measurement, the one outcome the check must never produce — so the first of them ends the
    * recheck, and a refusal reports no `movedToRect` rather than a stale one.
    */
   | { measured: false; rect: undefined };
-
-/**
- * A look that measured the target: where it put it, and on which surface. The surface rides along
- * because a rect is only comparable to one measured on the same presentation (#2438).
- */
-type MovingTargetMeasured = {
-  measured: true;
-  rect: Rect;
-  surfaceBundleId: string | undefined;
-};
 
 /**
  * One observation of the same target, asked as the original question rather than a narrower one.
@@ -311,33 +305,19 @@ function resolvedRect(resolved: ResolvedInteractionTarget): Rect | undefined {
 }
 
 /**
- * The hint published beside every `target_still_moving` refusal, owned by the refusal's module so
- * the reason cannot be published without its recovery.
- *
- * A selector re-resolves against a fresh capture and can be retried as-is. An `@ref` cannot survive
- * the wait: the capture a `wait` takes retires the ref frame (ADR 0014), which is the same reason
- * the off-screen guard sends its `@ref` refusals to a selector. The selector is quoted for the
- * caller's shell the way the daemon's other recovery hints quote values (`shellQuoteIfNeeded`), so
- * a label carrying an apostrophe cannot turn the suggested command into a copy-paste failure.
- */
-function targetStillMovingHint(params: { selector: string | undefined }): string {
-  const reobserve = params.selector
-    ? `Run wait ${shellQuoteIfNeeded(params.selector)} and retry with the same selector`
-    : 'Run snapshot -i and retry with a selector (text=/id=) rather than this @ref — re-observing retires the ref frame';
-  return (
-    'The target had no confirmed resting position when the transition window after the previous action ran ' +
-    `out, so nothing was dispatched. ${reobserve}; or pass --settle to have the action itself wait for the ` +
-    'UI to go quiet.'
-  );
-}
-
-/**
  * The refusal, keyed on the reason the whole interaction surface shares and raised beside the guard
  * that owns it. `rect` is the position the caller's own resolution produced and `movedToRect` where
  * the last re-observation found the target — the pair that says which way the surface is going.
  * `movedToRect` is the one optional member: a re-observation that measured nothing (the ref kept its
  * authorized frame node) has no position to name, and an absent value is the honest report rather
  * than a stale one.
+ *
+ * The hint is owned here so the reason cannot be published without its recovery. A selector
+ * re-resolves against a fresh capture and can be retried as-is. An `@ref` cannot survive the wait:
+ * the capture a `wait` takes retires the ref frame (ADR 0014), which is the same reason the
+ * off-screen guard sends its `@ref` refusals to a selector. The selector is quoted for the caller's
+ * shell (`shellQuoteIfNeeded`), so a label carrying an apostrophe cannot turn the suggested command
+ * into a copy-paste failure.
  */
 export function motionRefusal(
   resolved: Exclude<ResolvedInteractionTarget, { kind: 'point' }>,
@@ -346,6 +326,9 @@ export function motionRefusal(
 ): Error {
   const selector = resolved.target.kind === 'selector' ? resolved.target.selector : undefined;
   const ref = resolved.target.kind === 'ref' ? resolved.target.ref : undefined;
+  const reobserve = selector
+    ? `Run wait ${shellQuoteIfNeeded(selector)} and retry with the same selector`
+    : 'Run snapshot -i and retry with a selector (text=/id=) rather than this @ref — re-observing retires the ref frame';
   return discloseDispatch(
     new AppError(
       'COMMAND_FAILED',
@@ -358,7 +341,10 @@ export function motionRefusal(
         ...(resolved.node?.rect ? { rect: resolved.node.rect } : {}),
         ...(movedToRect ? { movedToRect } : {}),
         waitedMs,
-        hint: targetStillMovingHint({ selector }),
+        hint:
+          'The target had no confirmed resting position when the transition window after the previous action ran ' +
+          `out, so nothing was dispatched. ${reobserve}; or pass --settle to have the action itself wait for the ` +
+          'UI to go quiet.',
       },
     ),
     'no',
