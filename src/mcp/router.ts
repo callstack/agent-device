@@ -12,7 +12,6 @@ import {
   HELP_TOOL,
   MCP_SERVER_INSTRUCTIONS,
 } from './server-guide.ts';
-import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
 import {
   cacheFields,
   finalizeResult,
@@ -169,15 +168,8 @@ async function callTool(
     // (unknown tool name, malformed params).
     return await executor.execute(name, optionalArguments(record.arguments), { signal });
   } catch (error) {
-    return textToolResult(formatToolErrorText(normalizeToolError(error)), true);
+    return await executor.errorResult(error);
   }
-}
-
-function textToolResult(text: string, isError = false): ToolResult {
-  return {
-    isError,
-    content: [{ type: 'text', text }],
-  };
 }
 
 function successResponse(id: JsonRpcId, result: unknown): JsonRpcResponse {

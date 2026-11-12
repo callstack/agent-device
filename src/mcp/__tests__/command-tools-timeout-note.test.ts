@@ -9,7 +9,7 @@ import { listCommandTools } from '../command-tools.ts';
 // command's declared policy — sourced from the registry, so the declared
 // number cannot drift from the enforced one.
 test('every MCP tool description declares its timeout envelope', () => {
-  for (const tool of listCommandTools({ outputSchemas: true })) {
+  for (const tool of listCommandTools({ outputSchemas: false })) {
     const policy = resolveCommandTimeoutPolicy(tool.name);
     if (policy.envelopeMs === 'unbounded') {
       assert.match(
@@ -36,7 +36,7 @@ test('every MCP tool description declares its timeout envelope', () => {
 // registry-vs-registry agreement.
 test('the declared envelopes carry the known tier values', () => {
   const descriptions = new Map(
-    listCommandTools({ outputSchemas: true }).map((tool) => [tool.name, tool.description]),
+    listCommandTools({ outputSchemas: false }).map((tool) => [tool.name, tool.description]),
   );
   assert.match(descriptions.get('devices') ?? '', / Times out after 90s\.$/);
   assert.match(descriptions.get('install') ?? '', / Times out after 480s\.$/);

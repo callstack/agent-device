@@ -79,6 +79,8 @@ export type CommandToolExecutor = {
     input: Record<string, unknown>,
     options?: { signal?: AbortSignal },
   ) => Promise<ToolResult>;
+  /** A failure outside a resolved command call, shaped like this executor's own errors. */
+  errorResult: (error: unknown) => Promise<ToolResult>;
 };
 
 type McpOutputFormat = 'optimized' | 'json';
@@ -154,6 +156,8 @@ export function listCommandTools(options: { outputSchemas: boolean }): Array<{
 export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): CommandToolExecutor {
   const refPins = createToolRefPinStore();
   return {
+    errorResult: async (error) =>
+      await buildErrorToolResult(error, deps.structuredContent, refPins, undefined, undefined),
     execute: async (name, input, options = {}) => {
       if (!isCommandName(name)) {
         throw new AppError('INVALID_ARGS', `Unknown command tool: ${name}`);

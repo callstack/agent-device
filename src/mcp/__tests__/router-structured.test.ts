@@ -73,3 +73,17 @@ test('a structured server advertises outputSchemas and returns structuredContent
   assert.deepEqual(result.structuredContent, { devices: [{ ...DEVICE, booted: true }] });
   assert.deepEqual(validateAgainstSchema(result.structuredContent, devicesSchema), []);
 });
+
+test('a tool call that fails before reaching a command follows the server mode', async () => {
+  const call = { jsonrpc: '2.0', id: 'bad', method: 'tools/call' } as const;
+  const params = { name: 'no-such-tool', arguments: {} };
+  const structured = await createMcpMessageHandler({ structured: true })({ ...call, params });
+  const text = await handleMcpMessage({ ...call, params });
+
+  assert.ok(structured && 'result' in structured && text && 'result' in text);
+  const structuredResult = structured.result as CallResult;
+  assert.equal(structuredResult.isError, true);
+  assert.equal((structuredResult.structuredContent as { code?: string }).code, 'INVALID_ARGS');
+  assert.equal('structuredContent' in (text.result as CallResult), false);
+  assert.match((text.result as CallResult).content[0]?.text ?? '', /^Error \(INVALID_ARGS\)/);
+});

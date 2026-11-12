@@ -46,7 +46,7 @@ const MODEL_WRITABLE_COMMON_KEYS = [
 ] as const;
 
 test('MCP tool schemas advertise no operator-owned inputs', () => {
-  for (const tool of listCommandTools({ outputSchemas: true })) {
+  for (const tool of listCommandTools({ outputSchemas: false })) {
     const properties = tool.inputSchema.properties ?? {};
     for (const key of OPERATOR_OWNED_KEYS) {
       assert.equal(key in properties, false, `${tool.name} advertises ${key}`);
@@ -59,7 +59,7 @@ test('MCP tool schemas advertise no operator-owned inputs', () => {
 // assertions above would stay green while the model lost the ability to say
 // which device a call targets.
 test('MCP tool schemas keep every common input the model may write', () => {
-  const wait = listCommandTools({ outputSchemas: true }).find((tool) => tool.name === 'wait');
+  const wait = listCommandTools({ outputSchemas: false }).find((tool) => tool.name === 'wait');
   assert.ok(wait, 'expected an MCP tool named wait');
   const properties = wait.inputSchema.properties ?? {};
   for (const key of MODEL_WRITABLE_COMMON_KEYS) {
@@ -89,7 +89,7 @@ test('MCP refuses every explicit operator-owned argument with guidance', async (
 });
 
 test('MCP neither advertises nor admits the retired readiness budget', async () => {
-  for (const tool of listCommandTools({ outputSchemas: true })) {
+  for (const tool of listCommandTools({ outputSchemas: false })) {
     const properties = tool.inputSchema.properties ?? {};
     assert.equal('readinessTimeoutMs' in properties, false, `${tool.name} advertises it`);
   }
@@ -245,7 +245,7 @@ test('MCP still resolves operator env values outside the model-writable surface'
 });
 
 test('MCP neither advertises nor admits the CLI-only fill textStdin marker', async () => {
-  for (const tool of listCommandTools({ outputSchemas: true })) {
+  for (const tool of listCommandTools({ outputSchemas: false })) {
     const properties = tool.inputSchema.properties ?? {};
     assert.equal('textStdin' in properties, false, `${tool.name} advertises it`);
   }
@@ -274,7 +274,7 @@ test('MCP neither advertises nor admits the CLI-only fill textStdin marker', asy
 // so no schema offers the switch. The operator still sets it, through the environment or the user
 // config, and that value reaches the command route.
 test('MCP neither advertises nor admits the stabilization opt-out, and still resolves the operator default', async () => {
-  for (const tool of listCommandTools({ outputSchemas: true })) {
+  for (const tool of listCommandTools({ outputSchemas: false })) {
     const properties = tool.inputSchema.properties ?? {};
     assert.equal('postGestureStabilization' in properties, false, `${tool.name} advertises it`);
   }
@@ -316,7 +316,7 @@ test('MCP neither advertises nor admits the stabilization opt-out, and still res
 // The proxy lease device spec is not operator infrastructure, so the schema offers it (issue #3864).
 test('MCP open, install, reinstall and uninstall advertise the proxy lease device spec', () => {
   for (const name of ['open', 'install', 'reinstall', 'uninstall']) {
-    const tool = listCommandTools({ outputSchemas: true }).find(
+    const tool = listCommandTools({ outputSchemas: false }).find(
       (candidate) => candidate.name === name,
     );
     assert.ok(tool, `expected an MCP tool named ${name}`);

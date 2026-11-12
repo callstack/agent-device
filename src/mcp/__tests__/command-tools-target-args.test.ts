@@ -53,7 +53,7 @@ test('an unknown argument answers with a call example the tool accepts', async (
 
 test('every tool hint example is accepted by that tool', async () => {
   const executor = createReadingExecutor();
-  for (const { name } of listCommandTools({ outputSchemas: true })) {
+  for (const { name } of listCommandTools({ outputSchemas: false })) {
     const refused = await executor.execute(name, { notAnArgument: true });
     const example = exampleFromHint(toolText(refused), `Example call: ${name} `);
     const retried = toolText(await executor.execute(name, example));
@@ -81,6 +81,6 @@ test('the removed nested target reaches its migration guidance over MCP', async 
 
   assert.equal(result.isError, true);
   assert.match(toolText(result), /target was removed; pass the UI target at the top level/);
-  const press = listCommandTools({ outputSchemas: true }).find((tool) => tool.name === 'press');
+  const press = listCommandTools({ outputSchemas: false }).find((tool) => tool.name === 'press');
   assert.ok(press && !('target' in (press.inputSchema.properties ?? {})));
 });

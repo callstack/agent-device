@@ -26,7 +26,7 @@ function executorReturning(
 test('the default executor returns text only, from typed and untyped tools', async () => {
   const executor = executorReturning(undefined);
 
-  const press = await executor.execute('press', { target: { kind: 'ref', ref: '@e2' } });
+  const press = await executor.execute('press', { ref: '@e2' });
   const snapshot = await executor.execute('snapshot', {});
   const json = await executor.execute('snapshot', { mcpOutputFormat: 'json' });
 
