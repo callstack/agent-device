@@ -1,3 +1,4 @@
+import { createDaemonScreenshotArtifactAdapter } from './screenshot-artifact-adapter.ts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
@@ -11,11 +12,7 @@ import type { ScreenshotRuntimeExecution } from '@agent-device/contracts/screens
 import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
-import type { ArtifactAdapter } from '@agent-device/contracts/artifact-adapter';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import {
@@ -132,7 +129,10 @@ export async function captureScreenshotArtifact(
   const { session, sessionName, outPath, dispatchContext } = params;
   const runtime = await params.createCommandSurface({
     backend: createBoundScreenshotBackend(params),
-    artifacts: createDaemonScreenshotArtifactAdapter(),
+    artifacts: createDaemonScreenshotArtifactAdapter(
+      params.crop !== undefined,
+      dispatchContext.signal,
+    ),
     sessions: createReadonlyRuntimeSessionStore(sessionName, session),
     policy: localCommandPolicy(),
   });
@@ -412,47 +412,6 @@ function createBoundScreenshotBackend(
         crop.run.warnings.push(...buildScreenshotCropWarnings(outcome));
       }
       return facts.displayRotation ? { displayRotation: facts.displayRotation } : undefined;
-    },
-  };
-}
-
-function createDaemonScreenshotArtifactAdapter(): ArtifactAdapter {
-  return {
-    resolveInput: async () => {
-      throw new AppError('UNSUPPORTED_OPERATION', 'screenshot does not resolve input artifacts');
-    },
-    reserveOutput: async (ref) => {
-      let tempRoot: string | undefined;
-      let outputPath: string;
-      if (ref?.kind === 'path') {
-        outputPath = ref.path;
-      } else {
-        tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-screenshot-'));
-        outputPath = path.join(tempRoot, 'screenshot.png');
-      }
-      await fs.mkdir(path.dirname(outputPath), { recursive: true });
-      return {
-        path: outputPath,
-        visibility: 'client-visible',
-        publish: async () => undefined,
-        ...(tempRoot
-          ? {
-              cleanup: async () => {
-                await fs.rm(tempRoot, { recursive: true, force: true });
-              },
-            }
-          : {}),
-      };
-    },
-    createTempFile: async (options) => {
-      const root = await fs.mkdtemp(path.join(os.tmpdir(), `${options.prefix}-`));
-      return {
-        path: path.join(root, `file${options.ext}`),
-        visibility: 'internal',
-        cleanup: async () => {
-          await fs.rm(root, { recursive: true, force: true });
-        },
-      };
     },
   };
 }

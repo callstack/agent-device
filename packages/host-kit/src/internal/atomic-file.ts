@@ -19,14 +19,21 @@ export function publishFileSync(options: {
   destination: string;
   contents: string | Uint8Array;
   mode?: number;
+  preserveExistingMode?: boolean;
   publish?: AtomicPublishMode;
 }): void {
   withAtomicPublishTempPathSync(options.destination, (temporaryPath) => {
+    const existing = options.preserveExistingMode
+      ? fs.statSync(options.destination, { throwIfNoEntry: false })
+      : undefined;
+    const preservedMode = existing?.isFile() ? existing.mode & 0o777 : undefined;
+    const mode = preservedMode ?? options.mode;
     const writeOptions = {
       encoding: typeof options.contents === 'string' ? ('utf8' as const) : undefined,
-      ...(options.mode === undefined ? {} : { mode: options.mode }),
+      ...(mode === undefined ? {} : { mode }),
     };
     fs.writeFileSync(temporaryPath, options.contents, writeOptions);
+    if (preservedMode !== undefined) fs.chmodSync(temporaryPath, preservedMode);
     if (options.publish === 'link-exclusive') {
       fs.linkSync(temporaryPath, options.destination);
     } else {
