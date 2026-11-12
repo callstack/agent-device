@@ -23,7 +23,15 @@ for (const structured of [false, true]) {
       assert.equal(typeof tool.annotations?.readOnlyHint, 'boolean', tool.name);
       assert.equal(typeof tool.annotations?.destructiveHint, 'boolean', tool.name);
     }
-    for (const name of ['devices', 'apps', 'get', 'is', 'help']) {
+    for (const name of [
+      'devices',
+      'apps',
+      'appstate',
+      'artifacts',
+      'capabilities',
+      'events',
+      'help',
+    ]) {
       assert.deepEqual(
         tools.find((tool) => tool.name === name)?.annotations,
         {
@@ -34,6 +42,10 @@ for (const structured of [false, true]) {
       );
     }
     for (const name of [
+      'get',
+      'is',
+      'snapshot',
+      'wait',
       'find',
       'clipboard',
       'session',

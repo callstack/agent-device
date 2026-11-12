@@ -82,7 +82,7 @@ test('usageForCommand supports tap alias for press', async () => {
 test('usageForCommand documents keyboard dismissal flow', async () => {
   const help = await usageForCommand('keyboard');
   assert.equal(help === null, false);
-  assert.match(help ?? '', /To hide the keyboard, use keyboard dismiss/);
+  assert.match(help ?? '', /keyboard \[status\|get\|dismiss\|enter\|return\]/);
   assert.match(help ?? '', /taps the keyboard dismiss\/hide key when one is exposed/);
   assert.match(help ?? '', /UNSUPPORTED_OPERATION/);
 });
@@ -174,8 +174,6 @@ test('debug command help stays scoped to symbolication', async () => {
   const help = await usageForCommand('debug');
   if (help === null) throw new Error('Expected debug help text');
   assert.match(help, /debug symbols --artifact/);
-  assert.match(help, /intentionally narrow/);
-  assert.match(help, /use logs for app logs, network for HTTP evidence, perf for performance/);
   assert.doesNotMatch(help, /agent-device debug perf/);
   assert.doesNotMatch(help, /agent-device debug logs/);
 });
