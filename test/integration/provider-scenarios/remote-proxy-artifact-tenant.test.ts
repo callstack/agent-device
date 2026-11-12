@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import https from 'node:https';
-import { cleanupUploadedArtifact } from '../../../packages/daemon/src/resources/artifact-tracking.ts';
 import path from 'node:path';
 import { test } from 'vitest';
 import { normalizeAgentDeviceError } from '@agent-device/kernel/errors';
@@ -306,7 +305,6 @@ test('real HTTP proxy preserves resumable upload integrity and caller credential
   if (await skipWhenLoopbackUnavailable(t, 'proxy resumable upload coverage')) return;
   await withProviderScenarioResource(createFakeProviderWorld, async ({ daemon }) => {
     const proxy = await createProviderScenarioProxy(daemon, { clientToken: TENANT_TOKEN });
-    let trackedId = '';
     try {
       const content = Buffer.from('ABCDE');
       const auth = { authorization: `Bearer ${TENANT_TOKEN}` };
@@ -359,9 +357,7 @@ test('real HTTP proxy preserves resumable upload integrity and caller credential
       const result = (await finalized.json()) as { ok: boolean; uploadId: string };
       assert.equal(result.ok, true);
       assert.ok(result.uploadId);
-      trackedId = result.uploadId;
     } finally {
-      if (trackedId) cleanupUploadedArtifact(trackedId);
       await proxy.close();
     }
   });
@@ -376,7 +372,6 @@ test('real TLS proxy preserves resumable upload origin and integrity', async (t)
       clientToken: TENANT_TOKEN,
       tls: { cert, key },
     });
-    let trackedId = '';
     const request = async (
       url: string,
       method: string,
@@ -456,11 +451,9 @@ test('real TLS proxy preserves resumable upload origin and integrity', async (t)
       );
       assert.equal(finalized.status, 200, finalized.body);
       const result = JSON.parse(finalized.body) as { ok: boolean; uploadId: string };
-      trackedId = result.uploadId;
       assert.equal(result.ok, true);
-      assert.ok(trackedId);
+      assert.ok(result.uploadId);
     } finally {
-      if (trackedId) cleanupUploadedArtifact(trackedId);
       await proxy.close();
     }
   });

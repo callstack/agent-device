@@ -3,7 +3,6 @@ import crypto from 'node:crypto';
 import { test } from 'vitest';
 import { createDaemonProxy } from '@agent-device/proxy';
 import { skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
-import { cleanupUploadedArtifact } from '../../../packages/daemon/src/resources/artifact-tracking.ts';
 import { withProviderScenarioResource } from './harness.ts';
 import { createFakeProviderWorld } from './provider-device-runtime.fixtures.ts';
 
@@ -25,7 +24,6 @@ test('Fetch proxy confines real resumable uploads to their authenticated tenant 
         return await fetch(request);
       },
     });
-    const trackedIds: string[] = [];
     const send = async (
       url: string,
       method: string,
@@ -66,71 +64,66 @@ test('Fetch proxy confines real resumable uploads to their authenticated tenant 
       assert.ok(!JSON.stringify(ticket).includes(daemon.token));
       return { origin, ...ticket };
     };
-    try {
-      const before = forwarded;
-      const refused = await send(
-        'https://tenant-a.example/agent-device/upload/preflight',
-        'POST',
-        {
-          authorization: 'Bearer invalid',
-          'content-type': 'application/json',
-        },
-        '{}',
-      );
-      assert.equal(refused.status, 401);
-      assert.equal(forwarded, before);
+    const before = forwarded;
+    const refused = await send(
+      'https://tenant-a.example/agent-device/upload/preflight',
+      'POST',
+      {
+        authorization: 'Bearer invalid',
+        'content-type': 'application/json',
+      },
+      '{}',
+    );
+    assert.equal(refused.status, 401);
+    assert.equal(forwarded, before);
 
-      const a = await preflight('a', 'ABCDE');
-      const b = await preflight('b', 'VWXYZ');
-      const forged = { authorization: 'Bearer token-b', 'x-agent-device-tenant': 'tenant-a' };
-      const crossChunk = await send(
-        a.upload.url,
+    const a = await preflight('a', 'ABCDE');
+    const b = await preflight('b', 'VWXYZ');
+    const forged = { authorization: 'Bearer token-b', 'x-agent-device-tenant': 'tenant-a' };
+    const crossChunk = await send(
+      a.upload.url,
+      'PUT',
+      { ...forged, 'content-range': 'bytes 0-1/5' },
+      'AB',
+    );
+    assert.ok(crossChunk.status >= 400);
+    const crossFinalize = await send(
+      `${a.origin}/agent-device/upload/finalize`,
+      'POST',
+      { ...forged, 'content-type': 'application/json' },
+      JSON.stringify({ uploadId: a.uploadId }),
+    );
+    assert.ok(crossFinalize.status >= 400);
+
+    for (const [ticket, content] of [
+      [a, 'ABCDE'],
+      [b, 'VWXYZ'],
+    ] as const) {
+      const first = await send(
+        ticket.upload.url,
         'PUT',
-        { ...forged, 'content-range': 'bytes 0-1/5' },
-        'AB',
+        { ...ticket.upload.headers, 'content-range': 'bytes 0-1/5' },
+        content.slice(0, 2),
       );
-      assert.ok(crossChunk.status >= 400);
-      const crossFinalize = await send(
-        `${a.origin}/agent-device/upload/finalize`,
+      assert.equal(first.status, 308);
+      assert.equal(first.headers.get('x-upload-offset'), '2');
+      const second = await send(
+        ticket.upload.url,
+        'PUT',
+        { ...ticket.upload.headers, 'content-range': 'bytes 2-4/5' },
+        content.slice(2),
+      );
+      assert.equal(second.status, 200);
+      const finalize = await send(
+        `${ticket.origin}/agent-device/upload/finalize`,
         'POST',
-        { ...forged, 'content-type': 'application/json' },
-        JSON.stringify({ uploadId: a.uploadId }),
+        { ...ticket.upload.headers, 'content-type': 'application/json' },
+        JSON.stringify({ uploadId: ticket.uploadId }),
       );
-      assert.ok(crossFinalize.status >= 400);
-
-      for (const [ticket, content] of [
-        [a, 'ABCDE'],
-        [b, 'VWXYZ'],
-      ] as const) {
-        const first = await send(
-          ticket.upload.url,
-          'PUT',
-          { ...ticket.upload.headers, 'content-range': 'bytes 0-1/5' },
-          content.slice(0, 2),
-        );
-        assert.equal(first.status, 308);
-        assert.equal(first.headers.get('x-upload-offset'), '2');
-        const second = await send(
-          ticket.upload.url,
-          'PUT',
-          { ...ticket.upload.headers, 'content-range': 'bytes 2-4/5' },
-          content.slice(2),
-        );
-        assert.equal(second.status, 200);
-        const finalize = await send(
-          `${ticket.origin}/agent-device/upload/finalize`,
-          'POST',
-          { ...ticket.upload.headers, 'content-type': 'application/json' },
-          JSON.stringify({ uploadId: ticket.uploadId }),
-        );
-        assert.equal(finalize.status, 200);
-        const result = (await finalize.json()) as { ok: boolean; uploadId: string };
-        if (result.uploadId) trackedIds.push(result.uploadId);
-        assert.equal(result.ok, true);
-        assert.ok(result.uploadId);
-      }
-    } finally {
-      for (const id of trackedIds) cleanupUploadedArtifact(id);
+      assert.equal(finalize.status, 200);
+      const result = (await finalize.json()) as { ok: boolean; uploadId: string };
+      assert.equal(result.ok, true);
+      assert.ok(result.uploadId);
     }
   });
 });
