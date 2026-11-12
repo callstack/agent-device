@@ -9,54 +9,54 @@ It narrows how [ADR 0011](0011-interaction-guarantee-contract.md) paths declare 
 
 ## Context
 
-Pre-input checks exist so that an action reports success only when the intended control could receive it. They reject a target that is still moving, a covered target, a point inside a system bar, or a control that a fading view still blocks.
+Pre-dispatch checks let an action report success only when the intended control could receive the input. They reject a target that is still moving, a covered target, a point inside a system bar, and a control that a fading view still blocks.
 
-There is no owner for this step.
-The moving-target gate runs only for runtime-resolved press and click. Long-press, fill, hover and drag skip it.
+These checks have no owner.
+The moving-target gate runs only for runtime-resolved press and click; long-press, fill, hover and drag skip it.
 Its waits ignore the request deadline and cancellation signal (`packages/command-runtime/src/commands/runtime-common.ts`).
-Each new check brings its own place, loop, evidence carrier and refusal reason.
-Proposals for iOS native readiness and Android system-bar bounds each add a separate loop or a private per-node carrier, and each patches the in-memory session clone to keep its facts.
-State that decides the outcome is implicit: object identity between captures, closures, private side tables, and the `deferredSurface` baseline that one request leaves for the next.
+Each new check adds its own loop, evidence carrier, clone patch and refusal reason. Recent proposals for iOS native readiness and Android system-bar bounds both did.
+The state that decides the outcome is implicit: object identity between captures, closures, private side tables, and the `deferredSurface` baseline that one request leaves for the next.
 
 ## Decision
 
-**One owner.** Command runtime has one pre-dispatch admission step for resolved targets.
+**One owner.** Command runtime has one admission step for resolved targets.
 Every interaction whose target the daemon resolves calls it between resolution and the backend call: press, click, long-press, double-tap, hover, fill, and each endpoint of a target-authored drag.
-The native-ref and direct iOS selector paths dispatch natively without daemon resolution. Admission does not apply to them; they keep their ADR 0011 path rows.
-Static resolution guards (visibility, parent-owned touch point, covered annotation) stay in their shared owner and run first. Admission consumes their result.
+The native-ref and direct iOS selector paths dispatch without daemon resolution, so admission does not apply to them. They keep their ADR 0011 path rows.
+The static resolution guards (visibility, parent-owned touch point, covered annotation) stay with their shared owner and run first. Admission uses their result.
 
-**Typed checks with declared policy.** Admission runs an ordered list of checks over one evidence bundle. Today the list is motion and readiness.
-Each check returns pass, wait, or refuse with a typed reason. Unknown geometry, a covered target, an ambiguous native binding, and a native read failure keep distinct reasons.
-Each interaction declares which checks apply and their policy in its ADR 0011 path row, with the maximum extra reads on the accept path.
+**Typed checks.** Admission runs an ordered list of checks over one evidence bundle. Today the list is motion, then readiness.
+Each check returns pass, wait or refuse. A refusal has a typed reason; unknown geometry, a covered target, an ambiguous native binding and a native read failure stay distinct.
+Each interaction's ADR 0011 path row declares which checks apply, their policy, and the maximum extra reads on the accept path.
 
-**One budget and one loop.** All waiting in admission uses one loop under one hard bound: the earlier of the request execution and result deadlines, and any explicit intent cap.
-The loop checks cancellation and the bound before and after every awaited read, before every sleep, and immediately before dispatch.
-Transition windows are anchored once; a retry does not restart them.
-The loop reuses the observation engine in `packages/capture-kit/src/observe-until.ts` with a hard bound that a verdict or minimum poll count cannot extend. Other consumers keep its soft budget.
-While only a live fact is blocked, the loop polls that fact. When a fact or geometry changes, dependent checks run again on fresh evidence before dispatch.
+**One loop, one budget.** All admission waiting happens in one loop. Its hard bound is the earliest of the request execution deadline, the result deadline and any intent cap.
+The loop checks cancellation and the bound before and after every read, before every sleep, and immediately before dispatch.
+Transition windows start once; a retry does not restart them.
+The loop uses the observation engine in `packages/capture-kit/src/observe-until.ts` with a hard bound that no verdict or minimum poll count can extend. Other users of that engine keep its soft budget.
+While only a live fact blocks, the loop polls that fact alone. When a fact or the geometry changes, the dependent checks run again on fresh evidence before dispatch.
 
-**Evidence provenance.** Platform facts reach admission as typed private evidence, owned by `packages/contracts/src/snapshot-private-evidence.ts`.
-One operation constructs, copies and remaps that evidence across projection and cloning. Checks and stores do not add side tables or per-field clone patches.
-A live probe result is separate evidence with its own producer, surface and generation. It is never relabeled as part of an older capture.
+**Evidence.** Platform facts reach admission as typed private evidence, owned by `packages/contracts/src/snapshot-private-evidence.ts`.
+One operation builds, copies and remaps that evidence through projection and cloning. No check or store adds its own side table or clone patch.
+A live probe result is separate evidence with its own producer, surface and generation. It never counts as part of an older capture.
 
-**Cost.** A target is idle when no preceding mutation left a motion baseline in `deferredSurface`.
-On the accept path an idle target pays no extra capture, probe or sleep.
+**Cost.** A target is idle when no earlier mutation left a motion baseline in `deferredSurface`.
+On the accept path, an idle target adds no capture, probe or sleep.
 A live probe, such as iOS native hittability, runs only for a target that is not idle.
 
-**Preserved authority.** Frame admission and its error precedence stay first (ADR 0014). Ref expiry stays immediately before the leaf side effect.
-Pinned replay and find targets, repeated-action plans, and system sheets keep their current rules.
+**Unchanged rules.** Frame admission and its error precedence come first (ADR 0014). Ref expiry stays immediately before the leaf side effect.
+Pinned replay and find targets, repeated-action plans and system sheets keep their current rules.
 A refusal before any send reports `dispatched: no`. A failure after a send reports what the ledger recorded.
 
 ## Rejected alternatives
 
-- **One admission stage for every input, with admitted-only backend signatures.** Raw points, native refs, coordinate gestures, keyboard and remote input do not have a resolved target. The stage would add captures they do not need and would break ADR 0011, 0013, 0014 and 0031 guarantees.
-- **Path declarations alone.** Declaring order and cost in ADR 0011 makes omissions visible but leaves two wait loops and two matchers on the press path.
-- **Fused native tap-if-authorized as the readiness design.** It can shorten the gap between read and tap on iOS, but it does not solve waiting on other platforms and element hittability still does not prove the point receives input. It stays a separate, measured optimization behind the readiness check.
-- **A check per PR, as today.** Each fix adds a loop, a carrier and a reason, and the paths drift apart.
+- **One stage for all input, with admitted-only backend signatures.** Raw points, native refs, coordinate gestures, and keyboard and remote input have no resolved target. The stage would add captures they do not need and break guarantees in ADR 0011, 0013, 0014 and 0031.
+- **Path declarations alone.** Declaring order and cost in ADR 0011 shows the gaps but keeps two wait loops and two target matchers on the press path.
+- **A fused native tap-if-authorized as the readiness design.** It can shorten the gap between read and tap on iOS. It does not help waiting on other platforms, and element hittability still does not prove that the point receives the input. It stays a separate optimization, adopted only when measured.
+- **One more check for each new bug.** This is the current pattern; the paths keep drifting apart.
 
 ## Consequences and open gaps
 
-No wait loop for these interactions exists outside admission; the moving-target gate's schedules move into it. New pre-dispatch checks and platform facts join admission instead of adding their own loop or carrier.
-Long-press, fill and hover gain the motion check; a daemon-resolved double-tap already has it through the press path. Their accept-path latency must not grow. Target-authored drag runs admission without the motion check: ADR 0011 marks its target stability inapplicable, because re-pointing one endpoint would split the gesture plan.
-An app-timed overlay that appears with no preceding mutation is not detected on an idle press. This is the cost rule's trade-off and matches the gate's existing blind spot.
-Partial custom covers (#4347) and safe regions for coordinate-authored trajectories stay open. Admission gives them a place; it does not solve them.
+The moving-target gate's waits move into admission. No other wait loop exists for these interactions.
+Long-press, fill and hover gain the motion check, and their accept-path latency must not grow. A daemon-resolved double-tap already has the check through the press path.
+Target-authored drag runs admission without the motion check. ADR 0011 marks its target stability as inapplicable, because re-pointing one endpoint would split the gesture plan.
+An overlay that the app shows on its own timer, with no earlier mutation, is not detected on an idle press. This is the trade-off of the cost rule, and the gate already has the same blind spot.
+Partial custom covers (#4347) and safe regions for coordinate-authored trajectories stay open. Admission gives them a place but does not solve them.
