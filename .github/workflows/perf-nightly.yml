@@ -202,6 +202,9 @@ jobs:
           platform: android
           install: 'false'
 
+      - name: Setup Android system image
+        uses: ./.github/actions/setup-android-system-image
+
       # The emulator action runs each script line on its own, so the script is one folded line.
       - name: Run Android command perf suite
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
