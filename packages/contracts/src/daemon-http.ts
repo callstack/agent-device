@@ -36,6 +36,32 @@ export function normalizeDaemonPublicOrigin(value: string): string {
   return url.origin;
 }
 
+/** Validate a Node origin-form request target and its single Host header. */
+export function nodeHttpRequestUrl(
+  target: string | undefined,
+  rawHeaders: readonly string[],
+  secure: boolean,
+): URL | null {
+  if (
+    !target ||
+    !target.startsWith('/') ||
+    target.startsWith('//') ||
+    /[\x00-\x20\x7f#\\]/.test(target)
+  )
+    return null;
+  const hosts: string[] = [];
+  for (let i = 0; i + 1 < rawHeaders.length; i += 2) {
+    if (rawHeaders[i]?.toLowerCase() === 'host') hosts.push(rawHeaders[i + 1] ?? '');
+  }
+  if (hosts.length !== 1 || /[\/\?#]/.test(hosts[0] ?? '')) return null;
+  try {
+    const origin = normalizeDaemonPublicOrigin(`${secure ? 'https' : 'http'}://${hosts[0]}`);
+    return new URL(target, origin);
+  } catch {
+    return null;
+  }
+}
+
 export function buildDaemonHttpBaseUrl(baseUrl: string): string {
   return buildDaemonHttpUrl(baseUrl, DAEMON_HTTP_BASE_PATH);
 }

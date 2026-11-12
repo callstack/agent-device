@@ -9,6 +9,7 @@ import { responseDisconnectSignal } from './response-disconnect-signal.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { AsyncResource } from 'node:async_hooks';
 import http from 'node:http';
+import { TLSSocket } from 'node:tls';
 import { randomUUID } from 'node:crypto';
 import type { DiagnosticsRecordRef, NormalizedError } from '@agent-device/kernel/errors';
 import { normalizeError } from '@agent-device/kernel/errors';
@@ -26,6 +27,8 @@ import {
 } from '@agent-device/host-kit/request';
 import {
   buildDaemonHealthPayload,
+  normalizeDaemonPublicOrigin,
+  nodeHttpRequestUrl,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_REQUEST_MAX_BYTES,
 } from '@agent-device/contracts/daemon-http';
@@ -76,6 +79,8 @@ export async function createDaemonHttpServer(options: {
   leaseRegistry?: LeaseRegistry;
   endSessionsForLease?: (leaseId: string) => Promise<void>;
   token?: string;
+  /** Fixed public origin for upload tickets. */
+  publicOrigin?: string;
   retainArtifacts?: boolean;
   /** The runtime host's environment: read for the auth hook and handed to the download archive. */
   env: NodeJS.ProcessEnv;
@@ -96,6 +101,10 @@ export async function createDaemonHttpServer(options: {
    */
   onUnownedRequestFailure?: (failure: NormalizedError) => void;
 }): Promise<http.Server> {
+  const publicOrigin =
+    options.publicOrigin === undefined
+      ? undefined
+      : normalizeDaemonPublicOrigin(options.publicOrigin);
   const instanceId = randomUUID();
   const hostArch = await readHostCpuArch();
   const leaseBackends = LEASE_BACKENDS.filter(
@@ -111,6 +120,12 @@ export async function createDaemonHttpServer(options: {
     onUnownedRequestFailure,
   } = options;
   const onRequest = AsyncResource.bind((req: http.IncomingMessage, res: http.ServerResponse) => {
+    const ingressUrl = nodeHttpRequestUrl(req.url, req.rawHeaders, req.socket instanceof TLSSocket);
+    if (!ingressUrl) {
+      res.writeHead(400);
+      res.end();
+      return;
+    }
     if (req.method === 'GET' && req.url === '/health') {
       res.statusCode = 200;
       res.setHeader('content-type', 'application/json');
@@ -145,6 +160,7 @@ export async function createDaemonHttpServer(options: {
         req,
         res,
         token: resolveToken({}, req.headers),
+        origin: publicOrigin ?? ingressUrl.origin,
         authorize: async (request) =>
           await authorizeAuxiliaryHttpRequest({
             req: request.req,

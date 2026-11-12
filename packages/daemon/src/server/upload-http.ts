@@ -46,12 +46,13 @@ export function tryHandleUploadHttpRoute(params: {
   res: http.ServerResponse;
   authorize: AuxiliaryHttpAuthorizer;
   token: string;
+  origin: string;
 }): boolean {
-  const { req, res, authorize, token } = params;
+  const { req, res, authorize, token, origin } = params;
   const route = resolveUploadHttpRoute(req);
   if (route === null) return false;
 
-  void handleUploadHttpRoute(route, req, res, authorize, token);
+  void handleUploadHttpRoute(route, req, res, authorize, token, origin);
   return true;
 }
 
@@ -61,10 +62,11 @@ async function handleUploadHttpRoute(
   res: http.ServerResponse,
   authorize: AuxiliaryHttpAuthorizer,
   token: string,
+  origin: string,
 ): Promise<void> {
   switch (route.kind) {
     case 'preflight':
-      await handleUploadPreflight(req, res, authorize, token);
+      await handleUploadPreflight(req, res, authorize, token, origin);
       return;
     case 'direct':
       await handleResumableUpload(route.uploadId, req, res, authorize);
@@ -79,15 +81,16 @@ async function handleUploadHttpRoute(
 }
 
 function resolveUploadHttpRoute(req: http.IncomingMessage): UploadHttpRoute | null {
-  if (req.method === 'POST' && req.url === '/upload/preflight') return { kind: 'preflight' };
+  const pathname = req.url?.split('?')[0];
+  if (req.method === 'POST' && pathname === '/upload/preflight') return { kind: 'preflight' };
   if (req.method === 'PUT' && req.url?.startsWith(DIRECT_UPLOAD_PATH_PREFIX)) {
     return {
       kind: 'direct',
       uploadId: req.url.slice(DIRECT_UPLOAD_PATH_PREFIX.length).replace(/\?.*$/, ''),
     };
   }
-  if (req.method === 'POST' && req.url === '/upload/finalize') return { kind: 'finalize' };
-  if (req.method === 'POST' && req.url === '/upload') return { kind: 'upload' };
+  if (req.method === 'POST' && pathname === '/upload/finalize') return { kind: 'finalize' };
+  if (req.method === 'POST' && pathname === '/upload') return { kind: 'upload' };
   return null;
 }
 
@@ -118,6 +121,7 @@ async function handleUploadPreflight(
   res: http.ServerResponse,
   authorize: AuxiliaryHttpAuthorizer,
   token: string,
+  origin: string,
 ): Promise<void> {
   try {
     const auth = await authorize({
@@ -133,7 +137,7 @@ async function handleUploadPreflight(
     const body = await readRestJsonBody(req, 64 * 1024);
     const preflight = readUploadPreflightBody(body);
     const upload = beginResumableUpload({
-      baseUrl: resolveHttpRequestBaseUrl(req),
+      baseUrl: origin,
       tokenHeaders: buildUploadTicketAuthHeaders(token),
       ...preflight,
       tenantId: auth.tenantId,
@@ -293,16 +297,4 @@ function buildUploadTicketAuthHeaders(token: string): Record<string, string> {
     authorization: `Bearer ${token}`,
     'x-agent-device-token': token,
   };
-}
-
-function resolveHttpRequestBaseUrl(req: http.IncomingMessage): string {
-  const host = typeof req.headers.host === 'string' ? req.headers.host : '';
-  if (!host) throw new AppError('INVALID_ARGS', 'Missing host header');
-  const forwardedProto = req.headers['x-forwarded-proto'];
-  const proto = (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto)
-    ?.split(',')[0]
-    ?.trim()
-    .toLowerCase();
-  const scheme = proto === 'https' ? 'https' : 'http';
-  return `${scheme}://${host}`;
 }
