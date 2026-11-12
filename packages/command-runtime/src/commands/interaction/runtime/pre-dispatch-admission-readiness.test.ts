@@ -80,7 +80,14 @@ async function exercise(input: {
   resultDeadline?: boolean;
   missingSource?: boolean;
   movingChild?: boolean;
-  options?: { count?: number; doubleTap?: boolean };
+  options?: {
+    count?: number;
+    doubleTap?: boolean;
+    intervalMs?: number;
+    holdMs?: number;
+    jitterPx?: number;
+    button?: 'primary' | 'secondary';
+  };
 }) {
   const events: string[] = [];
   const points: Point[] = [];
@@ -377,11 +384,31 @@ test('a child moving into the old parent point uses the fresh canonically guarde
   expect(points[0]!.y).toBeLessThan(166);
 });
 
-for (const options of [{ count: 1 }, { doubleTap: false }]) {
+for (const options of [
+  { count: 1 },
+  { doubleTap: false },
+  { count: 1, doubleTap: false, intervalMs: 0, holdMs: 0, jitterPx: 0, button: 'primary' },
+] as const) {
   test(`explicit ordinary tap defaults still await readiness: ${JSON.stringify(options)}`, async () => {
     const { run, events, points } = await exercise({ states: ['blocked', 'ready'], options });
     await run;
     expect(events.indexOf('tap')).toBeGreaterThan(events.indexOf('ready'));
+    expect(points).toHaveLength(1);
+  });
+}
+
+for (const options of [
+  { count: 2 },
+  { doubleTap: true },
+  { intervalMs: 1 },
+  { holdMs: 25 },
+  { jitterPx: 1 },
+  { button: 'secondary' },
+] as const) {
+  test(`non-default tap intent skips readiness: ${JSON.stringify(options)}`, async () => {
+    const { run, events, points } = await exercise({ states: ['blocked'], options });
+    await run;
+    expect(events).not.toContain('read');
     expect(points).toHaveLength(1);
   });
 }

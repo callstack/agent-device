@@ -1,6 +1,12 @@
 import { expect, test, vi } from 'vitest';
 import { captureSnapshot, captureSnapshotData } from '../snapshot-capture.ts';
-import { summarizeSnapshotDiagnostics } from '@agent-device/contracts/capture';
+import {
+  attachSnapshotClickabilityEvidence,
+  attachSnapshotOcclusionContextEvidence,
+  readSnapshotClickabilityEvidence,
+  readSnapshotOcclusionContextEvidence,
+  summarizeSnapshotDiagnostics,
+} from '@agent-device/contracts/capture';
 import { buildSnapshotVisibility } from '@agent-device/capture-kit/snapshot-visibility';
 import { ANDROID_EMULATOR, buildNodes, IOS_SIMULATOR, MACOS_DEVICE } from '@agent-device/test-kit';
 import {
@@ -66,6 +72,59 @@ test('snapshot capture preserves scope for every other platform projection', asy
     'action file',
     'action file',
   ]);
+});
+
+test('snapshot capture retains Android facts at their normalized node indices', async () => {
+  const data = {
+    backend: 'android' as const,
+    producer: 'android-uiautomator' as const,
+    nodes: [
+      { index: 10, depth: 0, type: 'Button', label: 'Save' },
+      { index: 20, depth: 0, type: 'Button', label: 'Cancel' },
+    ],
+  };
+  attachSnapshotClickabilityEvidence(data, {
+    kind: 'exact',
+    provider: 'android-helper',
+    clickableByNodeIndex: new Map([
+      [10, true],
+      [20, false],
+    ]),
+  });
+  attachSnapshotOcclusionContextEvidence(data, {
+    nodes: [{ index: 100 }, { index: 200 }],
+    sourceIndexByNodeIndex: new Map([
+      [10, 100],
+      [20, 200],
+    ]),
+  });
+
+  const { snapshot } = await captureSnapshot({
+    device: ANDROID_EMULATOR,
+    session: undefined,
+    flags: { snapshotRaw: true },
+    logPath: '/tmp/snapshot-capture-test.log',
+    captureData: async () => data,
+  });
+
+  expect(snapshot.nodes.map((node) => [node.index, node.label])).toEqual([
+    [0, 'Save'],
+    [1, 'Cancel'],
+  ]);
+  expect(readSnapshotClickabilityEvidence(snapshot)).toEqual({
+    kind: 'exact',
+    provider: 'android-helper',
+    clickableByNodeIndex: new Map([
+      [0, true],
+      [1, false],
+    ]),
+  });
+  expect(readSnapshotOcclusionContextEvidence(snapshot)?.sourceIndexByNodeIndex).toEqual(
+    new Map([
+      [0, 100],
+      [1, 200],
+    ]),
+  );
 });
 
 test('buildSnapshotVisibility returns non-partial for empty node list', () => {

@@ -159,7 +159,20 @@ async function tapCommand(
   if (!runtime.backend.tap) {
     throw new AppError('UNSUPPORTED_OPERATION', 'tap is not supported by this backend');
   }
-  const atRest = await admitResolvedTarget(runtime, options, resolutionRequest, resolved);
+  const atRest = await admitResolvedTarget(
+    runtime,
+    options,
+    resolutionRequest,
+    resolved,
+    (options.count ?? 1) === 1 &&
+      (options.intervalMs ?? 0) === 0 &&
+      (options.holdMs ?? 0) === 0 &&
+      (options.jitterPx ?? 0) === 0 &&
+      options.doubleTap !== true &&
+      (options.button ?? 'primary') === 'primary'
+      ? 'when-unknown'
+      : 'skip',
+  );
   const point = requireResolvedPoint(atRest);
   const pointObservation = pointObservationOf(atRest);
   let backendResult;

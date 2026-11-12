@@ -12,7 +12,6 @@ import type {
   InteractionTarget,
   ResolvedInteractionTarget,
 } from '@agent-device/contracts/interaction';
-import type { BackendTapOptions } from '@agent-device/contracts/backend';
 import type { NativePressReadiness } from '@agent-device/contracts/selector-observation-runtime';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import {
@@ -40,9 +39,10 @@ import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-e
 
 export async function admitResolvedTarget(
   runtime: AgentDeviceRuntime,
-  options: CommandContext & BackendTapOptions & { target: InteractionTarget },
+  options: CommandContext & { target: InteractionTarget },
   params: ResolveInteractionTargetParams,
   resolved: ResolvedInteractionTarget,
+  nativeReadiness: 'when-unknown' | 'skip',
 ): Promise<ResolvedInteractionTarget> {
   if (resolved.kind === 'point' || !resolved.node?.rect) return resolved;
   if (params.expectedResolvedTarget || params.preresolvedTarget) return resolved;
@@ -50,14 +50,7 @@ export async function admitResolvedTarget(
   const screening = await budget.read(() =>
     screenMotion(runtime, options, resolved.node!, resolved.preAction),
   );
-  const native =
-    !!runtime.backend.readPressReadiness &&
-    (options.count ?? 1) === 1 &&
-    (options.intervalMs ?? 0) === 0 &&
-    (options.holdMs ?? 0) === 0 &&
-    (options.jitterPx ?? 0) === 0 &&
-    options.doubleTap !== true &&
-    (options.button ?? 'primary') === 'primary';
+  const native = nativeReadiness === 'when-unknown' && !!runtime.backend.readPressReadiness;
   if (screening.kind === 'pass' && !native) {
     assertWithinBudget(budget);
     return resolved;
@@ -266,7 +259,8 @@ async function checkMotion(
     state.motion = undefined;
     return true;
   }
-  if (verdict.kind === 'refuse') throw motionRefusal(state.resolved, undefined, 0);
+  if (verdict.kind === 'refuse')
+    throw motionRefusal(state.resolved, undefined, look.observedAtMs - motion.wait.firstLookAtMs);
   if (verdict.kind === 'wait') motion.restingSinceMs = verdict.restingSinceMs;
   if (look.observedAtMs < motion.wait.giveUpAtMs)
     motion.endsAtMs = Math.max(
