@@ -39,7 +39,7 @@ The daemon computes it under ADR 0012 decision 6, R3.
 Every divergence includes it, with `manual` when no safer route is proven.
 It is never absent or null.
 Its small fixed size permits inclusion at every response level, including `--level digest`.
-It must survive these four projections unchanged: daemon text summary, JSON, Node client `AppError`, and MCP `structuredContent`.
+It must survive these projections unchanged: daemon text summary, JSON, Node client `AppError`, MCP text, and MCP `structuredContent` where MCP returns it.
 
 `screen` has two discriminated forms.
 `{ state: "available", refsGeneration, refs, truncated }` is a fresh healthy snapshot digest.
@@ -96,7 +96,10 @@ All surfaces preserve the daemon error.
 The Node client rejects with `AppError` and retains `details.divergence`.
 CLI exits nonzero.
 Text shows a compact report; JSON includes the complete structured error.
-MCP returns `isError: true`, the object in `structuredContent`, and the same compact text summary.
+MCP returns `isError: true` and the same compact text summary.
+The default MCP server returns that text only, so the text carries the repair fields: step, repair hint, screen refs, and suggestions.
+The repair hint includes the concrete resume command when `resume.allowed` is true.
+Only `agent-device mcp --structured` and data hosts, such as the AI SDK adapter, also return the object in `structuredContent`.
 MCP treats divergence as a ref-issuing result, including on the error path.
 Before return, it merges and pins every `screen` ref with `refsGeneration`.
 CLI and direct clients receive the daemon error's unpinned refs and generation.
@@ -232,8 +235,9 @@ Successful text replay prints one line with replayed count and wall time.
 - Divergence reports: compact/default/full field and byte ceilings; digest output includes `suggestionCount` without entries; redaction, overflow artifacts, artifact-write failure, available/sparse/capture-failed screens, and original-cause preservation.
 - Resume: digest emission and rejection after script/include/expansion changes; `resume.allowed` reasons, `--from` indexing, variable-output rejection, control-flow rejection, and `test --from` rejection.
 - Surfaces: daemon/client/CLI/MCP tests prove typed divergence survives failure.
-  JSON and MCP structured output retain it.
+  JSON and MCP structured output (`--structured` and data hosts) retain it.
+  Default MCP error text carries the repair fields, and MCP pins its screen refs in both modes.
   MCP pins only actionable error-path refs.
   No text-only path discards the report.
-  `repairHint` is present and identical in text, JSON, client `AppError`, and MCP `structuredContent`, including compact `--level digest`.
+  `repairHint` is present and identical in text, JSON, client `AppError`, MCP text, and MCP `structuredContent` where returned, including compact `--level digest`.
 - `--update` retirement: no source-file rewrite; suggestions remain bounded, ranked, and deduplicated under the suggestion total order.
