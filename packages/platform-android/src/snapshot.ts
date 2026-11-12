@@ -639,9 +639,13 @@ async function captureAndroidHelperContentAttempt(params: {
     capture: {
       xml: helperCapture.xml,
       helperMetadata: helperCapture.helperMetadata,
-      metadata: systemSurfaceOnly
-        ? { ...helperCapture.metadata, systemSurfaceOnly: true }
-        : helperCapture.metadata,
+      metadata: {
+        ...helperCapture.metadata,
+        ...(systemSurfaceOnly ? { systemSurfaceOnly: true } : {}),
+        ...(content.applicationWindowPackages.length > 0
+          ? { applicationWindowPackages: content.applicationWindowPackages }
+          : {}),
+      },
     },
   };
 }

@@ -19,10 +19,7 @@ import type {
   SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
-import type {
-  AgentDeviceBackendPlatform,
-  BackendSnapshotResult,
-} from '@agent-device/contracts/backend';
+import type { BackendSnapshotResult } from '@agent-device/contracts/backend';
 import type {
   AgentDeviceRuntime,
   CommandSessionRecord,
@@ -125,7 +122,7 @@ export const snapshotCommand: RuntimeCommand<
     ...(capture.snapshot.presentedSurface
       ? { presentedSurface: capture.snapshot.presentedSurface }
       : {}),
-    ...snapshotAppFields(capture, runtime.backend.platform),
+    ...snapshotAppFields(capture),
   });
 };
 
@@ -238,39 +235,24 @@ function nextSnapshotSession(
 }
 
 /**
- * The app the response header names. Every Android node carries its window's package, so a capture
- * whose app content belongs only to another package, such as the launcher after a failed open,
- * names that package instead of the session app. The session keeps its app.
+ * The app the response header names. An Android helper capture lists its application windows, so
+ * one that shows none of the session app, such as the launcher after a failed open, names the
+ * topmost captured app instead. The session keeps its app.
  */
-function snapshotAppFields(
-  capture: SnapshotCapture,
-  platform: AgentDeviceBackendPlatform,
-): {
+function snapshotAppFields(capture: SnapshotCapture): {
   appName?: string;
   appBundleId?: string;
 } {
   const sessionApp = capture.result.appBundleId ?? capture.session?.appBundleId;
+  const appWindows = capture.annotations.androidSnapshot?.applicationWindowPackages;
   const shownApp =
-    platform === 'android' && sessionApp
-      ? capturedAndroidApp(capture.snapshot.nodes, sessionApp)
-      : sessionApp;
+    sessionApp && appWindows?.[0] && !appWindows.includes(sessionApp) ? appWindows[0] : sessionApp;
   const appName =
     shownApp === sessionApp ? (capture.result.appName ?? capture.session?.appName) : shownApp;
   return {
     ...(appName || shownApp ? { appName: appName ?? shownApp } : {}),
     ...(shownApp ? { appBundleId: shownApp } : {}),
   };
-}
-
-/** The session app when any app node belongs to it, else the first other app package. */
-function capturedAndroidApp(nodes: readonly SnapshotNode[], sessionApp: string): string {
-  let otherApp: string | undefined;
-  for (const node of nodes) {
-    if (!node.bundleId || node.systemBar || node.keyboardOwned) continue;
-    if (node.bundleId === sessionApp) return sessionApp;
-    otherApp ??= node.bundleId;
-  }
-  return otherApp ?? sessionApp;
 }
 
 /**

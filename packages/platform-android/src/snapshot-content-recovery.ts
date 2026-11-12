@@ -35,19 +35,41 @@ export type AndroidHelperContentRecoveryDecision = {
   };
 };
 
-export type AndroidHelperContentClassification =
+type AndroidHelperContentOutcome =
   | { outcome: 'ok' }
   | { outcome: 'system-surface-only' }
   | { outcome: 'unusable'; decision: AndroidHelperContentRecoveryDecision };
+
+export type AndroidHelperContentClassification =
+  | ({ outcome: 'ok' | 'system-surface-only' } & AndroidApplicationWindows)
+  | { outcome: 'unusable'; decision: AndroidHelperContentRecoveryDecision };
+
+type AndroidApplicationWindows = {
+  /**
+   * Packages of the captured application windows that are not system-owned, topmost first: the
+   * app a snapshot header names. Input method and system windows are never application windows.
+   */
+  applicationWindowPackages: string[];
+};
 
 export function classifyAndroidHelperContent(
   xml: string,
   metadata: AndroidSnapshotBackendMetadata,
   options: { foregroundAppPackage?: string } = {},
 ): AndroidHelperContentClassification {
-  if (metadata.backend !== 'android-helper') return { outcome: 'ok' };
-
+  if (metadata.backend !== 'android-helper')
+    return { outcome: 'ok', applicationWindowPackages: [] };
   const summary = summarizeAndroidHelperXml(xml, options.foregroundAppPackage);
+  const content = classifyAndroidHelperSummary(summary, metadata);
+  return content.outcome === 'unusable'
+    ? content
+    : { ...content, applicationWindowPackages: summary.applicationWindowPackages };
+}
+
+function classifyAndroidHelperSummary(
+  summary: AndroidHelperXmlSummary,
+  metadata: AndroidSnapshotBackendMetadata,
+): AndroidHelperContentOutcome {
   if (isEmptyHelperOutput(summary, metadata)) {
     return unusable(
       summary,
@@ -97,7 +119,7 @@ function unusable(
   metadata: AndroidSnapshotBackendMetadata,
   reason: AndroidHelperContentRecoveryDecision['reason'],
   failureReason: string,
-): AndroidHelperContentClassification {
+): AndroidHelperContentOutcome {
   return {
     outcome: 'unusable',
     decision: buildRecoveryDecision(summary, metadata, reason, failureReason),
@@ -201,7 +223,7 @@ type AndroidHelperXmlSummary = {
   foregroundAppPackage?: string;
   foregroundAppMeaningfulNodeCount?: number;
   windowTypes: number[];
-};
+} & AndroidApplicationWindows;
 
 type AndroidHelperXmlSummaryState = Omit<AndroidHelperXmlSummary, 'windowTypes'> & {
   currentWindowType?: number;
@@ -243,6 +265,7 @@ function createAndroidHelperXmlSummaryState(
       ? { foregroundAppPackage, foregroundAppMeaningfulNodeCount: 0 }
       : {}),
     windowTypes: new Set<number>(),
+    applicationWindowPackages: [],
   };
 }
 
@@ -280,6 +303,12 @@ function recordAndroidHelperWindowNode(
   if (node.windowType === ANDROID_WINDOW_TYPE_APPLICATION) {
     summary.applicationWindowRootCount += 1;
     if (summary.currentWindowSystemOwned) summary.systemApplicationWindowRootCount += 1;
+    else if (
+      node.packageName !== null &&
+      !summary.applicationWindowPackages.includes(node.packageName)
+    ) {
+      summary.applicationWindowPackages.push(node.packageName);
+    }
   }
 }
 
@@ -370,6 +399,7 @@ function finalizeAndroidHelperXmlSummary(
         }
       : {}),
     windowTypes: [...summary.windowTypes].sort((a, b) => a - b).slice(0, MAX_REPORTED_WINDOW_TYPES),
+    applicationWindowPackages: summary.applicationWindowPackages,
   };
 }
 

@@ -79,6 +79,11 @@ export type AndroidSnapshotBackendMetadata = {
   cacheInvalidated?: boolean;
   captureMode?: string;
   systemSurfaceOnly?: boolean;
+  /**
+   * Packages of the captured application windows that are not system-owned, topmost first. Input
+   * method and system windows are excluded. Absent when the capture read no such window.
+   */
+  applicationWindowPackages?: string[];
   windowCount?: number;
   /**
    * `AccessibilityWindowInfo` types of the listed windows the helper could not serialize because

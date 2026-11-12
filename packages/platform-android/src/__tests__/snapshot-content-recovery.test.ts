@@ -270,6 +270,38 @@ test('rejects system chrome inherited under an empty application window', () => 
   expect(decision?.diagnostics.helperNonSystemMeaningfulNodeCount).toBe(0);
 });
 
+test('lists only non-system application windows, topmost first', () => {
+  const window = (windowType: number, packageName: string, text: string) =>
+    node({
+      windowType,
+      packageName,
+      className: 'android.widget.FrameLayout',
+      children: [node({ text, packageName, className: 'android.widget.TextView' })],
+    });
+  const result = classifyAndroidHelperContent(
+    helperXml([
+      window(3, 'com.android.systemui', '12:00'),
+      window(1, 'android', 'Allow?'),
+      window(2, 'com.google.android.inputmethod.latin', 'Space'),
+      window(1, 'com.google.android.apps.nexuslauncher', 'Gmail'),
+      window(1, 'com.google.android.apps.nexuslauncher', 'Photos'),
+      window(1, 'com.example.app', 'Home'),
+    ]),
+    {
+      backend: 'android-helper',
+      nodeCount: 12,
+      rootPresent: true,
+      windowCount: 6,
+      captureMode: 'interactive-windows',
+    },
+  );
+
+  expect(result.outcome === 'unusable' ? [] : result.applicationWindowPackages).toEqual([
+    'com.google.android.apps.nexuslauncher',
+    'com.example.app',
+  ]);
+});
+
 test('returns a meaningful active system surface (notification shade) faithfully', () => {
   const result = classifyAndroidHelperContent(
     helperXml([

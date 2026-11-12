@@ -6,58 +6,58 @@ import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 
-test('an Android snapshot names the app it captured, not a session app that is not in front', async () => {
-  const captureWith = async (overlay: { type: string; label: string; bundleId: string }) => {
-    let stored: Parameters<CommandSessionStore['set']>[0] | undefined;
-    const device = createAgentDevice({
-      backend: {
-        platform: 'android',
-        captureSnapshot: async () => ({
-          snapshot: makeSnapshotState(
-            [
-              {
-                index: 0,
-                depth: 0,
-                type: 'TextView',
-                label: '12:00',
-                bundleId: 'com.android.systemui',
-                systemBar: 'status',
-              },
-              { index: 1, depth: 0, ...overlay },
-            ],
-            { backend: 'android' },
-          ),
-          appName: 'Settings',
-          appBundleId: 'com.android.settings',
+async function snapshotWithAppWindows(applicationWindowPackages: string[] | undefined) {
+  let stored: Parameters<CommandSessionStore['set']>[0] | undefined;
+  const device = createAgentDevice({
+    backend: {
+      platform: 'android',
+      captureSnapshot: async () => ({
+        snapshot: makeSnapshotState([{ index: 0, depth: 0, type: 'TextView', label: 'Gmail' }], {
+          backend: 'android',
         }),
-      },
-      artifacts: createLocalArtifactAdapter(),
-      sessions: {
-        get: () => undefined,
-        set: (record) => {
-          stored = record;
+        androidSnapshot: {
+          backend: 'android-helper',
+          ...(applicationWindowPackages ? { applicationWindowPackages } : {}),
         },
+        appName: 'Settings',
+        appBundleId: 'com.android.settings',
+      }),
+    },
+    artifacts: createLocalArtifactAdapter(),
+    sessions: {
+      get: () => undefined,
+      set: (record) => {
+        stored = record;
       },
-      policy: localCommandPolicy(),
-    });
-    const result = await device.capture.snapshot({ session: 'default', interactiveOnly: true });
-    return { result, stored };
-  };
-
-  const launcher = await captureWith({
-    type: 'ScrollView',
-    label: 'Workspace',
-    bundleId: 'com.google.android.apps.nexuslauncher',
+    },
+    policy: localCommandPolicy(),
   });
-  assert.equal(launcher.result.appName, 'com.google.android.apps.nexuslauncher');
-  assert.equal(launcher.result.appBundleId, 'com.google.android.apps.nexuslauncher');
-  assert.equal(launcher.stored?.appBundleId, 'com.android.settings');
+  const result = await device.capture.snapshot({ session: 'default', interactiveOnly: true });
+  return { result, stored };
+}
 
-  const settings = await captureWith({
-    type: 'TextView',
-    label: 'Network & internet',
-    bundleId: 'com.android.settings',
-  });
-  assert.equal(settings.result.appName, 'Settings');
-  assert.equal(settings.result.appBundleId, 'com.android.settings');
+test('an Android snapshot names the captured app when the session app has no window in it', async () => {
+  const { result, stored } = await snapshotWithAppWindows([
+    'com.google.android.apps.nexuslauncher',
+  ]);
+
+  assert.equal(result.appName, 'com.google.android.apps.nexuslauncher');
+  assert.equal(result.appBundleId, 'com.google.android.apps.nexuslauncher');
+  assert.equal(stored?.appBundleId, 'com.android.settings');
+});
+
+test('an Android snapshot keeps the session app while one of its windows is captured', async () => {
+  const { result } = await snapshotWithAppWindows([
+    'com.google.android.permissioncontroller',
+    'com.android.settings',
+  ]);
+
+  assert.equal(result.appName, 'Settings');
+  assert.equal(result.appBundleId, 'com.android.settings');
+});
+
+test('a snapshot without application window facts names the session app', async () => {
+  const { result } = await snapshotWithAppWindows(undefined);
+
+  assert.equal(result.appBundleId, 'com.android.settings');
 });
