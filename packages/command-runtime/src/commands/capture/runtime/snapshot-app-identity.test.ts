@@ -73,3 +73,40 @@ test('an Android snapshot in a session with no app names the captured foreground
   assert.equal(result.appName, 'com.google.android.apps.nexuslauncher');
   assert.equal(result.appBundleId, 'com.google.android.apps.nexuslauncher');
 });
+
+test('a repeated snapshot of a foreign foreground app is not acknowledged as unchanged', async () => {
+  const snapshot = makeSnapshotState([{ index: 0, depth: 0, type: 'TextView', label: 'Gmail' }], {
+    backend: 'android',
+  });
+  let stored: Parameters<CommandSessionStore['set']>[0] | undefined = {
+    name: 'default',
+    appBundleId: 'com.android.settings',
+  };
+  const device = createAgentDevice({
+    backend: {
+      platform: 'android',
+      captureSnapshot: async () => ({
+        snapshot,
+        androidSnapshot: {
+          backend: 'android-helper',
+          foregroundWindowPackage: 'com.google.android.apps.nexuslauncher',
+        },
+        appBundleId: 'com.android.settings',
+      }),
+    },
+    artifacts: createLocalArtifactAdapter(),
+    sessions: {
+      get: () => stored,
+      set: (record) => {
+        stored = record;
+      },
+    },
+    policy: localCommandPolicy(),
+  });
+
+  await device.capture.snapshot({ session: 'default' });
+  const result = await device.capture.snapshot({ session: 'default' });
+
+  assert.equal(result.appBundleId, 'com.google.android.apps.nexuslauncher');
+  assert.equal(result.unchanged, undefined);
+});

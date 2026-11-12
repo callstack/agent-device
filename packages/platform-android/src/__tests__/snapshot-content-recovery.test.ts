@@ -318,7 +318,7 @@ test('names the active application window, not a stale one listed first or a sys
       window({
         windowType: 1,
         packageName: 'com.android.settings',
-        text: 'Network & internet',
+        text: 'Network and internet',
         windowLayer: 1,
       }),
       window({
@@ -345,7 +345,7 @@ test('names no foreground app when only a framework window is active', () => {
       window({
         windowType: 1,
         packageName: 'com.android.settings',
-        text: 'Network & internet',
+        text: 'Network and internet',
         windowLayer: 1,
       }),
     ]),
