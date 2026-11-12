@@ -675,47 +675,115 @@ test('authenticate returning a tenantId the daemon rejects refuses the request b
   expect(upstream.requests).toHaveLength(0);
 });
 
-test.each([
-  [undefined, 'https', 'https'],
-  ['https', 'https', 'https'],
-  ['http, https', 'http', 'https'],
-  ['HTTPS', 'https', 'http'],
-  [' hTtPs , http ', 'https', 'http'],
-  ['HTTP', 'http', 'https'],
-  ['hTtP', 'http', 'https'],
-  ['ftp', 'https', 'https'],
-  ['http://evil.example/path?', 'https', 'https'],
-])(
-  'upload preflight constrains forwarded protocol %s',
-  async (forwarded, scheme, requestScheme) => {
+test.each(['http, https', 'HTTPS', 'http://evil.example/path?'])(
+  'upload preflight ignores forwarded headers %s',
+  async (forwarded) => {
     const upstream = recordingUpstream(() =>
       Response.json({
         ok: true,
         upload: {
           url: 'http://daemon:4310/upload/direct/abc?part=1',
-          headers: { authorization: 'Bearer upstream-secret' },
+          headers: { authorization: 'Bearer upstream-secret', 'content-type': 'application/zip' },
         },
       }),
     );
-    const headers: Record<string, string> = { authorization: 'Bearer client-secret' };
-    if (forwarded) headers['x-forwarded-proto'] = forwarded;
     const response = await proxyWith(upstream.fetch).handle(
-      new Request(`${requestScheme}://gateway.example.test:8443/agent-device/upload/preflight`, {
+      new Request('https://gateway.example.test:8443/agent-device/upload/preflight', {
         method: 'POST',
-        headers,
+        headers: {
+          authorization: 'Bearer client-secret',
+          'x-forwarded-proto': forwarded,
+          'x-forwarded-host': 'evil.example',
+          forwarded: 'host=evil.example;proto=http',
+        },
         body: '{}',
       }),
     );
-    expect(response.status).toBe(200);
     const payload = (await response.json()) as {
-      ok: boolean;
       upload: { url: string; headers: Record<string, string> };
     };
-    expect(payload.ok).toBe(true);
     expect(payload.upload.url).toBe(
-      `${scheme}://gateway.example.test:8443/agent-device/upload/direct/abc?part=1`,
+      'https://gateway.example.test:8443/agent-device/upload/direct/abc?part=1',
     );
-    expect(payload.upload.headers.authorization).toBe('Bearer client-secret');
-    expect(JSON.stringify(payload.upload.headers)).not.toContain('upstream-secret');
+    expect(payload.upload.headers).toEqual({
+      'content-type': 'application/zip',
+      ...buildDaemonHttpAuthHeaders('client-secret'),
+    });
+    expect(JSON.stringify(payload)).not.toContain('upstream-secret');
   },
 );
+
+test('fixed public origin rewrites a prefixed ticket and preserves its query', async () => {
+  const upstream = recordingUpstream(() =>
+    Response.json({ upload: { url: 'http://daemon/upload/direct/abc?part=1', headers: {} } }),
+  );
+  const proxy = createDaemonProxy({
+    upstreamBaseUrl: 'http://daemon',
+    upstreamToken: 'secret',
+    clientToken: 'client',
+    publicOrigin: 'https://PUBLIC.example:8443/',
+    upstreamFetch: upstream.fetch,
+  });
+  const response = await proxy.handle(
+    new Request('http://internal/agent-device/upload/preflight', {
+      method: 'POST',
+      headers: { authorization: 'Bearer client' },
+      body: '{}',
+    }),
+  );
+  expect(((await response.json()) as { upload: { url: string } }).upload.url).toBe(
+    'https://public.example:8443/agent-device/upload/direct/abc?part=1',
+  );
+  const denied = await proxy.handle(
+    new Request('http://internal/upload/preflight', { method: 'POST', body: '{}' }),
+  );
+  expect(denied.status).toBe(401);
+  expect(upstream.requests).toHaveLength(1);
+});
+
+test.each([
+  'https://user@example.com',
+  'https://example.com/path',
+  'https://example.com?',
+  'https://example.com#',
+  'https://example.com:99999',
+  ' https://example.com',
+  'ftp://example.com',
+])('rejects invalid public origin %s at construction', (publicOrigin) => {
+  expect(() =>
+    createDaemonProxy({
+      upstreamBaseUrl: 'http://daemon',
+      upstreamToken: 'secret',
+      clientToken: 'client',
+      publicOrigin,
+    }),
+  ).toThrow();
+});
+
+test('malformed successful tickets fail without exposing upstream credentials', async () => {
+  const upstream = recordingUpstream(() =>
+    Response.json({ upload: { url: 'bad', headers: { authorization: 'secret' } } }),
+  );
+  const response = await proxyWith(upstream.fetch).handle(
+    new Request(`${PROXY_ORIGIN}/upload/preflight`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer client-secret' },
+      body: '{}',
+    }),
+  );
+  expect(response.status).toBe(500);
+  expect(await response.text()).not.toContain('secret');
+});
+
+test('unsuccessful preflight responses pass through', async () => {
+  const upstream = recordingUpstream(() => new Response('unavailable', { status: 503 }));
+  const response = await proxyWith(upstream.fetch).handle(
+    new Request(`${PROXY_ORIGIN}/upload/preflight`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer client-secret' },
+      body: '{}',
+    }),
+  );
+  expect(response.status).toBe(503);
+  expect(await response.text()).toBe('unavailable');
+});

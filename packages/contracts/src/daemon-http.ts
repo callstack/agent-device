@@ -15,6 +15,27 @@ export const DAEMON_HTTP_LEASE_HEADER = 'x-agent-device-lease-id';
 export const DAEMON_HTTP_NETWORK_ACCESS_HEADER = 'x-agent-device-network-access';
 export const DAEMON_HTTP_PUBLIC_NETWORK_ACCESS = 'public-only';
 
+/** Normalize an absolute HTTP(S) origin, or throw when it contains other URL components. */
+export function normalizeDaemonPublicOrigin(value: string): string {
+  if (!/^https?:\/\/[^\s\/?#]+\/?$/i.test(value) || /[\x00-\x20\x7f\\]/.test(value)) {
+    throw new Error('Invalid publicOrigin');
+  }
+  const authority = value.match(/^https?:\/\/([^/]+)/i)?.[1] ?? '';
+  if (authority.includes('@') || authority.endsWith(':')) throw new Error('Invalid publicOrigin');
+  const url = new URL(value);
+  if (
+    !url.hostname ||
+    url.username ||
+    url.password ||
+    url.pathname !== '/' ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error('Invalid publicOrigin');
+  }
+  return url.origin;
+}
+
 export function buildDaemonHttpBaseUrl(baseUrl: string): string {
   return buildDaemonHttpUrl(baseUrl, DAEMON_HTTP_BASE_PATH);
 }
