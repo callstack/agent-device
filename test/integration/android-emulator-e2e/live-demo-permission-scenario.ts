@@ -47,6 +47,7 @@ export async function assertScreenshotDemoPermissionRestoration(options: {
   assert.ok(Number.isInteger(apiLevel) && apiLevel > 0, 'Android must report its API level');
   const initial = await readPermission();
   const cases: PermissionCase[] = [];
+  const failures: unknown[] = [];
   fs.mkdirSync(options.artifactDir, { recursive: true });
   try {
     for (const value of [undefined, '0', '1']) {
@@ -65,15 +66,28 @@ export async function assertScreenshotDemoPermissionRestoration(options: {
       item.after = await readPermission();
       assert.equal(item.after, before, `normalized capture changed the ${item.state} permission`);
     }
-  } finally {
+  } catch (error) {
+    failures.push(error);
+  }
+  let restored: string | null | undefined;
+  try {
     await writePermission(
       initial === null ? undefined : initial.slice(DEMO_PERMISSION_PREFIX.length),
     );
-    const restored = await readPermission();
+    restored = await readPermission();
+    assert.equal(restored, initial, 'the native test must restore its initial global setting');
+  } catch (error) {
+    failures.push(error);
+  }
+  try {
     fs.writeFileSync(
       path.join(options.artifactDir, 'demo-permission-evidence.json'),
       `${JSON.stringify({ serial: options.serial, apiLevel, initial, restored, cases }, null, 2)}\n`,
     );
-    assert.equal(restored, initial, 'the native test must restore its initial global setting');
+  } catch (error) {
+    failures.push(error);
   }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1)
+    throw new AggregateError(failures, 'Android screenshot evidence and cleanup failed');
 }
