@@ -48,7 +48,9 @@ test('the captured Contacts sheet keeps Done and its rows pressable under its ow
 
 test('a toolbar that extends past the navigation bar still covers Done', () => {
   const nodes = captures().contactsNewContactInteractive;
-  nodeWithLabel(nodes, 'Toolbar').rect = { x: 0, y: 83, width: 402, height: 120 };
+  const passthrough = nodes.find((candidate) => candidate.role === 'CNPassthroughToolbar');
+  assert.ok(passthrough, 'CNPassthroughToolbar');
+  passthrough.rect = { x: 0, y: 83, width: 402, height: 120 };
 
   assert.ok(coveredLabels(nodes).includes('Done'));
 });
