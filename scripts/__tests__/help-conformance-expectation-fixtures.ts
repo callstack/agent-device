@@ -161,8 +161,12 @@ export const EXPECTATION_FIXTURES: Record<string, ExpectationFixture> = {
         id: 'noVerificationCommand',
         commands: ['agent-device press @e5 --settle', 'agent-device close'],
       },
+      // Bare find clicks; a later word "exists" in the query or a fill value is no exists action.
+      { id: 'bareFindClicks', commands: ['agent-device find text "Sent"'] },
+      { id: 'existsInFindQuery', commands: ['agent-device find text "Sent exists"'] },
+      { id: 'findFillsExists', commands: ['agent-device find text Sent fill exists'] },
     ],
-    metamorphic: { commands: ['agent-device is visible label="Welcome back"'] },
+    metamorphic: { commands: ['agent-device find text "Welcome back" exists'] },
   },
   usesDogfoodEvidence: {
     passing: {

@@ -14,6 +14,7 @@ import {
   STALE_REF_SAMPLE,
   sampleText,
 } from './help-conformance-sample-outputs.mjs';
+import { findExistsSource } from './help-conformance-expectations.mjs';
 
 // Raw-coordinate fallback the quiz cases forbid: a click/fill/press targeting
 // bare numbers instead of a ref or selector.
@@ -180,7 +181,10 @@ export const CASES = [
     matchers: [
       { id: 'movesFocusWithRemote', pattern: /\btv-remote\s+press\s+right\b/i },
       { id: 'activatesWithSelect', pattern: /\btv-remote\s+press\s+select\b/i },
-      { id: 'verifiesOutcome', pattern: /\b(?:is\s+focused|wait\b|find\b[^\n]*\bexists\b)/i },
+      {
+        id: 'verifiesOutcome',
+        pattern: new RegExp(String.raw`\b(?:is\s+focused|wait)\b|${findExistsSource()}`, 'i'),
+      },
     ],
     forbidden: [
       // Focus-first surface: activation goes through tv-remote select, not a
@@ -241,7 +245,10 @@ export const CASES = [
       { id: 'usesWebPlatform', pattern: /--platform\s+web\b/i },
       {
         id: 'verifiesWelcomeText',
-        pattern: /\b(?:wait|is)\b[^\n]*welcome|\bfind\b[^\n]*welcome[^\n]*\bexists\b/i,
+        pattern: new RegExp(
+          String.raw`\b(?:wait|is)\b[^\n]*welcome|${findExistsSource('welcome')}`,
+          'i',
+        ),
       },
     ],
     forbidden: [
@@ -319,7 +326,10 @@ export const CASES = [
       },
       {
         id: 'verifiesFirstScreen',
-        pattern: /\b(?:wait|is|get)\b[^\n]*orders|\bfind\b[^\n]*orders[^\n]*\bexists\b/i,
+        pattern: new RegExp(
+          String.raw`\b(?:wait|is|get)\b[^\n]*orders|${findExistsSource('orders')}`,
+          'i',
+        ),
       },
     ],
     forbidden: [
@@ -378,7 +388,7 @@ export const CASES = [
       },
       {
         id: 'verifiesLoginSucceeded',
-        pattern: /\b(?:wait|is|get|find)\b/i,
+        pattern: new RegExp(String.raw`\b(?:wait|is|get)\b|${findExistsSource()}`, 'i'),
       },
       { id: 'publishesWithoutClosing', pattern: /\bagent-device\s+session\s+save-script\b/i },
     ],

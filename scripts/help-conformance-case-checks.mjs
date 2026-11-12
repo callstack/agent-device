@@ -1,4 +1,10 @@
-import { opensAndCloses, usesValidationPrep } from './help-conformance-expectations.mjs';
+import {
+  findExistsSource,
+  opensAndCloses,
+  usesValidationPrep,
+} from './help-conformance-expectations.mjs';
+
+const VERIFICATION = new RegExp(String.raw`\b(?:wait|is|get)\b|${findExistsSource()}`);
 
 const EXPECTATION_SCORERS = {
   validPlanCommands: ({ commands, commandValidation }) =>
@@ -17,9 +23,7 @@ const EXPECTATION_SCORERS = {
   // that can tell whether the model actually chained.
   usesConfidentChaining: ({ commands }) => commands.some((command) => /&&/.test(command)),
   noWaitStable: ({ joined }) => !joined.includes('wait stable'),
-  // Bare find clicks, so only find ... exists verifies.
-  verifiesNamedExpectation: ({ joined }) =>
-    /\b(wait|is|get)\b|\bfind\b[^\n]*\bexists\b/.test(joined),
+  verifiesNamedExpectation: ({ joined }) => VERIFICATION.test(joined),
   usesDogfoodEvidence: ({ joined }) =>
     /(?:\bscreenshot\b|\brecord\b|\blogs\b|\bnetwork\b|\bperf\b|\btrace\b|dogfood-output)/i.test(
       joined,

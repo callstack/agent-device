@@ -283,7 +283,7 @@ Loop:
   1. Build or prepare the changed surface with the repo command that owns it.
   2. Open the target app/device state explicitly.
   3. Use snapshot -i and press/fill/click/longpress --settle for UI-driving steps.
-  4. Use the settled diff as evidence when it shows the changed behavior; otherwise verify with wait/get/is/find, screenshot, logs, network, perf, or trace based on the claim.
+  4. Use the settled diff as evidence when it shows the changed behavior; otherwise verify with wait/get/is, find <locator> exists, screenshot, logs, network, perf, or trace based on the claim.
   5. Record timings, token/output size, screenshots/videos, logs, or perf artifacts only when they answer the validation question.
   6. Close sessions and release leases before finishing. If your session booted a local simulator or emulator, use close --shutdown, unless the user asks to keep it running.
 

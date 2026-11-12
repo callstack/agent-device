@@ -19,3 +19,12 @@ function isSupportedBuildCommand(command) {
 function isPnpmScript(command, script) {
   return new RegExp(`^pnpm\\s+(?:run\\s+)?${script}(?:\\s|$)`).test(command ?? '');
 }
+
+/**
+ * A find whose action is `exists`, the only read-only find: bare find clicks. `subject` must
+ * appear in the query, which the optional locator precedes and the action follows.
+ */
+export function findExistsSource(subject = '') {
+  const unquoted = subject ? String.raw`[^\s"']*${subject}[^\s"']*` : String.raw`[^\s"']+`;
+  return String.raw`\bfind\s+(?:(?:text|label|value|role|id)\s+)?(?:"[^"\n]*${subject}[^"\n]*"|'[^'\n]*${subject}[^'\n]*'|${unquoted})\s+exists(?:\s|$)`;
+}
