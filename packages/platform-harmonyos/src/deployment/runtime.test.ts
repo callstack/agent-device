@@ -261,6 +261,21 @@ test.each([
   },
 );
 
+test('uninstall refuses to claim removal when the post-uninstall dump cannot be verified', async () => {
+  const run = vi.fn(
+    scriptAnswers([installedDump, emptyAnswer, absentBundleAnswer, unreachableAnswer]),
+  );
+  const commands = { which: async () => undefined, run } as HostCommandRunner;
+  const signal = new AbortController().signal;
+  const operations = createHarmonyAppDeploymentOperations({ commands, device, signal });
+
+  await expect(operations.uninstallApp?.({ app: 'com.example.app' })).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'Could not verify the uninstall of com.example.app',
+  });
+  expect(run).toHaveBeenCalledTimes(4);
+});
+
 test('uninstall refuses a blank bundle name', async () => {
   const run = vi.fn();
   const commands = { which: async () => undefined, run } as HostCommandRunner;
