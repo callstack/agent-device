@@ -15,6 +15,7 @@ import {
 } from '@agent-device/capture-kit/recording-output-path';
 import { parsePerfRuntimeRequest } from '@agent-device/capture-kit/perf-runtime-plan';
 import { uploadArtifact } from './upload-client.ts';
+import { withUploadPreparationDeadline } from './upload-preparation-deadline.ts';
 import { createStderrUploadProgressReporter, type UploadProgressSink } from './upload-progress.ts';
 
 // Mirrors `DEFAULT_TEST_ARTIFACTS_ROOT` in `packages/replay-test/src/internal/session-test-artifacts.ts`
@@ -37,6 +38,22 @@ export type PreparedRemoteRequest = {
 };
 
 export async function prepareRemoteRequestArtifacts(
+  req: Omit<DaemonWireRequest, 'token'>,
+  info: DaemonArtifactEndpoint,
+  signal: AbortSignal,
+  host: HostEnvironment,
+): Promise<PreparedRemoteRequest> {
+  if (!isRemoteDaemon(info)) {
+    return await prepareRemoteRequestArtifactsWithinBudget(req, info, signal, host);
+  }
+  return await withUploadPreparationDeadline(
+    signal,
+    async (preparationSignal) =>
+      await prepareRemoteRequestArtifactsWithinBudget(req, info, preparationSignal, host),
+  );
+}
+
+async function prepareRemoteRequestArtifactsWithinBudget(
   req: Omit<DaemonWireRequest, 'token'>,
   info: DaemonArtifactEndpoint,
   signal: AbortSignal,

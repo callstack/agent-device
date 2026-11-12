@@ -5,7 +5,7 @@
 // abort signal — a rejection the caller swallows would keep streaming a full app bundle to a device
 // nobody owns.
 
-import { afterEach, test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -19,10 +19,79 @@ const TEST_TOKEN = 'agent-device-upload-cancel-token';
 const tempDirs: string[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
   for (const dir of tempDirs) {
     await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {});
   }
   tempDirs.length = 0;
+});
+
+test('cancellation refuses preparation before it reads a missing artifact', async () => {
+  const artifactPath = createTempFile('missing.apk', 'payload');
+  fs.unlinkSync(artifactPath);
+  const control = new AbortController();
+  const reason = new Error('request owner stopped');
+  control.abort(reason);
+  const fetch = vi.spyOn(globalThis, 'fetch');
+  await assert.rejects(
+    uploadArtifact({
+      env: process.env,
+      localPath: artifactPath,
+      baseUrl: 'http://127.0.0.1:1',
+      token: TEST_TOKEN,
+      signal: control.signal,
+    }),
+    (error: unknown) => error === reason,
+  );
+  assert.equal(fetch.mock.calls.length, 0);
+});
+
+test('a standalone upload expires its preparation aggregate without starting a fallback', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const artifactPath = createTempFile('app.apk', 'payload');
+  let preflightEntered = () => {};
+  const entered = new Promise<void>((resolve) => {
+    preflightEntered = resolve;
+  });
+  let preflightSignal: AbortSignal | undefined;
+  let refusePreflight: ((reason: Error) => void) | undefined;
+  const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+    const signal = init?.signal;
+    assert.ok(signal);
+    preflightSignal = signal;
+    preflightEntered();
+    return await new Promise<Response>((_resolve, reject) => {
+      refusePreflight = reject;
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+  });
+  const outcome = uploadArtifact({
+    env: process.env,
+    localPath: artifactPath,
+    baseUrl: 'http://127.0.0.1:1',
+    token: TEST_TOKEN,
+  }).then(
+    (value) => ({ value, error: undefined }),
+    (error: unknown) => ({ value: undefined, error }),
+  );
+  try {
+    await entered;
+    await vi.advanceTimersByTimeAsync(600_001);
+    assert.equal(preflightSignal?.aborted, true);
+    const result = await outcome;
+    assert.equal(result.value, undefined);
+    assert.ok(result.error && typeof result.error === 'object' && 'details' in result.error);
+    assert.deepEqual(result.error.details, {
+      reason: 'artifact_preparation_deadline_exceeded',
+      transferPhase: 'preparation',
+      timeoutMs: 600_000,
+    });
+    assert.equal(fetch.mock.calls.length, 1);
+  } finally {
+    refusePreflight?.(new Error('fixture cleanup'));
+    await outcome;
+  }
 });
 
 test('an aborted signal ends a legacy upload mid-stream instead of finishing the bytes', async () => {

@@ -8,6 +8,7 @@ import {
 import { prepareUploadArtifact, type PreparedUploadArtifact } from './upload-client-artifact.ts';
 import { isRetryableUploadStreamError, streamFileToHttpRequest } from './upload-stream.ts';
 import type { UploadProgressSink } from './upload-progress.ts';
+import { withUploadPreparationDeadline } from './upload-preparation-deadline.ts';
 
 const UPLOAD_PREFLIGHT_TIMEOUT_MS = 30 * 1000;
 const ARTIFACT_HASH_ALGORITHM = 'sha256';
@@ -57,7 +58,19 @@ type UploadPreflightResult =
     };
 
 export async function uploadArtifact(options: UploadArtifactOptions): Promise<string> {
-  const prepared = await prepareUploadArtifact(options.localPath, options.platform, options.env);
+  return await withUploadPreparationDeadline(
+    options.signal,
+    async (signal) => await uploadArtifactWithinBudget({ ...options, signal }),
+  );
+}
+
+async function uploadArtifactWithinBudget(options: UploadArtifactOptions): Promise<string> {
+  const prepared = await prepareUploadArtifact(
+    options.localPath,
+    options.platform,
+    options.env,
+    options.signal,
+  );
   const normalizedBase = options.baseUrl.endsWith('/') ? options.baseUrl : `${options.baseUrl}/`;
   const uploadAttemptId = randomUUID();
 
@@ -223,7 +236,7 @@ async function uploadLegacyArtifact(options: {
     headers,
     payloadPath: artifact.payloadPath,
     timeoutMessage: 'Artifact upload timed out',
-    timeoutHint: 'The upload to the remote daemon exceeded the 5-minute timeout.',
+    timeoutHint: 'Inspect the upload diagnostics before retrying the artifact.',
     errorMessage: 'Failed to upload artifact to remote daemon',
     errorHint: 'Verify the remote daemon is reachable and supports artifact uploads.',
     signal: options.signal,

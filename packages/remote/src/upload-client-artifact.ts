@@ -26,7 +26,9 @@ export async function prepareUploadArtifact(
   localPath: string,
   requestedPlatform: string | undefined,
   env: Readonly<EnvMap>,
+  signal?: AbortSignal,
 ): Promise<PreparedUploadArtifact> {
+  signal?.throwIfAborted();
   const stat = fs.statSync(localPath);
   const fileName = path.basename(localPath);
   const isDirectory = stat.isDirectory();
@@ -35,8 +37,9 @@ export async function prepareUploadArtifact(
   const cleanupPaths: string[] = [];
   try {
     const payloadPath = isDirectory
-      ? await createGzipTarArchive(localPath, cleanupPaths, env)
+      ? await createGzipTarArchive(localPath, cleanupPaths, env, signal)
       : localPath;
+    signal?.throwIfAborted();
     const payloadStat = fs.statSync(payloadPath);
 
     return {
@@ -45,7 +48,7 @@ export async function prepareUploadArtifact(
       artifactType: isDirectory ? 'app-bundle' : 'file',
       platform,
       contentType: isDirectory ? 'application/gzip' : DEFAULT_CONTENT_TYPE,
-      sha256: await computeFileHash(payloadPath),
+      sha256: await computeFileHash(payloadPath, signal),
       sizeBytes: payloadStat.size,
       cleanup: () => cleanupUploadPaths(cleanupPaths),
     };
@@ -59,6 +62,7 @@ async function createGzipTarArchive(
   localPath: string,
   cleanupPaths: string[],
   env: Readonly<EnvMap>,
+  signal?: AbortSignal,
 ): Promise<string> {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `agent-device-upload-${randomUUID()}-`));
   cleanupPaths.push(tempDir);
@@ -67,6 +71,7 @@ async function createGzipTarArchive(
     'tar',
     ['czf', archivePath, '-C', path.dirname(localPath), path.basename(localPath)],
     {
+      signal,
       env: {
         ...env,
         COPYFILE_DISABLE: '1',
@@ -97,7 +102,7 @@ function cleanupUploadPaths(cleanupPaths: string[]): void {
   }
 }
 
-async function computeFileHash(localPath: string): Promise<string> {
+async function computeFileHash(localPath: string, signal?: AbortSignal): Promise<string> {
   const hash = createHash(ARTIFACT_HASH_ALGORITHM);
   const sink = new Writable({
     write(chunk: Buffer, _encoding, callback) {
@@ -105,7 +110,8 @@ async function computeFileHash(localPath: string): Promise<string> {
       callback();
     },
   });
-  await pipeline(fs.createReadStream(localPath), sink).catch((error: unknown) => {
+  await pipeline(fs.createReadStream(localPath), sink, { signal }).catch((error: unknown) => {
+    signal?.throwIfAborted();
     throw new AppError(
       'COMMAND_FAILED',
       'Failed to read local artifact',

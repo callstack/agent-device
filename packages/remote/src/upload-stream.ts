@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import type { IncomingHttpHeaders } from 'node:http';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
+import { addAbortSignal } from 'node:stream';
 import { AppError } from '@agent-device/kernel/errors';
 import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
 import {
@@ -9,8 +10,8 @@ import {
   type UploadProgressSink,
   type UploadProgressStage,
 } from './upload-progress.ts';
+import { withUploadPreparationDeadline } from './upload-preparation-deadline.ts';
 
-const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_UPLOAD_REDIRECTS = 5;
 const UPLOAD_STREAM_RETRYABLE_DETAIL = 'uploadStreamRetryable';
 
@@ -40,12 +41,18 @@ export async function streamFileToHttpRequest(options: {
   signal?: AbortSignal;
   progress?: UploadStreamProgressOptions;
 }): Promise<UploadStreamResponse> {
-  return await streamFileToHttpRequestAttempt({
-    ...options,
-    url: options.url,
-    redirectCount: 0,
-    startOffset: 0,
-  });
+  return await withUploadPreparationDeadline(
+    options.signal,
+    async (signal) =>
+      await streamFileToHttpRequestAttempt({
+        ...options,
+        signal,
+        url: options.url,
+        redirectCount: 0,
+        startOffset: 0,
+      }),
+    { message: options.timeoutMessage, hint: options.timeoutHint },
+  );
 }
 
 export function isRetryableUploadStreamError(error: unknown): boolean {
@@ -67,6 +74,7 @@ async function streamFileToHttpRequestAttempt(options: {
   startOffset: number;
   progress?: UploadStreamProgressOptions;
 }): Promise<UploadStreamResponse> {
+  options.signal?.throwIfAborted();
   // This module sits in the CLI's eager import closure via the remote-artifact
   // upload client, but only a remote daemon ever uploads, so the HTTP stack
   // loads here rather than at import time.
@@ -75,7 +83,8 @@ async function streamFileToHttpRequestAttempt(options: {
   const headers = buildUploadRequestHeaders(options.headers, options.startOffset, payloadSize);
   emitUploadAttemptStarted(options.progress, options.startOffset, payloadSize);
 
-  return await new Promise((resolve, reject) => {
+  let upload: Promise<void> | undefined;
+  return await new Promise<UploadStreamResponse>((resolve, reject) => {
     let responseReceived = false;
     const req = transport.request(
       {
@@ -91,9 +100,9 @@ async function streamFileToHttpRequestAttempt(options: {
       },
       (res) => {
         responseReceived = true;
+        if (options.signal) addAbortSignal(options.signal, res);
         void readNodeHttpResponseBody(res)
           .then((body) => {
-            clearTimeout(timeout);
             const statusCode = res.statusCode ?? 500;
             const location = res.headers.location;
             if (location && isUploadRedirectStatus(statusCode)) {
@@ -166,24 +175,14 @@ async function streamFileToHttpRequestAttempt(options: {
               body,
             });
           })
-          .catch(reject);
+          .catch((error: unknown) =>
+            reject(options.signal?.aborted ? options.signal.reason : error),
+          );
       },
     );
 
-    const timeout = setTimeout(() => {
-      req.destroy();
-      reject(
-        new AppError('COMMAND_FAILED', options.timeoutMessage, {
-          timeoutMs: UPLOAD_TIMEOUT_MS,
-          ...(options.timeoutHint ? { hint: options.timeoutHint } : {}),
-          ...retryableUploadStreamDetail(options),
-        }),
-      );
-    }, UPLOAD_TIMEOUT_MS);
-
     req.on('error', (err) => {
       if (responseReceived) return;
-      clearTimeout(timeout);
       // A caller that canceled owns this outcome: the signal's reason is the answer, and wrapping it
       // as an ordinary transport failure would let a retry path treat "we stopped" as "it broke".
       if (options.signal?.aborted) {
@@ -202,9 +201,7 @@ async function streamFileToHttpRequestAttempt(options: {
         ),
       );
     });
-    req.on('close', () => clearTimeout(timeout));
-
-    void pipeline(
+    upload = pipeline(
       fs.createReadStream(options.payloadPath, { start: options.startOffset }),
       createUploadProgressTransform({
         stage: options.progress?.stage ?? 'legacy',
@@ -214,12 +211,19 @@ async function streamFileToHttpRequestAttempt(options: {
         onProgress: options.progress?.onProgress,
       }),
       req,
+      { signal: options.signal },
     ).catch((err: unknown) => {
       if (responseReceived) return;
       req.destroy();
+      if (options.signal?.aborted) {
+        reject(options.signal.reason);
+        return;
+      }
       const error = err instanceof Error ? err : new Error(String(err));
       reject(new AppError('COMMAND_FAILED', 'Failed to read local artifact', {}, error));
     });
+  }).finally(async () => {
+    await upload;
   });
 }
 
