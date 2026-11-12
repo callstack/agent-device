@@ -94,6 +94,44 @@ test('failed temporary-file cleanup cannot accumulate a new sidecar file on each
   assert.equal(fs.readFileSync(eventLogPath, 'utf8'), existing);
 });
 
+test('stale same-PID temporary sidecars do not block rotation or lose evidence', async () => {
+  const dir = mkdtempForTestSync('event-log-reused-pid-');
+  const eventLogPath = resolveSessionEventLogPath(dir);
+  const env = { AGENT_DEVICE_EVENT_LOG_MAX_BYTES: '200' };
+  const send = (summary: string) =>
+    appendSessionEvent(
+      eventLogPath,
+      'default',
+      { kind: 'request.started', ts: 'fixed', summary },
+      env,
+    );
+  send('first');
+  send('second');
+  await flushSessionEventLogWrites(eventLogPath);
+  const before = fs.readFileSync(eventLogPath);
+  const orphans = [
+    `${eventLogPath}.window.json.${process.pid}.tmp`,
+    `${eventLogPath}.window.json.${process.pid}.previous-writer.tmp`,
+  ];
+  for (const orphan of orphans) fs.writeFileSync(orphan, 'retained orphan evidence');
+
+  send('new event');
+  await flushSessionEventLogWrites(eventLogPath);
+
+  assert.deepEqual(fs.readFileSync(resolveRotatedSessionEventLogPath(eventLogPath)), before);
+  assert.deepEqual(summaries(eventLogPath, '0', 10), ['first', 'second', 'new event']);
+  for (const orphan of orphans) {
+    assert.equal(fs.readFileSync(orphan, 'utf8'), 'retained orphan evidence');
+  }
+  assert.deepEqual(
+    fs
+      .readdirSync(dir)
+      .filter((name) => name.endsWith('.tmp'))
+      .sort(),
+    orphans.map((file) => path.basename(file)).sort(),
+  );
+});
+
 async function appendEvents(eventLogPath: string, from: number, to: number): Promise<void> {
   for (let index = from; index < to; index += 1) {
     appendSessionEvent(
@@ -270,7 +308,7 @@ test('a retained generation whose length moved is refused rather than mapped', a
   assert.equal(unverified.details?.reason, EVENT_LOG_WINDOW_UNVERIFIED_REASON);
 });
 
-test('an unreadable window sidecar fails reads typed and never blocks appends', async () => {
+test('an unreadable window sidecar refuses required rotation and preserves the typed cause', async () => {
   const eventLogPath = resolveSessionEventLogPath(
     mkdtempForTestSync('agent-device-event-log-bad-'),
   );
@@ -284,14 +322,36 @@ test('an unreadable window sidecar fails reads typed and never blocks appends', 
   assert.equal(unverified.details?.reason, EVENT_LOG_WINDOW_UNVERIFIED_REASON);
   assert.equal(typeof unverified.details?.hint, 'string');
 
-  // Writes keep flowing past the corrupt sidecar, including across the
-  // rotations the following appends trigger.
-  const sizeBefore = fs.statSync(eventLogPath).size;
-  await appendEvents(eventLogPath, 40, 60);
-  assert.ok(
-    fs.statSync(eventLogPath).size > 0 && retainedLineCount(eventLogPath) >= 9,
-    `appends must survive a corrupt sidecar (size before ${sizeBefore})`,
+  const before = fs.readFileSync(eventLogPath);
+  const rotatedPath = resolveRotatedSessionEventLogPath(eventLogPath);
+  const rotatedBefore = fs.readFileSync(rotatedPath);
+  const event = {
+    kind: 'request.started' as const,
+    ts: 'fixed',
+    summary: 'blocked'.repeat(120),
+  };
+  const incomingBytes = Buffer.byteLength(
+    `${JSON.stringify({ version: 1, session: 'default', ...event })}\n`,
   );
+  assert.ok(incomingBytes <= 1024);
+  assert.ok(before.length + incomingBytes > 1024);
+  const logPath = path.join(path.dirname(eventLogPath), 'diagnostics.ndjson');
+  await withDiagnosticsScope({ debug: true, logPath }, async () => {
+    appendSessionEvent(eventLogPath, 'default', event, process.env);
+    await flushSessionEventLogWrites(eventLogPath);
+  });
+  assert.deepEqual(fs.readFileSync(eventLogPath), before);
+  assert.deepEqual(fs.readFileSync(rotatedPath), rotatedBefore);
+  assert.equal(fs.readFileSync(`${eventLogPath}.window.json`, 'utf8'), '{ not json');
+  const diagnostics = fs
+    .readFileSync(logPath, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  const failure = diagnostics.find((record) => record.phase === 'session_event_log_write_failed');
+  assert.equal(failure?.data.reason, 'maintenance-failed');
+  assert.equal(failure?.data.operation, 'rotation');
+  assert.equal(failure?.data.error?.details?.reason, EVENT_LOG_WINDOW_UNVERIFIED_REASON);
   assert.equal(readError(eventLogPath, '0').details?.reason, EVENT_LOG_WINDOW_UNVERIFIED_REASON);
 });
 

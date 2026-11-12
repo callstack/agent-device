@@ -2,7 +2,7 @@ import type { SessionAction } from '@agent-device/contracts/session';
 import fs from 'node:fs';
 import path from 'node:path';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
 import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/diagnostics';
 import { isRecord } from '@agent-device/kernel/record';
@@ -112,6 +112,7 @@ function reportEventLogFailure(
       reason,
       operation,
       errno: (error as NodeJS.ErrnoException | undefined)?.code,
+      error: error === undefined ? undefined : normalizeError(error),
     },
   });
 }

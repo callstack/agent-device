@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import {
@@ -36,6 +37,7 @@ const EVENT_LOG_WINDOW_SUFFIX = '.window.json';
 const EVENT_LOG_WINDOW_VERSION = 2;
 const RETAINED_GENERATIONS = 2;
 const WINDOW_READ_ATTEMPTS = 3;
+const EVENT_LOG_WRITER_TOKEN = randomUUID();
 
 export const EVENT_LOG_CURSOR_EXPIRED_REASON = 'EVENT_LOG_CURSOR_EXPIRED';
 export const EVENT_LOG_WINDOW_UNVERIFIED_REASON = 'EVENT_LOG_WINDOW_UNVERIFIED';
@@ -324,7 +326,7 @@ async function writeWindowSidecar(
   generations: readonly EventLogGeneration[],
 ): Promise<void> {
   const windowPath = resolveWindowPath(eventLogPath);
-  const tmpPath = `${windowPath}.${process.pid}.tmp`;
+  const tmpPath = `${windowPath}.${process.pid}.${EVENT_LOG_WRITER_TOKEN}.tmp`;
   const file = await fs.promises.open(tmpPath, 'wx');
   try {
     try {
