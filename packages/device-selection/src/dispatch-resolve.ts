@@ -309,8 +309,11 @@ function buildResolveTargetDeviceCacheKey(
 ): string {
   // The app target only informs the first device choice. Once a request has
   // chosen a device, every later resolution must reuse that same device even
-  // when dispatch has no app target to pass back through this seam.
+  // when dispatch has no app target to pass back through this seam. The request
+  // already holds what selection reads from env, and Android SDK discovery adds
+  // to that env during the first inventory read.
   const {
+    env: _env,
     appleSimulatorAppTarget: _appleSimulatorAppTarget,
     appDeviceTarget: _appDeviceTarget,
     webSession: _webSession,

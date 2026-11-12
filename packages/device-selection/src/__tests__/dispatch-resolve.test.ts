@@ -278,6 +278,27 @@ test('resolveTargetDevice reuses request-scoped device resolution cache for iden
   assert.equal(mockListAppleDevices.mock.calls.length, 1);
 });
 
+test('resolveTargetDevice reuses the request cache after the inventory configures the host env', async () => {
+  // Android SDK discovery writes ANDROID_HOME and PATH into the host env during the first
+  // inventory read; the request's later resolution must still reuse that selection.
+  const env: Record<string, string | undefined> = { PATH: '/usr/bin' };
+  mockListAppleDevices.mockImplementation(async () => {
+    env.ANDROID_HOME = '/sdk';
+    env.PATH = `/sdk/platform-tools:${env.PATH}`;
+    return [bootedSimulator];
+  });
+
+  await withResolveTargetDeviceCacheScope(async () => {
+    const first = await resolveTargetDevice({ udid: 'sim-2' }, { env });
+    const inventoryReads = mockListAppleDevices.mock.calls.length;
+    const second = await resolveTargetDevice({ udid: 'sim-2' }, { env });
+
+    assert.equal(first.id, 'sim-2');
+    assert.equal(second.id, 'sim-2');
+    assert.equal(mockListAppleDevices.mock.calls.length, inventoryReads);
+  });
+});
+
 test('resolveTargetDevice request cache key separates device selectors', async () => {
   mockListAppleDevices.mockResolvedValue([simulator, bootedSimulator]);
 
