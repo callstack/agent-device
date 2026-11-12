@@ -342,6 +342,7 @@ test('real HTTP proxy preserves resumable upload integrity and caller credential
       });
       assert.equal(first.status, 308);
       assert.equal(first.headers.get('x-upload-offset'), '2');
+      assert.equal(first.headers.get('range'), 'bytes=0-1');
       const second = await fetch(url, {
         method: 'PUT',
         headers: { ...ticket.upload.headers, 'content-range': 'bytes 2-4/5' },
@@ -399,6 +400,9 @@ test('real TLS proxy preserves resumable upload origin and integrity', async (t)
         req.end(body);
       });
     try {
+      const sessions = await proxy.callCommand(TENANT_TOKEN, 'session_list');
+      assert.equal(sessions.statusCode, 200, JSON.stringify(sessions.json));
+      assert.deepEqual(sessions.json.result?.data, { sessions: [] });
       const auth = { authorization: `Bearer ${TENANT_TOKEN}` };
       const preflight = await request(
         `${proxy.baseUrl}/upload/preflight`,
@@ -436,6 +440,7 @@ test('real TLS proxy preserves resumable upload origin and integrity', async (t)
       );
       assert.equal(first.status, 308);
       assert.equal(first.headers['x-upload-offset'], '2');
+      assert.equal(first.headers.range, 'bytes=0-1');
       const second = await request(
         url.href,
         'PUT',

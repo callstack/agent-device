@@ -50,6 +50,13 @@ type WireMutation = {
 
 const MUTATIONS: readonly WireMutation[] = [
   {
+    breakClass: 'upload ticket: the response wrapper drops the configured origin',
+    file: 'packages/proxy/src/daemon-proxy.ts',
+    name: 'rewrittenUploadPreflightResponse',
+    from: 'text, request, uploadHeaders, publicOrigin',
+    to: 'text, request, uploadHeaders, undefined',
+  },
+  {
     breakClass: 'upload origin: socket TLS is ignored',
     file: 'packages/contracts/src/daemon-http.ts',
     name: 'resolveHttpRequestBaseUrl',

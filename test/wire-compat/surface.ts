@@ -120,7 +120,12 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'handleResumableUpload',
         'handleUploadFinalize',
       ),
-      ...from(DAEMON_PROXY, 'rewriteUploadDirectUrl', 'rewriteUploadPreflightResponse'),
+      ...from(
+        DAEMON_PROXY,
+        'rewrittenUploadPreflightResponse',
+        'rewriteUploadDirectUrl',
+        'rewriteUploadPreflightResponse',
+      ),
       ...from(
         ARTIFACT_HTTP,
         'DownloadableArtifactHttpRoute',

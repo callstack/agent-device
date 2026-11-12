@@ -86,14 +86,16 @@ test('Fetch proxy confines real resumable uploads to their authenticated tenant 
       { ...forged, 'content-range': 'bytes 0-1/5' },
       'AB',
     );
-    assert.ok(crossChunk.status >= 400);
+    assert.equal(crossChunk.status, 401);
+    assert.equal(((await crossChunk.json()) as { code: string }).code, 'UNAUTHORIZED');
     const crossFinalize = await send(
       `${a.origin}/agent-device/upload/finalize`,
       'POST',
       { ...forged, 'content-type': 'application/json' },
       JSON.stringify({ uploadId: a.uploadId }),
     );
-    assert.ok(crossFinalize.status >= 400);
+    assert.equal(crossFinalize.status, 401);
+    assert.equal(((await crossFinalize.json()) as { code: string }).code, 'UNAUTHORIZED');
 
     for (const [ticket, content] of [
       [a, 'ABCDE'],

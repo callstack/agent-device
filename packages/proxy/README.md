@@ -89,6 +89,11 @@ header. Actual Node HTTPS sockets are supported. A custom direct-daemon HTTP emb
 termination can pass `publicOrigin` to `createDaemonHttpServer`. The built-in daemon listens on
 loopback HTTP; expose it behind TLS through a configured proxy.
 
+Your Node HTTP client must send exactly one valid `Host` header on every request, including
+`/health`. Missing, duplicate or malformed Host headers receive HTTP 400, even with `publicOrigin`
+configured. Configure raw-socket and HTTP/1.0 health probes to send `Host: localhost` (or your
+deployment's host and port).
+
 ### Reach the daemon over your own transport
 
 By default the proxy calls the daemon with the global `fetch`. Pass `upstreamFetch` when the daemon

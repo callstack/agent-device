@@ -204,7 +204,8 @@
     "packages/contracts/src/device-inventory.ts#parseDevicePinSelector": "sha256:6b3b9ac32efcc8e7859cc0e8ceef5a85e9cec7082d92901e0c1ee8c0555381da",
     "packages/contracts/src/device-inventory.ts#readDevicePin": "sha256:bb15ca2a086a881c6cf945c25d432c092be165e58165d229c25df69c4c9fafbd",
     "packages/proxy/src/daemon-proxy.ts#rewriteUploadDirectUrl": "sha256:b121db3ffb5a520b4b31810a2e28ff01c1a15d959514c9fbe2a61cd960d2af93",
-    "packages/proxy/src/daemon-proxy.ts#rewriteUploadPreflightResponse": "sha256:73ddcb6ba425de816b04077874a85730522a1a756dbd4dcdc2280a13f063a121"
+    "packages/proxy/src/daemon-proxy.ts#rewriteUploadPreflightResponse": "sha256:332820b6f10e079632330c2c4996c4faa6f339e921f12f287bd83c9296df5ccd",
+    "packages/proxy/src/daemon-proxy.ts#rewrittenUploadPreflightResponse": "sha256:21d633d947cd72f5008bcc886a8f3ecd4f778b594d0654b8d0741db8594003db"
   },
   "compatibleChanges": [
     {

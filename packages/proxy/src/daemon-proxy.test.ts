@@ -814,7 +814,59 @@ test.each([
   expect(body).not.toContain('client-secret');
 });
 
-test('unsuccessful preflight responses pass through', async () => {
+test.each([400, 401, 503])(
+  'strips daemon credentials from a ticket in a %s response',
+  async (status) => {
+    const upstream = recordingUpstream(() =>
+      Response.json(
+        {
+          ok: false,
+          code: 'UPLOAD_FAILED',
+          uploadId: 'abc',
+          upload: {
+            url: 'http://daemon/upload/direct/abc',
+            headers: buildDaemonHttpAuthHeaders(DAEMON_TOKEN),
+          },
+        },
+        { status },
+      ),
+    );
+    const response = await proxyWith(upstream.fetch).handle(
+      new Request(`${PROXY_ORIGIN}/upload/preflight`, {
+        method: 'POST',
+        headers: { authorization: 'Bearer client-secret' },
+        body: '{}',
+      }),
+    );
+    expect(response.status).toBe(status);
+    const payload = await response.json();
+    expect(payload).toMatchObject({
+      ok: false,
+      code: 'UPLOAD_FAILED',
+      upload: {
+        url: `${PROXY_ORIGIN}/upload/direct/abc`,
+        headers: buildDaemonHttpAuthHeaders('client-secret'),
+      },
+    });
+    expect(JSON.stringify(payload)).not.toContain(DAEMON_TOKEN);
+  },
+);
+
+test('ordinary JSON preflight errors retain their status and body', async () => {
+  const error = { ok: false, code: 'UPLOAD_UNAVAILABLE' };
+  const upstream = recordingUpstream(() => Response.json(error, { status: 503 }));
+  const response = await proxyWith(upstream.fetch).handle(
+    new Request(`${PROXY_ORIGIN}/upload/preflight`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer client-secret' },
+      body: '{}',
+    }),
+  );
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual(error);
+});
+
+test('unsuccessful plain-text preflight responses pass through', async () => {
   const upstream = recordingUpstream(() => new Response('unavailable', { status: 503 }));
   const response = await proxyWith(upstream.fetch).handle(
     new Request(`${PROXY_ORIGIN}/upload/preflight`, {

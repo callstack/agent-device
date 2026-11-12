@@ -82,15 +82,37 @@ export async function createProviderScenarioProxy(
   const baseUrl = `${tls ? 'https' : 'http'}://127.0.0.1:${proxyPort}/agent-device`;
   let closed = false;
   const requestRpc: ProviderScenarioProxy['requestRpc'] = async (authToken, payload) => {
-    const response = await fetch(`${baseUrl}/rpc`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${authToken}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(payload),
+    return await new Promise((resolve, reject) => {
+      const transport = tls ? https : http;
+      const request = transport.request(
+        `${baseUrl}/rpc`,
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${authToken}`,
+            'content-type': 'application/json',
+          },
+          ...(tls ? { ca: tls.ca ?? tls.cert } : {}),
+        },
+        (response) => {
+          const chunks: Buffer[] = [];
+          response.on('data', (chunk: Buffer) => chunks.push(chunk));
+          response.on('error', reject);
+          response.on('end', () => {
+            try {
+              resolve({
+                statusCode: response.statusCode ?? 0,
+                json: JSON.parse(Buffer.concat(chunks).toString('utf8')),
+              });
+            } catch (error) {
+              reject(error);
+            }
+          });
+        },
+      );
+      request.on('error', reject);
+      request.end(JSON.stringify(payload));
     });
-    return { statusCode: response.status, json: await response.json() };
   };
 
   return {
@@ -301,6 +323,7 @@ function sendUpstreamResponse(
     'content-disposition',
     'content-length',
     'x-request-id',
+    'range',
     'x-upload-offset',
   ]) {
     const value = upstreamResponse.headers[name];

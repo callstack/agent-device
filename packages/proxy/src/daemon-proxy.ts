@@ -409,14 +409,15 @@ async function rewrittenUploadPreflightResponse(params: {
   publicOrigin: string | undefined;
 }): Promise<Response> {
   const { request, upstreamResponse, headers, uploadHeaders, publicOrigin } = params;
-  if (!upstreamResponse.ok)
-    return new Response(upstreamResponse.body, { status: upstreamResponse.status, headers });
   const text = await upstreamResponse.text();
   headers.set('content-type', upstreamResponse.headers.get('content-type') ?? 'application/json');
-  return new Response(rewriteUploadPreflightResponse(text, request, uploadHeaders, publicOrigin), {
-    status: upstreamResponse.status,
-    headers,
-  });
+  return new Response(
+    rewriteUploadPreflightResponse(text, request, uploadHeaders, publicOrigin, upstreamResponse.ok),
+    {
+      status: upstreamResponse.status,
+      headers,
+    },
+  );
 }
 
 function rewriteUploadPreflightResponse(
@@ -424,14 +425,18 @@ function rewriteUploadPreflightResponse(
   request: Request,
   uploadHeaders: Record<string, string>,
   publicOrigin: string | undefined,
+  expectTicket: boolean,
 ): string {
   let parsed: unknown;
   try {
     parsed = JSON.parse(body) as unknown;
   } catch {
+    if (!expectTicket) return body;
     throw new Error('Invalid upstream upload ticket');
   }
 
+  if (!expectTicket && (!parsed || typeof parsed !== 'object' || !('upload' in parsed)))
+    return body;
   if (!parsed || typeof parsed !== 'object') throw new Error('Invalid upstream upload ticket');
   const record = parsed as { uploadId?: unknown; upload?: { url?: unknown; headers?: unknown } };
   if (
