@@ -747,7 +747,7 @@ export function androidSettingsXml(
     '<hierarchy rotation="0">',
     '  <node index="0" text="" resource-id="com.android.settings:id/main_content_scrollable_container" class="android.widget.ScrollView" package="com.android.settings" content-desc="" bounds="[0,0][390,600]" clickable="false" enabled="true">',
     '    <node index="0" text="Apps" resource-id="android:id/title" class="android.widget.TextView" package="com.android.settings" content-desc="" bounds="[24,124][152,178]" clickable="true" enabled="true" focusable="true" focused="false" />',
-    `    <node index="1" text="${escapeXml(searchText)}" resource-id="com.android.settings:id/search" class="android.widget.EditText" package="com.android.settings" content-desc="Search" bounds="[16,24][374,80]" clickable="true" enabled="true" focusable="true" focused="true" password="false" editable="true" />`,
+    `    <node index="1" text="${escapeXml(searchText)}" resource-id="com.android.settings:id/search" class="android.widget.EditText" package="com.android.settings" content-desc="Search" bounds="[16,24][374,80]" clickable="true" enabled="true" focusable="true" focused="true" password="false" />`,
     ...(options.duplicateAppsRow
       ? [
           '    <node index="2" text="Apps" resource-id="android:id/title" class="android.widget.TextView" package="com.android.settings" content-desc="Search result Apps" bounds="[24,190][220,244]" clickable="true" enabled="true" focusable="true" focused="false" />',

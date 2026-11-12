@@ -1,5 +1,3 @@
-import { matchesSnapshotScope, type SnapshotScopeCandidate } from './snapshot-scope.ts';
-
 /**
  * Machine-readable wait failure taxonomy. These values are carried in
  * `error.details.reason`; callers should branch on them instead of parsing
@@ -61,18 +59,3 @@ export type WaitCommandResult = {
   hint?: string;
   warning?: string;
 };
-
-/**
- * The `wait text` match rule: the snapshot scope rule minus typed content. An editable node's
- * value is what the user typed, and Android also reports that text as the node's label, so an
- * editable node matches only by its identifier or by a label distinct from its value. The Swift
- * runner's native `findText` is pinned to the same table, `contracts/fixtures/wait-text-policy.json`.
- */
-export function matchesWaitText(
-  node: SnapshotScopeCandidate & { editable?: boolean },
-  text: string,
-): boolean {
-  if (node.editable !== true) return matchesSnapshotScope(node, text);
-  const label = node.label === node.value ? undefined : node.label;
-  return matchesSnapshotScope({ identifier: node.identifier, label }, text);
-}

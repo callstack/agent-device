@@ -28,11 +28,14 @@ extension RunnerTests {
     struct Case: Decodable {
       struct Node: Decodable {
         let editable: Bool?
+        let enabled: Bool?
         let label: String?
         let value: String?
         let identifier: String?
+        let placeholder: String?
       }
       let name: String
+      let platform: String?
       let text: String
       let node: Node
       let expected: Bool
@@ -49,12 +52,17 @@ extension RunnerTests {
     XCTAssertFalse(cases.isEmpty, "wait text policy table must not be empty")
 
     let editableTypes: [XCUIElement.ElementType] = [.textField, .secureTextField, .searchField, .textView]
-    for fixture in cases {
+    // Android-only rows pin the TS twin; the runner sees Apple element types only.
+    for fixture in cases where fixture.platform == nil {
       for type in fixture.node.editable == true ? editableTypes : [.staticText, .other] {
-        var attributes: [String: Any] = ["elementType": type.rawValue]
+        var attributes: [String: Any] = [
+          "elementType": type.rawValue,
+          "enabled": fixture.node.enabled ?? true,
+        ]
         attributes["label"] = fixture.node.label
         attributes["value"] = fixture.node.value
         attributes["identifier"] = fixture.node.identifier
+        attributes["placeholderValue"] = fixture.node.placeholder
         XCTAssertEqual(
           Self.findTextPredicate(fixture.text).evaluate(with: attributes),
           fixture.expected,
