@@ -193,6 +193,40 @@ test('relaunch refuses to open or observe after the Android exit close fence exp
   expect(calls).toEqual(['close:com.example.app']);
 });
 
+test('relaunch opens after the stopped package restarts with a new process', async () => {
+  vi.useFakeTimers();
+  bindAndroidAdbHostStub({});
+  const { calls, lifecycle } = createLifecycle({
+    close: async (app) => await closeAndroidApp(device, app),
+  });
+  let pidofReads = 0;
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => ({
+        stdout:
+          args[1] === 'pidof'
+            ? // The first read precedes am force-stop; Android restarts the package right after it.
+              pidofReads++ === 0
+              ? '12345\n'
+              : '67890\n'
+            : args[1] === 'dumpsys'
+              ? 'mCurrentFocus=Window{43 u0 com.android.launcher/.Launcher}\n'
+              : '',
+        stderr: '',
+        exitCode: 0,
+      }),
+    },
+    { serial: device.id },
+    async () => {
+      await Promise.all([
+        lifecycle.openApplication(openInput({ relaunch: true })),
+        vi.runAllTimersAsync(),
+      ]);
+    },
+  );
+  expect(calls.slice(0, 2)).toEqual(['close:com.example.app', 'open:com.example.app']);
+});
+
 test('preserves a runtime launch URL duration after the admitted Android follow-up open', async () => {
   const { calls, lifecycle } = createLifecycle();
   vi.spyOn(Date, 'now')

@@ -220,7 +220,7 @@ async function startAndroidApp(
   if (resolved.type === 'intent') {
     return await openAndroidIntent(device, resolved.value, options);
   }
-  if (options.terminateRunningApp) await stopAndroidPackage(device, resolved.value);
+  if (options.terminateRunningApp) await stopAndroidPackage(device, resolved.value, 'relaunch');
   if (activity) {
     return await openAndroidPackageActivity(
       device,
@@ -357,7 +357,7 @@ async function openAndroidAppBoundDeepLink(
   }
   await ensureAndroidLocalhostReverse(device, deepLinkUrl);
   const resolved = await requireAndroidPackageForOpen(device, app, 'app-bound open');
-  if (options.terminateRunningApp) await stopAndroidPackage(device, resolved);
+  if (options.terminateRunningApp) await stopAndroidPackage(device, resolved, 'relaunch');
   return await runAndroidShell(device, [
     'am',
     'start',
@@ -616,7 +616,20 @@ export async function openAndroidDevice(device: DeviceInfo): Promise<void> {
 }
 
 export async function closeAndroidApp(device: DeviceInfo, app: string): Promise<void> {
-  await stopAndroidPackage(device, await resolveAndroidPackageToEnd(device, app, 'Close'));
+  await stopAndroidPackage(device, await resolveAndroidPackageToEnd(device, app, 'Close'), 'close');
+}
+
+/**
+ * A close that stopped every process that ran before it, but saw the package start again. A relaunch
+ * accepts this: Android can restart a package at once for a provider or broadcast client (Settings
+ * on Android 17), and the launch that follows reuses that new process.
+ */
+export function isAndroidPackageRestartedAfterClose(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    error.details?.reason === 'android-app-close-timeout' &&
+    error.details.phase === 'process'
+  );
 }
 
 async function resolveAndroidPackageToEnd(
@@ -632,7 +645,11 @@ async function resolveAndroidPackageToEnd(
   return resolved.value;
 }
 
-async function stopAndroidPackage(device: DeviceInfo, packageName: string): Promise<void> {
+async function stopAndroidPackage(
+  device: DeviceInfo,
+  packageName: string,
+  purpose: 'close' | 'relaunch',
+): Promise<void> {
   const killed = await readAndroidPackagePids(
     device,
     packageName,
@@ -643,7 +660,8 @@ async function stopAndroidPackage(device: DeviceInfo, packageName: string): Prom
   }
   await runAndroidShell(device, ['am', 'force-stop', packageName]);
   const expired = await waitForAndroidPackageStopped(device, packageName, killed);
-  if (expired) throw androidCloseTimeoutError(packageName, expired);
+  if (!expired || (purpose === 'relaunch' && expired === 'process')) return;
+  throw androidCloseTimeoutError(packageName, expired);
 }
 
 /**

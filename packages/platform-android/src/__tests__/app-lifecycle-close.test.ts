@@ -330,6 +330,40 @@ test('openAndroidApp refuses to relaunch a package whose stop fence expires', as
   }
 });
 
+test('openAndroidApp relaunches a package that Android restarts right after the stop', async () => {
+  vi.useFakeTimers();
+  const calls: (readonly string[])[] = [];
+  let pidofReads = 0;
+  try {
+    await withAndroidAdbProvider(
+      {
+        exec: async (args) => {
+          calls.push(args);
+          const stdout =
+            args[1] === 'pidof'
+              ? pidofReads++ === 0
+                ? '12345\n'
+                : '67890\n'
+              : args[1] === 'dumpsys'
+                ? 'mCurrentFocus=Window{42 u0 com.android.launcher/.Launcher}\n'
+                : '';
+          return { stdout, stderr: '', exitCode: 0 };
+        },
+      },
+      { serial: ANDROID_EMULATOR.id },
+      async () => {
+        await Promise.all([
+          openAndroidApp(ANDROID_EMULATOR, 'com.example.app', { terminateRunningApp: true }),
+          vi.runAllTimersAsync(),
+        ]);
+      },
+    );
+    assert.equal(calls.filter((args) => args[2] === 'start').length, 1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test.each([
   [9_999, true, 4],
   [10_000, false, 2],

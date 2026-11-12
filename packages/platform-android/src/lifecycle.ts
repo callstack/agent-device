@@ -116,6 +116,9 @@ async function openAndroidApplication(
       device: binding.device,
       interactor: await binding.resolveInteractor(input.execution, relaunchOwner),
       positionals: [relaunchOwner],
+    }).catch(async (error: unknown) => {
+      const { isAndroidPackageRestartedAfterClose } = await import('./app-lifecycle.ts');
+      if (!isAndroidPackageRestartedAfterClose(error)) throw error;
     });
     timing.relaunchCloseDurationMs = elapsed(closeStartedAtMs);
   }
