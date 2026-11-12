@@ -29,7 +29,7 @@ const METRO_COMMAND_NAME = 'metro';
 const METRO_ACTION_VALUES = ['prepare', 'reload'] as const;
 
 const metroCommandDescription =
-  'Prepare a React Native development server or ask connected apps to reload, using the development server this session is bound to. Provide explicit runtime inputs only to override that binding for one call.';
+  'Prepare a React Native development server or ask connected apps to reload, using the development server this session is bound to. Explicit runtime inputs override that binding for one call.';
 
 export const metroCommandMetadata = defineFieldCommandMetadata(
   METRO_COMMAND_NAME,

@@ -85,7 +85,7 @@ const pushCommandMetadata = defineFieldCommandMetadata(
 
 const triggerAppEventCommandMetadata = defineFieldCommandMetadata(
   'trigger-app-event',
-  'Ask the app to handle an app-defined automation or test event, with an optional structured payload. Call this only for event names and payload shapes the app documents.',
+  'Ask the app to handle an app-defined automation or test event, with an optional structured payload. Supported event names and payload shapes are defined by the app.',
   {
     event: requiredField(
       stringField('Name of an app-defined automation or test event the app documents.'),

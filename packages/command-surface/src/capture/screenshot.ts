@@ -28,7 +28,7 @@ import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 const SCREENSHOT_COMMAND_NAME = 'screenshot';
 
 const screenshotCommandDescription =
-  'Capture a screenshot of the active app or web session. Choose the capture scope, density, size, or annotations through the corresponding input fields when needed.';
+  'Capture a screenshot of the active app or web session. Input fields control capture scope, density, size, and annotations.';
 
 const screenshotCommandMetadata = defineFieldCommandMetadata(
   SCREENSHOT_COMMAND_NAME,

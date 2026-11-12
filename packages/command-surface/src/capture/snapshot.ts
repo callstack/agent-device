@@ -18,7 +18,7 @@ import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 const SNAPSHOT_COMMAND_NAME = 'snapshot';
 
 const snapshotCommandDescription =
-  'Capture the accessibility tree or compare it with the previous session baseline. Use the returned refs for subsequent semantic interactions and the diff option to verify UI changes.';
+  'Capture the accessibility tree or compare it with the previous session baseline. The result includes refs for semantic interactions; the diff option reports UI changes.';
 
 const snapshotBackendCapabilityHelp = Object.entries(SNAPSHOT_BACKEND_CAPABILITIES)
   .map(([backend, capability]) => {

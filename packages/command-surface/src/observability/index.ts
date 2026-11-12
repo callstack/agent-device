@@ -36,7 +36,7 @@ const eventsCommandDescription =
   'Read the daemon-owned session event timeline as paged JSON-friendly entries';
 const networkCommandDescription = 'Dump recent HTTP(s) traffic parsed from the session app log';
 const audioCommandDescription =
-  'Measure browser or host-rendered simulator/emulator audio as compact dBFS buckets. Start a probe before requesting its status or stopping it.';
+  'Measure browser or host-rendered simulator/emulator audio as compact dBFS buckets. Probe status and stop require a started probe.';
 
 export const logsCommandMetadata = defineFieldCommandMetadata(
   LOGS_COMMAND_NAME,

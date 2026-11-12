@@ -10,7 +10,7 @@ const REACT_NATIVE_COMMAND_NAME = 'react-native';
 const REACT_NATIVE_ACTION_VALUES = ['dismiss-overlay'] as const;
 
 const reactNativeCommandDescription =
-  'Run supported React Native automation helpers. Use dismiss-overlay to close a visible development error overlay before continuing normal UI automation.';
+  'Run supported React Native automation helpers. The dismiss-overlay action closes a visible development error overlay.';
 
 export const reactNativeCommandMetadata = defineFieldCommandMetadata(
   REACT_NATIVE_COMMAND_NAME,

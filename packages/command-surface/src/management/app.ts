@@ -32,7 +32,7 @@ import { withCommandRuntimeHints } from '../runtime-hints.ts';
 
 const appsCommandMetadata = defineFieldCommandMetadata(
   'apps',
-  'List the apps installed on the selected device. Include system or OEM apps only when they are needed as automation targets.',
+  'List the apps installed on the selected device. The appsFilter input includes or excludes system and OEM apps.',
   {
     appsFilter: enumField(
       ['user-installed', 'all'],
@@ -43,7 +43,7 @@ const appsCommandMetadata = defineFieldCommandMetadata(
 
 const openCommandMetadata = defineFieldCommandMetadata(
   'open',
-  'Boot the selected device when needed, then open an app, deep link, or URL in a session. Use the app or URL inputs to choose what becomes the foreground automation target. Remote daemons refuse file: URLs in open targets and launch URLs with reason REMOTE_HOST_INPUT_DENIED. Serve local web content over HTTP(S) instead.',
+  'Boot the selected device when needed, then open an app, deep link, or URL in a session. The app or URL inputs select the foreground automation target. Remote daemons refuse file: URLs in open targets and launch URLs with reason REMOTE_HOST_INPUT_DENIED. Local web content is supported over HTTP(S).',
   {
     app: stringField('App name, bundle id, package, or URL.'),
     url: stringField('Optional URL passed with an app shell.'),
@@ -93,7 +93,7 @@ const openCommandMetadata = defineFieldCommandMetadata(
 
 const closeCommandMetadata = defineFieldCommandMetadata(
   'close',
-  'Close the named app, or close the active session app when app is omitted. If the session booted a local simulator or emulator, add shutdown when you finish, unless the user asks to keep it running; close alone never stops the device. Android ADB close fails with android-app-close-timeout if the app stays foreground past 2s, a killed process does not exit within 10s, or a new process runs past 2s; a relaunching open accepts that new process. It fails with android-process-probe-unavailable when adb pidof cannot list the app processes; if that happens before the force-stop, the app keeps running. If close cannot confirm its cleanup on a session that holds a device claim, the session and its claim stay; run close again with the same options to retry the cleanup, leaving out save-script once the script is published.',
+  'Close the named app, or close the active session app when app is omitted. The shutdown option also stops a local simulator or emulator booted by the session; close alone never stops the device. Android ADB close fails with android-app-close-timeout if the app stays foreground past 2s, a killed process does not exit within 10s, or a new process runs past 2s; a relaunching open accepts that new process. It fails with android-process-probe-unavailable when adb pidof cannot list the app processes; if that happens before the force-stop, the app keeps running. If close cannot confirm its cleanup on a session that holds a device claim, the session and its claim stay. A repeated close retries cleanup with the same options; save-script is no longer needed after the script is published.',
   {
     app: stringField('Optional app to close.'),
     shutdown: booleanField('Shutdown the session/device where supported.'),

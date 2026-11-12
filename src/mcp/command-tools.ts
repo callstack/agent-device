@@ -42,6 +42,7 @@ import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
 import { resolveMcpConfigDefaults } from './tool-input-config.ts';
 import { projectStructuredContent } from './tool-result.ts';
 import { createToolRefPinStore, type ToolRefPinStore } from './tool-ref-pins.ts';
+import { COMMAND_TOOL_METADATA } from './tool-metadata.ts';
 
 export type ToolResult = {
   isError: boolean;
@@ -130,6 +131,8 @@ function toolInputAudience(metadata: AdmissionMetadata): InputAudienceMap {
 /** `outputSchemas` advertises each typed tool's outputSchema; only a structured host returns data that matches it. */
 export function listCommandTools(options: { outputSchemas: boolean }): Array<{
   name: string;
+  title: string;
+  annotations: { readOnlyHint: boolean; destructiveHint: boolean };
   description: string;
   inputSchema: JsonSchema;
   outputSchema?: JsonSchema;
@@ -142,8 +145,11 @@ export function listCommandTools(options: { outputSchemas: boolean }): Array<{
         ? MCP_COMMAND_OUTPUT_SCHEMAS[definition.name as keyof typeof MCP_COMMAND_OUTPUT_SCHEMAS]
         : undefined;
     const advertised = advertisedInputSchema(definition.name, definition);
+    const [title, readOnlyHint] = COMMAND_TOOL_METADATA[definition.name];
     return {
       name: definition.name,
+      title,
+      annotations: { readOnlyHint, destructiveHint: !readOnlyHint },
       description: withTimeoutNote(definition.name, mcpBody(definition)),
       inputSchema: advertised,
       // Only typed commands carry an outputSchema; untyped tools stay

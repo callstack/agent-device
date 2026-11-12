@@ -80,13 +80,13 @@ export const DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS = {
 
 const devicesCommandMetadata = defineFieldCommandMetadata(
   'devices',
-  'List available devices and simulators that can be selected for automation. Use platform, device, udid, or serial inputs on later commands to target one result.',
+  'List available devices and simulators that can be selected for automation. Results include identifiers accepted by the platform, device, udid, and serial selection inputs.',
   {},
 );
 
 const capabilitiesCommandMetadata = defineFieldCommandMetadata(
   'capabilities',
-  'List the commands supported by the selected device or active session. Use device-selection inputs when checking support before a session is open.',
+  'List the commands supported by the selected device or active session. Device-selection inputs support capability checks without an open session.',
   {},
 );
 

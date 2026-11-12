@@ -44,9 +44,11 @@ export function terminalOnlyCommandNames(): string[] {
  * none of the routing/timeout/batch traits descriptors exist to declare, and adding it
  * there would also mint a redundant CLI command next to `agent-device help`.
  */
-export const HELP_TOOL: { name: string; description: string; inputSchema: JsonSchema } = {
+export const HELP_TOOL = {
   name: HELP_TOOL_NAME,
-  description: `Usage guides. No topic: the root decision card. topic = one of ${helpTopicIds().join(', ')} for that guide, or a tool name for its complete flag reference. For specialized work or an unclear command shape only; not a startup step, not needed after an error that carries a hint.`,
+  title: 'Read usage guides',
+  annotations: { readOnlyHint: true, destructiveHint: false },
+  description: `Return usage guides and command references. With no topic, returns the root decision card. The topic can be ${helpTopicIds().join(', ')}, or a tool name for its complete flag reference.`,
   inputSchema: {
     type: 'object',
     properties: {
@@ -54,6 +56,12 @@ export const HELP_TOOL: { name: string; description: string; inputSchema: JsonSc
     },
     additionalProperties: false,
   },
+} satisfies {
+  name: string;
+  title: string;
+  annotations: { readOnlyHint: boolean; destructiveHint: boolean };
+  description: string;
+  inputSchema: JsonSchema;
 };
 
 // The guides are the CLI's own text: rewriting their prose per surface would fork one
