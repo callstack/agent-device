@@ -117,7 +117,7 @@ function placeSessionEventLogWindow(eventLogPath: string): SessionEventLogWindow
   if (!newest) throw unverifiedWindowError(eventLogPath, 'window file records no generation');
 
   const activeExists = fileExists(eventLogPath);
-  const activeStart = placeActiveGeneration(eventLogPath, newest);
+  const activeStart = placeActiveGeneration(readFirstLineDigest(eventLogPath), newest);
   const files: EventLogWindowFile[] = [];
   const rotatedStart = placeRotatedGeneration({
     eventLogPath,
@@ -147,8 +147,10 @@ function placeNeverRotatedWindow(eventLogPath: string, rotatedPath: string): Ses
  * the sidecar was written, so a first line still matching it means the rename
  * has not landed yet and the active file is still that generation.
  */
-function placeActiveGeneration(eventLogPath: string, newest: EventLogGeneration): number {
-  const activeDigest = readFirstLineDigest(eventLogPath);
+function placeActiveGeneration(
+  activeDigest: string | undefined,
+  newest: EventLogGeneration,
+): number {
   return activeDigest !== undefined && activeDigest === newest.firstLineDigest
     ? newest.firstLineIndex
     : newest.firstLineIndex + newest.lineCount;
@@ -214,11 +216,7 @@ export async function rotateSessionEventLogIfNeeded(
       throw unverifiedWindowError(eventLogPath, 'active generation differs from its window record');
     }
     const record: EventLogGeneration = {
-      firstLineIndex: activeRecorded
-        ? newest.firstLineIndex
-        : newest
-          ? newest.firstLineIndex + newest.lineCount
-          : 0,
+      firstLineIndex: newest ? placeActiveGeneration(measured.firstLineDigest, newest) : 0,
       lineCount: measured.lineCount,
       firstLineDigest: measured.firstLineDigest,
     };
