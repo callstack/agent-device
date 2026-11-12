@@ -33,6 +33,15 @@ Protocol and maintenance references:
 
 ## UITest Runner File Map
 
+### Busy keyboard regression tests
+
+Run the two `testKeyboard*WhileTheAppIsBusy` tests with the simulator software keyboard enabled.
+Before you boot a throwaway simulator, run `defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO`.
+Restore the previous preference after the run.
+If the software keyboard does not appear, the tests fail instead of skipping.
+The tests assert command success and the fixture's `Done while busy` or `Return while busy` label.
+The Return test also asserts the keyboard visibility reported after submission.
+
 `AgentDeviceRunnerUITests/RunnerTests` is split into focused files to reduce context size for contributors and LLM agents.
 
 - `RunnerTests.swift`: shared state/constants, `setUp()`, and `testCommand()` entry flow.

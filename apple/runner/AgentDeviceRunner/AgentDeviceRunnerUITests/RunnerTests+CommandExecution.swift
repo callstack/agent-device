@@ -617,7 +617,7 @@ extension RunnerTests {
       )
     case .keyboardReturn:
       var press: (wasVisible: Bool, pressed: Bool, visible: Bool)?
-      withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {
+      withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .preEventSkipped) {
         press = pressKeyboardReturn(app: activeApp)
       }
       guard let result = press else {

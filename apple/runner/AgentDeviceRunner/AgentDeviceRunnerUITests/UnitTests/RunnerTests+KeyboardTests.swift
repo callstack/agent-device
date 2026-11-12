@@ -342,7 +342,9 @@ extension RunnerTests {
       let response = try execute(command: command)
 
       XCTAssertTrue(response.ok, String(describing: response.error))
-      XCTAssertEqual(app.staticTexts["agent-device-keyboard-busy-answer"].label, "Done while busy")
+      let answer = app.staticTexts["agent-device-keyboard-busy-answer"].label
+      XCTAssertEqual(answer, "Done while busy")
+      NSLog("AGENT_DEVICE_KEYBOARD_BUSY command=dismiss response.ok=%@ answer=%@", response.ok ? "true" : "false", answer)
     }
   }
 
@@ -353,7 +355,11 @@ extension RunnerTests {
       let response = try execute(command: command)
 
       XCTAssertTrue(response.ok, String(describing: response.error))
-      XCTAssertEqual(app.staticTexts["agent-device-keyboard-busy-answer"].label, "Return while busy")
+      XCTAssertEqual(response.data?.wasVisible, true)
+      XCTAssertEqual(response.data?.visible, false)
+      let answer = app.staticTexts["agent-device-keyboard-busy-answer"].label
+      XCTAssertEqual(answer, "Return while busy")
+      NSLog("AGENT_DEVICE_KEYBOARD_BUSY command=enter response.ok=%@ visible=%@ answer=%@", response.ok ? "true" : "false", String(describing: response.data?.visible), answer)
     }
   }
 
@@ -376,9 +382,9 @@ extension RunnerTests {
     while !isKeyboardVisible(app: app) && Date() < keyboardDeadline {
       sleepFor(0.2)
     }
-    try XCTSkipUnless(
+    XCTAssertTrue(
       isKeyboardVisible(app: app),
-      "software keyboard is down: this simulator cannot exercise a keyboard control"
+      "Enable the simulator software keyboard before running the busy keyboard tests; see apple/runner/README.md"
     )
     XCTAssertEqual(app.staticTexts["agent-device-keyboard-busy-answer"].label, "Unanswered")
     try body()
