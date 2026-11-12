@@ -16,7 +16,9 @@ export function scanDaemonFixtureLaunches(files: readonly FixtureSource[]): stri
   const family = new Set<string>();
   const imports = new Map<string, string[]>();
   const paths = new Set(files.map(({ file }) => file));
+  const candidates = familyCandidates(files, paths);
   for (const { file, source } of files) {
+    if (!candidates.has(file)) continue;
     const parsed = parseSync(file, source);
     if (parsed.errors.length)
       throw new Error(`Cannot scan daemon fixtures in ${file}: ${parsed.errors[0]!.message}`);
@@ -42,13 +44,7 @@ export function scanDaemonFixtureLaunches(files: readonly FixtureSource[]): stri
       )
         family.add(file);
       if (specifier.startsWith('.')) {
-        const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier));
-        const dependency = [
-          resolved,
-          resolved.replace(/\.js$/, '.ts'),
-          `${resolved}.ts`,
-          `${resolved}/index.ts`,
-        ].find((candidate) => paths.has(candidate));
+        const dependency = resolveLocalImport(file, specifier, paths);
         if (dependency) dependencies.push(dependency);
       }
     });
@@ -67,6 +63,52 @@ export function scanDaemonFixtureLaunches(files: readonly FixtureSource[]): stri
   return files
     .filter(({ file }) => family.has(file))
     .flatMap(({ file, source }) => daemonFixtureLaunchViolations(source, file));
+}
+
+const FAMILY_SEED = 'createRegisteredDaemonFixtures';
+const RELATIVE_SPECIFIER = /['"](\.{1,2}\/[^'"\n]+)['"]/g;
+
+/**
+ * A superset of the family found from text alone: files that name the seed helper, plus every file
+ * that reaches one through a quoted relative path. Only these need the AST pass, and the exact
+ * family is always inside this set.
+ */
+function familyCandidates(
+  files: readonly FixtureSource[],
+  paths: ReadonlySet<string>,
+): Set<string> {
+  const candidates = new Set<string>();
+  const importers = new Map<string, string[]>();
+  for (const { file, source } of files) {
+    if (source.includes(FAMILY_SEED)) candidates.add(file);
+    for (const match of source.matchAll(RELATIVE_SPECIFIER)) {
+      const dependency = resolveLocalImport(file, match[1]!, paths);
+      if (dependency) importers.set(dependency, [...(importers.get(dependency) ?? []), file]);
+    }
+  }
+  const pending = [...candidates];
+  while (pending.length > 0) {
+    for (const importer of importers.get(pending.pop()!) ?? []) {
+      if (candidates.has(importer)) continue;
+      candidates.add(importer);
+      pending.push(importer);
+    }
+  }
+  return candidates;
+}
+
+function resolveLocalImport(
+  file: string,
+  specifier: string,
+  paths: ReadonlySet<string>,
+): string | undefined {
+  const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier));
+  return [
+    resolved,
+    resolved.replace(/\.js$/, '.ts'),
+    `${resolved}.ts`,
+    `${resolved}/index.ts`,
+  ].find((candidate) => paths.has(candidate));
 }
 
 /** Checks mocked monitored launches in a daemon-fixture family module. */
