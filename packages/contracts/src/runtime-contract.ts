@@ -72,6 +72,11 @@ export type CommandContext = {
   session?: string;
   requestId?: string;
   signal?: AbortSignal;
+  /**
+   * The wall-clock instant the request must finish by: the earlier of its execution and result
+   * deadlines. Pre-dispatch admission never waits past it.
+   */
+  deadlineAtMs?: number;
   metadata?: Record<string, unknown>;
 };
 

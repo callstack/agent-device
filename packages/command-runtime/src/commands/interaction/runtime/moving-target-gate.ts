@@ -1,3 +1,23 @@
+/**
+ * The motion check of pre-dispatch admission (#3471, ADR 0039): a press or click resolved from a
+ * selector or `@ref` must not dispatch at a point an in-flight transition has already vacated. A
+ * capture is one instant's photograph of a surface that may still be rearranging itself, and the
+ * ADB-backed Android helper is measured reporting frames in flight — so an interaction issued right
+ * after an action that moved the UI can resolve a point the target has already left and report
+ * success on the vacancy.
+ *
+ * Two judgements decide when it is real: {@link movingTargetGateDecision} asks whether this position
+ * is still owed a second observation, and kernel's `areCapturedRectsAtSamePosition` asks whether the
+ * target has stopped — that one lives in `@agent-device/kernel/rect-center` because the post-gesture
+ * no-effect comparison judges the same pair of capture rects and must not hold its own band. The
+ * window is anchored on the mutation's END, so the check waits out only what is LEFT of it — which
+ * is also why the refusal's hint names `--settle` as the caller-opted superset.
+ *
+ * This module owns what the check judges. `pre-dispatch-admission.ts` owns when it looks, and the
+ * request budget every look and sleep runs under. Re-resolving rather than re-pointing is
+ * deliberate: each look spends the whole resolution path, so every shared guard re-runs against the
+ * fresh observation and the response's identity fields describe the node actually dispatched at.
+ */
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import type {
   InteractionTarget,
@@ -11,11 +31,10 @@ import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import type {
   AgentDeviceRuntime,
   CommandContext,
-  CommandSessionRecord,
   MovingTargetBaseline,
 } from '@agent-device/contracts/runtime-contract';
 import { nodeRectByIdentity } from '@agent-device/ad-script';
-import { now, sleep } from '../../runtime-common.ts';
+import { now } from '../../runtime-common.ts';
 import { captureInteractionSnapshot } from './interaction-snapshot-capture.ts';
 import { requireSnapshotSession } from './selector-read-shared.ts';
 import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
@@ -23,82 +42,52 @@ import { resolveInteractionTarget } from './resolution.ts';
 import type { ResolveInteractionTargetParams } from './interaction-resolution-request.ts';
 
 /**
- * The moving-target gate (#3471): a press or click resolved from a selector or `@ref` must not
- * dispatch at a point an in-flight transition has already vacated. A raw-coordinate target has no
- * resolved element to re-observe, so the gate passes it through. A capture is one instant's
- * photograph of a surface that may still be rearranging itself, and the ADB-backed Android helper is
- * measured reporting frames in flight — so an interaction issued right after an action that moved
- * the UI can resolve a point the target has already left and report success on the vacancy. The exposure is the runtime path's own capture-to-dispatch
- * distance. Android requires a bounded quiet interval; other platforms retain the full observation window.
- *
- * Two judgements decide when it is real: {@link movingTargetGateDecision} asks whether this position
- * is still owed a second observation, and kernel's `areCapturedRectsAtSamePosition` asks whether the
- * target has stopped — that one lives in `@agent-device/kernel/rect-center` because the post-gesture
- * no-effect comparison judges the same pair of capture rects and must not hold its own band. Both
- * are pure over values the caller already holds, so neither is re-derived per platform. The window is
- * anchored on the mutation's END, so the gate waits out only what is LEFT of it — which is also why
- * the refusal's hint names `--settle` as the caller-opted superset.
- *
- * Android uses the window as a deadline and returns after a measured 100 ms quiet position.
- * Other backends retain the end-of-window recheck.
- * This seam runs in front of the dispatch and behind every pre-dispatch
- * guard that already judged the target (occlusion, off-screen, keyboard), so it re-decides none of
- * them: it takes the second and third observations, and dispatches the requested interaction at the
- * position two of them agree on.
- *
- * Agreement dispatches rather than refuses: a control that settled inside the window is the target
- * the caller asked for, at where it ended up. The refusal is reserved for a target the window could not
- * settle, where a coordinate would be a guess.
- *
- * Re-resolving rather than re-pointing is deliberate: the recheck spends the whole resolution path,
- * so every shared guard re-runs against the fresh observation and the response's identity fields
- * describe the node actually dispatched at.
+ * The motion check's screening: one session-record read, no capture. A target the previous action's
+ * own tree already shows at the resolved rect is `stationary`, and one resolved after the window has
+ * closed is `not-recent`; both pass at the point already resolved. Otherwise the check waits, with
+ * its transition window anchored here, once.
  */
-export async function guardResolvedTargetAgainstMotion(
+export async function screenMotion(
   runtime: AgentDeviceRuntime,
-  options: CommandContext & { target: InteractionTarget },
-  params: ResolveInteractionTargetParams,
-  resolved: ResolvedInteractionTarget,
-): Promise<ResolvedInteractionTarget> {
-  // A raw-coordinate press has no resolved element that could be at rest, and a target the capture
-  // gave no measurable rect for has already met the guard that owns that case.
-  if (resolved.kind === 'point') return resolved;
-  if (!resolved.node?.rect) return resolved;
-  // Two guards own the identity of what they already resolved and refuse a second look at it: a
-  // replay step's post-resolution identity guard (ADR 0012 step 4) judges THIS resolution against its
-  // own verification tree, and a mutating `find`'s carried node (#1654) is the node its locator just
-  // picked. Re-resolving under either swaps evidence for a different observation, so this asks
-  // before spending the session read the answer would then discard.
-  if (params.expectedResolvedTarget || params.preresolvedTarget) return resolved;
-  const gate = await readMovingTargetGate(runtime, options, resolved.node, resolved.preAction);
-  if (!gate) return resolved;
-  return runtime.backend.platform === 'android'
-    ? await resolveAndroidAtRestTarget(runtime, options, params, resolved, gate)
-    : await resolveAtRestTarget(runtime, options, params, resolved, gate);
+  options: CommandContext,
+  resolvedNode: SnapshotNode,
+  resolvedSurface: SurfaceScopedNodes | undefined,
+): Promise<{ kind: 'pass' } | { kind: 'wait'; wait: MotionWait }> {
+  // A session store that carries no baseline is the non-daemon case: an in-process runtime owns no
+  // mutation history, and a check with no history has nothing to worry about.
+  const session = await runtime.sessions.get(options.session ?? 'default');
+  const baseline = session?.movingTargetBaseline;
+  if (!baseline) return { kind: 'pass' };
+  const policy = MOTION_POLICIES[runtime.backend.platform === 'android' ? 'android' : 'default'];
+  const nowMs = now(runtime);
+  const decision = movingTargetGateDecision({
+    baselineFinishedAtMs: baseline.finishedAt,
+    targetShownAtRest: baselineShowsTargetAtRest(baseline, resolvedNode, resolvedSurface),
+    nowMs,
+    windowMs: policy.windowMs,
+  });
+  if (decision.kind !== 'recheck') return { kind: 'pass' };
+  const firstLookAtMs = policy.firstLook === 'after-window' ? nowMs + decision.waitMs : nowMs;
+  return {
+    kind: 'wait',
+    wait: {
+      policy,
+      firstLookAtMs,
+      giveUpAtMs: Math.max(nowMs + decision.waitMs, firstLookAtMs + policy.quietMs),
+    },
+  };
 }
 
 /** How long after a mutation its target positions stay owed a second observation. */
 export const MOVING_TARGET_GATE_WINDOW_MS = 500;
-const ANDROID_MOVING_TARGET_WINDOW_MS = 1_500;
-const ANDROID_TARGET_QUIET_MS = 100;
 
 /**
  * How far apart the two observations must be for agreeing to mean "at rest". Below one capture
  * round trip, two observations of a still-moving target agree by timing rather than by the target
- * having stopped, and the gate would certify a position it never measured. The gate therefore waits
- * `max(remaining window, this)` before re-observing.
+ * having stopped, and the check would certify a position it never measured. It is also the interval
+ * between looks.
  */
 export const MOVING_TARGET_GATE_SAMPLE_GAP_MS = 50;
-
-type MovingTargetGateDecision =
-  /** The session holds no baseline: nothing has resolved a mutation recently enough to matter. */
-  | { kind: 'idle' }
-  /** The last resolving mutation finished at or beyond the window ago; the resolved point stands. */
-  | { kind: 'not-recent' }
-  /** Inside the window, but the pre-action tree already shows this node at the resolved rect. */
-  | { kind: 'stationary' }
-  /** Inside the window and disturbed: re-observe at the end of it before dispatching. */
-  | { kind: 'recheck'; waitMs: number };
 
 /**
  * Whether a resolved rect is still owed a second observation, from the session's mutation clock and
@@ -112,7 +101,15 @@ export function movingTargetGateDecision(params: {
   targetShownAtRest: boolean;
   nowMs: number;
   windowMs?: number;
-}): MovingTargetGateDecision {
+}):
+  /** The session holds no baseline: nothing has resolved a mutation recently enough to matter. */
+  | { kind: 'idle' }
+  /** The last resolving mutation finished at or beyond the window ago; the resolved point stands. */
+  | { kind: 'not-recent' }
+  /** Inside the window, but the pre-action tree already shows this node at the resolved rect. */
+  | { kind: 'stationary' }
+  /** Inside the window and disturbed: re-observe at the end of it before dispatching. */
+  | { kind: 'recheck'; waitMs: number } {
   if (params.baselineFinishedAtMs === undefined) return { kind: 'idle' };
   const ageMs = params.nowMs - params.baselineFinishedAtMs;
   const windowMs = params.windowMs ?? MOVING_TARGET_GATE_WINDOW_MS;
@@ -124,31 +121,61 @@ export function movingTargetGateDecision(params: {
   };
 }
 
-/** A press owed a re-observation: the recheck decision, which carries the wait it owes. */
-type MovingTargetRecheck = Extract<MovingTargetGateDecision, { kind: 'recheck' }>;
+/**
+ * How the motion check waits for a target owed a re-observation. Android looks immediately and
+ * accepts a measured quiet interval inside its longer window. Other backends look once the window
+ * has passed and accept two agreeing looks one sample gap apart. `quietMs` is how long the position
+ * must hold across looks; `minLooks` is how many looks are taken before the window may end the wait.
+ */
+const MOTION_POLICIES = {
+  default: {
+    windowMs: MOVING_TARGET_GATE_WINDOW_MS,
+    quietMs: MOVING_TARGET_GATE_SAMPLE_GAP_MS,
+    minLooks: 2,
+    firstLook: 'after-window',
+  },
+  android: { windowMs: 1_500, quietMs: 100, minLooks: 3, firstLook: 'immediately' },
+} as const;
+
+/** A target owed re-observation: when to take the first look, and when the window gives up. */
+export type MotionWait = Readonly<{
+  policy: (typeof MOTION_POLICIES)[keyof typeof MOTION_POLICIES];
+  firstLookAtMs: number;
+  giveUpAtMs: number;
+}>;
 
 /**
- * The gate's idle-path cost, stated as code: one session-record read, no capture. A press whose
- * target the last action's own tree already shows at the resolved rect is `stationary`, and one
- * taken after the window has closed is `not-recent`; both dispatch at the point already resolved.
+ * Judges one look against the previous one. Agreement dispatches rather than refuses: a control
+ * that settled inside the window is the target the caller asked for, at where it ended up.
+ *
+ * Rest is one position on one surface, which is why the screening refuses to compare positions
+ * across surfaces at all (#2438). A look taken on another presentation — a system sheet arriving
+ * during the sample gap can carry the same control at the same rect — therefore measures nothing
+ * about where this target came to rest: it refuses like a look that measured nothing, and no
+ * position from it is reported as somewhere the target moved to.
  */
-async function readMovingTargetGate(
-  runtime: AgentDeviceRuntime,
-  options: CommandContext,
-  resolvedNode: SnapshotNode,
-  resolvedSurface: SurfaceScopedNodes | undefined,
-): Promise<MovingTargetRecheck | undefined> {
-  const baseline = await readGateBaseline(runtime, options);
-  if (!baseline) return undefined;
-  const decision = movingTargetGateDecision({
-    baselineFinishedAtMs: baseline.finishedAt,
-    targetShownAtRest: baselineShowsTargetAtRest(baseline, resolvedNode, resolvedSurface),
-    nowMs: now(runtime),
-    ...(runtime.backend.platform === 'android'
-      ? { windowMs: ANDROID_MOVING_TARGET_WINDOW_MS }
-      : {}),
-  });
-  return decision.kind === 'recheck' ? decision : undefined;
+export function judgeMotionLook(
+  look: MovingTargetObservation,
+  previous: MovingTargetObservation | undefined,
+  restingSinceMs: number,
+  policy: MotionWait['policy'],
+):
+  /** The position held for the policy's quiet interval: dispatch at this look's resolution. */
+  | { kind: 'pass'; admitted: ResolvedInteractionTarget }
+  /** Not yet at rest; the position has held since `restingSinceMs`. */
+  | { kind: 'wait'; restingSinceMs: number }
+  /** The look measured no position on the surface the previous looks measured. */
+  | { kind: 'refuse' } {
+  if (!look.measured) return { kind: 'refuse' };
+  if (previous?.measured && look.surfaceBundleId !== previous.surfaceBundleId) {
+    return { kind: 'refuse' };
+  }
+  if (!previous?.measured || !areCapturedRectsAtSamePosition(previous.rect, look.rect)) {
+    return { kind: 'wait', restingSinceMs: look.observedAtMs };
+  }
+  return look.observedAtMs - restingSinceMs >= policy.quietMs
+    ? { kind: 'pass', admitted: look.resolved }
+    : { kind: 'wait', restingSinceMs };
 }
 
 /**
@@ -167,8 +194,8 @@ async function readMovingTargetGate(
  *
  * The claim is an inference from one tree, not stability evidence: an animation that has not moved
  * the control yet reads here exactly as a finished transition does, and no observation available at
- * this instant separates them. The tier that carries evidence is `resolveAtRestTarget`, which spends
- * two fresh observations and requires them to agree on a position and a surface. This one buys the
+ * this instant separates them. The tier that carries evidence is the admission loop, which spends
+ * fresh looks and requires them to agree on a position and a surface. This one buys the
  * case it can decide for free — the previous transition already finished, which is what the large
  * majority of presses inside the window are — and sends everything else to be measured.
  */
@@ -183,91 +210,12 @@ function baselineShowsTargetAtRest(
 }
 
 /**
- * The baseline the gate screens against. A session store that carries none is the non-daemon case —
- * an in-process runtime owns no mutation history — and a gate with no history has nothing to worry
- * about.
+ * One look at the target: what it resolved to, whether that look measured a position, and the
+ * instant the look ended.
  */
-async function readGateBaseline(
-  runtime: AgentDeviceRuntime,
-  options: CommandContext,
-): Promise<CommandSessionRecord['movingTargetBaseline']> {
-  const session: CommandSessionRecord | undefined = await runtime.sessions.get(
-    options.session ?? 'default',
-  );
-  return session?.movingTargetBaseline;
-}
-
-/**
- * Re-resolves past the end of the window and one sample gap later; agreement is the resting
- * position. A re-resolution that fails outright is left to propagate: the resolution path's own typed
- * refusal (`selector_not_found`, `ref_not_found`, both `dispatched: 'no'`) describes a target the
- * wait lost more accurately than a motion refusal would, and the window has by then passed, so the
- * caller's retry is a fresh judgement rather than the same one.
- */
-async function resolveAtRestTarget(
-  runtime: AgentDeviceRuntime,
-  options: CommandContext & { target: InteractionTarget },
-  params: ResolveInteractionTargetParams,
-  resolved: Exclude<ResolvedInteractionTarget, { kind: 'point' }>,
-  gate: MovingTargetRecheck,
-): Promise<ResolvedInteractionTarget> {
-  // Measured, not arithmetic: the refused press reports the wait it actually paid, which is what a
-  // caller tuning `--settle` against this error needs.
-  const waitedFrom = now(runtime);
-  await sleep(runtime, gate.waitMs);
-  const first = await reObserveTarget(runtime, options, params);
-  if (!first.measured) throw motionRefusal(resolved, undefined, now(runtime) - waitedFrom);
-  await sleep(runtime, MOVING_TARGET_GATE_SAMPLE_GAP_MS);
-  const second = onSameSurface(first, await reObserveTarget(runtime, options, params));
-  if (second.measured && areCapturedRectsAtSamePosition(first.rect, second.rect))
-    return second.resolved;
-  throw motionRefusal(resolved, second.rect, now(runtime) - waitedFrom);
-}
-
-async function resolveAndroidAtRestTarget(
-  runtime: AgentDeviceRuntime,
-  options: CommandContext & { target: InteractionTarget },
-  params: ResolveInteractionTargetParams,
-  resolved: Exclude<ResolvedInteractionTarget, { kind: 'point' }>,
-  gate: MovingTargetRecheck,
-): Promise<ResolvedInteractionTarget> {
-  const startedAt = now(runtime);
-  const deadline = startedAt + Math.max(gate.waitMs, ANDROID_TARGET_QUIET_MS);
-  let previous = await reObserveTarget(runtime, options, params);
-  if (!previous.measured) throw motionRefusal(resolved, undefined, now(runtime) - startedAt);
-  let quietSince = now(runtime);
-  let observations = 0;
-  while (observations < 2 || now(runtime) < deadline) {
-    await sleep(runtime, MOVING_TARGET_GATE_SAMPLE_GAP_MS);
-    const next = onSameSurface(previous, await reObserveTarget(runtime, options, params));
-    observations++;
-    if (!next.measured) throw motionRefusal(resolved, undefined, now(runtime) - startedAt);
-    if (!areCapturedRectsAtSamePosition(previous.rect, next.rect)) quietSince = now(runtime);
-    if (now(runtime) - quietSince >= ANDROID_TARGET_QUIET_MS) return next.resolved;
-    previous = next;
-  }
-  throw motionRefusal(resolved, previous.rect, now(runtime) - startedAt);
-}
-
-/**
- * Rest is one position on one surface, which is why the screening refuses to compare positions
- * across surfaces at all (#2438). A look taken on another presentation — a system sheet arriving
- * during the sample gap can carry the same control at the same rect — therefore measures nothing
- * about where this target came to rest, and is demoted to the shape that already means that: it
- * cannot certify agreement, and no position from it is reported as somewhere the target moved to.
- */
-function onSameSurface(
-  first: MovingTargetObservation & { measured: true },
-  next: MovingTargetObservation,
-): MovingTargetObservation {
-  return next.measured && next.surfaceBundleId === first.surfaceBundleId
-    ? next
-    : { measured: false, rect: undefined, resolved: next.resolved };
-}
-
-/** One look at the target: what it resolved to, and whether that look measured a position. */
-type MovingTargetObservation = MovingTargetMeasurement & {
+export type MovingTargetObservation = MovingTargetMeasurement & {
   resolved: ResolvedInteractionTarget;
+  observedAtMs: number;
 };
 
 /** Whether a look produced a position of its own, or nothing to compare against. */
@@ -276,7 +224,7 @@ type MovingTargetMeasurement =
   | MovingTargetMeasured
   /**
    * No position of its own. Two of these would "agree" trivially — rest certified by a
-   * non-measurement, the one outcome the gate must never produce — so the first of them ends the
+   * non-measurement, the one outcome the check must never produce — so the first of them ends the
    * recheck, and a refusal reports no `movedToRect` rather than a stale one.
    */
   | { measured: false; rect: undefined };
@@ -300,9 +248,9 @@ type MovingTargetMeasured = {
  * ADR 0014's reconciliation adopt the capture's coordinates for a same-identity node, which is the
  * sanctioned way a ref's position moves. `measureRefObservation` then asks whether that adoption is
  * what actually got dispatched — a resolution that kept its authorized frame node measured nothing
- * here, and the gate refuses rather than comparing one stale rect to itself.
+ * here, and the check refuses rather than comparing one stale rect to itself.
  */
-async function reObserveTarget(
+export async function reObserveTarget(
   runtime: AgentDeviceRuntime,
   options: CommandContext & { target: InteractionTarget },
   params: ResolveInteractionTargetParams,
@@ -313,9 +261,10 @@ async function reObserveTarget(
     // A selector resolution measured its target on the surface it resolved against, which it
     // publishes as `preAction` along with the tree.
     const surfaceBundleId = resolved.preAction?.surfaceBundleId;
+    const observedAtMs = now(runtime);
     return rect
-      ? { measured: true, resolved, rect, surfaceBundleId }
-      : { measured: false, resolved, rect: undefined };
+      ? { measured: true, resolved, rect, surfaceBundleId, observedAtMs }
+      : { measured: false, resolved, rect: undefined, observedAtMs };
   }
   // A ref names its node by index in the frame tree, so the observation has to mint refs over the
   // same node set: an interactive-only look at a full-tree frame renumbers every node it drops.
@@ -326,7 +275,11 @@ async function reObserveTarget(
     frameTree.presentation?.interactiveOnly === true,
   );
   const resolved = await resolveInteractionTarget(runtime, options, params);
-  return { resolved, ...measureRefObservation(surfaceScopedNodes(snapshot), resolved) };
+  return {
+    resolved,
+    observedAtMs: now(runtime),
+    ...measureRefObservation(surfaceScopedNodes(snapshot), resolved),
+  };
 }
 
 /**
@@ -386,7 +339,7 @@ function targetStillMovingHint(params: { selector: string | undefined }): string
  * authorized frame node) has no position to name, and an absent value is the honest report rather
  * than a stale one.
  */
-function motionRefusal(
+export function motionRefusal(
   resolved: Exclude<ResolvedInteractionTarget, { kind: 'point' }>,
   movedToRect: Rect | undefined,
   waitedMs: number,

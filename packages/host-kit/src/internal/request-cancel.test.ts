@@ -12,6 +12,7 @@ import {
   markRequestCanceled,
   registerRequestAbort,
   resolveRequestTrackingId,
+  getRequestDeadlineMs,
   getRequestSignal,
   throwIfRequestCanceled,
   withRequestDeadline,
@@ -398,4 +399,20 @@ test('a canceled request aborts its signal with the typed canceled error', () =>
   } finally {
     clearRequestAbortRegistration(registration);
   }
+});
+
+test('a request runs under the earlier of its execution and result deadlines', async () => {
+  const resultDeadlineMs = Date.now() + 60_000;
+  const registration = registerRequestAbort('earliest-deadline', undefined, { resultDeadlineMs });
+  try {
+    assert.equal(getRequestDeadlineMs('earliest-deadline'), resultDeadlineMs);
+    await withRequestDeadline('earliest-deadline', 1_000, async () => {
+      const deadlineMs = getRequestDeadlineMs('earliest-deadline')!;
+      assert.ok(deadlineMs < resultDeadlineMs, 'the shorter execution deadline wins');
+      return { ok: true };
+    });
+  } finally {
+    clearRequestAbortRegistration(registration);
+  }
+  assert.equal(getRequestDeadlineMs('unregistered-request'), undefined);
 });

@@ -1,4 +1,5 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import { getRequestDeadlineMs } from '@agent-device/host-kit/request';
 import { bindInteractionSession } from './interaction-session.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
@@ -205,6 +206,7 @@ function pressRuntimeOptions(
   const { flags } = params;
   return {
     ...shared,
+    deadlineAtMs: getRequestDeadlineMs(shared.requestId),
     button: params.clickButton,
     count: flags?.count,
     intervalMs: flags?.intervalMs,

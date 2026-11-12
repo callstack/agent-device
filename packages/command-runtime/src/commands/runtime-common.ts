@@ -17,7 +17,21 @@ export function now(runtime: Pick<AgentDeviceRuntime, 'clock'>): number {
   return runtime.clock?.now() ?? Date.now();
 }
 
-export async function sleep(runtime: Pick<AgentDeviceRuntime, 'clock'>, ms: number): Promise<void> {
-  if (runtime.clock) await runtime.clock.sleep(ms);
-  else await new Promise((resolve) => setTimeout(resolve, ms));
+/** Sleeps on the runtime clock; without one, a timer that an abort of `signal` ends early. */
+export async function sleep(
+  runtime: Pick<AgentDeviceRuntime, 'clock'>,
+  ms: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (runtime.clock) return await runtime.clock.sleep(ms);
+  if (signal?.aborted) return;
+  await new Promise<void>((resolve) => {
+    const finish = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', finish);
+      resolve();
+    };
+    const timer = setTimeout(finish, ms);
+    signal?.addEventListener('abort', finish, { once: true });
+  });
 }

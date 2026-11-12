@@ -168,7 +168,7 @@ const FIND_FOCUS_DISPATCH_GAPS_ISSUE = 'https://github.com/callstack/agent-devic
  */
 const RUNTIME_TREE_TARGET_STABILITY: GuaranteeEnforcement = {
   kind: 'runtime',
-  via: 'packages/command-runtime/src/commands/interaction/runtime/moving-target-gate.ts#guardResolvedTargetAgainstMotion',
+  via: 'packages/command-runtime/src/commands/interaction/runtime/pre-dispatch-admission.ts#admitResolvedTarget',
   appliesTo: ['press', 'click'],
 };
 
@@ -637,7 +637,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       targetStability: {
         kind: 'waived',
         reason:
-          "gap: the seam dispatches a touch point captured one runner round trip earlier without the #3471 re-observation, so a focus issued right after an action that animated the surface can aim a position the target has already vacated and report success on the vacancy. The gate itself is the acting leaf's (`guardResolvedTargetAgainstMotion`), and this route does not pass through it.",
+          "gap: the seam dispatches a touch point captured one runner round trip earlier without the #3471 re-observation, so a focus issued right after an action that animated the surface can aim a position the target has already vacated and report success on the vacancy. The gate itself is the acting leaf's pre-dispatch admission (`admitResolvedTarget`), and this route does not pass through it.",
         trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
       },
     },

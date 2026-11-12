@@ -40,11 +40,13 @@ export type ObservationEvidence = Readonly<{
 
 /**
  * How an observation loop ended: `done` when the verdict accepted a capture, `expired` when the
- * budget ran out while the verdict still said continue, `failed` when a capture threw.
+ * budget ran out while the verdict still said continue, `deadline` when the hard deadline ended it,
+ * `failed` when a capture threw.
  */
 type ObservedEnd<T, R> =
   | Readonly<{ kind: 'done'; result: R; value: T }>
   | Readonly<{ kind: 'expired'; last: T | undefined }>
+  | Readonly<{ kind: 'deadline'; last: T | undefined }>
   | Readonly<{ kind: 'failed'; last: T | undefined; error: unknown }>;
 
 export type Observed<T, R> = ObservationEvidence & ObservedEnd<T, R>;
@@ -57,6 +59,11 @@ export type ObserveUntilParams<T, R> = Readonly<{
   clock?: ObservationClock;
   /** A capture the caller already holds; judged first, without a poll. */
   initial?: T;
+  /**
+   * Clock time that ends the loop whatever the verdict or `minPolls` asks: no poll starts at or
+   * after it, and a capture that finishes at or past it is not judged.
+   */
+  deadlineMs?: number;
 }>;
 
 const REAL_CLOCK: ObservationClock = {
@@ -108,7 +115,9 @@ export async function observeUntil<T, R>(
   }
 }
 
-function remainingMs<T, R>({ state, clock }: Loop<T, R>): number {
+/** Time left in the soft budget, or with `hard`, before the hard deadline. */
+function remainingMs<T, R>({ state, clock, params }: Loop<T, R>, hard?: 'hard'): number {
+  if (hard) return (params.deadlineMs ?? Infinity) - clock.now();
   return state.startedMs + state.budgetMs - clock.now();
 }
 
@@ -116,15 +125,21 @@ function mustPoll<T, R>({ params, state }: Loop<T, R>): boolean {
   return state.observations < (params.schedule.minPolls ?? 1);
 }
 
-/** Sleeps one interval between observations; ends the loop when the budget is spent first. */
+/**
+ * Sleeps one interval between observations; ends the loop when the budget is spent first, or when
+ * the next poll could not start before the hard deadline.
+ */
 async function waitBeforePoll<T, R>(loop: Loop<T, R>): Promise<Observed<T, R> | undefined> {
   const { state, clock, params } = loop;
-  if (state.observations === 0) return undefined;
+  const deadline = () => finish(loop, { kind: 'deadline', last: state.last });
+  if (state.observations === 0) return remainingMs(loop, 'hard') > 0 ? undefined : deadline();
   const forced = mustPoll(loop);
   if (!forced && remainingMs(loop) <= 0) return finish(loop, { kind: 'expired', last: state.last });
   const { intervalMs } = params.schedule;
-  await clock.sleep(forced ? intervalMs : Math.max(0, Math.min(intervalMs, remainingMs(loop))));
-  return undefined;
+  const sleepMs = forced ? intervalMs : Math.max(0, Math.min(intervalMs, remainingMs(loop)));
+  if (sleepMs >= remainingMs(loop, 'hard')) return deadline();
+  await clock.sleep(sleepMs);
+  return remainingMs(loop, 'hard') > 0 ? undefined : deadline();
 }
 
 async function pollOnce<T, R>(loop: Loop<T, R>): Promise<Observed<T, R> | undefined> {
@@ -146,6 +161,7 @@ async function pollOnce<T, R>(loop: Loop<T, R>): Promise<Observed<T, R> | undefi
     return finish(loop, { kind: 'failed', last: state.last, error });
   }
   record('observed');
+  if (remainingMs(loop, 'hard') <= 0) return finish(loop, { kind: 'deadline', last: state.last });
   return judge(loop, value);
 }
 
