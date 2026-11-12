@@ -22,6 +22,9 @@
       "path": "../contracts"
     },
     {
+      "path": "../host-kit"
+    },
+    {
       "path": "../kernel"
     },
     {

@@ -69,3 +69,18 @@ export type RevylWorkerActionResponse = Readonly<{
   bundle_id?: string | null;
   package_name?: string | null;
 }>;
+
+/** Presigned URLs for one build the session installs; Revyl drops the object with the session. */
+export type RevylSessionArtifactUpload = Readonly<{
+  upload_url: string;
+  download_url: string;
+}>;
+
+/** `install_async` accepts an install and names it; `install_status` reports it until it ends. */
+export type RevylInstallAccepted = Readonly<{ install_id?: string; status?: string }>;
+
+export type RevylInstallStatus = Readonly<{
+  install_id?: string;
+  status?: string;
+  result?: RevylWorkerActionResponse | null;
+}>;

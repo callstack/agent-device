@@ -26,7 +26,7 @@ export function createRevylConnection(host: ProviderPluginHost) {
       rejectRefusedProviderProfileFields(flags, REVYL_PROFILE_FIELDS);
       requireRevylCredentials(host.env, `connect ${REVYL_PROVIDER}`);
       const platform = requireConnectPlatform(flags);
-      const app = requireAppUrl(flags.providerApp, host);
+      const app = optionalAppUrl(flags.providerApp, host);
       // Stored through the same canonicalizer allocation reads with, so the profile and the
       // `start_device` body cannot differ by surrounding whitespace.
       const deviceModel = revylTextFlag(flags.device);
@@ -36,10 +36,10 @@ export function createRevylConnection(host: ProviderPluginHost) {
           leaseProvider: REVYL_PROVIDER,
           platform,
           ...(deviceModel === undefined ? {} : { device: deviceModel }),
-          providerApp: app,
+          ...(app === undefined ? {} : { providerApp: app }),
           ...(osVersion === undefined ? {} : { providerOsVersion: osVersion }),
         },
-        extraFlags: { providerApp: app },
+        ...(app === undefined ? {} : { extraFlags: { providerApp: app } }),
       };
     },
     verify: async ({ flags }: { flags: CliFlags }) => {
@@ -48,12 +48,13 @@ export function createRevylConnection(host: ProviderPluginHost) {
       rejectRefusedProviderProfileFields(flags, REVYL_PROFILE_FIELDS);
       const deviceModel = revylTextFlag(flags.device);
       const osVersion = revylTextFlag(flags.providerOsVersion);
+      const appUrl = revylTextFlag(flags.providerApp);
       return await verifyRevylProfile(
         requireRevylCredentials(host.env, `connect ${REVYL_PROVIDER}`),
         host.clientVersion,
         requireResolvedProfilePlatform(flags.platform, REVYL_SERVICE),
         {
-          appUrl: requireAppReference(flags.providerApp),
+          ...(appUrl === undefined ? {} : { appUrl }),
           ...(deviceModel === undefined ? {} : { deviceModel }),
           ...(osVersion === undefined ? {} : { osVersion }),
         },
@@ -64,15 +65,16 @@ export function createRevylConnection(host: ProviderPluginHost) {
 
 /**
  * Proves the credentials against the backend and reports the selected profile, both before a device is
- * rented. Revyl starts a device from the platform, an optional model and OS version, and an app URL, so
- * every one of those is what the verification reports back; nothing about them can be checked against
- * a catalog, because Revyl picks the device from its own pool at start time.
+ * rented. Revyl starts a device from the platform, an optional model and OS version, and an optional app
+ * URL, so every one of those is what the verification reports back; nothing about them can be checked
+ * against a catalog, because Revyl picks the device from its own pool at start time. Without an app URL
+ * the device starts with no app, and `install` puts a local build on it.
  */
 export async function verifyRevylProfile(
   credentials: RevylCredentials,
   clientVersion: string,
   platform: RevylPlatform,
-  profile: Readonly<{ appUrl: string; deviceModel?: string; osVersion?: string }>,
+  profile: Readonly<{ appUrl?: string; deviceModel?: string; osVersion?: string }>,
 ): Promise<ProviderConnectionVerification> {
   const client = createRevylClient({
     apiKey: credentials.apiKey,
@@ -80,7 +82,7 @@ export async function verifyRevylProfile(
     clientVersion,
   });
   await client.verifyCredentials();
-  if (!isRevylAppUrl(profile.appUrl)) {
+  if (profile.appUrl !== undefined && !isRevylAppUrl(profile.appUrl)) {
     throw new AppError(
       'INVALID_ARGS',
       `${REVYL_SERVICE} installs the app from a URL, so --provider-app must be an https URL.`,
@@ -101,11 +103,17 @@ export async function verifyRevylProfile(
       ...(profile.osVersion === undefined ? {} : { osVersion: profile.osVersion }),
       message: `${REVYL_SERVICE} assigns a device of this platform when the session starts; a model or OS version it has no device for is reported then.`,
     },
-    app: {
-      status: 'configured',
-      reference: profile.appUrl,
-      message: `App URL configured; ${REVYL_SERVICE} fetches and installs it when the session starts.`,
-    },
+    app:
+      profile.appUrl === undefined
+        ? {
+            status: 'deferred',
+            message: `No app URL; the device starts without an app. Run install <app> <path> to add a local build.`,
+          }
+        : {
+            status: 'configured',
+            reference: profile.appUrl,
+            message: `App URL configured; ${REVYL_SERVICE} fetches and installs it when the session starts.`,
+          },
   };
 }
 
@@ -133,30 +141,15 @@ function requireConnectPlatform(flags: CliFlags): RevylPlatform {
   });
 }
 
-function requireAppUrl(app: string | undefined, host: ProviderPluginHost): string {
+/** An app URL is optional; one that is given must be a URL Revyl can download. */
+function optionalAppUrl(app: string | undefined, host: ProviderPluginHost): string | undefined {
   const value = app?.trim();
-  if (!value) {
-    throw host.createError(
-      'INVALID_ARGS',
-      `connect ${REVYL_PROVIDER} requires --provider-app <https-url> with the build to install.`,
-    );
-  }
+  if (!value) return undefined;
   if (!isRevylAppUrl(value)) {
     throw host.createError(
       'INVALID_ARGS',
       `connect ${REVYL_PROVIDER} installs the app from an https URL; "${value}" is not one.`,
     );
-  }
-  return value;
-}
-
-/** Reads the app reference back out of the resolved profile verify is handed. */
-function requireAppReference(app: string | undefined): string {
-  const value = app?.trim();
-  if (!value) {
-    throw new AppError('COMMAND_FAILED', `${REVYL_SERVICE} profile missed its app URL.`, {
-      hint: 'Reconnect with --provider-app <https-url>.',
-    });
   }
   return value;
 }
