@@ -1,10 +1,12 @@
 # Dogfood iOS physical device lifecycle through the replay suite runner.
+# The General cell is selected by its identifier: on iOS 27 a label match can land on the
+# floating Search bar that overlaps the list.
 context platform=ios target=mobile
 open com.apple.Preferences --relaunch
 snapshot
-scroll down --until "role=cell label=General || role=button label=General" --max-passes 5
-click "role=cell label=General || role=button label=General"
+scroll down --until "id=com.apple.settings.general" --max-passes 5
+click "id=com.apple.settings.general"
 wait "label=About || label=\"Software Update\"" 5000
 back
-wait "role=cell label=General || role=button label=General" 5000
-is exists "role=cell label=General || role=button label=General"
+wait "id=com.apple.settings.general" 5000
+is exists "id=com.apple.settings.general"

@@ -155,13 +155,15 @@ static inline void RunnerWaitUntil(uint64_t startTicks, double offsetMs) {
 
 // Owns one edge contact from touch-down to its terminal event. The cancel event is built before
 // touch-down; after touch-down, every exit dispatches either the touch-up or that cancel event.
-// Returns nil on success, or the reason the contact did not complete.
+// Returns nil on success, or the reason the contact did not complete. `touchDown` turns true once
+// the touch-down is dispatched, so a caller can tell a contact that never began from one that ended.
 static inline NSString * _Nullable RunnerDispatchEdgeContact(
   const RunnerHIDFunctions *functions,
   CFTypeRef client,
   uint64_t sender,
   NSArray<NSDictionary<NSString *, NSNumber *> *> *samples,
-  CGSize screenSize
+  CGSize screenSize,
+  BOOL *touchDown
 ) {
   double durationMs = samples.lastObject[@"offsetMs"].doubleValue;
   CGPoint start = RunnerPointAtOffset(samples, 0, screenSize);
@@ -179,6 +181,7 @@ static inline NSString * _Nullable RunnerDispatchEdgeContact(
   }
   uint64_t startTicks = mach_absolute_time();
   RunnerDispatchAndRelease(functions, client, down);
+  *touchDown = YES;
   NSString *failure = nil;
   for (double offsetMs = RunnerFrameIntervalMs; offsetMs < durationMs + RunnerFrameIntervalMs;
        offsetMs += RunnerFrameIntervalMs) {

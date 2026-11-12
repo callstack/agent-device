@@ -43,6 +43,7 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 // Held for the app's lifetime: a window nobody retained would be gone before the test queried it.
 @property(nonatomic, strong) UIWindow *secondWindow;
 @property(nonatomic, strong) UILabel *navigationBackStatus;
+@property(nonatomic, strong) NSTimer *animationTimer;
 @property(nonatomic, strong) UILabel *maskedToggleStatus;
 @property(nonatomic, strong) UILabel *maskedDeliveryStatus;
 @property(nonatomic, strong) UILabel *maskedTextLengthStatus;
@@ -204,6 +205,12 @@ static NSUInteger AgentDeviceDigitCount(NSString *text, NSUInteger limit) {
 @end
 
 @implementation AgentDeviceRunnerFixtureViewController
+
+// `--hide-status-bar` stands in for a landscape iPhone, full-screen video, or an RN screen that hides
+// its status bar.
+- (BOOL)prefersStatusBarHidden {
+  return [NSProcessInfo.processInfo.arguments containsObject:@"--hide-status-bar"];
+}
 
 // An animation that never ends is what "busy" looks like to XCTest while it decides whether the app
 // may receive an event: the app keeps reporting work in flight, which is the state that cost an alert
@@ -544,8 +551,12 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       [NSString stringWithFormat:@"presses=%lu", (unsigned long)self.maskedTogglePresses];
 }
 
-- (void)navigationBackPressed {
-  self.navigationBackStatus.text = @"Back performed";
+- (void)navigationBackSwiped:(UIScreenEdgePanGestureRecognizer *)recognizer {
+  if (recognizer.state == UIGestureRecognizerStateEnded) {
+    // A back navigation redraws most of the screen, so the fixture repaints all of it too.
+    self.view.backgroundColor = UIColor.systemTealColor;
+    self.navigationBackStatus.text = @"Back performed";
+  }
 }
 
 - (void)agentDeviceWillAttachToWindow:(UIWindow *)window {
@@ -569,34 +580,42 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
 
   UILabel *label = self.label;
 
-  // Keep the fixture behind a launch argument so normal runner snapshots remain unchanged.
+  // Keep the fixture behind a launch argument so normal runner snapshots remain unchanged. A
+  // left-edge pan stands in for UIKit's interactive pop: it begins only for an edge-masked touch.
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-back-regression"]) {
     self.navigationBackStatus = label;
     label.accessibilityIdentifier = @"agent-device-back-status";
-    if ([NSProcessInfo.processInfo.arguments containsObject:@"--navigation-bar"]) {
-      UINavigationBar *bar = [[UINavigationBar alloc] initWithFrame:CGRectMake(0, 62, self.view.bounds.size.width, 44)];
-      UINavigationItem *item = [[UINavigationItem alloc] initWithTitle:@"Thread"];
-      item.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Go back" style:UIBarButtonItemStylePlain target:self action:@selector(navigationBackPressed)];
-      bar.items = @[item];
-      [self.view addSubview:bar];
-    } else {
-      // The control must sit under the point the runner's top-leading fallback aims at, whose
-      // bounds are known: x lands at most 44 from the frame's leading edge, y at
-      // clamp(safeTopInset + 22, 56, 96). Anchoring to the view's leading (not the safe-area's)
-      // keeps the button under x=44 on a landscape iPhone, where the side inset would otherwise
-      // start a safe-area anchor past it; the safe-area top plus 12 with a 64-pt height spans the
-      // whole clamped y range for every inset an iPhone or iPad reports.
-      UIButton *back = [UIButton buttonWithType:UIButtonTypeSystem];
-      back.translatesAutoresizingMaskIntoConstraints = NO;
-      [back setTitle:@"Go back" forState:UIControlStateNormal];
-      [back addTarget:self action:@selector(navigationBackPressed) forControlEvents:UIControlEventTouchUpInside];
-      [self.view addSubview:back];
-      [NSLayoutConstraint activateConstraints:@[
-        [back.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
-        [back.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:12],
-        [back.widthAnchor constraintEqualToConstant:88],
-        [back.heightAnchor constraintEqualToConstant:64],
-      ]];
+    UIScreenEdgePanGestureRecognizer *edgePan =
+        [[UIScreenEdgePanGestureRecognizer alloc] initWithTarget:self action:@selector(navigationBackSwiped:)];
+    edgePan.edges = UIRectEdgeLeft;
+    [self.view addGestureRecognizer:edgePan];
+    // `--animating` keeps the whole screen changing on its own, as a launch that is still rendering:
+    // 16 bands take independent random shades, so no two samples of the screen match.
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--animating"]) {
+      NSMutableArray<UIView *> *bands = [NSMutableArray array];
+      CGRect bounds = self.view.bounds;
+      for (NSUInteger index = 0; index < 16; index++) {
+        UIView *band = [[UIView alloc] initWithFrame:CGRectMake(
+            0, bounds.size.height * index / 16, bounds.size.width, bounds.size.height / 16)];
+        band.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+        [self.view insertSubview:band atIndex:0];
+        [bands addObject:band];
+      }
+      [self.animationTimer invalidate];
+      self.animationTimer = [NSTimer scheduledTimerWithTimeInterval:0.05 repeats:YES block:^(NSTimer *timer) {
+        for (UIView *band in bands) {
+          band.backgroundColor = [UIColor colorWithWhite:arc4random_uniform(256) / 255.0 alpha:1];
+        }
+      }];
+    }
+    // `--slow-toggle` repaints the whole screen every 0.5 s, slower than one verification delay, as
+    // a carousel does: one quiet pair of samples must not pass it for settled.
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--slow-toggle"]) {
+      __weak UIView *view = self.view;
+      [self.animationTimer invalidate];
+      self.animationTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(NSTimer *timer) {
+        view.backgroundColor = [view.backgroundColor isEqual:UIColor.blackColor] ? UIColor.whiteColor : UIColor.blackColor;
+      }];
     }
   }
 

@@ -29,11 +29,19 @@ const backOsUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
 } as const);
-/** No apple-family closure ever gated `back` beyond device kind: every other Apple OS, tvOS
- * included (the interactor drives the remote's Menu button there), supports it. */
+/** visionOS has no back gesture or button; the runner refuses the same way if reached directly. */
+const backVisionOsUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'iOS back is a left-edge swipe; visionOS has none. Press the visible back control by its ref.',
+} as const);
+/** tvOS presses the remote's Menu button, macOS taps the window back control, and iOS swipes from
+ * the left edge. watchOS and visionOS have no back. */
 function appleBackFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return backKindUnavailable;
-  return resolveDeviceAppleOs(device) === 'watchos' ? backOsUnavailable : available;
+  const os = resolveDeviceAppleOs(device);
+  if (os === 'watchos') return backOsUnavailable;
+  return os === 'visionos' ? backVisionOsUnavailable : available;
 }
 
 const homeKindUnavailable = Object.freeze({

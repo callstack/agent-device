@@ -31,3 +31,28 @@ test.each(['simulator', 'device'] as const)('iOS %s refuses all TV remote button
   }).tvRemote;
   expect(runtimeSubjectFact(fact, 'volume-up')).toMatchObject({ available: false });
 });
+
+test.each([
+  ['ios', true],
+  ['tvos', true],
+  ['macos', true],
+  ['watchos', false],
+  ['visionos', false],
+] as const)('back on %s is available: %s', (appleOs, availableExpected) => {
+  const fact = appleNavigationFacts({
+    id: `${appleOs}-back-facts`,
+    name: appleOs,
+    platform: 'apple',
+    appleOs,
+    kind: 'simulator',
+    target: 'mobile',
+    booted: true,
+  }).back;
+  expect(fact.available).toBe(availableExpected);
+  if (appleOs === 'visionos') {
+    expect(fact).toMatchObject({
+      reason: 'unsupported-platform-leaf',
+      hint: expect.stringContaining('visionOS'),
+    });
+  }
+});

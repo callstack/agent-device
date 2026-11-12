@@ -1,0 +1,56 @@
+[
+  {
+    "name": "iPhone portrait",
+    "surface": {
+      "x": 0,
+      "y": 0,
+      "width": 402,
+      "height": 874
+    },
+    "start": {
+      "x": 8,
+      "y": 437
+    },
+    "end": {
+      "x": 341,
+      "y": 437
+    },
+    "durationMs": 100
+  },
+  {
+    "name": "iPad portrait",
+    "surface": {
+      "x": 0,
+      "y": 0,
+      "width": 1024,
+      "height": 1366
+    },
+    "start": {
+      "x": 10,
+      "y": 683
+    },
+    "end": {
+      "x": 870,
+      "y": 683
+    },
+    "durationMs": 100
+  },
+  {
+    "name": "offset window",
+    "surface": {
+      "x": 100,
+      "y": 50,
+      "width": 300,
+      "height": 600
+    },
+    "start": {
+      "x": 108,
+      "y": 350
+    },
+    "end": {
+      "x": 355,
+      "y": 350
+    },
+    "durationMs": 100
+  }
+]

@@ -401,6 +401,14 @@ test('two runtimes create interactors that route the same macOS device by their 
     );
     // Runtime B: the same call on the same device routes through the XCTest runner.
     await xctestInteractor.back();
+    // macOS has no system back, so that mode refuses before any runner command.
+    await assert.rejects(
+      xctestInteractor.back('system'),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'UNSUPPORTED_OPERATION' &&
+        error.details?.dispatched === 'no',
+    );
   }, macOsDevice);
 
   assert.deepEqual(commands, [{ command: 'backInApp', appBundleId: undefined }]);

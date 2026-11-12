@@ -518,10 +518,19 @@ function expectNavigationAndKeyboardFacts(
   binding: DeviceBinding<PlatformRuntimeOperations>,
   device: DeviceInfo,
 ): void {
-  // Every simulator/device leaf supports back except watchOS, tvOS's Menu remote press
-  // included — no apple-family closure ever gated it beyond device kind and interactor
-  // constructibility.
-  expectOperationAvailability(binding, 'back', device.appleOs !== 'watchos');
+  // Every simulator/device leaf supports back except watchOS, which has no interactor, and
+  // visionOS, which has no back gesture. tvOS presses the Menu remote button.
+  expectOperationAvailability(
+    binding,
+    'back',
+    device.appleOs !== 'watchos' && device.appleOs !== 'visionos',
+  );
+  if (device.appleOs === 'visionos') {
+    expect(binding.facts.operations.back).toMatchObject({
+      reason: 'unsupported-platform-leaf',
+      hint: expect.stringContaining('visionOS has none'),
+    });
+  }
 
   // home and app-switcher share one springboard reading (R56): both are unavailable on macOS,
   // which drives an already-running app with no springboard, and on watchOS. That is parity, not

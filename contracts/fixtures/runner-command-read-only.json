@@ -37,12 +37,6 @@
   },
   {
     "command": {
-      "command": "backSystem"
-    },
-    "readOnly": false
-  },
-  {
-    "command": {
       "command": "desktopScroll"
     },
     "readOnly": false
