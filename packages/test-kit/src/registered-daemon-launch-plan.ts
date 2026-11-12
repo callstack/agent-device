@@ -47,7 +47,12 @@ export function createDaemonFixtureLaunchPlanner<P, F>(
     describing = true;
     try {
       const result: unknown = step.observe?.(child);
-      if (result !== undefined) refuse('an observer returned a replacement handle or value');
+      if (result !== undefined)
+        violations.push(
+          new Error(
+            'Daemon fixture launch contract: an observer returned a replacement handle or value',
+          ),
+        );
     } catch (error) {
       violations.push(
         new Error('Daemon fixture launch observer failed after starting a child', { cause: error }),

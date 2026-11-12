@@ -8,7 +8,10 @@ import {
   stateDirAndPaths,
   type RegisteredHttpDaemon,
 } from './test-utils/registered-http-daemon.ts';
-import { planRegisteredDaemonLaunches } from './test-utils/registered-daemon-fixture.ts';
+import {
+  planRegisteredDaemonLaunches,
+  finishRegisteredDaemonFixtures,
+} from './test-utils/registered-daemon-fixture.ts';
 
 // A client or a CLI run takes the host it is given. These tests run the real client and the real
 // default CLI against a real registered daemon on the host's state directory, while the process
@@ -36,8 +39,12 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
   vi.mocked(runCmdDetachedMonitored).mockClear();
-  await daemon?.close();
-  daemon = undefined;
+  try {
+    await daemon?.close();
+  } finally {
+    daemon = undefined;
+    await finishRegisteredDaemonFixtures();
+  }
 });
 
 async function bootHostAndProcess() {

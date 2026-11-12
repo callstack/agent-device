@@ -98,10 +98,19 @@ test('an observer cannot replace the returned child handle and its violation sur
     },
   ]);
   assert.equal(launch('node', []), f.child);
-  await rejectsContract(
-    f.fixtures.finishRegisteredDaemonFixtures(),
-    /observer returned a replacement handle/,
-  );
+  await assert.rejects(f.fixtures.finishRegisteredDaemonFixtures(), (error: unknown) => {
+    function leafErrors(value: unknown): Error[] {
+      return value instanceof AggregateError
+        ? value.errors.flatMap(leafErrors)
+        : value instanceof Error
+          ? [value]
+          : [];
+    }
+    const errors = leafErrors(error);
+    assert.equal(errors.length, 1, 'one replacement handle must produce exactly one violation');
+    assert.match(errors[0]!.message, /observer returned a replacement handle/);
+    return true;
+  });
 });
 
 test('teardown fails when termination reports success but the exact child exit never joins', async () => {

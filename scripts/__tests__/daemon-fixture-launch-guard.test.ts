@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import {
   daemonFixtureLaunchViolations,
   scanDaemonFixtureLaunches,
@@ -86,4 +86,87 @@ test('the repo scan follows renamed and re-exported fixture helpers but leaves o
   ]);
   assert.equal(violations.length, 1);
   assert.match(violations[0]!, /src\/consumer.test.ts/);
+});
+
+for (const expression of [
+  '(spawn as any)',
+  'spawn!',
+  '(spawn satisfies unknown)',
+  '(<any>spawn)',
+  'vi.mocked(launch as any)',
+]) {
+  test(`rejects a wrapped launcher: ${expression}`, () => {
+    assert.equal(
+      daemonFixtureLaunchViolations(
+        imports + `${expression}.mockImplementation(() => spawnRegisteredDaemonFixture());`,
+        'fixture.test.ts',
+      ).length,
+      1,
+    );
+  });
+}
+
+for (const annotation of ['MockedFunction', 'MockInstance']) {
+  test(`rejects a launcher parameter typed as ${annotation}`, () => {
+    assert.equal(
+      daemonFixtureLaunchViolations(
+        imports +
+          `function install(other: ${annotation}<typeof launch>) { other.mockImplementation(() => spawnRegisteredDaemonFixture()); }`,
+        'fixture.ts',
+      ).length,
+      1,
+    );
+  });
+}
+
+for (const binding of ['runCmdDetachedMonitored', 'runCmdDetachedMonitored: detached']) {
+  test(`rejects a launcher destructured from a namespace: ${binding}`, () => {
+    const local = binding.includes(':') ? 'detached' : 'runCmdDetachedMonitored';
+    const violations = daemonFixtureLaunchViolations(
+      `import * as command from '@agent-device/host-kit/command'; const { ${binding} } = command; ${local}.mockImplementation(() => ({}));`,
+      'fixture.ts',
+    );
+    assert.equal(violations.length, 1);
+    assert.match(violations[0]!, /mocked daemon launch must use/);
+  });
+}
+
+test('accepts a shared launch plan held in a local binding', () => {
+  assert.deepEqual(
+    daemonFixtureLaunchViolations(
+      imports +
+        `const next = plan([{kind: 'refuse', error: new Error('no')}]); const alias = next; spawn.mockImplementation(alias);`,
+      'fixture.ts',
+    ),
+    [],
+  );
+});
+
+for (const specifier of ['./support', './support/index.js', './support/renamed.js']) {
+  test(`follows a fixture family through ${specifier}`, () => {
+    const violations = scanDaemonFixtureLaunches([
+      {
+        file: 'src/support/renamed.ts',
+        source: `import {createRegisteredDaemonFixtures} from '@agent-device/test-kit'; export const fixtures = createRegisteredDaemonFixtures({});`,
+      },
+      { file: 'src/support/index.ts', source: `export * from './renamed.js';` },
+      {
+        file: 'src/consumer.test.ts',
+        source: `import {fixtures} from '${specifier}'; import {runCmdDetachedMonitored} from '@agent-device/host-kit/command'; vi.mocked(runCmdDetachedMonitored).mockImplementation(() => fixtures.spawnRegisteredDaemonFixture());`,
+      },
+    ]);
+    assert.equal(violations.length, 1);
+    assert.match(violations[0]!, /src\/consumer.test.ts/);
+  });
+}
+
+test('accepts a namespace-destructured launcher using the shared plan', () => {
+  assert.deepEqual(
+    daemonFixtureLaunchViolations(
+      imports +
+        `import * as command from '@agent-device/host-kit/command'; const { runCmdDetachedMonitored: detached } = command; vi.mocked(detached).mockImplementation(plan([]));`,
+      'fixture.ts',
+    ),
+    [],
+  );
 });

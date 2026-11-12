@@ -17,15 +17,3 @@ test('daemon fixture family mocks use declared launch plans', () => {
     .map((file) => ({ file, source: fs.readFileSync(path.join(REPO_ROOT, file), 'utf8') }));
   assert.deepEqual(scanDaemonFixtureLaunches(files), []);
 });
-
-test('daemon fixture guard rejects its adversarial cases in the PR unit lane', () => {
-  execFileSync(
-    process.execPath,
-    [
-      '--experimental-strip-types',
-      '--test',
-      'scripts/mutation/daemon-fixture-launch-guard.test.ts',
-    ],
-    { cwd: REPO_ROOT, stdio: 'pipe' },
-  );
-});

@@ -15,6 +15,7 @@ type FixtureSource = Readonly<{ file: string; source: string }>;
 export function scanDaemonFixtureLaunches(files: readonly FixtureSource[]): string[] {
   const family = new Set<string>();
   const imports = new Map<string, string[]>();
+  const paths = new Set(files.map(({ file }) => file));
   for (const { file, source } of files) {
     const parsed = parseSync(file, source);
     if (parsed.errors.length)
@@ -42,7 +43,13 @@ export function scanDaemonFixtureLaunches(files: readonly FixtureSource[]): stri
         family.add(file);
       if (specifier.startsWith('.')) {
         const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier));
-        dependencies.push(resolved.endsWith('.ts') ? resolved : `${resolved}.ts`);
+        const dependency = [
+          resolved,
+          resolved.replace(/\.js$/, '.ts'),
+          `${resolved}.ts`,
+          `${resolved}/index.ts`,
+        ].find((candidate) => paths.has(candidate));
+        if (dependency) dependencies.push(dependency);
       }
     });
     imports.set(file, dependencies);
@@ -70,6 +77,7 @@ export function daemonFixtureLaunchViolations(source: string, file: string): str
   const launchers = new Set<string>();
   const planners = new Set<string>();
   const bindings = new Map<string, AstNode>();
+  const destructuredProperties = new Set<AstNode>();
   visitAst(parsed.program, (node) => {
     if (node.type === 'ImportSpecifier') {
       const imported = propertyName(node.imported);
@@ -83,15 +91,29 @@ export function daemonFixtureLaunchViolations(source: string, file: string): str
       asNode(node.init)
     )
       bindings.set(String(asNode(node.id)!.name), asNode(node.init)!);
+    if (node.type === 'ObjectPattern') {
+      for (const property of nodeList(node.properties)) {
+        const entry = asNode(property);
+        if (!entry) continue;
+        destructuredProperties.add(entry);
+        if (propertyName(entry.key) === 'runCmdDetachedMonitored') {
+          const name = propertyName(entry.value);
+          if (name) launchers.add(name);
+        }
+      }
+    }
     if (node.type === 'Identifier' && asNode(node.typeAnnotation)) {
       const annotation = asNode(node.typeAnnotation)!;
       const text = source.slice(Number(annotation.start), Number(annotation.end));
-      if (text.includes('Mock<') && [...launchers].some((name) => text.includes(`typeof ${name}`)))
+      if (
+        /\bMock\w*\s*</.test(text) &&
+        [...launchers].some((name) => text.includes(`typeof ${name}`))
+      )
         launchers.add(String(node.name));
     }
   });
   function resolves(node: unknown, names: Set<string>, seen = new Set<string>()): boolean {
-    const value = asNode(node);
+    const value = unwrap(node);
     if (!value) return false;
     if (value.type === 'Identifier') {
       const name = String(value.name);
@@ -111,7 +133,19 @@ export function daemonFixtureLaunchViolations(source: string, file: string): str
       );
     return false;
   }
+  function isLaunchPlan(node: unknown, seen = new Set<string>()): boolean {
+    const value = unwrap(node);
+    if (!value) return false;
+    if (value.type === 'Identifier') {
+      const name = String(value.name);
+      if (seen.has(name)) return false;
+      seen.add(name);
+      return isLaunchPlan(bindings.get(name), seen);
+    }
+    return value.type === 'CallExpression' && resolves(value.callee, planners);
+  }
   function initializationViolation(node: AstNode): string | undefined {
+    if (destructuredProperties.has(node)) return;
     if (node.type !== 'Property' || propertyName(node.key) !== 'runCmdDetachedMonitored') return;
     const value = asNode(node.value);
     if (
@@ -147,12 +181,7 @@ export function daemonFixtureLaunchViolations(source: string, file: string): str
       )
     )
       return;
-    const argument = asNode(nodeList(node.arguments)[0]);
-    if (
-      method.startsWith('mockImplementation') &&
-      argument?.type === 'CallExpression' &&
-      resolves(argument.callee, planners)
-    )
+    if (method.startsWith('mockImplementation') && isLaunchPlan(nodeList(node.arguments)[0]))
       return;
     return 'mocked daemon launch must use planRegisteredDaemonLaunches';
   }
@@ -166,4 +195,21 @@ export function daemonFixtureLaunchViolations(source: string, file: string): str
       );
   });
   return violations;
+}
+
+function unwrap(node: unknown): AstNode | undefined {
+  let value = asNode(node);
+  while (
+    value &&
+    [
+      'ParenthesizedExpression',
+      'TSAsExpression',
+      'TSSatisfiesExpression',
+      'TSNonNullExpression',
+      'TSTypeAssertion',
+    ].includes(String(value.type))
+  ) {
+    value = asNode(value.expression);
+  }
+  return value;
 }
