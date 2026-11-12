@@ -10,6 +10,94 @@ import {
 } from './fixtures.ts';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
+import {
+  createAppleRunnerProviderFromTranscript,
+  createRecordingAppleToolProvider,
+  simctlDeviceLifecycleHandler,
+} from './providers.ts';
+import { createProviderTranscript } from './transcript.ts';
+
+test('Provider-backed integration admits an existing session device through its current pin before capture', async () => {
+  const device = PROVIDER_SCENARIO_IOS_SIMULATOR;
+  const other = { ...device, id: 'sim-other', name: 'Other iPhone' };
+  const transcript = createProviderTranscript([
+    {
+      command: 'ios.runner.snapshot',
+      platform: 'apple',
+      deviceId: device.id,
+      repeat: true,
+      result: {
+        nodes: [
+          {
+            index: 0,
+            type: 'Application',
+            label: 'Existing Session App',
+            rect: { x: 0, y: 0, width: 400, height: 800 },
+          },
+        ],
+        truncated: false,
+      },
+    },
+  ]);
+  const runner = createAppleRunnerProviderFromTranscript(transcript, 'ios.runner');
+  const appleTool = createRecordingAppleToolProvider({
+    simctl: simctlDeviceLifecycleHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
+      { name: device.name, udid: device.id },
+      { name: other.name, udid: other.id },
+    ]),
+  });
+  await withProviderScenarioResource(
+    () =>
+      createProviderScenarioHarness({
+        deviceInventoryProvider: async () => [device, other],
+        appleRunnerProvider: () => runner,
+        appleToolProvider: () => appleTool.provider,
+      }),
+    async (daemon) => {
+      const session = 'pin-existing';
+      assertRpcOk(
+        await daemon.callCommand(
+          'open',
+          ['com.example.app'],
+          { platform: 'ios', udid: device.id },
+          { session },
+        ),
+      );
+      assert.equal(await daemon.hasSession(session), true);
+      const pin: DevicePin = {
+        selector: { platform: 'ios', udid: other.id },
+        source: { kind: 'project', path: '/project/agent-device.json' },
+      };
+      const refused = await daemon.callCommand(
+        'snapshot',
+        [],
+        {},
+        { session, meta: { devicePin: pin } },
+      );
+      expect(assertRpcError(refused, 400, 'INVALID_ARGS', /device pin/).details).toMatchObject({
+        reason: 'device_pin_conflict',
+        pinSource: 'project config file /project/agent-device.json',
+        device: { id: device.id, name: device.name },
+      });
+      assert.equal(transcript.calls.length, 0);
+      const accepted = await daemon.callCommand(
+        'snapshot',
+        [],
+        {},
+        {
+          session,
+          meta: { devicePin: { ...pin, selector: { platform: 'ios', udid: device.id } } },
+        },
+      );
+      expect(assertRpcOk(accepted).nodes).toContainEqual(
+        expect.objectContaining({ label: 'Existing Session App' }),
+      );
+      assert.ok(transcript.calls.length > 0);
+      assert.ok(transcript.calls.every((call) => call.deviceId === device.id));
+      transcript.assertComplete();
+    },
+  );
+});
 
 for (const platform of ['ios', 'android'] as const) {
   test(`Provider-backed integration ${platform} pin validates the selected device through HTTP`, async () => {
@@ -250,20 +338,25 @@ for (const command of ['capabilities', 'lease_allocate'] as const) {
         }),
       async (daemon) => {
         const source = { kind: 'project', path: '/project/agent-device.json' };
-        for (const devicePin of [
-          {},
-          null,
-          false,
-          { selector: { platform: 'ios' } },
-          { selector: {}, source },
-          { selector: { platform: 'windows' }, source },
-          { selector: { platform: 'ios', serial: 'emulator-5554' }, source },
-          { selector: { platform: 'android', udid: 'SIM-1' }, source },
-          { selector: { udid: 'SIM-1', serial: 'emulator-5554' }, source },
-          { selector: { udid: 4 }, source },
-          { selector: { platform: 'ios' }, source: { ...source, kind: 'environment' } },
-          { selector: { platform: 'ios' }, source: { ...source, path: '' } },
-        ]) {
+        const configSource = 'project config file /project/agent-device.json';
+        const requestSource = 'daemon request metadata';
+        for (const [devicePin, pinSource] of [
+          [{}, requestSource],
+          [null, requestSource],
+          [false, requestSource],
+          [{ selector: { platform: 'ios' } }, requestSource],
+          [{ selector: {}, source }, configSource],
+          [{ selector: { platform: 'windows' }, source }, configSource],
+          [{ selector: { platform: 'ios', serial: 'emulator-5554' }, source }, configSource],
+          [{ selector: { platform: 'android', udid: 'SIM-1' }, source }, configSource],
+          [{ selector: { udid: 'SIM-1', serial: 'emulator-5554' }, source }, configSource],
+          [{ selector: { udid: 4 }, source }, configSource],
+          [
+            { selector: { platform: 'ios' }, source: { ...source, kind: 'environment' } },
+            requestSource,
+          ],
+          [{ selector: { platform: 'ios' }, source: { ...source, path: '' } }, requestSource],
+        ] as const) {
           const allocation = command === 'lease_allocate';
           const response = await fetch(`${daemon.baseUrl}/rpc`, {
             method: 'POST',
@@ -294,7 +387,7 @@ for (const command of ['capabilities', 'lease_allocate'] as const) {
             'INVALID_ARGS',
             /devicePin/,
           );
-          expect(error.details).toMatchObject({ reason: 'invalid_device_pin' });
+          expect(error.details).toMatchObject({ reason: 'invalid_device_pin', pinSource });
         }
         assert.equal(inventoryReads, 0);
       },
