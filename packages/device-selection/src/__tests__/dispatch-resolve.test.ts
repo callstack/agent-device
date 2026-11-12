@@ -279,8 +279,6 @@ test('resolveTargetDevice reuses request-scoped device resolution cache for iden
 });
 
 test('resolveTargetDevice reuses the request cache after the inventory configures the host env', async () => {
-  // Android SDK discovery writes ANDROID_HOME and PATH into the host env during the first
-  // inventory read; the request's later resolution must still reuse that selection.
   const env: Record<string, string | undefined> = { PATH: '/usr/bin' };
   mockListAppleDevices.mockImplementation(async () => {
     env.ANDROID_HOME = '/sdk';
@@ -296,6 +294,21 @@ test('resolveTargetDevice reuses the request cache after the inventory configure
     assert.equal(first.id, 'sim-2');
     assert.equal(second.id, 'sim-2');
     assert.equal(mockListAppleDevices.mock.calls.length, inventoryReads);
+  });
+});
+
+test('resolveTargetDevice request cache key separates env-derived device allowlists', async () => {
+  mockListAppleDevices.mockResolvedValue([bootedSimulator]);
+
+  await withResolveTargetDeviceCacheScope(async () => {
+    await resolveTargetDevice({ udid: 'sim-2' }, { env: {} });
+    const inventoryReads = mockListAppleDevices.mock.calls.length;
+    await resolveTargetDevice(
+      { udid: 'sim-2' },
+      { env: { AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST: 'emulator-5554' } },
+    );
+
+    assert.equal(mockListAppleDevices.mock.calls.length, inventoryReads * 2);
   });
 });
 
