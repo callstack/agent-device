@@ -454,6 +454,59 @@ test('the crop runs against the platform screenshot dimensions', async () => {
   });
 });
 
+for (const failure of ['sparse', 'canceled'] as const) {
+  for (const destinationExists of [true, false]) {
+    test(`${failure} crop preserves ${destinationExists ? 'existing' : 'absent'} destination and removes staging`, async () => {
+      const controller = new AbortController();
+      const fixture = screenshotRuntimeFixture({
+        snapshotResult: () => {
+          if (failure === 'canceled') controller.abort();
+          return {
+            nodes: CROP_TREE,
+            backend: 'android',
+            producer: 'android-uiautomator',
+            ...(failure === 'sparse'
+              ? { quality: { state: 'sparse' as const, backend: 'tree' } }
+              : {}),
+          };
+        },
+      });
+      const session = makeSession('default', { device: ANDROID_EMULATOR });
+      const outPath = path.join(mkdtempForTestSync('crop-publication'), 'capture.png');
+      const sentinel = Buffer.from('existing destination');
+      if (destinationExists) fs.writeFileSync(outPath, sentinel);
+      const req = screenshotRequest({
+        positionals: [outPath],
+        flags: { screenshotCropOn: 'label="Save"' },
+      });
+      const resolved = await resolveScreenshotGenericExecution({
+        hostCwd: process.cwd(),
+        createCommandSurface: testCreateCommandSurface,
+        platformServices: daemonPlatformServicesFixture(),
+        req,
+        session,
+        inspectFacts: fixture.inspectFacts,
+        bindDevice: fixture.bindDevice,
+      });
+      await expect(
+        executeResult(resolved, session, req, { signal: controller.signal }),
+      ).rejects.toMatchObject(
+        failure === 'sparse'
+          ? { details: { reason: SCREENSHOT_CROP_REASONS.captureUnreadable } }
+          : { name: 'AbortError' },
+      );
+      expect(fixture.captureScreenshot).toHaveBeenCalledTimes(1);
+      expect(fixture.captureSnapshot).toHaveBeenCalledTimes(1);
+      const stagedPath = fixture.captureScreenshot.mock.calls[0]?.[0].outPath;
+      expect(stagedPath).toBeDefined();
+      expect(stagedPath).not.toBe(outPath);
+      if (stagedPath) expect(fs.existsSync(path.dirname(stagedPath))).toBe(false);
+      if (destinationExists) expect(fs.readFileSync(outPath)).toEqual(sentinel);
+      else expect(fs.existsSync(outPath)).toBe(false);
+    });
+  }
+}
+
 test('a partial crop surfaces its warning once in the result record and annotates nothing', async () => {
   const fixture = screenshotRuntimeFixture({
     snapshotResult: () => ({
