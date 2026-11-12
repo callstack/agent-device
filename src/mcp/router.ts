@@ -141,7 +141,7 @@ async function handleRequest(
     case 'ping':
       return {};
     case 'tools/list':
-      // Descriptor tools plus the MCP-only guide tool. `listCommandTools({ outputSchemas: true })` stays
+      // Descriptor tools plus the MCP-only guide tool. `listCommandTools()` stays
       // descriptor-only because the AI SDK surface reuses it; the composition is the
       // router's.
       return {

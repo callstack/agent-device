@@ -70,7 +70,7 @@ type CommandToolExecutorDeps = {
  * `always` returns it from every call; a host that reads results as data, such as the AI SDK
  * adapter, sets it.
  */
-export type StructuredContentMode = 'declared' | 'always';
+type StructuredContentMode = 'declared' | 'always';
 
 export type CommandToolExecutor = {
   /** `signal` cancels the call: an abort closes its in-flight daemon request and the call settles as an error result. */
