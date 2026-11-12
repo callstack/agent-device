@@ -96,8 +96,7 @@ export const snapshotCommand: RuntimeCommand<
     options,
     identity: {
       previousAppBundleId: capture.session?.appBundleId,
-      // The app the header names, so an unchanged acknowledgement never spans a foreground switch.
-      currentAppBundleId: snapshotAppFields(capture).appBundleId,
+      currentAppBundleId: capture.result.appBundleId ?? capture.session?.appBundleId,
     },
   });
   await runtime.sessions.set(nextSnapshotSession(options.session, capture));

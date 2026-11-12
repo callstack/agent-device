@@ -74,7 +74,7 @@ test('an Android snapshot in a session with no app names the captured foreground
   assert.equal(result.appBundleId, 'com.google.android.apps.nexuslauncher');
 });
 
-test('a repeated snapshot of a foreign foreground app is not acknowledged as unchanged', async () => {
+test('a repeated unchanged snapshot of a foreign foreground app is acknowledged under its header', async () => {
   const snapshot = makeSnapshotState([{ index: 0, depth: 0, type: 'TextView', label: 'Gmail' }], {
     backend: 'android',
   });
@@ -107,6 +107,7 @@ test('a repeated snapshot of a foreign foreground app is not acknowledged as unc
   await device.capture.snapshot({ session: 'default' });
   const result = await device.capture.snapshot({ session: 'default' });
 
+  // The acknowledgement compares against the last stored tree, the launcher's, which the header names.
   assert.equal(result.appBundleId, 'com.google.android.apps.nexuslauncher');
-  assert.equal(result.unchanged, undefined);
+  assert.ok(result.unchanged);
 });
