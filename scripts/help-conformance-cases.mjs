@@ -180,7 +180,7 @@ export const CASES = [
     matchers: [
       { id: 'movesFocusWithRemote', pattern: /\btv-remote\s+press\s+right\b/i },
       { id: 'activatesWithSelect', pattern: /\btv-remote\s+press\s+select\b/i },
-      { id: 'verifiesOutcome', pattern: /\b(?:is\s+focused|wait\b|find\b)/i },
+      { id: 'verifiesOutcome', pattern: /\b(?:is\s+focused|wait\b|find\b[^\n]*\bexists\b)/i },
     ],
     forbidden: [
       // Focus-first surface: activation goes through tv-remote select, not a
@@ -239,7 +239,10 @@ export const CASES = [
       },
       { id: 'verifiesBackendWithDoctor', pattern: /\bagent-device\s+web\s+doctor\b/i },
       { id: 'usesWebPlatform', pattern: /--platform\s+web\b/i },
-      { id: 'verifiesWelcomeText', pattern: /\b(?:wait|is|find)\b[^\n]*welcome/i },
+      {
+        id: 'verifiesWelcomeText',
+        pattern: /\b(?:wait|is)\b[^\n]*welcome|\bfind\b[^\n]*welcome[^\n]*\bexists\b/i,
+      },
     ],
     forbidden: [
       // help web: native mobile/desktop setup commands are out of scope for
@@ -314,7 +317,10 @@ export const CASES = [
         id: 'opensFreshAfterInstall',
         pattern: /\binstall\b[\s\S]*\n[^\n]*\bopen\s+com\.example\.orders\b[^\n]*--relaunch\b/i,
       },
-      { id: 'verifiesFirstScreen', pattern: /\b(?:wait|find|is|get)\b[^\n]*orders/i },
+      {
+        id: 'verifiesFirstScreen',
+        pattern: /\b(?:wait|is|get)\b[^\n]*orders|\bfind\b[^\n]*orders[^\n]*\bexists\b/i,
+      },
     ],
     forbidden: [
       // help workflow: install for a first install; reinstall only when

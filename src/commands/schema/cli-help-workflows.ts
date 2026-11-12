@@ -28,7 +28,7 @@ Loop:
   3. Run press/fill/click/longpress <ref-or-selector> --settle for each mutating step.
   4. Treat a settled:true diff as the next observation. Do not add wait stable or another snapshot when the diff already shows the next target or expected result.
   5. If --settle prints not settled, follow its hint before the next ref-based action.
-  6. Verify named expectations with wait text/selector/absent, get, is, find, or the settled diff. A bare screenshot/snapshot is not verification for a named expectation.
+  6. Verify named expectations with wait text/selector/absent, get, is, find <locator> exists, or the settled diff. Bare find clicks. A bare screenshot/snapshot is not verification for a named expectation.
   7. Close the session when the script ends. If your session booted a local simulator or emulator, use close --shutdown, unless the user asks to keep it running.
 
 Command shapes:
