@@ -160,7 +160,7 @@ for (const destinationExists of [true, false]) {
           const scale = vi
             .spyOn(fs.promises, 'writeFile')
             .mockImplementation(async (file, data, options) => {
-              if (path.basename(String(file)) === 'screenshot.png' && Buffer.isBuffer(data)) {
+              if (Buffer.isBuffer(data) && data.toString('ascii', 1, 4) === 'PNG') {
                 const image = PNG.sync.read(data);
                 if (image.width === 16 && image.height === 12) {
                   scaleWrites += 1;
