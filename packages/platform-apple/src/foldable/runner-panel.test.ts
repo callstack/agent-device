@@ -16,7 +16,6 @@ vi.mock('../core/devicectl.ts', async (importOriginal) => ({
   })),
 }));
 
-import { createLocalAppleToolProvider, withAppleToolProvider } from '../core/tool-provider.ts';
 import { runIosDevicectlJsonRequest } from '../core/devicectl.ts';
 import { runAppleRunnerCommand } from '../core/runner-client.ts';
 import { iosRunnerOverrides } from '../interactions.ts';
@@ -167,20 +166,7 @@ test('a resolved read lifts the back-off a failed one opened', async () => {
   assert.equal(await resolveRunnerRequestLitPanel(device, {}), undefined);
   answering(IPHONE_DUO_CLOSED);
   // A rotation reads the table on its own route; its answer clears the back-off for surface reads.
-  const guest = createLocalAppleToolProvider({
-    runCommand: async (_command, args) => {
-      assert.equal(args.at(-1), 'panels');
-      return {
-        exitCode: 0,
-        stdout: JSON.stringify({ version: 1, displays: IPHONE_DUO_CLOSED.result.displays }),
-        stderr: '',
-      };
-    },
-  });
-  assert.equal(
-    await withAppleToolProvider(guest, () => isAppleFoldableSimulator(device, undefined)),
-    true,
-  );
+  assert.equal(await isAppleFoldableSimulator(device, undefined), true);
   assert.equal((await resolveRunnerRequestLitPanel(device, {}))?.displayId, 1);
 });
 

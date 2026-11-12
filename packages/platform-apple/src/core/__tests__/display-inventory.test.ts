@@ -765,13 +765,33 @@ describe('scoped simulator panel table', () => {
       readPanelPayload,
     };
 
-    const inventory = await queryAppleDisplayInventory(device, { foldHelper });
+    const inventory = await queryAppleDisplayInventory(device, { source: 'guest', foldHelper });
 
     assert.equal(inventory.activeDisplay?.name, 'LCD-1');
     assert.equal(readPanelPayload.mock.calls.length, 1);
     assert.equal(vi.mocked(ensureFoldHelperBinary).mock.calls.length, 0);
     assert.equal(mockRunSimctlForDevice.mock.calls.length, 0);
     assert.equal(mockRunXcrun.mock.calls.length, 0);
+  });
+
+  test('a helper handle alone keeps the default-set CoreDevice source', async () => {
+    mockReadHostTextFile.mockResolvedValue(JSON.stringify(IPHONE_DUO_CLOSED));
+    const readPanelPayload = vi.fn(async () => {
+      throw new Error('guest must not classify');
+    });
+    const foldHelper = {
+      setPose: vi.fn(),
+      rotate: vi.fn(),
+      readHingeAngle: vi.fn(),
+      readPanelPayload,
+    };
+    const inventory = await queryAppleDisplayInventory(
+      { ...scopedDuo, simulatorSetPath: undefined },
+      { foldHelper },
+    );
+    assert.equal(inventory.multiScreen, true);
+    assert.equal(readPanelPayload.mock.calls.length, 0);
+    assert.equal(mockRunXcrun.mock.calls.length, 1);
   });
 
   test('applies the same rule to a CoreDevice table whose second panel does not parse', async () => {

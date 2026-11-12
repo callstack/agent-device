@@ -62,7 +62,6 @@ export async function isAppleFoldableSimulator(
   const read = ++panelTableReads;
   const inventory = await queryAppleDisplayInventory(device, {
     signal,
-    foldHelper: createFoldHelper(device),
   });
   if (inventory.unresolved) return false;
   recordPanelTable(device, inventory, read);
@@ -106,20 +105,14 @@ export async function readFoldablePanelTable(
 /** iPhone Duo (iOS 27.3) renders picker + offset: outer 0 degrees, inner +90. */
 const PANEL_PICKERS = {
   outer: {
-    offset: 0,
-    values: {
-      portrait: 'portrait',
-      'landscape-left': 'landscape-left',
-      'landscape-right': 'landscape-right',
-    },
+    portrait: 'portrait',
+    'landscape-left': 'landscape-left',
+    'landscape-right': 'landscape-right',
   },
   inner: {
-    offset: 90,
-    values: {
-      portrait: 'landscape-left',
-      'landscape-left': 'portrait-upside-down',
-      'landscape-right': 'portrait',
-    },
+    portrait: 'landscape-left',
+    'landscape-left': 'portrait-upside-down',
+    'landscape-right': 'portrait',
   },
 } as const;
 
@@ -149,7 +142,7 @@ export async function setAppleFoldableOrientation(
     if (reading?.rotation === rotation) return { orientation: rotation };
     if (reading && reading.panel.displayId !== dispatchedDisplayId) {
       const mapping = reading.panel.primary ? PANEL_PICKERS.outer : PANEL_PICKERS.inner;
-      const value = mapping.values[rotation];
+      const value = mapping[rotation];
       await helper.rotate(value, signal);
       dispatchedDisplayId = reading.panel.displayId;
       emitDiagnostic({
@@ -163,7 +156,6 @@ export async function setAppleFoldableOrientation(
           attempt,
           observedOrientation: reading.rotation,
           litDisplay: reading.panel.name,
-          panelOffset: mapping.offset,
         },
       });
     }
@@ -218,7 +210,11 @@ async function readLitPanel(
 ): Promise<LitPanel | undefined> {
   let inventory: AppleDisplayInventory;
   try {
-    inventory = await queryAppleDisplayInventory(device, { signal, foldHelper: helper });
+    inventory = await queryAppleDisplayInventory(device, {
+      signal,
+      source: 'guest',
+      foldHelper: helper,
+    });
   } catch (error) {
     if (signal?.aborted) throw error;
     return undefined;

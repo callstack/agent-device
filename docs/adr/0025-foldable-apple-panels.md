@@ -58,7 +58,8 @@ It is the only reader of panel tables, and it selects the source.
   For a simulator in a scoped set, the fold helper's `panels` mode is the screen authority.
   It emits the same entry shape from the guest sources that `dtdeviceinfod` relays to CoreDevice: `CADisplay` and `BLSBacklight`.
   The guest lists every integrated panel and omits only the facts it cannot read.
-  Foldable `fold` and `orientation` operations use the guest table in either simulator set.
+  Fold pose and rotation lit-panel reads explicitly request the guest table in either simulator set.
+  Panel-count classification keeps the set-based source: CoreDevice in the default set, guest in a scoped set.
   Rotation confirms the lit panel because CoreDevice orientation can match the picker while the visible panel shows another orientation.
 - **Completeness.**
   Both sources list one entry per integrated panel. A panel that the parser drops is not single-panel evidence.
@@ -374,7 +375,9 @@ Rejected alternatives:
 `orientation` therefore rotates a multi-panel simulator through the guest device-state control: the HID event that Device Hub's orientation menu sends (`orientation-picker-control`, type `enum`).
 The picker accepts `pud` for upside-down dispatch, which the inner panel needs to show landscape-left.
 The user target `portrait-upside-down` remains refused with `unsupported-foldable-orientation`.
-Routing uses the `fold` admission and the panel table. A resolved panel count is a hardware fact, so the daemon probes each simulator once.
+Routing uses the `fold` admission and the set-based panel-count source. A resolved panel count is a hardware fact, so the daemon probes each simulator once.
+A supplied helper is a reuse handle; only an explicit guest-source request changes the default-set source.
+Thus, classifying a single-panel default-set simulator does not prepare the fold helper.
 
 Verification was updated on 2026-11-12 under [#4440](https://github.com/callstack/agent-device/pull/4440).
 In both simulator sets, the helper reads the guest panel table and dispatches the fixed picker value for the established lit panel.

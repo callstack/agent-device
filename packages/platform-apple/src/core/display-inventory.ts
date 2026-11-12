@@ -90,7 +90,9 @@ type CoreDeviceDisplayPayload = {
 type AppleDisplayInventoryOptions = {
   timeoutMs?: number;
   signal?: AbortSignal;
-  /** Selects the guest table in either simulator set and reuses this helper. */
+  /** Requests the guest table for a lit-panel read in either simulator set. */
+  source?: 'guest';
+  /** Reuses a helper without changing the simulator set's table source. */
   foldHelper?: FoldHelper;
 };
 
@@ -99,7 +101,7 @@ const DISPLAYS_UNSUPPORTED_HINT =
 
 /**
  * Reads the CoreDevice display table for one Apple device, or the guest's equivalent for a
- * simulator in a scoped device set or a caller that supplies its fold helper.
+ * simulator in a scoped device set or a caller that explicitly requests the guest table.
  *
  * Deliberately uncached: which panel is lit is exactly what changes when an
  * operator folds or opens the device, and a cached answer would resume capturing
@@ -114,7 +116,7 @@ export async function queryAppleDisplayInventory(
   options: AppleDisplayInventoryOptions,
 ): Promise<AppleDisplayInventory> {
   const table =
-    options.foldHelper || simulatorAddressFor(device).simulatorSetPath
+    options.source === 'guest' || simulatorAddressFor(device).simulatorSetPath
       ? await readGuestPanelTable(device, options)
       : await readCoreDevicePanelTable(device, options);
   if (!table.ok) {

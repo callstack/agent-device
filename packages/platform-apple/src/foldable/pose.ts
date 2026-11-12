@@ -49,6 +49,7 @@ export async function setAppleFoldPose(
   const helper = createFoldHelper(device);
   const inventory = await queryAppleDisplayInventory(device, {
     signal: options.signal,
+    source: 'guest',
     foldHelper: helper,
   });
   requireFoldableInventory(device, inventory);
@@ -275,7 +276,11 @@ async function readLitPanel(
   foldHelper: FoldHelper,
   signal: AbortSignal | undefined,
 ): Promise<AppleDeviceDisplay | undefined> {
-  const inventory = await queryAppleDisplayInventory(device, { signal, foldHelper });
+  const inventory = await queryAppleDisplayInventory(device, {
+    signal,
+    source: 'guest',
+    foldHelper,
+  });
   if (inventory.unresolved || inventory.ambiguous) return undefined;
   return inventory.activeDisplay;
 }

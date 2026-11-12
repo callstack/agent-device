@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { bindTestCommandHost, createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
@@ -14,9 +15,10 @@ import { AppError } from '@agent-device/kernel/errors';
 import { runAppleRunnerCommand } from '../core/runner-client.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../core/tool-provider.ts';
 import { createAppleInteractor } from '../interactor.ts';
-import { readFoldablePanelTable } from './orientation.ts';
+import { isAppleFoldableSimulator, readFoldablePanelTable } from './orientation.ts';
+import { ensureFoldHelperBinary } from './fold-helper-cache.ts';
 import { IOS_DEVICE, IOS_SIMULATOR } from '../__tests__/device-fixtures.ts';
-import { IPHONE_17_SINGLE_PANEL } from '../__tests__/display-fixtures.ts';
+import { IPHONE_17_SINGLE_PANEL, IPHONE_DUO_CLOSED } from '../__tests__/display-fixtures.ts';
 
 bindTestCommandHost();
 
@@ -24,6 +26,7 @@ const mockRunner = vi.mocked(runAppleRunnerCommand);
 
 beforeEach(() => {
   mockRunner.mockClear();
+  vi.mocked(ensureFoldHelperBinary).mockReset().mockResolvedValue({ path: '/cache/fold-helper' });
 });
 
 /** A fresh simulator id per test: the daemon keeps each simulator's resolved panel count. */
@@ -38,11 +41,17 @@ const SINGLE_PANEL_DISPLAYS = IPHONE_17_SINGLE_PANEL.result.displays;
 /** Single-panel and physical targets keep their runner rotation. */
 function fakeSimulator(device: DeviceInfo, displays: readonly object[]) {
   const helpers: string[][] = [];
-  const devicectl: string[] = [];
+  const unexpectedTools: string[] = [];
+  const classificationReads: string[] = [];
   const provider = createLocalAppleToolProvider({
     runCommand: async (_command, args) => {
+      if (args.slice(0, 4).join(' ') === 'devicectl device info displays') {
+        classificationReads.push(args.join(' '));
+        fs.writeFileSync(args.at(-1)!, JSON.stringify({ result: { displays } }));
+        return { stdout: '', stderr: '', exitCode: 0 };
+      }
       if (args[0] !== 'simctl') {
-        devicectl.push(args.join(' '));
+        unexpectedTools.push(args.join(' '));
         throw new Error(`unexpected tool call: ${args.join(' ')}`);
       }
       const spawn = args.slice(args.indexOf('spawn'));
@@ -55,7 +64,8 @@ function fakeSimulator(device: DeviceInfo, displays: readonly object[]) {
   });
   return {
     helpers,
-    devicectl,
+    unexpectedTools,
+    classificationReads,
     rotate: (rotation: DeviceRotation) =>
       withAppleToolProvider(provider, () =>
         createAppleInteractor(device, {}, createLiveTestHostEnvironment()).setOrientation(rotation),
@@ -68,15 +78,18 @@ test('a simulator is probed for its panel count once', async () => {
   await rotateDuo(sim, 'landscape-left');
   await rotateDuo(sim, 'portrait');
   expect(sim.panelReads()).toBe(5);
+  expect(sim.classificationReads).toHaveLength(1);
   expect(sim.rotations()).toEqual(['landscape-left', 'portrait']);
-  expect(sim.devicectl).toEqual([]);
+  expect(sim.unexpectedTools).toEqual([]);
 });
 
 test('a single-panel simulator keeps the runner rotation', async () => {
   const device = simulator();
   const sim = fakeSimulator(device, SINGLE_PANEL_DISPLAYS);
   await expect(sim.rotate('landscape-left')).resolves.toEqual({ orientation: 'landscape-left' });
-  expect(sim.helpers).toEqual([['panels']]);
+  expect(sim.helpers).toEqual([]);
+  expect(ensureFoldHelperBinary).not.toHaveBeenCalled();
+  expect(sim.classificationReads).toHaveLength(1);
   expect(mockRunner).toHaveBeenCalledWith(
     device,
     expect.objectContaining({ command: 'rotate', orientation: 'landscape-left' }),
@@ -84,10 +97,45 @@ test('a single-panel simulator keeps the runner rotation', async () => {
   );
 });
 
+test('a cold default Duo classifies without preparing the guest helper', async () => {
+  const device = simulator();
+  const calls: string[] = [];
+  vi.mocked(ensureFoldHelperBinary).mockRejectedValue(
+    new Error('cold helper exceeds guest budget'),
+  );
+  const provider = createLocalAppleToolProvider({
+    runCommand: async (_command, args) => {
+      calls.push(args.join(' '));
+      expect(args.slice(0, 4)).toEqual(['devicectl', 'device', 'info', 'displays']);
+      fs.writeFileSync(args.at(-1)!, JSON.stringify(IPHONE_DUO_CLOSED));
+      return { stdout: '', stderr: '', exitCode: 0 };
+    },
+  });
+  await expect(
+    withAppleToolProvider(provider, () => isAppleFoldableSimulator(device, undefined)),
+  ).resolves.toBe(true);
+  expect(calls).toHaveLength(1);
+  expect(ensureFoldHelperBinary).not.toHaveBeenCalled();
+});
+
+test('a cold default Duo helper failure cannot fall back to runner success', async () => {
+  const sim = fakeDuo(simulator(), { lit: 'outer', picker: 'portrait' });
+  vi.mocked(ensureFoldHelperBinary).mockRejectedValue(
+    new Error('cold helper exceeds guest budget'),
+  );
+  await expect(rotateDuo(sim, 'landscape-left')).resolves.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'orientation-unverified' },
+  });
+  expect(sim.classificationReads).toHaveLength(1);
+  expect(mockRunner).not.toHaveBeenCalled();
+  expect(sim.rotations()).toEqual([]);
+});
+
 test('a physical device keeps the runner rotation without a CoreDevice probe', async () => {
   const sim = fakeSimulator(IOS_DEVICE, []);
   await expect(sim.rotate('landscape-left')).resolves.toEqual({ orientation: 'landscape-left' });
-  expect(sim.devicectl).toEqual([]);
+  expect(sim.unexpectedTools).toEqual([]);
   expect(mockRunner).toHaveBeenCalledTimes(1);
 });
 
@@ -142,7 +190,8 @@ function fakeDuo(
   },
 ) {
   const helpers: string[][] = [];
-  const devicectl: string[] = [];
+  const unexpectedTools: string[] = [];
+  const classificationReads: string[] = [];
   const offsets = options.offsets ?? MEASURED_OFFSETS;
   let lit = options.lit;
   let pickerAngle = PANEL_ANGLE[options.picker];
@@ -175,11 +224,30 @@ function fakeDuo(
       type: { integrated: {} },
     };
   };
+  const readPanels = () => {
+    panelReads += 1;
+    if (lagReadsLeft > 0) lagReadsLeft -= 1;
+    else if (pendingPicker !== undefined) {
+      pickerAngle = pendingPicker;
+      pendingPicker = undefined;
+      show(lit);
+    }
+    const bothLit =
+      bothLitReads > 0 ||
+      (options.bothLitFromRead !== undefined && panelReads >= options.bothLitFromRead);
+    if (bothLitReads > 0) bothLitReads -= 1;
+    return [panel('outer', bothLit), panel('inner', bothLit)];
+  };
   const provider = createLocalAppleToolProvider({
     runCommand: async (_command, args) => {
       const [tool, ...rest] = args;
+      if (args.slice(0, 4).join(' ') === 'devicectl device info displays') {
+        classificationReads.push(args.join(' '));
+        fs.writeFileSync(args.at(-1)!, JSON.stringify({ result: { displays: readPanels() } }));
+        return { stdout: '', stderr: '', exitCode: 0 };
+      }
       if (tool !== 'simctl') {
-        devicectl.push(args.join(' '));
+        unexpectedTools.push(args.join(' '));
         throw new Error(`unexpected tool call: ${args.join(' ')}`);
       }
       const spawn = rest.slice(rest.indexOf('spawn'));
@@ -187,18 +255,7 @@ function fakeDuo(
       const mode = spawn.slice(3);
       helpers.push(mode);
       if (mode[0] === 'panels') {
-        panelReads += 1;
-        if (lagReadsLeft > 0) lagReadsLeft -= 1;
-        else if (pendingPicker !== undefined) {
-          pickerAngle = pendingPicker;
-          pendingPicker = undefined;
-          show(lit);
-        }
-        const bothLit =
-          bothLitReads > 0 ||
-          (options.bothLitFromRead !== undefined && panelReads >= options.bothLitFromRead);
-        if (bothLitReads > 0) bothLitReads -= 1;
-        const displays = [panel('outer', bothLit), panel('inner', bothLit)];
+        const displays = readPanels();
         return { stdout: JSON.stringify({ version: 1, displays }), stderr: '', exitCode: 0 };
       }
       expect(mode[0]).toBe('rotate');
@@ -214,7 +271,8 @@ function fakeDuo(
   });
   return {
     helpers,
-    devicectl,
+    unexpectedTools,
+    classificationReads,
     panelReads: () => panelReads,
     rotations: () => helpers.filter((mode) => mode[0] === 'rotate').map((mode) => mode[1]!),
     litScreen: () => `rot${shown[lit]}`,
@@ -238,16 +296,32 @@ async function rotateDuo(
   sim: ReturnType<typeof fakeDuo>,
   rotation: DeviceRotation,
 ): Promise<unknown> {
-  vi.useFakeTimers();
+  const prepare = vi.mocked(ensureFoldHelperBinary).getMockImplementation()!;
+  let clockStarted = false;
+  let ready!: () => void;
+  const helperStarted = new Promise<void>((resolve) => {
+    ready = resolve;
+  });
+  vi.mocked(ensureFoldHelperBinary).mockImplementation(async (input) => {
+    if (!clockStarted) {
+      vi.useFakeTimers();
+      clockStarted = true;
+      ready();
+    }
+    return prepare(input);
+  });
   try {
     const outcome = sim.rotate(rotation).then(
       (value) => value,
       (error: unknown) => error,
     );
-    await vi.advanceTimersByTimeAsync(30_000);
+    // CoreDevice classification performs file I/O before any settle timer exists.
+    await Promise.race([helperStarted, outcome]);
+    if (clockStarted) await vi.advanceTimersByTimeAsync(30_000);
     return await outcome;
   } finally {
     vi.useRealTimers();
+    vi.mocked(ensureFoldHelperBinary).mockImplementation(prepare);
   }
 }
 
@@ -266,7 +340,7 @@ describe.each([undefined, '/tmp/scoped-set'])('foldable rotation, set %s', (simu
       await expect(rotateDuo(sim, target)).resolves.toEqual({ orientation: target });
       expect(sim.litScreen()).toBe(`rot${PANEL_ANGLE[target]}`);
       expect(sim.rotations()).toEqual(dispatched);
-      expect(sim.devicectl).toEqual([]);
+      expect(sim.unexpectedTools).toEqual([]);
       expect(mockRunner).not.toHaveBeenCalled();
     },
   );
@@ -280,7 +354,7 @@ describe.each([undefined, '/tmp/scoped-set'])('foldable rotation, set %s', (simu
     expect(sim.litScreen()).toBe('rot0');
     // The measured inner offset makes the first dispatch exact: portrait - 90 is landscape-left.
     expect(sim.rotations()).toEqual(['landscape-left']);
-    expect(sim.devicectl).toEqual([]);
+    expect(sim.unexpectedTools).toEqual([]);
     expect(mockRunner).not.toHaveBeenCalled();
   });
 
@@ -296,7 +370,7 @@ describe.each([undefined, '/tmp/scoped-set'])('foldable rotation, set %s', (simu
     });
     expect(sim.litScreen()).toBe('rot270');
     expect(sim.rotations()).toEqual(['portrait-upside-down']);
-    expect(sim.devicectl).toEqual([]);
+    expect(sim.unexpectedTools).toEqual([]);
   });
 
   test('the outer panel reads the picker value itself, so its first dispatch is the target', async () => {
@@ -308,7 +382,7 @@ describe.each([undefined, '/tmp/scoped-set'])('foldable rotation, set %s', (simu
       await expect(rotateDuo(sim, rotation)).resolves.toEqual({ orientation: rotation });
       expect(sim.rotations()).toEqual([rotation]);
     }
-    expect(sim.devicectl).toEqual([]);
+    expect(sim.unexpectedTools).toEqual([]);
   });
 
   test('an unexpected panel response cannot calibrate another picker value', async () => {
@@ -326,7 +400,7 @@ describe.each([undefined, '/tmp/scoped-set'])('foldable rotation, set %s', (simu
     expect(sim.litScreen()).toBe('rot0');
     // An unexpected reading is not evidence that an unsupported picker value is safe to send.
     expect(sim.rotations()).toEqual(['landscape-right']);
-    expect(sim.devicectl).toEqual([]);
+    expect(sim.unexpectedTools).toEqual([]);
   });
 
   test('the picker survives a fold in both directions and each panel adds its own offset', async () => {
@@ -463,7 +537,7 @@ describe.each([undefined, '/tmp/scoped-set'])('foldable rotation, set %s', (simu
       });
       expect((outcome as AppError).details).not.toHaveProperty('observedOrientation');
       expect(sim.rotations()).toEqual([]);
-      expect(sim.devicectl).toEqual([]);
+      expect(sim.unexpectedTools).toEqual([]);
     },
   );
 
@@ -489,7 +563,7 @@ describe.each([undefined, '/tmp/scoped-set'])('foldable rotation, set %s', (simu
       });
       expect((outcome as AppError).details).not.toHaveProperty('observedOrientation');
       expect(sim.rotations()).toEqual([]);
-      expect(sim.devicectl).toEqual([]);
+      expect(sim.unexpectedTools).toEqual([]);
     },
   );
 
@@ -526,7 +600,7 @@ describe.each([undefined, '/tmp/scoped-set'])('foldable rotation, set %s', (simu
     // The panel never moved after the one dispatch, so nothing more was
     // dispatched: the loop re-read until its budget ended, then refused.
     expect(sim.rotations()).toEqual(['landscape-left']);
-    expect(sim.devicectl).toEqual([]);
+    expect(sim.unexpectedTools).toEqual([]);
   });
 
   test('a foldable still refuses portrait-upside-down as a target', async () => {
