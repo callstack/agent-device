@@ -126,10 +126,17 @@ function findPrecedingScrollContainer(
           candidate.parentIndex === node.parentIndex &&
           candidate.index < node.index &&
           hasUsableRect(candidate) &&
-          isScrollableNodeLike(candidate),
+          isScrollableNodeLike(candidate) &&
+          !isScrollIndicator(candidate),
       )
       .at(-1) ?? null
   );
+}
+
+/** A scroll bar's kind also says "scroll", and it is not what the target scrolled out of. */
+function isScrollIndicator(node: SnapshotNode): boolean {
+  const kind = `${node.type ?? ''} ${node.role ?? ''} ${node.subrole ?? ''}`.toLowerCase();
+  return /scroll\s?(bar|indicator)/.test(kind);
 }
 
 /**
@@ -147,8 +154,8 @@ function scrollContainerRecovery(
   if (!container) return {};
   const recovery =
     'selector' in target
-      ? `run scroll <direction> --until '${target.selector}' to bring it on screen, then retry with the same selector.`
-      : 'scroll toward it, then retry with a selector (e.g. text=/id=) rather than an @ref — the scroll expires the ref frame.';
+      ? `run scroll <direction> --until ${JSON.stringify(target.selector)} to bring it on screen, then retry with the same selector.`
+      : 'scroll toward it, then retry with a selector (e.g. text=/id=) rather than an @ref — the scroll expires the ref frame, so re-run snapshot -i before reusing any @ref.';
   return {
     ...(container.ref ? { scrollContainerRef: `@${container.ref}` } : {}),
     hint: `The target reports no frame, so nothing confirms it is on screen, and the frame names no direction. It may be scrolled out of a scrollable container: ${recovery}`,

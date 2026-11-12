@@ -192,7 +192,7 @@ test('runtime press on a zero-area target beside a scroll container names the sc
       assert.equal(details?.reason, 'target_bounds_invalid');
       assert.equal(details?.dispatched, 'no');
       assert.equal(details?.scrollContainerRef, '@e2');
-      assert.match(String(details?.hint), /scroll <direction> --until 'label="View all"'/);
+      assert.match(String(details?.hint), /scroll <direction> --until "label=\\"View all\\""/);
       return true;
     },
   );
@@ -204,6 +204,7 @@ test('runtime press on a zero-area target beside a scroll container names the sc
       assert.equal(details?.scrollContainerRef, '@e2');
       // A scroll expires the ref frame, so the ref recovery steers to a selector instead.
       assert.match(String(details?.hint), /retry with a selector/);
+      assert.match(String(details?.hint), /re-run snapshot -i/);
       assert.doesNotMatch(String(details?.hint), /--until/);
       return true;
     },
@@ -312,6 +313,36 @@ test('runtime press offers no scroll for a measured target whose input bounds ex
       assert.equal(details?.reason, 'target_bounds_invalid');
       assert.equal(details?.scrollContainerRef, undefined);
       assert.equal(details?.hint, undefined);
+      return true;
+    },
+  );
+});
+
+test('runtime press names the scroll view, not a scroll bar listed after it, as the scroll container', async () => {
+  const state = scrolledOutButtonSnapshot();
+  const [application, scrollView, block, button] = state.nodes;
+  const device = createInteractionDevice(
+    makeSnapshotState([
+      application!,
+      scrollView!,
+      {
+        ...block!,
+        type: 'Other',
+        role: 'AXScrollBar',
+        label: 'Vertical scroll bar, 2 pages',
+        rect: { x: 396, y: 118, width: 6, height: 756 },
+      },
+      button!,
+    ]),
+    { tap: async () => ({ ok: true }) },
+  );
+
+  await assert.rejects(
+    () => device.interactions.press(selector('label="View all"'), { session: 'default' }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'target_bounds_invalid');
+      assert.equal(details?.scrollContainerRef, '@e2');
       return true;
     },
   );
