@@ -402,17 +402,28 @@ test('a canceled request aborts its signal with the typed canceled error', () =>
 });
 
 test('a request runs under the earlier of its execution and result deadlines', async () => {
-  const resultDeadlineMs = Date.now() + 60_000;
-  const registration = registerRequestAbort('earliest-deadline', undefined, { resultDeadlineMs });
-  try {
-    assert.equal(getRequestDeadlineMs('earliest-deadline'), resultDeadlineMs);
-    await withRequestDeadline('earliest-deadline', 1_000, async () => {
-      const deadlineMs = getRequestDeadlineMs('earliest-deadline')!;
-      assert.ok(deadlineMs < resultDeadlineMs, 'the shorter execution deadline wins');
-      return { ok: true };
-    });
-  } finally {
-    clearRequestAbortRegistration(registration);
+  for (const [resultInMs, executionInMs] of [
+    [60_000, 1_000],
+    [1_000, 60_000],
+  ] as const) {
+    const resultDeadlineMs = Date.now() + resultInMs;
+    const registration = registerRequestAbort('earliest-deadline', undefined, { resultDeadlineMs });
+    try {
+      assert.equal(getRequestDeadlineMs('earliest-deadline'), resultDeadlineMs);
+      const before = Date.now();
+      await withRequestDeadline('earliest-deadline', executionInMs, async () => {
+        const deadlineMs = getRequestDeadlineMs('earliest-deadline')!;
+        const after = Date.now();
+        if (executionInMs < resultInMs) {
+          assert.ok(deadlineMs >= before + executionInMs && deadlineMs <= after + executionInMs);
+        } else {
+          assert.equal(deadlineMs, resultDeadlineMs);
+        }
+        return { ok: true };
+      });
+    } finally {
+      clearRequestAbortRegistration(registration);
+    }
   }
   assert.equal(getRequestDeadlineMs('unregistered-request'), undefined);
 });

@@ -249,3 +249,53 @@ describe('observeUntil hard deadline', () => {
     assert.equal(observed.polls.length, 1);
   });
 });
+
+describe('observeUntil hard deadline precedence', () => {
+  test('a capture that finishes exactly at the deadline is not judged', async () => {
+    const clock = fakeClock();
+    let judged = 0;
+    const observed = await observeUntil({
+      capture: async () => {
+        clock.advance(300);
+        return 'on time?';
+      },
+      verdict: () => {
+        judged += 1;
+        return { kind: 'done', result: 'accepted' };
+      },
+      schedule: SCHEDULE,
+      deadlineMs: clock.now() + 300,
+      clock,
+    });
+    assert.equal(observed.kind, 'deadline');
+    assert.equal(judged, 0);
+  });
+
+  test('an initial value is not judged once the deadline has passed', async () => {
+    const clock = fakeClock();
+    const observed = await observeUntil({
+      capture: async () => 2,
+      verdict: (latest) => ({ kind: 'done', result: latest }),
+      schedule: SCHEDULE,
+      initial: 1,
+      deadlineMs: clock.now(),
+      clock,
+    });
+    assert.equal(observed.kind, 'deadline');
+  });
+
+  test('the deadline wins when a slow verdict spends both the budget and the deadline', async () => {
+    const clock = fakeClock();
+    const observed = await observeUntil({
+      capture: async () => 1,
+      verdict: () => {
+        clock.advance(2_000);
+        return { kind: 'continue' };
+      },
+      schedule: SCHEDULE,
+      deadlineMs: clock.now() + 1_500,
+      clock,
+    });
+    assert.equal(observed.kind, 'deadline');
+  });
+});

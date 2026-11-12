@@ -103,6 +103,7 @@ export async function observeUntil<T, R>(
     },
   };
   if (params.initial !== undefined) {
+    if (remainingMs(loop, 'hard') <= 0) return finish(loop, { kind: 'deadline', last: undefined });
     loop.state.observations += 1;
     const done = judge(loop, params.initial);
     if (done) return done;
@@ -132,7 +133,8 @@ function mustPoll<T, R>({ params, state }: Loop<T, R>): boolean {
 async function waitBeforePoll<T, R>(loop: Loop<T, R>): Promise<Observed<T, R> | undefined> {
   const { state, clock, params } = loop;
   const deadline = () => finish(loop, { kind: 'deadline', last: state.last });
-  if (state.observations === 0) return remainingMs(loop, 'hard') > 0 ? undefined : deadline();
+  if (remainingMs(loop, 'hard') <= 0) return deadline();
+  if (state.observations === 0) return undefined;
   const forced = mustPoll(loop);
   if (!forced && remainingMs(loop) <= 0) return finish(loop, { kind: 'expired', last: state.last });
   const { intervalMs } = params.schedule;
