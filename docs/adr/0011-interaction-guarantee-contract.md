@@ -19,6 +19,7 @@ Completed process history is in git history.
 - Multiple mutating selector matches collapse only if they form one ancestor–descendant chain and every member resolves to the same actionable node. Otherwise, the mutation fails with `AMBIGUOUS_MATCH`. Maestro's explicit expected-point/non-hittable compatibility path stays separate.
 - Keep synthesized iOS gesture policy outside the element dispatch-path matrix.
 - On Android, the press/click moving-target guard samples fresh geometry until the target remains on one surface at one position for 100 ms, within a 1,500 ms transition window. A target that cannot establish that evidence is refused. Other platforms retain their existing guard schedule.
+- On `runtime-ref` and `runtime-selector`, ordinary primary iOS `press` and `click` actions wait for native hittability when the request-bound Apple runtime advertises `pressReadiness`. The original request budget bounds the wait; ambiguity or changed target authorization refuses input. Text-entry contents are not part of press identity.
 
 ## Context
 
@@ -87,6 +88,7 @@ export const INTERACTION_GUARANTEES = [
   'resolutionDisclosure',  // disclose the source of target resolution
   'outcomeObservation',    // state what the path observes after dispatch
   'targetStability',       // refuse tap positions that change between observations
+  'nativeReadiness',       // wait for admitted native control readiness before ordinary press/click
 ] as const;
 ```
 
@@ -320,6 +322,41 @@ Since #1105, the capture-resolving interaction commands also declare `preserve-d
 Their dominant timeout mode is the same blocked accessibility capture as `snapshot`.
 A daemon reset there destroyed every healthy app session that the daemon owned.
 
+### Native readiness for ordinary iOS taps
+
+Ordinary resolved `press` and `click` actions wait implicitly when the request-bound Apple owner
+reports that the exact authorized control is not natively hittable. The snapshot `hittable` field records capture-time geometric actionability; it does not establish that an overlay has released input. The native read checks live control hittability separately. The native mutation-read binds numeric element type, identifier, label, and rectangle before
+counting matches; a hittable duplicate cannot replace a blocked target. The binding keeps the capture
+producer's native identity and full rectangle, after required coordinate normalization and before row
+promotion or clipping. This private evidence survives session storage and is omitted from public
+snapshots. Non-text-entry controls also bind their value.
+TextField, SearchField, TextView, and SecureTextField values are omitted from the private press binding.
+Text-entry contents are state, not press identity; readiness does not prove that contents are unchanged.
+This rule replaces producer-specific input-value binding, which adds live reads and still cannot
+distinguish contents that accessibility reports with the same value.
+Selectors retain their authored value constraints when the canonical target is re-observed.
+A native reply must prove the actual queried app matches the authorized surface. ADR 0039's admission
+owner runs motion and native readiness in one observation loop under the central request budget.
+While only native readiness blocks, it polls that binding alone. After readiness passes, one fresh
+canonical resolution must authorize the target and select its guarded point. That capture starts a
+new admission generation and its native binding must pass before dispatch; a later Ready result does
+not upgrade the earlier capture. Pinned replay and mutating-find targets keep ADR 0039's bypass.
+A deadline reports `daemon_request_timeout` with the last native check/state when available;
+cancellation reports `request_canceled`. Both refuse before dispatch.
+
+The [proposed when-unknown policy](https://github.com/callstack/agent-device/issues/4388#issuecomment-6827440222)
+checks native readiness even for an idle target when no equivalent current native fact exists.
+This preserves implicit blocking but adds a live read to the accept path. It is a proposed exception
+to ADR 0039's zero-read idle rule, pending maintainer disposition; it is not an accepted cost change.
+Only `blocked` is waitable. A `missing` native match, ambiguity, changed authorization, unsupported native proof, cancellation, or timeout refuses before input. Raw coordinates and non-default tap options retain their existing semantics.
+
+The retained rectangle must use the same coordinate space as the live native element frame.
+Control matching does not filter candidates by containment of the canonical tap point.
+Canonical point guards validate that point separately.
+The request admits the dedicated internal `pressReadiness` operation conditionally. A public `querySelector` operation alone does not authorize this check. Public selector reads retain their existing matching policy. This guard supplies a necessary condition for fully blocked controls; native
+hittability does not certify the preserved point against partial app-drawn coverage. It does not
+wait for a selector that canonical resolution could not initially find.
+
 ## Consequences
 
 - A new dispatch path or a new guarantee forces a whole-matrix decision.
@@ -442,6 +479,7 @@ Step 3 is not complete:
 
 ## Alternatives considered
 
+- **An explicit transition-wait API or a fixed sleep:** rejected for native readiness. Tree stability and a universal duration cannot establish whether a control can receive input.
 - **Delete the fast paths** (single resolution spine): unacceptable.
   The direct iOS path saves a full snapshot round trip per interaction.
   The ref fast path is the backbone of replay throughput.

@@ -14,6 +14,7 @@ enum CommandType: String, Codable, CaseIterable {
   case desktopScroll
   case findText
   case querySelector
+  case pressReadiness
   case readText
   case snapshot
   case screenshot
@@ -239,6 +240,17 @@ struct RunnerLitPanelFact: Codable {
   let heightPt: Double
 }
 
+extension NativePressTarget {
+  func matches(type: UInt, identifier: String?, label: String?, value: String?, rect: SnapshotRect) -> Bool {
+    func text(_ value: String?) -> String { (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+    return self.type == type && text(self.identifier) == text(identifier)
+      && text(self.label) == text(label) && (Self.textEntryTypes.contains(type) || text(self.value) == text(value))
+      && [self.rect.x - rect.x, self.rect.y - rect.y, self.rect.width - rect.width, self.rect.height - rect.height]
+        .allSatisfy { $0.isFinite && abs($0) <= 1 }
+      && self.rect.width >= 0 && self.rect.height >= 0 && rect.width >= 0 && rect.height >= 0
+  }
+}
+
 struct Command: Codable {
   let command: CommandType
   let commandId: String?
@@ -247,6 +259,7 @@ struct Command: Codable {
   let text: String?
   let selectorKey: String?
   let selectorValue: String?
+  let authorizedTarget: NativePressTarget?
   let allowNonHittableCoordinateFallback: Bool?
   let delayMs: Int?
   let textEntryMode: String?
@@ -332,7 +345,7 @@ extension Command {
     case .actionButton, .volumeUp, .volumeDown:
       return .presentedSurfaceMutation
 
-    case .querySelector:
+    case .querySelector, .pressReadiness:
       return .selectorResolution
 
     case .mouseClick, .home, .recordStart, .activate:
@@ -492,6 +505,8 @@ struct DataPayload: Codable {
   var imageBase64: String?
   var text: String?
   var found: Bool?
+  var pressReadiness: String?
+  var pressReadinessAppBundleId: String?
   var items: [String]?
   /// Set on an alert read that is SpringBoard's `Open in “<App>”?` launch confirmation, in the
   /// device's language; absent otherwise.

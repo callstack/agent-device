@@ -1,8 +1,12 @@
+import { AppError } from '@agent-device/kernel/errors';
 import type {
   QuerySelectorInput,
   QuerySelectorNodeReading,
   QuerySelectorResult,
   SelectorObservationRuntimeOperations,
+  PressReadinessInput,
+  PressReadinessResult,
+  PressReadinessRuntimeOperations,
 } from '@agent-device/contracts/selector-observation-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { parseRect } from '@agent-device/kernel/record';
@@ -48,6 +52,50 @@ export function bindAppleQuerySelectorRuntime(
       return Object.freeze({
         found: data.found === true,
         ...(node ? { node } : {}),
+      });
+    },
+  });
+}
+
+/** The owner's strict, app-scoped readiness read, independent of public selector semantics. */
+export function bindApplePressReadinessRuntime(
+  request: AppleSelectorQueryRequest,
+): PressReadinessRuntimeOperations {
+  return Object.freeze({
+    pressReadiness: async (input: PressReadinessInput): Promise<PressReadinessResult> => {
+      const signal = input.signal
+        ? AbortSignal.any([request.signal, input.signal])
+        : request.signal;
+      signal.throwIfAborted();
+      if (!input.appBundleId)
+        throw new AppError('INVALID_ARGS', 'Native press readiness requires an app bundle ID');
+      const { queryAppleRunnerSelector } = await import('./core/runner-selector-query.ts');
+      const data = await queryAppleRunnerSelector(
+        request.device,
+        { authorizedTarget: input.authorizedTarget },
+        input.appBundleId,
+        { ...input.execution, signal },
+      );
+      const readiness = data.pressReadiness;
+      if (
+        readiness !== 'ready' &&
+        readiness !== 'blocked' &&
+        readiness !== 'missing' &&
+        readiness !== 'ambiguous' &&
+        readiness !== 'surface-mismatch'
+      ) {
+        throw new AppError(
+          'UNSUPPORTED_OPERATION',
+          'Runner did not report native press readiness; rebuild the Apple runner',
+        );
+      }
+      const appBundleId =
+        typeof data.pressReadinessAppBundleId === 'string'
+          ? data.pressReadinessAppBundleId
+          : undefined;
+      return Object.freeze({
+        readiness: appBundleId === input.appBundleId ? readiness : 'surface-mismatch',
+        ...(appBundleId ? { appBundleId } : {}),
       });
     },
   });

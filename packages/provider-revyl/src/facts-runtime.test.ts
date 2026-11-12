@@ -96,6 +96,7 @@ const EXPECTED_CELLS = {
   power: 'mode',
   prepareAppleRunner: 'mode',
   querySelector: 'mode',
+  pressReadiness: 'mode',
   readAlert: 'mode',
   readClipboard: 'mode',
   readSetting: 'mode',

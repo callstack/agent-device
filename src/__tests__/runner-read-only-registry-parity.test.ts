@@ -54,12 +54,13 @@ const REGISTRY_COUNTERPART: Record<RunnerName, RegistryRequest> = {
   pasteboardWrite: { command: 'clipboard', positionals: ['write', 'x'] },
 };
 
-// Runner commands that drive runner or app lifecycle, not a user-visible command, with whether the
-// resend gate may treat them as reads.
+// Runner-internal operations with no user-visible command, and whether the resend gate may
+// treat them as reads.
 const RUNNER_INTERNAL: Readonly<Record<string, boolean>> = {
   status: true,
   uptime: true,
   appState: true,
+  pressReadiness: true,
   snapshotBridge: true,
   gestureViewport: true,
   sequence: false,

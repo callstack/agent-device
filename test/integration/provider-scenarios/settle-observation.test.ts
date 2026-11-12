@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { assertRpcOk } from './assertions.ts';
-import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
+import { iosNativeSnapshotNodes, PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 import {
   createAppleRunnerProviderFromTranscript,
@@ -127,7 +127,7 @@ function snapshotEntry(nodes: readonly unknown[]): ProviderScenarioProviderEntry
     command: 'ios.runner.snapshot',
     deviceId: DEVICE_ID,
     platform: 'apple',
-    result: { nodes, truncated: false },
+    result: { nodes: iosNativeSnapshotNodes(nodes), truncated: false },
   };
 }
 
@@ -150,7 +150,7 @@ function changingSnapshotEntry(nodes: (label: string) => unknown[]): ProviderSce
     repeat: true,
     result: () => {
       capture += 1;
-      return { nodes: nodes(`Loading ${capture}`), truncated: false };
+      return { nodes: iosNativeSnapshotNodes(nodes(`Loading ${capture}`)), truncated: false };
     },
   };
 }
@@ -183,9 +183,17 @@ test(
       snapshotEntry(BEFORE_NODES),
       // press label=Continue --settle: resolution capture, tap, settle captures
       snapshotEntry(BEFORE_NODES),
+      {
+        command: 'ios.runner.pressReadiness',
+        result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
+      },
       tapEntry(200, 322),
       quietSnapshotEntry(SETTLED_NODES),
       // press @e2 (the Done ref from the settled diff): tap on the stored tree
+      {
+        command: 'ios.runner.pressReadiness',
+        result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
+      },
       tapEntry(200, 522),
     ]);
     const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
@@ -278,12 +286,12 @@ test(
         assert.equal(followUpData.warning, undefined);
         assert.equal(followUpData.x, 200);
         assert.equal(followUpData.y, 522);
-        // The round trip settle exists to remove: the follow-up spends a tap and
-        // nothing else. Asserted directly, since a quiet-UI entry would happily
+        // The round trip settle exists to remove: the follow-up spends a native readiness read and tap,
+        // without another capture. Asserted directly, since a quiet-UI entry would happily
         // serve a stray capture.
         assert.deepEqual(
           runnerTranscript.calls.slice(callsBeforeFollowUp).map((call) => call.command),
-          ['ios.runner.tap'],
+          ['ios.runner.pressReadiness', 'ios.runner.tap'],
         );
 
         runnerTranscript.assertComplete();
@@ -314,6 +322,10 @@ test('Provider-backed integration never-settled press --settle does not issue di
     // tap, then a settle stream that never repeats itself, so the loop can only ever time out.
     snapshotEntry(BEFORE_NODES),
     snapshotEntry(BEFORE_NODES),
+    {
+      command: 'ios.runner.pressReadiness',
+      result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
+    },
     tapEntry(200, 322),
     changingSnapshotEntry(loadingNodes),
   ]);
@@ -378,9 +390,17 @@ test('Provider-backed integration modal-dismiss press --settle attaches the unch
     // The dialog closes leaving Continue in place — a removals-only diff with
     // no added refs, so the tail is the only actionable-target payload.
     snapshotEntry(MODAL_BEFORE_NODES),
+    {
+      command: 'ios.runner.pressReadiness',
+      result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
+    },
     tapEntry(200, 422),
     quietSnapshotEntry(MODAL_DISMISSED_NODES),
     // press @e3 (the Continue ref from the tail): tap on the stored tree.
+    {
+      command: 'ios.runner.pressReadiness',
+      result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
+    },
     tapEntry(200, 322),
   ]);
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
@@ -454,7 +474,7 @@ test('Provider-backed integration modal-dismiss press --settle attaches the unch
       assert.equal(followUpData.y, 322);
       assert.deepEqual(
         runnerTranscript.calls.slice(callsBeforeFollowUp).map((call) => call.command),
-        ['ios.runner.tap'],
+        ['ios.runner.pressReadiness', 'ios.runner.tap'],
       );
 
       runnerTranscript.assertComplete();
@@ -717,6 +737,10 @@ test('Provider-backed integration fill --settle summoning the keyboard still att
     quietSnapshotEntry(FILL_SETTLED_NODES),
     // press @e17 (the "Discard and go back" ref from the tail): tap on the
     // stored settled tree.
+    {
+      command: 'ios.runner.pressReadiness',
+      result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
+    },
     tapEntry(201, 202),
   ]);
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
@@ -794,7 +818,7 @@ test('Provider-backed integration fill --settle summoning the keyboard still att
       assert.equal(followUpData.y, 202);
       assert.deepEqual(
         runnerTranscript.calls.slice(callsBeforeFollowUp).map((call) => call.command),
-        ['ios.runner.tap'],
+        ['ios.runner.pressReadiness', 'ios.runner.tap'],
       );
 
       runnerTranscript.assertComplete();

@@ -284,7 +284,29 @@ export type IosValueSemantics = {
   busy?: true;
 };
 
+/** Numeric native codes and canonical names share the text-entry press-identity rule. */
+export const NATIVE_PRESS_TEXT_ENTRY_TYPES = new Set<string | number>([
+  'SearchField',
+  'TextField',
+  'SecureTextField',
+  'TextView',
+  45,
+  49,
+  50,
+  52,
+]);
+
+/** Internal Apple capture wire provenance; removed before public snapshot assembly. */
+export type SnapshotNativePressTarget = {
+  type: number;
+  identifier?: string;
+  label?: string;
+  value?: string;
+  rect: Rect;
+};
+
 export type RawSnapshotNode = {
+  nativePressTarget?: SnapshotNativePressTarget;
   index: number;
   type?: string;
   role?: string;

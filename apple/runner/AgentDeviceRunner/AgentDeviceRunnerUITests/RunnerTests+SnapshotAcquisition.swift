@@ -2,6 +2,14 @@ import XCTest
 import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
+  func nativePressTarget(type: UInt, identifier: String?, label: String?, value: String?, frame: CGRect) -> NativePressTarget? {
+#if os(iOS)
+    return NativePressTarget(type: type, identifier: identifier, label: label, value: value, rect: SnapshotRect(frame))
+#else
+    return nil
+#endif
+  }
+
   func interactiveRootNode(rect: CGRect) -> RawAXNode {
     RawAXNode(
       index: 0,
@@ -223,7 +231,12 @@ extension RunnerTests {
       depth: depth,
       parentIndex: parentIndex,
       hiddenContentAbove: nil,
-      hiddenContentBelow: nil
+      hiddenContentBelow: nil,
+      nativePressTarget: nativePressTarget(type: snapshot.elementType.rawValue,
+        identifier: evaluation.identifier.isEmpty ? nil : evaluation.identifier,
+        label: snapshot.label.isEmpty ? nil : snapshot.label,
+        value: evaluation.valueText,
+        frame: snapshot.frame)
     )
   }
 
@@ -519,7 +532,9 @@ extension RunnerTests {
       depth: 0,
       parentIndex: nil,
       hiddenContentAbove: nil,
-      hiddenContentBelow: nil
+      hiddenContentBelow: nil,
+      nativePressTarget: nativePressTarget(type: candidate.type.rawValue, identifier: candidate.identifier,
+        label: candidate.label, value: candidate.valueText, frame: candidate.frame)
     )
   }
 
@@ -675,6 +690,8 @@ extension RunnerTests {
       let valueText = Self.valueText(element.value)
       let elementType = element.elementType
       let enabled = element.isEnabled
+      let target = nativePressTarget(type: elementType.rawValue, identifier: identifier,
+        label: label, value: valueText, frame: frame)
 
       node = RawAXNode(
         index: index,
@@ -691,7 +708,8 @@ extension RunnerTests {
         depth: 1,
         parentIndex: parentIndex,
         hiddenContentAbove: nil,
-        hiddenContentBelow: nil
+        hiddenContentBelow: nil,
+        nativePressTarget: target
       )
     })
     if let exceptionMessage {

@@ -47,35 +47,38 @@ test('the bridge tree becomes one depth-first raw snapshot with viewport evidenc
     limits,
   );
 
-  assert.deepEqual(result.nodes, [
-    {
-      index: 0,
-      type: 'Application',
-      role: 'Application',
-      rect: { x: 0, y: 0, width: 390, height: 844 },
-      depth: 0,
-      hittable: false,
-    },
-    {
-      index: 1,
-      parentIndex: 0,
-      type: 'Window',
-      role: 'Window',
-      subrole: 'UIWindow',
-      rect: { x: 0, y: 0, width: 390, height: 844 },
-      depth: 1,
-      hittable: true,
-    },
-    {
-      index: 2,
-      parentIndex: 1,
-      type: 'Button',
-      label: 'Continue',
-      rect: { x: 20, y: 700, width: 120, height: 48 },
-      depth: 2,
-      hittable: true,
-    },
-  ]);
+  assert.deepEqual(
+    result.nodes.map(({ nativePressTarget: _internal, ...node }) => node),
+    [
+      {
+        index: 0,
+        type: 'Application',
+        role: 'Application',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+        depth: 0,
+        hittable: false,
+      },
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'Window',
+        role: 'Window',
+        subrole: 'UIWindow',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+        depth: 1,
+        hittable: true,
+      },
+      {
+        index: 2,
+        parentIndex: 1,
+        type: 'Button',
+        label: 'Continue',
+        rect: { x: 20, y: 700, width: 120, height: 48 },
+        depth: 2,
+        hittable: true,
+      },
+    ],
+  );
   assert.deepEqual(result.viewport, {
     kind: 'reported',
     rect: { x: 0, y: 0, width: 390, height: 844 },
@@ -827,3 +830,47 @@ for (const row of traitClassification.cases) {
     assert.deepEqual(actual, row.bridge.expected, row.name);
   });
 }
+
+test('bridge binding carries classified numeric native types, including trait promotion', () => {
+  for (const [fields, expected] of [
+    [{ [automationType]: 0 }, 1],
+    [{ [automationType]: 9 }, 9],
+    [{ [automationType]: 34 }, 34],
+    [{ [automationType]: 39 }, 39],
+    [{ [automationType]: 51 }, 51],
+    [{ [application]: 'UIApplication' }, 2],
+    [{ [automationType]: 1, [traits]: '268435456' }, 9],
+  ] as const) {
+    const decoded = decodeSnapshotBridgeTree(
+      {
+        ...fields,
+        [label]: 'Control',
+        [frame]: { X: 10, Y: 20, Width: 100, Height: 40 },
+        [children]: [],
+      },
+      { truncated: false },
+      limits,
+    );
+    assert.equal(decoded.nodes[0]?.nativePressTarget?.type, expected);
+  }
+});
+
+test('bridge press bindings omit text-entry contents before presentation', () => {
+  for (const type of [45, 49, 50, 52]) {
+    for (const value of [undefined, 'Hint']) {
+      const node = decodeSnapshotBridgeTree(
+        {
+          [automationType]: type,
+          ...(value === undefined ? {} : { XC_kAXXCAttributeValue: value }),
+          [frame]: { X: 10, Y: 20, Width: 100, Height: 40 },
+          [children]: [],
+        },
+        { truncated: false },
+        limits,
+      ).nodes[0]!;
+      assert.equal(node.nativePressTarget?.type, type);
+      assert.equal(node.nativePressTarget?.value, undefined);
+      assert.equal(node.value, value);
+    }
+  }
+});

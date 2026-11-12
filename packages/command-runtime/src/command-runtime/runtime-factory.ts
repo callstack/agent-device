@@ -1,3 +1,4 @@
+import { transferSnapshotPrivateEvidence } from '@agent-device/contracts/capture';
 import type {
   AgentDeviceRuntime,
   AgentDeviceRuntimeConfig,
@@ -5,7 +6,6 @@ import type {
   CommandSessionStore,
 } from '@agent-device/contracts/runtime-contract';
 import { restrictedCommandPolicy } from '@agent-device/contracts/command-policy';
-import { copySnapshotViewportEvidence } from '@agent-device/contracts/capture';
 import { copySnapshotNodeInteractionBounds } from '@agent-device/kernel/rect-center';
 
 /**
@@ -51,11 +51,15 @@ function cloneSessionRecord(
   record: CommandSessionRecord | undefined,
 ): CommandSessionRecord | undefined {
   if (!record) return undefined;
-  const snapshot = record.snapshot ? structuredClone(record.snapshot) : undefined;
-  if (snapshot && record.snapshot) {
-    copySnapshotViewportEvidence(record.snapshot.nodes, snapshot.nodes);
+  const snapshot = record.snapshot
+    ? transferSnapshotPrivateEvidence(
+        record.snapshot,
+        structuredClone(record.snapshot),
+        new Map(record.snapshot.nodes.map((node) => [node.index, node.index])),
+      )
+    : undefined;
+  if (snapshot && record.snapshot)
     copySnapshotNodeInteractionBounds(record.snapshot.nodes, snapshot.nodes);
-  }
   return {
     ...record,
     ...(snapshot ? { snapshot } : {}),

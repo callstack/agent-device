@@ -1,4 +1,9 @@
-import { ref, createContractClock, createContractDevice } from './runtime-harness.ts';
+import {
+  ref,
+  createContractClock,
+  createContractDevice,
+  runNativeReadinessScenario,
+} from './runtime-harness.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
@@ -264,7 +269,14 @@ test(
   scenario('responseConstruction'),
   async () => {
     await withIosContractDaemon(
-      [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTapEntry({ x: 200, y: 322 })],
+      [
+        runnerSnapshotEntry(RUNNER_CONTINUE_NODES),
+        {
+          command: 'ios.runner.pressReadiness',
+          result: { pressReadiness: 'ready', pressReadinessAppBundleId: 'com.example.app' },
+        },
+        runnerTapEntry({ x: 200, y: 322 }),
+      ],
       async (daemon) => {
         const snapshot = await daemon.callCommand('snapshot', [], {
           snapshotInteractiveOnly: true,
@@ -318,3 +330,9 @@ test(scenarioNames(RUNTIME_REF_COVERAGE, 'resolutionDisclosure')[1]!, async () =
     kind: 'label-fallback',
   });
 });
+
+for (const [index, finalState] of (['ready', 'ambiguous'] as const).entries()) {
+  test(scenarioNames(RUNTIME_REF_COVERAGE, 'nativeReadiness')[index]!, async () => {
+    await runNativeReadinessScenario(ref('@e1'), finalState);
+  });
+}

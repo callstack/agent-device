@@ -109,6 +109,12 @@
   },
   {
     "command": {
+      "command": "pressReadiness"
+    },
+    "readOnly": true
+  },
+  {
+    "command": {
       "command": "querySelector"
     },
     "readOnly": true

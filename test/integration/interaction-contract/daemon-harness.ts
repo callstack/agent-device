@@ -1,5 +1,8 @@
 import { assertRpcOk } from '../provider-scenarios/assertions.ts';
-import { PROVIDER_SCENARIO_IOS_SIMULATOR } from '../provider-scenarios/fixtures.ts';
+import {
+  iosNativeSnapshotNodes,
+  PROVIDER_SCENARIO_IOS_SIMULATOR,
+} from '../provider-scenarios/fixtures.ts';
 import {
   createProviderScenarioHarness,
   withProviderScenarioResource,
@@ -97,7 +100,11 @@ export function runnerSnapshotEntry(
     command: 'ios.runner.snapshot',
     deviceId: CONTRACT_DEVICE_ID,
     platform: 'apple',
-    result: { nodes, truncated: false, ...result },
+    result: {
+      nodes: iosNativeSnapshotNodes(nodes),
+      truncated: false,
+      ...result,
+    },
   };
 }
 

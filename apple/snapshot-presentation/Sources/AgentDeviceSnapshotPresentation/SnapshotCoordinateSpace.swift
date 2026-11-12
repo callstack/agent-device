@@ -274,7 +274,8 @@ extension SnapshotGeometrySpace {
               enabled: node.enabled,
               frame: frame,
               viewport: viewport
-            )
+            ),
+          nativePressTargetRect: node.nativePressTarget.map { SnapshotRect(nodeSpace.orientedFrame(of: $0.rect.cgRect)) }
         )
       )
     }

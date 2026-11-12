@@ -1,4 +1,9 @@
-import { selector, createContractClock, createContractDevice } from './runtime-harness.ts';
+import {
+  selector,
+  createContractClock,
+  createContractDevice,
+  runNativeReadinessScenario,
+} from './runtime-harness.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
@@ -258,6 +263,10 @@ test(
       [
         // A resolves and taps at y=300; B resolves at 360 and its two re-observations disagree.
         runnerSnapshotEntry(runnerNodesAtY(300)),
+        {
+          command: 'ios.runner.pressReadiness',
+          result: { pressReadiness: 'ready', pressReadinessAppBundleId: 'com.example.app' },
+        },
         runnerTapEntry({ x: 200, y: 322 }),
         runnerSnapshotEntry(runnerNodesAtY(360)),
         runnerSnapshotEntry(runnerNodesAtY(420)),
@@ -419,7 +428,14 @@ test(
   scenario('responseConstruction'),
   async () => {
     await withIosContractDaemon(
-      [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTapEntry({ x: 200, y: 322 })],
+      [
+        runnerSnapshotEntry(RUNNER_CONTINUE_NODES),
+        {
+          command: 'ios.runner.pressReadiness',
+          result: { pressReadiness: 'ready', pressReadinessAppBundleId: 'com.example.app' },
+        },
+        runnerTapEntry({ x: 200, y: 322 }),
+      ],
       async (daemon) => {
         const press = await daemon.callCommand('press', ['label=Continue']);
         const data = assertRpcOk(press);
@@ -470,3 +486,9 @@ test(scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'resolutionDisclosure')[1]!, async
   // The winner never appears among its own alternatives.
   assert.ok(!resolution.alternatives.some((entry) => entry.diagnosticRef === 'diag-e3'));
 });
+
+for (const [index, finalState] of (['ready', 'ambiguous'] as const).entries()) {
+  test(scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'nativeReadiness')[index]!, async () => {
+    await runNativeReadinessScenario(selector('label="Continue"'), finalState);
+  });
+}

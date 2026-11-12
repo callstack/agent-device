@@ -1,4 +1,4 @@
-import { attachSnapshotTextInputGeometry } from '@agent-device/contracts/capture';
+import { transferSnapshotPrivateEvidence } from '@agent-device/contracts/snapshot-private-evidence';
 import { beforeEach, expect, test } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
@@ -54,8 +54,10 @@ function setup() {
     backend: 'xctest',
     producer: 'apple-runner',
   };
-  attachSnapshotTextInputGeometry(session.snapshot.nodes, {
-    rects: [{ x: 10, y: 100, width: 300, height: 40 }],
+  transferSnapshotPrivateEvidence({}, { nodes: session.snapshot.nodes }, new Map(), {
+    textInputGeometry: {
+      rects: [{ x: 10, y: 100, width: 300, height: 40 }],
+    },
   });
   activateCompleteRefFrame(session);
   store.publish(session.name, session);
@@ -90,7 +92,9 @@ test('a selector uses this request capture rather than the stored input geometry
       ? { ...node, rect: { x: 200, y: 160, width: 100, height: 40 } }
       : node,
   );
-  attachSnapshotTextInputGeometry(nodes, { rects: [{ x: 200, y: 160, width: 100, height: 40 }] });
+  transferSnapshotPrivateEvidence({}, { nodes: nodes }, new Map(), {
+    textInputGeometry: { rects: [{ x: 200, y: 160, width: 100, height: 40 }] },
+  });
   mockInteractorSnapshot.mockResolvedValue({ nodes, backend: 'xctest', producer: 'apple-runner' });
   const result = await runInteraction(store, session.name, 'click', ['role=button label=Home']);
   expect(result?.ok).toBe(true);
@@ -116,7 +120,9 @@ test('a rescued selector point keeps probing although the capture placed an inpu
       hittable: true,
     },
   ]);
-  attachSnapshotTextInputGeometry(nodes, { rects: [capturedRect] });
+  transferSnapshotPrivateEvidence({}, { nodes: nodes }, new Map(), {
+    textInputGeometry: { rects: [capturedRect] },
+  });
   mockInteractorSnapshot.mockResolvedValue({ nodes, backend: 'xctest', producer: 'apple-runner' });
   elementReadFixtureState.querySelectorAvailable = true;
   mockQuerySelector.mockResolvedValue({
@@ -136,7 +142,9 @@ test('a newer read-only observation keeps probing when the ref frame predates an
       return { ...node, rect: { x: 10, y: 740, width: 100, height: 40 } };
     return node.label === 'Home' ? { ...node, label: 'Profile' } : node;
   });
-  attachSnapshotTextInputGeometry(nodes, { rects: [{ x: 10, y: 740, width: 100, height: 40 }] });
+  transferSnapshotPrivateEvidence({}, { nodes: nodes }, new Map(), {
+    textInputGeometry: { rects: [{ x: 10, y: 740, width: 100, height: 40 }] },
+  });
   setSessionSnapshot(session, { ...session.snapshot!, nodes, createdAt: 2 });
   expect(refFrameState(session)).toBe('active');
   expect((await runInteraction(store, session.name, 'click', ['@e2']))?.ok).toBe(true);

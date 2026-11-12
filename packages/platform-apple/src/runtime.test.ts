@@ -968,3 +968,29 @@ test('the macOS surface branch composes the per-capture signal with the binding 
   poll.abort(new DOMException('Wait deadline exceeded', 'TimeoutError'));
   expect(passed.aborted).toBe(true);
 });
+
+// A public selector port is not a declaration of strict native readiness support.
+test.each([
+  [leaves.ios, true],
+  [leaves.ipados, true],
+  [appleDevice({ kind: 'device' }), true],
+  [leaves.tvos, false],
+  [leaves.macos, false],
+  [leaves.visionos, false],
+  [leaves.watchos, false],
+] as const)(
+  'advertises and binds strict press readiness only on the supported Apple leaf %s',
+  async (device, advertised) => {
+    const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+      device,
+      intent: { kind: 'ordinary' },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+    expect(binding.facts.operations.pressReadiness.available).toBe(advertised);
+    expect(binding.operations.pressReadiness).toBeTypeOf(advertised ? 'function' : 'undefined');
+  },
+);

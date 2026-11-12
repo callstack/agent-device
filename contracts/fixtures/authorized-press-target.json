@@ -1,0 +1,484 @@
+[
+  {
+    "name": "same target",
+    "expected": {
+      "type": 9,
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 9,
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "matches": true
+  },
+  {
+    "name": "one point capture rounding",
+    "expected": {
+      "type": 9,
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 9,
+      "label": "Continue",
+      "rect": {
+        "x": 41,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "matches": true
+  },
+  {
+    "name": "target moved",
+    "expected": {
+      "type": 9,
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 9,
+      "rect": {
+        "x": 42,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "matches": false
+  },
+  {
+    "name": "different control role",
+    "expected": {
+      "type": 9,
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 48,
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "matches": false
+  },
+  {
+    "name": "different label same rectangle",
+    "expected": {
+      "type": 9,
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 9,
+      "label": "Replacement",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "matches": false
+  },
+  {
+    "name": "different identifier same rectangle",
+    "expected": {
+      "type": 9,
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 9,
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "identifier": "other"
+    },
+    "matches": false
+  },
+  {
+    "name": "different native value",
+    "expected": {
+      "type": 9,
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 9,
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "value": "1"
+    },
+    "matches": false
+  },
+  {
+    "name": "label case is identity",
+    "expected": {
+      "type": 9,
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 9,
+      "label": "continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "matches": false
+  },
+  {
+    "name": "anonymous exact rectangle",
+    "expected": {
+      "type": 9,
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 9,
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "matches": true
+  },
+  {
+    "name": "shared nonempty identifier and value",
+    "expected": {
+      "type": 9,
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "identifier": "continue-control",
+      "value": "Ready"
+    },
+    "candidate": {
+      "type": 9,
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      },
+      "identifier": "continue-control",
+      "value": "Ready"
+    },
+    "matches": true
+  },
+  {
+    "name": "negative width",
+    "expected": {
+      "type": 9,
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": -1,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 9,
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": -1,
+        "height": 50
+      }
+    },
+    "matches": false
+  },
+  {
+    "name": "positive y width height rounding",
+    "expected": {
+      "type": 9,
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 9,
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 241,
+        "width": 101,
+        "height": 51
+      }
+    },
+    "matches": true
+  },
+  {
+    "name": "negative y width height rounding",
+    "expected": {
+      "type": 9,
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 9,
+      "label": "Continue",
+      "rect": {
+        "x": 40,
+        "y": 239,
+        "width": 99,
+        "height": 49
+      }
+    },
+    "matches": true
+  },
+  {
+    "name": "y outside capture rounding",
+    "expected": {
+      "type": 9,
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 9,
+      "rect": {
+        "x": 40,
+        "y": 242,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "matches": false
+  },
+  {
+    "name": "width outside capture rounding",
+    "expected": {
+      "type": 9,
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 9,
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 102,
+        "height": 50
+      }
+    },
+    "matches": false
+  },
+  {
+    "name": "height outside capture rounding",
+    "expected": {
+      "type": 9,
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 9,
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 52
+      }
+    },
+    "matches": false
+  },
+  {
+    "name": "search field contents are not press identity",
+    "expected": {
+      "type": 45,
+      "label": "Input",
+      "value": "before",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 45,
+      "label": "Input",
+      "value": "after",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "matches": true
+  },
+  {
+    "name": "text field contents are not press identity",
+    "expected": {
+      "type": 49,
+      "label": "Input",
+      "value": "before",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 49,
+      "label": "Input",
+      "value": "after",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "matches": true
+  },
+  {
+    "name": "secure text field contents are not press identity",
+    "expected": {
+      "type": 50,
+      "label": "Input",
+      "value": "before",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 50,
+      "label": "Input",
+      "value": "after",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "matches": true
+  },
+  {
+    "name": "text view contents are not press identity",
+    "expected": {
+      "type": 52,
+      "label": "Input",
+      "value": "before",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "candidate": {
+      "type": 52,
+      "label": "Input",
+      "value": "after",
+      "rect": {
+        "x": 40,
+        "y": 240,
+        "width": 100,
+        "height": 50
+      }
+    },
+    "matches": true
+  }
+]

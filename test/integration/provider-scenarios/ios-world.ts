@@ -6,6 +6,7 @@ import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { type ProviderScenarioTranscript, createProviderTranscript } from './transcript.ts';
 import {
+  iosNativeSnapshotNodes,
   createDemoIosApp,
   PROVIDER_SCENARIO_IOS_REINSTALL_DEVICE,
   PROVIDER_SCENARIO_IOS_SIMULATOR,
@@ -46,6 +47,10 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
     runnerSnapshot(),
     runnerSnapshot(),
     runnerSnapshot(),
+    {
+      command: 'ios.runner.pressReadiness',
+      result: { pressReadiness: 'ready', pressReadinessAppBundleId: 'com.apple.Preferences' },
+    },
     {
       command: 'ios.runner.tap',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
@@ -341,6 +346,10 @@ export async function createIosSettledClickWorld(): Promise<IosSettledClickWorld
     generalCellSnapshot({ y: 406 }),
     generalCellSnapshot({ y: 406 }),
     {
+      command: 'ios.runner.pressReadiness',
+      result: { pressReadiness: 'ready', pressReadinessAppBundleId: 'com.apple.Preferences' },
+    },
+    {
       command: 'ios.runner.tap',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
       platform: 'apple',
@@ -429,7 +438,7 @@ function runnerSnapshot() {
     deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
     platform: 'apple' as const,
     result: {
-      nodes: [
+      nodes: iosNativeSnapshotNodes([
         {
           index: 0,
           type: 'XCUIElementTypeCell',
@@ -448,7 +457,7 @@ function runnerSnapshot() {
           enabled: true,
           hittable: true,
         },
-      ],
+      ]),
       truncated: false,
     },
   };
@@ -460,7 +469,7 @@ function generalCellSnapshot(options: { y: number }) {
     deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
     platform: 'apple' as const,
     result: {
-      nodes: [
+      nodes: iosNativeSnapshotNodes([
         {
           index: 0,
           type: 'XCUIElementTypeApplication',
@@ -479,7 +488,7 @@ function generalCellSnapshot(options: { y: number }) {
           enabled: true,
           hittable: true,
         },
-      ],
+      ]),
       truncated: false,
     },
   };

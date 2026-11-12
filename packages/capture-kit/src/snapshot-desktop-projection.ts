@@ -37,13 +37,32 @@ export function scopeSnapshotNodes(
   nodes: RawSnapshotNode[],
   scope: string,
   subtreeContributes?: (range: { start: number; end: number }) => boolean,
+  sourceIndexByNodeIndex?: Map<number, number>,
 ): RawSnapshotNode[] {
   const normalizedScope = normalizeSnapshotScope(scope);
-  if (!normalizedScope) return reindexSnapshotNodes(nodes);
+  if (!normalizedScope) return reindexScopedNodes(nodes, 0, sourceIndexByNodeIndex);
   const range = findSnapshotScopeRange(nodes, normalizedScope, subtreeContributes);
-  if (!range) return [];
+  if (!range) {
+    sourceIndexByNodeIndex?.clear();
+    return [];
+  }
   const slice = nodes.slice(range.start, range.end);
-  return reindexSnapshotNodes(slice, slice[0]?.depth ?? 0);
+  return reindexScopedNodes(slice, slice[0]?.depth ?? 0, sourceIndexByNodeIndex);
+}
+
+function reindexScopedNodes(
+  nodes: RawSnapshotNode[],
+  depthOffset: number,
+  sourceIndexByNodeIndex: Map<number, number> | undefined,
+): RawSnapshotNode[] {
+  const reindexed = reindexSnapshotNodes(nodes, depthOffset);
+  if (sourceIndexByNodeIndex) {
+    const lineage = nodes.map((node) => sourceIndexByNodeIndex.get(node.index)!);
+    sourceIndexByNodeIndex.clear();
+    for (const [position, node] of reindexed.entries())
+      sourceIndexByNodeIndex.set(node.index, lineage[position]!);
+  }
+  return reindexed;
 }
 
 function filterInteractiveSnapshotNodes(

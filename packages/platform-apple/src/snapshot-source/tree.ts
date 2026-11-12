@@ -5,6 +5,7 @@ import {
   isRectVisibleInViewport,
 } from '@agent-device/kernel/rect';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
+import { NATIVE_PRESS_TEXT_ENTRY_TYPES } from '@agent-device/kernel/snapshot';
 import type { IosViewportEvidence } from '@agent-device/contracts/ios-snapshot';
 import { snapshotSourceError } from './errors.ts';
 import { isQuarterTurnedWindowFrame } from './window-coordinate-space.ts';
@@ -287,11 +288,24 @@ function nodeFacts(
   const userInteractionEnabled = optionalBoolean(value[ATTRIBUTE.userInteractionEnabled]);
   // Trimmed like the runner's `placeholderText`: a whitespace placeholder is no placeholder.
   const placeholder = optionalString(value[ATTRIBUTE.placeholder])?.trim();
+  const type = elementTypeName(elementClass, automationType, traits);
+  const nativeType = type === 'Other' ? 1 : ELEMENT_TYPE_NAMES.indexOf(type ?? '');
   return {
     index,
     ...(parentIndex === undefined ? {} : { parentIndex }),
-    ...(elementTypeName(elementClass, automationType, traits)
-      ? { type: elementTypeName(elementClass, automationType, traits) }
+    ...(type ? { type } : {}),
+    ...(nativeType >= 0 && frame
+      ? {
+          nativePressTarget: {
+            type: nativeType,
+            identifier: optionalString(value[ATTRIBUTE.identifier]),
+            label: optionalString(value[ATTRIBUTE.label]),
+            ...(NATIVE_PRESS_TEXT_ENTRY_TYPES.has(nativeType)
+              ? {}
+              : { value: optionalScalar(value[ATTRIBUTE.value]) }),
+            rect: frame,
+          },
+        }
       : {}),
     ...(elementClass ? { role: elementClass } : {}),
     ...(baseClass && baseClass !== elementClass ? { subrole: baseClass } : {}),

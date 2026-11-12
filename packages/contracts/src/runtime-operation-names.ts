@@ -72,6 +72,7 @@ export const RUNTIME_OPERATION_NAMES = [
   'power',
   'prepareAppleRunner',
   'prepareApplicationOpen',
+  'pressReadiness',
   'querySelector',
   'readAlert',
   'readClipboard',

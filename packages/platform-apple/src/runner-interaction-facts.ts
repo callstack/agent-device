@@ -103,6 +103,9 @@ function appleSnapshotFacts(device: DeviceInfo) {
 export function appleRunnerInteractionFacts(device: DeviceInfo) {
   return {
     appState: appleAppStateFact(device),
+    pressReadiness: ['ios', 'ipados'].includes(resolveDeviceAppleOs(device))
+      ? appleFocusFact(device)
+      : unavailable,
     prepareAppleRunner: applePrepareAppleRunnerFact(device),
     ...appleSnapshotFacts(device),
     ...selectorObservationRuntimeOperationFacts({

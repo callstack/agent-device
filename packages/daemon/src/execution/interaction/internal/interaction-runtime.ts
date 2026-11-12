@@ -102,6 +102,7 @@ export async function createInteractionRuntimeForRoute(
     // the verdict it may overturn come from one admission (ADR 0019 §2). A session whose owner did
     // not advertise the read keeps the bulk-tree verdict unchanged.
     confirmOffscreenTargetVisible: readOffscreenTargetRescue(params, session),
+    readPressReadiness: readNativePressReadiness(params, session),
     pairedGestureViewport: params.pairedGestureViewport,
     touchExecutor: params.touchExecutor,
     gestures: params.gestures,
@@ -137,6 +138,35 @@ function readOffscreenTargetRescue(
         params.contextFromFlags(params.req.flags, session.appBundleId, session.trace?.outPath),
       ),
     });
+}
+
+/** Uses only the strict readiness operation admitted by this request's touch owner. */
+function readNativePressReadiness(
+  params: InteractionRouteInput & {
+    touchExecutor?: BoundTouchExecutor;
+    gestures?: BoundGestureExecutor;
+  },
+  session: InteractionRuntimeInput['session'],
+): InteractionRuntimeInput['readPressReadiness'] {
+  const pressReadiness = params.touchExecutor?.pressReadiness;
+  if (!pressReadiness) return undefined;
+  return async (context, authorizedTarget, surfaceBundleId) => {
+    const appBundleId = surfaceBundleId ?? session.appBundleId;
+    if (!appBundleId)
+      throw new KernelAppError(
+        'UNSUPPORTED_OPERATION',
+        'Native press readiness requires an authorized app scope',
+      );
+    const result = await pressReadiness({
+      authorizedTarget,
+      appBundleId,
+      execution: runtimeExecutionFromContext(
+        params.contextFromFlags(params.req.flags, session.appBundleId, session.trace?.outPath),
+      ),
+      signal: context.signal,
+    });
+    return result.appBundleId === appBundleId ? result.readiness : 'surface-mismatch';
+  };
 }
 
 type FinalizeTouchInteractionInput = Omit<
@@ -207,6 +237,7 @@ function createInteractionBackend(params: InteractionRuntimeInput): AgentDeviceB
       }),
     }),
     ...gestureBackendMembers(params, gestureContext),
+    ...(params.readPressReadiness ? { readPressReadiness: params.readPressReadiness } : {}),
     ...(params.confirmOffscreenTargetVisible
       ? {
           confirmOffscreenTargetVisible: async (_context, node, rootViewport) =>

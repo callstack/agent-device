@@ -28,7 +28,26 @@ public struct SnapshotRect: Codable, Equatable {
   }
 }
 
+public struct NativePressTarget: Codable, Equatable {
+  // XCUIElement codes for SearchField, TextField, SecureTextField, and TextView.
+  public static let textEntryTypes: Set<UInt> = [45, 49, 50, 52]
+  public let type: UInt
+  public let identifier: String?
+  public let label: String?
+  public let value: String?
+  public let rect: SnapshotRect
+
+  public init(type: UInt, identifier: String?, label: String?, value: String?, rect: SnapshotRect) {
+    self.type = type
+    self.identifier = identifier
+    self.label = label
+    self.value = Self.textEntryTypes.contains(type) ? nil : value
+    self.rect = rect
+  }
+}
+
 public struct RawAXNode: Equatable {
+  public private(set) var nativePressTarget: NativePressTarget?
   public private(set) var index: Int
   public let type: String
   public let label: String?
@@ -66,8 +85,10 @@ public struct RawAXNode: Equatable {
     parentIndex: Int?,
     hiddenContentAbove: Bool?,
     hiddenContentBelow: Bool?,
-    actions: [String]? = nil
+    actions: [String]? = nil,
+    nativePressTarget: NativePressTarget? = nil
   ) {
+    self.nativePressTarget = nativePressTarget
     self.index = index
     self.type = type
     self.label = label
@@ -86,10 +107,14 @@ public struct RawAXNode: Equatable {
     self.actions = actions
   }
 
-  func replacing(rect: SnapshotRect, hittable: Bool?) -> RawAXNode {
+  func replacing(rect: SnapshotRect, hittable: Bool?, nativePressTargetRect: SnapshotRect?) -> RawAXNode {
     var updated = self
     updated.rect = rect
     updated.hittable = hittable
+    if let source = nativePressTarget, let nativePressTargetRect {
+      updated.nativePressTarget = NativePressTarget(type: source.type, identifier: source.identifier,
+        label: source.label, value: source.value, rect: nativePressTargetRect)
+    }
     return updated
   }
 
@@ -299,6 +324,7 @@ public struct SnapshotPresentationNode {
 }
 
 public struct PresentedNode: Codable, Equatable {
+  public let nativePressTarget: NativePressTarget?
   public let index: Int
   public let type: String
   public let label: String?
@@ -324,6 +350,7 @@ public struct PresentedNode: Codable, Equatable {
     depth: Int? = nil,
     parentIndex: Int?? = nil
   ) {
+    self.nativePressTarget = raw.nativePressTarget
     self.index = index ?? raw.index
     self.type = raw.type
     self.label = raw.label

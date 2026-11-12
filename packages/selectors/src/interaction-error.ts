@@ -41,6 +41,8 @@ export const INTERACTION_ERROR_REASONS = {
    * hint that names that recovery.
    */
   targetStillMoving: 'target_still_moving',
+  /** A resolved control was not natively actionable before dispatch; no input was sent. */
+  targetNotReady: 'target_not_ready',
 } as const;
 
 /** The part of a covered node a refusal reports. */

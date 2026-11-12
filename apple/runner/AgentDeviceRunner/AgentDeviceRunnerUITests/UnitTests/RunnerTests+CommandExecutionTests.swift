@@ -9,6 +9,17 @@ private final class RunnerCoordinateTapObserver {
 }
 
 extension RunnerTests {
+  @MainActor
+  func testAuthorizedReadinessRefusesAReplacementPreparedSurfaceBeforeQuerying() throws {
+    let command = try JSONDecoder().decode(Command.self, from: Data(
+      #"{"command":"pressReadiness","appBundleId":"com.example.session","authorizedTarget":{"type":9,"label":"Continue","rect":{"x":0,"y":0,"width":100,"height":40}}}"#.utf8))
+    let response = try executeOnMainPrepared(command: command, activeApp: app,
+      activeAppBundleId: "com.apple.SafariViewService")
+    XCTAssertTrue(response.ok)
+    XCTAssertEqual(response.data?.pressReadiness, "surface-mismatch")
+    XCTAssertEqual(response.data?.pressReadinessAppBundleId, "com.apple.SafariViewService")
+  }
+
   private func observeCoordinateTaps(droppingFirst: Bool = false) throws -> (
     observer: RunnerCoordinateTapObserver, restore: () -> Void
   ) {

@@ -292,6 +292,25 @@ function limrunRuntimeDependencies(): LimrunRuntimeDependencies {
 function runnerAnswer(command: Record<string, unknown>): Record<string, unknown> {
   if (command.command === 'appState') return { applicationState: 'notRunning' };
   if (command.command === 'snapshotBridge') return bridgeAnswer(command);
+  if (command.command === 'pressReadiness' && command.authorizedTarget) {
+    const target = command.authorizedTarget as {
+      type?: number;
+      label?: string;
+      rect?: { x?: number; y?: number; width?: number; height?: number };
+    };
+    return {
+      pressReadiness:
+        target.type === 9 &&
+        target.label === 'Continue' &&
+        target.rect?.x === 24 &&
+        target.rect?.y === 96 &&
+        target.rect?.width === 160 &&
+        target.rect?.height === 48
+          ? 'ready'
+          : 'missing',
+      pressReadinessAppBundleId: 'com.example.app',
+    };
+  }
   return {
     nodes: [
       {

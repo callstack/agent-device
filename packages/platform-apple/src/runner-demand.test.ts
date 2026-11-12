@@ -23,6 +23,7 @@ test.each([
   ['a touch', 'tapPoint'],
   ['a text read', 'readTextAtPoint'],
   ['a native text observation', 'findText'],
+  ['a native press readiness read', 'pressReadiness'],
   ['custom actions', 'captureSnapshotWithCustomActions'],
   ['an alert', 'readAlert'],
   ['runner preparation', 'prepareAppleRunner'],

@@ -20,6 +20,10 @@ export const RUNTIME_REF_COVERAGE = definePathCoverage('runtime-ref', {
     'runtime-ref resolutionDisclosure: an @ref discloses the exact ref-provenance shape',
     'runtime-ref resolutionDisclosure: trailing-label recovery discloses label-fallback, never exact',
   ],
+  nativeReadiness: [
+    'runtime-ref nativeReadiness: stationary control waits for its native blocker to finish',
+    'runtime-ref nativeReadiness: ambiguous native control refuses before input',
+  ],
   targetStability: [
     'runtime-ref targetStability: a ref whose authorized node is still moving is refused with target_still_moving',
     'runtime-ref targetStability: a ref that came to rest is tapped at the re-observed position',

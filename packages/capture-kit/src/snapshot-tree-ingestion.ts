@@ -5,7 +5,10 @@ import {
   normalizeType,
 } from '@agent-device/contracts/snapshot';
 
-export function normalizeSnapshotTree(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
+export function normalizeSnapshotTree(
+  nodes: RawSnapshotNode[],
+  sourceIndexByNodeIndex?: Map<number, number>,
+): RawSnapshotNode[] {
   const originalToNormalizedIndex = new Map<number, number>();
   for (const [position, node] of nodes.entries()) {
     originalToNormalizedIndex.set(node.index, position);
@@ -21,6 +24,7 @@ export function normalizeSnapshotTree(nodes: RawSnapshotNode[]): RawSnapshotNode
     }
 
     const index = position;
+    sourceIndexByNodeIndex?.set(index, node.index);
     const explicitParentIndex =
       typeof node.parentIndex === 'number'
         ? originalToNormalizedIndex.get(node.parentIndex)

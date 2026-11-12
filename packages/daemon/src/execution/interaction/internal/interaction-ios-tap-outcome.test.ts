@@ -108,7 +108,8 @@ beforeEach(() => {
   });
 });
 
-test('a changed post-action capture corroborates an iOS tap reported as failed', async () => {
+// For no delivery, an unrelated overlay change cannot corroborate a tap proved not dispatched.
+test.each([undefined, 'unknown', 'no'] as const)('dispatch disclosure (%s)', async (delivery) => {
   const sessionName = 'ios-tap-corroboration';
   const sessionStore = makeSessionStore();
   const session = makeIosSession(sessionName, {
@@ -121,6 +122,7 @@ test('a changed post-action capture corroborates an iOS tap reported as failed',
       throw new AppError(
         'XCTEST_RECORDED_FAILURE',
         'XCTest recorded a failure while executing tap; the action may not have been performed.',
+        delivery ? { dispatched: delivery } : undefined,
       );
     }
     if (command === 'snapshot') return snapshotPayload(imageViewerNodes);
@@ -129,13 +131,22 @@ test('a changed post-action capture corroborates an iOS tap reported as failed',
 
   const response = await runClick(sessionStore, sessionName);
 
-  expect(response?.ok).toBe(true);
+  expect(response?.ok).toBe(delivery !== 'no');
   if (response?.ok) {
     expect(response.data?.warning).toMatch(/post-action accessibility capture changed/);
     expect(response.data?.selector).toBe('id="unfollow"');
   }
   expect(legacyDispatchCapture.mock.calls.filter((call) => call[1] === 'press')).toHaveLength(1);
-  expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
+  expect(sessionStore.get(sessionName)?.actions).toHaveLength(delivery === 'no' ? 0 : 1);
+  if (delivery === 'no') {
+    expect(response).toMatchObject({
+      ok: false,
+      error: { code: 'XCTEST_RECORDED_FAILURE', details: { dispatched: 'no' } },
+    });
+    expect(legacyDispatchCapture.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(
+      0,
+    );
+  }
 });
 
 test('a corroborated tap failure still records the tree it acted through (#3471)', async () => {

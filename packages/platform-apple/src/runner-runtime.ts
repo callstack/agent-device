@@ -21,7 +21,10 @@ import { createAppleInteractor } from './interactor.ts';
 import { appleRunnerInteractionFacts } from './runner-interaction-facts.ts';
 import { bindAppleAppStateRuntime } from './app-state-runtime.ts';
 import { bindAppleFindTextRuntime } from './runtime-snapshot.ts';
-import { bindAppleQuerySelectorRuntime } from './runtime-selector-query.ts';
+import {
+  bindAppleQuerySelectorRuntime,
+  bindApplePressReadinessRuntime,
+} from './runtime-selector-query.ts';
 import { bindElementTextRuntime } from '@agent-device/contracts/element-text-runtime';
 import {
   captureSnapshotSignal,
@@ -120,8 +123,9 @@ export function createAppleRunnerRuntime(options: {
       captureSnapshotWithoutActiveApp: captureSnapshot,
     });
   };
+  const facts = appleRunnerInteractionFacts(options.device);
   return {
-    facts: appleRunnerInteractionFacts(options.device),
+    facts,
     bindDeployment: (
       request: Omit<Parameters<typeof createAppleAppDeploymentOperations>[0], 'device'>,
     ) => createAppleAppDeploymentOperations({ ...request, device: options.device }),
@@ -194,6 +198,7 @@ export function createAppleRunnerRuntime(options: {
       };
       const params = { ...request, device: options.device };
       const query = bindAppleQuerySelectorRuntime(params);
+      const readiness = bindApplePressReadinessRuntime(params);
       return {
         ...bindAppleAppStateRuntime(host, params),
         ...bindAppleFindTextRuntime(host, { ...params, appBackend: 'xctest' }),
@@ -204,6 +209,16 @@ export function createAppleRunnerRuntime(options: {
             { deviceId: options.device.id, requestId: input.execution?.requestId },
             () => query.querySelector(input),
           ),
+        ...(facts.pressReadiness.available
+          ? {
+              pressReadiness: (input: Parameters<typeof readiness.pressReadiness>[0]) =>
+                withAppleRunnerProvider(
+                  runCommand,
+                  { deviceId: options.device.id, requestId: input.execution.requestId },
+                  () => readiness.pressReadiness(input),
+                ),
+            }
+          : {}),
         ...bindBridgeSnapshot(request.signal, request.snapshot),
       };
     },

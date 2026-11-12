@@ -169,6 +169,10 @@ export function revylFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOper
         withoutActiveApp: available,
       }),
       ...screenshotRuntimeOperationFacts({ capture: available }),
+      pressReadiness: unavailableFact(
+        'unsupported-provider-mode',
+        'Revyl-owned devices do not expose native press-readiness checks.',
+      ),
       // A live selector read needs the local reader's rescue hook, which a rented device has none of,
       // so both text readings answer from the captured tree like `elementText` does.
       ...selectorObservationRuntimeOperationFacts({

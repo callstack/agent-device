@@ -1,3 +1,8 @@
+import assert from 'node:assert/strict';
+import { AppError } from '@agent-device/kernel/errors';
+import { transferSnapshotPrivateEvidence } from '@agent-device/contracts/snapshot-private-evidence';
+import type { InteractionTarget } from '@agent-device/contracts/interaction';
+import { continueButtonSnapshot } from './fixtures.ts';
 import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import type { CommandClock, CommandSessionRecord } from '@agent-device/contracts/runtime-contract';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
@@ -11,6 +16,7 @@ type ContractBackendOverrides = Partial<
     | 'captureSnapshot'
     | 'tap'
     | 'tapTarget'
+    | 'readPressReadiness'
     | 'fill'
     | 'fillTarget'
     | 'performGesture'
@@ -48,6 +54,7 @@ export function createContractDevice(
         overrides.captureSnapshot ? await overrides.captureSnapshot(...args) : { snapshot },
       tap: async (...args) => await overrides.tap?.(...args),
       tapTarget: overrides.tapTarget,
+      readPressReadiness: overrides.readPressReadiness,
       fill: async (...args) => await overrides.fill?.(...args),
       fillTarget: overrides.fillTarget,
       performGesture: overrides.performGesture,
@@ -96,4 +103,50 @@ export function selector(
   value: string,
 ): import('@agent-device/contracts/interaction').SelectorTarget {
   return { kind: 'selector', selector: value };
+}
+
+/** A stationary tree must not allow dispatch while the same native target is blocked. */
+export async function runNativeReadinessScenario(
+  target: InteractionTarget,
+  finalState: 'ready' | 'ambiguous',
+): Promise<void> {
+  const events: string[] = [];
+  const requestId = `contract-native-ready-${target.kind}:${finalState}`;
+  const captured = continueButtonSnapshot();
+  const snapshot = transferSnapshotPrivateEvidence(
+    {},
+    {
+      ...captured,
+      nodes: captured.nodes.map((node) => ({
+        ...node,
+        nativePressTarget: { type: 9, label: 'Continue', value: 'Continue', rect: node.rect! },
+      })),
+    },
+    new Map(),
+  );
+  const device = createContractDevice(snapshot, {
+    readPressReadiness: async () => {
+      const state = events.includes('blocked') ? finalState : 'blocked';
+      events.push(state);
+      return state;
+    },
+    tap: async () => {
+      events.push('tap');
+    },
+  });
+  const press = device.interactions.press(target, { requestId, deadlineAtMs: Date.now() + 2_000 });
+  if (finalState === 'ready') await press;
+  else
+    await assert.rejects(press, (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'target_not_ready');
+      assert.equal(error.details?.readiness, 'ambiguous');
+      assert.equal(error.details?.dispatched, 'no');
+      return true;
+    });
+  assert.deepEqual(events, [
+    'blocked',
+    finalState,
+    ...(finalState === 'ready' ? ['ready', 'tap'] : []),
+  ]);
 }

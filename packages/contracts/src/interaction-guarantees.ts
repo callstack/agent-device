@@ -86,6 +86,9 @@ export const INTERACTION_GUARANTEES = [
   // vacated and report success on the vacancy. The gate is backend-neutral: it re-observes past the
   // window and refuses rather than dispatching at a position two observations disagree about.
   'targetStability',
+  // Ordinary primary iOS taps wait for the authorized control's native hittability when their
+  // request-bound backend advertises readPressReadiness. This does not certify a partially covered point.
+  'nativeReadiness',
 ] as const;
 
 export type InteractionGuarantee = (typeof INTERACTION_GUARANTEES)[number];
@@ -213,6 +216,12 @@ const DIRECT_IOS_TARGET_STABILITY: GuaranteeEnforcement = {
     "Intentional: the fused runner request queries the element and taps it inside one XCTest request, so the runner aims at the element's own live frame at tap time rather than at a rect the daemon captured earlier and carried across a round trip — the capture-to-dispatch distance #3471 closes does not exist on this route. Its hittability semantics stay the runner's, as the offscreen cell above already records.",
 };
 
+const OTHER_ROUTE_NATIVE_READINESS: GuaranteeEnforcement = {
+  kind: 'inapplicable',
+  reason:
+    'The bounded native readiness check belongs to ordinary primary iOS press/click on runtime-selector and runtime-ref. Other routes keep their explicit gesture, native-handle, coordinate, or compatibility semantics.',
+};
+
 // The two runtime tree paths (selector and ref resolution) run the SAME shared
 // guard/observation implementations; only how the target is found
 // (disambiguation) and how failures are described (errorTaxonomy) differ.
@@ -281,11 +290,17 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
     via: 'packages/command-runtime/src/commands/interaction/runtime/settle.ts#settleAfterInteraction',
   },
   targetStability: RUNTIME_TREE_TARGET_STABILITY,
+  nativeReadiness: {
+    kind: 'runtime',
+    via: 'packages/command-runtime/src/commands/interaction/runtime/pre-dispatch-admission.ts#admitResolvedTarget',
+    appliesTo: ['press', 'click'],
+  },
 } satisfies Partial<Record<InteractionGuarantee, GuaranteeEnforcement>>;
 
 export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPathContract> = {
   'runtime-selector': {
-    description: 'Daemon tree capture, selector chain resolution, guarded coordinate tap.',
+    description:
+      'Daemon tree capture, selector chain resolution, guarded coordinate tap. Ordinary primary iOS taps also await strict native readiness when the request-bound backend advertises readPressReadiness through its admitted pressReadiness operation.',
     commands: ['press', 'click', 'fill', 'longpress', 'hover'],
     guarantees: {
       ...RUNTIME_TREE_SHARED_GUARANTEES,
@@ -308,7 +323,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
   },
   'runtime-ref': {
     description:
-      'Session snapshot ref lookup, guarded coordinate tap. #1654: when the caller already resolved the node (a mutating `find`), the lookup is replaced by that node and every guarantee below is enforced against it — the guards are unchanged, only the lookup is skipped.',
+      'Session snapshot ref lookup, guarded coordinate tap. Ordinary primary iOS taps await strict native readiness when the request-bound backend advertises readPressReadiness through its admitted pressReadiness operation. #1654: when the caller already resolved the node (a mutating `find`), the lookup is replaced by that node and every guarantee below is enforced against it — the guards are unchanged, only the lookup is skipped.',
     commands: ['press', 'click', 'fill', 'longpress', 'hover'],
     guarantees: {
       ...RUNTIME_TREE_SHARED_GUARANTEES,
@@ -337,6 +352,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       'Target-authored gesture drag resolves source and destination independently through the runtime tree, verifies both identities on replay, then dispatches one uninterrupted pointer plan.',
     commands: ['gesture'],
     guarantees: {
+      nativeReadiness: OTHER_ROUTE_NATIVE_READINESS,
       disambiguation: {
         kind: 'runtime',
         via: 'packages/command-runtime/src/commands/interaction/runtime/selector-action-resolution.ts#resolveActionSelector',
@@ -410,6 +426,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       'click @ref / fill @ref / hover @ref dispatch through the bound touch operation, whose web runtime owner selects clickRef/fillRef/hoverRef internally; no mobile owner advertises native-ref support. The route bypasses runtime resolution when no non-default options are set. A zero-round-trip preflight (preflightNativeRefInteraction) runs the shared guards against the stored session snapshot node first; no snapshot / no usable rect makes the preflight a no-op.',
     commands: ['click', 'fill', 'hover'],
     guarantees: {
+      nativeReadiness: OTHER_ROUTE_NATIVE_READINESS,
       disambiguation: {
         kind: 'inapplicable',
         reason: 'Refs identify exactly one node by construction.',
@@ -490,6 +507,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
     description: 'Raw x/y tap. Semantics are intentionally minimal.',
     commands: ['press', 'click', 'fill', 'longpress', 'hover'],
     guarantees: {
+      nativeReadiness: OTHER_ROUTE_NATIVE_READINESS,
       disambiguation: {
         kind: 'inapplicable',
         reason: 'Coordinates name a point, not an element.',
@@ -554,6 +572,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       'Mutating `find <locator> focus`, and the focus leg of `find <locator> type`: find captures its own tree, ranks its own candidate set, runs the node stages its `findAct` row declares, then dispatches a point focus itself (`type` then dispatches the text) instead of re-entering the interaction leaf. `find click`/`find fill` are NOT this path — they hand the resolved node to `runtime-ref` as a pre-resolved target (#1654). `focus <x> <y>` shares only `executeFocusPoint`; it is a generic-route command that never enters the interaction leaf and no row of this matrix classifies. Every cell below classifies what the `findAct` row plus this seam actually run, not what the acting rows run.',
     commands: ['find'],
     guarantees: {
+      nativeReadiness: OTHER_ROUTE_NATIVE_READINESS,
       // find's own ranking, but under the same ambiguity contract the runtime paths use: one
       // `reject-candidates` policy row (#1625), `--first`/`--last` the only narrowing, and
       // `preferOnscreenMatches` as the tie-break rather than a geometry-wins rule.
@@ -647,6 +666,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       'An explicit Maestro-compatible simple-selector click completed as an XCTest element tap. This path is selected only when the runner was allowed to use the non-hittable coordinate fallback but reported that it did not use it.',
     commands: ['click'],
     guarantees: {
+      nativeReadiness: OTHER_ROUTE_NATIVE_READINESS,
       disambiguation: {
         kind: 'waived',
         reason:
@@ -710,6 +730,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       'Replay-only coordinate fallback for non-hittable elements (allowNonHittableCoordinateFallback), matching Maestro semantics.',
     commands: ['press', 'click', 'fill'],
     guarantees: {
+      nativeReadiness: OTHER_ROUTE_NATIVE_READINESS,
       disambiguation: {
         kind: 'waived',
         reason:

@@ -279,6 +279,7 @@ test('a ref the second observation cannot re-measure is refused, never self-agre
       const details = (error as { details?: Record<string, unknown> }).details;
       assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
       assert.equal(details?.dispatched, 'no');
+      assert.equal(details?.waitedMs, MOVING_TARGET_GATE_SAMPLE_GAP_MS);
       // Nothing was measured, so nothing is reported: a caller reading `movedToRect` would take the
       // stale frame position for a fresh observation of where the target went.
       assert.equal(details?.movedToRect, undefined);

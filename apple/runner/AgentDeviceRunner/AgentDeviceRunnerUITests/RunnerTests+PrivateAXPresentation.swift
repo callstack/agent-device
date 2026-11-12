@@ -77,7 +77,9 @@ extension RunnerTests {
       focused: fields.focused, selected: fields.selected,
       hittable: false,
       depth: depth, parentIndex: parentIndex, hiddenContentAbove: nil, hiddenContentBelow: nil,
-      actions: fields.actions)
+      actions: fields.actions,
+      nativePressTarget: UInt(exactly: fields.rawType).flatMap { nativePressTarget(type: $0,
+        identifier: fields.identifier, label: fields.label, value: fields.value, frame: fields.rect) })
   }
 
   private func privateAXPresentationString(_ value: Any?) -> String {

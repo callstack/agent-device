@@ -10,18 +10,19 @@ final class ElementAttributesFixture: NSObject, XCUIElementSnapshot {
   let label: String
   let children: [XCUIElementSnapshot]
   let identifier: String
+  let value: Any?
   @objc let displayID: NSNumber?
 
-  init(_ elementType: XCUIElement.ElementType, _ frame: CGRect, label: String = "", identifier: String = "", children: [XCUIElementSnapshot] = [], displayID: NSNumber? = nil) {
+  init(_ elementType: XCUIElement.ElementType, _ frame: CGRect, label: String = "", identifier: String = "", children: [XCUIElementSnapshot] = [], displayID: NSNumber? = nil, value: Any? = nil) {
     self.elementType = elementType
     self.frame = frame
     self.label = label
     self.children = children
     self.identifier = identifier
     self.displayID = displayID
+    self.value = value
   }
 
-  var value: Any? { nil }
   var title: String { "" }
   var isEnabled: Bool { true }
   var horizontalSizeClass: XCUIElement.SizeClass { .unspecified }
@@ -35,6 +36,29 @@ final class ElementAttributesFixture: NSObject, XCUIElementSnapshot {
 }
 
 extension RunnerTests {
+  @MainActor
+  func testNativeBindingKeepsRawLabelsBeforeValueAndChildLabelSynthesis() {
+    let frame = CGRect(x: 10, y: 20, width: 100, height: 40)
+    let child = ElementAttributesFixture(.staticText, frame, label: "Continue")
+    for snapshot in [
+      ElementAttributesFixture(.slider, frame, value: "0.5"),
+      ElementAttributesFixture(.switch, frame, value: "1"),
+      ElementAttributesFixture(.button, frame, children: [child]),
+    ] {
+      let evaluation = evaluateSnapshot(snapshot)
+      XCTAssertFalse(evaluation.label.isEmpty, "fixture must exercise synthesized presentation")
+      let captured = makeSnapshotNode(snapshot: snapshot, evaluation: evaluation, depth: 1, index: 1, parentIndex: 0)
+      XCTAssertEqual(captured.label, evaluation.label)
+#if os(iOS)
+      XCTAssertEqual(captured.nativePressTarget?.type, snapshot.elementType.rawValue)
+      XCTAssertNil(captured.nativePressTarget?.label)
+      XCTAssertEqual(captured.nativePressTarget?.value, Self.valueText(snapshot.value))
+#else
+      XCTAssertNil(captured.nativePressTarget)
+#endif
+    }
+  }
+
   private static let containerFrame = CGRect(x: 20, y: 800, width: 360, height: 31)
 
   @MainActor

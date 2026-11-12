@@ -1,4 +1,8 @@
-import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
+import type {
+  RawSnapshotNode,
+  Rect,
+  SnapshotNativePressTarget,
+} from '@agent-device/kernel/snapshot';
 import type { IosViewportEvidence } from './ios-snapshot.ts';
 
 /**
@@ -32,8 +36,11 @@ export type SnapshotOcclusionContextEvidence = {
 /** Complete text-input geometry measured before iOS semantic projection; absent means unknown. */
 export type SnapshotTextInputGeometry = Readonly<{ rects: readonly Rect[] }>;
 
+export type SnapshotNativePressTargets = ReadonlyMap<number, SnapshotNativePressTarget>;
+
 type SnapshotPrivateEvidence = {
   viewport?: IosViewportEvidence;
+  nativePressTargets?: SnapshotNativePressTargets;
   textInputGeometry?: SnapshotTextInputGeometry;
   clickability?: SnapshotClickabilityEvidence;
   occlusionContext?: SnapshotOcclusionContextEvidence;
@@ -68,14 +75,6 @@ function readSnapshotViewportEvidence(
   owner: object | null | undefined,
 ): IosViewportEvidence | undefined {
   return owner ? privateEvidenceBySnapshotObject.get(owner)?.viewport : undefined;
-}
-
-export function copySnapshotViewportEvidence<T extends object>(
-  source: object | null | undefined,
-  target: T,
-): T {
-  const viewport = readSnapshotViewportEvidence(source);
-  return viewport ? attachSnapshotViewportEvidence(target, viewport) : target;
 }
 
 function attachSnapshotPrivateEvidence<T extends object>(
@@ -123,15 +122,95 @@ export function readSnapshotOcclusionContextEvidence(
   return owner ? privateEvidenceBySnapshotObject.get(owner)?.occlusionContext : undefined;
 }
 
-export function attachSnapshotTextInputGeometry<T extends object>(
-  owner: T,
-  geometry: SnapshotTextInputGeometry,
-): T {
-  return attachSnapshotPrivateEvidence(owner, { textInputGeometry: geometry });
-}
-
 export function readSnapshotTextInputGeometry(
   owner: object | null | undefined,
 ): SnapshotTextInputGeometry | undefined {
   return owner ? privateEvidenceBySnapshotObject.get(owner)?.textInputGeometry : undefined;
+}
+
+export function readSnapshotNativePressTargets(
+  owner: object,
+): SnapshotNativePressTargets | undefined {
+  return privateEvidenceBySnapshotObject.get(owner)?.nativePressTargets;
+}
+
+/** Carries captured facts through one owned construction or clone, with explicit node lineage. */
+export function transferSnapshotPrivateEvidence<T extends { nodes: RawSnapshotNode[] }>(
+  source: { nodes?: readonly RawSnapshotNode[] },
+  target: T,
+  sourceIndexByNodeIndex: ReadonlyMap<number, number>,
+  initialNodeFacts?: SnapshotPrivateEvidence,
+): T {
+  const nativeTargets = new Map<number, SnapshotNativePressTarget>();
+  if (target.nodes.some((node) => node.nativePressTarget !== undefined)) {
+    target.nodes = target.nodes.map(({ nativePressTarget, ...node }) => {
+      if (nativePressTarget) nativeTargets.set(node.index, nativePressTarget);
+      return node;
+    });
+  }
+  const objectEvidence = privateEvidenceBySnapshotObject.get(source);
+  if (objectEvidence)
+    attachSnapshotPrivateEvidence(
+      target,
+      remapPrivateEvidence(objectEvidence, sourceIndexByNodeIndex),
+    );
+  const nodeEvidence = source.nodes && privateEvidenceBySnapshotObject.get(source.nodes);
+  if (nodeEvidence)
+    attachSnapshotPrivateEvidence(
+      target.nodes,
+      remapPrivateEvidence(nodeEvidence, sourceIndexByNodeIndex),
+    );
+  if (initialNodeFacts) attachSnapshotPrivateEvidence(target.nodes, initialNodeFacts);
+  if (nativeTargets.size) {
+    const carried = readSnapshotNativePressTargets(target.nodes);
+    attachSnapshotPrivateEvidence(target.nodes, {
+      nativePressTargets: new Map([...(carried ?? []), ...nativeTargets]),
+    });
+  }
+  return target;
+}
+
+function remapPrivateEvidence(
+  evidence: SnapshotPrivateEvidence,
+  sourceIndexByNodeIndex: ReadonlyMap<number, number>,
+): SnapshotPrivateEvidence {
+  return {
+    ...evidence,
+    ...(evidence.nativePressTargets
+      ? { nativePressTargets: remapNodeFacts(evidence.nativePressTargets, sourceIndexByNodeIndex) }
+      : {}),
+    ...(evidence.clickability?.kind === 'exact'
+      ? {
+          clickability: {
+            ...evidence.clickability,
+            clickableByNodeIndex: remapNodeFacts(
+              evidence.clickability.clickableByNodeIndex,
+              sourceIndexByNodeIndex,
+            ),
+          },
+        }
+      : {}),
+    ...(evidence.occlusionContext
+      ? {
+          occlusionContext: {
+            ...evidence.occlusionContext,
+            sourceIndexByNodeIndex: remapNodeFacts(
+              evidence.occlusionContext.sourceIndexByNodeIndex,
+              sourceIndexByNodeIndex,
+            ),
+          },
+        }
+      : {}),
+  };
+}
+
+function remapNodeFacts<T>(
+  facts: ReadonlyMap<number, T>,
+  sourceIndexByNodeIndex: ReadonlyMap<number, number>,
+): ReadonlyMap<number, T> {
+  const remapped = new Map<number, T>();
+  for (const [index, sourceIndex] of sourceIndexByNodeIndex) {
+    if (facts.has(sourceIndex)) remapped.set(index, facts.get(sourceIndex)!);
+  }
+  return remapped;
 }

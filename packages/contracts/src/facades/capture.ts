@@ -66,8 +66,8 @@ export type {
 export {
   assertSnapshotScreenOrigin,
   attachSnapshotViewportEvidence,
-  copySnapshotViewportEvidence,
-  attachSnapshotTextInputGeometry,
+  transferSnapshotPrivateEvidence,
+  readSnapshotNativePressTargets,
   readSnapshotTextInputGeometry,
   attachSnapshotClickabilityEvidence,
   attachSnapshotOcclusionContextEvidence,
@@ -76,6 +76,7 @@ export {
   readSnapshotOcclusionContextEvidence,
 } from '../snapshot-private-evidence.ts';
 export type {
+  SnapshotNativePressTargets,
   SnapshotTextInputGeometry,
   AndroidSiblingOrderEvidence,
   SnapshotClickabilityEvidence,

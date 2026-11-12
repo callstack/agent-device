@@ -99,6 +99,7 @@ type ComparableSnapshotNode = Omit<
   | 'inheritsLabel'
   | 'inheritsIdentifier'
   | 'iosValueSemantics'
+  | 'nativePressTarget'
 >;
 
 type ScalarPresentationField = Exclude<

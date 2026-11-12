@@ -1,3 +1,4 @@
+import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import type { CoordinateTapTextInputEvidence } from '@agent-device/contracts/interactor-types';
 import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
@@ -124,6 +125,7 @@ export type InteractionRuntimeInput = {
     node: Pick<import('@agent-device/kernel/snapshot').SnapshotNode, 'identifier' | 'label'>,
     rootViewport: Rect | null,
   ) => Promise<Rect | null>;
+  readPressReadiness?: AgentDeviceBackend['readPressReadiness'];
   pairedGestureViewport?: Rect;
   touchExecutor?: BoundTouchExecutor;
   gestures?: BoundGestureExecutor;

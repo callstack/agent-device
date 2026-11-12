@@ -2,7 +2,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { InteractionTarget } from '@agent-device/contracts/interaction';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
-import { asAppError } from '@agent-device/kernel/errors';
+import { asAppError, readDispatchDisclosure } from '@agent-device/kernel/errors';
 import {
   isSparseSnapshotQualityVerdict,
   preferredSnapshotBackendForVerdict,
@@ -85,9 +85,11 @@ function canCorroborateIosTapFailure(
   params: IosTapCorroborationParams,
   session: SessionState,
 ): boolean {
+  const error = asAppError(params.error);
   return (
     isTapCommand(params.command) &&
-    asAppError(params.error).code === XCTEST_RECORDED_FAILURE &&
+    error.code === XCTEST_RECORDED_FAILURE &&
+    readDispatchDisclosure(error.details) !== 'no' &&
     isLocalIosRunnerSession(session, { skipPendingPostGestureStabilization: false })
   );
 }

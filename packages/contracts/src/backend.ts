@@ -1,3 +1,7 @@
+import type {
+  AuthorizedPressTarget,
+  NativePressReadiness,
+} from './selector-observation-runtime.ts';
 import type { ScreenshotScreenMask } from './screenshot.ts';
 import type { BackendSnapshotOptions, ScreenshotResultData } from './snapshot-types.ts';
 import type { SnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
@@ -438,6 +442,12 @@ export type AgentDeviceBackend = {
     node: Pick<SnapshotNode, 'identifier' | 'label'>,
     rootViewport: Rect | null,
   ): Promise<Rect | null>;
+  /** Strict native necessary-condition read; never substitutes a target or bypasses its canonical point guards. */
+  readPressReadiness?(
+    context: BackendCommandContext,
+    target: AuthorizedPressTarget,
+    surfaceBundleId?: string,
+  ): Promise<NativePressReadiness>;
   tap?(
     context: BackendCommandContext,
     point: Point,

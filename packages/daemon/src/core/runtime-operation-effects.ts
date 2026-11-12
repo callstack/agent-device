@@ -46,6 +46,7 @@ export const RUNTIME_OPERATION_EFFECTS: Readonly<
   fillRef: 'mutates',
   finalizeApplicationClose: 'mutates',
   findText: 'repeatable',
+  pressReadiness: 'repeatable',
   focusPoint: 'mutates',
   gestureViewport: 'repeatable',
   home: 'mutates',

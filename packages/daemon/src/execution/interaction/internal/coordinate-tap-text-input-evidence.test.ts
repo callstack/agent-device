@@ -5,7 +5,7 @@ import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { presentIosSnapshotAcquisition } from '@agent-device/capture-kit/ios-snapshot-runtime';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
-import { attachSnapshotTextInputGeometry } from '@agent-device/contracts/capture';
+import { transferSnapshotPrivateEvidence } from '@agent-device/contracts/snapshot-private-evidence';
 import { buildCoordinateTapTextInputEvidence } from './coordinate-tap-text-input-evidence.ts';
 
 type Fixture = {
@@ -61,7 +61,9 @@ test('an observation without acquisition geometry or a target bundle cannot esta
   const point = { x: 10, y: 20 };
   expect(buildCoordinateTapTextInputEvidence({ nodes: [] }, point, 'app')).toBeUndefined();
   const measured = { nodes: [{ index: 0, type: 'Button' }] };
-  attachSnapshotTextInputGeometry(measured.nodes, { rects: [] });
+  transferSnapshotPrivateEvidence({}, { nodes: measured.nodes }, new Map(), {
+    textInputGeometry: { rects: [] },
+  });
   expect(buildCoordinateTapTextInputEvidence(measured, point, undefined)).toBeUndefined();
   expect(buildCoordinateTapTextInputEvidence(measured, point, 'app')).toEqual({
     targetBundleId: 'app',

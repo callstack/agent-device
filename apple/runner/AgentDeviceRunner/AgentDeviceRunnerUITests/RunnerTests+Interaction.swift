@@ -397,6 +397,94 @@ extension RunnerTests {
     try resolveRunnerWindow(app: app).frame
   }
 
+  /// A mutation-read: count every exact target binding, including blocked duplicates. Unlike
+  /// public selector reads, a hittable sibling can never stand in for the authorized control.
+  func queryAuthorizedPressTarget(app: XCUIApplication, target: NativePressTarget, appBundleId: String? = nil) throws -> Response {
+    let expected = target.rect
+    guard XCUIElement.ElementType(rawValue: target.type) != nil,
+      expected.width > 0, expected.height > 0,
+      [expected.x, expected.y, expected.width, expected.height].allSatisfy({ $0.isFinite }) else {
+      return Response(ok: true, data: DataPayload(pressReadiness: "missing", pressReadinessAppBundleId: appBundleId))
+    }
+    let roots = try elementSearchRoots(root: app, litDisplayID: requestLitPanel?.displayID)
+    var windows: [XCUIElement] = []
+    let held = holdingRecordedIssues {
+      windows = roots.flatMap { $0 is XCUIApplication ? $0.windows.allElementsBoundByIndex : [$0] }
+    }
+    guard held.issues.isEmpty, held.exceptionMessage == nil, !windows.isEmpty else {
+      throw RunnerAppScreenCaptureFailure.unresolvedScreen
+    }
+    let orientation = capturedInterfaceOrientation(app: app)
+    let identity = Self.authorizedPressTargetPredicate(target)
+    var matches: [XCUIElement] = []
+    for window in windows {
+      var frame = CGRect.null
+      let geometry = holdingRecordedIssues { frame = window.frame }
+      let unresolvedGeometry = !geometry.issues.isEmpty || geometry.exceptionMessage != nil
+        || !SnapshotGeometry.isPositiveFinite(frame)
+      let windowSnapshot: XCUIElementSnapshot?
+      // An origin-zero, non-quarter-turn viewport always retains app orientation in the geometry owner.
+      if unresolvedGeometry || frame.origin != .zero || SnapshotGeometrySpace.namesQuarterTurn(orientation)
+        || target.type == XCUIElement.ElementType.window.rawValue {
+        windowSnapshot = try window.snapshot()
+      } else {
+        windowSnapshot = nil
+      }
+      if unresolvedGeometry || windowSnapshot.map({ !SnapshotGeometry.isPositiveFinite($0.frame) }) == true {
+        var possible: Bool?
+        let probe = holdingRecordedIssues {
+          possible = windowSnapshot.map { identity.evaluate(with: $0) } == true
+            || window.descendants(matching: .any).matching(identity).count > 0
+        }
+        guard probe.issues.isEmpty, probe.exceptionMessage == nil, possible == false else {
+          throw RunnerAppScreenCaptureFailure.unresolvedScreen
+        }
+        continue
+      }
+      // A placed app can report origin zero while its window is on screen elsewhere.
+      let space = windowSnapshot.map {
+        SnapshotGeometrySpace.space(reportedBySurfaceHost: true,
+          reportedFrame: $0.frame, inheritedFrom: .appOrientation,
+          viewport: .reported(box: frame, interfaceOrientation: orientation))
+      } ?? .appOrientation
+      if let windowSnapshot, target.matches(type: windowSnapshot.elementType.rawValue, identifier: windowSnapshot.identifier,
+        label: windowSnapshot.label, value: Self.valueText(windowSnapshot.value),
+        rect: SnapshotRect(space.orientedFrame(of: windowSnapshot.frame))) {
+        matches.append(window)
+      }
+      let binding = NSPredicate { object, _ in
+        guard let attributes = object as? XCUIElementAttributes else { return false }
+        return target.matches(type: attributes.elementType.rawValue, identifier: attributes.identifier,
+          label: attributes.label, value: Self.valueText(attributes.value),
+          rect: SnapshotRect(space.orientedFrame(of: attributes.frame)))
+      }
+      let candidates = window.descendants(matching: .any)
+        .matching(identity).matching(binding).allElementsBoundByIndex
+      for element in candidates {
+        let snapshot = try element.snapshot()
+        if target.matches(type: snapshot.elementType.rawValue, identifier: snapshot.identifier,
+          label: snapshot.label, value: Self.valueText(snapshot.value),
+          rect: SnapshotRect(space.orientedFrame(of: snapshot.frame))) {
+          matches.append(element)
+        }
+      }
+    }
+    let state = matches.count > 1 ? "ambiguous" : matches.first.map { $0.isHittable ? "ready" : "blocked" } ?? "missing"
+    return Response(ok: true, data: DataPayload(pressReadiness: state, pressReadinessAppBundleId: appBundleId))
+  }
+
+  static func authorizedPressTargetPredicate(_ target: NativePressTarget) -> NSPredicate {
+    var predicates = [NSPredicate(format: "elementType == %@", NSNumber(value: target.type))]
+    // Broad prefilters preserve whitespace/canonical-equivalent bindings; the final match stays exact.
+    if let identifier = target.identifier?.trimmingCharacters(in: .whitespacesAndNewlines), !identifier.isEmpty {
+      predicates.append(NSPredicate(format: "identifier CONTAINS[cd] %@", identifier))
+    }
+    if let label = target.label?.trimmingCharacters(in: .whitespacesAndNewlines), !label.isEmpty {
+      predicates.append(NSPredicate(format: "label CONTAINS[cd] %@", label))
+    }
+    return NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+  }
+
   func queryElement(app: XCUIApplication, selectorKey: String, selectorValue: String) throws -> Response {
     // querySelector is a read — it backs get/is/wait and the offscreen-refusal
     // double-check, none of which mutate. The fail-closed raw-match rule exists

@@ -12,7 +12,10 @@ import type { ScreenRecordingRuntimeHost } from './screen-recording-runtime-host
 import type { ScreenRecordingRuntimeOperations } from './screen-recording-runtime.ts';
 import type { ScreenshotRuntimeOperations } from './screenshot-runtime.ts';
 import type { SnapshotRuntimeHost, SnapshotRuntimeOperations } from './snapshot-runtime.ts';
-import type { SelectorObservationRuntimeOperations } from './selector-observation-runtime.ts';
+import type {
+  SelectorObservationRuntimeOperations,
+  PressReadinessRuntimeOperations,
+} from './selector-observation-runtime.ts';
 import type { ViewportRuntimeOperations } from './viewport-runtime.ts';
 import type { FocusRuntimeOperations } from './focus-runtime.ts';
 import type { GestureCommandInput, GestureSemanticInput } from './gesture-plan-types.ts';
@@ -70,6 +73,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   ScreenshotRuntimeOperations &
   SnapshotRuntimeOperations &
   SelectorObservationRuntimeOperations &
+  PressReadinessRuntimeOperations &
   ViewportRuntimeOperations &
   FocusRuntimeOperations &
   GestureRuntimeOperations &
@@ -188,7 +192,7 @@ export const tapPointUse = defineUse({ required: ['tapPoint'] });
 export const capturedTapUse = defineUse({
   required: ['captureSnapshot', 'tapPoint'],
   preferred: ['tapRef'],
-  conditional: ['tapElementSelector', 'querySelector'],
+  conditional: ['tapElementSelector', 'querySelector', 'pressReadiness'],
 });
 export const longPressPointUse = defineUse({ required: ['longPressPoint'] });
 export const capturedLongPressUse = defineUse({
