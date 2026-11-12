@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import {
@@ -182,31 +183,37 @@ function placeRotatedGeneration(params: {
 }
 
 /**
- * Rotate `events.ndjson` to `events.ndjson.1` once it reaches `maxBytes`.
+ * Rotate `events.ndjson` to `events.ndjson.1` before the incoming line exceeds `maxBytes`.
  *
  * Runs inside the per-path serialized write queue. The sidecar describing the
  * post-rename world is written first, so the only intermediate state a reader
  * can observe is "sidecar ahead of rename" — which the digests identify
- * exactly. A sidecar this function cannot read never blocks the append: the
- * window is marked unverifiable (reads then fail typed) and writing continues.
+ * exactly. A window that cannot be verified blocks rotation.
  */
 export async function rotateSessionEventLogIfNeeded(
   eventLogPath: string,
   maxBytes: number,
+  incomingBytes: number,
 ): Promise<boolean> {
   const active = lstatEventLogFile(eventLogPath);
-  if (!active || active.size < maxBytes) return false;
+  if (!active || active.size + incomingBytes <= maxBytes) return false;
+
+  readSessionEventLogWindow(eventLogPath);
 
   const sidecar = readWindowSidecar(eventLogPath);
-  if (sidecar === 'unverifiable') {
-    await fs.promises.rename(eventLogPath, resolveRotatedSessionEventLogPath(eventLogPath));
-    return true;
-  }
+  if (sidecar === 'unverifiable')
+    throw unverifiedWindowError(eventLogPath, 'window file is invalid');
 
   const measured = await measureEventLogFile(eventLogPath);
   if (measured.firstLineDigest !== undefined) {
     const generations = sidecar ?? [];
     const newest = generations.at(-1);
+    if (
+      newest?.firstLineDigest === measured.firstLineDigest &&
+      newest.lineCount !== measured.lineCount
+    ) {
+      throw unverifiedWindowError(eventLogPath, 'active generation differs from its window record');
+    }
     // A record whose digest already matches this exact file means a previous
     // rotation wrote the record but died before its rename; reuse it instead of
     // counting the same generation twice.
@@ -323,13 +330,22 @@ async function writeWindowSidecar(
   generations: readonly EventLogGeneration[],
 ): Promise<void> {
   const windowPath = resolveWindowPath(eventLogPath);
-  const tmpPath = `${windowPath}.${process.pid}.tmp`;
-  await fs.promises.writeFile(
-    tmpPath,
-    JSON.stringify({ version: EVENT_LOG_WINDOW_VERSION, generations }),
-    'utf8',
-  );
-  await fs.promises.rename(tmpPath, windowPath);
+  const tmpPath = `${windowPath}.${process.pid}.${randomUUID()}.tmp`;
+  const file = await fs.promises.open(tmpPath, 'wx');
+  try {
+    try {
+      await file.writeFile(
+        JSON.stringify({ version: EVENT_LOG_WINDOW_VERSION, generations }),
+        'utf8',
+      );
+    } finally {
+      await file.close();
+    }
+    await fs.promises.rename(tmpPath, windowPath);
+  } catch (error) {
+    await fs.promises.unlink(tmpPath).catch(() => undefined);
+    throw error;
+  }
 }
 
 function fileExists(filePath: string): boolean {
