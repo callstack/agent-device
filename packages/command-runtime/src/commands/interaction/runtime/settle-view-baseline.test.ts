@@ -88,6 +88,7 @@ test('a ref press after a full snapshot still lists what the press added', async
 
   assert.equal(result.settle?.diff?.summary.additions, 5);
   assert.equal(result.settle?.diff?.summary.removals, 0);
+  assert.equal(result.settle?.diff?.lines.length, 5);
   assert.ok(result.settle?.diff?.lines.every((line) => line.kind === 'added' && line.ref));
 });
 

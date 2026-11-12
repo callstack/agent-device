@@ -313,7 +313,8 @@ function buildSettleDiff(
     { flatten: true, withRefs: true },
   );
   // A full-tree baseline holds nodes the interactive settle view never reads, so its removals are
-  // not evidence and are left out. An added line is: the interactive view adds no node of its own.
+  // not evidence and are left out. Added lines stay: on Android the interactive view adds no node
+  // of its own, while an iOS row rewrite can also read as added, as it did before #4486.
   const changed = diff.lines.filter(
     (line) => line.kind === 'added' || (line.kind === 'removed' && !baseline.fullView),
   );
