@@ -94,14 +94,7 @@ export function daemonFixtureLaunchViolations(source: string, file: string): str
         return;
       }
       case 'ObjectPattern':
-        for (const property of nodeList(node.properties)) {
-          const entry = asNode(property);
-          if (!entry) continue;
-          destructuredProperties.add(entry);
-          if (propertyName(entry.key) !== 'runCmdDetachedMonitored') continue;
-          const name = propertyName(entry.value);
-          if (name) launchers.add(name);
-        }
+        recordDestructuredLaunchers(node);
         return;
       case 'Identifier': {
         const annotation = asNode(node.typeAnnotation);
@@ -115,6 +108,16 @@ export function daemonFixtureLaunchViolations(source: string, file: string): str
       }
     }
   });
+  function recordDestructuredLaunchers(node: AstNode): void {
+    for (const property of nodeList(node.properties)) {
+      const entry = asNode(property);
+      if (!entry) continue;
+      destructuredProperties.add(entry);
+      if (propertyName(entry.key) !== 'runCmdDetachedMonitored') continue;
+      const name = propertyName(entry.value);
+      if (name) launchers.add(name);
+    }
+  }
   function resolves(node: unknown, names: Set<string>, seen = new Set<string>()): boolean {
     const value = unwrap(node);
     if (!value) return false;
