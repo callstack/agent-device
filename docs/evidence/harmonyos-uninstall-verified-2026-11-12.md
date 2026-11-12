@@ -25,7 +25,8 @@ agent-device uninstall com.stringzhao.adtrajdriver --platform harmonyos --serial
 
 ## Observed output (verbatim)
 
-Install admits the bundle:
+Abridged install answer (the full payload also carries the resolved
+`appPath`, elided here for length):
 
 ```json
 {

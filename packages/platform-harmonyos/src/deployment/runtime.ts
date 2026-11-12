@@ -10,6 +10,8 @@ import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runt
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
+import { execFailureDetails } from '@agent-device/host-kit/command';
+import { parseHarmonyBundleList } from '../app-lifecycle.ts';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const available = Object.freeze({ available: true } as const);
@@ -74,22 +76,7 @@ async function uninstallHarmonyApp(
       hint: 'Pass the bundle name reported by bm dump, such as com.example.app.',
     });
   }
-  const dump = await runHdcShell(commands, device, ['bm', 'dump', '-n', bundleId], signal, {
-    allowFailure: true,
-  });
-  if (!parseBundleDump(dump.stdout)) {
-    // hdc reports an unreachable target through stdout while still exiting zero, so an
-    // absent bundle record is benign only when the shell transport itself proves alive.
-    if (dump.exitCode === null || !(await isHarmonyShellTransportAlive(commands, device, signal))) {
-      // exec-guard-allow: reachable at exit 0 — hdc reports unreachable targets through
-      // stdout at exit zero, so processExitError would never fire; trio is probe context.
-      throw new AppError('COMMAND_FAILED', `Could not probe the installed state of ${bundleId}`, {
-        exitCode: dump.exitCode,
-        stdout: dump.stdout,
-        stderr: dump.stderr,
-        hint: 'Confirm the device connection, then check the bundle name through bm dump -a.',
-      });
-    }
+  if (!(await readBundleInventory(commands, device, signal)).includes(bundleId)) {
     return { wasInstalled: false };
   }
   const uninstall = await runHdcShell(
@@ -98,15 +85,10 @@ async function uninstallHarmonyApp(
     ['bm', 'uninstall', '-n', bundleId],
     signal,
   );
-  const after = await runHdcShell(commands, device, ['bm', 'dump', '-n', bundleId], signal, {
-    allowFailure: true,
-  });
-  if (parseBundleDump(after.stdout)) {
-    // bm prints its verdict into stdout at exit code 0, so only a second dump that no
-    // longer finds the record proves the removal.
-    // exec-guard-allow: reachable at exit 0 — bm reports the removal verdict in stdout
-    // at exit 0, so the trio here documents bm's own answer rather than an exec failure;
-    // stderr enrichment would only repeat the line the message already quotes.
+  const remaining = await readBundleInventory(commands, device, signal);
+  if (remaining.includes(bundleId)) {
+    // bm prints its verdict into stdout at exit code 0, so only an inventory that no
+    // longer lists the bundle proves the removal.
     throw new AppError('COMMAND_FAILED', `${bundleId} is still installed after bm uninstall`, {
       exitCode: uninstall.exitCode,
       stdout: uninstall.stdout,
@@ -114,27 +96,44 @@ async function uninstallHarmonyApp(
       hint: 'Read the bm uninstall output above for the bm reason; system and shared bundles refuse removal.',
     });
   }
-  if (after.exitCode === null || !(await isHarmonyShellTransportAlive(commands, device, signal))) {
-    // exec-guard-allow: reachable at exit 0 — a failed post-uninstall dump still exits
-    // zero through hdc, so processExitError would never fire; trio is probe context.
-    throw new AppError('COMMAND_FAILED', `Could not verify the uninstall of ${bundleId}`, {
-      exitCode: after.exitCode,
-      stdout: after.stdout,
-      stderr: after.stderr,
-      hint: 'Confirm the device connection, then check the bundle name through bm dump -a.',
-    });
-  }
   return { wasInstalled: true, packageName: bundleId };
 }
 
-/** Answers whether hdc can reach the target at all, independent of any remote command. */
-async function isHarmonyShellTransportAlive(
+/**
+ * The one bundle-state interpreter for the uninstall route: the Bundle Manager's own
+ * inventory (`bm dump -a`) read through the shared `parseHarmonyBundleList`. A non-empty
+ * list proves the transport answered and answers membership; a failed exit or an empty
+ * read refuses instead of counting as absence, because a real device always lists its
+ * system bundles.
+ */
+async function readBundleInventory(
   commands: HostCommandRunner,
   device: DeviceInfo,
   signal: AbortSignal,
-): Promise<boolean> {
-  const probe = await runHdcShell(commands, device, ['true'], signal, { allowFailure: true });
-  return probe.exitCode === 0 && probe.stdout.trim().length === 0;
+): Promise<string[]> {
+  const inventory = await runHdcShell(commands, device, ['bm', 'dump', '-a'], signal, {
+    allowFailure: true,
+    timeoutMs: 15_000,
+  });
+  if (inventory.exitCode !== 0) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Could not read the installed bundle inventory',
+      execFailureDetails(inventory),
+    );
+  }
+  const bundles = parseHarmonyBundleList(inventory.stdout);
+  if (bundles.length === 0) {
+    // bm prints its failures into stdout at exit code 0, so an unparseable answer is an
+    // unknown read, never a proof of absence.
+    throw new AppError('COMMAND_FAILED', 'Could not read the installed bundle inventory', {
+      exitCode: inventory.exitCode,
+      stdout: inventory.stdout,
+      stderr: inventory.stderr,
+      hint: 'Confirm the device connection, then check bm dump -a output on the device.',
+    });
+  }
+  return bundles;
 }
 
 /** Parses the JSON bundle record out of one `bm dump -n` output. */

@@ -1,7 +1,9 @@
 # HarmonyOS uninstall transport classification, 2026-11-07
 
 Source under review: `forge/harmony-uninstall` at `7c0be71b5f7ee40101d9637d438f364114338dc6`.
-The classification fix landed as a follow-up commit on the same branch.
+The classification fix landed as a follow-up commit on the same branch,
+`6541f8b6b` (`fix(harmonyos): classify uninstall probe through a live transport`),
+which is the head this note's behavior corresponds to.
 Device: physical HarmonyOS handset, hdc serial `77TYD26826028730`.
 hdc: local command-line tools at `~/.local/harmony/command-line-tools/sdk/default/openharmony/toolchains/hdc`.
 Purpose: record the observable `bm dump -n` shapes that decide how the uninstall probe separates an absent bundle from a dead transport.

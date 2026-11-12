@@ -20,7 +20,7 @@ hdc -t 77TYD26826028730 shell "bm dump -n com.stringzhao.adtrajdriver"
 hdc -t 77TYD26826028730 shell "bm dump -n com.example.never.existed"
 ```
 
-## Observed output (verbatim)
+## Observed output (excerpts; the bundle record is truncated at the ellipsis)
 
 Installed bundle answers with the metadata JSON:
 
@@ -51,3 +51,8 @@ error: failed to get information and the parameters may be wrong.
 `bm dump` misses and `bm` failures carry their verdict in stdout text at exit
 code 0 on this build (7.0.0.111). `install`/`uninstall` success detection keys
 on stream content; an exit-code check would read every failure as success.
+
+Addendum 2026-11-13: the uninstall route no longer interprets this per-bundle
+dump. Both probes read the `bm dump -a` inventory through the shared
+`parseHarmonyBundleList`, and an unreadable answer refuses instead of counting
+as absence; these shapes remain the recorded reason unknown reads cannot pass.
