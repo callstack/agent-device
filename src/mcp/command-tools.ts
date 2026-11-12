@@ -12,6 +12,7 @@ import {
   type CommandExecutionResult,
   type CommandMetadata,
   type CommandName,
+  type DevicePin,
   type InputAudienceMap,
   type JsonSchema,
 } from '@agent-device/command-surface';
@@ -50,6 +51,7 @@ export type ToolResult = {
 type CommandToolExecutorDeps = {
   createClient?: (
     config: AgentDeviceClientConfig,
+    devicePin?: DevicePin,
   ) => AgentDeviceClient | Promise<AgentDeviceClient>;
   runCommand?: (
     client: AgentDeviceClient,
@@ -198,18 +200,17 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
       const { captureHostEnvironment } = await import('@agent-device/host-kit/process');
       const host = captureHostEnvironment(process);
       const supportedProperties = withMcpConfigSchema(name, metadata.inputSchema).properties;
-      const { input: resolvedInput, binding } = resolveMcpConfigDefaults(
-        name,
-        input,
-        supportedProperties,
-        host,
-      );
+      const {
+        input: resolvedInput,
+        binding,
+        devicePin,
+      } = resolveMcpConfigDefaults(name, input, supportedProperties, host);
       const config = readMcpToolConfig(resolvedInput, binding);
       const commandInput = stripMcpConfigFields(resolvedInput);
       const pinnedInput = refPins.pinInput(name, commandInput, config.client.stateDir);
       // One host per tool call: the client's ensuring transport and the output formatter resolve
       // the daemon and the styling from the same host the executor captured (#3794).
-      const client = await createClient(deps, config.client, host, options.signal);
+      const client = await createClient(deps, config.client, host, options.signal, devicePin);
       try {
         const result = await (deps.runCommand ?? runCommand)(client, name, pinnedInput);
         refPins.mergeCommandResult(name, result, config.client.stateDir, commandInput.session);
@@ -274,14 +275,16 @@ async function createClient(
   config: AgentDeviceClientConfig,
   host: HostEnvironment,
   signal: AbortSignal | undefined,
+  devicePin: DevicePin | undefined,
 ): Promise<AgentDeviceClient> {
-  if (deps.createClient) return await deps.createClient(config);
+  if (deps.createClient) return await deps.createClient(config, devicePin);
   const { createAgentDeviceClient } = await import('@agent-device/client');
   const { createEnsuredDaemonTransport } = await import('@agent-device/daemon-client');
   // One client per tool call, so each call ensures the daemon it is about to use.
   const ensuring = createEnsuredDaemonTransport({ host });
   return createAgentDeviceClient(config, {
     host,
+    devicePin,
     // The client builds the same request the daemon transport takes; its type only differs in the
     // session being optional, which `sendToDaemon` defaults. The call's signal rides every request
     // the command makes, so a cancelled call closes whichever request is in flight.

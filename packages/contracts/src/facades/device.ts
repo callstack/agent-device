@@ -9,6 +9,8 @@ export {
   filterDeviceInventoryProjection,
   isDeviceClaimConflictReason,
   projectProviderDeviceInventoryRequest,
+  parseDevicePinSelector,
+  readDevicePin,
   providerInstanceUnallocatedError,
 } from '../device-inventory.ts';
 export type {
@@ -80,3 +82,5 @@ export type {
   ProviderPortReverseOptions,
 } from '../provider-device-runtime.ts';
 export type { TargetShutdownResult } from '../target-shutdown-contract.ts';
+
+export type { DevicePin, DevicePinSelector } from '../device-pin.ts';

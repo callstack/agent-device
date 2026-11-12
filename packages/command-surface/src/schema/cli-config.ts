@@ -1,4 +1,5 @@
 import type { CliFlags } from '@agent-device/contracts/command';
+import { parseDevicePinSelector, type DevicePin } from '@agent-device/contracts/device';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
@@ -18,21 +19,29 @@ import { type EnvMap } from '@agent-device/kernel/source-value';
 import type { DaemonLockPolicy } from '@agent-device/kernel/contracts';
 import { PLATFORM_SELECTORS, type PlatformSelector } from '@agent-device/kernel/device';
 
-export function resolveConfigBackedFlagDefaults(options: {
+type ConfigDefaults = {
+  flags: Partial<CliFlags>;
+  devicePin?: DevicePin;
+};
+
+export function resolveConfigDefaults(options: {
   command: string | null;
   cwd: string;
   cliFlags: CliFlags;
   env: EnvMap;
-}): Partial<CliFlags> {
-  const env = options.env;
-  const defaults = mergeDefinedFlags(
-    {} as Partial<CliFlags>,
-    loadConfigFileDefaults(resolveConfigPaths(options.cwd, options.cliFlags.config, env)),
-  );
-  return mergeDefinedFlags(defaults, readEnvFlagDefaults(env, options.command));
+}): ConfigDefaults {
+  const defaults: ConfigDefaults = { flags: {} };
+  for (const entry of resolveConfigPaths(options.cwd, options.cliFlags.config, options.env)) {
+    const parsed = loadSingleConfigFile(entry);
+    mergeDefinedFlags(defaults.flags, parsed.flags);
+    if (parsed.devicePin) defaults.devicePin = parsed.devicePin;
+  }
+  mergeDefinedFlags(defaults.flags, readEnvFlagDefaults(options.env, options.command));
+  if (defaults.devicePin) mergeDefinedFlags(defaults.flags, defaults.devicePin.selector);
+  return defaults;
 }
 
-type ConfigFileSource = 'user' | 'project' | 'explicit';
+type ConfigFileSource = DevicePin['source']['kind'];
 
 type ConfigPath = { path: string; required: boolean; source: ConfigFileSource };
 
@@ -62,22 +71,13 @@ function resolveInputPath(inputPath: string, cwd: string, env: EnvMap): string {
   return resolveUserPath(inputPath, { cwd, env });
 }
 
-function loadConfigFileDefaults(pathsToCheck: ConfigPath[]): Partial<CliFlags> {
-  const merged: Partial<CliFlags> = {};
-  for (const entry of pathsToCheck) {
-    const parsed = loadSingleConfigFile(entry);
-    mergeDefinedFlags(merged, parsed);
-  }
-  return merged;
-}
-
-function loadSingleConfigFile(entry: ConfigPath): Partial<CliFlags> {
+function loadSingleConfigFile(entry: ConfigPath): ConfigDefaults {
   const { path: filePath, required } = entry;
   if (!fs.existsSync(filePath)) {
     if (required) {
       throw new AppError('INVALID_ARGS', `Config file not found: ${filePath}`);
     }
-    return {};
+    return { flags: {} };
   }
 
   let raw: string;
@@ -102,10 +102,21 @@ function loadSingleConfigFile(entry: ConfigPath): Partial<CliFlags> {
     throw new AppError('INVALID_ARGS', `Config file must contain a JSON object: ${filePath}`);
   }
 
-  return parseConfigObject(parsed as Record<string, unknown>, {
-    source: entry.source,
-    label: `${entry.source === 'project' ? 'project ' : ''}config file ${filePath}`,
-  });
+  const { devicePin, ...flagDefaults } = parsed;
+  const defaults: ConfigDefaults = {
+    flags: parseConfigObject(flagDefaults, { source: entry.source, label: configFileLabel(entry) }),
+  };
+  if (devicePin !== undefined) {
+    defaults.devicePin = {
+      selector: parseDevicePinSelector(devicePin, configFileLabel(entry)),
+      source: { kind: entry.source, path: entry.path },
+    };
+  }
+  return defaults;
+}
+
+function configFileLabel(entry: ConfigPath): string {
+  return `${entry.source === 'project' ? 'project ' : ''}config file ${entry.path}`;
 }
 
 // The `record` config key was released (v0.21.10) as a project/user-config default, but
@@ -204,8 +215,7 @@ function readEnvFlagDefaults(env: EnvMap, command: string | null): Partial<CliFl
   const flags: Partial<CliFlags> = {};
   for (const spec of getConfigurableOptionSpecs(command)) {
     if (spec.key === 'installSource') continue;
-    const envNames = spec.env.names;
-    const envValue = envNames
+    const envValue = spec.env.names
       .map((name) => ({ name, value: env[name] }))
       .find((entry) => typeof entry.value === 'string' && entry.value.trim().length > 0);
     if (!envValue) continue;

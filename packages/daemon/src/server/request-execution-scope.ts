@@ -301,6 +301,11 @@ export async function createRequestExecutionScope(params: {
     );
   }
   try {
+    const devicePin = scopedReq.meta?.devicePin;
+    const pinPolicy = devicePin
+      ? await import('@agent-device/device-selection/device-selection-resolver')
+      : undefined;
+    if (devicePin && pinPolicy) pinPolicy.assertRequestHonorsDevicePin(devicePin, scopedReq);
     if (params.daemonPolicy) assertDaemonPolicyAdmitsRequest(params.daemonPolicy, scopedReq);
     assertRequestLeaseAdmissionPreflight(scopedReq);
     // Parse the budget once, before resolving the target device or taking any lock. The lock plan
@@ -340,6 +345,10 @@ export async function createRequestExecutionScope(params: {
       deviceRuntimeGateway: params.deviceRuntimeGateway,
       platformRequestScope: params.platformRequestScope,
       daemonPolicy: params.daemonPolicy,
+      admitDevicePin:
+        devicePin && pinPolicy
+          ? (device) => pinPolicy.assertDeviceHonorsPin(devicePin, device, scopedReq.flags)
+          : undefined,
       claimRecoveryGateway: params.claimRecoveryGateway,
       sessionStore,
     });
@@ -559,13 +568,6 @@ export async function createRequestExecutionScope(params: {
   }
 }
 
-/**
- * The request's device access, gated by the executing command's #1320 claim
- * policy: bindings hand out device operations only after the claim admission
- * derived from that policy allows it, so `transient-exclusive` commands hold an
- * exclusive claim for as long as they can reach a device and every other policy
- * stays out of the claim store.
- */
 function createRequestDeviceAccess(params: {
   env: EnvMap;
   req: DaemonRequest;
@@ -578,6 +580,7 @@ function createRequestDeviceAccess(params: {
   deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   platformRequestScope: PlatformRequestScope;
   daemonPolicy: DaemonPolicy | undefined;
+  admitDevicePin: ((device: DeviceInfo) => void) | undefined;
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
   sessionStore: SessionStore;
 }): {
@@ -613,8 +616,9 @@ function createRequestDeviceAccess(params: {
       dispatchLedger: params.dispatchLedger,
       admitDeviceClaim: claimAdmission.admit,
       admitDevice:
-        daemonPolicy || claimPolicy === 'require-owner'
+        params.admitDevicePin || daemonPolicy || claimPolicy === 'require-owner'
           ? (device) => {
+              params.admitDevicePin?.(device);
               if (daemonPolicy) {
                 assertDaemonPolicyAdmitsDevice(daemonPolicy, device);
               }

@@ -49,8 +49,6 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
     'Server-side narrowing of the listed kernel DaemonRequest; the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
   'packages/contracts/src/daemon-wire-request.ts#DaemonWireRequest':
     'Client-side narrowing of the listed kernel DaemonRequest (token and session required, flags typed as CommandFlags); the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
-  'packages/contracts/src/daemon-wire-request.ts#DaemonWireRequestMeta':
-    'Narrowing of the listed kernel DaemonRequestMeta (installSource, lockPlatform and the lease coordinates); the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequestMeta.',
   'packages/remote/src/upload-stream.ts#UploadStreamProgressOptions':
     'Byte-progress callback options for local upload rendering. The bytes counted are digested through the request/response declarations; these options never cross the wire.',
   'packages/remote/src/upload-progress.ts#UploadProgressSink':

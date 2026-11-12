@@ -16,6 +16,7 @@
     { "path": "../contracts" },
     { "path": "../daemon-client" },
     { "path": "../daemon-contracts" },
+    { "path": "../device-selection" },
     { "path": "../host-kit" },
     { "path": "../kernel" },
     { "path": "../platform-apple" },

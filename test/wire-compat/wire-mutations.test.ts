@@ -50,6 +50,13 @@ type WireMutation = {
 
 const MUTATIONS: readonly WireMutation[] = [
   {
+    breakClass: 'request metadata: the device pin field is removed',
+    file: 'packages/contracts/src/daemon-wire-request.ts',
+    name: 'DaemonWireRequestMeta',
+    from: '  devicePin?: DevicePin;',
+    to: '',
+  },
+  {
     breakClass: 'instance refusal: the daemon drops the mismatch response header',
     file: 'packages/daemon/src/server/http/http-instance-precondition.ts',
     name: 'refuseStaleDaemonInstance',

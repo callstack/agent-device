@@ -55,6 +55,7 @@ import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   buildRequestFlags,
   type AgentDeviceClient,
+  type DevicePin,
   prepareDaemonCommandRequest,
   type DaemonCommandName,
 } from '@agent-device/command-surface';
@@ -78,7 +79,12 @@ export { pickScreenshotResultData } from './screenshot-result.ts';
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},
-  deps: { transport?: AgentDeviceDaemonTransport; host?: HostEnvironment } = {},
+  deps: {
+    transport?: AgentDeviceDaemonTransport;
+    host?: HostEnvironment;
+    /** The operator-configured device selector enforced on every request. */
+    devicePin?: DevicePin;
+  } = {},
 ): AgentDeviceClient {
   const host = deps.host ?? captureHostEnvironment(process);
   const transport = deps.transport ?? createDaemonTransport(host);
@@ -135,8 +141,18 @@ export function createAgentDeviceClient(
       ...(input ? { input } : {}),
       flags: buildRequestFlags(merged, metadataFlags),
       runtime: merged.runtime,
-      meta: { ...buildMeta(merged), requestId },
+      meta: {
+        ...buildMeta(merged),
+        requestId,
+        ...(deps.devicePin ? { devicePin: deps.devicePin } : {}),
+      },
     };
+    if (deps.devicePin) {
+      const { assertRequestHonorsDevicePin, effectiveDevicePinSelector } =
+        await import('@agent-device/device-selection/device-selection-resolver');
+      assertRequestHonorsDevicePin(deps.devicePin, request);
+      Object.assign(request.flags, effectiveDevicePinSelector(deps.devicePin, request.flags));
+    }
     // `signal` rides the transport context (it is a live object, never wire data), and the guard
     // answers for a custom transport that ignores it: the caller's promise settles on abort either
     // way. The built-in transport closes the request's connection, which is what makes the daemon

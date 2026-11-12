@@ -10,6 +10,7 @@ import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-invent
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type {
   DeviceLease,
+  DevicePin,
   LeaseLifecycleContext,
   LeaseLifecycleProvider,
 } from '@agent-device/contracts/device';
@@ -23,8 +24,10 @@ import { requestCwd } from '../../core/context.ts';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
   leaseReleaseRequestFor,
+  normalizeDeviceKey,
   normalizeLeaseBackend,
   normalizeLeaseProvider,
+  normalizeRequiredLeaseId,
 } from '../../resources/lease-registry-scope.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import {
@@ -105,7 +108,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       );
       const { lease, reused } = await allocateOrRenewLease(
         req,
-        leaseScope,
+        { ...leaseScope, leaseProvider },
         leaseRegistry,
         args.host,
       );
@@ -193,8 +196,8 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
 }
 
 /**
- * A request repeating the `leaseId` of its own live lease gets that lease back before any device is
- * picked, so a retry neither fails on a device that left the inventory nor binds another one.
+ * Unpinned retries can renew a lease whose device left the inventory.
+ * Pinned proxy retries must admit the existing device before renewing it.
  */
 async function allocateOrRenewLease(
   req: DaemonRequest,
@@ -203,9 +206,19 @@ async function allocateOrRenewLease(
   host: HostEnvironment,
 ): Promise<{ lease: DeviceLease; reused: boolean }> {
   const request = leaseScopeToAllocateRequest(scope);
-  const renewed = leaseRegistry.renewRequestedLease(request);
+  const pinnedProxy = req.meta?.devicePin && isProxyLeaseScope(scope);
+  const renewed = pinnedProxy ? undefined : leaseRegistry.renewRequestedLease(request);
   if (renewed) return { lease: renewed, reused: true };
-  const pickedDeviceKey = await pickProxyLeaseDeviceKey(req, scope, host.env);
+  const existingId =
+    pinnedProxy && scope.leaseId ? normalizeRequiredLeaseId(scope.leaseId) : undefined;
+  const existing = existingId
+    ? leaseRegistry.listActiveLeases().find((lease) => lease.leaseId === existingId)
+    : undefined;
+  const pickedDeviceKey = await pickProxyLeaseDeviceKey(
+    req,
+    { ...scope, deviceKey: normalizeDeviceKey(scope.deviceKey) ?? existing?.deviceKey },
+    host.env,
+  );
   const activeLeaseIds = new Set(leaseRegistry.listActiveLeases().map((entry) => entry.leaseId));
   const lease = leaseRegistry.allocateLease(
     pickedDeviceKey ? { ...request, deviceKey: pickedDeviceKey } : request,
@@ -213,39 +226,81 @@ async function allocateOrRenewLease(
   return { lease, reused: activeLeaseIds.has(lease.leaseId) };
 }
 
-/**
- * A proxy allocation that names no `deviceKey` but does name a device spec leaves the device to this
- * daemon: it resolves the request's selectors as a command would, and the lease binds that device.
- */
 async function pickProxyLeaseDeviceKey(
   req: DaemonRequest,
   scope: LeaseScope,
   env: EnvMap,
 ): Promise<string | undefined> {
-  if (!isProxyLeaseScope(scope) || scope.deviceKey) return undefined;
-  const flags = req.flags ?? {};
+  const pin = req.meta?.devicePin;
+  if (!isProxyLeaseScope(scope) || (scope.deviceKey && !pin)) return undefined;
+  const pinPolicy = pin
+    ? await import('@agent-device/device-selection/device-selection-resolver')
+    : undefined;
+  const requested = req.flags ?? {};
+  const selector =
+    pin && pinPolicy ? pinPolicy.effectiveDevicePinSelector(pin, requested) : requested;
+  const flags = {
+    platform: selector.platform,
+    target: requested.target,
+    device: selector.device,
+    udid: selector.udid,
+    serial: selector.serial,
+    iosSimulatorDeviceSet: requested.iosSimulatorDeviceSet,
+    androidDeviceAllowlist: requested.androidDeviceAllowlist,
+  };
+  if (scope.deviceKey && pin) {
+    return await admitPinnedProxyLeaseDeviceKey(scope.deviceKey, pin, flags, env);
+  }
   const { hasDeviceSelectionInput } = await import('../../core/device/device-selector-intent.ts');
   if (!hasDeviceSelectionInput(flags)) return undefined;
   const { resolveTargetDevice } = await import('@agent-device/device-selection/dispatch-resolve');
   const device = await resolveTargetDevice(
     {
+      ...flags,
       platform:
         flags.platform ??
         (scope.leaseBackend ? platformForLeaseBackend(scope.leaseBackend) : undefined),
-      target: flags.target,
-      device: flags.device,
-      udid: flags.udid,
-      serial: flags.serial,
-      iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
-      androidDeviceAllowlist: flags.androidDeviceAllowlist,
     },
     { env },
   );
+  if (pin && pinPolicy) pinPolicy.assertDeviceHonorsPin(pin, device, flags);
   return leaseDeviceKey({
     platform: publicPlatformString(device),
     target: device.target,
     id: device.id,
   });
+}
+
+async function admitPinnedProxyLeaseDeviceKey(
+  deviceKey: string,
+  pin: DevicePin,
+  flags: NonNullable<DaemonRequest['flags']>,
+  env: EnvMap,
+): Promise<string> {
+  const { listDeviceInventory } =
+    await import('@agent-device/device-selection/device-inventory-context');
+  const { buildDeviceInventoryRequestFromFlags } =
+    await import('@agent-device/device-selection/dispatch-resolve');
+  const { assertDeviceHonorsPin } =
+    await import('@agent-device/device-selection/device-selection-resolver');
+  const devices = await listDeviceInventory(buildDeviceInventoryRequestFromFlags(flags, env));
+  const device = devices.find(
+    (device) => leaseDeviceKey({ ...device, platform: publicPlatformString(device) }) === deviceKey,
+  );
+  if (!device) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'The lease device key does not match an available pinned device.',
+      {
+        reason: 'device_pin_conflict',
+        pin: pin.selector,
+        pinSource: `${pin.source.kind === 'project' ? 'project ' : ''}config file ${pin.source.path}`,
+        deviceKey,
+      },
+    );
+  }
+  assertDeviceHonorsPin(pin, device, flags);
+  return deviceKey;
 }
 
 // A run's repeat allocation reuses its live lease; refusing that request must not end the

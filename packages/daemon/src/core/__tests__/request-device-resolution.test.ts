@@ -69,3 +69,36 @@ test('request lease metadata overrides stale selector flags and selects the allo
   expect(selection.source).toBe('provider');
   expect(local).not.toHaveBeenCalled();
 });
+
+for (const resolve of [resolveRequestTargetDevice, resolveRequestTargetDeviceSelection]) {
+  for (const platform of ['ios', 'macos'] as const) {
+    test(`${resolve.name} preserves the ${platform} pin under an Apple-family request`, async () => {
+      const mac: DeviceInfo = {
+        ...device,
+        id: 'local-mac',
+        name: 'Mac',
+        appleOs: 'macos',
+        kind: 'device',
+        target: 'desktop',
+      };
+      const req: DaemonRequest = {
+        token: 't',
+        session: 'default',
+        command: 'capabilities',
+        positionals: [],
+        flags: { platform: 'apple' },
+        meta: {
+          devicePin: {
+            selector: { platform },
+            source: { kind: 'project', path: '/project/agent-device.json' },
+          },
+        },
+      };
+      const result = await withTestDeviceInventory({ local: async () => [mac, device] }, async () =>
+        resolve(req, { env: {} }),
+      );
+      const selected = 'device' in result ? result.device : result;
+      expect(selected.id).toBe(platform === 'ios' ? device.id : mac.id);
+    });
+  }
+}
