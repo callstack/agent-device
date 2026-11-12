@@ -1,7 +1,6 @@
 import type {
   AgentDeviceRequestOverrides,
   AgentDeviceSelectionOptions,
-  ElementTarget,
   InteractionTarget,
 } from '@agent-device/contracts/client';
 import {
@@ -40,21 +39,8 @@ import {
   optionalStringArray,
   readInputRecord,
   readRecordField,
-  requiredEnum,
   requiredNumber,
-  requiredString,
 } from './input-readers.ts';
-
-const INTERACTION_TARGET_KINDS = ['ref', 'selector', 'point'] as const;
-
-export type InteractionTargetInput =
-  | { kind: 'ref'; ref: string; label?: string }
-  | { kind: 'selector'; selector: string }
-  | { kind: 'point'; x: number; y: number };
-
-export type ElementTargetInput =
-  | { kind: 'ref'; ref: string; label?: string }
-  | { kind: 'selector'; selector: string };
 
 export type SelectorSnapshotInput = {
   depth?: number;
@@ -67,11 +53,13 @@ export type PointInput = { x: number; y: number };
 function commandInputSchema(
   properties: Record<string, JsonSchema>,
   required: readonly string[] = [],
+  retiredKeys: ReadonlySet<string> = new Set(),
 ): JsonSchema {
+  const common = Object.entries(commonProperties()).filter(([key]) => !retiredKeys.has(key));
   return {
     type: 'object',
     properties: {
-      ...commonProperties(),
+      ...Object.fromEntries(common),
       ...properties,
     },
     ...(required.length > 0 ? { required } : {}),
@@ -360,18 +348,6 @@ export function customField<T>(
   return optionalField(schema, read);
 }
 
-export function interactionTargetField(): CommandField<InteractionTargetInput> {
-  return optionalField(interactionTargetSchema(), (record, key) =>
-    record[key] === undefined ? undefined : readInteractionTarget(record, key),
-  );
-}
-
-export function elementTargetField(): CommandField<ElementTargetInput> {
-  return optionalField(elementTargetSchema(), (record, key) =>
-    record[key] === undefined ? undefined : readElementTarget(record, key),
-  );
-}
-
 export function pointField(description: string): CommandField<PointInput> {
   return optionalField(pointSchema(description), (record, key) =>
     record[key] === undefined ? undefined : readPoint(record, key),
@@ -462,7 +438,11 @@ function leaseDeviceSpecField<TKey extends (typeof LEASE_DEVICE_SPEC_KEYS)[numbe
 }
 
 export function fieldsInputSchema(fields: CommandFieldMap): JsonSchema {
-  return commandInputSchema(fieldProperties(fields), requiredFieldNames(fields));
+  return commandInputSchema(
+    fieldProperties(fields),
+    requiredFieldNames(fields),
+    retiredFieldNames(fields),
+  );
 }
 
 export function readFieldInput<TFields extends CommandFieldMap>(
@@ -489,66 +469,9 @@ export function readFieldInput<TFields extends CommandFieldMap>(
   }) as InferCommandInput<TFields>;
 }
 
-function readInteractionTarget(
-  record: Record<string, unknown>,
-  key: string,
-): InteractionTargetInput {
-  const target = readRecordField(record, key);
-  const kind = requiredEnum(target, 'kind', INTERACTION_TARGET_KINDS);
-  switch (kind) {
-    case 'ref':
-      return {
-        kind,
-        ref: requiredString(target, 'ref'),
-        label: optionalString(target, 'label'),
-      };
-    case 'selector':
-      return { kind, selector: requiredString(target, 'selector') };
-    case 'point':
-      return {
-        kind,
-        x: requiredNumber(target, 'x'),
-        y: requiredNumber(target, 'y'),
-      };
-  }
-}
-
-function readElementTarget(record: Record<string, unknown>, key: string): ElementTargetInput {
-  const target = readRecordField(record, key);
-  const kind = requiredEnum(target, 'kind', ['ref', 'selector'] as const);
-  if (kind === 'ref') {
-    return {
-      kind,
-      ref: requiredString(target, 'ref'),
-      label: optionalString(target, 'label'),
-    };
-  }
-  return { kind, selector: requiredString(target, 'selector') };
-}
-
 function readPoint(record: Record<string, unknown>, key: string): PointInput {
   const point = readRecordField(record, key);
   return { x: requiredNumber(point, 'x'), y: requiredNumber(point, 'y') };
-}
-
-export function toClientInteractionTarget(target: InteractionTargetInput): InteractionTarget {
-  switch (target.kind) {
-    case 'ref':
-      return { ref: target.ref, label: target.label };
-    case 'selector':
-      return { selector: target.selector };
-    case 'point':
-      return { x: target.x, y: target.y };
-  }
-}
-
-export function toClientElementTarget(target: ElementTargetInput): ElementTarget {
-  switch (target.kind) {
-    case 'ref':
-      return { ref: target.ref, label: target.label };
-    case 'selector':
-      return { selector: target.selector };
-  }
 }
 
 export function toRepeatedOptions(input: RepeatedInput): RepeatedInput {
@@ -592,6 +515,15 @@ function fieldProperties(fields: CommandFieldMap): Record<string, JsonSchema> {
   );
 }
 
+/** A retired field also retires the common key it shadows, such as the `target` device alias. */
+function retiredFieldNames(fields: CommandFieldMap): ReadonlySet<string> {
+  return new Set(
+    Object.entries(fields).flatMap(([key, field]) =>
+      field.audience?.kind === 'retired' ? [key] : [],
+    ),
+  );
+}
+
 function requiredFieldNames(fields: CommandFieldMap): string[] {
   return Object.entries(fields).flatMap(([key, field]) => (field.required ? [key] : []));
 }
@@ -605,52 +537,90 @@ export function fieldAudiences(fields: CommandFieldMap): InputAudienceMap {
   );
 }
 
-function interactionTargetSchema(): JsonSchema {
+// The UI target of an interaction is named by top-level keys, the CLI's vocabulary:
+// {"ref":"@e12"}, {"selector":"id=\"submit\""}, or {"x":120,"y":340}.
+
+export type TargetedInput<TFields extends CommandFieldMap, TTarget = InteractionTarget> = Omit<
+  InferCommandInput<TFields>,
+  'ref' | 'label' | 'selector' | 'x' | 'y' | 'target'
+> &
+  TTarget;
+
+/** The keys a minimal call example sets for a command that takes a UI target. */
+export const TARGET_INPUT_EXAMPLE = { ref: '@e12' } as const;
+
+const REF_FORM = '{"ref":"@e12"}';
+const SELECTOR_FORM = String.raw`{"selector":"id=\"submit\""}`;
+const ELEMENT_TARGET_FORMS = `${REF_FORM} or ${SELECTOR_FORM}`;
+const INTERACTION_TARGET_FORMS = `${REF_FORM}, ${SELECTOR_FORM}, or {"x":120,"y":340}`;
+
+/** Ref or selector, for a command that reads an element (`get`). */
+export function elementTargetFields() {
+  return targetFields(ELEMENT_TARGET_FORMS, 'ref or selector');
+}
+
+/** Ref, selector, or screen point, for a command that acts on the UI. */
+export function interactionTargetFields() {
   return {
-    oneOf: [
-      ...elementTargetSchemaVariants(),
-      {
-        type: 'object',
-        properties: {
-          kind: { type: 'string', const: 'point' },
-          x: { type: 'number' },
-          y: { type: 'number' },
-        },
-        required: ['kind', 'x', 'y'],
-        additionalProperties: false,
-      },
-    ],
-    description: 'UI target. This is separate from deviceTarget, which selects the device form.',
+    ...targetFields(INTERACTION_TARGET_FORMS, 'ref, selector, or x with y'),
+    x: numberField('Screen x coordinate, with y. Use only when no ref or selector is available.'),
+    y: numberField('Screen y coordinate, with x.'),
   };
 }
 
-function elementTargetSchema(): JsonSchema {
+function targetFields(forms: string, choice: string) {
   return {
-    oneOf: elementTargetSchemaVariants(),
-    description: 'UI element target by snapshot ref or selector expression.',
+    ref: stringField(`Snapshot element ref such as @e12. Pass exactly one of ${choice}.`),
+    label: stringField('Optional human label for ref.'),
+    selector: stringField('Selector expression such as id="submit" or label="Sign in".'),
+    target: retiredField(`target was removed; pass the UI target at the top level: ${forms}.`),
   };
 }
 
-function elementTargetSchemaVariants(): JsonSchema[] {
-  return [
-    {
-      type: 'object',
-      properties: {
-        kind: { type: 'string', const: 'ref' },
-        ref: { type: 'string', description: 'Snapshot element ref such as @e12.' },
-        label: { type: 'string', description: 'Optional human label for the ref.' },
-      },
-      required: ['kind', 'ref'],
-      additionalProperties: false,
-    },
-    {
-      type: 'object',
-      properties: {
-        kind: { type: 'string', const: 'selector' },
-        selector: { type: 'string', description: 'Agent-device selector expression.' },
-      },
-      required: ['kind', 'selector'],
-      additionalProperties: false,
-    },
-  ];
+/** Reads a command's fields, then requires exactly one UI target among the ones they declare. */
+export function readTargetedInput<
+  TFields extends CommandFieldMap,
+  TTarget extends InteractionTarget = InteractionTarget,
+>(input: unknown, fields: TFields): TargetedInput<TFields, TTarget> {
+  const { ref, label, selector, x, y, ...rest } = readFieldInput(input, fields) as Record<
+    string,
+    unknown
+  >;
+  const named = [
+    ref === undefined ? [] : ['ref'],
+    selector === undefined ? [] : ['selector'],
+    x === undefined && y === undefined ? [] : ['x/y'],
+  ].flat();
+  if (named.length !== 1) {
+    const forms = 'x' in fields ? INTERACTION_TARGET_FORMS : ELEMENT_TARGET_FORMS;
+    throw new AppError(
+      'INVALID_ARGS',
+      named.length === 0
+        ? 'Expected a UI target.'
+        : `Expected one UI target, got ${named.join(' and ')}.`,
+      { hint: `Pass exactly one of: ${forms}.` },
+    );
+  }
+  if (label !== undefined && ref === undefined) {
+    throw new AppError('INVALID_ARGS', 'label applies only with ref.', {
+      hint: 'Pass label together with ref, for example {"ref":"@e12","label":"Sign in"}.',
+    });
+  }
+  if (named[0] === 'x/y' && (x === undefined || y === undefined)) {
+    throw new AppError('INVALID_ARGS', 'Expected x and y together.', {
+      hint: 'Pass both screen coordinates, for example {"x":120,"y":340}.',
+    });
+  }
+  const target = toClientInteractionTarget({ ref, label, selector, x, y } as InteractionTarget);
+  return { ...rest, ...target } as TargetedInput<TFields, TTarget>;
+}
+
+/** Only the target keys, so a projection never carries another key along with them. */
+export function toClientInteractionTarget<TTarget extends InteractionTarget>(
+  input: TTarget,
+): TTarget {
+  if (input.ref !== undefined)
+    return compactRecord({ ref: input.ref, label: input.label }) as TTarget;
+  if (input.selector !== undefined) return { selector: input.selector } as TTarget;
+  return { x: input.x, y: input.y } as TTarget;
 }

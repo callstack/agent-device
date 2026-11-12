@@ -91,7 +91,7 @@ Example batch payload for a known chat flow:
 ```json
 [
   { "command": "open", "input": { "app": "ChatApp", "platform": "android" } },
-  { "command": "click", "input": { "target": { "kind": "selector", "selector": "label=\"Travel chat\"" } } },
+  { "command": "click", "input": { "selector": "label=\"Travel chat\"" } },
   {
     "command": "wait",
     "input": { "kind": "selector", "selector": "label=\"Message\"", "timeoutMs": 3000 }
@@ -99,11 +99,11 @@ Example batch payload for a known chat flow:
   {
     "command": "fill",
     "input": {
-      "target": { "kind": "selector", "selector": "label=\"Message\"" },
+      "selector": "label=\"Message\"",
       "text": "Sent the update"
     }
   },
-  { "command": "press", "input": { "target": { "kind": "selector", "selector": "label=\"Send\"" } } }
+  { "command": "press", "input": { "selector": "label=\"Send\"" } }
 ]
 ```
 

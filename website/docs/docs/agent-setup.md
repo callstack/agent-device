@@ -61,7 +61,9 @@ MCP-only clients don't need a separately installed skill. When a client connects
 
 Tool results are compact text. A tool that declares an output schema, such as `press` or `wait`, also returns `structuredContent` that matches it. On success, other tools, such as `snapshot` and `open`, return text only, because some clients show the model `structuredContent` instead of the text. They return `structuredContent` when you pass `mcpOutputFormat: "json"`, a non-default `responseLevel`, or `includeCost`. A failed call always returns the error in `structuredContent`.
 
-When a tool fails, the server returns an MCP tool result with `isError: true`. Check the tool result, not only whether the JSON-RPC call succeeded.
+Tools that act on a UI element take its target as top-level arguments, in the same words as the CLI: `press {"ref":"@e12"}`, `click {"selector":"id=\"submit\""}`, or `press {"x":120,"y":340}`. `get` takes `ref` or `selector`.
+
+When a tool fails, the server returns an MCP tool result with `isError: true`. Check the tool result, not only whether the JSON-RPC call succeeded. A call with an argument the tool doesn't take fails with `INVALID_ARGS`, and its hint shows a call that the tool accepts.
 
 The server runs one `tools/call` at a time, in the order it receives them. It answers `ping`, `tools/list`, and the handshake at once, even while a long tool call such as `test` or `wait` runs. A `notifications/cancelled` for a running or queued `tools/call` stops it, and the server sends no response for that request. Cancellation stops the daemon request, not work that already reached the device: on iOS, a command the device received keeps running there, and the session waits for it. See [Command methods](/docs/client-api#command-methods). A JSON-RPC batch cannot carry a `tools/call`; the server refuses that element with `-32600`.
 

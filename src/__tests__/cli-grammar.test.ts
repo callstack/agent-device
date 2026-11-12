@@ -26,30 +26,38 @@ test('snapshot grammar keeps interactive snapshot options focused', () => {
   assert.equal(options.depth, 3);
 });
 
+/** The keys a reader set, without the ones it left undefined. */
+function definedKeys(input: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
+}
+
 test('interaction and fill grammar share ref, selector, and point parsing', () => {
-  assert.deepEqual(readInputFromCli('press', ['@e3', 'Email'], BASE_FLAGS).target, {
-    kind: 'ref',
-    ref: '@e3',
-    label: 'Email',
+  const { ref, label } = readInputFromCli('press', ['@e3', 'Email'], BASE_FLAGS);
+  assert.deepEqual({ ref, label }, { ref: '@e3', label: 'Email' });
+  assert.deepEqual(
+    definedKeys(readInputFromCli('fill', ['id=email', 'qa@example.com'], BASE_FLAGS)),
+    {
+      selector: 'id=email',
+      text: 'qa@example.com',
+    },
+  );
+  assert.deepEqual(definedKeys(readInputFromCli('fill', ['@e4', 'good', 'morning'], BASE_FLAGS)), {
+    ref: '@e4',
+    text: 'good morning',
   });
-  const selectorFill = readInputFromCli('fill', ['id=email', 'qa@example.com'], BASE_FLAGS);
-  assert.deepEqual(selectorFill.target, { kind: 'selector', selector: 'id=email' });
-  assert.equal(selectorFill.text, 'qa@example.com');
-
-  const refFill = readInputFromCli('fill', ['@e4', 'good', 'morning'], BASE_FLAGS);
-  assert.deepEqual(refFill.target, { kind: 'ref', ref: '@e4' });
-  assert.equal(refFill.text, 'good morning');
-
-  const pointFill = readInputFromCli('fill', ['10', '20', 'hello'], BASE_FLAGS);
-  assert.deepEqual(pointFill.target, { kind: 'point', x: 10, y: 20 });
-  assert.equal(pointFill.text, 'hello');
+  assert.deepEqual(definedKeys(readInputFromCli('fill', ['10', '20', 'hello'], BASE_FLAGS)), {
+    x: 10,
+    y: 20,
+    text: 'hello',
+  });
 
   assert.deepEqual(readInputFromCli('longpress', ['@e4', '800'], BASE_FLAGS), {
-    target: { kind: 'ref', ref: '@e4' },
+    ref: '@e4',
     durationMs: 800,
   });
   assert.deepEqual(readInputFromCli('longpress', ['10', '20', '800'], BASE_FLAGS), {
-    target: { kind: 'point', x: 10, y: 20 },
+    x: 10,
+    y: 20,
     durationMs: 800,
   });
 });
@@ -83,13 +91,17 @@ test('interaction selectors reject unquoted trailing text instead of dropping it
   );
 
   // Quoted selector values and fill's trailing text payload keep working.
-  assert.deepEqual(readInputFromCli('press', ['text="Gesture lab"'], BASE_FLAGS).target, {
-    kind: 'selector',
-    selector: 'text="Gesture lab"',
-  });
-  const fillAfterSelector = readInputFromCli('fill', ['id=email', 'qa@example.com'], BASE_FLAGS);
-  assert.deepEqual(fillAfterSelector.target, { kind: 'selector', selector: 'id=email' });
-  assert.equal(fillAfterSelector.text, 'qa@example.com');
+  assert.equal(
+    readInputFromCli('press', ['text="Gesture lab"'], BASE_FLAGS).selector,
+    'text="Gesture lab"',
+  );
+  assert.deepEqual(
+    definedKeys(readInputFromCli('fill', ['id=email', 'qa@example.com'], BASE_FLAGS)),
+    {
+      selector: 'id=email',
+      text: 'qa@example.com',
+    },
+  );
 });
 
 test('bare snapshot refs without @ prefix throw helpful error', () => {

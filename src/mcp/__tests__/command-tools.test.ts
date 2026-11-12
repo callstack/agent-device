@@ -177,16 +177,13 @@ test('MCP pins every find-list ref so a plain follow-up press forwards pinned', 
     ['2 matches:', '= @e5~s41 [button] "Add"', '= @e9~s41 [cell] "Add another account"'].join('\n'),
   );
 
-  await executor.execute('press', { session: 'demo', target: { kind: 'ref', ref: '@e9' } });
-  await executor.execute('press', { session: 'demo', target: { kind: 'ref', ref: '@e5' } });
+  await executor.execute('press', { session: 'demo', ref: '@e9' });
+  await executor.execute('press', { session: 'demo', ref: '@e5' });
 
   const presses = calls.filter((call) => call.name === 'press');
   assert.deepEqual(
-    presses.map((call) => call.input.target),
-    [
-      { kind: 'ref', ref: '@e9~s41' },
-      { kind: 'ref', ref: '@e5~s41' },
-    ],
+    presses.map((call) => call.input.ref),
+    ['@e9~s41', '@e5~s41'],
   );
 });
 
@@ -703,7 +700,7 @@ test('MCP renders tool text from the unpinned input so the model never sees suff
   });
 
   await executor.execute('snapshot', {});
-  const result = await executor.execute('press', { target: { kind: 'ref', ref: '@e2' } });
+  const result = await executor.execute('press', { ref: '@e2' });
 
   assert.doesNotMatch(result.content[0]?.text ?? '', /~s9/);
 });
@@ -724,12 +721,12 @@ test('MCP command tool executor pins refs for runCommand while keeping rendered 
   await executor.execute('snapshot', { session: 'demo' });
   const result = await executor.execute('press', {
     session: 'demo',
-    target: { kind: 'ref', ref: '@e2' },
+    ref: '@e2',
   });
 
   assert.deepEqual(runCalls[1], {
     name: 'press',
-    input: { session: 'demo', target: { kind: 'ref', ref: '@e2~s500012' } },
+    input: { session: 'demo', ref: '@e2~s500012' },
   });
   assert.doesNotMatch(result.content[0]?.text ?? '', /~s500012/);
 });
@@ -802,8 +799,8 @@ test('MCP tool error is a ref-issuing result: isError, structuredContent, and pi
 
   // The error-path screen ref is pinned exactly like a successful ref-issuing
   // response — the caller's next command against @e5 forwards the generation.
-  await executor.execute('press', { target: { kind: 'ref', ref: '@e5' } });
-  assert.deepEqual(runCalls[1]?.input, { target: { kind: 'ref', ref: '@e5~s12' } });
+  await executor.execute('press', { ref: '@e5' });
+  assert.deepEqual(runCalls[1]?.input, { ref: '@e5~s12' });
 });
 
 test('ambiguous interaction errors pin their candidate refs for the next mutation', async () => {
@@ -825,18 +822,18 @@ test('ambiguous interaction errors pin their candidate refs for the next mutatio
 
   const result = await executor.execute('press', {
     session: 'demo',
-    target: { kind: 'selector', selector: 'label="Team Standup"' },
+    selector: 'label="Team Standup"',
   });
   assert.equal(result.isError, true);
   assert.match(result.content[0]?.text ?? '', /@e5~s42 \[cell\] "Team Standup"/);
 
   await executor.execute('press', {
     session: 'demo',
-    target: { kind: 'ref', ref: '@e5' },
+    ref: '@e5',
   });
   assert.deepEqual(runCalls[1]?.input, {
     session: 'demo',
-    target: { kind: 'ref', ref: '@e5~s42' },
+    ref: '@e5~s42',
   });
 });
 
@@ -920,13 +917,13 @@ test('MCP forwards record/noRecord from a get tool call through to the executed 
   });
   await executor.execute('get', {
     format: 'text',
-    target: { kind: 'ref', ref: '@e5' },
+    ref: '@e5',
     record: true,
   });
   assert.deepEqual(calls, [
     {
       name: 'get',
-      input: { format: 'text', target: { kind: 'ref', ref: '@e5' }, record: true },
+      input: { format: 'text', ref: '@e5', record: true },
     },
   ]);
 });
@@ -970,13 +967,13 @@ test('MCP forwards noRecord from a press tool call through to the executed comma
     },
   });
   await executor.execute('press', {
-    target: { kind: 'ref', ref: '@e5' },
+    ref: '@e5',
     noRecord: true,
   });
   assert.deepEqual(calls, [
     {
       name: 'press',
-      input: { target: { kind: 'ref', ref: '@e5' }, noRecord: true },
+      input: { ref: '@e5', noRecord: true },
     },
   ]);
 });

@@ -24,7 +24,7 @@ test('MCP returns structuredContent for typed tools, and for untyped tools only 
   const json = await executor.execute('snapshot', { mcpOutputFormat: 'json' });
   assert.deepEqual(json.structuredContent, snapshotResult);
 
-  const press = await executor.execute('press', { target: { kind: 'ref', ref: '@e2' } });
+  const press = await executor.execute('press', { ref: '@e2' });
   assert.deepEqual(press.structuredContent, { message: 'Tapped @e2 (10, 20)' });
 });
 

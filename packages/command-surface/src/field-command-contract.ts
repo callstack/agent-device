@@ -15,6 +15,8 @@ type FieldCommandPresentationOptions = {
 type FieldCommandOptions<TInput> = FieldCommandPresentationOptions & {
   /** For a command that reads its own fields (`batch` validates steps, `gesture` reads a union). */
   readInput: (input: unknown) => TInput;
+  /** See `CommandMetadata.inputExample`. */
+  inputExample?: Readonly<Record<string, unknown>>;
 };
 
 /**
@@ -51,5 +53,6 @@ export function defineFieldCommandMetadata(
     readInput: options?.readInput ?? ((input) => readFieldInput(input, fields)),
     inputAudience: fieldAudiences(fields),
     ...(options?.parseableOutput ? { parseableOutput: true as const } : {}),
+    ...(options?.inputExample ? { inputExample: options.inputExample } : {}),
   });
 }

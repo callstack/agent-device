@@ -1,6 +1,7 @@
 import type { AgentDeviceClientConfig } from '@agent-device/contracts/client';
 import {
   COMMON_INPUT_AUDIENCE,
+  commandInputExample,
   findCommandMetadata,
   isCommandName,
   listCommandMetadata,
@@ -189,7 +190,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
         findInadmissibleNestedCommandInput(metadata.inputSchema, input, name);
       if (rejection) {
         return await buildErrorToolResult(
-          new AppError('INVALID_ARGS', rejection),
+          new AppError('INVALID_ARGS', rejection.message, compactHint(rejection.hint)),
           refPins,
           undefined,
           input.session,
@@ -386,7 +387,17 @@ function stripMcpConfigFields(input: Record<string, unknown>): Record<string, un
   );
 }
 
-type AdmissionMetadata = Pick<CommandMetadata<string, unknown>, 'inputSchema' | 'inputAudience'>;
+type AdmissionMetadata = Pick<
+  CommandMetadata<string, unknown>,
+  'inputSchema' | 'inputAudience' | 'inputExample'
+>;
+
+/** Why admission refused a call, and for an unknown argument, a call the tool accepts. */
+type AdmissionRejection = { message: string; hint?: string };
+
+function compactHint(hint: string | undefined): { hint: string } | undefined {
+  return hint === undefined ? undefined : { hint };
+}
 
 /**
  * The advertised schema for a tool — exactly what `listCommandTools` exposes.
@@ -412,7 +423,7 @@ function findInadmissibleInput(
   name: CommandName,
   metadata: AdmissionMetadata,
   input: Record<string, unknown>,
-): string | undefined {
+): AdmissionRejection | undefined {
   const advertised = advertisedInputSchema(name, metadata).properties;
   const audience = toolInputAudience(metadata);
   for (const key of Object.keys(input)) {
@@ -425,8 +436,13 @@ function findInadmissibleInput(
     // admit them so the command's own reader answers with migration guidance
     // (e.g. maxSize -> "use --scale") instead of a bare unknown-key rejection.
     if (keyAudience?.kind === 'retired') continue;
-    if (keyAudience?.kind === 'operator') return operatorInputRefusal(key, keyAudience.source);
-    return `${key} is not an accepted argument for the ${name} tool.`;
+    if (keyAudience?.kind === 'operator') {
+      return { message: operatorInputRefusal(key, keyAudience.source) };
+    }
+    return {
+      message: `${key} is not an accepted argument for the ${name} tool.`,
+      hint: `Example call: ${name} ${JSON.stringify(commandInputExample(metadata))}`,
+    };
   }
   return undefined;
 }
@@ -459,7 +475,7 @@ function findInadmissibleNestedCommandInput(
   schema: JsonSchema | undefined,
   value: unknown,
   path: string,
-): string | undefined {
+): AdmissionRejection | undefined {
   if (!schema || value === undefined) return undefined;
   if (Array.isArray(value)) {
     return firstRejection(value, (item, index) =>
@@ -484,7 +500,7 @@ function findInadmissibleNestedProperty(
   parent: Record<string, unknown>,
   key: string,
   path: string,
-): string | undefined {
+): AdmissionRejection | undefined {
   const commandKey = property.commandInputFor;
   if (commandKey === undefined) {
     return findInadmissibleNestedCommandInput(property, parent[key], path);
@@ -501,14 +517,20 @@ function findInadmissibleNestedProperty(
   // daemon request flag. Reporting it is the reader's job — answering here would
   // bury the real error under a key complaint.
   if (command === undefined || !isRecord(nested)) return undefined;
-  const rejection = findInadmissibleInput(command, findCommandMetadata(command), nested);
-  return rejection === undefined ? undefined : `${path}: ${rejection}`;
+  const metadata = findCommandMetadata(command);
+  const rejection = findInadmissibleInput(command, metadata, nested);
+  if (rejection === undefined) return undefined;
+  const step = { [commandKey]: command, [key]: commandInputExample(metadata) };
+  return {
+    message: `${path}: ${rejection.message}`,
+    ...(rejection.hint === undefined ? {} : { hint: `Example step: ${JSON.stringify(step)}` }),
+  };
 }
 
 function firstRejection<TItem>(
   items: readonly TItem[],
-  check: (item: TItem, index: number) => string | undefined,
-): string | undefined {
+  check: (item: TItem, index: number) => AdmissionRejection | undefined,
+): AdmissionRejection | undefined {
   for (const [index, item] of items.entries()) {
     const rejection = check(item, index);
     if (rejection) return rejection;

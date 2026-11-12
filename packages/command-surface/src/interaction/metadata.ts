@@ -1,4 +1,5 @@
 import { CLICK_BUTTONS } from '@agent-device/contracts/click-button';
+import type { ElementTarget } from '@agent-device/contracts/client';
 import {
   GESTURE_KINDS,
   type GesturePayload,
@@ -26,22 +27,24 @@ import {
 } from '@agent-device/contracts/scroll-gesture';
 import { FIND_LOCATORS } from '@agent-device/selectors';
 import {
+  TARGET_INPUT_EXAMPLE,
   booleanField,
-  elementTargetField,
+  elementTargetFields,
   enumField,
   integerField,
-  interactionTargetField,
+  interactionTargetFields,
   numberField,
   operatorField,
   pointArrayField,
   pointField,
   postGestureStabilizationFields,
+  readTargetedInput,
   repeatedFields,
   requiredField,
   selectorSnapshotFields,
   stringField,
   type CommandFieldMap,
-  type InferCommandInput,
+  type TargetedInput,
 } from '../command-input.ts';
 import { readCommonInput, type CommonCommandInput } from '../common-input-fields.ts';
 import { optionalBoolean, readInputRecord } from '../input-readers.ts';
@@ -86,7 +89,7 @@ const interactionCommandDescriptions = {
 type InteractionCommandName = keyof typeof interactionCommandDescriptions;
 
 const clickFields = {
-  target: requiredField(interactionTargetField()),
+  ...interactionTargetFields(),
   button: enumField(CLICK_BUTTONS, 'Pointer button for platforms that support mouse buttons.'),
   ...selectorSnapshotFields(),
   ...repeatedFields(),
@@ -94,14 +97,14 @@ const clickFields = {
 };
 
 const pressFields = {
-  target: requiredField(interactionTargetField()),
+  ...interactionTargetFields(),
   ...selectorSnapshotFields(),
   ...repeatedFields(),
   ...postActionObservationFields('press'),
 };
 
 const fillFields = {
-  target: requiredField(interactionTargetField()),
+  ...interactionTargetFields(),
   // "" is accepted and means "replace with nothing", i.e. clear the field (#2063). The key
   // must still be present: omitting it is a missing argument, not a clear.
   text: requiredField(
@@ -125,14 +128,14 @@ const fillFields = {
 };
 
 const longPressFields = {
-  target: requiredField(interactionTargetField()),
+  ...interactionTargetFields(),
   durationMs: integerField('Long press duration in milliseconds.', { min: 0 }),
   ...selectorSnapshotFields(),
   ...postActionObservationFields('longpress'),
 };
 
 const hoverFields = {
-  target: requiredField(interactionTargetField()),
+  ...interactionTargetFields(),
   ...selectorSnapshotFields(),
   ...postActionObservationFields('hover'),
 };
@@ -194,7 +197,7 @@ const recordControlFields = () => ({
 
 const getFields = {
   format: requiredField(enumField(['text', 'attrs'] as const)),
-  target: requiredField(elementTargetField()),
+  ...elementTargetFields(),
   ...selectorSnapshotFields(),
   ...recordControlFields(),
 };
@@ -260,12 +263,12 @@ const gestureFields = {
   }),
 };
 
-export type ClickInput = InferCommandInput<typeof clickFields>;
-export type PressInput = InferCommandInput<typeof pressFields>;
-export type FillInput = InferCommandInput<typeof fillFields>;
-export type LongPressInput = InferCommandInput<typeof longPressFields>;
-export type HoverInput = InferCommandInput<typeof hoverFields>;
-export type GetInput = InferCommandInput<typeof getFields>;
+export type ClickInput = TargetedInput<typeof clickFields>;
+export type PressInput = TargetedInput<typeof pressFields>;
+export type FillInput = TargetedInput<typeof fillFields>;
+export type LongPressInput = TargetedInput<typeof longPressFields>;
+export type HoverInput = TargetedInput<typeof hoverFields>;
+export type GetInput = TargetedInput<typeof getFields, ElementTarget>;
 
 export type GestureInput = CommonCommandInput & GesturePayload;
 
@@ -273,20 +276,26 @@ export type GestureInput = CommonCommandInput & GesturePayload;
 export type GestureCommandInput = GestureInput & { postGestureStabilization?: boolean };
 
 export const interactionCommandMetadata = [
-  defineInteractionCommandMetadata('click', clickFields),
-  defineInteractionCommandMetadata('press', pressFields),
-  defineInteractionCommandMetadata('fill', fillFields),
-  defineInteractionCommandMetadata('longpress', longPressFields),
-  defineInteractionCommandMetadata('hover', hoverFields),
+  defineTargetedCommandMetadata('click', clickFields),
+  defineTargetedCommandMetadata('press', pressFields),
+  defineTargetedCommandMetadata('fill', fillFields),
+  defineTargetedCommandMetadata('longpress', longPressFields),
+  defineTargetedCommandMetadata('hover', hoverFields),
   defineInteractionCommandMetadata('swipe', swipeFields),
   defineInteractionCommandMetadata('focus', focusFields),
   defineInteractionCommandMetadata('type', typeFields),
   defineInteractionCommandMetadata('scroll', scrollFields),
-  defineInteractionCommandMetadata('get', getFields, { parseableOutput: true }),
+  defineFieldCommandMetadata('get', interactionCommandDescriptions.get, getFields, {
+    readInput: (input: unknown): GetInput =>
+      readTargetedInput<typeof getFields, ElementTarget>(input, getFields),
+    inputExample: TARGET_INPUT_EXAMPLE,
+    parseableOutput: true,
+  }),
   defineInteractionCommandMetadata('is', isFields),
   defineInteractionCommandMetadata('find', findFields, { parseableOutput: true }),
   defineFieldCommandMetadata('gesture', interactionCommandDescriptions.gesture, gestureFields, {
     readInput: readGestureCommandInput,
+    inputExample: { kind: 'pan', origin: { x: 200, y: 400 }, delta: { x: 0, y: -200 } },
   }),
 ] as const;
 
@@ -303,6 +312,16 @@ function readGestureCommandInput(input: unknown): GestureCommandInput {
   return gesture.kind === 'swipe' && optionalBoolean(record, 'postGestureStabilization') === false
     ? { ...gesture, postGestureStabilization: false }
     : gesture;
+}
+
+function defineTargetedCommandMetadata<
+  const TName extends InteractionCommandName,
+  const TFields extends CommandFieldMap,
+>(name: TName, fields: TFields) {
+  return defineFieldCommandMetadata(name, interactionCommandDescriptions[name], fields, {
+    readInput: (input: unknown): TargetedInput<TFields> => readTargetedInput(input, fields),
+    inputExample: TARGET_INPUT_EXAMPLE,
+  });
 }
 
 function defineInteractionCommandMetadata<

@@ -151,24 +151,11 @@ export function leaseDeviceSpecInputFromFlags(
   return requireLeaseDeviceSpec(flags).spec;
 }
 
-export function targetInputFromClientTarget(
-  target: InteractionTarget | ElementTarget,
-): Record<string, unknown> {
-  if ('ref' in target && target.ref !== undefined) {
-    return compactRecord({ kind: 'ref', ref: target.ref, label: target.label });
-  }
-  if ('selector' in target && target.selector !== undefined) {
-    return { kind: 'selector', selector: target.selector };
-  }
-  const point = target as { x: number; y: number };
-  return { kind: 'point', x: point.x, y: point.y };
-}
-
 export function interactionTargetPositionals(input: InteractionTarget | CommandInput): string[] {
-  const target = readTargetRecord(input);
+  const target = input as Record<string, unknown>;
   if (typeof target.ref === 'string') return [target.ref, ...optionalTargetLabel(target.label)];
   if (typeof target.selector === 'string') return [target.selector];
-  if (target.kind === 'point' || target.x !== undefined || target.y !== undefined) {
+  if (target.x !== undefined || target.y !== undefined) {
     return [
       String(requiredTargetNumber(target.x, 'x')),
       String(requiredTargetNumber(target.y, 'y')),
@@ -178,22 +165,10 @@ export function interactionTargetPositionals(input: InteractionTarget | CommandI
 }
 
 export function elementTargetPositionals(input: ElementTarget | CommandInput): string[] {
-  const target = readTargetRecord(input);
+  const target = input as Record<string, unknown>;
   if (typeof target.ref === 'string') return [target.ref, ...optionalTargetLabel(target.label)];
   if (typeof target.selector === 'string') return [target.selector];
   throw new AppError('INVALID_ARGS', 'element command requires @ref or selector target');
-}
-
-function readTargetRecord(input: unknown): Record<string, unknown> {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    throw new AppError('INVALID_ARGS', 'Expected target object.');
-  }
-  const record = input as Record<string, unknown>;
-  const nestedTarget = record.target;
-  if (nestedTarget && typeof nestedTarget === 'object' && !Array.isArray(nestedTarget)) {
-    return nestedTarget as Record<string, unknown>;
-  }
-  return record;
 }
 
 function requiredTargetNumber(value: unknown, field: string): number {

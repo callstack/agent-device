@@ -77,7 +77,7 @@ test('a refused step is refused wherever it sits in the batch', async () => {
   const result = await executor.execute('batch', {
     steps: [
       { command: 'snapshot', input: {} },
-      { command: 'tap', input: { target: { kind: 'selector', selector: 'text=OK' } } },
+      { command: 'tap', input: { selector: 'text=OK' } },
       { command: 'snapshot', input: { iosXctestrunFile: '/attacker/run.xctestrun' } },
     ],
   });
@@ -94,7 +94,7 @@ test('nested admission leaves legitimate batch input untouched', async () => {
   const steps = [
     { command: 'open', input: { app: 'settings' } },
     { command: 'snapshot', input: { interactiveOnly: true, noRecord: true } },
-    { command: 'tap', input: { target: { kind: 'selector', selector: 'text=OK' } } },
+    { command: 'tap', input: { selector: 'text=OK' } },
     { command: 'type', input: { text: 'hello' }, runtime: { platform: 'ios' } },
     { command: 'wait', input: { kind: 'duration', durationMs: 100, session: 'sim' } },
   ];

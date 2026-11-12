@@ -139,7 +139,7 @@ export async function openClientFixture(
       openAlert: async () =>
         fixtureOperationFromClient(
           await client.interactions.click({
-            target: { kind: 'selector', selector: 'id="automation-open-alert"' },
+            selector: 'id="automation-open-alert"',
             platform: 'ios',
             udid,
           }),

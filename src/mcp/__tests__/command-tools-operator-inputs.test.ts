@@ -99,8 +99,8 @@ test('MCP neither advertises nor admits the retired readiness budget', async () 
   });
 
   for (const [command, input] of [
-    ['press', { target: { kind: 'selector', selector: 'label=Continue' } }],
-    ['fill', { target: { kind: 'selector', selector: 'label=Name' }, text: 'x' }],
+    ['press', { selector: 'label=Continue' }],
+    ['fill', { selector: 'label=Name', text: 'x' }],
   ] as const) {
     const result = await executor.execute(command, { ...input, readinessTimeoutMs: 2_000 });
     assert.equal(result.isError, true, command);
@@ -250,7 +250,7 @@ test('MCP neither advertises nor admits the CLI-only fill textStdin marker', asy
   });
 
   const result = await executor.execute('fill', {
-    target: { kind: 'ref', ref: '@e3' },
+    ref: '@e3',
     text: 'secret',
     textStdin: true,
   });
