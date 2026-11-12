@@ -15,7 +15,7 @@ test.for([
     { x: 120, y: 340 },
   ],
 ] as const)('press reads %j as its UI target', ([input, target]) => {
-  expect(findCommandMetadata('press').readInput(input)).toMatchObject(target);
+  expect(findCommandMetadata('press').readInput(input)).toStrictEqual(target);
 });
 
 test.for([
@@ -44,11 +44,13 @@ test.for([{}, { ref: '@e6', selector: 'id=a' }, { x: 120 }] as const)(
   },
 );
 
-test('the removed nested target answers with the top-level spelling', () => {
-  const read = () =>
-    findCommandMetadata('press').readInput({ target: { kind: 'ref', ref: '@e6' } });
+test.for([
+  ['target', { target: { kind: 'ref', ref: '@e6' } }],
+  ['kind', { kind: 'ref', ref: '@e6' }],
+] as const)('the removed %s key answers with the top-level spelling', ([key, input]) => {
+  const read = () => findCommandMetadata('press').readInput(input);
   expect(read).toThrow(AppError);
-  expect(read).toThrow(/target was removed.*\{"ref":"@e12"\}/);
+  expect(read).toThrow(new RegExp(`${key} was removed.*\\{"ref":"@e12"\\}`));
 });
 
 test('get takes a ref or selector but no point', () => {

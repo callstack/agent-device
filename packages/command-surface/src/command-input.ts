@@ -578,6 +578,7 @@ function targetFields(forms: string, choice: string) {
       `Selector expression such as id="submit" or label="Sign in". Pass exactly one of ${choice}.`,
     ),
     target: retiredField(`target was removed; pass the UI target at the top level: ${forms}.`),
+    kind: retiredField(`kind was removed; the key you pass picks the UI target: ${forms}.`),
   };
 }
 

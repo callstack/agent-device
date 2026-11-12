@@ -94,7 +94,7 @@ Example batch payload for a known chat flow:
   { "command": "click", "input": { "selector": "label=\"Travel chat\"" } },
   {
     "command": "wait",
-    "input": { "kind": "selector", "selector": "label=\"Message\"", "timeoutMs": 3000 }
+    "input": { "selector": "label=\"Message\"", "timeoutMs": 3000 }
   },
   {
     "command": "fill",

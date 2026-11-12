@@ -123,7 +123,8 @@ function collectBatchStepExamples(): Array<{ line: string; steps: BatchStep[] }>
 }
 
 // A step's `input` is keyed by the command's structured field names, and no CLI help text spells
-// those out — `help press` documents the positional and the flags, not `ref` or `selector`. So
+// those out — `help press` shows the positional (`<x y|@ref|selector>`) and the flags, not the
+// keys a step's input uses for them (`ref`, `label`, `selector`, `x`, `y`). So
 // the printed steps ARE the terminal's only statement of them, and the check above cannot see it:
 // the CLI parser validates the step envelope and stops, never reading `input`. Each printed input
 // therefore goes through its own command's `readInput` — the same reader the daemon, the client,

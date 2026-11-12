@@ -58,7 +58,7 @@ export const HELP_TOOL: { name: string; description: string; inputSchema: JsonSc
 
 // The guides are the CLI's own text: rewriting their prose per surface would fork one
 // source of truth into two. One line up front states the mapping and its exceptions.
-const GUIDE_PREAMBLE = `CLI syntax over MCP: \`agent-device <command> <positionals> --flag\` = tool <command>; positionals are named properties (ref, label, selector, x, y, text, direction), flags camelCase (--settle -> settle: true, -i -> interactiveOnly: true). Terminal-only (no MCP tool; run in a shell): ${terminalOnlyCommandNames().join(', ')}.\n\n`;
+const GUIDE_PREAMBLE = `CLI syntax over MCP: the guide below is written for the terminal. Call the tool named after the command and pass every argument as a named property, for example press {ref: "@e12", settle: true} or snapshot {interactiveOnly: true}. Positionals become properties such as ref, label, selector, x, y, text, and direction; options become camelCase properties. Terminal-only (no MCP tool; run in a shell): ${terminalOnlyCommandNames().join(', ')}.\n\n`;
 
 export function callHelpTool(input: Record<string, unknown>): ToolResult {
   const topic = input.topic;

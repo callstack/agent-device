@@ -60,7 +60,7 @@ Pass `batch` a JSON array of steps:
   { "command": "open", "input": { "app": "settings" } },
   {
     "command": "wait",
-    "input": { "kind": "selector", "selector": "label=\"Privacy & Security\"", "timeoutMs": 3000 }
+    "input": { "selector": "label=\"Privacy & Security\"", "timeoutMs": 3000 }
   },
   {
     "command": "click",
