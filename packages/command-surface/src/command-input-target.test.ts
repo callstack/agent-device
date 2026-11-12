@@ -28,6 +28,22 @@ test.for([
   expect(() => findCommandMetadata('press').readInput(input)).toThrow(message);
 });
 
+// The schema cannot state "exactly one target": a top-level oneOf/anyOf/allOf in a tool input
+// schema is rejected by some model clients. The reader enforces it, and its hint names the forms.
+test.for([{}, { ref: '@e6', selector: 'id=a' }, { x: 120 }] as const)(
+  'press answers %j with INVALID_ARGS and the target forms',
+  (input) => {
+    try {
+      findCommandMetadata('press').readInput(input);
+      expect.unreachable('press should refuse the input');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AppError);
+      expect((error as AppError).code).toBe('INVALID_ARGS');
+      expect((error as AppError).details?.hint).toMatch(/\{"ref":"@e12"\}|\{"x":120,"y":340\}/);
+    }
+  },
+);
+
 test('the removed nested target answers with the top-level spelling', () => {
   const read = () =>
     findCommandMetadata('press').readInput({ target: { kind: 'ref', ref: '@e6' } });

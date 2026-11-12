@@ -50,7 +50,9 @@ export function createBatchCommandMetadata(
     fields,
     {
       readInput: (input) => readBatchInput(input, fields),
-      inputExample: { steps: [{ command: 'snapshot', input: { interactiveOnly: true } }] },
+      ...(nestedCommands.includes('snapshot')
+        ? { inputExample: { steps: [{ command: 'snapshot', input: { interactiveOnly: true } }] } }
+        : {}),
     },
   );
 }

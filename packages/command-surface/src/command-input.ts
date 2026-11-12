@@ -562,9 +562,11 @@ export function elementTargetFields() {
 /** Ref, selector, or screen point, for a command that acts on the UI. */
 export function interactionTargetFields() {
   return {
-    ...targetFields(INTERACTION_TARGET_FORMS, 'ref, selector, or x with y'),
-    x: numberField('Screen x coordinate, with y. Use only when no ref or selector is available.'),
-    y: numberField('Screen y coordinate, with x.'),
+    ...targetFields(INTERACTION_TARGET_FORMS, 'ref, selector, or x+y'),
+    x: numberField(
+      'Screen x coordinate, with y. Pass exactly one of ref, selector, or x+y; use x+y only when no ref or selector is available.',
+    ),
+    y: numberField('Screen y coordinate, with x. Pass exactly one of ref, selector, or x+y.'),
   };
 }
 
@@ -572,7 +574,9 @@ function targetFields(forms: string, choice: string) {
   return {
     ref: stringField(`Snapshot element ref such as @e12. Pass exactly one of ${choice}.`),
     label: stringField('Optional human label for ref.'),
-    selector: stringField('Selector expression such as id="submit" or label="Sign in".'),
+    selector: stringField(
+      `Selector expression such as id="submit" or label="Sign in". Pass exactly one of ${choice}.`,
+    ),
     target: retiredField(`target was removed; pass the UI target at the top level: ${forms}.`),
   };
 }
