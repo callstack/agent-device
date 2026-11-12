@@ -17,7 +17,7 @@ export const DAEMON_HTTP_PUBLIC_NETWORK_ACCESS = 'public-only';
 
 /** Normalize an absolute HTTP(S) origin, or throw when it contains other URL components. */
 export function normalizeDaemonPublicOrigin(value: string): string {
-  if (!/^https?:\/\/[^\s\/?#]+\/?$/i.test(value) || /[\x00-\x20\x7f\\]/.test(value)) {
+  if (!/^https?:\/\/[^\s/?#]+\/?$/i.test(value) || containsInvalidHttpUrlCharacter(value)) {
     throw new Error('Invalid publicOrigin');
   }
   const authority = value.match(/^https?:\/\/([^/]+)/i)?.[1] ?? '';
@@ -46,20 +46,29 @@ export function nodeHttpRequestUrl(
     !target ||
     !target.startsWith('/') ||
     target.startsWith('//') ||
-    /[\x00-\x20\x7f#\\]/.test(target)
+    target.includes('#') ||
+    containsInvalidHttpUrlCharacter(target)
   )
     return null;
   const hosts: string[] = [];
   for (let i = 0; i + 1 < rawHeaders.length; i += 2) {
     if (rawHeaders[i]?.toLowerCase() === 'host') hosts.push(rawHeaders[i + 1] ?? '');
   }
-  if (hosts.length !== 1 || /[\/\?#]/.test(hosts[0] ?? '')) return null;
+  if (hosts.length !== 1 || /[/?#]/.test(hosts[0] ?? '')) return null;
   try {
     const origin = normalizeDaemonPublicOrigin(`${secure ? 'https' : 'http'}://${hosts[0]}`);
     return new URL(target, origin);
   } catch {
     return null;
   }
+}
+
+function containsInvalidHttpUrlCharacter(value: string): boolean {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code <= 32 || code === 127 || character === '\\') return true;
+  }
+  return false;
 }
 
 export function buildDaemonHttpBaseUrl(baseUrl: string): string {
