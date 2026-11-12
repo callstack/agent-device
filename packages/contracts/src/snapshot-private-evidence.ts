@@ -77,14 +77,6 @@ function readSnapshotViewportEvidence(
   return owner ? privateEvidenceBySnapshotObject.get(owner)?.viewport : undefined;
 }
 
-export function copySnapshotViewportEvidence<T extends object>(
-  source: object | null | undefined,
-  target: T,
-): T {
-  const viewport = readSnapshotViewportEvidence(source);
-  return viewport ? attachSnapshotViewportEvidence(target, viewport) : target;
-}
-
 function attachSnapshotPrivateEvidence<T extends object>(
   owner: T,
   evidence: SnapshotPrivateEvidence,

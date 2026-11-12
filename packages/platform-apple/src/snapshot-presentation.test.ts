@@ -9,7 +9,7 @@ import { presentAppleRunnerSnapshot, readAppleSnapshotResult } from './snapshot-
 import {
   assertSnapshotScreenOrigin,
   attachSnapshotViewportEvidence,
-  copySnapshotViewportEvidence,
+  transferSnapshotPrivateEvidence,
 } from '@agent-device/contracts/capture';
 
 const NO_VIEWPORT_ROOT = { index: 0, type: 'Application', label: 'App' };
@@ -104,7 +104,7 @@ test('reported runner viewport retains screen authority through the wire reader 
     kind: 'missing',
     reason: 'not-provided',
   });
-  copySnapshotViewportEvidence(presented.nodes, priorUnknown);
+  transferSnapshotPrivateEvidence(presented, { nodes: priorUnknown }, new Map());
   await assert.doesNotReject(assertSnapshotScreenOrigin(priorUnknown, 'Captured action'));
 });
 

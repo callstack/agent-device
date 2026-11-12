@@ -66,10 +66,8 @@ export type {
 export {
   assertSnapshotScreenOrigin,
   attachSnapshotViewportEvidence,
-  copySnapshotViewportEvidence,
   transferSnapshotPrivateEvidence,
   readSnapshotNativePressTargets,
-  attachSnapshotTextInputGeometry,
   readSnapshotTextInputGeometry,
   attachSnapshotClickabilityEvidence,
   attachSnapshotOcclusionContextEvidence,
