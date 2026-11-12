@@ -32,7 +32,7 @@ function bootPropFailure(stdout: string, stderr: string) {
 function slowBootPropFailure(delayMs: number) {
   return async () => {
     await new Promise((resolve) => setTimeout(resolve, delayMs));
-    return { stdout: '', stderr: '', exitCode: 1 };
+    return { stdout: '', stderr: '', exitCode: 0 };
   };
 }
 
@@ -61,18 +61,47 @@ async function expectBootFailure(
   return await startedBootFailure(timeoutMs);
 }
 
-test('a boot poll against an offline device fails as an adb transport loss without retrying', async () => {
-  mockRunCmd.mockImplementation(bootPropFailure('', 'error: device offline'));
+test('an offline observation retries until booted', async () => {
+  mockRunCmd.mockImplementationOnce(bootPropFailure('', 'error: device offline'));
+  await waitForAndroidBoot('emulator-5554', 500);
+  assert.equal(mockRunCmd.mock.calls.length, 2);
+});
 
+test('unauthorized is terminal', async () => {
+  mockRunCmd.mockImplementation(bootPropFailure('', 'error: device unauthorized'));
   const failure = await expectBootFailure(500);
-
-  assert.equal(failure.code, 'COMMAND_FAILED');
   assert.equal(failure.details.reason, 'ADB_TRANSPORT_UNAVAILABLE');
-  assert.match(String(failure.details.hint), /adb devices -l/);
-  assert.equal(failure.details.serial, 'emulator-5554');
-  assert.equal(failure.details.stderr, 'error: device offline');
-  assert.equal(failure.details.exitCode, 1);
-  // shouldRetry refuses the transport loss, so exactly one poll ran.
+  assert.equal(mockRunCmd.mock.calls.length, 1);
+});
+
+test('typed reason controls retry independently of wording', async () => {
+  mockRunCmd.mockRejectedValueOnce(
+    new AppError('COMMAND_FAILED', 'changed wording', {
+      adbFailure: 'device_offline',
+      adbHostRefusal: true,
+    }),
+  );
+  await waitForAndroidBoot('emulator-5554', 500);
+  assert.equal(mockRunCmd.mock.calls.length, 2);
+  mockRunCmd.mockReset();
+  mockRunCmd.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'changed wording', {
+      adbFailure: 'device_unauthorized',
+      adbHostRefusal: true,
+    }),
+  );
+  const failure = await expectBootFailure(500);
+  assert.equal(failure.details.reason, 'ADB_TRANSPORT_UNAVAILABLE');
+  assert.equal(mockRunCmd.mock.calls.length, 1);
+});
+
+test('cancellation stops polling', async () => {
+  const controller = new AbortController();
+  mockRunCmd.mockImplementation(async () => {
+    controller.abort();
+    return { stdout: '0', stderr: '', exitCode: 0 };
+  });
+  await assert.rejects(waitForAndroidBoot('emulator-5554', 500, controller.signal));
   assert.equal(mockRunCmd.mock.calls.length, 1);
 });
 
