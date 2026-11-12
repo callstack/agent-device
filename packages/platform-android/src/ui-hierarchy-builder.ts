@@ -1,3 +1,4 @@
+import { attachSnapshotNodeInteractionBounds } from '@agent-device/kernel/rect-center';
 import {
   type AndroidSystemChromeProvenance,
   androidSystemBarMembership,
@@ -7,6 +8,8 @@ import type { AndroidSiblingOrderEvidence } from '@agent-device/contracts/captur
 import { isScrollableType, normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
 import {
   foldSnapshotRect,
+  androidSystemBarContentClips,
+  type AndroidSystemBarContentClip,
   serializeRegularSnapshotPresentationNode,
 } from './snapshot-presentation-node.ts';
 import type {
@@ -72,6 +75,7 @@ type AndroidSnapshotBuildState = {
   interactiveDescendantMemo: Map<AndroidNode, boolean>;
   /** Subtrees the regular projection hides (invisible / stale window). Empty for raw. */
   hidden: ReadonlySet<AndroidNode>;
+  systemBarContentClips: ReadonlyMap<AndroidNode, AndroidSystemBarContentClip>;
   /** Compose containers mapped to the role node whose class they publish. Empty for raw. */
   composeRoleFolds: ReadonlyMap<AndroidNode, AndroidNode>;
   /** The role nodes those containers absorb, which the regular projection omits. */
@@ -110,6 +114,7 @@ export function buildUiHierarchySnapshot(
     // C3: raw is the acquired tree (normalization only); regular additionally hides what Android
     // marks invisible and stale application windows. Daemon publication alone owns occlusion.
     hidden: new Set(),
+    systemBarContentClips: new Map(),
     composeRoleFolds: new Map(),
     foldedComposeRoleNodes: new Set(),
     presentationBudget,
@@ -118,13 +123,7 @@ export function buildUiHierarchySnapshot(
   };
 
   try {
-    presentationBudget.check('work');
-    state.viewport = resolveAndroidSnapshotViewport(tree, presentationBudget);
-    state.hidden = options.raw ? new Set() : collectAndroidHiddenNodes(tree, presentationBudget);
-    state.composeRoleFolds = options.raw
-      ? new Map()
-      : collectComposeRoleFolds(tree, presentationBudget);
-    state.foldedComposeRoleNodes = new Set(state.composeRoleFolds.values());
+    initializeAndroidSnapshotPresentation(tree, state);
     for (const root of tree.children) {
       walkUiHierarchyNode(state, root, 0);
       if (state.truncated) break;
@@ -188,6 +187,26 @@ export function buildUiHierarchySnapshot(
   }
 }
 
+function initializeAndroidSnapshotPresentation(
+  tree: AndroidUiHierarchy,
+  state: AndroidSnapshotBuildState,
+): void {
+  state.presentationBudget.check('work');
+  state.viewport = resolveAndroidSnapshotViewport(tree, state.presentationBudget);
+  const hidden = collectAndroidHiddenNodes(tree, state.presentationBudget);
+  state.hidden = state.options.raw ? new Set() : hidden;
+  state.systemBarContentClips = androidSystemBarContentClips(
+    tree.children,
+    hidden,
+    state.viewport,
+    state.presentationBudget,
+  );
+  state.composeRoleFolds = state.options.raw
+    ? new Map()
+    : collectComposeRoleFolds(tree, state.presentationBudget);
+  state.foldedComposeRoleNodes = new Set(state.composeRoleFolds.values());
+}
+
 function collectAndroidSiblingOrders(
   sourceNodes: readonly AndroidNode[],
 ): ReadonlyMap<number, AndroidSiblingOrderEvidence> {
@@ -235,6 +254,8 @@ function walkUiHierarchyNode(
     node.identifier,
     ancestorSystemBar,
   );
+  const clips = resolveAndroidNodeClips(state, node, ancestorClip, systemBar);
+  ancestorClip = clips.presentationClip;
   const currentWindowRect = node.windowRect ?? ancestorWindowRect ?? state.viewport;
   const effectiveRect = resolveAndroidEffectiveRect(state, node, ancestorClip, currentWindowRect);
   const currentIndex = appendAndroidNodeIfPresented(
@@ -247,6 +268,7 @@ function walkUiHierarchyNode(
     effectiveRect,
     currentWindowRect,
     systemBar,
+    clips.inputBounds,
   );
   const nextAncestorHittable = ancestorHittable || isAgentTarget(node);
   const nextAncestorCollection = ancestorCollection || isCollectionContainerType(node.type);
@@ -263,6 +285,28 @@ function walkUiHierarchyNode(
     nextAncestorClip,
     { bundleId: node.packageName ?? undefined, systemBar },
   );
+}
+
+function resolveAndroidNodeClips(
+  state: AndroidSnapshotBuildState,
+  node: AndroidNode,
+  ancestorClip: Rect | undefined,
+  systemBar: RawSnapshotNode['systemBar'],
+): { presentationClip?: Rect; inputBounds?: Rect } {
+  if (systemBar !== undefined) return {};
+  const windowClip = state.systemBarContentClips.get(node);
+  const contentBounds = windowClip?.hasBarDescendants ? undefined : windowClip?.inputBounds;
+  const presentationClip = foldSnapshotRect(
+    ancestorClip ?? contentBounds,
+    undefined,
+    contentBounds,
+  );
+  const inputBounds = foldSnapshotRect(
+    windowClip?.inputBounds ?? presentationClip,
+    undefined,
+    presentationClip,
+  );
+  return { presentationClip, inputBounds };
 }
 
 function shouldStopAndroidWalk(
@@ -296,6 +340,7 @@ function appendAndroidNodeIfPresented(
   effectiveRect: Rect | undefined,
   windowRect: Rect | undefined,
   systemBar: RawSnapshotNode['systemBar'],
+  interactionBounds: Rect | undefined,
 ): number | undefined {
   if (state.foldedComposeRoleNodes.has(node)) return parentIndex;
   if (
@@ -339,6 +384,7 @@ function appendAndroidNodeIfPresented(
     effectiveRect,
     windowRect,
     systemBar,
+    interactionBounds,
   );
 }
 
@@ -389,6 +435,7 @@ function appendAndroidSnapshotNode(
   effectiveRect: Rect | undefined,
   windowRect: Rect | undefined,
   systemBar: RawSnapshotNode['systemBar'],
+  interactionBounds: Rect | undefined,
 ): number {
   const currentIndex = state.nodes.length;
   // Snapshot filtering removes Compose layout wrappers. Keep depth aligned with
@@ -397,6 +444,7 @@ function appendAndroidSnapshotNode(
   // retained row by normalizeSnapshotTree's depth fallback (#1377).
   state.sourceNodes.push(node);
   const rawNode = createAndroidRawSnapshotNode(state, node, parentIndex, systemChrome, systemBar);
+  if (interactionBounds) attachSnapshotNodeInteractionBounds(rawNode, interactionBounds);
   publishAndroidPresentationNode(state, node, rawNode, effectiveRect, windowRect);
   return currentIndex;
 }

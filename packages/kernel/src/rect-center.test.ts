@@ -1,6 +1,10 @@
+import assert from 'node:assert/strict';
 import { expect, test } from 'vitest';
 import {
   areCapturedRectsAtSamePosition,
+  attachSnapshotNodeInteractionBounds,
+  readSnapshotNodeInteractionBounds,
+  copySnapshotNodeInteractionBounds,
   interiorCoordinate,
   pointInsideRect,
 } from './rect-center.ts';
@@ -8,6 +12,20 @@ import {
 test('interiorCoordinate preserves one-pixel edge controls', () => {
   expect(interiorCoordinate(0, 1)).toBe(0);
 });
+
+test.each([
+  { origin: 0.5, size: 1, expected: 1 },
+  { origin: -1.5, size: 1, expected: -1 },
+  { origin: 0.75, size: 0.5, expected: 1 },
+  { origin: 0.1, size: 0.2, expected: 0.2 },
+])(
+  'interior coordinates preserve fractional bounds: $origin + $size',
+  ({ origin, size, expected }) => {
+    expect(interiorCoordinate(origin, size)).toBeCloseTo(expected);
+    expect(interiorCoordinate(origin, size)).toBeGreaterThanOrEqual(origin);
+    expect(interiorCoordinate(origin, size)).toBeLessThan(origin + size);
+  },
+);
 
 test('pointInsideRect clamps center point inside the rect bounds', () => {
   expect(pointInsideRect({ x: 0.2, y: 10.2, width: 10, height: 5 })).toEqual({
@@ -63,4 +81,21 @@ test('the comparison is symmetric', () => {
   expect(areCapturedRectsAtSamePosition(shifted({ y: 202 }), CAPTURED)).toBe(
     areCapturedRectsAtSamePosition(CAPTURED, shifted({ y: 202 })),
   );
+});
+
+test('input bounds survive node spreads and explicit clone restoration without changing JSON', () => {
+  const bounds = { x: 0, y: 0, width: 100, height: 80 };
+  const source = [
+    attachSnapshotNodeInteractionBounds(
+      { index: 0, rect: { x: 0, y: 70, width: 100, height: 30 } },
+      bounds,
+    ),
+  ];
+  assert.deepEqual(readSnapshotNodeInteractionBounds({ ...source[0]! }), bounds);
+  const cloned = structuredClone(source);
+  copySnapshotNodeInteractionBounds(source, cloned);
+  assert.deepEqual(readSnapshotNodeInteractionBounds(cloned[0]!), bounds);
+  assert.deepEqual(JSON.parse(JSON.stringify(source)), [
+    { index: 0, rect: { x: 0, y: 70, width: 100, height: 30 } },
+  ]);
 });

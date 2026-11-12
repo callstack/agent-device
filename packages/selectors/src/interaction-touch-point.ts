@@ -4,11 +4,12 @@ import {
   type Rect,
   type SnapshotNode,
 } from '@agent-device/kernel/snapshot';
-import { containsPoint, intersectRects } from '@agent-device/kernel/rect';
+import { intersectRects } from '@agent-device/kernel/rect';
 import {
   areRectsApproximatelyEqual,
   normalizeRect,
-  resolveRectCenter,
+  pointInsideRect,
+  readSnapshotNodeInteractionBounds,
 } from '@agent-device/kernel/rect-center';
 import { isSemanticTouchTarget } from './touch-semantics.ts';
 
@@ -31,20 +32,24 @@ type PointClearance = { parentEdge: number; competitor: number };
 export function resolveInteractionTouchPoint(
   nodes: readonly SnapshotNode[],
   node: SnapshotNode,
-  options: { bounds?: readonly Rect[] } = {},
+  options: { parentOwnedBounds?: readonly Rect[] } = {},
 ): InteractionTouchPointResolution {
   const targetRect = normalizeRect(node.rect);
-  const center = resolveRectCenter(targetRect ?? undefined);
-  if (!targetRect || !center || !hasArea(targetRect)) return { kind: 'invalid' };
+  if (!targetRect || !hasArea(targetRect)) return { kind: 'invalid' };
+  const inputBounds = readSnapshotNodeInteractionBounds(node);
+  const inputRect = inputBounds ? intersectRects(targetRect, inputBounds) : targetRect;
+  if (!inputRect || !hasArea(inputRect)) return { kind: 'invalid' };
+  const center = pointInsideRect(inputRect);
+  if (!Number.isFinite(center.x) || !Number.isFinite(center.y)) return { kind: 'invalid' };
 
   const competitors = collectInteractiveDescendantRects(nodes, node, targetRect);
   if (competitors.length === 0) {
     return { kind: 'resolved', point: center, strategy: 'center' };
   }
 
-  const searchRect = (options.bounds ?? []).reduce<Rect | undefined>(
+  const searchRect = (options.parentOwnedBounds ?? []).reduce<Rect | undefined>(
     (current, bound) => (current ? intersectRects(current, bound) : undefined),
-    targetRect,
+    inputRect,
   );
   const point = searchRect
     ? findNearestParentOwnedPoint(targetRect, searchRect, center, competitors)
@@ -136,7 +141,13 @@ function findNearestParentOwnedPoint(
   const rankedPoints = xCandidates.flatMap((x) =>
     yCandidates.flatMap((y) => {
       const point = { x: Math.round(x), y: Math.round(y) };
-      if (!containsPoint(searchRect, point.x, point.y)) return [];
+      if (
+        point.x < searchRect.x ||
+        point.x >= searchRect.x + searchRect.width ||
+        point.y < searchRect.y ||
+        point.y >= searchRect.y + searchRect.height
+      )
+        return [];
       const ranked = rankParentOwnedPoint(
         point,
         targetRect,
@@ -189,7 +200,7 @@ function candidateAxisCoordinates(
   parentEdgeClearance: number,
 ): number[] {
   const min = origin + parentEdgeClearance;
-  const max = origin + size - parentEdgeClearance;
+  const max = Math.min(origin + size - parentEdgeClearance, Math.ceil(origin + size) - 1);
   if (min > max) return [];
   const boundaries = [...new Set([origin, origin + size, ...obstacleEdges])].sort((a, b) => a - b);
   const candidates = new Set<number>([center, min, max]);

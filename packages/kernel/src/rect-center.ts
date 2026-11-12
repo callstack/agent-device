@@ -1,4 +1,9 @@
-import { centerOfRect, type Point, type Rect } from '@agent-device/kernel/snapshot';
+import {
+  centerOfRect,
+  type Point,
+  type Rect,
+  type RawSnapshotNode,
+} from '@agent-device/kernel/snapshot';
 
 const RECT_COMPARE_FIELDS = ['x', 'y', 'width', 'height'] as const;
 const RECT_EQUALITY_TOLERANCE = 0.5;
@@ -75,10 +80,36 @@ export function pointInsideRect(rect: Rect): Point {
 }
 
 export function interiorCoordinate(origin: number, size: number): number {
-  // Preserve one-pixel edge controls instead of nudging coordinates outside
-  // tiny rects through normal center/bounds clamping.
-  if (size <= 1) return Math.floor(origin);
   const min = Math.ceil(origin);
-  const max = Math.floor(origin + size - 1);
+  const max = Math.ceil(origin + size) - 1;
+  if (min > max) return origin + size / 2;
   return Math.round(Math.min(max, Math.max(min, origin + size / 2)));
+}
+
+const nodeInteractionBounds = Symbol('snapshotNodeInteractionBounds');
+type NodeWithInteractionBounds = RawSnapshotNode & { [nodeInteractionBounds]?: Rect };
+
+/** Enumerable symbols survive node spreads while staying outside JSON snapshot output. */
+export function attachSnapshotNodeInteractionBounds<T extends RawSnapshotNode>(
+  node: T,
+  bounds: Rect,
+): T {
+  Object.defineProperty(node, nodeInteractionBounds, { value: bounds, enumerable: true });
+  return node;
+}
+
+export function readSnapshotNodeInteractionBounds(node: RawSnapshotNode): Rect | undefined {
+  return (node as NodeWithInteractionBounds)[nodeInteractionBounds];
+}
+
+/** structuredClone omits symbol properties, so cloned session nodes need their input authority restored. */
+export function copySnapshotNodeInteractionBounds(
+  source: readonly RawSnapshotNode[],
+  target: readonly RawSnapshotNode[],
+): void {
+  for (const [index, node] of source.entries()) {
+    const bounds = readSnapshotNodeInteractionBounds(node);
+    const copy = target[index];
+    if (bounds && copy) attachSnapshotNodeInteractionBounds(copy, bounds);
+  }
 }
