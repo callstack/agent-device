@@ -42,8 +42,10 @@ static void RunnerTestingDispatch(CFTypeRef client, RunnerHIDEventRef event) {
 
 NSArray<NSDictionary<NSString *, NSNumber *> *> *RunnerEdgeContactDispatches(
   NSInteger failingFrame,
-  NSString **failure
+  NSString **failure,
+  BOOL *touchDown
 ) {
+  *touchDown = NO;
   RunnerTestingFailingFrame = failingFrame;
   RunnerTestingCreatedFrames = 0;
   RunnerTestingDispatched = [NSMutableArray array];
@@ -61,7 +63,8 @@ NSArray<NSDictionary<NSString *, NSNumber *> *> *RunnerEdgeContactDispatches(
     @{ @"x": @0, @"y": @50, @"offsetMs": @0 },
     @{ @"x": @100, @"y": @50, @"offsetMs": @48 },
   ];
-  NSString *result = RunnerDispatchEdgeContact(&functions, (__bridge CFTypeRef)samples, 1, samples, CGSizeMake(100, 100));
+  NSString *result =
+    RunnerDispatchEdgeContact(&functions, (__bridge CFTypeRef)samples, 1, samples, CGSizeMake(100, 100), touchDown);
   if (failure != NULL) *failure = result;
   return [RunnerTestingDispatched copy];
 }

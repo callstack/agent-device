@@ -7,13 +7,60 @@ import ObjectiveC.runtime
 extension RunnerTests {
 #if os(iOS)
   @MainActor
-  func testRankedInAppBackUsesSynthesisWithoutXCTestTap() throws {
-    try assertInAppBackDispatch(navigationBar: false)
+  func testInAppBackSwipesFromTheLeftEdgeAndVerifiesTheChange() throws {
+    let status = try launchBackFixture(["--agent-device-back-regression"])
+    defer { endBackFixture() }
+
+    guard case .performed = try performInAppBack(app: app) else {
+      return XCTFail("a left-edge swipe the app answers must read as performed")
+    }
+    XCTAssertEqual(status.label, "Back performed")
+  }
+
+  /// A swipe the app ignores leaves the screen unchanged, so back refuses with the typed reason and
+  /// a hint to press the visible control instead.
+  @MainActor
+  func testInAppBackReportsASwipeThatChangedNothing() throws {
+    _ = try launchBackFixture([])
+    defer { endBackFixture() }
+
+    let response = try execute(command: try runnerCommandFixture(
+      #"{"command":"backInApp","commandId":"back-no-change","appBundleId":"com.callstack.agentdevice.runner"}"#
+    ))
+    XCTAssertEqual(response.error?.code, RunnerWireErrorCode.backSwipeNoChange)
+    XCTAssertNotNil(response.error?.hint)
+  }
+
+  /// A screen that changes on its own would read as a back navigation, so back reports an unknown
+  /// outcome there, never success.
+  @MainActor
+  func testInAppBackOnAScreenThatKeepsChangingReportsAnUnknownOutcome() throws {
+    _ = try launchBackFixture(["--agent-device-back-regression", "--animating"])
+    defer { endBackFixture() }
+
+    guard case .unconfirmed(let payload) = try performInAppBack(app: app) else {
+      return XCTFail("a screen that changes on its own must not read as performed")
+    }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
+  }
+
+  /// A screen that changes on its own every 0.5 s is never still for the required span (the contact
+  /// allowance, one 0.25 s delay, and the slowest capture, over 0.5 s on a simulator), so it never
+  /// settles and back reports an unknown outcome instead of crediting the swipe.
+  @MainActor
+  func testInAppBackOnAScreenChangingSlowerThanOneDelayIsNotPerformed() throws {
+    _ = try launchBackFixture(["--agent-device-back-regression", "--slow-toggle"])
+    defer { endBackFixture() }
+
+    guard case .unconfirmed(let payload) = try performInAppBack(app: app) else {
+      return XCTFail("a screen that toggles on its own must not read as performed")
+    }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
   }
 
   @MainActor
-  func testNavigationBarBackDoesNotChooseAControlOffTheLitPanel() throws {
-    let status = try launchBackFixture(["--agent-device-back-regression"], navigationBar: true)
+  func testInAppBackDoesNotSwipeOffTheLitPanel() throws {
+    let status = try launchBackFixture(["--agent-device-back-regression"])
     defer {
       setRequestLitPanel(from: try! runnerCommandFixture(#"{"command":"uptime"}"#))
       endBackFixture()
@@ -21,133 +68,194 @@ extension RunnerTests {
     setRequestLitPanel(from: try runnerCommandFixture(
       #"{"command":"backInApp","litPanel":{"displayId":999,"widthPt":669,"heightPt":951}}"#
     ))
-    XCTAssertThrowsError(try tapInAppBackControl(app: app)) {
-      XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .unresolvedScreen)
+    XCTAssertThrowsError(try performInAppBack(app: app)) {
+      XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .offLitPanel)
     }
-    XCTAssertNotEqual(status.label, "Back performed")
+    assertBackNeverPerformed(status)
   }
 
-  /// A navigation bar button keeps XCTest's element tap, which aims at its computed hittable point.
+  /// A hidden status bar (landscape, full-screen video, an RN screen that hides it) changes nothing:
+  /// the comparison always leaves the same top band out, so back swipes and verifies as anywhere else.
   @MainActor
-  func testNavigationBarBackKeepsTheElementTap() throws {
-    try assertInAppBackDispatch(navigationBar: true)
-  }
-
-  @MainActor
-  func testInAppBackVerifiesSoleScreenWhenXCTestCannotReadFramesOrEnumerate() throws {
-    let status = try launchBackFixture(["--agent-device-back-regression"])
+  func testInAppBackWithAHiddenStatusBarIsPerformed() throws {
+    let status = try launchBackFixture(["--agent-device-back-regression", "--hide-status-bar"])
     defer { endBackFixture() }
 
-    let outcome = try withRejectedAppTree(framesReadable: false) { try tapInAppBackControl(app: app) }
-
-    guard soleScreenRouteIsOpen(for: app) else {
-      guard case .unavailable = outcome else {
-        return XCTFail("without a window or a sole screen there is no route to tap")
-      }
-      return
-    }
-    guard case .performed = outcome else {
-      return XCTFail("a window-less back must synthesize and verify against the sole display")
+    guard case .performed = try performInAppBack(app: app) else {
+      return XCTFail("a screen without a status bar must still swipe and verify")
     }
     XCTAssertEqual(status.label, "Back performed")
   }
 
-  /// The sole-screen route compares real captures: a tap that lands on nothing leaves the screen
-  /// unchanged, so back is unavailable rather than performed.
+  /// The route witness: after the app's tree rejects the windows query, back reaches the screen
+  /// through whichever route opens (the sole screen where the app proves it fills it), swipes, and
+  /// verifies the change there.
   @MainActor
-  func testInAppBackOnTheSoleScreenReportsATapThatChangedNothingAsUnavailable() throws {
-    _ = try launchBackFixture([])
-    defer { endBackFixture() }
-
-    let outcome = try withRejectedAppTree(framesReadable: false) { try tapInAppBackControl(app: app) }
-
-    guard case .unavailable = outcome else {
-      return XCTFail("a top-leading tap on an app without a back control must not read as performed")
-    }
-  }
-
-  /// After the tree rejects a query, `back` reaches the top-leading control through whichever route
-  /// is open: the sole screen where the app proves it fills it (both families here), the resolved
-  /// window everywhere else. The refusal half on a real device is
-  /// `testSoleScreenDisplayIDIsNamedOnlyForAnAppThatFillsItsScreen` and the unprovable-foreground
-  /// test below, which stand where no simulator here can: its foreground app always fills its screen.
-  @MainActor
-  func testInAppBackAfterARejectedQueryTapsThroughTheRouteThatOpens() throws {
+  func testInAppBackAfterARejectedQuerySwipesAndVerifiesOnTheRouteThatOpens() throws {
     let status = try launchBackFixture(["--agent-device-back-regression"])
     defer { endBackFixture() }
 
     let outcome = try withRejectedAppTree(framesReadable: true, rejections: 1) {
-      try tapInAppBackControl(app: app)
+      try performInAppBack(app: app)
     }
 
     guard case .performed = outcome else {
-      return XCTFail("back must reach the fixture's top-leading control through a window or the sole screen")
+      return XCTFail("back must swipe and verify through the route that opens after a rejected query")
     }
     XCTAssertEqual(status.label, "Back performed")
   }
 
-  /// The window route the sole-screen rule leaves when the probe cannot prove the fill: with the
-  /// probe's primary-app read stubbed to answer nothing (the evidence seam's `unknown`), the route
-  /// closes, and a rejected tree still dispatches `back` through the resolved window. An iPhone
-  /// keeps the sole-screen route by idiom — it answers before the probe is ever asked, so no stub
-  /// can close it there and the window route is the off-phone half's own. Real windowed geometry
-  /// needs an iPad set to Windowed Apps, which no lane runs; `unknown` closes the same route for
-  /// the same reason — the fill is not proven.
+#if targetEnvironment(simulator)
+  /// A slow host: every capture takes 0.3 s and resolving the edge touch takes 0.8 s. The touch is
+  /// resolved before the sample the change is measured from, and the screen settles for as long as
+  /// the gap a slow capture makes, so a real pop on a still screen reads as performed.
   @MainActor
-  func testInAppBackAfterARejectedQueryWithUnprovableForegroundTapsThroughTheWindow() throws {
+  func testInAppBackOnASlowHostWithAStillScreenIsPerformed() throws {
     let status = try launchBackFixture(["--agent-device-back-regression"])
     defer { endBackFixture() }
-    // Runs the real probe once, which is also what registers the AXRuntime class this seam stubs.
-    XCTAssertTrue(soleScreenRouteIsOpen(for: app))
-    guard UIDevice.current.userInterfaceIdiom != .phone else {
-      return
-    }
-    let restoreProbe = stubForegroundPrimaryAppAsUnprovable()
-    defer { restoreProbe() }
-    XCTAssertFalse(
-      soleScreenRouteIsOpen(for: app),
-      "an iPad whose app the probe cannot prove keeps requiring a resolved window"
-    )
+    var slowCaptures = 0
+    let restoreCapture = try slowScreenshots(by: 0.3) { slowCaptures += 1 }
+    defer { restoreCapture() }
+    let restorePreparation = try slowEdgeTouchPreparation(by: 0.8)
+    defer { restorePreparation() }
 
-    let outcome = try withRejectedAppTree(framesReadable: true, rejections: 1) {
-      try tapInAppBackControl(app: app)
-    }
+    let outcome = try performInAppBack(app: app)
+
     guard case .performed = outcome else {
-      return XCTFail("a refused sole-screen route must still dispatch back through the resolved window")
+      return XCTFail("a still screen on a slow host must read as performed, got \(outcome)")
+    }
+    XCTAssertEqual(status.label, "Back performed")
+    XCTAssertGreaterThanOrEqual(slowCaptures, 4, "settle, just-before, and after samples were all slowed")
+  }
+
+  /// A device's timing on the simulator's edge touch: every capture takes 0.4 s and the contact is
+  /// delayed to 0.2 s, as long as a physical iPhone's capture and fling. The still span grows with the
+  /// capture, so the pop reads as performed.
+  @MainActor
+  func testInAppBackWithSlowCapturesAndALongerContactIsPerformed() throws {
+    let status = try launchBackFixture(["--agent-device-back-regression"])
+    defer { endBackFixture() }
+    let restoreCapture = try slowScreenshots(by: 0.4) {}
+    defer { restoreCapture() }
+    let restoreContact = try slowEdgeTouchContact(by: 0.1)
+    defer { restoreContact() }
+
+    let outcome = try performInAppBack(app: app)
+
+    guard case .performed = outcome else {
+      return XCTFail("0.4 s captures and a 0.2 s contact on a still screen must read as performed, got \(outcome)")
     }
     XCTAssertEqual(status.label, "Back performed")
   }
 
-  /// Stands in for a device showing the app in part of its screen as far as the probe can tell: the
-  /// probe's `primaryApp` read answers nothing, which the evidence seam reports as `unknown`. The
-  /// windowed geometry itself needs an iPad set to Windowed Apps, which no lane runs; `unknown`
-  /// closes the same route for the same reason — the fill is not proven.
-  private func stubForegroundPrimaryAppAsUnprovable() -> () -> Void {
-    let element = NSClassFromString("AXElement")
-    let method = element.flatMap { class_getClassMethod($0, NSSelectorFromString("primaryApp")) }
-    guard let method else {
-      preconditionFailure("AXRuntime did not register AXElement before the probe seam was stubbed")
+  /// The guard still holds: a contact that outruns the time the screen had been still reports an
+  /// unknown outcome even though the screen changed.
+  @MainActor
+  func testInAppBackWhoseContactOutrunsTheStillSpanIsUnverified() throws {
+    let status = try launchBackFixture(["--agent-device-back-regression"])
+    defer { endBackFixture() }
+    let restoreContact = try slowEdgeTouchContact(by: 1.5)
+    defer { restoreContact() }
+
+    guard case .unconfirmed(let payload) = try performInAppBack(app: app) else {
+      return XCTFail("a gap longer than the still span must not read as performed")
     }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
+    XCTAssertTrue(payload.message.contains("longer than the screen had been still"))
+    XCTAssertEqual(status.label, "Back performed", "the swipe itself still ran")
+  }
+
+  /// Delays every `XCUIScreen.screenshot` by `seconds`, calling `onCapture` for each.
+  private func slowScreenshots(by seconds: TimeInterval, onCapture: @escaping () -> Void) throws -> () -> Void {
+    let selector = #selector(XCUIScreen.screenshot)
+    let method = try XCTUnwrap(class_getInstanceMethod(XCUIScreen.self, selector))
     let original = method_getImplementation(method)
-    let replacement = imp_implementationWithBlock(
-      { (_: AnyObject) -> AnyObject? in nil } as @convention(block) (AnyObject) -> AnyObject?
-    )
-    method_setImplementation(method, replacement)
+    let slowed = imp_implementationWithBlock({ (target: AnyObject) -> AnyObject in
+      onCapture()
+      Thread.sleep(forTimeInterval: seconds)
+      typealias Screenshot = @convention(c) (AnyObject, Selector) -> AnyObject
+      return unsafeBitCast(original, to: Screenshot.self)(target, selector)
+    } as @convention(block) (AnyObject) -> AnyObject)
+    method_setImplementation(method, slowed)
     return {
       method_setImplementation(method, original)
-      imp_removeBlock(replacement)
+      imp_removeBlock(slowed)
     }
+  }
+
+  /// Delays resolving the edge touch (display, HID client, touchscreen sender) by `seconds`.
+  private func slowEdgeTouchPreparation(by seconds: TimeInterval) throws -> () -> Void {
+    let selector = NSSelectorFromString("prepareWithApplication:resolvedWindow:failure:")
+    let method = try XCTUnwrap(class_getClassMethod(RunnerSimulatorEdgeTouch.self, selector))
+    let original = method_getImplementation(method)
+    typealias Prepare = @convention(c) (
+      AnyObject, Selector, AnyObject, AnyObject?, AutoreleasingUnsafeMutablePointer<NSString?>
+    ) -> AnyObject?
+    let slowed = imp_implementationWithBlock({ (
+      target: AnyObject, application: AnyObject, window: AnyObject?, failure: AutoreleasingUnsafeMutablePointer<NSString?>
+    ) -> AnyObject? in
+      Thread.sleep(forTimeInterval: seconds)
+      return unsafeBitCast(original, to: Prepare.self)(target, selector, application, window, failure)
+    } as @convention(block) (AnyObject, AnyObject, AnyObject?, AutoreleasingUnsafeMutablePointer<NSString?>) -> AnyObject?)
+    method_setImplementation(method, slowed)
+    return {
+      method_setImplementation(method, original)
+      imp_removeBlock(slowed)
+    }
+  }
+
+  /// Delays the edge touch's contact itself by `seconds`, before it goes down.
+  private func slowEdgeTouchContact(by seconds: TimeInterval) throws -> () -> Void {
+    let selector = NSSelectorFromString("dispatchSamples:screenSize:touchDown:")
+    let method = try XCTUnwrap(class_getInstanceMethod(RunnerSimulatorEdgeTouch.self, selector))
+    let original = method_getImplementation(method)
+    typealias Dispatch = @convention(c) (AnyObject, Selector, NSArray, CGSize, UnsafeMutablePointer<ObjCBool>) -> NSString?
+    let slowed = imp_implementationWithBlock({ (
+      target: AnyObject, samples: NSArray, size: CGSize, touchDown: UnsafeMutablePointer<ObjCBool>
+    ) -> NSString? in
+      Thread.sleep(forTimeInterval: seconds)
+      return unsafeBitCast(original, to: Dispatch.self)(target, selector, samples, size, touchDown)
+    } as @convention(block) (AnyObject, NSArray, CGSize, UnsafeMutablePointer<ObjCBool>) -> NSString?)
+    method_setImplementation(method, slowed)
+    return {
+      method_setImplementation(method, original)
+      imp_removeBlock(slowed)
+    }
+  }
+#endif
+
+  /// Only a swipe refused before touch-down is the not-dispatched refusal; one cut short after its
+  /// touch-down may have navigated and stays an unknown outcome.
+  func testBackGestureRefusalSeparatesNotSentFromInterrupted() {
+    XCTAssertNil(Self.backGestureRefusal(.sent))
+    guard case .refused(let notSent) = Self.backGestureRefusal(.notSent(message: "no touchscreen", hint: nil)) else {
+      return XCTFail("a swipe that never touched down must refuse as not dispatched")
+    }
+    XCTAssertEqual(notSent.code, RunnerWireErrorCode.backSwipeNotDispatched)
+    guard case .unconfirmed(let interrupted) = Self.backGestureRefusal(.interrupted(message: "lift failed", hint: nil))
+    else {
+      return XCTFail("a swipe cut short after touch-down must not claim nothing was dispatched")
+    }
+    // It may already have navigated, so it is the unknown outcome, never a retryable refusal.
+    XCTAssertEqual(interrupted.code, RunnerWireErrorCode.backSwipeUnverified)
+    XCTAssertTrue(interrupted.hint?.contains("snapshot") == true)
+  }
+
+  /// Fails when the fixture reports a back within a short window, so a gesture the app handles
+  /// after the call returned still fails the test.
+  @MainActor
+  private func assertBackNeverPerformed(_ status: XCUIElement) {
+    let performed = expectation(for: NSPredicate(format: "label == %@", "Back performed"), evaluatedWith: status)
+    performed.isInverted = true
+    wait(for: [performed], timeout: 1)
   }
 
   /// Launches the runner app and waits for its fixture surface. With
-  /// `--agent-device-back-regression` it shows a top-leading back control whose press sets the
-  /// returned status to "Back performed", and without it nothing there.
+  /// `--agent-device-back-regression` a left-edge swipe sets the status to "Back performed", and
+  /// without it the app ignores the swipe.
   @MainActor
-  private func launchBackFixture(
-    _ arguments: [String],
-    navigationBar: Bool = false
-  ) throws -> XCUIElement {
-    app.launchArguments = arguments + (navigationBar ? ["--navigation-bar"] : [])
+  private func launchBackFixture(_ arguments: [String]) throws -> XCUIElement {
+    app.launchArguments = arguments
     app.launch()
     mainOwned.app = app
     mainOwned.bundleId = "com.callstack.agentdevice.runner"
@@ -158,7 +266,6 @@ extension RunnerTests {
     XCTAssertTrue(status.waitForFixtureExistence(timeout: appExistenceTimeout))
     return status
   }
-
   @MainActor
   private func endBackFixture() {
     invalidateCachedTarget(reason: "unit_test_cleanup")
@@ -207,185 +314,18 @@ extension RunnerTests {
     return try body()
   }
 
-  @MainActor
-  private func assertInAppBackDispatch(navigationBar: Bool) throws {
-    let status = try launchBackFixture(
-      ["--agent-device-back-regression"],
-      navigationBar: navigationBar
-    )
-    defer { endBackFixture() }
-    var xctestTaps = 0
-    var restorations: [() -> Void] = []
-    defer { restorations.reversed().forEach { $0() } }
-    for type in [XCUIElement.self, XCUICoordinate.self] {
-      let selector = NSSelectorFromString("tap")
-      let method = try XCTUnwrap(class_getInstanceMethod(type, selector))
-      let original = method_getImplementation(method)
-      let replacement = imp_implementationWithBlock({ (target: AnyObject) in
-        xctestTaps += 1
-        typealias Tap = @convention(c) (AnyObject, Selector) -> Void
-        unsafeBitCast(original, to: Tap.self)(target, selector)
-      } as @convention(block) (AnyObject) -> Void)
-      method_setImplementation(method, replacement)
-      restorations.append {
-        method_setImplementation(method, original)
-        imp_removeBlock(replacement)
-      }
-    }
-
-    guard case .performed = try tapInAppBackControl(app: app) else {
-      return XCTFail("the selected back control must dispatch")
-    }
-    let changed = expectation(for: NSPredicate(format: "label == %@", "Back performed"), evaluatedWith: status)
-    wait(for: [changed], timeout: appExistenceTimeout)
-    if navigationBar {
-      XCTAssertEqual(xctestTaps, 1, "a navigation bar button keeps the element tap")
-    } else {
-      XCTAssertEqual(xctestTaps, 0, "a ranked back control uses synthesized dispatch without idle waits")
-    }
-  }
 #endif
-
-  /// The fallback point sits inside the top bar on both families, from the screen's own top inset:
-  /// an iPhone 17 Pro measures a 59-pt inset with its bar at y 62-116; an iPad Pro 11" measures 32
-  /// with its bar at y 32-86, where a frame-height fraction that serves the iPhone (0.1·874=87, and
-  /// the old clamp's 96 at any taller height) lands below the iPad's bar.
-  func testTopLeadingNavigationFallbackPointTargetsHeaderControlBand() throws {
-    let iPhone = try XCTUnwrap(
-      Self.topLeadingNavigationFallbackPoint(
-        in: CGRect(x: 0, y: 0, width: 402, height: 874),
-        topSafeAreaInset: 59
-      )
-    )
-    XCTAssertEqual(iPhone.x, 32.16, accuracy: 0.01)
-    XCTAssertEqual(iPhone.y, 81, accuracy: 0.01, "inside the iPhone bar band 62-116")
-
-    let iPad = try XCTUnwrap(
-      Self.topLeadingNavigationFallbackPoint(
-        in: CGRect(x: 0, y: 0, width: 834, height: 1210),
-        topSafeAreaInset: 32
-      )
-    )
-    XCTAssertEqual(iPad.x, 44, accuracy: 0.01, "the leading-slot cap keeps a tablet tap inside the bar")
-    XCTAssertEqual(iPad.y, 56, accuracy: 0.01, "inside the iPad bar band 32-86")
-  }
-
-  func testTopLeadingNavigationFallbackPointRejectsInvalidFrame() {
-    XCTAssertNil(Self.topLeadingNavigationFallbackPoint(in: .infinite, topSafeAreaInset: 59))
-    XCTAssertNil(Self.topLeadingNavigationFallbackPoint(in: .zero, topSafeAreaInset: 59))
-  }
-
-  /// A runtime that reports no inset proves nothing about the band, so the point stays inside the
-  /// compact bar it used to target; a large inset (a surface that pushed the content down) must not
-  /// send the tap deep into the page.
-  func testTopLeadingNavigationFallbackPointStaysBoundedForUnknownAndLargeInsets() throws {
-    let frame = CGRect(x: 0, y: 0, width: 834, height: 1210)
-    let noInset = try XCTUnwrap(Self.topLeadingNavigationFallbackPoint(in: frame, topSafeAreaInset: 0))
-    XCTAssertEqual(noInset.y, 56, accuracy: 0.01, "the compact bar bound")
-    let hugeInset = try XCTUnwrap(Self.topLeadingNavigationFallbackPoint(in: frame, topSafeAreaInset: 400))
-    XCTAssertEqual(hugeInset.y, 96, accuracy: 0.01, "never leaves the header band")
-  }
-
-  func testNavigationBackControlRankPrefersBackThenCloseThenCancel() {
-    XCTAssertEqual(Self.navigationBackControlRank(label: "Back", identifier: ""), 0)
-    XCTAssertEqual(Self.navigationBackControlRank(label: "Close", identifier: ""), 1)
-    XCTAssertEqual(Self.navigationBackControlRank(label: "Cancel search", identifier: ""), 2)
-    XCTAssertNil(Self.navigationBackControlRank(label: "Search for more feeds", identifier: ""))
-  }
-
-  func testNavigationBackPredicateUsesTheSharedKeywordTable() {
-    let predicate = Self.navigationBackPredicate()
-
-    XCTAssertTrue(predicate.evaluate(with: ["label": "Back", "identifier": ""]))
-    XCTAssertTrue(predicate.evaluate(with: ["label": "", "identifier": "close-button"]))
-    XCTAssertFalse(predicate.evaluate(with: ["label": "Search for more feeds", "identifier": ""]))
-  }
-
-  func testTopNavigationControlFrameAcceptsOnlyHeaderBand() {
-    let window = CGRect(x: 0, y: 0, width: 430, height: 932)
-
-    XCTAssertTrue(
-      Self.isTopNavigationControlFrame(
-        CGRect(x: 340, y: 84, width: 72, height: 44),
-        in: window
-      )
-    )
-    XCTAssertFalse(
-      Self.isTopNavigationControlFrame(
-        CGRect(x: 20, y: 760, width: 72, height: 44),
-        in: window
-      )
-    )
-    XCTAssertFalse(Self.isTopNavigationControlFrame(.infinite, in: window))
-  }
-
-  func testTopNavigationBackCandidateAcceptsIOS27FloatingBarSystemBackButton() {
-    let window = CGRect(x: 0, y: 0, width: 466, height: 678)
-    let floatingBarBack = CGRect(x: 399, y: 175, width: 38, height: 38)
-
-    XCTAssertFalse(Self.isTopNavigationControlFrame(floatingBarBack, in: window))
-    XCTAssertTrue(
-      Self.isTopNavigationBackCandidateFrame(floatingBarBack, in: window, identifier: "BackButton")
-    )
-  }
-
-  func testTopNavigationBackCandidateRejectsKeywordOnlyMatchBelowHeaderBand() {
-    let window = CGRect(x: 0, y: 0, width: 466, height: 678)
-    let floatingBarBack = CGRect(x: 399, y: 175, width: 38, height: 38)
-
-    XCTAssertFalse(
-      Self.isTopNavigationBackCandidateFrame(floatingBarBack, in: window, identifier: "back-link")
-    )
-    XCTAssertFalse(
-      Self.isTopNavigationBackCandidateFrame(floatingBarBack, in: window, identifier: "")
-    )
-  }
-
-  func testTopNavigationBackCandidateBoundsSystemBackButtonToUpperWindow() {
-    // 40% of 932 is 372.8; the classic band ends at 180, so only the floating-bar bound decides.
-    let window = CGRect(x: 0, y: 0, width: 430, height: 932)
-
-    XCTAssertTrue(
-      Self.isTopNavigationBackCandidateFrame(
-        CGRect(x: 20, y: 348, width: 44, height: 44),
-        in: window,
-        identifier: "BackButton"
-      )
-    )
-    XCTAssertFalse(
-      Self.isTopNavigationBackCandidateFrame(
-        CGRect(x: 20, y: 356, width: 44, height: 44),
-        in: window,
-        identifier: "BackButton"
-      )
-    )
-    XCTAssertFalse(
-      Self.isTopNavigationBackCandidateFrame(.infinite, in: window, identifier: "BackButton")
-    )
-  }
-
-  func testTopNavigationBackCandidateKeepsClassicHeaderBandForKeywordMatches() {
-    let window = CGRect(x: 0, y: 0, width: 430, height: 932)
-
-    XCTAssertTrue(
-      Self.isTopNavigationBackCandidateFrame(
-        CGRect(x: 340, y: 84, width: 72, height: 44),
-        in: window,
-        identifier: "back-link"
-      )
-    )
-  }
 
   func testNavigationVisualObservationSeparatesChangeFromRefusal() {
     // A refused side makes the pair uncomparable, not "unchanged"; reading it as "unchanged" would
-    // let a capture that refused become the reason the `back` command claims no control exists.
-    // When both refuse, the later refusal names what the fallback last looked at before giving up.
+    // let a capture that refused become the reason `back` claims its swipe changed nothing.
+    // When both refuse, the later refusal names what back last looked at before giving up.
     typealias Sample = Result<Data, RunnerAppScreenCaptureFailure>
     let refused: Sample = .failure(.unresolvedScreen)
     let windowless: Sample = .failure(.unresolvedWindow)
-    let captured: Sample = .success(Data([1, 2, 3]))
-    let changed: Sample = .success(Data([1, 2, 4]))
-    let other: Sample = .success(Data([1]))
+    let captured: Sample = .success(grid(0))
+    let changed: Sample = .success(grid(255))
+    let other: Sample = .success(grid(0))
 
     XCTAssertEqual(Self.navigationVisualObservation(before: captured, after: changed), .changed, "changed")
     XCTAssertEqual(Self.navigationVisualObservation(before: captured, after: captured), .unchanged, "unchanged")
@@ -406,16 +346,124 @@ extension RunnerTests {
     )
   }
 
-  func testNavigationFallbackReportsARefusalAsAnUnknownOutcome() {
-    // The unverified answer carries the typed refusal's code and hint and says the outcome is
-    // unknown — never the definitive "no back control" a refused capture would otherwise become.
-    switch Self.inAppBackOutcome(observation: .unobserved(refusal: .unresolvedWindow)) {
-    case .unverified(let payload):
-      XCTAssertEqual(payload.code, "APP_SCREEN_WINDOW_UNRESOLVED")
+  /// A back navigation redraws most of the screen; a spinner, a clock tick, or a low-contrast
+  /// shimmer must not read as one, or as a screen that never settles.
+  func testVisualSamplesDifferOnlyForNavigationSizedChange() {
+    let base = grid(100)
+    let below = Self.backCompareTopRowsIgnored * Self.visualGridSize.width
+    var spinner = base
+    for index in below..<(below + 20) { spinner[index] = 255 }
+    let shimmer = grid(120)
+    var pushed = base
+    for index in below..<(below + 1500) { pushed[index] = 255 }
+
+    XCTAssertFalse(Self.visualSamplesDiffer(base, spinner), "20 cells below the top band is not navigation")
+    XCTAssertFalse(Self.visualSamplesDiffer(base, shimmer), "every cell moving by 20 stays inside the tolerance")
+    XCTAssertTrue(Self.visualSamplesDiffer(base, pushed), "a third of the screen redrawn is navigation")
+    XCTAssertTrue(Self.visualSamplesDiffer(base, base.dropLast()), "a different grid size is uncomparable")
+  }
+
+  /// The top band (status bar, clock, Dynamic Island) is never compared, so a clock tick or a status
+  /// bar that appears or hides cannot count as a change, while the first row below it does.
+  func testVisualSamplesIgnoreAChangeConfinedToTheTopBand() {
+    let base = grid(100)
+    let band = Self.backCompareTopRowsIgnored * Self.visualGridSize.width
+    var clockTick = base
+    for index in 0..<band { clockTick[index] = 255 }
+    var firstRowBelow = base
+    for index in band..<(band + Self.visualGridSize.width) { firstRowBelow[index] = 255 }
+
+    XCTAssertFalse(Self.visualSamplesDiffer(base, clockTick), "every cell of the top band changed")
+    XCTAssertTrue(Self.visualSamplesDiffer(base, firstRowBelow), "one full row below the band is over 1%")
+  }
+
+  /// The grid's first row is the top of the screen, so the ignored band is where the status bar is.
+  func testVisualGridKeepsTheTopOfTheScreenFirst() throws {
+    let width = 120, height = 240
+    let context = try XCTUnwrap(CGContext(
+      data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width,
+      space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue
+    ))
+    context.setFillColor(gray: 0, alpha: 1)
+    context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+    context.setFillColor(gray: 1, alpha: 1)
+    // CoreGraphics' origin is bottom-left, so the top 10% of the image is the high-y strip.
+    context.fill(CGRect(x: 0, y: CGFloat(height) * 0.9, width: CGFloat(width), height: CGFloat(height) * 0.1))
+    let image = try XCTUnwrap(context.makeImage())
+
+    let cells = try XCTUnwrap(Self.visualGrid(of: image))
+
+    XCTAssertGreaterThan(cells[0], 200, "the first grid row is the top of the screen")
+    XCTAssertLessThan(cells[cells.count - 1], 50, "the last grid row is the bottom")
+  }
+
+  private func grid(_ value: UInt8) -> Data {
+    Data(repeating: value, count: Self.visualGridSize.width * Self.visualGridSize.height)
+  }
+
+  /// The runner's back swipe and the host's `right-edge` preset read the same golden table.
+  func testBackSwipeEndpointsMatchTheHostRightEdgePreset() throws {
+    let cases = try XCTUnwrap(runnerContractFixture("back-swipe-geometry.json") as? [[String: Any]])
+    XCTAssertFalse(cases.isEmpty)
+    func point(_ value: Any?) throws -> CGPoint {
+      let object = try XCTUnwrap(value as? [String: Double])
+      return CGPoint(x: try XCTUnwrap(object["x"]), y: try XCTUnwrap(object["y"]))
+    }
+    for fixture in cases {
+      let name = fixture["name"] as? String ?? "?"
+      let surface = try XCTUnwrap(fixture["surface"] as? [String: Double], name)
+      let rect = CGRect(
+        x: try XCTUnwrap(surface["x"]), y: try XCTUnwrap(surface["y"]),
+        width: try XCTUnwrap(surface["width"]), height: try XCTUnwrap(surface["height"])
+      )
+      let endpoints = Self.backSwipeEndpoints(in: rect)
+      XCTAssertEqual(endpoints.start, try point(fixture["start"]), name)
+      XCTAssertEqual(endpoints.end, try point(fixture["end"]), name)
+      XCTAssertEqual(Self.backSwipeDurationMs, fixture["durationMs"] as? Double, name)
+    }
+  }
+
+  /// A swipe whose gap outran the time the screen had been still cannot tell its effect from a
+  /// self-repaint slower than the window.
+  func testBackSwipeGapIsCoveredOnlyByAsLongAStillWindow() {
+    XCTAssertTrue(Self.backSwipeGapIsCovered(stableSinceMs: 0, justBeforeMs: 600, afterMs: 1100))
+    XCTAssertTrue(Self.backSwipeGapIsCovered(stableSinceMs: 0, justBeforeMs: 600, afterMs: 1200))
+    XCTAssertFalse(Self.backSwipeGapIsCovered(stableSinceMs: 0, justBeforeMs: 600, afterMs: 1300))
+  }
+
+  /// The still span grows with the slowest capture, so the gap a slow capture makes stays covered.
+  func testBackSwipeRequiredStillSpanGrowsWithTheSlowestCapture() {
+    let fast = Self.backSwipeRequiredStillMs(maxCaptureMs: 100)
+    let slow = Self.backSwipeRequiredStillMs(maxCaptureMs: 600)
+    XCTAssertEqual(slow - fast, 500)
+    XCTAssertGreaterThanOrEqual(slow, Self.backSwipeDurationMs + Self.backSwipeVerificationDelay * 1000 + 600)
+  }
+
+  /// A screen that moved between settling and the swipe has no baseline to credit a change against.
+  func testBackSwipeBaselineHoldsOnlyWhenSettledAndUnmovedBeforeTheSwipe() {
+    let baseline = grid(100)
+    let moved = grid(255)
+
+    XCTAssertTrue(Self.backSwipeBaselineHolds(settled: true, baseline: baseline, justBefore: baseline))
+    XCTAssertFalse(Self.backSwipeBaselineHolds(settled: true, baseline: baseline, justBefore: moved))
+    XCTAssertFalse(Self.backSwipeBaselineHolds(settled: false, baseline: baseline, justBefore: baseline))
+  }
+
+  func testBackSwipeOutcomeNamesNoChangeAndAnUnsampledScreenApart() {
+    switch Self.backSwipeOutcome(observation: .unchanged) {
+    case .unconfirmed(let payload):
+      XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeNoChange)
+    case .performed, .refused:
+      XCTFail("an unchanged screen must refuse with the no-change reason")
+    }
+    // A screen that refused to be sampled after the swipe is an unknown outcome, never a success.
+    switch Self.backSwipeOutcome(observation: .unobserved(refusal: .unresolvedWindow)) {
+    case .unconfirmed(let payload):
+      XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
       XCTAssertEqual(payload.hint, RunnerAppScreenCaptureFailure.unresolvedWindow.hint)
       XCTAssertTrue(payload.message.contains("unknown outcome"))
-    case .performed, .unavailable:
-      XCTFail("a refused capture must report an unknown outcome, not 'no back control'")
+    case .performed, .refused:
+      XCTFail("an unsampled screen after the swipe must report an unknown outcome")
     }
   }
 

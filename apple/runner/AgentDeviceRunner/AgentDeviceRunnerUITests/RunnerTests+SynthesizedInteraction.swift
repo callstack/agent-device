@@ -427,10 +427,7 @@ extension RunnerTests {
   }
 
   @MainActor
-  func synthesizedCoordinateContext(
-    app: XCUIApplication,
-    windowQueryRejected: Bool = false
-  ) throws -> SynthesizedCoordinateContext? {
+  func synthesizedCoordinateContext(app: XCUIApplication) throws -> SynthesizedCoordinateContext? {
 #if os(iOS)
     var health = mainOwned.accessibilityHealth
     let window: XCUIElement?
@@ -443,13 +440,10 @@ extension RunnerTests {
       ) else { throw RunnerAppScreenCaptureFailure.unresolvedScreen }
       return context
     }
-    // A tree that just rejected a query skips the windows query only where the sole screen answers
-    // without it; anywhere else that query is still the only route.
-    let rejectedTreeSoleScreenFrame = windowQueryRejected ? soleScreenReferenceFrame(app: app) : nil
-    if rejectedTreeSoleScreenFrame == nil, let resolved = resolveRunnerWindowElement(app: app) {
+    if let resolved = resolveRunnerWindowElement(app: app) {
       window = resolved.window
       referenceFrame = resolved.frame
-    } else if let soleScreenFrame = rejectedTreeSoleScreenFrame ?? soleScreenReferenceFrame(app: app) {
+    } else if let soleScreenFrame = soleScreenReferenceFrame(app: app) {
       window = nil
       referenceFrame = soleScreenFrame
       // The windows query just failed on this tree, so this gesture's keyboard probes and XCTest

@@ -6,9 +6,11 @@ private let cancelBit: UInt32 = 1 << 7
 extension RunnerTests {
   func testEdgeContactLiftsWithoutUsingTheReservedCancel() {
     var failure: NSString?
-    let events = RunnerEdgeContactDispatches(-1, &failure)
+    var touchDown: ObjCBool = false
+    let events = RunnerEdgeContactDispatches(-1, &failure, &touchDown)
 
     XCTAssertNil(failure)
+    XCTAssertTrue(touchDown.boolValue)
     XCTAssertEqual(events.count, 5, "touch-down, three moves, touch-up")
     XCTAssertEqual(events.map { $0["touching"]?.boolValue }, [true, true, true, true, false])
     XCTAssertFalse(events.contains { ($0["mask"]?.uint32Value ?? 0) & cancelBit != 0 })
@@ -17,18 +19,22 @@ extension RunnerTests {
   func testEdgeContactDispatchesNothingWhenItCannotReserveItsEnd() {
     for failingFrame in [0, 1] {
       var failure: NSString?
-      let events = RunnerEdgeContactDispatches(failingFrame, &failure)
+      var touchDown: ObjCBool = true
+      let events = RunnerEdgeContactDispatches(failingFrame, &failure, &touchDown)
 
       XCTAssertNotNil(failure, "frame \(failingFrame)")
       XCTAssertTrue(events.isEmpty, "frame \(failingFrame): nothing goes down without its terminal event")
+      XCTAssertFalse(touchDown.boolValue, "frame \(failingFrame): the caller learns nothing was touched")
     }
   }
 
   func testEdgeContactCancelsWhenAMoveOrTheLiftCannotBeBuilt() {
     for (failingFrame, movesBeforeCancel) in [(2, 0), (3, 1), (5, 3)] {
       var failure: NSString?
-      let events = RunnerEdgeContactDispatches(failingFrame, &failure)
+      var touchDown: ObjCBool = false
+      let events = RunnerEdgeContactDispatches(failingFrame, &failure, &touchDown)
       let terminal = events.last
+      XCTAssertTrue(touchDown.boolValue, "frame \(failingFrame): the contact went down before it failed")
 
       XCTAssertNotNil(failure, "frame \(failingFrame)")
       XCTAssertEqual(events.count, 2 + movesBeforeCancel, "frame \(failingFrame): down, moves, cancel")

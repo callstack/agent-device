@@ -15,7 +15,6 @@
   "snapshotBridge": "none",
   "screenshot": "observed-screen",
   "backInApp": "app-windows",
-  "backSystem": "app-windows",
   "home": "none",
   "rotate": "none",
   "gesture": "app-windows",

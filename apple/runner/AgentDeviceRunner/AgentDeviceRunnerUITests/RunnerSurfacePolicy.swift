@@ -15,7 +15,7 @@ extension CommandType {
       .appState, .pasteboardWrite, .activate, .terminate, .targetReset, .shutdown:
       return .none
     case .tap, .longPress, .drag, .type, .swipe, .scroll, .findText, .querySelector, .readText,
-      .snapshot, .backInApp, .backSystem, .gesture, .gestureViewport, .appSwitcher,
+      .snapshot, .backInApp, .gesture, .gestureViewport, .appSwitcher,
       .keyboardDismiss, .sequence:
       return .appWindows
     case .screenshot, .recordStart:

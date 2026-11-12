@@ -25,12 +25,17 @@ private final class RunnerUnserializableTreeStub: NSObject {
   }
 }
 
-/// Counts XCTest coordinate presses without performing them.
+/// Counts XCTest coordinate presses and press-and-drags without performing them.
 private final class RunnerCoordinatePressCounter: NSObject {
   static var presses = 0
+  static var drags = 0
   @objc(pressForDuration:)
   func press(forDuration duration: TimeInterval) {
     Self.presses += 1
+  }
+  @objc(pressForDuration:thenDragToCoordinate:)
+  func press(forDuration duration: TimeInterval, thenDragTo coordinate: XCUICoordinate) {
+    Self.drags += 1
   }
 }
 
@@ -225,6 +230,11 @@ extension RunnerTests {
     swaps += [
       (class_getInstanceMethod(XCUICoordinate.self, #selector(XCUICoordinate.press(forDuration:))),
        class_getInstanceMethod(RunnerCoordinatePressCounter.self, #selector(RunnerCoordinatePressCounter.press(forDuration:)))),
+      (class_getInstanceMethod(XCUICoordinate.self, #selector(XCUICoordinate.press(forDuration:thenDragTo:))),
+       class_getInstanceMethod(
+         RunnerCoordinatePressCounter.self,
+         #selector(RunnerCoordinatePressCounter.press(forDuration:thenDragTo:))
+       )),
       (class_getInstanceMethod(XCUICoordinate.self, #selector(XCUICoordinate.tap)),
        class_getInstanceMethod(RunnerCoordinateTapCounter.self, #selector(RunnerCoordinateTapCounter.tap))),
     ]
@@ -233,6 +243,7 @@ extension RunnerTests {
       (target, method_setImplementation(target, method_getImplementation(stub)))
     }
     RunnerCoordinatePressCounter.presses = 0
+    RunnerCoordinatePressCounter.drags = 0
     RunnerCoordinateTapCounter.taps = 0
     RunnerUnserializableTreeStub.frameReads = 0
     RunnerUnserializableTreeStub.recordingTest = self
@@ -344,6 +355,86 @@ extension RunnerTests {
   }
 
   /// The real synthesis reports nothing dispatched when it fails while building its record.
+  /// A device's back fling is synthesized on the booked route, so even on a tree XCTest cannot
+  /// serialize it presses no XCTest coordinate, which would raise and end the runner (#4221).
+  @MainActor
+  func testDeviceBackFlingOnAnUnserializableTreeIsSynthesizedWithoutAnXCTestPress() throws {
+    app.launch()
+    mainOwned.app = app
+    let restoreXCTest = try simulateUnserializableAppTree()
+    defer {
+      restoreXCTest()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let context = try XCTUnwrap(
+      try synthesizedCoordinateContext(app: app),
+      "the sole-screen route books a context on an unserializable tree"
+    )
+    XCTAssertTrue(context.treeUnreadable)
+
+    guard case .ready(let fling) = try prepareDeviceBackFling(app: app, context: context) else {
+      return XCTFail("the fling must resolve on the booked route")
+    }
+    let dispatch = try fling()
+
+    guard case .sent = dispatch else {
+      return XCTFail("the fling must be synthesized on the booked route: \(dispatch)")
+    }
+    XCTAssertEqual(RunnerCoordinatePressCounter.presses, 0)
+    XCTAssertEqual(RunnerCoordinatePressCounter.drags, 0, "the XCTest press-and-drag never ran")
+  }
+
+  /// On a readable tree the device back fling does all its tree and window reads while it is prepared,
+  /// so the fling itself, which runs after the just-before sample, queries no windows and presses no
+  /// XCTest coordinate.
+  @MainActor
+  func testDeviceBackFlingOnAReadableTreeQueriesNoWindowsWhileItFlings() throws {
+    app.launch()
+    mainOwned.app = app
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let context = try XCTUnwrap(try synthesizedCoordinateContext(app: app))
+    guard !context.treeUnreadable else { return XCTFail("the fixture tree must be readable") }
+    guard case .ready(let fling) = try prepareDeviceBackFling(app: app, context: context) else {
+      return XCTFail("a readable tree resolves the fling")
+    }
+    let selector = NSSelectorFromString("allElementsBoundByIndex")
+    let query = try XCTUnwrap(class_getInstanceMethod(XCUIElementQuery.self, selector))
+    let originalQuery = method_getImplementation(query)
+    var queries = 0
+    let countedQuery = imp_implementationWithBlock({ (target: AnyObject) -> NSArray in
+      queries += 1
+      typealias Query = @convention(c) (AnyObject, Selector) -> NSArray
+      return unsafeBitCast(originalQuery, to: Query.self)(target, selector)
+    } as @convention(block) (AnyObject) -> NSArray)
+    method_setImplementation(query, countedQuery)
+    defer {
+      method_setImplementation(query, originalQuery)
+      imp_removeBlock(countedQuery)
+    }
+
+    guard case .sent = try fling() else { return XCTFail("the fling must be sent") }
+
+    XCTAssertEqual(queries, 0, "no windows query runs inside the gap")
+  }
+
+  /// A synthesis that fails before its record is handed to XCTest touched nothing; one that fails
+  /// after may have run.
+  func testSynthesisFailureMapsByWhetherTheRecordWasDispatched() {
+    guard case .sent = TouchDispatch(synthesisFailure: nil, dispatched: true) else {
+      return XCTFail("no failure is a sent gesture")
+    }
+    guard case .notSent = TouchDispatch(synthesisFailure: "no pointer path", dispatched: false) else {
+      return XCTFail("a failure before dispatch touched nothing")
+    }
+    guard case .interrupted = TouchDispatch(synthesisFailure: "synthesis failed", dispatched: true) else {
+      return XCTFail("a failure after dispatch may have run")
+    }
+  }
+
   @MainActor
   func testSynthesizedGestureWithAnEmptyPointerPathDispatchesNothing() throws {
     app.launch()
@@ -488,7 +579,7 @@ extension RunnerTests {
   }
 
   /// Every other XCUICoordinate gesture anchors through the same gate: a double tap, a long press
-  /// fallback, a drag, and the back and app-switcher swipes refuse on a tree that answers no window
+  /// fallback, a drag, and the app-switcher swipe refuse on a tree that answers no window
   /// instead of building a coordinate from the application XCTest cannot snapshot.
   @MainActor
   func testEveryXCTestCoordinateGestureRefusesAnUnserializableTree() throws {
@@ -505,7 +596,6 @@ extension RunnerTests {
       ("doubleTap", { _ = try self.doubleTapAt(app: self.app, x: 40, y: 40) }),
       ("longPress", { _ = try self.longPressAt(app: self.app, x: 40, y: 40, duration: 0.5) }),
       ("drag", { _ = try self.dragAt(app: self.app, x: 40, y: 40, x2: 80, y2: 80, holdDuration: 0.1) }),
-      ("back", { try self.performBackGesture(app: self.app) }),
       ("appSwitcher", { try self.performAppSwitcherGesture(app: self.app) }),
       ("touchFrame", { _ = try self.resolvedTouchVisualizationFrame(app: self.app, x: 40, y: 40) }),
     ]

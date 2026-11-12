@@ -69,36 +69,69 @@ static NSString * _Nullable RunnerResolveTouchscreenSender(
   return failure;
 }
 
-@implementation RunnerSimulatorEdgeTouch
+@implementation RunnerSimulatorEdgeTouch {
+  RunnerHIDFunctions _functions;
+  CFTypeRef _client;
+  uint64_t _sender;
+}
 
-+ (NSString * _Nullable)dispatchWithApplication:(id)application
++ (nullable instancetype)prepareWithApplication:(id)application
                                  resolvedWindow:(id _Nullable)resolvedWindow
-                                        samples:(NSArray<NSDictionary<NSString *, NSNumber *> *> *)samples
-                                     screenSize:(CGSize)screenSize {
-  if (samples.count < 2 || screenSize.width <= 0 || screenSize.height <= 0) {
-    return @"an edge touch needs at least two samples and a measured screen";
-  }
+                                        failure:(NSString * _Nullable __autoreleasing * _Nonnull)failure {
+  *failure = nil;
   NSUInteger displayID = 0;
   id soleScreen = nil;
   NSString *displayError = resolvedWindow == nil
     ? RunnerResolveSoleScreen(application, &soleScreen, &displayID)
     : RunnerResolveWindowDisplayID(resolvedWindow, &displayID);
-  if (displayError != nil) return displayError;
-  RunnerHIDFunctions functions = {0};
-  NSString *failure = RunnerResolveHIDFunctions(&functions);
-  if (failure != nil) return failure;
-  CFTypeRef client = functions.createClient(kCFAllocatorDefault);
-  if (client == NULL) return @"simulator HID dispatch is unavailable: no event system client";
-  uint64_t sender = 0;
-  failure = RunnerResolveTouchscreenSender(&functions, client, displayID, &sender);
-  if (failure != nil) {
-    CFRelease(client);
-    return failure;
+  if (displayError != nil) {
+    *failure = displayError;
+    return nil;
   }
-
-  failure = RunnerDispatchEdgeContact(&functions, client, sender, samples, screenSize);
+  RunnerHIDFunctions functions = {0};
+  NSString *hidError = RunnerResolveHIDFunctions(&functions);
+  if (hidError != nil) {
+    *failure = hidError;
+    return nil;
+  }
+  CFTypeRef client = functions.createClient(kCFAllocatorDefault);
+  if (client == NULL) {
+    *failure = @"simulator HID dispatch is unavailable: no event system client";
+    return nil;
+  }
+  uint64_t sender = 0;
+  NSString *senderError = RunnerResolveTouchscreenSender(&functions, client, displayID, &sender);
+  if (senderError != nil) {
+    CFRelease(client);
+    *failure = senderError;
+    return nil;
+  }
+  RunnerSimulatorEdgeTouch *touch = [[self alloc] initWithFunctions:functions client:client sender:sender];
   CFRelease(client);
-  return failure;
+  return touch;
+}
+
+- (instancetype)initWithFunctions:(RunnerHIDFunctions)functions client:(CFTypeRef)client sender:(uint64_t)sender {
+  if ((self = [super init])) {
+    _functions = functions;
+    _client = CFRetain(client);
+    _sender = sender;
+  }
+  return self;
+}
+
+- (void)dealloc {
+  CFRelease(_client);
+}
+
+- (NSString * _Nullable)dispatchSamples:(NSArray<NSDictionary<NSString *, NSNumber *> *> *)samples
+                             screenSize:(CGSize)screenSize
+                              touchDown:(BOOL *)touchDown {
+  *touchDown = NO;
+  if (samples.count < 2 || screenSize.width <= 0 || screenSize.height <= 0) {
+    return @"an edge touch needs at least two samples and a measured screen";
+  }
+  return RunnerDispatchEdgeContact(&_functions, _client, _sender, samples, screenSize, touchDown);
 }
 
 @end

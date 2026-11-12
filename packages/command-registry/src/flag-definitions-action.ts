@@ -263,7 +263,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: ['in-app', 'system'],
     setValue: 'in-app',
     usageLabel: '--in-app',
-    usageDescription: 'Back: use app-provided back UI when available',
+    usageDescription:
+      'Back: use app-provided back UI when available; on iOS, the verified left-edge back swipe',
     projectConfig: true,
     recorded: false,
   },
@@ -274,7 +275,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: ['in-app', 'system'],
     setValue: 'system',
     usageLabel: '--system',
-    usageDescription: 'Back: use system back input or gesture when available',
+    usageDescription:
+      'Back: use system back input or gesture when available; on iOS, the same left-edge back swipe as --in-app',
     projectConfig: true,
     recorded: false,
   },

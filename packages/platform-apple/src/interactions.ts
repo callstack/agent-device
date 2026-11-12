@@ -1,5 +1,4 @@
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
-import type { BackMode } from '@agent-device/contracts/back-mode';
 import { singlePointerPlanEndpoints } from '@agent-device/contracts/gesture-plan';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import {
@@ -48,7 +47,6 @@ import {
 import { runMacosDesktopScroll } from './os/macos/desktop-scroll.ts';
 import { appleRemotePressCommand } from './os/tvos/remote.ts';
 
-export type AppleBackRunnerCommand = 'backInApp' | 'backSystem';
 type RunAppleRunnerCommand = typeof runAppleRunnerCommand;
 type RunnerOpts = RunnerCallOptions;
 
@@ -67,11 +65,6 @@ type IosRunnerOverrides = Pick<
   | 'performGesture'
   | 'gestureViewport'
 >;
-
-export function resolveAppleBackRunnerCommand(mode?: BackMode): AppleBackRunnerCommand {
-  if (mode === 'system') return 'backSystem';
-  return 'backInApp';
-}
 
 export function iosRunnerOverrides(
   device: DeviceInfo,

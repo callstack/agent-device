@@ -548,24 +548,12 @@ extension RunnerTests {
       )
 #endif
     case .backInApp:
-      switch try tapInAppBackControl(app: activeApp) {
+      switch try performInAppBack(app: activeApp) {
       case .performed:
         return Response(ok: true, data: DataPayload(message: "backInApp"))
-      case .unavailable:
-        return Response(
-          ok: false,
-          error: ErrorPayload(message: "in-app back control is not available")
-        )
-      case .unverified(let error):
-        // The fallback gesture ran but the display refused to be sampled. Reporting the typed refusal
-        // keeps an unknown outcome from being laundered into a definitive "no back control" (#2728).
+      case .refused(let error), .unconfirmed(let error):
         return Response(ok: false, error: error)
       }
-    case .backSystem:
-      if try performSystemBackAction(app: activeApp) {
-        return Response(ok: true, data: DataPayload(message: "backSystem"))
-      }
-      return Response(ok: false, error: ErrorPayload(message: "system back is not available"))
     case .home:
       pressHomeButton()
       return Response(ok: true, data: DataPayload(message: "home"))

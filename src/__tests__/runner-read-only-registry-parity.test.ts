@@ -41,7 +41,6 @@ const REGISTRY_COUNTERPART: Record<RunnerName, RegistryRequest> = {
   snapshot: { command: 'snapshot' },
   screenshot: { command: 'screenshot' },
   backInApp: { command: 'back' },
-  backSystem: { command: 'back' },
   home: { command: 'home' },
   rotate: { command: 'orientation' },
   gesture: { command: 'gesture' },
