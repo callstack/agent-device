@@ -57,6 +57,6 @@ A refusal before any send reports `dispatched: no`. A failure after a send repor
 ## Consequences and open gaps
 
 No wait loop for these interactions exists outside admission; the moving-target gate's schedules move into it. New pre-dispatch checks and platform facts join admission instead of adding their own loop or carrier.
-Long-press, fill, hover and drag gain the motion check. Their accept-path latency must not grow.
+Long-press, double-tap, fill and hover gain the motion check. Their accept-path latency must not grow. Target-authored drag runs admission without the motion check: ADR 0011 marks its target stability inapplicable, because re-pointing one endpoint would split the gesture plan.
 An app-timed overlay that appears with no preceding mutation is not detected on an idle press. This is the cost rule's trade-off and matches the gate's existing blind spot.
 Partial custom covers (#4347) and safe regions for coordinate-authored trajectories stay open. Admission gives them a place; it does not solve them.
