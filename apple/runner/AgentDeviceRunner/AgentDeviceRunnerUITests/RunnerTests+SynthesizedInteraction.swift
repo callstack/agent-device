@@ -20,14 +20,19 @@ extension RunnerTests {
         hint: "Retry with finite x, y, x2, and y2 values."
       )
     }
+    // The window and display refusals come before the synthesis is handed anything: nothing was sent.
     guard let context = try context ?? synthesizedCoordinateContext(app: app) else {
-      return .unsupported(
+      return .notDispatched(
         message: "synthesized coordinate drag could not resolve an app window with a finite screen frame",
         hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
       )
     }
     guard let geometry = digitizerGeometry(app: app, surface: context.geometry) else {
-      return Self.unmeasuredSoleDisplayOutcome(gesture: "drag")
+      let unmeasured = Self.unmeasuredSoleDisplayOutcome(gesture: "drag").refusalText
+      return .notDispatched(
+        message: unmeasured?.message ?? "drag could not measure the display",
+        hint: unmeasured?.hint
+      )
     }
     let frame = context.geometry.windowOnScreen.rect
     let start = geometry.digitizerPoint(from: SurfacePoint(CGPoint(x: x, y: y))).point

@@ -958,6 +958,21 @@ extension RunnerTests {
     XCTAssertEqual(message, "synthesized coordinate tap could not resolve an app window with a finite screen frame")
   }
 
+  /// A synthesized drag whose app window cannot be named is refused before any synthesis, so it
+  /// reports that nothing was sent, unlike a tap, whose refusal keeps UNSUPPORTED_OPERATION.
+  @MainActor
+  func testWindowlessLandscapeDragRefusesAsNotDispatched() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
+    let (_, cleanup) = try launchWithUnreadableDisplay(landscape: true, windowQueryRejected: true)
+    defer { cleanup() }
+
+    let outcome = try synthesizedDragAt(app: app, x: 40, y: 40, x2: 120, y2: 40, durationMs: 100, profile: .fastSwipe)
+    guard case .notDispatched(let message, _) = outcome else {
+      return XCTFail("expected a not-dispatched refusal before synthesis, got \(outcome)")
+    }
+    XCTAssertEqual(message, "synthesized coordinate drag could not resolve an app window with a finite screen frame")
+  }
+
   /// #4091: when the device's only screen will not report its size, an app the sole-screen rule
   /// proves full-screen (an iPhone by its idiom) has a window that is the display, so its tap still
   /// turns about that window and is dispatched.
