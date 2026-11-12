@@ -98,12 +98,12 @@ function buildRecordingSessionRecoveryHint(
   const recordStopCommand = `agent-device record stop --session ${sessionArg}`;
   const reuseText =
     context === 'selector-conflict'
-      ? `rerun with --session ${sessionArg} without device selectors`
+      ? `use --session ${sessionArg} without device selectors`
       : `reuse --session ${sessionArg}`;
 
   return (
     `A recording session, maybe another agent's or user's, holds this device. ${CHOOSE_ANOTHER_DEVICE}` +
-    `Only if it is yours: run ${recordStopCommand}, then ${closeCommand} if it still exists; or ${reuseText}.`
+    `Only if it is yours: run ${recordStopCommand}, then ${closeCommand} if still open; or ${reuseText}.`
   );
 }
 
@@ -153,7 +153,8 @@ function buildOpenSessionRecoveryHint(
 /**
  * A device-in-use hint is read by an agent that may share the host with other agents, so the moves
  * that leave the holding session alone come before any that reuse or close it. Diagnostic
- * redaction caps a hint at 400 characters, so the text stays within that with a scoped address.
+ * redaction caps a hint at 400 characters, so the text stays within that with the longest
+ * bounded session address.
  */
 const HOLDER_MAY_BE_FOREIGN = 'The holding session may belong to another agent or user. ';
 const CHOOSE_ANOTHER_DEVICE =

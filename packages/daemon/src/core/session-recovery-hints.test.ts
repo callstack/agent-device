@@ -1,11 +1,15 @@
-import { makeStoredSessionRef } from '../__tests__/support/store-factory.ts';
 import { test, expect } from 'vitest';
 import {
   buildForeignWorkspaceSessionConflict,
   buildSessionRecoveryHint,
 } from './session-recovery-hints.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
-import { IOS_SIMULATOR } from '@agent-device/test-kit';
+import { IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
+import { PLATFORM_SELECTORS, webSessionBackendKey } from '@agent-device/kernel/device';
+import type { AppError } from '@agent-device/kernel/errors';
+import { makeSessionStore, makeStoredSessionRef } from '../__tests__/support/store-factory.ts';
+import { resolveEffectiveSessionName } from '../sessions/session-routing.ts';
+import type { DaemonRequest } from './daemon-request.ts';
 
 // The recovery hint's whole job is to hand back a command that works. For an implicitly
 // cwd-scoped session — named `default`, stored as `cwd:<hash>:default` — building it from the
@@ -122,20 +126,47 @@ test('selector-conflict recovery offers no platform session to a hand-named sess
 });
 
 // Diagnostic redaction cuts any string over 400 characters, which would drop the trailing
-// commands of a hint built for a long scoped address.
-test('every recovery variant fits the redaction cap with a scoped address', () => {
-  const recording = scopedRef({
-    screenRecording: {} as NonNullable<SessionState['screenRecording']>,
-  });
+// commands of a hint. The bound comes from the code that limits addresses: the web session name
+// validator, and the implicit workspace address session routing builds for every platform.
+// Explicit native and tenant-prefixed names have no length limit, so no fixed text covers them.
+function longestBoundedAddress(): string {
+  let webMaxLength = 0;
+  try {
+    webSessionBackendKey({ name: 'x'.repeat(256) });
+  } catch (error) {
+    webMaxLength = Number((error as AppError).details?.maxLength);
+  }
+  expect(webMaxLength).toBeGreaterThan(0);
+  const cwd = mkdtempForTestSync('agent-device-hint-scope-');
+  const workspaceAddresses = [undefined, ...PLATFORM_SELECTORS].map((platform) =>
+    resolveEffectiveSessionName(
+      { command: 'open', positionals: [], flags: { platform }, meta: { cwd } } as DaemonRequest,
+      makeSessionStore(),
+    ),
+  );
+  return [...workspaceAddresses, 'x'.repeat(webMaxLength)].reduce((longest, address) =>
+    address.length > longest.length ? address : longest,
+  );
+}
+
+test('every recovery variant fits the redaction cap with the longest bounded address', () => {
+  const address = longestBoundedAddress();
+  // A cwd scope keeps the platform-session suffix in the selector-conflict variant.
+  const session = scopedRef().session;
+  const ref = makeStoredSessionRef(session, address);
+  const recording = makeStoredSessionRef(
+    { ...session, screenRecording: {} as NonNullable<SessionState['screenRecording']> },
+    address,
+  );
   const hints = [
-    buildSessionRecoveryHint(scopedRef(), 'device-in-use', { offersDeviceWait: true }),
-    buildSessionRecoveryHint(scopedRef(), 'device-in-use', { waitedMs: 30_000 }),
-    buildSessionRecoveryHint(scopedRef(), 'selector-conflict', { offersPlatformSession: true }),
+    buildSessionRecoveryHint(ref, 'device-in-use', { offersDeviceWait: true }),
+    buildSessionRecoveryHint(ref, 'device-in-use', { waitedMs: 30_000 }),
+    buildSessionRecoveryHint(ref, 'selector-conflict', { offersPlatformSession: true }),
     buildSessionRecoveryHint(recording, 'device-in-use'),
     buildSessionRecoveryHint(recording, 'selector-conflict'),
     String(
-      buildForeignWorkspaceSessionConflict(scopedRef(), IOS_SIMULATOR, { offersDeviceWait: true })
-        .error.details?.hint,
+      buildForeignWorkspaceSessionConflict(ref, IOS_SIMULATOR, { offersDeviceWait: true }).error
+        .details?.hint,
     ),
   ];
 
