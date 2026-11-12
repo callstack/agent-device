@@ -519,6 +519,34 @@ function observeProcesses(processes: ProcessFixture[]) {
   );
 }
 
+test('a managed binary symlink cannot confer ownership on an executable outside its install', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-web-install-boundary-');
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
+    const binary = nativeBinary(status.installDir);
+    const linkedBinary = nativeBinary(managedInstallPaths(stateDir, '0.27.1').installDir);
+    const linkedBin = path.dirname(linkedBinary);
+    const outsideBin = path.join(stateDir, 'unrelated-bin');
+    fs.renameSync(linkedBin, outsideBin);
+    fs.symlinkSync(outsideBin, linkedBin, process.platform === 'win32' ? 'junction' : 'dir');
+    const unrelated = fs.realpathSync.native(path.join(outsideBin, path.basename(linkedBinary)));
+    observeProcesses([
+      { pid: 101, command: `${binary} daemon`, executable: binary },
+      { pid: 102, command: unrelated, executable: unrelated },
+    ]);
+    const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
+
+    expect((await recordManagedAgentBrowserProcesses(status, store)).pids).toEqual([101]);
+    expect(store.replace.mock.calls[0]?.[1].map(({ pid }: { pid: number }) => pid)).toEqual([101]);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
 test('records verified current and retained native roots and stable descendants', async () => {
   const stateDir = mkdtempForTestSync('agent-device web life-');
   try {

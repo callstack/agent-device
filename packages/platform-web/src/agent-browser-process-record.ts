@@ -270,6 +270,12 @@ function managedFleetOwnership(status: AgentBrowserToolStatus): ManagedFleetOwne
     launchMarkers: installs.map(agentBrowserChromeLaunchMarker),
     browserHomeRoots: uniqueStrings(installs.flatMap(managedBrowserHomeMarkers)),
     daemonEntries: installs.flatMap((install) => {
+      let installRoot: string;
+      try {
+        installRoot = normalizePathSeparators(realHostPathSync(install.installDir));
+      } catch {
+        return [];
+      }
       const bin = path.join(install.installDir, 'package', 'node_modules', 'agent-browser', 'bin');
       return [
         'agent-browser-darwin-arm64',
@@ -278,10 +284,12 @@ function managedFleetOwnership(status: AgentBrowserToolStatus): ManagedFleetOwne
         'agent-browser-linux-x64',
         'agent-browser-linux-musl-arm64',
         'agent-browser-linux-musl-x64',
+        'agent-browser-win32-arm64.exe',
         'agent-browser-win32-x64.exe',
       ].flatMap((name) => {
         try {
-          return [normalizePathSeparators(realHostPathSync(path.join(bin, name)))];
+          const executable = normalizePathSeparators(realHostPathSync(path.join(bin, name)));
+          return executable.startsWith(`${installRoot}/`) ? [executable] : [];
         } catch {
           return [];
         }
