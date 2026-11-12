@@ -24,7 +24,7 @@ import {
   normalizeIsPositionals,
 } from './internal/predicates.ts';
 import { selectorFailureHint, STALE_REF_HINT } from './internal/resolve.ts';
-import { matchesWaitText } from './internal/wait-text.ts';
+import { matchesWaitText } from './internal/node.ts';
 import {
   findBestMatchesByLocator,
   checkFindArgs,

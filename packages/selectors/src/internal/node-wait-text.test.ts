@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { matchesWaitText } from './wait-text.ts';
+import { matchesWaitText } from './node.ts';
 
 // Golden `wait text` table: the Swift runner's native findText predicate is asserted against the
 // same JSON (UnitTests/RunnerTests+InteractionTests.swift).
