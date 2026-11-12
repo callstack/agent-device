@@ -40,6 +40,7 @@
 | [0036 Bounded Composite Resource Admission](0036-bounded-composite-resource-admission.md) | resource operations, nested tests, session disposal, and claim recovery inside bounded batch/replay steps |
 | [0037 Web Session Devices](0037-web-session-devices.md) | web sessions as devices of their own, the session name rule, the `p_`/`t_` backend key and tenant isolation, and first-open locking for web |
 | [0038 Snapshot capture source routing](0038-snapshot-capture-source-routing.md) | the source router for multi-source owners, one fallback, refusal scopes, surface proof, and the producer registry |
+| [0039 Pre-dispatch admission](0039-pre-dispatch-admission.md) | one admission step for resolved-target input, typed checks with declared policy, one hard request budget, private evidence provenance, and the idle accept-path cost rule |
 
 ADRs record rationale.
 The registries and gates they describe are the current source of truth.
