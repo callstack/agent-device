@@ -1,4 +1,5 @@
 import { publishFileSync } from '@agent-device/host-kit/file';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
@@ -10,7 +11,7 @@ import {
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { ScreenshotRuntimeExecution } from '@agent-device/contracts/screenshot-runtime';
 import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -420,12 +421,20 @@ function createBoundScreenshotBackend(
           const contents = await fs.readFile(capturePath);
           dispatchContext.signal?.throwIfAborted();
           _context.signal?.throwIfAborted();
-          publishFileSync({ destination: outPath, contents });
+          publishFileSync({ destination: outPath, contents, preserveExistingMode: true });
           crop.run.warnings.push(...buildScreenshotCropWarnings(outcome));
         }
         return facts.displayRotation ? { displayRotation: facts.displayRotation } : undefined;
       } finally {
-        if (tempRoot) await fs.rm(tempRoot, { recursive: true, force: true });
+        if (tempRoot) {
+          await fs.rm(tempRoot, { recursive: true, force: true }).catch((error: unknown) => {
+            emitDiagnostic({
+              level: 'warn',
+              phase: 'screenshot_crop_cleanup_failed',
+              data: { tempRoot, error: errorMessage(error) },
+            });
+          });
+        }
       }
     },
   };

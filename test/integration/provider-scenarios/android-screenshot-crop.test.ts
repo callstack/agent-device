@@ -92,7 +92,8 @@ for (const destinationExists of [true, false]) {
       async (world) => {
         await world.daemon.client().apps.open({ app: 'settings', ...world.selection });
         const destination = path.join(world.tempRoot, 'crop.png');
-        if (destinationExists) fs.writeFileSync(destination, 'existing destination');
+        if (destinationExists)
+          fs.writeFileSync(destination, 'existing destination', { mode: 0o600 });
         const response = await world.daemon.callCommand('screenshot', [destination], {
           screenshotCropOn: 'label="Apps"',
         });
@@ -101,6 +102,9 @@ for (const destinationExists of [true, false]) {
         assert.equal(result.width, 32);
         assert.equal(result.height, 24);
         assertPngDimensions(destination, 32, 24);
+        if (destinationExists && process.platform !== 'win32') {
+          assert.equal(fs.statSync(destination).mode & 0o777, 0o600);
+        }
       },
     );
   });
@@ -124,7 +128,12 @@ for (const destinationExists of [true, false]) {
         const response = await world.daemon.callCommand('screenshot', [destination], {
           screenshotCropOn: 'label="Apps"',
         });
-        assert.ok(response.json?.error);
+        assert.equal(response.json?.error?.data?.code, 'COMMAND_FAILED');
+        assert.equal(response.json?.error?.message, 'Failed to capture screenshot');
+        assert.equal(
+          world.adbCalls.filter((args) => args.join(' ') === 'exec-out screencap -p').length,
+          1,
+        );
         if (destinationExists) assert.deepEqual(fs.readFileSync(destination), sentinel);
         else assert.equal(fs.existsSync(destination), false);
       },

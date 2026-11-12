@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
@@ -41,5 +41,54 @@ describe('publishFileSync', () => {
 
     const siblings = fs.readdirSync(directory).filter((name) => name.startsWith('clean.txt.'));
     expect(siblings).toEqual([]);
+  });
+
+  test.skipIf(process.platform === 'win32').each([0o600, 0o640])(
+    'preserves existing mode %s before replacing its contents',
+    (mode) => {
+      const target = destination(`private-${mode}.png`);
+      fs.writeFileSync(target, 'private old bytes');
+      fs.chmodSync(target, mode);
+      const previousUmask = process.umask(0o077);
+      try {
+        publishFileSync({
+          destination: target,
+          contents: 'private new bytes',
+          preserveExistingMode: true,
+        });
+        expect(fs.readFileSync(target, 'utf8')).toBe('private new bytes');
+        expect(fs.statSync(target).mode & 0o777).toBe(mode);
+      } finally {
+        process.umask(previousUmask);
+      }
+    },
+  );
+
+  test('creates an absent destination when existing-mode preservation is requested', () => {
+    const target = destination('previously-absent.png');
+    publishFileSync({ destination: target, contents: 'new bytes', preserveExistingMode: true });
+    expect(fs.readFileSync(target, 'utf8')).toBe('new bytes');
+  });
+
+  test('a failed permission update leaves the existing destination unchanged', () => {
+    const target = destination('permission-update-failed.png');
+    fs.writeFileSync(target, 'old bytes');
+    const failure = new Error('permission update failed');
+    const chmod = vi.spyOn(fs, 'chmodSync').mockImplementation(() => {
+      throw failure;
+    });
+    try {
+      expect(() =>
+        publishFileSync({ destination: target, contents: 'new bytes', preserveExistingMode: true }),
+      ).toThrow(failure);
+      expect(fs.readFileSync(target, 'utf8')).toBe('old bytes');
+      expect(
+        fs
+          .readdirSync(directory)
+          .filter((name) => name.startsWith('permission-update-failed.png.')),
+      ).toEqual([]);
+    } finally {
+      chmod.mockRestore();
+    }
   });
 });
