@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { bindTestCommandHost, createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
@@ -181,19 +180,7 @@ function fakeDuo(
       const [tool, ...rest] = args;
       if (tool !== 'simctl') {
         devicectl.push(args.join(' '));
-        if (!device.simulatorSetPath && tool === 'devicectl') {
-          const displays = [panel('outer', false), panel('inner', false)];
-          const rotation = rotationAtAngle(shown[lit]);
-          const deviceOrientation = rotation.replaceAll(/-([a-z])/g, (_, letter: string) =>
-            letter.toUpperCase(),
-          );
-          fs.writeFileSync(
-            args.at(-1)!,
-            JSON.stringify({ result: { displays, deviceOrientation } }),
-          );
-          return { stdout: '', stderr: '', exitCode: 0 };
-        }
-        throw new Error(`unexpected tool call in a scoped set: ${args.join(' ')}`);
+        throw new Error(`unexpected tool call: ${args.join(' ')}`);
       }
       const spawn = rest.slice(rest.indexOf('spawn'));
       expect(spawn.slice(0, 3)).toEqual(['spawn', device.id, '/cache/fold-helper']);
