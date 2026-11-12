@@ -114,6 +114,19 @@
     "expected": false
   },
   {
+    "name": "a field that reports its hint showing matches by that hint even without a placeholder",
+    "platform": "android",
+    "text": "device name",
+    "node": {
+      "type": "android.widget.EditText",
+      "editable": true,
+      "hintShowing": true,
+      "label": "Device name",
+      "value": "Device name"
+    },
+    "expected": true
+  },
+  {
     "name": "a disabled field's value is app text and matches",
     "text": "bench-ad",
     "node": {
