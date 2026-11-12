@@ -560,7 +560,7 @@ Use the output already shown to determine whether the feed-search UI is present,
     recovery: { code: 'DEVICE_IN_USE', sample: DEVICE_IN_USE_SAMPLE },
     task: quiz(
       DEVICE_IN_USE_SAMPLE,
-      'The default web session cannot open https://example.test because the "checkout" session already owns the device. Without closing that session, what command can reuse it or wait for the device to free up?',
+      'The default web session cannot open https://example.test because the "checkout" session, which is yours, already holds the device. Without closing that session, what command can reuse it or wait for the device to free up?',
     ),
     expectations: ['validPlanCommands', 'fullPrefix'],
     matchers: [

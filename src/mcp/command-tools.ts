@@ -1,17 +1,18 @@
 import type { AgentDeviceClientConfig } from '@agent-device/contracts/client';
 import {
   COMMON_INPUT_AUDIENCE,
+  commandInputExample,
   findCommandMetadata,
   isCommandName,
   listCommandMetadata,
   listMcpCommandMetadata,
-  operatorAudience,
   operatorInputRefusal,
   type AgentDeviceClient,
   type BindingSettings,
   type CommandExecutionResult,
   type CommandMetadata,
   type CommandName,
+  type DevicePin,
   type InputAudienceMap,
   type JsonSchema,
 } from '@agent-device/command-surface';
@@ -30,6 +31,7 @@ import {
 } from '@agent-device/command-registry/registry';
 import { MCP_COMMAND_OUTPUT_SCHEMAS } from './mcp-output-schemas.ts';
 import {
+  CONFIG_LOADER_AUDIENCE,
   MCP_TOOL_CONFIG_AUDIENCE,
   MCP_TOOL_CONFIG_KEYS,
   mcpToolConfigProperties,
@@ -50,6 +52,7 @@ export type ToolResult = {
 type CommandToolExecutorDeps = {
   createClient?: (
     config: AgentDeviceClientConfig,
+    devicePin?: DevicePin,
   ) => AgentDeviceClient | Promise<AgentDeviceClient>;
   runCommand?: (
     client: AgentDeviceClient,
@@ -77,24 +80,6 @@ type McpOutputFormat = 'optimized' | 'json';
 type McpToolConfig = {
   client: AgentDeviceClientConfig;
   outputFormat: McpOutputFormat;
-};
-
-/**
- * Config-file-loading keys. Not per-command flags but flags the MCP config
- * resolver reads to load an arbitrary file; never model-writable, since that
- * file can carry operator credentials and endpoints. They appear in no tool
- * schema, so admission rejects them like any unadvertised key — with a message
- * that points at the operator path instead of the generic unknown-key text.
- */
-const CONFIG_LOADER_AUDIENCE: InputAudienceMap = {
-  config: operatorAudience({
-    operatorPath:
-      'Point the process serving these tools at a config file with the AGENT_DEVICE_CONFIG environment variable.',
-  }),
-  remoteConfig: operatorAudience({
-    operatorPath:
-      'Configure the remote profile on the process serving these tools, not per tool call.',
-  }),
 };
 
 /**
@@ -189,7 +174,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
         findInadmissibleNestedCommandInput(metadata.inputSchema, input, name);
       if (rejection) {
         return await buildErrorToolResult(
-          new AppError('INVALID_ARGS', rejection),
+          new AppError('INVALID_ARGS', rejection.message, compactHint(rejection.hint)),
           refPins,
           undefined,
           input.session,
@@ -198,18 +183,17 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
       const { captureHostEnvironment } = await import('@agent-device/host-kit/process');
       const host = captureHostEnvironment(process);
       const supportedProperties = withMcpConfigSchema(name, metadata.inputSchema).properties;
-      const { input: resolvedInput, binding } = resolveMcpConfigDefaults(
-        name,
-        input,
-        supportedProperties,
-        host,
-      );
+      const {
+        input: resolvedInput,
+        binding,
+        devicePin,
+      } = resolveMcpConfigDefaults(name, input, supportedProperties, host);
       const config = readMcpToolConfig(resolvedInput, binding);
       const commandInput = stripMcpConfigFields(resolvedInput);
       const pinnedInput = refPins.pinInput(name, commandInput, config.client.stateDir);
       // One host per tool call: the client's ensuring transport and the output formatter resolve
       // the daemon and the styling from the same host the executor captured (#3794).
-      const client = await createClient(deps, config.client, host, options.signal);
+      const client = await createClient(deps, config.client, host, options.signal, devicePin);
       try {
         const result = await (deps.runCommand ?? runCommand)(client, name, pinnedInput);
         refPins.mergeCommandResult(name, result, config.client.stateDir, commandInput.session);
@@ -274,14 +258,16 @@ async function createClient(
   config: AgentDeviceClientConfig,
   host: HostEnvironment,
   signal: AbortSignal | undefined,
+  devicePin: DevicePin | undefined,
 ): Promise<AgentDeviceClient> {
-  if (deps.createClient) return await deps.createClient(config);
+  if (deps.createClient) return await deps.createClient(config, devicePin);
   const { createAgentDeviceClient } = await import('@agent-device/client');
   const { createEnsuredDaemonTransport } = await import('@agent-device/daemon-client');
   // One client per tool call, so each call ensures the daemon it is about to use.
   const ensuring = createEnsuredDaemonTransport({ host });
   return createAgentDeviceClient(config, {
     host,
+    devicePin,
     // The client builds the same request the daemon transport takes; its type only differs in the
     // session being optional, which `sendToDaemon` defaults. The call's signal rides every request
     // the command makes, so a cancelled call closes whichever request is in flight.
@@ -386,7 +372,17 @@ function stripMcpConfigFields(input: Record<string, unknown>): Record<string, un
   );
 }
 
-type AdmissionMetadata = Pick<CommandMetadata<string, unknown>, 'inputSchema' | 'inputAudience'>;
+type AdmissionMetadata = Pick<
+  CommandMetadata<string, unknown>,
+  'inputSchema' | 'inputAudience' | 'inputExample'
+>;
+
+/** Why admission refused a call, and for an unknown argument, a call the tool accepts. */
+type AdmissionRejection = { message: string; hint?: string };
+
+function compactHint(hint: string | undefined): { hint: string } | undefined {
+  return hint === undefined ? undefined : { hint };
+}
 
 /**
  * The advertised schema for a tool — exactly what `listCommandTools` exposes.
@@ -412,7 +408,7 @@ function findInadmissibleInput(
   name: CommandName,
   metadata: AdmissionMetadata,
   input: Record<string, unknown>,
-): string | undefined {
+): AdmissionRejection | undefined {
   const advertised = advertisedInputSchema(name, metadata).properties;
   const audience = toolInputAudience(metadata);
   for (const key of Object.keys(input)) {
@@ -425,8 +421,13 @@ function findInadmissibleInput(
     // admit them so the command's own reader answers with migration guidance
     // (e.g. maxSize -> "use --scale") instead of a bare unknown-key rejection.
     if (keyAudience?.kind === 'retired') continue;
-    if (keyAudience?.kind === 'operator') return operatorInputRefusal(key, keyAudience.source);
-    return `${key} is not an accepted argument for the ${name} tool.`;
+    if (keyAudience?.kind === 'operator') {
+      return { message: operatorInputRefusal(key, keyAudience.source) };
+    }
+    return {
+      message: `${key} is not an accepted argument for the ${name} tool.`,
+      hint: `Example call: ${name} ${JSON.stringify(commandInputExample(metadata))}`,
+    };
   }
   return undefined;
 }
@@ -459,7 +460,7 @@ function findInadmissibleNestedCommandInput(
   schema: JsonSchema | undefined,
   value: unknown,
   path: string,
-): string | undefined {
+): AdmissionRejection | undefined {
   if (!schema || value === undefined) return undefined;
   if (Array.isArray(value)) {
     return firstRejection(value, (item, index) =>
@@ -484,7 +485,7 @@ function findInadmissibleNestedProperty(
   parent: Record<string, unknown>,
   key: string,
   path: string,
-): string | undefined {
+): AdmissionRejection | undefined {
   const commandKey = property.commandInputFor;
   if (commandKey === undefined) {
     return findInadmissibleNestedCommandInput(property, parent[key], path);
@@ -501,14 +502,20 @@ function findInadmissibleNestedProperty(
   // daemon request flag. Reporting it is the reader's job — answering here would
   // bury the real error under a key complaint.
   if (command === undefined || !isRecord(nested)) return undefined;
-  const rejection = findInadmissibleInput(command, findCommandMetadata(command), nested);
-  return rejection === undefined ? undefined : `${path}: ${rejection}`;
+  const metadata = findCommandMetadata(command);
+  const rejection = findInadmissibleInput(command, metadata, nested);
+  if (rejection === undefined) return undefined;
+  const step = { [commandKey]: command, [key]: commandInputExample(metadata) };
+  return {
+    message: `${path}: ${rejection.message}`,
+    ...(rejection.hint === undefined ? {} : { hint: `Example step: ${JSON.stringify(step)}` }),
+  };
 }
 
 function firstRejection<TItem>(
   items: readonly TItem[],
-  check: (item: TItem, index: number) => string | undefined,
-): string | undefined {
+  check: (item: TItem, index: number) => AdmissionRejection | undefined,
+): AdmissionRejection | undefined {
   for (const [index, item] of items.entries()) {
     const rejection = check(item, index);
     if (rejection) return rejection;

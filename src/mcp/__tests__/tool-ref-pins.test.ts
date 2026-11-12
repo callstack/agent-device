@@ -17,14 +17,10 @@ test('ref-pin store keeps per-ref provenance across snapshot and find captures',
   );
   pins.mergeCommandResult('find', { ref: '@e5', refsGeneration: 500013 }, undefined, 'demo');
 
-  const pinned = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e37' } },
-    undefined,
-  );
+  const pinned = pins.pinInput('press', { session: 'demo', ref: '@e37' }, undefined);
   assert.deepEqual(pinned, {
     session: 'demo',
-    target: { kind: 'ref', ref: '@e37~s500012' },
+    ref: '@e37~s500012',
   });
 });
 
@@ -39,14 +35,10 @@ test('ref-pin store pins the find-issued ref to the find generation', () => {
   );
   pins.mergeCommandResult('find', { ref: '@e5', refsGeneration: 500013 }, undefined, 'demo');
 
-  const pinned = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e5' } },
-    undefined,
-  );
+  const pinned = pins.pinInput('press', { session: 'demo', ref: '@e5' }, undefined);
   assert.deepEqual(pinned, {
     session: 'demo',
-    target: { kind: 'ref', ref: '@e5~s500013' },
+    ref: '@e5~s500013',
   });
 });
 
@@ -66,19 +58,11 @@ test('ref-pin store pins every listed ref from a find list response', () => {
     'demo',
   );
 
-  const first = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e5' } },
-    undefined,
-  );
-  const second = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e9' } },
-    undefined,
-  );
+  const first = pins.pinInput('press', { session: 'demo', ref: '@e5' }, undefined);
+  const second = pins.pinInput('press', { session: 'demo', ref: '@e9' }, undefined);
 
-  assert.deepEqual(first, { session: 'demo', target: { kind: 'ref', ref: '@e5~s500014' } });
-  assert.deepEqual(second, { session: 'demo', target: { kind: 'ref', ref: '@e9~s500014' } });
+  assert.deepEqual(first, { session: 'demo', ref: '@e5~s500014' });
+  assert.deepEqual(second, { session: 'demo', ref: '@e9~s500014' });
 });
 
 test('ref-pin store pins ambiguous mutation candidates issued by an error', () => {
@@ -94,14 +78,10 @@ test('ref-pin store pins ambiguous mutation candidates issued by an error', () =
     'demo',
   );
 
-  const pinned = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e5' } },
-    undefined,
-  );
+  const pinned = pins.pinInput('press', { session: 'demo', ref: '@e5' }, undefined);
   assert.deepEqual(pinned, {
     session: 'demo',
-    target: { kind: 'ref', ref: '@e5~s500014' },
+    ref: '@e5~s500014',
   });
 });
 
@@ -116,17 +96,13 @@ test('ref-pin store pins wait refs and get targets from the per-ref map', () => 
   );
 
   const wait = pins.pinInput('wait', { session: 'demo', ref: '@e2' }, undefined);
-  const get = pins.pinInput(
-    'get',
-    { session: 'demo', format: 'text', target: { kind: 'ref', ref: '@e37' } },
-    undefined,
-  );
+  const get = pins.pinInput('get', { session: 'demo', format: 'text', ref: '@e37' }, undefined);
 
   assert.deepEqual(wait, { session: 'demo', ref: '@e2~s500012' });
   assert.deepEqual(get, {
     session: 'demo',
     format: 'text',
-    target: { kind: 'ref', ref: '@e37~s500012' },
+    ref: '@e37~s500012',
   });
 });
 
@@ -140,12 +116,8 @@ test('ref-pin store merges digest-level snapshot refs too', () => {
     'demo',
   );
 
-  const pinned = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e9' } },
-    undefined,
-  );
-  assert.deepEqual(pinned, { session: 'demo', target: { kind: 'ref', ref: '@e9~s41' } });
+  const pinned = pins.pinInput('press', { session: 'demo', ref: '@e9' }, undefined);
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e9~s41' });
 });
 
 // --- #1101 --settle: interaction responses re-pin from the settled diff ---
@@ -183,28 +155,20 @@ test('ref-pin store merges per-ref pins from a settle response diff', () => {
     'demo',
   );
 
-  const first = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e2' } },
-    undefined,
-  );
-  const second = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e4' } },
-    undefined,
-  );
+  const first = pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined);
+  const second = pins.pinInput('press', { session: 'demo', ref: '@e4' }, undefined);
   const untouched = pins.pinInput(
     'get',
-    { session: 'demo', format: 'text', target: { kind: 'ref', ref: '@e37' } },
+    { session: 'demo', format: 'text', ref: '@e37' },
     undefined,
   );
 
-  assert.deepEqual(first, { session: 'demo', target: { kind: 'ref', ref: '@e2~s7' } });
-  assert.deepEqual(second, { session: 'demo', target: { kind: 'ref', ref: '@e4~s8' } });
+  assert.deepEqual(first, { session: 'demo', ref: '@e2~s7' });
+  assert.deepEqual(second, { session: 'demo', ref: '@e4~s8' });
   assert.deepEqual(untouched, {
     session: 'demo',
     format: 'text',
-    target: { kind: 'ref', ref: '@e37~s7' },
+    ref: '@e37~s7',
   });
 });
 
@@ -232,12 +196,8 @@ test('ref-pin store merges digest-level settled refs too', () => {
     'demo',
   );
 
-  const pinned = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e4' } },
-    undefined,
-  );
-  assert.deepEqual(pinned, { session: 'demo', target: { kind: 'ref', ref: '@e4~s9' } });
+  const pinned = pins.pinInput('press', { session: 'demo', ref: '@e4' }, undefined);
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e4~s9' });
 });
 
 test('ref-pin store merges per-ref pins from a settle response unchanged-interactive tail', () => {
@@ -265,12 +225,8 @@ test('ref-pin store merges per-ref pins from a settle response unchanged-interac
     'demo',
   );
 
-  const pinned = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e1' } },
-    undefined,
-  );
-  assert.deepEqual(pinned, { session: 'demo', target: { kind: 'ref', ref: '@e1~s9' } });
+  const pinned = pins.pinInput('press', { session: 'demo', ref: '@e1' }, undefined);
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e1~s9' });
 });
 
 test('ref-pin store leaves pins untouched for plain interaction responses', () => {
@@ -284,19 +240,11 @@ test('ref-pin store leaves pins untouched for plain interaction responses', () =
   );
   pins.mergeCommandResult('press', { ref: 'e2', x: 10, y: 20 }, undefined, 'demo');
 
-  const first = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e2' } },
-    undefined,
-  );
-  const second = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e2' } },
-    undefined,
-  );
+  const first = pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined);
+  const second = pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined);
 
-  assert.deepEqual(first, { session: 'demo', target: { kind: 'ref', ref: '@e2~s7' } });
-  assert.deepEqual(second, { session: 'demo', target: { kind: 'ref', ref: '@e2~s7' } });
+  assert.deepEqual(first, { session: 'demo', ref: '@e2~s7' });
+  assert.deepEqual(second, { session: 'demo', ref: '@e2~s7' });
 });
 
 // --- ADR 0012 decision 2: resolution diagnostics are never ref-issued/pinned ---
@@ -328,25 +276,13 @@ test('ref-pin store never pins resolution.winnerDiagnostic/alternatives', () => 
     'demo',
   );
 
-  const e2 = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e2' } },
-    undefined,
-  );
-  const e3 = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e3' } },
-    undefined,
-  );
-  const diag = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@diag-e3' } },
-    undefined,
-  );
+  const e2 = pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined);
+  const e3 = pins.pinInput('press', { session: 'demo', ref: '@e3' }, undefined);
+  const diag = pins.pinInput('press', { session: 'demo', ref: '@diag-e3' }, undefined);
 
-  assert.deepEqual(e2, { session: 'demo', target: { kind: 'ref', ref: '@e2~s7' } });
-  assert.deepEqual(e3, { session: 'demo', target: { kind: 'ref', ref: '@e3~s7' } });
-  assert.deepEqual(diag, { session: 'demo', target: { kind: 'ref', ref: '@diag-e3' } });
+  assert.deepEqual(e2, { session: 'demo', ref: '@e2~s7' });
+  assert.deepEqual(e3, { session: 'demo', ref: '@e3~s7' });
+  assert.deepEqual(diag, { session: 'demo', ref: '@diag-e3' });
 });
 
 test('ref-pin store passes never-issued refs through unpinned', () => {
@@ -359,12 +295,8 @@ test('ref-pin store passes never-issued refs through unpinned', () => {
     'demo',
   );
 
-  const pinned = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e99' } },
-    undefined,
-  );
-  assert.deepEqual(pinned, { session: 'demo', target: { kind: 'ref', ref: '@e99' } });
+  const pinned = pins.pinInput('press', { session: 'demo', ref: '@e99' }, undefined);
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e99' });
 });
 
 test('ref-pin store passes refs through unpinned when the scope has no history', () => {
@@ -377,12 +309,8 @@ test('ref-pin store passes refs through unpinned when the scope has no history',
     'other',
   );
 
-  const pinned = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e2' } },
-    undefined,
-  );
-  assert.deepEqual(pinned, { session: 'demo', target: { kind: 'ref', ref: '@e2' } });
+  const pinned = pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined);
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e2' });
 });
 
 test('ref-pin store scopes by state dir so same-named sessions never cross-pollinate', () => {
@@ -397,24 +325,24 @@ test('ref-pin store scopes by state dir so same-named sessions never cross-polli
 
   const otherState = pins.pinInput(
     'press',
-    { session: 'demo', stateDir: '/state/b', target: { kind: 'ref', ref: '@e2' } },
+    { session: 'demo', stateDir: '/state/b', ref: '@e2' },
     '/state/b',
   );
   const originalState = pins.pinInput(
     'press',
-    { session: 'demo', stateDir: '/state/a', target: { kind: 'ref', ref: '@e2' } },
+    { session: 'demo', stateDir: '/state/a', ref: '@e2' },
     '/state/a',
   );
 
   assert.deepEqual(otherState, {
     session: 'demo',
     stateDir: '/state/b',
-    target: { kind: 'ref', ref: '@e2' },
+    ref: '@e2',
   });
   assert.deepEqual(originalState, {
     session: 'demo',
     stateDir: '/state/a',
-    target: { kind: 'ref', ref: '@e2~s500012' },
+    ref: '@e2~s500012',
   });
 });
 
@@ -434,12 +362,8 @@ test('ref-pin store clears the whole scope when a ref-issuing response stops car
     'demo',
   );
 
-  const pinned = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e2' } },
-    undefined,
-  );
-  assert.deepEqual(pinned, { session: 'demo', target: { kind: 'ref', ref: '@e2' } });
+  const pinned = pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined);
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e2' });
 });
 
 test('ref-pin store never rewrites refs that already carry a suffix and never pins non-@ refs', () => {
@@ -452,19 +376,11 @@ test('ref-pin store never rewrites refs that already carry a suffix and never pi
     'demo',
   );
 
-  const alreadyPinned = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e2~s3' } },
-    undefined,
-  );
-  const missingAt = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: 'e2' } },
-    undefined,
-  );
+  const alreadyPinned = pins.pinInput('press', { session: 'demo', ref: '@e2~s3' }, undefined);
+  const missingAt = pins.pinInput('press', { session: 'demo', ref: 'e2' }, undefined);
 
-  assert.deepEqual(alreadyPinned, { session: 'demo', target: { kind: 'ref', ref: '@e2~s3' } });
-  assert.deepEqual(missingAt, { session: 'demo', target: { kind: 'ref', ref: 'e2' } });
+  assert.deepEqual(alreadyPinned, { session: 'demo', ref: '@e2~s3' });
+  assert.deepEqual(missingAt, { session: 'demo', ref: 'e2' });
 });
 
 test('ref-pin store bounds retained pins per scope', () => {
@@ -476,19 +392,11 @@ test('ref-pin store bounds retained pins per scope', () => {
   }
   pins.mergeCommandResult('snapshot', { nodes, refsGeneration: 1 }, undefined, 'demo');
 
-  const first = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e0' } },
-    undefined,
-  );
-  const last = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e1001' } },
-    undefined,
-  );
+  const first = pins.pinInput('press', { session: 'demo', ref: '@e0' }, undefined);
+  const last = pins.pinInput('press', { session: 'demo', ref: '@e1001' }, undefined);
 
-  assert.deepEqual(first, { session: 'demo', target: { kind: 'ref', ref: '@e0' } });
-  assert.deepEqual(last, { session: 'demo', target: { kind: 'ref', ref: '@e1001~s1' } });
+  assert.deepEqual(first, { session: 'demo', ref: '@e0' });
+  assert.deepEqual(last, { session: 'demo', ref: '@e1001~s1' });
 });
 
 // --- ADR 0012 migration step 2: replay divergence is a ref-issuing error ---
@@ -523,12 +431,8 @@ test('ref-pin store merges divergence screen refs and pins them for later inputs
 
   pins.mergeErrorDetails(replayDivergenceDetails(), undefined, 'demo');
 
-  const pinned = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e5' } },
-    undefined,
-  );
-  assert.deepEqual(pinned, { session: 'demo', target: { kind: 'ref', ref: '@e5~s12' } });
+  const pinned = pins.pinInput('press', { session: 'demo', ref: '@e5' }, undefined);
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e5~s12' });
 });
 
 test('ref-pin store leaves existing pins untouched for an error without a divergence', () => {
@@ -542,12 +446,8 @@ test('ref-pin store leaves existing pins untouched for an error without a diverg
   );
   pins.mergeErrorDetails({ code: 'INVALID_ARGS', message: 'bad selector' }, undefined, 'demo');
 
-  const pinned = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e2' } },
-    undefined,
-  );
-  assert.deepEqual(pinned, { session: 'demo', target: { kind: 'ref', ref: '@e2~s7' } });
+  const pinned = pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined);
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e2~s7' });
 });
 
 test('ref-pin store leaves existing pins untouched for a mutating find without refsGeneration', () => {
@@ -561,12 +461,8 @@ test('ref-pin store leaves existing pins untouched for a mutating find without r
   );
   pins.mergeCommandResult('find', { ref: '@e2' }, undefined, 'demo');
 
-  const pinned = pins.pinInput(
-    'press',
-    { session: 'demo', target: { kind: 'ref', ref: '@e2' } },
-    undefined,
-  );
-  assert.deepEqual(pinned, { session: 'demo', target: { kind: 'ref', ref: '@e2~s7' } });
+  const pinned = pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined);
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e2~s7' });
 });
 
 // --- #1638: the generic-route settle commands pin on identical terms ---
@@ -607,14 +503,14 @@ test('ref-pin store merges per-ref pins from a scroll settle diff', () => {
 
   // The scrolled-in ref pins at the settle generation; a ref the settle never
   // republished keeps its older snapshot pin, so the daemon still warns on it.
-  assert.deepEqual(
-    pins.pinInput('press', { session: 'demo', target: { kind: 'ref', ref: '@e4' } }, undefined),
-    { session: 'demo', target: { kind: 'ref', ref: '@e4~s8' } },
-  );
-  assert.deepEqual(
-    pins.pinInput('press', { session: 'demo', target: { kind: 'ref', ref: '@e37' } }, undefined),
-    { session: 'demo', target: { kind: 'ref', ref: '@e37~s7' } },
-  );
+  assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e4' }, undefined), {
+    session: 'demo',
+    ref: '@e4~s8',
+  });
+  assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e37' }, undefined), {
+    session: 'demo',
+    ref: '@e37~s7',
+  });
 });
 
 test('ref-pin store merges per-ref pins from a back settle tail', () => {
@@ -641,10 +537,10 @@ test('ref-pin store merges per-ref pins from a back settle tail', () => {
     'demo',
   );
 
-  assert.deepEqual(
-    pins.pinInput('press', { session: 'demo', target: { kind: 'ref', ref: '@e6' } }, undefined),
-    { session: 'demo', target: { kind: 'ref', ref: '@e6~s12' } },
-  );
+  assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e6' }, undefined), {
+    session: 'demo',
+    ref: '@e6~s12',
+  });
 });
 
 test('ref-pin store leaves pins untouched for a scroll with no settle payload', () => {
@@ -663,8 +559,8 @@ test('ref-pin store leaves pins untouched for a scroll with no settle payload', 
     'demo',
   );
 
-  assert.deepEqual(
-    pins.pinInput('press', { session: 'demo', target: { kind: 'ref', ref: '@e2' } }, undefined),
-    { session: 'demo', target: { kind: 'ref', ref: '@e2~s7' } },
-  );
+  assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined), {
+    session: 'demo',
+    ref: '@e2~s7',
+  });
 });

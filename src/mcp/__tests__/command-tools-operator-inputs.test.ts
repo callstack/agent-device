@@ -9,8 +9,9 @@ import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts
 
 // Operator-owned inputs are never model-writable: the model reads untrusted
 // app UI text and picks tool arguments, so no tool schema may offer a
-// parameter to write a credential, the endpoint it is sent to, or an
-// operator infrastructure path into (exfiltration/redirect path). The keys
+// parameter to write a credential, the endpoint it is sent to, an
+// operator infrastructure path, or the tenant/lease scope a connection is
+// admitted under (exfiltration/redirect path). The keys
 // are refused as explicit input too — fail closed with env guidance, the
 // same posture as retired fields — while operator env/config defaults keep
 // flowing outside the model-writable surface.
@@ -25,6 +26,10 @@ const OPERATOR_OWNED_KEYS = [
   'iosXctestrunFile',
   'iosXctestDerivedDataPath',
   'iosXctestEnvDir',
+  'androidDeviceAllowlist',
+  'tenant',
+  'runId',
+  'leaseId',
 ] as const;
 
 // The rest of the shared common input: keys a model may write, because they
@@ -37,10 +42,6 @@ const MODEL_WRITABLE_COMMON_KEYS = [
   'device',
   'udid',
   'serial',
-  'androidDeviceAllowlist',
-  'tenant',
-  'runId',
-  'leaseId',
   'debug',
 ] as const;
 
@@ -99,8 +100,8 @@ test('MCP neither advertises nor admits the retired readiness budget', async () 
   });
 
   for (const [command, input] of [
-    ['press', { target: { kind: 'selector', selector: 'label=Continue' } }],
-    ['fill', { target: { kind: 'selector', selector: 'label=Name' }, text: 'x' }],
+    ['press', { selector: 'label=Continue' }],
+    ['fill', { selector: 'label=Name', text: 'x' }],
   ] as const) {
     const result = await executor.execute(command, { ...input, readinessTimeoutMs: 2_000 });
     assert.equal(result.isError, true, command);
@@ -215,6 +216,10 @@ test('MCP refuses any argument the advertised schema does not list', async () =>
 test('MCP still resolves operator env values outside the model-writable surface', async () => {
   vi.stubEnv('AGENT_DEVICE_DAEMON_AUTH_TOKEN', 'operator-env-token');
   vi.stubEnv('AGENT_DEVICE_STATE_DIR', '/operator/state-dir');
+  vi.stubEnv('AGENT_DEVICE_TENANT', 'operator-tenant');
+  vi.stubEnv('AGENT_DEVICE_RUN_ID', 'operator-run');
+  vi.stubEnv('AGENT_DEVICE_LEASE_ID', 'operator-lease');
+  vi.stubEnv('AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST', 'emulator-5554');
   const createdConfigs: Array<Record<string, unknown>> = [];
   const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
   const executor = createCommandToolExecutor({
@@ -232,6 +237,10 @@ test('MCP still resolves operator env values outside the model-writable surface'
 
   assert.equal(result.isError, false);
   assert.equal(calls[0]?.input.daemonAuthToken, 'operator-env-token');
+  assert.equal(calls[0]?.input.tenant, 'operator-tenant');
+  assert.equal(calls[0]?.input.runId, 'operator-run');
+  assert.equal(calls[0]?.input.leaseId, 'operator-lease');
+  assert.equal(calls[0]?.input.androidDeviceAllowlist, 'emulator-5554');
   assert.equal(createdConfigs[0]?.stateDir, '/operator/state-dir');
 });
 
@@ -250,7 +259,7 @@ test('MCP neither advertises nor admits the CLI-only fill textStdin marker', asy
   });
 
   const result = await executor.execute('fill', {
-    target: { kind: 'ref', ref: '@e3' },
+    ref: '@e3',
     text: 'secret',
     textStdin: true,
   });

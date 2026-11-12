@@ -30,7 +30,6 @@ import {
   request,
   requiredDaemonString,
   selectorSnapshotInputFromFlags,
-  targetInputFromClientTarget,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import type { ScrollInputDirection } from '@agent-device/contracts/scroll-gesture';
@@ -40,7 +39,7 @@ export const interactionCliReaders = {
     ...commonInputFromFlags(flags),
     ...selectorSnapshotInputFromFlags(flags),
     ...repeatedInputFromFlags(flags),
-    target: targetInputFromClientTarget(readInteractionTargetFromPositionals(positionals)),
+    ...readInteractionTargetFromPositionals(positionals),
     button: flags.clickButton,
     verify: flags.verify,
   }),
@@ -48,7 +47,7 @@ export const interactionCliReaders = {
     ...commonInputFromFlags(flags),
     ...selectorSnapshotInputFromFlags(flags),
     ...repeatedInputFromFlags(flags),
-    target: targetInputFromClientTarget(readInteractionTargetFromPositionals(positionals)),
+    ...readInteractionTargetFromPositionals(positionals),
     verify: flags.verify,
   }),
   longpress: (positionals, flags) => {
@@ -56,14 +55,13 @@ export const interactionCliReaders = {
     return {
       ...commonInputFromFlags(flags),
       ...selectorSnapshotInputFromFlags(flags),
-      target: targetInputFromClientTarget(decoded),
-      durationMs: decoded.durationMs,
+      ...decoded,
     };
   },
   hover: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
     ...selectorSnapshotInputFromFlags(flags),
-    target: targetInputFromClientTarget(readInteractionTargetFromPositionals(positionals)),
+    ...readInteractionTargetFromPositionals(positionals),
   }),
   swipe: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
@@ -91,7 +89,7 @@ export const interactionCliReaders = {
     return {
       ...commonInputFromFlags(flags),
       ...selectorSnapshotInputFromFlags(flags),
-      target: targetInputFromClientTarget(decoded.target),
+      ...decoded.target,
       text: decoded.text,
       delayMs: flags.delayMs,
       recordAs: flags.recordAs,
@@ -118,7 +116,7 @@ export const interactionCliReaders = {
     ...observationRecordInputFromFlags(flags),
     ...selectorSnapshotInputFromFlags(flags),
     format: readGetFormat(positionals[0]),
-    target: targetInputFromClientTarget(readElementTargetFromPositionals(positionals.slice(1))),
+    ...readElementTargetFromPositionals(positionals.slice(1)),
   }),
 } satisfies Record<string, CliReader>;
 

@@ -10,6 +10,7 @@
     "@agent-device/contracts": "workspace:*",
     "@agent-device/daemon-client": "workspace:*",
     "@agent-device/daemon-contracts": "workspace:*",
+    "@agent-device/device-selection": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*",
     "@agent-device/platform-apple": "workspace:*",

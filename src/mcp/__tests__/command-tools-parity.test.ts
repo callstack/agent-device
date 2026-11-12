@@ -6,7 +6,7 @@ import { createAgentDeviceClient } from '@agent-device/client';
 import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
 import type { AgentDeviceClient, CommandExecutionResult } from '@agent-device/command-surface';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
-import { COMMAND_OUTPUT_SCHEMAS } from '@agent-device/command-surface';
+import { COMMAND_OUTPUT_SCHEMAS, readInputFromCli } from '@agent-device/command-surface';
 import { validateAgainstSchema } from './output-schema-validator.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
@@ -155,7 +155,8 @@ test('MCP fill projects target-bound unconfirmed verification through its advert
   ]);
 
   const result = await executor.execute('fill', {
-    target: { kind: 'point', x: 100, y: 50 },
+    x: 100,
+    y: 50,
     text: fillResult.requested,
   });
   assert.deepEqual(result.structuredContent, fillResult);
@@ -237,3 +238,63 @@ test('MCP applies config-backed command defaults; explicit operator input is ref
   assert.ok(calls.every((request) => request.command === 'snapshot'));
   assert.ok(calls.every((request) => request.flags?.appsFilter === undefined));
 });
+
+// The CLI and MCP share one command input. A UI target spelled on the command line and the same
+// target passed as tool arguments must reach runCommand as the identical object, so a shape that
+// drifts on either side fails here.
+const UI_TARGETS = [
+  { name: 'ref', argv: ['@e6'], input: { ref: '@e6' } },
+  { name: 'ref with label', argv: ['@e6', 'Products'], input: { ref: '@e6', label: 'Products' } },
+  { name: 'selector', argv: ['id="home/products"'], input: { selector: 'id="home/products"' } },
+  { name: 'point', argv: ['201', '160'], input: { x: 201, y: 160 } },
+  { name: 'pinned ref', argv: ['@e6~s4'], input: { ref: '@e6~s4' } },
+] as const;
+
+const TARGETED_COMMANDS = [
+  { command: 'press', before: [], after: [], input: {}, without: [] },
+  { command: 'click', before: [], after: [], input: {}, without: [] },
+  { command: 'longpress', before: [], after: [], input: {}, without: [] },
+  { command: 'hover', before: [], after: [], input: {}, without: [] },
+  // The CLI reads the words after a fill ref as its text, so fill has no label spelling.
+  {
+    command: 'fill',
+    before: [],
+    after: ['hello'],
+    input: { text: 'hello' },
+    without: ['ref with label'],
+  },
+  { command: 'get', before: ['text'], after: [], input: { format: 'text' }, without: ['point'] },
+] as const;
+
+const CLI_TARGET_SCENARIOS = TARGETED_COMMANDS.flatMap((command) =>
+  UI_TARGETS.filter((target) => !(command.without as readonly string[]).includes(target.name)).map(
+    (target) => ({
+      label: `${command.command} ${target.name}`,
+      command: command.command,
+      argv: [...command.before, ...target.argv, ...command.after],
+      input: { ...command.input, ...target.input },
+    }),
+  ),
+);
+
+test.for(CLI_TARGET_SCENARIOS)(
+  'CLI argv and MCP input reach runCommand identically: $label',
+  async ({ command, argv, input }) => {
+    const reached: Array<Record<string, unknown>> = [];
+    const executor = createCommandToolExecutor({
+      createClient: () => ({}) as AgentDeviceClient,
+      runCommand: async (_client, _name, commandInput) => {
+        reached.push(commandInput);
+        return {};
+      },
+    });
+    await executor.execute(command, input);
+    const cliInput = readInputFromCli(command, argv, { json: false, help: false, version: false });
+
+    assert.deepEqual(reached, [definedKeys(cliInput)]);
+  },
+);
+
+function definedKeys(input: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
+}

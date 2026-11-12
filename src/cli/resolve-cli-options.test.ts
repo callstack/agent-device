@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { resolveCliOptions } from './resolve-cli-options.ts';
 
@@ -164,4 +165,33 @@ test('typed device selectors still reach device status and device release', () =
   );
   assert.equal(parsed.flags.platform, 'ios');
   assert.equal(parsed.flags.udid, '01234567-89AB-CDEF-0123-456789ABCDEF');
+});
+
+function projectPinnedTo(config: Record<string, unknown>): string {
+  const project = mkdtempForTestSync('agent-device-cli-pin-');
+  fs.writeFileSync(path.join(project, 'agent-device.json'), JSON.stringify(config));
+  return project;
+}
+
+test('without devicePin a configured device stays an overridable default', () => {
+  const cwd = projectPinnedTo({ platform: 'ios', device: 'iPad Pro' });
+  const parsed = resolveCliOptions(['open', 'com.example.app', '--device', 'iPhone 16'], {
+    cwd,
+    env: isolatedEnv({}),
+  });
+
+  assert.equal(parsed.flags.device, 'iPhone 16');
+  assert.equal(parsed.devicePin, undefined);
+});
+
+test('a selector-less command inherits the pinned device', () => {
+  const cwd = projectPinnedTo({ devicePin: { platform: 'ios', device: 'iPad Pro' } });
+  const parsed = resolveCliOptions(['open', 'com.example.app'], { cwd, env: isolatedEnv({}) });
+
+  assert.equal(parsed.flags.platform, 'ios');
+  assert.equal(parsed.flags.device, 'iPad Pro');
+  assert.deepEqual(parsed.devicePin, {
+    selector: { platform: 'ios', device: 'iPad Pro' },
+    source: { kind: 'project', path: path.join(cwd, 'agent-device.json') },
+  });
 });

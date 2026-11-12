@@ -220,7 +220,7 @@ export const SUITE: readonly SuiteScenario<SuiteStep>[] = [
             command: 'get',
             input: {
               format: 'text',
-              target: { kind: 'selector', selector: 'id="gesture-fling-status"' },
+              selector: 'id="gesture-fling-status"',
             },
           },
           { command: 'is', input: { predicate: 'visible', selector: 'id="gesture-canary-ready"' } },

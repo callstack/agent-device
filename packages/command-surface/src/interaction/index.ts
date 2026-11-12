@@ -1,5 +1,6 @@
 import type {
   ClickOptions,
+  ElementTarget,
   FillOptions,
   FindOptions,
   FocusOptions,
@@ -33,7 +34,6 @@ import {
   objectSchema,
   stringArraySchema,
   stringSchema,
-  toClientElementTarget,
   toClientInteractionTarget,
   toRepeatedOptions,
   toSelectorSnapshotOptions,
@@ -662,7 +662,7 @@ function toClickOptions(input: ClickInput): ClickOptions {
 function toPressOptions(input: PressInput): PressOptions {
   return {
     ...commonToClientOptions(input),
-    ...toClientInteractionTarget(input.target),
+    ...toClientInteractionTarget(input),
     ...toSelectorSnapshotOptions(input),
     ...toRepeatedOptions(input),
     verify: input.verify,
@@ -673,7 +673,7 @@ function toPressOptions(input: PressInput): PressOptions {
 function toFillOptions(input: FillInput): FillOptions {
   return {
     ...commonToClientOptions(input),
-    ...toClientInteractionTarget(input.target),
+    ...toClientInteractionTarget(input),
     ...toSelectorSnapshotOptions(input),
     text: input.text,
     delayMs: input.delayMs,
@@ -687,7 +687,7 @@ function toFillOptions(input: FillInput): FillOptions {
 function toLongPressOptions(input: LongPressInput): LongPressOptions {
   return {
     ...commonToClientOptions(input),
-    ...toClientInteractionTarget(input.target),
+    ...toClientInteractionTarget(input),
     ...toSelectorSnapshotOptions(input),
     durationMs: input.durationMs,
     ...toSettleOptions(input),
@@ -697,7 +697,7 @@ function toLongPressOptions(input: LongPressInput): LongPressOptions {
 function toHoverOptions(input: HoverInput): HoverOptions {
   return {
     ...commonToClientOptions(input),
-    ...toClientInteractionTarget(input.target),
+    ...toClientInteractionTarget(input),
     ...toSelectorSnapshotOptions(input),
     ...toSettleOptions(input),
   };
@@ -718,7 +718,7 @@ function toSettleOptions(input: {
 function toGetOptions(input: GetInput): GetOptions {
   return {
     ...commonToClientOptions(input),
-    ...toClientElementTarget(input.target),
+    ...toClientInteractionTarget<ElementTarget>(input),
     ...toSelectorSnapshotOptions(input),
     format: input.format,
     // `--record` is scoped (ADR 0012 decision 6 amendment), so it does NOT ride

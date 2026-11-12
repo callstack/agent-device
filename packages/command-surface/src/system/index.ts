@@ -357,6 +357,7 @@ const foldFieldMetadata = defineFieldCommandMetadata(
       const { pose, keyframes, ...common } = fields;
       return { ...common, ...parseFoldInput({ pose, keyframes }) };
     },
+    inputExample: { pose: 'half-open' },
   },
 );
 
@@ -478,6 +479,7 @@ const telephonyFieldMetadata = defineFieldCommandMetadata(
       const { action, number, text, ...common } = readFieldInput(input, telephonyFields);
       return { ...common, ...parseTelephonyEventInput({ action, number, text }) };
     },
+    inputExample: { action: 'call', number: '+15555550100' },
   },
 );
 

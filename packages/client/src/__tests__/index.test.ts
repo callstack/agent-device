@@ -400,12 +400,12 @@ test('structured interaction input keeps UI target separate from deviceTarget', 
   await runCommand(client, 'get', {
     deviceTarget: 'mobile',
     format: 'text',
-    target: { kind: 'ref', ref: '@e1' },
+    ref: '@e1',
   });
   await runCommand(client, 'longpress', {
     deviceTarget: 'mobile',
     durationMs: 800,
-    target: { kind: 'ref', ref: '@e2' },
+    ref: '@e2',
   });
 
   assert.equal(setup.calls.length, 2);

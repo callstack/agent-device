@@ -21,14 +21,6 @@ export function readRecordField(
   return value as Record<string, unknown>;
 }
 
-export function requiredString(record: Record<string, unknown>, key: string): string {
-  const value = record[key];
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new AppError('INVALID_ARGS', `Expected ${key} to be a non-empty string.`);
-  }
-  return value;
-}
-
 /**
  * Opt-in reader for the one field where the empty string is a VALUE, not a missing input:
  * `fill <target> ""` is the clear-field primitive (#2063). `requiredField` still refuses a
@@ -69,18 +61,6 @@ export function optionalBoolean(record: Record<string, unknown>, key: string): b
   if (value === undefined) return undefined;
   if (typeof value !== 'boolean') {
     throw new AppError('INVALID_ARGS', `Expected ${key} to be a boolean.`);
-  }
-  return value;
-}
-
-export function requiredEnum<const T extends readonly string[]>(
-  record: Record<string, unknown>,
-  key: string,
-  values: T,
-): T[number] {
-  const value = record[key];
-  if (typeof value !== 'string' || !values.includes(value)) {
-    throw new AppError('INVALID_ARGS', `Expected ${key} to be one of: ${values.join(', ')}.`);
   }
   return value;
 }

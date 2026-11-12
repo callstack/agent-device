@@ -9,6 +9,7 @@ import { AppError } from '@agent-device/kernel/errors';
 
 export type { AgentDeviceClient, AgentDeviceCommandClient } from './client-port.ts';
 export type { CommandMetadata, JsonSchema } from './command-contract.ts';
+export { commandInputExample } from './command-contract.ts';
 export type { InputAudience, InputAudienceMap } from './input-audience.ts';
 export type { CommandName } from './command-metadata.ts';
 export type { CommandExecutionResult } from './command-surface.ts';
@@ -36,7 +37,7 @@ export { isFlagSupportedForCommand } from './schema/option-schema.ts';
 export {
   applyDefaultPlatformBinding,
   resolveBindingSettings,
-  resolveConfigBackedFlagDefaults,
+  resolveConfigDefaults,
   type BindingSettings,
 } from './schema/cli-config.ts';
 export { mergeDefinedFlags } from './schema/merge-flags.ts';
@@ -107,3 +108,5 @@ async function prepareRequestWithMetadataFlags(
     ...(metadata ? { metadataFlags: readMetadataCommandFlags(metadata, request.options) } : {}),
   };
 }
+
+export type { DevicePin } from '@agent-device/contracts/device';

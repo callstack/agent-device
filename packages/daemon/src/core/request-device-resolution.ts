@@ -25,14 +25,16 @@ export async function resolveRequestTargetDevice(
   options: RequestTargetDeviceOptions,
   flags: RequestTargetDeviceFlags = req.flags ?? {},
 ): ReturnType<typeof resolveTargetDevice> {
-  const device = await resolveTargetDevice(
-    { ...flags, ...resolveLeaseScope(req) },
-    {
-      ...options,
-      webSession: req.internal?.webSession,
-    },
-  );
+  const device = await resolveTargetDevice(await resolveRequestDeviceFlags(req, flags), {
+    ...options,
+    webSession: req.internal?.webSession,
+  });
   assertWebSelectionHasIdentity(req, device);
+  if (req.meta?.devicePin) {
+    const { assertDeviceHonorsPin } =
+      await import('@agent-device/device-selection/device-selection-resolver');
+    assertDeviceHonorsPin(req.meta.devicePin, device, flags);
+  }
   return device;
 }
 
@@ -42,12 +44,33 @@ export async function resolveRequestTargetDeviceSelection(
   flags: RequestTargetDeviceFlags = req.flags ?? {},
 ): ReturnType<typeof resolveTargetDeviceSelection> {
   const selection = await resolveTargetDeviceSelection(
-    { ...flags, ...resolveLeaseScope(req) },
+    await resolveRequestDeviceFlags(req, flags),
     {
       ...options,
       webSession: req.internal?.webSession,
     },
   );
   assertWebSelectionHasIdentity(req, selection.device);
+  if (req.meta?.devicePin) {
+    const { assertDeviceHonorsPin } =
+      await import('@agent-device/device-selection/device-selection-resolver');
+    assertDeviceHonorsPin(req.meta.devicePin, selection.device, flags);
+  }
   return selection;
+}
+
+async function resolveRequestDeviceFlags(
+  req: DaemonRequest,
+  flags: RequestTargetDeviceFlags,
+): Promise<RequestTargetDeviceFlags> {
+  const pin = req.meta?.devicePin;
+  if (pin) {
+    const { effectiveDevicePinSelector } =
+      await import('@agent-device/device-selection/device-selection-resolver');
+    flags = { ...flags, ...effectiveDevicePinSelector(pin, flags) };
+  }
+  return {
+    ...flags,
+    ...resolveLeaseScope(req),
+  };
 }

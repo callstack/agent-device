@@ -1,3 +1,4 @@
+import { attachSnapshotNodeInteractionBounds } from '@agent-device/kernel/rect-center';
 import assert from 'node:assert/strict';
 import fc from 'fast-check';
 import type { Point, Rect } from '@agent-device/kernel/snapshot';
@@ -6,15 +7,139 @@ import {
   interactionTouchPointScenarioArb,
   makeSnapshotState,
   PROPERTY_RUNS,
+  pixelRectArb,
+  finiteRectArb,
 } from './snapshot-geometry.fixtures.ts';
 import { resolveInteractionTouchPoint } from './interaction-touch-point.ts';
+
+test.each([
+  { x: Number.MAX_VALUE, y: 0, width: Number.MAX_VALUE, height: 10 },
+  { x: 0, y: Number.MAX_VALUE, width: 10, height: Number.MAX_VALUE },
+])('rejects a center that overflows finite rectangle components: %j', (rect) => {
+  const node = { index: 0, rect };
+  assert.deepEqual(resolveInteractionTouchPoint([node], node), { kind: 'invalid' });
+});
+
+test('property: finite rectangles never resolve a non-finite tap coordinate', () => {
+  fc.assert(
+    fc.property(finiteRectArb, (rect) => {
+      const node = { index: 0, rect };
+      const result = resolveInteractionTouchPoint([node], node);
+      if (result.kind !== 'resolved') return;
+      assert.ok(Number.isFinite(result.point.x) && Number.isFinite(result.point.y));
+    }),
+    { numRuns: PROPERTY_RUNS },
+  );
+});
+
+test('the narrow raw parent cannot choose the navigation edge to avoid its child', () => {
+  const parent = attachSnapshotNodeInteractionBounds(
+    { index: 0, type: 'Link', rect: { x: 539, y: 2259, width: 2, height: 131 } },
+    { x: 0, y: 0, width: 1080, height: 2274 },
+  );
+  const child = {
+    index: 1,
+    parentIndex: 0,
+    type: 'Button',
+    ref: 'e2',
+    rect: { x: 539, y: 2259, width: 2, height: 3 },
+  };
+  assert.deepEqual(resolveInteractionTouchPoint([parent, child], parent), {
+    kind: 'blocked',
+    competitorCount: 1,
+    competitorRefs: ['e2'],
+  });
+});
+
+test('a raw target without competing descendants uses its measured input region', () => {
+  const node = attachSnapshotNodeInteractionBounds(
+    { index: 0, rect: { x: 0, y: 2259, width: 1080, height: 131 } },
+    { x: 0, y: 0, width: 1080, height: 2274 },
+  );
+  assert.deepEqual(resolveInteractionTouchPoint([node], node), {
+    kind: 'resolved',
+    point: { x: 540, y: 2267 },
+    strategy: 'center',
+  });
+});
+
+test('a fully covered raw target refuses even without competing descendants', () => {
+  const node = attachSnapshotNodeInteractionBounds(
+    { index: 0, rect: { x: 0, y: 2305, width: 1080, height: 95 } },
+    { x: 0, y: 0, width: 1080, height: 2274 },
+  );
+  assert.deepEqual(resolveInteractionTouchPoint([node], node), { kind: 'invalid' });
+});
+
+test('property: targets without competing descendants honor measured input bounds', () => {
+  fc.assert(
+    fc.property(interactionTouchPointScenarioArb, ({ target, bound }) => {
+      const measured = attachSnapshotNodeInteractionBounds({ ...target }, bound);
+      const result = resolveInteractionTouchPoint([measured], measured);
+      if (result.kind !== 'resolved') return;
+      assert.ok(containsPoint(bound, result.point));
+      assert.ok(containsPoint(target.rect!, result.point));
+    }),
+    { numRuns: PROPERTY_RUNS },
+  );
+});
+
+for (const axis of ['horizontal', 'vertical'] as const) {
+  test.each([1, 2, 3])(
+    `parent-owned ${axis} taps refuse when clearance exists only on the exclusive edge: %s px`,
+    (thickness) => {
+      const targetRect =
+        axis === 'horizontal'
+          ? { x: 5, y: 10, width: 150, height: thickness }
+          : { x: 5, y: 10, width: thickness, height: 150 };
+      const bounds =
+        axis === 'horizontal' ? { ...targetRect, width: 100 } : { ...targetRect, height: 100 };
+      const childRect =
+        axis === 'horizontal' ? { ...targetRect, width: 88 } : { ...targetRect, height: 88 };
+      const parent = attachSnapshotNodeInteractionBounds(
+        { index: 0, type: 'Link', rect: targetRect },
+        bounds,
+      );
+      const child = { index: 1, parentIndex: 0, type: 'Button', ref: 'e2', rect: childRect };
+      assert.deepEqual(resolveInteractionTouchPoint([parent, child], parent), {
+        kind: 'blocked',
+        competitorCount: 1,
+        competitorRefs: ['e2'],
+      });
+    },
+  );
+}
+
+test('a one-pixel visible strip resolves inside the strip instead of rounding into navigation', () => {
+  const node = { index: 0, rect: { x: 0, y: 2273, width: 1080, height: 1 } };
+  assert.deepEqual(resolveInteractionTouchPoint([node], node), {
+    kind: 'resolved',
+    point: { x: 540, y: 2273 },
+    strategy: 'center',
+  });
+});
+
+test('property: emitted integer tap points stay inside positive pixel rectangles at any size and origin', () => {
+  fc.assert(
+    fc.property(pixelRectArb, (rect) => {
+      const node = { index: 0, rect };
+      const result = resolveInteractionTouchPoint([node], node);
+      assert.equal(result.kind, 'resolved');
+      if (result.kind !== 'resolved') return;
+      assert.ok(result.point.x >= rect.x && result.point.x < rect.x + rect.width);
+      assert.ok(result.point.y >= rect.y && result.point.y < rect.y + rect.height);
+      assert.ok(Number.isInteger(result.point.x) && Number.isInteger(result.point.y));
+    }),
+    { numRuns: PROPERTY_RUNS },
+  );
+});
 
 function containsPoint(rect: Rect, point: Point): boolean {
   return (
     point.x >= rect.x &&
-    point.x <= rect.x + rect.width &&
+    point.x < rect.x + rect.width &&
     point.y >= rect.y &&
-    point.y <= rect.y + rect.height
+    point.y < rect.y + rect.height
   );
 }
 
@@ -141,7 +266,7 @@ test('still resolves the smallest positive-area target', () => {
 
   assert.deepEqual(resolveInteractionTouchPoint(nodes, nodes[0]!), {
     kind: 'resolved',
-    point: { x: 41, y: 121 },
+    point: { x: 40, y: 120 },
     strategy: 'center',
   });
 });
@@ -271,7 +396,7 @@ test('keeps a parent-owned point inside the supplied viewport bounds', () => {
   ]).nodes;
 
   const resolution = resolveInteractionTouchPoint(nodes, nodes[0]!, {
-    bounds: [{ x: 0, y: 0, width: 100, height: 120 }],
+    parentOwnedBounds: [{ x: 0, y: 0, width: 100, height: 120 }],
   });
 
   assert.equal(resolution.kind, 'resolved');
@@ -300,16 +425,18 @@ test('keeps rounded parent-owned points inside half-pixel viewport bounds', () =
   ]).nodes;
   const bound = { x: 37.5, y: 0, width: 1, height: 80 };
 
-  const resolution = resolveInteractionTouchPoint(nodes, nodes[0]!, { bounds: [bound] });
+  const resolution = resolveInteractionTouchPoint(nodes, nodes[0]!, { parentOwnedBounds: [bound] });
 
   assert.equal(resolution.kind, 'resolved');
-  if (resolution.kind === 'resolved') assert.ok(containsPoint(bound, resolution.point));
+  if (resolution.kind === 'resolved') assert.deepEqual(resolution.point, { x: 38, y: 79 });
 });
 
 test('property: resolved parent-owned points stay inside the target and supplied bounds', () => {
   fc.assert(
     fc.property(interactionTouchPointScenarioArb, ({ nodes, target, bound }) => {
-      const resolution = resolveInteractionTouchPoint(nodes, target, { bounds: [bound] });
+      const resolution = resolveInteractionTouchPoint(nodes, target, {
+        parentOwnedBounds: [bound],
+      });
       if (resolution.kind !== 'resolved') return;
       assert.ok(containsPoint(target.rect!, resolution.point));
       assert.ok(containsPoint(bound, resolution.point));
@@ -321,7 +448,9 @@ test('property: resolved parent-owned points stay inside the target and supplied
 test('property: resolved parent-owned points stay outside every competing descendant', () => {
   fc.assert(
     fc.property(interactionTouchPointScenarioArb, ({ nodes, target, bound, competitorRects }) => {
-      const resolution = resolveInteractionTouchPoint(nodes, target, { bounds: [bound] });
+      const resolution = resolveInteractionTouchPoint(nodes, target, {
+        parentOwnedBounds: [bound],
+      });
       if (resolution.kind !== 'resolved') return;
       for (const competitor of competitorRects) {
         assert.equal(containsPoint(competitor, resolution.point), false);
@@ -335,8 +464,8 @@ test('property: touch-point resolution is invariant to node-array permutations',
   fc.assert(
     fc.property(interactionTouchPointScenarioArb, ({ nodes, permutedNodes, target, bound }) => {
       assert.deepEqual(
-        resolveInteractionTouchPoint(permutedNodes, target, { bounds: [bound] }),
-        resolveInteractionTouchPoint(nodes, target, { bounds: [bound] }),
+        resolveInteractionTouchPoint(permutedNodes, target, { parentOwnedBounds: [bound] }),
+        resolveInteractionTouchPoint(nodes, target, { parentOwnedBounds: [bound] }),
       );
     }),
     { numRuns: PROPERTY_RUNS },

@@ -145,7 +145,7 @@ function killLeftovers(evidenceRoot: string): void {
   const pids = JSON.parse(fs.readFileSync(evidencePath, 'utf8')) as LeftoverPids;
   for (const pid of [pids.fixture, pids.fixtureChild, pids.tool]) {
     // pid 0 or a negative pid would address a whole process group.
-    if (Number.isInteger(pid) && pid > 0 && isAlive(pid)) process.kill(pid, 'SIGKILL');
+    if (Number.isInteger(pid) && pid > 0) killIfAlive(pid);
   }
 }
 
@@ -553,7 +553,7 @@ test('probe starts a long-lived detached child that inherits TMPDIR, then waits 
 
     // Once every consumer is gone — the detached child AND the orphaned node --test chain,
     // which holds the same TMPDIR — it is an ordinary abandoned directory.
-    for (const pid of consumersOf(evidence!)) if (isAlive(pid)) process.kill(pid, 'SIGKILL');
+    for (const pid of consumersOf(evidence!)) killIfAlive(pid);
     await waitFor(
       () => !liveRunDirectoryConsumers().has(path.basename(runDir)),
       20_000,
@@ -565,9 +565,7 @@ test('probe starts a long-lived detached child that inherits TMPDIR, then waits 
     );
     assert.equal(fs.existsSync(runDir), false, 'with no owner and no consumer it is pruned');
   } finally {
-    for (const pid of evidence ? consumersOf(evidence) : []) {
-      if (isAlive(pid)) process.kill(pid, 'SIGKILL');
-    }
+    for (const pid of evidence ? consumersOf(evidence) : []) killIfAlive(pid);
     if (wrapper.child.exitCode === null && wrapper.child.signalCode === null) {
       wrapper.child.kill('SIGKILL');
     }
@@ -576,6 +574,16 @@ test('probe starts a long-lived detached child that inherits TMPDIR, then waits 
     fs.rmSync(evidenceRoot, { recursive: true, force: true });
   }
 });
+
+// A pid can exit between a liveness check and the signal (killing a probe ends its runner), so
+// "already gone" is the outcome the caller wanted, not an error.
+function killIfAlive(pid: number): void {
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+  }
+}
 
 function isAlive(pid: number): boolean {
   try {

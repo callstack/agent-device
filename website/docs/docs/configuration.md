@@ -115,6 +115,43 @@ Use a numeric `artifact` value for an artifact ID. Use a string `artifact` value
 Project config can set a default lock mode for named sessions with `sessionLock`
 (`AGENT_DEVICE_SESSION_LOCK`). See [Lock a named session to a device](/docs/sessions#lock-a-named-session-to-a-device).
 
+## Pin a project to one device
+
+Set `devicePin` in `agent-device.json` to keep commands on the device you choose:
+
+```json
+{
+  "devicePin": {
+    "platform": "ios",
+    "device": "iPad Pro"
+  }
+}
+```
+
+Commands without selectors use the pin. A conflicting CLI selector or MCP input fails
+with `INVALID_ARGS` and `details.reason: "device_pin_conflict"`. The error names the
+config file and pinned selector. Edit or remove `devicePin` in that file to change the pin.
+
+A pin accepts `platform`, `device`, `udid`, and `serial`. Set at least one key. Use a UDID
+or serial to pin one device when several devices share the same name. You can add selectors
+to narrow a pin, such as `--udid` with a pinned device name, but the selected device must
+match every pinned value. Device names use the same matching rules as `--device`.
+
+The pin takes precedence over ordinary config and environment defaults. Explicit selectors,
+remote connection defaults, and batch steps must agree with it. The CLI and MCP read the
+pin from configuration; tool input cannot replace or disable it. The daemon also checks the
+selected device before giving a command access to it, including commands in batch and replay.
+
+You can also set a pin in your user config or a file selected with `--config` or
+`AGENT_DEVICE_CONFIG`. A project pin replaces the entire user pin; their selector fields
+are not merged. An explicit config file replaces both user and project files. Other
+`AGENT_DEVICE_*` defaults do not change the pin. There is no `--device-pin` flag or pin
+environment variable.
+
+Without `devicePin`, top-level `platform`, `device`, `udid`, and `serial` values remain
+overridable defaults. A [session lock](/docs/sessions#lock-a-named-session-to-a-device)
+protects a named session after it is bound; a pin also applies before a session exists.
+
 ## Supported environment variables
 
 Only the variables below, and those documented on command pages, are supported. Other `AGENT_DEVICE_*` names you may see in logs or source are internal.

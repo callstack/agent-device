@@ -1,8 +1,19 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import { mergeDefinedFlags, resolveConfigBackedFlagDefaults } from '@agent-device/command-surface';
+import {
+  type DevicePin,
+  mergeDefinedFlags,
+  resolveConfigDefaults,
+} from '@agent-device/command-surface';
 import { finalizeParsedArgs, parseRawArgs } from './parser/args.ts';
 import { resolveRemoteConfigDefaults } from './remote-config-flags.ts';
 import { type EnvMap } from '@agent-device/kernel/source-value';
+
+export type ResolvedCliOptions = ReturnType<typeof finalizeParsedArgs> & {
+  providedFlags: ReturnType<typeof parseRawArgs>['providedFlags'];
+  remoteConfigLeaseProvider: ReturnType<typeof resolveRemoteConfigDefaults>['leaseProvider'];
+  /** Enforced on every finished daemon request by the client (`assertRequestHonorsDevicePin`). */
+  devicePin: DevicePin | undefined;
+};
 
 export function resolveCliOptions(
   argv: string[],
@@ -11,7 +22,7 @@ export function resolveCliOptions(
     env: EnvMap;
     strictFlags?: boolean;
   },
-) {
+): ResolvedCliOptions {
   const rawParsed = parseRawArgs(argv);
   const { env, cwd } = options;
   const remoteConfig = shouldApplyRemoteConfigDefaults(rawParsed.command)
@@ -21,15 +32,14 @@ export function resolveCliOptions(
         env,
       })
     : { flags: {} };
-  const defaultFlags = mergeDefinedFlags(
-    resolveConfigBackedFlagDefaults({
-      command: rawParsed.command,
-      cwd,
-      cliFlags: rawParsed.flags as CliFlags,
-      env,
-    }),
-    remoteConfig.flags,
-  );
+  const configDefaults = resolveConfigDefaults({
+    command: rawParsed.command,
+    cwd,
+    cliFlags: rawParsed.flags as CliFlags,
+    env,
+  });
+  const devicePin = configDefaults.devicePin;
+  const defaultFlags = mergeDefinedFlags(configDefaults.flags, remoteConfig.flags);
   const finalized = finalizeParsedArgs(rawParsed, {
     strictFlags: options?.strictFlags,
     defaultFlags,
@@ -39,6 +49,7 @@ export function resolveCliOptions(
     ...finalized,
     providedFlags: rawParsed.providedFlags,
     remoteConfigLeaseProvider: remoteConfig.leaseProvider,
+    devicePin,
   };
 }
 

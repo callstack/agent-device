@@ -1,3 +1,5 @@
+import { readDevicePin } from '@agent-device/contracts/device';
+import { isRecord } from '@agent-device/kernel/record';
 import { readOptionalStringArrayField, type DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   AppError,
@@ -209,6 +211,9 @@ function parseSocketDaemonRequest(line: string): DaemonRequest {
       `Invalid request: ${error instanceof Error ? error.message.replace(/^\$\./, '') : 'positionals'}`,
       malformedRequestDetails(),
     );
+  }
+  if (isRecord(request.meta)) {
+    request.meta = { ...request.meta, devicePin: readDevicePin(request.meta.devicePin) };
   }
   return request as DaemonRequest;
 }

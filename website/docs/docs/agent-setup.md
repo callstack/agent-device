@@ -53,7 +53,7 @@ Capture screenshots, logs, network, audio, perf, traces, recordings, and `.ad` r
 
 `agent-device mcp` starts the stdio MCP server. It exposes installed CLI commands as structured tools. Some local workflows are CLI-only and have no MCP tool.
 
-`agent-device mcp` accepts no flags or arguments other than `--help` and `--version`; any other argument fails with `INVALID_ARGS`. To configure the server, such as its state directory, set `AGENT_DEVICE_*` environment variables or `AGENT_DEVICE_CONFIG` in the client's server entry.
+`agent-device mcp` accepts no flags or arguments other than `--help` and `--version`; any other argument fails with `INVALID_ARGS`. To configure the server, set `AGENT_DEVICE_*` environment variables or `AGENT_DEVICE_CONFIG` in the client's server entry. For example, set the state directory with `AGENT_DEVICE_STATE_DIR`, and the remote `tenant`, `runId`, and `leaseId` with `AGENT_DEVICE_TENANT`, `AGENT_DEVICE_RUN_ID`, and `AGENT_DEVICE_LEASE_ID` (or the same keys in `~/.agent-device/config.json`). Tool calls cannot pass these values.
 
 For web automation, MCP tools can target `platform: "web"` once the managed browser backend is set up, but `agent-device web setup` and `agent-device web doctor` are CLI-only. Run setup from a terminal that uses the same state directory as the MCP server before you ask an MCP client to drive a browser session.
 
@@ -61,7 +61,9 @@ MCP-only clients don't need a separately installed skill. When a client connects
 
 Tool results are compact text. A tool that declares an output schema, such as `press` or `wait`, also returns `structuredContent` that matches it. On success, other tools, such as `snapshot` and `open`, return text only, because some clients show the model `structuredContent` instead of the text. They return `structuredContent` when you pass `mcpOutputFormat: "json"`, a non-default `responseLevel`, or `includeCost`. A failed call always returns the error in `structuredContent`.
 
-When a tool fails, the server returns an MCP tool result with `isError: true`. Check the tool result, not only whether the JSON-RPC call succeeded.
+Tools that act on a UI element take its target as top-level arguments, in the same words as the CLI: `press {"ref":"@e12"}`, `click {"selector":"id=\"submit\""}`, or `press {"x":120,"y":340}`. `get` takes `ref` or `selector`.
+
+When a tool fails, the server returns an MCP tool result with `isError: true`. Check the tool result, not only whether the JSON-RPC call succeeded. A call with an argument the tool doesn't take fails with `INVALID_ARGS`, and its hint shows a call that the tool accepts.
 
 The server runs one `tools/call` at a time, in the order it receives them. It answers `ping`, `tools/list`, and the handshake at once, even while a long tool call such as `test` or `wait` runs. A `notifications/cancelled` for a running or queued `tools/call` stops it, and the server sends no response for that request. Cancellation stops the daemon request, not work that already reached the device: on iOS, a command the device received keeps running there, and the session waits for it. See [Command methods](/docs/client-api#command-methods). A JSON-RPC batch cannot carry a `tools/call`; the server refuses that element with `-32600`.
 

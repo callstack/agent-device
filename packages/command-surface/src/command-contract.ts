@@ -58,10 +58,53 @@ export type CommandMetadata<Name extends string, Input> = {
    * command prints them after its own text, and no formatter decides this per-command.
    */
   parseableOutput?: true;
+  /**
+   * The keys of a minimal valid call that a placeholder per required property cannot state, such
+   * as the one UI target an interaction needs. `commandInputExample` merges them over those.
+   */
+  inputExample?: Readonly<Record<string, unknown>>;
 };
 
 export function defineCommandMetadata<Name extends string, Input>(
   definition: CommandMetadata<Name, Input>,
 ): CommandMetadata<Name, Input> {
   return definition;
+}
+
+/**
+ * A minimal call for a command: a placeholder for each required property, then its declared
+ * example keys, which win. A model-facing surface shows it when a call names an argument the tool does not take,
+ * so a caller that never loaded the schema can retry once.
+ */
+export function commandInputExample(
+  metadata: Pick<CommandMetadata<string, unknown>, 'inputSchema' | 'inputExample'>,
+): Record<string, unknown> {
+  return { ...requiredPropertiesExample(metadata.inputSchema), ...metadata.inputExample };
+}
+
+function requiredPropertiesExample(schema: JsonSchema): Record<string, unknown> {
+  return Object.fromEntries(
+    (schema.required ?? []).map((key) => [key, placeholder(key, schema.properties?.[key])]),
+  );
+}
+
+function placeholder(key: string, schema: JsonSchema | undefined): unknown {
+  if (schema === undefined) return `<${key}>`;
+  if (schema.const !== undefined) return schema.const;
+  if (schema.enum !== undefined && schema.enum.length > 0) return schema.enum[0];
+  if (schema.oneOf !== undefined && schema.oneOf.length > 0)
+    return placeholder(key, schema.oneOf[0]);
+  switch (Array.isArray(schema.type) ? schema.type[0] : schema.type) {
+    case 'object':
+      return requiredPropertiesExample(schema);
+    case 'array':
+      return schema.items === undefined ? [] : [placeholder(key, schema.items)];
+    case 'number':
+    case 'integer':
+      return schema.minimum ?? 1;
+    case 'boolean':
+      return true;
+    default:
+      return `<${key}>`;
+  }
 }

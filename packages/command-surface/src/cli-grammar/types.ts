@@ -19,9 +19,8 @@ type PointInput = {
   y?: number;
 };
 
-export type CommandInput = Omit<InternalRequestOptions, 'batchSteps' | 'target'> &
-  Omit<Partial<CliFlags>, 'batchSteps' | 'target'> & {
-    target?: InternalRequestOptions['target'] | Record<string, unknown>;
+export type CommandInput = Omit<InternalRequestOptions, 'batchSteps'> &
+  Omit<Partial<CliFlags>, 'batchSteps'> & {
     action?: string;
     amount?: number;
     app?: string;

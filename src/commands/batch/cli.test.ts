@@ -68,7 +68,7 @@ test('batch structured interaction target is projected to positionals, not devic
   const result = await runCliCapture([
     'batch',
     '--steps',
-    '[{"command":"press","input":{"target":{"kind":"point","x":10,"y":20},"count":2,"platform":"ios","udid":"sim-1"}}]',
+    '[{"command":"press","input":{"x":10,"y":20,"count":2,"platform":"ios","udid":"sim-1"}}]',
     '--json',
   ]);
 
@@ -207,7 +207,7 @@ test('mutating UI verbs reach daemon dispatch through batch', async () => {
   const result = await runCliCapture([
     'batch',
     '--steps',
-    '[{"command":"press","input":{"target":{"kind":"ref","ref":"@e12"}}},{"command":"fill","input":{"target":{"kind":"ref","ref":"@e13"},"text":"x"}}]',
+    '[{"command":"press","input":{"ref":"@e12"}},{"command":"fill","input":{"ref":"@e13","text":"x"}}]',
     '--json',
   ]);
 
@@ -464,7 +464,7 @@ test('batch rejects a fill step that asks for stdin text before daemon dispatch'
   const result = await runCliCapture([
     'batch',
     '--steps',
-    '[{"command":"fill","input":{"target":{"kind":"ref","ref":"@e3"},"text":"x","textStdin":true}}]',
+    '[{"command":"fill","input":{"ref":"@e3","text":"x","textStdin":true}}]',
   ]);
 
   assert.equal(result.code, 1);
@@ -476,7 +476,7 @@ test('batch passes an explicit fill textStdin false through to dispatch', async 
   const result = await runCliCapture([
     'batch',
     '--steps',
-    '[{"command":"fill","input":{"target":{"kind":"ref","ref":"@e3"},"text":"x","textStdin":false}}]',
+    '[{"command":"fill","input":{"ref":"@e3","text":"x","textStdin":false}}]',
   ]);
 
   assert.equal(result.calls.length, 1);

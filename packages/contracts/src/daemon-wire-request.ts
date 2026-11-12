@@ -1,3 +1,4 @@
+import type { DevicePin } from './device-pin.ts';
 import type { CommandFlags } from './command-flags.ts';
 import type {
   DaemonInstallSource,
@@ -8,8 +9,8 @@ import type {
 import type { PlatformSelector } from '@agent-device/kernel/device';
 
 /**
- * Request metadata as a client may send it, with the two fields the daemon narrows past what the
- * wire can express and the lease coordinates the router reads. Public throughout: nothing here
+ * Request metadata as a client may send it, with the fields the daemon narrows past what the
+ * wire can express, workspace device pinning, and the lease coordinates the router reads. Public throughout: nothing here
  * names live session state.
  */
 export type DaemonWireRequestMeta = Omit<
@@ -18,6 +19,7 @@ export type DaemonWireRequestMeta = Omit<
 > & {
   installSource?: DaemonInstallSource;
   lockPlatform?: PlatformSelector;
+  devicePin?: DevicePin;
   leaseBackend?: LeaseBackend;
   leaseProvider?: string;
 };
