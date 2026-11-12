@@ -80,8 +80,9 @@ export type AndroidSnapshotBackendMetadata = {
   captureMode?: string;
   systemSurfaceOnly?: boolean;
   /**
-   * Packages of the captured application windows that are not system-owned, topmost first. Input
-   * method and system windows are excluded. Absent when the capture read no such window.
+   * Package names of the captured application windows that are not system-owned, by window layer
+   * (topmost first), each listed once. Input method and system windows are excluded. Absent when
+   * the capture read no such window.
    */
   applicationWindowPackages?: string[];
   windowCount?: number;

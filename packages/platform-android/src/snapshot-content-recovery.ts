@@ -46,8 +46,9 @@ export type AndroidHelperContentClassification =
 
 type AndroidApplicationWindows = {
   /**
-   * Packages of the captured application windows that are not system-owned, topmost first: the
-   * app a snapshot header names. Input method and system windows are never application windows.
+   * Package names of the captured application windows that are not system-owned, by window layer
+   * (topmost first), each listed once: the app a snapshot header names. Input method and system
+   * windows are never application windows.
    */
   applicationWindowPackages: string[];
 };
@@ -225,7 +226,11 @@ type AndroidHelperXmlSummary = {
   windowTypes: number[];
 } & AndroidApplicationWindows;
 
-type AndroidHelperXmlSummaryState = Omit<AndroidHelperXmlSummary, 'windowTypes'> & {
+type AndroidHelperXmlSummaryState = Omit<
+  AndroidHelperXmlSummary,
+  'windowTypes' | 'applicationWindowPackages'
+> & {
+  applicationWindows: Array<{ packageName: string; layer: number }>;
   currentWindowType?: number;
   currentWindowActiveOrFocused?: boolean;
   currentWindowSystemOwned?: boolean;
@@ -265,7 +270,7 @@ function createAndroidHelperXmlSummaryState(
       ? { foregroundAppPackage, foregroundAppMeaningfulNodeCount: 0 }
       : {}),
     windowTypes: new Set<number>(),
-    applicationWindowPackages: [],
+    applicationWindows: [],
   };
 }
 
@@ -303,11 +308,11 @@ function recordAndroidHelperWindowNode(
   if (node.windowType === ANDROID_WINDOW_TYPE_APPLICATION) {
     summary.applicationWindowRootCount += 1;
     if (summary.currentWindowSystemOwned) summary.systemApplicationWindowRootCount += 1;
-    else if (
-      node.packageName !== null &&
-      !summary.applicationWindowPackages.includes(node.packageName)
-    ) {
-      summary.applicationWindowPackages.push(node.packageName);
+    else if (node.packageName !== null) {
+      summary.applicationWindows.push({
+        packageName: node.packageName,
+        layer: node.windowLayer ?? Number.NEGATIVE_INFINITY,
+      });
     }
   }
 }
@@ -399,7 +404,15 @@ function finalizeAndroidHelperXmlSummary(
         }
       : {}),
     windowTypes: [...summary.windowTypes].sort((a, b) => a - b).slice(0, MAX_REPORTED_WINDOW_TYPES),
-    applicationWindowPackages: summary.applicationWindowPackages,
+    // The helper lists windows in getWindows() order, which is not z-order; the layer is.
+    applicationWindowPackages: [
+      ...new Set(
+        summary.applicationWindows
+          .slice()
+          .sort((a, b) => b.layer - a.layer || 0)
+          .map((window) => window.packageName),
+      ),
+    ],
   };
 }
 

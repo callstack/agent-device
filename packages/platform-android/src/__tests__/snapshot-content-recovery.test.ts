@@ -270,10 +270,11 @@ test('rejects system chrome inherited under an empty application window', () => 
   expect(decision?.diagnostics.helperNonSystemMeaningfulNodeCount).toBe(0);
 });
 
-test('lists only non-system application windows, topmost first', () => {
-  const window = (windowType: number, packageName: string, text: string) =>
+test('lists only non-system application windows, by layer, topmost first', () => {
+  const window = (windowType: number, packageName: string, text: string, windowLayer = 0) =>
     node({
       windowType,
+      windowLayer,
       packageName,
       className: 'android.widget.FrameLayout',
       children: [node({ text, packageName, className: 'android.widget.TextView' })],
@@ -283,9 +284,10 @@ test('lists only non-system application windows, topmost first', () => {
       window(3, 'com.android.systemui', '12:00'),
       window(1, 'android', 'Allow?'),
       window(2, 'com.google.android.inputmethod.latin', 'Space'),
-      window(1, 'com.google.android.apps.nexuslauncher', 'Gmail'),
-      window(1, 'com.google.android.apps.nexuslauncher', 'Photos'),
-      window(1, 'com.example.app', 'Home'),
+      // Listed before the app, but below it: getWindows() order is not z-order.
+      window(1, 'com.google.android.apps.nexuslauncher', 'Gmail', 1),
+      window(1, 'com.google.android.apps.nexuslauncher', 'Photos', 1),
+      window(1, 'com.example.app', 'Home', 5),
     ]),
     {
       backend: 'android-helper',
@@ -297,8 +299,8 @@ test('lists only non-system application windows, topmost first', () => {
   );
 
   expect(result.outcome === 'unusable' ? [] : result.applicationWindowPackages).toEqual([
-    'com.google.android.apps.nexuslauncher',
     'com.example.app',
+    'com.google.android.apps.nexuslauncher',
   ]);
 });
 
@@ -558,12 +560,14 @@ function node(options: {
   packageName: string;
   className: string;
   windowType?: number;
+  windowLayer?: number;
   windowActive?: boolean;
   /** Nested children, so chrome leaves can sit inside their status/nav-bar container as on a device. */
   children?: string[];
 }): string {
   const windowAttrs =
     (options.windowType === undefined ? '' : ` window-type="${options.windowType}"`) +
+    (options.windowLayer === undefined ? '' : ` window-layer="${options.windowLayer}"`) +
     (options.windowActive === undefined ? '' : ` window-active="${options.windowActive}"`);
   const open = `<node index="0"${windowAttrs} text="${options.text ?? ''}" resource-id="${options.resourceId ?? ''}" class="${options.className}" package="${options.packageName}" visible-to-user="true" enabled="true" bounds="[0,0][100,100]"`;
   return options.children === undefined

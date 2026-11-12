@@ -6,7 +6,13 @@ import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 
-async function snapshotWithAppWindows(applicationWindowPackages: string[] | undefined) {
+async function snapshotWithAppWindows(
+  applicationWindowPackages: string[] | undefined,
+  sessionApp: { appName: string; appBundleId: string } | undefined = {
+    appName: 'Settings',
+    appBundleId: 'com.android.settings',
+  },
+) {
   let stored: Parameters<CommandSessionStore['set']>[0] | undefined;
   const device = createAgentDevice({
     backend: {
@@ -19,8 +25,7 @@ async function snapshotWithAppWindows(applicationWindowPackages: string[] | unde
           backend: 'android-helper',
           ...(applicationWindowPackages ? { applicationWindowPackages } : {}),
         },
-        appName: 'Settings',
-        appBundleId: 'com.android.settings',
+        ...sessionApp,
       }),
     },
     artifacts: createLocalArtifactAdapter(),
@@ -39,6 +44,7 @@ async function snapshotWithAppWindows(applicationWindowPackages: string[] | unde
 test('an Android snapshot names the captured app when the session app has no window in it', async () => {
   const { result, stored } = await snapshotWithAppWindows([
     'com.google.android.apps.nexuslauncher',
+    'com.example.behind',
   ]);
 
   assert.equal(result.appName, 'com.google.android.apps.nexuslauncher');
@@ -59,5 +65,16 @@ test('an Android snapshot keeps the session app while one of its windows is capt
 test('a snapshot without application window facts names the session app', async () => {
   const { result } = await snapshotWithAppWindows(undefined);
 
+  assert.equal(result.appName, 'Settings');
   assert.equal(result.appBundleId, 'com.android.settings');
+});
+
+test('an Android snapshot in a session with no app names the topmost captured app', async () => {
+  const { result } = await snapshotWithAppWindows(
+    ['com.google.android.apps.nexuslauncher', 'com.example.behind'],
+    undefined,
+  );
+
+  assert.equal(result.appName, 'com.google.android.apps.nexuslauncher');
+  assert.equal(result.appBundleId, 'com.google.android.apps.nexuslauncher');
 });
