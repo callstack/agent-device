@@ -16,6 +16,7 @@ export function shouldIncludeAndroidNode(
   ancestorHittable: boolean,
   descendantHittable: boolean,
   ancestorCollection: boolean,
+  ancestorAlertPanel: boolean,
 ): boolean {
   if (node.visibleToUser === false) return false;
   const info = getAndroidNodeInclusionInfo(node);
@@ -26,6 +27,7 @@ export function shouldIncludeAndroidNode(
       ancestorHittable,
       descendantHittable,
       ancestorCollection,
+      ancestorAlertPanel,
     );
   }
   if (info.isStructural || info.isVisual) {
@@ -53,10 +55,12 @@ function shouldIncludeInteractiveAndroidNode(
   ancestorHittable: boolean,
   descendantHittable: boolean,
   ancestorCollection: boolean,
+  ancestorAlertPanel: boolean,
 ): boolean {
   if (hasNonPositiveRect(node)) return false;
   if (isAgentTarget(node)) return true;
   if (isScrollableType(info.type) && descendantHittable) return true;
+  if (ancestorAlertPanel && isTextAndroidNode(info)) return true;
   return shouldIncludeInteractiveProxyNode(
     info,
     ancestorHittable,
@@ -78,6 +82,10 @@ function shouldIncludeInteractiveProxyNode(
   // proxy so presentation can associate the label with the action.
   if (info.isStructural && !ancestorCollection && !ancestorHittable) return false;
   return ancestorHittable || descendantHittable || ancestorCollection;
+}
+
+function isTextAndroidNode(info: AndroidNodeInclusionInfo): boolean {
+  return info.hasMeaningfulText && !info.isStructural && !info.isVisual;
 }
 
 function hasNonPositiveRect(node: AndroidNode): boolean {

@@ -57,6 +57,11 @@ const ANDROID_PERMISSION_ID_PATTERN = /(?:^|:)id\/permission_/i;
 const ANDROID_BLOCKING_DIALOG_PATTERN =
   /\b(?:is(?:n't| not) responding|keeps stopping|has stopped|close app|app info)\b/i;
 
+/** The AlertController panel that holds a dialog's title, message, and buttons, under the platform or an AppCompat package. */
+export function isAndroidAlertPanelIdentifier(identifier: string | null): boolean {
+  return identifier !== null && /(?:^|:)id\/parentPanel$/i.test(identifier);
+}
+
 export function classifyAndroidAlertIdentifier(
   identifier: string | null,
 ): 'button' | 'content' | undefined {

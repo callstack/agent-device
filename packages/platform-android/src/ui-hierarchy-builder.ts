@@ -28,6 +28,7 @@ import {
 import { collectAndroidHiddenNodes } from './ui-hierarchy-visibility.ts';
 import { scopePresentedAndroidSnapshot } from './ui-hierarchy-scope.ts';
 import { isCollectionContainerType, shouldIncludeAndroidNode } from './ui-hierarchy-inclusion.ts';
+import { isAndroidAlertPanelIdentifier } from './alert-detection.ts';
 import {
   createAndroidSnapshotPresentationNode,
   isAndroidSnapshotPresentationFailure,
@@ -242,6 +243,7 @@ function walkUiHierarchyNode(
   parentIndex?: number,
   ancestorHittable: boolean = false,
   ancestorCollection: boolean = false,
+  ancestorAlertPanel: boolean = false,
   ancestorSystemChrome: boolean = false,
   ancestorWindowRect?: Rect,
   ancestorClip?: Rect,
@@ -264,6 +266,7 @@ function walkUiHierarchyNode(
     parentIndex,
     ancestorHittable,
     ancestorCollection,
+    ancestorAlertPanel,
     ancestorSystemChrome,
     effectiveRect,
     currentWindowRect,
@@ -272,6 +275,8 @@ function walkUiHierarchyNode(
   );
   const nextAncestorHittable = ancestorHittable || isAgentTarget(node);
   const nextAncestorCollection = ancestorCollection || isCollectionContainerType(node.type);
+  const nextAncestorAlertPanel =
+    ancestorAlertPanel || isAndroidAlertPanelIdentifier(node.identifier);
   const nextAncestorClip = resolveAndroidDescendantClip(state, node, effectiveRect, ancestorClip);
   walkAndroidChildren(
     state,
@@ -280,6 +285,7 @@ function walkUiHierarchyNode(
     currentIndex,
     nextAncestorHittable,
     nextAncestorCollection,
+    nextAncestorAlertPanel,
     ancestorSystemChrome || isAndroidSystemChromeWindowResourceId(node.identifier),
     currentWindowRect,
     nextAncestorClip,
@@ -336,6 +342,7 @@ function appendAndroidNodeIfPresented(
   parentIndex: number | undefined,
   ancestorHittable: boolean,
   ancestorCollection: boolean,
+  ancestorAlertPanel: boolean,
   ancestorSystemChrome: boolean,
   effectiveRect: Rect | undefined,
   windowRect: Rect | undefined,
@@ -359,6 +366,7 @@ function appendAndroidNodeIfPresented(
       ancestorHittable,
       hasInteractiveDescendant(state, node),
       ancestorCollection,
+      ancestorAlertPanel,
     )
   ) {
     return parentIndex;
@@ -405,6 +413,7 @@ function walkAndroidChildren(
   parentIndex: number | undefined,
   ancestorHittable: boolean,
   ancestorCollection: boolean,
+  ancestorAlertPanel: boolean,
   ancestorSystemChrome: boolean,
   ancestorWindowRect: Rect | undefined,
   ancestorClip: Rect | undefined,
@@ -418,6 +427,7 @@ function walkAndroidChildren(
       parentIndex,
       ancestorHittable,
       ancestorCollection,
+      ancestorAlertPanel,
       ancestorSystemChrome,
       ancestorWindowRect,
       ancestorClip,

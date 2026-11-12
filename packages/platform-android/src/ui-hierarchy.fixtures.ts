@@ -1,6 +1,7 @@
 // Real archived device trees, regenerated from a device and never hand-edited (a
 // hand-written id is how a fixture stops proving anything). Static import, not an
 // `fs` read: it typechecks each tree against `RawSnapshotNode[]`.
+import deviceNameDialogCapture from './fixtures/android-device-name-dialog.raw.json' with { type: 'json' };
 import imeCapture from './fixtures/android-ime-capture.raw.json' with { type: 'json' };
 import qsShadeCapture from './fixtures/android-qs-shade-capture.raw.json' with { type: 'json' };
 import {
@@ -141,3 +142,11 @@ export const ANDROID_IME_CAPTURE_RAW_NODES: RawSnapshotNode[] = imeCapture;
  * hand-written ids. `--raw` keeps the structural wrappers a default capture drops.
  */
 export const ANDROID_QS_SHADE_CAPTURE_RAW_NODES: RawSnapshotNode[] = qsShadeCapture;
+
+/**
+ * Real device capture (ReactNative_API_35B, Android 15 emulator, Settings > About emulated device >
+ * Device name) taken with `snapshot --raw --json` and projected to the fields the walk reads. An
+ * AppCompat AlertDialog: the title `com.android.settings:id/alertTitle` is passive text inside
+ * `com.android.settings:id/parentPanel`, beside the edit field and the Cancel and OK buttons.
+ */
+export const ANDROID_DEVICE_NAME_DIALOG_RAW_NODES: RawSnapshotNode[] = deviceNameDialogCapture;
