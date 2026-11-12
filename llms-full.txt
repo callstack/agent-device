@@ -2189,7 +2189,9 @@ agent-device alert dismiss
 
 * `wait absent <selector>` is strict absence, not a visibility check: it passes only when a complete, readable capture has zero matches, so hidden or off-screen matches keep it pending. It rejects `--scope` and `--depth`. Sparse, truncated, incomplete, and Android unreadable-content captures never satisfy it.
 
-* `wait @ref` needs a snapshot from a prior `snapshot` command. It resolves the ref to its label or text, then waits for that text, so a duplicate label can match a different element than the original ref.
+* `wait text <value>` matches a node whose label, identifier, or value contains the text, ignoring case. An enabled editable field never matches by its current value, or by a label that only repeats that value. Its identifier, a label distinct from the value, or the placeholder an empty field shows still match. So `wait text` after `fill` waits until the app shows that text elsewhere, for example after Save. To check the field itself, use `is text <selector> <value>` or `get text`.
+
+* `wait @ref` needs a snapshot from a prior `snapshot` command. It resolves the ref to its label or text, then waits for that text, so a duplicate label can match a different element than the original ref. It uses the same text rule, so for a filled field whose text is its typed value it waits for that text to appear elsewhere; to wait for the field itself, use a selector such as `wait 'id="email"'`.
 
 * Wait failures carry `error.details.reason` in `--json` output:
 
