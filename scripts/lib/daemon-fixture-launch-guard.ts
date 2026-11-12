@@ -79,37 +79,40 @@ export function daemonFixtureLaunchViolations(source: string, file: string): str
   const bindings = new Map<string, AstNode>();
   const destructuredProperties = new Set<AstNode>();
   visitAst(parsed.program, (node) => {
-    if (node.type === 'ImportSpecifier') {
-      const imported = propertyName(node.imported);
-      const name = propertyName(node.local);
-      if (name && imported === 'runCmdDetachedMonitored') launchers.add(name);
-      if (name && imported === 'planRegisteredDaemonLaunches') planners.add(name);
-    }
-    if (
-      node.type === 'VariableDeclarator' &&
-      asNode(node.id)?.type === 'Identifier' &&
-      asNode(node.init)
-    )
-      bindings.set(String(asNode(node.id)!.name), asNode(node.init)!);
-    if (node.type === 'ObjectPattern') {
-      for (const property of nodeList(node.properties)) {
-        const entry = asNode(property);
-        if (!entry) continue;
-        destructuredProperties.add(entry);
-        if (propertyName(entry.key) === 'runCmdDetachedMonitored') {
+    switch (node.type) {
+      case 'ImportSpecifier': {
+        const imported = propertyName(node.imported);
+        const name = propertyName(node.local);
+        if (name && imported === 'runCmdDetachedMonitored') launchers.add(name);
+        if (name && imported === 'planRegisteredDaemonLaunches') planners.add(name);
+        return;
+      }
+      case 'VariableDeclarator': {
+        const name = propertyName(node.id);
+        const value = asNode(node.init);
+        if (name && value) bindings.set(name, value);
+        return;
+      }
+      case 'ObjectPattern':
+        for (const property of nodeList(node.properties)) {
+          const entry = asNode(property);
+          if (!entry) continue;
+          destructuredProperties.add(entry);
+          if (propertyName(entry.key) !== 'runCmdDetachedMonitored') continue;
           const name = propertyName(entry.value);
           if (name) launchers.add(name);
         }
+        return;
+      case 'Identifier': {
+        const annotation = asNode(node.typeAnnotation);
+        if (!annotation) return;
+        const text = source.slice(Number(annotation.start), Number(annotation.end));
+        if (
+          /\bMock\w*\s*</.test(text) &&
+          [...launchers].some((name) => text.includes(`typeof ${name}`))
+        )
+          launchers.add(String(node.name));
       }
-    }
-    if (node.type === 'Identifier' && asNode(node.typeAnnotation)) {
-      const annotation = asNode(node.typeAnnotation)!;
-      const text = source.slice(Number(annotation.start), Number(annotation.end));
-      if (
-        /\bMock\w*\s*</.test(text) &&
-        [...launchers].some((name) => text.includes(`typeof ${name}`))
-      )
-        launchers.add(String(node.name));
     }
   });
   function resolves(node: unknown, names: Set<string>, seen = new Set<string>()): boolean {
