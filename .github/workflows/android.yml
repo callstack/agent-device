@@ -73,6 +73,10 @@ jobs:
         if: steps.impact.outputs.run != 'false'
         run: node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-android-emulator-coverage.test.ts
 
+      - name: Setup Android system image
+        if: steps.impact.outputs.run != 'false'
+        uses: ./.github/actions/setup-android-system-image
+
       - name: Run Android smoke checks
         if: steps.impact.outputs.run != 'false'
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
