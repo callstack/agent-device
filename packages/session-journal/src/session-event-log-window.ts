@@ -209,26 +209,21 @@ export async function rotateSessionEventLogIfNeeded(
   if (measured.firstLineDigest !== undefined) {
     const generations = sidecar ?? [];
     const newest = generations.at(-1);
-    if (
-      newest?.firstLineDigest === measured.firstLineDigest &&
-      newest.lineCount !== measured.lineCount
-    ) {
+    const activeRecorded = newest?.firstLineDigest === measured.firstLineDigest;
+    if (activeRecorded && newest.lineCount > measured.lineCount) {
       throw unverifiedWindowError(eventLogPath, 'active generation differs from its window record');
     }
-    // A record whose digest already matches this exact file means a previous
-    // rotation wrote the record but died before its rename; reuse it instead of
-    // counting the same generation twice.
-    const record: EventLogGeneration =
-      newest && newest.firstLineDigest === measured.firstLineDigest
-        ? newest
-        : {
-            firstLineIndex: newest ? newest.firstLineIndex + newest.lineCount : 0,
-            lineCount: measured.lineCount,
-            firstLineDigest: measured.firstLineDigest,
-          };
-    const next = (record === newest ? generations : [...generations, record]).slice(
-      -RETAINED_GENERATIONS,
-    );
+    const record: EventLogGeneration = {
+      firstLineIndex: activeRecorded
+        ? newest.firstLineIndex
+        : newest
+          ? newest.firstLineIndex + newest.lineCount
+          : 0,
+      lineCount: measured.lineCount,
+      firstLineDigest: measured.firstLineDigest,
+    };
+    const previous = activeRecorded ? generations.slice(0, -1) : generations;
+    const next = [...previous, record].slice(-RETAINED_GENERATIONS);
     await writeWindowSidecar(eventLogPath, next);
   }
   await fs.promises.rename(eventLogPath, resolveRotatedSessionEventLogPath(eventLogPath));

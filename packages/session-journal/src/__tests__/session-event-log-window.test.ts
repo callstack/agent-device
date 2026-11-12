@@ -17,6 +17,7 @@ import {
   EVENT_LOG_WINDOW_UNVERIFIED_REASON,
   resolveRotatedSessionEventLogPath,
   resolveSessionEventLogMaxBytes,
+  rotateSessionEventLogIfNeeded,
 } from '../session-event-log-window.ts';
 
 const originalMaxBytes = process.env.AGENT_DEVICE_EVENT_LOG_MAX_BYTES;
@@ -589,4 +590,110 @@ test('an active-file rename failure preserves bytes and a later event recovers t
   assert.ok(fs.statSync(eventLogPath).size <= 200);
   assert.deepEqual(summaries(eventLogPath, '0', 10), ['first', 'second', 'recovered']);
   assert.equal(readSessionEventLog(eventLogPath, { cursor: '2' }).endCursor, '3');
+});
+
+test.each([false, true])(
+  'rotation recovers after a failed rename and smaller append (retained generation: %s)',
+  async (retainedGeneration) => {
+    const eventLogPath = resolveSessionEventLogPath(mkdtempForTestSync('event-rename-growth-'));
+    const cap = 400;
+    const env = { AGENT_DEVICE_EVENT_LOG_MAX_BYTES: String(cap) };
+    const event = (summary: string) => ({ kind: 'request.started' as const, ts: 'fixed', summary });
+    const line = (summary: string) =>
+      `${JSON.stringify(Object.assign({ version: 1, ts: 'fixed', session: 'default' }, event(summary)))}\n`;
+    const send = async (summary: string) => {
+      appendSessionEvent(eventLogPath, 'default', event(summary), env);
+      await flushSessionEventLogWrites(eventLogPath);
+    };
+    if (retainedGeneration) {
+      await send('prefix' + 'x'.repeat(230));
+      await send('seed-next');
+      assert.equal(fs.existsSync(resolveRotatedSessionEventLogPath(eventLogPath)), true);
+    }
+    await send('first');
+    await send('second');
+    const before = fs.readFileSync(eventLogPath, 'utf8');
+    const failed = 'failed' + 'x'.repeat(180);
+    const small = 'small';
+    const large = 'large' + 'x'.repeat(180);
+    assert.ok(Buffer.byteLength(line(failed)) < cap);
+    assert.ok(Buffer.byteLength(before + line(failed)) > cap);
+    assert.ok(Buffer.byteLength(before + line(small)) <= cap);
+    assert.ok(Buffer.byteLength(line(large)) < cap);
+    assert.ok(Buffer.byteLength(before + line(small) + line(large)) > cap);
+    const rename = fs.promises.rename.bind(fs.promises);
+    const fault = vi
+      .spyOn(fs.promises, 'rename')
+      .mockImplementation(async (source, destination) => {
+        if (
+          String(source) === eventLogPath &&
+          String(destination) === resolveRotatedSessionEventLogPath(eventLogPath)
+        )
+          throw Object.assign(new Error('denied'), { code: 'EACCES' });
+        return rename(source, destination);
+      });
+    await send(failed);
+    assert.equal(fs.readFileSync(eventLogPath, 'utf8'), before);
+    fault.mockRestore();
+    await send(small);
+    assert.equal(fs.readFileSync(eventLogPath, 'utf8'), before + line(small));
+    await send(large);
+    assert.equal(
+      fs.readFileSync(resolveRotatedSessionEventLogPath(eventLogPath), 'utf8'),
+      before + line(small),
+    );
+    assert.equal(fs.readFileSync(eventLogPath, 'utf8'), line(large));
+    const earliest = retainedGeneration ? '1' : '0';
+    assert.deepEqual(summaries(eventLogPath, earliest, 10), [
+      ...(retainedGeneration ? ['seed-next'] : []),
+      'first',
+      'second',
+      small,
+      large,
+    ]);
+    assert.equal(
+      readSessionEventLog(eventLogPath, { cursor: retainedGeneration ? '3' : '2' }).endCursor,
+      retainedGeneration ? '6' : '4',
+    );
+    if (retainedGeneration) {
+      assert.equal(readError(eventLogPath, '0').details?.reason, EVENT_LOG_CURSOR_EXPIRED_REASON);
+    }
+  },
+);
+
+test('a recorded active generation that shrank is refused without replacing its evidence', async () => {
+  const eventLogPath = resolveSessionEventLogPath(mkdtempForTestSync('event-rename-shrink-'));
+  const env = { AGENT_DEVICE_EVENT_LOG_MAX_BYTES: '400' };
+  const send = async (summary: string) => {
+    appendSessionEvent(
+      eventLogPath,
+      'default',
+      { kind: 'request.started', ts: 'fixed', summary },
+      env,
+    );
+    await flushSessionEventLogWrites(eventLogPath);
+  };
+  await send('first');
+  await send('second');
+  const before = fs.readFileSync(eventLogPath, 'utf8');
+  const rename = fs.promises.rename.bind(fs.promises);
+  const fault = vi.spyOn(fs.promises, 'rename').mockImplementation(async (source, destination) => {
+    if (String(source) === eventLogPath)
+      throw Object.assign(new Error('denied'), { code: 'EACCES' });
+    return rename(source, destination);
+  });
+  await send('failed' + 'x'.repeat(180));
+  fault.mockRestore();
+  const windowPath = eventLogPath + '.window.json';
+  const window = fs.readFileSync(windowPath);
+  const shortened = before.slice(0, before.indexOf('\n') + 1);
+  fs.writeFileSync(eventLogPath, shortened);
+  await assert.rejects(
+    rotateSessionEventLogIfNeeded(eventLogPath, 400, 400),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === EVENT_LOG_WINDOW_UNVERIFIED_REASON,
+  );
+  assert.equal(fs.readFileSync(eventLogPath, 'utf8'), shortened);
+  assert.deepEqual(fs.readFileSync(windowPath), window);
+  assert.equal(fs.existsSync(resolveRotatedSessionEventLogPath(eventLogPath)), false);
 });
