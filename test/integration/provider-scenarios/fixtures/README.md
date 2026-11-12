@@ -7,7 +7,7 @@ Only the test server uses the key. Test clients trust the matching certificate t
 `ca` option. The fixture does not change a machine trust store or disable certificate verification.
 Do not use this pair for a deployed service or add it to a shared trust store.
 
-The certificate names localhost and loopback addresses. Its validity ends in November 2036.
+The certificate covers `localhost` and `127.0.0.1`. Its validity ends in November 2036.
 Replace both files together before expiry. Keeping the pair in the fixture avoids an OpenSSL
 executable or certificate-generation dependency in the test runner.
 
@@ -17,7 +17,7 @@ From the repository root, run:
 ```sh
 openssl req -x509 -newkey rsa:2048 -noenc -sha256 -days 3650 \
   -subj '/CN=localhost' \
-  -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1' \
+  -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' \
   -keyout test/integration/provider-scenarios/fixtures/localhost-key.pem \
   -out test/integration/provider-scenarios/fixtures/localhost-cert.pem
 ```
