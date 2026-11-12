@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
+import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { assertRpcOk } from './assertions.ts';
@@ -104,6 +105,71 @@ test.each([
       target === 'selector'
         ? ['snapshot', 'snapshot', 'snapshot']
         : ['snapshot', 'snapshot', 'findText', 'snapshot'],
+    );
+  } finally {
+    await daemon.close();
+  }
+});
+
+test('Apple wait text ignores a text field’s typed value but matches its label', async () => {
+  const appleTool = createRecordingAppleToolProvider({
+    simctl: async (args) => {
+      if (args[0] === 'list') {
+        return {
+          stdout: JSON.stringify({
+            devices: {
+              'iOS 18.5': [{ udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id, state: 'Booted' }],
+            },
+          }),
+          stderr: '',
+          exitCode: 0,
+        };
+      }
+      if (args[0] === 'launch') return { stdout: '', stderr: '', exitCode: 0 };
+      throw new Error(`Unexpected Apple simulator call: ${args.join(' ')}`);
+    },
+  });
+  const daemon = await createProviderScenarioHarness({
+    deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
+    appleToolProvider: () => appleTool.provider,
+    appleRunnerProvider: () => ({
+      hasLiveSession: () => true,
+      runCommand: async (_device, command) => {
+        if (command.command === 'findText') return { found: false };
+        assert.equal(command.command, 'snapshot');
+        return {
+          nodes: [
+            {
+              index: 0,
+              type: 'Application',
+              label: 'Contacts',
+              rect: { x: 0, y: 0, width: 393, height: 852 },
+            },
+            {
+              index: 1,
+              parentIndex: 0,
+              type: 'TextField',
+              label: 'First name',
+              value: 'benchad',
+              rect: { x: 16, y: 200, width: 361, height: 44 },
+            },
+          ],
+        };
+      },
+    }),
+  });
+  try {
+    await daemon.client().apps.open({
+      app: 'com.apple.MobileAddressBook',
+      platform: 'ios',
+      udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+    });
+    const flags = { platform: 'ios' as const };
+    const typed = await daemon.callCommand('wait', ['text', 'benchad', '1000'], flags);
+    assert.equal(typed.json?.error?.data?.details?.reason, WAIT_REASONS.targetAbsent);
+    assert.equal(
+      assertRpcOk(await daemon.callCommand('wait', ['text', 'First name', '100'], flags)).text,
+      'First name',
     );
   } finally {
     await daemon.close();

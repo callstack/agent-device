@@ -19,3 +19,9 @@ test('unknown fillable type does not establish Android field content', () => {
   expect(isFillableType('', 'android')).toBe(true);
   expect(androidFieldValue({ type: '', text: 'Static label' })).toBeUndefined();
 });
+
+test('a web text input is fillable by its ARIA role, a button is not', () => {
+  expect(isFillableType('textbox', 'web')).toBe(true);
+  expect(isFillableType('searchbox', 'web')).toBe(true);
+  expect(isFillableType('button', 'web')).toBe(false);
+});

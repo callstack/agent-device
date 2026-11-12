@@ -5,7 +5,7 @@ import type {
   WaitCommandOptions,
   WaitCommandResult,
 } from './selector-wait.ts';
-import { findNodeByLabel } from './selector-read-utils.ts';
+import { matchesWaitText } from '@agent-device/selectors';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { createWaitPolling, type WaitPollDeadline, waitTimeoutError } from './wait-polling.ts';
 
@@ -57,7 +57,9 @@ async function snapshotContainsText<Runtime extends SelectorWaitRuntime>(
     updateSession: true,
     includeHiddenContentHints: false,
   });
-  return Boolean(findNodeByLabel(capture.snapshot.nodes, text));
+  return capture.snapshot.nodes.some((node) =>
+    matchesWaitText(node, text, runtime.backend.platform),
+  );
 }
 
 function backendContext(

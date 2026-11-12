@@ -190,8 +190,36 @@ extension RunnerTests {
 #endif
   }
 
+  /// The `wait text` rule for native `findText`, pinned to `contracts/fixtures/wait-text-policy.json`.
+  /// An enabled text-entry element's value is typed content unless it is the placeholder, so such
+  /// an element matches only by identifier or by a label that is not its value. The types are the
+  /// ones the snapshot marks editable.
+  static func findTextPredicate(_ text: String) -> NSPredicate {
+    let editableTypes = [
+      XCUIElement.ElementType.textField,
+      .secureTextField,
+      .searchField,
+      .textView,
+    ].map(\.rawValue)
+    let typed = NSPredicate(
+      format: "elementType IN %@ AND enabled == YES AND value != placeholderValue",
+      editableTypes
+    )
+    return NSCompoundPredicate(orPredicateWithSubpredicates: [
+      NSPredicate(format: "identifier CONTAINS[c] %@", text),
+      NSCompoundPredicate(andPredicateWithSubpredicates: [
+        NSCompoundPredicate(notPredicateWithSubpredicate: typed),
+        NSPredicate(format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@", text, text),
+      ]),
+      NSCompoundPredicate(andPredicateWithSubpredicates: [
+        typed,
+        NSPredicate(format: "label CONTAINS[c] %@ AND label != value", text),
+      ]),
+    ])
+  }
+
   func findElement(app: XCUIApplication, text: String) throws -> XCUIElement? {
-    let predicate = NSPredicate(format: "label CONTAINS[c] %@ OR identifier CONTAINS[c] %@ OR value CONTAINS[c] %@", text, text, text)
+    let predicate = Self.findTextPredicate(text)
     return try elementQueries(app: app, matching: .any)
       .lazy
       .map { $0.matching(predicate).firstMatch }

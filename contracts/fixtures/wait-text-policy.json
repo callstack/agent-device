@@ -1,0 +1,162 @@
+[
+  {
+    "name": "static text matches by label, case-insensitively",
+    "text": "saved",
+    "node": {
+      "label": "Name Saved"
+    },
+    "expected": true
+  },
+  {
+    "name": "a non-editable value still matches",
+    "text": "bench-ad",
+    "node": {
+      "label": "Device name",
+      "value": "bench-ad"
+    },
+    "expected": true
+  },
+  {
+    "name": "an editable field's typed value does not match",
+    "text": "benchad",
+    "node": {
+      "editable": true,
+      "label": "First name",
+      "value": "benchad"
+    },
+    "expected": false
+  },
+  {
+    "name": "part of an editable field's typed value does not match",
+    "text": "bench",
+    "node": {
+      "editable": true,
+      "label": "First name",
+      "value": "benchad"
+    },
+    "expected": false
+  },
+  {
+    "name": "an editable field still matches by its label",
+    "text": "first name",
+    "node": {
+      "editable": true,
+      "label": "First name",
+      "value": "benchad"
+    },
+    "expected": true
+  },
+  {
+    "name": "an editable field whose label repeats its typed value does not match",
+    "text": "bench-ad",
+    "node": {
+      "editable": true,
+      "label": "bench-ad",
+      "value": "bench-ad",
+      "identifier": "android:id/edit"
+    },
+    "expected": false
+  },
+  {
+    "name": "an editable field still matches by its identifier",
+    "text": "id/edit",
+    "node": {
+      "editable": true,
+      "label": "bench-ad",
+      "value": "bench-ad",
+      "identifier": "android:id/edit"
+    },
+    "expected": true
+  },
+  {
+    "name": "an empty editable field matches by its hint label",
+    "text": "device name",
+    "node": {
+      "editable": true,
+      "label": "Device name",
+      "value": ""
+    },
+    "expected": true
+  },
+  {
+    "name": "a hint reported as both label and value still matches as the placeholder",
+    "text": "device name",
+    "node": {
+      "editable": true,
+      "label": "Device name",
+      "value": "Device name",
+      "placeholder": "Device name"
+    },
+    "expected": true
+  },
+  {
+    "name": "an empty field whose value is its placeholder matches by that placeholder",
+    "text": "last name",
+    "node": {
+      "editable": true,
+      "value": "Last name",
+      "placeholder": "Last name"
+    },
+    "expected": true
+  },
+  {
+    "name": "typed text equal to the placeholder does not match when the field reports its hint is hidden",
+    "platform": "android",
+    "text": "device name",
+    "node": {
+      "type": "android.widget.EditText",
+      "editable": true,
+      "hintShowing": false,
+      "label": "Device name",
+      "value": "Device name",
+      "placeholder": "Device name"
+    },
+    "expected": false
+  },
+  {
+    "name": "a field that reports its hint showing matches by that hint even without a placeholder",
+    "platform": "android",
+    "text": "device name",
+    "node": {
+      "type": "android.widget.EditText",
+      "editable": true,
+      "hintShowing": true,
+      "label": "Device name",
+      "value": "Device name"
+    },
+    "expected": true
+  },
+  {
+    "name": "a disabled field's value is app text and matches",
+    "text": "bench-ad",
+    "node": {
+      "editable": true,
+      "enabled": false,
+      "label": "Name",
+      "value": "bench-ad"
+    },
+    "expected": true
+  },
+  {
+    "name": "an Android EditText without an editable fact is editable by its class",
+    "platform": "android",
+    "text": "bench-ad",
+    "node": {
+      "type": "android.widget.EditText",
+      "label": "bench-ad",
+      "value": "bench-ad"
+    },
+    "expected": false
+  },
+  {
+    "name": "a web textbox without an editable fact is editable by its role",
+    "platform": "web",
+    "text": "bench-ad",
+    "node": {
+      "type": "textbox",
+      "label": "Device name",
+      "value": "bench-ad"
+    },
+    "expected": false
+  }
+]

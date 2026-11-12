@@ -20,6 +20,8 @@ export function isFillableType(type: string, platform: Platform | PublicPlatform
   if (platform === 'android') {
     return normalized.includes('edittext') || normalized.includes('autocompletetextview');
   }
+  // Web nodes carry ARIA roles: a text input is a `textbox` or `searchbox`.
+  if (platform === 'web' && (normalized === 'textbox' || normalized === 'searchbox')) return true;
   return (
     normalized.includes('textfield') ||
     normalized.includes('securetextfield') ||
