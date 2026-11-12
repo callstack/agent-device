@@ -3,7 +3,7 @@ import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { sessionChecks } from '../session-doctor-options.ts';
 
-// The doctor's recovery command must carry each session's ADDRESS — the string `close --session`
+// The doctor's close suggestion must carry each session's ADDRESS — the string `close --session`
 // accepts — and dedupe by address: two cwd-scoped implicit sessions both carry the public name
 // `default`, so a name compare hid them from each other and the printed
 // `close --session default` addressed neither (#2031/#1394).
@@ -18,9 +18,24 @@ test('the same-device warning names the other session by its address, not its na
 
   expect(check?.status).toBe('warn');
   expect(check?.summary).toContain(other);
-  expect(check?.command).toContain(`--session ${other}`);
-  expect(check?.command).not.toContain('--session default');
+  expect(check?.hint).toContain(`agent-device close --session ${other}`);
+  expect(check?.hint).not.toContain('--session default');
+  // Agents run `command` verbatim and the other session may be another agent's.
+  expect(check?.hint).toMatch(/only if that session is yours/);
+  expect(check?.command).toBeUndefined();
   expect(check?.evidence).toMatchObject({ session: here, sameDeviceSessions: [other] });
+});
+
+test('the same-device close suggestion shell-quotes a session name with metacharacters', () => {
+  const store = makeSessionStore();
+  const here = 'cwd:aaaaaaaaaaaaaaaa:default';
+  const other = 'a;b $(x)';
+  store.publish(here, makeIosSession('default'));
+  store.publish(other, makeIosSession(other));
+
+  const [check] = sessionChecks(store, here, store.get(here));
+
+  expect(check?.hint).toContain("agent-device close --session 'a;b $(x)' --platform");
 });
 
 test('a session alone on its device passes with its own address in evidence', () => {

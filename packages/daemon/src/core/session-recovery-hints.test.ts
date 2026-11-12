@@ -1,8 +1,15 @@
-import { makeStoredSessionRef } from '../__tests__/support/store-factory.ts';
 import { test, expect } from 'vitest';
-import { buildSessionRecoveryHint } from './session-recovery-hints.ts';
+import {
+  buildForeignWorkspaceSessionConflict,
+  buildSessionRecoveryHint,
+} from './session-recovery-hints.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
-import { IOS_SIMULATOR } from '@agent-device/test-kit';
+import { IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
+import { PLATFORM_SELECTORS, webSessionBackendKey } from '@agent-device/kernel/device';
+import type { AppError } from '@agent-device/kernel/errors';
+import { makeSessionStore, makeStoredSessionRef } from '../__tests__/support/store-factory.ts';
+import { resolveEffectiveSessionName } from '../sessions/session-routing.ts';
+import type { DaemonRequest } from './daemon-request.ts';
 
 // The recovery hint's whole job is to hand back a command that works. For an implicitly
 // cwd-scoped session — named `default`, stored as `cwd:<hash>:default` — building it from the
@@ -30,8 +37,40 @@ test('device-in-use recovery names the address --session accepts, not the public
   const hint = buildSessionRecoveryHint(scopedRef(), 'device-in-use');
 
   expect(hint).toContain(`agent-device close --session ${SCOPED_ADDRESS}`);
-  expect(hint).toContain(`rerun the command with --session ${SCOPED_ADDRESS}`);
+  expect(hint).toContain(`reuse --session ${SCOPED_ADDRESS}`);
   expect(hint).not.toMatch(/--session default\b/);
+});
+
+// A device-in-use hint is read by agents sharing a host: it must offer the moves that leave the
+// holding session alone before any that would take it over.
+test('device-in-use recovery lists non-takeover options before reusing or closing the holder', () => {
+  const hint = buildSessionRecoveryHint(scopedRef(), 'device-in-use', { offersDeviceWait: true });
+
+  const firstTakeover = Math.min(
+    hint.indexOf(`--session ${SCOPED_ADDRESS}`),
+    hint.indexOf('close --session'),
+  );
+  expect(firstTakeover).toBeGreaterThan(-1);
+  expect(hint.indexOf('agent-device devices')).toBeGreaterThan(-1);
+  expect(hint.indexOf('agent-device devices')).toBeLessThan(firstTakeover);
+  expect(hint.indexOf('--wait <ms>')).toBeGreaterThan(-1);
+  expect(hint.indexOf('--wait <ms>')).toBeLessThan(firstTakeover);
+  expect(hint.slice(0, firstTakeover)).toMatch(/only if that session is yours/i);
+});
+
+test('foreign-workspace recovery lists non-takeover options before closing the holder', () => {
+  const hint = String(
+    buildForeignWorkspaceSessionConflict(scopedRef(), IOS_SIMULATOR, { offersDeviceWait: true })
+      .error.details?.hint,
+  );
+
+  const close = hint.indexOf(`close --session ${SCOPED_ADDRESS}`);
+  expect(close).toBeGreaterThan(-1);
+  expect(hint.indexOf('agent-device devices')).toBeGreaterThan(-1);
+  expect(hint.indexOf('agent-device devices')).toBeLessThan(close);
+  expect(hint.indexOf('--wait <ms>')).toBeGreaterThan(-1);
+  expect(hint.indexOf('--wait <ms>')).toBeLessThan(close);
+  expect(hint.slice(close)).toMatch(/only if that workspace is yours/);
 });
 
 test('selector-conflict recovery uses the same address', () => {
@@ -84,4 +123,59 @@ test('selector-conflict recovery offers no platform session to a hand-named sess
   );
 
   expect(hint).not.toContain('--platform');
+});
+
+// Diagnostic redaction cuts any string over 400 characters, which would drop the trailing
+// commands of a hint. The bound comes from the code that limits addresses: the web session name
+// validator, and the implicit workspace address session routing builds for every platform.
+// Explicit native and tenant-prefixed names have no length limit, so no fixed text covers them.
+function longestBoundedAddress(): string {
+  let webMaxLength = 0;
+  try {
+    webSessionBackendKey({ name: 'x'.repeat(256) });
+  } catch (error) {
+    webMaxLength = Number((error as AppError).details?.maxLength);
+  }
+  expect(webMaxLength).toBeGreaterThan(0);
+  const cwd = mkdtempForTestSync('agent-device-hint-scope-');
+  const workspaceAddresses = [undefined, ...PLATFORM_SELECTORS].map((platform) =>
+    resolveEffectiveSessionName(
+      {
+        command: 'open',
+        token: 'test-token',
+        session: 'default',
+        positionals: [],
+        flags: { platform },
+        meta: { cwd },
+      } satisfies DaemonRequest,
+      makeSessionStore(),
+    ),
+  );
+  return [...workspaceAddresses, 'x'.repeat(webMaxLength)].reduce((longest, address) =>
+    address.length > longest.length ? address : longest,
+  );
+}
+
+test('every recovery variant fits the redaction cap with the longest bounded address', () => {
+  const address = longestBoundedAddress();
+  // A cwd scope keeps the platform-session suffix in the selector-conflict variant.
+  const session = scopedRef().session;
+  const ref = makeStoredSessionRef(session, address);
+  const recording = makeStoredSessionRef(
+    { ...session, screenRecording: {} as NonNullable<SessionState['screenRecording']> },
+    address,
+  );
+  const hints = [
+    buildSessionRecoveryHint(ref, 'device-in-use', { offersDeviceWait: true }),
+    buildSessionRecoveryHint(ref, 'device-in-use', { waitedMs: 30_000 }),
+    buildSessionRecoveryHint(ref, 'selector-conflict', { offersPlatformSession: true }),
+    buildSessionRecoveryHint(recording, 'device-in-use'),
+    buildSessionRecoveryHint(recording, 'selector-conflict'),
+    String(
+      buildForeignWorkspaceSessionConflict(ref, IOS_SIMULATOR, { offersDeviceWait: true }).error
+        .details?.hint,
+    ),
+  ];
+
+  for (const hint of hints) expect(hint.length).toBeLessThanOrEqual(400);
 });
