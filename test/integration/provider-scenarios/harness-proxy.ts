@@ -179,7 +179,10 @@ function allowlistedUpstreamTarget(
     );
   const isArtifactList = method === 'GET' && (route === '/artifacts' || route === '/artifacts/');
   const isArtifact = method === 'GET' && /^\/artifacts\/[0-9a-f-]+$/i.test(route);
-  if (!isRpc && !isDiagnostics && !isArtifactList && !isArtifact) return undefined;
+  const isUpload =
+    (method === 'POST' && ['/upload/preflight', '/upload/finalize'].includes(route)) ||
+    (method === 'PUT' && /^\/upload\/direct\/[0-9a-f-]+$/i.test(route));
+  if (!isRpc && !isDiagnostics && !isArtifactList && !isArtifact && !isUpload) return undefined;
   return { path: route, route };
 }
 
@@ -276,7 +279,13 @@ function sendUpstreamResponse(
   upstreamResponse: RecordingUpstreamResponse,
 ): void {
   response.statusCode = upstreamResponse.statusCode;
-  for (const name of ['content-type', 'content-disposition', 'content-length', 'x-request-id']) {
+  for (const name of [
+    'content-type',
+    'content-disposition',
+    'content-length',
+    'x-request-id',
+    'x-upload-offset',
+  ]) {
     const value = upstreamResponse.headers[name];
     if (value) response.setHeader(name, value);
   }
