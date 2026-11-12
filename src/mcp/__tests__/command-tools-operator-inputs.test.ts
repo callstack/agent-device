@@ -217,6 +217,7 @@ test('MCP still resolves operator env values outside the model-writable surface'
   vi.stubEnv('AGENT_DEVICE_DAEMON_AUTH_TOKEN', 'operator-env-token');
   vi.stubEnv('AGENT_DEVICE_STATE_DIR', '/operator/state-dir');
   vi.stubEnv('AGENT_DEVICE_TENANT', 'operator-tenant');
+  vi.stubEnv('AGENT_DEVICE_RUN_ID', 'operator-run');
   vi.stubEnv('AGENT_DEVICE_LEASE_ID', 'operator-lease');
   vi.stubEnv('AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST', 'emulator-5554');
   const createdConfigs: Array<Record<string, unknown>> = [];
@@ -237,6 +238,7 @@ test('MCP still resolves operator env values outside the model-writable surface'
   assert.equal(result.isError, false);
   assert.equal(calls[0]?.input.daemonAuthToken, 'operator-env-token');
   assert.equal(calls[0]?.input.tenant, 'operator-tenant');
+  assert.equal(calls[0]?.input.runId, 'operator-run');
   assert.equal(calls[0]?.input.leaseId, 'operator-lease');
   assert.equal(calls[0]?.input.androidDeviceAllowlist, 'emulator-5554');
   assert.equal(createdConfigs[0]?.stateDir, '/operator/state-dir');

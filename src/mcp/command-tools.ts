@@ -6,7 +6,6 @@ import {
   isCommandName,
   listCommandMetadata,
   listMcpCommandMetadata,
-  operatorAudience,
   operatorInputRefusal,
   type AgentDeviceClient,
   type BindingSettings,
@@ -32,6 +31,7 @@ import {
 } from '@agent-device/command-registry/registry';
 import { MCP_COMMAND_OUTPUT_SCHEMAS } from './mcp-output-schemas.ts';
 import {
+  CONFIG_LOADER_AUDIENCE,
   MCP_TOOL_CONFIG_AUDIENCE,
   MCP_TOOL_CONFIG_KEYS,
   mcpToolConfigProperties,
@@ -80,24 +80,6 @@ type McpOutputFormat = 'optimized' | 'json';
 type McpToolConfig = {
   client: AgentDeviceClientConfig;
   outputFormat: McpOutputFormat;
-};
-
-/**
- * Config-file-loading keys. Not per-command flags but flags the MCP config
- * resolver reads to load an arbitrary file; never model-writable, since that
- * file can carry operator credentials and endpoints. They appear in no tool
- * schema, so admission rejects them like any unadvertised key — with a message
- * that points at the operator path instead of the generic unknown-key text.
- */
-const CONFIG_LOADER_AUDIENCE: InputAudienceMap = {
-  config: operatorAudience({
-    operatorPath:
-      'Point the process serving these tools at a config file with the AGENT_DEVICE_CONFIG environment variable.',
-  }),
-  remoteConfig: operatorAudience({
-    operatorPath:
-      'Configure the remote profile on the process serving these tools, not per tool call.',
-  }),
 };
 
 /**

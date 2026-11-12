@@ -99,7 +99,7 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription:
       'Open: wait up to n ms for a device another session is holding before failing with DEVICE_IN_USE',
     inputDescription:
-      "Wait up to n milliseconds while another session holds the device, then fail with DEVICE_IN_USE. A claim held by another workspace fails at once. The wait extends this command's timeout.",
+      "Wait up to n milliseconds (100-120000) while another session holds the device, then fail with DEVICE_IN_USE. A claim held by another workspace fails at once. The wait extends this command's timeout.",
     projectConfig: false,
     recorded: false,
   },

@@ -116,7 +116,7 @@ const COMMON_INPUT_FIELDS = {
     schema: {
       type: 'string',
       enum: DEVICE_TARGETS,
-      description: 'Device form factor (CLI --target).',
+      description: 'Device form factor.',
     },
     read: readDeviceTarget,
     clientKey: 'target',

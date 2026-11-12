@@ -32,20 +32,21 @@ const MCP_TOOL_CONFIG_FIELDS = {
     schema: {
       type: 'string',
       enum: ['optimized', 'json'],
-      description: 'Text format (default optimized); json adds structuredContent.',
+      description: 'Result text: compact optimized (default) or the full result as JSON (larger).',
     },
   },
   includeCost: {
     schema: {
       type: 'boolean',
-      description: 'Add agent cost (cost.wallClockMs, …) to structuredContent.',
+      description: 'Add agent cost (cost.wallClockMs, …) to the result.',
     },
   },
   responseLevel: {
     schema: {
       type: 'string',
       enum: ['digest', 'default', 'full'],
-      description: 'Response verbosity (default: default).',
+      description:
+        'Result detail: digest (smallest) or full (largest), as JSON; default is compact text.',
     },
   },
 } as const satisfies Record<string, McpToolConfigFieldSpec>;
@@ -57,6 +58,24 @@ const MCP_TOOL_CONFIG_ROWS: ReadonlyArray<readonly [string, McpToolConfigFieldSp
 export const MCP_TOOL_CONFIG_KEYS: ReadonlySet<string> = new Set(
   MCP_TOOL_CONFIG_ROWS.map(([key]) => key),
 );
+
+/**
+ * Config-file-loading keys. Not per-command flags but flags the MCP config
+ * resolver reads to load an arbitrary file; never model-writable, since that
+ * file can carry operator credentials and endpoints. They appear in no tool
+ * schema, so admission rejects them like any unadvertised key — with a message
+ * that points at the operator path instead of the generic unknown-key text.
+ */
+export const CONFIG_LOADER_AUDIENCE: InputAudienceMap = {
+  config: operatorAudience({
+    operatorPath:
+      'Point the process serving these tools at a config file with the AGENT_DEVICE_CONFIG environment variable.',
+  }),
+  remoteConfig: operatorAudience({
+    operatorPath:
+      'Configure the remote profile on the process serving these tools, not per tool call.',
+  }),
+};
 
 export const MCP_TOOL_CONFIG_AUDIENCE: InputAudienceMap = Object.fromEntries(
   MCP_TOOL_CONFIG_ROWS.flatMap(([key, field]) => (field.audience ? [[key, field.audience]] : [])),

@@ -108,7 +108,7 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription:
       'Proxy lease: ask the backend for a physical device instead of a simulator or emulator; refused without such a backend',
     inputDescription:
-      'Proxy lease: a physical device instead of a simulator or emulator. Honored only by a proxy backend that leases by spec; other daemons refuse it.',
+      'Proxy lease: true requests a physical device; false selects nothing. Honored only by a proxy backend that leases by spec; other daemons refuse it.',
     projectConfig: false,
     recorded: false,
   },
