@@ -50,6 +50,7 @@ private final class RunnerWindowlessQueryStub: NSObject {
 /// Fails every synthesized gesture, after or before handing its events to XCTest.
 private final class RunnerSynthesisFailureStub: NSObject {
   static var dispatchedBeforeFailing = true
+  static var calls = 0
   @objc(synthesizeGestureWithApplication:resolvedWindow:interfaceOrientation:pointerSamples:dispatched:)
   class func synthesizeGesture(
     _ app: AnyObject,
@@ -58,6 +59,7 @@ private final class RunnerSynthesisFailureStub: NSObject {
     pointerSamples: [[[String: NSNumber]]],
     dispatched: UnsafeMutablePointer<ObjCBool>?
   ) -> String? {
+    calls += 1
     dispatched?.pointee = ObjCBool(dispatchedBeforeFailing)
     return "stubbed synthesis failure"
   }
@@ -251,19 +253,28 @@ extension RunnerTests {
   }
 
   /// A sequence step whose synthesis failed after hand-off reports the same unknown code as the
-  /// standalone command, and the sequence stops without an XCTest fallback press.
+  /// standalone command, keeps its gesture window, and stops the sequence: no XCTest fallback press,
+  /// and the next step never runs.
   @MainActor
-  func testSequenceLongPressFailingAfterDispatchReportsTheUnknownCode() throws {
+  func testSequenceLongPressFailingAfterDispatchReportsTheUnknownCodeAndStops() throws {
     let (response, presses) = try longPressWithFailingSynthesis(
       dispatchedBeforeFailing: true,
       health: .healthy,
-      command: #"{"command":"sequence","commandId":"failing-synthesis-sequence","steps":[{"kind":"longPress","x":40,"y":200,"durationMs":300}]}"#
+      command: #"{"command":"sequence","commandId":"failing-synthesis-sequence","steps":[{"kind":"longPress","x":40,"y":200,"durationMs":300},{"kind":"longPress","x":80,"y":200,"durationMs":300}]}"#
     )
 
-    let step = try XCTUnwrap(response.data?.sequenceResults?.first)
+    XCTAssertEqual(response.data?.completedSteps, 0)
+    XCTAssertEqual(response.data?.failedStepIndex, 0)
+    let steps = response.data?.sequenceResults ?? []
+    XCTAssertEqual(steps.count, 1, "the step after the failure has no result")
+    let step = try XCTUnwrap(steps.first)
     XCTAssertFalse(step.ok)
     XCTAssertEqual(step.errorCode, RunnerWireErrorCode.synthesizedGestureOutcomeUnknown)
-    XCTAssertEqual(presses, 0)
+    let start = try XCTUnwrap(step.gestureStartUptimeMs)
+    let end = try XCTUnwrap(step.gestureEndUptimeMs)
+    XCTAssertLessThanOrEqual(start, end)
+    XCTAssertEqual(RunnerSynthesisFailureStub.calls, 1, "the second step is never synthesized")
+    XCTAssertEqual(presses, 0, "and never pressed through XCTest")
   }
 
   /// One refused before its events reached XCTest sent nothing, and says so.
@@ -320,6 +331,7 @@ extension RunnerTests {
       app.terminate()
     }
     RunnerSynthesisFailureStub.dispatchedBeforeFailing = dispatchedBeforeFailing
+    RunnerSynthesisFailureStub.calls = 0
     let swaps: [(Method, Method)] = [
       (try XCTUnwrap(class_getClassMethod(
         RunnerSynthesizedGesture.self,
