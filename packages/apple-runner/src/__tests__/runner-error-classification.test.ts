@@ -137,6 +137,20 @@ test('a coordinate fill refused on an unreadable point reports its own code, not
   assert.equal(isRetryableRunnerError(new AppError(refusal.code, '', refusal.details)), false);
 });
 
+// The literals are what the Swift runner encodes. Only a gesture refused before any event reached
+// XCTest proves the command sent nothing; one that failed after may have run.
+test('a synthesized gesture refusal is not dispatched; a failure after hand-off stays unknown', () => {
+  const refused = classifyRunnerReportedError('SYNTHESIZED_GESTURE_NOT_DISPATCHED');
+  assert.equal(refused.code, 'COMMAND_FAILED');
+  assert.equal(refused.details.reason, 'synthesized_gesture_not_dispatched');
+  assert.equal(refused.details.dispatched, 'no');
+  const unknown = classifyRunnerReportedError('SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN');
+  assert.equal(unknown.code, 'COMMAND_FAILED');
+  assert.equal(unknown.details.reason, 'synthesized_gesture_outcome_unknown');
+  assert.equal(unknown.details.dispatched, 'unknown');
+  assert.equal(isRetryableRunnerError(new AppError(unknown.code, '', unknown.details)), false);
+});
+
 test('retryable requires an AppError with COMMAND_FAILED', () => {
   assert.equal(isRetryableRunnerError(new Error('fetch failed')), false);
   assert.equal(isRetryableRunnerError(new AppError('DEVICE_NOT_FOUND', 'fetch failed')), false);

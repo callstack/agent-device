@@ -334,6 +334,14 @@ export const NO_TEXT_INPUT_AT_POINT_RUNNER_CODE = 'NO_TEXT_INPUT_AT_POINT';
 export const TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE = 'TEXT_INPUT_PROBE_UNAVAILABLE';
 
 /**
+ * The runner codes for a synthesized long press or planned gesture. NOT_DISPATCHED: refused before
+ * any of its events reached XCTest, so the command sent nothing. OUTCOME_UNKNOWN: failed after its
+ * events reached XCTest, so it may have run; the runner never falls back to repeat it.
+ */
+const SYNTHESIZED_GESTURE_NOT_DISPATCHED_RUNNER_CODE = 'SYNTHESIZED_GESTURE_NOT_DISPATCHED';
+const SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN_RUNNER_CODE = 'SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN';
+
+/**
  * Runner codes that classify a failure for the host without renaming it on the wire. They stay
  * `COMMAND_FAILED` and survive as `details.runnerErrorCode`, which is what family policy reads:
  * `RUNNER_BUSY` for retriable contention, `ALERT_NOT_FOUND` for an alert that is not there yet,
@@ -346,6 +354,8 @@ const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<string, { retriable?: true
   [APP_NOT_RUNNING_RUNNER_CODE, { retriable: true }],
   [ALERT_NOT_FOUND_RUNNER_CODE, {}],
   [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, {}],
+  [SYNTHESIZED_GESTURE_NOT_DISPATCHED_RUNNER_CODE, {}],
+  [SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN_RUNNER_CODE, {}],
   ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, {}] as const),
 ]);
 
@@ -359,6 +369,8 @@ const RUNNER_REPORTED_ERROR_REASONS: ReadonlyMap<string, RunnerReportedErrorReas
   [MAIN_THREAD_TIMEOUT_RUNNER_CODE, 'runner_main_thread_timeout'],
   [NO_TEXT_INPUT_AT_POINT_RUNNER_CODE, 'no_text_input_at_point'],
   [TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE, 'text_input_probe_unavailable'],
+  [SYNTHESIZED_GESTURE_NOT_DISPATCHED_RUNNER_CODE, 'synthesized_gesture_not_dispatched'],
+  [SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN_RUNNER_CODE, 'synthesized_gesture_outcome_unknown'],
 ]);
 
 /**
@@ -383,6 +395,7 @@ const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new 
   [TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE, 'no'],
   [ALERT_BUTTON_NOT_FOUND_RUNNER_CODE, 'no'],
   [ALERT_UNRESOLVED_RUNNER_CODE, 'no'],
+  [SYNTHESIZED_GESTURE_NOT_DISPATCHED_RUNNER_CODE, 'no'],
   ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, 'no'] as const),
 ]);
 
@@ -394,7 +407,9 @@ type RunnerReportedErrorReason =
   | 'runner_busy'
   | 'runner_main_thread_timeout'
   | 'no_text_input_at_point'
-  | 'text_input_probe_unavailable';
+  | 'text_input_probe_unavailable'
+  | 'synthesized_gesture_not_dispatched'
+  | 'synthesized_gesture_outcome_unknown';
 
 /** Wire code plus the details every path must publish for one runner-reported error code. */
 export type RunnerReportedErrorClass = Readonly<{

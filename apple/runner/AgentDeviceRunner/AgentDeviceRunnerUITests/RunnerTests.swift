@@ -47,6 +47,10 @@ final class RunnerTests: XCTestCase {
     static let textInputProbeUnavailable = "TEXT_INPUT_PROBE_UNAVAILABLE"
     static let alertButtonNotFound = "ALERT_BUTTON_NOT_FOUND"
     static let alertUnresolved = "ALERT_UNRESOLVED"
+    /// A synthesized gesture refused before its events reached XCTest, so the command sent nothing.
+    static let synthesizedGestureNotDispatched = "SYNTHESIZED_GESTURE_NOT_DISPATCHED"
+    /// A synthesized gesture that failed after its events reached XCTest, so it may have run.
+    static let synthesizedGestureOutcomeUnknown = "SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN"
     /// Refuses a repeat of a `commandId` the runner already finished, when that command's own
     /// classification keeps no response body to replay. Nothing ran for the repeat, but the daemon's
     /// dispatch disclosure stays `unknown` — only the runner knows whether an earlier send of that id

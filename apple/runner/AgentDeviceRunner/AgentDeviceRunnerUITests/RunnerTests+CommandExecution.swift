@@ -26,6 +26,15 @@ extension RunnerTests {
       return refusal.response
     } catch let refusal as RunnerCoordinateRefusal {
       return unsupportedResponse(message: refusal.message, hint: refusal.hint)
+    } catch let unknown as RunnerGestureOutcomeUnknown {
+      return Response(
+        ok: false,
+        error: ErrorPayload(
+          code: RunnerWireErrorCode.synthesizedGestureOutcomeUnknown,
+          message: unknown.message,
+          hint: unknown.hint
+        )
+      )
     }
   }
 
@@ -253,7 +262,8 @@ extension RunnerTests {
       case .xctestFallback(let message, let hint):
         fallback = GestureFallback(strategy: "xctest-coordinate-long-press", message: message, hint: hint)
       case .refused(_, let message, let hint):
-        return unsupportedResponse(message: message, hint: hint)
+        // A long press that may have run throws `RunnerGestureOutcomeUnknown`; a refusal sent nothing.
+        return gestureNotDispatchedResponse(message: message, hint: hint)
       }
 #else
       fallback = nil
@@ -685,7 +695,12 @@ extension RunnerTests {
         let (timing, outcome) = try performGesture(activeApp, idleTimeout: false) {
           try sampledPlannedGesture(app: activeApp, plan: plan)
         }
-        response = plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
+        // A sampled gesture that may have run throws `RunnerGestureOutcomeUnknown`; a refusal sent nothing.
+        if case .unsupported(let message, let hint) = outcome {
+          response = gestureNotDispatchedResponse(message: message, hint: hint)
+        } else {
+          response = plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
+        }
 #if os(iOS) && targetEnvironment(simulator)
       case .screenEdgeTouch:
         let (timing, outcome) = try performGesture(activeApp, idleTimeout: false) {

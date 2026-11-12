@@ -12,6 +12,14 @@ struct RunnerCoordinateRefusal: Error {
   let hint: String?
 }
 
+/// A synthesized gesture that failed after its events reached XCTest, so it may have run. Thrown
+/// rather than returned so that no XCTest fallback repeats it: a fallback would press a second time.
+/// `executeOnMainPrepared` answers it as `SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN`.
+struct RunnerGestureOutcomeUnknown: Error {
+  let message: String
+  let hint: String?
+}
+
 private struct RunnerUnsupportedOperationError: LocalizedError {
   let message: String
 

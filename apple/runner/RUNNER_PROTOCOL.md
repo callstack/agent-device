@@ -172,6 +172,11 @@ Its shape is `{kind: "reported" | "derived", rect: {x, y, width, height}}` or
 `derived` and `missing` establish no screen origin.
 A root box used to validate presented nodes does not upgrade this evidence.
 
+A synthesized long press or planned gesture reports how far it got. `SYNTHESIZED_GESTURE_NOT_DISPATCHED`
+means it was refused before any of its events reached XCTest, so the command sent nothing.
+`SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN` means it failed after its events reached XCTest, so it may have
+run; the runner does not fall back to an XCTest gesture that would repeat it.
+
 ## Maintenance Rules
 
 - Treat the TypeScript and Swift wire models as a single contract.

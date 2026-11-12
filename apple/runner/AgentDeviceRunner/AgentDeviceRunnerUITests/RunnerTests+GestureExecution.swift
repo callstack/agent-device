@@ -29,6 +29,14 @@ extension RunnerTests {
     }
   }
 
+  /// A synthesized gesture refused before any of its events reached XCTest: the command sent nothing.
+  func gestureNotDispatchedResponse(message: String, hint: String?) -> Response {
+    Response(
+      ok: false,
+      error: ErrorPayload(code: RunnerWireErrorCode.synthesizedGestureNotDispatched, message: message, hint: hint)
+    )
+  }
+
   func unsupportedResponse(message: String, hint: String?) -> Response {
     Response(
       ok: false,

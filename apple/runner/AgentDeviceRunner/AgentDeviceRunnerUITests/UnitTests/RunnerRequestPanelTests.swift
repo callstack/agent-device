@@ -139,12 +139,15 @@ private final class LitPanelBookingProbe: NSObject {
     return nil
   }
 
-  @objc(synthesizeGestureWithApplication:resolvedWindow:interfaceOrientation:pointerSamples:)
+  @objc(synthesizeGestureWithApplication:resolvedWindow:interfaceOrientation:pointerSamples:dispatched:)
   class func synthesizeGesture(_ app: AnyObject, resolvedWindow: AnyObject?, interfaceOrientation: Int,
-                               pointerSamples: [[[String: NSNumber]]]) -> String? {
+                               pointerSamples: [[[String: NSNumber]]],
+                               dispatched: UnsafeMutablePointer<ObjCBool>?) -> String? {
+    dispatched?.pointee = false
     guard let first = pointerSamples.first?.first, let last = pointerSamples.first?.last else {
       return "fixture pointer path is empty"
     }
+    dispatched?.pointee = true
     record(window: resolvedWindow, orientation: interfaceOrientation,
            start: CGPoint(x: first["x"]!.doubleValue, y: first["y"]!.doubleValue),
            end: CGPoint(x: last["x"]!.doubleValue, y: last["y"]!.doubleValue))
@@ -649,8 +652,8 @@ extension RunnerTests {
       (class_getInstanceMethod(try XCTUnwrap(object_getClass(query)), #selector(getter: XCUIElementQuery.allElementsBoundByIndex)),
        class_getInstanceMethod(LitPanelBookingProbe.self, #selector(getter: LitPanelBookingProbe.allElementsBoundByIndex))),
       (class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeDragWithApplication:resolvedWindow:interfaceOrientation:drag:")), dragStub),
-      (class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeGestureWithApplication:resolvedWindow:interfaceOrientation:pointerSamples:")),
-       class_getClassMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.synthesizeGesture(_:resolvedWindow:interfaceOrientation:pointerSamples:))))
+      (class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeGestureWithApplication:resolvedWindow:interfaceOrientation:pointerSamples:dispatched:")),
+       class_getClassMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.synthesizeGesture(_:resolvedWindow:interfaceOrientation:pointerSamples:dispatched:))))
     ]
     var originals: [(Method, IMP)] = []
     defer {
