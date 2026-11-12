@@ -1,9 +1,4 @@
-import {
-  createMcpMessageHandler,
-  handleMcpMessage,
-  type JsonRpcMessage,
-  type McpMessageHandler,
-} from './router.ts';
+import { createMcpMessageHandler, type JsonRpcMessage, type McpMessageHandler } from './router.ts';
 import { jsonRpcRequestSchema, type JsonRpcId } from '@agent-device/kernel/contracts';
 
 type JsonRpcResponse = NonNullable<Awaited<ReturnType<McpMessageHandler>>>;
@@ -13,9 +8,7 @@ type MessageWriter = (message: unknown) => void;
 
 /** `structured`: `agent-device mcp --structured`; see `createMcpMessageHandler`. */
 export async function runAgentDeviceMcpServer(options: { structured: boolean }): Promise<void> {
-  const session = createMcpStdioSession({
-    handlePayload: createMcpPayloadHandler(createMcpMessageHandler(options)),
-  });
+  const session = createMcpStdioSession({ handlePayload: createMcpPayloadHandler(options) });
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', (chunk: string) => {
     session.receive(chunk);
@@ -37,16 +30,14 @@ export async function runAgentDeviceMcpServer(options: { structured: boolean }):
  * `tools/call`, queued or running, and the server sends no response for it. A batch never carries
  * a `tools/call`: see `handleMcpBatch`.
  */
-export function createMcpStdioSession(
-  options: {
-    handlePayload?: PayloadHandler;
-    write?: MessageWriter;
-  } = {},
-): {
+export function createMcpStdioSession(options: {
+  handlePayload: PayloadHandler;
+  write?: MessageWriter;
+}): {
   receive: (chunk: string) => void;
   end: () => Promise<void>;
 } {
-  const handlePayload = options.handlePayload ?? handleMcpPayload;
+  const handlePayload = options.handlePayload;
   const write = options.write ?? writeMessage;
   const inFlight = new Set<Promise<void>>();
   const toolCalls = new Map<JsonRpcId, AbortController>();
@@ -105,7 +96,7 @@ export function createMcpStdioSession(
     if (line.length === 0) return;
     let payload: unknown;
     try {
-      // The decoded value stays untyped here; handleMcpPayload validates it at the boundary.
+      // The decoded value stays untyped here; the payload handler validates it at the boundary.
       payload = JSON.parse(line) as unknown;
     } catch (error) {
       write({
@@ -136,15 +127,14 @@ export function createMcpStdioSession(
   };
 }
 
-function createMcpPayloadHandler(handleMessage: McpMessageHandler) {
+/** One server's JSON-RPC payload boundary: single messages and legacy batches. */
+export function createMcpPayloadHandler(options: { structured: boolean }) {
+  const handleMessage = createMcpMessageHandler(options);
   return async (payload: unknown, context: PayloadContext = {}): Promise<unknown | null> =>
     Array.isArray(payload)
       ? await handleMcpBatch(handleMessage, payload)
       : await handleInboundMessage(handleMessage, payload, context);
 }
-
-/** The default server's payload handler: text-only results. */
-export const handleMcpPayload = createMcpPayloadHandler(handleMcpMessage);
 
 /**
  * JSON-RPC batching exists only for legacy clients (MCP 2025-06-18 removed it). A `tools/call` in a

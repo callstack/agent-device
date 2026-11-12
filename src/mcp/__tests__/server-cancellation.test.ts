@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import * as daemonClient from '@agent-device/daemon-client';
-import { createMcpStdioSession } from '../server.ts';
+import { createMcpPayloadHandler, createMcpStdioSession } from '../server.ts';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -24,7 +24,10 @@ test('notifications/cancelled aborts the daemon request of a running tools/call 
       }),
   );
   const writes: unknown[] = [];
-  const session = createMcpStdioSession({ write: (message) => writes.push(message) });
+  const session = createMcpStdioSession({
+    handlePayload: createMcpPayloadHandler({ structured: false }),
+    write: (message) => writes.push(message),
+  });
 
   session.receive(
     `${JSON.stringify({

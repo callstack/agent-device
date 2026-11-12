@@ -3,13 +3,16 @@ import { test } from 'vitest';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { helpTopicIds } from '../../commands/schema/cli-help.ts';
 import { listMcpExposedCommandNames } from '@agent-device/command-registry/registry';
-import { handleMcpMessage } from '../router.ts';
+import { createMcpMessageHandler } from '../router.ts';
 import {
   HELP_TOOL_NAME,
   MCP_SERVER_INSTRUCTIONS,
   terminalOnlyCommandNames,
 } from '../server-guide.ts';
-import { handleMcpPayload } from '../server.ts';
+import { createMcpPayloadHandler } from '../server.ts';
+
+const handleMcpMessage = createMcpMessageHandler({ structured: false });
+const handleMcpPayload = createMcpPayloadHandler({ structured: false });
 
 test('MCP exposes every automatable CLI command as a structured direct tool, plus the MCP-only help tool', async () => {
   const response = await handleMcpMessage({

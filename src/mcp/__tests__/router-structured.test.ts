@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import * as daemonClient from '@agent-device/daemon-client';
-import { createMcpMessageHandler, handleMcpMessage, type McpMessageHandler } from '../router.ts';
+import { createMcpMessageHandler, type McpMessageHandler } from '../router.ts';
 import { validateAgainstSchema } from './output-schema-validator.ts';
 
 type Tool = { name: string; outputSchema?: Record<string, unknown> };
@@ -26,6 +26,8 @@ beforeEach(() => {
     return { ok: true, data: { devices: [{ ...DEVICE, booted: true }] } } as never;
   });
 });
+
+const handleMcpMessage = createMcpMessageHandler({ structured: false });
 
 afterEach(() => {
   vi.restoreAllMocks();

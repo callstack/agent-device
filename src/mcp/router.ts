@@ -56,9 +56,6 @@ export function createMcpMessageHandler(options: { structured: boolean }): McpMe
   return async (message, context = {}) => await handleServerMessage(server, message, context);
 }
 
-/** The default server's handler: text-only results. */
-export const handleMcpMessage = createMcpMessageHandler({ structured: false });
-
 type McpServer = { structured: boolean; executor: CommandToolExecutor };
 
 /** `signal` aborts a `tools/call` the client cancelled; other methods finish too fast to need it. */
