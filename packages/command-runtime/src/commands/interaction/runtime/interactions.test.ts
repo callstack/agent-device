@@ -901,12 +901,14 @@ test('runtime press plan names the refused key and the pending keys when a membe
     },
   });
 
-  const failure = await device.interactions
-    .press(ref('@e1'), { session: 'default', refs: ['e1', 'e2'] })
-    .catch((error: unknown) => error as AppError);
-
+  await assert.rejects(
+    device.interactions.press(ref('@e1'), { session: 'default', refs: ['e1', 'e2'] }),
+    (error: AppError) => {
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.refPlanKey, '@e2');
+      assert.deepEqual(error.details?.refPlanPending, []);
+      return true;
+    },
+  );
   assert.equal(taps.length, 2);
-  assert.equal(failure.code, 'COMMAND_FAILED');
-  assert.equal(failure.details?.refPlanKey, '@e2');
-  assert.deepEqual(failure.details?.refPlanPending, []);
 });
