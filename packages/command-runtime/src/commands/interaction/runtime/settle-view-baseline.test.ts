@@ -77,6 +77,20 @@ test('a ref press after a full snapshot reports no removals the view change caus
   assert.match(result.settle?.hint ?? '', /previous snapshot was a full tree.*nearly-empty tree/);
 });
 
+test('a ref press after a full snapshot still lists what the press added', async () => {
+  const device = createDevice({
+    refFrame: fullDialogTree(),
+    // The press opens another screen: its controls are new, the dialog is gone.
+    capture: () => interactiveTree(['Next', 'Back', 'Home', 'Menu', 'Help']),
+  });
+
+  const result = await device.interactions.press(ref('@e3'), { session: 'default', settle: {} });
+
+  assert.equal(result.settle?.diff?.summary.additions, 5);
+  assert.equal(result.settle?.diff?.summary.removals, 0);
+  assert.ok(result.settle?.diff?.lines.every((line) => line.kind === 'added' && line.ref));
+});
+
 test('a ref press after an interactive snapshot still reports what left the screen', async () => {
   const device = createDevice({
     refFrame: interactiveTree(DIALOG_LABELS),

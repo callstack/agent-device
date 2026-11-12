@@ -81,7 +81,7 @@ export const NEVER_SETTLED_HINT =
   'The UI kept changing for the whole settle budget (animation, carousel, or ticker?), so no settled diff is shown. Raise --timeout, wait for specific content, or take a fresh snapshot.';
 
 const FULL_VIEW_BASELINE_HINT =
-  'The previous snapshot was a full tree and settle reads the interactive view, so this diff starts from the settled screen instead of listing changes. Later settles diff against that settled interactive view.';
+  'The previous snapshot was a full tree and settle reads the interactive view, so this diff lists only added lines; removals are not listed. Later settles diff against that settled interactive view.';
 
 const SETTLE_CAPTURE_STALLED_HINT =
   'A snapshot capture stalled past the settle budget, so no settled diff is shown. The action itself succeeded; observe with wait stable or snapshot.';
@@ -196,9 +196,6 @@ async function readSettledOutcome(
   // replacement presented as change within one surface, refs included, so it is refused and the
   // transition is disclosed instead.
   const surfaceChange = resolvePostActionSurfaceChange(params.baseline, settledCapture);
-  // A full-tree baseline holds nodes the interactive settle view never reads. The settled view
-  // becomes the baseline instead, so the diff cannot report those nodes as removed.
-  const diffBaseline = params.baseline.fullView ? settledNodes : params.baseline.nodes;
   const diffShown = outcome.settled && stored && !surfaceChange;
   return {
     observation: {
@@ -213,7 +210,7 @@ async function readSettledOutcome(
       // advisory state.
       ...(diffShown
         ? buildSettleDiffAndTail(
-            diffBaseline,
+            params.baseline,
             settledNodes,
             params.actionPoint,
             session?.appBundleId,
@@ -301,7 +298,7 @@ function nonEmptyBaseline(
 }
 
 function buildSettleDiff(
-  baselineNodes: SnapshotNode[],
+  baseline: SurfaceScopedNodes,
   settledNodes: SnapshotNode[],
   appBundleId: string | undefined,
 ): NonNullable<SettleObservation['diff']> {
@@ -311,30 +308,34 @@ function buildSettleDiff(
   // snapshot), extra baseline-only lines surface as removals — advisory noise,
   // the same baseline caveat --verify's changedFromBefore already accepts.
   const diff = buildSnapshotDiff(
-    withoutSettleChrome(baselineNodes, appBundleId),
+    withoutSettleChrome(baseline.nodes, appBundleId),
     withoutSettleChrome(settledNodes, appBundleId),
     { flatten: true, withRefs: true },
   );
-  const changed = diff.lines.filter((line) => line.kind !== 'unchanged');
+  // A full-tree baseline holds nodes the interactive settle view never reads, so its removals are
+  // not evidence and are left out. An added line is: the interactive view adds no node of its own.
+  const changed = diff.lines.filter(
+    (line) => line.kind === 'added' || (line.kind === 'removed' && !baseline.fullView),
+  );
   const lines = capSettleDiffLines(changed).map((line) => ({
     kind: line.kind as 'added' | 'removed',
     text: line.text,
     ...(line.ref ? { ref: line.ref } : {}),
   }));
   return {
-    summary: diff.summary,
+    summary: baseline.fullView ? { ...diff.summary, removals: 0 } : diff.summary,
     lines,
     ...(changed.length > lines.length ? { truncated: true as const } : {}),
   };
 }
 
 function buildSettleDiffAndTail(
-  baselineNodes: SnapshotNode[],
+  baseline: SurfaceScopedNodes,
   settledNodes: SnapshotNode[],
   actionPoint: Point | undefined,
   appBundleId: string | undefined,
 ): Pick<SettleObservation, 'diff' | 'tail' | 'tailTruncated'> {
-  const diff = buildSettleDiff(baselineNodes, settledNodes, appBundleId);
+  const diff = buildSettleDiff(baseline, settledNodes, appBundleId);
   return { diff, ...buildSettleTail(diff, settledNodes, actionPoint, appBundleId) };
 }
 
