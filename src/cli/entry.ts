@@ -69,7 +69,11 @@ function isVersionRequest(argv: string[]): boolean {
   return argv.length === 1 && (argv[0] === '--version' || argv[0] === '-V');
 }
 
-/** Only `mcp` and `mcp --structured` start the server; the full CLI rejects any other argument. */
+/**
+ * Only `mcp` and `mcp --structured` start the server; the full CLI rejects any other argument.
+ * This is the one runtime read of `--structured`: its `mcpStructured` flag declaration serves help
+ * and that rejection only, so the server starts without loading the CLI module.
+ */
 function mcpServerRequest(argv: string[]): { structured: boolean } | undefined {
   if (argv[0] !== 'mcp') return undefined;
   if (argv.length === 1) return { structured: false };

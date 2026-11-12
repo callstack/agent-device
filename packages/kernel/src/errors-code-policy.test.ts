@@ -174,7 +174,7 @@ const EXPECTED_HINT_BY_CODE: Record<KnownAppErrorCode, string> = {
   UNAUTHORIZED: 'Refresh daemon metadata and retry the command.',
   AMBIGUOUS_MATCH: 'Multiple candidates matched. Narrow the query or pass an exact identifier.',
   REPLAY_DIVERGENCE:
-    'Read the divergence report (details.divergence) for the screen and selector suggestions to repair the step.',
+    'Repair the step from the divergence report: its screen and selector suggestions.',
   REPAIR_SESSION_EXPIRED:
     'The --save-script repair session was reaped before it was finalized; re-run replay <script> --save-script from the start.',
   REPAIR_COMMIT_FAILED:

@@ -70,7 +70,7 @@ type Json7Schema = Parameters<typeof jsonSchema>[0];
 
 /**
  * Builds an AI SDK tool set from the same command registry the MCP server
- * exposes (`listCommandTools()` / `createCommandToolExecutor()`), so the two
+ * exposes (`listCommandTools({ outputSchemas })` / `createCommandToolExecutor()`), so the two
  * integrations stay in lockstep without a hand-maintained tool list. Uses
  * `jsonSchema()` against the registry's JSON Schema directly — no zod layer.
  *

@@ -92,6 +92,7 @@ The report carries a bounded `screen`, ranked `suggestions`, one `repairHint` en
 - Serialized ceilings are 8/24/64 KiB for the compact, default, and full response levels. Overflow goes to a redacted session-scoped artifact.
 - Entered text is never serialized. Native `.ad` replay replaces expanded variable values with `<var:NAME>` in human-readable divergence fields.
 - Every surface (daemon text, JSON, Node client `AppError`, MCP text, and MCP `structuredContent` on a structured server) preserves the repair data. No surface may reduce divergence to text that discards it. The default MCP server returns text only, so its error text carries the step, the repair hint (with the concrete resume command when `resume.allowed` is true), the screen, and the suggestions.
+  Why: clients that receive `structuredContent` show the model that JSON and drop the text, so a default `structuredContent` error replaced the compact report with the larger JSON. Keeping `structuredContent` on default errors was rejected for that reason; a client that reads errors as data opts in with `agent-device mcp --structured`.
 
 Resume is `replay --from N --plan-digest <sha>`.
 `N` is a 1-based index into the fully expanded executable plan.
