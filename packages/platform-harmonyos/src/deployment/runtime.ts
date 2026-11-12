@@ -89,6 +89,8 @@ async function uninstallHarmonyApp(
   if (remaining.includes(bundleId)) {
     // bm prints its verdict into stdout at exit code 0, so only an inventory that no
     // longer lists the bundle proves the removal.
+    // exec-guard-allow: reachable at exit 0 — bm's own verdict prose is the detail, and
+    // processExitError would mislabel an answered tool call as a process failure.
     throw new AppError('COMMAND_FAILED', `${bundleId} is still installed after bm uninstall`, {
       exitCode: uninstall.exitCode,
       stdout: uninstall.stdout,
@@ -126,6 +128,8 @@ async function readBundleInventory(
   if (bundles.length === 0) {
     // bm prints its failures into stdout at exit code 0, so an unparseable answer is an
     // unknown read, never a proof of absence.
+    // exec-guard-allow: reachable at exit 0 — the bm prose answers why the read failed,
+    // and processExitError would mislabel an answered tool call as a process failure.
     throw new AppError('COMMAND_FAILED', 'Could not read the installed bundle inventory', {
       exitCode: inventory.exitCode,
       stdout: inventory.stdout,
