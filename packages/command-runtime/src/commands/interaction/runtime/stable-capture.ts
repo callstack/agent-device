@@ -103,7 +103,10 @@ export async function runStableCaptureLoop(
     quietMs?: number;
     timeoutMs: number;
     resetBudgetOnPrivateAxRecovery?: boolean;
-    /** Immutable pre-action projection; the stored session may advance before settle begins. */
+    /**
+     * Immutable pre-action projection; the stored session may advance before settle begins. The loop
+     * reads the view the baseline was read in, so a full-view baseline is diffed full against full.
+     */
     broadTransitionBaseline?: SurfaceScopedNodes;
   },
 ): Promise<StableCaptureLoopResult> {
@@ -154,6 +157,7 @@ export async function runStableCaptureLoop(
       runtime,
       options,
       deadlineMs - now(runtime),
+      params.broadTransitionBaseline?.fullView !== true,
       preferredBackend,
     );
     if (read.kind !== 'captured') return unfinished(read);
@@ -543,6 +547,7 @@ async function captureStableSignalWithinDeadline(
   runtime: AgentDeviceRuntime,
   options: CommandContext & SelectorSnapshotOptions,
   remainingMs: number,
+  interactiveOnly: boolean,
   preferredBackend?: SnapshotPreferredBackend,
 ): Promise<StableCaptureRead> {
   try {
@@ -552,7 +557,7 @@ async function captureStableSignalWithinDeadline(
         { ...options, signal },
         {
           updateSession: false,
-          interactiveOnly: true,
+          interactiveOnly,
           preferredBackend,
         },
       );

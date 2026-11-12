@@ -161,9 +161,9 @@ export type SurfaceScopedNodes = {
    */
   presentedSurface?: PresentedSurface;
   /**
-   * The nodes are a ref frame the agent read as a full tree (`snapshot` without `-i`). A settle reads
-   * the interactive view, so a diff against these nodes would report every node that view omits as
-   * removed. Only the settle baseline sets it.
+   * The nodes are a ref frame the agent read as a full tree (`snapshot` without `-i`). The settle
+   * loop then reads the full tree too, because diffing these nodes against the interactive view
+   * reports every node that view omits as removed. Only the settle baseline sets it.
    */
   fullView?: true;
 };
@@ -350,11 +350,6 @@ export type SettleObservation = {
     lines: SettleDiffLine[];
     /** Present (true) when lines were capped to the response bound. */
     truncated?: boolean;
-    /**
-     * Present (true) when the baseline was a ref frame read as a full tree: removals were not
-     * compared, so `summary.removals` is 0 and `lines` holds only additions.
-     */
-    removalsOmitted?: true;
   };
   /**
    * Unchanged interactive refs tail: benchmarks (July 2026) showed 27% of

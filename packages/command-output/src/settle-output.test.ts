@@ -49,30 +49,3 @@ test('post-action observation CLI output formatters follow descriptor traits', a
     );
   }
 });
-
-test('a settle that omitted removals does not print a removal count', async () => {
-  const format = listCliOutputFormatters()[PUBLIC_COMMANDS.press]!;
-  const settle = (removalsOmitted: boolean) => ({
-    settled: true,
-    waitedMs: 12,
-    diff: {
-      summary: { additions: 0, removals: 0, unchanged: 6 },
-      lines: [],
-      ...(removalsOmitted ? { removalsOmitted: true } : {}),
-    },
-  });
-  const text = async (removalsOmitted: boolean) =>
-    String(
-      (
-        await format({
-          env: process.env,
-          stderrIsTTY: false,
-          input: {},
-          result: { message: 'ok', settle: settle(removalsOmitted) },
-        })
-      ).text,
-    );
-
-  assert.match(await text(true), /settled after 12ms: \+0 removals not listed \(~6 unchanged\)/);
-  assert.match(await text(false), /settled after 12ms: \+0 -0 \(~6 unchanged\)/);
-});

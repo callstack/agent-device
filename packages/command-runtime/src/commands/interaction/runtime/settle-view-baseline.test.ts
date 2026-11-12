@@ -10,8 +10,8 @@ import { createMemorySessionStore } from '../../../command-runtime/runtime-facto
 import { ref, selector } from './selector-read-utils.ts';
 import { createFakeClock } from './__tests__/settle-device-fixtures.ts';
 
-// #4486: a full `snapshot` keeps wrapper nodes that the interactive view the settle loop reads
-// omits. A press that changes nothing must not report those wrappers as removed.
+// #4486: a full `snapshot` keeps wrapper nodes the interactive view omits. A settle on its refs reads
+// the full tree too, so an unchanged screen reports no change and wrappers are never false removals.
 //
 // Budgets are injected (fake clock) — no real waiting.
 
@@ -44,16 +44,29 @@ function interactiveTree(labels: readonly string[]): SnapshotState {
   return { ...makeSnapshotState(dialogNodes(labels)), presentation: { interactiveOnly: true } };
 }
 
-function createDevice(params: {
-  refFrame: SnapshotState;
-  capture: (call: number) => SnapshotState;
-}) {
-  let calls = 0;
-  return createAgentDevice({
+type Screen = { full: SnapshotState; interactive: SnapshotState };
+
+const DIALOG: Screen = { full: fullDialogTree(), interactive: interactiveTree(DIALOG_LABELS) };
+
+/**
+ * A backend that answers each capture in the view it was asked for. `screens` is the screen before
+ * the press and after it; `views` records the view of every capture taken after the press.
+ */
+function createDevice(params: { refFrame: SnapshotState; before: Screen; after: Screen }) {
+  let pressed = false;
+  const views: Array<'full' | 'interactive'> = [];
+  const device = createAgentDevice({
     backend: {
       platform: 'android',
-      captureSnapshot: async () => ({ snapshot: params.capture((calls += 1)) }),
-      tap: async () => ({ ok: true }),
+      captureSnapshot: async (_context, options) => {
+        const screen = pressed ? params.after : params.before;
+        if (pressed) views.push(options?.interactiveOnly === true ? 'interactive' : 'full');
+        return { snapshot: options?.interactiveOnly === true ? screen.interactive : screen.full };
+      },
+      tap: async () => {
+        pressed = true;
+        return { ok: true };
+      },
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
     sessions: createMemorySessionStore([
@@ -62,55 +75,70 @@ function createDevice(params: {
     policy: localCommandPolicy(),
     clock: createFakeClock(),
   });
+  return { device, views };
 }
 
-test('a ref press after a full snapshot reports no removals the view change caused', async () => {
-  const device = createDevice({
-    refFrame: fullDialogTree(),
-    capture: () => interactiveTree(DIALOG_LABELS),
+function removedLabels(lines: Array<{ kind: string; text: string }> | undefined): string[] {
+  return (lines ?? []).filter((line) => line.kind === 'removed').map((line) => line.text);
+}
+
+test('a ref press after a full snapshot settles on the full tree and reports no false removals', async () => {
+  const { device, views } = createDevice({
+    refFrame: DIALOG.full,
+    before: DIALOG,
+    after: DIALOG,
   });
 
   const result = await device.interactions.press(ref('@e3'), { session: 'default', settle: {} });
 
-  assert.equal(result.settle?.diff?.summary.removals, 0);
-  assert.equal(result.settle?.diff?.removalsOmitted, true);
-  // The tiny-tree readiness hint the settled screen earns is kept beside the view-change hint.
-  assert.match(result.settle?.hint ?? '', /previous snapshot was a full tree.*nearly-empty tree/);
+  assert.ok(views.length > 0 && views.every((view) => view === 'full'));
+  assert.deepEqual(result.settle?.diff?.summary, { additions: 0, removals: 0, unchanged: 4 });
 });
 
-test('a ref press after a full snapshot still lists what the press added', async () => {
-  const device = createDevice({
-    refFrame: fullDialogTree(),
-    // The press opens another screen: its controls are new, the dialog is gone.
-    capture: () => interactiveTree(['Next', 'Back', 'Home', 'Menu', 'Help']),
+test('a ref press after a full snapshot still reports what changed on the full tree', async () => {
+  const next = ['Next', 'Back'];
+  const { device } = createDevice({
+    refFrame: DIALOG.full,
+    before: DIALOG,
+    after: {
+      full: {
+        ...makeSnapshotState([
+          { index: 0, depth: 0, type: 'Group', rect: { x: 0, y: 0, width: 400, height: 800 } },
+          ...dialogNodes(next, 1),
+        ]),
+        presentation: {},
+      },
+      interactive: interactiveTree(next),
+    },
   });
 
   const result = await device.interactions.press(ref('@e3'), { session: 'default', settle: {} });
 
-  assert.equal(result.settle?.diff?.summary.additions, 5);
-  assert.equal(result.settle?.diff?.summary.removals, 0);
-  assert.equal(result.settle?.diff?.lines.length, 5);
-  assert.ok(result.settle?.diff?.lines.every((line) => line.kind === 'added' && line.ref));
+  assert.equal(result.settle?.diff?.summary.additions, 2);
+  assert.equal(result.settle?.diff?.summary.removals, 3);
+  assert.ok(removedLabels(result.settle?.diff?.lines).some((text) => text.includes('Device name')));
 });
 
-test('a ref press after an interactive snapshot still reports what left the screen', async () => {
-  const device = createDevice({
-    refFrame: interactiveTree(DIALOG_LABELS),
-    capture: () => interactiveTree(['Cancel', 'OK']),
+test('a ref press after an interactive snapshot settles on the interactive view', async () => {
+  const titleGone = interactiveTree(['Cancel', 'OK']);
+  const { device, views } = createDevice({
+    refFrame: DIALOG.interactive,
+    before: DIALOG,
+    after: { full: DIALOG.full, interactive: titleGone },
   });
 
   const result = await device.interactions.press(ref('@e1'), { session: 'default', settle: {} });
 
-  assert.equal(result.settle?.diff?.summary.removals, 1);
-  assert.doesNotMatch(result.settle?.hint ?? '', /full tree/);
+  assert.ok(views.length > 0 && views.every((view) => view === 'interactive'));
+  assert.deepEqual(removedLabels(result.settle?.diff?.lines).length, 1);
 });
 
-test('a selector press keeps its diff although its resolution read a full tree', async () => {
-  const device = createDevice({
-    refFrame: interactiveTree(DIALOG_LABELS),
-    // Capture 1 resolves the selector on a full tree; the settle loop then reads the interactive
-    // view, where the dialog title is gone after the press.
-    capture: (call) => (call === 1 ? fullDialogTree() : interactiveTree(['Cancel', 'OK'])),
+test('a selector press settles on the interactive view although its resolution read a full tree', async () => {
+  const titleGone = interactiveTree(['Cancel', 'OK']);
+  const { device, views } = createDevice({
+    refFrame: DIALOG.interactive,
+    before: DIALOG,
+    after: { full: DIALOG.full, interactive: titleGone },
   });
 
   const result = await device.interactions.press(selector('label=OK'), {
@@ -118,12 +146,6 @@ test('a selector press keeps its diff although its resolution read a full tree',
     settle: {},
   });
 
-  // The genuine removal is listed; this route keeps comparing removals (#4486 leaves it open).
-  assert.ok(
-    result.settle?.diff?.lines.some(
-      (line) => line.kind === 'removed' && line.text.includes('Device name'),
-    ),
-  );
-  assert.equal(result.settle?.diff?.removalsOmitted, undefined);
-  assert.doesNotMatch(result.settle?.hint ?? '', /full tree/);
+  assert.ok(views.length > 0 && views.every((view) => view === 'interactive'));
+  assert.ok(removedLabels(result.settle?.diff?.lines).some((text) => text.includes('Device name')));
 });

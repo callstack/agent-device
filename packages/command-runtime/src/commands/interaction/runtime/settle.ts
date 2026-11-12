@@ -80,9 +80,6 @@ const MAX_SETTLE_TAIL_ENTRIES = 20;
 export const NEVER_SETTLED_HINT =
   'The UI kept changing for the whole settle budget (animation, carousel, or ticker?), so no settled diff is shown. Raise --timeout, wait for specific content, or take a fresh snapshot.';
 
-const FULL_VIEW_BASELINE_HINT =
-  'The previous snapshot was a full tree and settle reads the interactive view, so this diff lists only added lines; removals are not listed. A settle on refs from this response compares interactive views.';
-
 const SETTLE_CAPTURE_STALLED_HINT =
   'A snapshot capture stalled past the settle budget, so no settled diff is shown. The action itself succeeded; observe with wait stable or snapshot.';
 
@@ -210,16 +207,13 @@ async function readSettledOutcome(
       // advisory state.
       ...(diffShown
         ? buildSettleDiffAndTail(
-            params.baseline,
+            params.baseline.nodes,
             settledNodes,
             params.actionPoint,
             session?.appBundleId,
           )
         : {}),
-      ...withFullViewBaselineHint(
-        resolveSettleHint(outcome, stored, settledNodes.length, surfaceChange),
-        diffShown && params.baseline.fullView === true,
-      ),
+      ...resolveSettleHint(outcome, stored, settledNodes.length, surfaceChange),
     },
     settledCapture,
   };
@@ -268,8 +262,8 @@ function authorizedRefBaseline(
 
 /**
  * The ref frame the agent last read. A frame read as a full tree (`snapshot` without `-i`) is marked
- * `fullView`, because the settle loop reads the interactive view. Selector captures are full trees
- * too, but no agent chose that view, so only the ref frame carries the mark.
+ * `fullView`, so the settle loop reads the full tree too and the diff compares one view. Selector
+ * captures are full trees as well, but no agent chose that view, so only the ref frame carries it.
  */
 function refFrameBaseline(snapshot: SnapshotState | undefined): SurfaceScopedNodes {
   const baseline = surfaceScopedNodes(snapshot);
@@ -298,7 +292,7 @@ function nonEmptyBaseline(
 }
 
 function buildSettleDiff(
-  baseline: SurfaceScopedNodes,
+  baselineNodes: SnapshotNode[],
   settledNodes: SnapshotNode[],
   appBundleId: string | undefined,
 ): NonNullable<SettleObservation['diff']> {
@@ -308,36 +302,30 @@ function buildSettleDiff(
   // snapshot), extra baseline-only lines surface as removals — advisory noise,
   // the same baseline caveat --verify's changedFromBefore already accepts.
   const diff = buildSnapshotDiff(
-    withoutSettleChrome(baseline.nodes, appBundleId),
+    withoutSettleChrome(baselineNodes, appBundleId),
     withoutSettleChrome(settledNodes, appBundleId),
     { flatten: true, withRefs: true },
   );
-  // A full-tree baseline holds nodes the interactive settle view never reads, so its removals are
-  // not evidence and are left out. Added lines stay: on Android the interactive view adds no node
-  // of its own, while an iOS row rewrite can also read as added, as it did before #4486.
-  const changed = diff.lines.filter(
-    (line) => line.kind === 'added' || (line.kind === 'removed' && baseline.fullView !== true),
-  );
+  const changed = diff.lines.filter((line) => line.kind !== 'unchanged');
   const lines = capSettleDiffLines(changed).map((line) => ({
     kind: line.kind as 'added' | 'removed',
     text: line.text,
     ...(line.ref ? { ref: line.ref } : {}),
   }));
   return {
-    summary: baseline.fullView === true ? { ...diff.summary, removals: 0 } : diff.summary,
+    summary: diff.summary,
     lines,
-    ...(baseline.fullView === true ? { removalsOmitted: true as const } : {}),
     ...(changed.length > lines.length ? { truncated: true as const } : {}),
   };
 }
 
 function buildSettleDiffAndTail(
-  baseline: SurfaceScopedNodes,
+  baselineNodes: SnapshotNode[],
   settledNodes: SnapshotNode[],
   actionPoint: Point | undefined,
   appBundleId: string | undefined,
 ): Pick<SettleObservation, 'diff' | 'tail' | 'tailTruncated'> {
-  const diff = buildSettleDiff(baseline, settledNodes, appBundleId);
+  const diff = buildSettleDiff(baselineNodes, settledNodes, appBundleId);
   return { diff, ...buildSettleTail(diff, settledNodes, actionPoint, appBundleId) };
 }
 
@@ -464,16 +452,6 @@ function capSettleDiffLines<T extends { kind: string }>(changed: T[]): T[] {
     }
   }
   return kept;
-}
-
-function withFullViewBaselineHint(
-  resolved: { hint?: string },
-  fullViewBaselineReset: boolean,
-): { hint?: string } {
-  if (!fullViewBaselineReset) return resolved;
-  return {
-    hint: resolved.hint ? `${FULL_VIEW_BASELINE_HINT} ${resolved.hint}` : FULL_VIEW_BASELINE_HINT,
-  };
 }
 
 /**
