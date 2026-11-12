@@ -41,32 +41,36 @@ export async function screenshotAndroid(
       ).stdout.replace(/\n$/, '')
     : undefined;
 
-  let failed = false;
+  let capture: ScreenshotCaptureFacts;
   try {
     await enableAndroidDemoMode(device);
     await sleep(ANDROID_SCREENSHOT_SETTLE_DELAY_MS);
-    return await captureAndroidScreenshotWithRotation(device, outPath);
+    capture = await captureAndroidScreenshotWithRotation(device, outPath);
   } catch (error) {
-    failed = true;
-    throw error;
-  } finally {
-    await disableAndroidDemoMode(device).catch(() => {});
-    try {
-      await runDemoSettingCommand(
-        device,
-        previous === undefined
-          ? ['settings', 'delete', 'global', 'sysui_demo_allowed']
-          : ['settings', 'put', 'global', 'sysui_demo_allowed', previous],
-      );
-    } catch (error) {
-      if (!failed) throw error;
+    await restoreAndroidDemoSetting(device, previous).catch((restoreError: unknown) => {
       emitDiagnostic({
         level: 'error',
         phase: 'android_screenshot_demo_setting_restore_failed',
-        data: { error: normalizeError(error) },
+        data: { error: normalizeError(restoreError) },
       });
-    }
+    });
+    throw error;
   }
+  await restoreAndroidDemoSetting(device, previous);
+  return capture;
+}
+
+async function restoreAndroidDemoSetting(
+  device: DeviceInfo,
+  previous: string | undefined,
+): Promise<void> {
+  await disableAndroidDemoMode(device).catch(() => {});
+  await runDemoSettingCommand(
+    device,
+    previous === undefined
+      ? ['settings', 'delete', 'global', 'sysui_demo_allowed']
+      : ['settings', 'put', 'global', 'sysui_demo_allowed', previous],
+  );
 }
 
 async function runDemoSettingCommand(device: DeviceInfo, words: ShellWord[]) {
