@@ -215,6 +215,10 @@ function buildLineMetadata(
   }
   if (node.focused === true) metadata.push('focused');
   if (isEditableRole(type)) metadata.push('editable');
+  const placeholder = collapseControlCharacters(node.placeholder ?? '');
+  if (isEditableRole(type) && !trimText(node.label) && !trimText(node.value) && placeholder) {
+    metadata.push(`placeholder:"${escapePreviewText(placeholder)}"`);
+  }
   if (looksScrollable(node, type)) metadata.push('scrollable');
   if (!textSurface.shouldSummarize) {
     return uniqueMetadata(metadata);
