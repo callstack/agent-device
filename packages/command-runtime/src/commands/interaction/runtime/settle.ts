@@ -80,7 +80,7 @@ export const NEVER_SETTLED_HINT =
   'The UI kept changing for the whole settle budget (animation, carousel, or ticker?), so no settled diff is shown. Raise --timeout, wait for specific content, or take a fresh snapshot.';
 
 const FULL_VIEW_BASELINE_HINT =
-  'The previous snapshot was a full tree and settle reads the interactive view, so this diff starts from the settled screen instead of listing changes. Later settles diff against it.';
+  'The previous snapshot was a full tree and settle reads the interactive view, so this diff starts from the settled screen instead of listing changes. Later settles diff against that settled interactive view.';
 
 const SETTLE_CAPTURE_STALLED_HINT =
   'A snapshot capture stalled past the settle budget, so no settled diff is shown. The action itself succeeded; observe with wait stable or snapshot.';
@@ -218,9 +218,10 @@ async function readSettledOutcome(
             session?.appBundleId,
           )
         : {}),
-      ...(diffShown && params.baseline.fullView
-        ? { hint: FULL_VIEW_BASELINE_HINT }
-        : resolveSettleHint(outcome, stored, settledNodes.length, surfaceChange)),
+      ...withFullViewBaselineHint(
+        resolveSettleHint(outcome, stored, settledNodes.length, surfaceChange),
+        diffShown && params.baseline.fullView === true,
+      ),
     },
     settledCapture,
   };
@@ -454,6 +455,16 @@ function capSettleDiffLines<T extends { kind: string }>(changed: T[]): T[] {
  * itself reports rather than in place of it: the transition explains the missing diff, and the
  * loop's own verdict (stalled, never settled, sparse, tiny tree) still explains the capture.
  */
+function withFullViewBaselineHint(
+  resolved: { hint?: string },
+  fullViewBaselineReset: boolean,
+): { hint?: string } {
+  if (!fullViewBaselineReset) return resolved;
+  return {
+    hint: resolved.hint ? `${FULL_VIEW_BASELINE_HINT} ${resolved.hint}` : FULL_VIEW_BASELINE_HINT,
+  };
+}
+
 function resolveSettleHint(
   outcome: { settled: boolean; stalled: boolean },
   stored: boolean,

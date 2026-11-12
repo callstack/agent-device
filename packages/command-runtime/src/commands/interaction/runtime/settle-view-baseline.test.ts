@@ -10,33 +10,24 @@ import { createSettleDevice } from './__tests__/settle-device-fixtures.ts';
 //
 // Budgets are injected (fake clock) — no real waiting.
 
-const DIALOG = ['Device name', 'Cancel', 'OK'].map((label, index) => ({
-  index: index + 1,
-  depth: 1,
-  parentIndex: 0,
-  type: index === 0 ? 'StaticText' : 'Button',
-  label,
-  rect: { x: 10, y: 100 + index * 60, width: 200, height: 40 },
-  hittable: true,
-}));
+const DIALOG_LABELS = ['Device name', 'Cancel', 'OK'];
 
-function dialogWithWrapper(interactiveOnly: boolean): SnapshotState {
-  return {
-    ...makeSnapshotState([
-      { index: 0, depth: 0, type: 'Group', rect: { x: 0, y: 0, width: 400, height: 800 } },
-      ...DIALOG,
-    ]),
-    presentation: interactiveOnly ? { interactiveOnly: true } : {},
-  };
+function dialogNodes(labels: readonly string[], firstIndex = 0) {
+  return labels.map((label, index) => ({
+    index: firstIndex + index,
+    depth: firstIndex === 0 ? 0 : 1,
+    ...(firstIndex === 0 ? {} : { parentIndex: 0 }),
+    type: label === 'Device name' ? 'StaticText' : 'Button',
+    label,
+    rect: { x: 10, y: 100 + DIALOG_LABELS.indexOf(label) * 60, width: 200, height: 40 },
+    hittable: true,
+  }));
 }
 
-async function pressAfterSnapshot(stored: SnapshotState) {
+async function pressAfterSnapshot(stored: SnapshotState, settledLabels: readonly string[]) {
   const device = createSettleDevice({
     stored,
-    // The interactive view of the unchanged dialog: the wrapper is not in it.
-    captureSnapshot: () => ({
-      snapshot: makeSnapshotState(DIALOG.map((node, index) => ({ ...node, index, depth: 0 }))),
-    }),
+    captureSnapshot: () => ({ snapshot: makeSnapshotState(dialogNodes(settledLabels)) }),
   });
   const result = await device.interactions.press(ref('@e3'), {
     session: 'default',
@@ -47,14 +38,28 @@ async function pressAfterSnapshot(stored: SnapshotState) {
 }
 
 test('a settle after a full snapshot reports no removals the view change caused', async () => {
-  const settle = await pressAfterSnapshot(dialogWithWrapper(false));
+  const fullTree: SnapshotState = {
+    ...makeSnapshotState([
+      { index: 0, depth: 0, type: 'Group', rect: { x: 0, y: 0, width: 400, height: 800 } },
+      ...dialogNodes(DIALOG_LABELS, 1),
+    ]),
+    presentation: {},
+  };
+
+  const settle = await pressAfterSnapshot(fullTree, DIALOG_LABELS);
 
   assert.equal(settle?.diff?.summary.removals, 0);
-  assert.match(settle?.hint ?? '', /previous snapshot was a full tree/);
+  // The tiny-tree readiness hint the settled screen earns is kept beside the view-change hint.
+  assert.match(settle?.hint ?? '', /previous snapshot was a full tree.*nearly-empty tree/);
 });
 
 test('a settle after an interactive snapshot still reports what left the screen', async () => {
-  const settle = await pressAfterSnapshot(dialogWithWrapper(true));
+  const interactiveTree: SnapshotState = {
+    ...makeSnapshotState(dialogNodes(DIALOG_LABELS)),
+    presentation: { interactiveOnly: true },
+  };
+
+  const settle = await pressAfterSnapshot(interactiveTree, ['Cancel', 'OK']);
 
   assert.equal(settle?.diff?.summary.removals, 1);
   assert.doesNotMatch(settle?.hint ?? '', /full tree/);
