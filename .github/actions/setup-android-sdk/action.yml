@@ -18,6 +18,12 @@ outputs:
   build-tools-dir:
     description: 'Absolute path of the installed build-tools directory'
     value: ${{ steps.install.outputs.build-tools-dir }}
+  system-image-dir:
+    description: 'Absolute path of the API 36 x86_64 Play Store system image'
+    value: ${{ steps.install.outputs.system-image-dir }}
+  system-image-revision:
+    description: 'Installed system image revision, when requested'
+    value: ${{ steps.install.outputs.system-image-revision }}
 
 runs:
   using: 'composite'
@@ -32,6 +38,7 @@ runs:
         set -euo pipefail
         SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
         BUILD_TOOLS_DIR="$SDK_ROOT/build-tools/$BUILD_TOOLS_VERSION"
+        SYSTEM_IMAGE_DIR="$SDK_ROOT/system-images/android-36/google_apis_playstore/x86_64"
         # Every build-tools binary a caller runs: the helper build (aapt2, d8, zipalign,
         # apksigner) and the fixture APK scripts (aapt, apksigner).
         INSTALLED=true
@@ -58,7 +65,14 @@ runs:
           fi
           if [ "$INSTALL_SYSTEM_IMAGE" = true ]; then
             "$SDKMANAGER" --install 'system-images;android-36;google_apis_playstore;x86_64' --channel=0
+            IMAGE_REVISION="$(sed -n 's/^Pkg.Revision[[:space:]]*=[[:space:]]*//p' "$SYSTEM_IMAGE_DIR/source.properties" | tr -d '\r' | sed 's/[[:space:]]*$//')"
+            if ! [[ "$IMAGE_REVISION" =~ ^[0-9]+([.][0-9]+)*$ ]]; then
+              echo '::error::Android system image has no numeric Pkg.Revision.' >&2
+              exit 1
+            fi
+            echo "system-image-revision=$IMAGE_REVISION" >> "$GITHUB_OUTPUT"
           fi
         fi
         echo "AGENT_DEVICE_ANDROID_BUILD_TOOLS=$BUILD_TOOLS_VERSION" >> "$GITHUB_ENV"
         echo "build-tools-dir=$BUILD_TOOLS_DIR" >> "$GITHUB_OUTPUT"
+        echo "system-image-dir=$SYSTEM_IMAGE_DIR" >> "$GITHUB_OUTPUT"

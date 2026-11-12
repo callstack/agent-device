@@ -4,31 +4,37 @@ description: 'Cache the API 36 Play Store image shared by Android emulator lanes
 runs:
   using: 'composite'
   steps:
+    - name: Setup Android SDK
+      id: sdk
+      uses: ./.github/actions/setup-android-sdk
+
     - name: Resolve Android system image cache
-      id: image
+      id: key
       shell: bash
+      env:
+        CACHE_PREFIX: android-system-image-${{ runner.os }}-${{ runner.arch }}-api36-google_apis_playstore-x86_64-${{ hashFiles('.github/actions/setup-android-system-image/action.yml', '.github/actions/setup-android-sdk/action.yml') }}
       run: |
         set -euo pipefail
-        echo "path=${ANDROID_HOME:?}/system-images/android-36/google_apis_playstore/x86_64" >> "$GITHUB_OUTPUT"
-        echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+        echo "prefix=$CACHE_PREFIX-$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
 
-    # The SDK installer still checks for upstream revisions. Rotate weekly so an immutable cache
-    # does not require downloading the same updated image on every run until eviction.
+    # Only revision keys are saved. The current key restores the most recently saved compatible revision.
     - name: Restore Android system image
       id: restore
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
       with:
-        path: ${{ steps.image.outputs.path }}
-        key: android-system-image-${{ runner.os }}-${{ runner.arch }}-api36-google_apis_playstore-x86_64-${{ steps.image.outputs.week }}-${{ hashFiles('.github/actions/setup-android-system-image/action.yml') }}
+        path: ${{ steps.sdk.outputs.system-image-dir }}
+        key: ${{ steps.key.outputs.prefix }}-current
+        restore-keys: ${{ steps.key.outputs.prefix }}-revision-
 
     - name: Install Android system image
+      id: install
       uses: ./.github/actions/setup-android-sdk
       with:
         system-image: 'true'
 
     - name: Save Android system image
-      if: steps.restore.outputs.cache-hit != 'true'
+      if: steps.restore.outputs.cache-matched-key != format('{0}-revision-{1}', steps.key.outputs.prefix, steps.install.outputs.system-image-revision)
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
       with:
-        path: ${{ steps.image.outputs.path }}
-        key: ${{ steps.restore.outputs.cache-primary-key }}
+        path: ${{ steps.sdk.outputs.system-image-dir }}
+        key: ${{ format('{0}-revision-{1}', steps.key.outputs.prefix, steps.install.outputs.system-image-revision) }}
