@@ -17,11 +17,11 @@ test('project config rejects remote connection fields before daemon dispatch wit
     path.join(project, 'agent-device.json'),
     JSON.stringify({
       daemonBaseUrl: 'https://daemon.example.test',
-      daemonAuthToken: 'token-123',
+      daemonAuthToken: 'leak-sentinel-token',
       daemonTransport: 'http',
-      tenant: 'tenant-123',
-      runId: 'run-123',
-      leaseId: 'lease-123',
+      tenant: 'leak-sentinel-tenant',
+      runId: 'leak-sentinel-run',
+      leaseId: 'leak-sentinel-lease',
       platform: 'ios',
     }),
     'utf8',
@@ -37,7 +37,7 @@ test('project config rejects remote connection fields before daemon dispatch wit
   const output = `${result.stdout}\n${result.stderr}`;
   assert.match(output, /daemonBaseUrl/);
   assert.match(output, /not allowed in project config file/i);
-  assert.doesNotMatch(output, /daemon\.example\.test|token-123|tenant-123|run-123|lease-123/);
+  assert.doesNotMatch(output, /daemon\.example\.test|leak-sentinel/);
 
   fs.rmSync(root, { recursive: true, force: true });
 });
