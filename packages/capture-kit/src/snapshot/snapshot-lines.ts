@@ -64,7 +64,7 @@ export function formatSnapshotLine(
   const label = resolveDisplayLabel(node, type, options, textSurface);
   const indent = '  '.repeat(depth);
   const ref = node.ref ? `@${node.ref}` : '';
-  const metadata = buildLineMetadata(node, type, options, textSurface);
+  const metadata = buildLineMetadata(node, type, label, options, textSurface);
   if (!label && (node.inheritsLabel === true || node.inheritsIdentifier === true)) {
     metadata.push('same label as parent');
   }
@@ -206,6 +206,7 @@ function resolveDisplayLabel(
 function buildLineMetadata(
   node: SnapshotNode,
   type: string,
+  label: string,
   options: SnapshotLineFormatOptions,
   textSurface: { text: string; isLargeSurface: boolean; shouldSummarize: boolean },
 ): string[] {
@@ -215,6 +216,10 @@ function buildLineMetadata(
   }
   if (node.focused === true) metadata.push('focused');
   if (isEditableRole(type)) metadata.push('editable');
+  const placeholder = collapseControlCharacters(node.placeholder ?? '');
+  if (isEditableRole(type) && !label && placeholder) {
+    metadata.push(`placeholder:"${escapePreviewText(placeholder)}"`);
+  }
   if (looksScrollable(node, type)) metadata.push('scrollable');
   if (!textSurface.shouldSummarize) {
     return uniqueMetadata(metadata);
