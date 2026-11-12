@@ -5,8 +5,9 @@ import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from './__tests__/test-utils.ts';
 
-const { runCmdMock, probe } = vi.hoisted(() => ({
+const { runCmdMock, hostRunCmdMock, probe } = vi.hoisted(() => ({
   runCmdMock: vi.fn(),
+  hostRunCmdMock: vi.fn(),
   probe: { unanswered: false },
 }));
 
@@ -15,6 +16,12 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   runCmd: runCmdMock,
   withoutCommandExecutorOverride: async <T>(fn: () => Promise<T>) => await fn(),
 }));
+
+vi.mock('../../host-kit/src/internal/exec.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../host-kit/src/internal/exec.ts')>();
+  hostRunCmdMock.mockImplementation(actual.runCmd);
+  return { ...actual, runCmd: hostRunCmdMock };
+});
 
 const identitiesMock = vi.hoisted(() =>
   vi.fn(
@@ -54,6 +61,10 @@ import { agentBrowserFleetOf } from './agent-browser-fleet.ts';
 import { managedInstallPaths } from './agent-browser-install-paths.ts';
 import { recordManagedAgentBrowserProcesses } from './agent-browser-process-record.ts';
 import { getManagedAgentBrowserStatus } from './agent-browser-tool.ts';
+import {
+  createOwnedProcessRecordStore,
+  reapOwnedProcessRecordsAtStartup,
+} from '@agent-device/host-kit/process';
 
 bindTestCommandHost();
 
@@ -557,6 +568,82 @@ test('recording requires a managed executable or the Node wrapper as the entry',
       })),
     );
   } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('recorded launch entries alone reach the identity-checked reaper', async () => {
+  const stateDir = mkdtempForTestSync('agent-device web reap-');
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
+    const { daemonCommand } = installPreviousVersionFleet(stateDir);
+    const binary = path.join(status.packageDir, 'bin', 'agent-browser-darwin-arm64');
+    const commands = [
+      `"${binary}"`,
+      daemonCommand,
+      `${process.execPath} "${status.entryScript}"`,
+      `tail -f "${status.entryScript}"`,
+      `vim "${status.entryScript}"`,
+      `grep agent-browser "${status.entryScript}"`,
+      `${process.execPath} /tmp/other.js "${status.entryScript}"`,
+      `"${binary}-other"`,
+    ];
+    const pids = commands.map((_, index) => 11001 + index);
+    const alive = new Set(pids);
+    const signals: number[] = [];
+    mockProcessList(commands.map((command, index) => `  ${pids[index]}     1 ${command}`));
+    identitiesMock.mockImplementationOnce(
+      async (selected) =>
+        new Map(
+          [...selected].map((pid) => [
+            pid,
+            {
+              startTime: `start-${pid}`,
+              command: commands[pids.indexOf(pid)]!,
+              zombie: false,
+            },
+          ]),
+        ),
+    );
+    const store = createOwnedProcessRecordStore({
+      stateDir,
+      sessionsDir: path.join(stateDir, 'sessions'),
+      resolveSessionDir: (id) => path.join(stateDir, 'sessions', id),
+    });
+    await recordManagedAgentBrowserProcesses(status, store);
+    expect(store.read()[0]?.records.map(({ pid }) => pid)).toEqual(pids.slice(0, 3));
+
+    vi.spyOn(process, 'kill').mockImplementation(((pid: number, signal: string | number) => {
+      if (!alive.has(pid)) throw Object.assign(new Error('absent'), { code: 'ESRCH' });
+      if (signal !== 0) {
+        signals.push(pid);
+        alive.delete(pid);
+      }
+      return true;
+    }) as typeof process.kill);
+    hostRunCmdMock.mockImplementation(async (_command: string, args: readonly string[]) => {
+      const pid = Number(args[1]);
+      const command = commands[pids.indexOf(pid)];
+      const start = pid === pids[2] ? 'changed-start' : `start-${pid}`;
+      return {
+        stdout: args[3] === 'pid=,command=' ? `${pid} ${command}\n` : `${pid} S ${start}\n`,
+        stderr: '',
+        exitCode: 0,
+      };
+    });
+    const result = await reapOwnedProcessRecordsAtStartup(store, {
+      termTimeoutMs: 1,
+      killTimeoutMs: 1,
+    });
+    expect(signals).toEqual(pids.slice(0, 2));
+    expect(result.terminatedPids).toEqual(pids.slice(0, 2));
+    expect(result.missingPids).toEqual([pids[2]]);
+  } finally {
+    hostRunCmdMock.mockReset();
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
