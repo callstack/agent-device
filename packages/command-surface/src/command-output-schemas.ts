@@ -88,6 +88,8 @@ const settleObservationSchema: JsonSchema = objectSchema(
         ),
         lines: {
           type: 'array',
+          description:
+            'Changed lines. Absent at the digest response level, which keeps summary and settle.refs.',
           items: objectSchema(
             {
               kind: enumSchema(['added', 'removed']),
@@ -99,7 +101,7 @@ const settleObservationSchema: JsonSchema = objectSchema(
         },
         truncated: booleanSchema('Lines were capped to the response bound.'),
       },
-      ['summary', 'lines'],
+      ['summary'],
       'Settled diff vs the pre-action tree (changed lines only).',
     ),
     tail: {
