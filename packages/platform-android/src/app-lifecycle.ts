@@ -220,7 +220,7 @@ async function startAndroidApp(
   if (resolved.type === 'intent') {
     return await openAndroidIntent(device, resolved.value, options);
   }
-  if (options.terminateRunningApp) await stopAndroidPackage(device, resolved.value, 'relaunch');
+  if (options.terminateRunningApp) await stopAndroidPackageForRelaunch(device, resolved.value);
   if (activity) {
     return await openAndroidPackageActivity(
       device,
@@ -357,7 +357,7 @@ async function openAndroidAppBoundDeepLink(
   }
   await ensureAndroidLocalhostReverse(device, deepLinkUrl);
   const resolved = await requireAndroidPackageForOpen(device, app, 'app-bound open');
-  if (options.terminateRunningApp) await stopAndroidPackage(device, resolved, 'relaunch');
+  if (options.terminateRunningApp) await stopAndroidPackageForRelaunch(device, resolved);
   return await runAndroidShell(device, [
     'am',
     'start',
@@ -616,7 +616,16 @@ export async function openAndroidDevice(device: DeviceInfo): Promise<void> {
 }
 
 export async function closeAndroidApp(device: DeviceInfo, app: string): Promise<void> {
-  await stopAndroidPackage(device, await resolveAndroidPackageToEnd(device, app, 'Close'), 'close');
+  await stopAndroidPackage(device, await resolveAndroidPackageToEnd(device, app, 'Close'));
+}
+
+async function stopAndroidPackageForRelaunch(
+  device: DeviceInfo,
+  packageName: string,
+): Promise<void> {
+  await stopAndroidPackage(device, packageName).catch((error: unknown) => {
+    if (!passedAndroidRelaunchStopFences(error)) throw error;
+  });
 }
 
 /**
@@ -645,11 +654,7 @@ async function resolveAndroidPackageToEnd(
   return resolved.value;
 }
 
-async function stopAndroidPackage(
-  device: DeviceInfo,
-  packageName: string,
-  purpose: 'close' | 'relaunch',
-): Promise<void> {
+async function stopAndroidPackage(device: DeviceInfo, packageName: string): Promise<void> {
   const killed = await readAndroidPackagePids(
     device,
     packageName,
@@ -659,7 +664,7 @@ async function stopAndroidPackage(
     throw androidPidofUnavailableError(packageName);
   }
   await runAndroidShell(device, ['am', 'force-stop', packageName]);
-  const expired = await waitForAndroidPackageStopped(device, packageName, killed, purpose);
+  const expired = await waitForAndroidPackageStopped(device, packageName, killed);
   if (expired) throw androidCloseTimeoutError(packageName, expired);
 }
 
@@ -724,12 +729,9 @@ async function waitForAndroidPackageStopped(
   device: DeviceInfo,
   packageName: string,
   killed: ReadonlySet<string>,
-  purpose: 'close' | 'relaunch',
 ): Promise<AndroidStopFencePhase | undefined> {
   if (!(await waitForAndroidPackageNotForeground(device, packageName))) return 'foreground';
   if (!(await waitForAndroidKilledProcessesExit(device, packageName, killed))) return 'exit';
-  // See passedAndroidRelaunchStopFences: a relaunch needs no process fence.
-  if (purpose === 'relaunch') return undefined;
   if (!(await waitForAndroidPackageProcessGone(device, packageName))) return 'process';
   return undefined;
 }
