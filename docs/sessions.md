@@ -27,7 +27,7 @@ JSON output also includes `runnerLogPath` and `requestLogPath` when available.
 Each session artifact directory contains:
 
 - `requests/<request-id>.ndjson` - daemon request diagnostics for this session.
-- `events.ndjson` - session event timeline for requests and recorded actions; rotates to `events.ndjson.1` past 5 MB (`AGENT_DEVICE_EVENT_LOG_MAX_BYTES`, whole bytes), with `events.ndjson.window.json` tracking the retained files so `events` cursors within the retained window stay valid across rotation. Older cursors expire.
+- `events.ndjson` - session event timeline for requests and recorded actions; rotates to `events.ndjson.1` before an entry would exceed 5 MiB (`AGENT_DEVICE_EVENT_LOG_MAX_BYTES`, whole bytes), with `events.ndjson.window.json` tracking the retained files so `events` cursors within the retained window stay valid across rotation. Older cursors expire.
 - `runner.log` - Apple runner and `xcodebuild` build/start output for this session.
 - `app.log` - app/device logs when `logs start` or `logs clear --restart` is active.
 
@@ -38,6 +38,12 @@ User-entered text, clipboard contents, push/event payloads, selector values, fre
 flags/messages/paths, and raw unknown command arguments are omitted or replaced with content-free
 placeholders. `--no-record` suppresses recorded action entries; request start/finish entries still
 record command, status, and timing.
+
+The timeline is best effort. An event line larger than the configured file cap or 16 MiB is dropped.
+Each session can have at most 128 events and 16 MiB of event data awaiting a write; further events are
+dropped until capacity is available. These drops do not fail the command. Look for the
+`session_event_log_write_failed` diagnostic to identify missing entries, including write or rotation
+failures. Failed entries are not replayed.
 
 To debug a specific run, start with the session artifact directory. The top-level daemon log only
 covers daemon startup and lifecycle issues.
