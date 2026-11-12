@@ -1,5 +1,5 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { normalizeType } from '@agent-device/contracts/snapshot';
+import { isViewportRootNode, normalizeType } from '@agent-device/contracts/snapshot';
 import {
   areRectsApproximatelyEqual,
   findDescendant,
@@ -41,7 +41,8 @@ function collectRepeatedStaticSuppressionForNode(
   if (type !== 'other') {
     return;
   }
-  const semanticDescendant = findEquivalentSemanticDescendant(nodes, position, nodeLabel);
+  const semanticDescendant =
+    !isViewportRootNode(node) && findEquivalentSemanticDescendant(nodes, position, nodeLabel);
   if (semanticDescendant) {
     context.suppressNode(node, [semanticDescendant]);
     return;
@@ -85,6 +86,7 @@ export function collectIosActionWrapperSuppression(
   context: SnapshotTreeRuleContext,
 ): void {
   forEachOtherNodeWithLabel(nodes, (node, nodeLabel, position) => {
+    if (isViewportRootNode(node)) return;
     const semanticDescendant = findDescendant(nodes, position, (descendant) => {
       return (
         isSemanticActionNode(descendant) &&
