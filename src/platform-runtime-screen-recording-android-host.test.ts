@@ -65,8 +65,8 @@ test('uses the request-scoped Android ADB executor rather than a host fallback',
   expect(calls).toEqual([
     ['shell', expect.stringContaining('screenrecord --bit-rate 8000000')],
     ['shell', 'test', '-d', '/proc/42'],
-    ['shell', 'cat', '/proc/42/stat'],
     ['shell', 'cat', '/proc/42/cmdline'],
+    ['shell', 'cat', '/proc/42/stat'],
     ['shell', 'test', '-e', '/sdcard/capture.mp4'],
     ['shell', 'stat', '-c', '%s', '/sdcard/capture.mp4'],
   ]);
@@ -74,14 +74,22 @@ test('uses the request-scoped Android ADB executor rather than a host fallback',
 
 test('finds only exact screenrecord processes for the canonical remote path', async () => {
   const remotePath = '/sdcard/agent-device-recording-123.mp4';
+  let candidateExited = false;
+  const candidateCalls: string[] = [];
   await withAndroidAdbProvider(
     {
       exec: async (args) => {
         const command = args.slice(1).join(' ');
-        if (command === 'ps -A -o pid=') return result('41\n42\n43\n44\n');
+        if (command.includes('/proc/45')) candidateCalls.push(command);
+        if (command === 'ps -A -o pid=') return result('41\n42\n43\n44\n45\n');
+        if (command === 'test -d /proc/45') return result('', '', candidateExited ? 1 : 0);
         if (/^test -d \/proc\/\d+$/.test(command)) return result();
         const pid = /\/proc\/(\d+)\//.exec(command)?.[1];
         if (!pid) return result('', 'unexpected command', 1);
+        if (pid === '45') {
+          candidateExited = true;
+          return result('', 'process exited', 1);
+        }
         if (command.endsWith('/stat')) return result(procStat(Number(pid), pid));
         const commandLines: Record<string, string> = {
           '41': ['/system/bin/screenrecord', '--bit-rate', '8000000', remotePath, ''].join('\0'),
@@ -111,6 +119,9 @@ test('finds only exact screenrecord processes for the canonical remote path', as
         ],
         conclusive: true,
       });
+      expect(candidateCalls).toContain('cat /proc/45/cmdline');
+      expect(candidateCalls).toContain('cat /proc/45/stat');
+      expect(candidateCalls.filter((command) => command === 'test -d /proc/45')).toHaveLength(2);
     },
   );
 });
@@ -247,6 +258,45 @@ test('distinguishes a missing proc directory from an unavailable identity probe'
   );
 });
 
+for (const failure of ['cmdline', 'stat', 'empty-stat'] as const) {
+  const field = failure === 'cmdline' ? 'cmdline' : 'stat';
+  test.each([
+    ['absent', 1, 'already-missing'],
+    ['present', 0, 'uncertain'],
+    ['interrupted', null, 'uncertain'],
+  ] as const)(
+    `rechecks process presence after ${failure}: %s`,
+    async (_presence, probeExit, expected) => {
+      const commands: string[] = [];
+      let probes = 0;
+      adbExecutor.override = async (args) => {
+        const command = args.slice(1).join(' ');
+        commands.push(command);
+        if (command === 'test -d /proc/42') {
+          return ++probes === 1 ? result() : { stdout: '', stderr: '', exitCode: probeExit };
+        }
+        if (command === `cat /proc/42/${field}`) {
+          return failure === 'empty-stat' ? result('') : result('', 'read failed', 1);
+        }
+        if (command.endsWith('/stat')) return result(procStat(42, '42'));
+        return result(['/system/bin/screenrecord', '/sdcard/capture.mp4', ''].join('\0'));
+      };
+      try {
+        const transport = await createAndroidScreenRecordingTransport(
+          android,
+          createLiveTestHostEnvironment(),
+        );
+        await expect(
+          transport.stop({ pid: '42', remotePath: '/sdcard/capture.mp4', startTime: '42' }),
+        ).resolves.toBe(expected);
+        expect(commands.some((command) => command.startsWith('kill '))).toBe(false);
+      } finally {
+        adbExecutor.override = undefined;
+      }
+    },
+  );
+}
+
 test('retains an interrupted empty-stderr presence probe as uncertain', async () => {
   adbExecutor.override = async (args) => {
     expect(args).toEqual(['shell', 'test', '-d', '/proc/44']);
@@ -314,7 +364,7 @@ test('retains an interrupted empty-stderr manifest probe as unavailable', async 
   }
 });
 
-test('proves termination from each ownership-lost producer without signalling', async () => {
+test('does not signal an exited or reassigned recorder', async () => {
   const commands: string[] = [];
   const recorded = { pid: '4004', remotePath: '/sdcard/capture.mp4', startTime: '3766' };
   const reassignedPid = {
@@ -349,27 +399,32 @@ test('proves termination from each ownership-lost producer without signalling', 
       }
       identity = exitedTask;
       await expect(transport.stop(recorded)).resolves.toBe('ownership-lost');
+      identity = { stat: procStat(4004, '3766', 'Z'), cmdline: '' };
+      await expect(transport.inspect(recorded)).resolves.toBe('missing');
+      await expect(transport.stop(recorded)).resolves.toBe('already-missing');
       expect(commands.some((command) => command.startsWith('kill '))).toBe(false);
     },
   );
 });
 
-test('classifies a replacement recorder on the same path as a foreign writer and never signals it', async () => {
+test('never signals a recorder whose pid was reused during the command-line read', async () => {
   const commands: string[] = [];
   const recorded = { pid: '4004', remotePath: '/sdcard/capture.mp4', startTime: '3766' };
-  const replacementRecorder = {
-    stat: procStat(4004, '9911'),
-    cmdline: ['/system/bin/screenrecord', '--bit-rate', '8000000', recorded.remotePath, ''].join(
-      '\0',
-    ),
-  };
+  let currentStart = recorded.startTime;
   await withAndroidAdbProvider(
     {
       exec: async (args) => {
         const command = args.slice(1).join(' ');
         commands.push(command);
-        if (command.endsWith('/stat')) return result(replacementRecorder.stat);
-        if (command.endsWith('/cmdline')) return result(replacementRecorder.cmdline);
+        if (command.endsWith('/stat')) return result(procStat(4004, currentStart));
+        if (command.endsWith('/cmdline')) {
+          currentStart = '9911';
+          return result(
+            ['/system/bin/screenrecord', '--bit-rate', '8000000', recorded.remotePath, ''].join(
+              '\0',
+            ),
+          );
+        }
         return result('');
       },
     },
@@ -379,15 +434,15 @@ test('classifies a replacement recorder on the same path as a foreign writer and
         android,
         createLiveTestHostEnvironment(),
       );
-      await expect(transport.inspect(recorded)).resolves.toBe('foreign-writer');
       await expect(transport.stop(recorded)).resolves.toBe('ownership-lost');
+      await expect(transport.inspect(recorded)).resolves.toBe('foreign-writer');
       expect(commands.some((command) => command.startsWith('kill '))).toBe(false);
     },
   );
 });
 
-function procStat(pid: number, startTime: string): string {
-  return `${pid} (screenrecord) S ${Array.from({ length: 18 }, () => '0').join(' ')} ${startTime}`;
+function procStat(pid: number, startTime: string, state = 'S'): string {
+  return `${pid} (screenrecord) ${state} ${Array.from({ length: 18 }, () => '0').join(' ')} ${startTime}`;
 }
 
 function result(
@@ -440,3 +495,37 @@ test('retains unavailable manifest reads and confirms manifest deletion', async 
   );
   expect(commands).toHaveLength(2);
 });
+
+for (const interruptedAt of ['initial', 'recheck'] as const) {
+  test(`retains legal provider interruption on the ${interruptedAt} presence probe`, async () => {
+    const commands: string[] = [];
+    let probes = 0;
+    await withAndroidAdbProvider(
+      {
+        exec: async (args) => {
+          const command = args.slice(1).join(' ');
+          commands.push(command);
+          if (command === 'test -d /proc/42') {
+            return ++probes === 1 && interruptedAt === 'recheck'
+              ? result()
+              : { stdout: '', stderr: '', exitCode: 1, signal: 'SIGTERM' };
+          }
+          if (command.endsWith('/cmdline')) return result('', 'read failed', 1);
+          if (command.endsWith('/stat')) return result(procStat(42, '42'));
+          throw new Error('unexpected command');
+        },
+      },
+      { serial: android.id },
+      async () => {
+        const transport = await createAndroidScreenRecordingTransport(
+          android,
+          createLiveTestHostEnvironment(),
+        );
+        await expect(
+          transport.stop({ pid: '42', remotePath: '/sdcard/capture.mp4', startTime: '42' }),
+        ).resolves.toBe('uncertain');
+        expect(commands.some((command) => command.startsWith('kill '))).toBe(false);
+      },
+    );
+  });
+}

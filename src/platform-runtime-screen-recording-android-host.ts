@@ -153,7 +153,9 @@ export async function createAndroidScreenRecordingTransport(
 type AndroidShell = (
   words: readonly ShellWord[],
   signal?: AbortSignal,
-) => Promise<Readonly<{ stdout: string; stderr: string; exitCode: number | null }>>;
+) => Promise<
+  Readonly<{ stdout: string; stderr: string; exitCode: number | null; signal?: string }>
+>;
 
 async function inspectAndroidScreenRecordingProcess(
   shell: AndroidShell,
@@ -167,21 +169,31 @@ async function inspectAndroidScreenRecordingProcess(
 > {
   const presence = await probeAndroidProcessPresence(shell, expected.pid, signal);
   if (presence !== 'present') return { status: presence };
-  const stat = await shell(['cat', `/proc/${expected.pid}/stat`], signal);
-  if (stat.exitCode !== 0) return { status: 'uncertain' };
-  const startTime = parseProcStartTime(stat.stdout);
-  if (!startTime) return { status: 'uncertain' };
   const command = await shell(['cat', `/proc/${expected.pid}/cmdline`], signal);
-  if (command.exitCode !== 0) return { status: 'uncertain' };
+  const stat = await shell(['cat', `/proc/${expected.pid}/stat`], signal);
+  const identity = stat.exitCode === 0 ? parseProcIdentity(stat.stdout) : undefined;
+  if (command.exitCode !== 0 || !identity) {
+    return {
+      status:
+        (await probeAndroidProcessPresence(shell, expected.pid, signal)) === 'missing'
+          ? 'missing'
+          : 'uncertain',
+    };
+  }
+  if (identity.state === 'Z') return { status: 'missing' };
   if (!matchesScreenRecordingCommand(command.stdout, expected.remotePath)) {
     return { status: 'ownership-lost' };
   }
-  if (expected.startTime.length > 0 && expected.startTime !== startTime) {
+  if (expected.startTime.length > 0 && expected.startTime !== identity.startTime) {
     return { status: 'foreign-writer' };
   }
   return {
     status: 'owned-alive',
-    process: Object.freeze({ pid: expected.pid, remotePath: expected.remotePath, startTime }),
+    process: Object.freeze({
+      pid: expected.pid,
+      remotePath: expected.remotePath,
+      startTime: identity.startTime,
+    }),
   };
 }
 
@@ -191,6 +203,7 @@ async function probeAndroidProcessPresence(
   signal?: AbortSignal,
 ): Promise<'present' | 'missing' | 'uncertain'> {
   const result = await shell(['test', '-d', `/proc/${pid}`], signal);
+  if (result.signal) return 'uncertain';
   if (result.exitCode === 0) return 'present';
   return result.exitCode === 1 && result.stderr.trim() === '' ? 'missing' : 'uncertain';
 }
@@ -205,7 +218,7 @@ function matchesScreenRecordingCommand(commandLine: string, remotePath: string):
   );
 }
 
-function parseProcStartTime(stat: string): string | undefined {
+function parseProcIdentity(stat: string) {
   const close = stat.lastIndexOf(')');
   if (close < 0) return undefined;
   const fieldsAfterCommand = stat
@@ -213,5 +226,7 @@ function parseProcStartTime(stat: string): string | undefined {
     .trim()
     .split(/\s+/);
   const startTime = fieldsAfterCommand[19];
-  return startTime && /^\d+$/.test(startTime) ? startTime : undefined;
+  return startTime && /^\d+$/.test(startTime)
+    ? { startTime, state: fieldsAfterCommand[0] }
+    : undefined;
 }
