@@ -191,7 +191,7 @@ test('runtime press on a zero-area target beside a scroll container names the sc
       const details = (error as { details?: Record<string, unknown> }).details;
       assert.equal(details?.reason, 'target_bounds_invalid');
       assert.equal(details?.dispatched, 'no');
-      assert.equal(details?.scrollContainerRef, '@e2');
+      assert.equal(details?.scrollContainerRef, 'e2');
       assert.match(String(details?.hint), /scroll <direction> --until 'label="View all"'/);
       return true;
     },
@@ -201,7 +201,7 @@ test('runtime press on a zero-area target beside a scroll container names the sc
     (error: unknown) => {
       const details = (error as { details?: Record<string, unknown> }).details;
       assert.equal(details?.reason, 'target_bounds_invalid');
-      assert.equal(details?.scrollContainerRef, '@e2');
+      assert.equal(details?.scrollContainerRef, 'e2');
       // A scroll expires the ref frame, so the ref recovery steers to a selector instead.
       assert.match(String(details?.hint), /retry with a selector/);
       assert.match(String(details?.hint), /re-run snapshot -i/);
@@ -360,7 +360,7 @@ test('runtime press names the scroll view, not a scroll bar listed after it, as 
     (error: unknown) => {
       const details = (error as { details?: Record<string, unknown> }).details;
       assert.equal(details?.reason, 'target_bounds_invalid');
-      assert.equal(details?.scrollContainerRef, '@e2');
+      assert.equal(details?.scrollContainerRef, 'e2');
       return true;
     },
   );

@@ -22,6 +22,7 @@ import {
   type SnapshotViewportSize,
   type SnapshotQualityNote,
 } from '@agent-device/kernel/snapshot';
+import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import {
   snapshotRefMinting,
   type SnapshotBackend,
@@ -104,7 +105,9 @@ export function buildSnapshotState(
   const nodes = attachRefs(
     snapshotRaw
       ? scopedNodes
-      : annotateCoveredSnapshotNodes(scopedNodes, overlayOptionsForBackend(data?.backend)),
+      : annotateUnmeasuredSnapshotNodes(
+          annotateCoveredSnapshotNodes(scopedNodes, overlayOptionsForBackend(data?.backend)),
+        ),
     snapshotRefMinting(data),
   );
   const textInputGeometry = readSnapshotTextInputGeometry(data.nodes);
@@ -134,6 +137,25 @@ export function buildSnapshotState(
     // route-level comparisons on the next capture.
     comparisonSafe: isAndroidComparisonSafeSnapshot(data?.backend, flags),
   };
+}
+
+/**
+ * The hint a node carries when the rect it is published with has no area. That is not evidence
+ * that the node is off screen, but nothing confirms that it is on screen either: a scroll view
+ * keeps its scrolled-out content in the tree with a zero-area frame (#4451), as SpringBoard keeps
+ * another page's icons (#3841).
+ */
+const UNMEASURED_PRESENTATION_HINT = 'unmeasured';
+
+function annotateUnmeasuredSnapshotNodes(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
+  return nodes.map((node) =>
+    node.rect && !isPositiveFiniteRect(node.rect)
+      ? {
+          ...node,
+          presentationHints: [...(node.presentationHints ?? []), UNMEASURED_PRESENTATION_HINT],
+        }
+      : node,
+  );
 }
 
 function annotateBackendReplacementSurfaces(

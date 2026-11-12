@@ -140,15 +140,6 @@ function isScrollIndicator(node: SnapshotNode): boolean {
 }
 
 /**
- * POSIX single-quote wrap, so the hint's command survives a paste into a shell whatever the
- * selector holds. The kernel's `shellQuote` is the same rule; importing it here would add an eager
- * module to this file's closure.
- */
-function quoteForShell(value: string): string {
-  return `'${value.replaceAll("'", String.raw`'\''`)}'`;
-}
-
-/**
  * The recovery for a target with no usable frame beside a scroll container. The frame that
  * refuses the touch point is also the one that would have named the direction, so the hint names
  * the command and leaves the direction open; the off-screen stage owns the directed form.
@@ -156,17 +147,16 @@ function quoteForShell(value: string): string {
 function scrollContainerRecovery(
   node: SnapshotNode,
   nodes: SnapshotState['nodes'],
-  target: { ref: string } | { selector: string },
+  shellQuotedSelector: string | undefined,
 ): { scrollContainerRef?: string; hint?: string } {
   if (hasUsableRect(node)) return {};
   const container = findPrecedingScrollContainer(node, nodes);
   if (!container) return {};
-  const recovery =
-    'selector' in target
-      ? `run scroll <direction> --until ${quoteForShell(target.selector)} to bring it on screen, then retry with the same selector.`
-      : 'scroll toward it, then retry with a selector (e.g. text=/id=) rather than an @ref — the scroll expires the ref frame, so re-run snapshot -i before reusing any @ref.';
+  const recovery = shellQuotedSelector
+    ? `run scroll <direction> --until ${shellQuotedSelector} to bring it on screen, then retry with the same selector.`
+    : 'scroll toward it, then retry with a selector (e.g. text=/id=) rather than an @ref — the scroll expires the ref frame, so re-run snapshot -i before reusing any @ref.';
   return {
-    ...(container.ref ? { scrollContainerRef: `@${container.ref}` } : {}),
+    ...(container.ref ? { scrollContainerRef: container.ref } : {}),
     hint: `The target reports no frame, so nothing confirms it is on screen, and the frame names no direction. It may be scrolled out of a scrollable container: ${recovery}`,
   };
 }
@@ -174,11 +164,14 @@ function scrollContainerRecovery(
 export function resolveNodeTouchPoint(
   node: SnapshotNode,
   nodes: SnapshotState['nodes'],
-  failure: {
-    invalidMessage: string;
-    blockedTargetLabel: string;
-    blockedTargetDetails: { ref: string } | { selector: string };
-  },
+  failure: { invalidMessage: string; blockedTargetLabel: string } & (
+    | { blockedTargetDetails: { ref: string } }
+    /**
+     * The recovery names a command that takes the selector, so the caller hands it over as one
+     * shell word: this entry's eager closure stops short of the kernel's `shellQuote`.
+     */
+    | { blockedTargetDetails: { selector: string }; shellQuotedSelector: string }
+  ),
 ): Point {
   const visibility = createSnapshotVisibility(nodes);
   const effectiveViewport = visibility.resolveEffectiveViewport(node);
@@ -192,7 +185,11 @@ export function resolveNodeTouchPoint(
       new AppError('COMMAND_FAILED', failure.invalidMessage, {
         reason: INTERACTION_ERROR_REASONS.targetBoundsInvalid,
         ...bareTargetDetails(failure.blockedTargetDetails),
-        ...scrollContainerRecovery(node, nodes, failure.blockedTargetDetails),
+        ...scrollContainerRecovery(
+          node,
+          nodes,
+          'shellQuotedSelector' in failure ? failure.shellQuotedSelector : undefined,
+        ),
       }),
       'no',
     );

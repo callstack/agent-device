@@ -105,6 +105,41 @@ test('runtime press names a direction for a partial clip whose center is off-scr
   assert.equal(taps.length, 0);
 });
 
+test('the scroll an off-screen selector target is pointed at survives the shell', async () => {
+  // The hint is copied into a shell, and a bare single-quote wrap would end at the apostrophe.
+  const device = createInteractionDevice(
+    makeSnapshotState([
+      {
+        index: 0,
+        depth: 0,
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 400, height: 800 },
+        hittable: true,
+      },
+      {
+        index: 1,
+        depth: 2,
+        parentIndex: 0,
+        type: 'Button',
+        label: "Today's cash",
+        rect: { x: 20, y: 900, width: 200, height: 44 },
+        hittable: true,
+      },
+    ]),
+    { tap: async () => {} },
+  );
+
+  await assert.rejects(
+    () => device.interactions.press(selector('label="Today\'s cash"'), { session: 'default' }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'offscreen_selector');
+      assert.match(String(details?.hint), /--until 'label="Today'\\''s cash"'/);
+      return true;
+    },
+  );
+});
+
 test('runtime click rejects refs covered by floating overlays', async () => {
   const calls: Point[] = [];
   const device = createInteractionDevice(coveredByTabBarSnapshot(), {
