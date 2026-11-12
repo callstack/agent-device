@@ -133,3 +133,23 @@ test('MCP command tool executor renders JSON text when requested', async () => {
     '{"nodes":[{"ref":"e1","index":0,"depth":0,"type":"Button","label":"Continue","enabled":true}],"truncated":false}',
   );
 });
+
+test('default MCP errors retain possible dispatch, observe-first recovery and the local log path', async () => {
+  const executor = executorReturning(undefined, () => {
+    const error = new AppError('COMMAND_FAILED', 'press reply was lost', {
+      dispatched: 'unknown',
+      reason: 'runner_reply_lost',
+      logPath: '/tmp/agent-device/press.log',
+    });
+    throw error;
+  });
+
+  const result = await executor.execute('press', { ref: '@e2' });
+
+  assert.equal(result.isError, true);
+  assert.equal('structuredContent' in result, false);
+  const text = result.content[0]?.text ?? '';
+  assert.match(text, /May have reached the device\./);
+  assert.match(text, /Run snapshot to check the screen before you retry\./);
+  assert.match(text, /Log: \/tmp\/agent-device\/press\.log/);
+});

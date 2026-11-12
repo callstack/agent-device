@@ -21,9 +21,11 @@ function toolText(result: { content: Array<{ text: string }> }): string {
 }
 
 function exampleFromHint(text: string, prefix: string): Record<string, unknown> {
-  const line = text.split('\n').find((entry) => entry.startsWith(`Hint: ${prefix}`));
-  assert.ok(line, `expected a "${prefix}" hint in:\n${text}`);
-  return JSON.parse(line.slice(`Hint: ${prefix}`.length)) as Record<string, unknown>;
+  const marker = ` Next: ${prefix}`;
+  const summary = text.split('\n')[0] ?? '';
+  const start = summary.indexOf(marker);
+  assert.notEqual(start, -1, `expected a "${prefix}" next step in:\n${text}`);
+  return JSON.parse(summary.slice(start + marker.length)) as Record<string, unknown>;
 }
 
 // An agent without the schema loaded guesses the CLI's vocabulary as flat arguments.
