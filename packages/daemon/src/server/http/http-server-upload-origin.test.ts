@@ -1,7 +1,7 @@
 import { connect } from 'node:net';
 import { expect, test } from 'vitest';
-import { createDaemonHttpServer } from '../http/http-server.ts';
-import { startRpcServer } from './http-server-rpc.fixtures.ts';
+import { createDaemonHttpServer } from './http-server.ts';
+import { startRpcServer } from '../__tests__/http-server-rpc.fixtures.ts';
 
 const body = JSON.stringify({
   sha256: 'a'.repeat(64),
