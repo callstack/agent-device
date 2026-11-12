@@ -159,20 +159,7 @@ async function tapCommand(
   if (!runtime.backend.tap) {
     throw new AppError('UNSUPPORTED_OPERATION', 'tap is not supported by this backend');
   }
-  let atRest = await admitResolvedTarget(runtime, options, resolutionRequest, resolved);
-  if (
-    atRest.kind !== 'point' &&
-    runtime.backend.readPressReadiness &&
-    (options.count ?? 1) === 1 &&
-    (options.intervalMs ?? 0) === 0 &&
-    (options.holdMs ?? 0) === 0 &&
-    (options.jitterPx ?? 0) === 0 &&
-    options.doubleTap !== true &&
-    (options.button ?? 'primary') === 'primary'
-  ) {
-    const { guardPressReadiness } = await import('./press-readiness.ts');
-    atRest = await guardPressReadiness(runtime, options, resolutionRequest, atRest);
-  }
+  const atRest = await admitResolvedTarget(runtime, options, resolutionRequest, resolved);
   const point = requireResolvedPoint(atRest);
   const pointObservation = pointObservationOf(atRest);
   let backendResult;

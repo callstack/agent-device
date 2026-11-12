@@ -3,6 +3,8 @@ import { test, vi } from 'vitest';
 import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import type { Point } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import { transferSnapshotPrivateEvidence } from '@agent-device/contracts/capture';
+import type { NativePressReadiness } from '@agent-device/contracts/selector-observation-runtime';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
@@ -50,12 +52,14 @@ function createAdmissionDevice(params: {
   baselineAgeMs?: number;
   baselineTree?: SnapshotState;
   captureMs?: number;
+  nativeStates?: NativePressReadiness[];
   /** Runs inside each scenario-clock sleep; a returned promise holds the sleep open. */
   onSleep?: () => void | Promise<void>;
   /** Runs inside each capture with the signal it received; a returned promise holds it open. */
   onCapture?: (capture: number, signal: AbortSignal | undefined) => void | Promise<void>;
 }) {
   let nowMs = 0;
+  let nativeReads = 0;
   const sleeps: number[] = [];
   const captureStarts: number[] = [];
   const taps: Point[] = [];
@@ -74,8 +78,32 @@ function createAdmissionDevice(params: {
       nowMs += params.captureMs ?? 0;
       const snapshot = params.trees[Math.min(captureStarts.length - 1, params.trees.length - 1)]!;
       await params.onCapture?.(captureStarts.length, context.signal);
-      return { snapshot };
+      return {
+        snapshot: params.nativeStates
+          ? transferSnapshotPrivateEvidence(
+              {},
+              {
+                ...snapshot,
+                nodes: snapshot.nodes.map((node) =>
+                  node.index === 1
+                    ? {
+                        ...node,
+                        nativePressTarget: { type: 9, label: node.label, rect: node.rect! },
+                      }
+                    : node,
+                ),
+              },
+              new Map(),
+            )
+          : snapshot,
+      };
     },
+    ...(params.nativeStates
+      ? {
+          readPressReadiness: async () =>
+            params.nativeStates![Math.min(nativeReads++, params.nativeStates!.length - 1)]!,
+        }
+      : {}),
     tap: async (_context, point) => {
       taps.push(point);
       return { ok: true };
@@ -359,5 +387,29 @@ test('a missing ref keeps its resolution refusal ahead of a canceled request', a
       return true;
     },
   );
+  assert.deepEqual(harness.taps, []);
+});
+
+test('a deadline after native readiness passes reports the fresh motion blocker', async () => {
+  const harness = createAdmissionDevice({
+    platform: 'android',
+    trees: Array.from({ length: 20 }, (_, index) => slideTree(10 + index * 10)),
+    baselineAgeMs: 0,
+    baselineTree: slideTree(10),
+    nativeStates: ['blocked', 'ready'],
+  });
+  const error = await harness.device.interactions
+    .press(selector('label="Slide target"'), {
+      deadlineAtMs: Date.now() + 200,
+    })
+    .then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+  assertDeadlineBeforeDispatch(error);
+  const details = (error as { details?: Record<string, unknown> }).details;
+  assert.notEqual(details?.check, 'native-readiness');
+  assert.equal(details?.readiness, undefined);
+  assert.ok(harness.captureStarts.length > 2, 'the refreshed target entered the motion wait');
   assert.deepEqual(harness.taps, []);
 });

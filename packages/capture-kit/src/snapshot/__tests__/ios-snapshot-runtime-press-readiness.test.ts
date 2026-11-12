@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   readSnapshotNativePressTargets,
-  copySnapshotNativePressTargets,
+  transferSnapshotPrivateEvidence,
 } from '@agent-device/contracts/snapshot-private-evidence';
 import { presentIosSnapshotAcquisition } from '../ios-snapshot-runtime.ts';
 import { buildSnapshotState } from '../../snapshot-state.ts';
@@ -83,8 +83,12 @@ for (const raw of [false, true]) {
       value: undefined,
       rect: full,
     });
-    const cloned = copySnapshotNativePressTargets(snapshot.nodes, structuredClone(snapshot.nodes));
-    expect(readSnapshotNativePressTargets(cloned)?.get(field.index)).toEqual(
+    const cloned = transferSnapshotPrivateEvidence(
+      snapshot,
+      structuredClone(snapshot),
+      new Map(snapshot.nodes.map((node) => [node.index, node.index])),
+    );
+    expect(readSnapshotNativePressTargets(cloned.nodes)?.get(field.index)).toEqual(
       readSnapshotNativePressTargets(snapshot.nodes)?.get(field.index),
     );
     expect(JSON.stringify(snapshot)).not.toContain('nativePressTarget');

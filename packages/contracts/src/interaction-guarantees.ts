@@ -292,7 +292,7 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   targetStability: RUNTIME_TREE_TARGET_STABILITY,
   nativeReadiness: {
     kind: 'runtime',
-    via: 'packages/command-runtime/src/commands/interaction/runtime/press-readiness.ts#guardPressReadiness',
+    via: 'packages/command-runtime/src/commands/interaction/runtime/pre-dispatch-admission.ts#admitResolvedTarget',
     appliesTo: ['press', 'click'],
   },
 } satisfies Partial<Record<InteractionGuarantee, GuaranteeEnforcement>>;

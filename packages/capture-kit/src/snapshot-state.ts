@@ -1,10 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
-  copySnapshotViewportEvidence,
-  attachSnapshotNativePressTargets,
+  transferSnapshotPrivateEvidence,
   readSnapshotOcclusionContextEvidence,
-  readSnapshotTextInputGeometry,
-  attachSnapshotTextInputGeometry,
   snapshotCaptureAnnotationsFrom,
   publicSnapshotCaptureAnnotations,
 } from '@agent-device/contracts/capture';
@@ -93,61 +90,51 @@ export function buildSnapshotState(
     rawNodes,
     snapshotRaw === true,
   );
+  const sourceIndexByNodeIndex = new Map<number, number>();
   const normalizedNodes = normalizeSnapshotTree(
     snapshotRaw ? backendAnnotatedNodes : pruneGroupNodes(backendAnnotatedNodes),
+    sourceIndexByNodeIndex,
   );
   const scopedNodes =
     flags?.snapshotScope && backendScopesAfterWire(data?.backend)
-      ? scopeSnapshotNodes(normalizedNodes, flags.snapshotScope)
+      ? scopeSnapshotNodes(normalizedNodes, flags.snapshotScope, undefined, sourceIndexByNodeIndex)
       : normalizedNodes;
   const annotations = snapshotCaptureAnnotationsFrom(data);
   const presentation = snapshotPresentationOptionsFromFlags(flags);
-  const nodes = stripNativePressTargets(
-    attachRefs(
-      snapshotRaw
-        ? scopedNodes
-        : annotateCoveredSnapshotNodes(scopedNodes, overlayOptionsForBackend(data?.backend)),
-      snapshotRefMinting(data),
-    ),
+  const nodes = attachRefs(
+    snapshotRaw
+      ? scopedNodes
+      : annotateCoveredSnapshotNodes(scopedNodes, overlayOptionsForBackend(data?.backend)),
+    snapshotRefMinting(data),
   );
-  const textInputGeometry = readSnapshotTextInputGeometry(data.nodes);
-  if (textInputGeometry) attachSnapshotTextInputGeometry(nodes, textInputGeometry);
-  copySnapshotViewportEvidence(data.nodes, nodes);
-  return {
-    nodes,
-    truncated: data?.truncated,
-    createdAt: Date.now(),
-    ...snapshotStateProvenance(data),
-    ...publicSnapshotCaptureAnnotations({
-      quality: annotations.quality,
-      qualityNotes: annotations.qualityNotes,
-    }),
-    ...(data.comparisonIdentity
-      ? { comparisonKey: iosSnapshotComparisonIdentityKey(data.comparisonIdentity) }
-      : {}),
-    ...(data.systemSurface ? { iosSystemSurfaceBundleId: data.systemSurface.bundleId } : {}),
-    ...(data.presentedSurface ? { presentedSurface: data.presentedSurface } : {}),
-    ...(data.targetActivation ? { targetActivation: data.targetActivation } : {}),
-    ...(data.keyboard ? { keyboard: data.keyboard } : {}),
-    ...(data.viewport ? { viewport: data.viewport } : {}),
-    presentationKey: buildSnapshotPresentationKey(presentation),
-    presentation,
-    // Only broad Android snapshots become freshness baselines. If the user asked for a scoped
-    // or filtered view, preserve that output contract but avoid pretending it is safe for
-    // route-level comparisons on the next capture.
-    comparisonSafe: isAndroidComparisonSafeSnapshot(data?.backend, flags),
-  };
-}
-
-function stripNativePressTargets(nodes: import('@agent-device/kernel/snapshot').SnapshotNode[]) {
-  const targets = new Map(
-    nodes.flatMap((node) =>
-      node.nativePressTarget ? [[node.index, node.nativePressTarget] as const] : [],
-    ),
+  return transferSnapshotPrivateEvidence(
+    data,
+    {
+      nodes,
+      truncated: data?.truncated,
+      createdAt: Date.now(),
+      ...snapshotStateProvenance(data),
+      ...publicSnapshotCaptureAnnotations({
+        quality: annotations.quality,
+        qualityNotes: annotations.qualityNotes,
+      }),
+      ...(data.comparisonIdentity
+        ? { comparisonKey: iosSnapshotComparisonIdentityKey(data.comparisonIdentity) }
+        : {}),
+      ...(data.systemSurface ? { iosSystemSurfaceBundleId: data.systemSurface.bundleId } : {}),
+      ...(data.presentedSurface ? { presentedSurface: data.presentedSurface } : {}),
+      ...(data.targetActivation ? { targetActivation: data.targetActivation } : {}),
+      ...(data.keyboard ? { keyboard: data.keyboard } : {}),
+      ...(data.viewport ? { viewport: data.viewport } : {}),
+      presentationKey: buildSnapshotPresentationKey(presentation),
+      presentation,
+      // Only broad Android snapshots become freshness baselines. If the user asked for a scoped
+      // or filtered view, preserve that output contract but avoid pretending it is safe for
+      // route-level comparisons on the next capture.
+      comparisonSafe: isAndroidComparisonSafeSnapshot(data?.backend, flags),
+    },
+    sourceIndexByNodeIndex,
   );
-  if (!targets.size) return nodes;
-  const published = nodes.map(({ nativePressTarget: _private, ...node }) => node);
-  return attachSnapshotNativePressTargets(published, targets);
 }
 
 function annotateBackendReplacementSurfaces(

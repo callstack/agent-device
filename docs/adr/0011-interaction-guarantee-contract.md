@@ -335,9 +335,19 @@ Text-entry contents are state, not press identity; readiness does not prove that
 This rule replaces producer-specific input-value binding, which adds live reads and still cannot
 distinguish contents that accessibility reports with the same value.
 Selectors retain their authored value constraints when the canonical target is re-observed.
-A native reply must prove the actual queried app matches the authorized surface. The wait polls only this native binding. After a blocked wait becomes ready, one fresh canonical capture must still authorize the same target on the same surface and its parent/child guards must choose the dispatch point before input. The original request deadline and cancellation signal bound every read and capture.
-Expected-target and already-resolved bindings are checked once and refuse a blocked control
-without recapturing or replacing that binding.
+A native reply must prove the actual queried app matches the authorized surface. ADR 0039's admission
+owner runs motion and native readiness in one observation loop under the central request budget.
+While only native readiness blocks, it polls that binding alone. After readiness passes, one fresh
+canonical resolution must authorize the target and select its guarded point. That capture starts a
+new admission generation and its native binding must pass before dispatch; a later Ready result does
+not upgrade the earlier capture. Pinned replay and mutating-find targets keep ADR 0039's bypass.
+A deadline reports `daemon_request_timeout` with the last native check/state when available;
+cancellation reports `request_canceled`. Both refuse before dispatch.
+
+The [proposed when-unknown policy](https://github.com/callstack/agent-device/issues/4388#issuecomment-6827440222)
+checks native readiness even for an idle target when no equivalent current native fact exists.
+This preserves implicit blocking but adds a live read to the accept path. It is a proposed exception
+to ADR 0039's zero-read idle rule, pending maintainer disposition; it is not an accepted cost change.
 Only `blocked` is waitable. A `missing` native match, ambiguity, changed authorization, unsupported native proof, cancellation, or timeout refuses before input. Raw coordinates and non-default tap options retain their existing semantics.
 
 The retained rectangle must use the same coordinate space as the live native element frame.

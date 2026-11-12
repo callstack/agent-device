@@ -3,19 +3,12 @@ import { AppError, createRequestCanceledError } from '@agent-device/kernel/error
 import { presentIosSnapshotAcquisition } from '@agent-device/capture-kit/ios-snapshot-runtime';
 import { presentIosRunnerSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
-import { attachSnapshotNativePressTargets } from '@agent-device/contracts/snapshot-private-evidence';
+import { transferSnapshotPrivateEvidence } from '@agent-device/contracts/snapshot-private-evidence';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import type { NativePressReadiness } from '@agent-device/contracts/selector-observation-runtime';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
-import {
-  getRequestSignal,
-  markRequestCanceled,
-  registerRequestAbort,
-  clearRequestAbortRegistration,
-  withRequestDeadline,
-} from '@agent-device/host-kit/request';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { createAgentDevice } from '../../../runtime.ts';
 import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
@@ -55,12 +48,21 @@ function tree(label = 'Continue', childPhase?: 'before' | 'after') {
           ? { x: 20, y: 220, width: 300, height: 20 }
           : { x: 20, y: 166, width: 300, height: 74 },
     });
-  const node = snapshot.nodes[1]!;
-  attachSnapshotNativePressTargets(
-    snapshot.nodes,
-    new Map([[node.index, { type: 9, label, rect: node.rect! }]]),
+  return transferSnapshotPrivateEvidence(
+    {},
+    {
+      ...snapshot,
+      nodes: snapshot.nodes.map((node) =>
+        node.index === 1
+          ? {
+              ...node,
+              nativePressTarget: { type: 9, label, rect: node.rect! },
+            }
+          : node,
+      ),
+    },
+    new Map(),
   );
-  return snapshot;
 }
 
 async function exercise(input: {
@@ -83,9 +85,9 @@ async function exercise(input: {
   const events: string[] = [];
   const points: Point[] = [];
   const requestId = `readiness:${Math.random()}`;
-  const caller = input.callerAbort ? new AbortController() : undefined;
+  const caller = input.callerAbort || input.cancelInRead ? new AbortController() : undefined;
   const admittedAt = Date.now();
-  const resultDeadlineMs = admittedAt + (input.timeoutMs ?? 150);
+  const resultDeadlineMs = admittedAt + (input.timeoutMs ?? (input.resultDeadline ? 150 : 2_000));
   const deadlineClock = input.resultDeadline
     ? vi.spyOn(Date, 'now').mockReturnValue(admittedAt)
     : undefined;
@@ -104,8 +106,7 @@ async function exercise(input: {
             input.changeTarget && reads > 0 ? 'Replacement' : 'Continue',
             input.movingChild ? (reads > 0 ? 'after' : 'before') : undefined,
           );
-          if (input.missingSource) attachSnapshotNativePressTargets(snapshot.nodes, new Map());
-          return { snapshot };
+          return { snapshot: input.missingSource ? structuredClone(snapshot) : snapshot };
         },
         readPressReadiness: async (context) => {
           events.push('read');
@@ -115,9 +116,9 @@ async function exercise(input: {
               once: true,
             });
           }
-          if (input.cancelInRead) markRequestCanceled(requestId);
+          if (input.cancelInRead) caller!.abort(createRequestCanceledError());
           if (input.transportFailure) throw new Error('native query failed');
-          if (caller && reads > 1) {
+          if (input.callerAbort && caller && reads > 1) {
             caller.abort(new Error('caller aborted'));
             await new Promise<void>((resolve) => setTimeout(resolve, input.timeoutMs ?? 150));
             deadlineClock!.mockReturnValue(resultDeadlineMs + 1);
@@ -166,7 +167,17 @@ async function exercise(input: {
         },
       ]),
       policy: localCommandPolicy(),
-      signal: caller?.signal ?? (input.nativeBudgetAbort ? undefined : getRequestSignal(requestId)),
+      signal: caller?.signal,
+      // Keep observation time independent of the wall-clock cut-off. The real owned timer must
+      // interrupt the second native read, rather than the observation schedule ending it first.
+      ...(deadlineClock
+        ? {
+            clock: {
+              now: () => admittedAt,
+              sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+            },
+          }
+        : {}),
     });
     await device.interactions.press(
       input.kind === 'point'
@@ -174,18 +185,11 @@ async function exercise(input: {
         : input.kind === 'ref'
           ? ref('@e2')
           : selector('label="Continue"'),
-      { requestId, ...input.options },
+      { requestId, deadlineAtMs: resultDeadlineMs, ...input.options },
     );
     return { ok: true as const, data: {} };
   };
-  const registration = input.resultDeadline
-    ? registerRequestAbort(requestId, undefined, {
-        resultDeadlineMs,
-      })
-    : undefined;
-  const run = input.resultDeadline
-    ? execute().finally(() => clearRequestAbortRegistration(registration))
-    : withRequestDeadline(requestId, input.timeoutMs ?? 2_000, execute);
+  const run = execute();
   return { run, events, points };
 }
 
@@ -204,6 +208,15 @@ for (const kind of ['selector', 'ref'] as const) {
     expect(points).toEqual([{ x: 90, y: 265 }]);
   });
 }
+
+test('a fresh canonical generation must earn its own native readiness before dispatch', async () => {
+  const { run, points, events } = await exercise({ states: ['blocked', 'ready', 'ambiguous'] });
+  await expect(run).rejects.toMatchObject({
+    details: { reason: 'target_not_ready', readiness: 'ambiguous', dispatched: 'no' },
+  });
+  expect(points).toEqual([]);
+  expect(events.slice(events.indexOf('ready'))).toEqual(['ready', 'capture', 'read', 'ambiguous']);
+});
 
 for (const states of [['ambiguous'], ['missing']] as NativePressReadiness[][]) {
   test(`unconfirmed ${states[0]} target never sends input`, async () => {
@@ -322,7 +335,12 @@ for (const nativeAbortError of [undefined, 'canceled'] as const) {
     expect(events).toContain('native-budget-abort-rejected');
     expect(points).toEqual([]);
     expect(failure).toMatchObject({
-      details: { reason: 'target_not_ready', readiness: 'blocked', dispatched: 'no' },
+      details: {
+        reason: 'daemon_request_timeout',
+        check: 'native-readiness',
+        readiness: 'blocked',
+        dispatched: 'no',
+      },
     });
   });
 }

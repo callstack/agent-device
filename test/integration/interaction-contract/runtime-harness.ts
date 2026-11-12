@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
-import { attachSnapshotNativePressTargets } from '@agent-device/contracts/snapshot-private-evidence';
-import { withRequestDeadline } from '@agent-device/host-kit/request';
+import { transferSnapshotPrivateEvidence } from '@agent-device/contracts/snapshot-private-evidence';
 import type { InteractionTarget } from '@agent-device/contracts/interaction';
 import { continueButtonSnapshot } from './fixtures.ts';
 import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
@@ -113,11 +112,17 @@ export async function runNativeReadinessScenario(
 ): Promise<void> {
   const events: string[] = [];
   const requestId = `contract-native-ready-${target.kind}:${finalState}`;
-  const snapshot = continueButtonSnapshot();
-  const node = snapshot.nodes[0]!;
-  attachSnapshotNativePressTargets(
-    snapshot.nodes,
-    new Map([[node.index, { type: 9, label: 'Continue', value: 'Continue', rect: node.rect! }]]),
+  const captured = continueButtonSnapshot();
+  const snapshot = transferSnapshotPrivateEvidence(
+    {},
+    {
+      ...captured,
+      nodes: captured.nodes.map((node) => ({
+        ...node,
+        nativePressTarget: { type: 9, label: 'Continue', value: 'Continue', rect: node.rect! },
+      })),
+    },
+    new Map(),
   );
   const device = createContractDevice(snapshot, {
     readPressReadiness: async () => {
@@ -129,18 +134,19 @@ export async function runNativeReadinessScenario(
       events.push('tap');
     },
   });
-  await withRequestDeadline(requestId, 2_000, async () => {
-    const press = device.interactions.press(target, { requestId });
-    if (finalState === 'ready') await press;
-    else
-      await assert.rejects(press, (error: unknown) => {
-        assert.ok(error instanceof AppError);
-        assert.equal(error.details?.reason, 'target_not_ready');
-        assert.equal(error.details?.readiness, 'ambiguous');
-        assert.equal(error.details?.dispatched, 'no');
-        return true;
-      });
-    return { ok: true, data: {} };
-  });
-  assert.deepEqual(events, ['blocked', finalState, ...(finalState === 'ready' ? ['tap'] : [])]);
+  const press = device.interactions.press(target, { requestId, deadlineAtMs: Date.now() + 2_000 });
+  if (finalState === 'ready') await press;
+  else
+    await assert.rejects(press, (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'target_not_ready');
+      assert.equal(error.details?.readiness, 'ambiguous');
+      assert.equal(error.details?.dispatched, 'no');
+      return true;
+    });
+  assert.deepEqual(events, [
+    'blocked',
+    finalState,
+    ...(finalState === 'ready' ? ['ready', 'tap'] : []),
+  ]);
 }

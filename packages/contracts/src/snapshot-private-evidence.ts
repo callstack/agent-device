@@ -143,20 +143,87 @@ export function readSnapshotTextInputGeometry(
   return owner ? privateEvidenceBySnapshotObject.get(owner)?.textInputGeometry : undefined;
 }
 
-export function attachSnapshotNativePressTargets<T extends object>(
-  owner: T,
-  targets: SnapshotNativePressTargets,
-): T {
-  return attachSnapshotPrivateEvidence(owner, { nativePressTargets: targets });
-}
-
 export function readSnapshotNativePressTargets(
   owner: object,
 ): SnapshotNativePressTargets | undefined {
   return privateEvidenceBySnapshotObject.get(owner)?.nativePressTargets;
 }
 
-export function copySnapshotNativePressTargets<T extends object>(source: object, target: T): T {
-  const targets = readSnapshotNativePressTargets(source);
-  return targets ? attachSnapshotNativePressTargets(target, targets) : target;
+/** Carries captured facts through one owned construction or clone, with explicit node lineage. */
+export function transferSnapshotPrivateEvidence<T extends { nodes: RawSnapshotNode[] }>(
+  source: { nodes?: readonly RawSnapshotNode[] },
+  target: T,
+  sourceIndexByNodeIndex: ReadonlyMap<number, number>,
+): T {
+  const nativeTargets = new Map<number, SnapshotNativePressTarget>();
+  if (target.nodes.some((node) => node.nativePressTarget !== undefined)) {
+    target.nodes = target.nodes.map(({ nativePressTarget, ...node }) => {
+      if (nativePressTarget) nativeTargets.set(node.index, nativePressTarget);
+      return node;
+    });
+  }
+  const objectEvidence = privateEvidenceBySnapshotObject.get(source);
+  if (objectEvidence)
+    attachSnapshotPrivateEvidence(
+      target,
+      remapPrivateEvidence(objectEvidence, sourceIndexByNodeIndex),
+    );
+  const nodeEvidence = source.nodes && privateEvidenceBySnapshotObject.get(source.nodes);
+  if (nodeEvidence)
+    attachSnapshotPrivateEvidence(
+      target.nodes,
+      remapPrivateEvidence(nodeEvidence, sourceIndexByNodeIndex),
+    );
+  if (nativeTargets.size) {
+    const carried = readSnapshotNativePressTargets(target.nodes);
+    attachSnapshotPrivateEvidence(target.nodes, {
+      nativePressTargets: new Map([...(carried ?? []), ...nativeTargets]),
+    });
+  }
+  return target;
+}
+
+function remapPrivateEvidence(
+  evidence: SnapshotPrivateEvidence,
+  sourceIndexByNodeIndex: ReadonlyMap<number, number>,
+): SnapshotPrivateEvidence {
+  return {
+    ...evidence,
+    ...(evidence.nativePressTargets
+      ? { nativePressTargets: remapNodeFacts(evidence.nativePressTargets, sourceIndexByNodeIndex) }
+      : {}),
+    ...(evidence.clickability?.kind === 'exact'
+      ? {
+          clickability: {
+            ...evidence.clickability,
+            clickableByNodeIndex: remapNodeFacts(
+              evidence.clickability.clickableByNodeIndex,
+              sourceIndexByNodeIndex,
+            ),
+          },
+        }
+      : {}),
+    ...(evidence.occlusionContext
+      ? {
+          occlusionContext: {
+            ...evidence.occlusionContext,
+            sourceIndexByNodeIndex: remapNodeFacts(
+              evidence.occlusionContext.sourceIndexByNodeIndex,
+              sourceIndexByNodeIndex,
+            ),
+          },
+        }
+      : {}),
+  };
+}
+
+function remapNodeFacts<T>(
+  facts: ReadonlyMap<number, T>,
+  sourceIndexByNodeIndex: ReadonlyMap<number, number>,
+): ReadonlyMap<number, T> {
+  const remapped = new Map<number, T>();
+  for (const [index, sourceIndex] of sourceIndexByNodeIndex) {
+    if (facts.has(sourceIndex)) remapped.set(index, facts.get(sourceIndex)!);
+  }
+  return remapped;
 }
