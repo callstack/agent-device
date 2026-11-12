@@ -135,7 +135,7 @@ test('runtime press refuses a selector match with a zero-area rect and dispatche
  * A Flutter screen on iOS at the top of its content (#4451), as the Simulator AX bridge presents it:
  * the scroll view and its content are siblings, and the content below the fold keeps a 0x0 rect.
  */
-function scrolledOutButtonSnapshot() {
+function scrolledOutButtonSnapshot(label = 'View all') {
   return makeSnapshotState([
     {
       index: 0,
@@ -169,7 +169,7 @@ function scrolledOutButtonSnapshot() {
       parentIndex: 0,
       type: 'Button',
       role: 'FlutterSemanticsObject',
-      label: 'View all',
+      label,
       rect: { x: 0, y: 0, width: 0, height: 0 },
       hittable: false,
     },
@@ -192,7 +192,7 @@ test('runtime press on a zero-area target beside a scroll container names the sc
       assert.equal(details?.reason, 'target_bounds_invalid');
       assert.equal(details?.dispatched, 'no');
       assert.equal(details?.scrollContainerRef, '@e2');
-      assert.match(String(details?.hint), /scroll <direction> --until "label=\\"View all\\""/);
+      assert.match(String(details?.hint), /scroll <direction> --until 'label="View all"'/);
       return true;
     },
   );
@@ -210,6 +210,24 @@ test('runtime press on a zero-area target beside a scroll container names the sc
     },
   );
   assert.deepEqual(taps, []);
+});
+
+test('the scroll a zero-area target is pointed at survives the shell', async () => {
+  // The hint is copied into a shell: double quotes would expand the `$`, and a bare single-quote
+  // wrap would end at the apostrophe.
+  const device = createInteractionDevice(scrolledOutButtonSnapshot("Today's $5 deal"), {
+    tap: async () => ({ ok: true }),
+  });
+
+  await assert.rejects(
+    () => device.interactions.press(selector('label="Today\'s $5 deal"'), { session: 'default' }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'target_bounds_invalid');
+      assert.match(String(details?.hint), /--until 'label="Today'\\''s \$5 deal"'/);
+      return true;
+    },
+  );
 });
 
 test('runtime press on a Compose button dispatches its center only once its role node is folded', async () => {

@@ -140,6 +140,15 @@ function isScrollIndicator(node: SnapshotNode): boolean {
 }
 
 /**
+ * POSIX single-quote wrap, so the hint's command survives a paste into a shell whatever the
+ * selector holds. The kernel's `shellQuote` is the same rule; importing it here would add an eager
+ * module to this file's closure.
+ */
+function quoteForShell(value: string): string {
+  return `'${value.replaceAll("'", String.raw`'\''`)}'`;
+}
+
+/**
  * The recovery for a target with no usable frame beside a scroll container. The frame that
  * refuses the touch point is also the one that would have named the direction, so the hint names
  * the command and leaves the direction open; the off-screen stage owns the directed form.
@@ -154,7 +163,7 @@ function scrollContainerRecovery(
   if (!container) return {};
   const recovery =
     'selector' in target
-      ? `run scroll <direction> --until ${JSON.stringify(target.selector)} to bring it on screen, then retry with the same selector.`
+      ? `run scroll <direction> --until ${quoteForShell(target.selector)} to bring it on screen, then retry with the same selector.`
       : 'scroll toward it, then retry with a selector (e.g. text=/id=) rather than an @ref — the scroll expires the ref frame, so re-run snapshot -i before reusing any @ref.';
   return {
     ...(container.ref ? { scrollContainerRef: `@${container.ref}` } : {}),
