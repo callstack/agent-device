@@ -21,6 +21,7 @@ import type {
   SettleTailEntry,
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { RuntimeCommand } from '../../runtime-types.ts';
 import type { CapturedSnapshot } from './selector-read-shared.ts';
 import {
@@ -265,7 +266,19 @@ function authorizedRefBaseline(
   session: CommandSessionRecord | undefined,
 ): SurfaceScopedNodes | undefined {
   if (resolved.kind !== 'ref') return undefined;
-  return nonEmptyBaseline(surfaceScopedNodes(session?.refFrameSnapshot));
+  return nonEmptyBaseline(refFrameBaseline(session?.refFrameSnapshot));
+}
+
+/**
+ * The ref frame the agent last read. A frame read as a full tree (`snapshot` without `-i`) is marked
+ * `fullView`, because the settle loop reads the interactive view. Selector captures are full trees
+ * too, but no agent chose that view, so only the ref frame carries the mark.
+ */
+function refFrameBaseline(snapshot: SnapshotState | undefined): SurfaceScopedNodes {
+  const baseline = surfaceScopedNodes(snapshot);
+  return snapshot?.presentation && snapshot.presentation.interactiveOnly !== true
+    ? { ...baseline, fullView: true }
+    : baseline;
 }
 
 /**
@@ -275,9 +288,9 @@ function authorizedRefBaseline(
  * dismissal (#3565).
  */
 function sessionBaseline(session: CommandSessionRecord | undefined): SurfaceScopedNodes {
-  const { presentedSurface: _unverified, ...baseline } = surfaceScopedNodes(
-    session?.refFrameSnapshot ?? session?.snapshot,
-  );
+  const { presentedSurface: _unverified, ...baseline } = session?.refFrameSnapshot
+    ? refFrameBaseline(session.refFrameSnapshot)
+    : surfaceScopedNodes(session?.snapshot);
   return baseline;
 }
 

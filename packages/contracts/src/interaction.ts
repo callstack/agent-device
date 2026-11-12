@@ -161,9 +161,9 @@ export type SurfaceScopedNodes = {
    */
   presentedSurface?: PresentedSurface;
   /**
-   * The nodes come from a full-tree `snapshot` (no `-i`). A settle reads the interactive view, so a
-   * diff against these nodes would report every node that view omits as removed. Absent means an
-   * interactive view, or a capture that recorded no presentation.
+   * The nodes are a ref frame the agent read as a full tree (`snapshot` without `-i`). A settle reads
+   * the interactive view, so a diff against these nodes would report every node that view omits as
+   * removed. Only the settle baseline sets it.
    */
   fullView?: true;
 };

@@ -16,10 +16,7 @@ import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
  */
 export function surfaceScopedNodes(
   snapshot:
-    | Pick<
-        SnapshotState,
-        'nodes' | 'iosSystemSurfaceBundleId' | 'presentedSurface' | 'presentation'
-      >
+    | Pick<SnapshotState, 'nodes' | 'iosSystemSurfaceBundleId' | 'presentedSurface'>
     | undefined,
 ): SurfaceScopedNodes {
   return {
@@ -28,8 +25,5 @@ export function surfaceScopedNodes(
       ? { surfaceBundleId: snapshot.iosSystemSurfaceBundleId }
       : {}),
     ...(snapshot?.presentedSurface ? { presentedSurface: snapshot.presentedSurface } : {}),
-    ...(snapshot?.presentation && snapshot.presentation.interactiveOnly !== true
-      ? { fullView: true as const }
-      : {}),
   };
 }
