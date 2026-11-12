@@ -160,6 +160,12 @@ export type SurfaceScopedNodes = {
    * Absent means the capture's producer published no fact.
    */
   presentedSurface?: PresentedSurface;
+  /**
+   * The nodes come from a full-tree `snapshot` (no `-i`). A settle reads the interactive view, so a
+   * diff against these nodes would report every node that view omits as removed. Absent means an
+   * interactive view, or a capture that recorded no presentation.
+   */
+  fullView?: true;
 };
 
 /** Which tree a resolved `@ref`'s node was read from (ADR 0014, "Mutation admission and read behavior"). */

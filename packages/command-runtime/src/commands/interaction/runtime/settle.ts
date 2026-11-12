@@ -79,6 +79,9 @@ const MAX_SETTLE_TAIL_ENTRIES = 20;
 export const NEVER_SETTLED_HINT =
   'The UI kept changing for the whole settle budget (animation, carousel, or ticker?), so no settled diff is shown. Raise --timeout, wait for specific content, or take a fresh snapshot.';
 
+const FULL_VIEW_BASELINE_HINT =
+  'The previous snapshot was a full tree and settle reads the interactive view, so this diff starts from the settled screen instead of listing changes. Later settles diff against it.';
+
 const SETTLE_CAPTURE_STALLED_HINT =
   'A snapshot capture stalled past the settle budget, so no settled diff is shown. The action itself succeeded; observe with wait stable or snapshot.';
 
@@ -192,6 +195,10 @@ async function readSettledOutcome(
   // replacement presented as change within one surface, refs included, so it is refused and the
   // transition is disclosed instead.
   const surfaceChange = resolvePostActionSurfaceChange(params.baseline, settledCapture);
+  // A full-tree baseline holds nodes the interactive settle view never reads. The settled view
+  // becomes the baseline instead, so the diff cannot report those nodes as removed.
+  const diffBaseline = params.baseline.fullView ? settledNodes : params.baseline.nodes;
+  const diffShown = outcome.settled && stored && !surfaceChange;
   return {
     observation: {
       ...observation,
@@ -203,15 +210,17 @@ async function readSettledOutcome(
       // captures are intentionally diff-less: they are not a stable
       // observation, so surfacing refs would invite agents to act on
       // advisory state.
-      ...(outcome.settled && stored && !surfaceChange
+      ...(diffShown
         ? buildSettleDiffAndTail(
-            params.baseline.nodes,
+            diffBaseline,
             settledNodes,
             params.actionPoint,
             session?.appBundleId,
           )
         : {}),
-      ...resolveSettleHint(outcome, stored, settledNodes.length, surfaceChange),
+      ...(diffShown && params.baseline.fullView
+        ? { hint: FULL_VIEW_BASELINE_HINT }
+        : resolveSettleHint(outcome, stored, settledNodes.length, surfaceChange)),
     },
     settledCapture,
   };
