@@ -24,10 +24,12 @@ typedef struct {
 // frame, so the record's display ID is read from that same window. Pass nil for the sole-screen
 // route: the app's tree could not name its window and the screen is proven instead.
 // `interfaceOrientation` is the orientation used to convert the supplied points.
+// `dispatched`, when given, turns YES once the record is handed to XCTest to run.
 + (NSString * _Nullable)synthesizeDragWithApplication:(id)application
                                       resolvedWindow:(id _Nullable)resolvedWindow
                                 interfaceOrientation:(NSInteger)interfaceOrientation
-                                                drag:(RunnerSynthesizedDrag)drag;
+                                                drag:(RunnerSynthesizedDrag)drag
+                                          dispatched:(BOOL * _Nullable)dispatched;
 
 + (RunnerTapSynthesisStatus)synthesizeTapWithApplication:(id)application
                                       resolvedWindow:(id _Nullable)resolvedWindow

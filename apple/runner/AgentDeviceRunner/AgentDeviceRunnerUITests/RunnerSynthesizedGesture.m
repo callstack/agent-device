@@ -65,7 +65,8 @@ static NSString * _Nullable RunnerTrySynthesizeDrag(
   CGPoint end,
   double durationMs,
   NSString *recordName,
-  RunnerDragPointerPathFactory pathFactory
+  RunnerDragPointerPathFactory pathFactory,
+  BOOL * _Nullable dispatched
 );
 static RunnerTapSynthesisStatus RunnerTrySynthesizeTap(
   id application,
@@ -90,12 +91,15 @@ static id RunnerTapPointerPath(
 + (NSString * _Nullable)synthesizeDragWithApplication:(id)application
                                       resolvedWindow:(id _Nullable)resolvedWindow
                                 interfaceOrientation:(NSInteger)interfaceOrientation
-                                                drag:(RunnerSynthesizedDrag)drag {
+                                                drag:(RunnerSynthesizedDrag)drag
+                                          dispatched:(BOOL * _Nullable)dispatched {
+  if (dispatched != NULL) *dispatched = NO;
   @try {
     return RunnerTrySynthesizeDrag(
       application, resolvedWindow, interfaceOrientation, drag.start, drag.end, drag.durationMs,
       drag.controlledScroll ? @"agent-device-controlled-scroll" : @"agent-device-swipe",
-      drag.controlledScroll ? RunnerControlledScrollPointerPath : RunnerSwipePointerPath
+      drag.controlledScroll ? RunnerControlledScrollPointerPath : RunnerSwipePointerPath,
+      dispatched
     );
   } @catch (NSException *exception) {
     return RunnerFormatXCTestException(exception, @"private XCTest event synthesis failed");
@@ -193,7 +197,8 @@ static NSString * _Nullable RunnerTrySynthesizeDrag(
   CGPoint end,
   double durationMs,
   NSString *recordName,
-  RunnerDragPointerPathFactory pathFactory
+  RunnerDragPointerPathFactory pathFactory,
+  BOOL * _Nullable dispatched
 ) {
   RunnerGestureEventBridge bridge;
   id record = nil;
@@ -206,6 +211,7 @@ static NSString * _Nullable RunnerTrySynthesizeDrag(
   }
   ((RunnerMsgSendAddPath)objc_msgSend)(record, bridge.core.addPathSelector, path);
 
+  if (dispatched != NULL) *dispatched = YES;
   return RunnerSynthesizeEventRecord(&bridge, record);
 }
 

@@ -131,11 +131,12 @@ private final class LitPanelBookingProbe: NSObject {
     return 0
   }
 
-  @objc(synthesizeDragWithApplication:resolvedWindow:interfaceOrientation:drag:)
+  @objc(synthesizeDragWithApplication:resolvedWindow:interfaceOrientation:drag:dispatched:)
   class func synthesizeDrag(_ app: AnyObject, resolvedWindow: AnyObject?, interfaceOrientation: Int,
-                            drag: RunnerSynthesizedDrag) -> String? {
+                            drag: RunnerSynthesizedDrag, dispatched: UnsafeMutablePointer<ObjCBool>?) -> String? {
     record(window: resolvedWindow, orientation: interfaceOrientation,
            start: drag.start, end: drag.end)
+    dispatched?.pointee = true
     return nil
   }
 
@@ -645,13 +646,13 @@ extension RunnerTests {
       class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:interfaceOrientation:point:deadline:errorMessage:")),
       class_getClassMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.synthesizeTap(_:resolvedWindow:interfaceOrientation:point:deadline:errorMessage:)))
     )
-    let dragStub = class_getClassMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.synthesizeDrag(_:resolvedWindow:interfaceOrientation:drag:)))
+    let dragStub = class_getClassMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.synthesizeDrag(_:resolvedWindow:interfaceOrientation:drag:dispatched:)))
     let composedSwaps: [(Method?, Method?)] = [
       (class_getInstanceMethod(try XCTUnwrap(object_getClass(app)), NSSelectorFromString("keyboards")),
        class_getInstanceMethod(LitPanelBookingProbe.self, #selector(getter: LitPanelBookingProbe.keyboards))),
       (class_getInstanceMethod(try XCTUnwrap(object_getClass(query)), #selector(getter: XCUIElementQuery.allElementsBoundByIndex)),
        class_getInstanceMethod(LitPanelBookingProbe.self, #selector(getter: LitPanelBookingProbe.allElementsBoundByIndex))),
-      (class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeDragWithApplication:resolvedWindow:interfaceOrientation:drag:")), dragStub),
+      (class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeDragWithApplication:resolvedWindow:interfaceOrientation:drag:dispatched:")), dragStub),
       (class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeGestureWithApplication:resolvedWindow:interfaceOrientation:pointerSamples:dispatched:")),
        class_getClassMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.synthesizeGesture(_:resolvedWindow:interfaceOrientation:pointerSamples:dispatched:))))
     ]

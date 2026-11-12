@@ -197,3 +197,28 @@ test('parseRunnerSequenceResult infers a failure from sequenceResults when faile
     },
   );
 });
+
+test('a sequence step that failed after hand-off reads like the standalone command', () => {
+  assert.throws(
+    () =>
+      parseRunnerSequenceResult({
+        sequenceResults: [
+          {
+            ok: false,
+            kind: 'longPress',
+            errorCode: 'SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN',
+            errorMessage: 'synthesis failed',
+          },
+        ],
+        completedSteps: 0,
+        failedStepIndex: 0,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.runnerErrorCode, 'SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN');
+      assert.equal(error.details?.reason, 'synthesized_gesture_outcome_unknown');
+      return true;
+    },
+  );
+});

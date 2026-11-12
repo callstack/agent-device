@@ -39,20 +39,20 @@ extension RunnerTests {
       referenceFrame: frame,
       orientation: context.geometry.orientation
     )
-    let message = RunnerSynthesizedGesture.synthesizeDrag(
+    var dispatched: ObjCBool = false
+    let failure = RunnerSynthesizedGesture.synthesizeDrag(
       withApplication: app,
       resolvedWindow: context.resolvedWindow,
       interfaceOrientation: geometry.orientation,
       drag: RunnerSynthesizedDrag(start: start, end: end, durationMs: durationMs,
-                                  controlledScroll: ObjCBool(profile == .controlledScroll))
+                                  controlledScroll: ObjCBool(profile == .controlledScroll)),
+      dispatched: &dispatched
     )
-    if let message {
-      return .unsupported(
-        message: message,
-        hint: "Private XCTest event synthesis is required for AX-free coordinate drag on iOS; update Xcode if this persists."
-      )
-    }
-    return .performed
+    return try Self.synthesizedGestureOutcome(
+      failure: failure,
+      dispatched: dispatched.boolValue,
+      refusalHint: "Private XCTest event synthesis is required for AX-free coordinate drag on iOS; update Xcode if this persists."
+    )
 #elseif os(tvOS)
     return .unsupported(
       message: "coordinate drag is not supported on tvOS",

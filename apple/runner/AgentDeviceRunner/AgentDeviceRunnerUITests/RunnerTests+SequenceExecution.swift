@@ -18,6 +18,8 @@ extension RunnerTests {
     let outcome: RunnerInteractionOutcome
     let gestureStartUptimeMs: Double
     let gestureEndUptimeMs: Double
+    /// The code a failed step reports.
+    var errorCode = "UNSUPPORTED_OPERATION"
   }
 
   @MainActor
@@ -127,7 +129,7 @@ extension RunnerTests {
           SequenceStepResult(
             ok: false,
             kind: step.kind,
-            errorCode: "UNSUPPORTED_OPERATION",
+            errorCode: stepOutcome.errorCode,
             errorMessage: message,
             errorHint: hint,
             gestureStartUptimeMs: stepOutcome.gestureStartUptimeMs,
@@ -202,11 +204,13 @@ extension RunnerTests {
       } catch let unknown as RunnerGestureOutcomeUnknown {
         // The step may have run, so the sequence stops on it instead of falling back and repeating it.
         // Its window runs from before dispatch to the failure, covering whatever part of it ran.
-        return finishedSequenceStep(
+        var failed = finishedSequenceStep(
           step,
           timing: (attemptStartUptimeMs, currentUptimeMs()),
           outcome: .unsupported(message: unknown.message, hint: unknown.hint)
         )
+        failed.errorCode = RunnerWireErrorCode.synthesizedGestureOutcomeUnknown
+        return failed
       }
       switch attempt {
       case .performed(let timing):

@@ -172,10 +172,12 @@ Its shape is `{kind: "reported" | "derived", rect: {x, y, width, height}}` or
 `derived` and `missing` establish no screen origin.
 A root box used to validate presented nodes does not upgrade this evidence.
 
-A synthesized long press or planned gesture reports how far it got. `SYNTHESIZED_GESTURE_NOT_DISPATCHED`
-means it was refused before any of its events reached XCTest, so the command sent nothing.
-`SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN` means it failed after its events reached XCTest, so it may have
-run; the runner does not fall back to an XCTest gesture that would repeat it.
+A synthesized long press, drag, or planned gesture reports how far it got.
+`SYNTHESIZED_GESTURE_NOT_DISPATCHED` means it was refused before its event record was handed to XCTest,
+so the command sent nothing. `SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN` means it failed after its event
+record was handed to XCTest. That is not confirmed delivery: the record can still fail before its
+events run. The gesture may have run, so the runner does not fall back to an XCTest gesture that
+would repeat it, and a sequence step reports the same code.
 
 ## Maintenance Rules
 

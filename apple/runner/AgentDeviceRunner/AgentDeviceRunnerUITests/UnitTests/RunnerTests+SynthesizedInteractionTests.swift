@@ -250,6 +250,22 @@ extension RunnerTests {
     XCTAssertEqual(presses, 0, "no XCTest fallback repeats a gesture that may have run")
   }
 
+  /// A sequence step whose synthesis failed after hand-off reports the same unknown code as the
+  /// standalone command, and the sequence stops without an XCTest fallback press.
+  @MainActor
+  func testSequenceLongPressFailingAfterDispatchReportsTheUnknownCode() throws {
+    let (response, presses) = try longPressWithFailingSynthesis(
+      dispatchedBeforeFailing: true,
+      health: .healthy,
+      command: #"{"command":"sequence","commandId":"failing-synthesis-sequence","steps":[{"kind":"longPress","x":40,"y":200,"durationMs":300}]}"#
+    )
+
+    let step = try XCTUnwrap(response.data?.sequenceResults?.first)
+    XCTAssertFalse(step.ok)
+    XCTAssertEqual(step.errorCode, RunnerWireErrorCode.synthesizedGestureOutcomeUnknown)
+    XCTAssertEqual(presses, 0)
+  }
+
   /// One refused before its events reached XCTest sent nothing, and says so.
   @MainActor
   func testLongPressSynthesisRefusedBeforeDispatchIsNotDispatched() throws {
@@ -293,7 +309,8 @@ extension RunnerTests {
   @MainActor
   private func longPressWithFailingSynthesis(
     dispatchedBeforeFailing: Bool,
-    health: RunnerAccessibilityHealth
+    health: RunnerAccessibilityHealth,
+    command: String = #"{"command":"longPress","commandId":"failing-synthesis-long-press","x":40,"y":200,"durationMs":300}"#
   ) throws -> (Response, presses: Int) {
     app.launch()
     mainOwned.app = app
@@ -321,12 +338,7 @@ extension RunnerTests {
     defer { for (method, original) in originals.reversed() { method_setImplementation(method, original) } }
     RunnerCoordinatePressCounter.presses = 0
 
-    let response = try executeOnMainPrepared(
-      command: try runnerCommandFixture(
-        #"{"command":"longPress","commandId":"failing-synthesis-long-press","x":40,"y":200,"durationMs":300}"#
-      ),
-      activeApp: app
-    )
+    let response = try executeOnMainPrepared(command: try runnerCommandFixture(command), activeApp: app)
     return (response, RunnerCoordinatePressCounter.presses)
   }
 

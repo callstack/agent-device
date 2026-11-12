@@ -688,7 +688,8 @@ extension RunnerTests {
             y2: last.y,
             durationMs: plan.durationMs,
             message: plan.intent,
-            synthesized: (profile: .fastSwipe, policyKind: .synthesizedDrag)
+            synthesized: (profile: .fastSwipe, policyKind: .synthesizedDrag),
+            refusalSentNothing: true
           )
         )
       case .sampled:

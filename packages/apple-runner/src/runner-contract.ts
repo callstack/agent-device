@@ -771,7 +771,20 @@ function buildSequenceStepError(
   const failed = results[failedStepIndex];
   const kind = failed?.kind ?? 'step';
   const message = failed?.errorMessage ?? `sequence step ${failedStepIndex} (${kind}) failed`;
-  return new AppError(toAppErrorCode(failed?.errorCode), message, {
+  // A step code the runner keeps off the wire (such as SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN) reads as
+  // it does on a standalone command: COMMAND_FAILED with its runner code and reason.
+  const stepCode = toAppErrorCode(failed?.errorCode);
+  const classification = classifyRunnerReportedError(failed?.errorCode);
+  const diagnosticOnly = classification.code !== stepCode;
+  return new AppError(diagnosticOnly ? classification.code : stepCode, message, {
+    ...(diagnosticOnly
+      ? {
+          runnerErrorCode: failed?.errorCode,
+          ...(classification.details.reason === undefined
+            ? {}
+            : { reason: classification.details.reason }),
+        }
+      : {}),
     failedStepIndex,
     failedStepKind: kind,
     completedSteps,
