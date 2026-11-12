@@ -35,7 +35,8 @@ import {
   type MovingTargetObservation,
 } from './moving-target-gate.ts';
 import type { ResolveInteractionTargetParams } from './interaction-resolution-request.ts';
-import { nativePressTarget, readinessRefusal } from './press-readiness.ts';
+import { readSnapshotNativePressTargets } from '@agent-device/contracts/capture';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 
 export async function admitResolvedTarget(
   runtime: AgentDeviceRuntime,
@@ -170,7 +171,7 @@ type AdmissionState = {
   generation: number;
   native: boolean;
   live?: {
-    producer: 'native-press-readiness';
+    source: 'native-press-readiness';
     surfaceBundleId: string | undefined;
     generation: number;
     state: NativePressReadiness;
@@ -291,7 +292,7 @@ async function checkReadiness(
         state.resolved.preAction?.surfaceBundleId,
       );
       state.live = {
-        producer: 'native-press-readiness',
+        source: 'native-press-readiness',
         surfaceBundleId: state.resolved.preAction?.surfaceBundleId,
         generation: state.generation,
         state: readiness,
@@ -341,4 +342,30 @@ function admissionFailure(error: unknown, state: AdmissionState): unknown {
   if (isRequestDeadlineDetails(error.details) && state.live)
     error.details = { ...error.details, check: 'native-readiness', readiness: state.live.state };
   return discloseDispatch(error, 'no');
+}
+
+/** The producer's unclipped native identity, not the public canonical projection. */
+function nativePressTarget(resolved: Exclude<ResolvedInteractionTarget, { kind: 'point' }>) {
+  const source =
+    resolved.preAction &&
+    resolved.node &&
+    readSnapshotNativePressTargets(resolved.preAction.nodes)?.get(resolved.node.index);
+  if (!source || !resolved.point) throw readinessRefusal('missing-source-binding');
+  return source;
+}
+
+function readinessRefusal(state: string, cause?: unknown): AppError {
+  return discloseDispatch(
+    new AppError(
+      'COMMAND_FAILED',
+      'Resolved target was not ready for input; nothing was dispatched',
+      {
+        reason: INTERACTION_ERROR_REASONS.targetNotReady,
+        readiness: state,
+        hint: 'Inspect the current surface and retry when the intended control is available. For an @ref, run snapshot -i and retry with a selector; re-observation can retire the old ref.',
+      },
+      cause,
+    ),
+    'no',
+  );
 }

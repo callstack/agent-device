@@ -122,13 +122,6 @@ export function readSnapshotOcclusionContextEvidence(
   return owner ? privateEvidenceBySnapshotObject.get(owner)?.occlusionContext : undefined;
 }
 
-export function attachSnapshotTextInputGeometry<T extends object>(
-  owner: T,
-  geometry: SnapshotTextInputGeometry,
-): T {
-  return attachSnapshotPrivateEvidence(owner, { textInputGeometry: geometry });
-}
-
 export function readSnapshotTextInputGeometry(
   owner: object | null | undefined,
 ): SnapshotTextInputGeometry | undefined {
@@ -146,6 +139,7 @@ export function transferSnapshotPrivateEvidence<T extends { nodes: RawSnapshotNo
   source: { nodes?: readonly RawSnapshotNode[] },
   target: T,
   sourceIndexByNodeIndex: ReadonlyMap<number, number>,
+  initialNodeFacts?: SnapshotPrivateEvidence,
 ): T {
   const nativeTargets = new Map<number, SnapshotNativePressTarget>();
   if (target.nodes.some((node) => node.nativePressTarget !== undefined)) {
@@ -166,6 +160,7 @@ export function transferSnapshotPrivateEvidence<T extends { nodes: RawSnapshotNo
       target.nodes,
       remapPrivateEvidence(nodeEvidence, sourceIndexByNodeIndex),
     );
+  if (initialNodeFacts) attachSnapshotPrivateEvidence(target.nodes, initialNodeFacts);
   if (nativeTargets.size) {
     const carried = readSnapshotNativePressTargets(target.nodes);
     attachSnapshotPrivateEvidence(target.nodes, {

@@ -68,7 +68,6 @@ export {
   attachSnapshotViewportEvidence,
   transferSnapshotPrivateEvidence,
   readSnapshotNativePressTargets,
-  attachSnapshotTextInputGeometry,
   readSnapshotTextInputGeometry,
   attachSnapshotClickabilityEvidence,
   attachSnapshotOcclusionContextEvidence,

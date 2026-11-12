@@ -1,8 +1,7 @@
 import {
-  attachSnapshotTextInputGeometry,
-  attachSnapshotViewportEvidence,
+  transferSnapshotPrivateEvidence,
   type SnapshotTextInputGeometry,
-} from '@agent-device/contracts/capture';
+} from '@agent-device/contracts/snapshot-private-evidence';
 import { isFillableType, normalizeType } from '@agent-device/contracts/snapshot';
 import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producers';
 import {
@@ -56,9 +55,15 @@ export function presentIosSnapshotAcquisition(
       acquired.acquisition.viewport.kind === 'reported'
         ? snapshotViewportSizeFrom(presentation.validatedViewport)
         : undefined;
-    const nodes = [...presentation.payload.nodes];
-    attachSnapshotViewportEvidence(nodes, acquired.acquisition.viewport);
-    if (textInputGeometry) attachSnapshotTextInputGeometry(nodes, textInputGeometry);
+    const { nodes } = transferSnapshotPrivateEvidence(
+      {},
+      { nodes: [...presentation.payload.nodes] },
+      new Map(),
+      {
+        viewport: acquired.acquisition.viewport,
+        ...(textInputGeometry ? { textInputGeometry } : {}),
+      },
+    );
     return stampSnapshotIdentity(
       {
         ...(presentation.qualityNotes ? { qualityNotes: presentation.qualityNotes } : {}),

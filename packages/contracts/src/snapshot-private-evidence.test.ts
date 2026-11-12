@@ -7,6 +7,7 @@ import {
   assertSnapshotScreenOrigin,
   readSnapshotOcclusionContextEvidence,
   readSnapshotNativePressTargets,
+  readSnapshotTextInputGeometry,
   transferSnapshotPrivateEvidence,
   copySnapshotClickabilityEvidence,
   readSnapshotClickabilityEvidence,
@@ -52,6 +53,7 @@ test('generic construction and cloning remap captured facts without upgrading or
       nodes: [{ index: 30, type: 'Button', nativePressTarget: { type: 9, label: 'Save', rect } }],
     },
     new Map(),
+    { textInputGeometry: { rects: [rect] } },
   );
   attachSnapshotClickabilityEvidence(source, {
     kind: 'exact',
@@ -100,6 +102,7 @@ test('generic construction and cloning remap captured facts without upgrading or
     (error: unknown) =>
       (error as { details?: Record<string, unknown> }).details?.reason === 'window-origin-unknown',
   );
+  assert.deepEqual(readSnapshotTextInputGeometry(cloned.nodes), { rects: [rect] });
   assert.equal(JSON.stringify(cloned).includes('nativePressTarget'), false);
   assert.deepEqual(readSnapshotNativePressTargets(source.nodes)?.get(30), {
     type: 9,
