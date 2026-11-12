@@ -153,7 +153,9 @@ export async function createAndroidScreenRecordingTransport(
 type AndroidShell = (
   words: readonly ShellWord[],
   signal?: AbortSignal,
-) => Promise<Readonly<{ stdout: string; stderr: string; exitCode: number | null }>>;
+) => Promise<
+  Readonly<{ stdout: string; stderr: string; exitCode: number | null; signal?: string }>
+>;
 
 async function inspectAndroidScreenRecordingProcess(
   shell: AndroidShell,
@@ -169,7 +171,8 @@ async function inspectAndroidScreenRecordingProcess(
   if (presence !== 'present') return { status: presence };
   const command = await shell(['cat', `/proc/${expected.pid}/cmdline`], signal);
   const stat = await shell(['cat', `/proc/${expected.pid}/stat`], signal);
-  if (stat.exitCode !== 0 || command.exitCode !== 0) {
+  const identity = stat.exitCode === 0 ? parseProcIdentity(stat.stdout) : undefined;
+  if (command.exitCode !== 0 || !identity) {
     return {
       status:
         (await probeAndroidProcessPresence(shell, expected.pid, signal)) === 'missing'
@@ -177,8 +180,6 @@ async function inspectAndroidScreenRecordingProcess(
           : 'uncertain',
     };
   }
-  const identity = parseProcIdentity(stat.stdout);
-  if (!identity) return { status: 'uncertain' };
   if (identity.state === 'Z') return { status: 'missing' };
   if (!matchesScreenRecordingCommand(command.stdout, expected.remotePath)) {
     return { status: 'ownership-lost' };
@@ -202,6 +203,7 @@ async function probeAndroidProcessPresence(
   signal?: AbortSignal,
 ): Promise<'present' | 'missing' | 'uncertain'> {
   const result = await shell(['test', '-d', `/proc/${pid}`], signal);
+  if (result.signal) return 'uncertain';
   if (result.exitCode === 0) return 'present';
   return result.exitCode === 1 && result.stderr.trim() === '' ? 'missing' : 'uncertain';
 }
