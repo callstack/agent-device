@@ -468,9 +468,6 @@ export function sampleGestureOffsets(
   );
 }
 
-/** One timed sample of a densified gesture path: the plan's own sample shape. */
-export type DensifiedGestureSample = PointerTrajectorySample;
-
 /**
  * Densifies a plan's own timed path onto one merged sampling grid: the profile grid and the
  * canonical offsets merge, every merged offset interpolates inside its canonical segment, and the
