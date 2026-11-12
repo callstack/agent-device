@@ -9,7 +9,7 @@ import { matchesWaitText } from './wait-text.ts';
 // same JSON (UnitTests/RunnerTests+InteractionTests.swift).
 type WaitTextCase = {
   name: string;
-  platform?: 'android';
+  platform?: 'android' | 'web';
   text: string;
   node: Omit<SnapshotNode, 'index' | 'ref'>;
   expected: boolean;

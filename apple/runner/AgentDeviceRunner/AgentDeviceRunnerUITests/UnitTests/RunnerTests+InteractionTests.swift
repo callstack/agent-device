@@ -52,7 +52,7 @@ extension RunnerTests {
     XCTAssertFalse(cases.isEmpty, "wait text policy table must not be empty")
 
     let editableTypes: [XCUIElement.ElementType] = [.textField, .secureTextField, .searchField, .textView]
-    // Android-only rows pin the TS twin; the runner sees Apple element types only.
+    // Android and web rows pin the TS twin; the runner sees Apple element types only.
     for fixture in cases where fixture.platform == nil {
       for type in fixture.node.editable == true ? editableTypes : [.staticText, .other] {
         var attributes: [String: Any] = [

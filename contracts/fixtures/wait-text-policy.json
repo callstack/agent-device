@@ -120,5 +120,16 @@
       "value": "bench-ad"
     },
     "expected": false
+  },
+  {
+    "name": "a web textbox without an editable fact is editable by its role",
+    "platform": "web",
+    "text": "bench-ad",
+    "node": {
+      "type": "textbox",
+      "label": "Device name",
+      "value": "bench-ad"
+    },
+    "expected": false
   }
 ]
