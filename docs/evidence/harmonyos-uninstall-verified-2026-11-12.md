@@ -10,7 +10,7 @@ this build (see `harmonyos-uninstall-2026-11-08.md` for the recorded shapes).
 
 - HUAWEI 畅享 90 Plus, model `JDY-AL50`, HarmonyOS 7.0.0.111 (SP10C00E111R4P3), API 26
 - Physical device over USB, `hdc shell` as uid 2000 (shell)
-- agent-device head `31dfcd012`, built in the contribution worktree, daemon restarted clean
+- agent-device head `e36de175b`, built in the contribution worktree, daemon restarted clean
 - Target bundle: `com.stringzhao.adtrajdriver`, the debug-signed harness HAP
   from this contribution's own tooling (`examples/harmony-trajectory-driver`);
   no user data involved.
@@ -40,9 +40,9 @@ Abridged install answer (the full payload also carries the resolved
 }
 ```
 
-Uninstall reports removal, and a host-side `bm dump -n` right after answers
-`error: failed to get information and the parameters may be wrong.` — the
-record is gone, so the second dump the fix adds agreed with the hardware:
+Uninstall reports removal, and a host-side `bm dump -a | grep adtrajdriver`
+right after matches nothing — the inventory the route itself reads no longer
+lists the bundle, so the route's post-check agreed with the hardware:
 
 ```json
 {
@@ -55,6 +55,15 @@ record is gone, so the second dump the fix adds agreed with the hardware:
     "message": "Uninstalled: com.stringzhao.adtrajdriver"
   }
 }
+```
+
+Inventory membership around the uninstall, read verbatim on the host:
+
+```
+$ hdc -t 77TYD26826028730 shell "bm dump -a" | grep adtrajdriver   # after install
+	com.stringzhao.adtrajdriver
+$ hdc -t 77TYD26826028730 shell "bm dump -a" | grep -c adtrajdriver  # after uninstall
+0
 ```
 
 A second uninstall answers honestly that nothing was removed:
@@ -78,10 +87,11 @@ A second uninstall answers honestly that nothing was removed:
   hardware at a named commit.
 - The `wasInstalled: false` branch ran against a genuinely absent record with
   the live-transport probe answering.
-- The "record survives bm uninstall" refusal (a `bm` that answers success but
-  leaves the bundle) has no hardware reproduction on this build; the unit test
-  `uninstall refuses to claim removal when the bundle record survives bm
-  uninstall` pins the behavior with the recorded output shapes.
+- The "inventory still lists the bundle" refusal (a `bm` that answers success
+  but leaves the bundle) has no hardware reproduction on this build; the unit
+  test `uninstall refuses to claim removal when the inventory still lists the
+  bundle` pins the behavior with the recorded output shapes, alongside the
+  unknown-read and failed-exit refusals the inventory read now carries.
 - Local `check:affected --run --head 31dfcd012 --base old-origin/main` passes
   every stage except `unit`; `unit` fails only
   `scripts/__tests__/eager-closure-budgets.test.ts` because this clone's
