@@ -39,7 +39,9 @@ describe('publishFileSync', () => {
     const target = destination('clean.txt');
     publishFileSync({ destination: target, contents: 'body' });
 
-    const siblings = fs.readdirSync(directory).filter((name) => name.startsWith('clean.txt.'));
+    const siblings = fs
+      .readdirSync(directory)
+      .filter((name) => name.startsWith('.clean.txt.') && name.endsWith('.tmp'));
     expect(siblings).toEqual([]);
   });
 
@@ -85,7 +87,9 @@ describe('publishFileSync', () => {
       expect(
         fs
           .readdirSync(directory)
-          .filter((name) => name.startsWith('permission-update-failed.png.')),
+          .filter(
+            (name) => name.startsWith('.permission-update-failed.png.') && name.endsWith('.tmp'),
+          ),
       ).toEqual([]);
     } finally {
       chmod.mockRestore();

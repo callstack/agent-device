@@ -31,7 +31,10 @@ export function createDaemonScreenshotArtifactAdapter(
         return {
           path: outputPath,
           visibility: 'client-visible',
-          publish: async () => undefined,
+          publish: async () => {
+            if (atomic) signal?.throwIfAborted();
+            return undefined;
+          },
           ...(tempRoot
             ? {
                 cleanup: async () => {
@@ -113,7 +116,21 @@ async function resolveScreenshotDestination(outputPath: string): Promise<string>
       if (error.code === 'ENOENT') return undefined;
       throw error;
     });
-    destination = entry?.isSymbolicLink() ? await fs.realpath(outputPath) : outputPath;
+    destination = entry?.isSymbolicLink()
+      ? await fs.realpath(outputPath).catch((error: NodeJS.ErrnoException) => {
+          if (error.code === 'ENOENT') {
+            throw new AppError(
+              'INVALID_ARGS',
+              'Screenshot destination is a dangling symbolic link',
+              {
+                reason: 'screenshot_destination_dangling_symlink',
+                path: outputPath,
+              },
+            );
+          }
+          throw error;
+        })
+      : outputPath;
     const target = await fs.stat(destination).catch((error: NodeJS.ErrnoException) => {
       if (error.code === 'ENOENT') return undefined;
       throw error;

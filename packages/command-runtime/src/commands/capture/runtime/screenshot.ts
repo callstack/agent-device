@@ -56,7 +56,9 @@ export const screenshotCommand: RuntimeCommand<
     if (options.scale !== undefined) {
       await resizePngFileToScale(reserved.path, options.scale);
     }
-    (options.signal ?? runtime.signal)?.throwIfAborted();
+    if (reserved.publishedPath !== undefined) {
+      (options.signal ?? runtime.signal)?.throwIfAborted();
+    }
     artifact = await reserved.publish();
   } catch (error) {
     await reserved.cleanup?.();

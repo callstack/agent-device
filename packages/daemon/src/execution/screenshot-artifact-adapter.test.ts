@@ -39,8 +39,9 @@ test('a dangling destination symlink is refused without replacing it', async () 
       outputOptions,
     ),
   ).rejects.toMatchObject({
-    code: 'COMMAND_FAILED',
-    details: { reason: 'screenshot_publication_failed', filesystemCode: 'ENOENT' },
+    code: 'INVALID_ARGS',
+    message: 'Screenshot destination is a dangling symbolic link',
+    details: { reason: 'screenshot_destination_dangling_symlink', path: destination },
   });
   expect(fs.readlinkSync(destination)).toBe('missing.png');
   expect(fs.existsSync(path.join(root, 'missing.png'))).toBe(false);
@@ -87,3 +88,20 @@ for (const existing of [true, false]) {
     expect(fs.existsSync(path.dirname(reserved.path))).toBe(false);
   });
 }
+
+test('automatic crop output retains cancellation and owned-file cleanup before publication', async () => {
+  const controller = new AbortController();
+  const cancellation = new Error('cancelled after crop');
+  const reserved = await createDaemonScreenshotArtifactAdapter(
+    true,
+    controller.signal,
+  ).reserveOutput(undefined, outputOptions);
+  fs.writeFileSync(reserved.path, 'completed crop');
+  controller.abort(cancellation);
+  try {
+    await expect(reserved.publish()).rejects.toBe(cancellation);
+  } finally {
+    await reserved.cleanup?.();
+  }
+  expect(fs.existsSync(path.dirname(reserved.path))).toBe(false);
+});
