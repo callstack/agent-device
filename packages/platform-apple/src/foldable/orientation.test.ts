@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { bindTestCommandHost, createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 vi.mock('./fold-helper-cache.ts', () => ({
@@ -17,7 +17,7 @@ import { createLocalAppleToolProvider, withAppleToolProvider } from '../core/too
 import { createAppleInteractor } from '../interactor.ts';
 import { readFoldablePanelTable } from './orientation.ts';
 import { IOS_DEVICE, IOS_SIMULATOR } from '../__tests__/device-fixtures.ts';
-import { IPHONE_17_SINGLE_PANEL, IPHONE_DUO_CLOSED } from '../__tests__/display-fixtures.ts';
+import { IPHONE_17_SINGLE_PANEL } from '../__tests__/display-fixtures.ts';
 
 bindTestCommandHost();
 
@@ -34,63 +34,24 @@ function simulator(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
   return { ...IOS_SIMULATOR, id: `${IOS_SIMULATOR.id}-${simulatorCount}`, ...overrides };
 }
 
-const DUO_DISPLAYS = IPHONE_DUO_CLOSED.result.displays;
 const SINGLE_PANEL_DISPLAYS = IPHONE_17_SINGLE_PANEL.result.displays;
 
-const CORE_DEVICE_NAMES: Record<string, string> = {
-  'landscape-left': 'landscapeLeft',
-  'landscape-right': 'landscapeRight',
-  portrait: 'portrait',
-};
-
-/**
- * A simulator as CoreDevice and simctl see it. A guest HID orientation event takes effect at once
- * unless `followsHid` is false. As measured on iPhone Duo, `devicectl device orientation get`
- * answers with the orientation it sampled at the previous query, starting from `sampled`. The
- * first `wedgedReads` orientation reads time out. The fold helper's `panels` mode serves the
- * displays of a simulator in a scoped set.
- */
-function fakeSimulator(
-  device: DeviceInfo,
-  displays: readonly object[],
-  options: { followsHid?: boolean; sampled?: string; wedgedReads?: number } = {},
-) {
+/** Single-panel and physical targets keep their runner rotation. */
+function fakeSimulator(device: DeviceInfo, displays: readonly object[]) {
   const helpers: string[][] = [];
   const devicectl: string[] = [];
-  let orientation = 'portrait';
-  let sampled = options.sampled ?? orientation;
-  let wedgedReads = options.wedgedReads ?? 0;
   const provider = createLocalAppleToolProvider({
     runCommand: async (_command, args) => {
-      const [tool, ...rest] = args;
-      if (tool === 'simctl') {
-        const spawn = rest.slice(rest.indexOf('spawn'));
-        expect(spawn.slice(0, 3)).toEqual(['spawn', device.id, '/cache/fold-helper']);
-        const mode = spawn.slice(3);
-        helpers.push(mode);
-        if (mode[0] === 'panels') {
-          return { stdout: JSON.stringify({ version: 1, displays }), stderr: '', exitCode: 0 };
-        }
-        expect(mode[0]).toBe('rotate');
-        if (options.followsHid !== false) orientation = CORE_DEVICE_NAMES[mode[1]!]!;
-        return { stdout: '', stderr: '', exitCode: 0 };
+      if (args[0] !== 'simctl') {
+        devicectl.push(args.join(' '));
+        throw new Error(`unexpected tool call: ${args.join(' ')}`);
       }
-      const jsonPath = args.at(-1)!;
-      const query = args.slice(0, 4).join(' ');
-      expect(args.slice(4)).toEqual(['--device', device.id, '--json-output', jsonPath]);
-      devicectl.push(query);
-      if (query === 'devicectl device info displays') {
-        fs.writeFileSync(jsonPath, JSON.stringify({ result: { displays } }));
-        return { stdout: '', stderr: '', exitCode: 0 };
-      }
-      expect(query).toBe('devicectl device orientation get');
-      if (wedgedReads > 0) {
-        wedgedReads -= 1;
-        throw new AppError('COMMAND_FAILED', 'xcrun timed out', { timeoutMs: 2_000 });
-      }
-      fs.writeFileSync(jsonPath, JSON.stringify({ result: { deviceOrientation: sampled } }));
-      sampled = orientation;
-      return { stdout: '', stderr: '', exitCode: 0 };
+      const spawn = args.slice(args.indexOf('spawn'));
+      expect(spawn.slice(0, 3)).toEqual(['spawn', device.id, '/cache/fold-helper']);
+      const mode = spawn.slice(3);
+      helpers.push(mode);
+      expect(mode).toEqual(['panels']);
+      return { stdout: JSON.stringify({ version: 1, displays }), stderr: '', exitCode: 0 };
     },
   });
   return {
@@ -103,41 +64,20 @@ function fakeSimulator(
   };
 }
 
-test.each(['landscape-left', 'portrait', 'landscape-right'] as const)(
-  'a foldable simulator rotates to %s through guest HID once CoreDevice reports it',
-  async (rotation) => {
-    const device = simulator();
-    const sim = fakeSimulator(device, DUO_DISPLAYS, {
-      sampled: rotation === 'portrait' ? 'landscapeLeft' : 'portrait',
-    });
-    await expect(sim.rotate(rotation)).resolves.toEqual({ orientation: rotation });
-    expect(sim.helpers).toEqual([['rotate', rotation]]);
-    // The routing probe, the read that can be stale, and the read that reports the rotation.
-    expect(sim.devicectl).toEqual([
-      'devicectl device info displays',
-      'devicectl device orientation get',
-      'devicectl device orientation get',
-    ]);
-    expect(mockRunner).not.toHaveBeenCalled();
-  },
-);
-
-test('a simulator is probed for its panels once', async () => {
-  const sim = fakeSimulator(simulator(), DUO_DISPLAYS);
-  await sim.rotate('landscape-left');
-  await sim.rotate('portrait');
-  expect(sim.devicectl.filter((query) => query.endsWith('displays'))).toHaveLength(1);
-  expect(sim.helpers).toEqual([
-    ['rotate', 'landscape-left'],
-    ['rotate', 'portrait'],
-  ]);
+test('a simulator is probed for its panel count once', async () => {
+  const sim = fakeDuo(simulator(), { lit: 'outer', picker: 'portrait' });
+  await rotateDuo(sim, 'landscape-left');
+  await rotateDuo(sim, 'portrait');
+  expect(sim.panelReads()).toBe(5);
+  expect(sim.rotations()).toEqual(['landscape-left', 'portrait']);
+  expect(sim.devicectl).toEqual([]);
 });
 
 test('a single-panel simulator keeps the runner rotation', async () => {
   const device = simulator();
   const sim = fakeSimulator(device, SINGLE_PANEL_DISPLAYS);
   await expect(sim.rotate('landscape-left')).resolves.toEqual({ orientation: 'landscape-left' });
-  expect(sim.helpers).toEqual([]);
+  expect(sim.helpers).toEqual([['panels']]);
   expect(mockRunner).toHaveBeenCalledWith(
     device,
     expect.objectContaining({ command: 'rotate', orientation: 'landscape-left' }),
@@ -146,14 +86,14 @@ test('a single-panel simulator keeps the runner rotation', async () => {
 });
 
 test('a physical device keeps the runner rotation without a CoreDevice probe', async () => {
-  const sim = fakeSimulator(IOS_DEVICE, DUO_DISPLAYS);
+  const sim = fakeSimulator(IOS_DEVICE, []);
   await expect(sim.rotate('landscape-left')).resolves.toEqual({ orientation: 'landscape-left' });
   expect(sim.devicectl).toEqual([]);
   expect(mockRunner).toHaveBeenCalledTimes(1);
 });
 
 /**
- * A scoped-set Duo as measured on the device (iOS 27.3): the guest keeps one
+ * A Duo as measured on the device (iOS 27.3): the guest keeps one
  * `orientation-picker-control` value, and the lit panel reads that value plus a fixed
  * per-panel offset — outer 0, inner +90 — so successive events look relative on the inner
  * panel. The picker survives a fold: the panel that lights afterwards reads it plus its own
@@ -181,7 +121,7 @@ function rotationAtAngle(angle: number): DeviceRotation {
   return rotation!;
 }
 
-function fakeScopedDuo(
+function fakeDuo(
   device: DeviceInfo,
   options: {
     lit: DuoPanel;
@@ -241,6 +181,18 @@ function fakeScopedDuo(
       const [tool, ...rest] = args;
       if (tool !== 'simctl') {
         devicectl.push(args.join(' '));
+        if (!device.simulatorSetPath && tool === 'devicectl') {
+          const displays = [panel('outer', false), panel('inner', false)];
+          const rotation = rotationAtAngle(shown[lit]);
+          const deviceOrientation = rotation.replaceAll(/-([a-z])/g, (_, letter: string) =>
+            letter.toUpperCase(),
+          );
+          fs.writeFileSync(
+            args.at(-1)!,
+            JSON.stringify({ result: { displays, deviceOrientation } }),
+          );
+          return { stdout: '', stderr: '', exitCode: 0 };
+        }
         throw new Error(`unexpected tool call in a scoped set: ${args.join(' ')}`);
       }
       const spawn = rest.slice(rest.indexOf('spawn'));
@@ -294,9 +246,9 @@ function fakeScopedDuo(
   };
 }
 
-/** Runs one scoped rotation under fake timers: the settle delay must not cost real time. */
-async function rotateScoped(
-  sim: ReturnType<typeof fakeScopedDuo>,
+/** Runs one rotation under fake timers: the settle delay must not cost real time. */
+async function rotateDuo(
+  sim: ReturnType<typeof fakeDuo>,
   rotation: DeviceRotation,
 ): Promise<unknown> {
   vi.useFakeTimers();
@@ -312,274 +264,297 @@ async function rotateScoped(
   }
 }
 
-test('a foldable simulator in a scoped set rotates on the first command, confirmed by the panel table', async () => {
-  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
-  // The inner panel lights at rot90 while the picker sits at portrait (K = +90, measured).
-  const sim = fakeScopedDuo(scoped, { lit: 'inner', picker: 'portrait' });
-  expect(sim.litScreen()).toBe('rot90');
-  await expect(rotateScoped(sim, 'portrait')).resolves.toEqual({ orientation: 'portrait' });
-  expect(sim.litScreen()).toBe('rot0');
-  // The measured inner offset makes the first dispatch exact: portrait - 90 is landscape-left.
-  expect(sim.rotations()).toEqual(['landscape-left']);
-  expect(sim.devicectl).toEqual([]);
-  expect(mockRunner).not.toHaveBeenCalled();
-});
-
-test('a scoped rotation to landscape-left dispatches the upside-down picker value when the delta needs it', async () => {
-  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
-  const sim = fakeScopedDuo(scoped, {
-    lit: 'inner',
-    picker: 'landscape-left',
-  });
-  expect(sim.litScreen()).toBe('rot0');
-  await expect(rotateScoped(sim, 'landscape-left')).resolves.toEqual({
-    orientation: 'landscape-left',
-  });
-  expect(sim.litScreen()).toBe('rot270');
-  expect(sim.rotations()).toEqual(['portrait-upside-down']);
-  expect(sim.devicectl).toEqual([]);
-});
-
-test('the outer panel reads the picker value itself, so its first dispatch is the target', async () => {
-  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
-  const sim = fakeScopedDuo(scoped, { lit: 'outer', picker: 'portrait' });
-  expect(sim.litScreen()).toBe('rot0');
-  for (const rotation of ['landscape-left', 'landscape-right', 'portrait'] as const) {
-    sim.helpers.length = 0;
-    await expect(rotateScoped(sim, rotation)).resolves.toEqual({ orientation: rotation });
-    expect(sim.rotations()).toEqual([rotation]);
-  }
-  expect(sim.devicectl).toEqual([]);
-});
-
-test('a panel whose offset differs from the measured one still converges', async () => {
-  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
-  const sim = fakeScopedDuo(scoped, {
-    lit: 'outer',
-    picker: 'portrait',
-    offsets: { inner: 90, outer: 270 },
-  });
-  await expect(rotateScoped(sim, 'landscape-right')).resolves.toEqual({
-    orientation: 'landscape-right',
-  });
-  expect(sim.litScreen()).toBe('rot90');
-  // The measured outer offset (0) lands a quarter-turn away; that reading calibrates the second.
-  expect(sim.rotations()).toEqual(['landscape-right', 'portrait-upside-down']);
-  expect(sim.devicectl).toEqual([]);
-});
-
-test('the picker survives a fold in both directions and each panel adds its own offset', async () => {
-  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
-  // Measured sequence: the inner panel at rot0 with the picker at landscape-left.
-  const sim = fakeScopedDuo(scoped, { lit: 'inner', picker: 'landscape-left' });
-  expect(sim.litScreen()).toBe('rot0');
-
-  sim.fold('outer');
-  expect(sim.litScreen()).toBe('rot270');
-  await expect(rotateScoped(sim, 'portrait')).resolves.toEqual({ orientation: 'portrait' });
-  expect(sim.rotations()).toEqual(['portrait']);
-
-  sim.fold('inner');
-  expect(sim.litScreen()).toBe('rot90');
-  await expect(rotateScoped(sim, 'landscape-left')).resolves.toEqual({
-    orientation: 'landscape-left',
-  });
-  expect(sim.rotations()).toEqual(['portrait-upside-down']);
-});
-
-test('a fold that leaves the picker where the outer panel cannot follow still lands in one dispatch', async () => {
-  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
-  // Measured: the inner panel at landscape-left needs the picker at the upside-down value; the
-  // outer panel's foreground UI has no upside-down, so after the fold it kept landscape-left.
-  const sim = fakeScopedDuo(scoped, {
-    lit: 'inner',
-    picker: 'portrait-upside-down',
-    cannotShow: { outer: ['portrait-upside-down'] },
-    lastShown: { outer: 'landscape-left' },
-  });
-  expect(sim.litScreen()).toBe('rot270');
-  sim.fold('outer');
-  expect(sim.litScreen()).toBe('rot270');
-  await expect(rotateScoped(sim, 'landscape-right')).resolves.toEqual({
-    orientation: 'landscape-right',
-  });
-  expect(sim.rotations()).toEqual(['landscape-right']);
-});
-
-test('reads with both panels lit after a fold to closed neither confirm nor dispatch', async () => {
-  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
-  const sim = fakeScopedDuo(scoped, { lit: 'inner', picker: 'landscape-left' });
-  // A first command routes the device as a foldable (one panel probe) and finds portrait showing.
-  await expect(rotateScoped(sim, 'portrait')).resolves.toEqual({ orientation: 'portrait' });
-  // The outer panel already shows the target, but the table names two lit panels for two reads.
-  sim.fold('outer', { bothLitReads: 2 });
-  expect(sim.litScreen()).toBe('rot270');
-  await expect(rotateScoped(sim, 'landscape-left')).resolves.toEqual({
-    orientation: 'landscape-left',
-  });
-  // Confirmed by the third read, the first to name one lit panel; nothing was dispatched blind.
-  expect(sim.panelReads()).toBe(3);
-  expect(sim.rotations()).toEqual([]);
-});
-
-test('after the both-lit reads, the first single-lit reading drives one exact dispatch', async () => {
-  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
-  const sim = fakeScopedDuo(scoped, { lit: 'inner', picker: 'landscape-left' });
-  await expect(rotateScoped(sim, 'portrait')).resolves.toEqual({ orientation: 'portrait' });
-  sim.fold('outer', { bothLitReads: 2 });
-  await expect(rotateScoped(sim, 'landscape-right')).resolves.toEqual({
-    orientation: 'landscape-right',
-  });
-  expect(sim.panelReads()).toBe(4);
-  expect(sim.rotations()).toEqual(['landscape-right']);
-});
-
-test('a table that never names a single lit panel dispatches nothing and is refused', async () => {
-  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
-  const sim = fakeScopedDuo(scoped, { lit: 'outer', picker: 'portrait', bothLitFromRead: 1 });
-  const outcome = await rotateScoped(sim, 'landscape-left');
-  expect(outcome).toMatchObject({
-    code: 'COMMAND_FAILED',
-    details: {
-      reason: 'orientation-unverified-scoped-set',
-      requestedOrientation: 'landscape-left',
+describe.each([undefined, '/tmp/scoped-set'])('foldable rotation, set %s', (simulatorSetPath) => {
+  test.each([
+    ['outer', 'portrait', []],
+    ['outer', 'landscape-left', ['landscape-left']],
+    ['outer', 'landscape-right', ['landscape-right']],
+    ['inner', 'portrait', ['landscape-left']],
+    ['inner', 'landscape-left', ['portrait-upside-down']],
+    ['inner', 'landscape-right', []],
+  ] as const)(
+    'confirms %s %s from the lit panel without CoreDevice',
+    async (lit, target, dispatched) => {
+      const sim = fakeDuo(simulator({ simulatorSetPath }), { lit, picker: 'portrait' });
+      await expect(rotateDuo(sim, target)).resolves.toEqual({ orientation: target });
+      expect(sim.litScreen()).toBe(`rot${PANEL_ANGLE[target]}`);
+      expect(sim.rotations()).toEqual(dispatched);
+      expect(sim.devicectl).toEqual([]);
+      expect(mockRunner).not.toHaveBeenCalled();
     },
-  });
-  expect((outcome as AppError).message).toContain('named no single lit panel');
-  expect((outcome as AppError).details).not.toHaveProperty('observedOrientation');
-  expect(sim.rotations()).toEqual([]);
-});
+  );
 
-test('an undecided final read does not report an earlier reading as the current one', async () => {
-  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
-  // The routing probe and two decided rotation reads, then both panels report lit to the end.
-  const sim = fakeScopedDuo(scoped, {
-    lit: 'inner',
-    picker: 'portrait',
-    followsHid: false,
-    bothLitFromRead: 4,
+  test('a foldable rotates on the first command, confirmed by the panel table', async () => {
+    const scoped = simulator({ simulatorSetPath });
+    // The inner panel lights at rot90 while the picker sits at portrait (K = +90, measured).
+    const sim = fakeDuo(scoped, { lit: 'inner', picker: 'portrait' });
+    expect(sim.litScreen()).toBe('rot90');
+    await expect(rotateDuo(sim, 'portrait')).resolves.toEqual({ orientation: 'portrait' });
+    expect(sim.litScreen()).toBe('rot0');
+    // The measured inner offset makes the first dispatch exact: portrait - 90 is landscape-left.
+    expect(sim.rotations()).toEqual(['landscape-left']);
+    expect(sim.devicectl).toEqual([]);
+    expect(mockRunner).not.toHaveBeenCalled();
   });
-  const outcome = await rotateScoped(sim, 'portrait');
-  expect(outcome).toMatchObject({
-    code: 'COMMAND_FAILED',
-    details: { reason: 'orientation-unverified-scoped-set' },
-  });
-  expect((outcome as AppError).details).not.toHaveProperty('observedOrientation');
-  expect((outcome as AppError).details).not.toHaveProperty('rawPanelOrientation');
-  expect(sim.rotations()).toEqual(['landscape-left']);
-});
 
-test('a scoped rotation to the orientation already showing dispatches nothing', async () => {
-  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
-  const sim = fakeScopedDuo(scoped, {
-    lit: 'inner',
-    picker: 'landscape-left',
-  });
-  expect(sim.litScreen()).toBe('rot0');
-  await expect(rotateScoped(sim, 'portrait')).resolves.toEqual({ orientation: 'portrait' });
-  expect(sim.rotations()).toEqual([]);
-});
-
-test.each([
-  ['the parsed panel already shows the target', 'landscape-left'],
-  ['the parsed panel shows another rotation', 'landscape-right'],
-] as const)(
-  'an incomplete panel table never confirms or dispatches (%s)',
-  async (_case, target) => {
-    const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
-    // Two activeOn integrated entries; the inner one has no geometry, so it does not parse. The
-    // outer panel that did parse is the only lit one left, but no single lit panel is established.
-    const sim = fakeScopedDuo(scoped, {
-      lit: 'outer',
+  test('inner landscape-left dispatches the upside-down picker value', async () => {
+    const scoped = simulator({ simulatorSetPath });
+    const sim = fakeDuo(scoped, {
+      lit: 'inner',
       picker: 'landscape-left',
-      incompleteLitPanel: 'inner',
+    });
+    expect(sim.litScreen()).toBe('rot0');
+    await expect(rotateDuo(sim, 'landscape-left')).resolves.toEqual({
+      orientation: 'landscape-left',
     });
     expect(sim.litScreen()).toBe('rot270');
-    const outcome = await rotateScoped(sim, target);
+    expect(sim.rotations()).toEqual(['portrait-upside-down']);
+    expect(sim.devicectl).toEqual([]);
+  });
+
+  test('the outer panel reads the picker value itself, so its first dispatch is the target', async () => {
+    const scoped = simulator({ simulatorSetPath });
+    const sim = fakeDuo(scoped, { lit: 'outer', picker: 'portrait' });
+    expect(sim.litScreen()).toBe('rot0');
+    for (const rotation of ['landscape-left', 'landscape-right', 'portrait'] as const) {
+      sim.helpers.length = 0;
+      await expect(rotateDuo(sim, rotation)).resolves.toEqual({ orientation: rotation });
+      expect(sim.rotations()).toEqual([rotation]);
+    }
+    expect(sim.devicectl).toEqual([]);
+  });
+
+  test('an unexpected panel response cannot calibrate another picker value', async () => {
+    const scoped = simulator({ simulatorSetPath });
+    const sim = fakeDuo(scoped, {
+      lit: 'outer',
+      picker: 'portrait',
+      offsets: { inner: 90, outer: 270 },
+    });
+    const outcome = await rotateDuo(sim, 'landscape-right');
     expect(outcome).toMatchObject({
       code: 'COMMAND_FAILED',
-      details: { reason: 'orientation-unverified-scoped-set', requestedOrientation: target },
+      details: { requestedOrientation: 'landscape-right', observedOrientation: 'portrait' },
     });
-    expect((outcome as AppError).details).not.toHaveProperty('observedOrientation');
-    expect(sim.rotations()).toEqual([]);
+    expect(sim.litScreen()).toBe('rot0');
+    // An unexpected reading is not evidence that an unsupported picker value is safe to send.
+    expect(sim.rotations()).toEqual(['landscape-right']);
     expect(sim.devicectl).toEqual([]);
-  },
-);
+  });
 
-test.each([
-  ['the lit panel already shows the target', 'landscape-left'],
-  ['the lit panel shows another rotation', 'landscape-right'],
-] as const)(
-  'a panel of unknown power beside the lit one never confirms or dispatches (%s)',
-  async (_case, target) => {
-    const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
-    // The outer panel reads lit; the inner one reports a backlight state the parser does not
-    // recognize, so its power is unknown and it may be lit too.
-    const sim = fakeScopedDuo(scoped, {
-      lit: 'outer',
-      picker: 'landscape-left',
-      unknownPowerPanel: 'inner',
+  test('the picker survives a fold in both directions and each panel adds its own offset', async () => {
+    const scoped = simulator({ simulatorSetPath });
+    // Measured sequence: the inner panel at rot0 with the picker at landscape-left.
+    const sim = fakeDuo(scoped, { lit: 'inner', picker: 'landscape-left' });
+    expect(sim.litScreen()).toBe('rot0');
+
+    sim.fold('outer');
+    expect(sim.litScreen()).toBe('rot270');
+    await expect(rotateDuo(sim, 'portrait')).resolves.toEqual({ orientation: 'portrait' });
+    expect(sim.rotations()).toEqual(['portrait']);
+
+    sim.fold('inner');
+    expect(sim.litScreen()).toBe('rot90');
+    await expect(rotateDuo(sim, 'landscape-left')).resolves.toEqual({
+      orientation: 'landscape-left',
+    });
+    expect(sim.rotations()).toEqual(['portrait-upside-down']);
+  });
+
+  test('a fold that leaves the picker where the outer panel cannot follow still lands in one dispatch', async () => {
+    const scoped = simulator({ simulatorSetPath });
+    // Measured: the inner panel at landscape-left needs the picker at the upside-down value; the
+    // outer panel's foreground UI has no upside-down, so after the fold it kept landscape-left.
+    const sim = fakeDuo(scoped, {
+      lit: 'inner',
+      picker: 'portrait-upside-down',
+      cannotShow: { outer: ['portrait-upside-down'] },
+      lastShown: { outer: 'landscape-left' },
     });
     expect(sim.litScreen()).toBe('rot270');
-    const outcome = await rotateScoped(sim, target);
+    sim.fold('outer');
+    expect(sim.litScreen()).toBe('rot270');
+    await expect(rotateDuo(sim, 'landscape-right')).resolves.toEqual({
+      orientation: 'landscape-right',
+    });
+    expect(sim.rotations()).toEqual(['landscape-right']);
+  });
+
+  test('reads with both panels lit after a fold to closed neither confirm nor dispatch', async () => {
+    const scoped = simulator({ simulatorSetPath });
+    const sim = fakeDuo(scoped, { lit: 'inner', picker: 'landscape-left' });
+    // A first command routes the device as a foldable (one panel probe) and finds portrait showing.
+    await expect(rotateDuo(sim, 'portrait')).resolves.toEqual({ orientation: 'portrait' });
+    // The outer panel already shows the target, but the table names two lit panels for two reads.
+    sim.fold('outer', { bothLitReads: 2 });
+    expect(sim.litScreen()).toBe('rot270');
+    await expect(rotateDuo(sim, 'landscape-left')).resolves.toEqual({
+      orientation: 'landscape-left',
+    });
+    // Confirmed by the third read, the first to name one lit panel; nothing was dispatched blind.
+    expect(sim.panelReads()).toBe(3);
+    expect(sim.rotations()).toEqual([]);
+  });
+
+  test('after the both-lit reads, the first single-lit reading drives one exact dispatch', async () => {
+    const scoped = simulator({ simulatorSetPath });
+    const sim = fakeDuo(scoped, { lit: 'inner', picker: 'landscape-left' });
+    await expect(rotateDuo(sim, 'portrait')).resolves.toEqual({ orientation: 'portrait' });
+    sim.fold('outer', { bothLitReads: 2 });
+    await expect(rotateDuo(sim, 'landscape-right')).resolves.toEqual({
+      orientation: 'landscape-right',
+    });
+    expect(sim.panelReads()).toBe(4);
+    expect(sim.rotations()).toEqual(['landscape-right']);
+  });
+
+  test('a table that never names a single lit panel dispatches nothing and is refused', async () => {
+    const scoped = simulator({ simulatorSetPath });
+    const sim = fakeDuo(scoped, { lit: 'outer', picker: 'portrait', bothLitFromRead: 1 });
+    const outcome = await rotateDuo(sim, 'landscape-left');
     expect(outcome).toMatchObject({
       code: 'COMMAND_FAILED',
-      details: { reason: 'orientation-unverified-scoped-set', requestedOrientation: target },
+      details: {
+        reason: 'orientation-unverified',
+        requestedOrientation: 'landscape-left',
+      },
     });
+    expect((outcome as AppError).message).toContain('named no single lit panel');
     expect((outcome as AppError).details).not.toHaveProperty('observedOrientation');
     expect(sim.rotations()).toEqual([]);
-    expect(sim.devicectl).toEqual([]);
-  },
-);
-
-test('a reading taken before the dispatch lands teaches nothing and is not followed by another dispatch', async () => {
-  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
-  // The first two panel reads after each picker event still show the panel as it was before it.
-  const sim = fakeScopedDuo(scoped, { lit: 'inner', picker: 'portrait', hidLagReads: 2 });
-  expect(sim.litScreen()).toBe('rot90');
-  await expect(rotateScoped(sim, 'landscape-left')).resolves.toEqual({
-    orientation: 'landscape-left',
   });
-  // One exact dispatch (landscape-left - 90 = portrait-upside-down); the stale reads in between
-  // neither re-learned an offset nor dispatched again.
-  expect(sim.rotations()).toEqual(['portrait-upside-down']);
-});
 
-test('a scoped rotation the lit panel never shows is refused as unverified', async () => {
-  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
-  const sim = fakeScopedDuo(scoped, {
-    lit: 'inner',
-    picker: 'portrait',
-    followsHid: false,
+  test('an undecided final read does not report an earlier reading as the current one', async () => {
+    const scoped = simulator({ simulatorSetPath });
+    // The routing probe and two decided rotation reads, then both panels report lit to the end.
+    const sim = fakeDuo(scoped, {
+      lit: 'inner',
+      picker: 'portrait',
+      followsHid: false,
+      bothLitFromRead: 4,
+    });
+    const outcome = await rotateDuo(sim, 'portrait');
+    expect(outcome).toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'orientation-unverified' },
+    });
+    expect((outcome as AppError).details).not.toHaveProperty('observedOrientation');
+    expect((outcome as AppError).details).not.toHaveProperty('rawPanelOrientation');
+    expect(sim.rotations()).toEqual(['landscape-left']);
   });
-  await expect(rotateScoped(sim, 'portrait')).resolves.toMatchObject({
-    code: 'COMMAND_FAILED',
-    message: expect.stringContaining('the lit panel shows landscape-right'),
-    details: {
-      reason: 'orientation-unverified-scoped-set',
-      requestedOrientation: 'portrait',
-      observedOrientation: 'landscape-right',
-      rawPanelOrientation: 'rot90',
+
+  test('a rotation to the orientation already showing dispatches nothing', async () => {
+    const scoped = simulator({ simulatorSetPath });
+    const sim = fakeDuo(scoped, {
+      lit: 'inner',
+      picker: 'landscape-left',
+    });
+    expect(sim.litScreen()).toBe('rot0');
+    await expect(rotateDuo(sim, 'portrait')).resolves.toEqual({ orientation: 'portrait' });
+    expect(sim.rotations()).toEqual([]);
+  });
+
+  test.each([
+    ['the parsed panel already shows the target', 'landscape-left'],
+    ['the parsed panel shows another rotation', 'landscape-right'],
+  ] as const)(
+    'an incomplete panel table never confirms or dispatches (%s)',
+    async (_case, target) => {
+      const scoped = simulator({ simulatorSetPath });
+      // Two activeOn integrated entries; the inner one has no geometry, so it does not parse. The
+      // outer panel that did parse is the only lit one left, but no single lit panel is established.
+      const sim = fakeDuo(scoped, {
+        lit: 'outer',
+        picker: 'landscape-left',
+        incompleteLitPanel: 'inner',
+      });
+      expect(sim.litScreen()).toBe('rot270');
+      const outcome = await rotateDuo(sim, target);
+      expect(outcome).toMatchObject({
+        code: 'COMMAND_FAILED',
+        details: { reason: 'orientation-unverified', requestedOrientation: target },
+      });
+      expect((outcome as AppError).details).not.toHaveProperty('observedOrientation');
+      expect(sim.rotations()).toEqual([]);
+      expect(sim.devicectl).toEqual([]);
     },
-  });
-  // The panel never moved after the one dispatch, so it taught no offset and nothing more was
-  // dispatched: the loop re-read until its budget ended, then refused.
-  expect(sim.rotations()).toEqual(['landscape-left']);
-  expect(sim.devicectl).toEqual([]);
-});
+  );
 
-test('a foldable simulator in a scoped set still refuses portrait-upside-down as a target', async () => {
-  const scoped = simulator({ simulatorSetPath: '/tmp/scoped-set' });
-  const sim = fakeScopedDuo(scoped, {
-    lit: 'inner',
-    picker: 'portrait',
+  test.each([
+    ['the lit panel already shows the target', 'landscape-left'],
+    ['the lit panel shows another rotation', 'landscape-right'],
+  ] as const)(
+    'a panel of unknown power beside the lit one never confirms or dispatches (%s)',
+    async (_case, target) => {
+      const scoped = simulator({ simulatorSetPath });
+      // The outer panel reads lit; the inner one reports a backlight state the parser does not
+      // recognize, so its power is unknown and it may be lit too.
+      const sim = fakeDuo(scoped, {
+        lit: 'outer',
+        picker: 'landscape-left',
+        unknownPowerPanel: 'inner',
+      });
+      expect(sim.litScreen()).toBe('rot270');
+      const outcome = await rotateDuo(sim, target);
+      expect(outcome).toMatchObject({
+        code: 'COMMAND_FAILED',
+        details: { reason: 'orientation-unverified', requestedOrientation: target },
+      });
+      expect((outcome as AppError).details).not.toHaveProperty('observedOrientation');
+      expect(sim.rotations()).toEqual([]);
+      expect(sim.devicectl).toEqual([]);
+    },
+  );
+
+  test('delayed panel reads wait without resending the picker value', async () => {
+    const scoped = simulator({ simulatorSetPath });
+    // The first two panel reads after each picker event still show the panel as it was before it.
+    const sim = fakeDuo(scoped, { lit: 'inner', picker: 'portrait', hidLagReads: 2 });
+    expect(sim.litScreen()).toBe('rot90');
+    await expect(rotateDuo(sim, 'landscape-left')).resolves.toEqual({
+      orientation: 'landscape-left',
+    });
+    // One exact dispatch (landscape-left - 90 = portrait-upside-down); the stale reads in between
+    // did not cause another dispatch.
+    expect(sim.rotations()).toEqual(['portrait-upside-down']);
   });
-  await expect(sim.rotate('portrait-upside-down')).rejects.toMatchObject({
-    code: 'UNSUPPORTED_OPERATION',
-    details: { reason: 'unsupported-foldable-orientation' },
+
+  test('a rotation the lit panel never shows is refused as unverified', async () => {
+    const scoped = simulator({ simulatorSetPath });
+    const sim = fakeDuo(scoped, {
+      lit: 'inner',
+      picker: 'portrait',
+      followsHid: false,
+    });
+    await expect(rotateDuo(sim, 'portrait')).resolves.toMatchObject({
+      code: 'COMMAND_FAILED',
+      message: expect.stringContaining('the lit panel shows landscape-right'),
+      details: {
+        reason: 'orientation-unverified',
+        requestedOrientation: 'portrait',
+        observedOrientation: 'landscape-right',
+        rawPanelOrientation: 'rot90',
+      },
+    });
+    // The panel never moved after the one dispatch, so nothing more was
+    // dispatched: the loop re-read until its budget ended, then refused.
+    expect(sim.rotations()).toEqual(['landscape-left']);
+    expect(sim.devicectl).toEqual([]);
   });
-  expect(sim.rotations()).toEqual([]);
-  expect(mockRunner).not.toHaveBeenCalled();
+
+  test('a foldable still refuses portrait-upside-down as a target', async () => {
+    const scoped = simulator({ simulatorSetPath });
+    const sim = fakeDuo(scoped, {
+      lit: 'inner',
+      picker: 'portrait',
+    });
+    await expect(sim.rotate('portrait-upside-down')).rejects.toMatchObject({
+      code: 'UNSUPPORTED_OPERATION',
+      details: { reason: 'unsupported-foldable-orientation' },
+    });
+    expect(sim.rotations()).toEqual([]);
+    expect(mockRunner).not.toHaveBeenCalled();
+  });
 });
 
 test('a single-panel simulator in a scoped set keeps the runner rotation', async () => {
@@ -591,39 +566,11 @@ test('a single-panel simulator in a scoped set keeps the runner rotation', async
   expect(mockRunner).toHaveBeenCalledTimes(1);
 });
 
-test('a foldable simulator refuses portrait-upside-down before any HID dispatch', async () => {
-  const sim = fakeSimulator(simulator(), DUO_DISPLAYS);
-  await expect(sim.rotate('portrait-upside-down')).rejects.toMatchObject({
-    code: 'UNSUPPORTED_OPERATION',
-    details: { reason: 'unsupported-foldable-orientation' },
-  });
-  expect(sim.helpers).toEqual([]);
-  expect(mockRunner).not.toHaveBeenCalled();
-});
-
-test('a timed-out CoreDevice read does not refuse a rotation that a later read reports', async () => {
-  const sim = fakeSimulator(simulator(), DUO_DISPLAYS, { wedgedReads: 2 });
-  await expect(sim.rotate('landscape-left')).resolves.toEqual({ orientation: 'landscape-left' });
-});
-
-test('a foldable rotation that CoreDevice never reports is refused as unverified', async () => {
-  const sim = fakeSimulator(simulator(), DUO_DISPLAYS, { followsHid: false });
-  await expect(sim.rotate('landscape-right')).rejects.toMatchObject({
-    code: 'COMMAND_FAILED',
-    details: {
-      reason: 'orientation-unverified',
-      requestedOrientation: 'landscape-right',
-      observedOrientation: 'portrait',
-    },
-  });
-  expect(sim.helpers).toHaveLength(1);
-});
-
 /** A rotation reads the panel table itself: the surface probe's retry window never holds it. */
 test('a rotation is not routed by a pending panel-table retry', async () => {
   const device = simulator();
   let tableFailures = 0;
-  const sim = fakeSimulator(device, DUO_DISPLAYS);
+  const sim = fakeDuo(device, { lit: 'outer', picker: 'portrait' });
   const failing = createLocalAppleToolProvider({
     runCommand: async (_command, args) => {
       if (args.slice(0, 4).join(' ') === 'devicectl device info displays') {
@@ -638,17 +585,9 @@ test('a rotation is not routed by a pending panel-table retry', async () => {
   await withAppleToolProvider(failing, () => readFoldablePanelTable(device, { timeoutMs: 5_000 }));
   expect(tableFailures).toBe(1);
 
-  await expect(sim.rotate('landscape-left')).resolves.toEqual({ orientation: 'landscape-left' });
-  expect(sim.helpers).toEqual([['rotate', 'landscape-left']]);
+  await expect(rotateDuo(sim, 'landscape-left')).resolves.toEqual({
+    orientation: 'landscape-left',
+  });
+  expect(sim.rotations()).toEqual(['landscape-left']);
   expect(mockRunner).not.toHaveBeenCalled();
-});
-
-test('a stale CoreDevice sample cannot verify a rotation that did not happen', async () => {
-  const sim = fakeSimulator(simulator(), DUO_DISPLAYS, {
-    followsHid: false,
-    sampled: 'landscapeLeft',
-  });
-  await expect(sim.rotate('landscape-left')).rejects.toMatchObject({
-    details: { reason: 'orientation-unverified', observedOrientation: 'portrait' },
-  });
 });

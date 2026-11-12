@@ -750,7 +750,10 @@ describe('scoped simulator panel table', () => {
     assert.equal(mockRunXcrun.mock.calls.length, 0);
   });
 
-  test('reads with the fold helper the caller already opened', async () => {
+  test.each([
+    ['scoped', scopedDuo],
+    ['default', { ...scopedDuo, simulatorSetPath: undefined }],
+  ] as const)('reads with the supplied fold helper in the %s set', async (_set, device) => {
     vi.mocked(ensureFoldHelperBinary).mockClear();
     const readPanelPayload = vi.fn(async () => ({
       result: { displays: (JSON.parse(GUEST_PANELS_OPEN) as { displays: unknown[] }).displays },
@@ -762,12 +765,13 @@ describe('scoped simulator panel table', () => {
       readPanelPayload,
     };
 
-    const inventory = await queryAppleDisplayInventory(scopedDuo, { foldHelper });
+    const inventory = await queryAppleDisplayInventory(device, { foldHelper });
 
     assert.equal(inventory.activeDisplay?.name, 'LCD-1');
     assert.equal(readPanelPayload.mock.calls.length, 1);
     assert.equal(vi.mocked(ensureFoldHelperBinary).mock.calls.length, 0);
     assert.equal(mockRunSimctlForDevice.mock.calls.length, 0);
+    assert.equal(mockRunXcrun.mock.calls.length, 0);
   });
 
   test('applies the same rule to a CoreDevice table whose second panel does not parse', async () => {

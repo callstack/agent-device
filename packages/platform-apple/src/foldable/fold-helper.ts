@@ -25,7 +25,7 @@ export type FoldableRotation = Exclude<DeviceRotation, 'portrait-upside-down'>;
 /**
  * Every value the guest's orientation picker accepts, upside-down included: its wire spelling
  * is `pud`, which the fold helper maps from `portrait-upside-down`. The picker needs all four
- * values because each event turns the lit panel by the value's delta, so reaching one target
+ * values because the lit panel adds a fixed offset to the picker, so reaching one target
  * can require dispatching another value. Callers keep user targets to {@link FoldableRotation}.
  */
 export type FoldPickerValue = DeviceRotation;

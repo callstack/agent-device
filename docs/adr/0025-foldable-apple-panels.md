@@ -58,6 +58,8 @@ It is the only reader of panel tables, and it selects the source.
   For a simulator in a scoped set, the fold helper's `panels` mode is the screen authority.
   It emits the same entry shape from the guest sources that `dtdeviceinfod` relays to CoreDevice: `CADisplay` and `BLSBacklight`.
   The guest lists every integrated panel and omits only the facts it cannot read.
+  Foldable `fold` and `orientation` operations use the guest table in either simulator set.
+  Rotation confirms the lit panel because CoreDevice orientation can match the picker while the visible panel shows another orientation.
 - **Completeness.**
   Both sources list one entry per integrated panel. A panel that the parser drops is not single-panel evidence.
   If two or more integrated entries exist and not all parse, the device is multi-panel without a capture panel. Capture refuses with `capture-panel-unidentified`.

@@ -5,10 +5,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
-import {
-  IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS,
-  IOS_SCOPED_DISPLAY_PROBE_BUDGET_MS,
-} from './config.ts';
+import { IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS, IOS_GUEST_DISPLAY_PROBE_BUDGET_MS } from './config.ts';
 import type { FoldHelper } from '../foldable/fold-helper.ts';
 import { runIosDevicectlJsonRequest } from './devicectl.ts';
 import { simulatorAddressFor } from './simctl.ts';
@@ -93,7 +90,7 @@ type CoreDeviceDisplayPayload = {
 type AppleDisplayInventoryOptions = {
   timeoutMs?: number;
   signal?: AbortSignal;
-  /** A fold helper the caller already holds, so a scoped read does not probe its build again. */
+  /** Selects the guest table in either simulator set and reuses this helper. */
   foldHelper?: FoldHelper;
 };
 
@@ -102,7 +99,7 @@ const DISPLAYS_UNSUPPORTED_HINT =
 
 /**
  * Reads the CoreDevice display table for one Apple device, or the guest's equivalent for a
- * simulator in a scoped device set.
+ * simulator in a scoped device set or a caller that supplies its fold helper.
  *
  * Deliberately uncached: which panel is lit is exactly what changes when an
  * operator folds or opens the device, and a cached answer would resume capturing
@@ -116,9 +113,10 @@ export async function queryAppleDisplayInventory(
   device: DeviceInfo,
   options: AppleDisplayInventoryOptions,
 ): Promise<AppleDisplayInventory> {
-  const table = simulatorAddressFor(device).simulatorSetPath
-    ? await readGuestPanelTable(device, options)
-    : await readCoreDevicePanelTable(device, options);
+  const table =
+    options.foldHelper || simulatorAddressFor(device).simulatorSetPath
+      ? await readGuestPanelTable(device, options)
+      : await readCoreDevicePanelTable(device, options);
   if (!table.ok) {
     emitUnresolvedDiagnostic(device, table.reason, table.detail);
     return unresolvedInventory();
@@ -153,14 +151,15 @@ async function readCoreDevicePanelTable(
 /**
  * CoreDevice resolves a simulator only in the default device set, so a scoped simulator's panel
  * table comes from the fold helper inside the guest. It reads the same CADisplay and BLSBacklight
- * sources `dtdeviceinfod` reports to CoreDevice, in CoreDevice's payload shape.
+ * sources `dtdeviceinfod` reports to CoreDevice, in CoreDevice's payload shape. Foldable
+ * operations use this guest source in either set.
  */
 async function readGuestPanelTable(
   device: DeviceInfo,
   options: AppleDisplayInventoryOptions,
 ): Promise<PanelTableRead> {
   // The first read on a host also builds the helper; the budget covers that build too.
-  const budget = AbortSignal.timeout(IOS_SCOPED_DISPLAY_PROBE_BUDGET_MS);
+  const budget = AbortSignal.timeout(IOS_GUEST_DISPLAY_PROBE_BUDGET_MS);
   const signal = options.signal ? AbortSignal.any([options.signal, budget]) : budget;
   try {
     const { createFoldHelper } = await import('../foldable/fold-helper.ts');
