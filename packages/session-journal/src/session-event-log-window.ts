@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import { randomUUID } from 'node:crypto';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import {
@@ -96,6 +95,7 @@ export function readSessionEventLogWindow(eventLogPath: string): SessionEventLog
     const before = readWindowStateToken(eventLogPath);
     try {
       const window = placeSessionEventLogWindow(eventLogPath);
+      for (const file of window.files) assertCompleteEventLogFile(eventLogPath, file.path);
       if (readWindowStateToken(eventLogPath) === before) return window;
     } catch (error) {
       lastError = error;
@@ -196,6 +196,7 @@ export async function rotateSessionEventLogIfNeeded(
   incomingBytes: number,
 ): Promise<boolean> {
   const active = lstatEventLogFile(eventLogPath);
+  if (active) assertCompleteEventLogFile(eventLogPath, eventLogPath);
   if (!active || active.size + incomingBytes <= maxBytes) return false;
 
   readSessionEventLogWindow(eventLogPath);
@@ -330,7 +331,7 @@ async function writeWindowSidecar(
   generations: readonly EventLogGeneration[],
 ): Promise<void> {
   const windowPath = resolveWindowPath(eventLogPath);
-  const tmpPath = `${windowPath}.${process.pid}.${randomUUID()}.tmp`;
+  const tmpPath = `${windowPath}.${process.pid}.tmp`;
   const file = await fs.promises.open(tmpPath, 'wx');
   try {
     try {
@@ -345,6 +346,25 @@ async function writeWindowSidecar(
   } catch (error) {
     await fs.promises.unlink(tmpPath).catch(() => undefined);
     throw error;
+  }
+}
+
+function assertCompleteEventLogFile(eventLogPath: string, filePath: string): void {
+  try {
+    const descriptor = fs.openSync(filePath, 'r');
+    try {
+      const { size } = fs.fstatSync(descriptor);
+      if (size === 0) return;
+      const tail = Buffer.alloc(1);
+      if (fs.readSync(descriptor, tail, 0, 1, size - 1) !== 1 || tail[0] !== 0x0a) {
+        throw unverifiedWindowError(eventLogPath, 'retained event log has an incomplete line');
+      }
+    } finally {
+      fs.closeSync(descriptor);
+    }
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw unverifiedWindowError(eventLogPath, 'retained event log completeness cannot be verified');
   }
 }
 

@@ -1,4 +1,4 @@
-import { afterEach, test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,8 +21,75 @@ import {
 const originalMaxBytes = process.env.AGENT_DEVICE_EVENT_LOG_MAX_BYTES;
 
 afterEach(() => {
+  vi.restoreAllMocks();
   if (originalMaxBytes === undefined) delete process.env.AGENT_DEVICE_EVENT_LOG_MAX_BYTES;
   else process.env.AGENT_DEVICE_EVENT_LOG_MAX_BYTES = originalMaxBytes;
+});
+
+test('a partial failed append refuses later appends and cursor reads without changing evidence', async () => {
+  const eventLogPath = resolveSessionEventLogPath(
+    mkdtempForTestSync('agent-device-event-log-partial-'),
+  );
+  const append = fs.promises.appendFile.bind(fs.promises);
+  const partial = '{"version":1,"summary":';
+  const writes = vi.spyOn(fs.promises, 'appendFile').mockImplementationOnce(async (file) => {
+    await append(file, partial, 'utf8');
+    throw Object.assign(new Error('partial write'), { code: 'ENOSPC' });
+  });
+  appendSessionEvent(eventLogPath, 'default', { kind: 'request.started' }, {});
+  await flushSessionEventLogWrites(eventLogPath);
+  appendSessionEvent(eventLogPath, 'default', { kind: 'request.finished' }, {});
+  await flushSessionEventLogWrites(eventLogPath);
+
+  assert.equal(writes.mock.calls.length, 1);
+  assert.equal(fs.readFileSync(eventLogPath, 'utf8'), partial);
+  assert.equal(readError(eventLogPath, '0').details?.reason, EVENT_LOG_WINDOW_UNVERIFIED_REASON);
+});
+
+test('a persisted incomplete rotated tail refuses placement even when its digest and line count match', async () => {
+  const eventLogPath = resolveSessionEventLogPath(
+    mkdtempForTestSync('agent-device-event-log-partial-rotation-'),
+  );
+  process.env.AGENT_DEVICE_EVENT_LOG_MAX_BYTES = '1024';
+  await appendEvents(eventLogPath, 0, 12);
+  const rotatedPath = resolveRotatedSessionEventLogPath(eventLogPath);
+  const bytes = fs.readFileSync(rotatedPath);
+  assert.equal(bytes.at(-1), 0x0a);
+  fs.truncateSync(rotatedPath, bytes.length - 1);
+
+  assert.equal(readError(eventLogPath, '0').details?.reason, EVENT_LOG_WINDOW_UNVERIFIED_REASON);
+  assert.deepEqual(fs.readFileSync(rotatedPath), bytes.subarray(0, -1));
+});
+
+test('failed temporary-file cleanup cannot accumulate a new sidecar file on each maintenance attempt', async () => {
+  const sessionDir = mkdtempForTestSync('agent-device-event-log-temp-bound-');
+  const eventLogPath = resolveSessionEventLogPath(sessionDir);
+  const existing = `${JSON.stringify({
+    version: 1,
+    kind: 'request.started',
+    session: 'default',
+    ts: '2026-11-12',
+    summary: 'existing'.repeat(16),
+  })}\n`;
+  fs.writeFileSync(eventLogPath, existing);
+  const rename = fs.promises.rename.bind(fs.promises);
+  vi.spyOn(fs.promises, 'rename').mockImplementation(async (source, destination) => {
+    if (String(destination) === `${eventLogPath}.window.json`) {
+      throw Object.assign(new Error('publication refused'), { code: 'EACCES' });
+    }
+    await rename(source, destination);
+  });
+  vi.spyOn(fs.promises, 'unlink').mockRejectedValue(
+    Object.assign(new Error('cleanup refused'), { code: 'EACCES' }),
+  );
+  const env = { AGENT_DEVICE_EVENT_LOG_MAX_BYTES: String(Buffer.byteLength(existing) + 20) };
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    appendSessionEvent(eventLogPath, 'default', { kind: 'request.started' }, env);
+    await flushSessionEventLogWrites(eventLogPath);
+  }
+
+  assert.equal(fs.readdirSync(sessionDir).filter((name) => name.endsWith('.tmp')).length, 1);
+  assert.equal(fs.readFileSync(eventLogPath, 'utf8'), existing);
 });
 
 async function appendEvents(eventLogPath: string, from: number, to: number): Promise<void> {
