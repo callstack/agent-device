@@ -100,7 +100,7 @@ export async function createAgentDeviceTools(
   if (platform) hiddenFields.add('platform');
 
   const tools: ToolSet = {};
-  for (const definition of listCommandTools()) {
+  for (const definition of listCommandTools({ outputSchemas: true })) {
     if (set === 'core' && resolveCommandFrameworkTier(definition.name) !== 'core') continue;
 
     tools[definition.name] = tool({

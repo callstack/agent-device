@@ -95,6 +95,16 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
+    key: 'mcpStructured',
+    names: ['--structured'],
+    type: 'boolean',
+    usageLabel: '--structured',
+    usageDescription:
+      'MCP: advertise tool output schemas and return structuredContent; results are text only by default',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'tenant',
     names: ['--tenant'],
     type: 'string',

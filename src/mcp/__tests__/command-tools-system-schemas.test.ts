@@ -195,7 +195,9 @@ test('MCP navigation output schemas advertise the closed dispatch shapes', () =>
 });
 
 test('MCP tv remote outputSchema accepts named buttons and raw codes and refuses other strings', () => {
-  const tvRemote = listCommandTools().find((tool) => tool.name === 'tv-remote');
+  const tvRemote = listCommandTools({ outputSchemas: true }).find(
+    (tool) => tool.name === 'tv-remote',
+  );
   assert.ok(tvRemote?.outputSchema);
   for (const button of ['up', 'volume-down', 'android-keycode:300', 'android-keycode:2147483647']) {
     assert.deepEqual(

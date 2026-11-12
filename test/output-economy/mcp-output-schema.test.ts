@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
-import type { CommandName } from '@agent-device/command-surface';
-import { listCommandTools } from '../../src/mcp/command-tools.ts';
+import type { CommandName, JsonSchema } from '@agent-device/command-surface';
+import { createMcpMessageHandler } from '../../src/mcp/router.ts';
 import { validateAgainstSchema } from '../../src/mcp/__tests__/output-schema-validator.ts';
 import { captureOutputEconomyDaemonResponses } from './daemon-route-fixtures.ts';
 
@@ -22,7 +22,17 @@ const samples: Array<[string, CommandName, Record<string, unknown>]> = [
   ['network digest', 'network', daemon.networkDigest],
 ];
 
-const outputSchemas = new Map(listCommandTools().map((tool) => [tool.name, tool.outputSchema]));
+// The schemas a client of `agent-device mcp --structured` reads from tools/list: only that mode
+// advertises outputSchemas, and its typed tools return the daemon data as structuredContent.
+const listed = await createMcpMessageHandler({ structured: true })({
+  jsonrpc: '2.0',
+  id: 'list',
+  method: 'tools/list',
+});
+if (!listed || !('result' in listed)) throw new Error('tools/list failed');
+const tools = (listed.result as { tools: Array<{ name: string; outputSchema?: JsonSchema }> })
+  .tools;
+const outputSchemas = new Map(tools.map((tool) => [tool.name, tool.outputSchema]));
 // A sample is checked once its tool advertises an outputSchema; untyped tools have nothing to violate.
 const typedSamples = samples.flatMap(([label, name, data]) => {
   const schema = outputSchemas.get(name);

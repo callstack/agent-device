@@ -19,7 +19,8 @@ import { runCli } from '../cli.ts';
 import { runWebCommand } from '../cli/commands/web.ts';
 import { exitAfterFlush } from '../cli/process-exit.ts';
 
-const MCP_ARGS_MESSAGE = 'mcp accepts no flags or arguments other than --help and --version.';
+const MCP_ARGS_MESSAGE =
+  'mcp accepts no flags or arguments other than --structured, --help, and --version.';
 import { installIsolatedCliTestEnv } from './cli-test-env.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonResponse } from '@agent-device/daemon-client';
@@ -278,6 +279,7 @@ test('#1596: a failing `test` suite exits 1 through the flushed exit path', asyn
 test.each([
   { argv: ['mcp', '--json'], stream: 'stdout', message: MCP_ARGS_MESSAGE },
   { argv: ['mcp', '--debug'], stream: 'stderr', message: MCP_ARGS_MESSAGE },
+  { argv: ['mcp', '--structured', '--debug'], stream: 'stderr', message: MCP_ARGS_MESSAGE },
   {
     argv: ['mcp', 'extra'],
     stream: 'stderr',

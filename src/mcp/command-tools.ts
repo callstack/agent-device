@@ -59,14 +59,20 @@ type CommandToolExecutorDeps = {
     name: CommandName,
     input: Record<string, unknown>,
   ) => Promise<CommandExecutionResult>;
-  /**
-   * `always` returns `structuredContent` for every successful call. A host that reads results as
-   * data, such as the AI SDK adapter, sets it; the MCP server leaves it unset.
-   */
-  structuredContent?: 'always';
+  structuredContent?: StructuredContentMode;
 };
 
-type CommandToolExecutor = {
+/**
+ * When a result carries `structuredContent`. Unset, results are text only: clients that show the
+ * model `structuredContent` instead of the text would otherwise replace the compact text with JSON.
+ * `declared` returns it from every tool that declares an outputSchema, from other tools when the
+ * call asks for machine output, and on every error; `agent-device mcp --structured` sets it.
+ * `always` returns it from every call; a host that reads results as data, such as the AI SDK
+ * adapter, sets it.
+ */
+export type StructuredContentMode = 'declared' | 'always';
+
+export type CommandToolExecutor = {
   /** `signal` cancels the call: an abort closes its in-flight daemon request and the call settles as an error result. */
   execute: (
     name: string,
@@ -119,7 +125,8 @@ function toolInputAudience(metadata: AdmissionMetadata): InputAudienceMap {
   };
 }
 
-export function listCommandTools(): Array<{
+/** `outputSchemas` advertises each typed tool's outputSchema; only a structured host returns data that matches it. */
+export function listCommandTools(options: { outputSchemas: boolean }): Array<{
   name: string;
   description: string;
   inputSchema: JsonSchema;
@@ -129,7 +136,7 @@ export function listCommandTools(): Array<{
     // The registry is keyed by the typed-result commands only (CommandResultMap),
     // so guard the lookup; untyped tools resolve to no outputSchema.
     const outputSchema =
-      definition.name in MCP_COMMAND_OUTPUT_SCHEMAS
+      options.outputSchemas && definition.name in MCP_COMMAND_OUTPUT_SCHEMAS
         ? MCP_COMMAND_OUTPUT_SCHEMAS[definition.name as keyof typeof MCP_COMMAND_OUTPUT_SCHEMAS]
         : undefined;
     const advertised = advertisedInputSchema(definition.name, definition);
@@ -175,6 +182,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
       if (rejection) {
         return await buildErrorToolResult(
           new AppError('INVALID_ARGS', rejection.message, compactHint(rejection.hint)),
+          deps.structuredContent,
           refPins,
           undefined,
           input.session,
@@ -199,7 +207,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
         refPins.mergeCommandResult(name, result, config.client.stateDir, commandInput.session);
         return {
           isError: false,
-          ...(deps.structuredContent === 'always' || returnsStructuredContent(name, config)
+          ...(returnsStructuredContent(deps.structuredContent, name, config)
             ? { structuredContent: await projectStructuredContent(name, result) }
             : {}),
           content: [
@@ -212,8 +220,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
                 input: commandInput,
                 result,
                 env: host.env,
-                outputFormat: config.outputFormat,
-                responseLevel: config.client.responseLevel,
+                config,
               }),
             },
           ],
@@ -221,6 +228,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
       } catch (error) {
         return await buildErrorToolResult(
           error,
+          deps.structuredContent,
           refPins,
           config.client.stateDir,
           commandInput.session,
@@ -232,12 +240,13 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
 
 /**
  * ADR 0012: a command error is a ref-issuing result — `isError: true`, the
- * normalized error as `structuredContent`, and an `available`
+ * normalized error as `structuredContent` for a structured host, and an `available`
  * `divergence.screen`'s refs merged/pinned at `refsGeneration` like any
  * ref-issuing success. Merge-only; never clears existing pins.
  */
 async function buildErrorToolResult(
   error: unknown,
+  mode: StructuredContentMode | undefined,
   refPins: ToolRefPinStore,
   stateDir: string | undefined,
   session: unknown,
@@ -246,12 +255,10 @@ async function buildErrorToolResult(
   refPins.mergeErrorDetails(normalized.details, stateDir, session);
   return {
     isError: true,
-    structuredContent: normalized,
+    ...(mode ? { structuredContent: normalized } : {}),
     content: [{ type: 'text', text: formatToolErrorText(normalized) }],
   };
 }
-
-export const commandToolExecutor = createCommandToolExecutor();
 
 async function createClient(
   deps: CommandToolExecutorDeps,
@@ -288,17 +295,15 @@ async function runCommand(
   return await commandSurface.runCommand(client, name, input);
 }
 
-/**
- * A typed tool must return its declared `structuredContent`. A tool without an `outputSchema` has
- * no structured contract, so it returns the compact text alone unless the caller asks for machine
- * output. Some clients, Claude Code among them, show the model `structuredContent` instead of the
- * text, so an unrequested raw result would replace the compact text in the model's context.
- */
-function returnsStructuredContent(name: CommandName, config: McpToolConfig): boolean {
-  if (name in MCP_COMMAND_OUTPUT_SCHEMAS) return true;
-  return (
-    rendersJsonText(config.outputFormat, config.client.responseLevel) || config.client.cost === true
-  );
+/** See {@link StructuredContentMode}: a declared tool must return its declared `structuredContent`. */
+function returnsStructuredContent(
+  mode: StructuredContentMode | undefined,
+  name: CommandName,
+  config: McpToolConfig,
+): boolean {
+  if (mode === 'always') return true;
+  if (mode !== 'declared') return false;
+  return name in MCP_COMMAND_OUTPUT_SCHEMAS || rendersJsonText(config);
 }
 
 function readMcpToolConfig(
@@ -566,15 +571,14 @@ async function renderToolText(params: {
   input: Record<string, unknown>;
   result: CommandExecutionResult;
   env: EnvMap;
-  outputFormat: McpOutputFormat;
-  responseLevel?: ResponseLevel;
+  config: McpToolConfig;
 }): Promise<string> {
   // A non-default responseLevel (digest/full) hands back a leveled payload whose
   // shape the optimized CLI formatters do not understand (e.g. the snapshot
   // formatter expects `nodes`, which the digest drops) — rendering it through
-  // them would print misleading text that contradicts `structuredContent`. Emit
-  // the leveled payload verbatim as JSON instead.
-  if (rendersJsonText(params.outputFormat, params.responseLevel)) {
+  // them would print misleading text. The cost rides only on the data, which the
+  // formatters drop. Emit the payload verbatim as JSON instead.
+  if (rendersJsonText(params.config)) {
     return renderJsonText(params.result);
   }
   const cliOutput = await formatCliOutput({
@@ -600,10 +604,16 @@ function toolTextWithWarnings(name: CommandName, cliOutput: CliOutput): string {
   return stderr === '' ? text : `${text}${text.endsWith('\n') ? '' : '\n'}${stderr}`;
 }
 
-function rendersJsonText(outputFormat: McpOutputFormat, responseLevel?: ResponseLevel): boolean {
-  return outputFormat === 'json' || (responseLevel !== undefined && responseLevel !== 'default');
+/** Machine output requested: the JSON form, a leveled payload, or the cost that rides only on the data. */
+function rendersJsonText(config: McpToolConfig): boolean {
+  const { responseLevel, cost } = config.client;
+  return (
+    config.outputFormat === 'json' ||
+    (responseLevel !== undefined && responseLevel !== 'default') ||
+    cost === true
+  );
 }
 
 function renderJsonText(value: unknown): string {
-  return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  return typeof value === 'string' ? value : JSON.stringify(value);
 }

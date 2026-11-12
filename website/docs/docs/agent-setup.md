@@ -51,15 +51,17 @@ Capture screenshots, logs, network, audio, perf, traces, recordings, and `.ad` r
 
 ## MCP server
 
-`agent-device mcp` starts the stdio MCP server. It exposes installed CLI commands as structured tools. Some local workflows are CLI-only and have no MCP tool.
+`agent-device mcp` starts the stdio MCP server. It exposes installed CLI commands as tools. Some local workflows are CLI-only and have no MCP tool.
 
-`agent-device mcp` accepts no flags or arguments other than `--help` and `--version`; any other argument fails with `INVALID_ARGS`. To configure the server, set `AGENT_DEVICE_*` environment variables or `AGENT_DEVICE_CONFIG` in the client's server entry. For example, set the state directory with `AGENT_DEVICE_STATE_DIR`, and the remote `tenant`, `runId`, and `leaseId` with `AGENT_DEVICE_TENANT`, `AGENT_DEVICE_RUN_ID`, and `AGENT_DEVICE_LEASE_ID` (or the same keys in `~/.agent-device/config.json`). Tool calls cannot pass these values.
+`agent-device mcp` accepts no flags or arguments other than `--structured`, `--help`, and `--version`; any other argument fails with `INVALID_ARGS`. To configure the server, set `AGENT_DEVICE_*` environment variables or `AGENT_DEVICE_CONFIG` in the client's server entry. For example, set the state directory with `AGENT_DEVICE_STATE_DIR`, and the remote `tenant`, `runId`, and `leaseId` with `AGENT_DEVICE_TENANT`, `AGENT_DEVICE_RUN_ID`, and `AGENT_DEVICE_LEASE_ID` (or the same keys in `~/.agent-device/config.json`). Tool calls cannot pass these values.
 
 For web automation, MCP tools can target `platform: "web"` once the managed browser backend is set up, but `agent-device web setup` and `agent-device web doctor` are CLI-only. Run setup from a terminal that uses the same state directory as the MCP server before you ask an MCP client to drive a browser session.
 
 MCP-only clients don't need a separately installed skill. When a client connects (`initialize` and `server/discover`), the server returns short `instructions` with the core workflow: start with `open`, act with `settle: true`, verify, `close`, how to keep refs accurate, and how to recover when the accessibility tree is sparse. An MCP-only `help` tool returns the same guides as `agent-device help <topic|command>`. Agents don't call `help` at startup; they call it for specialized work (gestures, scripting, TV, macOS, web, remote, debugging) or when a command is unclear.
 
-Tool results are compact text. A tool that declares an output schema, such as `press` or `wait`, also returns `structuredContent` that matches it. On success, other tools, such as `snapshot` and `open`, return text only, because some clients show the model `structuredContent` instead of the text. They return `structuredContent` when you pass `mcpOutputFormat: "json"`, a non-default `responseLevel`, or `includeCost`. A failed call always returns the error in `structuredContent`.
+Tool results are compact text, such as `@e4 [button] "Products"` lines and settled UI diffs. Tools declare no output schema, and results carry no `structuredContent`, because some clients show the model `structuredContent` instead of the text. Pass `mcpOutputFormat: "json"`, a non-default `responseLevel`, or `includeCost` to get the result as JSON text.
+
+If your client reads results as data, start the server with `agent-device mcp --structured`. Tools that have a typed result, such as `press` or `wait`, then declare an output schema and return `structuredContent` that matches it. Other tools return `structuredContent` when you ask for JSON as above. A failed call returns the error in `structuredContent`.
 
 Tools that act on a UI element take its target as top-level arguments, in the same words as the CLI: `press {"ref":"@e12"}`, `click {"selector":"id=\"submit\""}`, or `press {"x":120,"y":340}`. `get` takes `ref` or `selector`.
 

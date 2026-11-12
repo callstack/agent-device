@@ -311,9 +311,9 @@ async function parseCliInputOrExit(
     return await exitOnParseFailure(
       new AppError(
         'INVALID_ARGS',
-        'mcp accepts no flags or arguments other than --help and --version.',
+        'mcp accepts no flags or arguments other than --structured, --help, and --version.',
         {
-          hint: 'Run agent-device mcp alone. Configure the server with AGENT_DEVICE_* environment variables or AGENT_DEVICE_CONFIG.',
+          hint: 'Run agent-device mcp or agent-device mcp --structured. Configure the server with AGENT_DEVICE_* environment variables or AGENT_DEVICE_CONFIG.',
         },
       ),
       argv,

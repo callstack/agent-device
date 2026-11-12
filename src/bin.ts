@@ -17,10 +17,10 @@ runEntry(
     mcp: async () => {
       const { runAgentDeviceMcpServer } = await import('./mcp/server.ts');
       return {
-        runAgentDeviceMcpServer: async () =>
+        runAgentDeviceMcpServer: async (options) =>
           await withCommandHost(
             { host, requestEnv: undefined },
-            async () => await runAgentDeviceMcpServer(),
+            async () => await runAgentDeviceMcpServer(options),
           ),
       };
     },
