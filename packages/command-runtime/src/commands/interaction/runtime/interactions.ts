@@ -20,7 +20,7 @@ import {
   type PostActionObservationOptions,
 } from './post-action-observation.ts';
 import { resolveInteractionTarget, type InteractionTarget } from './resolution.ts';
-import { guardResolvedTargetAgainstMotion } from './moving-target-gate.ts';
+import { admitResolvedTarget } from './pre-dispatch-admission.ts';
 import { pointObservationOf } from './target-visibility-stages.ts';
 import { dispatchNativeRefInteraction } from './native-ref-interaction.ts';
 import type {
@@ -145,8 +145,8 @@ async function tapCommand(
     : await maybeTapRefTarget(runtime, options, action);
   if (nativeRefTap) return nativeRefTap;
 
-  // One request object for the resolution and for the re-resolutions #3471's gate may spend, so the
-  // second look is the same question asked again rather than a differently-configured one.
+  // One request object for the resolution and for the looks admission may spend, so a second look is
+  // the same question asked again rather than a differently-configured one.
   const resolutionRequest: ResolveInteractionTargetParams = {
     action,
     requireInteractive: true,
@@ -159,15 +159,7 @@ async function tapCommand(
   if (!runtime.backend.tap) {
     throw new AppError('UNSUPPORTED_OPERATION', 'tap is not supported by this backend');
   }
-  // The moving-target gate (#3471): after every pre-dispatch guard has accepted the target and
-  // before the device is touched. A press issued straight after an action that animated the UI can
-  // otherwise resolve a point the control has already vacated and report success on the vacancy.
-  const atRest = await guardResolvedTargetAgainstMotion(
-    runtime,
-    options,
-    resolutionRequest,
-    resolved,
-  );
+  const atRest = await admitResolvedTarget(runtime, options, resolutionRequest, resolved);
   const point = requireResolvedPoint(atRest);
   const pointObservation = pointObservationOf(atRest);
   let backendResult;

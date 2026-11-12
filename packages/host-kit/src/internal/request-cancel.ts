@@ -1,8 +1,11 @@
 import {
   AppError,
   createRequestCanceledError,
+  createRequestDeadlineError,
   isRequestCanceledDetails,
   isRequestCanceledError,
+  isRequestDeadlineDetails,
+  REQUEST_DEADLINE_REASON,
 } from '@agent-device/kernel/errors';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { runtimeSlot } from '../runtime-slots.ts';
@@ -159,6 +162,15 @@ export function getRequestResultDeadlineMs(requestId: string | undefined): numbe
   return requestId ? requestAbortControllers().get(requestId)?.resultDeadlineMs : undefined;
 }
 
+/** The earlier of the request's execution and result deadlines, if it runs under either. */
+export function getRequestDeadlineMs(requestId: string | undefined): number | undefined {
+  const deadlines = [
+    getRequestExecutionDeadlineMs(requestId),
+    getRequestResultDeadlineMs(requestId),
+  ].filter((deadlineMs) => deadlineMs !== undefined);
+  return deadlines.length > 0 ? Math.min(...deadlines) : undefined;
+}
+
 export function throwIfRequestCanceled(requestId: string | undefined): void {
   getRequestSignal(requestId)?.throwIfAborted();
   if (isRequestCanceled(requestId)) {
@@ -166,24 +178,17 @@ export function throwIfRequestCanceled(requestId: string | undefined): void {
   }
 }
 
-const DEADLINE_MESSAGE = 'Daemon request deadline exceeded';
-const DEADLINE_HINT =
-  'Check completed steps and the current device state before retrying the timed-out operation.';
-
 function deadlineFailure(error: unknown, timeoutMs: number, requestId: string): AppError {
-  const prior = error instanceof AppError ? error.details : undefined;
-  return new AppError(
-    'COMMAND_FAILED',
-    DEADLINE_MESSAGE,
+  const { hint, ...prior } = error instanceof AppError ? (error.details ?? {}) : {};
+  return createRequestDeadlineError(
     {
       ...prior,
-      ...(typeof prior?.reason === 'string' && prior.reason !== 'daemon_request_timeout'
+      ...(typeof prior.reason === 'string' && !isRequestDeadlineDetails(prior)
         ? { causeReason: prior.reason }
         : {}),
-      reason: 'daemon_request_timeout',
       timeoutMs,
       requestId,
-      hint: isRequestCanceledError(error) ? DEADLINE_HINT : (prior?.hint ?? DEADLINE_HINT),
+      ...(hint === undefined || isRequestCanceledError(error) ? {} : { hint }),
     },
     error,
   );
@@ -192,19 +197,20 @@ function deadlineFailure(error: unknown, timeoutMs: number, requestId: string): 
 function projectDeadlineResponse(result: DaemonResponse, timeoutMs: number): DaemonResponse {
   if (result.ok) return result;
   const priorReason = result.error.details?.reason;
+  const deadline = createRequestDeadlineError();
   return {
     ...result,
     error: {
       ...result.error,
       ...(isRequestCanceledDetails(result.error.details)
-        ? { message: DEADLINE_MESSAGE, hint: DEADLINE_HINT }
+        ? { message: deadline.message, hint: String(deadline.details?.hint) }
         : {}),
       details: {
         ...result.error.details,
-        ...(typeof priorReason === 'string' && priorReason !== 'daemon_request_timeout'
+        ...(typeof priorReason === 'string' && !isRequestDeadlineDetails(result.error.details)
           ? { causeReason: priorReason }
           : {}),
-        reason: 'daemon_request_timeout',
+        reason: REQUEST_DEADLINE_REASON,
         timeoutMs,
       },
     },

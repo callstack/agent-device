@@ -404,6 +404,31 @@ export function createRequestCanceledError(details?: AppErrorDetails, cause?: un
   );
 }
 
+/** `details.reason` of a request whose deadline passed before its work could finish. */
+export const REQUEST_DEADLINE_REASON = 'daemon_request_timeout';
+
+/** Whether `details` carry the {@link REQUEST_DEADLINE_REASON}, for a caller holding details. */
+export function isRequestDeadlineDetails(details: AppErrorDetails | undefined): boolean {
+  return details?.reason === REQUEST_DEADLINE_REASON;
+}
+
+/**
+ * The error of a request whose deadline passed before its work could finish. `details` may add
+ * evidence (`timeoutMs`, `requestId`, a cause reason) or override the hint; the reason is fixed.
+ */
+export function createRequestDeadlineError(details?: AppErrorDetails, cause?: unknown): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    'Daemon request deadline exceeded',
+    {
+      hint: 'Check completed steps and the current device state before retrying the timed-out operation.',
+      ...details,
+      reason: REQUEST_DEADLINE_REASON,
+    },
+    cause,
+  );
+}
+
 /**
  * The typed reason of a canceled request, for a caller holding the details rather than the error:
  * a rule table that matches on details needs the same fact {@link isRequestCanceledError} reads, and

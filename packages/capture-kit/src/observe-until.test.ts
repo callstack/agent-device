@@ -195,3 +195,107 @@ describe('observeUntil late capture', () => {
     assert.equal(observed.polls.length, 2);
   });
 });
+
+describe('observeUntil hard deadline', () => {
+  test('minPolls cannot take a poll that would start at or after the deadline', async () => {
+    const clock = fakeClock();
+    let captures = 0;
+    const observed = await observeUntil({
+      capture: async () => {
+        captures += 1;
+        return captures;
+      },
+      verdict: () => ({ kind: 'continue' }),
+      schedule: { ...SCHEDULE, minPolls: 3 },
+      deadlineMs: clock.now() + 300,
+      clock,
+    });
+    assert.equal(observed.kind, 'deadline');
+    assert.equal(observed.kind === 'deadline' && observed.last, 2);
+    assert.deepEqual(clock.slept, [200]);
+  });
+
+  test('a verdict that raises the budget cannot pass the deadline', async () => {
+    const clock = fakeClock();
+    const observed = await observeUntil({
+      capture: async () => 1,
+      verdict: () => ({ kind: 'continue', budgetMs: 10_000 }),
+      schedule: SCHEDULE,
+      deadlineMs: clock.now() + 500,
+      clock,
+    });
+    assert.equal(observed.kind, 'deadline');
+    assert.ok(observed.waitedMs < 500);
+  });
+
+  test('a capture that finishes at or past the deadline is not judged', async () => {
+    const clock = fakeClock();
+    let judged = 0;
+    const observed = await observeUntil({
+      capture: async () => {
+        clock.advance(400);
+        return 'late';
+      },
+      verdict: () => {
+        judged += 1;
+        return { kind: 'done', result: 'accepted' };
+      },
+      schedule: SCHEDULE,
+      deadlineMs: clock.now() + 300,
+      clock,
+    });
+    assert.equal(observed.kind, 'deadline');
+    assert.equal(judged, 0);
+    assert.equal(observed.polls.length, 1);
+  });
+});
+
+describe('observeUntil hard deadline precedence', () => {
+  test('a capture that finishes exactly at the deadline is not judged', async () => {
+    const clock = fakeClock();
+    let judged = 0;
+    const observed = await observeUntil({
+      capture: async () => {
+        clock.advance(300);
+        return 'on time?';
+      },
+      verdict: () => {
+        judged += 1;
+        return { kind: 'done', result: 'accepted' };
+      },
+      schedule: SCHEDULE,
+      deadlineMs: clock.now() + 300,
+      clock,
+    });
+    assert.equal(observed.kind, 'deadline');
+    assert.equal(judged, 0);
+  });
+
+  test('an initial value is not judged once the deadline has passed', async () => {
+    const clock = fakeClock();
+    const observed = await observeUntil({
+      capture: async () => 2,
+      verdict: (latest) => ({ kind: 'done', result: latest }),
+      schedule: SCHEDULE,
+      initial: 1,
+      deadlineMs: clock.now(),
+      clock,
+    });
+    assert.equal(observed.kind, 'deadline');
+  });
+
+  test('the deadline wins when a slow verdict spends both the budget and the deadline', async () => {
+    const clock = fakeClock();
+    const observed = await observeUntil({
+      capture: async () => 1,
+      verdict: () => {
+        clock.advance(2_000);
+        return { kind: 'continue' };
+      },
+      schedule: SCHEDULE,
+      deadlineMs: clock.now() + 1_500,
+      clock,
+    });
+    assert.equal(observed.kind, 'deadline');
+  });
+});
