@@ -40,10 +40,12 @@ placeholders. `--no-record` suppresses recorded action entries; request start/fi
 record command, status, and timing.
 
 The timeline is best effort. An event line larger than the configured file cap or 16 MiB is dropped.
-Each session can have at most 128 events and 16 MiB of event data awaiting a write; further events are
-dropped until capacity is available. These drops do not fail the command. Look for the
-`session_event_log_write_failed` diagnostic to identify missing entries, including write or rotation
-failures. Failed entries are not replayed.
+The per-session limit is 128 events and 16 MiB of event data, including the write in progress.
+Further events are dropped until capacity is available. These drops do not fail the command, and
+failed entries are not replayed. To capture write or rotation failure diagnostics while reproducing
+missing entries, run the command with `--debug`, then look for `session_event_log_write_failed` in
+`requests/<request-id>.ndjson` inside the session artifact directory. An active `trace` also records
+these diagnostics in its trace file.
 
 To debug a specific run, start with the session artifact directory. The top-level daemon log only
 covers daemon startup and lifecycle issues.
