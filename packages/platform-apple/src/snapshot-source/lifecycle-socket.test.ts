@@ -3,6 +3,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { once } from 'node:events';
 import { test } from 'vitest';
+import { SnapshotSourceError } from '@agent-device/capture-kit/snapshot-source-channel';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { createSnapshotSourceHost } from './host.ts';
 import { SnapshotBridgeManager } from './lifecycle.ts';
@@ -32,6 +33,7 @@ test('local socket closure between requests and in flight permits later acquisit
   const socketPath = path.join(mkdtempForTestSync('bridge-socket-'), 's');
   const peers: net.Socket[] = [];
   let reply = true;
+  let receivedRequests = 0;
   server.on('connection', (peer) => {
     peers.push(peer);
     let buffered = Buffer.alloc(0);
@@ -40,6 +42,7 @@ test('local socket closure between requests and in flight permits later acquisit
       if (buffered.length < 4 || buffered.length < buffered.readUInt32BE(0) + 4) return;
       const size = buffered.readUInt32BE(0);
       const request = JSON.parse(buffered.subarray(4, size + 4).toString());
+      receivedRequests += 1;
       buffered = buffered.subarray(size + 4);
       if (!reply) {
         peer.destroy();
@@ -82,17 +85,18 @@ test('local socket closure between requests and in flight permits later acquisit
     await request();
     assert.equal(peers.length, 2);
     reply = false;
-    let settlements = 0;
     await assert.rejects(
-      request().finally(() => {
-        settlements++;
-      }),
+      request(),
+      (error: unknown) =>
+        error instanceof SnapshotSourceError &&
+        error.failureKind === 'transport-failure' &&
+        error.failureCode === 'bridge-connection-closed',
     );
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    assert.equal(settlements, 1);
+    assert.equal(receivedRequests, 3);
     reply = true;
     await request();
     assert.equal(peers.length, 3);
+    assert.equal(receivedRequests, 4);
   } finally {
     await manager.close();
     for (const peer of peers) peer.destroy();

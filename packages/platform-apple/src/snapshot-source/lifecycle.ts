@@ -140,8 +140,7 @@ export class SnapshotBridgeManager {
     } else if (normalized.failureKind === 'process-crash') {
       await this.removeSession(session, false);
     } else if (normalized.failureKind === 'transport-failure') {
-      session.socket?.destroy();
-      session.socket = undefined;
+      retireBridgeSocket(session);
     }
     return normalized;
   }
@@ -386,17 +385,11 @@ export class SnapshotBridgeManager {
         if (stop.aborted) throw closedSourceRefusal();
         throw snapshotSourceError('cancelled', 'abort-signal');
       }
-      const invalidate = () => {
-        if (session.socket === socket) session.socket = undefined;
-      };
-      const onError = () => {
-        invalidate();
-        socket.destroy();
-      };
+      const onError = () => retireBridgeSocket(session, socket);
       const onClose = () => {
-        invalidate();
         socket.off('error', onError);
         socket.off('close', onClose);
+        retireBridgeSocket(session, socket);
       };
       socket.on('error', onError);
       socket.on('close', onClose);
@@ -482,14 +475,14 @@ export class SnapshotBridgeManager {
     deadline: SnapshotSourceDeadline,
     turn: OwnedWork,
   ): Promise<SnapshotBridgeEnvelope> {
-    if (!session.socket || session.socket.destroyed) {
-      await this.connectUntilReady(session, deadline, turn.interrupt.signal);
-    }
-    const socket = session.socket;
-    if (!socket || socket.destroyed)
-      throw snapshotSourceError('transport-failure', 'bridge-connection-closed');
+    const socket =
+      session.socket && !session.socket.destroyed
+        ? session.socket
+        : await this.connectUntilReady(session, deadline, turn.interrupt.signal);
     // Nothing is sent once a close owns this turn: the bridge it would reach is being stopped.
     if (refusedByClose(this.closed, turn)) throw closedSourceRefusal();
+    if (socket.destroyed)
+      throw snapshotSourceError('transport-failure', 'bridge-connection-closed');
     const requestId = randomUUID();
     const request = createSnapshotBridgeDescribeRequest({
       requestId,
@@ -574,8 +567,7 @@ export class SnapshotBridgeManager {
   }
 
   private async dispose(session: BridgeSession, stopProcess: boolean): Promise<void> {
-    session.socket?.destroy();
-    session.socket = undefined;
+    retireBridgeSocket(session);
     if (stopProcess && session.process.isAlive()) {
       session.process.signal('SIGTERM');
       await waitForProcess(session.process, SHUTDOWN_TERM_TIMEOUT_MS);
@@ -586,6 +578,11 @@ export class SnapshotBridgeManager {
     }
     await this.host.remove(session.socketPath);
   }
+}
+
+function retireBridgeSocket(session: BridgeSession, socket = session.socket): void {
+  if (session.socket === socket) session.socket = undefined;
+  socket?.destroy();
 }
 
 function liveSession(entry: BridgeEntry | undefined): BridgeSession | undefined {
