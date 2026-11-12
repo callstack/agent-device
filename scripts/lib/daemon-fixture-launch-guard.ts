@@ -13,87 +13,67 @@ type FixtureSource = Readonly<{ file: string; source: string }>;
 
 /** Follows local fixture imports so a renamed helper or a new consumer cannot leave the guard. */
 export function scanDaemonFixtureLaunches(files: readonly FixtureSource[]): string[] {
-  const family = new Set<string>();
-  const imports = new Map<string, string[]>();
   const paths = new Set(files.map(({ file }) => file));
-  const candidates = familyCandidates(files, paths);
-  for (const { file, source } of files) {
-    if (!candidates.has(file)) continue;
-    const parsed = parseSync(file, source);
-    if (parsed.errors.length)
-      throw new Error(`Cannot scan daemon fixtures in ${file}: ${parsed.errors[0]!.message}`);
-    const dependencies: string[] = [];
-    visitAst(parsed.program, (node) => {
-      if (
-        node.type === 'CallExpression' &&
-        memberName(asNode(node.callee) ?? {}) === 'createRegisteredDaemonFixtures'
-      )
-        family.add(file);
-      if (
-        node.type !== 'ImportDeclaration' &&
-        node.type !== 'ExportNamedDeclaration' &&
-        node.type !== 'ExportAllDeclaration'
-      )
-        return;
-      const specifier = asNode(node.source)?.value;
-      if (typeof specifier !== 'string') return;
-      if (
-        nodeList(node.specifiers).some(
-          (entry) => propertyName(asNode(entry)?.imported) === 'createRegisteredDaemonFixtures',
-        )
-      )
-        family.add(file);
-      if (specifier.startsWith('.')) {
-        const dependency = resolveLocalImport(file, specifier, paths);
-        if (dependency) dependencies.push(dependency);
-      }
-    });
-    imports.set(file, dependencies);
-  }
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const [file, dependencies] of imports) {
-      if (!family.has(file) && dependencies.some((dependency) => family.has(dependency))) {
-        family.add(file);
-        changed = true;
-      }
+  const parsed = new Map(files.map(({ file, source }) => [file, parseFixtureSource(file, source)]));
+  const importers = new Map<string, string[]>();
+  for (const [file, { dependencies }] of parsed) {
+    for (const specifier of dependencies) {
+      const dependency = resolveLocalImport(file, specifier, paths);
+      if (dependency) importers.set(dependency, [...(importers.get(dependency) ?? []), file]);
     }
   }
+  // Only a file that could name the seed needs its tree walked; everything else joins through imports.
+  const seeds = files
+    .filter(({ file, source }) => mayNameSeed(source) && namesSeed(parsed.get(file)!.program()))
+    .map(({ file }) => file);
+  const family = reachedFrom(seeds, importers);
   return files
     .filter(({ file }) => family.has(file))
     .flatMap(({ file, source }) => daemonFixtureLaunchViolations(source, file));
 }
 
-const FAMILY_SEED = 'createRegisteredDaemonFixtures';
-const RELATIVE_SPECIFIER = /['"](\.{1,2}(?:\/[^'"\n]*)?)['"]/g;
+type ParsedFixtureSource = Readonly<{ program: () => AstNode; dependencies: readonly string[] }>;
 
-/**
- * A superset of the family found from text alone: files that name the seed helper, plus every file
- * that reaches one through a quoted relative path. Only these need the AST pass, and the exact
- * family is always inside this set.
- */
-function familyCandidates(
-  files: readonly FixtureSource[],
-  paths: ReadonlySet<string>,
-): Set<string> {
-  const seeds = files.filter(({ source }) => source.includes(FAMILY_SEED)).map(({ file }) => file);
-  return reachedFrom(seeds, quotedRelativeImporters(files, paths));
+/** Relative module requests come from the parser's module record, so escaped specifiers resolve too. */
+function parseFixtureSource(file: string, source: string): ParsedFixtureSource {
+  const parsed = parseSync(file, source);
+  if (parsed.errors.length)
+    throw new Error(`Cannot scan daemon fixtures in ${file}: ${parsed.errors[0]!.message}`);
+  const requests = [
+    ...parsed.module.staticImports.map((entry) => entry.moduleRequest.value),
+    ...parsed.module.staticExports.flatMap((entry) =>
+      entry.entries.flatMap((item) => (item.moduleRequest ? [item.moduleRequest.value] : [])),
+    ),
+  ];
+  return {
+    // The tree is built on first access, so only seed candidates pay for it.
+    program: () => parsed.program as unknown as AstNode,
+    dependencies: requests.filter((request) => request.startsWith('.')),
+  };
 }
 
-/** Maps each file to the files whose quoted relative paths resolve to it. */
-function quotedRelativeImporters(
-  files: readonly FixtureSource[],
-  paths: ReadonlySet<string>,
-): Map<string, string[]> {
-  const importers = new Map<string, string[]>();
-  for (const { file, source } of files) {
-    for (const match of source.matchAll(RELATIVE_SPECIFIER)) {
-      const dependency = resolveLocalImport(file, match[1]!, paths);
-      if (dependency) importers.set(dependency, [...(importers.get(dependency) ?? []), file]);
-    }
-  }
-  return importers;
+const FAMILY_SEED = 'createRegisteredDaemonFixtures';
+
+/** A cheap superset of seed files: the name in plain text, or any escape that could spell it. */
+function mayNameSeed(source: string): boolean {
+  return source.includes(FAMILY_SEED) || source.includes('\\u');
+}
+
+function namesSeed(program: AstNode): boolean {
+  let found = false;
+  visitAst(program, (node) => {
+    if (found) return;
+    if (node.type === 'CallExpression' && memberName(asNode(node.callee) ?? {}) === FAMILY_SEED)
+      found = true;
+    if (node.type !== 'ImportDeclaration' && node.type !== 'ExportNamedDeclaration') return;
+    if (
+      nodeList(node.specifiers).some(
+        (entry) => propertyName(asNode(entry)?.imported) === FAMILY_SEED,
+      )
+    )
+      found = true;
+  });
+  return found;
 }
 
 function reachedFrom(
