@@ -488,7 +488,7 @@ Device cloud interfaces:
 Direct proxy flow for a remote Mac/simulator:
   On the Mac with simulator/device access:
     cloudflared tunnel --url http://127.0.0.1:4310
-    # Once the tunnel reports its public name:
+    # In a second terminal, after the tunnel reports its public name:
     agent-device proxy --port 4310 --public-origin https://example.trycloudflare.com
   Forwarding headers do not set upload ticket origins. For an ephemeral tunnel, obtain its public name, then configure and restart the proxy.
   On the remote client:

@@ -78,7 +78,8 @@ the proxy does not serve, which gets a plain `Not found` 404.
 ### Serve uploads through a TLS tunnel
 
 Set `publicOrigin` to the public HTTP(S) origin when TLS terminates before the proxy, for example
-`https://public.example:8443`. With the CLI, run
+`https://public.example:8443`. Use the scheme, host and optional port, without credentials, a path,
+query or fragment. With the CLI, run
 `agent-device proxy --port 4310 --public-origin https://public.example:8443`. For an ephemeral
 tunnel, obtain its public name first, then configure and restart the proxy. This replaces the
 previous first-`X-Forwarded-Proto` behavior.
