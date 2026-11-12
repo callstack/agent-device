@@ -63,7 +63,9 @@ MCP-only clients don’t need a separately installed skill. When a client connec
 
 Tool results are compact text. A tool that declares an output schema, such as `press` or `wait`, also returns `structuredContent` that matches it. On success, other tools, such as `snapshot` and `open`, return text only, because some clients show the model `structuredContent` instead of the text. They return `structuredContent` when you pass `mcpOutputFormat: "json"`, a non-default `responseLevel`, or `includeCost`. A failed call always returns the error in `structuredContent`.
 
-When a tool fails, the server returns an MCP tool result with `isError: true`. Check the tool result, not only whether the JSON-RPC call succeeded.
+Tools that act on a UI element take its target as top-level arguments, in the same words as the CLI: `press {"ref":"@e12"}`, `click {"selector":"id=\"submit\""}`, or `press {"x":120,"y":340}`. `get` takes `ref` or `selector`.
+
+When a tool fails, the server returns an MCP tool result with `isError: true`. Check the tool result, not only whether the JSON-RPC call succeeded. A call with an argument the tool doesn’t take fails with `INVALID_ARGS`, and its hint shows a call that the tool accepts.
 
 The server runs one `tools/call` at a time, in the order it receives them. It answers `ping`, `tools/list`, and the handshake at once, even while a long tool call such as `test` or `wait` runs. A `notifications/cancelled` for a running or queued `tools/call` stops it, and the server sends no response for that request. Cancellation stops the daemon request, not work that already reached the device: on iOS, a command the device received keeps running there, and the session waits for it. See [Command methods](/docs/client-api#command-methods). A JSON-RPC batch cannot carry a `tools/call`; the server refuses that element with `-32600`.
 
@@ -473,15 +475,15 @@ Pass `batch` a JSON array of steps:
   { "command": "open", "input": { "app": "settings" } },
   {
     "command": "wait",
-    "input": { "kind": "selector", "selector": "label=\"Privacy & Security\"", "timeoutMs": 3000 }
+    "input": { "selector": "label=\"Privacy & Security\"", "timeoutMs": 3000 }
   },
   {
     "command": "click",
-    "input": { "target": { "kind": "selector", "selector": "label=\"Privacy & Security\"" } }
+    "input": { "selector": "label=\"Privacy & Security\"" }
   },
   {
     "command": "get",
-    "input": { "format": "text", "target": { "kind": "selector", "selector": "label=\"Tracking\"" } }
+    "input": { "format": "text", "selector": "label=\"Tracking\"" }
   }
 ]
 ```
@@ -559,16 +561,16 @@ Open app -> open thread -> type -> send
 [
   { "command": "open", "input": { "app": "com.example.chat", "platform": "android" } },
   { "command": "wait", "input": { "kind": "text", "text": "Inbox", "timeoutMs": 3000 } },
-  { "command": "press", "input": { "target": { "kind": "selector", "selector": "label=\"Inbox\" role=button" } } },
-  { "command": "press", "input": { "target": { "kind": "selector", "selector": "label=\"Morgan Lee\"" } } },
+  { "command": "press", "input": { "selector": "label=\"Inbox\" role=button" } },
+  { "command": "press", "input": { "selector": "label=\"Morgan Lee\"" } },
   {
     "command": "fill",
     "input": {
-      "target": { "kind": "selector", "selector": "label=\"Message\" role=text-field" },
+      "selector": "label=\"Message\" role=text-field",
       "text": "sent the update"
     }
   },
-  { "command": "press", "input": { "target": { "kind": "selector", "selector": "label=\"Send\" role=button" } } },
+  { "command": "press", "input": { "selector": "label=\"Send\" role=button" } },
   { "command": "wait", "input": { "kind": "text", "text": "sent the update", "timeoutMs": 3000 } }
 ]
 ```
@@ -581,10 +583,10 @@ Open app -> open action menu -> choose option -> verify
   { "command": "wait", "input": { "kind": "text", "text": "Home", "timeoutMs": 3000 } },
   {
     "command": "press",
-    "input": { "target": { "kind": "selector", "selector": "label=\"More actions\" role=button" } }
+    "input": { "selector": "label=\"More actions\" role=button" }
   },
   { "command": "wait", "input": { "kind": "text", "text": "Scan document", "timeoutMs": 2000 } },
-  { "command": "press", "input": { "target": { "kind": "selector", "selector": "label=\"Scan document\"" } } },
+  { "command": "press", "input": { "selector": "label=\"Scan document\"" } },
   { "command": "wait", "input": { "kind": "text", "text": "Document uploaded", "timeoutMs": 15000 } },
   { "command": "is", "input": { "predicate": "visible", "selector": "label=\"Document uploaded\"" } }
 ]
@@ -4549,19 +4551,19 @@ Example batch payload for a known chat flow:
 ```json
 [
   { "command": "open", "input": { "app": "ChatApp", "platform": "android" } },
-  { "command": "click", "input": { "target": { "kind": "selector", "selector": "label=\"Travel chat\"" } } },
+  { "command": "click", "input": { "selector": "label=\"Travel chat\"" } },
   {
     "command": "wait",
-    "input": { "kind": "selector", "selector": "label=\"Message\"", "timeoutMs": 3000 }
+    "input": { "selector": "label=\"Message\"", "timeoutMs": 3000 }
   },
   {
     "command": "fill",
     "input": {
-      "target": { "kind": "selector", "selector": "label=\"Message\"" },
+      "selector": "label=\"Message\"",
       "text": "Sent the update"
     }
   },
-  { "command": "press", "input": { "target": { "kind": "selector", "selector": "label=\"Send\"" } } }
+  { "command": "press", "input": { "selector": "label=\"Send\"" } }
 ]
 ```
 
