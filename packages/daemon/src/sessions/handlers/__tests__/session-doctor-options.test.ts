@@ -26,6 +26,18 @@ test('the same-device warning names the other session by its address, not its na
   expect(check?.evidence).toMatchObject({ session: here, sameDeviceSessions: [other] });
 });
 
+test('the same-device close suggestion shell-quotes a session name with metacharacters', () => {
+  const store = makeSessionStore();
+  const here = 'cwd:aaaaaaaaaaaaaaaa:default';
+  const other = 'a;b $(x)';
+  store.publish(here, makeIosSession('default'));
+  store.publish(other, makeIosSession(other));
+
+  const [check] = sessionChecks(store, here, store.get(here));
+
+  expect(check?.hint).toContain("agent-device close --session 'a;b $(x)' --platform");
+});
+
 test('a session alone on its device passes with its own address in evidence', () => {
   const store = makeSessionStore();
   const here = 'cwd:aaaaaaaaaaaaaaaa:default';

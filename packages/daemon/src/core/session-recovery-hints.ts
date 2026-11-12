@@ -102,8 +102,8 @@ function buildRecordingSessionRecoveryHint(
       : `reuse --session ${sessionArg}`;
 
   return (
-    `A recording session, possibly another agent's or user's, holds this device. ${CHOOSE_ANOTHER_DEVICE}` +
-    `Only if that session is yours: run ${recordStopCommand}, then ${closeCommand}; or ${reuseText}.`
+    `A recording session, maybe another agent's or user's, holds this device. ${CHOOSE_ANOTHER_DEVICE}` +
+    `Only if it is yours: run ${recordStopCommand}, then ${closeCommand} if it still exists; or ${reuseText}.`
   );
 }
 
@@ -113,7 +113,8 @@ function buildRecordingSessionRecoveryHint(
  * what `close --session` and `--session` take, and for an implicit session it is the store key
  * rather than the `default` name `session list` shows (#2031) — but reusing it would run this
  * workspace's commands inside the other workspace's session, so switching device and waiting are
- * offered first, and closing it only to a caller that owns it.
+ * offered first. Closing it stays on offer, conditioned on the workspace: it is often the caller's
+ * own from another folder.
  */
 function buildForeignWorkspaceSessionRecoveryHint(
   sessionAddress: string,
@@ -121,9 +122,9 @@ function buildForeignWorkspaceSessionRecoveryHint(
 ): string {
   const sessionArg = shellQuoteIfNeeded(sessionAddress);
   return (
-    `${describeOpenWaitAttempt(options)}The holding session is another workspace's, possibly another agent's or user's. ` +
+    `${describeOpenWaitAttempt(options)}The holding session belongs to another workspace, possibly another agent's or user's. ` +
     `${CHOOSE_ANOTHER_DEVICE}${waitForDeviceHint(options)}` +
-    `Run agent-device close --session ${sessionArg} only if that session is yours.`
+    `Run agent-device close --session ${sessionArg} only if that workspace is yours.`
   );
 }
 

@@ -54,6 +54,21 @@ test('device-in-use recovery lists non-takeover options before reusing or closin
   expect(hint.slice(0, firstTakeover)).toMatch(/only if that session is yours/i);
 });
 
+test('foreign-workspace recovery lists non-takeover options before closing the holder', () => {
+  const hint = String(
+    buildForeignWorkspaceSessionConflict(scopedRef(), IOS_SIMULATOR, { offersDeviceWait: true })
+      .error.details?.hint,
+  );
+
+  const close = hint.indexOf(`close --session ${SCOPED_ADDRESS}`);
+  expect(close).toBeGreaterThan(-1);
+  expect(hint.indexOf('agent-device devices')).toBeGreaterThan(-1);
+  expect(hint.indexOf('agent-device devices')).toBeLessThan(close);
+  expect(hint.indexOf('--wait <ms>')).toBeGreaterThan(-1);
+  expect(hint.indexOf('--wait <ms>')).toBeLessThan(close);
+  expect(hint.slice(close)).toMatch(/only if that workspace is yours/);
+});
+
 test('selector-conflict recovery uses the same address', () => {
   const hint = buildSessionRecoveryHint(scopedRef(), 'selector-conflict');
 

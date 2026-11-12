@@ -1,5 +1,6 @@
 import { detectProjectRuntimeKind } from '@agent-device/host-kit/project-runtime';
 import { publicPlatformString } from '@agent-device/kernel/device';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import type { SessionStore } from '../../core/session-store.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionState } from '../../core/session-state.ts';
@@ -120,6 +121,7 @@ export function sessionChecks(
     ];
   }
 
+  const [otherSession] = sameDeviceSessions;
   return [
     {
       id: 'session',
@@ -131,8 +133,8 @@ export function sessionChecks(
       // No `command`: agents run that field verbatim, and the daemon cannot tell whether another
       // session is the caller's, so the close stays conditional in the hint.
       hint:
-        sameDeviceSessions.length > 0
-          ? `Before a QA run, run agent-device close --session ${sameDeviceSessions[0]} --platform ${publicPlatformString(session.device)} only if that session is yours and left from an old attempt.`
+        otherSession !== undefined
+          ? `Before a QA run, run agent-device close --session ${shellQuoteIfNeeded(otherSession)} --platform ${publicPlatformString(session.device)} only if that session is yours and left from an old attempt.`
           : undefined,
       evidence: {
         session: sessionName,

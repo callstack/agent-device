@@ -142,7 +142,7 @@ test('open on device owned by recording session returns recording recovery hint'
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(response.error.code).toBe('DEVICE_IN_USE');
-    expect(response.error.details?.hint).toContain('A recording session, possibly another agent');
+    expect(response.error.details?.hint).toContain('A recording session, maybe another agent');
     expect(response.error.details?.hint).toContain('agent-device record stop --session default');
     expect(response.error.details?.hint).toContain('agent-device close --session default');
     expect(response.error.details?.hint).toContain('agent-device devices');
