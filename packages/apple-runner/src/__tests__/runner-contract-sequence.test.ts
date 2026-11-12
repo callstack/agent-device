@@ -218,7 +218,43 @@ test('a sequence step that failed after hand-off reads like the standalone comma
       assert.equal(error.code, 'COMMAND_FAILED');
       assert.equal(error.details?.runnerErrorCode, 'SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN');
       assert.equal(error.details?.reason, 'synthesized_gesture_outcome_unknown');
+      assert.equal(error.details?.dispatched, 'unknown');
       return true;
     },
   );
+});
+
+function sequenceFailure(results: Array<Record<string, unknown>>): AppError {
+  const failedStepIndex = results.findIndex((result) => result.ok !== true);
+  try {
+    parseRunnerSequenceResult({
+      sequenceResults: results,
+      completedSteps: failedStepIndex,
+      failedStepIndex,
+    });
+  } catch (error) {
+    assert.ok(error instanceof AppError);
+    return error;
+  }
+  throw new Error('expected a sequence failure');
+}
+
+const notDispatchedLongPress = {
+  ok: false,
+  kind: 'longPress',
+  errorCode: 'SYNTHESIZED_GESTURE_NOT_DISPATCHED',
+  errorMessage: 'synthesis refused',
+};
+
+test('a first step refused before dispatch means the sequence sent nothing', () => {
+  const error = sequenceFailure([notDispatchedLongPress]);
+  assert.equal(error.code, 'COMMAND_FAILED');
+  assert.equal(error.details?.runnerErrorCode, 'SYNTHESIZED_GESTURE_NOT_DISPATCHED');
+  assert.equal(error.details?.dispatched, 'no');
+});
+
+test('a step refused before dispatch after an earlier step ran leaves the sequence unknown', () => {
+  const error = sequenceFailure([{ ok: true, kind: 'tap' }, notDispatchedLongPress]);
+  assert.equal(error.details?.runnerErrorCode, 'SYNTHESIZED_GESTURE_NOT_DISPATCHED');
+  assert.equal(error.details?.dispatched, 'unknown');
 });

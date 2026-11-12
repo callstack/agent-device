@@ -177,7 +177,9 @@ A synthesized long press, drag, or planned gesture reports how far it got.
 so the command sent nothing. `SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN` means it failed after its event
 record was handed to XCTest. That is not confirmed delivery: the record can still fail before its
 events run. The gesture may have run, so the runner does not fall back to an XCTest gesture that
-would repeat it, and a sequence step reports the same code.
+would repeat it. A sequence long-press step reports the same two codes. The host reports a failed
+sequence step with the step code's dispatch disclosure only when no earlier step ran; after one did,
+the sequence is `dispatched: unknown`.
 
 ## Maintenance Rules
 

@@ -277,6 +277,29 @@ extension RunnerTests {
     XCTAssertEqual(presses, 0, "and never pressed through XCTest")
   }
 
+  /// A sequence long-press step refused before its events reached XCTest reports the same
+  /// not-dispatched code as the standalone command, whether or not an earlier step ran. The host
+  /// reads the sequence as sent nothing only when no earlier step ran.
+  @MainActor
+  func testSequenceLongPressRefusedBeforeDispatchIsNotDispatched() throws {
+    for (steps, failedIndex) in [
+      (#"[{"kind":"longPress","x":40,"y":200,"durationMs":300}]"#, 0),
+      (#"[{"kind":"tap","x":40,"y":200},{"kind":"longPress","x":40,"y":200,"durationMs":300}]"#, 1),
+    ] {
+      let (response, presses) = try longPressWithFailingSynthesis(
+        dispatchedBeforeFailing: false,
+        health: .unavailable,
+        command: #"{"command":"sequence","commandId":"refused-synthesis-sequence-\#(failedIndex)","steps":\#(steps)}"#
+      )
+
+      XCTAssertEqual(response.data?.completedSteps, failedIndex)
+      XCTAssertEqual(response.data?.failedStepIndex, failedIndex)
+      let step = try XCTUnwrap(response.data?.sequenceResults?.last)
+      XCTAssertEqual(step.errorCode, RunnerWireErrorCode.synthesizedGestureNotDispatched)
+      XCTAssertEqual(presses, 0)
+    }
+  }
+
   /// One refused before its events reached XCTest sent nothing, and says so.
   @MainActor
   func testLongPressSynthesisRefusedBeforeDispatchIsNotDispatched() throws {

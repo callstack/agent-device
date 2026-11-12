@@ -216,11 +216,17 @@ extension RunnerTests {
       case .performed(let timing):
         return finishedSequenceStep(step, timing: timing, outcome: .performed)
       case .refused(let timing, let message, let hint):
-        return finishedSequenceStep(
+        var refused = finishedSequenceStep(
           step,
           timing: timing,
           outcome: .unsupported(message: message, hint: hint)
         )
+        // As on the standalone command, a long press that may have run throws instead, so this one
+        // sent nothing. The host still reports the sequence as unknown when an earlier step ran.
+        if policyKind == .coordinateLongPress {
+          refused.errorCode = RunnerWireErrorCode.synthesizedGestureNotDispatched
+        }
+        return refused
       case .xctestFallback:
         break
       }
