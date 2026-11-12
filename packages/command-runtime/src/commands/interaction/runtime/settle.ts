@@ -463,11 +463,6 @@ function capSettleDiffLines<T extends { kind: string }>(changed: T[]): T[] {
   return kept;
 }
 
-/**
- * The settled observation's hint. A surface change (#2438) is stated alongside whatever the loop
- * itself reports rather than in place of it: the transition explains the missing diff, and the
- * loop's own verdict (stalled, never settled, sparse, tiny tree) still explains the capture.
- */
 function withFullViewBaselineHint(
   resolved: { hint?: string },
   fullViewBaselineReset: boolean,
@@ -478,6 +473,11 @@ function withFullViewBaselineHint(
   };
 }
 
+/**
+ * The settled observation's hint. A surface change (#2438) is stated alongside whatever the loop
+ * itself reports rather than in place of it: the transition explains the missing diff, and the
+ * loop's own verdict (stalled, never settled, sparse, tiny tree) still explains the capture.
+ */
 function resolveSettleHint(
   outcome: { settled: boolean; stalled: boolean },
   stored: boolean,
