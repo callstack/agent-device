@@ -140,7 +140,14 @@ function longestBoundedAddress(): string {
   const cwd = mkdtempForTestSync('agent-device-hint-scope-');
   const workspaceAddresses = [undefined, ...PLATFORM_SELECTORS].map((platform) =>
     resolveEffectiveSessionName(
-      { command: 'open', positionals: [], flags: { platform }, meta: { cwd } } as DaemonRequest,
+      {
+        command: 'open',
+        token: 'test-token',
+        session: 'default',
+        positionals: [],
+        flags: { platform },
+        meta: { cwd },
+      } satisfies DaemonRequest,
       makeSessionStore(),
     ),
   );
