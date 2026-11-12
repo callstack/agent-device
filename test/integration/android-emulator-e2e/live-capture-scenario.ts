@@ -3,11 +3,23 @@ import path from 'node:path';
 
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { assertPngFile } from '../provider-scenarios/assertions.ts';
+import { assertScreenshotDemoPermissionRestoration } from './live-demo-permission-scenario.ts';
 import { type LiveContext, runStep, verifyCommand } from './live-harness.ts';
 
 const C = PUBLIC_COMMANDS;
 
 export async function assertCaptureAndClose(context: LiveContext): Promise<void> {
+  await assertScreenshotDemoPermissionRestoration({
+    serial: context.serial,
+    artifactDir: context.artifactDir,
+    captureScreenshot: async (filePath) => {
+      await runStep(context, 'capture normalized permission restoration evidence', [
+        'screenshot',
+        filePath,
+        '--normalize-status-bar',
+      ]);
+    },
+  });
   const screenshotPath = path.join(context.artifactDir, 'fixture-smoke.png');
   const screenshot = await runStep(context, 'capture fixture screenshot', [
     'screenshot',
