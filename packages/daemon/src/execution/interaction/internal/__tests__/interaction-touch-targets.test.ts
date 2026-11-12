@@ -292,3 +292,12 @@ test('parseTouchRefSequence refuses a trailing positional after the plan', () =>
   expect(parsed.response.error.code).toBe('INVALID_ARGS');
   expect(parsed.response.error.message).toContain('takes no trailing label');
 });
+
+test('parseTouchTarget refuses a malformed generation suffix as a second key', () => {
+  // `@e14~s` is generation-shaped enough that treating it as a fallback label
+  // would dispatch only the first key.
+  const parsed = parseTouchTarget(['@e13', '@e14~s'], 'press');
+  expect(parsed.ok).toBe(false);
+  if (parsed.ok || parsed.response.ok) return;
+  expect(parsed.response.error.message).toContain('Separate the keys');
+});

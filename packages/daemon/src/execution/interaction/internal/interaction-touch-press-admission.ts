@@ -206,7 +206,7 @@ function sequenceRecordingGuardResponse(
   parsedTarget: ParsedTargetedTouch,
 ): DaemonResponse | undefined {
   if (!parsedTarget.refs) return undefined;
-  if (isSessionRecording(session)) {
+  if (isSessionRecording(session) && !req.flags?.noRecord) {
     return errorResponse(
       'INVALID_ARGS',
       'A multi-ref press sequence cannot be recorded: the recorder binds one target per step, so the recorded step would press only the first key. Record one press per key, or pass --no-record on this step.',

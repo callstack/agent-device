@@ -240,7 +240,7 @@ const tapInteractionResponseDataSchema = interactionResponseDataSchema({
         },
       },
       ['pressed', 'refs', 'points'],
-      'Present when the command ran a multi-ref plan (press @e13,@e14,...): one press per key, in order.',
+      'Present when the command ran a multi-ref plan (press @e13,@e14,...): one action per key, in order.',
     ),
   },
 });
@@ -496,7 +496,7 @@ const pressCommandFacet = defineCommandFacet({
   text: {
     summary: 'Short-press a UI target',
     cliDetail:
-      'The hold duration is positional on longpress, not press --hold-ms. Enter a fixed key plan in one command with a comma-separated ref sequence: press @e13,@e14,@e15,@e16 presses each key in order (2 to 16 refs; a repeated ref presses the same key twice, for a PIN digit). The whole plan resolves and admits against the current frame before the first press, so a member that cannot resolve refuses before anything dispatches. The plan is one logical command: key 1 expires the frame, later keys tap where the snapshot showed them, and the motion screen judges the plan once — take a fresh snapshot and rebuild the plan when the screen can move between keys. A later key that refuses carries details.dispatchedSteps counting the keys already sent, details.refPlanKey naming the key that refused, and details.refPlanPending listing the keys that did not run. --interval-ms sleeps between keys; --count, --hold-ms, --jitter-px, --double-tap, and --button apply to every key. The response ref is the first key; sequence.points carries where every key landed. Script recording refuses the sequence form: record one press per key.',
+      'The hold duration is positional on longpress, not press --hold-ms. Enter a fixed key plan in one command with a comma-separated ref sequence: press @e13,@e14,@e15,@e16 presses each key in order (2 to 16 refs; a repeated ref presses the same key twice, for a PIN digit). The whole plan resolves and admits against the current frame before the first press, so a member that cannot resolve refuses before anything dispatches. The plan is one logical command: key 1 expires the frame, later keys tap where the snapshot showed them, and the motion screen judges the plan once — take a fresh snapshot and rebuild the plan when the screen can move between keys. A later key that refuses carries details.dispatchedSteps counting the keys already sent, details.refPlanKey naming the key that refused, and details.refPlanPending listing the keys that did not run. --interval-ms sleeps between keys; --count, --hold-ms, --jitter-px, and --double-tap apply to every key. The response ref is the first key; sequence.points carries where every key landed. Script recording refuses the sequence form: record one press per key.',
   },
   metadata: metadata('press'),
   run: (client, input) => client.interactions.press(toPressOptions(input)),

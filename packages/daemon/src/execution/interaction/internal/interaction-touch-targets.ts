@@ -56,7 +56,7 @@ export function parseTouchTarget(positionals: string[], commandLabel: string): P
     if (
       SEQUENCE_TOUCH_COMMANDS.has(commandLabel) &&
       spaceSeparatedRef !== undefined &&
-      /^@e\d+(~s\d+)?$/.test(spaceSeparatedRef.trim())
+      /^@e\d+(~s?\d*)?$/.test(spaceSeparatedRef.trim())
     ) {
       // `press @e13 @e14` is a comma-separated plan typed with spaces. On the
       // single-ref path the extra positional would become a fallback label and
