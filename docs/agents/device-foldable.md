@@ -2,8 +2,7 @@
 
 Before you change capture behavior on a multi-panel device, read ADR 0025.
 To list the panels, run `xcrun devicectl device info displays --device <udid>`.
-For foldable orientation in either set, read the guest table with `xcrun simctl spawn <udid> ~/.agent-device/fold-helper/<key>/fold-helper panels`.
-For a scoped set, add `--set <set>` after `simctl`.
+For rotation, run `xcrun simctl [--set <set>] spawn <udid> ~/.agent-device/fold-helper/<key>/fold-helper panels`.
 
 - Panels: the list shows each integrated panel with `backlightState`. Only the lit panel permits capture.
   A capture of the dark panel exits 0 and writes an all-black PNG.
