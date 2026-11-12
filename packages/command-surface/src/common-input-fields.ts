@@ -83,11 +83,12 @@ type CommonInputFieldSpec = {
 
 /**
  * The common operator shape: the value comes from the key's own environment
- * variable or its `~/.agent-device/config.json` entry. It covers both kinds of
+ * variable or its `~/.agent-device/config.json` entry. It covers every kind of
  * operator-owned common key — the credential and the endpoint it is sent to
  * (a model-writable `daemonBaseUrl` would redirect the env-resolved
- * `daemonAuthToken` to an arbitrary server), and the build and device-set paths,
- * which select operator infrastructure rather than per-call work.
+ * `daemonAuthToken` to an arbitrary server), the build and device-set paths,
+ * which select operator infrastructure rather than per-call work, and the
+ * tenant, run, lease, and device-allowlist scope the connection is admitted under.
  */
 const ENV_OR_OPERATOR_CONFIG = operatorAudience({ operatorConfig: true });
 
@@ -96,7 +97,7 @@ const RETIRED_READINESS_TIMEOUT_MESSAGE =
 
 const COMMON_INPUT_FIELDS = {
   session: {
-    schema: { type: 'string', description: 'Agent-device session name.' },
+    schema: { type: 'string', description: 'Session name.' },
     read: (record) => optionalString(record, 'session'),
     flagKey: 'session',
     flagIn: ['input'],
@@ -105,7 +106,7 @@ const COMMON_INPUT_FIELDS = {
     schema: {
       type: 'string',
       enum: PLATFORM_SELECTORS,
-      description: 'Platform selector used to resolve a device.',
+      description: 'Device platform.',
     },
     read: (record) => optionalEnum(record, 'platform', PLATFORM_SELECTORS),
     flagKey: 'platform',
@@ -115,7 +116,7 @@ const COMMON_INPUT_FIELDS = {
     schema: {
       type: 'string',
       enum: DEVICE_TARGETS,
-      description: 'Device target form. Maps to the CLI --target flag.',
+      description: 'Device form factor (CLI --target).',
     },
     read: readDeviceTarget,
     clientKey: 'target',
@@ -127,14 +128,13 @@ const COMMON_INPUT_FIELDS = {
     schema: {
       type: 'string',
       enum: DEVICE_TARGETS,
-      description:
-        'Alias for deviceTarget. Commands that take a UI target (ref, selector, or x/y) accept only deviceTarget.',
+      description: 'Alias for deviceTarget.',
     },
   },
   device: {
     schema: {
       type: 'string',
-      description: 'Device name selector (a UDID belongs in udid, a serial in serial).',
+      description: 'Device name; ids go in udid or serial.',
     },
     read: (record) => optionalString(record, 'device'),
     flagKey: 'device',
@@ -143,8 +143,7 @@ const COMMON_INPUT_FIELDS = {
   udid: {
     schema: {
       type: 'string',
-      description:
-        'Apple device or simulator UDID; the selector that pins one device when several share a name.',
+      description: 'Apple device or simulator UDID.',
     },
     read: (record) => optionalString(record, 'udid'),
     flagKey: 'udid',
@@ -153,7 +152,7 @@ const COMMON_INPUT_FIELDS = {
   serial: {
     schema: {
       type: 'string',
-      description: 'Android, HarmonyOS, or Vega VVD serial selector.',
+      description: 'Android, HarmonyOS, or Vega VVD serial.',
     },
     read: (record) => optionalString(record, 'serial'),
     flagKey: 'serial',
@@ -206,6 +205,7 @@ const COMMON_INPUT_FIELDS = {
       description: 'Android serial allowlist used for device resolution.',
     },
     read: (record) => optionalString(record, 'androidDeviceAllowlist'),
+    audience: ENV_OR_OPERATOR_CONFIG,
     flagKey: 'androidDeviceAllowlist',
     flagIn: ['input', 'selection'],
   },
@@ -241,14 +241,17 @@ const COMMON_INPUT_FIELDS = {
   tenant: {
     schema: { type: 'string', description: 'Remote tenant identifier.' },
     read: (record) => optionalString(record, 'tenant'),
+    audience: ENV_OR_OPERATOR_CONFIG,
   },
   runId: {
     schema: { type: 'string', description: 'Lease run identifier.' },
     read: (record) => optionalString(record, 'runId'),
+    audience: ENV_OR_OPERATOR_CONFIG,
   },
   leaseId: {
     schema: { type: 'string', description: 'Existing lease identifier.' },
     read: (record) => optionalString(record, 'leaseId'),
+    audience: ENV_OR_OPERATOR_CONFIG,
   },
   cwd: {
     schema: { type: 'string', description: 'Working directory for command execution.' },

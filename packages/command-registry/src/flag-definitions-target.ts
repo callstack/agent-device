@@ -60,7 +60,7 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription:
       'Proxy lease: OS version or range the backend picks the device by (Android: API level); refused without such a backend',
     inputDescription:
-      'OS version or range for the device a proxy backend leases, for example 18.6.2 or ">=26" (Android: API level), sent as given. A blank string names nothing; a non-string fails with INVALID_ARGS, reason device-spec-invalid. Only the CLI allocating a lease through connect proxy sends it to that backend; a daemon refuses every other request that names it, with reason device-spec-unsupported.',
+      'Proxy lease: OS version or range, for example 18.6.2 or ">=26" (Android: API level). Honored only by a proxy backend that leases by spec; other daemons refuse it.',
     projectConfig: false,
     recorded: false,
   },
@@ -72,7 +72,7 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription:
       'Proxy lease: Android system image tag the backend picks the device by; refused without such a backend',
     inputDescription:
-      'Android system image tag for the device a proxy backend leases, for example google_apis_playstore, sent as given. A blank string names nothing; a non-string fails with INVALID_ARGS, reason device-spec-invalid. Only the CLI allocating a lease through connect proxy sends it to that backend; a daemon refuses every other request that names it, with reason device-spec-unsupported.',
+      'Proxy lease: Android system image tag, for example google_apis_playstore. Honored only by a proxy backend that leases by spec; other daemons refuse it.',
     projectConfig: false,
     recorded: false,
   },
@@ -84,7 +84,7 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription:
       'Proxy lease: iOS simulator mode (slim or full) the backend leases; refused without such a backend',
     inputDescription:
-      'iOS simulator mode for the device a proxy backend leases, slim or full, sent as given; the backend validates it. A blank string names nothing; a non-string fails with INVALID_ARGS, reason device-spec-invalid. Only the CLI allocating a lease through connect proxy sends it to that backend; a daemon refuses every other request that names it, with reason device-spec-unsupported.',
+      'Proxy lease: iOS simulator mode, slim or full. Honored only by a proxy backend that leases by spec; other daemons refuse it.',
     projectConfig: false,
     recorded: false,
   },
@@ -96,7 +96,7 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription:
       'Proxy lease: saved device state (baseline) the backend restores on the leased device; refused without such a backend',
     inputDescription:
-      'Name of a saved, prepared device state (baseline) that a proxy backend restores on the device it leases, sent as given; the backend validates it. A blank string names nothing; a non-string fails with INVALID_ARGS, reason device-spec-invalid. A new lease that does not report this baseline in lease.device.baseline is released and fails with reason device-spec-unsupported. Only the CLI allocating a lease through connect proxy sends it to that backend; a daemon refuses every other request that names it, with reason device-spec-unsupported.',
+      'Proxy lease: saved device state (baseline) to restore on the leased device. Honored only by a proxy backend that leases by spec; other daemons refuse it.',
     projectConfig: false,
     recorded: false,
   },
@@ -108,7 +108,7 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription:
       'Proxy lease: ask the backend for a physical device instead of a simulator or emulator; refused without such a backend',
     inputDescription:
-      'Ask a proxy backend to lease a physical device instead of a simulator or emulator. false names nothing; a non-boolean fails with INVALID_ARGS, reason device-spec-invalid. Only the CLI allocating a lease through connect proxy sends true to that backend; a daemon refuses every other request that names it, with reason device-spec-unsupported.',
+      'Proxy lease: a physical device instead of a simulator or emulator. Honored only by a proxy backend that leases by spec; other daemons refuse it.',
     projectConfig: false,
     recorded: false,
   },

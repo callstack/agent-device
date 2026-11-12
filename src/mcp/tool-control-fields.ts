@@ -32,23 +32,20 @@ const MCP_TOOL_CONFIG_FIELDS = {
     schema: {
       type: 'string',
       enum: ['optimized', 'json'],
-      description:
-        'MCP text content format. Defaults to optimized agent-friendly text; use json for JSON text and structured content from every tool.',
+      description: 'Text format (default optimized); json adds structuredContent.',
     },
   },
   includeCost: {
     schema: {
       type: 'boolean',
-      description:
-        'Include per-command agent-cost (cost.wallClockMs, …) in structuredContent. Defaults to off; the default response shape is unchanged.',
+      description: 'Add agent cost (cost.wallClockMs, …) to structuredContent.',
     },
   },
   responseLevel: {
     schema: {
       type: 'string',
       enum: ['digest', 'default', 'full'],
-      description:
-        'Response verbosity: token-cheap digest / default (today) / full. Defaults to default; the default response shape is unchanged.',
+      description: 'Response verbosity (default: default).',
     },
   },
 } as const satisfies Record<string, McpToolConfigFieldSpec>;

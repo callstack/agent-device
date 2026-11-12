@@ -15,7 +15,7 @@ import type { ToolResult } from './command-tools.ts';
  * `open`, act → settled diff → verify → `close`, ref fidelity, sparse-AX recovery, follow
  * error hints. Everything situational lives behind the `help` tool.
  */
-export const MCP_SERVER_INSTRUCTIONS = `agent-device drives iOS, Android, tvOS, Android TV, macOS, Linux, and web apps. Tools mirror CLI commands of the same name; CLI flags are camelCase properties (--settle -> settle: true).
+export const MCP_SERVER_INSTRUCTIONS = `agent-device drives iOS, Android, tvOS, Android TV, macOS, Linux, and web apps. Tools mirror CLI commands of the same name; CLI flags are camelCase properties (--settle -> settle: true). If your client defers tool schemas, load a tool's schema before its first call.
 
 Start: known app -> call open {app, foreground: true} at once; do not probe with devices, apps, appstate, snapshot, or screenshot first. open returns the initial interactive snapshot with @refs. Unknown app id: devices, then apps, then open the discovered id; never invent ids. Existing session: continue from its state, do not reopen.
 
