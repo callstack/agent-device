@@ -207,7 +207,7 @@ async function readSettledOutcome(
       // advisory state.
       ...(diffShown
         ? buildSettleDiffAndTail(
-            params.baseline,
+            params.baseline.nodes,
             settledNodes,
             params.actionPoint,
             session?.appBundleId,
@@ -327,14 +327,12 @@ function buildSettleDiff(
 }
 
 function buildSettleDiffAndTail(
-  baseline: SurfaceScopedNodes,
+  baselineNodes: SnapshotNode[],
   settledNodes: SnapshotNode[],
   actionPoint: Point | undefined,
   appBundleId: string | undefined,
 ): Pick<SettleObservation, 'diff' | 'tail' | 'tailTruncated'> {
-  const diff = buildSettleDiff(baseline.nodes, settledNodes, appBundleId);
-  // The tail names next interactive targets, which a full-tree settle capture does not single out.
-  if (baseline.fullView === true) return { diff };
+  const diff = buildSettleDiff(baselineNodes, settledNodes, appBundleId);
   return { diff, ...buildSettleTail(diff, settledNodes, actionPoint, appBundleId) };
 }
 

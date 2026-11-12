@@ -93,8 +93,8 @@ test('a ref press after a full snapshot settles on the full tree and reports no 
 
   assert.ok(views.length > 0 && views.every((view) => view === 'full'));
   assert.deepEqual(result.settle?.diff?.summary, { additions: 0, removals: 0, unchanged: 4 });
-  // The tail names interactive targets, which a full-tree capture does not single out.
-  assert.equal(result.settle?.tail, undefined);
+  // An unchanged screen still hands back refs to act on next, from the full-tree view.
+  assert.ok(result.settle?.tail?.some((entry) => entry.label === 'OK'));
 });
 
 test('a ref press after a scoped full snapshot keeps the interactive settle view', async () => {
