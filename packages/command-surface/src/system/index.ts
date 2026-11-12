@@ -626,6 +626,7 @@ export const telephonyDaemonWriter: DaemonWriter = direct(TELEPHONY_COMMAND_NAME
 
 const appStateCommandFacet = defineParameterlessCommandFacet({
   name: APPSTATE_COMMAND_NAME,
+  effect: 'read',
   description: appStateCommandDescription,
   text: {
     summary: 'Show the foreground app and activity',
@@ -635,6 +636,7 @@ const appStateCommandFacet = defineParameterlessCommandFacet({
 
 const backCommandFacet = defineCommandFacet({
   name: BACK_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Navigate back in the app or system',
   },
@@ -647,6 +649,7 @@ const backCommandFacet = defineCommandFacet({
 
 const homeCommandFacet = defineParameterlessCommandFacet({
   name: HOME_COMMAND_NAME,
+  effect: 'write',
   description: homeCommandDescription,
   text: {
     summary: 'Go to the device home screen',
@@ -656,6 +659,7 @@ const homeCommandFacet = defineParameterlessCommandFacet({
 
 const orientationCommandFacet = defineCommandFacet({
   name: ORIENTATION_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Set device orientation',
   },
@@ -668,6 +672,7 @@ const orientationCommandFacet = defineCommandFacet({
 
 const foldCommandFacet = defineCommandFacet({
   name: FOLD_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Fold or unfold a foldable iPhone simulator or Android emulator',
     cliDetail: `iPhone Duo simulators and foldable Android emulators. iOS sends a ${foldGuidance.hingeEvent} and confirms the hinge angle inside the simulator; Android sets the emulator console posture and confirms the device state. Refs and coordinates do not survive a pose change.`,
@@ -681,6 +686,7 @@ const foldCommandFacet = defineCommandFacet({
 
 const appSwitcherCommandFacet = defineParameterlessCommandFacet({
   name: APP_SWITCHER_COMMAND_NAME,
+  effect: 'write',
   description: appSwitcherCommandDescription,
   text: {
     summary: 'Open the device app switcher',
@@ -690,6 +696,7 @@ const appSwitcherCommandFacet = defineParameterlessCommandFacet({
 
 const keyboardCommandFacet = defineCommandFacet({
   name: KEYBOARD_COMMAND_NAME,
+  effect: 'destructive',
   text: {
     summary: 'Inspect, press, or dismiss the device keyboard',
   },
@@ -702,6 +709,7 @@ const keyboardCommandFacet = defineCommandFacet({
 
 const clipboardCommandFacet = defineCommandFacet({
   name: CLIPBOARD_COMMAND_NAME,
+  effect: 'destructive',
   text: {
     summary: 'Read or write device clipboard text',
   },
@@ -714,6 +722,7 @@ const clipboardCommandFacet = defineCommandFacet({
 
 const actionButtonCommandFacet = defineParameterlessCommandFacet({
   name: ACTION_BUTTON_COMMAND_NAME,
+  effect: 'destructive',
   description: actionButtonCommandDescription,
   text: {
     summary: 'Press the iPhone or iPad Action Button',
@@ -725,6 +734,7 @@ const actionButtonCommandFacet = defineParameterlessCommandFacet({
 
 const tvRemoteCommandFacet = defineCommandFacet({
   name: TV_REMOTE_COMMAND_NAME,
+  effect: 'destructive',
   text: {
     summary: 'Press a TV remote navigation, media, or hardware button',
     cliDetail:
@@ -739,6 +749,7 @@ const tvRemoteCommandFacet = defineCommandFacet({
 
 const hardwareButtonCommandFacet = defineCommandFacet({
   name: HARDWARE_BUTTON_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Press a phone hardware button once',
     cliDetail:
@@ -753,6 +764,7 @@ const hardwareButtonCommandFacet = defineCommandFacet({
 
 const telephonyCommandFacet = defineCommandFacet({
   name: TELEPHONY_COMMAND_NAME,
+  effect: 'destructive',
   text: {
     summary: 'Simulate an incoming call or SMS on an Android emulator over adb',
     cliDetail:

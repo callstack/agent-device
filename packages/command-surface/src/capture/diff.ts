@@ -111,6 +111,7 @@ const diffDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.diff, (input) => [
 
 export const diffCommandFacet = defineCommandFacet({
   name: DIFF_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Diff snapshot or screenshot',
     cliDetail:

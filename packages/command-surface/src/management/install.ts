@@ -133,6 +133,7 @@ const installFromSourceDaemonWriter: DaemonWriter = (input) =>
 
 const installCommandFacet = defineCommandFacet({
   name: 'install',
+  effect: 'destructive',
   text: {
     summary: 'Install an app binary from a path',
     cliDetail:
@@ -147,6 +148,7 @@ const installCommandFacet = defineCommandFacet({
 
 const reinstallCommandFacet = defineCommandFacet({
   name: 'reinstall',
+  effect: 'destructive',
   text: {
     summary: 'Replace an installed app with a new build',
   },
@@ -159,6 +161,7 @@ const reinstallCommandFacet = defineCommandFacet({
 
 const uninstallCommandFacet = defineCommandFacet({
   name: 'uninstall',
+  effect: 'destructive',
   text: {
     summary: 'Remove an installed app',
   },
@@ -171,6 +174,7 @@ const uninstallCommandFacet = defineCommandFacet({
 
 const installFromSourceCommandFacet = defineCommandFacet({
   name: 'install-from-source',
+  effect: 'destructive',
   text: {
     summary: 'Install app builds from URLs or CI artifacts',
   },

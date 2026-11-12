@@ -44,6 +44,7 @@ export const debugCliReader: CliReader = (positionals, flags) => ({
 
 export const debugCommandFacet = defineCommandFacet({
   name: DEBUG_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Symbolicate Apple crash artifacts',
   },

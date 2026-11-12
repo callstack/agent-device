@@ -309,6 +309,7 @@ export const testDaemonWriter: AsyncDaemonWriter = async (input, host) => {
 
 export const replayCommandFacet = defineCommandFacet({
   name: REPLAY_COMMAND_NAME,
+  effect: 'destructive',
   text: {
     summary: 'Replay a recorded session or Maestro flow',
     cliDetail:
@@ -323,6 +324,7 @@ export const replayCommandFacet = defineCommandFacet({
 
 export const testCommandFacet = defineCommandFacet({
   name: TEST_COMMAND_NAME,
+  effect: 'destructive',
   text: {
     summary: 'Run replay test suites',
     cliDetail:

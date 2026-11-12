@@ -192,6 +192,7 @@ const closeDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.close, (input) =>
 
 export const appsCommandFacet = defineCommandFacet({
   name: 'apps',
+  effect: 'read',
   text: {
     summary: 'List installed apps or deferred provider app assets',
     cliDetail:
@@ -206,6 +207,7 @@ export const appsCommandFacet = defineCommandFacet({
 
 export const openCommandFacet = defineCommandFacet({
   name: 'open',
+  effect: 'destructive',
   text: {
     summary: 'Open an app, deep link or URL, save replays',
     cliDetail:
@@ -222,6 +224,7 @@ export const openCommandFacet = defineCommandFacet({
 
 export const closeCommandFacet = defineCommandFacet({
   name: 'close',
+  effect: 'destructive',
   text: {
     summary: 'Close an app or end the session',
   },

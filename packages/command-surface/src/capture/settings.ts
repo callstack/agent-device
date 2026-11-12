@@ -98,6 +98,7 @@ function settingsInputApp(input: SettingsUpdateOptions): string | undefined {
 
 export const settingsCommandFacet = defineCommandFacet({
   name: SETTINGS_COMMAND_NAME,
+  effect: 'destructive',
   text: {
     summary: 'Change OS settings and app permissions',
     cliDetail: [

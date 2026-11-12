@@ -77,6 +77,7 @@ const doctorDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.doctor);
 
 export const doctorCommandFacet = defineCommandFacet({
   name: 'doctor',
+  effect: 'write',
   text: {
     summary: 'Diagnose device, app, dev-server, and RN/Expo readiness',
     cliDetail:

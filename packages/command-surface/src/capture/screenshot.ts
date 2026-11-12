@@ -81,6 +81,7 @@ export const screenshotDaemonWriter: DaemonWriter = (input) => {
 
 export const screenshotCommandFacet = defineCommandFacet({
   name: SCREENSHOT_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Capture a screenshot',
     cliDetail:

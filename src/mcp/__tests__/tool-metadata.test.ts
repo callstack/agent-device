@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { resolveCommandRecordingEffect } from '@agent-device/command-registry/registry';
 import { createMcpMessageHandler } from '../router.ts';
 
 type AdvertisedTool = {
@@ -22,6 +23,13 @@ for (const structured of [false, true]) {
       assert.ok(tool.title?.trim(), `${tool.name}: missing title`);
       assert.equal(typeof tool.annotations?.readOnlyHint, 'boolean', tool.name);
       assert.equal(typeof tool.annotations?.destructiveHint, 'boolean', tool.name);
+      if (tool.annotations?.readOnlyHint) {
+        assert.notEqual(
+          resolveCommandRecordingEffect({ command: tool.name, positionals: [] }),
+          'mutates-app',
+          `${tool.name}: a recorded app mutation cannot be read-only`,
+        );
+      }
     }
     for (const name of [
       'devices',
@@ -41,21 +49,17 @@ for (const structured of [false, true]) {
         name,
       );
     }
-    for (const name of [
-      'get',
-      'is',
-      'snapshot',
-      'wait',
-      'find',
-      'clipboard',
-      'session',
-      'batch',
-      'replay',
-      'test',
-      'shutdown',
-      'doctor',
-      'screenshot',
-    ]) {
+    for (const name of ['get', 'is', 'snapshot', 'wait', 'doctor', 'screenshot', 'session']) {
+      assert.deepEqual(
+        tools.find((tool) => tool.name === name)?.annotations,
+        {
+          readOnlyHint: false,
+          destructiveHint: false,
+        },
+        name,
+      );
+    }
+    for (const name of ['find', 'clipboard', 'batch', 'replay', 'test', 'shutdown']) {
       assert.deepEqual(
         tools.find((tool) => tool.name === name)?.annotations,
         {

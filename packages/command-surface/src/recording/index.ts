@@ -124,6 +124,7 @@ export const traceDaemonWriter: DaemonWriter = direct(TRACE_COMMAND_NAME, (input
 
 export const recordCommandFacet = defineCommandFacet({
   name: RECORD_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Start or stop screen recording',
     cliDetail:
@@ -138,6 +139,7 @@ export const recordCommandFacet = defineCommandFacet({
 
 export const traceCommandFacet = defineCommandFacet({
   name: TRACE_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Start or stop trace capture',
   },

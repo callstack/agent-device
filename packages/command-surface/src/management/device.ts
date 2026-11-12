@@ -80,7 +80,7 @@ export const DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS = {
 
 const devicesCommandMetadata = defineFieldCommandMetadata(
   'devices',
-  'List available devices and simulators that can be selected for automation. Results include identifiers accepted by the platform, device, udid, and serial selection inputs.',
+  'List available devices and simulators that can be selected for automation. Results include the platform, device name, and available platform-specific identifiers for selection.',
   {},
 );
 
@@ -138,6 +138,7 @@ const shutdownDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.shutdown);
 
 const devicesCommandFacet = defineCommandFacet({
   name: 'devices',
+  effect: 'read',
   text: {
     summary: 'List available devices and simulators',
   },
@@ -150,6 +151,7 @@ const devicesCommandFacet = defineCommandFacet({
 
 const capabilitiesCommandFacet = defineCommandFacet({
   name: 'capabilities',
+  effect: 'read',
   text: {
     summary: 'List supported commands for the selected device',
     cliDetail: 'Select an explicit target with --platform/--device/--udid/--serial.',
@@ -163,6 +165,7 @@ const capabilitiesCommandFacet = defineCommandFacet({
 
 const bootCommandFacet = defineCommandFacet({
   name: 'boot',
+  effect: 'write',
   text: {
     summary: 'Boot target device/simulator',
   },
@@ -175,6 +178,7 @@ const bootCommandFacet = defineCommandFacet({
 
 const shutdownCommandFacet = defineCommandFacet({
   name: 'shutdown',
+  effect: 'destructive',
   text: {
     summary: 'Shutdown target simulator/emulator',
     cliDetail: 'For an active session, use close --shutdown.',

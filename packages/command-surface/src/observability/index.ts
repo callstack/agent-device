@@ -155,6 +155,7 @@ export const audioDaemonWriter: DaemonWriter = (input) =>
 
 export const logsCommandFacet = defineCommandFacet({
   name: LOGS_COMMAND_NAME,
+  effect: 'destructive',
   text: {
     summary: 'Manage session app logs',
   },
@@ -167,6 +168,7 @@ export const logsCommandFacet = defineCommandFacet({
 
 export const eventsCommandFacet = defineCommandFacet({
   name: EVENTS_COMMAND_NAME,
+  effect: 'read',
   text: {
     summary: 'Read session event timeline',
   },
@@ -179,6 +181,7 @@ export const eventsCommandFacet = defineCommandFacet({
 
 export const networkCommandFacet = defineCommandFacet({
   name: NETWORK_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Inspect HTTP(S) traffic from session logs',
   },
@@ -191,6 +194,7 @@ export const networkCommandFacet = defineCommandFacet({
 
 export const audioCommandFacet = defineCommandFacet({
   name: AUDIO_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Probe audio levels',
   },

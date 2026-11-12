@@ -56,6 +56,7 @@ const viewportDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.viewport, (inp
 
 export const viewportCommandFacet = defineCommandFacet({
   name: 'viewport',
+  effect: 'write',
   text: {
     summary: 'Resize the active web viewport for the current session',
   },

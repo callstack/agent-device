@@ -94,6 +94,7 @@ export const waitDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.wait, (inpu
 
 export const waitCommandFacet = defineCommandFacet({
   name: WAIT_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Wait for a duration, text, selector, strict absence, or stable UI',
   },

@@ -24,7 +24,15 @@ export type JsonSchema = {
   commandInputFor?: string;
 };
 
-export type CommandMetadata<Name extends string, Input> = {
+/** Read excludes artifact writes and foreground changes. Write covers non-destructive updates. */
+export type CommandEffect = 'read' | 'write' | 'destructive';
+
+export type CommandMetadata<Name extends string, Input> = CommandInputMetadata<Name, Input> & {
+  title: string;
+  effect: CommandEffect;
+};
+
+export type CommandInputMetadata<Name extends string, Input> = {
   name: Name;
   description: string;
   /**
@@ -66,8 +74,8 @@ export type CommandMetadata<Name extends string, Input> = {
 };
 
 export function defineCommandMetadata<Name extends string, Input>(
-  definition: CommandMetadata<Name, Input>,
-): CommandMetadata<Name, Input> {
+  definition: CommandInputMetadata<Name, Input>,
+): CommandInputMetadata<Name, Input> {
   return definition;
 }
 

@@ -70,6 +70,7 @@ export const perfDaemonWriter: DaemonWriter = direct(PERF_COMMAND_NAME, (input) 
 
 export const perfCommandFacet = defineCommandFacet({
   name: PERF_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Check frames, memory, or native profiles',
     cliDetail:

@@ -10,7 +10,7 @@ const REACT_NATIVE_COMMAND_NAME = 'react-native';
 const REACT_NATIVE_ACTION_VALUES = ['dismiss-overlay'] as const;
 
 const reactNativeCommandDescription =
-  'Run supported React Native automation helpers. The dismiss-overlay action closes a visible development error overlay.';
+  'Run supported React Native automation helpers. The dismiss-overlay action closes a visible React Native warning or error overlay.';
 
 export const reactNativeCommandMetadata = defineFieldCommandMetadata(
   REACT_NATIVE_COMMAND_NAME,
@@ -37,6 +37,7 @@ export const reactNativeDaemonWriter: DaemonWriter = direct(REACT_NATIVE_COMMAND
 
 export const reactNativeCommandFacet = defineCommandFacet({
   name: REACT_NATIVE_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Run React Native automation helpers',
   },

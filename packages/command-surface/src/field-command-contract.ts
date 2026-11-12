@@ -1,4 +1,4 @@
-import { defineCommandMetadata, type CommandMetadata } from './command-contract.ts';
+import { defineCommandMetadata, type CommandInputMetadata } from './command-contract.ts';
 import {
   fieldAudiences,
   fieldsInputSchema,
@@ -33,19 +33,19 @@ export function defineFieldCommandMetadata<
   description: string,
   fields: TFields,
   options?: FieldCommandPresentationOptions,
-): CommandMetadata<TName, InferCommandInput<TFields>>;
+): CommandInputMetadata<TName, InferCommandInput<TFields>>;
 export function defineFieldCommandMetadata<const TName extends string, TInput>(
   name: TName,
   description: string,
   fields: CommandFieldMap,
   options: FieldCommandOptions<TInput>,
-): CommandMetadata<TName, TInput>;
+): CommandInputMetadata<TName, TInput>;
 export function defineFieldCommandMetadata(
   name: string,
   description: string,
   fields: CommandFieldMap,
   options?: FieldCommandPresentationOptions & Partial<FieldCommandOptions<unknown>>,
-): CommandMetadata<string, unknown> {
+): CommandInputMetadata<string, unknown> {
   return defineCommandMetadata({
     name,
     description,

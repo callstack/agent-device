@@ -129,6 +129,7 @@ const triggerAppEventDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.trigger
 
 const pushCommandFacet = defineCommandFacet({
   name: 'push',
+  effect: 'destructive',
   text: {
     summary: 'Deliver a push notification payload',
   },
@@ -141,6 +142,7 @@ const pushCommandFacet = defineCommandFacet({
 
 const triggerAppEventCommandFacet = defineCommandFacet({
   name: 'trigger-app-event',
+  effect: 'destructive',
   text: {
     summary: 'Invoke an app-defined automation event',
   },

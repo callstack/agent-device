@@ -4,7 +4,12 @@ import type {
   CommandSchemaOverride,
 } from '@agent-device/command-registry/command-schema';
 import type { AnyDaemonWriter, CliReader } from '../cli-grammar/types.ts';
-import type { CommandMetadata, JsonSchema } from '../command-contract.ts';
+import type {
+  CommandEffect,
+  CommandInputMetadata,
+  CommandMetadata,
+  JsonSchema,
+} from '../command-contract.ts';
 import {
   resolveFacetText,
   type FacetCommandText,
@@ -42,7 +47,8 @@ export type CommandFacetInput<
   Result = unknown,
 > = {
   name: TCommandName;
-  metadata: CommandMetadata<TCommandName, Input>;
+  metadata: CommandInputMetadata<TCommandName, Input>;
+  effect: CommandEffect;
   run: (client: AgentDeviceClient, input: Input) => Promise<Result>;
   cliSchema?: CommandSchemaOverride;
   cliReader: CliReader;
@@ -88,7 +94,7 @@ export function defineCommandFacet<const TCommandName extends string, Input, Res
   // resolved text is what every surface renders from.
   const text = resolveFacetText(command.text, command.metadata.description);
   const mcpTail = text.mcpDetail ? { mcpDetail: text.mcpDetail } : {};
-  const metadata = { ...command.metadata, ...mcpTail };
+  const metadata = { ...command.metadata, title: text.summary, effect: command.effect, ...mcpTail };
   const definition: CommandDefinition<TCommandName, Result> = {
     name: metadata.name,
     description: metadata.description,
@@ -118,6 +124,7 @@ export function defineParameterlessCommandFacet<
 >(command: {
   name: TCommandName;
   description: string;
+  effect: CommandEffect;
   text: FacetCommandText;
   run: (
     client: AgentDeviceClient,
@@ -126,6 +133,7 @@ export function defineParameterlessCommandFacet<
 }): CommandFacet<TCommandName, Result> & { daemonWriter: AnyDaemonWriter } {
   return defineCommandFacet({
     name: command.name,
+    effect: command.effect,
     text: command.text,
     metadata: defineFieldCommandMetadata(command.name, command.description, {}),
     run: command.run,

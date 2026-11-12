@@ -128,6 +128,7 @@ export const metroCliReader: CliReader = (positionals, flags) => {
 
 export const metroCommandFacet = defineCommandFacet({
   name: METRO_COMMAND_NAME,
+  effect: 'destructive',
   text: {
     summary: 'Prepare the dev server or reload apps',
     cliDetail:
