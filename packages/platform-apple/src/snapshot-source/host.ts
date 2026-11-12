@@ -118,8 +118,6 @@ async function connectSnapshotBridge(
       connected = true;
       clearTimeout(timer);
       options.signal?.removeEventListener('abort', onAbort);
-      socket.off('error', onError);
-      socket.off('close', onClose);
       socket.setTimeout(0);
       resolve(socket);
     };
@@ -128,6 +126,7 @@ async function connectSnapshotBridge(
       socket.destroy();
     };
     const onClose = () => {
+      socket.off('error', onError);
       if (!connected)
         finish(snapshotSourceError('transport-failure', 'bridge-closed-before-connect'));
     };
@@ -142,7 +141,7 @@ async function connectSnapshotBridge(
       reject(error);
     };
     socket.once('connect', onConnect);
-    socket.once('error', onError);
+    socket.on('error', onError);
     socket.once('close', onClose);
     options.signal?.addEventListener('abort', onAbort, { once: true });
     if (options.signal?.aborted) onAbort();

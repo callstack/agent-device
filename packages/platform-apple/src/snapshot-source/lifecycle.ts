@@ -140,8 +140,7 @@ export class SnapshotBridgeManager {
     } else if (normalized.failureKind === 'process-crash') {
       await this.removeSession(session, false);
     } else if (normalized.failureKind === 'transport-failure') {
-      session.socket?.destroy();
-      session.socket = undefined;
+      retireBridgeSocket(session);
     }
     return normalized;
   }
@@ -220,7 +219,7 @@ export class SnapshotBridgeManager {
     if (existing) {
       if (existing.bridgePath === input.bridge.path && existing.process.isAlive()) {
         if (!existing.socket || existing.socket.destroyed) {
-          existing.socket = await this.connectUntilReady(existing, deadline, turn.interrupt.signal);
+          await this.connectUntilReady(existing, deadline, turn.interrupt.signal);
         }
         return existing;
       }
@@ -330,7 +329,7 @@ export class SnapshotBridgeManager {
       };
       entry.session = session;
       try {
-        session.socket = await this.connectUntilReady(session, deadline, creation.interrupt.signal);
+        await this.connectUntilReady(session, deadline, creation.interrupt.signal);
         assertOpen();
         this.entries.set(udid, { phase: 'live', session });
         return session;
@@ -386,6 +385,15 @@ export class SnapshotBridgeManager {
         if (stop.aborted) throw closedSourceRefusal();
         throw snapshotSourceError('cancelled', 'abort-signal');
       }
+      const onError = () => retireBridgeSocket(session, socket);
+      const onClose = () => {
+        socket.off('error', onError);
+        socket.off('close', onClose);
+        retireBridgeSocket(session, socket);
+      };
+      socket.on('error', onError);
+      socket.on('close', onClose);
+      session.socket = socket;
       return socket;
     }
   }
@@ -467,11 +475,14 @@ export class SnapshotBridgeManager {
     deadline: SnapshotSourceDeadline,
     turn: OwnedWork,
   ): Promise<SnapshotBridgeEnvelope> {
-    if (!session.socket || session.socket.destroyed) {
-      session.socket = await this.connectUntilReady(session, deadline, turn.interrupt.signal);
-    }
+    const socket =
+      session.socket && !session.socket.destroyed
+        ? session.socket
+        : await this.connectUntilReady(session, deadline, turn.interrupt.signal);
     // Nothing is sent once a close owns this turn: the bridge it would reach is being stopped.
     if (refusedByClose(this.closed, turn)) throw closedSourceRefusal();
+    if (socket.destroyed)
+      throw snapshotSourceError('transport-failure', 'bridge-connection-closed');
     const requestId = randomUUID();
     const request = createSnapshotBridgeDescribeRequest({
       requestId,
@@ -494,7 +505,7 @@ export class SnapshotBridgeManager {
     const frame = encodeSnapshotBridgeFrame(request, input.limits);
     return await roundTripSnapshotBridge({
       process: session.process,
-      socket: session.socket,
+      socket,
       frame,
       requestId,
       deadline,
@@ -556,8 +567,7 @@ export class SnapshotBridgeManager {
   }
 
   private async dispose(session: BridgeSession, stopProcess: boolean): Promise<void> {
-    session.socket?.destroy();
-    session.socket = undefined;
+    retireBridgeSocket(session);
     if (stopProcess && session.process.isAlive()) {
       session.process.signal('SIGTERM');
       await waitForProcess(session.process, SHUTDOWN_TERM_TIMEOUT_MS);
@@ -568,6 +578,11 @@ export class SnapshotBridgeManager {
     }
     await this.host.remove(session.socketPath);
   }
+}
+
+function retireBridgeSocket(session: BridgeSession, socket = session.socket): void {
+  if (session.socket === socket) session.socket = undefined;
+  socket?.destroy();
 }
 
 function liveSession(entry: BridgeEntry | undefined): BridgeSession | undefined {
