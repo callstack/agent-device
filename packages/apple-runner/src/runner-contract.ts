@@ -334,7 +334,8 @@ export const NO_TEXT_INPUT_AT_POINT_RUNNER_CODE = 'NO_TEXT_INPUT_AT_POINT';
 export const TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE = 'TEXT_INPUT_PROBE_UNAVAILABLE';
 
 /**
- * The runner codes for a synthesized long press, scroll, swipe, or planned gesture on iOS.
+ * The runner codes for a synthesized long press, scroll, or planned gesture on iOS; the CLI `swipe` is
+ * a planned fling gesture.
  * NOT_DISPATCHED: the event synthesis refused before any of its events reached XCTest, so the
  * command sent nothing. OUTCOME_UNKNOWN: failed after its events reached XCTest, so it may have run;
  * the runner never falls back to repeat it. Any other refusal, a platform one included, keeps
