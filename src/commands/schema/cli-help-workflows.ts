@@ -82,6 +82,13 @@ Logs:
     agent-device open MyApp --platform ios --relaunch --launch-console ./artifacts/app.console.log
   --launch-console is only for local or Limrun iOS simulator app launches, not URL opens.
 
+Network:
+  Use network dump for recent session HTTP traffic parsed from app logs.
+    agent-device network dump --include headers
+    agent-device network dump 20 --include all
+  Use this instead of logs path when the question is request/response metadata.
+  network log is a supported alias, but network dump --include headers is the clearest plan form. Do not write network log headers.
+
 Events:
   Use events for a compact session timeline without dumping full app logs.
     agent-device events
@@ -89,13 +96,6 @@ Events:
   Events preserve command names, status, durations, bounded device/app inventory previews, lifecycle outcomes, artifact basenames, and structural action details such as scroll distance/direction, safe refs, and coordinates. User-entered text, clipboard contents, push/event payloads, selector values, free-form flags/messages/paths, and raw unknown command arguments are omitted or replaced with content-free placeholders. --no-record suppresses action.recorded entries, but request start/finish entries still record command, status, and timing.
   Events are best effort: an event over the file cap (AGENT_DEVICE_EVENT_LOG_MAX_BYTES, default 5 MiB) or 16 MiB is dropped. Pending writes are capped per session at 128 events and 16 MiB.
   Drops and write failures emit session_event_log_write_failed without failing the command. Failed entries are not replayed.
-
-Network:
-  Use network dump for recent session HTTP traffic parsed from app logs.
-    agent-device network dump --include headers
-    agent-device network dump 20 --include all
-  Use this instead of logs path when the question is request/response metadata.
-  network log is a supported alias, but network dump --include headers is the clearest plan form. Do not write network log headers.
 
 Audio:
   Use audio probe when the question is whether a browser page, macOS session, iOS simulator, or Android emulator produced audible output during a short observation window.
