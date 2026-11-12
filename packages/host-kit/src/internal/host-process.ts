@@ -218,15 +218,6 @@ function parseHostProcessCommandRows(stdout: string): Array<{ pid: number; comma
   }));
 }
 
-/** Observes actual executable paths. Missing entries are unknown, not proof of exit. */
-export async function readProcessExecutablePaths(
-  pids: Iterable<number>,
-  timeoutMs?: number,
-): Promise<ReadonlyMap<number, string>> {
-  const observer = await import('./process-executable-path.ts');
-  return await observer.readProcessExecutablePaths(pids, timeoutMs);
-}
-
 export function readProcessStartTime(pid: number): string | null {
   return readProcessField(pid, 'lstart=');
 }
