@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, test, vi } from 'vitest';
+import { afterEach, expectTypeOf, test, vi } from 'vitest';
 import {
   createRegisteredDaemonFixtures,
   type RegisteredDaemonChild,
@@ -154,4 +154,34 @@ test('a failed child join does not prevent teardown from stopping the remaining 
     true,
     'failed cleanup must retain state for diagnosis',
   );
+});
+
+test('exit gates delay the returned launch but are not accepted on companions', async () => {
+  const f = fixture();
+  let release!: () => void;
+  const exitGate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const step = { kind: 'registered' as const, paths: f.paths, fields: {} };
+  type RegisteredLaunch = Extract<
+    Parameters<typeof f.fixtures.planRegisteredDaemonLaunches>[0][number],
+    { kind: 'registered' }
+  >;
+  type Companion = NonNullable<RegisteredLaunch['companions']>[number];
+  expectTypeOf<typeof step & { exitGate: Promise<void> }>().not.toExtend<Companion>();
+  const launch = f.fixtures.planRegisteredDaemonLaunches([
+    { ...step, exitGate, companions: [step] },
+  ]);
+  const child = launch('node', []);
+  let exited = false;
+  void child.exited.then(() => {
+    exited = true;
+  });
+  await Promise.resolve();
+  assert.equal(f.launches(), 2);
+  assert.equal(exited, false, 'the returned child must wait for its exit gate');
+  release();
+  assert.equal(await child.exited, await f.child.exited);
+  await f.fixtures.finishRegisteredDaemonFixtures();
+  assert.equal(f.stops(), 2);
 });
