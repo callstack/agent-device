@@ -7,7 +7,7 @@ import { hostPlatform, uniquePositivePids } from './host-process.ts';
 const DEFAULT_TIMEOUT_MS = 1_000;
 const WINDOWS_TIMEOUT_FLOOR_MS = 2_000;
 const PATH_BUFFER_BYTES = 4_096;
-const WINDOWS_POWERSHELL = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+const WINDOWS_POWERSHELL = String.raw`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`;
 
 /** Observes actual executable paths. Missing entries are unknown, not proof of exit. */
 export async function readProcessExecutablePaths(

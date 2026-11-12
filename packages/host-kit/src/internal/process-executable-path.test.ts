@@ -55,7 +55,7 @@ test.each(['darwin', 'win32'] as const)(
   async (os) => {
     platform(os);
     const valid =
-      os === 'darwin' ? '/Applications/应用 App/bin' : 'C:\\Program Files\\应用\\bin.exe';
+      os === 'darwin' ? '/Applications/应用 App/bin' : String.raw`C:\Program Files\应用\bin.exe`;
     runCmdMock.mockResolvedValue({
       exitCode: 0,
       stderr: '',
@@ -79,7 +79,7 @@ test.each(['darwin', 'win32'] as const)(
       assert.match(args[3], /n<=0 \|\| n>=4096/);
       assert.equal(options.timeoutMs, 20);
     } else {
-      assert.equal(cmd, 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
+      assert.equal(cmd, String.raw`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`);
       assert.match(args[3], /ExecutablePath/);
       assert.doesNotMatch(args[3], /CommandLine/);
       assert.equal(options.timeoutMs, 2000);
