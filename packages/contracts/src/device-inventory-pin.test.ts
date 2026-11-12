@@ -58,10 +58,24 @@ for (const selector of [
   });
 }
 
-for (const kind of ['user', 'project', 'explicit'] as const) {
-  test(`a ${kind} wire pin retains its selector and source`, () => {
+for (const [kind, pinSource] of [
+  ['user', 'config file /project/agent-device.json'],
+  ['project', 'project config file /project/agent-device.json'],
+  ['explicit', 'config file /project/agent-device.json'],
+] as const) {
+  test(`a ${kind} wire pin retains its source for accepted and invalid selectors`, () => {
     const pin = { selector: { platform: 'ios', udid: 'SIM-1' }, source: { ...source, kind } };
     assert.deepEqual(readDevicePin(pin), pin);
+    assert.throws(
+      () => readDevicePin({ ...pin, selector: { platform: 'windows' } }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'INVALID_ARGS');
+        assert.equal(error.details?.reason, 'invalid_device_pin');
+        assert.equal(error.details?.pinSource, pinSource);
+        return true;
+      },
+    );
   });
 }
 
