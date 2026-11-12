@@ -63,23 +63,29 @@ type AdmissionBudget = Readonly<{
   deadlineMs: number;
   clock: ObservationClock;
   /**
-   * Runs one awaited read with the budget checked before and after it. The read receives a signal
-   * that also aborts at the request deadline, so a read in flight ends there and refuses.
+   * Runs one awaited read with the budget checked before and after it. With `until: 'deadline'`,
+   * the read receives a signal that also aborts at the request deadline, so a read in flight ends
+   * there and refuses.
    */
-  read<T>(read: (signal: AbortSignal | undefined) => Promise<T>): Promise<T>;
+  read<T>(read: (signal: AbortSignal | undefined) => Promise<T>, until?: 'deadline'): Promise<T>;
+  /** The refusal of a wait the remaining request time cannot cover, before any send. */
+  deadlineRefusal(): AppError;
 }>;
 
 function requestBudget(runtime: AgentDeviceRuntime, options: CommandContext): AdmissionBudget {
   const signal = options.signal ?? runtime.signal;
-  // A timer arms only within its 32-bit range; a later, infinite or absent deadline is still held
-  // by the clock checks.
-  const timerRemainingMs = Math.max(0, Math.ceil((options.deadlineAtMs ?? Infinity) - Date.now()));
-  const deadlineSignal =
-    timerRemainingMs <= 2 ** 31 - 1 ? AbortSignal.timeout(timerRemainingMs) : undefined;
-  const readSignal =
-    signal && deadlineSignal
-      ? AbortSignal.any([signal, deadlineSignal])
-      : (signal ?? deadlineSignal);
+  // The first read that runs until the deadline arms its timer, so an idle press builds none. The
+  // timer arms only within its 32-bit range; a later, infinite or absent deadline is still held by
+  // the clock checks.
+  let deadlineSignals:
+    | Readonly<{ read: AbortSignal | undefined; deadline: AbortSignal | undefined }>
+    | undefined;
+  const armDeadline = () => {
+    const remainingMs = Math.max(0, Math.ceil((options.deadlineAtMs ?? Infinity) - Date.now()));
+    const deadline = remainingMs <= 2 ** 31 - 1 ? AbortSignal.timeout(remainingMs) : undefined;
+    const read = signal && deadline ? AbortSignal.any([signal, deadline]) : (signal ?? deadline);
+    return { read, deadline };
+  };
   const budget: AdmissionBudget = {
     signal,
     deadlineMs: now(runtime) + ((options.deadlineAtMs ?? Infinity) - Date.now()),
@@ -90,25 +96,39 @@ function requestBudget(runtime: AgentDeviceRuntime, options: CommandContext): Ad
         await sleep(runtime, ms, signal);
       },
     },
-    read: async (read) => {
+    read: async (read, until) => {
       assertWithinBudget(budget);
+      const { read: readSignal, deadline } = until
+        ? (deadlineSignals ??= armDeadline())
+        : { read: signal, deadline: undefined };
       let value;
       try {
         value = await read(readSignal);
       } catch (error) {
-        if (readSignal?.aborted) assertWithinBudget(budget, deadlineSignal?.aborted || undefined);
+        if (readSignal?.aborted) assertWithinBudget(budget, deadline?.aborted || undefined);
         throw error;
       }
-      assertWithinBudget(budget, deadlineSignal?.aborted || undefined);
+      assertWithinBudget(budget, deadline?.aborted || undefined);
       return value;
+    },
+    deadlineRefusal: () => {
+      const remainingMs = Math.max(0, Math.round(budget.deadlineMs - budget.clock.now()));
+      return discloseDispatch(
+        createRequestDeadlineError({
+          ...(options.requestId ? { requestId: options.requestId } : {}),
+          remainingMs,
+          hint: `The request had ${remainingMs} ms left, which cannot cover the wait for the target to come to rest, so nothing was dispatched. Retry once the UI is idle, or allow the request more time.`,
+        }),
+        'no',
+      );
     },
   };
   return budget;
 }
 
 /**
- * Refuses before any send once the request is canceled, or once its deadline passed or the wait
- * left no time to reach it (`deadlineReached`).
+ * Refuses before any send once the request is canceled, or once its deadline passed or the
+ * remaining time cannot cover the wait (`deadlineReached`).
  */
 function assertWithinBudget(
   budget: AdmissionBudget,
@@ -119,7 +139,7 @@ function assertWithinBudget(
     const details = signal.reason instanceof AppError ? signal.reason.details : undefined;
     throw discloseDispatch(createRequestCanceledError(details, signal.reason), 'no');
   }
-  if (deadlineReached) throw discloseDispatch(createRequestDeadlineError(), 'no');
+  if (deadlineReached) throw budget.deadlineRefusal();
 }
 
 /**
@@ -145,7 +165,7 @@ async function awaitRest(
     Exclude<ReturnType<typeof judgeMotionLook>, { kind: 'wait' }>
   >({
     capture: () =>
-      budget.read((signal) => reObserveTarget(runtime, { ...options, signal }, params)),
+      budget.read((signal) => reObserveTarget(runtime, { ...options, signal }, params), 'deadline'),
     verdict: (look, previous) => {
       const verdict = judgeMotionLook(look, previous, restingSinceMs, wait.policy);
       if (verdict.kind !== 'wait') return { kind: 'done', result: verdict };
@@ -170,7 +190,7 @@ async function awaitRest(
       throw observed.error;
     case 'deadline':
       assertWithinBudget(budget);
-      throw discloseDispatch(createRequestDeadlineError(), 'no');
+      throw budget.deadlineRefusal();
     case 'expired':
       throw motionRefusal(
         resolved,

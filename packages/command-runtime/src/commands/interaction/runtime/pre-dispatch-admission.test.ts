@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import type { Point } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
@@ -129,7 +129,8 @@ for (const history of [
   { name: 'a mutation outside the window', baselineAgeMs: 5_000 },
   { name: 'a target the previous action left in place', baselineAgeMs: 100, stationary: true },
 ] as const) {
-  test(`an idle press after ${history.name} pays no extra capture or sleep`, async () => {
+  test(`an idle press after ${history.name} pays no extra capture, sleep or timer`, async () => {
+    const timers = vi.spyOn(AbortSignal, 'timeout');
     for (const target of ['selector', 'ref'] as const) {
       const harness = createAdmissionDevice({
         platform: 'android',
@@ -140,7 +141,7 @@ for (const history of [
 
       await harness.device.interactions.press(
         target === 'selector' ? selector('label="Slide target"') : ref('@e2'),
-        { session: 'default' },
+        { session: 'default', deadlineAtMs: Date.now() + 60_000 },
       );
 
       assert.deepEqual(harness.taps, [{ x: 70, y: BUTTON_Y + 25 }], target);
@@ -148,6 +149,8 @@ for (const history of [
       assert.equal(harness.captureStarts.length, target === 'selector' ? 1 : 0, target);
       assert.deepEqual(harness.sleeps, [], target);
     }
+    assert.equal(timers.mock.calls.length, 0, 'no deadline timer on the accept path');
+    timers.mockRestore();
   });
 }
 

@@ -1,5 +1,10 @@
-import { test, expect, beforeEach } from 'vitest';
+import { test, expect, beforeEach, vi } from 'vitest';
+import type { PressCommandResult } from '@agent-device/contracts/interaction';
 import { attachRefs } from '@agent-device/kernel/snapshot';
+import {
+  clearRequestAbortRegistration,
+  registerRequestAbort,
+} from '@agent-device/host-kit/request';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import {
@@ -7,6 +12,7 @@ import {
   mockInteractorSnapshot,
 } from '../../../__tests__/support/interactor-resolution-fixture.ts';
 import { touchCreateCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
+import { commandSurfaceWithMembers } from '../../../__tests__/support/command-surface-override-fake.ts';
 import { runFindInternalClick } from '../../../__tests__/support/touch-interaction-runner.ts';
 import {
   getRuntimeBindings,
@@ -198,4 +204,51 @@ test('a read right after a press captures the post-tap screen instead of reusing
 
   expect(read).toMatchObject({ ok: true, data: { text: 'Step 2' } });
   expect(mockInteractorSnapshot).toHaveBeenCalledTimes(2);
+});
+
+test('press and click hand the earliest request deadline to pre-dispatch admission', async () => {
+  const requestId = 'press-deadline-handoff';
+  const resultDeadlineMs = Date.now() + 30_000;
+  const registration = registerRequestAbort(requestId, undefined, { resultDeadlineMs });
+  try {
+    const handedOff: Array<number | undefined> = [];
+    const answer = (options: { deadlineAtMs?: number } | undefined) => {
+      handedOff.push(options?.deadlineAtMs);
+      return { kind: 'point', point: { x: 10, y: 20 } } as unknown as PressCommandResult;
+    };
+    const createCommandSurface = commandSurfaceWithMembers(() => ({
+      interactions: {
+        press: vi.fn(async (_target, options) => answer(options)),
+        click: vi.fn(async (_target, options) => answer(options)),
+      },
+    }));
+    const sessionStore = makeSessionStore();
+    const sessionName = 'press-deadline-handoff';
+    sessionStore.publish(
+      sessionName,
+      makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+    );
+
+    for (const command of ['press', 'click']) {
+      await handleInteractionCommands({
+        createCommandSurface,
+        req: {
+          token: 't',
+          session: sessionName,
+          command,
+          positionals: ['10', '20'],
+          flags: {},
+          meta: { requestId },
+        },
+        sessionName,
+        sessionStore,
+        contextFromFlags,
+        ...getRuntimeBindings(),
+      });
+    }
+
+    expect(handedOff).toEqual([resultDeadlineMs, resultDeadlineMs]);
+  } finally {
+    clearRequestAbortRegistration(registration);
+  }
 });
