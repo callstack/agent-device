@@ -350,6 +350,11 @@ export type SettleObservation = {
     lines: SettleDiffLine[];
     /** Present (true) when lines were capped to the response bound. */
     truncated?: boolean;
+    /**
+     * Present (true) when the baseline was a ref frame read as a full tree: removals were not
+     * compared, so `summary.removals` is 0 and `lines` holds only additions.
+     */
+    removalsOmitted?: true;
   };
   /**
    * Unchanged interactive refs tail: benchmarks (July 2026) showed 27% of

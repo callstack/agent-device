@@ -73,6 +73,7 @@ test('a ref press after a full snapshot reports no removals the view change caus
   const result = await device.interactions.press(ref('@e3'), { session: 'default', settle: {} });
 
   assert.equal(result.settle?.diff?.summary.removals, 0);
+  assert.equal(result.settle?.diff?.removalsOmitted, true);
   // The tiny-tree readiness hint the settled screen earns is kept beside the view-change hint.
   assert.match(result.settle?.hint ?? '', /previous snapshot was a full tree.*nearly-empty tree/);
 });
@@ -117,6 +118,12 @@ test('a selector press keeps its diff although its resolution read a full tree',
     settle: {},
   });
 
-  assert.ok((result.settle?.diff?.summary.removals ?? 0) > 0);
+  // The genuine removal is listed; this route keeps comparing removals (#4486 leaves it open).
+  assert.ok(
+    result.settle?.diff?.lines.some(
+      (line) => line.kind === 'removed' && line.text.includes('Device name'),
+    ),
+  );
+  assert.equal(result.settle?.diff?.removalsOmitted, undefined);
   assert.doesNotMatch(result.settle?.hint ?? '', /full tree/);
 });

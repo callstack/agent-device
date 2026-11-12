@@ -19,6 +19,7 @@ type SettleTextView = {
     summary?: { additions?: number; removals?: number; unchanged?: number };
     lines?: Array<{ kind?: string; text?: string; ref?: string }>;
     truncated?: boolean;
+    removalsOmitted?: boolean;
   };
   tail?: Array<{ ref?: string; role?: string; label?: string }>;
   tailTruncated?: boolean;
@@ -140,5 +141,7 @@ function formatSettleVerdict(view: SettleTextView): string {
   const verdict = view.settled === true ? 'settled' : 'not settled';
   const summary = view.diff?.summary;
   if (!summary) return `${verdict} after ${view.waitedMs ?? 0}ms`;
-  return `${verdict} after ${view.waitedMs ?? 0}ms: +${summary.additions ?? 0} -${summary.removals ?? 0} (~${summary.unchanged ?? 0} unchanged)`;
+  const removals =
+    view.diff?.removalsOmitted === true ? 'removals not listed' : `-${summary.removals ?? 0}`;
+  return `${verdict} after ${view.waitedMs ?? 0}ms: +${summary.additions ?? 0} ${removals} (~${summary.unchanged ?? 0} unchanged)`;
 }

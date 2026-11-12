@@ -81,7 +81,7 @@ export const NEVER_SETTLED_HINT =
   'The UI kept changing for the whole settle budget (animation, carousel, or ticker?), so no settled diff is shown. Raise --timeout, wait for specific content, or take a fresh snapshot.';
 
 const FULL_VIEW_BASELINE_HINT =
-  'The previous snapshot was a full tree and settle reads the interactive view, so this diff lists only added lines; removals are not listed. Later settles diff against that settled interactive view.';
+  'The previous snapshot was a full tree and settle reads the interactive view, so this diff lists only added lines; removals are not listed. A settle on refs from this response compares interactive views.';
 
 const SETTLE_CAPTURE_STALLED_HINT =
   'A snapshot capture stalled past the settle budget, so no settled diff is shown. The action itself succeeded; observe with wait stable or snapshot.';
@@ -316,7 +316,7 @@ function buildSettleDiff(
   // not evidence and are left out. Added lines stay: on Android the interactive view adds no node
   // of its own, while an iOS row rewrite can also read as added, as it did before #4486.
   const changed = diff.lines.filter(
-    (line) => line.kind === 'added' || (line.kind === 'removed' && !baseline.fullView),
+    (line) => line.kind === 'added' || (line.kind === 'removed' && baseline.fullView !== true),
   );
   const lines = capSettleDiffLines(changed).map((line) => ({
     kind: line.kind as 'added' | 'removed',
@@ -324,8 +324,9 @@ function buildSettleDiff(
     ...(line.ref ? { ref: line.ref } : {}),
   }));
   return {
-    summary: baseline.fullView ? { ...diff.summary, removals: 0 } : diff.summary,
+    summary: baseline.fullView === true ? { ...diff.summary, removals: 0 } : diff.summary,
     lines,
+    ...(baseline.fullView === true ? { removalsOmitted: true as const } : {}),
     ...(changed.length > lines.length ? { truncated: true as const } : {}),
   };
 }
