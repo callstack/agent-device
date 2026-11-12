@@ -81,6 +81,8 @@ async function uninstallHarmonyApp(
     // hdc reports an unreachable target through stdout while still exiting zero, so an
     // absent bundle record is benign only when the shell transport itself proves alive.
     if (dump.exitCode === null || !(await isHarmonyShellTransportAlive(commands, device, signal))) {
+      // exec-guard-allow: reachable at exit 0 — hdc reports unreachable targets through
+      // stdout at exit zero, so processExitError would never fire; trio is probe context.
       throw new AppError('COMMAND_FAILED', `Could not probe the installed state of ${bundleId}`, {
         exitCode: dump.exitCode,
         stdout: dump.stdout,
@@ -102,6 +104,9 @@ async function uninstallHarmonyApp(
   if (parseBundleDump(after.stdout)) {
     // bm prints its verdict into stdout at exit code 0, so only a second dump that no
     // longer finds the record proves the removal.
+    // exec-guard-allow: reachable at exit 0 — bm reports the removal verdict in stdout
+    // at exit 0, so the trio here documents bm's own answer rather than an exec failure;
+    // stderr enrichment would only repeat the line the message already quotes.
     throw new AppError('COMMAND_FAILED', `${bundleId} is still installed after bm uninstall`, {
       exitCode: uninstall.exitCode,
       stdout: uninstall.stdout,
@@ -110,6 +115,8 @@ async function uninstallHarmonyApp(
     });
   }
   if (after.exitCode === null || !(await isHarmonyShellTransportAlive(commands, device, signal))) {
+    // exec-guard-allow: reachable at exit 0 — a failed post-uninstall dump still exits
+    // zero through hdc, so processExitError would never fire; trio is probe context.
     throw new AppError('COMMAND_FAILED', `Could not verify the uninstall of ${bundleId}`, {
       exitCode: after.exitCode,
       stdout: after.stdout,
