@@ -801,11 +801,16 @@ extension RunnerTests {
     plan: RunnerGesturePlan,
     gesture: String
   ) throws -> NativePlannedGestureResolution {
+    // Both refusals come before the synthesis is handed anything, so the gesture sent nothing.
     guard let context = try synthesizedCoordinateContext(app: app) else {
-      return .refused(.unsupported(message: "\(gesture) could not resolve a surface", hint: nil))
+      return .refused(.notDispatched(message: "\(gesture) could not resolve a surface", hint: nil))
     }
     guard let geometry = digitizerGeometry(app: app, surface: context.geometry) else {
-      return .refused(Self.unmeasuredSoleDisplayOutcome(gesture: gesture))
+      let unmeasured = Self.unmeasuredSoleDisplayOutcome(gesture: gesture).refusalText
+      return .refused(.notDispatched(
+        message: unmeasured?.message ?? "\(gesture) could not measure the display",
+        hint: unmeasured?.hint
+      ))
     }
     let pointerSamples: [[[String: NSNumber]]] = plan.pointers.map { pointer in
       pointer.samples.map { sample in

@@ -774,9 +774,8 @@ function buildSequenceStepError(
   const kind = failed?.kind ?? 'step';
   const message = failed?.errorMessage ?? `sequence step ${failedStepIndex} (${kind}) failed`;
   // A step code the runner keeps off the wire (such as SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN) reads as
-  // it does on a standalone command: COMMAND_FAILED with its runner code and reason. The step's
-  // dispatch disclosure is the sequence's only when no earlier step ran; after one did, the sequence
-  // reached the device whatever the failed step sent.
+  // it does on a standalone command: COMMAND_FAILED with its runner code, reason, and dispatch.
+  // `runApplePressSeries` turns it into `unknown` once an earlier step ran.
   const stepCode = toAppErrorCode(failed?.errorCode);
   const classification = classifyRunnerReportedError(failed?.errorCode);
   const diagnosticOnly = classification.code !== stepCode;
@@ -789,7 +788,7 @@ function buildSequenceStepError(
             : { reason: classification.details.reason }),
         }
       : {}),
-    dispatched: completedSteps === 0 ? classification.details.dispatched : 'unknown',
+    dispatched: classification.details.dispatched,
     failedStepIndex,
     failedStepKind: kind,
     completedSteps,

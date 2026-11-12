@@ -252,9 +252,3 @@ test('a first step refused before dispatch means the sequence sent nothing', () 
   assert.equal(error.details?.runnerErrorCode, 'SYNTHESIZED_GESTURE_NOT_DISPATCHED');
   assert.equal(error.details?.dispatched, 'no');
 });
-
-test('a step refused before dispatch after an earlier step ran leaves the sequence unknown', () => {
-  const error = sequenceFailure([{ ok: true, kind: 'tap' }, notDispatchedLongPress]);
-  assert.equal(error.details?.runnerErrorCode, 'SYNTHESIZED_GESTURE_NOT_DISPATCHED');
-  assert.equal(error.details?.dispatched, 'unknown');
-});

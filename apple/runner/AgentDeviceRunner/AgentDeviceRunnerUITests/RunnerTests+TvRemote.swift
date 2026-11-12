@@ -6,7 +6,8 @@ enum RunnerInteractionOutcome {
   /// `hint` is an optional actionable next step (mapped to ErrorPayload.hint).
   case unsupported(message: String, hint: String?)
   /// The iOS event synthesis refused before any of its events reached XCTest, so nothing was sent.
-  /// Only `synthesizedGestureOutcome` produces it; it answers SYNTHESIZED_GESTURE_NOT_DISPATCHED.
+  /// Only the iOS synthesis produces it (`synthesizedGestureOutcome` and the `nativePlannedGesture`
+  /// refusals); it answers SYNTHESIZED_GESTURE_NOT_DISPATCHED. Platform arms keep `.unsupported`.
   case notDispatched(message: String, hint: String?)
 
   /// The message and hint of a refusal; nil for `.performed`.
