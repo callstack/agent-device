@@ -40,3 +40,10 @@ test('a text field with a label omits the placeholder', () => {
     '@e4 [text-field] "Search" [editable]',
   );
 });
+
+test('an empty text field with only an identifier still prints its placeholder', () => {
+  assert.equal(
+    interactiveLine(textField({ identifier: 'com.example:id/search', placeholder: 'Search' })),
+    '@e4 [text-field] "com.example:id/search" [editable] [placeholder:"Search"]',
+  );
+});
