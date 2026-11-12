@@ -620,11 +620,11 @@ export async function closeAndroidApp(device: DeviceInfo, app: string): Promise<
 }
 
 /**
- * A close that stopped every process that ran before it, but saw the package start again. A relaunch
- * accepts this: Android can restart a package at once for a provider or broadcast client (Settings
- * on Android 17), and the launch that follows reuses that new process.
+ * A close refused only by its process fence, which runs after the foreground and exit fences passed.
+ * That is all a relaunch needs: the processes that ran before the stop are gone, and Android can
+ * restart a package at once for a provider or broadcast client (Settings on Android 17).
  */
-export function isAndroidPackageRestartedAfterClose(error: unknown): boolean {
+export function passedAndroidRelaunchStopFences(error: unknown): boolean {
   return (
     error instanceof AppError &&
     error.details?.reason === 'android-app-close-timeout' &&
@@ -659,9 +659,8 @@ async function stopAndroidPackage(
     throw androidPidofUnavailableError(packageName);
   }
   await runAndroidShell(device, ['am', 'force-stop', packageName]);
-  const expired = await waitForAndroidPackageStopped(device, packageName, killed);
-  if (!expired || (purpose === 'relaunch' && expired === 'process')) return;
-  throw androidCloseTimeoutError(packageName, expired);
+  const expired = await waitForAndroidPackageStopped(device, packageName, killed, purpose);
+  if (expired) throw androidCloseTimeoutError(packageName, expired);
 }
 
 /**
@@ -725,9 +724,12 @@ async function waitForAndroidPackageStopped(
   device: DeviceInfo,
   packageName: string,
   killed: ReadonlySet<string>,
+  purpose: 'close' | 'relaunch',
 ): Promise<AndroidStopFencePhase | undefined> {
   if (!(await waitForAndroidPackageNotForeground(device, packageName))) return 'foreground';
   if (!(await waitForAndroidKilledProcessesExit(device, packageName, killed))) return 'exit';
+  // See passedAndroidRelaunchStopFences: a relaunch needs no process fence.
+  if (purpose === 'relaunch') return undefined;
   if (!(await waitForAndroidPackageProcessGone(device, packageName))) return 'process';
   return undefined;
 }
