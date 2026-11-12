@@ -56,7 +56,7 @@ const FAMILY_SEED = 'createRegisteredDaemonFixtures';
 
 /** A cheap superset of seed files: the name in plain text, or any escape that could spell it. */
 function mayNameSeed(source: string): boolean {
-  return source.includes(FAMILY_SEED) || source.includes('\\u');
+  return source.includes(FAMILY_SEED) || source.includes(String.raw`\u`);
 }
 
 function namesSeed(program: AstNode): boolean {

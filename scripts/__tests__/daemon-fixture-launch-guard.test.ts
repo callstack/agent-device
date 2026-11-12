@@ -88,7 +88,7 @@ test('the repo scan follows renamed and re-exported fixture helpers but leaves o
   assert.match(violations[0]!, /src\/consumer.test.ts/);
 });
 
-for (const specifier of ['..', '.', '.\\u002e']) {
+for (const specifier of ['..', '.', String.raw`.\u002e`]) {
   test(`the repo scan follows a fixture family imported through '${specifier}'`, () => {
     const bad = `import { runCmdDetachedMonitored } from '@agent-device/host-kit/command'; const spawn = vi.mocked(runCmdDetachedMonitored); spawn.mockImplementation(() => { throw new Error('raw'); });`;
     const consumer =
