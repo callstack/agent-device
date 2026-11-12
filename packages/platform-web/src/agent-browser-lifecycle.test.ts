@@ -1,13 +1,15 @@
 import { bindTestCommandHost, installFakeManagedAgentBrowser } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
+import { ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from './__tests__/test-utils.ts';
 
-const { runCmdMock, hostRunCmdMock, probe } = vi.hoisted(() => ({
+const { runCmdMock, spawnMock, probe } = vi.hoisted(() => ({
   runCmdMock: vi.fn(),
-  hostRunCmdMock: vi.fn(),
+  spawnMock: vi.fn(),
   probe: { unanswered: false },
 }));
 
@@ -17,10 +19,10 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   withoutCommandExecutorOverride: async <T>(fn: () => Promise<T>) => await fn(),
 }));
 
-vi.mock('../../host-kit/src/internal/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../host-kit/src/internal/exec.ts')>();
-  hostRunCmdMock.mockImplementation(actual.runCmd);
-  return { ...actual, runCmd: hostRunCmdMock };
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  spawnMock.mockImplementation(actual.spawn);
+  return { ...actual, spawn: spawnMock };
 });
 
 const executablePathsMock = vi.hoisted(() => vi.fn());
@@ -761,26 +763,36 @@ test('recording and reaping require executable provenance and matching identity'
       }
       return true;
     }) as typeof process.kill);
-    hostRunCmdMock.mockImplementation(async (_command: string, args: readonly string[]) => {
-      const pid = Number(args[1]);
-      const command = rows.find((row) => row.pid === pid)?.command;
-      const start = pid === 11003 ? 'changed-start' : `start-${pid}`;
-      return {
-        stdout: args[3] === 'pid=,command=' ? `${pid} ${command}\n` : `${pid} S ${start}\n`,
-        stderr: '',
-        exitCode: 0,
-      };
-    });
-    const result = await reapOwnedProcessRecordsAtStartup(store, {
-      termTimeoutMs: 1,
-      killTimeoutMs: 1,
-    });
-    expect(signals).toEqual([11001, 11002]);
-    expect(result.terminatedPids).toEqual([11001, 11002]);
-    expect(result.missingPids).toEqual([11003]);
-    expect(recordedPids).toEqual([11001, 11002, 11003]);
+    await spawnMock.withImplementation(
+      (_command: string, args: readonly string[]) => {
+        const pid = Number(args[1]);
+        const command = rows.find((row) => row.pid === pid)?.command;
+        const start = pid === 11003 ? 'changed-start' : `start-${pid}`;
+        const stdout = args[3] === 'pid=,command=' ? `${pid} ${command}\n` : `${pid} S ${start}\n`;
+        const child = Object.assign(new ChildProcess(), {
+          stdin: new PassThrough(),
+          stdout: new PassThrough(),
+          stderr: new PassThrough(),
+        });
+        queueMicrotask(() => {
+          child.stdout.end(stdout);
+          child.stderr.end();
+          child.emit('close', 0, null);
+        });
+        return child;
+      },
+      async () => {
+        const result = await reapOwnedProcessRecordsAtStartup(store, {
+          termTimeoutMs: 1,
+          killTimeoutMs: 1,
+        });
+        expect(signals).toEqual([11001, 11002]);
+        expect(result.terminatedPids).toEqual([11001, 11002]);
+        expect(result.missingPids).toEqual([11003]);
+        expect(recordedPids).toEqual([11001, 11002, 11003]);
+      },
+    );
   } finally {
-    hostRunCmdMock.mockReset();
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
