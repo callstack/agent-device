@@ -275,11 +275,18 @@ test('readLeaseDeviceSpec decides each key is named, not named, or invalid', () 
       osVersion: '>=26',
       imageTag: 'google_apis',
       deviceMode: 'full',
+      deviceBaseline: 'logged-in',
       physical: true,
     }),
     {
-      spec: { osVersion: '>=26', imageTag: 'google_apis', deviceMode: 'full', physical: true },
-      keys: ['osVersion', 'imageTag', 'deviceMode', 'physical'],
+      spec: {
+        osVersion: '>=26',
+        imageTag: 'google_apis',
+        deviceMode: 'full',
+        deviceBaseline: 'logged-in',
+        physical: true,
+      },
+      keys: ['osVersion', 'imageTag', 'deviceMode', 'deviceBaseline', 'physical'],
       invalidKeys: [],
     },
   );
@@ -287,15 +294,27 @@ test('readLeaseDeviceSpec decides each key is named, not named, or invalid', () 
   assert.deepEqual(readLeaseDeviceSpec(undefined), notNamed);
   assert.deepEqual(readLeaseDeviceSpec({}), notNamed);
   assert.deepEqual(
-    readLeaseDeviceSpec({ osVersion: '', imageTag: '  ', deviceMode: '', physical: false }),
+    readLeaseDeviceSpec({
+      osVersion: '',
+      imageTag: '  ',
+      deviceMode: '',
+      deviceBaseline: ' ',
+      physical: false,
+    }),
     notNamed,
   );
   assert.deepEqual(
-    readLeaseDeviceSpec({ osVersion: 26, imageTag: null, deviceMode: true, physical: 'yes' }),
+    readLeaseDeviceSpec({
+      osVersion: 26,
+      imageTag: null,
+      deviceMode: true,
+      deviceBaseline: 1,
+      physical: 'yes',
+    }),
     {
       spec: {},
       keys: [],
-      invalidKeys: ['osVersion', 'imageTag', 'deviceMode', 'physical'],
+      invalidKeys: ['osVersion', 'imageTag', 'deviceMode', 'deviceBaseline', 'physical'],
     },
   );
   assert.deepEqual(readLeaseDeviceSpec({ osVersion: '18', physical: 1 }), {
@@ -336,6 +355,24 @@ test('readLeaseDevice reads the granted facts and rejects an echo missing one', 
     undefined,
   );
   assert.equal(readLeaseDevice(undefined), undefined);
+});
+
+test('readLeaseDevice reads the granted baseline and drops a malformed one', () => {
+  const device = { model: 'iPhone 17 Pro', osVersion: '26.0', physical: false };
+  const withBaseline = { ...device, baseline: { name: 'logged-in', version: 3 } };
+  assert.deepEqual(readLeaseDevice(withBaseline), withBaseline);
+  const paddedBaseline = { ...device, baseline: { name: ' logged-in ', version: 3 } };
+  assert.deepEqual(readLeaseDevice(paddedBaseline), paddedBaseline);
+  for (const baseline of [
+    { name: 'logged-in', version: 0 },
+    { name: 'logged-in', version: 1.5 },
+    { name: 'logged-in', version: '3' },
+    { name: ' ', version: 3 },
+    { version: 3 },
+    'logged-in',
+  ]) {
+    assert.deepEqual(readLeaseDevice({ ...device, baseline }), device);
+  }
 });
 
 test('isInactiveLeaseError recognizes the lease being gone, and refuses a request mismatch', () => {

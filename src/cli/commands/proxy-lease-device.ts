@@ -64,7 +64,7 @@ export async function resolveProxyLeaseState(options: {
     if (!options.leaseBackend) {
       throw new AppError(
         'INVALID_ARGS',
-        `${options.command} with --os, --image-tag, --device-mode or --physical requires --platform or --lease-backend so the proxy backend knows which device family to pick from.`,
+        `${options.command} with --os, --image-tag, --device-mode, --device-baseline or --physical requires --platform or --lease-backend so the proxy backend knows which device family to pick from.`,
       );
     }
     return { state: options.state, allocateBySpec: true };
@@ -110,10 +110,12 @@ async function resolveProxyLeaseStateLocally(options: {
  * none was supplied from outside, so it is refused and never released.
  *
  * A request that names a device spec has no such fallback: a new lease that does not echo the
- * granted device in `lease.device`, or that reports a slim simulator for a `full` request,
- * did not honour the spec, so it is released and the request fails with `device-spec-unsupported`.
- * A lease that reports no mode is accepted: the mode is then unconfirmed. A renewed lease serves the request only when
- * every spec key the request names equals the one the lease was allocated by. Once a lease is bound,
+ * granted device in `lease.device`, that reports a slim simulator for a `full` request, or that
+ * does not report the requested baseline in `lease.device.baseline`, did not honour the spec,
+ * so it is released and the request fails with `device-spec-unsupported`.
+ * A lease that reports no mode is accepted: the mode is then unconfirmed. A renewed lease serves
+ * the request only when every spec key it names equals the one the lease was allocated by.
+ * Once a lease is bound,
  * the spec leaves the command flags: the device it chose is named by its identity instead.
  */
 export async function bindLeaseNamedDevice(options: {
@@ -167,6 +169,9 @@ export async function bindLeaseNamedDevice(options: {
 /** A refused allocation is discarded unless the daemon explicitly reported reuse. */
 function leaseHonoursSpec(lease: Lease, spec: LeaseDeviceSpec): boolean {
   if (!lease.device) return false;
+  if (spec.deviceBaseline !== undefined && lease.device.baseline?.name !== spec.deviceBaseline) {
+    return false;
+  }
   // Full is a guarantee and slim is best effort, so a full grant serves a slim request.
   return !(spec.deviceMode === 'full' && lease.device.deviceMode === 'slim');
 }

@@ -101,3 +101,38 @@ test('lease allocation sends the iOS simulator mode and returns the mode the bac
   assert.equal(setup.calls[0]?.flags?.deviceMode, 'full');
   assert.deepEqual(lease.device, device);
 });
+
+test('lease allocation preserves a padded baseline name in the request and granted device', async () => {
+  const device = {
+    model: 'iPhone 17 Pro',
+    osVersion: '26.2',
+    physical: false,
+    baseline: { name: ' logged-in ', version: 2 },
+  };
+  const setup = createClientTransport(async (req) => ({
+    ok: true,
+    data: {
+      lease: {
+        leaseId: 'lease-baseline',
+        tenantId: req.meta?.tenantId,
+        runId: req.meta?.runId,
+        backend: req.meta?.leaseBackend,
+        deviceKey: 'ios:mobile:SIM-1',
+        device,
+      },
+    },
+  }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const lease = await client.leases.allocate({
+    tenant: 'proxy',
+    runId: 'proxy-run',
+    leaseBackend: 'ios-instance',
+    leaseProvider: 'proxy',
+    platform: 'ios',
+    deviceBaseline: ' logged-in ',
+  });
+
+  assert.equal(setup.calls[0]?.flags?.deviceBaseline, ' logged-in ');
+  assert.deepEqual(lease.device, device);
+});

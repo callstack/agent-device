@@ -51,6 +51,7 @@ export const REMOTE_CONFIG_FIELD_SPECS = [
   { key: 'osVersion', type: 'string', env: false },
   { key: 'imageTag', type: 'string', env: false },
   { key: 'deviceMode', type: 'string', env: false },
+  { key: 'deviceBaseline', type: 'string', env: false },
   { key: 'physical', type: 'boolean', env: false },
   {
     key: 'iosSimulatorDeviceSet',

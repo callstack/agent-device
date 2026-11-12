@@ -277,6 +277,7 @@ export const LEASE_DEVICE_SPEC_KEYS = [
   'osVersion',
   'imageTag',
   'deviceMode',
+  'deviceBaseline',
   'physical',
 ] as const satisfies readonly (keyof CommandFlags & keyof LeaseDeviceSpec)[];
 
@@ -331,13 +332,20 @@ export type LeaseDeviceSpecReading = {
 
 /**
  * The one decision on what a device spec names, for the CLI, the SDK, MCP and the daemon alike.
- * Each key is named, not named, or invalid: a non-blank `osVersion`, `imageTag` or `deviceMode` and
- * `physical: true` are named, with the value as given; an absent key, a blank string and
+ * Each key is named, not named, or invalid: a non-blank `osVersion`, `imageTag`, `deviceMode` or
+ * `deviceBaseline` and `physical: true` are named, with the value as given;
+ * an absent key, a blank string and
  * `physical: false` name nothing; any other type is invalid.
  */
 export function readLeaseDeviceSpec(
   source:
-    | { osVersion?: unknown; imageTag?: unknown; deviceMode?: unknown; physical?: unknown }
+    | {
+        osVersion?: unknown;
+        imageTag?: unknown;
+        deviceMode?: unknown;
+        deviceBaseline?: unknown;
+        physical?: unknown;
+      }
     | undefined,
 ): LeaseDeviceSpecReading {
   const spec: Record<string, string | boolean> = {};
@@ -371,26 +379,40 @@ export function readLeaseDevice(value: unknown): LeaseDevice | undefined {
   if (!model || !osVersion || typeof record.physical !== 'boolean') return undefined;
   const imageTag = nonEmptyString(record.imageTag);
   const deviceMode = nonEmptyString(record.deviceMode);
+  const baseline = readLeaseDeviceBaseline(record.baseline);
   return {
     model,
     osVersion,
     ...(imageTag ? { imageTag } : {}),
     ...(deviceMode ? { deviceMode } : {}),
+    ...(baseline ? { baseline } : {}),
     physical: record.physical,
   };
+}
+
+function readLeaseDeviceBaseline(value: unknown): LeaseDevice['baseline'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const name =
+    typeof record.name === 'string' && record.name.trim().length > 0 ? record.name : undefined;
+  const { version } = record;
+  if (!name || typeof version !== 'number' || !Number.isInteger(version) || version < 1) {
+    return undefined;
+  }
+  return { name, version };
 }
 
 /** The refusal for a request whose device spec nothing on its path can honour. */
 export function deviceSpecUnsupportedError(
   keys: readonly string[],
-  message = 'This daemon cannot pick a device by OS version, image tag, device mode, or physical/virtual class.',
+  message = 'This daemon cannot pick a device by OS version, image tag, device mode, baseline, or physical/virtual class.',
   details: Record<string, unknown> = {},
 ): AppError {
   return new AppError('UNSUPPORTED_OPERATION', message, {
     ...details,
     reason: DEVICE_SPEC_UNSUPPORTED_REASON,
     keys: [...keys],
-    hint: 'Drop --os, --image-tag, --device-mode and --physical, or connect through a proxy whose backend picks devices by spec.',
+    hint: 'Drop --os, --image-tag, --device-mode, --device-baseline and --physical, or connect through a proxy whose backend picks devices by spec.',
   });
 }
 
@@ -398,7 +420,7 @@ export function deviceSpecUnsupportedError(
 export function deviceSpecInvalidError(keys: readonly string[]): AppError {
   return new AppError(
     'INVALID_ARGS',
-    'osVersion, imageTag and deviceMode take a string, and physical takes a boolean.',
+    'osVersion, imageTag, deviceMode and deviceBaseline take a string, and physical takes a boolean.',
     { reason: DEVICE_SPEC_INVALID_REASON, keys: [...keys] },
   );
 }
