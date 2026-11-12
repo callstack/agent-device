@@ -111,7 +111,8 @@ function reportEventLogFailure(
       path: eventLogPath,
       reason,
       operation,
-      errno: (error as NodeJS.ErrnoException | undefined)?.code,
+      errno:
+        error instanceof AppError ? undefined : (error as NodeJS.ErrnoException | undefined)?.code,
       error: error === undefined ? undefined : normalizeError(error),
     },
   });
