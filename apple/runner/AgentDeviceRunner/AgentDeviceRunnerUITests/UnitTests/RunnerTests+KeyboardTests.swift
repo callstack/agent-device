@@ -327,6 +327,62 @@ extension RunnerTests {
   private func textEntryInputCount() -> Int {
     app.textFields.count + app.secureTextFields.count + app.searchFields.count + app.textViews.count
   }
+
+  // `keyboard dismiss` and `keyboard enter` tap a keyboard control. An app that never stops animating
+  // made that tap wait for XCTest's idle timeout, past the runner's main-thread watchdog, so the command
+  // failed with "main thread execution timed out" and the runner refused the next commands. The fixture
+  // keeps an animation in flight while its field has focus, until its backstop, and records whether
+  // each control landed while the app was still busy.
+  static let keyboardBusyBackstop: TimeInterval = 20
+
+  @MainActor
+  func testKeyboardDismissTapsItsDismissKeyWhileTheAppIsBusy() throws {
+    try withBusyKeyboardField {
+      let command = try runnerCommandFixture(#"{"command":"keyboardDismiss","commandId":"dismiss-busy"}"#)
+      let response = try execute(command: command)
+
+      XCTAssertTrue(response.ok, String(describing: response.error))
+      XCTAssertEqual(app.staticTexts["agent-device-keyboard-busy-answer"].label, "Done while busy")
+    }
+  }
+
+  @MainActor
+  func testKeyboardEnterPressesReturnWhileTheAppIsBusy() throws {
+    try withBusyKeyboardField {
+      let command = try runnerCommandFixture(#"{"command":"keyboardReturn","commandId":"return-busy"}"#)
+      let response = try execute(command: command)
+
+      XCTAssertTrue(response.ok, String(describing: response.error))
+      XCTAssertEqual(app.staticTexts["agent-device-keyboard-busy-answer"].label, "Return while busy")
+    }
+  }
+
+  @MainActor
+  private func withBusyKeyboardField(_ body: () throws -> Void) throws {
+    app.launchArguments = ["--agent-device-keyboard-busy", String(Self.keyboardBusyBackstop)]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let field = app.textFields["agent-device-keyboard-busy-input"]
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
+    // Focus starts the busy animation, so this tap must not wait for the app to idle either.
+    withBoundedInteractionIdleTimeoutIfSupported(app, waits: .bothSkipped) { field.tap() }
+    let keyboardDeadline = Date().addingTimeInterval(5)
+    while !isKeyboardVisible(app: app) && Date() < keyboardDeadline {
+      sleepFor(0.2)
+    }
+    try XCTSkipUnless(
+      isKeyboardVisible(app: app),
+      "software keyboard is down: this simulator cannot exercise a keyboard control"
+    )
+    XCTAssertEqual(app.staticTexts["agent-device-keyboard-busy-answer"].label, "Unanswered")
+    try body()
+  }
 #endif
 }
 #endif
