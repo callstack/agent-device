@@ -151,7 +151,7 @@ export function createDaemonProxyServer(options: DaemonProxyOptions): http.Serve
   return http.createServer(createDaemonProxyRequestListener(createDaemonProxy(options)));
 }
 
-/** Serves a proxy from any `node:http` or `node:https` server; upload tickets follow its scheme. */
+/** Serves a proxy from any `node:http` or `node:https` server. */
 export function createDaemonProxyRequestListener(proxy: DaemonProxy): http.RequestListener {
   return (req, res) => {
     void import('./node-http.ts')

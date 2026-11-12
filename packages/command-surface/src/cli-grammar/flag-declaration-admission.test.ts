@@ -104,3 +104,25 @@ function getInRegistry(
   assert.ok(declaration, `expected a declaration for ${key}`);
   return declaration;
 }
+
+test('public origin cannot be supplied by project config or recorded', () => {
+  const declaration = getFlagDefinitionsForKey('publicOrigin')[0];
+  assert.equal(declaration?.projectConfig, false);
+  assert.equal(declaration?.recorded, false);
+  const workspace = makeTempWorkspace();
+  try {
+    writeProjectConfig(workspace.project, { publicOrigin: 'https://public.example' });
+    assert.throws(
+      () =>
+        resolveConfigDefaults({
+          command: 'proxy',
+          cwd: workspace.project,
+          cliFlags: OPERATOR_CLI_FLAGS,
+          env: { HOME: workspace.home },
+        }),
+      /not allowed in project config file/,
+    );
+  } finally {
+    fs.rmSync(workspace.root, { recursive: true, force: true });
+  }
+});

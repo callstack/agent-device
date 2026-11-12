@@ -182,3 +182,59 @@ test('proxy honors proxy host and port flags and mints a token when none is supp
   assert.ok(String(data.proxyBaseUrl).endsWith(`:${reservedPort}`));
   assert.match(String(data.token), /^[0-9a-f]{64}$/);
 });
+
+test('proxy rejects an invalid public origin before starting the daemon', async () => {
+  await assert.rejects(
+    proxyCommand({
+      host: createTestHostEnvironment(),
+      positionals: [],
+      flags: { json: true, help: false, version: false, publicOrigin: 'https://example.com/path' },
+      client: unreferencedClient,
+    }),
+    (error: { code?: string }) => error.code === 'INVALID_ARGS',
+  );
+  assert.equal(mocks.ensureProxyUpstreamDaemon.mock.calls.length, 0);
+  assert.equal(mocks.createdServers.length, 0);
+});
+
+test('proxy flag selects the public origin for an authenticated upload ticket', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const upstream = http.createServer((_req, res) => {
+    res.setHeader('content-type', 'application/json');
+    res.end(
+      JSON.stringify({
+        upload: {
+          url: 'http://127.0.0.1/upload/direct/id?part=1',
+          headers: { authorization: 'Bearer daemon-secret' },
+        },
+      }),
+    );
+  });
+  const port = await listenOnLoopback(upstream);
+  try {
+    mocks.ensureProxyUpstreamDaemon.mockResolvedValue({
+      httpPort: port,
+      token: 'daemon-secret',
+      stateDir: '/tmp',
+    });
+    runProxy({ publicOrigin: 'https://public.example:8443', daemonAuthToken: 'client-secret' });
+    const { data } = await waitForStartupOutput();
+    const response = await fetch(`${data.proxyBaseUrl}/agent-device/upload/preflight`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer client-secret', 'x-forwarded-proto': 'http' },
+      body: '{}',
+    });
+    assert.equal(response.status, 200);
+    const ticket = (await response.json()) as {
+      upload: { url: string; headers: Record<string, string> };
+    };
+    assert.equal(
+      ticket.upload.url,
+      'https://public.example:8443/agent-device/upload/direct/id?part=1',
+    );
+    assert.equal(ticket.upload.headers.authorization, 'Bearer client-secret');
+    assert.doesNotMatch(JSON.stringify(ticket), /daemon-secret/);
+  } finally {
+    await closeLoopbackServer(upstream);
+  }
+});

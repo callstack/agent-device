@@ -65,18 +65,28 @@ export default { fetch: proxy.handle };
 For a WebSocket or other message transport, turn each incoming message into a `Request` and send
 the `Response` back. Three things the proxy relies on:
 
-- `request.url` is the URL the client used. Upload tickets point clients at its origin. The first
-  comma-separated `x-forwarded-proto` value overrides the scheme when it is `http` or `https`
-  (case-insensitive). This value is client-controlled unless your ingress replaces it. Configure
-  your ingress to replace client-supplied values with the public scheme rather than append to them.
-  When you construct `Request` objects, use the public URL and remove untrusted forwarding
-  headers before calling `handle`.
+- Without `publicOrigin`, construct `request.url` with the canonical client-facing URL for each
+  request. The embedder is responsible for that URL. `Forwarded` and `X-Forwarded-*` headers do
+  not select the upload ticket origin.
 - `request.signal` aborts when the client goes away. The proxy then cancels the daemon request, so
   work the client stopped waiting for does not keep running.
 - Response bodies stream. Artifact downloads can be large, so forward the body as it arrives.
 
 `handle` never rejects. Errors come back as JSON responses with a 4xx or 5xx status, except a route
 the proxy does not serve, which gets a plain `Not found` 404.
+
+### Serve uploads through a TLS tunnel
+
+Set `publicOrigin` to the public HTTP(S) origin when TLS terminates before the proxy, for example
+`https://public.example:8443`. With the CLI, run
+`agent-device proxy --port 4310 --public-origin https://public.example:8443`. For an ephemeral
+tunnel, obtain its public name first, then configure and restart the proxy. This replaces the
+previous first-`X-Forwarded-Proto` behavior.
+
+Without a fixed origin, the Node listener uses the actual socket scheme and one validated `Host`
+header. Actual Node HTTPS sockets are supported. A custom direct-daemon HTTP embedding behind TLS
+termination can pass `publicOrigin` to `createDaemonHttpServer`. The built-in daemon listens on
+loopback HTTP; expose it behind TLS through a configured proxy.
 
 ### Reach the daemon over your own transport
 
