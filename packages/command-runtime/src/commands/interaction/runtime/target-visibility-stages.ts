@@ -1,3 +1,4 @@
+import { shellQuote } from '@agent-device/kernel/device-shell';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import { assertSnapshotScreenOrigin } from '@agent-device/contracts/capture';
 import type {
@@ -175,7 +176,7 @@ function scrollRevealClause(
 ): string {
   if (!direction) return 'Scroll toward it,';
   if (!selector) return `Scroll ${direction} toward it,`;
-  return `Run scroll ${direction} --until '${selector}' to bring it on screen,`;
+  return `Run scroll ${direction} --until ${shellQuote(selector)} to bring it on screen,`;
 }
 
 // Full on-screen visibility (not only the effective-viewport form): items inside an
