@@ -270,38 +270,86 @@ test('rejects system chrome inherited under an empty application window', () => 
   expect(decision?.diagnostics.helperNonSystemMeaningfulNodeCount).toBe(0);
 });
 
-test('lists only non-system application windows, by layer, topmost first', () => {
-  const window = (windowType: number, packageName: string, text: string, windowLayer = 0) =>
-    node({
-      windowType,
-      windowLayer,
-      packageName,
-      className: 'android.widget.FrameLayout',
-      children: [node({ text, packageName, className: 'android.widget.TextView' })],
-    });
-  const result = classifyAndroidHelperContent(
-    helperXml([
-      window(3, 'com.android.systemui', '12:00'),
-      window(1, 'android', 'Allow?'),
-      window(2, 'com.google.android.inputmethod.latin', 'Space'),
-      // Listed before the app, but below it: getWindows() order is not z-order.
-      window(1, 'com.google.android.apps.nexuslauncher', 'Gmail', 1),
-      window(1, 'com.google.android.apps.nexuslauncher', 'Photos', 1),
-      window(1, 'com.example.app', 'Home', 5),
-    ]),
-    {
-      backend: 'android-helper',
-      nodeCount: 12,
-      rootPresent: true,
-      windowCount: 6,
-      captureMode: 'interactive-windows',
-    },
-  );
+function foregroundWindowPackageOf(windows: string[]): string | undefined {
+  const result = classifyAndroidHelperContent(helperXml(windows), {
+    backend: 'android-helper',
+    nodeCount: windows.length * 2,
+    rootPresent: true,
+    windowCount: windows.length,
+    captureMode: 'interactive-windows',
+  });
+  return result.outcome === 'unusable' ? undefined : result.foregroundWindowPackage;
+}
 
-  expect(result.outcome === 'unusable' ? [] : result.applicationWindowPackages).toEqual([
-    'com.example.app',
-    'com.google.android.apps.nexuslauncher',
-  ]);
+function window(params: {
+  windowType: number;
+  packageName: string;
+  text: string;
+  windowLayer: number;
+  windowActive?: boolean;
+}): string {
+  const { text, ...windowAttributes } = params;
+  return node({
+    ...windowAttributes,
+    className: 'android.widget.FrameLayout',
+    children: [
+      node({ text, packageName: params.packageName, className: 'android.widget.TextView' }),
+    ],
+  });
+}
+
+test('names the active application window, not a stale one listed first or a system window above it', () => {
+  expect(
+    foregroundWindowPackageOf([
+      window({
+        windowType: 3,
+        packageName: 'com.android.systemui',
+        text: '12:00',
+        windowLayer: 9,
+        windowActive: true,
+      }),
+      window({
+        windowType: 2,
+        packageName: 'com.google.android.inputmethod.latin',
+        text: 'Space',
+        windowLayer: 8,
+      }),
+      // A stale session-app window Android kept after the transition: inactive, lower layer.
+      window({
+        windowType: 1,
+        packageName: 'com.android.settings',
+        text: 'Network & internet',
+        windowLayer: 1,
+      }),
+      window({
+        windowType: 1,
+        packageName: 'com.google.android.apps.nexuslauncher',
+        text: 'Gmail',
+        windowLayer: 2,
+        windowActive: true,
+      }),
+    ]),
+  ).toBe('com.google.android.apps.nexuslauncher');
+});
+
+test('names no foreground app when only a framework window is active', () => {
+  expect(
+    foregroundWindowPackageOf([
+      window({
+        windowType: 1,
+        packageName: 'android',
+        text: 'Allow?',
+        windowLayer: 3,
+        windowActive: true,
+      }),
+      window({
+        windowType: 1,
+        packageName: 'com.android.settings',
+        text: 'Network & internet',
+        windowLayer: 1,
+      }),
+    ]),
+  ).toBeUndefined();
 });
 
 test('returns a meaningful active system surface (notification shade) faithfully', () => {

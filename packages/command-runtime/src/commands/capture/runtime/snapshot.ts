@@ -235,18 +235,16 @@ function nextSnapshotSession(
 }
 
 /**
- * The app the response header names. An Android helper capture lists its application windows, so
- * one that shows none of the session app, such as the launcher after a failed open, or a session
- * with no app, names the topmost captured app instead. The session keeps its app.
+ * The app the response header names: the foreground application window the Android snapshot
+ * helper captured, such as the launcher after a failed open, else the session app. The session
+ * keeps its app.
  */
 function snapshotAppFields(capture: SnapshotCapture): {
   appName?: string;
   appBundleId?: string;
 } {
   const sessionApp = capture.result.appBundleId ?? capture.session?.appBundleId;
-  const appWindows = capture.annotations.androidSnapshot?.applicationWindowPackages;
-  const shownApp =
-    sessionApp && appWindows?.includes(sessionApp) ? sessionApp : (appWindows?.[0] ?? sessionApp);
+  const shownApp = capture.annotations.androidSnapshot?.foregroundWindowPackage ?? sessionApp;
   const appName =
     shownApp === sessionApp ? (capture.result.appName ?? capture.session?.appName) : shownApp;
   return {

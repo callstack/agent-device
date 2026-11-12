@@ -642,8 +642,8 @@ async function captureAndroidHelperContentAttempt(params: {
       metadata: {
         ...helperCapture.metadata,
         ...(systemSurfaceOnly ? { systemSurfaceOnly: true } : {}),
-        ...(content.applicationWindowPackages.length > 0
-          ? { applicationWindowPackages: content.applicationWindowPackages }
+        ...(content.foregroundWindowPackage
+          ? { foregroundWindowPackage: content.foregroundWindowPackage }
           : {}),
       },
     },

@@ -6,8 +6,8 @@ import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 
-async function snapshotWithAppWindows(
-  applicationWindowPackages: string[] | undefined,
+async function snapshotWithForeground(
+  foregroundWindowPackage: string | undefined,
   sessionApp: { appName: string; appBundleId: string } | undefined = {
     appName: 'Settings',
     appBundleId: 'com.android.settings',
@@ -23,7 +23,7 @@ async function snapshotWithAppWindows(
         }),
         androidSnapshot: {
           backend: 'android-helper',
-          ...(applicationWindowPackages ? { applicationWindowPackages } : {}),
+          ...(foregroundWindowPackage ? { foregroundWindowPackage } : {}),
         },
         ...sessionApp,
       }),
@@ -41,37 +41,32 @@ async function snapshotWithAppWindows(
   return { result, stored };
 }
 
-test('an Android snapshot names the captured app when the session app has no window in it', async () => {
-  const { result, stored } = await snapshotWithAppWindows([
-    'com.google.android.apps.nexuslauncher',
-    'com.example.behind',
-  ]);
+test('an Android snapshot names the captured foreground app when it is not the session app', async () => {
+  const { result, stored } = await snapshotWithForeground('com.google.android.apps.nexuslauncher');
 
+  // A foreign app has no label of its own here, so the header shows its package.
   assert.equal(result.appName, 'com.google.android.apps.nexuslauncher');
   assert.equal(result.appBundleId, 'com.google.android.apps.nexuslauncher');
   assert.equal(stored?.appBundleId, 'com.android.settings');
 });
 
-test('an Android snapshot keeps the session app while one of its windows is captured', async () => {
-  const { result } = await snapshotWithAppWindows([
-    'com.google.android.permissioncontroller',
-    'com.android.settings',
-  ]);
+test('an Android snapshot keeps the session app label when the session app is in front', async () => {
+  const { result } = await snapshotWithForeground('com.android.settings');
 
   assert.equal(result.appName, 'Settings');
   assert.equal(result.appBundleId, 'com.android.settings');
 });
 
-test('a snapshot without application window facts names the session app', async () => {
-  const { result } = await snapshotWithAppWindows(undefined);
+test('a snapshot without a foreground window fact names the session app', async () => {
+  const { result } = await snapshotWithForeground(undefined);
 
   assert.equal(result.appName, 'Settings');
   assert.equal(result.appBundleId, 'com.android.settings');
 });
 
-test('an Android snapshot in a session with no app names the topmost captured app', async () => {
-  const { result } = await snapshotWithAppWindows(
-    ['com.google.android.apps.nexuslauncher', 'com.example.behind'],
+test('an Android snapshot in a session with no app names the captured foreground app', async () => {
+  const { result } = await snapshotWithForeground(
+    'com.google.android.apps.nexuslauncher',
     undefined,
   );
 

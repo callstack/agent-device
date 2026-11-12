@@ -5,6 +5,7 @@ import { classifyAndroidAlertIdentifier } from './alert-detection.ts';
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
 import { ANDROID_WINDOW_TYPE_APPLICATION } from './ui-hierarchy-node.ts';
+import { isAndroidForegroundWindow } from './ui-hierarchy-visibility.ts';
 
 const MAX_REPORTED_WINDOW_TYPES = 8;
 const MIN_FOREGROUND_APP_MEANINGFUL_NODES = 2;
@@ -35,42 +36,28 @@ export type AndroidHelperContentRecoveryDecision = {
   };
 };
 
-type AndroidHelperContentOutcome =
+export type AndroidHelperContentClassification =
   | { outcome: 'ok' }
   | { outcome: 'system-surface-only' }
   | { outcome: 'unusable'; decision: AndroidHelperContentRecoveryDecision };
-
-export type AndroidHelperContentClassification =
-  | ({ outcome: 'ok' | 'system-surface-only' } & AndroidApplicationWindows)
-  | { outcome: 'unusable'; decision: AndroidHelperContentRecoveryDecision };
-
-type AndroidApplicationWindows = {
-  /**
-   * Package names of the captured application windows that are not system-owned, by window layer
-   * (topmost first), each listed once: the app a snapshot header names. Input method and system
-   * windows are never application windows.
-   */
-  applicationWindowPackages: string[];
-};
 
 export function classifyAndroidHelperContent(
   xml: string,
   metadata: AndroidSnapshotBackendMetadata,
   options: { foregroundAppPackage?: string } = {},
-): AndroidHelperContentClassification {
-  if (metadata.backend !== 'android-helper')
-    return { outcome: 'ok', applicationWindowPackages: [] };
+): AndroidHelperContentClassification & { foregroundWindowPackage?: string } {
+  if (metadata.backend !== 'android-helper') return { outcome: 'ok' };
   const summary = summarizeAndroidHelperXml(xml, options.foregroundAppPackage);
   const content = classifyAndroidHelperSummary(summary, metadata);
-  return content.outcome === 'unusable'
-    ? content
-    : { ...content, applicationWindowPackages: summary.applicationWindowPackages };
+  return summary.foregroundWindow
+    ? { ...content, foregroundWindowPackage: summary.foregroundWindow.packageName }
+    : content;
 }
 
 function classifyAndroidHelperSummary(
   summary: AndroidHelperXmlSummary,
   metadata: AndroidSnapshotBackendMetadata,
-): AndroidHelperContentOutcome {
+): AndroidHelperContentClassification {
   if (isEmptyHelperOutput(summary, metadata)) {
     return unusable(
       summary,
@@ -120,7 +107,7 @@ function unusable(
   metadata: AndroidSnapshotBackendMetadata,
   reason: AndroidHelperContentRecoveryDecision['reason'],
   failureReason: string,
-): AndroidHelperContentOutcome {
+): AndroidHelperContentClassification {
   return {
     outcome: 'unusable',
     decision: buildRecoveryDecision(summary, metadata, reason, failureReason),
@@ -224,13 +211,14 @@ type AndroidHelperXmlSummary = {
   foregroundAppPackage?: string;
   foregroundAppMeaningfulNodeCount?: number;
   windowTypes: number[];
-} & AndroidApplicationWindows;
+  /**
+   * The non-system application window the presentation keeps as foreground: active or focused, at
+   * the highest layer. A stale application window under it is not foreground.
+   */
+  foregroundWindow?: { packageName: string; layer: number };
+};
 
-type AndroidHelperXmlSummaryState = Omit<
-  AndroidHelperXmlSummary,
-  'windowTypes' | 'applicationWindowPackages'
-> & {
-  applicationWindows: Array<{ packageName: string; layer: number }>;
+type AndroidHelperXmlSummaryState = Omit<AndroidHelperXmlSummary, 'windowTypes'> & {
   currentWindowType?: number;
   currentWindowActiveOrFocused?: boolean;
   currentWindowSystemOwned?: boolean;
@@ -270,7 +258,6 @@ function createAndroidHelperXmlSummaryState(
       ? { foregroundAppPackage, foregroundAppMeaningfulNodeCount: 0 }
       : {}),
     windowTypes: new Set<number>(),
-    applicationWindows: [],
   };
 }
 
@@ -308,13 +295,18 @@ function recordAndroidHelperWindowNode(
   if (node.windowType === ANDROID_WINDOW_TYPE_APPLICATION) {
     summary.applicationWindowRootCount += 1;
     if (summary.currentWindowSystemOwned) summary.systemApplicationWindowRootCount += 1;
-    else if (node.packageName !== null) {
-      summary.applicationWindows.push({
-        packageName: node.packageName,
-        layer: node.windowLayer ?? Number.NEGATIVE_INFINITY,
-      });
-    }
+    else recordAndroidForegroundWindow(summary, node);
   }
+}
+
+function recordAndroidForegroundWindow(
+  summary: AndroidHelperXmlSummaryState,
+  node: AndroidUiNodeMetadata,
+): void {
+  if (node.packageName === null || !isAndroidForegroundWindow(node)) return;
+  const layer = node.windowLayer ?? -1;
+  if (summary.foregroundWindow && summary.foregroundWindow.layer >= layer) return;
+  summary.foregroundWindow = { packageName: node.packageName, layer };
 }
 
 function recordAndroidHelperMeaningfulNode(
@@ -404,15 +396,7 @@ function finalizeAndroidHelperXmlSummary(
         }
       : {}),
     windowTypes: [...summary.windowTypes].sort((a, b) => a - b).slice(0, MAX_REPORTED_WINDOW_TYPES),
-    // The helper lists windows in getWindows() order, which is not z-order; the layer is.
-    applicationWindowPackages: [
-      ...new Set(
-        summary.applicationWindows
-          .slice()
-          .sort((a, b) => b.layer - a.layer || 0)
-          .map((window) => window.packageName),
-      ),
-    ],
+    ...(summary.foregroundWindow ? { foregroundWindow: summary.foregroundWindow } : {}),
   };
 }
 

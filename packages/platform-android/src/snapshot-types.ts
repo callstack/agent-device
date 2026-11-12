@@ -42,11 +42,10 @@ export type AndroidSnapshotBackendMetadata = {
   captureMode?: AndroidSnapshotCaptureMode;
   systemSurfaceOnly?: boolean;
   /**
-   * Package names of the captured application windows that are not system-owned, by window layer
-   * (topmost first), each listed once. Input method and system windows are excluded. Absent when
-   * the capture read no such window.
+   * Package of the foreground application window the snapshot helper captured: active or focused,
+   * at the highest layer, and not owned by the system. Absent when the helper saw none.
    */
-  applicationWindowPackages?: string[];
+  foregroundWindowPackage?: string;
   windowCount?: number;
   /**
    * `AccessibilityWindowInfo` types of the listed windows the helper could not serialize because
