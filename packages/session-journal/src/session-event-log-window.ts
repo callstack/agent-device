@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import {
@@ -36,6 +37,7 @@ const EVENT_LOG_WINDOW_SUFFIX = '.window.json';
 const EVENT_LOG_WINDOW_VERSION = 2;
 const RETAINED_GENERATIONS = 2;
 const WINDOW_READ_ATTEMPTS = 3;
+const EVENT_LOG_WRITER_TOKEN = randomUUID();
 
 export const EVENT_LOG_CURSOR_EXPIRED_REASON = 'EVENT_LOG_CURSOR_EXPIRED';
 export const EVENT_LOG_WINDOW_UNVERIFIED_REASON = 'EVENT_LOG_WINDOW_UNVERIFIED';
@@ -95,6 +97,7 @@ export function readSessionEventLogWindow(eventLogPath: string): SessionEventLog
     const before = readWindowStateToken(eventLogPath);
     try {
       const window = placeSessionEventLogWindow(eventLogPath);
+      for (const file of window.files) assertCompleteEventLogFile(eventLogPath, file.path);
       if (readWindowStateToken(eventLogPath) === before) return window;
     } catch (error) {
       lastError = error;
@@ -116,7 +119,7 @@ function placeSessionEventLogWindow(eventLogPath: string): SessionEventLogWindow
   if (!newest) throw unverifiedWindowError(eventLogPath, 'window file records no generation');
 
   const activeExists = fileExists(eventLogPath);
-  const activeStart = placeActiveGeneration(eventLogPath, newest);
+  const activeStart = placeActiveGeneration(readFirstLineDigest(eventLogPath), newest);
   const files: EventLogWindowFile[] = [];
   const rotatedStart = placeRotatedGeneration({
     eventLogPath,
@@ -146,8 +149,10 @@ function placeNeverRotatedWindow(eventLogPath: string, rotatedPath: string): Ses
  * the sidecar was written, so a first line still matching it means the rename
  * has not landed yet and the active file is still that generation.
  */
-function placeActiveGeneration(eventLogPath: string, newest: EventLogGeneration): number {
-  const activeDigest = readFirstLineDigest(eventLogPath);
+function placeActiveGeneration(
+  activeDigest: string | undefined,
+  newest: EventLogGeneration,
+): number {
   return activeDigest !== undefined && activeDigest === newest.firstLineDigest
     ? newest.firstLineIndex
     : newest.firstLineIndex + newest.lineCount;
@@ -182,45 +187,43 @@ function placeRotatedGeneration(params: {
 }
 
 /**
- * Rotate `events.ndjson` to `events.ndjson.1` once it reaches `maxBytes`.
+ * Rotate `events.ndjson` to `events.ndjson.1` before the incoming line exceeds `maxBytes`.
  *
  * Runs inside the per-path serialized write queue. The sidecar describing the
  * post-rename world is written first, so the only intermediate state a reader
  * can observe is "sidecar ahead of rename" — which the digests identify
- * exactly. A sidecar this function cannot read never blocks the append: the
- * window is marked unverifiable (reads then fail typed) and writing continues.
+ * exactly. A window that cannot be verified blocks rotation.
  */
 export async function rotateSessionEventLogIfNeeded(
   eventLogPath: string,
   maxBytes: number,
+  incomingBytes: number,
 ): Promise<boolean> {
   const active = lstatEventLogFile(eventLogPath);
-  if (!active || active.size < maxBytes) return false;
+  if (active) assertCompleteEventLogFile(eventLogPath, eventLogPath);
+  if (!active || active.size + incomingBytes <= maxBytes) return false;
+
+  readSessionEventLogWindow(eventLogPath);
 
   const sidecar = readWindowSidecar(eventLogPath);
-  if (sidecar === 'unverifiable') {
-    await fs.promises.rename(eventLogPath, resolveRotatedSessionEventLogPath(eventLogPath));
-    return true;
-  }
+  if (sidecar === 'unverifiable')
+    throw unverifiedWindowError(eventLogPath, 'window file is invalid');
 
   const measured = await measureEventLogFile(eventLogPath);
   if (measured.firstLineDigest !== undefined) {
     const generations = sidecar ?? [];
     const newest = generations.at(-1);
-    // A record whose digest already matches this exact file means a previous
-    // rotation wrote the record but died before its rename; reuse it instead of
-    // counting the same generation twice.
-    const record: EventLogGeneration =
-      newest && newest.firstLineDigest === measured.firstLineDigest
-        ? newest
-        : {
-            firstLineIndex: newest ? newest.firstLineIndex + newest.lineCount : 0,
-            lineCount: measured.lineCount,
-            firstLineDigest: measured.firstLineDigest,
-          };
-    const next = (record === newest ? generations : [...generations, record]).slice(
-      -RETAINED_GENERATIONS,
-    );
+    const activeRecorded = newest?.firstLineDigest === measured.firstLineDigest;
+    if (activeRecorded && newest.lineCount > measured.lineCount) {
+      throw unverifiedWindowError(eventLogPath, 'active generation differs from its window record');
+    }
+    const record: EventLogGeneration = {
+      firstLineIndex: newest ? placeActiveGeneration(measured.firstLineDigest, newest) : 0,
+      lineCount: measured.lineCount,
+      firstLineDigest: measured.firstLineDigest,
+    };
+    const previous = activeRecorded ? generations.slice(0, -1) : generations;
+    const next = [...previous, record].slice(-RETAINED_GENERATIONS);
     await writeWindowSidecar(eventLogPath, next);
   }
   await fs.promises.rename(eventLogPath, resolveRotatedSessionEventLogPath(eventLogPath));
@@ -323,13 +326,41 @@ async function writeWindowSidecar(
   generations: readonly EventLogGeneration[],
 ): Promise<void> {
   const windowPath = resolveWindowPath(eventLogPath);
-  const tmpPath = `${windowPath}.${process.pid}.tmp`;
-  await fs.promises.writeFile(
-    tmpPath,
-    JSON.stringify({ version: EVENT_LOG_WINDOW_VERSION, generations }),
-    'utf8',
-  );
-  await fs.promises.rename(tmpPath, windowPath);
+  const tmpPath = `${windowPath}.${process.pid}.${EVENT_LOG_WRITER_TOKEN}.tmp`;
+  const file = await fs.promises.open(tmpPath, 'wx');
+  try {
+    try {
+      await file.writeFile(
+        JSON.stringify({ version: EVENT_LOG_WINDOW_VERSION, generations }),
+        'utf8',
+      );
+    } finally {
+      await file.close();
+    }
+    await fs.promises.rename(tmpPath, windowPath);
+  } catch (error) {
+    await fs.promises.unlink(tmpPath).catch(() => undefined);
+    throw error;
+  }
+}
+
+function assertCompleteEventLogFile(eventLogPath: string, filePath: string): void {
+  try {
+    const descriptor = fs.openSync(filePath, 'r');
+    try {
+      const { size } = fs.fstatSync(descriptor);
+      if (size === 0) return;
+      const tail = Buffer.alloc(1);
+      if (fs.readSync(descriptor, tail, 0, 1, size - 1) !== 1 || tail[0] !== 0x0a) {
+        throw unverifiedWindowError(eventLogPath, 'retained event log has an incomplete line');
+      }
+    } finally {
+      fs.closeSync(descriptor);
+    }
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw unverifiedWindowError(eventLogPath, 'retained event log completeness cannot be verified');
+  }
 }
 
 function fileExists(filePath: string): boolean {

@@ -2,7 +2,7 @@ import type { SessionAction } from '@agent-device/contracts/session';
 import fs from 'node:fs';
 import path from 'node:path';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
 import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/diagnostics';
 import { isRecord } from '@agent-device/kernel/record';
@@ -21,7 +21,10 @@ const SESSION_EVENT_LOG_FILENAME = 'events.ndjson';
 const EVENT_LOG_VERSION = 1;
 const DEFAULT_EVENT_LIMIT = 100;
 const MAX_EVENT_LIMIT = 500;
-const pendingEventLogWrites = new Map<string, Promise<void>>();
+const MAX_QUEUED_ENTRIES = 128;
+const MAX_QUEUED_BYTES = 16 * 1024 * 1024;
+type EventLogQueue = { pending: Promise<void>; entries: number; bytes: number };
+const pendingEventLogWrites = new Map<string, EventLogQueue>();
 const ensuredEventLogDirs = new Set<string>();
 
 export type SessionEventLogEntry = {
@@ -84,55 +87,90 @@ export function appendSessionEvent(
 
 export async function flushSessionEventLogWrites(eventLogPath?: string): Promise<void> {
   const pending = eventLogPath
-    ? pendingEventLogWrites.get(eventLogPath)
-    : Promise.all(pendingEventLogWrites.values());
+    ? pendingEventLogWrites.get(eventLogPath)?.pending
+    : Promise.all([...pendingEventLogWrites.values()].map((queue) => queue.pending));
   await pending;
 }
 
+type EventLogFailureReason =
+  | 'entry-too-large'
+  | 'queue-full'
+  | 'maintenance-failed'
+  | 'append-failed';
+
+function reportEventLogFailure(
+  eventLogPath: string,
+  reason: EventLogFailureReason,
+  operation: string,
+  error?: unknown,
+): void {
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'session_event_log_write_failed',
+    data: {
+      path: eventLogPath,
+      reason,
+      operation,
+      errno: (error as NodeJS.ErrnoException | undefined)?.code,
+      error: error === undefined ? undefined : normalizeError(error),
+    },
+  });
+}
+
 function queueEventLogWrite(eventLogPath: string, line: string, env: NodeJS.ProcessEnv): void {
-  const previous = pendingEventLogWrites.get(eventLogPath) ?? Promise.resolve();
-  const pending = previous
-    .catch(() => undefined)
+  const maxBytes = resolveSessionEventLogMaxBytes(env);
+  const lineBytes = Buffer.byteLength(line, 'utf8');
+  if (lineBytes > Math.min(maxBytes, MAX_QUEUED_BYTES)) {
+    reportEventLogFailure(eventLogPath, 'entry-too-large', 'admission');
+    return;
+  }
+  let queue = pendingEventLogWrites.get(eventLogPath);
+  if (
+    queue &&
+    (queue.entries >= MAX_QUEUED_ENTRIES || queue.bytes + lineBytes > MAX_QUEUED_BYTES)
+  ) {
+    reportEventLogFailure(eventLogPath, 'queue-full', 'admission');
+    return;
+  }
+  if (!queue) {
+    queue = { pending: Promise.resolve(), entries: 0, bytes: 0 };
+    pendingEventLogWrites.set(eventLogPath, queue);
+  }
+  const current = queue;
+  current.entries += 1;
+  current.bytes += lineBytes;
+  current.pending = current.pending
     .then(async () => {
-      await ensureEventLogDir(eventLogPath);
-      await rotateSessionEventLogIfNeeded(eventLogPath, resolveSessionEventLogMaxBytes(env));
-      await fs.promises.appendFile(eventLogPath, line, 'utf8');
-    })
-    .catch((error) => {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'session_event_log_write_failed',
-        data: {
-          path: eventLogPath,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
+      try {
+        await ensureEventLogDir(eventLogPath);
+      } catch (error) {
+        reportEventLogFailure(eventLogPath, 'maintenance-failed', 'mkdir', error);
+        return;
+      }
+      try {
+        await rotateSessionEventLogIfNeeded(eventLogPath, maxBytes, lineBytes);
+      } catch (error) {
+        reportEventLogFailure(eventLogPath, 'maintenance-failed', 'rotation', error);
+        return;
+      }
+      try {
+        await fs.promises.appendFile(eventLogPath, line, 'utf8');
+      } catch (error) {
+        reportEventLogFailure(eventLogPath, 'append-failed', 'append', error);
+      }
     })
     .finally(() => {
-      if (pendingEventLogWrites.get(eventLogPath) === pending) {
-        pendingEventLogWrites.delete(eventLogPath);
-      }
+      current.entries -= 1;
+      current.bytes -= lineBytes;
+      if (current.entries === 0) pendingEventLogWrites.delete(eventLogPath);
     });
-  pendingEventLogWrites.set(eventLogPath, pending);
 }
 
 async function ensureEventLogDir(eventLogPath: string): Promise<void> {
   const dir = path.dirname(eventLogPath);
   if (ensuredEventLogDirs.has(dir)) return;
-  try {
-    await fs.promises.mkdir(dir, { recursive: true });
-    ensuredEventLogDirs.add(dir);
-  } catch (error) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'session_event_log_dir_failed',
-      data: {
-        path: eventLogPath,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
-    throw error;
-  }
+  await fs.promises.mkdir(dir, { recursive: true });
+  ensuredEventLogDirs.add(dir);
 }
 
 export function appendActionEvent(
