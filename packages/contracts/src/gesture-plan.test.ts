@@ -123,7 +123,23 @@ test('densifyGesturePath hands within-segment pacing to the progress hook and ke
   assert.ok(
     seen.some(([progress, segmentDurationMs]) => progress === 0.5 && segmentDurationMs === 100),
   );
-  // Endpoints never pass through the hook.
+  // The hook only shapes interior offsets: every progress it saw lies strictly
+  // between 0 and 1, so the endpoints never passed through it.
+  assert.ok(seen.length >= 1);
+  for (const [progress] of seen) {
+    assert.ok(progress > 0 && progress < 1, `hook saw progress ${progress}`);
+  }
   assert.deepEqual(dense[0]?.point, { x: 0, y: 0 });
   assert.deepEqual(dense.at(-1)?.point, { x: 100, y: 0 });
+});
+
+test('densifyGesturePath refuses a duration that disagrees with the last canonical offset', () => {
+  const canonical = [
+    { offsetMs: 0, point: { x: 0, y: 0 } },
+    { offsetMs: 100, point: { x: 100, y: 0 } },
+  ];
+  assert.throws(
+    () => densifyGesturePath(canonical, 150, 'default'),
+    /must equal the last canonical sample offset/,
+  );
 });

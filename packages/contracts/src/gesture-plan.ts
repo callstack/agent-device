@@ -482,6 +482,16 @@ export function densifyGesturePath(
   profile: GestureSamplingProfile,
   progress: (baseProgress: number, segmentDurationMs: number) => number = (p) => p,
 ): PointerTrajectorySample[] {
+  // The plan's last offset is its duration; a disagreement between the two
+  // arguments would extrapolate past the final sample or drop its endpoint.
+  const last = canonical.at(-1);
+  if (!last || last.offsetMs !== durationMs) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'gesture sample duration must equal the last canonical sample offset',
+      { reason: 'GESTURE_SAMPLE_DURATION_MISMATCH', durationMs },
+    );
+  }
   const offsets = [
     ...new Set([
       ...sampleGestureOffsets(durationMs, profile),
@@ -499,16 +509,22 @@ export function densifyGesturePath(
     const start = canonical[segmentIndex]!;
     const end = canonical[segmentIndex + 1]!;
     const segmentDurationMs = end.offsetMs - start.offsetMs;
+    const baseProgress =
+      segmentDurationMs === 0 ? 0 : (offsetMs - start.offsetMs) / segmentDurationMs;
     return {
       offsetMs,
       point:
+        // Both endpoints and every zero-length segment keep the canonical
+        // point, so the hook only ever reshapes strictly interior offsets.
         offsetMs === end.offsetMs || segmentDurationMs === 0
           ? end.point
-          : interpolateGesturePoint(
-              start.point,
-              end.point,
-              progress((offsetMs - start.offsetMs) / segmentDurationMs, segmentDurationMs),
-            ),
+          : baseProgress === 0
+            ? start.point
+            : interpolateGesturePoint(
+                start.point,
+                end.point,
+                progress(baseProgress, segmentDurationMs),
+              ),
     };
   });
 }
