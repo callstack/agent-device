@@ -290,7 +290,7 @@ const backCommandDescription =
 const homeCommandDescription =
   'Send the selected device to its home screen. This leaves the app session open but moves the foreground away from the app.';
 const orientationCommandDescription =
-  'Set device orientation on iOS and Android. auto hands rotation back to the sensor on ADB-backed Android (local and Limrun); other backends refuse it. A foldable iPhone simulator (iPhone Duo) refuses portrait-upside-down. In both default and scoped simulator sets it rotates through the fold helper and succeeds only when the lit panel shows the requested orientation; otherwise it fails with orientation-unverified, or orientation-panel-table-unavailable when the final guest panel table cannot be read.';
+  'Set device orientation on iOS and Android. auto hands rotation back to the sensor on ADB-backed Android (local and Limrun); other backends refuse it. In both default and scoped simulator sets, an iPhone Duo classified with more than one integrated panel refuses portrait-upside-down and rotates through the fold helper; it succeeds only when the lit panel shows the requested orientation, otherwise it fails with orientation-unverified, or orientation-panel-table-unavailable when the final guest panel table cannot be read. A simulator classified with one panel, or whose first classification read is unresolved, uses the standard runner rotation.';
 const foldGuidance = {
   hingeEvent: 'simulator HID hinge event',
   permissions: 'Device Hub and host Accessibility permission are not required.',
