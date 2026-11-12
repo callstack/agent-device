@@ -34,3 +34,29 @@ for (const destinationExists of [true, false]) {
     });
   });
 }
+
+for (const destinationExists of [true, false]) {
+  test(`capture failure preserves ${destinationExists ? 'existing' : 'absent'} crop destination`, async () => {
+    await withProviderScenarioResource(
+      () =>
+        createAndroidSettingsWorld({
+          onAdbExec: (args) =>
+            args.join(' ') === 'exec-out screencap -p'
+              ? { stdout: '', stderr: 'capture failed', exitCode: 1 }
+              : undefined,
+        }),
+      async (world) => {
+        await world.daemon.client().apps.open({ app: 'settings', ...world.selection });
+        const destination = path.join(world.tempRoot, 'crop.png');
+        const sentinel = Buffer.from('existing destination');
+        if (destinationExists) fs.writeFileSync(destination, sentinel);
+        const response = await world.daemon.callCommand('screenshot', [destination], {
+          screenshotCropOn: 'label="Apps"',
+        });
+        assert.ok(response.json?.error);
+        if (destinationExists) assert.deepEqual(fs.readFileSync(destination), sentinel);
+        else assert.equal(fs.existsSync(destination), false);
+      },
+    );
+  });
+}
