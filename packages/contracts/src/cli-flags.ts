@@ -43,9 +43,6 @@ export type CliFlags = CloudProviderProfileFields &
     daemonServerMode?: DaemonServerMode;
     proxyHost?: string;
     proxyPort?: number;
-    // Declared for `mcp --help` and for the CLI's rejection of other `mcp` arguments; nothing
-    // reads the parsed value. The process entry starts the server from argv (`mcp --structured`)
-    // before the CLI module loads, so that one argv check is the flag's only runtime read.
     mcpStructured?: boolean;
     tenant?: string;
     sessionIsolation?: SessionIsolationMode;
