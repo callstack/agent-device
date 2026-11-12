@@ -50,14 +50,18 @@ export function nodeHttpRequestUrl(
     containsInvalidHttpUrlCharacter(target)
   )
     return null;
+  const origin = resolveHttpRequestBaseUrl(rawHeaders, secure);
+  return origin === null ? null : new URL(target, origin);
+}
+
+function resolveHttpRequestBaseUrl(rawHeaders: readonly string[], secure: boolean): string | null {
   const hosts: string[] = [];
   for (let i = 0; i + 1 < rawHeaders.length; i += 2) {
     if (rawHeaders[i]?.toLowerCase() === 'host') hosts.push(rawHeaders[i + 1] ?? '');
   }
   if (hosts.length !== 1 || /[/?#]/.test(hosts[0] ?? '')) return null;
   try {
-    const origin = normalizeDaemonPublicOrigin(`${secure ? 'https' : 'http'}://${hosts[0]}`);
-    return new URL(target, origin);
+    return normalizeDaemonPublicOrigin(`${secure ? 'https' : 'http'}://${hosts[0]}`);
   } catch {
     return null;
   }
