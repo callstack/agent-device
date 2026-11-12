@@ -128,13 +128,11 @@ export function sessionChecks(
         sameDeviceSessions.length > 0
           ? `Other active sessions target the same device: ${sameDeviceSessions.join(', ')}`
           : `Active session ${session.name} targets ${session.device.name}`,
+      // No `command`: agents run that field verbatim, and the daemon cannot tell whether another
+      // session is the caller's, so the close stays conditional in the hint.
       hint:
         sameDeviceSessions.length > 0
-          ? 'Before a QA run, close a stale session only if it is yours and left from an old attempt.'
-          : undefined,
-      command:
-        sameDeviceSessions.length > 0
-          ? `agent-device close --session ${sameDeviceSessions[0]} --platform ${publicPlatformString(session.device)}`
+          ? `Before a QA run, run agent-device close --session ${sameDeviceSessions[0]} --platform ${publicPlatformString(session.device)} only if that session is yours and left from an old attempt.`
           : undefined,
       evidence: {
         session: sessionName,
