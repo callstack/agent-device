@@ -278,6 +278,40 @@ test('resolveTargetDevice reuses request-scoped device resolution cache for iden
   assert.equal(mockListAppleDevices.mock.calls.length, 1);
 });
 
+test('resolveTargetDevice reuses the request cache after the inventory configures the host env', async () => {
+  const env: Record<string, string | undefined> = { PATH: '/usr/bin' };
+  mockListAppleDevices.mockImplementation(async () => {
+    env.ANDROID_HOME = '/sdk';
+    env.PATH = `/sdk/platform-tools:${env.PATH}`;
+    return [bootedSimulator];
+  });
+
+  await withResolveTargetDeviceCacheScope(async () => {
+    const first = await resolveTargetDevice({ udid: 'sim-2' }, { env });
+    const inventoryReads = mockListAppleDevices.mock.calls.length;
+    const second = await resolveTargetDevice({ udid: 'sim-2' }, { env });
+
+    assert.equal(first.id, 'sim-2');
+    assert.equal(second.id, 'sim-2');
+    assert.equal(mockListAppleDevices.mock.calls.length, inventoryReads);
+  });
+});
+
+test('resolveTargetDevice request cache key separates env-derived device allowlists', async () => {
+  mockListAppleDevices.mockResolvedValue([bootedSimulator]);
+
+  await withResolveTargetDeviceCacheScope(async () => {
+    await resolveTargetDevice({ udid: 'sim-2' }, { env: {} });
+    const inventoryReads = mockListAppleDevices.mock.calls.length;
+    await resolveTargetDevice(
+      { udid: 'sim-2' },
+      { env: { AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST: 'emulator-5554' } },
+    );
+
+    assert.equal(mockListAppleDevices.mock.calls.length, inventoryReads * 2);
+  });
+});
+
 test('resolveTargetDevice request cache key separates device selectors', async () => {
   mockListAppleDevices.mockResolvedValue([simulator, bootedSimulator]);
 
