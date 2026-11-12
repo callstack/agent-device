@@ -1,12 +1,17 @@
 import { expect, test } from 'vitest';
 import { shouldIncludeAndroidNode } from '../ui-hierarchy-inclusion.ts';
 import type { AndroidNode } from '../ui-hierarchy-node.ts';
+import {
+  ANDROID_DEVICE_NAME_DIALOG_RAW_NODES,
+  walkInteractiveOnlyAndroidFixture,
+} from '../ui-hierarchy.fixtures.ts';
 
 test('interactive inclusion keeps positive agent targets and rejects degenerate geometry', () => {
   expect(
     shouldIncludeAndroidNode(
       node({ clickable: true }),
       { interactiveOnly: true },
+      false,
       false,
       false,
       false,
@@ -19,6 +24,7 @@ test('interactive inclusion keeps positive agent targets and rejects degenerate 
       false,
       false,
       false,
+      false,
     ),
   ).toBe(false);
 });
@@ -26,10 +32,33 @@ test('interactive inclusion keeps positive agent targets and rejects degenerate 
 test('interactive inclusion keeps a semantic Compose proxy only in actionable context', () => {
   const semanticView = node({ type: 'android.view.View', label: 'Start a call' });
   expect(
-    shouldIncludeAndroidNode(semanticView, { interactiveOnly: true }, true, false, false),
+    shouldIncludeAndroidNode(semanticView, { interactiveOnly: true }, true, false, false, false),
   ).toBe(true);
   expect(
-    shouldIncludeAndroidNode(semanticView, { interactiveOnly: true }, false, false, false),
+    shouldIncludeAndroidNode(semanticView, { interactiveOnly: true }, false, false, false, false),
+  ).toBe(false);
+});
+
+test('interactive inclusion keeps an AlertDialog title and drops screen text outside the dialog', () => {
+  const labels = walkInteractiveOnlyAndroidFixture(ANDROID_DEVICE_NAME_DIALOG_RAW_NODES).map(
+    (presented) => presented.label,
+  );
+  expect(labels).toContain('Device name');
+  expect(labels).toEqual(expect.arrayContaining(['sdk_gphone64_arm64', 'Cancel', 'OK']));
+  expect(labels).not.toContain('4:37');
+});
+
+test('interactive inclusion keeps passive text only inside an alert panel', () => {
+  const title = node({ type: 'android.widget.TextView', label: 'Device name' });
+  expect(
+    shouldIncludeAndroidNode(title, { interactiveOnly: true }, false, false, false, true),
+  ).toBe(true);
+  expect(
+    shouldIncludeAndroidNode(title, { interactiveOnly: true }, false, false, false, false),
+  ).toBe(false);
+  const panelLayout = node({ type: 'android.widget.LinearLayout', label: 'Panel' });
+  expect(
+    shouldIncludeAndroidNode(panelLayout, { interactiveOnly: true }, false, false, false, true),
   ).toBe(false);
 });
 
@@ -41,13 +70,14 @@ test('regular inclusion preserves meaningful structural nodes and actionable des
       false,
       false,
       false,
+      false,
     ),
   ).toBe(true);
   expect(
-    shouldIncludeAndroidNode(node({ type: 'android.view.View' }), {}, false, true, false),
+    shouldIncludeAndroidNode(node({ type: 'android.view.View' }), {}, false, true, false, false),
   ).toBe(true);
   expect(
-    shouldIncludeAndroidNode(node({ type: 'android.view.View' }), {}, false, false, false),
+    shouldIncludeAndroidNode(node({ type: 'android.view.View' }), {}, false, false, false, false),
   ).toBe(false);
 });
 

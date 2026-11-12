@@ -1,0 +1,778 @@
+[
+  {
+    "index": 0,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.google.android.apps.nexuslauncher",
+    "rect": {
+      "x": 0,
+      "y": 2274,
+      "width": 1080,
+      "height": 126
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 1,
+    "parentIndex": 0,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.google.android.apps.nexuslauncher",
+    "identifier": "com.google.android.apps.nexuslauncher:id/taskbar_container",
+    "rect": {
+      "x": 0,
+      "y": 2274,
+      "width": 1080,
+      "height": 126
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 2,
+    "parentIndex": 1,
+    "type": "android.view.View",
+    "bundleId": "com.google.android.apps.nexuslauncher",
+    "identifier": "com.google.android.apps.nexuslauncher:id/taskbar_scrim",
+    "rect": {
+      "x": 0,
+      "y": 2274,
+      "width": 1080,
+      "height": 126
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 3,
+    "parentIndex": 1,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.google.android.apps.nexuslauncher",
+    "identifier": "com.google.android.apps.nexuslauncher:id/navbuttons_view",
+    "rect": {
+      "x": 0,
+      "y": 2274,
+      "width": 1080,
+      "height": 126
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 4,
+    "parentIndex": 3,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.google.android.apps.nexuslauncher",
+    "identifier": "com.google.android.apps.nexuslauncher:id/start_contextual_buttons",
+    "rect": {
+      "x": 21,
+      "y": 2274,
+      "width": 103,
+      "height": 126
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 5,
+    "parentIndex": 3,
+    "type": "android.widget.LinearLayout",
+    "bundleId": "com.google.android.apps.nexuslauncher",
+    "identifier": "com.google.android.apps.nexuslauncher:id/end_nav_buttons",
+    "rect": {
+      "x": 124,
+      "y": 2274,
+      "width": 830,
+      "height": 126
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 6,
+    "parentIndex": 5,
+    "type": "android.widget.ImageView",
+    "bundleId": "com.google.android.apps.nexuslauncher",
+    "identifier": "com.google.android.apps.nexuslauncher:id/back",
+    "label": "Back",
+    "rect": {
+      "x": 125,
+      "y": 2279,
+      "width": 207,
+      "height": 116
+    },
+    "hittable": true,
+    "visibleToUser": true
+  },
+  {
+    "index": 7,
+    "parentIndex": 5,
+    "type": "android.widget.ImageView",
+    "bundleId": "com.google.android.apps.nexuslauncher",
+    "identifier": "com.google.android.apps.nexuslauncher:id/home",
+    "label": "Home",
+    "rect": {
+      "x": 434,
+      "y": 2279,
+      "width": 210,
+      "height": 116
+    },
+    "hittable": true,
+    "visibleToUser": true
+  },
+  {
+    "index": 8,
+    "parentIndex": 5,
+    "type": "android.widget.ImageView",
+    "bundleId": "com.google.android.apps.nexuslauncher",
+    "identifier": "com.google.android.apps.nexuslauncher:id/recent_apps",
+    "label": "Recents",
+    "rect": {
+      "x": 746,
+      "y": 2279,
+      "width": 207,
+      "height": 116
+    },
+    "hittable": true,
+    "visibleToUser": true
+  },
+  {
+    "index": 9,
+    "parentIndex": 3,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.google.android.apps.nexuslauncher",
+    "identifier": "com.google.android.apps.nexuslauncher:id/end_contextual_buttons",
+    "rect": {
+      "x": 956,
+      "y": 2274,
+      "width": 103,
+      "height": 126
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 10,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.systemui",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "width": 1080,
+      "height": 132
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 11,
+    "parentIndex": 10,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/status_bar_launch_animation_container",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "width": 1080,
+      "height": 132
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 12,
+    "parentIndex": 10,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/status_bar_container",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "width": 1080,
+      "height": 132
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 13,
+    "parentIndex": 12,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/status_bar",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "width": 1080,
+      "height": 132
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 14,
+    "parentIndex": 13,
+    "type": "android.widget.LinearLayout",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/status_bar_contents",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "width": 1027,
+      "height": 132
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 15,
+    "parentIndex": 14,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/status_bar_start_side_container",
+    "rect": {
+      "x": 42,
+      "y": 1,
+      "width": 426,
+      "height": 131
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 16,
+    "parentIndex": 15,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/status_bar_start_side_content",
+    "rect": {
+      "x": 42,
+      "y": 1,
+      "width": 220,
+      "height": 131
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 17,
+    "parentIndex": 16,
+    "type": "android.widget.LinearLayout",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/status_bar_start_side_except_heads_up",
+    "rect": {
+      "x": 42,
+      "y": 1,
+      "width": 220,
+      "height": 131
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 18,
+    "parentIndex": 17,
+    "type": "android.widget.TextView",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/clock",
+    "label": "4:37",
+    "rect": {
+      "x": 42,
+      "y": 45,
+      "width": 104,
+      "height": 43
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 19,
+    "parentIndex": 17,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/notification_icon_area",
+    "rect": {
+      "x": 146,
+      "y": 1,
+      "width": 116,
+      "height": 131
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 20,
+    "parentIndex": 19,
+    "type": "android.view.ViewGroup",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/notificationIcons",
+    "rect": {
+      "x": 146,
+      "y": 1,
+      "width": 116,
+      "height": 131
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 21,
+    "parentIndex": 20,
+    "type": "android.widget.ImageView",
+    "bundleId": "com.android.systemui",
+    "label": "Security & privacy notification: Set a screen lock",
+    "rect": {
+      "x": 146,
+      "y": 1,
+      "width": 58,
+      "height": 131
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 22,
+    "parentIndex": 20,
+    "type": "android.widget.ImageView",
+    "bundleId": "com.android.systemui",
+    "label": "Android System notification: Serial console enabled",
+    "rect": {
+      "x": 204,
+      "y": 1,
+      "width": 58,
+      "height": 131
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 23,
+    "parentIndex": 14,
+    "type": "android.view.View",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/cutout_space_view",
+    "rect": {
+      "x": 468,
+      "y": 1,
+      "width": 122,
+      "height": 131
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 24,
+    "parentIndex": 14,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/status_bar_end_side_container",
+    "rect": {
+      "x": 590,
+      "y": 1,
+      "width": 426,
+      "height": 131
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 25,
+    "parentIndex": 24,
+    "type": "android.widget.LinearLayout",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/status_bar_end_side_content",
+    "rect": {
+      "x": 857,
+      "y": 1,
+      "width": 159,
+      "height": 131
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 26,
+    "parentIndex": 25,
+    "type": "android.widget.LinearLayout",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/system_icons",
+    "rect": {
+      "x": 857,
+      "y": 37,
+      "width": 159,
+      "height": 58
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 27,
+    "parentIndex": 26,
+    "type": "android.widget.LinearLayout",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/statusIcons",
+    "rect": {
+      "x": 865,
+      "y": 37,
+      "width": 120,
+      "height": 58
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 28,
+    "parentIndex": 27,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/mobile_combo",
+    "label": "Phone signal full.",
+    "rect": {
+      "x": 865,
+      "y": 37,
+      "width": 104,
+      "height": 58
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 29,
+    "parentIndex": 28,
+    "type": "android.widget.LinearLayout",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/mobile_group",
+    "rect": {
+      "x": 865,
+      "y": 37,
+      "width": 104,
+      "height": 58
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 30,
+    "parentIndex": 29,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/mobile_type_container",
+    "rect": {
+      "x": 872,
+      "y": 42,
+      "width": 55,
+      "height": 47
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 31,
+    "parentIndex": 30,
+    "type": "android.widget.ImageView",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/mobile_type",
+    "label": "3G",
+    "rect": {
+      "x": 872,
+      "y": 44,
+      "width": 55,
+      "height": 42
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 32,
+    "parentIndex": 29,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.systemui",
+    "rect": {
+      "x": 930,
+      "y": 46,
+      "width": 39,
+      "height": 39
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 33,
+    "parentIndex": 32,
+    "type": "android.widget.ImageView",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/mobile_signal",
+    "rect": {
+      "x": 930,
+      "y": 46,
+      "width": 39,
+      "height": 39
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 34,
+    "parentIndex": 27,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.systemui",
+    "rect": {
+      "x": 865,
+      "y": 66,
+      "width": 0,
+      "height": 0
+    },
+    "visibleToUser": false
+  },
+  {
+    "index": 35,
+    "parentIndex": 26,
+    "type": "android.widget.LinearLayout",
+    "bundleId": "com.android.systemui",
+    "identifier": "com.android.systemui:id/battery",
+    "label": "Battery charging, 100 percent.",
+    "rect": {
+      "x": 985,
+      "y": 49,
+      "width": 20,
+      "height": 34
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 36,
+    "parentIndex": 35,
+    "type": "android.widget.ImageView",
+    "bundleId": "com.android.systemui",
+    "rect": {
+      "x": 985,
+      "y": 49,
+      "width": 20,
+      "height": 34
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 37,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.settings",
+    "rect": {
+      "x": 28,
+      "y": 957,
+      "width": 1024,
+      "height": 492
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 38,
+    "parentIndex": 37,
+    "type": "android.widget.LinearLayout",
+    "bundleId": "com.android.settings",
+    "rect": {
+      "x": 70,
+      "y": 999,
+      "width": 940,
+      "height": 408
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 39,
+    "parentIndex": 38,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.settings",
+    "rect": {
+      "x": 70,
+      "y": 999,
+      "width": 940,
+      "height": 408
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 40,
+    "parentIndex": 39,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.settings",
+    "identifier": "com.android.settings:id/action_bar_root",
+    "rect": {
+      "x": 70,
+      "y": 999,
+      "width": 940,
+      "height": 408
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 41,
+    "parentIndex": 40,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.settings",
+    "identifier": "android:id/content",
+    "rect": {
+      "x": 70,
+      "y": 999,
+      "width": 940,
+      "height": 408
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 42,
+    "parentIndex": 41,
+    "type": "androidx.appcompat.widget.LinearLayoutCompat",
+    "bundleId": "com.android.settings",
+    "identifier": "com.android.settings:id/parentPanel",
+    "rect": {
+      "x": 70,
+      "y": 999,
+      "width": 940,
+      "height": 408
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 43,
+    "parentIndex": 42,
+    "type": "android.widget.LinearLayout",
+    "bundleId": "com.android.settings",
+    "identifier": "com.android.settings:id/topPanel",
+    "rect": {
+      "x": 70,
+      "y": 999,
+      "width": 940,
+      "height": 118
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 44,
+    "parentIndex": 43,
+    "type": "android.widget.LinearLayout",
+    "bundleId": "com.android.settings",
+    "identifier": "com.android.settings:id/title_template",
+    "rect": {
+      "x": 70,
+      "y": 999,
+      "width": 940,
+      "height": 118
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 45,
+    "parentIndex": 44,
+    "type": "android.widget.TextView",
+    "bundleId": "com.android.settings",
+    "identifier": "com.android.settings:id/alertTitle",
+    "label": "Device name",
+    "rect": {
+      "x": 133,
+      "y": 1046,
+      "width": 814,
+      "height": 71
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 46,
+    "parentIndex": 42,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.settings",
+    "identifier": "com.android.settings:id/customPanel",
+    "rect": {
+      "x": 70,
+      "y": 1117,
+      "width": 940,
+      "height": 126
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 47,
+    "parentIndex": 46,
+    "type": "android.widget.FrameLayout",
+    "bundleId": "com.android.settings",
+    "identifier": "com.android.settings:id/custom",
+    "rect": {
+      "x": 70,
+      "y": 1117,
+      "width": 940,
+      "height": 126
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 48,
+    "parentIndex": 47,
+    "type": "android.widget.ScrollView",
+    "bundleId": "com.android.settings",
+    "rect": {
+      "x": 70,
+      "y": 1117,
+      "width": 940,
+      "height": 126
+    },
+    "hittable": true,
+    "visibleToUser": true
+  },
+  {
+    "index": 49,
+    "parentIndex": 48,
+    "type": "android.widget.LinearLayout",
+    "bundleId": "com.android.settings",
+    "rect": {
+      "x": 70,
+      "y": 1117,
+      "width": 940,
+      "height": 126
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 50,
+    "parentIndex": 49,
+    "type": "android.widget.EditText",
+    "bundleId": "com.android.settings",
+    "identifier": "android:id/edit",
+    "label": "sdk_gphone64_arm64",
+    "value": "sdk_gphone64_arm64",
+    "rect": {
+      "x": 123,
+      "y": 1117,
+      "width": 834,
+      "height": 126
+    },
+    "hittable": true,
+    "visibleToUser": true
+  },
+  {
+    "index": 51,
+    "parentIndex": 42,
+    "type": "android.widget.ScrollView",
+    "bundleId": "com.android.settings",
+    "identifier": "com.android.settings:id/buttonPanel",
+    "rect": {
+      "x": 70,
+      "y": 1243,
+      "width": 940,
+      "height": 164
+    },
+    "hittable": true,
+    "visibleToUser": true
+  },
+  {
+    "index": 52,
+    "parentIndex": 51,
+    "type": "android.widget.LinearLayout",
+    "bundleId": "com.android.settings",
+    "rect": {
+      "x": 70,
+      "y": 1243,
+      "width": 940,
+      "height": 164
+    },
+    "visibleToUser": true
+  },
+  {
+    "index": 53,
+    "parentIndex": 52,
+    "type": "android.widget.Button",
+    "bundleId": "com.android.settings",
+    "identifier": "android:id/button2",
+    "label": "Cancel",
+    "rect": {
+      "x": 636,
+      "y": 1254,
+      "width": 174,
+      "height": 142
+    },
+    "hittable": true,
+    "visibleToUser": true
+  },
+  {
+    "index": 54,
+    "parentIndex": 52,
+    "type": "android.widget.Button",
+    "bundleId": "com.android.settings",
+    "identifier": "android:id/button1",
+    "label": "OK",
+    "rect": {
+      "x": 810,
+      "y": 1254,
+      "width": 168,
+      "height": 142
+    },
+    "hittable": true,
+    "visibleToUser": true
+  }
+]
