@@ -31,6 +31,7 @@ export function finalizeTouchInteraction(params: {
   recordedTargets?: { source: RecordedTargetCapture; destination: RecordedTargetCapture };
   actionStartedAt: number;
   actionFinishedAt: number;
+  visualization?: 'recorded-during-execution';
   androidFreshnessBaseline?: SnapshotState | undefined;
   /**
    * The tree this action resolved its target against, plus its own `--settle` observation when it ran
@@ -52,6 +53,7 @@ export function finalizeTouchInteraction(params: {
     recordedTargets,
     actionStartedAt,
     actionFinishedAt,
+    visualization,
     androidFreshnessBaseline,
     preActionTree,
     settle,
@@ -89,14 +91,16 @@ export function finalizeTouchInteraction(params: {
     preActionTree,
     settle,
   });
-  operations.recordGestureVisualization(
-    actionCommand,
-    positionals,
-    parameterizedResult,
-    (actionFlags ?? {}) as Record<string, unknown>,
-    actionStartedAt,
-    actionFinishedAt,
-  );
+  if (visualization !== 'recorded-during-execution') {
+    operations.recordGestureVisualization(
+      actionCommand,
+      positionals,
+      parameterizedResult,
+      (actionFlags ?? {}) as Record<string, unknown>,
+      actionStartedAt,
+      actionFinishedAt,
+    );
+  }
   return { ok: true, data: parameterizedResponseData };
 }
 

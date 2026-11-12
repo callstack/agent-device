@@ -68,7 +68,6 @@ export function buildCanonicalGestureEvents(
       ];
     }
     case 'tap': {
-      // One overlay per contact at the gesture time; a repeated series shows its first touch.
       const points = Array.isArray(result.points) ? result.points.map(readPoint) : [];
       const holdMs = readRecordingNumber(result.holdMs);
       return points.flatMap((point) =>
@@ -80,7 +79,11 @@ export function buildCanonicalGestureEvents(
                 x: point.x,
                 y: point.y,
                 ...referenceFrame,
-                ...(holdMs === undefined ? {} : { durationMs: holdMs }),
+                ...(holdMs === undefined
+                  ? {}
+                  : {
+                      durationMs: resolveRecordingDurationMs(gestureDurationMs, [holdMs], holdMs),
+                    }),
               },
             ]
           : [],
