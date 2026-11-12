@@ -56,3 +56,4 @@ export {
   type OwnerLiveness,
   readCurrentOwnerIdentity,
 } from './internal/owner-identity.ts';
+export { readProcessExecutablePaths } from './internal/process-executable-path.ts';
