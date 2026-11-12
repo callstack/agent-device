@@ -216,6 +216,7 @@ test('a cancellation ends a scenario-clock sleep that would not return on its ow
       }),
     assertCanceledBeforeDispatch,
   );
+  assert.equal(harness.captureStarts.length, 1, 'no look after the cancellation');
   assert.deepEqual(harness.taps, []);
 });
 
