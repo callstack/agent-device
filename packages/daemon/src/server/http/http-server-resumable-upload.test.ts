@@ -98,7 +98,7 @@ function chunkedPut(url: string, headers: Record<string, string>, body: Buffer):
   });
 }
 
-test('preflight constrains forwarded protocol to the request authority', async (t) => {
+test('preflight ignores forwarding metadata and uses the socket scheme and request authority', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'daemon HTTP resumable upload coverage')) return;
   const runtime = createTestRuntimeStateHandle();
   try {
@@ -111,23 +111,25 @@ test('preflight constrains forwarded protocol to the request authority', async (
       });
       try {
         const port = await listenOnLoopback(server);
-        for (const [forwarded, scheme, authority, expectedAuthority] of [
-          [undefined, 'http', undefined, undefined],
-          ['https', 'https', undefined, undefined],
-          ['https, http', 'https', undefined, undefined],
-          ['HTTPS', 'https', undefined, undefined],
-          [' hTtPs , http ', 'https', undefined, undefined],
-          ['HTTP', 'http', undefined, undefined],
-          ['ftp', 'http', undefined, undefined],
-          ['http://evil.example/path?', 'http', undefined, undefined],
-          ['HTTPS', 'https', 'Daemon.example:80', 'daemon.example:80'],
-          ['http', 'http', 'Daemon.example:443', 'daemon.example:443'],
-          ['http', 'http', 'Daemon.example:80', 'daemon.example'],
-          ['https', 'https', 'Daemon.example:443', 'daemon.example'],
+        for (const [forwarded, authority, expectedAuthority] of [
+          [undefined, undefined, undefined],
+          ['https', undefined, undefined],
+          ['https, http', undefined, undefined],
+          ['HTTPS', undefined, undefined],
+          [' hTtPs , http ', undefined, undefined],
+          ['HTTP', undefined, undefined],
+          ['ftp', undefined, undefined],
+          ['http://evil.example/path?', undefined, undefined],
+          ['HTTPS', 'Daemon.example:80', 'daemon.example'],
+          ['http', 'Daemon.example:443', 'daemon.example:443'],
+          ['http', 'Daemon.example:80', 'daemon.example'],
+          ['https', 'Daemon.example:443', 'daemon.example:443'],
         ] as const) {
           const headers: Record<string, string> = {
             authorization: 'Bearer resumable-token',
             'content-type': 'application/json',
+            'x-forwarded-host': 'evil.example:444',
+            forwarded: 'host=evil.example:444;proto=https',
           };
           if (forwarded) headers['x-forwarded-proto'] = forwarded;
           if (authority) headers.host = authority;
@@ -157,7 +159,7 @@ test('preflight constrains forwarded protocol to the request authority', async (
           };
           assert.ok(ticket.uploadId);
           const url = new URL(ticket.upload.url);
-          assert.equal(url.origin, `${scheme}://${expectedAuthority ?? `127.0.0.1:${port}`}`);
+          assert.equal(url.origin, `http://${expectedAuthority ?? `127.0.0.1:${port}`}`);
           assert.match(url.pathname, /^\/upload\/direct\//);
           assert.equal(ticket.upload.headers.authorization, 'Bearer resumable-token');
         }
