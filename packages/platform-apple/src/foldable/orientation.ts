@@ -125,6 +125,13 @@ export async function setAppleFoldableOrientation(
   options: { signal?: AbortSignal } = {},
 ): Promise<{ orientation: DeviceRotation }> {
   const { signal } = options;
+  if (device.model !== 'iPhone Duo') {
+    throw new AppError('UNSUPPORTED_OPERATION', 'Guest rotation requires an iPhone Duo model', {
+      deviceId: device.id,
+      reason: 'unsupported-foldable-model',
+      hint: 'The guest orientation picker mapping is verified only for iPhone Duo. Use a simulator whose discovered model is iPhone Duo.',
+    });
+  }
   if (rotation === 'portrait-upside-down') {
     throw new AppError('UNSUPPORTED_OPERATION', `${device.name} cannot rotate to ${rotation}`, {
       deviceId: device.id,
@@ -208,16 +215,17 @@ async function readLitPanel(
   helper: FoldHelper,
   signal: AbortSignal | undefined,
 ): Promise<LitPanel | undefined> {
-  let inventory: AppleDisplayInventory;
-  try {
-    inventory = await queryAppleDisplayInventory(device, {
-      signal,
-      source: 'guest',
-      foldHelper: helper,
+  const inventory = await queryAppleDisplayInventory(device, {
+    signal,
+    source: 'guest',
+    foldHelper: helper,
+  });
+  if (inventory.unresolved) {
+    throw new AppError('COMMAND_FAILED', 'The guest panel table could not be read', {
+      deviceId: device.id,
+      reason: 'orientation-panel-table-unavailable',
+      hint: 'The fold helper could not provide a usable display table. Check the apple_display_inventory_unresolved diagnostic for the helper or display-table failure, then retry.',
     });
-  } catch (error) {
-    if (signal?.aborted) throw error;
-    return undefined;
   }
   const panel = establishedLitPanel(inventory);
   if (!panel) return undefined;

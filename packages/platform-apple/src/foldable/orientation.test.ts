@@ -33,7 +33,12 @@ beforeEach(() => {
 let simulatorCount = 0;
 function simulator(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
   simulatorCount += 1;
-  return { ...IOS_SIMULATOR, id: `${IOS_SIMULATOR.id}-${simulatorCount}`, ...overrides };
+  return {
+    ...IOS_SIMULATOR,
+    model: 'iPhone Duo',
+    id: `${IOS_SIMULATOR.id}-${simulatorCount}`,
+    ...overrides,
+  };
 }
 
 const SINGLE_PANEL_DISPLAYS = IPHONE_17_SINGLE_PANEL.result.displays;
@@ -125,7 +130,10 @@ test('a cold default Duo helper failure cannot fall back to runner success', asy
   );
   await expect(rotateDuo(sim, 'landscape-left')).resolves.toMatchObject({
     code: 'COMMAND_FAILED',
-    details: { reason: 'orientation-unverified' },
+    details: {
+      reason: 'orientation-panel-table-unavailable',
+      hint: expect.stringContaining('apple_display_inventory_unresolved'),
+    },
   });
   expect(sim.classificationReads).toHaveLength(1);
   expect(mockRunner).not.toHaveBeenCalled();
@@ -136,6 +144,7 @@ test('a physical device keeps the runner rotation without a CoreDevice probe', a
   const sim = fakeSimulator(IOS_DEVICE, []);
   await expect(sim.rotate('landscape-left')).resolves.toEqual({ orientation: 'landscape-left' });
   expect(sim.unexpectedTools).toEqual([]);
+  expect(sim.classificationReads).toEqual([]);
   expect(mockRunner).toHaveBeenCalledTimes(1);
 });
 
@@ -652,3 +661,20 @@ test('a rotation is not routed by a pending panel-table retry', async () => {
   expect(sim.rotations()).toEqual(['landscape-left']);
   expect(mockRunner).not.toHaveBeenCalled();
 });
+
+test.each(['iPad Pro', 'Another Foldable', undefined])(
+  'an unverified multi-panel model %s cannot use the Duo picker mapping',
+  async (model) => {
+    const sim = fakeDuo(simulator({ model, name: 'iPhone Duo' }), {
+      lit: 'outer',
+      picker: 'portrait',
+    });
+    await expect(sim.rotate('landscape-left')).rejects.toMatchObject({
+      code: 'UNSUPPORTED_OPERATION',
+      details: { reason: 'unsupported-foldable-model' },
+    });
+    expect(ensureFoldHelperBinary).not.toHaveBeenCalled();
+    expect(sim.rotations()).toEqual([]);
+    expect(mockRunner).not.toHaveBeenCalled();
+  },
+);

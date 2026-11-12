@@ -1,6 +1,6 @@
 # Foldable Apple verification
 
-Read ADR 0025 before capture changes.
+Before capture changes, read ADR 0025.
 For default-set capture, run `xcrun devicectl device info displays --device <udid>`.
 For scoped capture or rotation, run `xcrun simctl --set <set> spawn <udid> ~/.agent-device/fold-helper/<key>/fold-helper panels`.
 For default-set rotation, omit `--set <set>`.

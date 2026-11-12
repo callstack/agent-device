@@ -26,7 +26,7 @@ const FOLDABLE_REQUIRED_HINT =
   'fold sets the hinge angle of a foldable simulator such as iPhone Duo; this simulator reports one integrated panel, so it has no hinge to pose.';
 
 const INVENTORY_REQUIRED_HINT =
-  "fold needs the simulator's integrated displays to identify a foldable: the fold helper reads their panel table in either simulator set. The apple_display_inventory_unresolved diagnostic names why the read failed.";
+  "fold needs the simulator's integrated displays to identify a foldable: the default set uses CoreDevice and a scoped set uses the fold helper. The apple_display_inventory_unresolved diagnostic names why the read failed.";
 
 const DISPATCHED_UNVERIFIED_HINT =
   'The pose request was sent and the device may have followed it, but the first hinge-angle read returned no sample, so fold cannot confirm it. Take a screenshot or snapshot to see which panel is lit; hingeReadFailure names why the read failed.';
@@ -49,7 +49,6 @@ export async function setAppleFoldPose(
   const helper = createFoldHelper(device);
   const inventory = await queryAppleDisplayInventory(device, {
     signal: options.signal,
-    source: 'guest',
     foldHelper: helper,
   });
   requireFoldableInventory(device, inventory);

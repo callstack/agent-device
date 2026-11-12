@@ -84,6 +84,11 @@ test('timed fold keyframes reach simulator HID through the public client and dae
   const ok = { stdout: '', stderr: '', exitCode: 0 };
   let angle = 0;
   const tool = createRecordingAppleToolProvider({
+    devicectl: async (args) => {
+      assert.deepEqual(args.slice(0, 3), ['device', 'info', 'displays']);
+      fs.writeFileSync(args.at(-1)!, JSON.stringify({ result: JSON.parse(guestPanelReading()) }));
+      return ok;
+    },
     simctl: async (args, options) => {
       if (args[0] === 'list') {
         return {
@@ -142,6 +147,7 @@ test('timed fold keyframes reach simulator HID through the public client and dae
     });
     assert.equal(result.pose, 'half-open');
     assert.equal(result.hingeAngleDegrees, 100);
+    assert.equal(result.screen?.display, 'LCD-1');
     const replayed = await daemon.client().command.fold({
       platform: 'ios',
       udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
@@ -209,6 +215,12 @@ function createFoldLedgerAppleToolProvider(params: {
   // Built on the shared recording provider so any call this route does not script (macosHelper,
   // macosHost, plist, or an unexpected runCommand) throws instead of being silently answered.
   const recording = createRecordingAppleToolProvider({
+    devicectl: async (args, options) => {
+      await record('devicectl', args, options);
+      assert.deepEqual(args.slice(0, 3), ['device', 'info', 'displays']);
+      fs.writeFileSync(args.at(-1)!, JSON.stringify({ result: JSON.parse(guestPanelReading()) }));
+      return ok;
+    },
     simctl: async (args, options) => {
       if (args[0] === 'list') {
         if (params.isTracking()) await record('simctl', args, options);
@@ -344,13 +356,21 @@ function assertFoldLedgerPhaseCoverage(ledger: readonly FoldLedgerCall[]): void 
   const isDisplayInventory = (call: FoldLedgerCall) =>
     call.tool === 'simctl' && call.args[0] === 'spawn' && call.args[3] === 'panels';
 
+  assert.equal(
+    ledger.filter(
+      (call) =>
+        call.tool === 'devicectl' && call.args.slice(0, 3).join(' ') === 'device info displays',
+    ).length,
+    1,
+    'ledger must record the set-source foldable classification',
+  );
   assert.ok(ledger.some(isBuild), 'ledger is missing the helper-build phase');
   assert.ok(ledger.some(isSpawn), 'ledger is missing the HID-dispatch (simctl spawn) phase');
   assert.ok(ledger.some(isHingeRead), 'ledger is missing the hinge-settle-read phase');
   assert.equal(
     ledger.filter(isDisplayInventory).length,
-    2,
-    'ledger must record both the foldable-check and the lit-panel guest inventory reads',
+    1,
+    'ledger must record the lit-panel guest inventory read',
   );
 }
 
