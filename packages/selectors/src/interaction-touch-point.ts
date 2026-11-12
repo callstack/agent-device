@@ -40,6 +40,7 @@ export function resolveInteractionTouchPoint(
   const inputRect = inputBounds ? intersectRects(targetRect, inputBounds) : targetRect;
   if (!inputRect || !hasArea(inputRect)) return { kind: 'invalid' };
   const center = pointInsideRect(inputRect);
+  if (!Number.isFinite(center.x) || !Number.isFinite(center.y)) return { kind: 'invalid' };
 
   const competitors = collectInteractiveDescendantRects(nodes, node, targetRect);
   if (competitors.length === 0) {

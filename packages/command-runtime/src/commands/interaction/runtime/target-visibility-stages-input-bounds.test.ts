@@ -6,6 +6,48 @@ import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { createInteractionDevice } from './__tests__/test-utils/index.ts';
 import { ref, selector } from './selector-read-utils.ts';
 
+test('selector refuses an overflowed center before backend input', async () => {
+  const snapshot = buildSnapshotState(
+    {
+      backend: 'android',
+      producer: 'android-uiautomator',
+      nodes: [
+        {
+          index: 0,
+          type: 'Button',
+          identifier: 'overflow',
+          label: 'Overflow',
+          hittable: true,
+          rect: { x: Number.MAX_VALUE, y: 0, width: Number.MAX_VALUE, height: 10 },
+        },
+      ],
+    },
+    { snapshotRaw: true },
+  );
+  const calls: unknown[] = [];
+  const device = createInteractionDevice(snapshot, {
+    platform: 'android',
+    tap: async (_context, point) => {
+      calls.push(point);
+    },
+  });
+  const observed = await device.capture.snapshot({ session: 'default' });
+  const node = observed.nodes.find((entry) => entry.identifier === 'overflow');
+  assert.ok(node?.ref);
+  await assert.rejects(
+    device.interactions.click(selector('id=overflow'), {
+      session: 'default',
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'target_bounds_invalid');
+      assert.equal(error.details?.dispatched, 'no');
+      return true;
+    },
+  );
+  assert.deepEqual(calls, []);
+});
+
 for (const route of ['ref', 'selector'] as const) {
   for (const covered of [false, true]) {
     test(`${route} honors measured input bounds through raw ingestion and session cloning: covered=${covered}`, async () => {

@@ -8,8 +8,48 @@ import {
   makeSnapshotState,
   PROPERTY_RUNS,
   pixelRectArb,
+  finiteRectArb,
 } from './snapshot-geometry.fixtures.ts';
 import { resolveInteractionTouchPoint } from './interaction-touch-point.ts';
+
+test.each([
+  { x: Number.MAX_VALUE, y: 0, width: Number.MAX_VALUE, height: 10 },
+  { x: 0, y: Number.MAX_VALUE, width: 10, height: Number.MAX_VALUE },
+])('rejects a center that overflows finite rectangle components: %j', (rect) => {
+  const node = { index: 0, rect };
+  assert.deepEqual(resolveInteractionTouchPoint([node], node), { kind: 'invalid' });
+});
+
+test('property: finite rectangles never resolve a non-finite tap coordinate', () => {
+  fc.assert(
+    fc.property(finiteRectArb, (rect) => {
+      const node = { index: 0, rect };
+      const result = resolveInteractionTouchPoint([node], node);
+      if (result.kind !== 'resolved') return;
+      assert.ok(Number.isFinite(result.point.x) && Number.isFinite(result.point.y));
+    }),
+    { numRuns: PROPERTY_RUNS },
+  );
+});
+
+test('the narrow raw parent cannot choose the navigation edge to avoid its child', () => {
+  const parent = attachSnapshotNodeInteractionBounds(
+    { index: 0, type: 'Link', rect: { x: 539, y: 2259, width: 2, height: 131 } },
+    { x: 0, y: 0, width: 1080, height: 2274 },
+  );
+  const child = {
+    index: 1,
+    parentIndex: 0,
+    type: 'Button',
+    ref: 'e2',
+    rect: { x: 539, y: 2259, width: 2, height: 3 },
+  };
+  assert.deepEqual(resolveInteractionTouchPoint([parent, child], parent), {
+    kind: 'blocked',
+    competitorCount: 1,
+    competitorRefs: ['e2'],
+  });
+});
 
 test('a raw target without competing descendants uses its measured input region', () => {
   const node = attachSnapshotNodeInteractionBounds(

@@ -30,6 +30,13 @@ export const pixelRectArb: fc.Arbitrary<Rect> = fc.record({
   height: fc.integer({ min: 1, max: 8000 }),
 });
 
+export const finiteRectArb: fc.Arbitrary<Rect> = fc.record({
+  x: fc.double({ noNaN: true, noDefaultInfinity: true }),
+  y: fc.double({ noNaN: true, noDefaultInfinity: true }),
+  width: fc.double({ min: 0, noNaN: true, noDefaultInfinity: true }),
+  height: fc.double({ min: 0, noNaN: true, noDefaultInfinity: true }),
+});
+
 export const distinctRectPairArb: fc.Arbitrary<{ ancestor: Rect; target: Rect }> = fc
   .record({
     x: fc.integer({ min: -200, max: 200 }),
