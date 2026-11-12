@@ -213,6 +213,44 @@ function requireResolvedPoint(result: { point?: Point }): Point {
 }
 
 /**
+ * Resolves and admits every plan member against the active frame, before key 1. Member 0's
+ * resolution captures the plan's pre-command evidence baseline. Every refusal here is
+ * pre-dispatch: nothing has crossed to the device, so the verdict stays `no`.
+ */
+async function resolveRefPlanMembers(
+  runtime: AgentDeviceRuntime,
+  options: PressCommandOptions,
+  action: 'click' | 'press',
+  plannedRefs: readonly string[],
+  captureEvidenceBaseline: boolean,
+): Promise<Array<{ ref: string; atRest: ResolvedInteractionTarget; point: Point }>> {
+  // One request object for the resolution and for the looks admission may spend, so a
+  // second look is the same question asked again rather than a differently-configured one.
+  const resolutionRequest: ResolveInteractionTargetParams = {
+    action,
+    requireInteractive: true,
+    pipeline: SELECTOR_PIPELINE_POLICIES.promotedTarget,
+  };
+  const members: Array<{ ref: string; atRest: ResolvedInteractionTarget; point: Point }> = [];
+  for (const [index, ref] of plannedRefs.entries()) {
+    const member: PressCommandOptions = { ...options, target: { kind: 'ref', ref } };
+    try {
+      const resolved = await resolveInteractionTarget(runtime, member, {
+        ...resolutionRequest,
+        // One pre-command baseline serves the plan's evidence: member 0's resolution
+        // captures it, and the final result carries it forward.
+        captureEvidenceBaseline: captureEvidenceBaseline && index === 0,
+      });
+      const atRest = await admitResolvedTarget(runtime, member, resolutionRequest, resolved);
+      members.push({ ref, atRest, point: requireResolvedPoint(atRest) });
+    } catch (error) {
+      throw attachRefPlanContext(error, plannedRefs, index);
+    }
+  }
+  return members;
+}
+
+/**
  * A multi-ref plan is one ADR 0014 logical command that resolves and admits every member
  * once against the active frame, then dispatches the admitted points in order — `press
  * --count` with N points. Key 1's dispatch expires the ref frame, so later keys tap where
@@ -236,28 +274,13 @@ async function tapRefPlanCommand(
   // response identity, so the plan iterates `refs` alone.
   const plannedRefs = (options.refs ?? []).map((ref) => (ref.startsWith('@') ? ref : `@${ref}`));
   const observation = planPostActionObservation(options);
-  const resolutionRequest: ResolveInteractionTargetParams = {
+  const members = await resolveRefPlanMembers(
+    runtime,
+    options,
     action,
-    requireInteractive: true,
-    pipeline: SELECTOR_PIPELINE_POLICIES.promotedTarget,
-  };
-  const members: Array<{ ref: string; atRest: ResolvedInteractionTarget; point: Point }> = [];
-  for (const [index, ref] of plannedRefs.entries()) {
-    const member: PressCommandOptions = { ...options, target: { kind: 'ref', ref } };
-    try {
-      const resolved = await resolveInteractionTarget(runtime, member, {
-        ...resolutionRequest,
-        // One pre-command baseline serves the plan's evidence: member 0's resolution
-        // captures it, and the final result carries it forward.
-        captureEvidenceBaseline: observation.needsPreActionBaseline && index === 0,
-      });
-      const atRest = await admitResolvedTarget(runtime, member, resolutionRequest, resolved);
-      members.push({ ref, atRest, point: requireResolvedPoint(atRest) });
-    } catch (error) {
-      // Nothing has crossed to the device yet.
-      throw attachRefPlanContext(error, plannedRefs, index);
-    }
-  }
+    plannedRefs,
+    observation.needsPreActionBaseline,
+  );
   let lastBackendResult;
   for (const [index, member] of members.entries()) {
     if (index > 0 && options.intervalMs !== undefined && options.intervalMs > 0) {
