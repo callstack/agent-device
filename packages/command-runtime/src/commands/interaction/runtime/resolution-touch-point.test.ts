@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { Point } from '@agent-device/kernel/snapshot';
+import { attachSnapshotNodeInteractionBounds } from '@agent-device/kernel/rect-center';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   buildUiHierarchySnapshot,
@@ -120,6 +122,89 @@ test('runtime press refuses a selector match with a zero-area rect and dispatche
       assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
       assert.equal(details?.reason, 'target_bounds_invalid');
       assert.equal(details?.dispatched, 'no');
+      // No scroll container holds the icon, so no scroll is offered as the recovery.
+      assert.equal(details?.scrollContainerRef, undefined);
+      assert.equal(details?.hint, undefined);
+      return true;
+    },
+  );
+  assert.deepEqual(taps, []);
+});
+
+/**
+ * A Flutter screen on iOS at the top of its content (#4451), as the Simulator AX bridge presents it:
+ * the scroll view and its content are siblings, and the content below the fold keeps a 0x0 rect.
+ */
+function scrolledOutButtonSnapshot() {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+      hittable: false,
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'ScrollView',
+      role: 'FlutterSemanticsScrollView',
+      rect: { x: 0, y: 118, width: 402, height: 756 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      depth: 1,
+      parentIndex: 0,
+      type: 'StaticText',
+      role: 'FlutterSemanticsObject',
+      label: 'Tall block',
+      rect: { x: 157, y: 546, width: 86, height: 27 },
+      hittable: true,
+    },
+    {
+      index: 3,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      role: 'FlutterSemanticsObject',
+      label: 'View all',
+      rect: { x: 0, y: 0, width: 0, height: 0 },
+      hittable: false,
+    },
+  ]);
+}
+
+test('runtime press on a zero-area target beside a scroll container names the scroll that reveals it', async () => {
+  const taps: Point[] = [];
+  const device = createInteractionDevice(scrolledOutButtonSnapshot(), {
+    tap: async (_context, point) => {
+      taps.push(point);
+      return { ok: true };
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.press(selector('label="View all"'), { session: 'default' }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'target_bounds_invalid');
+      assert.equal(details?.dispatched, 'no');
+      assert.equal(details?.scrollContainerRef, '@e2');
+      assert.match(String(details?.hint), /scroll <direction> --until 'label="View all"'/);
+      return true;
+    },
+  );
+  await assert.rejects(
+    () => device.interactions.press(ref('@e4'), { session: 'default' }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'target_bounds_invalid');
+      assert.equal(details?.scrollContainerRef, '@e2');
+      // A scroll expires the ref frame, so the ref recovery steers to a selector instead.
+      assert.match(String(details?.hint), /retry with a selector/);
+      assert.doesNotMatch(String(details?.hint), /--until/);
       return true;
     },
   );
@@ -165,4 +250,69 @@ test('runtime press on a Compose button dispatches its center only once its role
     reason: 'covered_by_interactive_descendants',
     dispatched: 'no',
   });
+});
+
+test('runtime press offers no scroll for a zero-area target listed before the only scroll container', async () => {
+  const state = scrolledOutButtonSnapshot();
+  const [application, scrollView, , button] = state.nodes;
+  const device = createInteractionDevice(
+    makeSnapshotState([application!, { ...button!, index: 1 }, { ...scrollView!, index: 2 }]),
+    { tap: async () => ({ ok: true }) },
+  );
+
+  await assert.rejects(
+    () => device.interactions.press(selector('label="View all"'), { session: 'default' }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'target_bounds_invalid');
+      assert.equal(details?.scrollContainerRef, undefined);
+      assert.equal(details?.hint, undefined);
+      return true;
+    },
+  );
+});
+
+test('runtime press offers no scroll for a measured target whose input bounds exclude it', async () => {
+  const root = { x: 0, y: 0, width: 1080, height: 2400 };
+  // A row with a real frame, wholly under the navigation bar the input bounds stop at.
+  const row = attachSnapshotNodeInteractionBounds(
+    {
+      index: 2,
+      depth: 2,
+      parentIndex: 1,
+      type: 'Button',
+      identifier: 'row',
+      label: 'Row',
+      hittable: true,
+      rect: { x: 0, y: 2305, width: 1080, height: 95 },
+    },
+    { ...root, height: 2274 },
+  );
+  const snapshot = buildSnapshotState(
+    {
+      backend: 'android',
+      producer: 'android-uiautomator',
+      nodes: [
+        { index: 0, depth: 0, type: 'Application', rect: root },
+        { index: 1, depth: 1, parentIndex: 0, type: 'ScrollView', rect: root, hittable: true },
+        row,
+      ],
+    },
+    { snapshotRaw: true },
+  );
+  const device = createInteractionDevice(snapshot, {
+    platform: 'android',
+    tap: async () => ({ ok: true }),
+  });
+
+  await assert.rejects(
+    () => device.interactions.press(selector('id=row'), { session: 'default' }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'target_bounds_invalid');
+      assert.equal(details?.scrollContainerRef, undefined);
+      assert.equal(details?.hint, undefined);
+      return true;
+    },
+  );
 });

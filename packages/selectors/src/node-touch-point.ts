@@ -3,7 +3,11 @@ import type { Point, SnapshotAddressableNode, SnapshotNode } from '@agent-device
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { normalizeRect } from '@agent-device/kernel/rect-center';
 import { normalizeRef } from '@agent-device/kernel/snapshot';
-import { createSnapshotVisibility, isFillableType } from '@agent-device/contracts/snapshot';
+import {
+  createSnapshotVisibility,
+  isFillableType,
+  isScrollableNodeLike,
+} from '@agent-device/contracts/snapshot';
 import type { Platform } from '@agent-device/kernel/device';
 import { INTERACTION_ERROR_REASONS } from './interaction-error.ts';
 import { isDescendantOf, resolveInteractionTouchPoint } from './interaction-touch-point.ts';
@@ -104,6 +108,53 @@ function isTextField(node: SnapshotNode, platform: Platform): boolean {
   );
 }
 
+/**
+ * The scroll container a target with no usable frame may be scrolled out of (#4451): the nearest
+ * scrollable sibling listed before it. That is the shape Flutter publishes on iOS: its
+ * accessibility container lists a scroll view and then that scroll view's content, and keeps the
+ * scrolled-out content with a zero-area frame. A target under a framed scroll ancestor never
+ * reaches here, because the off-screen stage refuses it first.
+ */
+function findPrecedingScrollContainer(
+  node: SnapshotNode,
+  nodes: SnapshotState['nodes'],
+): SnapshotNode | null {
+  return (
+    nodes
+      .filter(
+        (candidate) =>
+          candidate.parentIndex === node.parentIndex &&
+          candidate.index < node.index &&
+          hasUsableRect(candidate) &&
+          isScrollableNodeLike(candidate),
+      )
+      .at(-1) ?? null
+  );
+}
+
+/**
+ * The recovery for a target with no usable frame beside a scroll container. The frame that
+ * refuses the touch point is also the one that would have named the direction, so the hint names
+ * the command and leaves the direction open; the off-screen stage owns the directed form.
+ */
+function scrollContainerRecovery(
+  node: SnapshotNode,
+  nodes: SnapshotState['nodes'],
+  target: { ref: string } | { selector: string },
+): { scrollContainerRef?: string; hint?: string } {
+  if (hasUsableRect(node)) return {};
+  const container = findPrecedingScrollContainer(node, nodes);
+  if (!container) return {};
+  const recovery =
+    'selector' in target
+      ? `run scroll <direction> --until '${target.selector}' to bring it on screen, then retry with the same selector.`
+      : 'scroll toward it, then retry with a selector (e.g. text=/id=) rather than an @ref — the scroll expires the ref frame.';
+  return {
+    ...(container.ref ? { scrollContainerRef: `@${container.ref}` } : {}),
+    hint: `The target reports no frame, so nothing confirms it is on screen, and the frame names no direction. It may be scrolled out of a scrollable container: ${recovery}`,
+  };
+}
+
 export function resolveNodeTouchPoint(
   node: SnapshotNode,
   nodes: SnapshotState['nodes'],
@@ -125,6 +176,7 @@ export function resolveNodeTouchPoint(
       new AppError('COMMAND_FAILED', failure.invalidMessage, {
         reason: INTERACTION_ERROR_REASONS.targetBoundsInvalid,
         ...bareTargetDetails(failure.blockedTargetDetails),
+        ...scrollContainerRecovery(node, nodes, failure.blockedTargetDetails),
       }),
       'no',
     );

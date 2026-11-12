@@ -15,6 +15,15 @@ import type {
   IosSnapshotPresentationStats,
 } from './types.ts';
 
+/**
+ * The hint a presented node carries when its producer reported a frame that measures nothing. The
+ * cursor-projected fold keeps such a node, because a missing measurement is not evidence that it
+ * is off screen, but nothing confirms that it is on screen either: a scroll view keeps its
+ * scrolled-out content in the tree this way (#4451), as SpringBoard keeps another page's icons
+ * (#3841).
+ */
+const UNMEASURED_PRESENTATION_HINT = 'unmeasured';
+
 export function foldIosSnapshot(
   nodes: readonly RawSnapshotNode[],
   viewport: Rect,
@@ -142,6 +151,7 @@ function appendFoldedNode(
       index,
       depth: keptDepth,
       parentIndex: keptIndex,
+      ...unmeasuredHint(node),
       ...foldedHittability(
         sourceHittable,
         node.parentIndex !== undefined,
@@ -156,6 +166,13 @@ function appendFoldedNode(
   });
   keptIndex = index;
   return { keptIndex, keptDepth };
+}
+
+function unmeasuredHint(
+  node: RawSnapshotNode,
+): Partial<Pick<RawSnapshotNode, 'presentationHints'>> {
+  if (node.parentIndex === undefined || !node.rect || isPositiveFiniteRect(node.rect)) return {};
+  return { presentationHints: [UNMEASURED_PRESENTATION_HINT] };
 }
 
 function foldedHittability(
