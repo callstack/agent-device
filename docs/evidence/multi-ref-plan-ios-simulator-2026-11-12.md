@@ -1,8 +1,9 @@
 # Multi-ref press plan on an iOS simulator PIN pad, 2026-11-12
 
-Evidence for #4296 at head `edf015fed` (built and run from the contribution
-worktree, daemon restarted clean). The plan lowers to ordinary presses; this
-run exercises that lowering on real simulator dispatch: a PIN pad page served
+Evidence for #4296 (built and run from the contribution worktree, daemon
+restarted clean). The plan is one logical command that resolves and admits
+every member against the active frame and then dispatches the admitted
+points in order; this run exercises that lowering on real simulator dispatch: a PIN pad page served
 to Safari on the booted iPhone 17 Pro simulator (`C1C05FFF-29AD-40D8-94E5-D9CBB25EC6BB`,
 iOS 26.5), whose digit keys are real accessibility buttons (`1` `2` `3` `4` `C`)
 and whose state row (`ENTERED=... RESULT=...`) plus dot row (`●●●●`) give a
@@ -31,12 +32,14 @@ Fresh `snapshot -i`, then one command (timed):
 Wall time `2104ms`. The page's own state after the run:
 `●●●●` and `ENTERED=1212 RESULT=PASS` — the repeated ref pressed the same
 key twice, and the screenshot (`positive-final.png`) shows four dots with the
-pass row. Per-key resolution and admission ran on every member (the ordinary
-press path), which is why the run costs what four presses cost and not less.
+pass row. Every member resolved and admitted once against the snapshot frame
+before key 1; the four dispatches then ran against the admitted points, which
+is why the run costs about what four presses cost and not less.
 
-## Negative: a later member the frame cannot resolve
+## Negative: a member the frame cannot resolve
 
-Fresh snapshot, then `press @e13,@e999` (`@e999` names nothing):
+Fresh snapshot, then `press @e13,@e999` (`@e999` names nothing), at the
+resolve-once head:
 
 ```json
 {
@@ -44,8 +47,7 @@ Fresh snapshot, then `press @e13,@e999` (`@e999` names nothing):
   "code": "COMMAND_FAILED",
   "message": "Ref @e999 not found",
   "details": {
-    "dispatched": "unknown",
-    "dispatchedSteps": 1,
+    "dispatched": "no",
     "refPlanKey": "@e999",
     "refPlanPending": [],
     "ref": "e999"
@@ -53,21 +55,25 @@ Fresh snapshot, then `press @e13,@e999` (`@e999` names nothing):
 }
 ```
 
-The request dispatch ledger counted key 1 (`dispatchedSteps: 1`, verdict
-`unknown` — the kernel rule: any failure after a dispatched step is never
-`no`), and the details name the refused key and the keys that did not run.
-`@e13` had already entered a digit; the page held `ENTERED=2`.
+Every member resolves before key 1, so the whole plan refuses pre-dispatch:
+`dispatched: 'no'`, no key sent, and the page held `ENTERED=-`. An earlier
+iteration of this PR resolved members lazily at dispatch time; there the same
+command sent key 1 first and disclosed `dispatched: 'unknown'` with
+`dispatchedSteps: 1` — the ledger-owned post-dispatch disclosure the request
+boundary still carries for backend failures. The refusal site moved with the
+resolve-once shape; the disclosure contract did not.
 
 ## Later-key mutation semantics, observed rather than claimed
 
 Three page variants put a mid-plan mutation between key 1 and key 2 (a
 removed key, a disabled key, a system alert raised 50ms after key 1). In all
-three the second member resolved to the slot's current point and dispatched —
-the tap landed on whatever occupied that point, which is exactly what a
-single `press` of the same ref does after the same mutation. The plan adds no
-identity re-find and no extra refusal: it inherits the ordinary press's
-dispatched-at-point semantics, and callers who need landed verification use
-`--settle`/`--verify` as with any press.
+three the second member dispatched onto whatever occupied the key's
+snapshot-time point, and the command reported success. This is the
+resolve-once contract working as specified: key 1 expires the ref frame, so
+later keys tap where the snapshot showed them and no member re-resolves —
+`press --count` has the same property across its repetitions. Callers whose
+screen can move between keys take a fresh snapshot and rebuild the plan;
+callers who need landed verification on a fixed key use `--settle`/`--verify`.
 
 ## Wall time against the alternatives
 

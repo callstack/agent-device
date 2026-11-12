@@ -179,7 +179,7 @@ function parseTouchRefSequence(positionals: string[]): ParsedTouchTarget {
 }
 
 const REF_SEQUENCE_HINT =
-  'List each snapshot ref in press order, for example press @e13,@e14,@e15,@e16; a repeated ref presses the same key twice (a PIN digit). Every key is admitted against the current frame before the first press, and every press runs the ordinary press path: when a later key refuses, the failure names that key in details.refPlanKey, the keys already sent in details.dispatchedSteps, and the keys that did not run in details.refPlanPending.';
+  'List each snapshot ref in press order, for example press @e13,@e14,@e15,@e16; a repeated ref presses the same key twice (a PIN digit). The whole plan resolves and admits against the current frame before the first press, so a member that cannot resolve refuses before anything dispatches; after the first press later keys tap where the snapshot showed them, and a later key that refuses carries its reason in details.refPlanKey, the keys already sent in details.dispatchedSteps, and the keys that did not run in details.refPlanPending.';
 
 export type ParsedLongPressTarget =
   | (ParsedTouchTargetOk & { ok: true; durationMs?: number })

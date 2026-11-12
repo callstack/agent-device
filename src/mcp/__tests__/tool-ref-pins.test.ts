@@ -602,3 +602,17 @@ test('ref-pin store pins a repeated plan member twice and leaves unknown members
   const unknownMember = pins.pinInput('press', { session: 'demo', ref: '@e1,@e99' }, undefined);
   assert.deepEqual(unknownMember, { session: 'demo', ref: '@e1~s6,@e99' });
 });
+
+test('ref-pin store pins the unpinned members of a partly pinned plan', () => {
+  const pins = makeStore();
+
+  pins.mergeCommandResult(
+    'snapshot',
+    { nodes: [{ ref: 'e13' }, { ref: 'e14' }], truncated: false, refsGeneration: 500021 },
+    undefined,
+    'demo',
+  );
+
+  const pinned = pins.pinInput('press', { session: 'demo', ref: '@e13~s4,@e14' }, undefined);
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e13~s4,@e14~s500021' });
+});

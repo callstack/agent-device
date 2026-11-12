@@ -320,17 +320,17 @@ function pinRef(ref: string, pins: Map<string, number>): string {
   // Only pin the canonical plain form `@e12`: an existing `~` means the ref is
   // already pinned (or malformed — the daemon owns rejecting that), and a
   // missing `@` prefix is not a ref the daemon would accept anyway. Refs with
-  // no recorded provenance pass through unpinned — never guess.
-  if (!ref.startsWith('@') || ref.includes('~')) return ref;
-  // A comma-separated ref plan (`@e13,@e14`): pin each member against the same
-  // scope, so a renumbered frame refuses a member through its generation pin
-  // instead of pressing whatever the new frame names at that index.
+  // no recorded provenance pass through unpinned — never guess. The comma
+  // split runs first so a plan with one already-pinned member still pins the
+  // others: `@e13~s4,@e14` forwards `@e13~s4` untouched and pins `@e14`.
+  if (!ref.startsWith('@')) return ref;
   if (ref.includes(',')) {
     return ref
       .split(',')
       .map((member) => pinRef(member.trim(), pins))
       .join(',');
   }
+  if (ref.includes('~')) return ref;
   const generation = pins.get(ref.slice(1));
   return generation === undefined ? ref : `${ref}~s${generation}`;
 }

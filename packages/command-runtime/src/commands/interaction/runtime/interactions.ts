@@ -4,6 +4,7 @@ import type {
   PreresolvedInteractionTarget,
   PressCommandResult,
   RepeatedInput,
+  ResolvedInteractionTarget,
   ResolvedTarget,
 } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
@@ -44,9 +45,9 @@ export type PressCommandOptions = CommandContext &
     /**
      * Multi-ref press plan (`press @e13,@e14,...`): every member in dispatch
      * order, bare ref bodies; `target` repeats member 0 for the response's
-     * ref identity. Absent for a single-ref press. Each member lowers to an
-     * ordinary press through the same resolution and admission as any other;
-     * see tapRefPlanCommand.
+     * ref identity. Absent for a single-ref press. One ADR 0014 logical
+     * command: every member resolves and admits against the active frame
+     * before the first press; see tapRefPlanCommand.
      */
     refs?: readonly string[];
     /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
@@ -212,11 +213,13 @@ function requireResolvedPoint(result: { point?: Point }): Point {
 }
 
 /**
- * A multi-ref plan lowers to ordinary presses: every member re-resolves against the current
- * frame and passes the same admission as any press, so a member fails with the ordinary press
- * reasons and the kernel's dispatched-steps disclosure counts the keys already sent. Later
- * members follow selector semantics — each names whatever the fresh frame shows — which is how
- * a repeated digit presses the same key twice.
+ * A multi-ref plan is one ADR 0014 logical command that resolves and admits every member
+ * once against the active frame, then dispatches the admitted points in order — `press
+ * --count` with N points. Key 1's dispatch expires the ref frame, so later keys tap where
+ * the snapshot showed them: no member re-resolves, and the motion screen judges the whole
+ * plan once, before key 1. Every resolution and admission refusal is pre-dispatch
+ * (`dispatched: 'no'`); after key 1, the request dispatch ledger owns the dispatched-steps
+ * disclosure and these details name the key that refused and the keys that did not run.
  */
 async function tapRefPlanCommand(
   runtime: AgentDeviceRuntime,
@@ -226,33 +229,89 @@ async function tapRefPlanCommand(
   if (options.target.kind !== 'ref') {
     throw new AppError('INVALID_ARGS', 'A multi-ref press plan requires ref targets.');
   }
+  if (!runtime.backend.tap) {
+    throw new AppError('UNSUPPORTED_OPERATION', 'tap is not supported by this backend');
+  }
   // The parser emits the full plan in `refs` with `target` kept as member 0's
   // response identity, so the plan iterates `refs` alone.
   const plannedRefs = (options.refs ?? []).map((ref) => (ref.startsWith('@') ? ref : `@${ref}`));
-  const points: Point[] = [];
-  let last: PressCommandResult | undefined;
-  for (let index = 0; index < plannedRefs.length; index += 1) {
+  const observation = planPostActionObservation(options);
+  const resolutionRequest: ResolveInteractionTargetParams = {
+    action,
+    requireInteractive: true,
+    pipeline: SELECTOR_PIPELINE_POLICIES.promotedTarget,
+  };
+  const members: Array<{ ref: string; atRest: ResolvedInteractionTarget; point: Point }> = [];
+  for (const [index, ref] of plannedRefs.entries()) {
+    const member: PressCommandOptions = { ...options, target: { kind: 'ref', ref } };
+    try {
+      const resolved = await resolveInteractionTarget(runtime, member, {
+        ...resolutionRequest,
+        // One pre-command baseline serves the plan's evidence: member 0's resolution
+        // captures it, and the final result carries it forward.
+        captureEvidenceBaseline: observation.needsPreActionBaseline && index === 0,
+      });
+      const atRest = await admitResolvedTarget(runtime, member, resolutionRequest, resolved);
+      members.push({ ref, atRest, point: requireResolvedPoint(atRest) });
+    } catch (error) {
+      // Nothing has crossed to the device yet.
+      throw attachRefPlanContext(error, plannedRefs, index);
+    }
+  }
+  let lastBackendResult;
+  for (const [index, member] of members.entries()) {
     if (index > 0 && options.intervalMs !== undefined && options.intervalMs > 0) {
       await sleep(runtime, options.intervalMs, options.signal);
     }
-    const member: PressCommandOptions = {
-      ...options,
-      target: { kind: 'ref', ref: plannedRefs[index]! },
-      refs: undefined,
-    };
+    const pointObservation = pointObservationOf(member.atRest);
     try {
-      last = await tapCommand(runtime, member, action);
+      lastBackendResult = await runtime.backend.tap(
+        toBackendContext(runtime, options),
+        member.point,
+        {
+          button: options.button,
+          count: options.count,
+          intervalMs: options.intervalMs,
+          holdMs: options.holdMs,
+          jitterPx: options.jitterPx,
+          doubleTap: options.doubleTap,
+          ...(pointObservation ? { pointObservation } : {}),
+        },
+      );
     } catch (error) {
-      // The request dispatch ledger counts the keys already sent and owns the
-      // kernel's dispatched-steps disclosure at the request boundary; these
-      // details only name the key that refused and the keys that did not run.
+      // Resolution is complete before the backend call. Preserve it out of
+      // band so a daemon-level failure corroboration can still record the same
+      // target identity if the backend reports an ambiguous tap outcome.
+      attachResolvedInteractionTarget(error, member.atRest);
       throw attachRefPlanContext(error, plannedRefs, index);
     }
-    points.push(requireResolvedPoint(last));
   }
+  const last = members.at(-1)!;
+  const first = members[0]!;
+  // The plan's evidence compares the pre-command tree member 0 captured with the
+  // post-command tree, so the baseline rides to the final result.
+  const finalTarget: ResolvedInteractionTarget =
+    last.atRest.preAction || !first.atRest.preAction
+      ? last.atRest
+      : { ...last.atRest, preAction: first.atRest.preAction };
+  const formattedBackendResult = toBackendResult(lastBackendResult);
+  const result = await applyPostActionObservation(
+    runtime,
+    options,
+    finalTarget,
+    {
+      ...finalTarget,
+      ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
+    },
+    observation,
+  );
   return {
-    ...last!,
-    sequence: { pressed: points.length, refs: plannedRefs, points },
+    ...result,
+    sequence: {
+      pressed: members.length,
+      refs: plannedRefs,
+      points: members.map((member) => member.point),
+    },
   };
 }
 

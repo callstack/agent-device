@@ -481,7 +481,7 @@ const clickCommandFacet = defineCommandFacet({
   text: {
     summary: 'Click or tap a UI target',
     cliDetail:
-      'A comma-separated ref sequence follows the press form: click @e13,@e14 clicks each key in order as one command (2 to 16 refs, no repeats), with the same admission, rest, and refusal contract as press — see press for the details.executed and details.pending recovery fields. Script recording refuses the sequence form: record one click per key.',
+      "A comma-separated ref sequence follows the press form: click @e13,@e14 clicks each key in order as one command, with press's plan contract. See press for the plan semantics and recovery fields. Script recording refuses the sequence form: record one click per key.",
   },
   metadata: metadata('click'),
   run: (client, input) => client.interactions.click(toClickOptions(input)),
@@ -496,7 +496,7 @@ const pressCommandFacet = defineCommandFacet({
   text: {
     summary: 'Short-press a UI target',
     cliDetail:
-      'The hold duration is positional on longpress, not press --hold-ms. Enter a fixed key plan in one command with a comma-separated ref sequence: press @e13,@e14,@e15,@e16 presses each key in order (2 to 16 refs; a repeated ref presses the same key twice, for a PIN digit). Every key is admitted against the current frame before the first press, and every press runs the ordinary press path, so a later key that refuses fails with that press reason — details.dispatchedSteps counts the keys already sent, details.refPlanKey names the key that refused, and details.refPlanPending lists the keys that did not run; rebuild the remaining plan from a fresh snapshot instead of retrying. Later keys follow selector semantics: each names whatever the fresh frame shows. --interval-ms sleeps between keys; --count, --hold-ms, --jitter-px, --double-tap, and --button apply to every key. The response ref is the first key; sequence.points carries where every key landed. Script recording refuses the sequence form: record one press per key.',
+      'The hold duration is positional on longpress, not press --hold-ms. Enter a fixed key plan in one command with a comma-separated ref sequence: press @e13,@e14,@e15,@e16 presses each key in order (2 to 16 refs; a repeated ref presses the same key twice, for a PIN digit). The whole plan resolves and admits against the current frame before the first press, so a member that cannot resolve refuses before anything dispatches. The plan is one logical command: key 1 expires the frame, later keys tap where the snapshot showed them, and the motion screen judges the plan once — take a fresh snapshot and rebuild the plan when the screen can move between keys. A later key that refuses carries details.dispatchedSteps counting the keys already sent, details.refPlanKey naming the key that refused, and details.refPlanPending listing the keys that did not run. --interval-ms sleeps between keys; --count, --hold-ms, --jitter-px, --double-tap, and --button apply to every key. The response ref is the first key; sequence.points carries where every key landed. Script recording refuses the sequence form: record one press per key.',
   },
   metadata: metadata('press'),
   run: (client, input) => client.interactions.press(toPressOptions(input)),
