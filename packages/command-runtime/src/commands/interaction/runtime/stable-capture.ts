@@ -533,8 +533,8 @@ function stableCaptureDelayMs(params: {
 }
 
 // Intentionally does not update the session snapshot: the stable loop captures
-// an interactive-only tree purely as a settle signal, and overwriting the
-// session's richer cached snapshot with the filtered tree would degrade
+// an interactive-only tree (the full tree for a `fullView` baseline) purely as a
+// settle signal, and overwriting the session's richer cached snapshot with it would degrade
 // subsequent ref/get/find lookups against the same session. (`--settle` DOES
 // store its final capture, but explicitly, in one place, after the loop.)
 //

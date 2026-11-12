@@ -93,6 +93,21 @@ test('a ref press after a full snapshot settles on the full tree and reports no 
 
   assert.ok(views.length > 0 && views.every((view) => view === 'full'));
   assert.deepEqual(result.settle?.diff?.summary, { additions: 0, removals: 0, unchanged: 4 });
+  // The tail names interactive targets, which a full-tree capture does not single out.
+  assert.equal(result.settle?.tail, undefined);
+});
+
+test('a ref press after a scoped full snapshot keeps the interactive settle view', async () => {
+  const { device, views } = createDevice({
+    refFrame: { ...DIALOG.full, presentation: { scope: 'Device name' } },
+    before: DIALOG,
+    after: DIALOG,
+  });
+
+  await device.interactions.press(ref('@e3'), { session: 'default', settle: {} });
+
+  // The settle capture cannot reproduce a scoped projection, so the frame is not a full-view baseline.
+  assert.ok(views.length > 0 && views.every((view) => view === 'interactive'));
 });
 
 test('a ref press after a full snapshot still reports what changed on the full tree', async () => {
@@ -133,7 +148,7 @@ test('a ref press after an interactive snapshot settles on the interactive view'
   assert.deepEqual(removedLabels(result.settle?.diff?.lines).length, 1);
 });
 
-test('a selector press settles on the interactive view although its resolution read a full tree', async () => {
+test('a selector press settles on the interactive view', async () => {
   const titleGone = interactiveTree(['Cancel', 'OK']);
   const { device, views } = createDevice({
     refFrame: DIALOG.interactive,

@@ -207,7 +207,7 @@ async function readSettledOutcome(
       // advisory state.
       ...(diffShown
         ? buildSettleDiffAndTail(
-            params.baseline.nodes,
+            params.baseline,
             settledNodes,
             params.actionPoint,
             session?.appBundleId,
@@ -261,15 +261,22 @@ function authorizedRefBaseline(
 }
 
 /**
- * The ref frame the agent last read. A frame read as a full tree (`snapshot` without `-i`) is marked
- * `fullView`, so the settle loop reads the full tree too and the diff compares one view. Selector
- * captures are full trees as well, but no agent chose that view, so only the ref frame carries it.
+ * The ref frame the agent last read. A frame read as the whole full tree (`snapshot` without `-i`,
+ * `-s`, `-d` or `--raw`) is marked `fullView`, so the settle loop reads the full tree too and the
+ * diff compares one view. A scoped, depth-limited or raw frame is a projection the settle capture
+ * does not reproduce, so it stays unmarked. Selector captures are full trees as well, but no agent
+ * chose that view, so only the ref frame carries the mark.
  */
 function refFrameBaseline(snapshot: SnapshotState | undefined): SurfaceScopedNodes {
   const baseline = surfaceScopedNodes(snapshot);
-  return snapshot?.presentation && snapshot.presentation.interactiveOnly !== true
-    ? { ...baseline, fullView: true }
-    : baseline;
+  const presentation = snapshot?.presentation;
+  const wholeFullTree =
+    presentation !== undefined &&
+    presentation.interactiveOnly !== true &&
+    presentation.scope === undefined &&
+    presentation.depth === undefined &&
+    presentation.raw !== true;
+  return wholeFullTree ? { ...baseline, fullView: true } : baseline;
 }
 
 /**
@@ -279,9 +286,9 @@ function refFrameBaseline(snapshot: SnapshotState | undefined): SurfaceScopedNod
  * dismissal (#3565).
  */
 function sessionBaseline(session: CommandSessionRecord | undefined): SurfaceScopedNodes {
-  const { presentedSurface: _unverified, ...baseline } = session?.refFrameSnapshot
-    ? refFrameBaseline(session.refFrameSnapshot)
-    : surfaceScopedNodes(session?.snapshot);
+  const { presentedSurface: _unverified, ...baseline } = surfaceScopedNodes(
+    session?.refFrameSnapshot ?? session?.snapshot,
+  );
   return baseline;
 }
 
@@ -296,8 +303,8 @@ function buildSettleDiff(
   settledNodes: SnapshotNode[],
   appBundleId: string | undefined,
 ): NonNullable<SettleObservation['diff']> {
-  // Flattened compare, like `diff -i`: both sides are interactive-flavored
-  // captures and depth jitter across captures should not read as change. When
+  // Flattened compare, like `diff -i`: both sides are captures in one view (interactive, or the full
+  // tree for a `fullView` baseline), and depth jitter across captures should not read as change. When
   // the baseline came from a richer stored tree (ref targets reuse the session
   // snapshot), extra baseline-only lines surface as removals — advisory noise,
   // the same baseline caveat --verify's changedFromBefore already accepts.
@@ -320,12 +327,14 @@ function buildSettleDiff(
 }
 
 function buildSettleDiffAndTail(
-  baselineNodes: SnapshotNode[],
+  baseline: SurfaceScopedNodes,
   settledNodes: SnapshotNode[],
   actionPoint: Point | undefined,
   appBundleId: string | undefined,
 ): Pick<SettleObservation, 'diff' | 'tail' | 'tailTruncated'> {
-  const diff = buildSettleDiff(baselineNodes, settledNodes, appBundleId);
+  const diff = buildSettleDiff(baseline.nodes, settledNodes, appBundleId);
+  // The tail names next interactive targets, which a full-tree settle capture does not single out.
+  if (baseline.fullView === true) return { diff };
   return { diff, ...buildSettleTail(diff, settledNodes, actionPoint, appBundleId) };
 }
 
