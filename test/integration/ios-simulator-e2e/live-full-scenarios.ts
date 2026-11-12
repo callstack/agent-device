@@ -286,7 +286,7 @@ export async function assertObservabilityAndArtifacts(context: LiveContext): Pro
         command: 'get',
         input: {
           format: 'text',
-          target: { kind: 'selector', selector: 'id="automation-press"' },
+          selector: 'id="automation-press"',
         },
       },
       {

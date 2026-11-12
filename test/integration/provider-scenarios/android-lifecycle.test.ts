@@ -870,7 +870,7 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
     steps: [
       {
         command: 'press',
-        input: { target: { kind: 'point', x: 10, y: 20 }, count: 2, intervalMs: 1 },
+        input: { x: 10, y: 20, count: 2, intervalMs: 1 },
       },
     ],
     onError: 'stop',

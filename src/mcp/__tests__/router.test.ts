@@ -37,7 +37,8 @@ test('MCP exposes every automatable CLI command as a structured direct tool, plu
   const fillProperties = (fillTool.inputSchema as { properties: Record<string, unknown> })
     .properties;
   assert.ok(!('positionals' in fillProperties));
-  assert.ok('target' in fillProperties);
+  assert.ok('ref' in fillProperties);
+  assert.ok(!('target' in fillProperties));
   assert.ok('recordAs' in fillProperties);
 
   const batchTool = (response.result as { tools: Array<Record<string, unknown>> }).tools.find(
@@ -51,11 +52,11 @@ test('MCP exposes every automatable CLI command as a structured direct tool, plu
     jsonrpc: '2.0',
     id: 2,
     method: 'tools/call',
-    params: { name: 'fill', arguments: {} },
+    params: { name: 'fill', arguments: { text: 'qa' } },
   });
   assert.ok(invalidFillResponse && 'result' in invalidFillResponse);
   assert.equal((invalidFillResponse.result as { isError: boolean }).isError, true);
-  assert.match(JSON.stringify(invalidFillResponse.result), /Expected target to be set/);
+  assert.match(JSON.stringify(invalidFillResponse.result), /Expected a UI target/);
 
   const malformedArgumentsResponse = await handleMcpMessage({
     jsonrpc: '2.0',

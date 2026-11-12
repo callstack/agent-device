@@ -98,7 +98,8 @@ const SETTLE_REF_ISSUING_TOOLS: ReadonlySet<CommandName> = new Set(
     .filter((name) => commandSupportsSettleObservation(name)),
 );
 
-const TARGET_REF_TOOLS: ReadonlySet<CommandName> = new Set([
+const REF_ARGUMENT_TOOLS: ReadonlySet<CommandName> = new Set([
+  'wait',
   'press',
   'click',
   'fill',
@@ -303,28 +304,16 @@ function pinPlainRefArguments(
 ): Record<string, unknown> {
   // No remembered pins for this scope → pass refs through unpinned.
   if (pins === undefined || pins.size === 0) return input;
-  if (name === 'wait') return pinWaitRef(input, pins) ?? input;
-  if (TARGET_REF_TOOLS.has(name)) return pinTargetRef(input, pins) ?? input;
-  return input;
+  return REF_ARGUMENT_TOOLS.has(name) ? (pinRefArgument(input, pins) ?? input) : input;
 }
 
-function pinWaitRef(
+function pinRefArgument(
   record: Record<string, unknown>,
   pins: Map<string, number>,
 ): Record<string, unknown> | undefined {
   if (typeof record.ref !== 'string') return undefined;
   const pinned = pinRef(record.ref, pins);
   return pinned === record.ref ? undefined : { ...record, ref: pinned };
-}
-
-function pinTargetRef(
-  record: Record<string, unknown>,
-  pins: Map<string, number>,
-): Record<string, unknown> | undefined {
-  const target = asOptionalRecord(record.target);
-  if (target?.kind !== 'ref' || typeof target.ref !== 'string') return undefined;
-  const pinned = pinRef(target.ref, pins);
-  return pinned === target.ref ? undefined : { ...record, target: { ...target, ref: pinned } };
 }
 
 function pinRef(ref: string, pins: Map<string, number>): string {

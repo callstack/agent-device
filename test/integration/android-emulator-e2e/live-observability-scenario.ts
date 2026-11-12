@@ -110,7 +110,7 @@ async function assertBatchAndEvents(context: LiveContext): Promise<void> {
     JSON.stringify([
       {
         command: 'get',
-        input: { format: 'text', target: { kind: 'selector', selector: 'id="dismiss-notice"' } },
+        input: { format: 'text', selector: 'id="dismiss-notice"' },
       },
       {
         command: 'is',

@@ -16,7 +16,7 @@ const fillMetadata = interactionCommandMetadata.find((metadata) => metadata.name
 test('fill accepts an empty text as the clear request', () => {
   if (!fillMetadata) throw new Error('expected fill metadata');
   const input = fillMetadata.readInput({
-    target: { kind: 'ref', ref: '@e57' },
+    ref: '@e57',
     text: '',
   }) as { text: unknown };
 
@@ -26,7 +26,7 @@ test('fill accepts an empty text as the clear request', () => {
 test('fill still refuses a missing text', () => {
   if (!fillMetadata) throw new Error('expected fill metadata');
   try {
-    fillMetadata.readInput({ target: { kind: 'ref', ref: '@e57' } });
+    fillMetadata.readInput({ ref: '@e57' });
     expect.unreachable('fill should refuse input without text');
   } catch (error) {
     expect(error).toBeInstanceOf(AppError);
@@ -38,7 +38,7 @@ test('fill still refuses a missing text', () => {
 test('fill refuses a non-string text', () => {
   if (!fillMetadata) throw new Error('expected fill metadata');
   try {
-    fillMetadata.readInput({ target: { kind: 'ref', ref: '@e57' }, text: 42 });
+    fillMetadata.readInput({ ref: '@e57', text: 42 });
     expect.unreachable('fill should refuse a non-string text');
   } catch (error) {
     expect((error as AppError).code).toBe('INVALID_ARGS');

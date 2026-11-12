@@ -60,15 +60,15 @@ Pass `batch` a JSON array of steps:
   { "command": "open", "input": { "app": "settings" } },
   {
     "command": "wait",
-    "input": { "kind": "selector", "selector": "label=\"Privacy & Security\"", "timeoutMs": 3000 }
+    "input": { "selector": "label=\"Privacy & Security\"", "timeoutMs": 3000 }
   },
   {
     "command": "click",
-    "input": { "target": { "kind": "selector", "selector": "label=\"Privacy & Security\"" } }
+    "input": { "selector": "label=\"Privacy & Security\"" }
   },
   {
     "command": "get",
-    "input": { "format": "text", "target": { "kind": "selector", "selector": "label=\"Tracking\"" } }
+    "input": { "format": "text", "selector": "label=\"Tracking\"" }
   }
 ]
 ```
@@ -146,16 +146,16 @@ Open app -> open thread -> type -> send
 [
   { "command": "open", "input": { "app": "com.example.chat", "platform": "android" } },
   { "command": "wait", "input": { "kind": "text", "text": "Inbox", "timeoutMs": 3000 } },
-  { "command": "press", "input": { "target": { "kind": "selector", "selector": "label=\"Inbox\" role=button" } } },
-  { "command": "press", "input": { "target": { "kind": "selector", "selector": "label=\"Morgan Lee\"" } } },
+  { "command": "press", "input": { "selector": "label=\"Inbox\" role=button" } },
+  { "command": "press", "input": { "selector": "label=\"Morgan Lee\"" } },
   {
     "command": "fill",
     "input": {
-      "target": { "kind": "selector", "selector": "label=\"Message\" role=text-field" },
+      "selector": "label=\"Message\" role=text-field",
       "text": "sent the update"
     }
   },
-  { "command": "press", "input": { "target": { "kind": "selector", "selector": "label=\"Send\" role=button" } } },
+  { "command": "press", "input": { "selector": "label=\"Send\" role=button" } },
   { "command": "wait", "input": { "kind": "text", "text": "sent the update", "timeoutMs": 3000 } }
 ]
 ```
@@ -168,10 +168,10 @@ Open app -> open action menu -> choose option -> verify
   { "command": "wait", "input": { "kind": "text", "text": "Home", "timeoutMs": 3000 } },
   {
     "command": "press",
-    "input": { "target": { "kind": "selector", "selector": "label=\"More actions\" role=button" } }
+    "input": { "selector": "label=\"More actions\" role=button" }
   },
   { "command": "wait", "input": { "kind": "text", "text": "Scan document", "timeoutMs": 2000 } },
-  { "command": "press", "input": { "target": { "kind": "selector", "selector": "label=\"Scan document\"" } } },
+  { "command": "press", "input": { "selector": "label=\"Scan document\"" } },
   { "command": "wait", "input": { "kind": "text", "text": "Document uploaded", "timeoutMs": 15000 } },
   { "command": "is", "input": { "predicate": "visible", "selector": "label=\"Document uploaded\"" } }
 ]

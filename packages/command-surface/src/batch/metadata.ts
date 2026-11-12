@@ -48,7 +48,12 @@ export function createBatchCommandMetadata(
     'batch',
     'Execute multiple commands in one daemon request.',
     fields,
-    { readInput: (input) => readBatchInput(input, fields) },
+    {
+      readInput: (input) => readBatchInput(input, fields),
+      ...(nestedCommands.includes('snapshot')
+        ? { inputExample: { steps: [{ command: 'snapshot', input: { interactiveOnly: true } }] } }
+        : {}),
+    },
   );
 }
 

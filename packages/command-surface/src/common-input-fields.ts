@@ -128,7 +128,7 @@ const COMMON_INPUT_FIELDS = {
       type: 'string',
       enum: DEVICE_TARGETS,
       description:
-        'Alias for deviceTarget on commands without a UI target field. Interaction commands reserve target for the UI element.',
+        'Alias for deviceTarget. Commands that take a UI target (ref, selector, or x/y) accept only deviceTarget.',
     },
   },
   device: {

@@ -74,7 +74,7 @@ test('batch help documents the step shape and the commands batch accepts', async
   // A step's input is keyed by structured field names no CLI help spells out, so the examples are
   // this text's only statement of them. `cli-help-examples.test.ts` runs them through the readers.
   assert.match(help, /\n\nExamples:\n {2}agent-device batch --steps '\[/);
-  assert.match(help, /"command":"press","input":\{"target":\{"kind":"ref"/);
+  assert.match(help, /"command":"press","input":\{"ref":"@e12"/);
   assert.match(help, /"command":"fill",.*"text":"qa@example\.com"/);
   assert.match(help, /"command":"snapshot","input":\{"interactiveOnly":true\}/);
 });
