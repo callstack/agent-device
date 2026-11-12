@@ -17,7 +17,9 @@ export type DaemonFixtureLaunch<P, F> =
       };
       exitGate?: Promise<void>;
       observe?: (child: RegisteredDaemonChild) => void;
-      companions?: readonly Extract<DaemonFixtureLaunch<P, F>, { kind: 'registered' }>[];
+      companions?: readonly (Extract<DaemonFixtureLaunch<P, F>, { kind: 'registered' }> & {
+        exitGate?: never;
+      })[];
     };
 
 export type DaemonFixtureLaunchStep<P, F> =
