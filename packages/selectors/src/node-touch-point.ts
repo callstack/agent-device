@@ -165,7 +165,7 @@ export function resolveNodeTouchPoint(
   node: SnapshotNode,
   nodes: SnapshotState['nodes'],
   failure: { invalidMessage: string; blockedTargetLabel: string } & (
-    | { blockedTargetDetails: { ref: string } }
+    | { blockedTargetDetails: { ref: string }; shellQuotedSelector?: never }
     /**
      * The recovery names a command that takes the selector, so the caller hands it over as one
      * shell word: this entry's eager closure stops short of the kernel's `shellQuote`.
@@ -185,11 +185,7 @@ export function resolveNodeTouchPoint(
       new AppError('COMMAND_FAILED', failure.invalidMessage, {
         reason: INTERACTION_ERROR_REASONS.targetBoundsInvalid,
         ...bareTargetDetails(failure.blockedTargetDetails),
-        ...scrollContainerRecovery(
-          node,
-          nodes,
-          'shellQuotedSelector' in failure ? failure.shellQuotedSelector : undefined,
-        ),
+        ...scrollContainerRecovery(node, nodes, failure.shellQuotedSelector),
       }),
       'no',
     );

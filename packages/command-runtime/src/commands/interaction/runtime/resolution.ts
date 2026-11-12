@@ -1,4 +1,4 @@
-import { shellQuote } from '@agent-device/kernel/device-shell';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import {
@@ -163,7 +163,7 @@ async function resolveSelectorInteractionTarget(
         invalidMessage: `Selector ${resolved.selector} resolved to invalid bounds`,
         blockedTargetLabel: `Selector ${selectorExpression}`,
         blockedTargetDetails: { selector: selectorExpression },
-        shellQuotedSelector: shellQuote(selectorExpression),
+        shellQuotedSelector: shellQuoteIfNeeded(selectorExpression),
       }),
   });
   return {
