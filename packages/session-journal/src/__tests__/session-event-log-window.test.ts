@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 import {
   appendSessionEvent,
@@ -347,4 +348,155 @@ test('a tailing reader resumes from endCursor past unparsable lines without repl
   const partial = readSessionEventLog(eventLogPath, { cursor: '1', limit: 2 });
   assert.equal(partial.nextCursor, '3');
   assert.equal(partial.endCursor, '3');
+});
+
+test('the 128-entry limit includes in-flight work and releases on completion', async () => {
+  const eventLogPath = resolveSessionEventLogPath(mkdtempForTestSync('event-queue-count-'));
+  const append = fs.promises.appendFile.bind(fs.promises);
+  let release!: () => void;
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  vi.spyOn(fs.promises, 'appendFile').mockImplementationOnce(async (...args) => {
+    entered();
+    await blocked;
+    return append(...args);
+  });
+  const send = (index: number) =>
+    appendSessionEvent(
+      eventLogPath,
+      'default',
+      {
+        kind: 'request.started',
+        summary: `event ${index}`,
+      },
+      {},
+    );
+  send(0);
+  await started;
+  for (let i = 1; i <= 128; i += 1) send(i);
+  release();
+  await flushSessionEventLogWrites(eventLogPath);
+  send(129);
+  await flushSessionEventLogWrites(eventLogPath);
+  assert.deepEqual(summaries(eventLogPath, '0', 500), [
+    ...Array.from({ length: 128 }, (_, i) => `event ${i}`),
+    'event 129',
+  ]);
+});
+
+test('serialized byte admission includes in-flight payload and reports both limits', async () => {
+  const dir = mkdtempForTestSync('event-queue-bytes-');
+  const eventLogPath = resolveSessionEventLogPath(dir);
+  const logPath = path.join(dir, 'diagnostics.ndjson');
+  const max = 16 * 1024 * 1024;
+  const env = { AGENT_DEVICE_EVENT_LOG_MAX_BYTES: String(max * 2) };
+  const append = fs.promises.appendFile.bind(fs.promises);
+  let release!: () => void;
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  vi.spyOn(fs.promises, 'appendFile').mockImplementationOnce(async (...args) => {
+    entered();
+    await blocked;
+    return append(...args);
+  });
+  const fixed = { kind: 'request.started' as const, ts: 'fixed' };
+  const makeEvent = (keySize: number) => ({ ...fixed, details: { ['x'.repeat(keySize)]: 1 } });
+  const lineSize = (event: ReturnType<typeof makeEvent>) =>
+    Buffer.byteLength(
+      `${JSON.stringify(Object.assign({ version: 1, ts: 'fixed', session: 'default' }, event))}\n`,
+    );
+  const baseline = lineSize(makeEvent(1)) - 1;
+  const half = makeEvent(Math.floor(max / 2) - baseline);
+  const tooLarge = makeEvent(max - baseline + 1);
+  await withDiagnosticsScope({ debug: true, logPath }, async () => {
+    appendSessionEvent(eventLogPath, 'default', half, env);
+    await started;
+    appendSessionEvent(eventLogPath, 'default', half, env);
+    appendSessionEvent(eventLogPath, 'default', fixed, env);
+    appendSessionEvent(eventLogPath, 'default', tooLarge, env);
+    release();
+    await flushSessionEventLogWrites(eventLogPath);
+    appendSessionEvent(eventLogPath, 'default', fixed, env);
+    await flushSessionEventLogWrites(eventLogPath);
+  });
+  assert.equal(
+    fs.statSync(eventLogPath).size,
+    max +
+      Buffer.byteLength(
+        `${JSON.stringify(Object.assign({ version: 1, ts: 'fixed', session: 'default' }, fixed))}\n`,
+      ),
+  );
+  const diagnostics = fs
+    .readFileSync(logPath, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  assert.deepEqual(
+    diagnostics
+      .filter((event) => event.phase === 'session_event_log_write_failed')
+      .map((event) => [event.data.reason, event.data.operation]),
+    [
+      ['queue-full', 'admission'],
+      ['entry-too-large', 'admission'],
+    ],
+  );
+});
+
+test('failed rotations preserve the cap and later new events recover in cursor order', async () => {
+  const eventLogPath = resolveSessionEventLogPath(mkdtempForTestSync('event-rotation-failure-'));
+  const env = { AGENT_DEVICE_EVENT_LOG_MAX_BYTES: '200' };
+  const send = (summary: string) =>
+    appendSessionEvent(
+      eventLogPath,
+      'default',
+      {
+        kind: 'request.started',
+        ts: 'fixed',
+        summary,
+      },
+      env,
+    );
+  send('first');
+  send('second');
+  await flushSessionEventLogWrites(eventLogPath);
+  const before = fs.readFileSync(eventLogPath);
+  const rename = fs.promises.rename.bind(fs.promises);
+  const fault = vi.spyOn(fs.promises, 'rename').mockImplementation(async (source, destination) => {
+    if (String(destination) === `${eventLogPath}.window.json`)
+      throw Object.assign(new Error('denied'), { code: 'EACCES' });
+    return rename(source, destination);
+  });
+  send('failed one');
+  send('failed two');
+  await flushSessionEventLogWrites(eventLogPath);
+  assert.deepEqual(fs.readFileSync(eventLogPath), before);
+  assert.ok(before.length <= 200);
+  fault.mockRestore();
+  send('recovered');
+  await flushSessionEventLogWrites(eventLogPath);
+  assert.deepEqual(summaries(eventLogPath, '0', 10), ['first', 'second', 'recovered']);
+  assert.equal(readSessionEventLog(eventLogPath, { cursor: '2' }).endCursor, '3');
+  assert.ok(fs.statSync(eventLogPath).size <= 200);
+});
+
+test('the active cap admits an exact UTF-8 line and refuses a larger line', async () => {
+  const eventLogPath = resolveSessionEventLogPath(mkdtempForTestSync('event-utf8-cap-'));
+  const event = { kind: 'request.started' as const, ts: 'fixed', summary: 'é' };
+  const line = `${JSON.stringify(Object.assign({ version: 1, ts: 'fixed', session: 'default' }, event))}\n`;
+  const env = { AGENT_DEVICE_EVENT_LOG_MAX_BYTES: String(Buffer.byteLength(line)) };
+  appendSessionEvent(eventLogPath, 'default', event, env);
+  await flushSessionEventLogWrites(eventLogPath);
+  appendSessionEvent(eventLogPath, 'default', { ...event, summary: 'éé' }, env);
+  await flushSessionEventLogWrites(eventLogPath);
+  assert.equal(fs.readFileSync(eventLogPath, 'utf8'), line);
 });
