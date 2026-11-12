@@ -16,7 +16,7 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
     'Do not probe first with devices, apps, appstate, snapshot, or screenshot',
     'Unknown app id: devices, then apps, then open <discovered-id>. Never invent ids',
     'is, or get. A bare screenshot is not verification',
-    'find acts: it clicks by default. To check only, use find <locator> exists',
+    'find acts: it clicks by default. To check only, use find text "..." exists',
     'End with: agent-device close',
   ],
   commands: [
@@ -28,7 +28,7 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
     'Stop and report ambiguity',
     '1. Open the requested app; use --relaunch only when the script needs fresh state',
     '5. If --settle prints not settled, follow its hint',
-    '6. Verify named expectations with wait text/selector/absent, get, is, find <locator> exists, or the settled diff. Bare find clicks. A bare screenshot/snapshot is not verification',
+    '6. Verify named expectations with wait text/selector/absent, get, is, find text "..." exists, or the settled diff. Bare find clicks. A bare screenshot/snapshot is not verification',
   ],
   maestro: [
     'Run Maestro compatibility flows with replay <flow.yaml> --maestro',

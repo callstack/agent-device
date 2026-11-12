@@ -28,7 +28,7 @@ Loop:
   3. Run press/fill/click/longpress <ref-or-selector> --settle for each mutating step.
   4. Treat a settled:true diff as the next observation. Do not add wait stable or another snapshot when the diff already shows the next target or expected result.
   5. If --settle prints not settled, follow its hint before the next ref-based action.
-  6. Verify named expectations with wait text/selector/absent, get, is, find <locator> exists, or the settled diff. Bare find clicks. A bare screenshot/snapshot is not verification for a named expectation.
+  6. Verify named expectations with wait text/selector/absent, get, is, find text "..." exists, or the settled diff. Bare find clicks. A bare screenshot/snapshot is not verification for a named expectation.
   7. Close the session when the script ends. If your session booted a local simulator or emulator, use close --shutdown, unless the user asks to keep it running.
 
 Command shapes:
@@ -283,7 +283,7 @@ Loop:
   1. Build or prepare the changed surface with the repo command that owns it.
   2. Open the target app/device state explicitly.
   3. Use snapshot -i and press/fill/click/longpress --settle for UI-driving steps.
-  4. Use the settled diff as evidence when it shows the changed behavior; otherwise verify with wait/get/is, find <locator> exists, screenshot, logs, network, perf, or trace based on the claim.
+  4. Use the settled diff as evidence when it shows the changed behavior; otherwise verify with wait/get/is, find text "..." exists, screenshot, logs, network, perf, or trace based on the claim.
   5. Record timings, token/output size, screenshots/videos, logs, or perf artifacts only when they answer the validation question.
   6. Close sessions and release leases before finishing. If your session booted a local simulator or emulator, use close --shutdown, unless the user asks to keep it running.
 

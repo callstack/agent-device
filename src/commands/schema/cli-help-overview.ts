@@ -27,7 +27,7 @@ Loop:
     Run snapshot -i only when the diff lacks the next target or did not settle.
   Verify a named expectation with the diff, wait text "...", wait <selector>, wait absent <selector>,
     is, or get. A bare screenshot is not verification.
-    find acts: it clicks by default. To check only, use find <locator> exists.
+    find acts: it clicks by default. To check only, use find text "..." exists.
   End with: agent-device close
 
 Targets:
