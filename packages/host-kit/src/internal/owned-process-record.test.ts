@@ -338,3 +338,24 @@ test('startup keeps a record whose start time the host did not answer, without s
     cleanup();
   }
 });
+
+test.each(['managed-web-browser', 'verified-managed-web-browser'])(
+  'open web session fences %s records',
+  async (purpose) => {
+    const { store, cleanup } = reapFixture('web-session');
+    const record = { ...BROWSER, purpose };
+    hostRuns(record);
+    try {
+      store.replace({ kind: 'daemon' }, [record]);
+      const summary = await reapOwnedProcessRecordsAtStartup(store, {
+        openWebSessionNames: ['web'],
+      });
+      assert.equal(summary.skippedForOpenWebSession, true);
+      assert.deepEqual(summary.inspectedPids, []);
+      assert.deepEqual(processState.signals, []);
+      assert.deepEqual(store.read()[0]?.records, [record]);
+    } finally {
+      cleanup();
+    }
+  },
+);

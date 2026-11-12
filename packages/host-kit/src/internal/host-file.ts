@@ -146,3 +146,7 @@ export function createHostDirectoryLinkSync(targetPath: string, linkPath: string
 export function readHostDirectorySync(directoryPath: string): string[] {
   return fs.readdirSync(directoryPath);
 }
+
+export function realHostPathSync(filePath: string): string {
+  return fs.realpathSync.native(filePath);
+}

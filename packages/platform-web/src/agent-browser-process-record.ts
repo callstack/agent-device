@@ -2,15 +2,16 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import type { OwnedProcessRecord } from '@agent-device/contracts/platform-runtime-host';
 import { uniqueStrings } from '@agent-device/kernel/collections';
+import { realHostPathSync } from '@agent-device/host-kit/host-file';
 import { withoutCommandExecutorOverride } from '@agent-device/host-kit/command';
 import {
   expandProcessTree,
   hostProcessId,
-  hostNodeExecutablePath,
   isProcessAlive,
   listHostProcesses,
   readHostProcessIdentityObservationsAsync,
   readProcessIdentities,
+  readProcessExecutablePaths,
   type HostProcessInfo,
   type OwnedProcessRecordStore,
 } from '@agent-device/host-kit/process';
@@ -25,7 +26,7 @@ const HOST_PROCESS_LIST_TIMEOUT_MS = 1_500;
 const AGENT_DEVICE_BROWSER_MARKER_PREFIX = '--agent-device-managed-web=';
 
 /** The `purpose` every owned-process record for the managed web fleet carries. */
-export const MANAGED_WEB_BROWSER_PROCESS_PURPOSE = 'managed-web-browser';
+export const MANAGED_WEB_BROWSER_PROCESS_PURPOSE = 'verified-managed-web-browser';
 
 export type AgentBrowserProcessMatch = {
   process: HostProcessInfo;
@@ -70,8 +71,25 @@ export function summarizeAgentBrowserProcesses(
 function matchManagedAgentBrowserProcess(
   processInfo: HostProcessInfo,
   ownership: ManagedFleetOwnership,
+  executablePath: string | undefined,
 ): AgentBrowserProcessMatch | undefined {
-  return matchChromeProcess(processInfo, ownership) ?? matchDaemonProcess(processInfo, ownership);
+  if (!executablePath) return undefined;
+  const executable = normalizePathSeparators(executablePath);
+  if (isChromeExecutable(executable)) {
+    const chrome = matchChromeProcess(processInfo, ownership);
+    if (chrome) return chrome;
+  }
+  if (processInfo.pid !== hostProcessId() && ownership.daemonEntries.includes(executable)) {
+    return { process: processInfo, reason: 'agent-browser-daemon' };
+  }
+  return undefined;
+}
+
+function isChromeExecutable(executable: string): boolean {
+  const name = executable.slice(executable.lastIndexOf('/') + 1);
+  return /^(?:Google Chrome(?: for Testing)?|Chrome for Testing|Chromium|chrome(?:\.exe)?|chromium|chromium-browser|headless_shell)$/i.test(
+    name,
+  );
 }
 
 export async function inspectManagedAgentBrowserProcesses(
@@ -84,10 +102,30 @@ export async function recordManagedAgentBrowserProcesses(
   status: AgentBrowserToolStatus,
   store: OwnedProcessRecordStore,
 ): Promise<AgentBrowserProcessSummary> {
-  const processes = await listRealHostProcesses();
+  const initial = await listRealHostProcesses();
+  const pids = initial.map(({ pid }) => pid);
+  const before = await readProcessIdentities(pids);
+  const scanned = await listRealHostProcesses();
+  const executablePaths = await readProcessExecutablePaths(pids);
+  const after = await readProcessIdentities(pids);
+  const initialPids = new Set(pids);
+  const processes = scanned.filter(({ pid, command }) => {
+    const first = before.get(pid);
+    const last = after.get(pid);
+    return (
+      initialPids.has(pid) &&
+      !!first?.startTime &&
+      !!first.command &&
+      first.zombie === false &&
+      last?.zombie === false &&
+      first.startTime === last.startTime &&
+      first.command === last.command &&
+      command === first.command
+    );
+  });
   const ownership = managedFleetOwnership(status);
   const roots = summarizeMatches(processes, (processInfo) =>
-    matchManagedAgentBrowserProcess(processInfo, ownership),
+    matchManagedAgentBrowserProcess(processInfo, ownership, executablePaths.get(processInfo.pid)),
   );
   const ownedProcesses = expandProcessTree(roots.pids, processes);
   const summary: AgentBrowserProcessSummary = {
@@ -95,17 +133,17 @@ export async function recordManagedAgentBrowserProcesses(
     pids: ownedProcesses.map(({ pid }) => pid),
     processes: ownedProcesses.map((process) => ({
       process,
-      reason: matchManagedAgentBrowserProcess(process, ownership)?.reason ?? 'descendant',
+      reason:
+        matchManagedAgentBrowserProcess(process, ownership, executablePaths.get(process.pid))
+          ?.reason ?? 'descendant',
     })),
   };
-  // One off-loop identity read answers the whole fleet.
-  const identities = await readProcessIdentities(summary.pids);
-  const records: OwnedProcessRecord[] = summary.pids.flatMap((pid) => {
-    const { startTime, command } = identities.get(pid) ?? {};
-    return startTime && command
-      ? [{ pid, startTime, command, purpose: MANAGED_WEB_BROWSER_PROCESS_PURPOSE }]
-      : [];
-  });
+  const records: OwnedProcessRecord[] = ownedProcesses.map(({ pid, command }) => ({
+    pid,
+    startTime: before.get(pid)!.startTime!,
+    command,
+    purpose: MANAGED_WEB_BROWSER_PROCESS_PURPOSE,
+  }));
   if (records.length > 0) store.replace({ kind: 'daemon' }, records);
   return summary;
 }
@@ -221,7 +259,6 @@ type ManagedFleetOwnership = {
   launchMarkers: string[];
   browserHomeRoots: string[];
   daemonEntries: string[];
-  entryScript?: string;
 };
 
 function managedFleetOwnership(status: AgentBrowserToolStatus): ManagedFleetOwnership {
@@ -232,13 +269,9 @@ function managedFleetOwnership(status: AgentBrowserToolStatus): ManagedFleetOwne
   return {
     launchMarkers: installs.map(agentBrowserChromeLaunchMarker),
     browserHomeRoots: uniqueStrings(installs.flatMap(managedBrowserHomeMarkers)),
-    entryScript: status.entryScript
-      ? normalizePathSeparators(path.resolve(status.entryScript))
-      : undefined,
     daemonEntries: installs.flatMap((install) => {
       const bin = path.join(install.installDir, 'package', 'node_modules', 'agent-browser', 'bin');
       return [
-        'agent-browser.js',
         'agent-browser-darwin-arm64',
         'agent-browser-darwin-x64',
         'agent-browser-linux-arm64',
@@ -246,7 +279,13 @@ function managedFleetOwnership(status: AgentBrowserToolStatus): ManagedFleetOwne
         'agent-browser-linux-musl-arm64',
         'agent-browser-linux-musl-x64',
         'agent-browser-win32-x64.exe',
-      ].map((name) => normalizePathSeparators(path.resolve(bin, name)));
+      ].flatMap((name) => {
+        try {
+          return [normalizePathSeparators(realHostPathSync(path.join(bin, name)))];
+        } catch {
+          return [];
+        }
+      });
     }),
   };
 }
@@ -262,33 +301,6 @@ function matchChromeProcess(
   }
   if (ownership.browserHomeRoots.some((root) => isCommandUnderPath(processInfo, root))) {
     return { process: processInfo, reason: 'managed-browser-home' };
-  }
-  return undefined;
-}
-
-function matchDaemonProcess(
-  processInfo: HostProcessInfo,
-  ownership: ManagedFleetOwnership,
-): AgentBrowserProcessMatch | undefined {
-  if (processInfo.pid === hostProcessId() || isChromeLikeCommand(processInfo.command))
-    return undefined;
-  const command = normalizePathSeparators(processInfo.command);
-  const node = consumeCommandEntry(command, normalizePathSeparators(hostNodeExecutablePath()));
-  const matched = [
-    ...ownership.daemonEntries,
-    ...(ownership.entryScript ? [ownership.entryScript] : []),
-  ].some((entry) => {
-    const script = entry.endsWith('.js');
-    return consumeCommandEntry(script ? (node ?? '') : command, entry) !== undefined;
-  });
-  return matched ? { process: processInfo, reason: 'agent-browser-daemon' } : undefined;
-}
-
-function consumeCommandEntry(command: string, entry: string): string | undefined {
-  for (const candidate of [entry, `"${entry}"`, `'${entry}'`]) {
-    if (!command.startsWith(candidate)) continue;
-    const rest = command.slice(candidate.length);
-    if (!rest || /^\s/.test(rest)) return rest.trimStart();
   }
   return undefined;
 }

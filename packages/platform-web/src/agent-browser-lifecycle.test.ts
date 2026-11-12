@@ -23,6 +23,8 @@ vi.mock('../../host-kit/src/internal/exec.ts', async (importOriginal) => {
   return { ...actual, runCmd: hostRunCmdMock };
 });
 
+const executablePathsMock = vi.hoisted(() => vi.fn());
+
 const identitiesMock = vi.hoisted(() =>
   vi.fn(
     async (pids: Iterable<number>) =>
@@ -46,6 +48,7 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
         ? new Map<number, { state: string; startTime: string }>()
         : await actual.readHostProcessIdentityObservationsAsync(pids),
     readProcessIdentities: identitiesMock,
+    readProcessExecutablePaths: executablePathsMock,
   };
 });
 
@@ -59,7 +62,10 @@ import {
 } from './agent-browser-lifecycle.ts';
 import { agentBrowserFleetOf } from './agent-browser-fleet.ts';
 import { managedInstallPaths } from './agent-browser-install-paths.ts';
-import { recordManagedAgentBrowserProcesses } from './agent-browser-process-record.ts';
+import {
+  managedWebBrowserProcessRecordIsLive,
+  recordManagedAgentBrowserProcesses,
+} from './agent-browser-process-record.ts';
 import { getManagedAgentBrowserStatus } from './agent-browser-tool.ts';
 import {
   createOwnedProcessRecordStore,
@@ -72,6 +78,8 @@ const mockRunCmd = vi.mocked(runCmdMock);
 
 beforeEach(() => {
   mockRunCmd.mockReset();
+  identitiesMock.mockClear();
+  executablePathsMock.mockReset();
   probe.unanswered = false;
 });
 
@@ -210,7 +218,7 @@ function recordedBrowserStore(stateDir: string, pid = NEVER_A_PID) {
             pid,
             startTime: `start-${pid}`,
             command: `command-${pid}`,
-            purpose: 'managed-web-browser',
+            purpose: 'verified-managed-web-browser',
           },
         ],
       },
@@ -404,7 +412,7 @@ test('cleanup reads recorded browser identities without reconstructing a process
             pid: NEVER_A_PID,
             startTime: `start-${NEVER_A_PID}`,
             command: `command-${NEVER_A_PID}`,
-            purpose: 'managed-web-browser',
+            purpose: 'verified-managed-web-browser',
           },
         ],
       },
@@ -467,74 +475,51 @@ test('process summary reports only conservatively owned managed Chrome processes
   }
 });
 
-test('records the managed browser daemon and Chrome fleet at the spawn owner', async () => {
-  const stateDir = mkdtempForTestSync('agent-device-web-life-');
-  try {
-    installFakeManagedAgentBrowser(stateDir);
-    const status = getManagedAgentBrowserStatus({
-      stateDir,
-      host: { env: process.env, cwd: process.cwd() },
-    });
-    const marker = agentBrowserChromeLaunchMarker(status);
-    const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
-    mockRunCmd.mockResolvedValue({
-      stdout: [
-        `  101     1 ${process.execPath} ${status.entryScript}`,
-        `  201   101 /Applications/Chromium.app/Contents/MacOS/Chromium ${marker}`,
-        '  301   201 /Applications/Chromium.app/Contents/Frameworks/Chromium Helper --type=gpu',
-        '  999     1 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      ].join('\n'),
-      stderr: '',
-      exitCode: 0,
-    });
+type ProcessFixture = { pid: number; ppid?: number; command: string; executable?: string };
 
-    identitiesMock.mockClear();
-    const summary = await recordManagedAgentBrowserProcesses(status, store);
-
-    expect(summary.pids).toEqual([101, 201, 301]);
-    expect(identitiesMock.mock.calls).toEqual([[[101, 201, 301]]]);
-    expect(store.replace).toHaveBeenCalledWith(
-      { kind: 'daemon' },
-      [101, 201, 301].map((pid) => ({
-        pid,
-        startTime: `start-${pid}`,
-        command: `command-${pid}`,
-        purpose: 'managed-web-browser',
-      })),
-    );
-  } finally {
-    fs.rmSync(stateDir, { recursive: true, force: true });
-  }
-});
-
-function mockProcessList(lines: string[]) {
-  mockRunCmd.mockResolvedValue({ stdout: lines.join('\n'), stderr: '', exitCode: 0 });
+function nativeBinary(installDir: string): string {
+  const binary = path.join(
+    installDir,
+    'package',
+    'node_modules',
+    'agent-browser',
+    'bin',
+    'agent-browser-darwin-arm64',
+  );
+  fs.mkdirSync(path.dirname(binary), { recursive: true });
+  fs.writeFileSync(binary, 'fixture');
+  return fs.realpathSync.native(binary);
 }
 
-test('recording the fleet owns the recordable agent-browser daemon', async () => {
-  const stateDir = mkdtempForTestSync('agent-device-web-life-');
-  try {
-    installFakeManagedAgentBrowser(stateDir);
-    const status = getManagedAgentBrowserStatus({
-      stateDir,
-      host: { env: process.env, cwd: process.cwd() },
-    });
-    const command = `${process.execPath} ${status.entryScript}`;
-    const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
-    mockProcessList([`  101     1 ${command}`]);
+function observeProcesses(processes: ProcessFixture[]) {
+  mockRunCmd.mockResolvedValue({
+    stdout: processes.map(({ pid, ppid = 1, command }) => `  ${pid} ${ppid} ${command}`).join('\n'),
+    stderr: '',
+    exitCode: 0,
+  });
+  identitiesMock.mockImplementation(
+    async (pids) =>
+      new Map(
+        [...pids].flatMap((pid) => {
+          const row = processes.find((item) => item.pid === pid);
+          return row
+            ? [[pid, { startTime: `start-${pid}`, command: row.command, zombie: false }]]
+            : [];
+        }),
+      ),
+  );
+  executablePathsMock.mockImplementation(
+    async (pids: Iterable<number>) =>
+      new Map(
+        [...pids].flatMap((pid) => {
+          const executable = processes.find((item) => item.pid === pid)?.executable;
+          return executable ? [[pid, executable]] : [];
+        }),
+      ),
+  );
+}
 
-    const summary = await recordManagedAgentBrowserProcesses(status, store);
-
-    expect(summary.processes[0]?.reason).toBe('agent-browser-daemon');
-    expect(store.replace).toHaveBeenCalledWith({ kind: 'daemon' }, [
-      { pid: 101, startTime: 'start-101', command: 'command-101', purpose: 'managed-web-browser' },
-    ]);
-  } finally {
-    fs.rmSync(stateDir, { recursive: true, force: true });
-  }
-});
-
-test('recording requires a managed executable or the Node wrapper as the entry', async () => {
+test('records verified current and retained native roots and stable descendants', async () => {
   const stateDir = mkdtempForTestSync('agent-device web life-');
   try {
     installFakeManagedAgentBrowser(stateDir);
@@ -542,37 +527,163 @@ test('recording requires a managed executable or the Node wrapper as the entry',
       stateDir,
       host: { env: process.env, cwd: process.cwd() },
     });
-    const bin = path.join(status.packageDir, 'bin');
-    const binary = path.join(bin, 'agent-browser-darwin-arm64');
-    const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
-    const commands = [
-      `"${process.execPath}" "${status.entryScript}" open`,
-      `"${binary}"`,
-      `tail -f "${status.entryScript}"`,
-      `vim "${status.entryScript}"`,
-      `grep agent-browser "${status.entryScript}"`,
-      `${process.execPath} /tmp/other.js "${status.entryScript}"`,
-      `pnpm --dir "${status.installDir}" start`,
-      `"${binary}-other"`,
+    const current = nativeBinary(status.installDir);
+    const previous = managedInstallPaths(stateDir, '0.27.1');
+    const retained = nativeBinary(previous.installDir);
+    const marker = agentBrowserChromeLaunchMarker(status);
+    const rows: ProcessFixture[] = [
+      { pid: 101, command: `${current} daemon`, executable: current },
+      { pid: 102, command: `${retained} daemon`, executable: retained },
+      { pid: 201, ppid: 101, command: `/opt/Chromium ${marker}`, executable: '/opt/Chromium' },
+      { pid: 301, ppid: 201, command: 'child' },
+      { pid: 999, command: `/tmp/unrelated ${marker}`, executable: '/tmp/unrelated' },
     ];
-    mockProcessList(commands.map((command, index) => `  ${101 + index}     1 ${command}`));
+    observeProcesses(rows);
+    const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
     const summary = await recordManagedAgentBrowserProcesses(status, store);
-    expect(summary.pids).toEqual([101, 102]);
+    expect(summary.pids).toEqual([101, 102, 201, 301]);
+    expect(summary.processes.map(({ reason }) => reason)).toEqual([
+      'agent-browser-daemon',
+      'agent-browser-daemon',
+      'launch-marker',
+      'descendant',
+    ]);
     expect(store.replace).toHaveBeenCalledWith(
       { kind: 'daemon' },
-      [101, 102].map((pid) => ({
+      rows.slice(0, 4).map(({ pid, command }) => ({
         pid,
+        command,
         startTime: `start-${pid}`,
-        command: `command-${pid}`,
-        purpose: 'managed-web-browser',
+        purpose: 'verified-managed-web-browser',
       })),
     );
+    expect(identitiesMock).toHaveBeenCalledTimes(2);
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
 
-test('recorded launch entries alone reach the identity-checked reaper', async () => {
+test('retained Chrome home and marker roots require a Chrome executable and this state directory', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
+  const otherStateDir = mkdtempForTestSync('agent-device-web-other-');
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
+    const previous = managedInstallPaths(stateDir, '0.27.1');
+    const other = managedInstallPaths(otherStateDir, '0.27.1');
+    fs.mkdirSync(previous.installDir, { recursive: true });
+    const otherBinary = nativeBinary(other.installDir);
+    const home = path.join(
+      previous.runtimeHomeDir,
+      '.agent-browser',
+      'browsers',
+      'chrome-150',
+      'chrome',
+    );
+    const marker = agentBrowserChromeLaunchMarker(previous);
+    const rows: ProcessFixture[] = [
+      { pid: 201, command: `/opt/Chromium ${marker}`, executable: '/opt/Chromium' },
+      { pid: 202, command: `${home} --type=renderer`, executable: home },
+      { pid: 203, command: `/opt/Chromium ${marker}`, executable: '/tmp/editor' },
+      { pid: 204, command: `${home} --type=renderer` },
+      { pid: 205, command: `${otherBinary} daemon`, executable: otherBinary },
+      {
+        pid: 206,
+        command: `/opt/Chromium ${agentBrowserChromeLaunchMarker(other)}`,
+        executable: '/opt/Chromium',
+      },
+    ];
+    observeProcesses(rows);
+    const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
+    const summary = await recordManagedAgentBrowserProcesses(status, store);
+    expect(summary.pids).toEqual([201, 202]);
+    expect(summary.processes.map(({ reason }) => reason)).toEqual([
+      'launch-marker',
+      'managed-browser-home',
+    ]);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+    fs.rmSync(otherStateDir, { recursive: true, force: true });
+  }
+});
+
+test('an unstable root or intermediate process cannot authorize its descendants', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
+    const binary = nativeBinary(status.installDir);
+    const rows: ProcessFixture[] = [
+      { pid: 101, command: `${binary} daemon`, executable: binary },
+      { pid: 102, ppid: 101, command: 'child' },
+      { pid: 103, ppid: 102, command: 'grandchild' },
+      { pid: 104, command: `${binary} daemon`, executable: binary },
+      { pid: 105, ppid: 104, command: 'child of changed root' },
+    ];
+    observeProcesses(rows);
+    identitiesMock.mockImplementationOnce(
+      async (pids) =>
+        new Map(
+          [...pids].map((pid) => [
+            pid,
+            {
+              startTime: `start-${pid}`,
+              command: rows.find((row) => row.pid === pid)!.command,
+              zombie: false,
+            },
+          ]),
+        ),
+    );
+    identitiesMock.mockImplementationOnce(
+      async (pids) =>
+        new Map(
+          [...pids].map((pid) => [
+            pid,
+            {
+              startTime: pid === 102 || pid === 104 ? 'changed' : `start-${pid}`,
+              command: rows.find((row) => row.pid === pid)!.command,
+              zombie: false,
+            },
+          ]),
+        ),
+    );
+    const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
+    const summary = await recordManagedAgentBrowserProcesses(status, store);
+    expect(summary.pids).toEqual([101]);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('recording refuses a scanned command that differs from the bracketed identity', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
+    const binary = nativeBinary(status.installDir);
+    observeProcesses([{ pid: 101, command: `${binary} daemon`, executable: binary }]);
+    identitiesMock.mockImplementation(
+      async () =>
+        new Map([[101, { startTime: 'start-101', command: 'different command', zombie: false }]]),
+    );
+    const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
+    expect((await recordManagedAgentBrowserProcesses(status, store)).pids).toEqual([]);
+    expect(store.replace).not.toHaveBeenCalled();
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('recording and reaping require executable provenance and matching identity', async () => {
   const stateDir = mkdtempForTestSync('agent-device web reap-');
   try {
     installFakeManagedAgentBrowser(stateDir);
@@ -580,43 +691,40 @@ test('recorded launch entries alone reach the identity-checked reaper', async ()
       stateDir,
       host: { env: process.env, cwd: process.cwd() },
     });
-    const { daemonCommand } = installPreviousVersionFleet(stateDir);
-    const binary = path.join(status.packageDir, 'bin', 'agent-browser-darwin-arm64');
-    const commands = [
-      `"${binary}"`,
-      daemonCommand,
-      `${process.execPath} "${status.entryScript}"`,
-      `tail -f "${status.entryScript}"`,
-      `vim "${status.entryScript}"`,
-      `grep agent-browser "${status.entryScript}"`,
-      `${process.execPath} /tmp/other.js "${status.entryScript}"`,
-      `"${binary}-other"`,
+    const binary = nativeBinary(status.installDir);
+    const previous = nativeBinary(managedInstallPaths(stateDir, '0.27.1').installDir);
+    const rows: ProcessFixture[] = [
+      { pid: 11001, command: `${binary} daemon`, executable: binary },
+      { pid: 11002, command: `${previous} daemon`, executable: previous },
+      { pid: 11003, command: `${binary} daemon`, executable: binary },
+      {
+        pid: 11004,
+        command: `${process.execPath} ${status.entryScript}`,
+        executable: process.execPath,
+      },
+      { pid: 11005, command: `tail -f ${binary}`, executable: '/usr/bin/tail' },
+      { pid: 11006, command: `vim ${binary}`, executable: '/usr/bin/vim' },
+      { pid: 11007, command: `grep ${binary}`, executable: '/usr/bin/grep' },
+      { pid: 11008, command: `${binary} daemon`, executable: '/tmp/other' },
+      { pid: 11009, command: `${binary} daemon` },
+      { pid: 11010, command: `${binary}-other`, executable: `${binary}-other` },
+      {
+        pid: 11011,
+        command: `${process.execPath} ${status.entryScript}`,
+        executable: '/tmp/unrelated-node',
+      },
+      { pid: 11012, command: `${binary} daemon`, executable: binary.slice(0, binary.indexOf(' ')) },
     ];
-    const pids = commands.map((_, index) => 11001 + index);
-    const alive = new Set(pids);
-    const signals: number[] = [];
-    mockProcessList(commands.map((command, index) => `  ${pids[index]}     1 ${command}`));
-    identitiesMock.mockImplementationOnce(
-      async (selected) =>
-        new Map(
-          [...selected].map((pid) => [
-            pid,
-            {
-              startTime: `start-${pid}`,
-              command: commands[pids.indexOf(pid)]!,
-              zombie: false,
-            },
-          ]),
-        ),
-    );
+    observeProcesses(rows);
     const store = createOwnedProcessRecordStore({
       stateDir,
       sessionsDir: path.join(stateDir, 'sessions'),
       resolveSessionDir: (id) => path.join(stateDir, 'sessions', id),
     });
     await recordManagedAgentBrowserProcesses(status, store);
-    expect(store.read()[0]?.records.map(({ pid }) => pid)).toEqual(pids.slice(0, 3));
-
+    expect(store.read()[0]?.records.map(({ pid }) => pid)).toEqual([11001, 11002, 11003]);
+    const alive = new Set(rows.map(({ pid }) => pid));
+    const signals: number[] = [];
     vi.spyOn(process, 'kill').mockImplementation(((pid: number, signal: string | number) => {
       if (!alive.has(pid)) throw Object.assign(new Error('absent'), { code: 'ESRCH' });
       if (signal !== 0) {
@@ -627,8 +735,8 @@ test('recorded launch entries alone reach the identity-checked reaper', async ()
     }) as typeof process.kill);
     hostRunCmdMock.mockImplementation(async (_command: string, args: readonly string[]) => {
       const pid = Number(args[1]);
-      const command = commands[pids.indexOf(pid)];
-      const start = pid === pids[2] ? 'changed-start' : `start-${pid}`;
+      const command = rows.find((row) => row.pid === pid)?.command;
+      const start = pid === 11003 ? 'changed-start' : `start-${pid}`;
       return {
         stdout: args[3] === 'pid=,command=' ? `${pid} ${command}\n` : `${pid} S ${start}\n`,
         stderr: '',
@@ -639,35 +747,16 @@ test('recorded launch entries alone reach the identity-checked reaper', async ()
       termTimeoutMs: 1,
       killTimeoutMs: 1,
     });
-    expect(signals).toEqual(pids.slice(0, 2));
-    expect(result.terminatedPids).toEqual(pids.slice(0, 2));
-    expect(result.missingPids).toEqual([pids[2]]);
+    expect(signals).toEqual([11001, 11002]);
+    expect(result.terminatedPids).toEqual([11001, 11002]);
+    expect(result.missingPids).toEqual([11003]);
   } finally {
     hostRunCmdMock.mockReset();
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
 
-function installPreviousVersionFleet(stateDir: string) {
-  const previous = managedInstallPaths(stateDir, '0.27.1');
-  fs.mkdirSync(previous.installDir, { recursive: true });
-  const entryScript = path.join(
-    previous.installDir,
-    'package',
-    'node_modules',
-    'agent-browser',
-    'bin',
-    'agent-browser.js',
-  );
-  return {
-    previous,
-    daemonCommand: `${process.execPath} ${entryScript}`,
-    markedChromeCommand: `/Applications/Chromium.app/Contents/MacOS/Chromium ${agentBrowserChromeLaunchMarker(previous)}`,
-    homeChromeCommand: `${path.join(previous.runtimeHomeDir, '.agent-browser', 'browsers')}/chrome-150/chrome --type=renderer`,
-  };
-}
-
-test('a fleet left running by a previous version stays owned after the pin moves', async () => {
+test('cleanup retains legacy records without signaling or treating them as verified', async () => {
   const stateDir = mkdtempForTestSync('agent-device-web-life-');
   try {
     installFakeManagedAgentBrowser(stateDir);
@@ -675,57 +764,25 @@ test('a fleet left running by a previous version stays owned after the pin moves
       stateDir,
       host: { env: process.env, cwd: process.cwd() },
     });
-    const { previous, daemonCommand, markedChromeCommand, homeChromeCommand } =
-      installPreviousVersionFleet(stateDir);
-    assert.notEqual(previous.installDir, status.installDir);
-    const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
-    mockProcessList([
-      `  101     1 ${daemonCommand}`,
-      `  201     1 ${markedChromeCommand}`,
-      `  202     1 ${homeChromeCommand}`,
-      '  999     1 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    ]);
-
-    const summary = await recordManagedAgentBrowserProcesses(status, store);
-
-    assert.deepEqual(summary.pids, [101, 201, 202]);
-    assert.deepEqual(
-      summary.processes.map(({ reason }) => reason),
-      ['agent-browser-daemon', 'launch-marker', 'managed-browser-home'],
-    );
-    expect(store.replace).toHaveBeenCalledWith(
-      { kind: 'daemon' },
-      [101, 201, 202].map((pid) => ({
-        pid,
-        startTime: `start-${pid}`,
-        command: `command-${pid}`,
-        purpose: 'managed-web-browser',
-      })),
-    );
-  } finally {
-    fs.rmSync(stateDir, { recursive: true, force: true });
-  }
-});
-
-test('a previous version fleet from another state dir is not claimed', async () => {
-  const stateDir = mkdtempForTestSync('agent-device-web-life-');
-  const otherStateDir = mkdtempForTestSync('agent-device-web-life-other-');
-  try {
-    installFakeManagedAgentBrowser(stateDir);
-    const status = getManagedAgentBrowserStatus({
+    const store = createOwnedProcessRecordStore({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      sessionsDir: path.join(stateDir, 'sessions'),
+      resolveSessionDir: (id) => path.join(stateDir, 'sessions', id),
     });
-    const { daemonCommand, markedChromeCommand } = installPreviousVersionFleet(otherStateDir);
-    const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
-    mockProcessList([`  101     1 ${daemonCommand}`, `  201     1 ${markedChromeCommand}`]);
-
-    const summary = await recordManagedAgentBrowserProcesses(status, store);
-
-    assert.equal(summary.count, 0);
-    expect(store.replace).not.toHaveBeenCalled();
+    const legacy = { pid: 11001, command: 'old', startTime: 'old', purpose: 'managed-web-browser' };
+    store.replace({ kind: 'daemon' }, [legacy]);
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw new Error('unexpected signal');
+    });
+    const result = await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
+      env: process.env,
+      ownedProcessRecords: store,
+    });
+    expect(result.pids).toEqual([]);
+    expect(await managedWebBrowserProcessRecordIsLive(store)).toBe(false);
+    expect(store.read()[0]?.records).toEqual([legacy]);
+    expect(kill).not.toHaveBeenCalled();
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
-    fs.rmSync(otherStateDir, { recursive: true, force: true });
   }
 });
