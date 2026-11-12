@@ -1,8 +1,8 @@
 /**
  * Pre-dispatch admission (ADR 0039) for runtime-resolved press and click: the one step between
  * resolution and the backend call. The static resolution guards have already judged the target.
- * Admission runs the motion check and owns every wait it asks for, under one request budget. The
- * budget is checked last, so no awaited work lies between admission and the send.
+ * Admission runs motion and native readiness checks under one request budget. The budget is checked
+ * last, so no awaited work lies between admission and the send.
  *
  * A raw point has no resolved element to re-observe. A replay step's identity guard (ADR 0012
  * step 4) and a mutating `find`'s carried node (#1654) own what they resolved, and a second look
@@ -96,9 +96,9 @@ type AdmissionBudget = Readonly<{
 
 function requestBudget(runtime: AgentDeviceRuntime, options: CommandContext): AdmissionBudget {
   const signal = options.signal ?? runtime.signal;
-  // The first read that runs until the deadline arms its timer, so an idle press builds none. The
-  // timer arms only within its 32-bit range; a later, infinite or absent deadline is still held by
-  // the clock checks.
+  // The first read that runs until the deadline arms its timer. Paths with no bounded read build
+  // none. The timer arms only within its 32-bit range; a later, infinite or absent deadline is still
+  // held by the clock checks.
   let deadlineSignals:
     | Readonly<{ read: AbortSignal | undefined; deadline: AbortSignal | undefined }>
     | undefined;
