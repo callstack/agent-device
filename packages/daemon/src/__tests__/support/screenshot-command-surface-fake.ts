@@ -31,8 +31,9 @@ export const screenshotCommandSurface: CreateDaemonCommandSurface = async (confi
               surface: options.surface,
             },
           );
+          await reserved.publish();
           return {
-            path: reserved.path,
+            path: reserved.publishedPath ?? reserved.path,
             ...(captured?.displayRotation ? { displayRotation: captured.displayRotation } : {}),
           };
         } catch (error) {

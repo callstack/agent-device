@@ -1,5 +1,4 @@
-import { publishFileSync } from '@agent-device/host-kit/file';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { createDaemonScreenshotArtifactAdapter } from './screenshot-artifact-adapter.ts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
@@ -11,13 +10,9 @@ import {
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { ScreenshotRuntimeExecution } from '@agent-device/contracts/screenshot-runtime';
 import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
-import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
 import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
-import type { ArtifactAdapter } from '@agent-device/contracts/artifact-adapter';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import {
@@ -134,7 +129,10 @@ export async function captureScreenshotArtifact(
   const { session, sessionName, outPath, dispatchContext } = params;
   const runtime = await params.createCommandSurface({
     backend: createBoundScreenshotBackend(params),
-    artifacts: createDaemonScreenshotArtifactAdapter(),
+    artifacts: createDaemonScreenshotArtifactAdapter(
+      params.crop !== undefined,
+      dispatchContext.signal,
+    ),
     sessions: createReadonlyRuntimeSessionStore(sessionName, session),
     policy: localCommandPolicy(),
   });
@@ -379,104 +377,41 @@ function createBoundScreenshotBackend(
         ...dispatchContext,
         ...screenshotFlagsFromOptions(options),
       });
-      const tempRoot = crop
-        ? await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-crop-'))
-        : undefined;
-      const capturePath = tempRoot
-        ? path.join(tempRoot, `screenshot${path.extname(outPath) || '.png'}`)
-        : outPath;
-      try {
-        const facts = await captureScreenshot({
-          outPath: capturePath,
-          options: {
-            appBundleId: dispatchContext.appBundleId,
-            pixelDensity: resolved.pixelDensity,
-            screenMask: resolved.screenMask,
-            fullscreen: resolved.fullscreen,
-            normalizeStatusBar: resolved.normalizeStatusBar,
-            stabilize: resolved.stabilize,
-            surface: options?.surface,
-            // An open session already proved the simulator is booted, so the per-capture recheck is
-            // the daemon's own knowledge rather than something the caller has to assert.
-            skipIosSimulatorBootCheck:
-              dispatchContext.skipIosSimulatorBootCheck ??
-              (isIosFamily(session.device) && session.device.kind === 'simulator'),
-            captureBackend: resolved.captureBackend,
-            preferredCaptureBackend: dispatchContext.preferredScreenshotCaptureBackend,
-          },
-          execution: screenshotExecutionFromContext(dispatchContext),
-        });
-        if (crop) {
-          assertScreenshotCropCapture(session.device, facts);
-          const outcome = await cropScreenshotToSelector({
-            device: session.device,
-            session,
-            surface: session.surface,
-            cropOn: crop.cropOn,
-            screenshotPath: capturePath,
-            logPath: crop.logPath,
-            dispatchContext,
-            captureSnapshot: crop.captureSnapshot,
-          });
-          const contents = await fs.readFile(capturePath);
-          dispatchContext.signal?.throwIfAborted();
-          _context.signal?.throwIfAborted();
-          publishFileSync({ destination: outPath, contents, preserveExistingMode: true });
-          crop.run.warnings.push(...buildScreenshotCropWarnings(outcome));
-        }
-        return facts.displayRotation ? { displayRotation: facts.displayRotation } : undefined;
-      } finally {
-        if (tempRoot) {
-          await fs.rm(tempRoot, { recursive: true, force: true }).catch((error: unknown) => {
-            emitDiagnostic({
-              level: 'warn',
-              phase: 'screenshot_crop_cleanup_failed',
-              data: { tempRoot, error: errorMessage(error) },
-            });
-          });
-        }
-      }
-    },
-  };
-}
-
-function createDaemonScreenshotArtifactAdapter(): ArtifactAdapter {
-  return {
-    resolveInput: async () => {
-      throw new AppError('UNSUPPORTED_OPERATION', 'screenshot does not resolve input artifacts');
-    },
-    reserveOutput: async (ref) => {
-      let tempRoot: string | undefined;
-      let outputPath: string;
-      if (ref?.kind === 'path') {
-        outputPath = ref.path;
-      } else {
-        tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-screenshot-'));
-        outputPath = path.join(tempRoot, 'screenshot.png');
-      }
-      await fs.mkdir(path.dirname(outputPath), { recursive: true });
-      return {
-        path: outputPath,
-        visibility: 'client-visible',
-        publish: async () => undefined,
-        ...(tempRoot
-          ? {
-              cleanup: async () => {
-                await fs.rm(tempRoot, { recursive: true, force: true });
-              },
-            }
-          : {}),
-      };
-    },
-    createTempFile: async (options) => {
-      const root = await fs.mkdtemp(path.join(os.tmpdir(), `${options.prefix}-`));
-      return {
-        path: path.join(root, `file${options.ext}`),
-        visibility: 'internal',
-        cleanup: async () => {
-          await fs.rm(root, { recursive: true, force: true });
+      const facts = await captureScreenshot({
+        outPath,
+        options: {
+          appBundleId: dispatchContext.appBundleId,
+          pixelDensity: resolved.pixelDensity,
+          screenMask: resolved.screenMask,
+          fullscreen: resolved.fullscreen,
+          normalizeStatusBar: resolved.normalizeStatusBar,
+          stabilize: resolved.stabilize,
+          surface: options?.surface,
+          // An open session already proved the simulator is booted, so the per-capture recheck is
+          // the daemon's own knowledge rather than something the caller has to assert.
+          skipIosSimulatorBootCheck:
+            dispatchContext.skipIosSimulatorBootCheck ??
+            (isIosFamily(session.device) && session.device.kind === 'simulator'),
+          captureBackend: resolved.captureBackend,
+          preferredCaptureBackend: dispatchContext.preferredScreenshotCaptureBackend,
         },
-      };
+        execution: screenshotExecutionFromContext(dispatchContext),
+      });
+      if (crop) {
+        assertScreenshotCropCapture(session.device, facts);
+        const outcome = await cropScreenshotToSelector({
+          device: session.device,
+          session,
+          surface: session.surface,
+          cropOn: crop.cropOn,
+          screenshotPath: outPath,
+          logPath: crop.logPath,
+          dispatchContext,
+          captureSnapshot: crop.captureSnapshot,
+        });
+        crop.run.warnings.push(...buildScreenshotCropWarnings(outcome));
+      }
+      return facts.displayRotation ? { displayRotation: facts.displayRotation } : undefined;
     },
   };
 }

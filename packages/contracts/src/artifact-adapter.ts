@@ -50,6 +50,8 @@ export type ResolvedInputFile = {
 
 export type ReservedOutputFile = {
   path: string;
+  /** The client-visible destination after publication, when work uses a staging path. */
+  publishedPath?: string;
   visibility: OutputVisibility;
   publish: () => Promise<ArtifactDescriptor | undefined>;
   cleanup?: () => Promise<void>;
