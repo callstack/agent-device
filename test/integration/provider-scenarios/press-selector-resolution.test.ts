@@ -171,12 +171,24 @@ for (const target of ['label="Input"', 'value="before"']) {
           result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
         },
         { ...snapshotEntry(changed), repeat: true },
-        ...(target.startsWith('label=') ? [tapEntry(90, 265)] : []),
+        ...(target.startsWith('label=')
+          ? [
+              {
+                command: 'ios.runner.pressReadiness',
+                result: { pressReadiness: 'ready', pressReadinessAppBundleId: APP },
+              },
+              tapEntry(90, 265),
+            ]
+          : []),
       ],
       async (daemon, transcript) => {
         const press = await daemon.callCommand('press', [target]);
         if (target.startsWith('label=')) {
           assertRpcOk(press);
+          assert.equal(
+            transcript.calls.filter((call) => call.command === 'ios.runner.pressReadiness').length,
+            3,
+          );
           assert.equal(
             transcript.calls.filter((call) => call.command === 'ios.runner.tap').length,
             1,
