@@ -2,7 +2,7 @@ import {
   attachSnapshotTextInputGeometry,
   attachSnapshotViewportEvidence,
   type SnapshotTextInputGeometry,
-} from '@agent-device/contracts/snapshot-private-evidence';
+} from '@agent-device/contracts/capture';
 import { isFillableType, normalizeType } from '@agent-device/contracts/snapshot';
 import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producers';
 import {
