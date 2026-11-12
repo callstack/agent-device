@@ -262,9 +262,9 @@ function authorizedRefBaseline(
 
 /**
  * The ref frame the agent last read. A frame read as the whole full tree (`snapshot` without `-i`,
- * `-s`, `-d` or `--raw`) is marked `fullView`, so the settle loop reads the full tree too and the
- * diff compares one view. A scoped, depth-limited or raw frame is a projection the settle capture
- * does not reproduce, so it stays unmarked. Selector captures are full trees as well, but no agent
+ * `-s`, `-d`, `--raw` or `--actions`) is marked `fullView`, so the settle loop reads the full tree
+ * too and the diff compares one view. Any of those flags makes a projection the settle capture
+ * does not reproduce, so such a frame stays unmarked. Selector captures are full trees as well, but no agent
  * chose that view, so only the ref frame carries the mark.
  */
 function refFrameBaseline(snapshot: SnapshotState | undefined): SurfaceScopedNodes {
@@ -275,7 +275,8 @@ function refFrameBaseline(snapshot: SnapshotState | undefined): SurfaceScopedNod
     presentation.interactiveOnly !== true &&
     presentation.scope === undefined &&
     presentation.depth === undefined &&
-    presentation.raw !== true;
+    presentation.raw !== true &&
+    presentation.customActions !== true;
   return wholeFullTree ? { ...baseline, fullView: true } : baseline;
 }
 

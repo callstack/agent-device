@@ -97,18 +97,23 @@ test('a ref press after a full snapshot settles on the full tree and reports no 
   assert.ok(result.settle?.tail?.some((entry) => entry.label === 'OK'));
 });
 
-test('a ref press after a scoped full snapshot keeps the interactive settle view', async () => {
-  const { device, views } = createDevice({
-    refFrame: { ...DIALOG.full, presentation: { scope: 'Device name' } },
-    before: DIALOG,
-    after: DIALOG,
+for (const [flag, presentation] of [
+  ['-s', { scope: 'Device name' }],
+  ['--actions', { customActions: true }],
+] as const) {
+  test(`a ref press after a full snapshot with ${flag} keeps the interactive settle view`, async () => {
+    const { device, views } = createDevice({
+      refFrame: { ...DIALOG.full, presentation },
+      before: DIALOG,
+      after: DIALOG,
+    });
+
+    await device.interactions.press(ref('@e3'), { session: 'default', settle: {} });
+
+    // The settle capture cannot reproduce that projection, so the frame is not a full-view baseline.
+    assert.ok(views.length > 0 && views.every((view) => view === 'interactive'));
   });
-
-  await device.interactions.press(ref('@e3'), { session: 'default', settle: {} });
-
-  // The settle capture cannot reproduce a scoped projection, so the frame is not a full-view baseline.
-  assert.ok(views.length > 0 && views.every((view) => view === 'interactive'));
-});
+}
 
 test('a ref press after a full snapshot still reports what changed on the full tree', async () => {
   const next = ['Next', 'Back'];
