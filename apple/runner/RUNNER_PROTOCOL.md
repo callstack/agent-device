@@ -172,9 +172,9 @@ Its shape is `{kind: "reported" | "derived", rect: {x, y, width, height}}` or
 `derived` and `missing` establish no screen origin.
 A root box used to validate presented nodes does not upgrade this evidence.
 
-A synthesized long press, drag, or planned gesture reports how far it got.
-`SYNTHESIZED_GESTURE_NOT_DISPATCHED` means it was refused before its event record was handed to XCTest,
-so the command sent nothing. `SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN` means it failed after its event
+A synthesized long press, scroll, swipe, or planned gesture reports how far it got.
+`SYNTHESIZED_GESTURE_NOT_DISPATCHED` means the iOS event synthesis refused before its event record was
+handed to XCTest, so the command sent nothing; any other refusal keeps `UNSUPPORTED_OPERATION`. `SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN` means it failed after its event
 record was handed to XCTest. That is not confirmed delivery: the record can still fail before its
 events run. The gesture may have run, so the runner does not fall back to an XCTest gesture that
 would repeat it. A sequence long-press step reports the same two codes as the step's `errorCode`. The runner does not

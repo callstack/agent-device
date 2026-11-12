@@ -544,8 +544,11 @@ extension RunnerTests {
     switch try performSynthesizedTapGesture(app: app, x: x, y: y, context: context) {
     case .performed:
       return .performed
-    case .xctestFallback(let message, let hint), .refused(_, let message, let hint):
+    case .xctestFallback(let message, let hint):
       throw RunnerCoordinateRefusal(message: message, hint: hint)
+    case .refused(_, let refusal):
+      let text = refusal.refusalText
+      throw RunnerCoordinateRefusal(message: text?.message ?? "synthesized tap refused", hint: text?.hint)
     }
   }
 

@@ -76,8 +76,7 @@ extension RunnerTests {
     durationMs: Double?,
     message: String,
     synthesizedContext: SynthesizedCoordinateContext? = nil,
-    synthesized: (profile: SynthesizedDragProfile, policyKind: SynthesizedGesturePolicyKind)? = nil,
-    refusalSentNothing: Bool = false
+    synthesized: (profile: SynthesizedDragProfile, policyKind: SynthesizedGesturePolicyKind)? = nil
   ) throws -> Response {
     let durationMs = durationMs ?? runnerDefaultDragDurationMs
     let commandName = dragCommandName(message: message)
@@ -97,8 +96,7 @@ extension RunnerTests {
       message: message,
       context: synthesizedContext,
       policyKind: synthesized.policyKind,
-      profile: synthesized.profile,
-      refusalSentNothing: refusalSentNothing
+      profile: synthesized.profile
     ) {
       return synthesizedResponse
     }
@@ -162,8 +160,7 @@ extension RunnerTests {
     message: String,
     context: SynthesizedCoordinateContext?,
     policyKind: SynthesizedGesturePolicyKind,
-    profile: SynthesizedDragProfile,
-    refusalSentNothing: Bool
+    profile: SynthesizedDragProfile
   ) throws -> Response? {
 #if os(iOS)
     let context = try context ?? synthesizedCoordinateContext(app: activeApp)
@@ -219,12 +216,8 @@ extension RunnerTests {
         message: message,
         fallback: GestureFallback(strategy: "xctest-coordinate-drag", message: fallbackMessage, hint: hint)
       )
-    case .refused(_, let refusalMessage, let hint):
-      // A drag that may have run throws `RunnerGestureOutcomeUnknown`, so a refusal sent nothing; a
-      // caller that names whole-command non-dispatch asks for the typed code.
-      return refusalSentNothing
-        ? gestureNotDispatchedResponse(message: refusalMessage, hint: hint)
-        : unsupportedResponse(message: refusalMessage, hint: hint)
+    case .refused(_, let refusal):
+      return refusalResponse(refusal)
     }
 #else
     return nil

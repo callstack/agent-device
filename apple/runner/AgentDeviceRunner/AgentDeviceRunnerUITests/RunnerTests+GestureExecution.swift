@@ -20,21 +20,26 @@ extension RunnerTests {
     0.050
   }
 
+  /// The error response for a refused outcome, nil for `.performed`.
   func unsupportedResponse(for outcome: RunnerInteractionOutcome) -> Response? {
-    switch outcome {
-    case .performed:
-      return nil
-    case .unsupported(let message, let hint):
-      return unsupportedResponse(message: message, hint: hint)
-    }
+    if case .performed = outcome { return nil }
+    return refusalResponse(outcome)
   }
 
-  /// A synthesized gesture refused before any of its events reached XCTest: the command sent nothing.
-  func gestureNotDispatchedResponse(message: String, hint: String?) -> Response {
-    Response(
-      ok: false,
-      error: ErrorPayload(code: RunnerWireErrorCode.synthesizedGestureNotDispatched, message: message, hint: hint)
-    )
+  /// The one mapping of a refusal: `.notDispatched` answers SYNTHESIZED_GESTURE_NOT_DISPATCHED (the
+  /// command sent nothing), and `.unsupported` keeps UNSUPPORTED_OPERATION.
+  func refusalResponse(_ refusal: RunnerInteractionOutcome) -> Response {
+    switch refusal {
+    case .performed:
+      preconditionFailure("a performed gesture is not a refusal")
+    case .unsupported(let message, let hint):
+      return unsupportedResponse(message: message, hint: hint)
+    case .notDispatched(let message, let hint):
+      return Response(
+        ok: false,
+        error: ErrorPayload(code: RunnerWireErrorCode.synthesizedGestureNotDispatched, message: message, hint: hint)
+      )
+    }
   }
 
   func unsupportedResponse(message: String, hint: String?) -> Response {

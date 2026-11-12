@@ -824,7 +824,7 @@ extension RunnerTests {
 #endif
 
   /// A synthesized gesture's result. A failure before its events reached XCTest sent nothing, so it
-  /// is an `.unsupported` refusal, which a policy may still answer with an XCTest fallback. A failure
+  /// is a `.notDispatched` refusal, which a policy may still answer with an XCTest fallback. A failure
   /// after may have run, so it throws `RunnerGestureOutcomeUnknown`, which no fallback repeats.
   static func synthesizedGestureOutcome(
     failure: String?,
@@ -832,7 +832,7 @@ extension RunnerTests {
     refusalHint: String
   ) throws -> RunnerInteractionOutcome {
     guard let failure else { return .performed }
-    guard dispatched else { return .unsupported(message: failure, hint: refusalHint) }
+    guard dispatched else { return .notDispatched(message: failure, hint: refusalHint) }
     throw RunnerGestureOutcomeUnknown(
       message: failure,
       hint: "Check the screen with snapshot before you retry; the gesture may already have run."

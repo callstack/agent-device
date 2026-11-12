@@ -120,10 +120,24 @@ extension RunnerTests {
     XCTAssertNil(response.data?.gestureFallback, "no XCTest drag repeats a fling that may have run")
   }
 
+  /// A scroll whose synthesized drag was refused before hand-off (RunnerCreateEventRecord) sent
+  /// nothing: scroll never falls back to an XCTest drag, so it answers the not-dispatched code.
+  @MainActor
+  func testScrollDragRefusedBeforeHandOffIsNotDispatched() throws {
+    let response = try flingWithFailingSynthesis(
+      dispatchedBeforeFailing: false,
+      health: .healthy,
+      command: #"{"command":"scroll","commandId":"scroll-refused-synthesis","direction":"down"}"#
+    )
+
+    XCTAssertEqual(response.error?.code, RunnerWireErrorCode.synthesizedGestureNotDispatched)
+  }
+
   @MainActor
   private func flingWithFailingSynthesis(
     dispatchedBeforeFailing: Bool,
-    health: RunnerAccessibilityHealth
+    health: RunnerAccessibilityHealth,
+    command json: String? = nil
   ) throws -> Response {
     RunnerSynthesizedSwipeFailureStub.dispatchedBeforeFailing = dispatchedBeforeFailing
     let selector = NSSelectorFromString(
@@ -140,7 +154,7 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    let command = try runnerCommandFixture(
+    let command = try runnerCommandFixture(json ??
       """
       {"command":"gesture","commandId":"gesture-fling-failing-synthesis","gesturePlan":{"topology":"single","intent":"fling","executionProfile":"endpoint-hold","durationMs":100,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":160,"y":150}},{"offsetMs":100,"point":{"x":40,"y":150}}]}]}}
       """

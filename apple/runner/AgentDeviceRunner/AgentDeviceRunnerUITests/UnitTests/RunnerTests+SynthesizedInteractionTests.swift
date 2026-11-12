@@ -309,6 +309,40 @@ extension RunnerTests {
     XCTAssertEqual(presses, 0)
   }
 
+  /// A sampled planned gesture that the synthesis refused before hand-off sent nothing, and says so.
+  @MainActor
+  func testSampledPlannedGestureRefusedBeforeHandOffIsNotDispatched() throws {
+    let (response, presses) = try longPressWithFailingSynthesis(
+      dispatchedBeforeFailing: false,
+      health: .unavailable,
+      command: #"{"command":"gesture","commandId":"sampled-pan-refused","gesturePlan":{"topology":"single","intent":"pan","executionProfile":"timed-pan","durationMs":500,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":160,"y":150}},{"offsetMs":250,"point":{"x":100,"y":150}},{"offsetMs":500,"point":{"x":40,"y":150}}]}]}}"#
+    )
+
+    XCTAssertEqual(response.error?.code, RunnerWireErrorCode.synthesizedGestureNotDispatched)
+    XCTAssertEqual(presses, 0)
+  }
+
+  /// The sampled arm maps only the synthesis's own pre-hand-off refusal to the not-dispatched code.
+  /// A platform refusal, such as tvOS and macOS answer for a sampled plan, keeps
+  /// UNSUPPORTED_OPERATION.
+  func testSampledPlannedGestureResponseKeepsEachRefusalsCode() throws {
+    let plan = try XCTUnwrap(try runnerCommandFixture(#"{"command":"gesture","commandId":"sampled-pan-refused","gesturePlan":{"topology":"single","intent":"pan","executionProfile":"timed-pan","durationMs":500,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":160,"y":150}},{"offsetMs":250,"point":{"x":100,"y":150}},{"offsetMs":500,"point":{"x":40,"y":150}}]}]}}"#).gesturePlan)
+    let timing = (gestureStartUptimeMs: 0.0, gestureEndUptimeMs: 1.0)
+
+    let platform = plannedGestureResponse(
+      plan: plan,
+      timing: timing,
+      outcome: .unsupported(message: "multi-touch gestures are not supported on tvOS", hint: "tvOS has no touch input")
+    )
+    XCTAssertEqual(platform.error?.code, "UNSUPPORTED_OPERATION")
+    let notDispatched = plannedGestureResponse(
+      plan: plan,
+      timing: timing,
+      outcome: .notDispatched(message: "synthesis refused", hint: nil)
+    )
+    XCTAssertEqual(notDispatched.error?.code, RunnerWireErrorCode.synthesizedGestureNotDispatched)
+  }
+
   /// The real synthesis reports nothing dispatched when it fails while building its record.
   @MainActor
   func testSynthesizedGestureWithAnEmptyPointerPathDispatchesNothing() throws {
@@ -332,7 +366,7 @@ extension RunnerTests {
     guard case .performed = try Self.synthesizedGestureOutcome(failure: nil, dispatched: true, refusalHint: "") else {
       return XCTFail("no failure is performed")
     }
-    guard case .unsupported = try Self.synthesizedGestureOutcome(failure: "x", dispatched: false, refusalHint: "") else {
+    guard case .notDispatched = try Self.synthesizedGestureOutcome(failure: "x", dispatched: false, refusalHint: "") else {
       return XCTFail("a failure before dispatch is a refusal a fallback may answer")
     }
     XCTAssertThrowsError(try Self.synthesizedGestureOutcome(failure: "x", dispatched: true, refusalHint: "")) {

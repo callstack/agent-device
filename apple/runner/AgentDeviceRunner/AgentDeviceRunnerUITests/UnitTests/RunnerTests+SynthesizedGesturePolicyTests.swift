@@ -160,9 +160,12 @@ extension RunnerTests {
       let attempt = try performSynthesizedGesture(app, kind: kind, context: context, synthesize: failedSynthesis)
       XCTAssertEqual(synthesizedGestureRoute(attempt), expected, "kind=\(kind.rawValue)")
       switch attempt {
-      case .xctestFallback(let message, let hint), .refused(_, let message, let hint):
+      case .xctestFallback(let message, let hint):
         XCTAssertEqual(message, "forced private synthesis failure")
         XCTAssertEqual(hint, "forced hint")
+      case .refused(_, let refusal):
+        XCTAssertEqual(refusal.refusalText?.message, "forced private synthesis failure")
+        XCTAssertEqual(refusal.refusalText?.hint, "forced hint")
       case .performed:
         break
       }

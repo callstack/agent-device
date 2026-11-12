@@ -124,7 +124,7 @@ extension RunnerTests {
           )
         )
         completedSteps += 1
-      case .unsupported(let message, let hint):
+      case .unsupported(let message, let hint), .notDispatched(let message, let hint):
         results.append(
           SequenceStepResult(
             ok: false,
@@ -215,15 +215,11 @@ extension RunnerTests {
       switch attempt {
       case .performed(let timing):
         return finishedSequenceStep(step, timing: timing, outcome: .performed)
-      case .refused(let timing, let message, let hint):
-        var refused = finishedSequenceStep(
-          step,
-          timing: timing,
-          outcome: .unsupported(message: message, hint: hint)
-        )
-        // As on the standalone command, a long press that may have run throws instead, so this one
-        // sent nothing. The host still reports the sequence as unknown when an earlier step ran.
-        if policyKind == .coordinateLongPress {
+      case .refused(let timing, let refusal):
+        var refused = finishedSequenceStep(step, timing: timing, outcome: refusal)
+        // As on the standalone command, only the synthesis's own pre-hand-off refusal sent nothing.
+        // The host still reports the sequence as unknown when an earlier step ran.
+        if case .notDispatched = refusal {
           refused.errorCode = RunnerWireErrorCode.synthesizedGestureNotDispatched
         }
         return refused

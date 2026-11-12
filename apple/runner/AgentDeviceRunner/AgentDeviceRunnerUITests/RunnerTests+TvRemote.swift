@@ -5,6 +5,17 @@ enum RunnerInteractionOutcome {
   /// A capability/state gap, surfaced to the caller as an UNSUPPORTED_OPERATION error.
   /// `hint` is an optional actionable next step (mapped to ErrorPayload.hint).
   case unsupported(message: String, hint: String?)
+  /// The iOS event synthesis refused before any of its events reached XCTest, so nothing was sent.
+  /// Only `synthesizedGestureOutcome` produces it; it answers SYNTHESIZED_GESTURE_NOT_DISPATCHED.
+  case notDispatched(message: String, hint: String?)
+
+  /// The message and hint of a refusal; nil for `.performed`.
+  var refusalText: (message: String, hint: String?)? {
+    switch self {
+    case .performed: return nil
+    case .unsupported(let message, let hint), .notDispatched(let message, let hint): return (message, hint)
+    }
+  }
 }
 
 enum TvRemoteButton: String {

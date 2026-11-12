@@ -2,9 +2,9 @@ import XCTest
 import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
-  private func refusedTapResponse(_ message: String, hint: String?) -> Response {
+  private func refusedTapResponse(_ refusal: RunnerInteractionOutcome) -> Response {
     clearRememberedTextEntryTap()
-    return unsupportedResponse(message: message, hint: hint)
+    return refusalResponse(refusal)
   }
 
   /// Runs `command` against its prepared app; a thrown lit-panel refusal answers it (ADR 0025).
@@ -134,8 +134,8 @@ extension RunnerTests {
               )
             case .xctestFallback(let message, let hint):
               fallback = .coordinateTap(message, hint: hint)
-            case .refused(_, let message, let hint):
-              return refusedTapResponse(message, hint: hint)
+            case .refused(_, let refusal):
+              return refusedTapResponse(refusal)
             }
           }
           let (timing, outcome) = try performGesture(activeApp) {
@@ -201,8 +201,8 @@ extension RunnerTests {
             return gestureResponse(message: "tapped", timing: timing)
           case .xctestFallback(let message, let hint):
             fallback = .coordinateTap(message, hint: hint)
-          case .refused(_, let message, let hint):
-            return refusedTapResponse(message, hint: hint)
+          case .refused(_, let refusal):
+            return refusedTapResponse(refusal)
           }
         }
         let touchFrame = try resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
@@ -261,9 +261,8 @@ extension RunnerTests {
         return gestureResponse(message: "long pressed", timing: timing, frame: .touch(touchFrame))
       case .xctestFallback(let message, let hint):
         fallback = GestureFallback(strategy: "xctest-coordinate-long-press", message: message, hint: hint)
-      case .refused(_, let message, let hint):
-        // A long press that may have run throws `RunnerGestureOutcomeUnknown`; a refusal sent nothing.
-        return gestureNotDispatchedResponse(message: message, hint: hint)
+      case .refused(_, let refusal):
+        return refusalResponse(refusal)
       }
 #else
       fallback = nil
@@ -688,20 +687,14 @@ extension RunnerTests {
             y2: last.y,
             durationMs: plan.durationMs,
             message: plan.intent,
-            synthesized: (profile: .fastSwipe, policyKind: .synthesizedDrag),
-            refusalSentNothing: true
+            synthesized: (profile: .fastSwipe, policyKind: .synthesizedDrag)
           )
         )
       case .sampled:
         let (timing, outcome) = try performGesture(activeApp, idleTimeout: false) {
           try sampledPlannedGesture(app: activeApp, plan: plan)
         }
-        // A sampled gesture that may have run throws `RunnerGestureOutcomeUnknown`; a refusal sent nothing.
-        if case .unsupported(let message, let hint) = outcome {
-          response = gestureNotDispatchedResponse(message: message, hint: hint)
-        } else {
-          response = plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
-        }
+        response = plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
 #if os(iOS) && targetEnvironment(simulator)
       case .screenEdgeTouch:
         let (timing, outcome) = try performGesture(activeApp, idleTimeout: false) {

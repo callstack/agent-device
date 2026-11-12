@@ -334,9 +334,11 @@ export const NO_TEXT_INPUT_AT_POINT_RUNNER_CODE = 'NO_TEXT_INPUT_AT_POINT';
 export const TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE = 'TEXT_INPUT_PROBE_UNAVAILABLE';
 
 /**
- * The runner codes for a synthesized long press or planned gesture. NOT_DISPATCHED: refused before
- * any of its events reached XCTest, so the command sent nothing. OUTCOME_UNKNOWN: failed after its
- * events reached XCTest, so it may have run; the runner never falls back to repeat it.
+ * The runner codes for a synthesized long press, scroll, swipe, or planned gesture on iOS.
+ * NOT_DISPATCHED: the event synthesis refused before any of its events reached XCTest, so the
+ * command sent nothing. OUTCOME_UNKNOWN: failed after its events reached XCTest, so it may have run;
+ * the runner never falls back to repeat it. Any other refusal, a platform one included, keeps
+ * UNSUPPORTED_OPERATION.
  */
 const SYNTHESIZED_GESTURE_NOT_DISPATCHED_RUNNER_CODE = 'SYNTHESIZED_GESTURE_NOT_DISPATCHED';
 const SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN_RUNNER_CODE = 'SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN';
@@ -378,7 +380,7 @@ const RUNNER_REPORTED_ERROR_REASONS: ReadonlyMap<string, RunnerReportedErrorReas
  * the command runs, the selector refusals included: the runner resolves the element and refuses
  * before any gesture. `INVALID_ARGS` comes only from request decoding and argument validation,
  * each ahead of any gesture. Every other code, and a reply without one, is `unknown`:
- * `UNSUPPORTED_OPERATION` is also what a synthesized gesture or element tap reports after it ran.
+ * `UNSUPPORTED_OPERATION` is also what an element or coordinate tap reports after it ran.
  */
 const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new Map([
   ['INVALID_ARGS', 'no'],
