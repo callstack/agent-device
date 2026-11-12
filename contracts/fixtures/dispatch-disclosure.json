@@ -280,7 +280,19 @@
   {
     "id": "ios-runner.reply.UNSUPPORTED_OPERATION",
     "producer": "ios-runner",
-    "trigger": "structured runner reply with code UNSUPPORTED_OPERATION, which a synthesized gesture or an element tap also reports after it ran",
+    "trigger": "structured runner reply with code UNSUPPORTED_OPERATION, which an element or coordinate tap also reports after it ran",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.reply.SYNTHESIZED_GESTURE_NOT_DISPATCHED",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code SYNTHESIZED_GESTURE_NOT_DISPATCHED: the iOS synthesis, or the planned gesture's window or display resolution, refused before any event record was handed to XCTest",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN: the synthesis failed after its event record was handed to XCTest, so the gesture may have run",
     "dispatched": "unknown"
   },
   {

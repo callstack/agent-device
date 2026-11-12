@@ -175,7 +175,9 @@ A root box used to validate presented nodes does not upgrade this evidence.
 A synthesized long press, scroll, or planned gesture reports how far it got; on iOS the CLI `swipe` is
 a planned fling `gesture` that runs as a synthesized drag, so it reports the same way.
 `SYNTHESIZED_GESTURE_NOT_DISPATCHED` means the iOS event synthesis refused before its event record was
-handed to XCTest, so the command sent nothing; any other refusal keeps `UNSUPPORTED_OPERATION`. `SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN` means it failed after its event
+handed to XCTest, so the command sent nothing. It also covers a planned gesture refused on iOS while
+its window or display is resolved (the window cannot be named, or the sole display cannot be
+measured), before any synthesis. Any other refusal keeps `UNSUPPORTED_OPERATION`. `SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN` means it failed after its event
 record was handed to XCTest. That is not confirmed delivery: the record can still fail before its
 events run. The gesture may have run, so the runner does not fall back to an XCTest gesture that
 would repeat it. A sequence long-press step reports the same two codes as the step's `errorCode`. The runner does not

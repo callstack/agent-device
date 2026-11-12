@@ -789,7 +789,11 @@ function buildSequenceStepError(
             : { reason: classification.details.reason }),
         }
       : {}),
-    dispatched: classification.details.dispatched,
+    // Only a step code that classifies a dispatch publishes one; a plain refusal or a code-less step
+    // leaves it unset, as a sequence failure always did.
+    ...(sequenceStepClassifiesDispatch(failed?.errorCode)
+      ? { dispatched: classification.details.dispatched }
+      : {}),
     failedStepIndex,
     failedStepKind: kind,
     completedSteps,
@@ -798,6 +802,14 @@ function buildSequenceStepError(
       failed?.errorHint ??
       'Run snapshot -i to inspect the current UI, then continue from the observed state.',
   });
+}
+
+function sequenceStepClassifiesDispatch(code: string | undefined): boolean {
+  return (
+    code !== undefined &&
+    (RUNNER_ERROR_CODE_DISPATCH.has(code) ||
+      code === SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN_RUNNER_CODE)
+  );
 }
 
 function readSequenceResults(value: unknown): RunnerSequenceStepResult[] {

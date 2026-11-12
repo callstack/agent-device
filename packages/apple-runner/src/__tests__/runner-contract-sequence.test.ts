@@ -252,3 +252,13 @@ test('a first step refused before dispatch means the sequence sent nothing', () 
   assert.equal(error.details?.runnerErrorCode, 'SYNTHESIZED_GESTURE_NOT_DISPATCHED');
   assert.equal(error.details?.dispatched, 'no');
 });
+
+test.each([
+  { name: 'a plain UNSUPPORTED_OPERATION step', errorCode: 'UNSUPPORTED_OPERATION' },
+  { name: 'a code-less step', errorCode: undefined },
+])('$name publishes no dispatched key', ({ errorCode }) => {
+  const error = sequenceFailure([
+    { ok: false, kind: 'doubleTap', ...(errorCode ? { errorCode } : {}), errorMessage: 'refused' },
+  ]);
+  assert.equal('dispatched' in (error.details ?? {}), false);
+});
