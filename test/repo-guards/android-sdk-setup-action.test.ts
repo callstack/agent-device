@@ -67,6 +67,10 @@ function systemImageFixture(rootVariable: 'ANDROID_HOME' | 'ANDROID_SDK_ROOT') {
 set -euo pipefail
 printf '%s\\n' "$*" >> "$SDK_FIXTURE_CALLS"
 if [ "$1" = --install ]; then
+  if [ "$#" -lt 2 ] ||
+     [ "$2" != 'system-images;android-36;google_apis_playstore;x86_64' ]; then
+    exit 1
+  fi
   mkdir -p "$SDK_FIXTURE_IMAGE"
   printf 'Pkg.Revision=%s\\n' "$SDK_FIXTURE_REVISION" > "$SDK_FIXTURE_IMAGE/source.properties"
 fi
