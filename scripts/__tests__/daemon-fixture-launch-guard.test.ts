@@ -88,6 +88,23 @@ test('the repo scan follows renamed and re-exported fixture helpers but leaves o
   assert.match(violations[0]!, /src\/consumer.test.ts/);
 });
 
+for (const specifier of ['..', '.']) {
+  test(`the repo scan follows a fixture family imported through a bare '${specifier}'`, () => {
+    const bad = `import { runCmdDetachedMonitored } from '@agent-device/host-kit/command'; const spawn = vi.mocked(runCmdDetachedMonitored); spawn.mockImplementation(() => { throw new Error('raw'); });`;
+    const consumer =
+      specifier === '..' ? 'src/support/nested/consumer.test.ts' : 'src/support/consumer.test.ts';
+    const violations = scanDaemonFixtureLaunches([
+      {
+        file: 'src/support/index.ts',
+        source: `import { createRegisteredDaemonFixtures } from '@agent-device/test-kit'; export const fixtures = createRegisteredDaemonFixtures({});`,
+      },
+      { file: consumer, source: `import { fixtures } from '${specifier}'; ${bad}` },
+    ]);
+    assert.equal(violations.length, 1);
+    assert.ok(violations[0]!.includes(consumer));
+  });
+}
+
 for (const expression of [
   '(spawn as any)',
   'spawn!',

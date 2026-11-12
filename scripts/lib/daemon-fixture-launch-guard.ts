@@ -66,7 +66,7 @@ export function scanDaemonFixtureLaunches(files: readonly FixtureSource[]): stri
 }
 
 const FAMILY_SEED = 'createRegisteredDaemonFixtures';
-const RELATIVE_SPECIFIER = /['"](\.{1,2}\/[^'"\n]+)['"]/g;
+const RELATIVE_SPECIFIER = /['"](\.{1,2}(?:\/[^'"\n]*)?)['"]/g;
 
 /**
  * A superset of the family found from text alone: files that name the seed helper, plus every file
@@ -77,24 +77,39 @@ function familyCandidates(
   files: readonly FixtureSource[],
   paths: ReadonlySet<string>,
 ): Set<string> {
-  const candidates = new Set<string>();
+  const seeds = files.filter(({ source }) => source.includes(FAMILY_SEED)).map(({ file }) => file);
+  return reachedFrom(seeds, quotedRelativeImporters(files, paths));
+}
+
+/** Maps each file to the files whose quoted relative paths resolve to it. */
+function quotedRelativeImporters(
+  files: readonly FixtureSource[],
+  paths: ReadonlySet<string>,
+): Map<string, string[]> {
   const importers = new Map<string, string[]>();
   for (const { file, source } of files) {
-    if (source.includes(FAMILY_SEED)) candidates.add(file);
     for (const match of source.matchAll(RELATIVE_SPECIFIER)) {
       const dependency = resolveLocalImport(file, match[1]!, paths);
       if (dependency) importers.set(dependency, [...(importers.get(dependency) ?? []), file]);
     }
   }
-  const pending = [...candidates];
+  return importers;
+}
+
+function reachedFrom(
+  seeds: readonly string[],
+  importers: ReadonlyMap<string, string[]>,
+): Set<string> {
+  const reached = new Set(seeds);
+  const pending = [...seeds];
   while (pending.length > 0) {
     for (const importer of importers.get(pending.pop()!) ?? []) {
-      if (candidates.has(importer)) continue;
-      candidates.add(importer);
+      if (reached.has(importer)) continue;
+      reached.add(importer);
       pending.push(importer);
     }
   }
-  return candidates;
+  return reached;
 }
 
 function resolveLocalImport(
