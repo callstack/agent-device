@@ -16,6 +16,7 @@ import {
 import {
   finishRegisteredDaemonFixture,
   spawnRegisteredDaemonFixture,
+  planRegisteredDaemonLaunches,
   waitForRegisteredDaemonFixture,
 } from './registered-daemon-fixture.ts';
 
@@ -93,9 +94,7 @@ export async function launchesFreshHttpDaemon(
     await Promise.allSettled([closeLoopbackServer(stub.server)]);
     throw error;
   }
-  spawn.mockImplementation((_command, _args, options) =>
-    spawnRegisteredDaemonFixture(paths, fields, options),
-  );
+  spawn.mockImplementation(planRegisteredDaemonLaunches([{ kind: 'registered', paths, fields }]));
   return {
     stub,
     commands: () => stub.rpcRequests.map((rpc) => String(rpc.params?.command)),

@@ -11,10 +11,38 @@ import {
   launchRegisteredDaemonFixtureArgs,
   registeredDaemonFixtureArgs,
   spawnRegisteredDaemonFixture,
+  planRegisteredDaemonLaunches,
   waitForFixtureFile,
   waitForRegisteredDaemonFixture,
   finishRegisteredDaemonFixture,
 } from './registered-daemon-fixture.ts';
+
+test('a launch plan returns the registered child identity and joins that child at teardown', async () => {
+  const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-planned-identity-'));
+  const launch = planRegisteredDaemonLaunches([
+    {
+      kind: 'registered',
+      paths,
+      fields: {
+        httpPort: 4210,
+        token: 'fixture',
+        version: 'test',
+        codeOrigin: 'checkout',
+        codeSignature: 'fixture',
+      },
+    },
+  ]);
+  const child = launch('node', [], { stdio: 'ignore' });
+  try {
+    const observed = await waitForRegisteredDaemonFixture(paths, child);
+    assert.equal(observed.pid, child.pid);
+    assert.notEqual(child.pid, process.pid);
+  } finally {
+    await finishRegisteredDaemonFixture(paths.baseDir);
+  }
+  assert.equal((await child.exited).pid, child.pid);
+  assert.equal(fs.existsSync(paths.baseDir), false);
+});
 
 test('args built before any launch keep their own entry script under a concurrent second build', async () => {
   // Under a shared entry path child 1 would run child 2's switches and carry the wrong marker.

@@ -21,12 +21,14 @@ function readPublishedDaemonRecord(infoPath: string): PublishedDaemonRecord | nu
 }
 
 export const {
+  planRegisteredDaemonLaunches,
   registeredDaemonFixtureArgs,
   launchRegisteredDaemonFixtureArgs,
   spawnRegisteredDaemonFixture,
   waitForFixtureFile,
   waitForRegisteredDaemonFixture,
   finishRegisteredDaemonFixture,
+  finishRegisteredDaemonFixtures,
 } = createRegisteredDaemonFixtures<PublishedDaemonRecord, DaemonPaths, DaemonRegistrationFields>({
   registrationOwnerUrl: import.meta
     .resolve('@agent-device/daemon-contracts/daemon-registration-owner'),

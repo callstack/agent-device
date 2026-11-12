@@ -25,6 +25,7 @@ import { isProcessAlive } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
 import {
   spawnRegisteredDaemonFixture,
+  planRegisteredDaemonLaunches,
   finishRegisteredDaemonFixtures,
   waitForFixtureFile,
 } from './registered-daemon-fixture.ts';
@@ -86,14 +87,15 @@ function fields(httpPort: number) {
 }
 
 /** A deferred-publication fixture that never exits on its own; retirement can still stop it. */
-function spawnUnregisteredDaemonChild(
-  paths: DaemonPaths,
-  options: Parameters<typeof runCmdDetachedMonitored>[2],
-  emitStartupMarker = false,
-): ReturnType<typeof runCmdDetachedMonitored> {
+function unregisteredDaemonLaunch(paths: DaemonPaths, emitStartupMarker = false) {
   fs.mkdirSync(paths.baseDir, { recursive: true });
   fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');
-  return spawnRegisteredDaemonFixture(paths, fields(1), options, undefined, { emitStartupMarker });
+  return {
+    kind: 'registered' as const,
+    paths,
+    fields: fields(1),
+    fixtureOptions: { emitStartupMarker },
+  };
 }
 
 function registrationHeldFor(paths: DaemonPaths, pid: number): string {
@@ -160,12 +162,19 @@ test('a daemon slower than the retired 15 s budget starts successfully while it 
   const now = virtualClock();
   const spawned = { at: 0, child: undefined as { pid: number } | undefined };
   const booted = registrationBooted(paths);
-  spawn.mockImplementation((_command, _args, options) => {
-    const child = spawnRegisteredDaemonFixture(paths, fields(http.port), options);
-    spawned.at = now.value;
-    spawned.child = child;
-    return child;
-  });
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      {
+        kind: 'registered',
+        paths,
+        fields: fields(http.port),
+        observe(child) {
+          spawned.at = now.value;
+          spawned.child = child;
+        },
+      },
+    ]),
+  );
   fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');
   let nextPhase = 0;
   pause.mockImplementation(async () => {
@@ -208,20 +217,21 @@ test('a daemon that exits during startup fails with startup-exited within one se
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-exit-fast-'));
   let resolveFirstExit: ((exit: ExecDetachedExit) => void) | undefined;
   let exitObservedAt = 0;
-  spawn.mockImplementation(() => {
-    const pid = 998_231 + spawn.mock.calls.length;
-    if (spawn.mock.calls.length === 1) {
-      const exited = new Promise<ExecDetachedExit>((resolve) => {
-        resolveFirstExit = resolve;
-      });
-      void exited.then(() => {
-        exitObservedAt = Date.now();
-      });
-      setTimeout(() => resolveFirstExit?.({ pid, exitCode: 1 }), 400);
-      return { pid, exited };
-    }
-    return { pid, exited: Promise.resolve({ pid, exitCode: 1 }) };
+  const exitGate = new Promise<void>((resolve) => {
+    resolveFirstExit = () => resolve();
   });
+  void exitGate.then(() => {
+    exitObservedAt = Date.now();
+  });
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      () => {
+        setTimeout(() => resolveFirstExit?.({ pid: 998_232, exitCode: 1 }), 400);
+        return { kind: 'exit', exit: { pid: 998_232, exitCode: 1 }, exitGate };
+      },
+      { kind: 'exit', exit: { pid: 998_233, exitCode: 1 } },
+    ]),
+  );
   pause.mockImplementation(async (ms) => {
     await realPause(Math.min(Number(ms), 50));
   });
@@ -238,10 +248,16 @@ test('a live daemon that publishes no startup marker is retired as stalled befor
   const started = now.value;
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-no-marker-'));
   let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
-  spawn.mockImplementation((_command, _args, options) => {
-    child = spawnUnregisteredDaemonChild(paths, options);
-    return child;
-  });
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      () => ({
+        ...unregisteredDaemonLaunch(paths),
+        observe(launched) {
+          child = launched;
+        },
+      }),
+    ]),
+  );
   const booted = registrationBooted(paths);
   pause.mockImplementation(async () => {
     if (!booted()) return await realPause();
@@ -278,10 +294,16 @@ test('a live daemon that keeps progressing but never registers fails at the env 
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-ceiling-'));
   let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
   const booted = registrationBooted(paths);
-  spawn.mockImplementation((_command, _args, options) => {
-    child = spawnUnregisteredDaemonChild(paths, options, true);
-    return child;
-  });
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      () => ({
+        ...unregisteredDaemonLaunch(paths, true),
+        observe(launched) {
+          child = launched;
+        },
+      }),
+    ]),
+  );
   pause.mockImplementation(async () => {
     if (!booted()) return await realPause();
     if (now.value - started < 30_000) now.value += 1_000;
@@ -324,10 +346,16 @@ test("a startup progressed by a fresh launch is not judged stalled by an earlier
   const started = now.value;
   let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
   let booted = false;
-  spawn.mockImplementation((_command, _args, options) => {
-    child = spawnUnregisteredDaemonChild(paths, options, true);
-    return child;
-  });
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      () => ({
+        ...unregisteredDaemonLaunch(paths, true),
+        observe(launched) {
+          child = launched;
+        },
+      }),
+    ]),
+  );
   pause.mockImplementation(async () => {
     if (child && !booted) {
       booted = fs.existsSync(registrationHeldFor(paths, child.pid));
@@ -365,12 +393,19 @@ test('a busy exit while a live lock holder defers publication reaches the ceilin
   });
   await waitForFixtureFile(registrationHeldFor(paths, winner.pid));
   let contender: ReturnType<typeof runCmdDetachedMonitored> | undefined;
-  spawn.mockImplementation((_command, _args, options) => {
-    contender = spawnRegisteredDaemonFixture(paths, fields(1), options, undefined, {
-      emitStartupMarkerBeforeAcquisition: true,
-    });
-    return contender;
-  });
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      {
+        kind: 'registered',
+        paths,
+        fields: fields(1),
+        fixtureOptions: { emitStartupMarkerBeforeAcquisition: true },
+        observe(child) {
+          contender = child;
+        },
+      },
+    ]),
+  );
   pause.mockImplementation(async () => {
     await realPause(20);
   });
@@ -403,11 +438,11 @@ test('a child gone at the deadline without an observed exit and no live startup 
   vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '2000');
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-gone-at-deadline-'));
   livenessOverrides = new Map([[997_842, false]]);
-  spawn.mockImplementation(() => ({
-    pid: 997_842,
-    exited: new Promise<ExecDetachedExit>(() => {}),
-    readIdentity: () => ({ pid: 997_842, startTime: null }),
-  }));
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      { kind: 'exit', exit: { pid: 997_842 }, exitGate: new Promise(() => {}) },
+    ]),
+  );
   pause.mockImplementation(async () => {
     await realPause(50);
   });
@@ -422,13 +457,17 @@ test('an observed exit on a reused launch pid is not a live startup at the deadl
   const reusedPid = 997_603;
   livenessOverrides = new Map([[reusedPid, true]]);
   let resolveExit: ((exit: ExecDetachedExit) => void) | undefined;
-  spawn.mockImplementation(() => ({
-    pid: reusedPid,
-    exited: new Promise<ExecDetachedExit>((resolve) => {
-      resolveExit = resolve;
-    }),
-    readIdentity: () => ({ pid: reusedPid, startTime: null }),
-  }));
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      {
+        kind: 'exit',
+        exit: { pid: reusedPid, exitCode: DAEMON_STARTUP_EXIT_CODES.busy },
+        exitGate: new Promise<void>((resolve) => {
+          resolveExit = () => resolve();
+        }),
+      },
+    ]),
+  );
   const now = virtualClock();
   let advanced = false;
   pause.mockImplementation(async () => {
@@ -448,10 +487,11 @@ test('an observed exit on a reused launch pid is not a live startup at the deadl
 test('an unproven registration exit reports startup-exited even under a short env ceiling', async () => {
   vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '2000');
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-exit-under-ceiling-'));
-  spawn.mockImplementation(() => ({
-    pid: 998_444,
-    exited: Promise.resolve({ pid: 998_444, exitCode: DAEMON_STARTUP_EXIT_CODES.unproven }),
-  }));
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      { kind: 'exit', exit: { pid: 998_444, exitCode: DAEMON_STARTUP_EXIT_CODES.unproven } },
+    ]),
+  );
   pause.mockImplementation(async () => {
     await realPause();
   });

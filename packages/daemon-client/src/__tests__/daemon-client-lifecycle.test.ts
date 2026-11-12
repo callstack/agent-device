@@ -15,7 +15,7 @@ import {
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import {
-  spawnRegisteredDaemonFixture,
+  planRegisteredDaemonLaunches,
   finishRegisteredDaemonFixture,
   finishRegisteredDaemonFixtures,
 } from './registered-daemon-fixture.ts';
@@ -142,40 +142,48 @@ function installSpawnedHttpDaemonAtOwnedStateDir(
   onStateDir: (stateDir: string) => void,
 ): void {
   mockSleep.mockImplementation(actualRetry.sleep);
-  mockRunCmdDetached.mockImplementation((_command, _args, options) => {
-    const ownedStateDir = String(options?.env?.AGENT_DEVICE_STATE_DIR);
-    onStateDir(ownedStateDir);
-    const ownedPaths = resolveDaemonPaths(ownedStateDir);
-    return spawnRegisteredDaemonFixture(
-      ownedPaths,
-      {
-        httpPort,
-        token: 'local-secret',
-        version: readVersion(),
-        codeOrigin: 'checkout',
-        codeSignature: currentDaemonCodeSignature(),
+  mockRunCmdDetached.mockImplementation(
+    planRegisteredDaemonLaunches([
+      (options) => {
+        const ownedStateDir = String(options?.env?.AGENT_DEVICE_STATE_DIR);
+        onStateDir(ownedStateDir);
+        const ownedPaths = resolveDaemonPaths(ownedStateDir);
+        return {
+          kind: 'registered',
+          paths: ownedPaths,
+          fields: {
+            httpPort,
+            token: 'local-secret',
+            version: readVersion(),
+            codeOrigin: 'checkout',
+            codeSignature: currentDaemonCodeSignature(),
+          },
+        };
       },
-      options,
-    );
-  });
+    ]),
+  );
 }
 
 function installSpawnedHttpDaemon(paths: DaemonPaths, httpPort: number): void {
   mockSleep.mockImplementation(actualRetry.sleep);
-  mockRunCmdDetached.mockImplementation((_command, _args, options) => {
-    assert.equal(options?.env?.AGENT_DEVICE_STATE_DIR, paths.baseDir);
-    return spawnRegisteredDaemonFixture(
-      paths,
-      {
-        httpPort,
-        token: 'local-secret',
-        version: readVersion(),
-        codeOrigin: 'checkout',
-        codeSignature: currentDaemonCodeSignature(),
+  mockRunCmdDetached.mockImplementation(
+    planRegisteredDaemonLaunches([
+      (options) => {
+        assert.equal(options?.env?.AGENT_DEVICE_STATE_DIR, paths.baseDir);
+        return {
+          kind: 'registered',
+          paths,
+          fields: {
+            httpPort,
+            token: 'local-secret',
+            version: readVersion(),
+            codeOrigin: 'checkout',
+            codeSignature: currentDaemonCodeSignature(),
+          },
+        };
       },
-      options,
-    );
-  });
+    ]),
+  );
 }
 
 function mockSocketConnectionFailures(failingPort: number): {
@@ -279,14 +287,18 @@ test('sendToDaemon retains unknown metadata after a spawn failure', async () => 
   vi.stubEnv('AGENT_DEVICE_STATE_DIR', stateDir);
   let attempts = 0;
 
-  mockRunCmdDetached.mockImplementation((_command, _args, options) => {
-    attempts += 1;
-    assert.equal(options?.env?.AGENT_DEVICE_STATE_DIR, stateDir);
-    fs.mkdirSync(paths.baseDir, { recursive: true });
-    fs.writeFileSync(paths.infoPath, '{"partial":true}\n', 'utf8');
-    fs.writeFileSync(paths.lockPath, 'not-json\n', 'utf8');
-    throw new Error(`spawn failed ${attempts}`);
-  });
+  mockRunCmdDetached.mockImplementation(
+    planRegisteredDaemonLaunches([
+      (options) => {
+        attempts += 1;
+        assert.equal(options?.env?.AGENT_DEVICE_STATE_DIR, stateDir);
+        fs.mkdirSync(paths.baseDir, { recursive: true });
+        fs.writeFileSync(paths.infoPath, '{"partial":true}\n', 'utf8');
+        fs.writeFileSync(paths.lockPath, 'not-json\n', 'utf8');
+        return { kind: 'refuse', error: new Error(`spawn failed ${attempts}`) };
+      },
+    ]),
+  );
 
   try {
     let thrown: unknown;
@@ -326,17 +338,15 @@ test('sendToDaemon reports early daemon exit with log tail and startup paths', a
   vi.stubEnv('AGENT_DEVICE_STATE_DIR', stateDir);
   let attempts = 0;
 
-  mockRunCmdDetached.mockImplementation((_command, _args, options) => {
+  const earlyExit = (options: Parameters<typeof runCmdDetachedMonitored>[2]) => {
     attempts += 1;
     const stderrFd = options?.stdio?.[2];
     if (typeof stderrFd === 'number') {
       fs.writeSync(stderrFd, `early daemon failure ${attempts}\n`);
     }
-    return {
-      pid: 43_200 + attempts,
-      exited: Promise.resolve({ pid: 43_200 + attempts, exitCode: 1 }),
-    };
-  });
+    return { kind: 'exit' as const, exit: { pid: 43_200 + attempts, exitCode: 1 } };
+  };
+  mockRunCmdDetached.mockImplementation(planRegisteredDaemonLaunches([earlyExit, earlyExit]));
 
   try {
     let thrown: unknown;

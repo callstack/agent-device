@@ -4,6 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { runCmdDetachedMonitored, ExecDetachedExit } from '@agent-device/host-kit/command';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
+import {
+  createDaemonFixtureLaunchPlanner,
+  type DaemonFixtureLaunchStep,
+} from './registered-daemon-launch-plan.ts';
 
 /** The state-dir layout the fixture child reads: where its registration and sessions live. */
 type RegisteredDaemonPaths = Readonly<{ baseDir: string; sessionsDir: string; infoPath: string }>;
@@ -43,6 +47,9 @@ export type RegisteredDaemonFixtures<
   TPaths extends RegisteredDaemonPaths,
   TFields extends object,
 > = Readonly<{
+  planRegisteredDaemonLaunches: (
+    steps: readonly DaemonFixtureLaunchStep<TPaths, TFields>[],
+  ) => typeof runCmdDetachedMonitored;
   /** A real registration owner, advertising the caller's fields and joining before deletion. */
   registeredDaemonFixtureArgs: (
     paths: TPaths,
@@ -80,6 +87,15 @@ export function createRegisteredDaemonFixtures<
     string,
     Array<{ launch: RegisteredDaemonChild; startTime: string | null }>
   >();
+  const planner = createDaemonFixtureLaunchPlanner<TPaths, TFields>((step, options) =>
+    spawnRegisteredDaemonFixture(
+      step.paths,
+      step.fields,
+      options,
+      step.acquisitionBarrier,
+      step.fixtureOptions,
+    ),
+  );
 
   function registeredDaemonFixtureArgs(
     paths: TPaths,
@@ -87,6 +103,7 @@ export function createRegisteredDaemonFixtures<
     acquisitionBarrier?: string,
     fixtureOptions?: RegisteredDaemonFixtureOptions,
   ): string[] {
+    planner.assertLaunchAllowed();
     // One directory per launch so a later build cannot overwrite a script an earlier child has
     // not loaded; the path still ends in the real daemon entry name for the identity checks.
     const launchDir = path.join(paths.baseDir, 'fixture-entries', crypto.randomUUID());
@@ -138,6 +155,7 @@ setInterval(() => {}, 1000);
     args: string[],
     options: Parameters<typeof runCmdDetachedMonitored>[2],
   ): RegisteredDaemonChild {
+    planner.assertLaunchAllowed();
     const child = composition.launch(process.execPath, args, options);
     const owned = children.get(paths.baseDir) ?? [];
     owned.push({ launch: child, startTime: readProcessStartTime(child.pid) });
@@ -186,24 +204,59 @@ setInterval(() => {}, 1000);
   }
 
   async function finishRegisteredDaemonFixture(stateDir: string): Promise<void> {
+    const errors: unknown[] = [];
     for (const owned of children.get(stateDir) ?? []) {
-      const child = owned.launch;
-      const termination = await composition.stopDaemonProcess(
-        { pid: child.pid, startTime: owned.startTime },
-        { mode: 'force', termTimeoutMs: 0, killTimeoutMs: 2_000 },
-      );
-      assert.notEqual(termination.status, 'retained', JSON.stringify(termination));
-      await child.exited;
+      try {
+        const child = owned.launch;
+        const termination = await composition.stopDaemonProcess(
+          { pid: child.pid, startTime: owned.startTime },
+          { mode: 'force', termTimeoutMs: 0, killTimeoutMs: 2_000 },
+        );
+        assert.notEqual(termination.status, 'retained', JSON.stringify(termination));
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            child.exited,
+            new Promise<never>((_resolve, reject) => {
+              timer = setTimeout(
+                () =>
+                  reject(
+                    new Error(`Daemon fixture child ${child.pid} was not joined after termination`),
+                  ),
+                1_000,
+              );
+            }),
+          ]);
+        } finally {
+          clearTimeout(timer);
+        }
+      } catch (error) {
+        errors.push(error);
+      }
     }
+    if (errors.length) throw new AggregateError(errors, 'Daemon fixture children did not finish');
     children.delete(stateDir);
     fs.rmSync(stateDir, { recursive: true, force: true });
+    planner.assertPlans();
   }
 
   async function finishRegisteredDaemonFixtures(): Promise<void> {
-    for (const stateDir of children.keys()) await finishRegisteredDaemonFixture(stateDir);
+    const results = await Promise.allSettled(
+      [...children.keys()].map(finishRegisteredDaemonFixture),
+    );
+    const errors = results
+      .filter((result) => result.status === 'rejected')
+      .map((result) => result.reason);
+    try {
+      planner.assertPlans();
+    } catch (error) {
+      errors.push(error);
+    }
+    if (errors.length) throw new AggregateError(errors, 'Daemon fixture teardown failed');
   }
 
   return {
+    planRegisteredDaemonLaunches: planner.planRegisteredDaemonLaunches,
     registeredDaemonFixtureArgs,
     launchRegisteredDaemonFixtureArgs,
     spawnRegisteredDaemonFixture,

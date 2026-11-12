@@ -5,12 +5,12 @@ import { afterEach, test, vi } from 'vitest';
 import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import { DAEMON_QUIESCE_COMMAND } from '@agent-device/daemon-contracts/daemon-resolution';
-import { DAEMON_STARTUP_EXIT_CODES } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { isProcessAlive } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
 import {
   finishRegisteredDaemonFixtures,
   spawnRegisteredDaemonFixture,
+  planRegisteredDaemonLaunches,
   waitForRegisteredDaemonFixture,
 } from './registered-daemon-fixture.ts';
 import { currentDaemonCodeSignature } from './code-signature-fixture.ts';
@@ -45,9 +45,6 @@ import { ensureDaemon } from '../daemon-client-ensure.ts';
 // so a kill or a spawn is observable as a dead pid or a call to the launch seam.
 
 const spawn = vi.mocked(runCmdDetachedMonitored);
-const actualCommand = await vi.importActual<typeof import('@agent-device/host-kit/command')>(
-  '@agent-device/host-kit/command',
-);
 const actualRetry = await vi.importActual<typeof import('@agent-device/host-kit/retry')>(
   '@agent-device/host-kit/retry',
 );
@@ -618,35 +615,43 @@ test('ensureDaemon quiesces an incompatible daemon that wins a startup race inst
   fs.mkdirSync(paths.baseDir, { recursive: true });
   vi.mocked(sleep).mockImplementation(actualRetry.sleep);
   let winner: ReturnType<typeof spawnRegisteredDaemonFixture> | undefined;
-  spawn.mockImplementationOnce((_command, _args, options) => {
-    // An incompatible daemon registers just ahead of the one this call launches, which then exits busy.
-    winner = spawnRegisteredDaemonFixture(
-      paths,
+  spawn.mockImplementationOnce(
+    planRegisteredDaemonLaunches([
       {
-        httpPort: stale.port,
-        token: 'local-secret',
-        version: '0.0.0-stale',
-        codeOrigin: 'checkout',
-        codeSignature: currentDaemonCodeSignature(),
-        capabilities: ['quiesce'],
+        kind: 'registered',
+        paths,
+        fields: {
+          httpPort: fresh.port,
+          token: 'local-secret',
+          version: readVersion(),
+          codeOrigin: 'checkout',
+          codeSignature: currentDaemonCodeSignature(),
+        },
+        acquisitionBarrier: barrier,
+        companions: [
+          {
+            kind: 'registered',
+            paths,
+            fields: {
+              httpPort: stale.port,
+              token: 'local-secret',
+              version: '0.0.0-stale',
+              codeOrigin: 'checkout',
+              codeSignature: currentDaemonCodeSignature(),
+              capabilities: ['quiesce'],
+            },
+            observe(child) {
+              winner = child;
+              leaver.pid = child.pid;
+              // Released whether or not the winner published, so the launched child never waits forever.
+              const release = () => fs.writeFileSync(barrier, 'go');
+              void waitForRegisteredDaemonFixture(paths, child).then(release, release);
+            },
+          },
+        ],
       },
-      undefined,
-    );
-    leaver.pid = winner.pid;
-    // Released whether or not the winner published, so the launched child never waits forever.
-    const release = () => fs.writeFileSync(barrier, 'go');
-    void waitForRegisteredDaemonFixture(paths, winner).then(release, release);
-    // Our launch loses the race once the winner is registered: it exits with the busy code.
-    return actualCommand.runCmdDetachedMonitored(
-      process.execPath,
-      [
-        '-e',
-        `const fs=require("fs");setInterval(()=>{if(fs.existsSync(process.argv[1]))process.exit(${DAEMON_STARTUP_EXIT_CODES.busy})},10)`,
-        barrier,
-      ],
-      options,
-    );
-  });
+    ]),
+  );
   launchesFreshDaemonAt(paths, fresh.port);
 
   try {
