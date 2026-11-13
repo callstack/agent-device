@@ -81,6 +81,9 @@ test('every drag plan preserves ordered samples and exact hold/move endpoints', 
     for (let index = 1; index < samples.length; index += 1) {
       assert.ok(samples[index]!.offsetMs >= samples[index - 1]!.offsetMs);
     }
+    const dense = densifyGesturePath(samples, 'android');
+    assert.deepEqual(dense[0]?.point, from);
+    assert.deepEqual(dense.at(-1)?.point, to);
   }
 });
 
@@ -102,6 +105,8 @@ test('densifyGesturePath merges the profile grid into the canonical path and kee
   // A merged grid offset inside the first segment interpolates on that segment's line.
   const at50 = dense.find(({ offsetMs }) => offsetMs === 50);
   assert.deepEqual(at50?.point, { x: 50, y: 0 });
+  const at150 = dense.find(({ offsetMs }) => offsetMs === 150);
+  assert.deepEqual(at150?.point, { x: 100, y: 50 });
   // Canonical offsets survive verbatim.
   const at100 = dense.find(({ offsetMs }) => offsetMs === 100);
   assert.deepEqual(at100?.point, { x: 100, y: 0 });
@@ -150,3 +155,22 @@ test('densifyGesturePath refuses a path of fewer than two timed samples', () => 
     { code: 'INVALID_ARGS', details: { reason: 'GESTURE_PATH_TOO_SHORT' } },
   );
 });
+
+for (const [name, offsets] of [
+  ['a nonzero first offset', [5, 100]],
+  ['tied first offsets', [0, 0, 100]],
+  ['tied last offsets', [0, 100, 100]],
+  ['reversed offsets', [0, 75, 50, 100]],
+  ['a non-finite interior offset', [0, Number.NaN, 100]],
+] as const) {
+  test(`densifyGesturePath refuses ${name}`, () => {
+    const canonical = offsets.map((offsetMs, index) => ({
+      offsetMs,
+      point: { x: index * 10, y: 0 },
+    }));
+    assert.throws(() => densifyGesturePath(canonical, 'default'), {
+      code: 'INVALID_ARGS',
+      details: { reason: 'GESTURE_PATH_INVALID_TIMELINE' },
+    });
+  });
+}

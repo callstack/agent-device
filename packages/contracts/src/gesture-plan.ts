@@ -490,6 +490,21 @@ export function densifyGesturePath(
       reason: 'GESTURE_PATH_TOO_SHORT',
     });
   }
+  if (
+    canonical[0]!.offsetMs !== 0 ||
+    canonical.some(
+      ({ offsetMs }, index) =>
+        !Number.isFinite(offsetMs) || (index > 0 && offsetMs <= canonical[index - 1]!.offsetMs),
+    )
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'gesture path needs a strictly increasing timeline from zero',
+      {
+        reason: 'GESTURE_PATH_INVALID_TIMELINE',
+      },
+    );
+  }
   const offsets = [
     ...new Set([
       ...sampleGestureOffsets(durationMs, profile),
