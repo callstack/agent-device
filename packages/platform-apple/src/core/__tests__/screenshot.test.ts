@@ -64,7 +64,11 @@ import { runCmd } from '@agent-device/host-kit/command';
 import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
+import {
+  resolveAppleToolProvider,
+  withAppleToolProvider,
+  SIMCTL_SCREENSHOT_TIMEOUT_REASON,
+} from '../tool-provider.ts';
 
 import { IOS_TEST_SIMULATOR, MACOS_TEST_DEVICE } from './apple-core-stub-helpers.ts';
 
@@ -109,15 +113,18 @@ async function waitForFileText(filePath: string, attempts = 20): Promise<string>
   throw lastError;
 }
 
-test('shouldRetryIosSimulatorScreenshot detects simulator screen-surface timeout', () => {
-  const error = new AppError('COMMAND_FAILED', 'Detected file type from extension: PNG', {
+test('shouldRetryIosSimulatorScreenshot retries the timeout reason the adapter stamps', () => {
+  // The reason the local simctl adapter stamps from the tool's protocol header; see
+  // screenshot-simctl-protocol.test.ts for the producer that mints it.
+  const error = new AppError('COMMAND_FAILED', 'xcrun exited with code 60', {
     stderr: 'Timeout waiting for screen surfaces',
     exitCode: 60,
+    reason: SIMCTL_SCREENSHOT_TIMEOUT_REASON,
   });
   assert.equal(shouldRetryIosSimulatorScreenshot(error), true);
 });
 
-test('shouldRetryIosSimulatorScreenshot detects timed out simctl screenshot command', () => {
+test('shouldRetryIosSimulatorScreenshot retries a command host-kit killed at its deadline', () => {
   const error = new AppError('COMMAND_FAILED', 'xcrun timed out after 20000ms', {
     args: ['simctl', 'io', 'sim-1', 'screenshot', '/tmp/out.png'],
     timeoutMs: 20_000,
@@ -133,6 +140,22 @@ test('shouldRetryIosSimulatorScreenshot ignores unrelated screenshot failures', 
   assert.equal(shouldRetryIosSimulatorScreenshot(error), false);
 });
 
+test('the same screenshot timeout wording without the typed reason is not retryable', () => {
+  // Identical wording and argv to the two positives above, minus the typed evidence: the retry
+  // decision must not be reachable from the tool's prose or from this module's own argv.
+  const worded = new AppError('COMMAND_FAILED', 'Detected file type from extension: PNG', {
+    stderr: 'Timeout waiting for screen surfaces',
+    exitCode: 60,
+  });
+  const wordedAndSpelled = new AppError('COMMAND_FAILED', 'xcrun timed out after 20000ms', {
+    args: ['simctl', 'io', 'sim-1', 'screenshot', '/tmp/out.png'],
+    stderr: 'Timeout waiting for screen surfaces',
+    exitCode: 60,
+  });
+  assert.equal(shouldRetryIosSimulatorScreenshot(worded), false);
+  assert.equal(shouldRetryIosSimulatorScreenshot(wordedAndSpelled), false);
+});
+
 test('captureSimulatorScreenshotWithFallback falls back to runner after retry exhaustion', async () => {
   const tmpDir = await mkdtempForTest('agent-device-ios-runner-fallback-');
   let ensureBootedCalls = 0;
@@ -145,9 +168,10 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after retry ex
   });
   mockOpenIosSimulatorApp.mockResolvedValue(undefined);
   mockRetryWithPolicy.mockRejectedValue(
-    new AppError('COMMAND_FAILED', 'Detected file type from extension: PNG', {
+    new AppError('COMMAND_FAILED', 'xcrun exited with code 60', {
       stderr: 'Timeout waiting for screen surfaces',
       exitCode: 60,
+      reason: SIMCTL_SCREENSHOT_TIMEOUT_REASON,
     }),
   );
   mockRunAppleRunnerCommand.mockResolvedValue({ message: 'tmp/fallback.png' });
@@ -269,14 +293,17 @@ test('captureSimulatorScreenshotWithFallback can skip session-backed simulator b
   assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });
 
-test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after shutdown screenshot failure', async () => {
+test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after an observed shutdown', async () => {
+  // The boot authorization is the observed state, not the capture's wording; see
+  // screenshot-boot-state-recovery.test.ts for the state seam itself. This case pins the flow:
+  // one boot, one re-capture, no runner leg.
   const ensureBooted = vi.fn(async () => {});
   let captureAttempts = 0;
   const captureWithRetry = vi.fn(async () => {
     captureAttempts += 1;
     if (captureAttempts === 1) {
       throw new AppError('COMMAND_FAILED', 'simctl screenshot failed', {
-        stderr: 'Unable to boot device in current state: Shutdown',
+        stderr: 'Unable to capture screenshot',
         args: ['simctl', 'io', 'sim-1', 'screenshot', '/tmp/out.png'],
       });
     }
@@ -291,6 +318,7 @@ test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after
     deps: {
       ensureBooted,
       captureWithRetry,
+      observesSimulatorShutdown: async () => true,
       normalizeDensity: async () => {},
       captureWithRunner,
       shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
@@ -310,7 +338,7 @@ test('captureSimulatorScreenshotWithFallback keeps runner fallback after skipped
     captureAttempts += 1;
     if (captureAttempts === 1) {
       throw new AppError('COMMAND_FAILED', 'simctl screenshot failed', {
-        stderr: 'Unable to boot device in current state: Shutdown',
+        stderr: 'Unable to capture screenshot',
         args: ['simctl', 'io', 'sim-1', 'screenshot', '/tmp/out.png'],
       });
     }
@@ -329,6 +357,7 @@ test('captureSimulatorScreenshotWithFallback keeps runner fallback after skipped
     deps: {
       ensureBooted,
       captureWithRetry,
+      observesSimulatorShutdown: async () => true,
       normalizeDensity: async () => {},
       captureWithRunner,
       shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
@@ -635,6 +664,7 @@ test('captureSimulatorScreenshotWithFallback keeps the real runner fallback insi
     new AppError('COMMAND_FAILED', 'Detected file type from extension: PNG', {
       stderr: 'Timeout waiting for screen surfaces',
       exitCode: 60,
+      reason: SIMCTL_SCREENSHOT_TIMEOUT_REASON,
     }),
   );
   mockRunAppleRunnerCommand.mockImplementation(async () => {
@@ -670,6 +700,9 @@ test('captureSimulatorScreenshotWithFallback keeps the real runner fallback insi
         captureWithRunner: captureScreenshotViaRunner,
         shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
         resolveCaptureTarget: async () => ({}),
+        // The state question belongs to screenshot-boot-state-recovery.test.ts; here it must answer
+        // "not turned off" so the runner fallback this case observes is the ordinary one.
+        observesSimulatorShutdown: async () => false,
       },
     });
 
@@ -845,6 +878,8 @@ test('captureSimulatorScreenshotWithFallback keeps the panel rotation for a runn
       captureWithRetry: async () => {
         throw new Error('simctl screenshot failed');
       },
+      // This case is about the rotation facts; the state question is the recovery suite's.
+      observesSimulatorShutdown: async () => false,
     },
   });
   assert.deepEqual(facts, { displayRotation: 'landscape-right' });
@@ -865,6 +900,8 @@ test('an explicit screen mask refuses an unmasked runner fallback after simctl e
         captureWithRetry: captureSimulatorScreenshotWithRetry,
         captureWithRunner: captureScreenshotViaRunner,
         normalizeDensity: async () => {},
+        // The mask, not a turned-off simulator, is what must refuse the runner here.
+        observesSimulatorShutdown: async () => false,
       },
     }),
     (error) => error === failure,

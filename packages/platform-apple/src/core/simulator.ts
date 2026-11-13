@@ -180,13 +180,29 @@ export async function ensureBootedSimulator(
   await openIosSimulatorApp({ signal: options.signal });
 }
 
-async function getSimulatorState(device: DeviceInfo, signal?: AbortSignal): Promise<string | null> {
+/**
+ * The one boot-state read: `simctl list devices -j` answered through the listing's typed `state`
+ * field. `null` means the listing failed or omits this simulator, which is never a state.
+ *
+ * The caller names the ceiling. The boot path can afford the inventory budget; a caller that only
+ * wants to know whether it may boot after its own failed command bounds the same read to itself.
+ * This read does not consult the boot memo: it is the fresh observation, and the memo is written by
+ * the owners that make one.
+ */
+export async function readSimulatorBootState(
+  device: DeviceInfo,
+  options: { signal?: AbortSignal; timeoutMs: number },
+): Promise<string | null> {
   const simctlArgs = buildSimctlArgsForDevice(device, ['list', 'devices', '-j']);
   const result = await runXcrun(simctlArgs, {
     allowFailure: true,
-    signal,
-    timeoutMs: IOS_SIMCTL_LIST_TIMEOUT_MS,
+    signal: options.signal,
+    timeoutMs: options.timeoutMs,
   });
   if (result.exitCode !== 0) return null;
   return readSimctlDeviceState(result.stdout, device.id);
+}
+
+async function getSimulatorState(device: DeviceInfo, signal?: AbortSignal): Promise<string | null> {
+  return await readSimulatorBootState(device, { signal, timeoutMs: IOS_SIMCTL_LIST_TIMEOUT_MS });
 }

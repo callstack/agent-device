@@ -1,6 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   coerceExecResult,
+  requireExecSuccess,
   runCmd,
   whichCmd,
   type ExecOptions,
@@ -55,6 +56,70 @@ async function runSimctlCommand(
   return await runCommand('xcrun', [...simctlCommand(args)], options);
 }
 
+/**
+ * simctl's own error-protocol header, printed once at the top of stderr ahead of the human
+ * sentence it renders: `An error was encountered processing the command (domain=…, code=…):`.
+ * The header line is the protocol; the text after it is CoreSimulator's prose. A nested
+ * `Underlying error (…)` line is indented and is never this line.
+ */
+const SIMCTL_ERROR_HEADER =
+  /^An error was encountered processing the command \(domain=([^,]+), code=(-?\d+)\):\s*$/m;
+
+/**
+ * `NSPOSIXErrorDomain` code 60 is macOS `ETIMEDOUT`: the tool's own answer that the screenshot
+ * call timed out. This is the only place that reads it, so the verdict becomes a typed reason here
+ * and nothing downstream re-parses the tool's text. A nested `Underlying error (…)` line is
+ * indented and is never the header, and a code the header does not state is not this reason.
+ */
+const SIMCTL_SCREENSHOT_TIMEOUT_DOMAIN = 'NSPOSIXErrorDomain';
+const SIMCTL_SCREENSHOT_TIMEOUT_CODE = 60;
+
+/**
+ * `details.reason` this adapter stamps when simctl's screenshot call reports its own protocol
+ * timeout. Owned beside the parse that mints it; the screenshot retry and runner-fallback decisions
+ * read the reason and never the tool's wording.
+ */
+export const SIMCTL_SCREENSHOT_TIMEOUT_REASON = 'simulator-screenshot-timeout';
+
+/**
+ * The screenshot subcommand of an otherwise-unscoped simctl argv: `io <udid> screenshot …`. The
+ * `--set <path>` prefix is stripped first, and the flag fragments simctl's screenshot options add
+ * (`--mask=`, `--display=`) come after the subcommand, so positions 0 and 2 are the verb pair.
+ */
+function isSimctlScreenshotArgs(args: ScopedSimctlArgs): boolean {
+  const unscoped = args[0] === '--set' ? args.slice(2) : args;
+  return unscoped[0] === 'io' && unscoped[2] === 'screenshot';
+}
+
+/**
+ * The local simctl adapter: the one producer that runs `xcrun simctl` itself, so the one place
+ * allowed to read the tool's error protocol. A failed screenshot call answers with the typed
+ * {@link SIMCTL_SCREENSHOT_TIMEOUT_CODE} reason and keeps every exit-failure detail the exec layer
+ * would have produced; other failures, and other subcommands, keep exec's own behaviour.
+ *
+ * `reason` is stamped, never host-kit's `timeoutMs`: that field is exec's evidence that *it* killed
+ * a child at its deadline, and `isCommandTimeoutError` reads it as such.
+ */
+async function runLocalSimctlCommand(
+  args: ScopedSimctlArgs,
+  options?: AppleToolExecOptions,
+): Promise<ExecResult> {
+  const commandArgs = [...simctlCommand(args)];
+  if (options?.allowFailure || !isSimctlScreenshotArgs(args)) {
+    return await runCmd('xcrun', commandArgs, options);
+  }
+  const result = await runCmd('xcrun', commandArgs, { ...options, allowFailure: true });
+  const header = SIMCTL_ERROR_HEADER.exec(result.stderr);
+  const isScreenshotTimeout =
+    header?.[1] === SIMCTL_SCREENSHOT_TIMEOUT_DOMAIN &&
+    Number(header?.[2]) === SIMCTL_SCREENSHOT_TIMEOUT_CODE;
+  return requireExecSuccess(result, `xcrun exited with code ${result.exitCode}`, {
+    cmd: 'xcrun',
+    args: commandArgs,
+    ...(isScreenshotTimeout ? { reason: SIMCTL_SCREENSHOT_TIMEOUT_REASON } : {}),
+  });
+}
+
 function simctlCommandArgs(command: ScopedSimctlCommand): ScopedSimctlArgs {
   return Object.freeze(command.slice(1)) as ScopedSimctlArgs;
 }
@@ -96,7 +161,9 @@ export function createLocalAppleToolProvider(
   const simctl: AppleSimctlToolProvider = {
     run: provider.simctl
       ? coerceRun(provider.simctl.run)
-      : async (args, options) => await runSimctlCommand(runCommand, args, options),
+      : provider.runCommand
+        ? async (args, options) => await runSimctlCommand(runCommand, args, options)
+        : runLocalSimctlCommand,
   };
   const plist = provider.plist ?? {
     readJson: async (plistPath: string, signal?: AbortSignal) =>
