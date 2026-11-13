@@ -189,7 +189,10 @@ test('MCP errors whose default recovery step does not read the log leave out the
 
   const result = await executor.execute('press', {});
 
-  assert.doesNotMatch(result.content[0]?.text ?? '', /Log:/);
+  assert.equal(result.isError, true);
+  const text = result.content[0]?.text ?? '';
+  assert.match(text, /^Error \(INVALID_ARGS\): missing ref\./);
+  assert.doesNotMatch(text, /Log:/);
 });
 
 test('MCP errors keep a multi-line typed reason on the summary line', async () => {
