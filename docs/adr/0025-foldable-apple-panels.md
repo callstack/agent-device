@@ -58,6 +58,9 @@ It is the only reader of panel tables, and it selects the source.
   For a simulator in a scoped set, the fold helper's `panels` mode is the screen authority.
   It emits the same entry shape from the guest sources that `dtdeviceinfod` relays to CoreDevice: `CADisplay` and `BLSBacklight`.
   The guest lists every integrated panel and omits only the facts it cannot read.
+  Fold pose and rotation lit-panel reads explicitly request the guest table in either simulator set.
+  Panel-count classification keeps the set-based source: CoreDevice in the default set, guest in a scoped set.
+  Rotation confirms the lit panel because CoreDevice orientation can match the picker while the visible panel shows another orientation.
 - **Completeness.**
   Both sources list one entry per integrated panel. A panel that the parser drops is not single-panel evidence.
   If two or more integrated entries exist and not all parse, the device is multi-panel without a capture panel. Capture refuses with `capture-panel-unidentified`.
@@ -104,7 +107,7 @@ It is the only reader of panel tables, and it selects the source.
   `IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS` limits the probe to 5s, below the subsequent 20s screenshot deadline.
   Thus, an unresponsive CoreDevice cannot consume the capture's own budget.
   Measured cost is 0.16–0.26s, compared with 4.93s for the screenshot.
-  The guest probe costs about 0.3s. `IOS_SCOPED_DISPLAY_PROBE_BUDGET_MS` limits it to 15s, including the first helper build.
+  The guest probe costs about 0.3s. `IOS_GUEST_DISPLAY_PROBE_BUDGET_MS` limits it to 15s, including the first helper build.
 
 ## Why the default capture had to stop being implicit
 
@@ -370,19 +373,27 @@ Rejected alternatives:
 `XCUIDevice.orientation` has no effect on an iPhone Duo simulator, and the runner readback repeats the requested value.
 `devicectl device orientation set` reports success and has no effect on a simulator that `simctl boot` started.
 `orientation` therefore rotates a multi-panel simulator through the guest device-state control: the HID event that Device Hub's orientation menu sends (`orientation-picker-control`, type `enum`).
-The control has no upside-down value, so `portrait-upside-down` is refused with `unsupported-foldable-orientation`.
-Routing uses the `fold` admission and the panel table. A resolved panel count is a hardware fact, so the daemon probes each simulator once.
+The picker accepts `pud` for upside-down dispatch, which the inner panel needs to show landscape-left.
+The user target `portrait-upside-down` remains refused with `unsupported-foldable-orientation`.
+Routing uses the `fold` admission and the set-based panel-count source. A resolved panel count is a hardware fact, so the daemon probes each simulator once.
+A supplied helper is a reuse handle; only an explicit guest-source request changes the default-set source.
+Thus, classifying a single-panel default-set simulator does not prepare the fold helper.
 
-The verdict comes from `devicectl device orientation get`, a process that never sent the HID event.
-CoreDevice answers each query with the value that it sampled at the previous query, so the first read after a dispatch is discarded.
-A rotation that no fresh read reports is refused with `orientation-unverified`.
-A simulator in a scoped set is refused with `unsupported-device-scope` before dispatch, because no reader can verify its rotation.
+The picker offsets were measured on iPhone Duo; a new multi-panel model needs its own mapping.
+In both simulator sets, the helper reads the guest panel table and dispatches the fixed picker value for the established lit panel.
+The table maps the outer panel at zero offset and the inner panel at +90 degrees.
+Only a fresh `currentOrientation` from an established lit panel confirms the requested visible orientation.
+An incomplete table, unknown-power sibling, or multiple lit panels cannot confirm or dispatch.
+A repeated visible target dispatches nothing; delayed reads wait without resending to the same panel.
+A target that never appears is refused with `orientation-unverified` in either set.
+An unresolved guest read inside the settle loop neither confirms nor dispatches; the loop retries it.
+An unresolved final read reports `orientation-panel-table-unavailable` and points to the inventory diagnostic.
 
 Rejected alternatives:
 
-- **The panel table's `orientation.currentDeviceOrientation`: rejected.** It is screen-relative. On the Duo inner panel, it is a quarter-turn from the device orientation.
-- **A guest orientation read: rejected.** CoreMotion `CMDeviceOrientationManager` reports `Ambiguous`, and `BKSHIDServicesIsOrientationLockedWithOrientation` reports 0, after a rotation that CoreDevice and the screenshots confirm.
-- **Dispatch without a verdict in a scoped set: rejected.** The runner path already reported a false success there.
+- **CoreDevice orientation readback: rejected.** Its picker sample can lag and can match the request while the visible inner panel is a quarter-turn away.
+- **Other guest device-orientation APIs: rejected.** CoreMotion `CMDeviceOrientationManager` reports `Ambiguous`, and `BKSHIDServicesIsOrientationLockedWithOrientation` reports 0 after a rotation.
+- **Dispatch without a lit-panel verdict: rejected.** An acknowledgement alone can report false success.
 
 ## Pose is derived from panel power, and official control does not exist
 
@@ -678,11 +689,6 @@ The silent misses investigated here came from default outer-display routes and i
   `AgentDeviceMacOSHelper` also reaches it through Screen Capture Kit.
   Only iOS branches changed target.
   Desktop behavior remains unmeasured here.
-- **Quarter-turn detection.**
-  Both Duo panels report `currentOrientation: rot90`.
-  Inventory carries orientation without a test against changed orientation.
-  `orientation` now rotates a Duo simulator in the default set through guest HID (2026-10-26).
-  The changed `currentOrientation` values have no test yet.
 - **A slowly settled hinge.**
   Four reads consume twenty seconds of streams.
   A Duo that takes longer to settle inside `half-open` is refused.

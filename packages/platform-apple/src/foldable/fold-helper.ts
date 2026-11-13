@@ -19,8 +19,16 @@ const HINGE_ANGLE_NO_SAMPLE_HINT =
 
 const OUTPUT_VERSION = 1;
 
-/** The orientations the guest's device-state control offers; it has no upside-down value. */
+/** The orientations a foldable accepts as a user target; upside-down stays refused there. */
 export type FoldableRotation = Exclude<DeviceRotation, 'portrait-upside-down'>;
+
+/**
+ * Every value the guest's orientation picker accepts, upside-down included: its wire spelling
+ * is `pud`, which the fold helper maps from `portrait-upside-down`. The picker needs all four
+ * values because the lit panel adds a fixed offset to the picker, so reaching one target
+ * can require dispatching another value. Callers keep user targets to {@link FoldableRotation}.
+ */
+export type FoldPickerValue = DeviceRotation;
 
 /** The guest panel table in the `devicectl device info displays` payload shape. */
 export type SimulatorPanelPayload = { result: { displays: unknown[] } };
@@ -33,8 +41,8 @@ export type SimulatorPanelPayload = { result: { displays: unknown[] } };
 export type FoldHelper = Readonly<{
   /** Dispatches a preset pose or a keyframe trajectory through simulator HID. */
   setPose(pose: FoldPose | readonly FoldKeyframe[], signal?: AbortSignal): Promise<void>;
-  /** Dispatches a device orientation through the same simulator HID control channel. */
-  rotate(orientation: FoldableRotation, signal?: AbortSignal): Promise<void>;
+  /** Dispatches one picker value through the same simulator HID control channel. */
+  rotate(orientation: FoldPickerValue, signal?: AbortSignal): Promise<void>;
   /**
    * One fresh CoreMotion `CMAngleManager` subscription, the source `devicectl device motion
    * hinge-angle` relays. It reports the latest sample once `windowMs` has passed since the first,

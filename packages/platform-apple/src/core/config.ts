@@ -31,10 +31,10 @@ export const IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS = 20_000;
 // request-level daemon reset. Measured probe cost is ~0.2s.
 export const IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS = 5_000;
 /**
- * A scoped simulator's panel table comes from a guest helper that the first read on a host also
+ * A guest panel table comes from a helper that the first read on a host also
  * builds. This ceiling on the whole read, build included, stays below the capture's own budget.
  */
-export const IOS_SCOPED_DISPLAY_PROBE_BUDGET_MS = 15_000;
+export const IOS_GUEST_DISPLAY_PROBE_BUDGET_MS = 15_000;
 /**
  * One guest hinge read, before its sampling window: the fold helper waits at most 3s for its first
  * CoreMotion sample, so this exec deadline only guards a wedged `simctl spawn`.
@@ -55,14 +55,11 @@ export const IOS_FOLD_POSE_READ_INTERVAL_MS = 1_000;
 /** Two consecutive reads this close together mean the hinge has stopped moving. */
 export const IOS_FOLD_POSE_STABLE_DEGREES = 0.5;
 /**
- * How many fresh CoreDevice orientation reads a dispatched foldable rotation gets before it is
- * refused. One read costs ~0.2s, and the iPhone Duo reported the new orientation on the first
- * fresh read; the margin covers a loaded host. A read that times out counts as one that saw no
- * orientation. With the routing probe, a cold fold-helper build, and the HID dispatch, the worst
- * case stays inside the default 90s request envelope.
+ * Bounded lit-panel reads cover delayed HID effects and the two-lit interval after a fold.
+ * A fixed picker value is sent once per lit panel; the remaining reads only observe.
  */
-export const IOS_FOLDABLE_ORIENTATION_SETTLE_ATTEMPTS = 8;
-export const IOS_FOLDABLE_ORIENTATION_READ_TIMEOUT_MS = 2_000;
+export const IOS_FOLDABLE_ORIENTATION_SETTLE_ATTEMPTS = 6;
+export const IOS_FOLDABLE_ORIENTATION_SETTLE_MS = 600;
 
 // CoreSimulator can briefly stall while it services the scale lookup immediately
 // after a keyboard transition. Keep this bounded below the full capture budget.

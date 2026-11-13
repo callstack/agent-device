@@ -26,7 +26,7 @@ const FOLDABLE_REQUIRED_HINT =
   'fold sets the hinge angle of a foldable simulator such as iPhone Duo; this simulator reports one integrated panel, so it has no hinge to pose.';
 
 const INVENTORY_REQUIRED_HINT =
-  "fold needs the simulator's panel table to tell a foldable from a single-panel simulator: 'devicectl device info displays' in the default device set, or the fold helper's guest panel read in a scoped set. The apple_display_inventory_unresolved diagnostic names why the read failed.";
+  "fold needs the simulator's integrated displays to identify a foldable: the default set uses CoreDevice and a scoped set uses the fold helper. The apple_display_inventory_unresolved diagnostic names why the read failed.";
 
 const DISPATCHED_UNVERIFIED_HINT =
   'The pose request was sent and the device may have followed it, but the first hinge-angle read returned no sample, so fold cannot confirm it. Take a screenshot or snapshot to see which panel is lit; hingeReadFailure names why the read failed.';
@@ -45,8 +45,7 @@ export async function setAppleFoldPose(
   const intent = input;
   const targetAngle = intent.keyframes?.at(-1)?.angle;
   const pose = intent.pose ?? foldPoseForHingeAngle(targetAngle!)!;
-  // One helper serves the scoped panel reads, the dispatch, and every hinge read. It builds on its
-  // first use, so a default-set device that cannot fold is refused before any build.
+  // One helper serves the panel reads, the dispatch, and every hinge read.
   const helper = createFoldHelper(device);
   const inventory = await queryAppleDisplayInventory(device, {
     signal: options.signal,
@@ -276,7 +275,11 @@ async function readLitPanel(
   foldHelper: FoldHelper,
   signal: AbortSignal | undefined,
 ): Promise<AppleDeviceDisplay | undefined> {
-  const inventory = await queryAppleDisplayInventory(device, { signal, foldHelper });
+  const inventory = await queryAppleDisplayInventory(device, {
+    signal,
+    source: 'guest',
+    foldHelper,
+  });
   if (inventory.unresolved || inventory.ambiguous) return undefined;
   return inventory.activeDisplay;
 }
