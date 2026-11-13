@@ -30,6 +30,7 @@ import {
   leaseScopeToCommandFlags,
   leaseScopeToConnectionMetadata,
   parseLeaseDeviceKey,
+  remoteSessionRequiredError,
 } from '@agent-device/contracts/lease-scope';
 
 export type RemoteConnectionState = {
@@ -451,19 +452,6 @@ export function requireLeasedConnectionSession(
 ): void {
   if (session !== undefined || !isLeasedConnection(connection)) return;
   throw remoteSessionRequiredError(connection.leaseProvider);
-}
-
-/** The refusal for a command on a leased connection that names no session. */
-export function remoteSessionRequiredError(leaseProvider: string | undefined): AppError {
-  return new AppError(
-    'INVALID_ARGS',
-    'A leased remote connection needs its session named: pass --session <name> or set AGENT_DEVICE_SESSION.',
-    {
-      reason: 'REMOTE_SESSION_REQUIRED',
-      ...(leaseProvider === undefined ? {} : { leaseProvider }),
-      hint: "Without a name, a command could reach another agent's connection on this machine.",
-    },
-  );
 }
 
 function isLeasedConnection(connection: Pick<RemoteConnectionState, 'leaseProvider'>): boolean {

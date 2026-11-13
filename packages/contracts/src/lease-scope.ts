@@ -1,6 +1,6 @@
 import type { DaemonResponse, LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
-import { stripUndefined } from '@agent-device/kernel/record';
+import { namesSessionExplicitly, stripUndefined } from '@agent-device/kernel/record';
 import type { CloudProviderProfileFields } from './remote-config-fields.ts';
 import type { CommandFlags } from './command-flags.ts';
 import type { DaemonWireRequest } from './daemon-wire-request.ts';
@@ -93,6 +93,19 @@ type LeaseOptionsLike = {
   deviceKey?: string;
   clientId?: string;
 };
+
+/** The refusal for a request on a provider lease that names no session. */
+export function remoteSessionRequiredError(leaseProvider: string | undefined): AppError {
+  return new AppError(
+    'INVALID_ARGS',
+    'A leased remote connection needs its session named: pass --session <name>, set AGENT_DEVICE_SESSION, or send the session parameter.',
+    {
+      reason: 'REMOTE_SESSION_REQUIRED',
+      ...(leaseProvider === undefined ? {} : { leaseProvider }),
+      hint: "Without a name, a command could reach another agent's connection.",
+    },
+  );
+}
 
 export function leaseScopeFromRequest(req: LeaseRequestLike): LeaseScope {
   return stripUndefined({
@@ -644,9 +657,14 @@ function buildLeaseRpcParams(
   command: LeaseRpcCommand,
   options: { includeTokenParam: boolean },
 ): Record<string, unknown> {
-  return leaseScopeToLeaseRpcParams(leaseScopeFromRequest(req), command, {
-    includeTokenParam: options.includeTokenParam,
-    token: req.token,
-    session: req.session,
-  });
+  return {
+    ...leaseScopeToLeaseRpcParams(leaseScopeFromRequest(req), command, {
+      includeTokenParam: options.includeTokenParam,
+      token: req.token,
+      session: req.session,
+    }),
+    ...(req.meta?.sessionExplicit === undefined
+      ? {}
+      : { sessionExplicit: namesSessionExplicitly(req) }),
+  };
 }

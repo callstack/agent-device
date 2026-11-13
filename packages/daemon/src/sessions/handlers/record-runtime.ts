@@ -19,7 +19,7 @@ import {
 } from '@agent-device/contracts/screen-recording-runtime-plan';
 import { isWholeScreenRecordingScope } from '@agent-device/contracts/recording';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { namesSessionExplicitly } from '@agent-device/kernel/contracts';
+import { namesSessionExplicitly } from '@agent-device/kernel/record';
 import {
   deviceIdentityFlag,
   type DeviceIdentity,
