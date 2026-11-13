@@ -111,7 +111,7 @@ Open apps and links:
 
 iOS Simulator launch behavior:
 
-- An `open` that launches an app reports `timing.postOpenObservation`. When it is present and not `"observable"`, the next command that reads the screen waits briefly until two reads agree, so a `click` lands where the element comes to rest. If the screen is still moving after that wait, the command proceeds and warns that the surface was still changing.
+- An `open` that launches an app reports `timing.postOpenObservation`. Whenever it is present, the next command that reads the screen waits for the app's first screen, up to the 10-second polling budget described under `open`, so a `click` lands on the real first screen where its element comes to rest. If the wait runs out, the command proceeds and warns with `postGestureOutcome.kind` `"loading"` (no first screen yet) or `"unsettled"` (a first screen that kept changing).
 - If CoreSimulator never answers a URL hand-off, `open` fails within 20 seconds with `details.reason: ios-simulator-openurl-timeout`. The Simulator may still have received the URL; retry the open or answer the prompt with `alert accept`.
 - When `open <app> --launch-url <url>` raises an `Open in "<App>"?` prompt and the URL's scheme belongs to the session app, `open` taps **Open** and returns `launchConfirmation: "accepted"`. If the app still never starts, `open` hands over the URL once more.
 - On a local iOS Simulator, `open` recognizes the prompt in the Simulator's preferred languages, through the OS's own wording of its title and buttons, so a French Simulator's `Ouvrir dans « <App> » ?` is answered like the English one. `alert accept` and `alert dismiss` answer it by the same wording. If the runner cannot read that wording, the prompt is not recognized.
