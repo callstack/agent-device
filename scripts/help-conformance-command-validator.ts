@@ -1,12 +1,15 @@
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from '../src/cli/parser/args.ts';
 import { isCommandName, readInputFromCli } from '@agent-device/command-surface';
+import { parseFindArgs } from '@agent-device/selectors';
 
 type ValidationKind = 'agent-device-grammar' | 'pseudo-ref';
 
 type ParsedAgentCommand = {
   command: string;
   positionals: string[];
+  /** A `find` command's action and query, as `parseFindArgs` reads them; the scorers stay plain JS. */
+  find?: { action: string; query: string };
 };
 
 type ValidationResult = { valid: true } | { valid: false; kind: ValidationKind; error: string };
@@ -91,8 +94,19 @@ function validatePlanCommand(value: unknown): PlanValidationResult {
     agentCommand: {
       command: parsed.command,
       positionals: [...parsed.positionals],
+      ...(parsed.command === 'find' ? readFind(parsed.positionals) : {}),
     },
   };
+}
+
+/** An unsupported action is no find the plan can act on, so it carries no parsed find. */
+function readFind(positionals: string[]): Pick<ParsedAgentCommand, 'find'> {
+  try {
+    const { action, query } = parseFindArgs(positionals);
+    return { find: { action, query } };
+  } catch {
+    return {};
+  }
 }
 
 function runCli(): void {
