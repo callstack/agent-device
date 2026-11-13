@@ -119,6 +119,7 @@ const PRESENTATION_SCALAR_FIELDS = {
   label: true,
   value: true,
   contentDescription: true,
+  text: true,
   identifier: true,
   enabled: true,
   editable: true,

@@ -194,22 +194,25 @@ function sourceNodeFromAttributes(
  * How a node is named. An Android node is labelled by its text and falls back to the content
  * description only when it has none, as `normalizeAndroidUiHierarchyNode` reads the same
  * attributes for the native helper; a content description beside visible text travels as
- * `contentDescription`. A hinted empty field is labelled by its hint, which is its text. XCUITest
- * names a node by `label`, else `name`.
+ * `contentDescription`, and a node labelled by its description carries an empty `text`. A hinted
+ * empty field is labelled by its hint, which is its text. XCUITest names a node by `label`, else
+ * `name`.
  */
 function labelFacts(
   attrs: Record<string, string>,
   platform: WebDriverSourcePlatform,
-): Pick<RawSnapshotNode, 'label' | 'contentDescription'> {
+): Pick<RawSnapshotNode, 'label' | 'contentDescription' | 'text'> {
   if (platform === 'ios')
     return { label: firstWebDriverAttribute(attrs, ['label', 'text', 'name']) };
   const description = nonEmptyWebDriverAttribute(attrs['content-desc']);
-  const label = nonEmptyWebDriverAttribute(attrs.text) ?? description;
+  const text = nonEmptyWebDriverAttribute(attrs.text);
+  const label = text ?? description;
   return {
     label,
     ...(description !== undefined && description !== label
       ? { contentDescription: description }
       : {}),
+    ...(label !== undefined && text === undefined ? { text: '' } : {}),
   };
 }
 
