@@ -34,6 +34,13 @@ export function installIsolatedCliTestEnv(
     }
   }
 
+  if (!explicitKeys.has('AGENT_DEVICE_HOME')) {
+    if (!previousEnv.has('AGENT_DEVICE_HOME'))
+      previousEnv.set('AGENT_DEVICE_HOME', process.env.AGENT_DEVICE_HOME);
+    process.env.AGENT_DEVICE_HOME = path.join(tempRoot, 'plugins');
+    installWorkspaceReplayPlugins(process.env, true);
+  }
+
   return () => {
     for (const [key, value] of previousEnv.entries()) {
       if (value === undefined) {
@@ -46,8 +53,8 @@ export function installIsolatedCliTestEnv(
   };
 }
 
-export function installedMaestroCliTestEnv(): Record<string, string> {
-  const env = { AGENT_DEVICE_HOME: mkdtempForTestSync('agent-device-cli-maestro-') };
+export function installedReplayCliTestEnv(): Record<string, string> {
+  const env = { AGENT_DEVICE_HOME: mkdtempForTestSync('agent-device-cli-replay-') };
   installWorkspaceReplayPlugins(env, true);
   return env;
 }

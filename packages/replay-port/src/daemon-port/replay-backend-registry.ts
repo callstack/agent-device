@@ -1,4 +1,7 @@
-import type { ReplayExecution, ReplayExecutionResolver } from '@agent-device/plugins/replay-execution';
+import type {
+  ReplayExecution,
+  ReplayExecutionResolver,
+} from '@agent-device/plugins/replay-execution';
 import type { ReplayBackendId, ReplayFormat } from '@agent-device/ad-script';
 import type { ReplayBackend, ReplayBackendResolver } from '@agent-device/contracts/replay-backend';
 import type { AppError } from '@agent-device/kernel/errors';
@@ -9,7 +12,7 @@ async function binding() {
   return runtimeSlot(backendResolverKey, () => ({
     resolve: undefined as ReplayBackendResolver | undefined,
     execution: undefined as ReplayExecutionResolver | undefined,
-    storeEnv: undefined as NodeJS.ProcessEnv | undefined,
+    assertSelectionCurrent: undefined as ((packageName: string) => void) | undefined,
   }));
 }
 
@@ -17,47 +20,34 @@ async function binding() {
 export async function bindReplayBackendResolver(
   resolve: ReplayBackendResolver,
   execution?: ReplayExecutionResolver,
-  storeEnv?: NodeJS.ProcessEnv,
+  assertSelectionCurrent?: (packageName: string) => void,
 ): Promise<void> {
-  Object.assign(await binding(), { resolve, execution, storeEnv });
+  Object.assign(await binding(), { resolve, execution, assertSelectionCurrent });
 }
 
 /** Resolves native replay and suite execution from this runtime's fixed plugin set. */
 export async function getReplayExecution(): Promise<ReplayExecution> {
   const state = await binding();
+  state.assertSelectionCurrent?.(await backendPackage('ad'));
   if (!state.execution) throw await missingReplayBackend('ad');
   try {
     return await state.execution(await backendPackage('ad'));
   } catch (error) {
-    throw await recoverReplayPluginError('ad', error, state.storeEnv);
+    throw await recoverReplayPluginError('ad', error);
   }
 }
 
-async function recoverReplayPluginError(
-  id: ReplayFormat,
-  error: unknown,
-  storeEnv?: NodeJS.ProcessEnv,
-): Promise<unknown> {
+async function recoverReplayPluginError(id: ReplayFormat, error: unknown): Promise<unknown> {
   const { AppError } = await import('@agent-device/kernel/errors');
-  if (!(error instanceof AppError) || error.details?.reason !== 'plugin-not-installed') return error;
-  const packageName = await backendPackage(id);
-  if (storeEnv) {
-    const { storePluginCandidates } = await import('@agent-device/plugins/store');
-    const selected = await storePluginCandidates(storeEnv);
-    if (selected.some((candidate) => candidate.package === packageName)) {
-      return new AppError('INVALID_ARGS', 'The running daemon retains an older plugin set.', {
-        reason: 'daemon-plugin-set-stale',
-        package: packageName,
-        hint: 'Finish your sessions and restart the daemon on its host, then retry the original invocation with all its arguments. An embedded host must close and recreate its runtime.',
-      });
-    }
-  }
+  if (!(error instanceof AppError) || error.details?.reason !== 'plugin-not-installed')
+    return error;
   return await missingReplayBackend(id);
 }
 
 /** Resolves against the current daemon's plugins, without consulting another host's store. */
 export async function getReplayBackend(id: ReplayBackendId): Promise<ReplayBackend> {
-  const resolve = (await binding()).resolve;
+  const { resolve, assertSelectionCurrent } = await binding();
+  assertSelectionCurrent?.(await backendPackage(id));
   if (!resolve) throw await missingReplayBackend(id);
   return await resolveBackend(id, resolve);
 }
@@ -70,7 +60,7 @@ async function resolveBackend(
   try {
     return await resolve(id, createReplayBackendHost(), await backendPackage(id));
   } catch (error) {
-    throw await recoverReplayPluginError(id, error, (await binding()).storeEnv);
+    throw await recoverReplayPluginError(id, error);
   }
 }
 
@@ -136,7 +126,7 @@ async function missingReplayBackend(id: ReplayFormat): Promise<AppError> {
       backend: id,
       package: packageName,
       installCommand,
-      hint: 'Install on the client for source collection/export and on the daemon host for execution. Restart the daemon after changing plugins; retry the original command with all its arguments.',
+      hint: `${(await import('./replay-backend-declarations.ts')).getReplayBackendDeclaration(id).installationHint} Restart the daemon after changing plugins; retry the original command with all its arguments.`,
     },
   );
 }

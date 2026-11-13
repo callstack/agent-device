@@ -9,7 +9,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
-import { installedMaestroCliTestEnv } from './cli-test-env.ts';
+import { installedReplayCliTestEnv } from './cli-test-env.ts';
 import { runCliCapture } from './cli-capture.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
@@ -86,7 +86,7 @@ test('a Maestro replay against a remote daemon sends its runFlow includes too', 
     ['replay', './flows/checkout.yaml', '--maestro', '--platform', 'ios'],
     {
       cwd,
-      env: { ...REMOTE_DAEMON_ENV, ...installedMaestroCliTestEnv() },
+      env: { ...REMOTE_DAEMON_ENV, ...installedReplayCliTestEnv() },
       defaultResponse: { ok: true, data: { replayed: 1 } },
     },
   );
@@ -115,7 +115,7 @@ test.each(['native', 'maestro'])(
       ['test', maestro ? './*.yaml' : './*.ad', '--json', ...(maestro ? ['--maestro'] : [])],
       {
         cwd,
-        env: { ...REMOTE_DAEMON_ENV, ...(maestro ? installedMaestroCliTestEnv() : {}) },
+        env: { ...REMOTE_DAEMON_ENV, ...(maestro ? installedReplayCliTestEnv() : {}) },
         defaultResponse: { ok: true, data: { tests: [], total: 0, passed: 0, failed: 0 } },
       },
     );

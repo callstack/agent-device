@@ -34,14 +34,19 @@ function formatMaestroCompatibilityReference(): string {
   ].join('\n');
 }
 
+const maestroPackage = '@agent-device/maestro';
+const nativePackage = '@agent-device/replay';
+
 const maestroReplayBackendDeclaration: ReplayBackendDeclaration<'maestro'> = {
   id: 'maestro',
-  package: '@agent-device/maestro',
+  package: maestroPackage,
+  installationHint:
+    'Install on the client for source collection/export and on the daemon host for Maestro execution.',
   help: {
     summary: 'Supported Maestro YAML commands, grammar, and runtime boundaries',
     body: `agent-device help maestro
 
-Install with agent-device plugins add @agent-device/maestro on the client and daemon host. Restart the daemon after installation.
+Install with agent-device plugins add ${maestroPackage} on the client and daemon host. Restart the daemon after installation.
 
 Run Maestro compatibility flows with replay <flow.yaml> --maestro or test <path> --maestro. Bind an iOS or Android target with --platform or an existing session.
 
@@ -64,10 +69,12 @@ const REPLAY_BACKEND_DECLARATIONS: {
 } = {
   ad: {
     id: 'ad',
-    package: '@agent-device/replay',
+    package: nativePackage,
+    installationHint:
+      'Install on the daemon host for native .ad replay and all test suites. Core clients can read and send native .ad sources without this plugin.',
     help: {
-      summary: 'Native .ad replay and test suites (plugin, install separately)',
-      body: 'Install agent-device plugins add @agent-device/replay on the daemon host for native .ad replay and all test suites. Existing scripts and arguments stay the same. Ordinary open/close --save-script recording stays in core. Restart the daemon after changing plugins, then retry the original invocation with all its arguments.',
+      summary: 'Native .ad replay and test suites',
+      body: `Run agent-device plugins add ${nativePackage} on the daemon host for native .ad replay and all test suites. Existing scripts and arguments stay the same. Ordinary open/close --save-script recording stays in core. Restart the daemon after changing plugins, then retry the original invocation with all its arguments.`,
     },
   },
   maestro: maestroReplayBackendDeclaration,
@@ -77,4 +84,10 @@ export function getReplayBackendDeclaration(
   id: ReplayFormat,
 ): ReplayBackendDeclaration<ReplayFormat> {
   return REPLAY_BACKEND_DECLARATIONS[id];
+}
+
+/** Installation guidance uses the same vetted package declaration as missing-plugin errors. */
+export function replayPluginInstallHelp(id: ReplayFormat): string {
+  const declaration = getReplayBackendDeclaration(id);
+  return `${declaration.help.summary} (plugin, install separately). Run agent-device plugins add ${declaration.package}.`;
 }

@@ -12,6 +12,7 @@ import { PROVIDER_PLUGIN_POLICY } from './provider-plugin-policy.ts';
 export type ProviderRuntimeComposition = Readonly<{
   resolveReplayBackend: import('@agent-device/plugins/replay-backend').ReplayBackendResolver;
   resolveReplayExecution: import('@agent-device/plugins/replay-execution').ReplayExecutionResolver;
+  assertPluginSelectionCurrent?: (packageName: string) => void;
   runtimes: readonly ProviderDeviceRuntime[];
   platformModules: readonly PlatformRuntimeProviderRegistration[];
   /** Every plugin the registry saw, built-in or not, active or failed. */
@@ -27,11 +28,13 @@ export type ProviderRuntimeComposition = Readonly<{
 export async function createDaemonProviderRuntimeComposition(
   host: HostEnvironment,
 ): Promise<ProviderRuntimeComposition> {
-  const { storePluginCandidates } = await import('@agent-device/plugins/store');
-  return await createEmbeddedProviderRuntimeComposition(
-    host,
-    await storePluginCandidates(host.env),
-  );
+  const { storePluginCandidates, createPluginSelectionGuard } =
+    await import('@agent-device/plugins/store');
+  const candidates = await storePluginCandidates(host.env);
+  return Object.freeze({
+    ...(await createEmbeddedProviderRuntimeComposition(host, candidates)),
+    assertPluginSelectionCurrent: createPluginSelectionGuard(candidates, host.env),
+  });
 }
 
 /** Composes built-ins followed by supplied candidates without reading the plugin store. */

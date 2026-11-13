@@ -31,7 +31,8 @@
     "vitest": "5.0.4",
     "yaml": "^2.9.0",
     "@agent-device/maestro": "workspace:*",
-    "@agent-device/ad-replay": "workspace:*"
+    "@agent-device/ad-replay": "workspace:*",
+    "@agent-device/plugins": "workspace:*"
   },
   "exports": {
     ".": {

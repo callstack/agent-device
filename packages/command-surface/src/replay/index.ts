@@ -330,7 +330,7 @@ export const replayCommandFacet = defineCommandFacet({
   name: REPLAY_COMMAND_NAME,
   effect: 'destructive',
   text: {
-    summary: 'Replay a recorded session or Maestro flow',
+    summary: 'Replay a recorded session or Maestro flow (plugin, install separately)',
     cliDetail:
       'Replay has a 60-second work budget inside a 90-second client timeout; --timeout <ms> sets a work budget of X and client timeout of X + 30000 ms. The running step receives ordinary request cancellation at the budget. When it settles, failure returns details.reason daemon_request_timeout and details.timeoutMs, preserving the failing script path and line. The daemon and other sessions stay available if it responds; an authored close may already have ended its session. A completed replay returns success even if it settles just after the deadline. Cancellation does not prove native device work stopped. A step that ignores cancellation beyond the 30-second margin may cause a transport timeout; an unresponsive daemon retains the client liveness-based reset. Direct test keeps its own timeout behavior. For Maestro YAML compatibility flows, use replay <flow.yaml> --maestro and keep the target binding such as --platform ios on the replay command. A script with no terminal close leaves its session (and daemon) running until you close it or it idle-reaps — no different from a session opened interactively. For native .ad scripts, --keep-session suppresses exactly an authored terminal close so you can continue interactively. replay export <file.ad> converts compatible actions to Maestro YAML locally, including app switches with explicit launchApp.appId targets, deep links (including tel: and mailto:) as openLink, and home as pressKey: Home.',
   },
@@ -345,7 +345,7 @@ export const testCommandFacet = defineCommandFacet({
   name: TEST_COMMAND_NAME,
   effect: 'destructive',
   text: {
-    summary: 'Run replay test suites',
+    summary: 'Run replay test suites (plugin, install separately)',
     cliDetail:
       "Relative globs are expanded on the caller from its working directory, whose name is treated literally. Quote glob inputs to defer expansion to test. Copied diagnostic artifacts receive numbered filenames when needed to preserve other artifacts, replay sources, timing traces, and attempt manifests. JUnit reports (--reporter junit:<path>) replace characters forbidden by XML 1.0 with U+FFFD and preserve legal Unicode and whitespace. JSON and other reporters retain the original suite values. Custom reporter getExitCode hooks must return an integer from 0 to 255 or undefined; the highest valid code wins and cannot lower a failing suite's exit code. A nested test stops after a bounded resource refusal even with --retries; other failures keep their configured retries.",
   },

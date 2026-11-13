@@ -1,6 +1,9 @@
 import { gestureHelpTopic } from './cli-help-gestures.ts';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
-import { getReplayBackendDeclaration } from '@agent-device/replay-port/replay-backend-declarations';
+import {
+  getReplayBackendDeclaration,
+  replayPluginInstallHelp,
+} from '@agent-device/replay-port/replay-backend-declarations';
 import { normalizeCliCommandAlias } from '@agent-device/command-registry/cli-command-aliases';
 import { helpBody } from '@agent-device/command-registry/command-text';
 import { getCliCommandSchema, getCommandSchema } from '@agent-device/command-surface';
@@ -875,6 +878,11 @@ export function buildCommandUsageText(commandName: string): string | null {
     schema.flagDescriptionOverrides,
   );
   const sections: string[] = [];
+  if (commandName === 'replay' || commandName === 'test') {
+    sections.push(replayPluginInstallHelp('ad'));
+    sections.push(getReplayBackendDeclaration('ad').help.body);
+    sections.push(replayPluginInstallHelp('maestro'));
+  }
   if (commandName === 'connect') {
     sections.push(`Optional provider plugins:\n${providerPluginHelp()}`);
   }

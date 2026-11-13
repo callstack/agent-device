@@ -277,7 +277,8 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
 
     if (req.command === 'replay' || req.command === 'test') {
       try {
-        const { requireReplayPlugins } = await import('@agent-device/replay-port/replay-plugin-admission');
+        const { requireReplayPlugins } =
+          await import('@agent-device/replay-port/replay-plugin-admission');
         await requireReplayPlugins(req);
       } catch (error) {
         return finalizeThrownRequestError(error);

@@ -554,6 +554,9 @@ importers:
       '@agent-device/maestro':
         specifier: workspace:*
         version: link:../maestro
+      '@agent-device/plugins':
+        specifier: workspace:*
+        version: link:../plugins
       '@agent-device/proxy':
         specifier: workspace:*
         version: link:../proxy

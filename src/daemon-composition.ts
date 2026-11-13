@@ -124,7 +124,7 @@ export async function composeDaemonRuntimeDeps(
     await bindReplayBackendResolver(
       providerComposition.resolveReplayBackend,
       providerComposition.resolveReplayExecution,
-      providerCandidates === undefined ? host.env : undefined,
+      providerComposition.assertPluginSelectionCurrent,
     );
     const providerDeviceRuntimes = [...providerComposition.runtimes];
     const deviceRuntimeGateway = createPlatformRuntimeGateway({

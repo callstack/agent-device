@@ -9,10 +9,16 @@ export function installWorkspaceReplayPlugins(env: NodeJS.ProcessEnv, source: bo
     throw new Error('Workspace plugin installation requires AGENT_DEVICE_HOME');
   const configPath = resolveUserConfigPath(env);
   const home = path.dirname(configPath);
-  for (const packageId of ['maestro', 'replay']) installWorkspacePlugin(source, home, configPath, packageId);
+  for (const packageId of ['maestro', 'replay'])
+    installWorkspacePlugin(source, home, configPath, packageId);
 }
 
-function installWorkspacePlugin(source: boolean, home: string, configPath: string, packageId: string): void {
+function installWorkspacePlugin(
+  source: boolean,
+  home: string,
+  configPath: string,
+  packageId: string,
+): void {
   const installation = crypto.randomUUID();
   const directory = path.join(
     home,

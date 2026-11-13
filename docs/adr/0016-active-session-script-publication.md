@@ -9,6 +9,8 @@ Implementation owners are `packages/daemon/src/sessions/handlers/session-script-
 
 ## Rules at a glance
 
+Ordinary recording and publication remain core capabilities without the replay plugin. Consuming the resulting `.ad` script or starting replay repair requires `@agent-device/replay` on the daemon host.
+
 This section is a normative summary.
 [Decision](#decision) contains the binding contracts and refusal cases.
 

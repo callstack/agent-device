@@ -50,6 +50,7 @@ export type PluginCandidate = Readonly<{
   source: PluginSource;
   package?: string;
   version?: string;
+  selectionStamp?: string;
   /** Claims `provider` before its load settles, so a later candidate with that id is a duplicate. Dormant candidates claim it without loading. */
   provider?: string;
   /** Claims `provider` without registering or listing: a built-in that is not configured. */
@@ -212,7 +213,7 @@ export async function startProviderRegistry(
           reason: 'plugin-registry-closed',
         });
       const slot = requireReplaySlot(resolved, NATIVE_REPLAY_BACKEND, packageName);
-      if (slot.failure !== undefined) throw slot.failure;
+      if (slot.failure !== undefined) throw replaySlotError(slot);
       const execution = slot.replaySetup?.execution;
       if (!execution) throw invalidPlugin('Native replay plugin must provide execution.create()');
       return await (slot.executionLoading ??= Promise.resolve().then(async () => {
@@ -221,7 +222,7 @@ export async function startProviderRegistry(
         } catch (error) {
           slot.failure = asPluginFailure(error, 'plugin_load_failed');
           inventory.splice(0, inventory.length, ...resolved.inventory());
-          throw slot.failure;
+          throw replaySlotError(slot);
         }
       }));
     },
@@ -300,7 +301,7 @@ async function resolveRegisteredReplayBackend(
   packageName?: string,
 ): Promise<ReplayBackend> {
   const slot = requireReplaySlot(resolved, id, packageName);
-  if (slot.failure !== undefined) throw slot.failure;
+  if (slot.failure !== undefined) throw replaySlotError(slot);
   const backend = slot.replaySetup?.replayBackend;
   if (!backend) throw invalidPlugin(`Replay backend was not set up: ${id}`);
   return await (slot.replayLoading ??= Promise.resolve().then(async () => {
@@ -309,7 +310,7 @@ async function resolveRegisteredReplayBackend(
     } catch (error) {
       slot.failure = asPluginFailure(error, 'plugin_load_failed');
       inventory.splice(0, inventory.length, ...resolved.inventory());
-      throw slot.failure;
+      throw replaySlotError(slot);
     }
   }));
 }
@@ -330,6 +331,28 @@ function requireReplaySlot(
       backend: id,
     });
   return slot;
+}
+
+function replaySlotError(slot: Slot): AppError {
+  const error = asPluginFailure(slot.failure, 'plugin_load_failed');
+  const packageName = slot.candidate.package;
+  return new AppError(
+    error.code,
+    error.message,
+    {
+      ...error.details,
+      ...(packageName
+        ? {
+            package: packageName,
+            updateCommand: `agent-device plugins update ${packageName}`,
+            hint: `Repair or update ${packageName} on this host, then restart the daemon and retry the original invocation with all its arguments.`,
+          }
+        : {
+            hint: 'Repair the supplied replay plugin, then close and recreate the embedded runtime. Retry the original invocation with all its arguments.',
+          }),
+    },
+    error,
+  );
 }
 
 async function cleanUpReplaySlot(slot: Slot): Promise<PluginCleanupOutcome[]> {

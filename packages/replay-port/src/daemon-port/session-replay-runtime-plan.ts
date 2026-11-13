@@ -117,7 +117,12 @@ export function prepareReplayPlan(params: {
   const backendRejection = validateReplayBackendFlag(req);
   if (backendRejection) return { ok: false, response: backendRejection };
 
-  const { manifest, replayReq } = inspectReplayPlanManifest(req, script, dispatch, params.inspectAdReplay);
+  const { manifest, replayReq } = inspectReplayPlanManifest(
+    req,
+    script,
+    dispatch,
+    params.inspectAdReplay,
+  );
   const { metadata, actions, actionLines, planDigest } = manifest;
   const preEntrySession = sessionStore.get();
   const entryIndexResult = resolveReplayPlanEntryIndex({

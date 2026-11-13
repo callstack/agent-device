@@ -289,3 +289,30 @@ test('wrong native capability fails inventory, disposes setup and keeps its firs
   await registry.close();
   expect(wrong.dispose).toHaveBeenCalledOnce();
 });
+
+test('a selected native package load failure cannot masquerade as absence by its message', async () => {
+  const registry = await startProviderRegistry(
+    await resolveProviderPlugins([
+      {
+        source: 'store',
+        package: '@agent-device/replay',
+        load: () => {
+          throw new Error('Replay backend is not installed: ad');
+        },
+      },
+    ]),
+    {},
+    policy,
+  );
+  try {
+    await expect(registry.resolveReplayExecution('@agent-device/replay')).rejects.toMatchObject({
+      details: {
+        reason: 'plugin_load_failed',
+        package: '@agent-device/replay',
+        updateCommand: 'agent-device plugins update @agent-device/replay',
+      },
+    });
+  } finally {
+    await registry.close();
+  }
+});

@@ -195,7 +195,9 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
     return errorResponse(appErr.code, appErr.message);
   }
   const sourceBundlesByPath = new Map(sourceBundles.map((bundle) => [bundle.entry, bundle]));
-  const outcome = await (await getReplayExecution()).runReplayTestSuite({
+  const outcome = await (
+    await getReplayExecution()
+  ).runReplayTestSuite({
     request: suiteRequest,
     // The host owns the request-global progress sink; the scheduler receives only the
     // narrow emit capability (#1478 P3b).
