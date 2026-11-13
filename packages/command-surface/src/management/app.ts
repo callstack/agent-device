@@ -192,7 +192,7 @@ const closeDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.close, (input) =>
 
 export const appsCommandFacet = defineCommandFacet({
   name: 'apps',
-  effect: 'read',
+  effect: 'write',
   text: {
     summary: 'List installed apps or deferred provider app assets',
     cliDetail:

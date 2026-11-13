@@ -626,7 +626,7 @@ export const telephonyDaemonWriter: DaemonWriter = direct(TELEPHONY_COMMAND_NAME
 
 const appStateCommandFacet = defineParameterlessCommandFacet({
   name: APPSTATE_COMMAND_NAME,
-  effect: 'read',
+  effect: 'write',
   description: appStateCommandDescription,
   text: {
     summary: 'Show the foreground app and activity',

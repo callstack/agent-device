@@ -24,7 +24,10 @@ export type JsonSchema = {
   commandInputFor?: string;
 };
 
-/** Read excludes artifact writes and foreground changes. Write covers non-destructive updates. */
+/**
+ * Read changes no device, app, session, or host state: no boot, foreground change, or artifact write.
+ * Write covers non-destructive updates.
+ */
 export type CommandEffect = 'read' | 'write' | 'destructive';
 
 export type CommandMetadata<Name extends string, Input> = CommandInputMetadata<Name, Input> & {

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { resolveCommandRecordingEffect } from '@agent-device/command-registry/registry';
+import {
+  commandDescriptors,
+  resolveCommandRecordingEffect,
+} from '@agent-device/command-registry/registry';
 import { createMcpMessageHandler } from '../router.ts';
 
 type AdvertisedTool = {
@@ -23,23 +26,9 @@ for (const structured of [false, true]) {
       assert.ok(tool.title?.trim(), `${tool.name}: missing title`);
       assert.equal(typeof tool.annotations?.readOnlyHint, 'boolean', tool.name);
       assert.equal(typeof tool.annotations?.destructiveHint, 'boolean', tool.name);
-      if (tool.annotations?.readOnlyHint) {
-        assert.notEqual(
-          resolveCommandRecordingEffect({ command: tool.name, positionals: [] }),
-          'mutates-app',
-          `${tool.name}: a recorded app mutation cannot be read-only`,
-        );
-      }
+      if (tool.annotations?.readOnlyHint) assertReadOnlyRuntimeEffects(tool);
     }
-    for (const name of [
-      'devices',
-      'apps',
-      'appstate',
-      'artifacts',
-      'capabilities',
-      'events',
-      'help',
-    ]) {
+    for (const name of ['devices', 'artifacts', 'capabilities', 'events', 'help']) {
       assert.deepEqual(
         tools.find((tool) => tool.name === name)?.annotations,
         {
@@ -49,7 +38,16 @@ for (const structured of [false, true]) {
         name,
       );
     }
-    for (const name of ['get', 'is', 'snapshot', 'wait', 'doctor', 'screenshot']) {
+    for (const name of [
+      'apps',
+      'appstate',
+      'get',
+      'is',
+      'snapshot',
+      'wait',
+      'doctor',
+      'screenshot',
+    ]) {
       assert.deepEqual(
         tools.find((tool) => tool.name === name)?.annotations,
         {
@@ -70,4 +68,27 @@ for (const structured of [false, true]) {
       );
     }
   });
+}
+
+function assertReadOnlyRuntimeEffects(tool: AdvertisedTool): void {
+  assert.notEqual(
+    resolveCommandRecordingEffect({ command: tool.name, positionals: [] }),
+    'mutates-app',
+    `${tool.name}: a recorded app mutation cannot be read-only`,
+  );
+  const descriptor = commandDescriptors.find((entry) => entry.name === tool.name);
+  if (tool.name === 'help') return;
+  assert.ok(descriptor, `${tool.name}: missing command descriptor`);
+  const execution = descriptor.platformExecution;
+  if (execution.kind !== 'device-runtime') return;
+  const uses = 'uses' in execution ? execution.uses : [execution.use];
+  for (const use of uses) {
+    const operations = [...use.required, ...use.preferred, ...(use.conditional ?? [])];
+    for (const operation of ['ensureReady', 'bootTarget', 'bootTargetHeadless'] as const) {
+      assert.ok(
+        !operations.includes(operation),
+        `${tool.name}: read-only tool declares ${operation}`,
+      );
+    }
+  }
 }
