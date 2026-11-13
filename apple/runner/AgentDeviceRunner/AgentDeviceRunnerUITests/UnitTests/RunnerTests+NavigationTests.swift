@@ -106,6 +106,25 @@ extension RunnerTests {
     XCTAssertEqual(app.navigationBars.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).count, 1)
   }
 
+  /// A back button that only moves after the tap is not a navigation: a tap that navigates nowhere
+  /// but shifts the bar, as a large-title collapse does, reports an unknown outcome.
+  @MainActor
+  func testInAppBackDoesNotCreditAMovedBackButtonToAPressedBackButton() throws {
+    guard #available(iOS 16.0, *) else { throw XCTSkip("UINavigationItem.backAction needs iOS 16") }
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--blocked-back", "--shifting-back"])
+    defer { endBackFixture() }
+    let backButton = app.navigationBars.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).firstMatch
+    let frameBefore = backButton.frame
+
+    guard case .unconfirmed(let payload) = try performInAppBack(app: app) else {
+      return XCTFail("a back button that only moved must not confirm a tap that navigated nowhere")
+    }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, true)
+    XCTAssertTrue(app.navigationBars["Detail"].exists)
+    XCTAssertNotEqual(backButton.frame.minY, frameBefore.minY, "the fixture must move the back button")
+  }
+
   /// An XCTest issue while the back button is looked up, such as a button gone mid-transition, means
   /// no button: back answers from the swipe path. An issue that escaped the read would fail this
   /// test as it fails the command with a recorded failure. The swipe's own outcome is not asserted:
@@ -651,7 +670,7 @@ extension RunnerTests {
   /// screen origin.
   func testNavigationBarBackStateHoldsTheLiveButtonOfAPlacedWindow() {
     let snapshotButton = CGRect(x: 8, y: 54, width: 44, height: 44)
-    let state = NavigationBarBackState(entries: ["Detail"], backButtonFrames: [snapshotButton])
+    let state = NavigationBarBackState(backButtonLabels: [["Root"]], backButtonFrames: [snapshotButton])
     let placed = SurfaceGeometry(
       windowOnScreen: SurfaceRect(CGRect(x: 224, y: 128, width: 386, height: 954)),
       panelNativeSize: nil,
@@ -674,7 +693,7 @@ extension RunnerTests {
   /// fractional frame values do not defeat the match; a button a point away is another button.
   func testNavigationBarBackStateHoldsALiveButtonWithinHalfAPointPerEdge() {
     let state = NavigationBarBackState(
-      entries: ["Root"],
+      backButtonLabels: [["Root"]],
       backButtonFrames: [CGRect(x: 8.33, y: 54.67, width: 44.33, height: 44)]
     )
     let placed = SurfaceGeometry(
@@ -692,8 +711,8 @@ extension RunnerTests {
   /// Two agreeing reads of the bar show a still bar only when they started at least one read
   /// interval apart: two reads drawn in one animation frame of a push agree, but prove nothing.
   func testNavigationBarBackStateHeldStillOnlyAcrossOneReadInterval() {
-    let bar = NavigationBarBackState(entries: ["Root"], backButtonFrames: [CGRect(x: 8, y: 54, width: 44, height: 44)])
-    let moved = NavigationBarBackState(entries: ["Root"], backButtonFrames: [CGRect(x: 40, y: 54, width: 44, height: 44)])
+    let bar = NavigationBarBackState(backButtonLabels: [["Root"]], backButtonFrames: [CGRect(x: 8, y: 54, width: 44, height: 44)])
+    let moved = NavigationBarBackState(backButtonLabels: [["Root"]], backButtonFrames: [CGRect(x: 40, y: 54, width: 44, height: 44)])
     let intervalMs = Self.navigationBarBackReadInterval * 1000
     let first = TimedNavigationBarBackState(state: bar, startedMs: 1000)
 
@@ -703,6 +722,22 @@ extension RunnerTests {
     XCTAssertTrue(Self.navigationBarBackStateHeldStill(from: first, to: oneIntervalLater))
     let movedLater = TimedNavigationBarBackState(state: moved, startedMs: 1000 + intervalMs)
     XCTAssertFalse(Self.navigationBarBackStateHeldStill(from: first, to: movedLater))
+  }
+
+  /// After the tap, only a change of the bar count, the back button count, or a back button label
+  /// shows a pop. A back button that only moved, such as by a large-title collapse, shows none.
+  func testNavigationBarBackPoppedOnlyOnABarOrBackButtonChange() {
+    let button = CGRect(x: 8, y: 54, width: 44, height: 44)
+    let detail = NavigationBarBackState(backButtonLabels: [["Root"]], backButtonFrames: [button])
+
+    let moved = NavigationBarBackState(backButtonLabels: [["Root"]], backButtonFrames: [button.offsetBy(dx: 0, dy: 30)])
+    XCTAssertFalse(Self.navigationBarBackPopped(from: detail, to: moved))
+    let relabeled = NavigationBarBackState(backButtonLabels: [["Settings"]], backButtonFrames: [button])
+    XCTAssertTrue(Self.navigationBarBackPopped(from: detail, to: relabeled))
+    let atRoot = NavigationBarBackState(backButtonLabels: [[]], backButtonFrames: [])
+    XCTAssertTrue(Self.navigationBarBackPopped(from: detail, to: atRoot))
+    let barGone = NavigationBarBackState(backButtonLabels: [], backButtonFrames: [])
+    XCTAssertTrue(Self.navigationBarBackPopped(from: atRoot, to: barGone))
   }
 #endif
 

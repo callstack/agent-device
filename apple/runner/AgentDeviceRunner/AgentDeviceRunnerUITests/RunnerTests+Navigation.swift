@@ -275,15 +275,20 @@ extension RunnerTests {
     }
   }
 
-  /// The label and frame of each navigation bar's system back buttons, one entry per bar in bar
-  /// order, so the bar count counts too. A pop removes, moves, or relabels the pressed button, or
-  /// removes its bar, so a change of this state is the evidence that the tap navigated. Bar titles
-  /// and identifiers are left out: a bar can retitle itself, such as a countdown, without any
-  /// navigation. A pop that leaves the back button as it was, such as one between two screens whose
-  /// back buttons have the same title, answers unverified.
+  /// The labels of each navigation bar's system back buttons, one list per bar in bar order, and
+  /// the frames of those buttons. Both must agree for a still bar before the tap. Bar titles and
+  /// identifiers are left out: a bar can retitle itself, such as a countdown, without any navigation.
   struct NavigationBarBackState: Equatable {
-    let entries: [String]
+    let backButtonLabels: [[String]]
     let backButtonFrames: [CGRect]
+  }
+
+  /// Whether the bar after the tap shows a pop: the bar count, the back button count, or a back
+  /// button label changed. Frames are left out: a tap that navigates nowhere can still move the
+  /// button, such as by a large-title collapse or a bar button that appears. A pop that keeps the
+  /// same back button labels and bar count answers unverified.
+  static func navigationBarBackPopped(from before: NavigationBarBackState, to after: NavigationBarBackState) -> Bool {
+    after.backButtonLabels != before.backButtonLabels
   }
 
   /// One read of the bar state, with the time the read started.
@@ -415,7 +420,7 @@ extension RunnerTests {
   ) -> NavigationBarBackConfirmation {
     while true {
       switch readNavigationBarBackState(app: app, phase: .confirmation, deadlineMs: deadlineMs) {
-      case .read(let after) where after != before: return .changed
+      case .read(let after) where Self.navigationBarBackPopped(from: before, to: after): return .changed
       case .hung: return .hung
       case .read, .unreadable: break
       }
@@ -491,30 +496,28 @@ extension RunnerTests {
   ) -> NavigationBarBackRead<NavigationBarBackState> {
     heldNavigationBarRead(phase) {
       guard let bars = try? elementQueries(app: app, matching: .navigationBar) else { return nil }
-      var entries: [String] = []
+      var backButtonLabels: [[String]] = []
       var backButtonFrames: [CGRect] = []
       for bar in bars.flatMap({ $0.allElementsBoundByIndex }) {
         guard currentUptimeMs() < deadlineMs, let snapshot = try? bar.snapshot() else { return nil }
-        let entry = Self.navigationBarBackEntry(snapshot)
-        entries.append(entry.entry)
-        backButtonFrames.append(contentsOf: entry.backButtonFrames)
+        let buttons = Self.navigationBarBackButtons(snapshot)
+        backButtonLabels.append(buttons.map(\.label))
+        backButtonFrames.append(contentsOf: buttons.map(\.frame))
       }
-      return NavigationBarBackState(entries: entries, backButtonFrames: backButtonFrames)
+      return NavigationBarBackState(backButtonLabels: backButtonLabels, backButtonFrames: backButtonFrames)
     }
   }
 
-  static func navigationBarBackEntry(_ bar: XCUIElementSnapshot) -> (entry: String, backButtonFrames: [CGRect]) {
-    var buttons: [String] = []
-    var frames: [CGRect] = []
+  static func navigationBarBackButtons(_ bar: XCUIElementSnapshot) -> [(label: String, frame: CGRect)] {
+    var buttons: [(label: String, frame: CGRect)] = []
     var pending = bar.children
     while let element = pending.popLast() {
       if element.identifier == navigationBarBackButtonIdentifier {
-        buttons.append("\(element.label)\u{1F}\(NSCoder.string(for: element.frame))")
-        frames.append(element.frame)
+        buttons.append((element.label, element.frame))
       }
       pending.append(contentsOf: element.children)
     }
-    return (buttons.joined(separator: "\u{1E}"), frames)
+    return buttons
   }
 
   @MainActor

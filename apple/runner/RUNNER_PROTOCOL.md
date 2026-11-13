@@ -142,12 +142,16 @@ candidate is found in a readable tree, and two reads in a row of the bar state, 
 places the snapshot frames at the window's screen origin, because a placed iPad window reports them
 from its own top-left, and allows 0.5 pt per edge for fractional frame values. No other button
 counts, whatever its label.
-The bar state is the label and frame of each navigation bar's `BackButton` children, one entry per
-bar in bar order, so the bar count counts too; one XCTest snapshot per bar. Bar titles and
-identifiers are left out, because a bar can retitle itself (a countdown) without navigating. After
-the tap it reads that state again with a 0.05 s pause between reads. A change from the state read
-before the tap answers `ok`. A pop that leaves the back button as it was, such as one between two
-screens whose back buttons have the same title, answers `BACK_SWIPE_UNVERIFIED`; so can a pop on a
+The bar state is the labels of each navigation bar's `BackButton` children, one list per bar in
+bar order, and the frames of those buttons; one XCTest snapshot per bar. The still check before the
+tap compares labels and frames. Bar titles and identifiers are left out, because a bar can retitle
+itself (a countdown) without navigating. After the tap it reads that state again with a 0.05 s
+pause between reads. Only these changes from the state read before the tap answer `ok`: the number
+of bars, the number of `BackButton` children (such as none at the root), or a `BackButton` label.
+Frames are left out after the tap, because a tap that navigates nowhere can still move the button
+(a large-title collapse, a bar button that appears). A pop that keeps the same `BackButton` labels
+and bar count, such as one between two screens whose back buttons have the same title, answers
+`BACK_SWIPE_UNVERIFIED`; so can a pop on a
 back button whose title updates itself, misread as a navigation. No change, or reads that fail, answer `BACK_SWIPE_UNVERIFIED`; a delivered tap is
 never followed by the swipe. Before and after the tap, reads start for up to 1 s each, checked
 before each bar's snapshot; a query in flight finishes or ends at XCTest's own query timeout.

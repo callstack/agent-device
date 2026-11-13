@@ -42,7 +42,8 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 // A real navigation stack for `back`. `--agent-device-back-navigation-bar` pushes a detail screen,
 // so the bar shows UIKit's system back button; the interactive pop is off, so only that button can
 // pop it. `--blocked-back` keeps that button but replaces its action, so pressing it navigates
-// nowhere. `--ticking-title` counts the detail screen's title down every 0.2 s, as a timer does,
+// nowhere. `--shifting-back` makes that press move the bar down instead, so the back button moves
+// without any navigation. `--ticking-title` counts the detail screen's title down every 0.2 s, as a timer does,
 // so its bar changes without any navigation. `--custom-back-item` instead puts a bar button titled
 // "Back" on the root, which is not the system back button and must never be pressed. The root's
 // label reports what happened.
@@ -79,7 +80,11 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
     detail.view.backgroundColor = UIColor.systemTealColor;
     if (blockedBack) {
       if (@available(iOS 16.0, *)) {
-        detail.navigationItem.backAction = [UIAction actionWithHandler:^(__kindof UIAction *action) {}];
+        BOOL shifting = [NSProcessInfo.processInfo.arguments containsObject:@"--shifting-back"];
+        __weak UINavigationController *weakSelf = self;
+        detail.navigationItem.backAction = [UIAction actionWithHandler:^(__kindof UIAction *action) {
+          if (shifting) weakSelf.additionalSafeAreaInsets = UIEdgeInsetsMake(30, 0, 0, 0);
+        }];
       }
     }
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--ticking-title"]) {
