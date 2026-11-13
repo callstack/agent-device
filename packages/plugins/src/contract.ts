@@ -9,6 +9,9 @@ import type { ProviderPluginHost } from './host.ts';
 /** The provider plugin contract version this module defines. */
 export const PROVIDER_PLUGIN_API_VERSION = 2;
 
+/** Provider ids that name daemon routing; no plugin can claim either of them. */
+export const ROUTING_PROVIDER_IDENTITIES: readonly string[] = ['cloud', 'proxy'];
+
 /**
  * The environment variables a plugin reads credentials from. The host fingerprints their values to
  * refuse a lease when the shell holds different credentials than the daemon started with. List
