@@ -1,7 +1,10 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
-import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
+import {
+  postActionBaseline,
+  surfaceScopedNodes,
+} from '@agent-device/capture-kit/snapshot-baseline';
 import type {
   SettleObservation,
   SettleParams,
@@ -18,7 +21,7 @@ import type { BoundContextFromFlags } from '../core/context.ts';
 import type { RuntimeAdmissionBindings } from '../core/request-runtime-binding.ts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import { resolveSettleObservationCapture } from '../core/settle-observation-capture.ts';
-import { isOutdatedObservation } from '../core/ref-frame.ts';
+import { isOutdatedObservation, refFrameTree } from '../core/ref-frame.ts';
 import { issueSettleRefs } from './session-snapshot.ts';
 import type { SessionStore } from '../core/session-store.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
@@ -45,7 +48,9 @@ import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
  *
  * 1. {@link planGenericSettleObservation} runs BEFORE the command dispatches and
  *    freezes the diff baseline. The baseline is the session's STORED pre-action
- *    tree, so the diff reads "settled tree vs the last tree you observed" — it
+ *    tree, or the ref frame when that tree was read in another view than the
+ *    frame (`postActionBaseline`), so the diff reads "settled tree vs the last
+ *    tree you observed" in one view — it
  *    may be several commands old, unlike press's freshly resolved pre-action
  *    capture. That is the honest #1101 contract for a route with no resolution
  *    step, and the settle loop's own captures overwrite `session.snapshot`, so
@@ -87,7 +92,11 @@ export function planGenericSettleObservation(
   if (invalidSettleFlags) return { response: invalidSettleFlags };
   const settle = readSettleRequest(params.flags);
   if (!settle) return {};
-  const baseline = storedTreeBaseline(params.session.snapshot);
+  // The stored tree answers when it shares the ref frame's view; otherwise the frame does (#4486).
+  const baseline = postActionBaseline({
+    frame: storedTreeBaseline(refFrameTree(params.session)),
+    candidates: [storedTreeBaseline(params.session.snapshot)],
+  });
   return { observe: async () => await observeSettled(params, settle, baseline) };
 }
 

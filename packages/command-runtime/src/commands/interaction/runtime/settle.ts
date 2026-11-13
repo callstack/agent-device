@@ -5,7 +5,10 @@ import type {
   CommandSessionRecord,
 } from '@agent-device/contracts/runtime-contract';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
-import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
+import {
+  postActionBaseline,
+  surfaceScopedNodes,
+} from '@agent-device/capture-kit/snapshot-baseline';
 import { buildSnapshotDiff } from '@agent-device/capture-kit/snapshot-diff';
 import { displayLabel, formatRole } from '@agent-device/capture-kit/snapshot-lines';
 import {
@@ -21,7 +24,6 @@ import type {
   SettleTailEntry,
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
-import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { RuntimeCommand } from '../../runtime-types.ts';
 import type { CapturedSnapshot } from './selector-read-shared.ts';
 import {
@@ -193,7 +195,6 @@ async function readSettledOutcome(
   // replacement presented as change within one surface, refs included, so it is refused and the
   // transition is disclosed instead.
   const surfaceChange = resolvePostActionSurfaceChange(params.baseline, settledCapture);
-  const diffShown = outcome.settled && stored && !surfaceChange;
   return {
     observation: {
       ...observation,
@@ -205,7 +206,7 @@ async function readSettledOutcome(
       // captures are intentionally diff-less: they are not a stable
       // observation, so surfacing refs would invite agents to act on
       // advisory state.
-      ...(diffShown
+      ...(outcome.settled && stored && !surfaceChange
         ? buildSettleDiffAndTail(
             params.baseline.nodes,
             settledNodes,
@@ -238,65 +239,35 @@ async function resolveSettleBaseline(
   resolved: ResolvedInteractionTarget,
 ): Promise<SurfaceScopedNodes> {
   const session = await runtime.sessions.get(options.session ?? 'default');
+  const frame = surfaceScopedNodes(session?.refFrameSnapshot);
   // A ref is authorized against the stored ref frame. Keep that visible presentation as the
   // transition baseline: a best-effort evidence recapture can recover through private AX and see
   // covered background controls that were not actionable when the ref was issued.
   // Resolved-target evidence is best-effort at the contracts boundary. The session still owns the
   // authoritative ref frame, so reuse it rather than silently turning a missing optional field
   // into an empty transition/diff baseline. Fall back to the latest observation for point targets
-  // and pre-frame sessions.
-  return (
-    authorizedRefBaseline(resolved, session) ??
-    nonEmptyBaseline(resolved.preAction) ??
-    sessionBaseline(session)
-  );
-}
-
-function authorizedRefBaseline(
-  resolved: ResolvedInteractionTarget,
-  session: CommandSessionRecord | undefined,
-): SurfaceScopedNodes | undefined {
-  if (resolved.kind !== 'ref') return undefined;
-  return nonEmptyBaseline(refFrameBaseline(session?.refFrameSnapshot));
+  // and pre-frame sessions. A candidate read in another view than the frame is skipped (#4486).
+  return postActionBaseline({
+    frame: withoutPresentedSurface(frame),
+    candidates: [
+      resolved.kind === 'ref' ? frame : undefined,
+      resolved.preAction,
+      session?.refFrameSnapshot
+        ? undefined
+        : withoutPresentedSurface(surfaceScopedNodes(session?.snapshot)),
+    ],
+  });
 }
 
 /**
- * The ref frame the agent last read. A frame read as the whole full tree (`snapshot` without `-i`,
- * `-s`, `-d`, `--raw` or `--actions`) is marked `fullView`, so the settle loop reads the full tree
- * too and the diff compares one view. Any of those flags makes a projection the settle capture
- * does not reproduce, so such a frame stays unmarked. Selector captures are full trees as well, but no agent
- * chose that view, so only the ref frame carries the mark.
- */
-function refFrameBaseline(snapshot: SnapshotState | undefined): SurfaceScopedNodes {
-  const baseline = surfaceScopedNodes(snapshot);
-  const presentation = snapshot?.presentation;
-  const wholeFullTree =
-    presentation !== undefined &&
-    presentation.interactiveOnly !== true &&
-    presentation.scope === undefined &&
-    presentation.depth === undefined &&
-    presentation.raw !== true &&
-    presentation.customActions !== true;
-  return wholeFullTree ? { ...baseline, fullView: true } : baseline;
-}
-
-/**
- * The latest stored tree, for a target no capture resolved. The diff can use its nodes, but its
+ * A stored tree, for a target no capture resolved. The diff can use its nodes, but its
  * presented-surface fact may predate a side effect this layer cannot see, and an `absent` read
  * taken before a sheet was presented must not rule out the confirmation owed to that sheet's
  * dismissal (#3565).
  */
-function sessionBaseline(session: CommandSessionRecord | undefined): SurfaceScopedNodes {
-  const { presentedSurface: _unverified, ...baseline } = surfaceScopedNodes(
-    session?.refFrameSnapshot ?? session?.snapshot,
-  );
-  return baseline;
-}
-
-function nonEmptyBaseline(
-  baseline: SurfaceScopedNodes | undefined,
-): SurfaceScopedNodes | undefined {
-  return baseline?.nodes.length ? baseline : undefined;
+function withoutPresentedSurface(baseline: SurfaceScopedNodes): SurfaceScopedNodes {
+  const { presentedSurface: _unverified, ...stored } = baseline;
+  return stored;
 }
 
 function buildSettleDiff(
@@ -304,11 +275,9 @@ function buildSettleDiff(
   settledNodes: SnapshotNode[],
   appBundleId: string | undefined,
 ): NonNullable<SettleObservation['diff']> {
-  // Flattened compare, like `diff -i`: both sides are captures in one view (interactive, or the full
-  // tree for a `fullView` baseline), and depth jitter across captures should not read as change. When
-  // the baseline came from a richer stored tree (ref targets reuse the session
-  // snapshot), extra baseline-only lines surface as removals — advisory noise,
-  // the same baseline caveat --verify's changedFromBefore already accepts.
+  // Flattened compare, like `diff -i`: both sides are captures in one presentation
+  // (postActionBaseline picks the baseline, and the settle loop captures in its view), and
+  // depth jitter across captures should not read as change.
   const diff = buildSnapshotDiff(
     withoutSettleChrome(baselineNodes, appBundleId),
     withoutSettleChrome(settledNodes, appBundleId),

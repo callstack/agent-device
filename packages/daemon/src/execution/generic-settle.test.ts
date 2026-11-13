@@ -312,6 +312,35 @@ test('scroll --settle passes the stored baseline and attaches the observation wi
   expect(settle.refsGeneration).toBe(stored.snapshotGeneration);
 });
 
+test('scroll --settle keeps the ref frame view when the stored tree was read in another view', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'generic-settle-view';
+  // The agent read refs from snapshot -i; a later selector read stored a full tree.
+  const session = makeIosSession(sessionName);
+  setSessionSnapshot(
+    session,
+    buildSnapshotState(snapshotPayload({ nodes: BEFORE_NODES }), { snapshotInteractiveOnly: true }),
+  );
+  activateCompleteRefFrame(session);
+  setSessionSnapshot(session, buildSnapshotState(snapshotPayload({ nodes: AFTER_NODES }), {}));
+  sessionStore.publish(sessionName, session);
+  mockCommandDispatch([AFTER_NODES]);
+
+  await dispatchGeneric({
+    sessionName,
+    sessionStore,
+    command: 'scroll',
+    positionals: ['down'],
+    flags: { ...SETTLE_FLAGS },
+  });
+
+  // #4486: the diff compares one view, so the interactive frame answers, not the full stored tree.
+  expect(settleObservationCalls[0]?.baseline.presentation?.interactiveOnly).toBe(true);
+  expect(settleObservationCalls[0]?.baseline.nodes).toEqual(
+    expect.arrayContaining([expect.objectContaining({ label: 'Continue' })]),
+  );
+});
+
 test('back --settle attaches the observation alongside the command result', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'generic-settle-back';

@@ -15,6 +15,7 @@ import {
   type SnapshotCommandOptionFields,
   type SnapshotNode,
   type SnapshotPreferredBackend,
+  type SnapshotPresentation,
 } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import {
@@ -72,6 +73,11 @@ export async function captureSelectorSnapshot(
     interactiveOnly?: boolean;
     includeHiddenContentHints?: boolean;
     preferredBackend?: SnapshotPreferredBackend;
+    /**
+     * The whole presentation to capture in, overriding `interactiveOnly`, `scope` and the command's
+     * depth and raw flags: a post-action read reproduces its baseline's view (#4486).
+     */
+    presentation?: SnapshotPresentation;
   } = {
     updateSession: true,
   },
@@ -82,11 +88,22 @@ export async function captureSelectorSnapshot(
   }
   const sessionName = options.session ?? 'default';
   const session = await runtime.sessions.get(sessionName);
+  const view = captureOptions.presentation;
   const result = await captureSnapshot(toBackendContext(runtime, options), {
-    interactiveOnly: captureOptions.interactiveOnly ?? false,
-    depth: options.depth,
-    scope: captureOptions.scope ?? options.scope,
-    raw: options.raw,
+    ...(view
+      ? {
+          interactiveOnly: view.interactiveOnly === true,
+          depth: view.depth,
+          scope: view.scope,
+          raw: view.raw,
+          ...(view.customActions === true ? { customActions: true } : {}),
+        }
+      : {
+          interactiveOnly: captureOptions.interactiveOnly ?? false,
+          depth: options.depth,
+          scope: captureOptions.scope ?? options.scope,
+          raw: options.raw,
+        }),
     includeRects: captureOptions.includeRects,
     ...(captureOptions.preferredBackend
       ? { preferredBackend: captureOptions.preferredBackend }

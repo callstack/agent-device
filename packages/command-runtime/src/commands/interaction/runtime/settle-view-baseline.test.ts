@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
+import type { AgentDeviceBackend, BackendSnapshotOptions } from '@agent-device/contracts/backend';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import type { SnapshotPresentation } from '@agent-device/kernel/snapshot';
 import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
@@ -10,67 +11,84 @@ import { createMemorySessionStore } from '../../../command-runtime/runtime-facto
 import { ref, selector } from './selector-read-utils.ts';
 import { createFakeClock } from './__tests__/settle-device-fixtures.ts';
 
-// #4486: a full `snapshot` keeps wrapper nodes the interactive view omits. A settle on its refs reads
-// the full tree too, so an unchanged screen reports no change and wrappers are never false removals.
-//
-// Budgets are injected (fake clock) — no real waiting.
+// #4486: a post-action comparison reads one view. A settle captures in its baseline's presentation,
+// the baseline is read in the agent's view (its ref frame's presentation), and verify and
+// `diff snapshot` compare only trees read in one presentation. Budgets are injected (fake clock).
 
-const DIALOG_LABELS = ['Device name', 'Cancel', 'OK'];
+const DIALOG = ['Device name', 'Cancel', 'OK'];
 
-function dialogNodes(labels: readonly string[], firstIndex = 0) {
-  return labels.map((label, index) => ({
-    index: firstIndex + index,
-    depth: firstIndex === 0 ? 0 : 1,
-    ...(firstIndex === 0 ? {} : { parentIndex: 0 }),
-    type: label === 'Device name' ? 'StaticText' : 'Button',
-    label,
-    rect: { x: 10, y: 100 + DIALOG_LABELS.indexOf(label) * 60, width: 200, height: 40 },
-    hittable: true,
-  }));
+function dialogNodes(labels: readonly string[], wrapper: boolean) {
+  const offset = wrapper ? 1 : 0;
+  return [
+    ...(wrapper
+      ? [
+          {
+            index: 0,
+            depth: 0,
+            type: 'Group',
+            label: 'Dialog',
+            rect: { x: 0, y: 0, width: 400, height: 800 },
+          },
+        ]
+      : []),
+    ...labels.map((label, index) => ({
+      index: offset + index,
+      depth: offset,
+      ...(wrapper ? { parentIndex: 0 } : {}),
+      type: label === 'Device name' ? 'StaticText' : 'Button',
+      label,
+      rect: { x: 10, y: 100 + index * 60, width: 200, height: 40 },
+      hittable: true,
+    })),
+  ];
 }
 
-/** The dialog as a full `snapshot` reads it: the wrapper the interactive view omits, then the dialog. */
-function fullDialogTree(): SnapshotState {
+/** The screen as each view reads it: the full tree keeps a wrapper the interactive view omits. */
+function screen(labels: readonly string[], presentation: SnapshotPresentation): SnapshotState {
+  const full = presentation.interactiveOnly !== true;
+  return { ...makeSnapshotState(dialogNodes(labels, full)), presentation };
+}
+
+const FULL: SnapshotPresentation = {};
+const INTERACTIVE: SnapshotPresentation = { interactiveOnly: true };
+
+function viewOf(options: BackendSnapshotOptions | undefined): SnapshotPresentation {
   return {
-    ...makeSnapshotState([
-      { index: 0, depth: 0, type: 'Group', rect: { x: 0, y: 0, width: 400, height: 800 } },
-      ...dialogNodes(DIALOG_LABELS, 1),
-    ]),
-    presentation: {},
+    ...(options?.interactiveOnly === true ? { interactiveOnly: true } : {}),
+    ...(options?.scope ? { scope: options.scope } : {}),
   };
 }
 
-function interactiveTree(labels: readonly string[]): SnapshotState {
-  return { ...makeSnapshotState(dialogNodes(labels)), presentation: { interactiveOnly: true } };
-}
-
-type Screen = { full: SnapshotState; interactive: SnapshotState };
-
-const DIALOG: Screen = { full: fullDialogTree(), interactive: interactiveTree(DIALOG_LABELS) };
-
 /**
- * A backend that answers each capture in the view it was asked for. `screens` is the screen before
- * the press and after it; `views` records the view of every capture taken after the press.
+ * A backend that answers every capture in the view it was asked for, as the daemon stamps it.
+ * `before` and `after` are the dialog labels on screen before and after the action; `views`
+ * records the view of every capture taken after it.
  */
-function createDevice(params: { refFrame: SnapshotState; before: Screen; after: Screen }) {
-  let pressed = false;
-  const views: Array<'full' | 'interactive'> = [];
+function createDevice(params: {
+  frame: SnapshotState;
+  before?: readonly string[];
+  after?: readonly string[];
+}) {
+  let acted = false;
+  const views: SnapshotPresentation[] = [];
   const device = createAgentDevice({
     backend: {
       platform: 'android',
       captureSnapshot: async (_context, options) => {
-        const screen = pressed ? params.after : params.before;
-        if (pressed) views.push(options?.interactiveOnly === true ? 'interactive' : 'full');
-        return { snapshot: options?.interactiveOnly === true ? screen.interactive : screen.full };
+        const view = viewOf(options);
+        if (acted) views.push(view);
+        return {
+          snapshot: screen(acted ? (params.after ?? DIALOG) : (params.before ?? DIALOG), view),
+        };
       },
       tap: async () => {
-        pressed = true;
+        acted = true;
         return { ok: true };
       },
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
     sessions: createMemorySessionStore([
-      { name: 'default', snapshot: params.refFrame, refFrameSnapshot: params.refFrame },
+      { name: 'default', snapshot: params.frame, refFrameSnapshot: params.frame },
     ]),
     policy: localCommandPolicy(),
     clock: createFakeClock(),
@@ -78,94 +96,74 @@ function createDevice(params: { refFrame: SnapshotState; before: Screen; after: 
   return { device, views };
 }
 
-function removedLabels(lines: Array<{ kind: string; text: string }> | undefined): string[] {
-  return (lines ?? []).filter((line) => line.kind === 'removed').map((line) => line.text);
-}
+const removed = (lines: Array<{ kind: string; text: string }> | undefined) =>
+  (lines ?? []).filter((line) => line.kind === 'removed').map((line) => line.text);
 
 test('a ref press after a full snapshot settles on the full tree and reports no false removals', async () => {
-  const { device, views } = createDevice({
-    refFrame: DIALOG.full,
-    before: DIALOG,
-    after: DIALOG,
-  });
+  const { device, views } = createDevice({ frame: screen(DIALOG, FULL) });
 
   const result = await device.interactions.press(ref('@e3'), { session: 'default', settle: {} });
 
-  assert.ok(views.length > 0 && views.every((view) => view === 'full'));
-  assert.deepEqual(result.settle?.diff?.summary, { additions: 0, removals: 0, unchanged: 4 });
-  // An unchanged screen still hands back refs to act on next, from the full-tree view.
-  assert.ok(result.settle?.tail?.some((entry) => entry.label === 'OK'));
+  assert.ok(views.length > 0 && views.every((view) => view.interactiveOnly !== true));
+  assert.equal(result.settle?.diff?.summary.removals, 0);
+  assert.equal(result.settle?.diff?.summary.additions, 0);
 });
 
-for (const [flag, presentation] of [
-  ['-s', { scope: 'Device name' }],
-  ['--actions', { customActions: true }],
-] as const) {
-  test(`a ref press after a full snapshot with ${flag} keeps the interactive settle view`, async () => {
-    const { device, views } = createDevice({
-      refFrame: { ...DIALOG.full, presentation },
-      before: DIALOG,
-      after: DIALOG,
-    });
-
-    await device.interactions.press(ref('@e3'), { session: 'default', settle: {} });
-
-    // The settle capture cannot reproduce that projection, so the frame is not a full-view baseline.
-    assert.ok(views.length > 0 && views.every((view) => view === 'interactive'));
-  });
-}
-
-test('a ref press after a full snapshot still reports what changed on the full tree', async () => {
-  const next = ['Next', 'Back'];
-  const { device } = createDevice({
-    refFrame: DIALOG.full,
-    before: DIALOG,
-    after: {
-      full: {
-        ...makeSnapshotState([
-          { index: 0, depth: 0, type: 'Group', rect: { x: 0, y: 0, width: 400, height: 800 } },
-          ...dialogNodes(next, 1),
-        ]),
-        presentation: {},
-      },
-      interactive: interactiveTree(next),
-    },
-  });
-
-  const result = await device.interactions.press(ref('@e3'), { session: 'default', settle: {} });
-
-  assert.equal(result.settle?.diff?.summary.additions, 2);
-  assert.equal(result.settle?.diff?.summary.removals, 3);
-  assert.ok(removedLabels(result.settle?.diff?.lines).some((text) => text.includes('Device name')));
-});
-
-test('a ref press after an interactive snapshot settles on the interactive view', async () => {
-  const titleGone = interactiveTree(['Cancel', 'OK']);
+test('a ref press after snapshot -i settles on the interactive view and lists what left', async () => {
   const { device, views } = createDevice({
-    refFrame: DIALOG.interactive,
-    before: DIALOG,
-    after: { full: DIALOG.full, interactive: titleGone },
+    frame: screen(DIALOG, INTERACTIVE),
+    after: ['Cancel', 'OK'],
   });
 
   const result = await device.interactions.press(ref('@e1'), { session: 'default', settle: {} });
 
-  assert.ok(views.length > 0 && views.every((view) => view === 'interactive'));
-  assert.deepEqual(removedLabels(result.settle?.diff?.lines).length, 1);
+  assert.ok(views.length > 0 && views.every((view) => view.interactiveOnly === true));
+  assert.deepEqual(removed(result.settle?.diff?.lines).length, 1);
 });
 
-test('a selector press settles on the interactive view', async () => {
-  const titleGone = interactiveTree(['Cancel', 'OK']);
+test('a ref press after a scoped snapshot settles in that scope', async () => {
   const { device, views } = createDevice({
-    refFrame: DIALOG.interactive,
-    before: DIALOG,
-    after: { full: DIALOG.full, interactive: titleGone },
+    frame: screen(DIALOG, { interactiveOnly: true, scope: 'Device name' }),
   });
 
-  const result = await device.interactions.press(selector('label=OK'), {
+  await device.interactions.press(ref('@e1'), { session: 'default', settle: {} });
+
+  assert.ok(views.length > 0 && views.every((view) => view.scope === 'Device name'));
+});
+
+test('a selector press resolved on the full tree still diffs in the ref frame view', async () => {
+  // `label=Dialog` names the wrapper only the full tree holds, so resolution falls back to it.
+  const { device, views } = createDevice({ frame: screen(DIALOG, INTERACTIVE) });
+
+  const result = await device.interactions.press(selector('label=Dialog'), {
     session: 'default',
     settle: {},
   });
 
-  assert.ok(views.length > 0 && views.every((view) => view === 'interactive'));
-  assert.ok(removedLabels(result.settle?.diff?.lines).some((text) => text.includes('Device name')));
+  assert.ok(views.length > 0 && views.every((view) => view.interactiveOnly === true));
+  assert.deepEqual(removed(result.settle?.diff?.lines), []);
+});
+
+test('verify after a full snapshot reads the full tree, so an unchanged screen reads unchanged', async () => {
+  const { device, views } = createDevice({ frame: screen(DIALOG, FULL) });
+
+  const result = await device.interactions.press(ref('@e3'), { session: 'default', verify: true });
+
+  assert.deepEqual(views, [FULL]);
+  assert.equal(result.evidence?.changedFromBefore, false);
+});
+
+test('diff snapshot -i after a full snapshot starts a baseline instead of listing the view change', async () => {
+  const { device } = createDevice({ frame: screen(DIALOG, FULL) });
+
+  const interactive = await device.capture.diffSnapshot({
+    session: 'default',
+    interactiveOnly: true,
+  });
+  assert.equal(interactive.baselineInitialized, true);
+  assert.deepEqual(interactive.summary, { additions: 0, removals: 0, unchanged: 3 });
+
+  const again = await device.capture.diffSnapshot({ session: 'default', interactiveOnly: true });
+  assert.equal(again.baselineInitialized, false);
+  assert.deepEqual(again.summary, { additions: 0, removals: 0, unchanged: 3 });
 });
