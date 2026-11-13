@@ -6,26 +6,25 @@ import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 
 import {
   IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS,
-  IOS_FOLDABLE_ORIENTATION_READ_TIMEOUT_MS,
   IOS_FOLDABLE_ORIENTATION_SETTLE_ATTEMPTS,
+  IOS_FOLDABLE_ORIENTATION_SETTLE_MS,
 } from '../core/config.ts';
-import { readAppleDeviceOrientation } from '../core/device-orientation.ts';
 import {
+  establishedLitPanel,
+  panelContentRotation,
   queryAppleDisplayInventory,
+  type AppleDeviceDisplay,
   type AppleDisplayInventory,
 } from '../core/display-inventory.ts';
 import { simulatorAddressFor } from '../core/simctl.ts';
-import { createFoldHelper } from './fold-helper.ts';
+import { createFoldHelper, type FoldHelper, type FoldableRotation } from './fold-helper.ts';
 import { appleFoldableFacts } from './runtime.ts';
 
 const UPSIDE_DOWN_UNSUPPORTED_HINT =
-  'A foldable simulator accepts portrait, landscape-left, and landscape-right. Its device-state control has no upside-down orientation.';
-
-const SCOPED_SET_UNSUPPORTED_HINT =
-  'CoreDevice resolves only simulators in the default device set, so the rotation of a foldable simulator in a scoped set cannot be verified. Rotate it in the default device set.';
+  'A foldable simulator accepts portrait, landscape-left, and landscape-right as rotation targets.';
 
 const ORIENTATION_UNVERIFIED_HINT =
-  'The simulator HID command completed, but CoreDevice did not report the new orientation. Read it with xcrun devicectl device orientation get --device <udid>, then retry.';
+  'The lit panel did not show the requested orientation, or the simulator never reported a single lit panel; the app in front may not support that orientation. Take a screenshot to see the screen, then retry.';
 
 /** Resolved panel counts are hardware facts, so each simulator is probed once per daemon. */
 const multiPanelByDevice = new Map<string, boolean>();
@@ -61,7 +60,9 @@ export async function isAppleFoldableSimulator(
   const known = multiPanelByDevice.get(device.id);
   if (known !== undefined) return known;
   const read = ++panelTableReads;
-  const inventory = await queryAppleDisplayInventory(device, { signal });
+  const inventory = await queryAppleDisplayInventory(device, {
+    signal,
+  });
   if (inventory.unresolved) return false;
   recordPanelTable(device, inventory, read);
   return inventory.multiScreen;
@@ -101,7 +102,23 @@ export async function readFoldablePanelTable(
   return inventory.multiScreen ? { kind: 'multi-panel', inventory } : { kind: 'single-panel' };
 }
 
-/** Rotates a foldable simulator through guest HID and verifies the rotation through CoreDevice. */
+/** iPhone Duo (iOS 27.3) renders picker + offset: outer 0 degrees, inner +90. */
+const PANEL_PICKERS = {
+  outer: {
+    portrait: 'portrait',
+    'landscape-left': 'landscape-left',
+    'landscape-right': 'landscape-right',
+  },
+  inner: {
+    portrait: 'landscape-left',
+    'landscape-left': 'portrait-upside-down',
+    'landscape-right': 'portrait',
+  },
+} as const;
+
+type LitPanel = { panel: AppleDeviceDisplay; rotation: DeviceRotation };
+
+/** Dispatches through guest HID and confirms from the lit panel in either simulator set. */
 export async function setAppleFoldableOrientation(
   device: DeviceInfo,
   rotation: DeviceRotation,
@@ -116,41 +133,102 @@ export async function setAppleFoldableOrientation(
       hint: UPSIDE_DOWN_UNSUPPORTED_HINT,
     });
   }
-  if (simulatorAddressFor(device).simulatorSetPath) {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      `${device.name} cannot rotate in a scoped simulator set`,
-      {
-        deviceId: device.id,
-        reason: 'unsupported-device-scope',
-        hint: SCOPED_SET_UNSUPPORTED_HINT,
-      },
-    );
-  }
-  await createFoldHelper(device).rotate(rotation, signal);
-  emitDiagnostic({
-    level: 'info',
-    phase: 'apple_foldable_orientation_dispatched',
-    data: { deviceId: device.id, orientation: rotation },
-  });
-  const read = { signal, timeoutMs: IOS_FOLDABLE_ORIENTATION_READ_TIMEOUT_MS };
-  // This read can return the orientation CoreDevice sampled before the dispatch.
-  await readAppleDeviceOrientation(device, read);
-  let observed: DeviceRotation | undefined;
+  const helper = createFoldHelper(device);
+  let dispatchedDisplayId: number | undefined;
+  let reading: LitPanel | undefined;
   for (let attempt = 1; attempt <= IOS_FOLDABLE_ORIENTATION_SETTLE_ATTEMPTS; attempt += 1) {
     signal?.throwIfAborted();
-    observed = await readAppleDeviceOrientation(device, read);
-    if (observed === rotation) return { orientation: rotation };
+    reading = await readLitPanel(device, helper, { signal });
+    if (reading?.rotation === rotation) return { orientation: rotation };
+    if (reading && reading.panel.displayId !== dispatchedDisplayId) {
+      const mapping = reading.panel.primary ? PANEL_PICKERS.outer : PANEL_PICKERS.inner;
+      const value = mapping[rotation];
+      await helper.rotate(value, signal);
+      dispatchedDisplayId = reading.panel.displayId;
+      emitDiagnostic({
+        level: 'info',
+        phase: 'apple_foldable_orientation_dispatched',
+        data: {
+          deviceId: device.id,
+          orientation: value,
+          requestedOrientation: rotation,
+          scopedSet: Boolean(simulatorAddressFor(device).simulatorSetPath),
+          attempt,
+          observedOrientation: reading.rotation,
+          litDisplay: reading.panel.name,
+        },
+      });
+    }
+    await settleRotation();
   }
-  throw new AppError(
+  reading = await readLitPanel(device, helper, { signal, requireTable: true });
+  if (reading?.rotation === rotation) return { orientation: rotation };
+  throw unverifiedError(device, rotation, reading);
+}
+
+/** An undecided final read reports no rotation, even if an earlier read named one. */
+function unverifiedError(
+  device: DeviceInfo,
+  rotation: FoldableRotation,
+  reading: LitPanel | undefined,
+): AppError {
+  return new AppError(
     'COMMAND_FAILED',
-    `${device.name} did not rotate to ${rotation}: CoreDevice reports ${observed ?? 'no orientation'}`,
+    `${device.name} did not confirm rotation to ${rotation}: ${
+      reading
+        ? `the lit panel shows ${reading.rotation}`
+        : 'the last panel table read named no single lit panel'
+    }`,
     {
       deviceId: device.id,
       requestedOrientation: rotation,
-      ...(observed === undefined ? {} : { observedOrientation: observed }),
+      ...(reading
+        ? {
+            observedOrientation: reading.rotation,
+            rawPanelOrientation: reading.panel.currentOrientation,
+          }
+        : {}),
       reason: 'orientation-unverified',
       hint: ORIENTATION_UNVERIFIED_HINT,
     },
   );
+}
+
+/**
+ * The one lit panel and the rotation it shows, from one fresh panel-table read, selected by the
+ * display inventory's {@link establishedLitPanel}. Anything less decided — an unreadable table,
+ * an incomplete one, no lit panel or several, a panel of unknown power, an unrecognized `rotN` —
+ * is no reading:
+ * the rotation loop must not confirm or dispatch from a panel that is not showing.
+ * On iPhone Duo the table reports both panels lit for a few seconds after a pose change in either
+ * direction, so the first reads after a fold or an unfold are no reading by design.
+ */
+async function readLitPanel(
+  device: DeviceInfo,
+  helper: FoldHelper,
+  options: { signal?: AbortSignal; requireTable?: boolean },
+): Promise<LitPanel | undefined> {
+  const inventory = await queryAppleDisplayInventory(device, {
+    signal: options.signal,
+    source: 'guest',
+    foldHelper: helper,
+  });
+  if (inventory.unresolved && options.requireTable) {
+    throw new AppError('COMMAND_FAILED', 'The guest panel table could not be read', {
+      deviceId: device.id,
+      reason: 'orientation-panel-table-unavailable',
+      hint: 'The fold helper could not provide a usable display table. Check the apple_display_inventory_unresolved diagnostic for the helper or display-table failure, then retry.',
+    });
+  }
+  const panel = establishedLitPanel(inventory);
+  if (!panel) return undefined;
+  const rotation = panelContentRotation(panel.currentOrientation);
+  return rotation === undefined ? undefined : { panel, rotation };
+}
+
+/** The gap a dispatched picker event needs before the panel table shows its effect. */
+async function settleRotation(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, IOS_FOLDABLE_ORIENTATION_SETTLE_MS);
+  });
 }

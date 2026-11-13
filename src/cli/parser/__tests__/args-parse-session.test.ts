@@ -811,6 +811,8 @@ test('parseArgs accepts proxy command flags', () => {
       '4310',
       '--daemon-auth-token',
       'proxy-secret',
+      '--public-origin',
+      'https://public.example:8443',
     ],
     { strictFlags: true },
   );
@@ -818,6 +820,7 @@ test('parseArgs accepts proxy command flags', () => {
   assert.equal(parsed.flags.stateDir, './tmp/ad-state');
   assert.equal(parsed.flags.proxyHost, '0.0.0.0');
   assert.equal(parsed.flags.proxyPort, 4310);
+  assert.equal(parsed.flags.publicOrigin, 'https://public.example:8443');
   assert.equal(parsed.flags.daemonAuthToken, 'proxy-secret');
 });
 

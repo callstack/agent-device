@@ -130,6 +130,52 @@ than silently applied:
 { "command": "appState", "appBundleId": "com.example.app" }
 ```
 
+```json
+{ "command": "backInApp", "appBundleId": "com.example.app" }
+```
+
+`backInApp` is the only back command. On iOS the runner answers it with the left-edge back swipe and
+verifies a change of the app's screen. Its failure codes are:
+
+| Code | When | Sent |
+| --- | --- | --- |
+| `APP_SCREEN_WINDOW_UNRESOLVED`, `APP_SCREEN_UNRESOLVED`, `APP_SCREEN_CAPTURE_UNRENDERABLE`, `APP_SCREEN_OFF_LIT_PANEL` | The screen could not be sampled before the swipe. | Nothing |
+| `BACK_SWIPE_NOT_DISPATCHED` | The swipe was refused before any touch went down, or the platform has no back gesture (visionOS; the daemon refuses it first). | Nothing |
+| `BACK_SWIPE_NO_CHANGE` | The swipe was sent and the sampled grid (48×96 grayscale cells, with the top 7 rows always left out; in portrait they hold the status bar and Dynamic Island, and in landscape the iPhone status bar is hidden and the Dynamic Island sits at a side edge, outside those rows) changed in at most 1% of the remaining cells by more than 24 of 256 levels. | The swipe |
+| `BACK_SWIPE_UNVERIFIED` | The swipe may have run; the outcome is unknown. | Possibly the swipe |
+
+The settle window is a run of samples taken 0.25 s apart that agree for as long as the gap the
+swipe will be credited across: a contact allowance, one 0.25 s delay, and the slowest capture seen
+while settling. A slow host therefore settles for longer. The swipe is then resolved up to its
+contact, and one more sample, taken right before the swipe, must still match the run:
+
+| Platform | Resolved before the last sample | Left in the gap | Contact allowance |
+| --- | --- | --- | --- |
+| Simulator | the edge-touch plan, its display, and the HID touchscreen sender | the 100 ms edge contact | 0.2 s |
+| Device | the synthesized fling plan (2 pt inside the leading edge to 0.9 of the width, no hold), with every tree and window read it needs | the 200 ms fling | 0.4 s |
+
+On both, every tree and window read happens during that preparation, before the just-before sample.
+
+Settling takes at most 8 samples, so the wait before the swipe is at most 1.75 s of delays plus
+eight captures, then the preparation and the last sample: about 2.6 s with the 0.1 s captures of a
+local simulator, and about 5 s with the 0.4 s captures measured on one physical iPhone (iPhone 17 Pro,
+iOS 27.0.1; https://github.com/callstack/agent-device/pull/4460#issuecomment-6828546541). Usually a still screen
+settles after 3 samples.
+
+Only a change from the last sample to the sample after the swipe counts, and only when the time
+between those two does not exceed the time the screen had been still; otherwise the result is
+`BACK_SWIPE_UNVERIFIED`. Then the swipe may or may not have navigated: run `snapshot` to see the
+current screen before acting again. A screen that animates on its own more slowly than the settle
+window can still be misread as a back navigation; any finite window has that limit, so also run
+`snapshot` after `back` on a screen with auto-advancing content.
+
+Each iOS back logs one runner line, `AGENT_DEVICE_RUNNER_BACK_SWIPE_VERIFICATION`, on every exit, with its
+`outcome` (`performed`, `refused`, `unconfirmed`, or `error` for a thrown failure), `code`, `changed`, `stableMs`, `justBeforeToAfterMs`, `gestureMs`, `maxCaptureMs`,
+`settleSamples`, and `settled`.
+
+The `backSystem` command was removed (#4460). This protocol carries no version: the daemon and the runner are built from the same
+agent-device version, and a configured `iosXctestrunFile` must be too, so no peer still sends it.
+
 `appState` answers `data.applicationState` with the named app's `XCUIApplication.State` by name
 (`runningForeground`, `runningBackground`, `runningBackgroundSuspended`, `notRunning`, `unknown`).
 It is a lifecycle read, so the activation preflight is skipped and the state reported is the one
@@ -171,6 +217,18 @@ Its shape is `{kind: "reported" | "derived", rect: {x, y, width, height}}` or
 `{kind: "missing", reason: "not-provided" | "invalid"}`.
 `derived` and `missing` establish no screen origin.
 A root box used to validate presented nodes does not upgrade this evidence.
+
+A synthesized long press, scroll, or planned gesture reports how far it got; on iOS the CLI `swipe` is
+a planned fling `gesture` that runs as a synthesized drag, so it reports the same way.
+`SYNTHESIZED_GESTURE_NOT_DISPATCHED` means the iOS event synthesis refused before its event record was
+handed to XCTest, so the command sent nothing. It also covers a planned gesture refused on iOS while
+its window or display is resolved (the window cannot be named, or the sole display cannot be
+measured), before any synthesis. Any other refusal keeps `UNSUPPORTED_OPERATION`. `SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN` means it failed after its event
+record was handed to XCTest. That is not confirmed delivery: the record can still fail before its
+events run. The gesture may have run, so the runner does not fall back to an XCTest gesture that
+would repeat it. A sequence long-press step reports the same two codes as the step's `errorCode`. The runner does not
+report a dispatch for the whole sequence: the daemon derives it from the step code when
+`completedSteps` is 0, and reports `dispatched: unknown` once an earlier step completed.
 
 ## Maintenance Rules
 

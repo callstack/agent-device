@@ -286,11 +286,11 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
 const appStateCommandDescription =
   'Show foreground app/activity (Android and HarmonyOS; iOS and macOS answer per session)';
 const backCommandDescription =
-  'Navigate back in the app or through system navigation. Use in-app for the app navigation stack and system when the platform back behavior is required. On iOS, a single-screen iPhone or an iPad whose app provably fills its screen can use a top-leading tap when the app tree is unreadable, with before/after visual verification. A capture failure reports an unknown outcome.';
+  'Navigate back in the app or through system navigation. Use in-app for the app navigation stack and system when the platform back behavior is required. On iOS both modes swipe from the left edge and succeed only when the app screen changes. Reason back_swipe_no_change: the swipe was sent and the screen did not change; press the visible back or close control. Reason back_swipe_unverified: the swipe may or may not have navigated, because the screen kept changing before it or could not be sampled after it; check with snapshot. Reason back_swipe_not_dispatched, or a screen that cannot be sampled before the swipe, means nothing was sent. An app with a left-edge drawer may open the drawer instead. Press a visible back or close control by its ref directly.';
 const homeCommandDescription =
   'Send the selected device to its home screen. This leaves the app session open but moves the foreground away from the app.';
 const orientationCommandDescription =
-  'Set device orientation on iOS and Android. auto hands rotation back to the sensor on ADB-backed Android (local and Limrun); other backends refuse it. A foldable iPhone simulator (iPhone Duo) refuses portrait-upside-down, and refuses every rotation in a scoped simulator set.';
+  'Set device orientation on iOS and Android. auto hands rotation back to the sensor on ADB-backed Android (local and Limrun); other backends refuse it. In both default and scoped simulator sets, an iPhone Duo classified with more than one integrated panel refuses portrait-upside-down and rotates through the fold helper; it succeeds only when the lit panel shows the requested orientation, otherwise it fails with orientation-unverified, or orientation-panel-table-unavailable when the final guest panel table cannot be read. A simulator classified with one panel, or whose first classification read is unresolved, uses the standard runner rotation.';
 const foldGuidance = {
   hingeEvent: 'simulator HID hinge event',
   permissions: 'Device Hub and host Accessibility permission are not required.',

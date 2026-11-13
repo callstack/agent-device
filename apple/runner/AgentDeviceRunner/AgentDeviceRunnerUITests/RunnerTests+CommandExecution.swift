@@ -2,9 +2,9 @@ import XCTest
 import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
-  private func refusedTapResponse(_ message: String, hint: String?) -> Response {
+  private func refusedTapResponse(_ refusal: RunnerInteractionOutcome) -> Response {
     clearRememberedTextEntryTap()
-    return unsupportedResponse(message: message, hint: hint)
+    return refusalResponse(refusal)
   }
 
   /// Runs `command` against its prepared app; a thrown lit-panel refusal answers it (ADR 0025).
@@ -26,6 +26,15 @@ extension RunnerTests {
       return refusal.response
     } catch let refusal as RunnerCoordinateRefusal {
       return unsupportedResponse(message: refusal.message, hint: refusal.hint)
+    } catch let unknown as RunnerGestureOutcomeUnknown {
+      return Response(
+        ok: false,
+        error: ErrorPayload(
+          code: RunnerWireErrorCode.synthesizedGestureOutcomeUnknown,
+          message: unknown.message,
+          hint: unknown.hint
+        )
+      )
     }
   }
 
@@ -125,8 +134,8 @@ extension RunnerTests {
               )
             case .xctestFallback(let message, let hint):
               fallback = .coordinateTap(message, hint: hint)
-            case .refused(_, let message, let hint):
-              return refusedTapResponse(message, hint: hint)
+            case .refused(_, let refusal):
+              return refusedTapResponse(refusal)
             }
           }
           let (timing, outcome) = try performGesture(activeApp) {
@@ -192,8 +201,8 @@ extension RunnerTests {
             return gestureResponse(message: "tapped", timing: timing)
           case .xctestFallback(let message, let hint):
             fallback = .coordinateTap(message, hint: hint)
-          case .refused(_, let message, let hint):
-            return refusedTapResponse(message, hint: hint)
+          case .refused(_, let refusal):
+            return refusedTapResponse(refusal)
           }
         }
         let touchFrame = try resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
@@ -252,8 +261,8 @@ extension RunnerTests {
         return gestureResponse(message: "long pressed", timing: timing, frame: .touch(touchFrame))
       case .xctestFallback(let message, let hint):
         fallback = GestureFallback(strategy: "xctest-coordinate-long-press", message: message, hint: hint)
-      case .refused(_, let message, let hint):
-        return unsupportedResponse(message: message, hint: hint)
+      case .refused(_, let refusal):
+        return refusalResponse(refusal)
       }
 #else
       fallback = nil
@@ -539,24 +548,12 @@ extension RunnerTests {
       )
 #endif
     case .backInApp:
-      switch try tapInAppBackControl(app: activeApp) {
+      switch try performInAppBack(app: activeApp) {
       case .performed:
         return Response(ok: true, data: DataPayload(message: "backInApp"))
-      case .unavailable:
-        return Response(
-          ok: false,
-          error: ErrorPayload(message: "in-app back control is not available")
-        )
-      case .unverified(let error):
-        // The fallback gesture ran but the display refused to be sampled. Reporting the typed refusal
-        // keeps an unknown outcome from being laundered into a definitive "no back control" (#2728).
+      case .refused(let error), .unconfirmed(let error):
         return Response(ok: false, error: error)
       }
-    case .backSystem:
-      if try performSystemBackAction(app: activeApp) {
-        return Response(ok: true, data: DataPayload(message: "backSystem"))
-      }
-      return Response(ok: false, error: ErrorPayload(message: "system back is not available"))
     case .home:
       pressHomeButton()
       return Response(ok: true, data: DataPayload(message: "home"))

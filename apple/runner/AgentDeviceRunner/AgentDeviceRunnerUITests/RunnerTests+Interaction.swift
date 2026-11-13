@@ -12,6 +12,14 @@ struct RunnerCoordinateRefusal: Error {
   let hint: String?
 }
 
+/// A synthesized gesture that failed after its events reached XCTest, so it may have run. Thrown
+/// rather than returned so that no XCTest fallback repeats it: a fallback would press a second time.
+/// `executeOnMainPrepared` answers it as `SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN`.
+struct RunnerGestureOutcomeUnknown: Error {
+  let message: String
+  let hint: String?
+}
+
 private struct RunnerUnsupportedOperationError: LocalizedError {
   let message: String
 
@@ -90,33 +98,121 @@ extension RunnerTests {
     let usedNonHittableFallback: Bool
   }
 
-  func performBackGesture(app: XCUIApplication) throws {
-    if pressTvRemote(.menu) {
-      return
+#if os(iOS)
+  /// Whether a touch reached the device. `.notSent` refused before any touch-down; `.interrupted`
+  /// began a contact that did not complete.
+  enum TouchDispatch {
+    case sent
+    case notSent(message: String, hint: String?)
+    case interrupted(message: String, hint: String?)
+
+    /// A synthesized gesture's result: no failure is `.sent`; a failure before the record was handed
+    /// to XCTest touched nothing; one after it may have run.
+    init(synthesisFailure failure: String?, dispatched: Bool) {
+      guard let failure else {
+        self = .sent
+        return
+      }
+      self = dispatched ? .interrupted(message: failure, hint: nil) : .notSent(message: failure, hint: nil)
     }
-    try performCoordinateBackGesture(app: app)
+
   }
 
-  private func performCoordinateBackGesture(app: XCUIApplication) throws {
-#if !os(tvOS)
-    let target = try normalizedOffsetAnchor(app: app)
-    let start = target.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5))
-    let end = target.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
-    start.press(forDuration: 0.05, thenDragTo: end)
-#endif
+  /// A gesture resolved up to its touch, so the time between the sample taken just before it and its
+  /// contact holds only the contact. `.notSent` refused before anything was sent.
+  enum PreparedTouch {
+    case ready(@MainActor () throws -> TouchDispatch)
+    case notSent(message: String, hint: String?)
+
+    /// A refusal raised before any touch: an unsupported surface, or a synthesis refusal before
+    /// hand-off. Either way nothing was sent. The switch is exhaustive, so a new refusal case must be
+    /// handled here at compile time instead of trapping at run time.
+    init(notSent refusal: RunnerInteractionOutcome) {
+      switch refusal {
+      case .performed:
+        preconditionFailure("a performed gesture is not a refusal before dispatch")
+      case .unsupported(let message, let hint), .notDispatched(let message, let hint):
+        self = .notSent(message: message, hint: hint)
+      }
+    }
   }
 
-  func performSystemBackAction(app: XCUIApplication) throws -> Bool {
-#if os(macOS)
-    return false
+  /// The left-edge back swipe across the context's screen route, resolved up to its contact. A
+  /// simulator sends it as one edge-masked touch at `backSwipeEndpoints`; a device has no such touch
+  /// and takes `prepareDeviceBackFling`.
+  @MainActor
+  func prepareBackGesture(app: XCUIApplication, context: SynthesizedCoordinateContext) throws -> PreparedTouch {
+#if targetEnvironment(simulator)
+    return try prepareScreenEdgeBackSwipe(app: app, surface: context.geometry.windowOnScreen.rect)
 #else
-    if pressTvRemote(.menu) {
-      return true
-    }
-    try performBackGesture(app: app)
-    return true
+    return try prepareDeviceBackFling(app: app, context: context)
 #endif
   }
+
+  /// A one-pointer fling from `start` to `end` across `surface`, shaped as the host planner shapes
+  /// one; `contactOrigin` asks for a screen-edge touch.
+  static func backFlingPlan(
+    from start: CGPoint,
+    to end: CGPoint,
+    durationMs: Double,
+    across surface: CGRect,
+    contactOrigin: String?
+  ) -> RunnerGesturePlan {
+    RunnerGesturePlan(
+      topology: "single",
+      intent: "fling",
+      executionProfile: "endpoint-hold",
+      contactOrigin: contactOrigin,
+      durationMs: durationMs,
+      viewport: RunnerGestureViewport(
+        x: Double(surface.minX), y: Double(surface.minY),
+        width: Double(surface.width), height: Double(surface.height)
+      ),
+      pointers: [
+        RunnerGesturePointer(pointerId: 0, samples: [
+          RunnerGestureSample(offsetMs: 0, point: RunnerGesturePoint(x: Double(start.x), y: Double(start.y))),
+          RunnerGestureSample(offsetMs: durationMs, point: RunnerGesturePoint(x: Double(end.x), y: Double(end.y))),
+        ]),
+      ]
+    )
+  }
+
+  /// The back gesture a device takes: a hold-free 200 ms fling from 2 pt inside the leading edge to
+  /// 0.9 of the width at mid-height, synthesized on the context's screen route, so it is safe on a
+  /// tree XCTest cannot serialize (#4221). On an iPhone 17 Pro it popped Settings > General and a header-less React Native
+  /// screen 5 times in 5 each, where XCTest's press-and-drag, which holds at the edge for at least
+  /// 0.1 s and then moves at 500 px/s, missed 2 in 10. The plan and every tree and window read it
+  /// needs are resolved here, so the returned dispatch runs only the fling.
+  static let deviceBackFlingDurationMs = 200.0
+
+  @MainActor
+  func prepareDeviceBackFling(app: XCUIApplication, context: SynthesizedCoordinateContext) throws -> PreparedTouch {
+    let surface = context.geometry.windowOnScreen.rect
+    let plan = Self.backFlingPlan(
+      from: CGPoint(x: surface.minX + 2, y: surface.midY),
+      to: CGPoint(x: surface.minX + surface.width * 0.9, y: surface.midY),
+      durationMs: Self.deviceBackFlingDurationMs,
+      across: surface,
+      contactOrigin: nil
+    )
+    let planned: NativePlannedGesture
+    switch try nativePlannedGesture(app: app, plan: plan, gesture: "back drag") {
+    case .resolved(let resolved): planned = resolved
+    case .refused(let outcome): return PreparedTouch(notSent: outcome)
+    }
+    return .ready {
+      var dispatched: ObjCBool = false
+      let failure = RunnerSynthesizedGesture.synthesizeGesture(
+        withApplication: app,
+        resolvedWindow: planned.context.resolvedWindow,
+        interfaceOrientation: planned.orientation,
+        pointerSamples: planned.pointerSamples,
+        dispatched: &dispatched
+      )
+      return TouchDispatch(synthesisFailure: failure, dispatched: dispatched.boolValue)
+    }
+  }
+#endif
 
   func performAppSwitcherGesture(app: XCUIApplication) throws {
     if pressTvRemote(.home) {
@@ -564,8 +660,11 @@ extension RunnerTests {
     switch try performSynthesizedTapGesture(app: app, x: x, y: y, context: context) {
     case .performed:
       return .performed
-    case .xctestFallback(let message, let hint), .refused(_, let message, let hint):
+    case .xctestFallback(let message, let hint):
       throw RunnerCoordinateRefusal(message: message, hint: hint)
+    case .refused(_, let refusal):
+      let text = refusal.refusalText
+      throw RunnerCoordinateRefusal(message: text?.message ?? "synthesized tap refused", hint: text?.hint)
     }
   }
 

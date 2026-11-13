@@ -20,7 +20,7 @@ React Native dev loop:
   For "start from screen X" flows, prefer open --relaunch before the first snapshot so the app does not reuse a prior in-progress navigation state.
   JS-only change with Metro or Re.Pack connected:
     agent-device metro reload
-    agent-device find "Home"
+    agent-device wait text "Home"
   Do not use agent-device reload. Use open --relaunch for native startup reset.
   Android RN/Expo/Re.Pack dev server: direct Android localhost URL opens with a port auto-configure host reachability. For app/package launches, run metro prepare when the app cannot reach the local dev server.
   Verify Metro/Re.Pack from the same host context that owns the dev server. If a sandboxed shell cannot curl localhost:8081/status but an unrestricted host shell can, the dev server is running and the sandbox probe is not authoritative.

@@ -467,8 +467,8 @@ export const cloud = {
       icon: 'network',
       label: 'Remote',
       title: 'On a device host',
-      body: 'Run the agent on Linux or in a cloud workspace and execute on the Mac or Linux host that has the devices, through the remote proxy.',
-      cmd: 'agent-device proxy --port 4310',
+      body: 'Start a tunnel to the device host, then pass its public HTTPS origin with --public-origin. The flag is required when the tunnel terminates TLS.',
+      cmd: 'agent-device proxy --port 4310 --public-origin https://example.trycloudflare.com',
       href: docs.proxy,
     },
     {

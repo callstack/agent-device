@@ -114,6 +114,21 @@ test('every mode addresses the UDID inside its scoped simulator set', async () =
   ]);
 });
 
+test('rotate dispatches every picker value, upside-down included', async () => {
+  const { calls } = await withHelper(scopedDuo, { stdout: '', exitCode: 0 }, async (helper) => {
+    await helper.rotate('portrait');
+    await helper.rotate('landscape-left');
+    await helper.rotate('landscape-right');
+    await helper.rotate('portrait-upside-down');
+  });
+  expect(calls.map((call) => call.args.slice(-2))).toEqual([
+    ['rotate', 'portrait'],
+    ['rotate', 'landscape-left'],
+    ['rotate', 'landscape-right'],
+    ['rotate', 'portrait-upside-down'],
+  ]);
+});
+
 test('reads one guest hinge sample without sending HID', async () => {
   const { value, calls } = await withHelper(
     scopedDuo,

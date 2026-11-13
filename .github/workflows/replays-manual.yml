@@ -46,6 +46,9 @@ jobs:
           install: 'false'
           require-artifact: 'true'
 
+      - name: Setup Android system image
+        uses: ./.github/actions/setup-android-system-image
+
       - name: Mark Android emulator setup complete
         id: android-setup
         run: echo "seconds=$(date +%s)" >> "$GITHUB_OUTPUT"

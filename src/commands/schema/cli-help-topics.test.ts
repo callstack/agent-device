@@ -188,7 +188,7 @@ test('usageForCommand resolves workflow help topic', async () => {
   );
   assert.match(help, /open -> snapshot -i -> settle -> verify -> close loop/);
   assert.match(help, /type never takes --settle/);
-  assert.match(help, /snapshot\/get\/is\/find answer read-only questions/);
+  assert.match(help, /snapshot\/get\/is answer read-only questions/);
   assert.match(help, /--settle confirms local UI quieted/);
   assert.match(help, /wait text "Expected result" or wait <selector> instead of polling/);
   assert.match(help, /strict disappearance uses wait absent <selector>/);

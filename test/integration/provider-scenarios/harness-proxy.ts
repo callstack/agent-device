@@ -1,6 +1,12 @@
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import http from 'node:http';
-import { createDaemonProxyServer, type DaemonProxyAuthenticate } from '@agent-device/proxy';
+import https from 'node:https';
+import {
+  createDaemonProxy,
+  createDaemonProxyRequestListener,
+  createDaemonProxyServer,
+  type DaemonProxyAuthenticate,
+} from '@agent-device/proxy';
 import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.fixtures.ts';
 import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit';
 import {
@@ -51,15 +57,19 @@ export type ProviderScenarioProxyOptions =
 
 export async function createProviderScenarioProxy(
   daemon: ProviderScenarioHarness,
-  options: ProviderScenarioProxyOptions,
+  options: ProviderScenarioProxyOptions & { tls?: https.ServerOptions },
 ): Promise<ProviderScenarioProxy> {
   const upstream = createRecordingUpstreamServer(daemon.httpPort);
   const upstreamPort = await listenOnLoopback(upstream.server);
-  const proxy = createDaemonProxyServer({
+  const { tls, ...authOptions } = options;
+  const proxyOptions = {
     upstreamBaseUrl: `http://127.0.0.1:${upstreamPort}`,
     upstreamToken: daemon.token,
-    ...options,
-  });
+    ...authOptions,
+  };
+  const proxy = tls
+    ? https.createServer(tls, createDaemonProxyRequestListener(createDaemonProxy(proxyOptions)))
+    : createDaemonProxyServer(proxyOptions);
   let proxyPort: number;
   try {
     proxyPort = await listenOnLoopback(proxy);
@@ -69,18 +79,40 @@ export async function createProviderScenarioProxy(
     throw error;
   }
 
-  const baseUrl = `http://127.0.0.1:${proxyPort}/agent-device`;
+  const baseUrl = `${tls ? 'https' : 'http'}://127.0.0.1:${proxyPort}/agent-device`;
   let closed = false;
   const requestRpc: ProviderScenarioProxy['requestRpc'] = async (authToken, payload) => {
-    const response = await fetch(`${baseUrl}/rpc`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${authToken}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(payload),
+    return await new Promise((resolve, reject) => {
+      const transport = tls ? https : http;
+      const request = transport.request(
+        `${baseUrl}/rpc`,
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${authToken}`,
+            'content-type': 'application/json',
+          },
+          ...(tls ? { ca: tls.ca ?? tls.cert } : {}),
+        },
+        (response) => {
+          const chunks: Buffer[] = [];
+          response.on('data', (chunk: Buffer) => chunks.push(chunk));
+          response.on('error', reject);
+          response.on('end', () => {
+            try {
+              resolve({
+                statusCode: response.statusCode ?? 0,
+                json: JSON.parse(Buffer.concat(chunks).toString('utf8')),
+              });
+            } catch (error) {
+              reject(error);
+            }
+          });
+        },
+      );
+      request.on('error', reject);
+      request.end(JSON.stringify(payload));
     });
-    return { statusCode: response.status, json: await response.json() };
   };
 
   return {
@@ -170,17 +202,27 @@ function allowlistedUpstreamTarget(
   }
 
   const route = target.pathname;
-  const method = request.method;
-  const isRpc = method === 'POST' && route === '/rpc';
-  const isDiagnostics =
-    method === 'GET' &&
-    /^\/sessions\/(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+\/requests\/(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+\/diagnostics$/.test(
-      route,
-    );
-  const isArtifactList = method === 'GET' && (route === '/artifacts' || route === '/artifacts/');
-  const isArtifact = method === 'GET' && /^\/artifacts\/[0-9a-f-]+$/i.test(route);
-  if (!isRpc && !isDiagnostics && !isArtifactList && !isArtifact) return undefined;
+  if (!isAllowedUpstreamRoute(request.method, route)) return undefined;
   return { path: route, route };
+}
+
+function isAllowedUpstreamRoute(method: string | undefined, route: string): boolean {
+  switch (method) {
+    case 'POST':
+      return ['/rpc', '/upload/preflight', '/upload/finalize'].includes(route);
+    case 'PUT':
+      return /^\/upload\/direct\/[0-9a-f-]+$/i.test(route);
+    case 'GET':
+      return (
+        ['/artifacts', '/artifacts/'].includes(route) ||
+        /^\/artifacts\/[0-9a-f-]+$/i.test(route) ||
+        /^\/sessions\/(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+\/requests\/(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+\/diagnostics$/.test(
+          route,
+        )
+      );
+    default:
+      return false;
+  }
 }
 
 async function readRequestBody(request: http.IncomingMessage): Promise<Buffer> {
@@ -276,7 +318,14 @@ function sendUpstreamResponse(
   upstreamResponse: RecordingUpstreamResponse,
 ): void {
   response.statusCode = upstreamResponse.statusCode;
-  for (const name of ['content-type', 'content-disposition', 'content-length', 'x-request-id']) {
+  for (const name of [
+    'content-type',
+    'content-disposition',
+    'content-length',
+    'x-request-id',
+    'range',
+    'x-upload-offset',
+  ]) {
     const value = upstreamResponse.headers[name];
     if (value) response.setHeader(name, value);
   }

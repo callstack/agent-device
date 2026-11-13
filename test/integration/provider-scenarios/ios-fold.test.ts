@@ -43,17 +43,19 @@ function guestHingeReading(angleDegrees: number): string {
   return `${JSON.stringify({ version: 1, angleDegrees, angleValid: true })}\n`;
 }
 
-/** Writes the `devicectl … displays --json-output <path>` result both fold fakes below answer. */
-function writeDisplayInventoryFixture(jsonOutputPath: string): void {
+/** The fold helper's `panels` mode output for a Duo with its inner panel lit. */
+function guestPanelReading(): string {
   const displays = [0, 1].map((displayId) => ({
     name: `LCD-${displayId}`,
     displayId,
     nativeSize: [2007, 2853],
     pointScale: 3,
     type: { integrated: {} },
-    active: displayId === 1,
+    primary: displayId === 0,
+    backlightState: displayId === 1 ? 'activeOn' : 'off',
+    currentOrientation: 'rot0',
   }));
-  fs.writeFileSync(jsonOutputPath, JSON.stringify({ result: { displays } }));
+  return `${JSON.stringify({ version: 1, displays })}\n`;
 }
 
 /**
@@ -82,6 +84,11 @@ test('timed fold keyframes reach simulator HID through the public client and dae
   const ok = { stdout: '', stderr: '', exitCode: 0 };
   let angle = 0;
   const tool = createRecordingAppleToolProvider({
+    devicectl: async (args) => {
+      assert.deepEqual(args.slice(0, 3), ['device', 'info', 'displays']);
+      fs.writeFileSync(args.at(-1)!, JSON.stringify({ result: JSON.parse(guestPanelReading()) }));
+      return ok;
+    },
     simctl: async (args, options) => {
       if (args[0] === 'list') {
         return {
@@ -97,16 +104,12 @@ test('timed fold keyframes reach simulator HID through the public client and dae
       if (args[0] === 'launch') return ok;
       assert.equal(args[0], 'spawn');
       assert.equal(args[1], PROVIDER_SCENARIO_IOS_SIMULATOR.id);
+      if (args[3] === 'panels') return { ...ok, stdout: guestPanelReading() };
       if (args[3] === 'hinge') return { ...ok, stdout: guestHingeReading(angle) };
       assert.equal(args[3], 'set');
       assert.deepEqual(JSON.parse(args[4]!), trajectory);
       assert.equal(options?.timeoutMs, 15000);
       angle = 100;
-      return ok;
-    },
-    devicectl: async (args) => {
-      assert.ok(args.includes('displays'));
-      writeDisplayInventoryFixture(args[args.indexOf('--json-output') + 1]!);
       return ok;
     },
   });
@@ -144,6 +147,7 @@ test('timed fold keyframes reach simulator HID through the public client and dae
     });
     assert.equal(result.pose, 'half-open');
     assert.equal(result.hingeAngleDegrees, 100);
+    assert.equal(result.screen?.display, 'LCD-1');
     const replayed = await daemon.client().command.fold({
       platform: 'ios',
       udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
@@ -211,6 +215,12 @@ function createFoldLedgerAppleToolProvider(params: {
   // Built on the shared recording provider so any call this route does not script (macosHelper,
   // macosHost, plist, or an unexpected runCommand) throws instead of being silently answered.
   const recording = createRecordingAppleToolProvider({
+    devicectl: async (args, options) => {
+      await record('devicectl', args, options);
+      assert.deepEqual(args.slice(0, 3), ['device', 'info', 'displays']);
+      fs.writeFileSync(args.at(-1)!, JSON.stringify({ result: JSON.parse(guestPanelReading()) }));
+      return ok;
+    },
     simctl: async (args, options) => {
       if (args[0] === 'list') {
         if (params.isTracking()) await record('simctl', args, options);
@@ -226,17 +236,14 @@ function createFoldLedgerAppleToolProvider(params: {
       }
       if (args[0] === 'launch') return ok;
       await record('simctl', args, options);
+      if (args[0] === 'spawn' && args[3] === 'panels') {
+        return { ...ok, stdout: guestPanelReading() };
+      }
       if (args[0] === 'spawn' && args[3] === 'hinge') {
         const angle = params.hingeAngleAt(hingeReads);
         hingeReads += 1;
         return { ...ok, stdout: guestHingeReading(angle) };
       }
-      return ok;
-    },
-    devicectl: async (args, options) => {
-      await record('devicectl', args, options);
-      assert.ok(args.includes('displays'), `unexpected devicectl call: ${args.join(' ')}`);
-      writeDisplayInventoryFixture(args[args.indexOf('--json-output') + 1]!);
       return ok;
     },
   });
@@ -347,15 +354,23 @@ function assertFoldLedgerPhaseCoverage(ledger: readonly FoldLedgerCall[]): void 
   const isHingeRead = (call: FoldLedgerCall) =>
     call.tool === 'simctl' && call.args[0] === 'spawn' && call.args[3] === 'hinge';
   const isDisplayInventory = (call: FoldLedgerCall) =>
-    call.tool === 'devicectl' && call.args.includes('displays');
+    call.tool === 'simctl' && call.args[0] === 'spawn' && call.args[3] === 'panels';
 
+  assert.equal(
+    ledger.filter(
+      (call) =>
+        call.tool === 'devicectl' && call.args.slice(0, 3).join(' ') === 'device info displays',
+    ).length,
+    1,
+    'ledger must record the set-source foldable classification',
+  );
   assert.ok(ledger.some(isBuild), 'ledger is missing the helper-build phase');
   assert.ok(ledger.some(isSpawn), 'ledger is missing the HID-dispatch (simctl spawn) phase');
   assert.ok(ledger.some(isHingeRead), 'ledger is missing the hinge-settle-read phase');
   assert.equal(
     ledger.filter(isDisplayInventory).length,
-    2,
-    'ledger must record both the foldable-check and the lit-panel display inventory reads',
+    1,
+    'ledger must record the lit-panel guest inventory read',
   );
 }
 

@@ -5,10 +5,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
-import {
-  IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS,
-  IOS_SCOPED_DISPLAY_PROBE_BUDGET_MS,
-} from './config.ts';
+import { IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS, IOS_GUEST_DISPLAY_PROBE_BUDGET_MS } from './config.ts';
 import type { FoldHelper } from '../foldable/fold-helper.ts';
 import { runIosDevicectlJsonRequest } from './devicectl.ts';
 import { simulatorAddressFor } from './simctl.ts';
@@ -93,7 +90,9 @@ type CoreDeviceDisplayPayload = {
 type AppleDisplayInventoryOptions = {
   timeoutMs?: number;
   signal?: AbortSignal;
-  /** A fold helper the caller already holds, so a scoped read does not probe its build again. */
+  /** Requests the guest table for a lit-panel read in either simulator set. */
+  source?: 'guest';
+  /** Reuses a helper without changing the simulator set's table source. */
   foldHelper?: FoldHelper;
 };
 
@@ -102,7 +101,7 @@ const DISPLAYS_UNSUPPORTED_HINT =
 
 /**
  * Reads the CoreDevice display table for one Apple device, or the guest's equivalent for a
- * simulator in a scoped device set.
+ * simulator in a scoped device set or a caller that explicitly requests the guest table.
  *
  * Deliberately uncached: which panel is lit is exactly what changes when an
  * operator folds or opens the device, and a cached answer would resume capturing
@@ -116,9 +115,10 @@ export async function queryAppleDisplayInventory(
   device: DeviceInfo,
   options: AppleDisplayInventoryOptions,
 ): Promise<AppleDisplayInventory> {
-  const table = simulatorAddressFor(device).simulatorSetPath
-    ? await readGuestPanelTable(device, options)
-    : await readCoreDevicePanelTable(device, options);
+  const table =
+    options.source === 'guest' || simulatorAddressFor(device).simulatorSetPath
+      ? await readGuestPanelTable(device, options)
+      : await readCoreDevicePanelTable(device, options);
   if (!table.ok) {
     emitUnresolvedDiagnostic(device, table.reason, table.detail);
     return unresolvedInventory();
@@ -153,14 +153,15 @@ async function readCoreDevicePanelTable(
 /**
  * CoreDevice resolves a simulator only in the default device set, so a scoped simulator's panel
  * table comes from the fold helper inside the guest. It reads the same CADisplay and BLSBacklight
- * sources `dtdeviceinfod` reports to CoreDevice, in CoreDevice's payload shape.
+ * sources `dtdeviceinfod` reports to CoreDevice, in CoreDevice's payload shape. Foldable
+ * operations use this guest source in either set.
  */
 async function readGuestPanelTable(
   device: DeviceInfo,
   options: AppleDisplayInventoryOptions,
 ): Promise<PanelTableRead> {
   // The first read on a host also builds the helper; the budget covers that build too.
-  const budget = AbortSignal.timeout(IOS_SCOPED_DISPLAY_PROBE_BUDGET_MS);
+  const budget = AbortSignal.timeout(IOS_GUEST_DISPLAY_PROBE_BUDGET_MS);
   const signal = options.signal ? AbortSignal.any([options.signal, budget]) : budget;
   try {
     const { createFoldHelper } = await import('../foldable/fold-helper.ts');
@@ -411,14 +412,33 @@ function warnWhenPrimaryPanelIsNotTheSmallest(panels: AppleDeviceDisplay[]): voi
 }
 
 /**
- * The panel a runner request names, only when panel power decided exactly one panel. Unlike a
- * capture, a surface request does not fall back to the `primary` panel: it can keep the runner's
- * historic route instead of guessing. Display 0 is the runtime's "no display" identity.
+ * The one panel the panel table establishes as lit, or nothing. It takes a resolved multi-panel
+ * table that parsed every integrated entry, and so named an active display, with exactly one lit
+ * panel, which is that active display, and no panel of unknown power. A table with an integrated
+ * entry missing its identity or geometry, or with a panel whose power is unknown, establishes no
+ * panel, even when the others show a single lit one: that entry may be lit too. Runner routing (`appleLitPanel`) and the foldable
+ * rotation controller select through this one rule.
+ */
+export function establishedLitPanel(
+  inventory: AppleDisplayInventory,
+): AppleDeviceDisplay | undefined {
+  if (!inventory.multiScreen || inventory.unresolved || !inventory.activeDisplay) return undefined;
+  // Unknown power may be showing content (see readPanelPower), so beside it no lit panel is the
+  // only one that may be lit.
+  if (inventory.displays.some((display) => display.power === 'unknown')) return undefined;
+  const litPanels = inventory.displays.filter((display) => display.power === 'lit');
+  if (litPanels.length !== 1 || litPanels[0] !== inventory.activeDisplay) return undefined;
+  return litPanels[0];
+}
+
+/**
+ * The panel a runner request names, only when the panel table establishes one lit panel (see
+ * {@link establishedLitPanel}). Unlike a capture, a surface request does not fall back to the
+ * `primary` panel: it can keep the runner's historic route instead of guessing. Display 0 is the
+ * runtime's "no display" identity.
  */
 export function appleLitPanel(inventory: AppleDisplayInventory): RunnerCommand['litPanel'] {
-  if (!inventory.multiScreen || inventory.unresolved || !inventory.activeDisplay) return undefined;
-  const litPanels = inventory.displays.filter((display) => display.power === 'lit');
-  const panel = litPanels.length === 1 ? litPanels[0]! : undefined;
+  const panel = establishedLitPanel(inventory);
   if (!panel || panel.displayId <= 0) return undefined;
   return {
     displayId: panel.displayId,
@@ -487,15 +507,28 @@ export type AppleCaptureTarget =
  * `rot270` is what the display shows after a rotation to landscape-left. An unrecognized or
  * missing value maps to no rotation.
  */
-const CORE_DEVICE_ROTATIONS: ReadonlyMap<string, DeviceRotation> = new Map<string, DeviceRotation>([
+const PANEL_CONTENT_ROTATIONS: ReadonlyMap<string, DeviceRotation> = new Map<
+  string,
+  DeviceRotation
+>([
   ['rot0', 'portrait'],
   ['rot90', 'landscape-right'],
   ['rot180', 'portrait-upside-down'],
   ['rot270', 'landscape-left'],
 ]);
 
+/**
+ * The content rotation a panel table `currentOrientation` names, in that panel's own frame, or
+ * nothing for an unrecognized value. This is the one parser of the field: a single-panel capture
+ * reads it as the device rotation, and the foldable rotation controller reads it as the lit
+ * panel's rotation before compensating that panel's picker offset.
+ */
+export function panelContentRotation(currentOrientation: string): DeviceRotation | undefined {
+  return PANEL_CONTENT_ROTATIONS.get(currentOrientation);
+}
+
 function appleDisplayRotation(display: AppleDeviceDisplay): DeviceRotation | undefined {
-  return CORE_DEVICE_ROTATIONS.get(display.currentOrientation);
+  return panelContentRotation(display.currentOrientation);
 }
 
 /**

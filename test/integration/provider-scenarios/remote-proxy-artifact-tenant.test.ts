@@ -2,6 +2,8 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
+import https from 'node:https';
 import path from 'node:path';
 import { test } from 'vitest';
 import { normalizeAgentDeviceError } from '@agent-device/kernel/errors';
@@ -293,6 +295,169 @@ test('Provider-backed integration authenticated proxy stamps every admitted RPC 
         [401, 401],
       );
       assert.equal(proxy.forwarded.length, forwardedCount);
+    } finally {
+      await proxy.close();
+    }
+  });
+});
+
+test('real HTTP proxy preserves resumable upload integrity and caller credentials', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'proxy resumable upload coverage')) return;
+  await withProviderScenarioResource(createFakeProviderWorld, async ({ daemon }) => {
+    const proxy = await createProviderScenarioProxy(daemon, { clientToken: TENANT_TOKEN });
+    try {
+      const content = Buffer.from('ABCDE');
+      const auth = { authorization: `Bearer ${TENANT_TOKEN}` };
+      const preflight = await fetch(`${proxy.baseUrl}/upload/preflight`, {
+        method: 'POST',
+        headers: {
+          ...auth,
+          'content-type': 'application/json',
+          'x-forwarded-proto': 'http, https',
+        },
+        body: JSON.stringify({
+          uploadAttemptId: crypto.randomUUID(),
+          sha256: crypto.createHash('sha256').update(content).digest('hex'),
+          fileName: 'demo.apk',
+          sizeBytes: 5,
+          artifactType: 'file',
+          platform: 'android',
+        }),
+      });
+      assert.equal(preflight.status, 200);
+      const ticket = (await preflight.json()) as {
+        uploadId: string;
+        upload: { url: string; headers: Record<string, string> };
+      };
+      const url = new URL(ticket.upload.url);
+      assert.equal(url.origin, new URL(proxy.baseUrl).origin);
+      assert.equal(url.pathname, `/agent-device/upload/direct/${ticket.uploadId}`);
+      assert.equal(ticket.upload.headers.authorization, `Bearer ${TENANT_TOKEN}`);
+      assert.ok(!JSON.stringify(ticket).includes(daemon.token));
+      const first = await fetch(url, {
+        method: 'PUT',
+        headers: { ...ticket.upload.headers, 'content-range': 'bytes 0-1/5' },
+        body: 'AB',
+        redirect: 'manual',
+      });
+      assert.equal(first.status, 308);
+      assert.equal(first.headers.get('x-upload-offset'), '2');
+      assert.equal(first.headers.get('range'), 'bytes=0-1');
+      const second = await fetch(url, {
+        method: 'PUT',
+        headers: { ...ticket.upload.headers, 'content-range': 'bytes 2-4/5' },
+        body: 'CDE',
+      });
+      assert.equal(second.status, 200);
+      const finalized = await fetch(`${proxy.baseUrl}/upload/finalize`, {
+        method: 'POST',
+        headers: { ...auth, 'content-type': 'application/json' },
+        body: JSON.stringify({ uploadId: ticket.uploadId }),
+      });
+      assert.equal(finalized.status, 200);
+      const result = (await finalized.json()) as { ok: boolean; uploadId: string };
+      assert.equal(result.ok, true);
+      assert.ok(result.uploadId);
+    } finally {
+      await proxy.close();
+    }
+  });
+});
+
+test('real TLS proxy preserves resumable upload origin and integrity', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'TLS proxy resumable upload coverage')) return;
+  const cert = fs.readFileSync(new URL('./fixtures/localhost-cert.pem', import.meta.url));
+  const key = fs.readFileSync(new URL('./fixtures/localhost-key.pem', import.meta.url));
+  await withProviderScenarioResource(createFakeProviderWorld, async ({ daemon }) => {
+    const proxy = await createProviderScenarioProxy(daemon, {
+      clientToken: TENANT_TOKEN,
+      tls: { cert, key },
+    });
+    const request = async (
+      url: string,
+      method: string,
+      headers: Record<string, string>,
+      body: string,
+    ) =>
+      await new Promise<{
+        status: number;
+        headers: import('node:http').IncomingHttpHeaders;
+        body: string;
+      }>((resolve, reject) => {
+        const req = https.request(url, { method, headers, ca: cert }, (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk: Buffer) => chunks.push(chunk));
+          res.on('end', () =>
+            resolve({
+              status: res.statusCode ?? 0,
+              headers: res.headers,
+              body: Buffer.concat(chunks).toString(),
+            }),
+          );
+          res.on('error', reject);
+        });
+        req.on('error', reject);
+        req.end(body);
+      });
+    try {
+      const sessions = await proxy.callCommand(TENANT_TOKEN, 'session_list');
+      assert.equal(sessions.statusCode, 200, JSON.stringify(sessions.json));
+      assert.deepEqual(sessions.json.result?.data, { sessions: [] });
+      const auth = { authorization: `Bearer ${TENANT_TOKEN}` };
+      const preflight = await request(
+        `${proxy.baseUrl}/upload/preflight`,
+        'POST',
+        {
+          ...auth,
+          'content-type': 'application/json',
+          'x-forwarded-proto': 'http, http, https',
+          'x-forwarded-host': 'evil.example',
+        },
+        JSON.stringify({
+          uploadAttemptId: crypto.randomUUID(),
+          sha256: crypto.createHash('sha256').update('ABCDE').digest('hex'),
+          fileName: 'demo.apk',
+          sizeBytes: 5,
+          artifactType: 'file',
+          platform: 'android',
+        }),
+      );
+      assert.equal(preflight.status, 200, preflight.body);
+      const ticket = JSON.parse(preflight.body) as {
+        uploadId: string;
+        upload: { url: string; headers: Record<string, string> };
+      };
+      const url = new URL(ticket.upload.url);
+      assert.equal(url.origin, new URL(proxy.baseUrl).origin);
+      assert.equal(url.pathname, `/agent-device/upload/direct/${ticket.uploadId}`);
+      assert.equal(ticket.upload.headers.authorization, `Bearer ${TENANT_TOKEN}`);
+      assert.ok(!preflight.body.includes(daemon.token));
+      const first = await request(
+        url.href,
+        'PUT',
+        { ...ticket.upload.headers, 'content-range': 'bytes 0-1/5' },
+        'AB',
+      );
+      assert.equal(first.status, 308);
+      assert.equal(first.headers['x-upload-offset'], '2');
+      assert.equal(first.headers.range, 'bytes=0-1');
+      const second = await request(
+        url.href,
+        'PUT',
+        { ...ticket.upload.headers, 'content-range': 'bytes 2-4/5' },
+        'CDE',
+      );
+      assert.equal(second.status, 200);
+      const finalized = await request(
+        `${proxy.baseUrl}/upload/finalize`,
+        'POST',
+        { ...auth, 'content-type': 'application/json' },
+        JSON.stringify({ uploadId: ticket.uploadId }),
+      );
+      assert.equal(finalized.status, 200, finalized.body);
+      const result = JSON.parse(finalized.body) as { ok: boolean; uploadId: string };
+      assert.equal(result.ok, true);
+      assert.ok(result.uploadId);
     } finally {
       await proxy.close();
     }

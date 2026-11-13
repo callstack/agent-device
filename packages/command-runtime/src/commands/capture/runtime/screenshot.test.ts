@@ -84,3 +84,63 @@ function cropPngBuffer(
   }
   return PNG.sync.write(cropped);
 }
+
+for (const staged of [false, true]) {
+  test(`late cancellation ${staged ? 'refuses staged publication' : 'retains direct screenshot success'}`, async () => {
+    const root = mkdtempForTestSync('screenshot-late-cancellation');
+    const destination = path.join(root, 'output.png');
+    const staging = path.join(root, 'work.png');
+    const sentinel = Buffer.from('old screenshot');
+    fs.writeFileSync(destination, sentinel);
+    const controller = new AbortController();
+    const cancellation = new Error('caller cancelled after capture');
+    const adapter = createLocalArtifactAdapter();
+    let publications = 0;
+    let cleanups = 0;
+    if (staged) {
+      adapter.reserveOutput = async () => ({
+        path: staging,
+        publishedPath: destination,
+        visibility: 'client-visible',
+        publish: async () => {
+          publications += 1;
+          fs.renameSync(staging, destination);
+          return undefined;
+        },
+        cleanup: async () => {
+          cleanups += 1;
+          fs.rmSync(staging, { force: true });
+        },
+      });
+    }
+    const device = createAgentDevice({
+      backend: {
+        platform: 'ios',
+        captureScreenshot: async (_context, requestedPath) => {
+          fs.writeFileSync(requestedPath, solidPngBuffer(8, 8));
+          controller.abort(cancellation);
+        },
+      },
+      artifacts: adapter,
+      sessions: { get: () => undefined, set: () => {} },
+      policy: localCommandPolicy(),
+    });
+    const operation = device.capture.screenshot({
+      out: { kind: 'path', path: destination },
+      scale: 0.5,
+      signal: controller.signal,
+    });
+    if (staged) {
+      await assert.rejects(operation, (error) => error === cancellation);
+      assert.deepEqual(fs.readFileSync(destination), sentinel);
+      assert.equal(fs.existsSync(staging), false);
+      assert.equal(publications, 0);
+      assert.equal(cleanups, 1);
+    } else {
+      const result = await operation;
+      assert.equal(result.path, destination);
+      const image = PNG.sync.read(fs.readFileSync(destination));
+      assert.deepEqual({ width: image.width, height: image.height }, { width: 4, height: 4 });
+    }
+  });
+}

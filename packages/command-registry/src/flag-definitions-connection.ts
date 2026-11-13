@@ -95,6 +95,15 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
+    key: 'publicOrigin',
+    names: ['--public-origin'],
+    type: 'string',
+    usageLabel: '--public-origin <origin>',
+    usageDescription: 'Proxy: public HTTP(S) origin for upload tickets',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'mcpStructured',
     names: ['--structured'],
     type: 'boolean',

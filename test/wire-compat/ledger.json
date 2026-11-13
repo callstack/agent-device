@@ -135,11 +135,14 @@
     "packages/daemon/src/server/upload-http.ts#handleResumableUpload": "sha256:b1e1cfd79f13470a1111a377b87975ed5c721500d99f3160a8b631194af37ce5",
     "packages/daemon/src/server/upload-http.ts#handleUpload": "sha256:bba7347a32f53b265cded1c7d73f943431ba3b5a0c8b347d621266ea20c10cd6",
     "packages/daemon/src/server/upload-http.ts#handleUploadFinalize": "sha256:f6879ce6b62d916265d98f6b6aa5f99650c82a9d391a7d5873015036d9289a24",
-    "packages/daemon/src/server/upload-http.ts#handleUploadPreflight": "sha256:6d850c477241295d0e8d7e9da3c0dd6abc6f8ea436d52674c3e2ebd77b43f711",
+    "packages/daemon/src/server/upload-http.ts#handleUploadPreflight": "sha256:8f9915c23fbf86903bee4db02e1b45aa835bc4d234c8e9a0fe4da5e67da8163e",
     "packages/daemon/src/server/upload-http.ts#readUploadFinalizeBody": "sha256:076298afa73d7e498a964b6c48d823de1cc8b15e9e971d0a22b7e6c3fd98d685",
     "packages/daemon/src/server/upload-http.ts#readUploadPreflightBody": "sha256:2e56302178b75d9a6f5424f01dfc46551dca2056ba06a43e48ae09ec528956b6",
-    "packages/daemon/src/server/upload-http.ts#resolveHttpRequestBaseUrl": "sha256:72319551fe0adb48ab20a1295e7d07314c328c43208bcfa99f6479854234927f",
-    "packages/daemon/src/server/upload-http.ts#resolveUploadHttpRoute": "sha256:8837e62933cf57111a8070454877c5859aed65b4dcdba755f145346e30f82835",
+    "packages/contracts/src/daemon-http.ts#resolveHttpRequestBaseUrl": "sha256:6ef76a849a7c61c7ae035cbf162dd1dfac3631f6a2df421560f19f798853e50f",
+    "packages/contracts/src/daemon-http.ts#nodeHttpRequestUrl": "sha256:1e7718ad5d5187afc14550c7f950ba548e891da2b60dedabb90735be6b012b35",
+    "packages/contracts/src/daemon-http.ts#normalizeDaemonPublicOrigin": "sha256:c7af0bed460c19415f1ed1e2d1f0fee99388fc8e1a9733952de86c8c55e08c4f",
+    "packages/contracts/src/daemon-http.ts#containsInvalidHttpUrlCharacter": "sha256:008c59ed9aa9338f7259877253783446762e603dad6dd91948a8aafc5eee37e0",
+    "packages/daemon/src/server/upload-http.ts#resolveUploadHttpRoute": "sha256:d744044d036a46221c3b8220179cc30e1e66b8619a4e5cd3f7dd5f8582817aba",
     "packages/daemon/src/server/upload-http.ts#sendJson": "sha256:c2317b4b14a10731684c9160038005965856150f05f8923765a3fa833d2ecae9",
     "packages/daemon/src/server/upload-http.ts#sendUploadedArtifactResponse": "sha256:9e418403448d58a96284fed605762fa71f9349bf2c70ad79df69b2b3e27487d6",
     "packages/remote/src/artifact-download.ts#RemoteArtifactDownload": "sha256:f73a888f4f8c9d603701c505bb342787b1ca6559a13b15da2385e60349ecea8e",
@@ -199,7 +202,10 @@
     "packages/contracts/src/device-pin.ts#DevicePinSelector": "sha256:c033ae0274d0da7c3cfdcafb2537091ba76e9a1fc4d635357fab9570cc1b223e",
     "packages/contracts/src/device-inventory.ts#DEVICE_PIN_SELECTOR_KEYS": "sha256:02a5f76aff71149e02395b60eaa7702715d4594061d11af4d9fa62224f0cc17d",
     "packages/contracts/src/device-inventory.ts#parseDevicePinSelector": "sha256:6b3b9ac32efcc8e7859cc0e8ceef5a85e9cec7082d92901e0c1ee8c0555381da",
-    "packages/contracts/src/device-inventory.ts#readDevicePin": "sha256:bb15ca2a086a881c6cf945c25d432c092be165e58165d229c25df69c4c9fafbd"
+    "packages/contracts/src/device-inventory.ts#readDevicePin": "sha256:bb15ca2a086a881c6cf945c25d432c092be165e58165d229c25df69c4c9fafbd",
+    "packages/proxy/src/daemon-proxy.ts#rewriteUploadDirectUrl": "sha256:b121db3ffb5a520b4b31810a2e28ff01c1a15d959514c9fbe2a61cd960d2af93",
+    "packages/proxy/src/daemon-proxy.ts#rewriteUploadPreflightResponse": "sha256:332820b6f10e079632330c2c4996c4faa6f339e921f12f287bd83c9296df5ccd",
+    "packages/proxy/src/daemon-proxy.ts#rewrittenUploadPreflightResponse": "sha256:21d633d947cd72f5008bcc886a8f3ecd4f778b594d0654b8d0741db8594003db"
   },
   "compatibleChanges": [
     {
@@ -518,11 +524,6 @@
       "rationale": "Implementation-only validation repair: a supplied retentionMs is validated before request projection instead of silently dropping fractions or malformed values. Existing integer values in the supported 1..2147483647 range and omitted values keep their request projection, defaults, payload fields and response framing. Unsupported durations now fail clearly with the existing INVALID_ARGS envelope; released clients can parse that normal command error. No route, authentication, method or wire field changes; no protocol bump under ADR 0006."
     },
     {
-      "declaration": "packages/daemon/src/server/upload-http.ts#resolveHttpRequestBaseUrl",
-      "digest": "sha256:72319551fe0adb48ab20a1295e7d07314c328c43208bcfa99f6479854234927f",
-      "rationale": "#4419 constrains forwarded protocol metadata case-insensitively to HTTP(S) before building the credentialed upload origin. Scheme selection precedes the existing ticket URL parser, preserving explicit ports that are non-default for the selected scheme. The ticket producer already canonicalized host case and scheme-default ports through new URL before this change. Valid forwarding, request authority, credential headers, upload routes and response shapes retain their contracts; comma-separated forwarding uses its first value, and unsupported or URL-shaped values cannot replace authority. Released peers still parse the same HTTP(S) upload ticket without a new required field or removed payload. This implementation-only security correction needs no protocol bump under ADR 0006."
-    },
-    {
       "declaration": "packages/contracts/src/lease-scope.ts#buildDaemonRpcRequest",
       "digest": "sha256:b3d03bb08f8f332b04dea6d2ea30abca2faf83a10f11cb874df2344b3f54c2b6",
       "rationale": "Adds the optional devicePin parameter to lease allocation RPC requests. Older daemons ignore this new parameter and continue to parse the existing lease scope and selector parameters unchanged. Clients without a pin send the same allocation payload as before. This is an additive optional request field under ADR 0006."
@@ -541,6 +542,21 @@
       "declaration": "packages/contracts/src/daemon-wire-request.ts#DaemonWireRequestMeta",
       "digest": "sha256:369be6aca9cfe20d221b40f5f6ab287ff11e148cc3f7e04fbbfa78be5df31e52",
       "rationale": "Tracks the actual metadata declaration instead of its obsolete narrowing waiver. devicePin is an additive optional request field: released clients omit it, older daemons ignore it, and existing metadata fields keep their meanings under ADR 0006."
+    },
+    {
+      "declaration": "packages/contracts/src/daemon-http.ts#resolveHttpRequestBaseUrl",
+      "digest": "sha256:6ef76a849a7c61c7ae035cbf162dd1dfac3631f6a2df421560f19f798853e50f",
+      "rationale": "#4434 moves the actual Node Host/socket base-origin constructor from upload-http into shared ingress validation. It now requires one valid Host authority and derives the scheme from the socket instead of forwarding headers. The adopted publicOrigin migration changes deployment authority configuration, not the upload ticket URL string, authentication headers, body fields, 308 range framing, or finalize format that protocol-2 clients parse. Clients send the returned absolute URL as before. Configured origins are selected separately by the daemon constructor; no existing payload field is removed or reinterpreted."
+    },
+    {
+      "declaration": "packages/daemon/src/server/upload-http.ts#resolveUploadHttpRoute",
+      "digest": "sha256:d744044d036a46221c3b8220179cc30e1e66b8619a4e5cd3f7dd5f8582817aba",
+      "rationale": "#4434 accepts optional query components on the existing POST upload, preflight and finalize routes. Existing query-free paths and methods resolve identically; direct-upload IDs still exclude the query. This broadens accepted request targets without removing a route or changing any response framing under ADR 0006."
+    },
+    {
+      "declaration": "packages/daemon/src/server/upload-http.ts#handleUploadPreflight",
+      "digest": "sha256:8f9915c23fbf86903bee4db02e1b45aa835bc4d234c8e9a0fe4da5e67da8163e",
+      "rationale": "#4434 passes the origin validated by the HTTP ingress owner, or the explicitly configured publicOrigin, into the existing ticket producer. Protocol-2 clients receive the same uploadId and upload URL/header object, use the returned absolute URL, and keep the existing byte, range, authentication and finalize contracts. Forwarding headers no longer select authority under the documented operator migration; no wire field becomes required or changes interpretation."
     }
   ]
 }

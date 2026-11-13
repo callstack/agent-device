@@ -359,6 +359,7 @@ function summarizeProviderScenarioFlagExclusions() {
         'textStdin',
         'proxyHost',
         'proxyPort',
+        'publicOrigin',
         'mcpStructured',
         'stale',
       ],

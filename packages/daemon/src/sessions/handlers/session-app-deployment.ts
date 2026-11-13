@@ -220,7 +220,7 @@ export async function handleUninstallCommand(
   const runtime = await requireRuntimeBinding(params.bindDevice)(device, uninstallAppUse);
   if (ref) expireRefFrame(sessionStore.requireCurrent(ref));
   const result = await runtime.operations.uninstallApp({ app });
-  const platform = isIosFamily(device) ? 'ios' : 'android';
+  const platform = isIosFamily(device) ? 'ios' : publicPlatformString(device);
   const appId = !result.wasInstalled
     ? undefined
     : 'bundleId' in result

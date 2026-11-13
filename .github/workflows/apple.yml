@@ -180,7 +180,7 @@ jobs:
     name: Smoke Tests
     if: ${{ always() && !github.event.pull_request.draft }}
     needs: smoke-apple-platform
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - name: Require both Apple jobs to succeed
         env:

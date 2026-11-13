@@ -216,8 +216,8 @@ extension RunnerTests {
         message: message,
         fallback: GestureFallback(strategy: "xctest-coordinate-drag", message: fallbackMessage, hint: hint)
       )
-    case .refused(_, let refusalMessage, let hint):
-      return unsupportedResponse(message: refusalMessage, hint: hint)
+    case .refused(_, let refusal):
+      return refusalResponse(refusal)
     }
 #else
     return nil

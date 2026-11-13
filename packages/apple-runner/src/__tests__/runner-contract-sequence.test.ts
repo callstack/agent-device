@@ -197,3 +197,68 @@ test('parseRunnerSequenceResult infers a failure from sequenceResults when faile
     },
   );
 });
+
+test('a sequence step that failed after hand-off reads like the standalone command', () => {
+  assert.throws(
+    () =>
+      parseRunnerSequenceResult({
+        sequenceResults: [
+          {
+            ok: false,
+            kind: 'longPress',
+            errorCode: 'SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN',
+            errorMessage: 'synthesis failed',
+          },
+        ],
+        completedSteps: 0,
+        failedStepIndex: 0,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.runnerErrorCode, 'SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN');
+      assert.equal(error.details?.reason, 'synthesized_gesture_outcome_unknown');
+      assert.equal(error.details?.dispatched, 'unknown');
+      return true;
+    },
+  );
+});
+
+function sequenceFailure(results: Array<Record<string, unknown>>): AppError {
+  const failedStepIndex = results.findIndex((result) => result.ok !== true);
+  try {
+    parseRunnerSequenceResult({
+      sequenceResults: results,
+      completedSteps: failedStepIndex,
+      failedStepIndex,
+    });
+  } catch (error) {
+    assert.ok(error instanceof AppError);
+    return error;
+  }
+  throw new Error('expected a sequence failure');
+}
+
+const notDispatchedLongPress = {
+  ok: false,
+  kind: 'longPress',
+  errorCode: 'SYNTHESIZED_GESTURE_NOT_DISPATCHED',
+  errorMessage: 'synthesis refused',
+};
+
+test('a first step refused before dispatch means the sequence sent nothing', () => {
+  const error = sequenceFailure([notDispatchedLongPress]);
+  assert.equal(error.code, 'COMMAND_FAILED');
+  assert.equal(error.details?.runnerErrorCode, 'SYNTHESIZED_GESTURE_NOT_DISPATCHED');
+  assert.equal(error.details?.dispatched, 'no');
+});
+
+test.each([
+  { name: 'a plain UNSUPPORTED_OPERATION step', errorCode: 'UNSUPPORTED_OPERATION' },
+  { name: 'a code-less step', errorCode: undefined },
+])('$name publishes no dispatched key', ({ errorCode }) => {
+  const error = sequenceFailure([
+    { ok: false, kind: 'doubleTap', ...(errorCode ? { errorCode } : {}), errorMessage: 'refused' },
+  ]);
+  assert.equal('dispatched' in (error.details ?? {}), false);
+});

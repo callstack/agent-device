@@ -17,6 +17,7 @@ import { screenshotAndroid } from '../screenshot.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { runCmd } from '@agent-device/host-kit/command';
 import { sleep } from '../adb.ts';
+import * as adbHost from '../adb-host.ts';
 
 const VALID_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+b9xkAAAAASUVORK5CYII=',
@@ -144,5 +145,128 @@ test('Android screenshots capture immediately by default and stabilize only when
       mockRunCmd.mock.calls.some(([, args]) => args.includes('broadcast')),
       true,
     );
+  });
+});
+
+for (const initial of [undefined, '0', '1', 'custom=value'] as const) {
+  for (const outcome of ['success', 'capture failure', 'settle failure'] as const) {
+    test(`stabilized screenshot restores ${initial ?? 'absent'} after ${outcome}`, async () => {
+      let setting: string | undefined = initial;
+      const primary = new Error(outcome);
+      mockRunCmd.mockImplementation(async (_cmd, args) => {
+        if (args.includes('settings')) {
+          if (args.includes('list')) {
+            return {
+              exitCode: 0,
+              stdout: setting === undefined ? '' : `sysui_demo_allowed=${setting}\n`,
+              stderr: '',
+            };
+          }
+
+          if (args.includes('get')) return { exitCode: 0, stdout: `${setting}\n`, stderr: '' };
+          if (args.includes('delete')) setting = undefined;
+          if (args.includes('put')) setting = args.at(-1);
+        }
+        if (args.includes('exec-out')) {
+          if (outcome === 'capture failure') throw primary;
+          return { exitCode: 0, stdout: '', stderr: '', stdoutBuffer: VALID_PNG };
+        }
+        return { exitCode: 0, stdout: '', stderr: '' };
+      });
+      if (outcome === 'settle failure') mockSleep.mockRejectedValue(primary);
+      await withTempScreenshot('screenshot-restore-', async (outPath) => {
+        if (outcome === 'success') await screenshotAndroid(device, outPath, { stabilize: true });
+        else
+          await assert.rejects(
+            screenshotAndroid(device, outPath, { stabilize: true }),
+            (error) => error === primary,
+          );
+        assert.equal(setting, initial);
+      });
+    });
+  }
+}
+
+test('failed prior setting read does not mutate demo mode', async () => {
+  mockRunCmd.mockImplementation(async (_cmd, args) => {
+    if (args.includes('settings') && args.includes('list'))
+      return { exitCode: 1, stdout: '', stderr: 'read failed' };
+    throw new Error('unexpected command');
+  });
+  await withTempScreenshot('screenshot-read-failure-', async (outPath) => {
+    await assert.rejects(screenshotAndroid(device, outPath, { stabilize: true }), {
+      code: 'COMMAND_FAILED',
+    });
+    assert.equal(mockRunCmd.mock.calls.length, 1);
+  });
+});
+
+test('restoration failure surfaces after a successful capture', async () => {
+  mockRunCmd.mockImplementation(async (_cmd, args) => {
+    if (args.includes('settings') && args.includes('delete'))
+      return { exitCode: 1, stdout: '', stderr: 'restore failed' };
+    if (args.includes('exec-out'))
+      return { exitCode: 0, stdout: '', stderr: '', stdoutBuffer: VALID_PNG };
+    return { exitCode: 0, stdout: '', stderr: '' };
+  });
+  await withTempScreenshot('screenshot-restore-failure-', async (outPath) => {
+    await assert.rejects(screenshotAndroid(device, outPath, { stabilize: true }), {
+      code: 'COMMAND_FAILED',
+    });
+  });
+});
+
+test('restoration failure is diagnostic evidence when capture fails', async () => {
+  const primary = new Error('capture failed');
+  const cleanup = new Error('restore failed');
+  const diagnostic = vi.spyOn(adbHost.requireAndroidAdbHost(), 'emitDiagnostic');
+  mockRunCmd.mockImplementation(async (_cmd, args) => {
+    if (args.includes('settings') && args.includes('delete')) throw cleanup;
+    if (args.includes('exec-out')) throw primary;
+    return { exitCode: 0, stdout: '', stderr: '' };
+  });
+  try {
+    await withTempScreenshot('screenshot-both-fail-', async (outPath) => {
+      await assert.rejects(
+        screenshotAndroid(device, outPath, { stabilize: true }),
+        (error) => error === primary,
+      );
+      assert.equal(
+        diagnostic.mock.calls.some(
+          ([event]) => event.phase === 'android_screenshot_demo_setting_restore_failed',
+        ),
+        true,
+      );
+    });
+  } finally {
+    diagnostic.mockRestore();
+  }
+});
+
+test('restoration uses the exact listing value across CRLF without a secondary get', async () => {
+  let setting = '0';
+  mockRunCmd.mockImplementation(async (_cmd, args) => {
+    if (args.includes('settings')) {
+      if (args.includes('list'))
+        return {
+          exitCode: 0,
+          stdout: `sysui_demo_allowed_extra=1\r\nsysui_demo_allowed=${setting}\r\nother=2\r\n`,
+          stderr: '',
+        };
+      if (args.includes('get')) return { exitCode: 0, stdout: `${setting}\r\n`, stderr: '' };
+      if (args.includes('put')) setting = String(args.at(-1));
+    }
+    if (args.includes('exec-out'))
+      return { exitCode: 0, stdout: '', stderr: '', stdoutBuffer: VALID_PNG };
+    return { exitCode: 0, stdout: '', stderr: '' };
+  });
+  await withTempScreenshot('screenshot-listing-value-', async (outPath) => {
+    await screenshotAndroid(device, outPath, { normalizeStatusBar: true });
+    assert.equal(setting, '0');
+    assert.equal(
+      mockRunCmd.mock.calls.some(([, args]) => args.includes('settings') && args.includes('get')),
+      false,
+    );
+    assert.deepEqual(await fs.readFile(outPath), VALID_PNG);
   });
 });

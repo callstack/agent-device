@@ -15,6 +15,66 @@ export const DAEMON_HTTP_LEASE_HEADER = 'x-agent-device-lease-id';
 export const DAEMON_HTTP_NETWORK_ACCESS_HEADER = 'x-agent-device-network-access';
 export const DAEMON_HTTP_PUBLIC_NETWORK_ACCESS = 'public-only';
 
+/** Normalize an absolute HTTP(S) origin, or throw when it contains other URL components. */
+export function normalizeDaemonPublicOrigin(value: string): string {
+  if (!/^https?:\/\/[^\s/?#]+\/?$/i.test(value) || containsInvalidHttpUrlCharacter(value)) {
+    throw new Error('Invalid publicOrigin');
+  }
+  const authority = value.match(/^https?:\/\/([^/]+)/i)?.[1] ?? '';
+  if (authority.includes('@') || authority.endsWith(':')) throw new Error('Invalid publicOrigin');
+  const url = new URL(value);
+  if (
+    !url.hostname ||
+    url.username ||
+    url.password ||
+    url.pathname !== '/' ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error('Invalid publicOrigin');
+  }
+  return url.origin;
+}
+
+/** Validate a Node origin-form request target and its single Host header. */
+export function nodeHttpRequestUrl(
+  target: string | undefined,
+  rawHeaders: readonly string[],
+  secure: boolean,
+): URL | null {
+  if (
+    !target ||
+    !target.startsWith('/') ||
+    target.startsWith('//') ||
+    target.includes('#') ||
+    containsInvalidHttpUrlCharacter(target)
+  )
+    return null;
+  const origin = resolveHttpRequestBaseUrl(rawHeaders, secure);
+  return origin === null ? null : new URL(target, origin);
+}
+
+function resolveHttpRequestBaseUrl(rawHeaders: readonly string[], secure: boolean): string | null {
+  const hosts: string[] = [];
+  for (let i = 0; i + 1 < rawHeaders.length; i += 2) {
+    if (rawHeaders[i]?.toLowerCase() === 'host') hosts.push(rawHeaders[i + 1] ?? '');
+  }
+  if (hosts.length !== 1 || /[/?#]/.test(hosts[0] ?? '')) return null;
+  try {
+    return normalizeDaemonPublicOrigin(`${secure ? 'https' : 'http'}://${hosts[0]}`);
+  } catch {
+    return null;
+  }
+}
+
+function containsInvalidHttpUrlCharacter(value: string): boolean {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code <= 32 || code === 127 || character === '\\') return true;
+  }
+  return false;
+}
+
 export function buildDaemonHttpBaseUrl(baseUrl: string): string {
   return buildDaemonHttpUrl(baseUrl, DAEMON_HTTP_BASE_PATH);
 }

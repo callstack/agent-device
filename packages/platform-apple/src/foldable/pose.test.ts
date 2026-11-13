@@ -107,6 +107,10 @@ test('sends the simulator HID pose and reports the pose the guest hinge read bac
     screen: { display: 'LCD-1', coordinateSpace: 'native-panel', widthPt: 669, heightPt: 951 },
   });
 
+  expect(mockInventory.mock.calls.map(([, options]) => options.source)).toEqual([
+    undefined,
+    'guest',
+  ]);
   expect(mockSend).toHaveBeenCalledWith('open', undefined);
   expect(mockHinge).toHaveBeenCalledTimes(2);
   // Reads are spaced so two samples of a moving hinge cannot land together; the first is not delayed.

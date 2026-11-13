@@ -5,7 +5,7 @@ import { closeIosApp, openIosApp, openIosDevice } from './core/app-launch.ts';
 import { readIosClipboardText, writeIosClipboardText } from './core/app-device-io.ts';
 import { readIosSetting, setIosSetting } from './core/app-settings.ts';
 import { captureScreenshotViaRunner, screenshotIos } from './core/screenshot.ts';
-import { iosRunnerOverrides, resolveAppleBackRunnerCommand } from './interactions.ts';
+import { iosRunnerOverrides } from './interactions.ts';
 import { appleRemotePressCommand } from './os/tvos/remote.ts';
 import { runMacOsScreenshotAction } from './os/macos/helper.ts';
 import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from './alert.ts';
@@ -143,12 +143,15 @@ export function createAppleInteractor(
         );
         return;
       }
+      if (mode === 'system' && isMacOs(device)) {
+        throw new AppError('UNSUPPORTED_OPERATION', 'macOS has no system back', {
+          dispatched: 'no',
+        });
+      }
+      // iOS has one back: the verified left-edge swipe, whichever mode was asked.
       await runAppleRunnerCommand(
         device,
-        {
-          command: resolveAppleBackRunnerCommand(mode),
-          appBundleId: runnerContext.appBundleId,
-        },
+        { command: 'backInApp', appBundleId: runnerContext.appBundleId },
         runnerOpts,
       );
     },

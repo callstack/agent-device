@@ -152,7 +152,8 @@ jobs:
       # The iPad leg runs a named selection: the smallest set that can execute the off-phone half of
       # the sole-screen rule — the admission boundary itself, the refusal when the display box a
       # synthesized turn swaps cannot be read and the app is not proven full-screen (#4091), one
-      # hostile-tree command that must reach synthesis, and `back`'s route witness.
+      # hostile-tree command that must reach synthesis, and `back`'s route witness: it swipes and
+      # verifies through the route that opens after a rejected query.
       # Geometry and error cases live in the host-runnable evidence matrix instead. `xcodebuild`
       # exits 0 when a selection matches nothing, so the reporter below asserts the executed count
       # against this lane's reach (`XCTEST_LANE=nightly-ipad`, derived by check:xctest-selection).
@@ -172,8 +173,7 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSoleScreenDisplayIDIsNamedOnlyForAnAppThatFillsItsScreen \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTapRefusesBeforeDispatchWhenTheSoleDisplayCannotBeMeasured \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testLongPressOnAnUnserializableTreeIsSynthesizedOnTheSoleScreen \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testInAppBackAfterARejectedQueryTapsThroughTheRouteThatOpens \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testInAppBackAfterARejectedQueryWithUnprovableForegroundTapsThroughTheWindow \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testInAppBackAfterARejectedQuerySwipesAndVerifiesOnTheRouteThatOpens \
             -resultBundlePath "$RESULT_BUNDLE_PATH" 2>&1 | tee .tmp/xctest-nightly/runner.log
 
       # Best-effort and never the job's verdict on its own; the step below is what asserts.

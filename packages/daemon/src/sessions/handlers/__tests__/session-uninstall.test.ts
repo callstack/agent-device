@@ -14,6 +14,15 @@ import {
   mockUninstallAppRuntime,
 } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+
+const HARMONY_DEVICE: DeviceInfo = {
+  platform: 'harmonyos',
+  id: 'hdc-1',
+  name: 'Harmony',
+  kind: 'device',
+  booted: true,
+};
 
 async function uninstall(device: SessionState['device'], app: string) {
   const sessionStore = makeSessionStore('agent-device-session-uninstall-');
@@ -77,6 +86,17 @@ test.each([
       message: 'Uninstalled: com.example.app',
     },
   ],
+  [
+    'a HarmonyOS removal',
+    HARMONY_DEVICE,
+    { wasInstalled: true, packageName: 'com.example.app' },
+    {
+      platform: 'harmonyos',
+      wasInstalled: true,
+      appId: 'com.example.app',
+      message: 'Uninstalled: com.example.app',
+    },
+  ],
 ] as const)(
   'uninstall reports %s through one admitted binding',
   async (_name, device, removed, expected) => {
@@ -92,15 +112,10 @@ test.each([
 );
 
 test('uninstall is refused before binding where the runtime fact closes it', async () => {
-  const harmony = {
-    platform: 'harmonyos',
-    id: 'hdc-1',
-    name: 'Harmony',
-    kind: 'device',
-    booted: true,
-  } as const;
+  // A HarmonyOS simulator closes the uninstall cell for the real owner too.
+  const harmonySimulator = { ...HARMONY_DEVICE, kind: 'simulator' as const };
 
-  await expect(uninstall(harmony, 'com.example.app')).resolves.toMatchObject({
+  await expect(uninstall(harmonySimulator, 'com.example.app')).resolves.toMatchObject({
     ok: false,
     error: { code: 'UNSUPPORTED_OPERATION', details: { reason: 'owner-capability-missing' } },
   });

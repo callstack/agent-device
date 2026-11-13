@@ -16,6 +16,7 @@ import {
   buildDaemonHttpUrl,
   isTenantOwnedSessionName,
   normalizeTenantId,
+  normalizeDaemonPublicOrigin,
   DAEMON_REQUEST_MAX_BYTES,
 } from '@agent-device/contracts/daemon-http';
 import {
@@ -55,6 +56,8 @@ export type DaemonProxyOptions = {
   upstreamBaseUrl: string;
   /** Auth token of the upstream daemon. Never leaves the proxy. */
   upstreamToken: string;
+  /** Fixed public HTTP(S) origin for upload tickets. */
+  publicOrigin?: string;
   maxRpcBodyBytes?: number;
   /**
    * Longest time one daemon request may take, including its body. Unset, an exchange lasts as long
@@ -82,11 +85,8 @@ export type DaemonProxy = {
   /** Identifies this proxy instance in its health payload, so clients notice a restart. */
   readonly instanceId: string;
   /**
-   * Answers one client request. `request.url` must be the URL the client used, because upload
-   * tickets are rewritten to its origin. The first comma-separated `x-forwarded-proto` value
-   * overrides its scheme when it is `http` or `https` (case-insensitive). This value is
-   * client-controlled unless ingress replaces it with the public scheme. Replace rather than
-   * append forwarding metadata, or remove untrusted headers and construct the public request URL.
+   * Answers one client request. Without `publicOrigin`, the embedder must construct
+   * `request.url` with the canonical client-facing origin. Forwarding headers do not select it.
    * Abort `request.signal` when the client goes away so in-flight daemon work is cancelled.
    * Resolves with an error response rather than rejecting.
    */
@@ -95,6 +95,7 @@ export type DaemonProxy = {
 
 type NormalizedProxyOptions = {
   upstreamBaseUrl: string;
+  publicOrigin: string | undefined;
   upstreamToken: string;
   clientToken: string | undefined;
   authenticate: DaemonProxyAuthenticate | undefined;
@@ -150,7 +151,7 @@ export function createDaemonProxyServer(options: DaemonProxyOptions): http.Serve
   return http.createServer(createDaemonProxyRequestListener(createDaemonProxy(options)));
 }
 
-/** Serves a proxy from any `node:http` or `node:https` server; upload tickets follow its scheme. */
+/** Serves a proxy from any `node:http` or `node:https` server. */
 export function createDaemonProxyRequestListener(proxy: DaemonProxy): http.RequestListener {
   return (req, res) => {
     void import('./node-http.ts')
@@ -364,6 +365,7 @@ async function forwardProxyRequest(params: {
       upstreamResponse,
       headers,
       uploadHeaders: caller.uploadHeaders,
+      publicOrigin: options.publicOrigin,
     });
   }
   return new Response(upstreamResponse.body, { status: upstreamResponse.status, headers });
@@ -404,44 +406,62 @@ async function rewrittenUploadPreflightResponse(params: {
   upstreamResponse: Response;
   headers: Headers;
   uploadHeaders: Record<string, string>;
+  publicOrigin: string | undefined;
 }): Promise<Response> {
-  const { request, upstreamResponse, headers, uploadHeaders } = params;
+  const { request, upstreamResponse, headers, uploadHeaders, publicOrigin } = params;
   const text = await upstreamResponse.text();
   headers.set('content-type', upstreamResponse.headers.get('content-type') ?? 'application/json');
-  return new Response(rewriteUploadPreflightResponse(text, request, uploadHeaders), {
-    status: upstreamResponse.status,
-    headers,
-  });
+  return new Response(
+    rewriteUploadPreflightResponse(text, request, uploadHeaders, publicOrigin, upstreamResponse.ok),
+    {
+      status: upstreamResponse.status,
+      headers,
+    },
+  );
 }
 
 function rewriteUploadPreflightResponse(
   body: string,
   request: Request,
   uploadHeaders: Record<string, string>,
+  publicOrigin: string | undefined,
+  expectTicket: boolean,
 ): string {
   let parsed: unknown;
   try {
     parsed = JSON.parse(body) as unknown;
   } catch {
-    return body;
+    if (!expectTicket) return body;
+    throw new Error('Invalid upstream upload ticket');
   }
 
-  if (!parsed || typeof parsed !== 'object') return body;
-  const record = parsed as { upload?: { url?: unknown; headers?: unknown } };
-  if (!record.upload || typeof record.upload !== 'object') return body;
+  if (!expectTicket && (!parsed || typeof parsed !== 'object' || !('upload' in parsed)))
+    return body;
+  if (!parsed || typeof parsed !== 'object') throw new Error('Invalid upstream upload ticket');
+  const record = parsed as { uploadId?: unknown; upload?: { url?: unknown; headers?: unknown } };
+  if (
+    typeof record.uploadId !== 'string' ||
+    !record.uploadId ||
+    record.uploadId.trim() !== record.uploadId ||
+    record.uploadId.includes('/') ||
+    !record.upload ||
+    typeof record.upload !== 'object'
+  )
+    throw new Error('Invalid upstream upload ticket');
 
   const rewrittenUrl =
     typeof record.upload.url === 'string'
-      ? rewriteUploadDirectUrl(record.upload.url, request)
+      ? rewriteUploadDirectUrl(record.upload.url, record.uploadId, request, publicOrigin)
       : null;
+  if (!rewrittenUrl) throw new Error('Invalid upstream upload ticket');
   return JSON.stringify({
     ...(parsed as Record<string, unknown>),
     upload: {
       ...record.upload,
-      ...(rewrittenUrl ? { url: rewrittenUrl } : {}),
+      url: rewrittenUrl,
       headers: {
         ...upstreamTicketContentType(record.upload.headers),
-        ...(rewrittenUrl ? uploadHeaders : {}),
+        ...uploadHeaders,
       },
     },
   });
@@ -458,7 +478,12 @@ function upstreamTicketContentType(headers: unknown): Record<string, string> {
   return {};
 }
 
-function rewriteUploadDirectUrl(upstreamUrl: string, request: Request): string | null {
+function rewriteUploadDirectUrl(
+  upstreamUrl: string,
+  uploadId: string,
+  request: Request,
+  publicOrigin: string | undefined,
+): string | null {
   let parsed: URL;
   try {
     parsed = new URL(upstreamUrl);
@@ -466,20 +491,20 @@ function rewriteUploadDirectUrl(upstreamUrl: string, request: Request): string |
     return null;
   }
 
-  if (!parsed.pathname.startsWith('/upload/')) {
+  if (
+    !['http:', 'https:'].includes(parsed.protocol) ||
+    parsed.username ||
+    parsed.password ||
+    parsed.hash ||
+    parsed.pathname !== `/upload/direct/${uploadId}`
+  ) {
     return null;
   }
 
   const requestUrl = new URL(request.url);
   const uploadIndex = requestUrl.pathname.lastIndexOf('/upload/preflight');
   const uploadPrefix = uploadIndex >= 0 ? requestUrl.pathname.slice(0, uploadIndex) : '';
-  const forwardedProto = request.headers
-    .get('x-forwarded-proto')
-    ?.split(',')[0]
-    ?.trim()
-    .toLowerCase();
-  const rewritten = new URL(requestUrl.origin);
-  if (forwardedProto === 'http' || forwardedProto === 'https') rewritten.protocol = forwardedProto;
+  const rewritten = new URL(publicOrigin ?? requestUrl.origin);
   rewritten.pathname = `${uploadPrefix}${parsed.pathname}`;
   rewritten.search = parsed.search;
   return rewritten.toString();
@@ -493,6 +518,10 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
     : normalizeToken(options.clientToken ?? '', 'clientToken');
   return {
     upstreamBaseUrl,
+    publicOrigin:
+      options.publicOrigin === undefined
+        ? undefined
+        : normalizeDaemonPublicOrigin(options.publicOrigin),
     upstreamToken,
     clientToken,
     authenticate: options.authenticate,

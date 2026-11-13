@@ -66,8 +66,8 @@ extension RunnerTests {
         )
       case .xctestFallback:
         break
-      case .refused(_, let message, let hint):
-        return unsupportedResponse(message: message, hint: hint)
+      case .refused(_, let refusal):
+        return refusalResponse(refusal)
       }
     }
 #else

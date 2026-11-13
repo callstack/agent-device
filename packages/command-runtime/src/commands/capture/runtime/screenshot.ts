@@ -56,16 +56,20 @@ export const screenshotCommand: RuntimeCommand<
     if (options.scale !== undefined) {
       await resizePngFileToScale(reserved.path, options.scale);
     }
+    if (reserved.publishedPath !== undefined) {
+      (options.signal ?? runtime.signal)?.throwIfAborted();
+    }
     artifact = await reserved.publish();
   } catch (error) {
     await reserved.cleanup?.();
     throw error;
   }
 
+  const outputPath = reserved.publishedPath ?? reserved.path;
   return {
-    path: reserved.path,
+    path: outputPath,
     ...(artifact ? { artifacts: [artifact] } : {}),
     ...(displayRotation ? { displayRotation } : {}),
-    ...successText(`Saved screenshot: ${reserved.path}`),
+    ...successText(`Saved screenshot: ${outputPath}`),
   };
 };

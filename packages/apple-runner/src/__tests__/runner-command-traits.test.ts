@@ -66,7 +66,6 @@ test('runner command trait table pins lifecycle-sensitive command groups', () =>
       'actionButton',
       'appSwitcher',
       'backInApp',
-      'backSystem',
       'home',
       'keyboardDismiss',
       'keyboardReturn',

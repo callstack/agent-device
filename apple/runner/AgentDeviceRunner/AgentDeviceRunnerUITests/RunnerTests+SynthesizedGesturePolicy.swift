@@ -98,11 +98,11 @@ enum SynthesizedGestureAttempt {
   case performed(timing: (gestureStartUptimeMs: Double, gestureEndUptimeMs: Double))
   /// Synthesis failed and the policy allows the call site's XCTest coordinate gesture.
   case xctestFallback(message: String, hint: String?)
-  /// Synthesis failed and the policy refuses an XCTest coordinate gesture.
+  /// Synthesis failed and the policy refuses an XCTest coordinate gesture. `refusal` is the
+  /// producer's `.unsupported` or `.notDispatched` outcome, never `.performed`.
   case refused(
     timing: (gestureStartUptimeMs: Double, gestureEndUptimeMs: Double),
-    message: String,
-    hint: String?
+    refusal: RunnerInteractionOutcome
   )
 }
 
@@ -141,12 +141,22 @@ extension RunnerTests {
     synthesize: () throws -> RunnerInteractionOutcome?
   ) throws -> SynthesizedGestureAttempt {
     var outcome: RunnerInteractionOutcome?
-    let timing = try measureGesture { outcome = try synthesize() }
+    let timing: (gestureStartUptimeMs: Double, gestureEndUptimeMs: Double)
+    do {
+      timing = try measureGesture { outcome = try synthesize() }
+    } catch let unknown as RunnerGestureOutcomeUnknown {
+      // A gesture that may have run is never repeated through a fallback.
+      logSynthesizedGesturePolicyDecision(kind: kind, context: context, fallbackAttempted: false)
+      throw unknown
+    }
     guard let outcome else {
       logSynthesizedGesturePolicyDecision(kind: kind, context: context, fallbackAttempted: false)
-      return .refused(timing: timing, message: "synthesized gesture deadline expired before dispatch", hint: nil)
+      return .refused(
+        timing: timing,
+        refusal: .unsupported(message: "synthesized gesture deadline expired before dispatch", hint: nil)
+      )
     }
-    guard case .unsupported(let message, let hint) = outcome else {
+    guard case let (message, hint)? = outcome.refusalText else {
       logSynthesizedGesturePolicyDecision(kind: kind, context: context, fallbackAttempted: false)
       return .performed(timing: timing)
     }
@@ -161,7 +171,7 @@ extension RunnerTests {
     )
     return fallbackAllowed
       ? .xctestFallback(message: message, hint: hint)
-      : .refused(timing: timing, message: message, hint: hint)
+      : .refused(timing: timing, refusal: outcome)
   }
 
   @MainActor

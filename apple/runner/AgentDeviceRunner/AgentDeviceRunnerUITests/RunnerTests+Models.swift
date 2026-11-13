@@ -18,7 +18,6 @@ enum CommandType: String, Codable, CaseIterable {
   case snapshot
   case screenshot
   case backInApp
-  case backSystem
   case home
   case rotate
   case appSwitcher
@@ -295,7 +294,7 @@ extension Command {
     // prevents). .scroll is the fused frame-resolve + drag scroll and .desktopScroll the macOS
     // frame-resolve + wheel event sibling of .drag; .sequence is the fused multi-step batch.
     case .tap, .type, .longPress, .drag, .remotePress, .swipe, .scroll, .desktopScroll,
-         .backInApp, .backSystem, .rotate, .appSwitcher,
+         .backInApp, .rotate, .appSwitcher,
          .keyboardDismiss, .keyboardReturn, .sequence, .gesture:
       return .interaction
 

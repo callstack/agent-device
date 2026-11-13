@@ -270,6 +270,88 @@ test('rejects system chrome inherited under an empty application window', () => 
   expect(decision?.diagnostics.helperNonSystemMeaningfulNodeCount).toBe(0);
 });
 
+function foregroundWindowPackageOf(windows: string[]): string | undefined {
+  const result = classifyAndroidHelperContent(helperXml(windows), {
+    backend: 'android-helper',
+    nodeCount: windows.length * 2,
+    rootPresent: true,
+    windowCount: windows.length,
+    captureMode: 'interactive-windows',
+  });
+  return result.outcome === 'unusable' ? undefined : result.foregroundWindowPackage;
+}
+
+function window(params: {
+  windowType: number;
+  packageName: string;
+  text: string;
+  windowLayer: number;
+  windowActive?: boolean;
+}): string {
+  const { text, ...windowAttributes } = params;
+  return node({
+    ...windowAttributes,
+    className: 'android.widget.FrameLayout',
+    children: [
+      node({ text, packageName: params.packageName, className: 'android.widget.TextView' }),
+    ],
+  });
+}
+
+test('names the active application window, not a stale one listed first or a system window above it', () => {
+  expect(
+    foregroundWindowPackageOf([
+      window({
+        windowType: 3,
+        packageName: 'com.android.systemui',
+        text: '12:00',
+        windowLayer: 9,
+        windowActive: true,
+      }),
+      window({
+        windowType: 2,
+        packageName: 'com.google.android.inputmethod.latin',
+        text: 'Space',
+        windowLayer: 8,
+      }),
+      // A stale session-app window Android kept after the transition: inactive, lower layer.
+      window({
+        windowType: 1,
+        packageName: 'com.android.settings',
+        text: 'Network and internet',
+        windowLayer: 1,
+      }),
+      window({
+        windowType: 1,
+        packageName: 'com.google.android.apps.nexuslauncher',
+        text: 'Gmail',
+        windowLayer: 2,
+        windowActive: true,
+      }),
+    ]),
+  ).toBe('com.google.android.apps.nexuslauncher');
+});
+
+test('names no foreground app when only a framework window is active', () => {
+  expect(
+    foregroundWindowPackageOf([
+      window({
+        windowType: 1,
+        packageName: 'android',
+        text: 'Allow?',
+        windowLayer: 3,
+        windowActive: true,
+      }),
+      window({
+        windowType: 1,
+        packageName: 'com.android.settings',
+        text: 'Network and internet',
+        windowLayer: 1,
+      }),
+    ]),
+  ).toBeUndefined();
+});
+
 test('returns a meaningful active system surface (notification shade) faithfully', () => {
   const result = classifyAndroidHelperContent(
     helperXml([
@@ -526,12 +608,14 @@ function node(options: {
   packageName: string;
   className: string;
   windowType?: number;
+  windowLayer?: number;
   windowActive?: boolean;
   /** Nested children, so chrome leaves can sit inside their status/nav-bar container as on a device. */
   children?: string[];
 }): string {
   const windowAttrs =
     (options.windowType === undefined ? '' : ` window-type="${options.windowType}"`) +
+    (options.windowLayer === undefined ? '' : ` window-layer="${options.windowLayer}"`) +
     (options.windowActive === undefined ? '' : ` window-active="${options.windowActive}"`);
   const open = `<node index="0"${windowAttrs} text="${options.text ?? ''}" resource-id="${options.resourceId ?? ''}" class="${options.className}" package="${options.packageName}" visible-to-user="true" enabled="true" bounds="[0,0][100,100]"`;
   return options.children === undefined

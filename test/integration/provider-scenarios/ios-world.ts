@@ -166,10 +166,10 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       result: { found: true },
     },
     {
-      command: 'ios.runner.backSystem',
+      command: 'ios.runner.backInApp',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
       platform: 'apple',
-      request: { command: 'backSystem', appBundleId: 'com.apple.Preferences' },
+      request: { command: 'backInApp', appBundleId: 'com.apple.Preferences' },
       result: { backed: true },
     },
     {

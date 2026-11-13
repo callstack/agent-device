@@ -40,6 +40,10 @@ final class RunnerTests: XCTestCase {
   /// discloses dispatched: no.
   /// `ALERT_UNRESOLVED` means required alert acquisition failed or exhausted its deadline.
   /// It establishes no absence and activates nothing, so dispatched: no.
+  /// `BACK_SWIPE_NO_CHANGE` is a back swipe that left the app's screen unchanged.
+  /// `BACK_SWIPE_UNVERIFIED` is one whose screen kept changing on its own before the swipe, or could
+  /// not be sampled afterwards. Both ran the swipe. `BACK_SWIPE_NOT_DISPATCHED` is a back swipe that
+  /// was refused before any touch went down, so dispatched: no.
   enum RunnerWireErrorCode {
     static let mainThreadTimeout = "MAIN_THREAD_TIMEOUT"
     static let appNotRunning = "APP_NOT_RUNNING"
@@ -47,6 +51,13 @@ final class RunnerTests: XCTestCase {
     static let textInputProbeUnavailable = "TEXT_INPUT_PROBE_UNAVAILABLE"
     static let alertButtonNotFound = "ALERT_BUTTON_NOT_FOUND"
     static let alertUnresolved = "ALERT_UNRESOLVED"
+    /// A synthesized gesture refused before its events reached XCTest, so the command sent nothing.
+    static let synthesizedGestureNotDispatched = "SYNTHESIZED_GESTURE_NOT_DISPATCHED"
+    /// A synthesized gesture that failed after its events reached XCTest, so it may have run.
+    static let synthesizedGestureOutcomeUnknown = "SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN"
+    static let backSwipeNoChange = "BACK_SWIPE_NO_CHANGE"
+    static let backSwipeUnverified = "BACK_SWIPE_UNVERIFIED"
+    static let backSwipeNotDispatched = "BACK_SWIPE_NOT_DISPATCHED"
     /// Refuses a repeat of a `commandId` the runner already finished, when that command's own
     /// classification keeps no response body to replay. Nothing ran for the repeat, but the daemon's
     /// dispatch disclosure stays `unknown` — only the runner knows whether an earlier send of that id
