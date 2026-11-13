@@ -365,7 +365,7 @@ function parseHostProcessIdentityRows(stdout: string): HostProcessIdentityRow[] 
     if (!match) continue;
     const pid = Number.parseInt(match[1]!, 10);
     if (!Number.isInteger(pid) || pid <= 0) continue;
-    // On Linux both facts come from one /proc read; the ps row only covers other hosts.
+    // On Linux both facts come from one /proc read; the ps row is the fallback when /proc is unreadable.
     const linux = readLinuxProcessStat(pid);
     rows.push(linux ? { pid, ...linux } : { pid, state: match[2]!, startTime: match[3]! });
   }
