@@ -2,7 +2,7 @@ import type { ConnectionProviderCapabilities } from '@agent-device/contracts/rem
 import { resolveUserConfigPath } from '@agent-device/host-kit/file';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { PluginConnection, PluginConnectionContext } from './contract.ts';
-import { legacyStoreManifests, storePluginCandidates } from './store.ts';
+import { storePluginCandidates } from './store.ts';
 
 /** A plugin's connection as the client calls it: the registry adds the `host` to each context. */
 export type PluginConnectionCallbacks = Readonly<{
@@ -15,10 +15,9 @@ export type PluginConnectionCallbacks = Readonly<{
 export type RegisteredConnection = PluginConnectionCallbacks &
   Readonly<{ capabilities: PluginConnection['capabilities'] }>;
 
-// Capabilities live in the plugin, so a v2 store plugin answers only once its package has loaded.
-// A client loads the store once per process through primePluginConnections; every synchronous
-// reader below then answers from that registry alone. Before the store is primed, a v1 plugin
-// answers from its manifest.
+// A plugin declares its connection capabilities in code, so a store plugin answers only once its
+// package has loaded. A client loads the store once per process through primePluginConnections;
+// every synchronous reader below then answers from that registry alone.
 export type FailedPlugin = Extract<PluginInventoryEntry, { state: 'failed' }>;
 
 type PrimedStore = Readonly<{
@@ -69,16 +68,10 @@ export function pluginConnectionCapabilities(
   env: NodeJS.ProcessEnv,
 ): ConnectionProviderCapabilities | undefined {
   if (provider === undefined) return undefined;
-  const store = primed.get(resolveUserConfigPath(env));
-  if (store) return store.connections.get(provider)?.capabilities;
-  return legacyStoreManifests(env).find((plugin) => plugin.agentDevicePlugin.provider === provider)
-    ?.agentDevicePlugin.connection;
+  return primed.get(resolveUserConfigPath(env))?.connections.get(provider)?.capabilities;
 }
 
 export function pluginConnectionNames(env: NodeJS.ProcessEnv): string[] {
   const store = primed.get(resolveUserConfigPath(env));
-  if (store) return [...store.connections.keys()];
-  return legacyStoreManifests(env)
-    .filter((plugin) => plugin.agentDevicePlugin.connection)
-    .map((plugin) => plugin.agentDevicePlugin.provider);
+  return store ? [...store.connections.keys()] : [];
 }
