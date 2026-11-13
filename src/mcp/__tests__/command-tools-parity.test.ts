@@ -215,6 +215,7 @@ test('MCP applies config-backed command defaults; explicit operator input is ref
     JSON.stringify({ iosXctestrunFile: configuredXctestrun, appsFilter: 'all' }),
   );
   vi.stubEnv('HOME', home);
+  vi.stubEnv('AGENT_DEVICE_HOME', path.join(home, '.agent-device'));
 
   const calls: Array<Parameters<AgentDeviceDaemonTransport>[0]> = [];
   const transport: AgentDeviceDaemonTransport = async (request) => {

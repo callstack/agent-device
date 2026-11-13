@@ -101,6 +101,9 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: build }
 
+      - name: Verify the standalone Maestro plugin package
+        run: node --test packages/maestro/test/package-smoke.mjs
+
       - name: Verify emitted chunk ownership
         uses: ./.github/actions/run-gate
         with: { gate: bundle-owner-files }
