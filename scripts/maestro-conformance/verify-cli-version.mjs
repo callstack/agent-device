@@ -12,8 +12,8 @@
 //
 // A script rather than `run:` shell because retained evidence has to be bounded: a JVM startup
 // failure prints a stack trace, and a step log is not the place to dump one unbounded. Each stream
-// keeps its last MAX_DIAGNOSTIC_BYTES, newest first, which is also the half the parse wants — the
-// notice-tolerant match takes the LAST semver of stdout, as the `grep | tail -1` it replaced did.
+// keeps its last MAX_DIAGNOSTIC_BYTES. Version matching consumes the full stream separately, so
+// truncating diagnostics cannot change which version is checked.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -23,9 +23,6 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 /** Per stream: how much of the probe's output the run retains and prints. */
 export const MAX_DIAGNOSTIC_BYTES = 8192;
-
-/** The shape the step grepped for. Tolerates notices (e.g. the analytics banner) around it. */
-const SEMVER_PATTERN = /\d+\.\d+\.\d+/g;
 
 /** Every verdict the probe can reach. Only `match` lets the differential proceed. */
 const PROBE_OUTCOMES = Object.freeze({
@@ -45,9 +42,58 @@ export function readPinnedVersion() {
   return version;
 }
 
-/** The last semver in `output`, or null when it carries none. */
+/** The last semver in `output`, with oversized versions represented by a bounded failure marker. */
 export function parseVersion(output) {
-  return output.match(SEMVER_PATTERN)?.at(-1) ?? null;
+  const capture = createVersionCapture();
+  capture.append(output);
+  return capture.read();
+}
+
+const VERSION_STATES = {
+  search: { digit: 'major' },
+  major: { digit: 'major', dot: 'major-dot' },
+  'major-dot': { digit: 'minor' },
+  minor: { digit: 'minor', dot: 'minor-dot' },
+  'minor-dot': { digit: 'patch' },
+  patch: { digit: 'patch' },
+};
+
+function versionCharacterKind(byte) {
+  if (byte >= 48 && byte <= 57) return 'digit';
+  if (byte === 46) return 'dot';
+  return 'other';
+}
+
+function createVersionCapture() {
+  let state = 'search';
+  let candidate = '';
+  let oversized = false;
+  let lastVersion = null;
+  const currentVersion = () =>
+    oversized ? `(version exceeds ${MAX_DIAGNOSTIC_BYTES} bytes)` : candidate;
+  const retain = (character) => {
+    if (candidate.length < MAX_DIAGNOSTIC_BYTES) candidate += character;
+    else oversized = true;
+  };
+  return {
+    append(output) {
+      for (const byte of Buffer.isBuffer(output) ? output : Buffer.from(output)) {
+        const nextState = VERSION_STATES[state][versionCharacterKind(byte)];
+        if (nextState !== undefined) {
+          state = nextState;
+          retain(String.fromCharCode(byte));
+          continue;
+        }
+        if (state === 'patch') lastVersion = currentVersion();
+        state = 'search';
+        candidate = '';
+        oversized = false;
+      }
+    },
+    read() {
+      return state === 'patch' ? currentVersion() : lastVersion;
+    },
+  };
 }
 
 /**
@@ -59,7 +105,11 @@ function probeVersion({ command, args = ['--version'], env = process.env }) {
     const child = spawn(command, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
     const stdout = boundedCapture();
     const stderr = boundedCapture();
-    child.stdout.on('data', (chunk) => stdout.append(chunk));
+    const version = createVersionCapture();
+    child.stdout.on('data', (chunk) => {
+      stdout.append(chunk);
+      version.append(chunk);
+    });
     child.stderr.on('data', (chunk) => stderr.append(chunk));
 
     let settled = false;
@@ -72,6 +122,7 @@ function probeVersion({ command, args = ['--version'], env = process.env }) {
         spawnErrorCode: undefined,
         exitCode,
         signal,
+        version: version.read(),
         stdout: stdout.read(),
         stderr: stderr.read(),
       });
@@ -86,6 +137,7 @@ function probeVersion({ command, args = ['--version'], env = process.env }) {
         spawnErrorCode: error?.code,
         exitCode: null,
         signal: null,
+        version: version.read(),
         stdout: stdout.read(),
         stderr: stderr.read(),
       });
@@ -99,7 +151,7 @@ function probeVersion({ command, args = ['--version'], env = process.env }) {
  * whose behavior the differential cannot trust.
  */
 export function evaluateVersionProbe(probe, expected) {
-  const version = parseVersion(probe.stdout.value);
+  const version = probe.version;
   const outcome = probeOutcome(probe, version, expected);
   return { outcome, version, report: reportFor(probe, { outcome, version, expected }) };
 }

@@ -5,9 +5,9 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { parse } from 'yaml';
 import {
   MAX_DIAGNOSTIC_BYTES,
@@ -22,7 +22,7 @@ const workflowPath = path.join(repoRoot, '.github/workflows/conformance-differen
 const PIN = readPinnedVersion();
 
 function scratchDirectory(prefix) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const root = mkdtempForTestSync(prefix);
   test.after(() => fs.rmSync(root, { force: true, recursive: true }));
   return root;
 }
@@ -64,6 +64,7 @@ function completedProbe(overrides) {
     spawnErrorCode: undefined,
     exitCode: 0,
     signal: null,
+    version: parseVersion(overrides.stdout?.value ?? ''),
     stdout: { value: '', bytes: 0, totalBytes: 0, droppedBytes: 0 },
     stderr: { value: '', bytes: 0, totalBytes: 0, droppedBytes: 0 },
     ...overrides,
@@ -152,6 +153,46 @@ test('oversized output is retained only up to its bounded tail and names what it
     new RegExp(`retained the last ${MAX_DIAGNOSTIC_BYTES} of \\d+ bytes, dropped \\d+`),
   );
   assert.ok(run.output.length < MAX_DIAGNOSTIC_BYTES * 2, 'the step log stays bounded');
+});
+
+test('a truncated number cannot become the pinned version at the retained boundary', () => {
+  for (const prefix of ['1', '9.']) {
+    const run = runProbe({
+      stdout: `${prefix}${PIN}${'x'.repeat(MAX_DIAGNOSTIC_BYTES - PIN.length)}`,
+    });
+    assert.equal(run.status, 1, `truncated ${prefix}${PIN} must not match ${PIN}: ${run.output}`);
+    assert.match(run.stdout, /verdict=version-mismatch/);
+  }
+});
+
+test('a complete version after a truncated prefix still determines the verdict', () => {
+  for (const [version, expectedStatus] of [
+    [PIN, 0],
+    ['1.2.3', 1],
+  ]) {
+    const run = runProbe({ stdout: `${'9'.repeat(MAX_DIAGNOSTIC_BYTES)} ${version}\n` });
+    assert.equal(run.status, expectedStatus, run.output);
+    assert.ok(run.stdout.includes(`actual=${version}\n`), run.output);
+  }
+});
+
+test('a version before oversized trailing notices remains authoritative', () => {
+  for (const [version, expectedStatus] of [
+    [PIN, 0],
+    ['1.2.3', 1],
+  ]) {
+    const run = runProbe({ stdout: `${version}\n${'notice '.repeat(MAX_DIAGNOSTIC_BYTES)}\n` });
+    assert.equal(run.status, expectedStatus, run.output);
+    assert.ok(run.stdout.includes(`actual=${version}\n`), run.output);
+  }
+});
+
+test('an oversized numeric version stays bounded and cannot match the pin', () => {
+  const run = runProbe({ stdout: `${'1'.repeat(MAX_DIAGNOSTIC_BYTES * 3)}.${PIN}\n` });
+  assert.equal(run.status, 1, run.output);
+  assert.match(run.stdout, /verdict=version-mismatch/);
+  assert.match(run.stdout, /actual=\(version exceeds 8192 bytes\)/);
+  assert.ok(run.output.length < MAX_DIAGNOSTIC_BYTES * 2);
 });
 
 test('a probe that did not complete cleanly is never accepted on the strength of its stdout', () => {

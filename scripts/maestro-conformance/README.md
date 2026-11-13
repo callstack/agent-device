@@ -149,7 +149,7 @@ The workflow builds and installs the fixture app, verifies its bundle id, pins
 the Maestro CLI to the same version as layers 1-2, and passes `--maestro` so the
 flow routes through the compat engine. The pin check runs
 [`verify-cli-version.mjs`](./verify-cli-version.mjs): it fails unless
-`maestro --version` exits 0 and its newest semver equals the pin, and it keeps the
+`maestro --version` exits 0 and its last semver in stdout equals the pin, and it keeps the
 probe's exit, stdout and stderr as bounded diagnostics so a failure names its cause
 (#4455).
 
