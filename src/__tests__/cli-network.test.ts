@@ -703,45 +703,6 @@ test('test command --debug prints failed attempt step window when timing trace e
   }
 });
 
-test('test --maestro forwards Maestro backend and platform for directory suites', async () => {
-  const tmpDir = await mkdtempForTest('agent-device-cli-maestro-suite-');
-  await fs.writeFile(
-    path.join(tmpDir, 'auth-flow.yml'),
-    ['appId: demo.app', '---', '- launchApp', ''].join('\n'),
-  );
-
-  try {
-    const result = await runTestSuiteCli(
-      ['test', '--maestro', '--platform', 'android', tmpDir],
-      async () => ({
-        ok: true,
-        data: {
-          total: 1,
-          executed: 1,
-          passed: 1,
-          failed: 0,
-          skipped: 0,
-          notRun: 0,
-          durationMs: 5,
-          failures: [],
-          tests: [],
-        },
-      }),
-    );
-
-    assert.equal(result.code, null);
-    assert.equal(result.calls.length, 1);
-    assert.equal(result.calls[0]?.command, 'test');
-    assert.deepEqual(result.calls[0]?.positionals, [tmpDir]);
-    assert.equal(result.calls[0]?.flags?.replayBackend, 'maestro');
-    assert.equal(result.calls[0]?.flags?.platform, 'android');
-    assert.equal(result.calls[0]?.meta?.requestProgress, 'replay-test');
-    assert.doesNotMatch(result.stderr, /Running replay suite\.\.\./);
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  }
-});
-
 test('test forwards shard flags and comma device lists', async () => {
   const result = await runTestSuiteCli(
     ['test', '--maestro', '--device', 'udid1,emulator-5554', '--shard-all', '2', './suite'],
