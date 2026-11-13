@@ -1,12 +1,3 @@
-import {
-  legacyStoreManifests,
-  readPluginConfig,
-  validatePluginSelection,
-  storeHome,
-  installationDirectory,
-  isVersionSelector,
-  type PluginSelection,
-} from './store-legacy.ts';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,18 +11,67 @@ import {
   resolveUserConfigPath,
 } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import type { PluginPackageEntry } from './discovery.ts';
-import { ROUTING_PROVIDER_IDENTITIES, type PluginManifest } from './manifest.ts';
 import type { PluginCandidate } from './registry.ts';
 
-export { legacyStoreManifests };
+export type PluginSelection = {
+  installation: string;
+  version?: string;
+  options?: Record<string, unknown>;
+};
+type PluginConfig = Record<string, unknown> & { plugins?: Record<string, PluginSelection> };
+
+function readPluginConfig(env: NodeJS.ProcessEnv): PluginConfig {
+  const configPath = resolveUserConfigPath(env);
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as PluginConfig;
+    if (!isRecord(config) || (config.plugins !== undefined && !isRecord(config.plugins)))
+      throw new AppError('INVALID_ARGS', 'Plugin config must contain an object');
+    return config;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
+    if (error instanceof SyntaxError)
+      throw new AppError('INVALID_ARGS', `Invalid plugin JSON: ${configPath}`, {}, error);
+    throw error;
+  }
+}
+
+function validatePluginSelection(name: string, selection: PluginSelection): void {
+  if (
+    !isPackageName(name) ||
+    !isRecord(selection) ||
+    typeof selection.installation !== 'string' ||
+    !/^[a-f0-9-]{36}$/.test(selection.installation) ||
+    (selection.version !== undefined && !isVersionSelector(selection.version)) ||
+    (selection.options !== undefined && !isRecord(selection.options))
+  ) {
+    throw new AppError('INVALID_ARGS', `Invalid plugin selection: ${name}`);
+  }
+}
+
+function storeHome(env: NodeJS.ProcessEnv): string {
+  return path.dirname(resolveUserConfigPath(env));
+}
+
+function installationDirectory(home: string, name: string, installation: string): string {
+  return path.join(home, 'plugins', installation, 'node_modules', name);
+}
+
+function isPackageName(value: string): boolean {
+  return /^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(value);
+}
+
+function isVersionSelector(value: unknown): value is string {
+  return (
+    typeof value === 'string' && /^[a-zA-Z0-9*^~<>=| .+-]+$/.test(value) && value.trim().length > 0
+  );
+}
 
 type StoreInstallation = {
   name: string;
   version: string;
   directory: string;
   selection: PluginSelection;
-  entry: PluginPackageEntry;
+  entry: string;
 };
 
 async function describeInstallation(
@@ -61,12 +101,8 @@ async function readInstallation(home: string, name: string, selection: PluginSel
   );
 }
 
-async function loadInstallation({ name, directory, selection, entry }: StoreInstallation) {
-  if (entry.kind === 'v1') {
-    const { adaptLegacyPlugin } = await import('./legacy.ts');
-    return adaptLegacyPlugin(entry.manifest, directory, selection.options);
-  }
-  const module = await import(pathToFileURL(entry.file).href);
+async function loadInstallation({ name, entry, selection }: StoreInstallation) {
+  const module = await import(pathToFileURL(entry).href);
   if (typeof module.default !== 'function')
     throw new AppError('INVALID_ARGS', `Plugin must export a default factory: ${name}`, {
       reason: 'invalid_plugin',
@@ -77,7 +113,8 @@ async function loadInstallation({ name, directory, selection, entry }: StoreInst
 /**
  * The store's contribution to the provider registry, in package-name order. Nothing here runs
  * plugin code: a selection or package that cannot be read becomes a candidate that fails when
- * loaded, so one damaged installation never hides the others.
+ * loaded, so one damaged installation never hides the others. A store package names its provider
+ * only once its factory runs, and the registry settles a duplicate then.
  */
 export async function storePluginCandidates(env: NodeJS.ProcessEnv): Promise<PluginCandidate[]> {
   const home = storeHome(env);
@@ -96,9 +133,6 @@ export async function storePluginCandidates(env: NodeJS.ProcessEnv): Promise<Plu
           source: 'store',
           package: name,
           version: installation.version,
-          ...(installation.entry.kind === 'v1'
-            ? { provider: installation.entry.manifest.agentDevicePlugin.provider }
-            : {}),
           ...(selection.options ? { hostOptions: selection.options } : {}),
           load: () => loadInstallation(installation),
         };
@@ -207,11 +241,16 @@ async function stagePlugin(
   }
 }
 
+/**
+ * Installs, updates or removes one plugin selection. Install checks the staged package's identity
+ * and version and resolves its entry to a readable file; the factory first runs when the daemon next
+ * composes its plugins. A provider-id clash with another plugin or a built-in is the registry's to
+ * settle then, by first claim.
+ */
 export async function changePlugin(
   action: PluginAction,
   input: string,
   env: NodeJS.ProcessEnv,
-  reservedProviders: readonly string[],
 ): Promise<void> {
   const { name, version } = parsePluginRequest(action, input);
   const configPath = resolveUserConfigPath(env);
@@ -234,13 +273,6 @@ export async function changePlugin(
       const requested =
         action === 'update' && isVersionSelector(previous?.version) ? previous.version : version;
       staged = await stagePlugin(home, name, requested, env);
-      assertUniqueLegacyProviders(
-        [
-          ...legacyStoreManifests(env).filter((manifest) => manifest.name !== name),
-          ...(staged.entry.kind === 'v1' ? [staged.entry.manifest] : []),
-        ],
-        reservedProviders,
-      );
       selections[name] = {
         installation: staged.installation,
         version: requested,
@@ -257,25 +289,5 @@ export async function changePlugin(
     throw error;
   } finally {
     await release();
-  }
-}
-
-// A v1 manifest names its provider before any code runs, so a clash is refused at install time. A
-// v2 package names its provider only once loaded; the registry records a clash then.
-function assertUniqueLegacyProviders(
-  manifests: readonly PluginManifest[],
-  reserved: readonly string[],
-): void {
-  const providers = new Set<string>([...ROUTING_PROVIDER_IDENTITIES, ...reserved]);
-  for (const { agentDevicePlugin } of manifests) {
-    if (providers.has(agentDevicePlugin.provider))
-      throw new AppError(
-        'INVALID_ARGS',
-        `Duplicate provider plugin: ${agentDevicePlugin.provider}`,
-        {
-          reason: 'duplicate_provider',
-        },
-      );
-    providers.add(agentDevicePlugin.provider);
   }
 }

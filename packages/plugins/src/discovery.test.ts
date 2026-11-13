@@ -120,11 +120,68 @@ test('package export resolution agrees with Node for each shape a plugin package
         entry.name,
       );
     } else {
-      assert.deepEqual(
-        discoverPluginEntry(directory),
-        { kind: 'v2', file: path.join(directory, entry.loads) },
-        entry.name,
-      );
+      assert.equal(discoverPluginEntry(directory), path.join(directory, entry.loads), entry.name);
     }
   }
+});
+
+test('a manifest entry never selects the loaded file', () => {
+  const root = fs.realpathSync(mkdtempForTestSync('agent-device-manifest-entry-'));
+  const directory = path.join(root, 'node_modules', 'declared');
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(
+    path.join(directory, 'package.json'),
+    JSON.stringify({
+      name: 'declared',
+      version: '1.0.0',
+      type: 'module',
+      main: './main.js',
+      agentDevicePlugin: { apiVersion: 1, provider: 'declared', entry: './legacy.js' },
+    }),
+  );
+  for (const file of ['main.js', 'legacy.js'])
+    fs.writeFileSync(path.join(directory, file), 'export {};');
+
+  assert.equal(discoverPluginEntry(directory), path.join(directory, 'main.js'));
+});
+
+test('an entry outside the installed package is refused', () => {
+  const root = mkdtempForTestSync('agent-device-entry-containment-');
+  const outside = path.join(root, 'outside.js');
+  fs.writeFileSync(outside, 'export {};');
+
+  const escaped = path.join(root, 'node_modules', 'traversal');
+  fs.mkdirSync(escaped, { recursive: true });
+  fs.writeFileSync(
+    path.join(escaped, 'package.json'),
+    JSON.stringify({
+      name: 'traversal',
+      version: '1.0.0',
+      type: 'module',
+      exports: { './agent-device': './../../outside.js' },
+    }),
+  );
+  assert.throws(
+    () => discoverPluginEntry(escaped),
+    (error: unknown) =>
+      (error as { details?: { reason?: string } }).details?.reason === 'plugin_load_failed',
+  );
+
+  const linked = path.join(root, 'node_modules', 'symlinked');
+  fs.mkdirSync(linked, { recursive: true });
+  fs.writeFileSync(
+    path.join(linked, 'package.json'),
+    JSON.stringify({
+      name: 'symlinked',
+      version: '1.0.0',
+      type: 'module',
+      exports: { './agent-device': './plugin.js' },
+    }),
+  );
+  fs.symlinkSync(outside, path.join(linked, 'plugin.js'));
+  assert.throws(
+    () => discoverPluginEntry(linked),
+    (error: unknown) =>
+      (error as { details?: { reason?: string } }).details?.reason === 'plugin_load_failed',
+  );
 });

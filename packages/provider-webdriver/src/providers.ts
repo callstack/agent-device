@@ -16,8 +16,8 @@ export const BROWSERSTACK_CREDENTIAL_VARIABLES = {
 
 /**
  * What a bundled provider declares before any of its code runs: the same fields an installed
- * plugin publishes under `agentDevicePlugin` in its manifest. Connect policy and the credential
- * fingerprint read this, never the provider implementation.
+ * plugin returns from its factory. Connect policy and the credential fingerprint read this, never
+ * the provider implementation.
  */
 export type CloudWebDriverProviderDeclaration = Readonly<{
   provider: CloudWebDriverKnownProviderName;

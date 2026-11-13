@@ -4,7 +4,6 @@ import {
   type PluginInventoryEntry,
 } from '@agent-device/contracts/plugin-inventory';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { legacyStoreManifests } from './store-legacy.ts';
 
 type CredentialValues = Readonly<Record<string, string | undefined>>;
 
@@ -12,7 +11,7 @@ type CredentialValues = Readonly<Record<string, string | undefined>>;
  * A versioned, non-reversible digest of the credentials a lease on `leaseBackend` reads from `env`,
  * or undefined when `env` holds none of them or the provider's credentials do not come from the
  * environment. Provider names are trimmed before lookup. Variable names come from the daemon's
- * plugin inventory, then from v1 manifests.
+ * plugin inventory.
  */
 export function providerCredentialFingerprint(
   provider: string,
@@ -20,7 +19,7 @@ export function providerCredentialFingerprint(
   leaseBackend?: string,
   inventory?: readonly PluginInventoryEntry[],
 ): string | undefined {
-  const variables = declaredCredentialVariables(provider.trim(), env, leaseBackend, inventory);
+  const variables = declaredCredentialVariables(provider.trim(), leaseBackend, inventory);
   // Whitespace-only counts as unset and other values are kept as is, as the provider's requireEnv does.
   return variables
     ? digest(
@@ -31,17 +30,14 @@ export function providerCredentialFingerprint(
     : undefined;
 }
 
-// Read from the inventory or manifest, so neither the client nor the daemon evaluates provider code.
+// Read from the inventory the daemon published, so neither the client nor the daemon evaluates
+// provider code.
 function declaredCredentialVariables(
   provider: string,
-  env: EnvMap,
   leaseBackend: string | undefined,
   inventory: readonly PluginInventoryEntry[] | undefined,
 ): readonly string[] | undefined {
-  const published = inventory && pluginCredentialVariables(inventory, provider, leaseBackend);
-  if (published) return published;
-  return legacyStoreManifests(env).find((plugin) => plugin.agentDevicePlugin.provider === provider)
-    ?.agentDevicePlugin.credentialVariables;
+  return inventory && pluginCredentialVariables(inventory, provider, leaseBackend);
 }
 
 function digest(values: CredentialValues): string | undefined {

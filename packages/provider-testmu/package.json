@@ -31,24 +31,6 @@
     "@agent-device/provider-webdriver": "workspace:*",
     "agent-device": "workspace:*"
   },
-  "agentDevicePlugin": {
-    "apiVersion": 1,
-    "provider": "testmu",
-    "entry": "./dist/plugin.mjs",
-    "connection": {
-      "leaseKind": "direct-device-provider",
-      "requiresAppAttachment": false,
-      "requiresRemoteDaemon": false,
-      "supportsArtifacts": true,
-      "supportsDeferredAppSelection": false,
-      "supportsDirectPortReverse": false,
-      "usesCloudWebDriverLease": true
-    },
-    "credentialVariables": [
-      "LT_USERNAME",
-      "LT_ACCESS_KEY"
-    ]
-  },
   "publishConfig": {
     "exports": {
       ".": {

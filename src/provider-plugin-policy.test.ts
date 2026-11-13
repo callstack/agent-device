@@ -8,7 +8,7 @@ import {
   startProviderRegistry,
 } from '@agent-device/plugins/registry';
 import { storePluginCandidates } from '@agent-device/plugins/store';
-import { pluginHome, selectPlugin, webDriverPluginSource } from '@agent-device/test-kit';
+import { pluginHome, selectV2Plugin, webDriverPluginSource } from '@agent-device/test-kit';
 import { PROVIDER_PLUGIN_POLICY } from './provider-plugin-policy.ts';
 
 const realFetch = globalThis.fetch;
@@ -39,7 +39,7 @@ afterEach(() => {
 
 test('a WebDriver plugin allocates through the shared engine under the process policy', async () => {
   const { home, env } = pluginHome();
-  selectPlugin(home, 'example', 'example', webDriverPluginSource('example', ['awsProjectArn']));
+  selectV2Plugin(home, 'example', webDriverPluginSource('example', ['awsProjectArn']));
   const registry = await startStoreRegistry(env);
   const { runtime, platformModule } = registry.registrations[0]!;
   assert.equal(runtime.provider, 'example');
@@ -71,11 +71,13 @@ test('a WebDriver plugin allocates through the shared engine under the process p
 
 test('a WebDriver descriptor missing what the engine needs is listed as an invalid plugin', async () => {
   const { home, env } = pluginHome();
-  selectPlugin(
+  selectV2Plugin(
     home,
     'example',
-    'example',
-    "export default () => ({ webDriver: { provider: 'example' } });",
+    `export default () => ({
+      apiVersion: 2, provider: 'example', credentials: { variables: [] },
+      setup: async () => ({ webDriver: { provider: 'example' } }),
+    });`,
   );
   const registry = await startStoreRegistry(env);
   assert.deepEqual(registry.registrations, []);

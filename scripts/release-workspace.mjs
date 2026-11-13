@@ -69,7 +69,11 @@ function checkPublishedDependencies(packed) {
   const unpublishableNames = new Set(
     packages.filter((pkg) => pkg.manifest.private === true).map((pkg) => pkg.manifest.name),
   );
-  if (packed.agentDevicePlugin) unpublishableNames.add(rootPackage.manifest.name);
+  // A provider plugin exports its factory as `./agent-device` and imports only types from
+  // agent-device, so it must never carry the core as a runtime dependency. The root and `main`
+  // loading fallbacks stay a loader convenience; a published plugin package names `./agent-device`.
+  if (packed.exports && Object.hasOwn(packed.exports, './agent-device'))
+    unpublishableNames.add(rootPackage.manifest.name);
   for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
     checkDependencyField(field, packed[field] ?? {}, unpublishableNames);
   }

@@ -23,12 +23,7 @@ export const pluginsCommand: ClientCommandHandler = async ({ positionals, flags 
     );
   }
   if (action !== 'list' && name) {
-    await changePlugin(
-      action as 'add' | 'update' | 'remove',
-      name,
-      process.env,
-      BUILTIN_PROVIDER_IDS,
-    );
+    await changePlugin(action as 'add' | 'update' | 'remove', name, process.env);
   }
   const plugins = await listPlugins(process.env, BUILTIN_PROVIDER_IDS);
   const daemon = readDaemonStatus(resolveDaemonPaths(flags.stateDir));

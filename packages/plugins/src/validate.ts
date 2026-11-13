@@ -1,15 +1,16 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import { isProviderId } from './discovery.ts';
-import {
-  assertCredentialVariables,
-  assertLocalConnectionCapabilities,
-  ROUTING_PROVIDER_IDENTITIES,
-} from './manifest.ts';
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform-runtime-operations';
-import { PROVIDER_PLUGIN_API_VERSION, type AgentDevicePlugin } from './contract.ts';
+import {
+  PROVIDER_PLUGIN_API_VERSION,
+  ROUTING_PROVIDER_IDENTITIES,
+  type AgentDevicePlugin,
+} from './contract.ts';
+
+const ENVIRONMENT_VARIABLE = /^[A-Z_][A-Z0-9_]*$/;
 
 /** The one validation of what a plugin factory returned, whichever source produced it. */
 export function validateAgentDevicePlugin(value: unknown): AgentDevicePlugin {
@@ -53,6 +54,15 @@ function assertCredentials(credentials: unknown): void {
   }
 }
 
+function assertCredentialVariables(variables: unknown): void {
+  if (
+    !Array.isArray(variables) ||
+    !variables.every((name) => typeof name === 'string' && ENVIRONMENT_VARIABLE.test(name))
+  ) {
+    throw invalidPlugin('Plugin credential variables must list environment variable names');
+  }
+}
+
 function assertConnection(connection: unknown): void {
   if (
     !isRecord(connection) ||
@@ -63,6 +73,31 @@ function assertConnection(connection: unknown): void {
     throw invalidPlugin('Plugin connection must provide capabilities, resolve and verify');
   }
   assertLocalConnectionCapabilities(connection.capabilities as ConnectionProviderCapabilities);
+}
+
+function assertLocalConnectionCapabilities(
+  policy: ConnectionProviderCapabilities | undefined,
+): void {
+  if (policy === undefined) return;
+  if (
+    !policy ||
+    typeof policy !== 'object' ||
+    policy.leaseKind !== 'direct-device-provider' ||
+    [
+      'requiresAppAttachment',
+      'requiresRemoteDaemon',
+      'supportsArtifacts',
+      'supportsDeferredAppSelection',
+      'supportsDirectPortReverse',
+      'usesCloudWebDriverLease',
+    ].some((key) => typeof policy[key as keyof ConnectionProviderCapabilities] !== 'boolean') ||
+    (policy.holdsCloudDevice !== undefined && typeof policy.holdsCloudDevice !== 'boolean') ||
+    (policy.forgetsEndedConnectionLease !== undefined &&
+      typeof policy.forgetsEndedConnectionLease !== 'boolean') ||
+    policy.requiresRemoteDaemon
+  ) {
+    throw invalidPlugin('Plugin connection must declare local provider capabilities');
+  }
 }
 
 /** The runtime a plugin built must answer to the provider id it registered. */
