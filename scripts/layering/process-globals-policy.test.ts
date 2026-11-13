@@ -61,8 +61,6 @@ test('entry declarations permit process reads but do not permit ambient command-
     'packages/capture-kit/src/png-worker.ts',
     'packages/maestro/src/daemon-port/run-script-http-child.ts',
     'packages/react-native/src/companion/client-companion-tunnel-worker.ts',
-    'src/sdk/host.ts',
-    'packages/host-kit/src/local-artifact-adapter.ts',
   ]) {
     assert.deepEqual(check('process.env; process.on("SIGINT", stop);', file), [], file);
     assert.equal(check('commandHostEnvironment();', file).length, 1, file);
@@ -124,11 +122,16 @@ test('bare process values are captures in calls, aliases, spreads, returns and c
     "import * as p from 'node:process'; captureHostEnvironment(p.default);",
   ]) {
     assert.equal(check(source).length, 1, source);
-    assert.deepEqual(check(source, 'src/sdk/host.ts'), [], source);
+    assert.equal(check(source, 'src/sdk/host.ts').length, 1, source);
+    assert.equal(
+      check(source, 'packages/host-kit/src/local-artifact-adapter.ts').length,
+      1,
+      source,
+    );
   }
 });
 
-test('SDK adapters capture their default host only through the shared entry', () => {
+test('SDK adapters cannot capture a process host', () => {
   for (const file of [
     'src/sdk/android-adb.ts',
     'src/sdk/artifacts.ts',

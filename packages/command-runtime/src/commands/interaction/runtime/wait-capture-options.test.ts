@@ -30,7 +30,7 @@ function pollingDevice(captureOptions: Array<BackendSnapshotOptions | undefined>
   };
   return createAgentDevice({
     backend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: { get: () => undefined, set: () => {} },
     policy: localCommandPolicy(),
     clock: createFakeClock(),

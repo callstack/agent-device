@@ -73,7 +73,7 @@ export function createSettleDevice(params: {
       fill: async () => ({ ok: true }),
       longPress: async () => ({ ok: true }),
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([
       {
         name: 'default',
