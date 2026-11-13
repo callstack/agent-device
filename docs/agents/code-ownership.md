@@ -15,11 +15,13 @@ Before you edit a module with many callers, run `pnpm depgraph affected <path>`.
 | Output formatters | `packages/command-output/src/` |
 | Help and progress | `src/commands/` |
 | Input fields and audiences | `packages/command-surface/src/common-input-fields.ts`, `packages/command-surface/src/input-audience.ts` |
-| Released SDK default hosts | `src/sdk/host.ts` |
+| Released SDK command-host scopes | `src/sdk/host.ts` |
 | Apple runner host port and binding | `packages/apple-runner/src/host.ts`, `packages/platform-apple/src/core/runner-client.ts` |
 
-For SDK entries `android-adb`, `artifacts`, `limrun`, `metro`, and `remote-config`, use `captureSdkHost` for defaults.
-For command-host readers, use `withSdkHost`.
+For SDK entries `android-adb`, `artifacts`, `limrun`, and `metro`, require an explicit host.
+For `resolveRemoteConfigProfile`, require `env`.
+For `createLocalArtifactAdapter`, require `cwd`.
+For SDK command-host readers, pass the supplied host to `withSdkHost`.
 Keep provider callbacks on their supplied host.
 Request cancellation and progress belong in `@agent-device/host-kit/request`.
 Per-call abort guards belong beside transports in `packages/daemon-client/src/daemon-client-transport.ts`.

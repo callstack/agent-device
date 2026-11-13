@@ -645,7 +645,7 @@ assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
           './install-source': (mod) => typeof mod.isTrustedInstallSourceUrl('https://example.test/app.apk'),
           './io': (mod) => typeof mod.createLocalArtifactAdapter({ cwd: process.cwd() }).reserveOutput,
           './limrun': async (mod) => {
-            const runtime = new mod.LimrunRuntime({ apiKey: 'lim_test_key' });
+            const runtime = new mod.LimrunRuntime({ apiKey: 'lim_test_key' }, { env: process.env, cwd: process.cwd() });
             await runtime.shutdown();
             return runtime.provider;
           },

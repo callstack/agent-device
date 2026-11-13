@@ -24,7 +24,6 @@ const TYPE_STRING = 0x03;
 const NO_INDEX = 0xffffffff;
 
 const utf16Decoder = new TextDecoder('utf-16le');
-let aaptPathCache: string | null | undefined;
 
 export async function resolveAndroidArchivePackageName(
   archivePath: string,
@@ -339,10 +338,6 @@ async function resolveAndroidArchivePackageNameWithAapt(
 }
 
 async function resolveAaptPath(): Promise<string | undefined> {
-  if (aaptPathCache !== undefined) {
-    return aaptPathCache ?? undefined;
-  }
-
   try {
     const files = requireAndroidAdbHost().files;
     const { hostPlatform } = await import('@agent-device/host-kit/process');
@@ -357,7 +352,6 @@ async function resolveAaptPath(): Promise<string | undefined> {
           const candidate = path.join(buildToolsDir, version, 'aapt');
           // SDK roots can come from env vars; reject relative roots before returning an executable.
           if (path.isAbsolute(candidate) && (await files.isExecutable(candidate))) {
-            aaptPathCache = candidate;
             return candidate;
           }
         }
@@ -369,6 +363,5 @@ async function resolveAaptPath(): Promise<string | undefined> {
     // Ignore SDK lookup failures and fall back to undefined.
   }
 
-  aaptPathCache = null;
   return undefined;
 }

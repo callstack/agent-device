@@ -19,7 +19,7 @@ test('runtime screenshot applies scale and forwards the capture rotation', async
         return { displayRotation: 'landscape-left' };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: { get: () => undefined, set: () => {} },
     policy: localCommandPolicy(),
   });
@@ -47,7 +47,7 @@ test('runtime screenshot scales the already-cropped backend capture', async () =
         );
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: { get: () => undefined, set: () => {} },
     policy: localCommandPolicy(),
   });
@@ -94,7 +94,7 @@ for (const staged of [false, true]) {
     fs.writeFileSync(destination, sentinel);
     const controller = new AbortController();
     const cancellation = new Error('caller cancelled after capture');
-    const adapter = createLocalArtifactAdapter();
+    const adapter = createLocalArtifactAdapter({ cwd: process.cwd() });
     let publications = 0;
     let cleanups = 0;
     if (staged) {

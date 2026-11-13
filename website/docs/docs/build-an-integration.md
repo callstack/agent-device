@@ -35,9 +35,11 @@ Entry points for integrations:
   - `listAndroidAppsWithAdb(executor)`
   - `getAndroidAppStateWithAdb(executor)`
   - `runAdbShell(executor, words, options?)` / `runAdbExecOut(executor, words, options?)`
-  - `runAndroidShell(device, words, options?)` / `runAndroidExecOut(device, words, options?)`
+  - `runAndroidShell(device, words, host, options?)` / `runAndroidExecOut(device, words, host, options?)`
   - types: `AndroidAdbExecutor`, `AndroidAdbExecutorOptions`, `AndroidAdbProvider`,
     `AndroidKeyboardState`, `AndroidKeyboardDismissResult`, `AndroidPortReverseEndpoint`
+- `agent-device/io`
+  - `createLocalArtifactAdapter({ cwd, rootDir?, tempDir? })`
 - `agent-device/batch`
   - `runBatch(req, sessionName, invoke)`
 - `agent-device/remote-config`
@@ -47,7 +49,7 @@ Entry points for integrations:
   - `buildBundleUrl(baseUrl, platform)`
   - `normalizeBaseUrl(baseUrl)`
   - `resolveRuntimeTransport(runtime)`
-  - `prepareMetroRuntime(options?)`, `reloadMetro(options?)`, `stopMetroTunnel(options)`
+  - `prepareMetroRuntime(options, host)`, `reloadMetro(options?)`, `stopMetroTunnel(options)`
   - types: `MetroBridgeDescriptor`, `MetroTunnelRequestMessage`, `MetroTunnelResponseMessage`
 - `agent-device/contracts`
   - `centerOfRect(rect)`
@@ -74,9 +76,9 @@ Entry points for integrations:
   - `validateDownloadSourceUrl(url)`
   - types: `MaterializeInstallSource`
 - `agent-device/artifacts`
-  - `resolveAndroidArchivePackageName(archivePath)`
+  - `resolveAndroidArchivePackageName(archivePath, host, signal?)`
 - `agent-device/limrun`
-  - `new LimrunRuntime(options)`
+  - `new LimrunRuntime(options, host)`
   - `runtime.getDeviceSession(device)`
   - types: `LimrunRuntimeOptions`, `LimrunDeviceSession`, `LimrunAndroidDeviceSession`,
     `LimrunIosDeviceSession`, `LimrunIosCommandExecution`
@@ -84,6 +86,21 @@ Entry points for integrations:
   - experimental `WebDriverPluginOptions` for providers using the shared engine.
 - `agent-device/plugins`
   - experimental plugin contract: `AgentDevicePluginFactory` and `ProviderPluginHost`; see [provider plugins](./plugins.md).
+
+## Migrate SDK hosts to 0.22
+
+In 0.22, Android host ADB helpers, archive inspection, Metro preparation, and `LimrunRuntime` require an explicit `{ env, cwd }` host. `resolveRemoteConfigProfile` requires `env`, and `createLocalArtifactAdapter` requires `cwd`. Capture these values in your application's entry point and pass the same host to its operations:
+
+```ts
+import { resolveAndroidArchivePackageName } from 'agent-device/artifacts';
+import { createLocalArtifactAdapter } from 'agent-device/io';
+
+const host = { env: { ...process.env }, cwd: process.cwd() };
+const artifacts = createLocalArtifactAdapter({ cwd: host.cwd });
+const packageName = await resolveAndroidArchivePackageName('./app.apk', host);
+```
+
+Use separate hosts for integrations with different environments or working directories. Pass `env: {}` when profile resolution should use only the file's settings. `startAgentDevice({ stateDir })` still captures a host when you omit `host`. CLI and MCP entry points continue to capture their process host.
 
 ## Android ADB providers
 
@@ -112,7 +129,7 @@ begins with `shell` or `exec-out` and did not come from those builders is refuse
 `details.reason: 'unguarded-device-shell-argv'` instead of being dispatched. A bridge that composes its
 own device commands calls `runAdbShell(executor, words, options?)` or
 `runAdbExecOut(executor, words, options?)` from `agent-device/android-adb`, passing each value as its
-own word; `runAndroidShell(device, words, options?)` and `runAndroidExecOut(device, words, options?)`
+own word; `runAndroidShell(device, words, host, options?)` and `runAndroidExecOut(device, words, host, options?)`
 resolve the executor from a device instead.
 
 ```ts
@@ -143,9 +160,10 @@ Full example from [`examples/sdk/batch-orchestration.ts`](https://github.com/cal
 import { prepareMetroRuntime, reloadMetro, stopMetroTunnel } from 'agent-device/metro';
 import { resolveRemoteConfigProfile } from 'agent-device/remote-config';
 
+const host = { env: { ...process.env }, cwd: process.cwd() };
 const remoteConfig = resolveRemoteConfigProfile({
   configPath: './agent-device.remote.json',
-  cwd: process.cwd(),
+  ...host,
 });
 
 const prepared = await prepareMetroRuntime({
@@ -159,7 +177,7 @@ const prepared = await prepareMetroRuntime({
     leaseId: remoteConfig.profile.leaseId!,
   },
   companionProfileKey: remoteConfig.resolvedPath,
-});
+}, host);
 
 console.log(prepared.iosRuntime, prepared.androidRuntime);
 

@@ -20,7 +20,7 @@ test('runtime wait stable settles after two unchanged captures', async () => {
         return { snapshot };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
     policy: localCommandPolicy(),
     clock,
@@ -64,7 +64,7 @@ test('runtime wait stable retains a recovered private-ax backend after its first
         return { snapshot };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
     policy: localCommandPolicy(),
     clock: createFakeClock(),
@@ -117,7 +117,7 @@ function createStableCaptureDevice(clock: {
         return { snapshot };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
     policy: localCommandPolicy(),
     clock,
@@ -237,7 +237,7 @@ test('runtime wait stable hints when it settles on a nearly-empty tree', async (
       platform: 'ios',
       captureSnapshot: async () => ({ snapshot: tinySnapshot }),
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot: tinySnapshot }]),
     policy: localCommandPolicy(),
     clock: createFakeClock(),
@@ -273,7 +273,7 @@ test('runtime wait stable omits the loading hint for a normal-sized tree', async
       platform: 'ios',
       captureSnapshot: async () => ({ snapshot: normalSnapshot }),
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot: normalSnapshot }]),
     policy: localCommandPolicy(),
     clock: createFakeClock(),
@@ -315,7 +315,7 @@ test('runtime wait stable requires quiet captures after instability before settl
         return { snapshot: changedSnapshot };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
     policy: localCommandPolicy(),
     clock,
@@ -352,7 +352,7 @@ test('runtime wait stable times out with capture stats when never settling', asy
         };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default' }]),
     policy: localCommandPolicy(),
     clock,
@@ -382,7 +382,7 @@ test('runtime wait stable surfaces a capture failure instead of reporting a time
         throw new Error('AX bridge crashed');
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default' }]),
     policy: localCommandPolicy(),
     clock: createFakeClock(),
@@ -426,7 +426,7 @@ test('runtime wait stable times out when a backend capture stalls past the wait 
           );
         }),
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default' }]),
     policy: localCommandPolicy(),
     clock,
@@ -463,7 +463,7 @@ test('runtime wait stable uses provided defaults when quietMs/timeoutMs are omit
         return { snapshot };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
     policy: localCommandPolicy(),
     clock,

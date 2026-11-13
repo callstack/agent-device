@@ -21,7 +21,7 @@ test('settle recovers the session baseline when resolved target evidence is abse
         snapshot: elapsedMs < 1_200 ? elementTransientRoomSnapshot : elementSettledRoomSnapshot,
       }),
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([
       {
         name: 'default',
@@ -72,7 +72,7 @@ test('settle uses the authorized ref frame instead of a polluted evidence captur
         snapshot: elapsedMs < 1_200 ? elementTransientRoomSnapshot : elementSettledRoomSnapshot,
       }),
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([
       {
         name: 'default',
@@ -132,7 +132,7 @@ async function settlePointTargetAgainstSession(session: {
         snapshot: elapsedMs < 1_200 ? elementTransientRoomSnapshot : elementSettledRoomSnapshot,
       }),
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([session]),
     policy: localCommandPolicy(),
     clock: {

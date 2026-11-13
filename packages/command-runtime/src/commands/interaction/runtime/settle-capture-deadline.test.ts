@@ -37,7 +37,7 @@ test('a stalled settle capture receives its deadline signal and the press still 
       },
       tap: async () => ({ ok: true }),
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot: before }]),
     policy: localCommandPolicy(),
     clock: createFakeClock(),
