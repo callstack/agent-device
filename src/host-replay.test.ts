@@ -4,9 +4,10 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { createAgentDeviceClient } from '@agent-device/client';
 import type { ReplayEnginePlugin } from '@agent-device/plugins/replay-backend';
+import { resolveProviderPlugins } from '@agent-device/plugins/registry';
+import { storePluginCandidates } from '@agent-device/plugins/store';
 import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
-import maestroPlugin from '../packages/maestro/src/plugin.ts';
 import { startAgentDevice } from './host.ts';
 
 function fixture() {
@@ -26,13 +27,16 @@ function fixture() {
   return { root, entry, host, stateDir: path.join(root, 'state') };
 }
 
-function trackedPlugin() {
+async function trackedPlugin() {
+  const resolved = await resolveProviderPlugins(await storePluginCandidates(process.env));
+  const maestro = resolved.slots.find((slot) => slot.backend === 'maestro')?.replayPlugin;
+  if (!maestro) throw new Error('Maestro test installation is missing');
   const calls = { setup: 0, create: 0, collect: 0, run: 0, dispose: 0 };
   const plugin: ReplayEnginePlugin = {
-    ...maestroPlugin(),
+    ...maestro,
     setup: async (host) => {
       calls.setup += 1;
-      const setup = await maestroPlugin().setup(host);
+      const setup = await maestro.setup(host);
       return {
         replayBackend: {
           create: async (host) => {
@@ -68,7 +72,7 @@ test.each(['replay', 'test', 'batch-test'] as const)(
     try {
       await state.run(async () => {
         const f = fixture();
-        const { plugin, calls } = trackedPlugin();
+        const { plugin, calls } = await trackedPlugin();
         const host = await startAgentDevice({ ...f, plugins: [plugin] });
         const input = { path: f.entry, platform: 'ios' as const, backend: 'maestro' };
         const testInput = { paths: [f.entry], platform: 'ios' as const, backend: 'maestro' };
@@ -129,8 +133,8 @@ test('isolated embedded clients ignore a conflicting store and never borrow anot
     path.join(f.host.env.AGENT_DEVICE_HOME!, 'config.json'),
     JSON.stringify({ plugins: { '@agent-device/maestro': { installation } } }),
   );
-  const firstPlugin = trackedPlugin();
-  const secondPlugin = trackedPlugin();
+  const firstPlugin = await trackedPlugin();
+  const secondPlugin = await trackedPlugin();
   const first = await startAgentDevice({ ...f, plugins: [firstPlugin.plugin] });
   const second = await startAgentDevice({
     ...f,
