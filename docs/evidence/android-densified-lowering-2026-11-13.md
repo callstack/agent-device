@@ -8,8 +8,8 @@ densified Android helper path.
 ## Device and build
 
 - Redmi K60 (Android), adb serial `5p4hqglvpzxshiuw`, Settings app foreground
-- agent-device head at this commit, built in the contribution worktree, daemon
-  restarted clean; the Android automation helper (0.32.0 build, packaged under
+- Contributor-reported tested commit: `181935c951`, built in the contribution
+  worktree, daemon restarted clean; the Android automation helper (0.32.0 build, packaged under
   this tree's version name) was installed with `adb install -t` before the run
 
 ## The runs
@@ -37,8 +37,12 @@ screen visibly scrolled in both runs.
 
 ## What this evidences
 
-The shared `densifyGesturePath` rewiring is behavior-preserving on the Android
-transport: the sampled-path rule it owns still produces the timed interior
-samples the helper's recognizer consumes, at the same cadence the Android
-lowering produced before the rewiring. CI covers the pure function and the
-lowering; this run covers the live dispatch path on hardware.
+The reported pan reached the Android helper's timed-pan route, and the scroll
+executed through the shared plan builder. The visible scroll and response JSON
+show dispatch, not the cadence of individual timed samples. Cadence equivalence
+rests on the pure-function and Android-lowering tests rather than this live run.
+
+The retained notes name `gesture pan --json` and `scroll down`, but do not
+preserve the complete argument lists. The pan response records the start point
+`(500, 1400)` and displacement `(0, -600)`. These are response facts, not a
+reconstruction of the missing invocation.

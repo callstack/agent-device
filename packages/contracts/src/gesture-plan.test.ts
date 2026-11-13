@@ -134,10 +134,10 @@ test('densifyGesturePath hands within-segment pacing to the progress hook and ke
 });
 
 test('densifyGesturePath refuses a path of fewer than two timed samples', () => {
-  assert.throws(
-    () => densifyGesturePath([{ offsetMs: 0, point: { x: 0, y: 0 } }], 'default'),
-    /at least two timed samples/,
-  );
+  assert.throws(() => densifyGesturePath([{ offsetMs: 0, point: { x: 0, y: 0 } }], 'default'), {
+    code: 'INVALID_ARGS',
+    details: { reason: 'GESTURE_PATH_TOO_SHORT' },
+  });
   assert.throws(
     () =>
       densifyGesturePath(
@@ -147,6 +147,6 @@ test('densifyGesturePath refuses a path of fewer than two timed samples', () => 
         ],
         'default',
       ),
-    /at least two timed samples/,
+    { code: 'INVALID_ARGS', details: { reason: 'GESTURE_PATH_TOO_SHORT' } },
   );
 });
