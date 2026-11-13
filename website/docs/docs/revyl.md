@@ -134,6 +134,7 @@ const host = await startAgentDevice({
 });
 
 const scope = {
+  session: 'checkout-ios',
   tenant: 'revyl',
   runId: process.env.GITHUB_RUN_ID ?? 'local-run',
   leaseBackend: 'ios-instance',

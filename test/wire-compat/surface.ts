@@ -263,6 +263,10 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'toInstallFromSourceDaemonRequest',
         'toReleaseMaterializedPathsDaemonRequest',
       ),
+      ...from(
+        'packages/daemon/src/core/request-session-intake.ts',
+        'resolveRequestSessionAtIntake',
+      ),
       // Consumer side: the payload the client actually puts on the wire. A
       // client-only change here breaks an older daemon just as surely.
       ...from(CLIENT_RPC, 'buildHttpRpcPayload'),

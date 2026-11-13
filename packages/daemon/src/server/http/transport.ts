@@ -11,6 +11,7 @@ import { AsyncResource } from 'node:async_hooks';
 import net from 'node:net';
 import type { Server as HttpServer } from 'node:http';
 import type { DaemonInvokeFn, DaemonRequest } from '../../core/daemon-request.ts';
+import { resolveRequestSessionAtIntake } from '../../core/request-session-intake.ts';
 import { resolveDaemonRequestResultDeadlineMs } from '../../core/daemon-command-registry.ts';
 import {
   clearRequestAbortRegistration,
@@ -215,7 +216,7 @@ function parseSocketDaemonRequest(line: string): DaemonRequest {
   if (isRecord(request.meta)) {
     request.meta = { ...request.meta, devicePin: readDevicePin(request.meta.devicePin) };
   }
-  return request as DaemonRequest;
+  return { ...request, ...resolveRequestSessionAtIntake(request) } as DaemonRequest;
 }
 
 export function listenNetServer(server: net.Server): Promise<number> {

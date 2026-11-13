@@ -158,6 +158,7 @@ The daemon reads `LT_USERNAME` and `LT_ACCESS_KEY` from its environment, unless 
 import { createAgentDeviceClient } from 'agent-device';
 
 const scope = {
+  session: 'checkout-ios',
   tenant: 'testmu',
   runId: process.env.GITHUB_RUN_ID ?? 'local-run',
   leaseBackend: 'ios-instance',

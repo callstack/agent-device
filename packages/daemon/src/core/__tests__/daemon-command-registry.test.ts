@@ -4,8 +4,10 @@ import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-regist
 import {
   canOverrideLockPolicySelector,
   canRunReplayScopedAction,
+  DAEMON_COMMAND_DESCRIPTORS,
   getDaemonCommandRoute,
   getSessionCommandKind,
+  ignoresSessionLease,
   isHumanControlMutation,
   isLeaseAdmissionExempt,
   resolveSessionlessLeaseAdmissionExemption,
@@ -18,6 +20,22 @@ import {
   usesSessionlessDefaultProviderDevice,
 } from '../daemon-command-registry.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
+
+test('only the commands that never touch their session ignore its lease', () => {
+  assert.deepEqual(
+    DAEMON_COMMAND_DESCRIPTORS.map(({ command }) => command)
+      .filter(ignoresSessionLease)
+      .sort(),
+    [
+      PUBLIC_COMMANDS.devices,
+      INTERNAL_COMMANDS.leaseAllocate,
+      INTERNAL_COMMANDS.leaseHeartbeat,
+      INTERNAL_COMMANDS.leaseRelease,
+      INTERNAL_COMMANDS.releaseMaterializedPaths,
+      INTERNAL_COMMANDS.sessionList,
+    ].sort(),
+  );
+});
 
 test('daemon command registry owns specialized handler routes', () => {
   assert.equal(getDaemonCommandRoute(INTERNAL_COMMANDS.humanControl), 'humanControl');

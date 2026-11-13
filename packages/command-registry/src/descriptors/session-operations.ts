@@ -336,6 +336,7 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
     daemon: {
       route: 'session',
       refFrameEffect: 'preserve',
+      ignoresSessionLease: true,
       ...REQUEST_EXECUTION_EXEMPT,
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,

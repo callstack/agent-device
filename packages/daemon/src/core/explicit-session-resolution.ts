@@ -1,6 +1,6 @@
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
-import { namesSessionExplicitly } from '@agent-device/kernel/contracts';
+import { namesSessionExplicitly } from '@agent-device/kernel/record';
 import {
   AppError,
   namedSessionNotFoundDetails,
@@ -41,7 +41,7 @@ export function namedSessionNotFoundError(sessionAddress: string): AppError {
  * Two shapes keep the path they chose: a request that never named a session, which is using the
  * daemon sessionlessly by design, and one that names a device selector as well, which states its
  * target outright and needs no session to supply one. The predicate deciding the first is
- * `namesSessionExplicitly` (`@agent-device/kernel/contracts`), traced from what the request carries
+ * `namesSessionExplicitly` (`@agent-device/kernel/record`), traced from what the request carries
  * rather than from the session string.
  */
 export function requireNamedSessionHoldsDevice(
