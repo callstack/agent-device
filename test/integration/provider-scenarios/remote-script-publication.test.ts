@@ -8,7 +8,7 @@ import { createAndroidSettingsWorld } from './android-world.ts';
 import { withProviderScenarioResource } from './harness.ts';
 import { createProviderScenarioProxy } from './harness-proxy.ts';
 
-for (const publication of ['active', 'active-force'] as const) {
+for (const publication of ['active', 'active-force', 'retry-existing'] as const) {
   test(`remote ${publication} publication downloads a reusable script through the owning proxy`, async () => {
     await withProviderScenarioResource(
       () => createAndroidSettingsWorld({ nativeTextInjection: true }),
@@ -30,10 +30,29 @@ for (const publication of ['active', 'active-force'] as const) {
         });
         try {
           await recordRemoteJourney(world, client, publication, destination);
+          if (publication === 'retry-existing') {
+            fs.mkdirSync(path.dirname(destination), { recursive: true });
+            fs.writeFileSync(destination, 'protected');
+            await assert.rejects(
+              client.sessions.saveScript({ path: destination }),
+              (error: unknown) =>
+                (error as { details?: { reason?: string } }).details?.reason ===
+                'script_target_exists',
+            );
+            assert.equal(fs.readFileSync(destination, 'utf8'), 'protected');
+          }
           const published = await client.sessions.saveScript(
-            publication === 'active-force' ? { path: destination } : {},
+            publication === 'retry-existing'
+              ? { path: destination, force: true }
+              : publication === 'active-force'
+                ? { path: destination }
+                : {},
           );
           assert.equal(published.savedScript, destination);
+          fs.unlinkSync(destination);
+          const retry = await client.sessions.saveScript();
+          assert.equal(retry.actionCount, published.actionCount);
+          assert.equal(retry.savedScript, destination);
           const text = fs.readFileSync(destination, 'utf8');
           assert.match(text, /open/);
           assert.match(text, /agent-device:target-v1/);

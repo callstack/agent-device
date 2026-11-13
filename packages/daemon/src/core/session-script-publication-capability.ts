@@ -148,8 +148,16 @@ export function retargetActivePublication(
 }
 
 /** Active publication succeeded: PUBLISHED is terminal, which is what stops recording. */
-export function markActivePublicationDone(session: SessionState, writtenPath: string): void {
-  session.scriptPublication = markAuthoringPublished(publicationState(session), writtenPath);
+export function markActivePublicationDone(
+  session: SessionState,
+  writtenPath: string,
+  actionCount: number,
+): void {
+  session.scriptPublication = markAuthoringPublished(
+    publicationState(session),
+    writtenPath,
+    actionCount,
+  );
 }
 
 /** Ordinary close publication succeeded: the authoring lifecycle reached `published`. */

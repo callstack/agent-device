@@ -46,6 +46,7 @@ export type SessionScriptPublicationState =
   | Readonly<{
       kind: 'authoring';
       status: 'armed' | 'aborted' | 'published';
+      publishedActionCount?: number;
       target: SessionScriptTarget;
     }>
   | Readonly<{
@@ -221,11 +222,13 @@ export function abortAuthoring(
 export function markAuthoringPublished(
   state: SessionScriptPublicationState,
   writtenPath: string,
+  actionCount?: number,
 ): SessionScriptPublicationState {
   if (state.kind !== 'authoring') return state;
   return {
     kind: 'authoring',
     status: 'published',
+    ...(actionCount !== undefined ? { publishedActionCount: actionCount } : {}),
     target: {
       kind: 'explicit',
       path: writtenPath,

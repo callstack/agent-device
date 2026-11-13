@@ -1,4 +1,5 @@
 import path from 'node:path';
+import fs from 'node:fs';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
@@ -36,6 +37,8 @@ export function handleSessionScriptPublication(params: {
     );
   }
   const session = sessionStore.requireCurrent(ref);
+  const retained = retainedPublication(req, session);
+  if (retained) return retained;
   const eligibilityError = validatePublicationEligibility(session);
   if (eligibilityError) return failure(eligibilityError);
 
@@ -67,30 +70,82 @@ export function handleSessionScriptPublication(params: {
     );
   }
 
-  markActivePublicationDone(session, result.path);
+  markActivePublicationDone(session, result.path, result.actionCount);
+  return publicationResponse(session, result.path, result.actionCount);
+}
+
+function retainedPublication(
+  req: DaemonRequest,
+  session: SessionState,
+): DaemonResponse | undefined {
+  const state = session.scriptPublication;
+  if (
+    state?.kind !== 'authoring' ||
+    state.status !== 'published' ||
+    state.target.kind !== 'explicit' ||
+    !state.target.clientPath
+  )
+    return undefined;
+  if (!fs.existsSync(state.target.path)) {
+    return failure(
+      new AppError(
+        'COMMAND_FAILED',
+        'The published script artifact has expired or is unavailable.',
+        {
+          reason: 'script_artifact_unavailable',
+          hint: 'The recording is terminal. Start a fresh authoring session to record another journey.',
+        },
+      ),
+    );
+  }
+  const requested = req.meta?.clientArtifactPaths?.savedScript;
+  if ((req.positionals?.length ?? 0) > 0 && !requested) {
+    return failure(
+      new AppError(
+        'INVALID_ARGS',
+        'A published remote script accepts only a caller-side download destination.',
+      ),
+    );
+  }
+  const force =
+    req.flags?.force === true ||
+    ((!requested || requested === state.target.clientPath) && state.target.force);
+  return publicationResponse(session, state.target.path, state.publishedActionCount ?? 0, {
+    path: requested ?? state.target.clientPath,
+    force,
+  });
+}
+
+function publicationResponse(
+  session: SessionState,
+  writtenPath: string,
+  actionCount: number,
+  download?: { path: string; force: boolean },
+): DaemonResponse {
   const state = session.scriptPublication;
   const target = state?.kind === 'authoring' ? state.target : undefined;
+  const localPath = download?.path ?? (target?.kind === 'explicit' ? target.clientPath : undefined);
   return {
     ok: true,
     data: {
       session: session.name,
-      savedScript: result.path,
-      ...(target?.kind === 'explicit' && target.clientPath
+      savedScript: writtenPath,
+      actionCount,
+      ...(localPath && target?.kind === 'explicit'
         ? {
             artifacts: [
               {
                 field: 'savedScript',
                 artifactType: 'session-script',
-                path: result.path,
-                localPath: target.clientPath,
-                fileName: path.basename(target.clientPath),
-                force: target.force,
+                path: writtenPath,
+                localPath,
+                fileName: path.basename(localPath),
+                force: download?.force ?? target.force,
               },
             ],
           }
         : {}),
-      actionCount: result.actionCount,
-      ...successText(`Published script: ${result.path}`),
+      ...successText(`Published script: ${writtenPath}`),
     },
   };
 }

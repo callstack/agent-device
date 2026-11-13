@@ -245,7 +245,7 @@ async function materializeScriptArtifact(
             : 'script_download_failed',
         path: destination,
         artifactId,
-        hint: 'The daemon already published the script. Retry downloading the retained artifact by ID; do not repeat the device journey.',
+        hint: 'The daemon already published the script. Retry session save-script with --force to replace the caller file, or choose another caller path. The command downloads the retained script without repeating the device journey.',
       },
       error instanceof Error ? error : undefined,
     );
