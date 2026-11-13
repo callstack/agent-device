@@ -423,6 +423,23 @@ export async function createIosPhysicalReinstallWorld(): Promise<IosPhysicalRein
   };
 }
 
+/**
+ * More Settings rows below the scripted cells. They make each tree a populated first screen, so the
+ * first capture after `open` settles on one quiet pair instead of holding a sparse tree for a quiet
+ * window.
+ */
+function settingsRows(firstIndex: number) {
+  return ['Accessibility', 'Privacy', 'Battery', 'Wallpaper', 'Display'].map((label, row) => ({
+    index: firstIndex + row,
+    type: 'XCUIElementTypeCell',
+    label,
+    identifier: label,
+    rect: { x: 16, y: 520 + row * 50, width: 360, height: 44 },
+    enabled: true,
+    hittable: true,
+  }));
+}
+
 function runnerSnapshot() {
   return {
     command: 'ios.runner.snapshot',
@@ -448,6 +465,7 @@ function runnerSnapshot() {
           enabled: true,
           hittable: true,
         },
+        ...settingsRows(2),
       ],
       truncated: false,
     },
@@ -479,6 +497,7 @@ function generalCellSnapshot(options: { y: number }) {
           enabled: true,
           hittable: true,
         },
+        ...settingsRows(2),
       ],
       truncated: false,
     },

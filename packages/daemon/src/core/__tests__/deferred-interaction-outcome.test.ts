@@ -132,7 +132,7 @@ test('an Apple open that could not observe its app marks stabilization without a
   assert.equal(pendingSurfaceStabilization(session)?.baseline?.signature, undefined);
 });
 
-test('every open that launched an app marks a first-screen wait, on iOS and Android alike', () => {
+test('every Apple open that launched an app marks a first-screen wait, and an Android open none', () => {
   const readiness = (platform: 'ios' | 'android') =>
     (
       [
@@ -151,7 +151,10 @@ test('every open that launched an app marks a first-screen wait, on iOS and Andr
   const launched = Array.from({ length: 5 }, () => 'first-screen');
 
   assert.deepEqual(readiness('ios'), [...launched, undefined]);
-  assert.deepEqual(readiness('android'), [...launched, undefined]);
+  assert.deepEqual(
+    readiness('android'),
+    Array.from({ length: 6 }, () => undefined),
+  );
 });
 
 test('the first capture after an open waits through a loading tree for the first screen', async () => {
@@ -173,9 +176,51 @@ test('the first capture after an open waits through a loading tree for the first
   assert.equal(isPostGestureStabilizationPending(session), false);
 });
 
+test('the first capture after an open does not count the Window root as first-screen content', async () => {
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  markPostOpenStabilization(session, 'observable');
+  const rootsOnly = makeSnapshotState([
+    { index: 0, type: 'Application', label: 'App', rect: { x: 0, y: 0, width: 390, height: 844 } },
+    { index: 1, parentIndex: 0, type: 'Window', rect: { x: 0, y: 0, width: 390, height: 844 } },
+  ]);
+  const { capture } = scriptedCapture([rootsOnly]);
+
+  const pendingResult = resolveDeferredInteractionOutcome(resolveParams(session, capture));
+  await vi.advanceTimersByTimeAsync(11_000);
+  const result = await pendingResult;
+
+  assert.equal(result?.snapshot.postGestureOutcome?.kind, 'loading');
+});
+
+test('the first capture after an open settles a producer-marked sparse read on its quiet pair', async () => {
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  markPostOpenStabilization(session, 'observable');
+  const sparse = {
+    ...makeSnapshotState([
+      {
+        index: 0,
+        type: 'Application',
+        label: 'App',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+      },
+    ]),
+    snapshotQuality: { state: 'sparse', backend: 'tree', reasonCode: 'sparse-tree' } as const,
+  };
+  const { capture, calls } = scriptedCapture([sparse, sparse]);
+
+  const pendingResult = resolveDeferredInteractionOutcome(resolveParams(session, capture));
+  await vi.advanceTimersByTimeAsync(1_000);
+  const result = await pendingResult;
+
+  assert.equal(calls(), 2);
+  assert.equal(result?.snapshot.postGestureOutcome, undefined);
+});
+
 test('the first capture after an open marks a tree that never showed a first screen as loading', async () => {
   vi.useFakeTimers();
-  const session = makeSession('android');
+  const session = makeSession('ios');
   markPostOpenStabilization(session, 'observable');
   const { capture } = scriptedCapture([makeSnapshotState([])]);
 

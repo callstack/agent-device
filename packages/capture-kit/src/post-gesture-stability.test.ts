@@ -4,7 +4,6 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { ObservationClock } from './observe-until.ts';
 import {
   formatPostGestureOutcomeWarning,
-  readFirstScreenContent,
   runPostGestureStabilityLoop,
   type FirstScreenContent,
   type PostGestureBaseline,
@@ -371,26 +370,4 @@ test('a gesture record never applies the first-screen rule to an empty tree', as
 
   assert.equal(outcome.value, empty);
   assert.equal(outcome.postGestureOutcome, undefined);
-});
-
-test('first-screen content excludes the Application and Window roots and distrusts sparse reads', () => {
-  const root = { index: 0, ref: 'e1', type: 'Application' };
-  const window = { index: 1, ref: 'e2', type: 'Window', parentIndex: 0 };
-  const button = { index: 2, ref: 'e3', type: 'Button', label: 'Continue', parentIndex: 1 };
-
-  assert.deepEqual(readFirstScreenContent({ nodes: [root, window] }), {
-    kind: 'measured',
-    contentNodes: 0,
-  });
-  assert.deepEqual(readFirstScreenContent({ nodes: [root, window, button] }), {
-    kind: 'measured',
-    contentNodes: 1,
-  });
-  assert.deepEqual(
-    readFirstScreenContent({
-      nodes: [root],
-      snapshotQuality: { state: 'sparse', backend: 'tree', reasonCode: 'sparse-tree' },
-    }),
-    { kind: 'unverifiable' },
-  );
 });

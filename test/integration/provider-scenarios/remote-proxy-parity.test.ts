@@ -8,7 +8,7 @@ import { test, vi } from 'vitest';
 import { sendToDaemon } from '@agent-device/daemon-client';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import { skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
-import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
+import { FIRST_SCREEN_NODES, PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness, type ProviderScenarioHarness } from './harness.ts';
 import {
   createProviderScenarioProxy,
@@ -89,6 +89,9 @@ function scriptedTree() {
         enabled: true,
         hittable: true,
       },
+      // More rows make this a populated first screen, so the first capture after open settles on one
+      // quiet pair.
+      ...FIRST_SCREEN_NODES.slice(1).map((node, row) => ({ ...node, index: row + 2 })),
     ],
     truncated: false,
   };

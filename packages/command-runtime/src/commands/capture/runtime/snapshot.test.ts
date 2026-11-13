@@ -851,6 +851,39 @@ test('runtime snapshot warns when its tree was read on a surface still moving af
   const result = await device.capture.snapshot({ session: 'default' });
 
   assert.deepEqual(result.warnings, [formatPostGestureOutcomeWarning(outcome)]);
+  assert.deepEqual(result.postGestureOutcome, outcome);
+});
+
+test('runtime snapshot publishes a launched app that was still loading as its outcome', async () => {
+  const outcome: PostGestureOutcome = {
+    kind: 'loading',
+    gesture: { action: 'open', positionals: [] },
+  };
+  const device = createSnapshotOnlyDevice({
+    snapshot: {
+      ...makeSnapshotState([{ index: 0, depth: 0, type: 'Application', label: 'Demo' }], {
+        backend: 'xctest',
+      }),
+      postGestureOutcome: outcome,
+    },
+  });
+
+  const result = await device.capture.snapshot({ session: 'default' });
+
+  assert.deepEqual(result.postGestureOutcome, outcome);
+  assert.deepEqual(result.warnings, [formatPostGestureOutcomeWarning(outcome)]);
+});
+
+test('runtime snapshot publishes no outcome for a tree read at rest', async () => {
+  const device = createSnapshotOnlyDevice({
+    snapshot: makeSnapshotState([{ index: 0, depth: 0, type: 'Window', label: 'Home' }], {
+      backend: 'xctest',
+    }),
+  });
+
+  const result = await device.capture.snapshot({ session: 'default' });
+
+  assert.equal('postGestureOutcome' in result, false);
 });
 
 test('runtime snapshot warns when a gesture produced no visible change', async () => {

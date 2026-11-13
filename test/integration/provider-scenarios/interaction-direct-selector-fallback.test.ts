@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from './test-timeouts.ts';
-import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
+import { FIRST_SCREEN_NODES, PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import {
   createProviderScenarioHarness,
   withProviderScenarioResource,
@@ -49,8 +49,8 @@ function snapshotEntry(nodes: unknown[]): ProviderScenarioProviderEntry {
 // The scripted open is not read back, so the first capture after it settles over a quiet pair of
 // reads and the direct tap path stays paused until that capture has run.
 const SETTLING_CAPTURE_ENTRIES = [
-  snapshotEntry([APPLICATION_NODE]),
-  snapshotEntry([APPLICATION_NODE]),
+  snapshotEntry([...FIRST_SCREEN_NODES]),
+  snapshotEntry([...FIRST_SCREEN_NODES]),
 ];
 
 async function settleAfterOpen(daemon: ProviderScenarioHarness): Promise<void> {
@@ -99,9 +99,10 @@ test('Provider-backed iOS selector wait captures directly and strips selectorCha
       rect: { x: 100, y: 300, width: 200, height: 44 },
     },
   ]);
-  const transcript = createProviderTranscript([continueSnapshot, continueSnapshot]);
+  const transcript = createProviderTranscript([...SETTLING_CAPTURE_ENTRIES, continueSnapshot]);
 
   await withDirectSelectorScenario(transcript, async (daemon) => {
+    await settleAfterOpen(daemon);
     const wait = await daemon.callCommand('wait', ['label="Continue"']);
     const data = assertRpcOk(wait);
     assert.equal(data.selector, 'label="Continue"');
@@ -122,7 +123,7 @@ test('Provider-backed iOS selector wait polls a fresh capture after a selector m
     },
   ]);
   const transcript = createProviderTranscript([
-    loadingSnapshot,
+    ...SETTLING_CAPTURE_ENTRIES,
     loadingSnapshot,
     snapshotEntry([
       APPLICATION_NODE,
@@ -138,6 +139,7 @@ test('Provider-backed iOS selector wait polls a fresh capture after a selector m
   ]);
 
   await withDirectSelectorScenario(transcript, async (daemon) => {
+    await settleAfterOpen(daemon);
     const wait = await daemon.callCommand('wait', ['label="Continue"']);
     const data = assertRpcOk(wait);
     assert.equal(data.selector, 'label="Continue"');

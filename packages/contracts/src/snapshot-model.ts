@@ -155,17 +155,18 @@ export type PostGestureOutcome = {
   gesture: PostGestureAction;
 };
 
-const POST_GESTURE_OUTCOME_KINDS: ReadonlySet<string> = new Set<PostGestureOutcome['kind']>([
-  'unsettled',
-  'no-effect',
-  'loading',
-]);
+const POST_GESTURE_OUTCOME_KINDS: Readonly<Record<PostGestureOutcome['kind'], true>> = {
+  unsettled: true,
+  'no-effect': true,
+  loading: true,
+};
 
 /** Reads a published post-gesture outcome off the wire; anything malformed is no outcome. */
 export function readPostGestureOutcome(value: unknown): PostGestureOutcome | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
   const { kind, gesture } = value as Record<string, unknown>;
-  if (typeof kind !== 'string' || !POST_GESTURE_OUTCOME_KINDS.has(kind)) return undefined;
+  if (typeof kind !== 'string' || !Object.hasOwn(POST_GESTURE_OUTCOME_KINDS, kind))
+    return undefined;
   if (typeof gesture !== 'object' || gesture === null) return undefined;
   const { action, positionals } = gesture as Record<string, unknown>;
   if (typeof action !== 'string' || !Array.isArray(positionals)) return undefined;

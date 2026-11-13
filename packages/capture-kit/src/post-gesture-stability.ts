@@ -1,11 +1,6 @@
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SnapshotKeyboardBandFact } from '@agent-device/kernel/snapshot';
-import type {
-  PostGestureAction,
-  PostGestureOutcome,
-  SnapshotState,
-} from '@agent-device/contracts/snapshot-model';
-import { isViewportRootNode } from '@agent-device/contracts/snapshot';
+import type { PostGestureAction, PostGestureOutcome } from '@agent-device/contracts/snapshot-model';
 import { observeUntil, type ObservationClock, type ObservationSchedule } from './observe-until.ts';
 
 /**
@@ -79,14 +74,6 @@ const FIRST_SCREEN_SPARSE_QUIET_MS = 1_500;
 export type FirstScreenContent =
   | Readonly<{ kind: 'measured'; contentNodes: number }>
   | Readonly<{ kind: 'unverifiable' }>;
-
-export function readFirstScreenContent(
-  snapshot: Pick<SnapshotState, 'nodes' | 'snapshotQuality'>,
-): FirstScreenContent {
-  if (snapshot.snapshotQuality?.state === 'sparse') return { kind: 'unverifiable' };
-  const contentNodes = snapshot.nodes.filter((node) => !isViewportRootNode(node)).length;
-  return { kind: 'measured', contentNodes };
-}
 
 /**
  * Whether a quiet pair can stand as a launched app's first screen. A tree with no content is a

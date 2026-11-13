@@ -1,5 +1,8 @@
 import { assertRpcOk } from '../provider-scenarios/assertions.ts';
-import { PROVIDER_SCENARIO_IOS_SIMULATOR } from '../provider-scenarios/fixtures.ts';
+import {
+  FIRST_SCREEN_NODES,
+  PROVIDER_SCENARIO_IOS_SIMULATOR,
+} from '../provider-scenarios/fixtures.ts';
 import {
   createProviderScenarioHarness,
   withProviderScenarioResource,
@@ -20,14 +23,6 @@ export const CONTRACT_APP = 'com.example.app';
 const CONTRACT_DEVICE_ID = PROVIDER_SCENARIO_IOS_SIMULATOR.id;
 
 const SETTLING_CAPTURE_READS = 2;
-const SETTLING_CAPTURE_NODES = [
-  {
-    index: 0,
-    type: 'Application',
-    label: 'Example',
-    rect: { x: 0, y: 0, width: 400, height: 800 },
-  },
-];
 
 /**
  * Provider-transcript harness for contract scenarios whose path involves the
@@ -47,7 +42,7 @@ export async function withIosContractDaemon(
   // scenario's own conversation with the runner exactly as scripted.
   const transcript = createProviderTranscript([
     ...Array.from({ length: SETTLING_CAPTURE_READS }, () =>
-      runnerSnapshotEntry(SETTLING_CAPTURE_NODES),
+      runnerSnapshotEntry(FIRST_SCREEN_NODES),
     ),
     ...entries,
   ]);

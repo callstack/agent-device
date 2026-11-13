@@ -1,8 +1,4 @@
-import {
-  extractNodeText,
-  isPostGestureRestUnproven,
-  normalizeType,
-} from '@agent-device/contracts/snapshot';
+import { extractNodeText, normalizeType } from '@agent-device/contracts/snapshot';
 import {
   readNodeLocalIdentity,
   TARGET_ANNOTATION_MAX_FIELD_BYTES,
@@ -34,13 +30,15 @@ export type AbsenceObservation =
   | { kind: 'present'; matches: number; firstMatch: AbsenceFirstMatch }
   | { kind: 'sparse'; matches: number; firstMatch?: AbsenceFirstMatch; quality: SparseQuality }
   | { kind: 'truncated'; matches: number; firstMatch?: AbsenceFirstMatch }
-  | { kind: 'unsettled'; matches: 0 };
+  | { kind: 'unsettled'; matches: 0 }
+  | { kind: 'loading'; matches: 0 };
 
 /** Why a capture with no match still cannot prove absence. */
 export const UNPROVABLE_ABSENCE_CAUSES = {
   sparse: 'capture was sparse',
   truncated: 'capture was truncated',
   unsettled: 'the surface was still changing after a gesture',
+  loading: 'the launched app was still loading its first screen',
 } as const;
 
 export type UnprovableAbsenceKind = keyof typeof UNPROVABLE_ABSENCE_CAUSES;
@@ -101,10 +99,9 @@ export function classifyAbsenceObservation(
     };
   }
   if (matchCount === 0) {
-    return {
-      kind: isPostGestureRestUnproven(snapshot.postGestureOutcome) ? 'unsettled' : 'absent',
-      matches: 0,
-    };
+    const outcome = snapshot.postGestureOutcome?.kind;
+    if (outcome === 'unsettled' || outcome === 'loading') return { kind: outcome, matches: 0 };
+    return { kind: 'absent', matches: 0 };
   }
   return { kind: 'present', matches: matchCount, firstMatch: firstMatch! };
 }
