@@ -12,6 +12,7 @@ import {
   matchesDeviceSelector,
   matchesDeviceNameSelector,
   platformSelectorsConflict,
+  preferredDeviceCandidates,
   type PlatformSelector,
   pickNewestBootableDevice,
   resolveDevice,
@@ -171,6 +172,7 @@ async function resolveSingleProviderDevice(
   throw new AppError('AMBIGUOUS_MATCH', 'Multiple provider devices match this request.', {
     ...deviceCandidateDetails(candidates),
     matches: candidates.length,
+    dispatched: 'no',
     hint: 'Select the leased provider device explicitly with --device, --udid, or --serial.',
     retrySelectors: retrySelectorsFor(candidates),
   });
@@ -235,6 +237,7 @@ async function resolveAppInstalledSimulatorSelection(
     {
       appTarget,
       ...deviceCandidateDetails(matches),
+      dispatched: 'no',
       hint: 'Pass --udid to select the intended simulator explicitly.',
       retrySelectors: retrySelectorsFor(matches),
     },
@@ -247,13 +250,16 @@ function withDeviceRetrySelectors(
   extraHint?: string,
 ): unknown {
   if (!(error instanceof AppError) || error.code !== 'AMBIGUOUS_MATCH') return error;
+  // The kernel refuses only its equally preferred devices; a lower-ranked or shut-down match is
+  // no answer to the tie, so only the tied devices become retry selectors.
+  const tied = preferredDeviceCandidates([...candidates]);
   return new AppError(
     error.code,
     error.message,
     {
       ...(error.details ?? {}),
-      ...deviceCandidateDetails(candidates),
-      retrySelectors: retrySelectorsFor(candidates),
+      ...deviceCandidateDetails(tied),
+      retrySelectors: retrySelectorsFor(tied),
       ...(extraHint ? { hint: [error.details?.hint, extraHint].filter(Boolean).join(' ') } : {}),
     },
     error,
