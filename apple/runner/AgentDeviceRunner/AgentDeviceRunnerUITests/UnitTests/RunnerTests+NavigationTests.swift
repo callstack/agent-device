@@ -133,8 +133,8 @@ extension RunnerTests {
   func testInAppBackWithAnIssueInTheButtonLookupAnswersFromTheSwipe() throws {
     _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
     defer { endBackFixture() }
-    navigationBarBackReadIssueForTesting = (.lookup, Self.vanishedBackButtonIssue)
-    defer { navigationBarBackReadIssueForTesting = nil }
+    navigationBarBackReadForTesting = { $0 == .lookup ? Self.vanishedBackButtonIssue : nil }
+    defer { navigationBarBackReadForTesting = nil }
 
     let response = try execute(command: try runnerCommandFixture(
       #"{"command":"backInApp","commandId":"back-lookup-issue","appBundleId":"com.callstack.agentdevice.runner"}"#
@@ -152,10 +152,10 @@ extension RunnerTests {
   func testInAppBackWithAHungQueryInTheButtonLookupSendsNothing() throws {
     _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
     defer { endBackFixture() }
-    defer { navigationBarBackReadIssueForTesting = nil }
+    defer { navigationBarBackReadForTesting = nil }
 
     let outcome = try expectingHungQueryRecorded {
-      navigationBarBackReadIssueForTesting = (.lookup, Self.hungQueryIssue)
+      navigationBarBackReadForTesting = { $0 == .lookup ? Self.hungQueryIssue : nil }
       return try performInAppBack(app: app)
     }
 
@@ -163,7 +163,7 @@ extension RunnerTests {
     XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeNotDispatched)
     XCTAssertEqual(lastNavigationBarBackTraceForTesting?.found, "hung")
     XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, false)
-    navigationBarBackReadIssueForTesting = nil
+    navigationBarBackReadForTesting = nil
     XCTAssertTrue(app.navigationBars["Detail"].exists, "nothing popped the detail screen")
   }
 
@@ -173,10 +173,10 @@ extension RunnerTests {
   func testInAppBackWithAHungQueryInTheConfirmationAnswersUnverified() throws {
     _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
     defer { endBackFixture() }
-    defer { navigationBarBackReadIssueForTesting = nil }
+    defer { navigationBarBackReadForTesting = nil }
 
     let outcome = try expectingHungQueryRecorded {
-      navigationBarBackReadIssueForTesting = (.confirmation, Self.hungQueryIssue)
+      navigationBarBackReadForTesting = { $0 == .confirmation ? Self.hungQueryIssue : nil }
       return try performInAppBack(app: app)
     }
 
@@ -223,8 +223,8 @@ extension RunnerTests {
   func testInAppBackWithAnIssueInTheConfirmationAnswersUnverified() throws {
     let status = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
     defer { endBackFixture() }
-    navigationBarBackReadIssueForTesting = (.confirmation, Self.vanishedBackButtonIssue)
-    defer { navigationBarBackReadIssueForTesting = nil }
+    navigationBarBackReadForTesting = { $0 == .confirmation ? Self.vanishedBackButtonIssue : nil }
+    defer { navigationBarBackReadForTesting = nil }
 
     let response = try execute(command: try runnerCommandFixture(
       #"{"command":"backInApp","commandId":"back-confirmation-issue","appBundleId":"com.callstack.agentdevice.runner"}"#
@@ -232,9 +232,33 @@ extension RunnerTests {
 
     XCTAssertEqual(response.error?.code, RunnerWireErrorCode.backSwipeUnverified)
     XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, true)
-    navigationBarBackReadIssueForTesting = nil
+    navigationBarBackReadForTesting = nil
     let popped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Back pressed"), object: status)
     XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed, "the tap itself was delivered")
+  }
+
+  /// A slow host can spend the whole confirmation budget on reads of the bar that is vanishing mid-pop,
+  /// each one an issue that proves nothing. The read after the budget sees the settled screen, so
+  /// the pop is confirmed, not left unverified.
+  @MainActor
+  func testInAppBackConfirmsAPopWhoseReadsInTheBudgetAllFailOnASlowHost() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
+    defer { endBackFixture() }
+    var confirmationReads = 0
+    navigationBarBackReadForTesting = { phase in
+      guard phase == .confirmation else { return nil }
+      confirmationReads += 1
+      guard confirmationReads <= 2 else { return nil }
+      Thread.sleep(forTimeInterval: 0.6)
+      return Self.vanishedBackButtonIssue
+    }
+    defer { navigationBarBackReadForTesting = nil }
+
+    guard case .performed = try performInAppBack(app: app) else {
+      return XCTFail("a pop read after the budget must read as performed")
+    }
+    XCTAssertEqual(confirmationReads, 3, "both reads in the budget failed, and one read followed it")
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.confirmed, "yes")
   }
 
   /// A bar button titled "Back" is not the system back button, so back never presses it: it swipes,

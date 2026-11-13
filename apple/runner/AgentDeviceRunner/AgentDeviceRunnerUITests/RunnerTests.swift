@@ -219,9 +219,10 @@ final class RunnerTests: XCTestCase {
   var litPanelWindowWalkIssueForTesting = false
 
 #if os(iOS)
-  /// Records an XCTest issue with this description during every navigation bar read of this phase
-  /// of iOS `back`, as a back button that vanishes mid-transition, or a hung query, does.
-  var navigationBarBackReadIssueForTesting: (phase: NavigationBarBackReadPhase, description: String)?
+  /// Runs at the end of every navigation bar read of iOS `back`, and records an XCTest issue with
+  /// the description it returns, as a bar that vanishes mid-transition, or a hung query, does. It
+  /// can also sleep, as a read on a slow host does.
+  var navigationBarBackReadForTesting: ((NavigationBarBackReadPhase) -> String?)?
 
   /// What the last iOS `back` saw of the navigation bar back button, so a test can tell the button
   /// path from the swipe when both navigate.

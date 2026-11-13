@@ -384,9 +384,11 @@ extension RunnerTests {
     }
   }
 
-  /// Whether a later read of the bar differs from `before`. Reads start only until `deadlineMs`; a
-  /// read in flight then finishes, or ends at XCTest's own query timeout, which is a hung query. A
-  /// read that fails proves nothing, so it never confirms.
+  /// Whether a later read of the bar differs from `before`. Reads start until `deadlineMs`, and one
+  /// final read starts after it and runs to the end, so the screen after the pop is always read: a
+  /// read of a bar that vanishes mid-pop can spend the whole budget in XCTest's retries. A read in
+  /// flight ends at XCTest's own query timeout, which is a hung query. A read that fails proves
+  /// nothing, so it never confirms.
   @MainActor
   private func navigationBarBackConfirmation(
     app: XCUIApplication,
@@ -394,14 +396,15 @@ extension RunnerTests {
     deadlineMs: Double
   ) -> NavigationBarBackConfirmation {
     while true {
-      switch readNavigationBarBackState(app: app, phase: .confirmation, deadlineMs: deadlineMs) {
+      let isFinalRead = currentUptimeMs() >= deadlineMs
+      let readDeadlineMs = isFinalRead ? Double.infinity : deadlineMs
+      switch readNavigationBarBackState(app: app, phase: .confirmation, deadlineMs: readDeadlineMs) {
       case .read(let after) where Self.navigationBarBackPopped(from: before, to: after): return .changed
       case .hung: return .hung
       case .read, .unreadable: break
       }
-      let remainingMs = deadlineMs - currentUptimeMs()
-      if remainingMs <= 0 { return .unchanged }
-      sleepFor(min(Self.navigationBarBackReadInterval, remainingMs / 1000))
+      if isFinalRead { return .unchanged }
+      sleepFor(min(Self.navigationBarBackReadInterval, max(0, deadlineMs - currentUptimeMs()) / 1000))
     }
   }
 
@@ -434,8 +437,8 @@ extension RunnerTests {
     let held = holdingRecordedIssues {
       value = read()
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
-      if let injected = navigationBarBackReadIssueForTesting, injected.phase == phase {
-        record(XCTIssue(type: .assertionFailure, compactDescription: injected.description))
+      if let description = navigationBarBackReadForTesting?(phase) {
+        record(XCTIssue(type: .assertionFailure, compactDescription: description))
       }
 #endif
     }
