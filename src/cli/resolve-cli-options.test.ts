@@ -194,6 +194,8 @@ test('a selector-less command inherits the pinned device', () => {
     selector: { platform: 'ios', device: 'iPad Pro' },
     source: { kind: 'project', path: path.join(cwd, 'agent-device.json') },
   });
+});
+
 // The screenshot burst flags are explicit-only: the same `count` key serves press and swipe series,
 // and a repository `count` tuned for those must not turn a single capture into a burst, nor refuse
 // `--crop-on` beside it. A typed flag still arms the burst, and press keeps the configured count.

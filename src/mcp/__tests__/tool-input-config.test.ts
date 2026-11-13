@@ -25,9 +25,9 @@ function projectHostWithConfig(config: Record<string, unknown>): {
 test('a project count for press series reaches a press tool call as a default', () => {
   const { host } = projectHostWithConfig({ count: 3 });
 
-  const resolved = resolveMcpConfigDefaults('press', {}, { count: { type: 'integer' } }, host);
+  const { input } = resolveMcpConfigDefaults('press', {}, { count: { type: 'integer' } }, host);
 
-  assert.equal(resolved.count, 3);
+  assert.equal(input.count, 3);
 });
 
 // The screenshot burst flags are explicit-only (CommandSchema). The tool call is the typed
@@ -35,20 +35,25 @@ test('a project count for press series reaches a press tool call as a default', 
 test('a project count never reaches a screenshot tool call', () => {
   const { host } = projectHostWithConfig({ count: 3 });
 
-  const resolved = resolveMcpConfigDefaults('screenshot', {}, { count: { type: 'integer' } }, host);
+  const { input } = resolveMcpConfigDefaults(
+    'screenshot',
+    {},
+    { count: { type: 'integer' } },
+    host,
+  );
 
-  assert.equal(resolved.count, undefined);
+  assert.equal(input.count, undefined);
 });
 
 test('a count the tool call typed reaches a screenshot, and wins over any default', () => {
   const { host } = projectHostWithConfig({ count: 3 });
 
-  const resolved = resolveMcpConfigDefaults(
+  const { input } = resolveMcpConfigDefaults(
     'screenshot',
     { count: 5 },
     { count: { type: 'integer' } },
     host,
   );
 
-  assert.equal(resolved.count, 5);
+  assert.equal(input.count, 5);
 });
