@@ -22,6 +22,7 @@ import type {
   GestureExecutionProfile,
   GestureSemanticInput,
   PointerTrajectory,
+  PointerTrajectorySample,
   SinglePointerGesturePlan,
   SinglePointerTrajectory,
   TapGesturePlan,
@@ -465,6 +466,80 @@ export function sampleGestureOffsets(
   return Array.from({ length: frameCount + 1 }, (_, index) =>
     Math.round((durationMs * index) / frameCount),
   );
+}
+
+/**
+ * Densifies a plan's own timed path onto one merged sampling grid: the profile grid and the
+ * canonical offsets merge, every merged offset interpolates inside its canonical segment, and the
+ * endpoints and duration stay the plan's — the duration IS the last canonical offset, so a
+ * disagreeing duration cannot be written. This is the one owner of the sampled-path rule; every
+ * transport lowering calls it instead of keeping its own merge-and-interpolate loop. The optional
+ * progress hook lets a transport reshape within-segment pacing (Android's controlled scroll) while
+ * the segment walk and the endpoint rule stay shared.
+ */
+export function densifyGesturePath(
+  canonical: readonly PointerTrajectorySample[],
+  profile: GestureSamplingProfile,
+  progress: (baseProgress: number, segmentDurationMs: number) => number = (p) => p,
+): PointerTrajectorySample[] {
+  // The walk reads each segment's end, so a path of fewer than two timed samples has no
+  // interpolable segment; the last offset is the duration the sampling grid builds on.
+  const durationMs = canonical.at(-1)?.offsetMs ?? 0;
+  if (canonical.length < 2 || !Number.isFinite(durationMs) || durationMs <= 0) {
+    throw new AppError('INVALID_ARGS', 'gesture path needs at least two timed samples', {
+      reason: 'GESTURE_PATH_TOO_SHORT',
+    });
+  }
+  if (
+    canonical[0]!.offsetMs !== 0 ||
+    canonical.some(
+      ({ offsetMs }, index) =>
+        !Number.isFinite(offsetMs) || (index > 0 && offsetMs <= canonical[index - 1]!.offsetMs),
+    )
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'gesture path needs a strictly increasing timeline from zero',
+      {
+        reason: 'GESTURE_PATH_INVALID_TIMELINE',
+      },
+    );
+  }
+  const offsets = [
+    ...new Set([
+      ...sampleGestureOffsets(durationMs, profile),
+      ...canonical.map(({ offsetMs }) => offsetMs),
+    ]),
+  ].sort((left, right) => left - right);
+  let segmentIndex = 0;
+  return offsets.map((offsetMs) => {
+    while (
+      segmentIndex < canonical.length - 2 &&
+      offsetMs > canonical[segmentIndex + 1]!.offsetMs
+    ) {
+      segmentIndex += 1;
+    }
+    const start = canonical[segmentIndex]!;
+    const end = canonical[segmentIndex + 1]!;
+    const segmentDurationMs = end.offsetMs - start.offsetMs;
+    const baseProgress =
+      segmentDurationMs === 0 ? 0 : (offsetMs - start.offsetMs) / segmentDurationMs;
+    return {
+      offsetMs,
+      point:
+        // Both endpoints and every zero-length segment keep the canonical
+        // point, so the hook only ever reshapes strictly interior offsets.
+        offsetMs === end.offsetMs || segmentDurationMs === 0
+          ? end.point
+          : baseProgress === 0
+            ? start.point
+            : interpolateGesturePoint(
+                start.point,
+                end.point,
+                progress(baseProgress, segmentDurationMs),
+              ),
+    };
+  });
 }
 
 function assertSamplesInViewport(

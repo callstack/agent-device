@@ -1,8 +1,7 @@
 import type { ScrollReleaseBehavior } from '@agent-device/contracts/scroll-command';
 import {
   GESTURE_SAMPLE_INTERVAL_MS,
-  interpolateGesturePoint,
-  sampleGestureOffsets,
+  densifyGesturePath,
 } from '@agent-device/contracts/gesture-plan';
 import type {
   GesturePlan,
@@ -63,38 +62,11 @@ export function lowerAndroidTouchPlan(plan: AndroidTouchPlan): AndroidLoweredTou
 
   const { releaseBehavior, ...gesturePlan } = plan;
   const [{ pointerId, samples: canonicalSamples }] = gesturePlan.pointers;
-  const offsets = [
-    ...new Set([
-      ...sampleGestureOffsets(plan.durationMs, 'android'),
-      ...canonicalSamples.map(({ offsetMs }) => offsetMs),
-    ]),
-  ].sort((left, right) => left - right);
-  let segmentIndex = 0;
-  const dense = offsets.map((offsetMs) => {
-    while (
-      segmentIndex < canonicalSamples.length - 2 &&
-      offsetMs > canonicalSamples[segmentIndex + 1]!.offsetMs
-    ) {
-      segmentIndex += 1;
-    }
-    const start = canonicalSamples[segmentIndex]!;
-    const end = canonicalSamples[segmentIndex + 1]!;
-    const segmentDurationMs = end.offsetMs - start.offsetMs;
-    const progress = (offsetMs - start.offsetMs) / segmentDurationMs;
-    return {
-      offsetMs,
-      point:
-        offsetMs === end.offsetMs || segmentDurationMs === 0
-          ? end.point
-          : interpolateGesturePoint(
-              start.point,
-              end.point,
-              releaseBehavior === 'controlled'
-                ? controlledScrollProgress(progress, segmentDurationMs)
-                : progress,
-            ),
-    };
-  });
+  const dense = densifyGesturePath(canonicalSamples, 'android', (progress, segmentDurationMs) =>
+    releaseBehavior === 'controlled'
+      ? controlledScrollProgress(progress, segmentDurationMs)
+      : progress,
+  );
   // The sampler floors the frame count at three, so `dense` always holds at least four samples.
   const samples: AndroidTransportSamples = [dense[0]!, dense[1]!, dense[2]!, ...dense.slice(3)];
 
