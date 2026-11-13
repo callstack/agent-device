@@ -627,6 +627,7 @@ assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
           './artifacts': async (mod) => {
             const name = await mod.resolveAndroidArchivePackageName(
               nodePath.join(process.cwd(), 'package.json'),
+              { env: { ...process.env }, cwd: process.cwd() },
             );
             return String(name);
           },

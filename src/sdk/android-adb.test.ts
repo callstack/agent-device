@@ -39,7 +39,7 @@ test('getAndroidAppStateWithAdb falls back to activity focus and settles empty',
 });
 
 test.skipIf(process.platform === 'win32')(
-  'public Android shell helpers retain explicit hosts across concurrent foreign scopes',
+  'public Android helpers retain explicit hosts and only their own request overlays',
   async () => {
     const { runAndroidShell, runAndroidExecOut } = await import('./android-adb.ts');
     const { ANDROID_EMULATOR, mkdtempForTestSync } = await import('@agent-device/test-kit');
@@ -71,5 +71,15 @@ test.skipIf(process.platform === 'win32')(
         cwd: realpathSync(bin),
       });
     }
+    const sharedHost = host('base');
+    const scoped = await withCommandHost(
+      { host: sharedHost, requestEnv: { SDK_OWNER: 'overlay' } },
+      () => runAndroidShell(ANDROID_EMULATOR, ['id'], sharedHost),
+    );
+    assert.deepEqual(JSON.parse(scoped.stdout), {
+      args: ['-s', ANDROID_EMULATOR.id, 'shell', 'id'],
+      owner: 'overlay',
+      cwd: realpathSync(bin),
+    });
   },
 );

@@ -13,6 +13,6 @@ export async function resolveAndroidArchivePackageName(
 ): Promise<Awaited<ReturnType<ResolveAndroidArchivePackageName>>> {
   return await withSdkHost(host, async () => {
     const { resolveAndroidArchivePackageName: resolve } = await loadAndroidMechanics();
-    return await resolve(path.resolve(host.cwd, archivePath), signal);
+    return await resolve(path.resolve(host.cwd, archivePath), signal, host.cwd);
   });
 }

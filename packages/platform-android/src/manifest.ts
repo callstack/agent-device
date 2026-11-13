@@ -28,23 +28,26 @@ const utf16Decoder = new TextDecoder('utf-16le');
 export async function resolveAndroidArchivePackageName(
   archivePath: string,
   signal?: AbortSignal,
+  cwd?: string,
 ): Promise<string | undefined> {
   for (const entry of ['AndroidManifest.xml', 'base/manifest/AndroidManifest.xml']) {
-    const manifest = await readZipEntry(archivePath, entry, signal);
+    const manifest = await readZipEntry(archivePath, entry, signal, cwd);
     if (!manifest) continue;
     const packageName = parseAndroidManifestPackageName(manifest);
     if (packageName) return packageName;
   }
-  return await resolveAndroidArchivePackageNameWithAapt(archivePath, signal);
+  return await resolveAndroidArchivePackageNameWithAapt(archivePath, signal, cwd);
 }
 
 async function readZipEntry(
   archivePath: string,
   entry: string,
   signal?: AbortSignal,
+  cwd?: string,
 ): Promise<Buffer | undefined> {
   try {
     const result = await runCmd('unzip', ['-p', archivePath, entry], {
+      cwd,
       allowFailure: true,
       binaryStdout: true,
       timeoutMs: ARCHIVE_INSPECTION_TIMEOUT_MS,
@@ -323,11 +326,13 @@ function readUtf16Length(chunk: Buffer, offset: number): PoolLength | undefined 
 async function resolveAndroidArchivePackageNameWithAapt(
   archivePath: string,
   signal?: AbortSignal,
+  cwd?: string,
 ): Promise<string | undefined> {
   signal?.throwIfAborted();
   const aaptPath = await resolveAaptPath();
   if (!aaptPath) return undefined;
   const result = await runCmd(aaptPath, ['dump', 'badging', archivePath], {
+    cwd,
     allowFailure: true,
     timeoutMs: ARCHIVE_INSPECTION_TIMEOUT_MS,
     signal,

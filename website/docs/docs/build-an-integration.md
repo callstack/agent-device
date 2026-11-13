@@ -38,8 +38,6 @@ Entry points for integrations:
   - `runAndroidShell(device, words, host, options?)` / `runAndroidExecOut(device, words, host, options?)`
   - types: `AndroidAdbExecutor`, `AndroidAdbExecutorOptions`, `AndroidAdbProvider`,
     `AndroidKeyboardState`, `AndroidKeyboardDismissResult`, `AndroidPortReverseEndpoint`
-- `agent-device/io`
-  - `createLocalArtifactAdapter({ cwd, rootDir?, tempDir? })`
 - `agent-device/batch`
   - `runBatch(req, sessionName, invoke)`
 - `agent-device/remote-config`
