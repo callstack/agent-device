@@ -3,6 +3,7 @@ import type {
   Point,
   SnapshotKeyboardBandFact,
   SnapshotNode,
+  SnapshotPresentation,
 } from '@agent-device/kernel/snapshot';
 import type { ResponseCost } from '@agent-device/kernel/contracts';
 import type { ClickButton } from './click-button.ts';
@@ -160,6 +161,11 @@ export type SurfaceScopedNodes = {
    * Absent means the capture's producer published no fact.
    */
   presentedSurface?: PresentedSurface;
+  /**
+   * The presentation the capture read (`-i`, `-s`, `-d`, `--raw`, `--actions`). A post-action read
+   * captures in it, so the diff compares one view (#4486). Absent means the default full tree.
+   */
+  presentation?: SnapshotPresentation;
 };
 
 /** Which tree a resolved `@ref`'s node was read from (ADR 0014, "Mutation admission and read behavior"). */
@@ -228,9 +234,10 @@ export type PostActionSurfaceChange = {
 /**
  * Opt-in (`--verify`) cheap post-condition evidence for mutating interaction
  * commands (#1047). `digest`/`nodeCount`/`interactiveNodeCount` describe a single
- * interactive-only capture taken right after the action; `changedFromBefore`
- * compares that digest against the pre-action capture the resolution path already
- * held, so no extra device round trip is spent beyond the one verify capture.
+ * capture taken right after the action in the pre-action capture's view (interactive-only
+ * by default, #4486); `changedFromBefore` compares that digest against the pre-action
+ * capture the resolution path already held, so no extra device round trip is spent beyond
+ * the one verify capture.
  * `changedFromBefore: false` is evidence, not failure — the command still
  * succeeded.
  *

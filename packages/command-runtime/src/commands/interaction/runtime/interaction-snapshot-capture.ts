@@ -6,8 +6,7 @@ import { toBackendContext } from '../../runtime-common.ts';
 /**
  * A leaf shared by every interaction runtime module that needs a fresh (or session-cached) tree:
  * `resolution.ts`'s ref/selector resolution, `selector-target-resolution.ts`'s acting selector lookup,
- * `moving-target-gate.ts`'s re-observation, `gestures.ts`'s viewport resolution, and
- * `post-action-observation.ts`'s `--verify` baseline.
+ * `moving-target-gate.ts`'s re-observation, and `gestures.ts`'s viewport resolution.
  * Deliberately self-contained — it imports no sibling of this directory, so those siblings can
  * import it without ever risking a cycle back.
  */

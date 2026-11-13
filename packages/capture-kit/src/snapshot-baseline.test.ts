@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
-import { surfaceScopedNodes } from './snapshot-baseline.ts';
+import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
+import { postActionBaseline, surfaceScopedNodes } from './snapshot-baseline.ts';
 
 const nodes = [{ index: 0, type: 'Application', ref: 'e1' }];
 
@@ -32,6 +33,58 @@ test('the mint carries the system surface the nodes describe', () => {
 test('a session with no stored snapshot still mints an empty baseline', () => {
   expect(surfaceScopedNodes(undefined)).toEqual({ nodes: [] });
 });
+
+test('the mint carries the presentation the capture read', () => {
+  expect(surfaceScopedNodes(snapshot({ presentation: { interactiveOnly: true } }))).toEqual({
+    nodes,
+    presentation: { interactiveOnly: true },
+  });
+});
+
+const INTERACTIVE = { interactiveOnly: true };
+const FULL = {};
+const frame = (presentation: SurfaceScopedNodes['presentation']) => tree('frame', presentation);
+
+// #4486: a settle diff compares one view, and the agent's view is its ref frame's presentation.
+test.each([
+  ['interactive frame, interactive candidate', INTERACTIVE, INTERACTIVE, 'candidate'],
+  ['interactive frame, full candidate', INTERACTIVE, FULL, 'frame'],
+  ['full frame, interactive candidate', FULL, INTERACTIVE, 'frame'],
+  ['full frame, full candidate', FULL, FULL, 'candidate'],
+  [
+    'interactive frame, scoped interactive candidate',
+    INTERACTIVE,
+    { interactiveOnly: true, scope: 'Composer' },
+    'frame',
+  ],
+  ['interactive frame, candidate with default full view', INTERACTIVE, undefined, 'frame'],
+  ['full frame, candidate with default full view', FULL, undefined, 'candidate'],
+] as const)(
+  '%s: the %s answers',
+  async (_case, framePresentation, candidatePresentation, expected) => {
+    const baseline = await postActionBaseline({
+      frame: frame(framePresentation),
+      candidates: [tree('candidate', candidatePresentation)],
+    });
+    expect(baseline.nodes[0]?.label).toBe(expected);
+  },
+);
+
+test('without a frame the first non-empty candidate answers, in its own view', async () => {
+  const baseline = await postActionBaseline({
+    frame: undefined,
+    candidates: [undefined, { nodes: [] }, tree('candidate', FULL)],
+  });
+  expect(baseline).toEqual(tree('candidate', FULL));
+  expect(await postActionBaseline({ frame: undefined, candidates: [] })).toEqual({ nodes: [] });
+});
+
+function tree(label: string, presentation: SurfaceScopedNodes['presentation']): SurfaceScopedNodes {
+  return {
+    nodes: [{ index: 0, type: 'Button', label, ref: 'e1' }],
+    ...(presentation ? { presentation } : {}),
+  };
+}
 
 function snapshot(fields: Partial<SnapshotState>): SnapshotState {
   return { nodes, createdAt: 0, presentationKey: '', ...fields } as SnapshotState;

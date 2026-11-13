@@ -5,7 +5,10 @@ import type {
   CommandSessionRecord,
 } from '@agent-device/contracts/runtime-contract';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
-import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
+import {
+  postActionBaseline,
+  surfaceScopedNodes,
+} from '@agent-device/capture-kit/snapshot-baseline';
 import { buildSnapshotDiff } from '@agent-device/capture-kit/snapshot-diff';
 import { displayLabel, formatRole } from '@agent-device/capture-kit/snapshot-lines';
 import {
@@ -236,45 +239,35 @@ async function resolveSettleBaseline(
   resolved: ResolvedInteractionTarget,
 ): Promise<SurfaceScopedNodes> {
   const session = await runtime.sessions.get(options.session ?? 'default');
+  const frame = surfaceScopedNodes(session?.refFrameSnapshot);
   // A ref is authorized against the stored ref frame. Keep that visible presentation as the
   // transition baseline: a best-effort evidence recapture can recover through private AX and see
   // covered background controls that were not actionable when the ref was issued.
   // Resolved-target evidence is best-effort at the contracts boundary. The session still owns the
   // authoritative ref frame, so reuse it rather than silently turning a missing optional field
   // into an empty transition/diff baseline. Fall back to the latest observation for point targets
-  // and pre-frame sessions.
-  return (
-    authorizedRefBaseline(resolved, session) ??
-    nonEmptyBaseline(resolved.preAction) ??
-    sessionBaseline(session)
-  );
-}
-
-function authorizedRefBaseline(
-  resolved: ResolvedInteractionTarget,
-  session: CommandSessionRecord | undefined,
-): SurfaceScopedNodes | undefined {
-  if (resolved.kind !== 'ref') return undefined;
-  return nonEmptyBaseline(surfaceScopedNodes(session?.refFrameSnapshot));
+  // and pre-frame sessions. A candidate read in another view than the frame is skipped (#4486).
+  return postActionBaseline({
+    frame: withoutPresentedSurface(frame),
+    candidates: [
+      resolved.kind === 'ref' ? frame : undefined,
+      resolved.preAction,
+      session?.refFrameSnapshot
+        ? undefined
+        : withoutPresentedSurface(surfaceScopedNodes(session?.snapshot)),
+    ],
+  });
 }
 
 /**
- * The latest stored tree, for a target no capture resolved. The diff can use its nodes, but its
+ * A stored tree, for a target no capture resolved. The diff can use its nodes, but its
  * presented-surface fact may predate a side effect this layer cannot see, and an `absent` read
  * taken before a sheet was presented must not rule out the confirmation owed to that sheet's
  * dismissal (#3565).
  */
-function sessionBaseline(session: CommandSessionRecord | undefined): SurfaceScopedNodes {
-  const { presentedSurface: _unverified, ...baseline } = surfaceScopedNodes(
-    session?.refFrameSnapshot ?? session?.snapshot,
-  );
-  return baseline;
-}
-
-function nonEmptyBaseline(
-  baseline: SurfaceScopedNodes | undefined,
-): SurfaceScopedNodes | undefined {
-  return baseline?.nodes.length ? baseline : undefined;
+function withoutPresentedSurface(baseline: SurfaceScopedNodes): SurfaceScopedNodes {
+  const { presentedSurface: _unverified, ...stored } = baseline;
+  return stored;
 }
 
 function buildSettleDiff(
@@ -282,11 +275,9 @@ function buildSettleDiff(
   settledNodes: SnapshotNode[],
   appBundleId: string | undefined,
 ): NonNullable<SettleObservation['diff']> {
-  // Flattened compare, like `diff -i`: both sides are interactive-flavored
-  // captures and depth jitter across captures should not read as change. When
-  // the baseline came from a richer stored tree (ref targets reuse the session
-  // snapshot), extra baseline-only lines surface as removals — advisory noise,
-  // the same baseline caveat --verify's changedFromBefore already accepts.
+  // Flattened compare, like `diff -i`: both sides are captures in one presentation
+  // (postActionBaseline picks the baseline, and the settle loop captures in its view), and
+  // depth jitter across captures should not read as change.
   const diff = buildSnapshotDiff(
     withoutSettleChrome(baselineNodes, appBundleId),
     withoutSettleChrome(settledNodes, appBundleId),

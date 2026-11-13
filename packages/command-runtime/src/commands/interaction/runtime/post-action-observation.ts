@@ -5,9 +5,16 @@ import type {
   SettleObservation,
   SettleParams,
 } from '@agent-device/contracts/interaction';
-import { captureInteractionSnapshot } from './interaction-snapshot-capture.ts';
-import { summarizePostActionEvidence } from './post-action-surface.ts';
-import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
+import { isSameSnapshotPresentation } from '@agent-device/kernel/snapshot';
+import {
+  resolvePostActionSurfaceChange,
+  summarizePostActionEvidence,
+} from './post-action-surface.ts';
+import {
+  postActionPresentation,
+  surfaceScopedNodes,
+} from '@agent-device/capture-kit/snapshot-baseline';
+import { captureSelectorSnapshot } from './selector-read-shared.ts';
 import { settleAfterInteraction, settleEvidence } from './settle.ts';
 
 type ObservedResult<T extends object> = T & {
@@ -81,9 +88,17 @@ async function observeAfterInteraction(
       ...params.settle,
       resolved,
     });
-    const evidence = params.verify
-      ? settleEvidence(outcome.settledCapture, resolved.preAction)
-      : undefined;
+    // A surface transition is evidence in every view; node digests compare only within one view.
+    const baseline =
+      outcome.settledCapture &&
+      (resolvePostActionSurfaceChange(resolved.preAction, outcome.settledCapture) ||
+        isSameSnapshotPresentation(
+          resolved.preAction?.presentation,
+          outcome.settledCapture.presentation,
+        ))
+        ? resolved.preAction
+        : undefined;
+    const evidence = params.verify ? settleEvidence(outcome.settledCapture, baseline) : undefined;
     return { settle: outcome.observation, ...(evidence ? { evidence } : {}) };
   }
   if (!params.verify) return {};
@@ -92,8 +107,8 @@ async function observeAfterInteraction(
 }
 
 /**
- * Post-action side of `--verify` (#1047): one interactive-only capture through
- * the same capture helper the resolution path already uses, digested and then
+ * Post-action side of `--verify` (#1047): one capture in the pre-action tree's presentation
+ * (interactive-only by default), so the comparison reads one view (#4486), digested and then
  * discarded. The node tree itself is never attached to the result, only the
  * cheap summary. A missing baseline yields no `changedFromBefore` claim —
  * no baseline, no comparison.
@@ -104,7 +119,11 @@ async function captureVerifyEvidence(
   resolved: ResolvedInteractionTarget,
 ): Promise<InteractionEvidence | undefined> {
   try {
-    const capture = await captureInteractionSnapshot(runtime, options, true);
+    const capture = await captureSelectorSnapshot(runtime, options, {
+      updateSession: true,
+      includeRects: true,
+      presentation: postActionPresentation(resolved.preAction),
+    });
     return summarizePostActionEvidence(surfaceScopedNodes(capture.snapshot), resolved.preAction);
   } catch {
     return undefined;

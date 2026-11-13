@@ -1,8 +1,10 @@
 import type {
   SnapshotNode,
   SnapshotPreferredBackend,
+  SnapshotPresentation,
   SnapshotQualityVerdict,
 } from '@agent-device/kernel/snapshot';
+import { postActionPresentation } from '@agent-device/capture-kit/snapshot-baseline';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import { snapshotProducerFacts } from '@agent-device/contracts/snapshot-producers';
@@ -103,7 +105,10 @@ export async function runStableCaptureLoop(
     quietMs?: number;
     timeoutMs: number;
     resetBudgetOnPrivateAxRecovery?: boolean;
-    /** Immutable pre-action projection; the stored session may advance before settle begins. */
+    /**
+     * Immutable pre-action projection; the stored session may advance before settle begins. The loop
+     * captures in its presentation, so the settled tree and the baseline share one view (#4486).
+     */
     broadTransitionBaseline?: SurfaceScopedNodes;
   },
 ): Promise<StableCaptureLoopResult> {
@@ -154,6 +159,14 @@ export async function runStableCaptureLoop(
       runtime,
       options,
       deadlineMs - now(runtime),
+      params.broadTransitionBaseline
+        ? postActionPresentation(params.broadTransitionBaseline)
+        : {
+            ...postActionPresentation(undefined),
+            depth: options.depth,
+            scope: options.scope,
+            raw: options.raw,
+          },
       preferredBackend,
     );
     if (read.kind !== 'captured') return unfinished(read);
@@ -529,8 +542,8 @@ function stableCaptureDelayMs(params: {
 }
 
 // Intentionally does not update the session snapshot: the stable loop captures
-// an interactive-only tree purely as a settle signal, and overwriting the
-// session's richer cached snapshot with the filtered tree would degrade
+// in its baseline's presentation (interactive-only by default) purely as a settle
+// signal, and overwriting the session's richer cached snapshot with it would degrade
 // subsequent ref/get/find lookups against the same session. (`--settle` DOES
 // store its final capture, but explicitly, in one place, after the loop.)
 //
@@ -543,6 +556,7 @@ async function captureStableSignalWithinDeadline(
   runtime: AgentDeviceRuntime,
   options: CommandContext & SelectorSnapshotOptions,
   remainingMs: number,
+  presentation: SnapshotPresentation,
   preferredBackend?: SnapshotPreferredBackend,
 ): Promise<StableCaptureRead> {
   try {
@@ -552,7 +566,7 @@ async function captureStableSignalWithinDeadline(
         { ...options, signal },
         {
           updateSession: false,
-          interactiveOnly: true,
+          presentation,
           preferredBackend,
         },
       );

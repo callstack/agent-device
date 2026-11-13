@@ -8,6 +8,7 @@ import {
   type SnapshotDiagnosticsSummary,
 } from '@agent-device/contracts/capture';
 import { AppError } from '@agent-device/kernel/errors';
+import { isSameSnapshotPresentation } from '@agent-device/kernel/snapshot';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import { snapshotProducerFacts } from '@agent-device/contracts/snapshot-producers';
 import type {
@@ -135,7 +136,11 @@ export const diffSnapshotCommand: RuntimeCommand<
   }
   const capture = await captureRuntimeSnapshot(runtime, options);
   const flattenForDiff = options.interactiveOnly === true;
-  const previousSnapshot = capture.session?.snapshot;
+  const stored = capture.session?.snapshot;
+  const previousSnapshot =
+    stored && isSameSnapshotPresentation(stored.presentation, capture.snapshot.presentation)
+      ? stored
+      : undefined;
   const nextSession = nextSnapshotSession(options.session, capture);
 
   if (!previousSnapshot) {

@@ -786,6 +786,19 @@ export function buildSnapshotPresentationKey(flags: SnapshotOptions | undefined)
   });
 }
 
+/**
+ * Whether two captures read one presentation, so a diff between them compares like with like
+ * (#4486): a full tree holds nodes an interactive read omits, and a scoped, depth-limited, raw or
+ * custom-action read holds a different node set than a plain one. An absent presentation is
+ * the default full tree, as on SnapshotState.
+ */
+export function isSameSnapshotPresentation(
+  a: SnapshotPresentation | undefined,
+  b: SnapshotPresentation | undefined,
+): boolean {
+  return buildSnapshotPresentationKey(a) === buildSnapshotPresentationKey(b);
+}
+
 export function centerOfRect(rect: Rect): Point {
   return {
     x: Math.round(rect.x + rect.width / 2),
