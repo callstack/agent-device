@@ -83,7 +83,7 @@ function matchManagedAgentBrowserProcess(
   ) {
     return { process: processInfo, reason: 'launch-marker' };
   }
-  if (isManagedBrowserExecutable(executable, ownership.browserHomeRoots)) {
+  if (isManagedBrowserExecutable(executable, ownership.browserExecutableRoots)) {
     return { process: processInfo, reason: 'managed-browser-home' };
   }
   if (matchesManagedDaemonExecutable(executable, ownership.daemonEntries)) {
@@ -99,14 +99,7 @@ function isManagedBrowserExecutable(executable: string, roots: readonly string[]
   } catch {
     return false;
   }
-  return roots.some((root) => {
-    try {
-      const resolvedRoot = normalizePathSeparators(realHostPathSync(root)).replace(/\/+$/, '');
-      return resolvedExecutable.startsWith(`${resolvedRoot}/`);
-    } catch {
-      return false;
-    }
-  });
+  return roots.some((root) => resolvedExecutable.startsWith(`${root}/`));
 }
 
 function matchesManagedDaemonExecutable(executable: string, entries: readonly string[]): boolean {
@@ -306,6 +299,7 @@ function isChromeLikeCommand(command: string): boolean {
 type ManagedFleetOwnership = {
   launchMarkers: string[];
   browserHomeRoots: string[];
+  browserExecutableRoots: string[];
   daemonEntries: string[];
 };
 
@@ -314,9 +308,19 @@ function managedFleetOwnership(status: AgentBrowserToolStatus): ManagedFleetOwne
     (install) => path.resolve(install.installDir) !== path.resolve(status.installDir),
   );
   const installs: ManagedInstallPaths[] = [status, ...siblings];
+  const browserHomeRoots = uniqueStrings(installs.flatMap(managedBrowserHomeMarkers));
   return {
     launchMarkers: installs.map(agentBrowserChromeLaunchMarker),
-    browserHomeRoots: uniqueStrings(installs.flatMap(managedBrowserHomeMarkers)),
+    browserHomeRoots,
+    browserExecutableRoots: uniqueStrings(
+      browserHomeRoots.flatMap((root) => {
+        try {
+          return [normalizePathSeparators(realHostPathSync(root)).replace(/\/+$/, '')];
+        } catch {
+          return [];
+        }
+      }),
+    ),
     daemonEntries: installs.flatMap((install) => {
       let installRoot: string;
       try {
