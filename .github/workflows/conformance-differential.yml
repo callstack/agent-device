@@ -117,19 +117,13 @@ jobs:
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
+      # Asserts what `maestro --version` actually reports against the same pin layers 1-2 use.
+      # The probe lives in scripts/maestro-conformance so its failure keeps the command's exit,
+      # stdout and stderr as bounded diagnostics and names which of command failure,
+      # missing/unparseable version, or a genuine mismatch it saw (#4455). It fails closed: only a
+      # reported version equal to the pin gets the differential to run.
       - name: Verify the Maestro CLI matches the oracle pin
-        run: |
-          set -euo pipefail
-          EXPECTED=$(node -p "require('./scripts/maestro-conformance/pinned-upstream.json').version")
-          # `maestro --version` can print notices (e.g. the analytics banner)
-          # around the version, so match the semver line rather than the whole
-          # output. Empty ACTUAL fails the comparison below, as it should.
-          ACTUAL=$(maestro --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -1 || true)
-          echo "expected=$EXPECTED actual=$ACTUAL"
-          if [ "$ACTUAL" != "$EXPECTED" ]; then
-            echo "::error::Layer-3 Maestro CLI is $ACTUAL but the oracle pins $EXPECTED. A differential against a different Maestro proves nothing about the pinned behavior."
-            exit 1
-          fi
+        run: node scripts/maestro-conformance/verify-cli-version.mjs
 
       # --trace-root lets the runner find agent-device's replay-timing.ndjson and
       # assert engine-side invariants (e.g. the settle loop latches instead of
