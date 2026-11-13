@@ -17,6 +17,7 @@ vi.mock('./exec.ts', async (original) => ({
 import { readProcessExecutablePaths } from '../process.ts';
 
 const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+const host = { env: process.env, cwd: process.cwd() };
 afterEach(() => {
   Object.defineProperty(process, 'platform', originalPlatform);
   vi.resetAllMocks();
@@ -45,7 +46,10 @@ test('Linux reads requested executable links and refuses missing, deleted and in
     if (!(name in entries)) throw new Error('unavailable');
     return entries[name];
   });
-  const paths = await readProcessExecutablePaths([1, 2, 3, 4, 5, 6, 1, 0, -1, 1.5, 2147483648]);
+  const paths = await readProcessExecutablePaths(
+    [1, 2, 3, 4, 5, 6, 1, 0, -1, 1.5, 2147483648],
+    host,
+  );
   assert.deepEqual([...paths], [[1, '/opt/应用/my binary']]);
   assert.equal(readlinkMock.mock.calls.length, 6);
   assert.equal(runCmdMock.mock.calls.length, 0);
@@ -54,7 +58,7 @@ test('Linux reads requested executable links and refuses missing, deleted and in
 test('Linux deadline returns unknown when a read does not settle', async () => {
   platform('linux');
   readlinkMock.mockImplementation(() => new Promise(() => {}));
-  assert.deepEqual([...(await readProcessExecutablePaths([1], 1))], []);
+  assert.deepEqual([...(await readProcessExecutablePaths([1], host, 1))], []);
 });
 
 test.each(['darwin', 'win32'] as const)(
@@ -76,7 +80,11 @@ test.each(['darwin', 'win32'] as const)(
         { pid: 5, path: valid },
       ]),
     });
-    const paths = await readProcessExecutablePaths([1, 2, 3, 4, 5, 0, 1, -1, 1.5, 2147483648], 20);
+    const paths = await readProcessExecutablePaths(
+      [1, 2, 3, 4, 5, 0, 1, -1, 1.5, 2147483648],
+      host,
+      20,
+    );
     assert.deepEqual([...paths], [[1, valid]]);
     assert.equal(runCmdMock.mock.calls.length, 1);
     const [cmd, args, options] = runCmdMock.mock.calls[0]!;
@@ -117,8 +125,8 @@ test.each(['darwin', 'win32'] as const)(
       stderr: '',
     });
     runCmdMock.mockRejectedValueOnce(new Error('timeout'));
-    for (let i = 0; i < 3; i++) assert.equal((await readProcessExecutablePaths([1])).size, 0);
-    assert.equal((await readProcessExecutablePaths([0, -1])).size, 0);
+    for (let i = 0; i < 3; i++) assert.equal((await readProcessExecutablePaths([1], host)).size, 0);
+    assert.equal((await readProcessExecutablePaths([0, -1], host)).size, 0);
     assert.equal(runCmdMock.mock.calls.length, 3);
   },
 );
@@ -128,17 +136,18 @@ test.each([undefined, '', 'Windows', String.raw`C:Windows`, String.raw`\Windows`
   async (root) => {
     platform('win32');
     vi.stubEnv('SystemRoot', root);
-    assert.equal((await readProcessExecutablePaths([1])).size, 0);
+    assert.equal((await readProcessExecutablePaths([1], host)).size, 0);
     assert.equal(runCmdMock.mock.calls.length, 0);
   },
 );
 
-test('Windows host SystemRoot variable names are case-insensitive', async () => {
+test('Windows uses only its supplied host SystemRoot with case-insensitive names', async () => {
   platform('win32');
-  vi.stubEnv('SystemRoot', undefined);
-  vi.stubEnv('sYsTeMrOoT', String.raw`E:\Windows`);
   runCmdMock.mockResolvedValue({ stdout: '[]', stderr: '', exitCode: 0 });
-  await readProcessExecutablePaths([1]);
+  await readProcessExecutablePaths([1], {
+    env: { sYsTeMrOoT: String.raw`E:\Windows` },
+    cwd: process.cwd(),
+  });
   assert.equal(
     runCmdMock.mock.calls[0]?.[0],
     String.raw`E:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`,

@@ -1,4 +1,8 @@
-import { bindTestCommandHost, installFakeManagedAgentBrowser } from '@agent-device/test-kit';
+import {
+  bindTestCommandHost,
+  createLiveTestHostEnvironment,
+  installFakeManagedAgentBrowser,
+} from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import * as hostFile from '@agent-device/host-kit/host-file';
 import { ChildProcess } from 'node:child_process';
@@ -77,6 +81,7 @@ import {
 } from '@agent-device/host-kit/process';
 
 bindTestCommandHost();
+const testHost = createLiveTestHostEnvironment();
 
 const mockRunCmd = vi.mocked(runCmdMock);
 
@@ -556,7 +561,9 @@ test.each([
       });
       observeProcesses([{ pid: 101, command: `${binary} daemon`, executable: observed }]);
       const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
-      expect((await recordManagedAgentBrowserProcesses(status, store)).pids).toEqual(expected);
+      expect((await recordManagedAgentBrowserProcesses(status, store, testHost)).pids).toEqual(
+        expected,
+      );
     } finally {
       fs.rmSync(stateDir, { recursive: true, force: true });
     }
@@ -584,7 +591,7 @@ test('a managed binary symlink cannot confer ownership on an executable outside 
     ]);
     const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
 
-    expect((await recordManagedAgentBrowserProcesses(status, store)).pids).toEqual([101]);
+    expect((await recordManagedAgentBrowserProcesses(status, store, testHost)).pids).toEqual([101]);
     expect(store.replace.mock.calls[0]?.[1].map(({ pid }: { pid: number }) => pid)).toEqual([101]);
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
@@ -612,7 +619,7 @@ test('records verified current and retained native roots and stable descendants'
     ];
     observeProcesses(rows);
     const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
-    const summary = await recordManagedAgentBrowserProcesses(status, store);
+    const summary = await recordManagedAgentBrowserProcesses(status, store, testHost);
     expect(summary.pids).toEqual([101, 102, 201, 301]);
     expect(summary.processes.map(({ reason }) => reason)).toEqual([
       'agent-browser-daemon',
@@ -670,7 +677,7 @@ test('retained Chrome home and marker roots require a Chrome executable and this
     ];
     observeProcesses(rows);
     const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
-    const summary = await recordManagedAgentBrowserProcesses(status, store);
+    const summary = await recordManagedAgentBrowserProcesses(status, store, testHost);
     expect(summary.pids).toEqual([201, 202]);
     expect(summary.processes.map(({ reason }) => reason)).toEqual([
       'launch-marker',
@@ -726,7 +733,7 @@ test('an unstable root or intermediate process cannot authorize its descendants'
         ),
     );
     const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
-    const summary = await recordManagedAgentBrowserProcesses(status, store);
+    const summary = await recordManagedAgentBrowserProcesses(status, store, testHost);
     expect(summary.pids).toEqual([101]);
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
@@ -748,7 +755,7 @@ test('recording refuses a scanned command that differs from the bracketed identi
         new Map([[101, { startTime: 'start-101', command: 'different command', zombie: false }]]),
     );
     const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
-    expect((await recordManagedAgentBrowserProcesses(status, store)).pids).toEqual([]);
+    expect((await recordManagedAgentBrowserProcesses(status, store, testHost)).pids).toEqual([]);
     expect(store.replace).not.toHaveBeenCalled();
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
@@ -793,7 +800,7 @@ test('recording and reaping require executable provenance and matching identity'
       sessionsDir: path.join(stateDir, 'sessions'),
       resolveSessionDir: (id) => path.join(stateDir, 'sessions', id),
     });
-    await recordManagedAgentBrowserProcesses(status, store);
+    await recordManagedAgentBrowserProcesses(status, store, testHost);
     const recordedPids = store.read()[0]?.records.map(({ pid }) => pid);
     const alive = new Set(rows.map(({ pid }) => pid));
     const signals: number[] = [];

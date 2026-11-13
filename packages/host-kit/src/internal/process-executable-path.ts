@@ -1,3 +1,4 @@
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import { readlink } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout, clearTimeout } from 'node:timers';
@@ -10,6 +11,7 @@ const PATH_BUFFER_BYTES = 4_096;
 
 export async function readProcessExecutablePaths(
   pids: Iterable<number>,
+  host: HostEnvironment,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<ReadonlyMap<number, string>> {
   const selected = uniquePositivePids(pids).filter((pid) => pid <= 2_147_483_647);
@@ -20,7 +22,7 @@ export async function readProcessExecutablePaths(
   return await withoutCommandExecutorOverride(async () => {
     try {
       const windows = platform === 'win32';
-      const executable = windows ? windowsPowerShellPath() : '/usr/bin/osascript';
+      const executable = windows ? windowsPowerShellPath(host.env) : '/usr/bin/osascript';
       if (!executable) return new Map();
       const result = await runCmd(
         executable,
@@ -37,9 +39,9 @@ export async function readProcessExecutablePaths(
   });
 }
 
-function windowsPowerShellPath(): string | undefined {
-  const key = Object.keys(process.env).find((name) => name.toUpperCase() === 'SYSTEMROOT');
-  const root = key === undefined ? undefined : process.env[key];
+function windowsPowerShellPath(env: EnvMap): string | undefined {
+  const key = Object.keys(env).find((name) => name.toUpperCase() === 'SYSTEMROOT');
+  const root = key === undefined ? undefined : env[key];
   if (!root || !path.win32.isAbsolute(root) || path.win32.parse(root).root.length < 3) {
     return undefined;
   }

@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import type { OwnedProcessRecord } from '@agent-device/contracts/platform-runtime-host';
@@ -125,12 +126,13 @@ export async function inspectManagedAgentBrowserProcesses(
 export async function recordManagedAgentBrowserProcesses(
   status: AgentBrowserToolStatus,
   store: OwnedProcessRecordStore,
+  host: HostEnvironment,
 ): Promise<AgentBrowserProcessSummary> {
   const initial = await listRealHostProcesses();
   const pids = initial.map(({ pid }) => pid);
   const before = await readProcessIdentities(pids);
   const scanned = await listRealHostProcesses();
-  const executablePaths = await readProcessExecutablePaths(pids);
+  const executablePaths = await readProcessExecutablePaths(pids, host);
   const after = await readProcessIdentities(pids);
   const initialPids = new Set(pids);
   const processes = scanned.filter(({ pid, command }) => {
