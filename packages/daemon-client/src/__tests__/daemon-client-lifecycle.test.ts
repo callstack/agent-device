@@ -382,9 +382,13 @@ test('daemon acquisition reclaims a proven reused owner before publication', asy
   const paths = resolveDaemonPaths(stateDir);
   const daemon = await startHttpDaemonFixture({ via: 'fresh-daemon' });
   vi.stubEnv('AGENT_DEVICE_STATE_DIR', stateDir);
+  const staleStartTime =
+    process.platform === 'linux'
+      ? 'linux:00000000-0000-0000-0000-000000000000:0'
+      : 'stale-start-time';
   const stale = tryAcquireProcessLock({
     lockDirPath: paths.lockPath,
-    owner: { pid: process.pid, startTime: 'stale-start-time', acquiredAtMs: Date.now() },
+    owner: { pid: process.pid, startTime: staleStartTime, acquiredAtMs: Date.now() },
   });
   assert.equal(stale.status, 'acquired');
   installSpawnedHttpDaemon(paths, daemon.port);
@@ -402,7 +406,7 @@ test('daemon acquisition reclaims a proven reused owner before publication', asy
     assert.deepEqual(response, { ok: true, data: { via: 'fresh-daemon' } });
     assert.equal(mockRunCmdDetached.mock.calls.length, 1);
     assert.equal(freshLock.state, 'held');
-    if (freshLock.state === 'held') assert.notEqual(freshLock.owner.startTime, 'stale-start-time');
+    if (freshLock.state === 'held') assert.notEqual(freshLock.owner.startTime, staleStartTime);
     assert.deepEqual(daemon.seenPaths, ['GET /health', 'POST /rpc']);
   } finally {
     if (stale.status === 'acquired') await stale.acquisition.release();

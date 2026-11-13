@@ -232,7 +232,13 @@ test('a log removed between creation and the write-handle reopen fails startup l
 
 for (const [pid, startTime, reason] of [
   [999_999_999, 'successor-start', 'replaced'],
-  [process.pid, 'recycled-start', 'replaced'],
+  [
+    process.pid,
+    process.platform === 'linux'
+      ? 'linux:00000000-0000-0000-0000-000000000000:0'
+      : 'recycled-start',
+    'replaced',
+  ],
   [process.pid, undefined, 'unproven'],
   [null, undefined, 'ownerless'],
 ] as const) {
