@@ -68,7 +68,7 @@ test('promoted navigation title dispatches as its presented button semantics, no
         tappedPoint = point;
       },
     },
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     policy: localCommandPolicy(),
   });
   await device.sessions.set({ name: 'default', snapshot });

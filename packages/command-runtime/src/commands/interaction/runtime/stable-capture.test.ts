@@ -192,7 +192,7 @@ test('regular captures settle from visible semantics while offscreen rows churn'
       platform: 'ios',
       captureSnapshot: async () => ({ snapshot: snapshots[captures++ % snapshots.length]! }),
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore(),
     policy: localCommandPolicy(),
     clock,
@@ -601,7 +601,7 @@ function staticSnapshotRuntime(snapshot: SnapshotState) {
       platform: 'ios',
       captureSnapshot: async () => ({ snapshot }),
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
     policy: localCommandPolicy(),
     clock: {
@@ -687,7 +687,7 @@ function transitionRuntime(
         };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([
       { name: 'default', snapshot: options.sessionSnapshot ?? presented },
     ]),

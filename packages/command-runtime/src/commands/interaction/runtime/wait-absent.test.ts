@@ -51,7 +51,7 @@ function absentDevice(
         return capture!;
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default' }]),
     policy: localCommandPolicy(),
     clock: createFakeClock(),
@@ -75,7 +75,7 @@ function cancelledAbsentDevice(params: {
       platform: 'ios',
       captureSnapshot,
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default' }]),
     policy: localCommandPolicy(),
     clock,

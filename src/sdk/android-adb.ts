@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import '../platform-runtime-android-adb-host.ts';
 export {
   createAndroidPortReverseManager,
@@ -14,12 +15,22 @@ import {
 } from '@agent-device/platform-android/mechanics';
 import { withSdkHost } from './host.ts';
 
-export async function runAndroidShell(...args: Parameters<typeof runAndroidShellOnHost>) {
-  return await withSdkHost(() => runAndroidShellOnHost(...args));
+export async function runAndroidShell(
+  device: Parameters<typeof runAndroidShellOnHost>[0],
+  words: Parameters<typeof runAndroidShellOnHost>[1],
+  host: HostEnvironment,
+  options?: Parameters<typeof runAndroidShellOnHost>[2],
+) {
+  return await withSdkHost(host, () => runAndroidShellOnHost(device, words, options));
 }
 
-export async function runAndroidExecOut(...args: Parameters<typeof runAndroidExecOutOnHost>) {
-  return await withSdkHost(() => runAndroidExecOutOnHost(...args));
+export async function runAndroidExecOut(
+  device: Parameters<typeof runAndroidExecOutOnHost>[0],
+  words: Parameters<typeof runAndroidExecOutOnHost>[1],
+  host: HostEnvironment,
+  options?: Parameters<typeof runAndroidExecOutOnHost>[2],
+) {
+  return await withSdkHost(host, () => runAndroidExecOutOnHost(device, words, options));
 }
 export type { ShellWord } from '@agent-device/kernel/device-shell';
 

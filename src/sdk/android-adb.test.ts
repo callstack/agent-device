@@ -39,29 +39,47 @@ test('getAndroidAppStateWithAdb falls back to activity focus and settles empty',
 });
 
 test.skipIf(process.platform === 'win32')(
-  'standalone public Android shell helpers establish their process host before dispatch',
+  'public Android helpers retain explicit hosts and only their own request overlays',
   async () => {
     const { runAndroidShell, runAndroidExecOut } = await import('./android-adb.ts');
     const { ANDROID_EMULATOR, mkdtempForTestSync } = await import('@agent-device/test-kit');
-    const { writeFileSync, chmodSync } = await import('node:fs');
+    const { withCommandHost } = await import('@agent-device/host-kit/command');
+    const { writeFileSync, chmodSync, realpathSync } = await import('node:fs');
     const { join } = await import('node:path');
     const bin = mkdtempForTestSync('agent-device-sdk-adb-');
-    const adbPath = join(bin, 'adb');
     writeFileSync(
-      adbPath,
-      `#!${process.execPath}\nprocess.stdout.write(JSON.stringify(process.argv.slice(2)));`,
+      join(bin, 'adb'),
+      `#!${process.execPath}\nprocess.stdout.write(JSON.stringify({args:process.argv.slice(2),owner:process.env.SDK_OWNER,cwd:process.cwd()}));`,
     );
-    chmodSync(adbPath, 0o755);
-    const previousPath = process.env.PATH;
-    process.env.PATH = bin;
-    try {
-      const shell = await runAndroidShell(ANDROID_EMULATOR, ['id']);
-      const execOut = await runAndroidExecOut(ANDROID_EMULATOR, ['id']);
-      assert.deepEqual(JSON.parse(shell.stdout), ['-s', ANDROID_EMULATOR.id, 'shell', 'id']);
-      assert.deepEqual(JSON.parse(execOut.stdout), ['-s', ANDROID_EMULATOR.id, 'exec-out', 'id']);
-    } finally {
-      if (previousPath === undefined) delete process.env.PATH;
-      else process.env.PATH = previousPath;
+    chmodSync(join(bin, 'adb'), 0o755);
+    const host = (owner: string) => ({ env: { PATH: bin, SDK_OWNER: owner }, cwd: bin });
+    const results = await withCommandHost(
+      { host: host('foreign'), requestEnv: { SDK_OWNER: 'request' } },
+      () =>
+        Promise.all([
+          runAndroidShell(ANDROID_EMULATOR, ['id'], host('shell')),
+          runAndroidExecOut(ANDROID_EMULATOR, ['id'], host('exec')),
+        ]),
+    );
+    for (const [index, command, owner] of [
+      [0, 'shell', 'shell'],
+      [1, 'exec-out', 'exec'],
+    ] as const) {
+      assert.deepEqual(JSON.parse(results[index].stdout), {
+        args: ['-s', ANDROID_EMULATOR.id, command, 'id'],
+        owner,
+        cwd: realpathSync(bin),
+      });
     }
+    const sharedHost = host('base');
+    const scoped = await withCommandHost(
+      { host: sharedHost, requestEnv: { SDK_OWNER: 'overlay' } },
+      () => runAndroidShell(ANDROID_EMULATOR, ['id'], sharedHost),
+    );
+    assert.deepEqual(JSON.parse(scoped.stdout), {
+      args: ['-s', ANDROID_EMULATOR.id, 'shell', 'id'],
+      owner: 'overlay',
+      cwd: realpathSync(bin),
+    });
   },
 );

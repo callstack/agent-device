@@ -13,7 +13,7 @@ import { PLATFORM_SELECTORS } from '@agent-device/kernel/device';
 export type RemoteConfigProfileOptions = {
   configPath: string;
   cwd: string;
-  env?: Record<string, string | undefined>;
+  env: Record<string, string | undefined>;
 };
 
 export type ResolvedRemoteConfigProfile = {

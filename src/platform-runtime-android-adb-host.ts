@@ -97,6 +97,7 @@ bindAndroidAdbHost({
     const lowered = lowerAndroidAdbInvocation(invocation, options, commandHostEnvironment().env);
     return await runCmd('adb', lowered.args, {
       ...lowered.options,
+      cwd: commandHostEnvironment().cwd,
       // adb's fork-server is a grandchild: without its own process group a deadline can only
       // signal `adb` itself, and the server keeps the stdio pipes open behind it.
       detached: process.platform !== 'win32',
@@ -107,6 +108,7 @@ bindAndroidAdbHost({
     const lowered = lowerAndroidAdbInvocation(invocation, options, commandHostEnvironment().env);
     const background = runCmdBackground('adb', lowered.args, {
       ...lowered.options,
+      cwd: commandHostEnvironment().cwd,
       allowFailure: true,
       captureOutput: false,
     });
