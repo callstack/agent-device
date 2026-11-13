@@ -157,7 +157,7 @@ test('press --settle routes its first capture afresh after a private-ax session 
       fill: async () => ({ ok: true }),
       longPress: async () => ({ ok: true }),
     } satisfies import('@agent-device/contracts/backend').AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot: established }]),
     policy: localCommandPolicy(),
     clock: createFakeClock(),
