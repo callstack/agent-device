@@ -42,8 +42,11 @@ export type CliOutputFormatterParams = {
    * Who reads the text. `terminal` (the default) is a person or script at the CLI. `model` is
    * an agent reading a tool result, which gets no daemon-host state paths it would never open.
    */
-  reader?: 'terminal' | 'model';
+  reader?: OutputReader;
 };
+
+/** Who reads command output: a person or script at the CLI, or an agent reading a tool result. */
+export type OutputReader = 'terminal' | 'model';
 
 export type CliOutputFormatter = (
   params: CliOutputFormatterParams,

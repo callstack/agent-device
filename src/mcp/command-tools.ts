@@ -120,8 +120,9 @@ const DECLARED_OPERATOR_AUDIENCE: InputAudienceMap = Object.fromEntries(
  * operator key. `listCommandTools` and admission both read this, so a key can
  * never be hidden from the model yet admitted from the wire.
  *
- * The command's own map is spread FIRST so an `operator` classification always
- * outranks it. `retired` keys are admitted (the command's reader answers with
+ * The shared alias map is spread first, so a command that declares a field under an
+ * alias's name (its own `target`, for example) keeps it. The command's own map comes next,
+ * so an `operator` classification spread after it always outranks it. `retired` keys are admitted (the command's reader answers with
  * migration guidance), so a command that retired a key whose name another
  * declaration owns as `operator` must fail closed on the refusal, not open on
  * the guidance. Every operator key a command declares is already in

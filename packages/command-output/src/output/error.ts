@@ -1,7 +1,5 @@
 import {
   AppError,
-  defaultHintForCode,
-  defaultHintReadsLog,
   normalizeError,
   readDispatchDisclosure,
   readErrorCandidateViews,
@@ -10,6 +8,7 @@ import {
   type NormalizedError,
 } from '@agent-device/kernel/errors';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import type { OutputReader } from '../output-common.ts';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
 import { collapseWarningText } from '../output-common.ts';
 
@@ -29,11 +28,10 @@ export type HumanErrorOptions = {
   showDetails?: boolean;
   /**
    * Who reads the text. `terminal` (the default) is a person or script at the CLI. `model` is
-   * an agent reading a tool result: the typed `details.reason` joins the code and the message
-   * stays one line. The diagnostics log path is left out unless the recovery step is the code's
-   * default and that default tells the reader to read the log.
+   * an agent reading a tool result: the typed `details.reason` joins the code and the summary
+   * stays one line.
    */
-  reader?: 'terminal' | 'model';
+  reader?: OutputReader;
   /** The failing command's synopsis, such as `agent-device fill <target> <text>`. */
   synopsis?: string;
 };
@@ -67,10 +65,9 @@ export function formatHumanError(
   return {
     summary,
     body: formatBody(normalized, {
-      fullMessage: truncated && !forModel,
+      fullMessage: truncated,
       candidateViews: inlineCandidates ? [] : candidateViews,
       showDetails: options.showDetails,
-      logLine: !forModel || hintReadsLog(normalized),
     }),
   };
 }
@@ -125,12 +122,6 @@ function nextStep(
   return parts.length > 0 ? parts.join(' ') : undefined;
 }
 
-function hintReadsLog(normalized: NormalizedError): boolean {
-  return (
-    normalized.hint === defaultHintForCode(normalized.code) && defaultHintReadsLog(normalized.code)
-  );
-}
-
 const REASON_LIMIT = 80;
 
 /** The typed `details.reason`, when the throw site classified the failure, as one bounded line. */
@@ -148,7 +139,6 @@ function formatBody(
     fullMessage: boolean;
     candidateViews: ErrorCandidateView[];
     showDetails?: boolean;
-    logLine: boolean;
   },
 ): string[] {
   const body: string[] = [];
@@ -165,7 +155,7 @@ function formatBody(
   }
   const candidateLines = formatErrorCandidateViews(options.candidateViews);
   if (candidateLines.length > 0) body.push(candidateLines.join('\n'));
-  const logLine = options.logLine ? formatLogLine(normalized) : undefined;
+  const logLine = formatLogLine(normalized);
   if (logLine) body.push(logLine);
   // ADR 0012: the divergence compact report always renders; --debug's raw
   // details dump below remains the full-object view.

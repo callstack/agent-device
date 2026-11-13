@@ -165,24 +165,25 @@ test('default MCP errors retain possible dispatch and observe-first recovery, an
   assert.match(text, /Log: \/tmp\/agent-device\/press\.log/);
 });
 
-test('MCP errors with a specific recovery step leave out the log path', async () => {
+test('MCP errors keep the log path when a producer hint sends the reader to the log', async () => {
   const executor = executorReturning(undefined, () => {
-    throw new AppError('COMMAND_FAILED', 'press reply was lost', {
-      reason: 'runner_reply_lost',
-      hint: 'Run snapshot, then press the target again.',
-      logPath: '/tmp/agent-device/press.log',
+    throw new AppError('COMMAND_FAILED', 'press still failed after a runner restart', {
+      reason: 'runner_recycle_budget_exhausted',
+      hint: 'Check the runner log for the underlying failure before retrying.',
+      logPath: '/tmp/agent-device/runner.log',
     });
   });
 
   const result = await executor.execute('press', { ref: '@e2' });
 
+  assert.equal(result.isError, true);
   assert.equal(
     result.content[0]?.text,
-    'Error (COMMAND_FAILED, runner_reply_lost): press reply was lost. Next: Run snapshot, then press the target again.',
+    'Error (COMMAND_FAILED, runner_recycle_budget_exhausted): press still failed after a runner restart. Next: Check the runner log for the underlying failure before retrying.\nLog: /tmp/agent-device/runner.log',
   );
 });
 
-test('MCP errors whose default recovery step does not read the log leave out the log path', async () => {
+test('MCP errors keep the log path whatever the recovery step', async () => {
   const executor = executorReturning(undefined, () => {
     throw new AppError('INVALID_ARGS', 'missing ref', { logPath: '/tmp/agent-device/press.log' });
   });
@@ -192,7 +193,22 @@ test('MCP errors whose default recovery step does not read the log leave out the
   assert.equal(result.isError, true);
   const text = result.content[0]?.text ?? '';
   assert.match(text, /^Error \(INVALID_ARGS\): missing ref\./);
-  assert.doesNotMatch(text, /Log:/);
+  assert.match(text, /\nLog: \/tmp\/agent-device\/press\.log$/);
+});
+
+test('MCP errors keep the full message when the summary cuts it', async () => {
+  const long = `runner reply was lost ${'x'.repeat(320)} end`;
+  const executor = executorReturning(undefined, () => {
+    throw new AppError('COMMAND_FAILED', long, {
+      hint: 'Run snapshot, then press the target again.',
+    });
+  });
+
+  const result = await executor.execute('press', { ref: '@e2' });
+
+  const text = result.content[0]?.text ?? '';
+  assert.match(text.split('\n')[0] ?? '', /… Next: Run snapshot/);
+  assert.ok(text.includes(`\nMessage: ${long}`), 'the cut summary is followed by the full message');
 });
 
 test('MCP errors keep a multi-line typed reason on the summary line', async () => {
